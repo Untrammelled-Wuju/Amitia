@@ -5,11 +5,13 @@
 #include <limits.h>
 #include <pthread.h>
 #include <spawn.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
+#include <sys/prctl.h>
 #include <unistd.h>
 
 struct hook_start_request {
@@ -34,6 +36,7 @@ static void *start_hook(void *opaque) {
   struct hook_start_request *request = opaque;
   char detail[PATH_MAX * 2];
   sleep(4);
+  prctl(PR_SET_NAME, "qq", 0, 0, 0);
   void *handle = dlopen(request->library, RTLD_NOW | RTLD_GLOBAL);
   if (!handle) {
     const char *error = dlerror();
@@ -58,12 +61,38 @@ static void *start_hook(void *opaque) {
   return NULL;
 }
 
+static void *maintain_process_name(void *opaque) {
+  (void)opaque;
+  for (;;) {
+    prctl(PR_SET_NAME, "qq", 0, 0, 0);
+    sleep(1);
+  }
+  return NULL;
+}
+
 static int has_process_type(char *const argv[]) {
   if (!argv) return 0;
   for (size_t index = 1; argv[index]; index++) {
     if (strncmp(argv[index], "--type=", 7) == 0) return 1;
   }
   return 0;
+}
+
+int prctl(int option, ...) {
+  va_list arguments;
+  va_start(arguments, option);
+  unsigned long first = va_arg(arguments, unsigned long);
+  unsigned long second = va_arg(arguments, unsigned long);
+  unsigned long third = va_arg(arguments, unsigned long);
+  unsigned long fourth = va_arg(arguments, unsigned long);
+  va_end(arguments);
+  if (option == PR_SET_NAME) {
+    first = (unsigned long)"qq";
+    second = 0;
+    third = 0;
+    fourth = 0;
+  }
+  return (int)syscall(SYS_prctl, option, first, second, third, fourth);
 }
 
 static const char *redirect_main_path(const char *path, char *const argv[]) {
@@ -118,6 +147,9 @@ int posix_spawnp(pid_t *pid, const char *file, const posix_spawn_file_actions_t 
 __attribute__((constructor)) static void prepare_snowluma_hook(void) {
   const char *library = getenv("AMITIA_SNOWLUMA_HOOK_LIBRARY");
   if (!library || library[0] != '/') return;
+  prctl(PR_SET_NAME, "qq", 0, 0, 0);
+  pthread_t name_thread;
+  if (pthread_create(&name_thread, NULL, maintain_process_name, NULL) == 0) pthread_detach(name_thread);
   unsetenv("AMITIA_SNOWLUMA_HOOK_LIBRARY");
   unsetenv("LD_PRELOAD");
   if (!getenv("SNOWLUMA_HOOK_RUNTIME_DIR")) {

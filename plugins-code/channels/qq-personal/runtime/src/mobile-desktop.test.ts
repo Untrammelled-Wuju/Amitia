@@ -2,8 +2,16 @@ import assert from "node:assert/strict"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import { createRequire } from "node:module"
 import test from "node:test"
 import { MobileDesktop, isMobileQQMainCommandLine, isMobileQQWrapper, mobileQQWrapperScript, mobileVncArguments, snowlumaHookRuntimeDirectory } from "./mobile-desktop.js"
+
+const require = createRequire(import.meta.url)
+const procLocks = require("../../native/linux-arm64/amitia-proc-locks.cjs") as {
+  deviceInodeKey(device: number, inode: number): string
+  loginStateFrame(uin: bigint): Buffer
+  syntheticProcessEnvironment(file: string): string | null
+}
 
 test("mobile VNC disables unavailable shared memory transport", () => {
   const args = mobileVncArguments(":0", "12345678")
@@ -40,6 +48,30 @@ test("QQ hook detection ignores Electron child processes", () => {
   assert.equal(isMobileQQMainCommandLine("/opt/QQ/qq\u0000--no-sandbox\u0000"), true)
   assert.equal(isMobileQQMainCommandLine("/opt/QQ/qq\u0000--type=gpu-process\u0000"), false)
   assert.equal(isMobileQQMainCommandLine("/usr/bin/not-qq\u0000"), false)
+})
+
+test("proc locks compatibility key matches the Linux device and inode format", () => {
+  assert.equal(procLocks.deviceInodeKey(0x1234, 77), "12:34:77")
+})
+
+test("proc locks compatibility scopes process environment to the QQ home", () => {
+  const previous = process.env.HOME
+  process.env.HOME = "/home/amitia"
+  try {
+    assert.equal(procLocks.syntheticProcessEnvironment("/proc/123/environ"), "HOME=/home/amitia\0XDG_CONFIG_HOME=/home/amitia/.config\0")
+    assert.equal(procLocks.syntheticProcessEnvironment("/proc/123/status"), null)
+  } finally {
+    if (previous === undefined) delete process.env.HOME
+    else process.env.HOME = previous
+  }
+})
+
+test("proc locks compatibility emits a logged-in state frame only after a real UIN hint", () => {
+  const frame = procLocks.loginStateFrame(3366726108n)
+  assert.equal(frame.readUInt32LE(0), 0x31504851)
+  assert.equal(frame.readUInt16LE(6), 7)
+  assert.equal(frame.readUInt32LE(16), 4)
+  assert.equal(frame.readBigUInt64LE(32), 3366726108n)
 })
 
 test("SnowLuma hook socket path is scoped to the runtime user", () => {

@@ -87,6 +87,9 @@ const identityLibrary = path.join(stagingRoot, "modules/qq-personal-service/nati
 const identityHash = createHash("sha256").update(fs.readFileSync(identityLibrary)).digest("hex")
 const snowlumaLoader = path.join(stagingRoot, "modules/qq-personal-service/native/libamitia-snowluma-loader.so")
 const snowlumaLoaderHash = createHash("sha256").update(fs.readFileSync(snowlumaLoader)).digest("hex")
+const procLocksPrelude = path.join(stagingRoot, "modules/qq-personal-service/native/amitia-proc-locks.cjs")
+fs.copyFileSync(path.join(root, "native/linux-arm64/amitia-proc-locks.cjs"), procLocksPrelude)
+const procLocksPreludeHash = createHash("sha256").update(fs.readFileSync(procLocksPrelude)).digest("hex")
 serviceModule.runtime.nativeCompanions = [
   {
     id: "current-identity-compat",
@@ -102,6 +105,14 @@ serviceModule.runtime.nativeCompanions = [
     architecture: "arm64",
     path: "native/libamitia-snowluma-loader.so",
     sha256: snowlumaLoaderHash,
+    executable: false,
+  },
+  {
+    id: "snowluma-proc-locks",
+    platform: "linux",
+    architecture: "arm64",
+    path: "native/amitia-proc-locks.cjs",
+    sha256: procLocksPreludeHash,
     executable: false,
   },
 ]

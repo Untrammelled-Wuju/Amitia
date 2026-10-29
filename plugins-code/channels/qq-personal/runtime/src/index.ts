@@ -217,9 +217,11 @@ function statusPayload() {
         received: String(messageCount),
         replies: String(replyCount),
         lastActivity: status.lastSeenAt || "暂无",
-        mobileLabel: mobileLabels[mobile.phase] || mobile.phase,
-        mobileVariant: mobile.phase === "waiting_login" ? "success" : mobile.phase === "failed" || mobile.phase === "interrupted" ? "error" : mobile.running ? "warning" : "neutral",
-        mobileDetail: mobile.error || mobile.detail || "尚未开始安装",
+        mobileLabel: status.connected ? "QQ 已连接" : mobileLabels[mobile.phase] || mobile.phase,
+        mobileVariant: status.connected ? "success" : mobile.phase === "waiting_login" ? "success" : mobile.phase === "failed" || mobile.phase === "interrupted" ? "error" : mobile.running ? "warning" : "neutral",
+        mobileDetail: status.connected
+          ? `SnowLuma 已接入 OneBot，账号 ${status.accountIds[0] || "已连接"}`
+          : mobile.error || mobile.detail || "尚未开始安装",
         installActionLabel: fullyInstalled ? "重新安装 QQ 与 SnowLuma" : "开始安装 QQ 与 SnowLuma",
       },
     },
@@ -255,6 +257,9 @@ app.get("/api/health", async () => {
   const snowlumaInstall = runtimeManager.installState()
   const fullyInstalled = mobile.installed && (snowlumaInstall.installed || snowluma.running)
   const hookPids = await mobileRuntime.hookProcessIds()
+  const hookLogLines = runtimeManager.recentLines()
+    .filter(line => /\[(Hook|QQHook|LoginProbe)\]/.test(line))
+    .slice(-20)
   return {
     success: true,
     bridgeReady: true,
@@ -264,6 +269,7 @@ app.get("/api/health", async () => {
     snowlumaRunning: snowluma.running,
     hookReady: hookPids.length > 0,
     hookProcessIds: hookPids,
+    hookLogLines,
     installActionLabel: fullyInstalled ? "重新安装 QQ 与 SnowLuma" : "开始安装 QQ 与 SnowLuma",
   }
 })

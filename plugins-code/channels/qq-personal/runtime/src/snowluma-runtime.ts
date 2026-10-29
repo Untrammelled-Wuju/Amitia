@@ -2,7 +2,7 @@ import { execFile, spawn, type ChildProcess } from "node:child_process"
 import fs from "node:fs"
 import net from "node:net"
 import path from "node:path"
-import { pathToFileURL } from "node:url"
+import { fileURLToPath, pathToFileURL } from "node:url"
 import type { QQPersonalConfig, SnowLumaRuntimeMode } from "./config.js"
 import { moduleDataDir } from "./config.js"
 import { extractLatestCredentials, resolveDockerBin } from "./snowluma-info.js"
@@ -30,6 +30,13 @@ const DEFAULT_NATIVE_HTTP_PORT = 16100
 const DEFAULT_NATIVE_WS_PORT = 16101
 const SHUTDOWN_MESSAGE = "amitia:snowluma:shutdown"
 const SHUTDOWN_BRIDGE = ".amitia-snowluma-shutdown.mjs"
+
+function resolveProcLocksPrelude(): string {
+  const runtimeDirectory = path.dirname(fileURLToPath(import.meta.url))
+  const packaged = path.join(runtimeDirectory, "native", "amitia-proc-locks.cjs")
+  if (fs.existsSync(packaged)) return packaged
+  return path.join(runtimeDirectory, "..", "..", "native", "linux-arm64", "amitia-proc-locks.cjs")
+}
 
 function isMissing(error: unknown): boolean {
   return error instanceof Error && "code" in error && error.code === "ENOENT"
@@ -411,12 +418,15 @@ export class SnowLumaRuntimeManager {
     const websocketPath = `${config.websocketPath.startsWith("/") ? "" : "/"}${config.websocketPath}`
     prepareSnowLumaOneBotConfig(root, `ws://127.0.0.1:${config.listenPort}${websocketPath}`, config.token)
     const shutdownBridge = writeShutdownBridge(this.allowedRoot)
+    const procLocksPrelude = resolveProcLocksPrelude()
+    const nodeOptions = [this.environment.NODE_OPTIONS, fs.existsSync(procLocksPrelude) ? `--require=${procLocksPrelude}` : ""].filter(Boolean).join(" ")
     const child = spawn(nodeBin, ["--import", pathToFileURL(shutdownBridge).href, entryPoint], {
       cwd: root,
       env: {
         ...process.env,
         ...this.environment,
         NO_COLOR: "1",
+        NODE_OPTIONS: nodeOptions,
         SNOWLUMA_HOOK_AUTOLOAD: "1",
         SNOWLUMA_UPDATE_ROOT: root,
         SNOWLUMA_LOG_DIR: path.join(root, "logs"),

@@ -1,6 +1,6 @@
 {
   "name": "@amitia/qq-personal-sidecar",
-    "version": "0.2.75",
+    "version": "0.2.83",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
