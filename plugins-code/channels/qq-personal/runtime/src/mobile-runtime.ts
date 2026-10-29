@@ -102,6 +102,7 @@ export class MobileQQRuntime {
           const response = await fetch(`http://127.0.0.1:${config.webuiPort}/`, { signal: AbortSignal.timeout(2000) })
           await response.body?.cancel()
           if (response.ok || response.status === 401 || response.status === 403) {
+            await this.attachSnowLumaHook(config)
             this.setState({ running: false, phase: "waiting_login", detail: "运行环境已启动，请打开 QQ 桌面登录", error: "" })
             return
           }
@@ -121,6 +122,28 @@ export class MobileQQRuntime {
       this.recordError(error)
       throw error
     }
+  }
+
+  async attachSnowLumaHook(config: QQPersonalConfig): Promise<void> {
+    if (config.runtimeMode !== "native" || !this.snowluma.status().running || this.desktop.usesSnowLumaHook()) return
+    await this.restartDesktopWithHook(config)
+  }
+
+  markWaitingLogin(): void {
+    this.setState({ running: false, phase: "waiting_login", detail: "运行环境已启动，请打开 QQ 桌面登录", error: "" })
+  }
+
+  private snowlumaHookLibrary(config: QQPersonalConfig): string {
+    const candidate = path.join(this.snowluma.nativeRoot(config), "native", `snowluma-${process.platform}-${process.arch}.so`)
+    return fs.existsSync(candidate) ? candidate : ""
+  }
+
+  private async restartDesktopWithHook(config: QQPersonalConfig): Promise<void> {
+    const hookLibrary = this.snowlumaHookLibrary(config)
+    if (!hookLibrary) return
+    await this.desktop.stop()
+    await this.desktop.start(config.novncPort, { snowlumaHookLibrary: hookLibrary })
+    this.snowluma.setEnvironment(this.desktop.environment())
   }
 
   recordError(error: unknown): void {

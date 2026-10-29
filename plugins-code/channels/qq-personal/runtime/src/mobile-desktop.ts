@@ -6,9 +6,18 @@ import { randomBytes } from "node:crypto"
 import { fileURLToPath } from "node:url"
 
 const identityCompatLibrary = path.join(path.dirname(fileURLToPath(import.meta.url)), "native", "libamitia-identity.so")
+const snowlumaHookLoaderLibrary = path.join(path.dirname(fileURLToPath(import.meta.url)), "native", "libamitia-snowluma-loader.so")
 
-export function mobileVncArguments(display: string, passwordFile: string): string[] {
-  return ["-display", display, "-passwdfile", `rm:${passwordFile}`, "-localhost", "-rfbport", "5900", "-forever", "-shared", "-noshm"]
+export function snowlumaHookRuntimeDirectory(uid = process.geteuid?.() ?? 0): string {
+  return `/tmp/snowluma-${uid}`
+}
+
+export interface MobileDesktopOptions {
+  snowlumaHookLibrary?: string
+}
+
+export function mobileVncArguments(display: string, password: string): string[] {
+  return ["-display", display, "-passwd", password, "-localhost", "-rfbport", "5900", "-forever", "-shared", "-noshm"]
 }
 
 export class MobileDesktop {
@@ -17,6 +26,7 @@ export class MobileDesktop {
   private failure = ""
   private stopping = false
   private display = ":1"
+  private snowlumaHookLibrary = ""
 
   constructor(private readonly root: string) {}
 
@@ -33,6 +43,7 @@ export class MobileDesktop {
       FONTCONFIG_FILE: path.join(this.root, "home", "fonts.conf"),
       PYTHONHOME: path.join(prefix, "usr"),
       PYTHONPATH: path.join(prefix, "usr/lib/python3/dist-packages"),
+      SNOWLUMA_HOOK_RUNTIME_DIR: snowlumaHookRuntimeDirectory(),
     }
   }
 
@@ -43,24 +54,34 @@ export class MobileDesktop {
     }
   }
 
+  private qqEnvironment(): NodeJS.ProcessEnv {
+    const environment = this.environment()
+    if (!this.snowlumaHookLibrary) return environment
+    return {
+      ...environment,
+      LD_PRELOAD: [snowlumaHookLoaderLibrary, process.env.LD_PRELOAD].filter(Boolean).join(":"),
+      AMITIA_SNOWLUMA_HOOK_LIBRARY: this.snowlumaHookLibrary,
+      AMITIA_SNOWLUMA_HOOK_PARENT_PID: String(process.pid),
+    }
+  }
+
   credentials(): string { return this.password }
 
   error(): string { return this.failure }
 
-  async start(port: number): Promise<void> {
+  async start(port: number, options: MobileDesktopOptions = {}): Promise<void> {
     if (this.children.length) return
     this.failure = ""
     this.stopping = false
+    this.snowlumaHookLibrary = String(options.snowlumaHookLibrary || "")
     const prefix = path.join(this.root, "root")
     const home = path.join(this.root, "home")
     await fs.mkdir(home, { recursive: true, mode: 0o700 })
     const xml = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
     await fs.writeFile(path.join(home, "fonts.conf"), `<fontconfig><dir>${xml(path.join(prefix, "usr/share/fonts"))}</dir><cachedir>${xml(path.join(home, "font-cache"))}</cachedir></fontconfig>`, { mode: 0o600 })
     this.password = randomBytes(6).toString("hex").slice(0, 8)
-    const passwordFile = path.join(home, ".vnc-password")
     try {
       const vnc = path.join(prefix, "usr/bin/x11vnc")
-      await fs.writeFile(passwordFile, `${this.password}\n`, { mode: 0o600 })
       await this.verifyProcessIdentity(prefix)
       await this.verifyKeyboard(prefix, home)
       const displayNumber = await this.launchDisplayServer(path.join(prefix, "usr/bin/Xvfb"))
@@ -69,11 +90,15 @@ export class MobileDesktop {
       const fluxboxConfig = path.join(home, "fluxbox-init")
       await fs.writeFile(fluxboxConfig, "session.screen0.toolbar.visible: false\nsession.screen0.workspaces: 1\n", { mode: 0o600 })
       this.launch(path.join(prefix, "usr/bin/fluxbox"), ["-display", this.display, "-rc", fluxboxConfig])
-      this.launch(vnc, mobileVncArguments(this.display, passwordFile))
+      this.launch(vnc, mobileVncArguments(this.display, this.password))
       await this.waitForPort(5900)
       this.launch(path.join(prefix, "usr/bin/python3"), [path.join(prefix, "usr/bin/websockify"), "--web", path.join(prefix, "usr/share/novnc"), `127.0.0.1:${port}`, "127.0.0.1:5900"])
       await this.waitForPort(port)
-      this.launch(path.join(prefix, "opt/QQ/qq"), ["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage"])
+      const qq = this.launch(path.join(prefix, "opt/QQ/qq"), ["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage"], true, this.qqEnvironment())
+      if (this.snowlumaHookLibrary) {
+        if (!qq.pid) throw new Error("手机 QQ 进程启动失败")
+        await this.waitForHookSocket(qq.pid)
+      }
       await new Promise(resolve => setTimeout(resolve, 1500))
       this.assertAlive()
     } catch (error) {
@@ -197,6 +222,20 @@ export class MobileDesktop {
     throw new Error(`手机 QQ 服务 ${port} 启动超时`)
   }
 
+  private async waitForHookSocket(pid: number): Promise<void> {
+    const socket = path.join(snowlumaHookRuntimeDirectory(), `mojo.${pid}.control.sock`)
+    const deadline = Date.now() + 20000
+    while (Date.now() < deadline) {
+      this.assertAlive()
+      try {
+        await fs.access(socket)
+        return
+      } catch {}
+      await new Promise(resolve => setTimeout(resolve, 200))
+    }
+    throw new Error(`SnowLuma Hook 启动超时：${this.failure || socket}`)
+  }
+
   private assertAlive(): void {
     if (this.children.some(child => !child.pid || child.exitCode !== null)) throw new Error(`手机 QQ 图形服务提前退出：${this.failure}`)
   }
@@ -213,6 +252,11 @@ export class MobileDesktop {
       await exited
     }
     this.password = ""
+    this.snowlumaHookLibrary = ""
     this.stopping = false
+  }
+
+  usesSnowLumaHook(): boolean {
+    return Boolean(this.snowlumaHookLibrary)
   }
 }

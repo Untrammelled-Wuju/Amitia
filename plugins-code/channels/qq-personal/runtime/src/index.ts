@@ -392,6 +392,10 @@ app.post("/api/connect", async (request, reply) => {
     if (next.runtimeMode === "native" && !runtimeStatus.running) {
       return reply.status(400).send({ success: false, error: runtimeStatus.error || "SnowLuma 启动失败" })
     }
+    if (next.runtimeMode === "native") {
+      await mobileRuntime.attachSnowLumaHook(next)
+      mobileRuntime.markWaitingLogin()
+    }
   } catch (error) {
     return reply.status(400).send({ success: false, error: error instanceof Error ? error.message : String(error) })
   }
@@ -558,7 +562,11 @@ try {
     try {
       if (config.enabled && runtimeManager.installState().installed) {
         await mobileRuntime.ensureDesktop(config)
-        await runtimeManager.start(config)
+        const runtimeStatus = await runtimeManager.start(config)
+        if (runtimeStatus.running) {
+          await mobileRuntime.attachSnowLumaHook(config)
+          mobileRuntime.markWaitingLogin()
+        }
       }
     } catch (error) {
       mobileRuntime.recordError(error)

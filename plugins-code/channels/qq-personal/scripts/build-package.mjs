@@ -66,17 +66,45 @@ execFileSync(process.env.AMITIA_ZIG || "zig", [
   path.join(stagingRoot, "modules/qq-personal-service/native/libamitia-identity.so"),
   path.join(root, "native/linux-arm64/current-identity-compat.c"),
 ], { stdio: "inherit" })
+execFileSync(process.env.AMITIA_ZIG || "zig", [
+  "cc",
+  "-target",
+  "aarch64-linux-gnu",
+  "-Os",
+  "-fPIC",
+  "-shared",
+  "-Wl,-z,defs",
+  "-Wl,-z,noexecstack",
+  "-Wl,-soname,libamitia-snowluma-loader.so",
+  "-o",
+  path.join(stagingRoot, "modules/qq-personal-service/native/libamitia-snowluma-loader.so"),
+  path.join(root, "native/linux-arm64/snowluma-hook-loader.c"),
+  "-ldl",
+  "-pthread",
+], { stdio: "inherit" })
 const serviceModule = manifest.modules.find((module) => module.id === "qq-personal-service")
 const identityLibrary = path.join(stagingRoot, "modules/qq-personal-service/native/libamitia-identity.so")
 const identityHash = createHash("sha256").update(fs.readFileSync(identityLibrary)).digest("hex")
-serviceModule.runtime.nativeCompanions = [{
-  id: "current-identity-compat",
-  platform: "linux",
-  architecture: "arm64",
-  path: "native/libamitia-identity.so",
-  sha256: identityHash,
-  executable: false,
-}]
+const snowlumaLoader = path.join(stagingRoot, "modules/qq-personal-service/native/libamitia-snowluma-loader.so")
+const snowlumaLoaderHash = createHash("sha256").update(fs.readFileSync(snowlumaLoader)).digest("hex")
+serviceModule.runtime.nativeCompanions = [
+  {
+    id: "current-identity-compat",
+    platform: "linux",
+    architecture: "arm64",
+    path: "native/libamitia-identity.so",
+    sha256: identityHash,
+    executable: false,
+  },
+  {
+    id: "snowluma-hook-loader",
+    platform: "linux",
+    architecture: "arm64",
+    path: "native/libamitia-snowluma-loader.so",
+    sha256: snowlumaLoaderHash,
+    executable: false,
+  },
+]
 fs.copyFileSync(path.join(uiRoot, "mobile", "schema.json"), path.join(stagingRoot, "modules/qq-personal-ui/mobile/schema.json"))
 
 await build({
