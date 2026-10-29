@@ -15,6 +15,16 @@
         "statePath": "mobileConfig"
       },
       {
+        "action_id": "mobile-access",
+        "target": "host_command",
+        "input": {
+          "channelId": "qq_personal",
+          "action": "mobile-access",
+          "input": {}
+        },
+        "statePath": "mobileAccess"
+      },
+      {
         "action_id": "status",
         "target": "host_command",
         "input": {
@@ -25,6 +35,16 @@
     ],
     "refreshIntervalMs": 1500,
     "onRefresh": [
+      {
+        "action_id": "mobile-access",
+        "target": "host_command",
+        "input": {
+          "channelId": "qq_personal",
+          "action": "mobile-access",
+          "input": {}
+        },
+        "statePath": "mobileAccess"
+      },
       {
         "action_id": "status",
         "target": "host_command",
@@ -38,6 +58,10 @@
   "actions": [
     {
       "actionId": "mobile-form",
+      "target": "host_command"
+    },
+    {
+      "actionId": "mobile-access",
       "target": "host_command"
     },
     {
@@ -494,7 +518,7 @@
                     {
                       "path": "text",
                       "source": "state",
-                      "sourcePath": "mobileConfig.display.reverseWebSocketUrl"
+                      "sourcePath": "mobileAccess.display.reverseWebSocketUrl"
                     }
                   ]
                 }
@@ -519,7 +543,7 @@
                     {
                       "path": "text",
                       "source": "state",
-                      "sourcePath": "mobileConfig.display.webuiUrl"
+                      "sourcePath": "mobileAccess.display.webuiUrl"
                     }
                   ]
                 },
@@ -534,7 +558,7 @@
                     {
                       "path": "items",
                       "source": "state",
-                      "sourcePath": "mobileConfig.display.credentials"
+                      "sourcePath": "mobileAccess.display.credentials"
                     }
                   ]
                 }
@@ -559,7 +583,7 @@
                     {
                       "path": "text",
                       "source": "state",
-                      "sourcePath": "mobileConfig.display.novncUrl"
+                      "sourcePath": "mobileAccess.display.novncUrl"
                     }
                   ]
                 }

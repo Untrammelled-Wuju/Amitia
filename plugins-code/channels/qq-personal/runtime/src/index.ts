@@ -18,6 +18,7 @@ import { downloadMedia, sendMedia, synthesizeVoice } from "./outbound.js"
 import { IdempotencyStore } from "./idempotency.js"
 import { startDockerService } from "./docker-service.js"
 import { MobileQQRuntime } from "./mobile-runtime.js"
+import { ChannelEventStore } from "./event-store.js"
 
 const env = process.env
 const app = Fastify({ logger: { level: env.LOG_LEVEL || "info" } })
@@ -34,9 +35,8 @@ const outboundRequests = new IdempotencyStore()
 const credentialStore = new CredentialStore(path.dirname(dataFilePath("qq-personal-config.json")))
 const runtimeManager = new SnowLumaRuntimeManager()
 const mobileRuntime = new MobileQQRuntime(moduleDataDir(), runtimeManager)
+const eventStore = new ChannelEventStore()
 let lastError = ""
-let messageCount = 0
-let replyCount = 0
 
 const inboundConfig = {
   coreUrl: env.AMITIA_CORE_URL || env.CORE_URL || "http://127.0.0.1:18899",
@@ -100,15 +100,17 @@ async function resolveConversationTitle(message: ParsedQQMessage): Promise<strin
 bridge.onEvent(async (event) => {
   try {
     const parsed = await parseOneBotMessage(bridge, event)
-    if (!shouldHandleMessage(parsed, event, config)) return
-    const normalized = applyPrefix(parsed, config)
+    const accepted = shouldHandleMessage(parsed, event, config)
+    const normalized = accepted ? applyPrefix(parsed, config) : parsed
     peers.set(normalized.messageType === "group" ? normalized.groupId : normalized.senderId, normalized.messageType)
     const payload = buildInboundPayload(normalized, await resolveConversationTitle(normalized))
-    await forwardInbound(inboundConfig, payload)
-    messageCount++
+    eventStore.recordInbound(payload)
+    eventStore.log("info", "message.inbound", `${payload.conversationTitle || payload.peerId}: ${payload.text.slice(0, 160)}`)
+    if (accepted) await forwardInbound(inboundConfig, payload)
     lastError = ""
   } catch (error) {
     lastError = error instanceof Error ? error.message : String(error)
+    eventStore.log("error", "message.inbound.failed", lastError)
     app.log.error({ error: lastError }, "QQ 个人号消息处理失败")
   }
 })
@@ -166,6 +168,7 @@ async function publicConfig() {
 function statusPayload() {
   const status = bridge.status()
   const mobile = mobileRuntime.summary()
+  const counts = eventStore.counts()
   const snowlumaInstall = runtimeManager.installState()
   const snowluma = runtimeManager.status()
   const fullyInstalled = mobile.installed && (snowlumaInstall.installed || snowluma.running)
@@ -197,8 +200,8 @@ function statusPayload() {
       websocketPath: config.websocketPath,
       startedAt: status.connectedAt,
       lastSeenAt: status.lastSeenAt,
-      messageCount,
-      replyCount,
+      messageCount: counts.inbound,
+      replyCount: counts.outbound,
       lastError,
       snowluma,
       snowlumaInstall,
@@ -206,16 +209,16 @@ function statusPayload() {
       displayMetrics: [
         { label: "QQ 号", value: status.accountIds[0] || "未连接" },
         { label: "客户端", value: String(status.clients) },
-        { label: "接收", value: String(messageCount) },
-        { label: "回复", value: String(replyCount) },
+        { label: "接收", value: String(counts.inbound) },
+        { label: "回复", value: String(counts.outbound) },
       ],
       displayStatus: {
         connectionLabel,
         connectionVariant,
         qqAccount: status.accountIds[0] || "未连接",
         clients: String(status.clients),
-        received: String(messageCount),
-        replies: String(replyCount),
+        received: String(counts.inbound),
+        replies: String(counts.outbound),
         lastActivity: status.lastSeenAt || "暂无",
         mobileLabel: status.connected ? "QQ 已连接" : mobileLabels[mobile.phase] || mobile.phase,
         mobileVariant: status.connected ? "success" : mobile.phase === "waiting_login" ? "success" : mobile.phase === "failed" || mobile.phase === "interrupted" ? "error" : mobile.running ? "warning" : "neutral",
@@ -257,7 +260,7 @@ app.get("/api/health", async () => {
   const snowlumaInstall = runtimeManager.installState()
   const fullyInstalled = mobile.installed && (snowlumaInstall.installed || snowluma.running)
   const hookPids = await mobileRuntime.hookProcessIds()
-  const hookLogLines = runtimeManager.recentLines()
+  const logLines = runtimeManager.recentLines()
     .filter(line => /\[(Hook|QQHook|LoginProbe)\]/.test(line))
     .slice(-20)
   return {
@@ -265,11 +268,16 @@ app.get("/api/health", async () => {
     bridgeReady: true,
     qqOnline: bridge.status().connected,
     qqRuntimeInstalled: mobile.installed,
+    protocol: "snowluma",
+    protocolVersion: snowlumaInstall.version,
+    protocolInstalled: snowlumaInstall.installed,
+    inboundReady: bridge.status().connected,
+    outboundReady: bridge.status().connected,
     snowlumaInstalled: snowlumaInstall.installed,
     snowlumaRunning: snowluma.running,
     hookReady: hookPids.length > 0,
     hookProcessIds: hookPids,
-    hookLogLines,
+    hookLogLines: logLines,
     installActionLabel: fullyInstalled ? "重新安装 QQ 与 SnowLuma" : "开始安装 QQ 与 SnowLuma",
   }
 })
@@ -313,6 +321,24 @@ app.post("/api/action", async (request, reply) => {
           webuiPasswordState: current.webuiPasswordState,
           novncPassword: current.novncPassword,
           runtimeMode: current.runtimeMode,
+          credentials: {
+            "WebUI 账号": current.webuiUser || "admin",
+            "WebUI 密码": current.webuiPassword || "等待启动后生成",
+            "noVNC 密码": current.novncPassword || "等待安装后生成",
+          },
+        },
+      },
+    })
+  }
+  if (action === "mobile-access") {
+    const current = await publicConfig()
+    return reply.send({
+      success: true,
+      data: {
+        display: {
+          reverseWebSocketUrl: current.reverseWebSocketUrl,
+          webuiUrl: current.webuiUrl,
+          novncUrl: current.novncUrl,
           credentials: {
             "WebUI 账号": current.webuiUser || "admin",
             "WebUI 密码": current.webuiPassword || "等待启动后生成",
@@ -390,14 +416,38 @@ app.post("/api/action", async (request, reply) => {
   return reply.send({ success: false, error: `未知操作：${action || "(空)"}` })
 })
 
-app.post("/api/messages", async () => ({ success: true, data: { messages: [], total: 0 } }))
-app.post("/api/logs", async () => ({ success: true, data: { items: [], total: 0 } }))
+app.post("/api/messages", async (request) => {
+  const body = (request.body || {}) as Record<string, unknown>
+  const limit = Number(body.limit || 200)
+  const offset = Number(body.offset || 0)
+  const conversationId = String(body.conversationId || "").trim()
+  return {
+    success: true,
+    data: eventStore.messages(
+      conversationId,
+      Number.isFinite(limit) ? limit : 200,
+      Number.isFinite(offset) ? offset : 0,
+    ),
+  }
+})
+app.post("/api/logs", async (request) => {
+  const body = (request.body || {}) as Record<string, unknown>
+  const limit = Number(body.limit || 200)
+  const offset = Number(body.offset || 0)
+  return {
+    success: true,
+    data: eventStore.logs(
+      Number.isFinite(limit) ? limit : 200,
+      Number.isFinite(offset) ? offset : 0,
+    ),
+  }
+})
 app.post("/api/peers", async (request) => {
   const body = (request.body || {}) as Record<string, unknown>
   const limit = Number(body.limit || 200)
   const offset = Number(body.offset || 0)
   const items = peers.list(Number.isFinite(limit) ? limit : 200, Number.isFinite(offset) ? offset : 0)
-  return { success: true, data: { items, total: items.length } }
+  return { success: true, data: { items, total: peers.count() } }
 })
 
 app.post("/api/connect", async (request, reply) => {
@@ -451,7 +501,14 @@ app.post("/api/send", async (request, reply) => {
       deliveryFingerprint(body, target),
       async () => {
         await bridge.sendMessage(target.kind, target.id, [{ type: "text", data: { text } }])
-        replyCount++
+        eventStore.recordOutbound({
+          conversationId: String(body.conversationId || `conv-qq-personal-${target.kind}-${target.id}`),
+          peerId: target.id,
+          peerKind: target.kind,
+          contentType: "text",
+          text,
+        })
+        eventStore.log("info", "message.outbound", `${target.kind}:${target.id}: ${text.slice(0, 160)}`)
         return { delivered: "text" }
       },
     )
@@ -474,7 +531,13 @@ app.post("/api/send-image", async (request, reply) => {
       async () => {
         const media = await downloadMedia(inboundConfig, candidate)
         const result = await sendMedia(bridge, target, "image", media)
-        replyCount++
+        eventStore.recordOutbound({
+          conversationId: String(body.conversationId || `conv-qq-personal-${target.kind}-${target.id}`),
+          peerId: target.id,
+          peerKind: target.kind,
+          contentType: "image",
+          text: String(body.altText || "[图片]"),
+        })
         return { delivered: "image", result }
       },
     )
@@ -499,7 +562,13 @@ app.post("/api/send-voice", async (request, reply) => {
         if (assetUrl) {
           const media = await downloadMedia(inboundConfig, assetUrl)
           await sendMedia(bridge, target, "record", media)
-          replyCount++
+          eventStore.recordOutbound({
+            conversationId: String(body.conversationId || `conv-qq-personal-${target.kind}-${target.id}`),
+            peerId: target.id,
+            peerKind: target.kind,
+            contentType: "voice",
+            text: text || "[语音]",
+          })
           return { delivered: "voice", items: [{ kind: "voice" }] }
         }
         const parts = text.split(/\r?\n/).map((part) => part.trim()).filter(Boolean)
@@ -517,7 +586,13 @@ app.post("/api/send-voice", async (request, reply) => {
               error: error instanceof Error ? error.message : String(error),
             })
           }
-          replyCount++
+          eventStore.recordOutbound({
+            conversationId: String(body.conversationId || `conv-qq-personal-${target.kind}-${target.id}`),
+            peerId: target.id,
+            peerKind: target.kind,
+            contentType: "text",
+            text: part,
+          })
         }
         return { delivered: "voice", items }
       }
@@ -541,7 +616,13 @@ app.post("/api/send-video", async (request, reply) => {
       async () => {
         const media = await downloadMedia(inboundConfig, candidate)
         const result = await sendMedia(bridge, target, "video", media)
-        replyCount++
+        eventStore.recordOutbound({
+          conversationId: String(body.conversationId || `conv-qq-personal-${target.kind}-${target.id}`),
+          peerId: target.id,
+          peerKind: target.kind,
+          contentType: "video",
+          text: String(body.altText || "[视频]"),
+        })
         return { delivered: "video", result }
       },
     )
@@ -565,7 +646,13 @@ app.post("/api/send-file", async (request, reply) => {
       async () => {
         const media = await downloadMedia(inboundConfig, candidate)
         const result = await sendMedia(bridge, target, "file", media, fileName)
-        replyCount++
+        eventStore.recordOutbound({
+          conversationId: String(body.conversationId || `conv-qq-personal-${target.kind}-${target.id}`),
+          peerId: target.id,
+          peerKind: target.kind,
+          contentType: "file",
+          text: `[文件]${fileName}`,
+        })
         return { delivered: "file", result }
       },
     )

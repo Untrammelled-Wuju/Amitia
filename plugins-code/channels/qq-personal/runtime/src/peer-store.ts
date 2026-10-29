@@ -20,6 +20,10 @@ export class PeerStore {
       .map(([id, kind]) => ({ id, kind }))
   }
 
+  count(): number {
+    return Object.keys(this.peers).length
+  }
+
   set(peerId: string, kind: PeerKind): void {
     const id = peerId.trim()
     if (!id || this.peers[id] === kind) return

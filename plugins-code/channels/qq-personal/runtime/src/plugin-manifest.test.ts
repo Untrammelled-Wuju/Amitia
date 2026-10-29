@@ -38,10 +38,18 @@ test("mobile schema binds host command results without an extra data envelope", 
   assert.ok(bindings.includes("status.mobileRuntimeSummary.running"))
   assert.ok(bindings.includes("status.displayStatus.installActionLabel"))
   assert.ok(Number(schema.lifecycle.refreshIntervalMs) >= 1000)
-  assert.equal(schema.lifecycle.onRefresh[0].statePath, "status")
+  assert.deepEqual(
+    schema.lifecycle.onMount.map((action: Record<string, unknown>) => action.statePath),
+    ["mobileConfig", "mobileAccess", "status"],
+  )
+  assert.deepEqual(
+    schema.lifecycle.onRefresh.map((action: Record<string, unknown>) => action.statePath),
+    ["mobileAccess", "status"],
+  )
+  assert.ok(schema.actions.some((action: Record<string, unknown>) => action.actionId === "mobile-access"))
   assert.ok(bindings.includes("status.displayStatus.connectionLabel"))
   assert.ok(bindings.includes("status.displayStatus.mobileLabel"))
-  assert.ok(bindings.includes("mobileConfig.display.reverseWebSocketUrl"))
+  assert.ok(bindings.includes("mobileAccess.display.reverseWebSocketUrl"))
   assert.equal(bindings.includes("status.data"), false)
   assert.equal(bindings.includes("status.mobileRuntime"), false)
 })

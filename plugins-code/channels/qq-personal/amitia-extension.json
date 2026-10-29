@@ -9,7 +9,7 @@
     "description": {
       "default": "通过 OneBot 11 反向 WebSocket 将 SnowLuma 个人 QQ 协议端接入 Amitia，支持 Windows、Linux 原生运行及 Docker 部署。"
     },
-    "version": "0.2.83",
+    "version": "0.2.94",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -122,7 +122,7 @@
         "default": "QQ 个人号界面"
       },
       "description": {
-        "default": "配置 SnowLuma 反向 WebSocket、查看连接状态与 SnowLuma 运行环境。"
+            "default": "配置 SnowLuma 反向 WebSocket、查看连接状态与 SnowLuma 运行环境。"
       },
       "type": "data_only",
       "placement": "device",
@@ -318,6 +318,17 @@
                 },
                 "title": {
                   "default": "读取手机端 QQ 个人号表单"
+                }
+              },
+              {
+                "action_id": "mobile-access",
+                "risk_level": "low",
+                "target": {
+                  "command": "channel.invoke",
+                  "type": "host_command"
+                },
+                "title": {
+                  "default": "刷新手机端访问凭据"
                 }
               },
               {
