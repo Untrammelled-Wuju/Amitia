@@ -18,6 +18,7 @@ export class MobileDesktop {
     return {
       ...process.env,
       HOME: path.join(this.root, "home"),
+      PATH: [path.join(prefix, "usr/bin"), process.env.PATH].filter(Boolean).join(":"),
       DISPLAY: this.display,
       LD_LIBRARY_PATH: [path.join(prefix, "usr/lib/aarch64-linux-gnu"), path.join(prefix, "lib/aarch64-linux-gnu"), process.env.LD_LIBRARY_PATH].filter(Boolean).join(":"),
       XKB_CONFIG_ROOT: path.join(prefix, "usr/share/X11/xkb"),
@@ -75,7 +76,7 @@ export class MobileDesktop {
     const child = spawn(command, args, { env: this.environment(), stdio: ["ignore", "pipe", "pipe"] })
     const record = (source: string) => (data: unknown) => {
       const text = String(data || "").trim()
-      if (text) this.failure = `${label} ${source}: ${text}`.slice(-2000)
+      if (text) this.failure = `${this.failure}\n${label} ${source}: ${text}`.trim().slice(-6000)
     }
     if (recordStdout) child.stdout?.on("data", record("stdout"))
     child.stderr?.on("data", record("stderr"))
@@ -88,7 +89,7 @@ export class MobileDesktop {
   }
 
   private launchDisplayServer(command: string): Promise<number> {
-    const child = this.launch(command, ["-displayfd", "1", "-screen", "0", "960x720x24", "-nolisten", "tcp"], false)
+    const child = this.launch(command, ["-xkbdir", path.join(this.root, "root/usr/share/X11/xkb"), "-displayfd", "1", "-screen", "0", "960x720x24", "-nolisten", "tcp"], false)
     return new Promise((resolve, reject) => {
       let output = ""
       let settled = false

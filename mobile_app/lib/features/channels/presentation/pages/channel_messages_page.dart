@@ -497,7 +497,12 @@ class _ChannelMessageDetailPageState
     try {
       final messages = await ref
           .read(chatServiceProvider)
-          .getMessages(widget.conversation.id);
+          .getMessages(
+            widget.conversation.id,
+            characterId: widget.conversation.characterId.isEmpty
+                ? null
+                : widget.conversation.characterId,
+          );
       if (!mounted) return;
       setState(() => _messages = messages);
     } catch (error) {
