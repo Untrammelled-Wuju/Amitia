@@ -31,6 +31,18 @@ export function moduleDataDir(): string {
   return dataDir
 }
 
+export function registerOwnedRuntime(extensionId: string): void {
+  const relative = path.relative(process.cwd(), dataDir)
+  if (path.isAbsolute(relative) || relative === ".." || relative.startsWith(`..${path.sep}`)) throw new Error("插件运行目录必须包含插件数据目录")
+  const receipt = path.join(process.cwd(), ".amitia-owned-runtime.json")
+  fs.writeFileSync(`${receipt}.tmp`, JSON.stringify({
+    extensionId,
+    paths: [path.join(relative, "snowluma"), path.join(relative, "mobile")],
+    linksFile: path.join(relative, "mobile", "links.json"),
+  }), { mode: 0o600 })
+  fs.renameSync(`${receipt}.tmp`, receipt)
+}
+
 function readPort(raw: unknown, fallback: number): number {
   const parsed = Number(raw)
   return Number.isInteger(parsed) && parsed > 0 && parsed <= 65535 ? parsed : fallback

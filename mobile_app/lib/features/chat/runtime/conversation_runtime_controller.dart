@@ -88,6 +88,8 @@ class ConversationRuntimeController extends ChangeNotifier {
   String? _characterId;
   ConversationWorkspaceDto? _workspace;
   bool _sending = false;
+  bool _groupSending = false;
+  bool _groupDiscussionMode = false;
   Object? _lastError;
   int _draftEpoch = 0;
   int _conversationUpdateEpoch = 0;
@@ -115,6 +117,7 @@ class ConversationRuntimeController extends ChangeNotifier {
 
   Map<String, dynamic>? get realtimeScope => _realtimeScope;
   OwnedGroupState? get group => _group;
+  bool get groupDiscussionMode => _groupDiscussionMode;
   List<Map<String, dynamic>> get groupMentions =>
       List<Map<String, dynamic>>.unmodifiable(_groupMentions);
 
@@ -162,14 +165,31 @@ class ConversationRuntimeController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setGroupDiscussionMode(bool enabled) {
+    final next =
+        enabled &&
+        _group != null &&
+        _group!.allowCharacterMentions &&
+        _group!.activeMembers.length >= 2;
+    if (_groupDiscussionMode == next) return;
+    _groupDiscussionMode = next;
+    notifyListeners();
+  }
+
   Future<OwnedGroupState?> refreshGroup() async {
     final id = _conversationId?.trim() ?? '';
     if (id.isEmpty) {
       _group = null;
+      _groupDiscussionMode = false;
       notifyListeners();
       return null;
     }
     _group = await _chatService.owned.groupState(id, characterId: _characterId);
+    if (_group == null ||
+        !_group!.allowCharacterMentions ||
+        _group!.activeMembers.length < 2) {
+      _groupDiscussionMode = false;
+    }
     notifyListeners();
     return _group;
   }
@@ -209,6 +229,7 @@ class ConversationRuntimeController extends ChangeNotifier {
           .toList(growable: false),
     );
     _group = group;
+    _groupDiscussionMode = false;
     _groupMentions = <Map<String, dynamic>>[];
     _characterId = baseRoleId;
     _conversationId = group.conversationId;
@@ -236,6 +257,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     _groupMentions = _groupMentions
         .where((mention) => mention['memberId']?.toString() != member.memberId)
         .toList(growable: false);
+    if (_group!.activeMembers.length < 2) _groupDiscussionMode = false;
     notifyListeners();
     return _group!;
   }
@@ -252,6 +274,7 @@ class ConversationRuntimeController extends ChangeNotifier {
       expectedSettingsRevision: _group!.settingsRevision,
       allowCharacterMentions: enabled,
     );
+    if (!_group!.allowCharacterMentions) _groupDiscussionMode = false;
     notifyListeners();
     return _group!;
   }
@@ -888,6 +911,13 @@ class ConversationRuntimeController extends ChangeNotifier {
     if (conversationId.isEmpty || group == null || role.isEmpty) {
       throw StateError('群聊状态尚未就绪');
     }
+    String groupAvatar(String characterId) {
+      for (final member in group.members) {
+        if (member.characterId == characterId) return member.characterAvatar;
+      }
+      return '';
+    }
+
     final pending = _cloneMessage(
       localMessage,
       id: '$requestId/user',
@@ -897,9 +927,12 @@ class ConversationRuntimeController extends ChangeNotifier {
     );
     _messages.upsert(pending);
     _sending = true;
+    _groupSending = true;
     _ownedRequestId = requestId;
     _lastError = null;
-    final mentions = groupMentionsFromText(message, group.activeMembers);
+    final mentions = _groupDiscussionMode
+        ? const <Map<String, dynamic>>[]
+        : groupMentionsFromText(message, group.activeMembers);
     var completed = false;
     String sourceConversationId = conversationId;
     Map<String, dynamic> expectedScope = <String, dynamic>{};
@@ -919,13 +952,46 @@ class ConversationRuntimeController extends ChangeNotifier {
         permissionMode: _permissionMode,
         messageStyle: _appearancePreferences?.messageStyle.name ?? 'flow',
         attachments: attachments,
+        discussionMode: _groupDiscussionMode,
       )) {
         if (_disposed || _ownedRequestId != requestId) break;
         final type = event['type'];
         if (event['sourceConversationId'] is String) {
           sourceConversationId = event['sourceConversationId'] as String;
         }
-        if (type == 'started') {
+        if (type == 'group.delivery.started') {
+          final deliveryId = (event['deliveryId'] ?? '').toString();
+          if (deliveryId.isEmpty) continue;
+          final childRequestId = (event['childRequestId'] ?? '').toString();
+          final scope = event['executionScope'];
+          _messages.upsert(
+            ChatMessage(
+              id: childRequestId.isEmpty
+                  ? 'group-delivery:$deliveryId'
+                  : '$childRequestId/assistant',
+              renderId: 'group-delivery:$deliveryId',
+              sourceOwnerId: scope is Map
+                  ? (scope['resourceOwnerId'] ?? '').toString()
+                  : '',
+              sourceConversationId: sourceConversationId,
+              characterId: (event['characterId'] ?? '').toString(),
+              characterName: (event['characterName'] ?? '').toString(),
+              characterAvatar: groupAvatar(
+                (event['characterId'] ?? '').toString(),
+              ),
+              groupRoundId: (event['groupRoundId'] ?? '').toString(),
+              deliveryId: deliveryId,
+              deliveryIndex: (event['deliveryIndex'] as num?)?.toInt() ?? 0,
+              role: MessageRole.assistant,
+              type: MessageType.text,
+              content: '',
+              time: DateTime.now(),
+              sequence: _nextLocalSequence(),
+              status: MessageStatus.streaming,
+            ),
+          );
+          notifyListeners();
+        } else if (type == 'started') {
           final scope = event['executionScope'];
           if (scope is! Map) continue;
           expectedScope = Map<String, dynamic>.from(scope);
@@ -947,6 +1013,13 @@ class ConversationRuntimeController extends ChangeNotifier {
             );
           }
           final assistantId = '$childRequestId/assistant';
+          final existing = _messages.messages
+              .where((item) => item.deliveryId == deliveryId)
+              .firstOrNull;
+          if (existing?.status == MessageStatus.delivered &&
+              existing?.sourceRevision != null) {
+            continue;
+          }
           _messages.upsert(
             ChatMessage(
               id: assistantId,
@@ -956,14 +1029,20 @@ class ConversationRuntimeController extends ChangeNotifier {
               renderId: 'group-delivery:$deliveryId',
               characterId: (event['characterId'] ?? '').toString(),
               characterName: (event['characterName'] ?? '').toString(),
-              characterAvatar: (event['characterAvatar'] ?? '').toString(),
+              characterAvatar: groupAvatar(
+                (event['characterId'] ?? '').toString(),
+              ),
               groupRoundId: (event['groupRoundId'] ?? '').toString(),
               deliveryId: deliveryId,
+              deliveryIndex:
+                  (event['deliveryIndex'] as num?)?.toInt() ??
+                  existing?.deliveryIndex ??
+                  0,
               role: MessageRole.assistant,
               type: MessageType.text,
               content: '',
-              time: DateTime.now(),
-              sequence: _nextLocalSequence(),
+              time: existing?.time ?? DateTime.now(),
+              sequence: existing?.sequence ?? _nextLocalSequence(),
               status: MessageStatus.streaming,
             ),
           );
@@ -975,6 +1054,9 @@ class ConversationRuntimeController extends ChangeNotifier {
               .where((item) => item.deliveryId == deliveryId)
               .firstOrNull;
           if (current == null) continue;
+          if (current.status == MessageStatus.delivered &&
+              current.sourceRevision != null)
+            continue;
           final reasoning = event['reasoning'] == true;
           _messages.upsert(
             _cloneMessage(
@@ -1004,6 +1086,7 @@ class ConversationRuntimeController extends ChangeNotifier {
                 characterAvatar: updated.characterAvatar,
                 groupRoundId: updated.groupRoundId,
                 deliveryId: updated.deliveryId,
+                deliveryIndex: updated.deliveryIndex,
                 role: updated.role,
                 type: updated.type,
                 content: updated.content,
@@ -1016,6 +1099,22 @@ class ConversationRuntimeController extends ChangeNotifier {
             );
           }
           notifyListeners();
+        } else if (type == 'group.delivery.completed') {
+          final deliveryId = (event['deliveryId'] ?? '').toString();
+          final current = _messages.messages
+              .where((item) => item.deliveryId == deliveryId)
+              .firstOrNull;
+          if (current != null) {
+            _messages.upsert(
+              _cloneMessage(
+                current,
+                status: MessageStatus.delivered,
+                reasoningComplete: true,
+                outputComplete: true,
+              ),
+            );
+            notifyListeners();
+          }
         } else if (type == 'group.delivery.failed') {
           final deliveryId = (event['deliveryId'] ?? '').toString();
           final current = _messages.messages
@@ -1028,6 +1127,25 @@ class ConversationRuntimeController extends ChangeNotifier {
                 content: current.content.isEmpty
                     ? (event['text'] ?? '生成失败').toString()
                     : current.content,
+                status: MessageStatus.error,
+              ),
+            );
+            notifyListeners();
+          } else if (deliveryId.isNotEmpty) {
+            _messages.upsert(
+              ChatMessage(
+                id: 'group-delivery:$deliveryId',
+                renderId: 'group-delivery:$deliveryId',
+                characterId: (event['characterId'] ?? '').toString(),
+                characterName: (event['characterName'] ?? '').toString(),
+                groupRoundId: (event['groupRoundId'] ?? '').toString(),
+                deliveryId: deliveryId,
+                deliveryIndex: (event['deliveryIndex'] as num?)?.toInt() ?? 0,
+                role: MessageRole.assistant,
+                type: MessageType.text,
+                content: (event['text'] ?? '生成失败').toString(),
+                time: DateTime.now(),
+                sequence: _nextLocalSequence(),
                 status: MessageStatus.error,
               ),
             );
@@ -1078,9 +1196,10 @@ class ConversationRuntimeController extends ChangeNotifier {
               renderId: 'group-delivery:$deliveryId',
               characterId: (scope['roleId'] ?? '').toString(),
               characterName: (delivery['characterName'] ?? '').toString(),
-              characterAvatar: (delivery['characterAvatar'] ?? '').toString(),
+              characterAvatar: groupAvatar((scope['roleId'] ?? '').toString()),
               groupRoundId: (delivery['groupRoundId'] ?? '').toString(),
               deliveryId: deliveryId,
+              deliveryIndex: existing?.deliveryIndex,
               role: MessageRole.assistant,
               type: MessageType.text,
               content: (delivery['reply'] ?? '').toString(),
@@ -1119,6 +1238,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     } finally {
       if (_ownedRequestId == requestId) {
         _ownedRequestId = '';
+        _groupSending = false;
         if (!_disposed) {
           _sending = false;
           if (completed) _conversationUpdateEpoch++;
@@ -1169,12 +1289,22 @@ class ConversationRuntimeController extends ChangeNotifier {
     for (final dto in snapshot.messages) {
       final message = _messageFromDto(dto);
       snapshotMessageIds.add(message.id);
-      _messages.upsert(message);
+      final existing = message.deliveryId.isEmpty
+          ? null
+          : _messages.messages
+                .where((item) => item.deliveryId == message.deliveryId)
+                .firstOrNull;
+      if (!_groupSending ||
+          existing == null ||
+          existing.status != MessageStatus.streaming) {
+        _messages.upsert(message);
+      }
     }
     _messages.removeWhere(
       (message) =>
           !snapshotMessageIds.contains(message.id) &&
           !_isLiveAssistantMessage(message) &&
+          !(_groupSending && message.deliveryId.isNotEmpty) &&
           message.status != MessageStatus.sending,
     );
     _agentReducer.reset(
@@ -1192,7 +1322,11 @@ class ConversationRuntimeController extends ChangeNotifier {
     _turnHistoryCursor = snapshot.turnNextCursor;
     _hasMoreTurnHistory = snapshot.hasMoreTurns;
     final active = _agentReducer.turn(_agentReducer.activeTurnId);
-    _sending = active != null && active.status != 'needs_reconciliation';
+    _sending =
+        _groupSending ||
+        active != null &&
+            !_isGroupTurn(active.requestId) &&
+            active.status != 'needs_reconciliation';
     _projectTurns();
     notifyListeners();
   }
@@ -1296,19 +1430,20 @@ class ConversationRuntimeController extends ChangeNotifier {
       final approvalId = (event.payload['approvalId'] ?? '').toString().trim();
       if (approvalId.isNotEmpty) _pendingApprovals.remove(approvalId);
     }
+    final groupTurn = _isGroupTurn(event.requestId);
     if (type == 'turn.queued' || type == 'turn.started') {
-      _sending = true;
+      if (!groupTurn) _sending = true;
       _conversationUpdateEpoch++;
     }
     if (type == 'turn.waiting' && event.status == 'needs_reconciliation') {
-      _sending = false;
+      if (!_groupSending && !groupTurn) _sending = false;
     }
     final terminal =
         type == 'turn.completed' ||
         type == 'turn.failed' ||
         type == 'turn.interrupted';
     if (terminal) {
-      _sending = false;
+      if (!_groupSending && !groupTurn) _sending = false;
       _conversationUpdateEpoch++;
       _streamScheduler.schedule(_flushStreamingProjection);
       _streamScheduler.flush();
@@ -1353,6 +1488,13 @@ class ConversationRuntimeController extends ChangeNotifier {
     final activeRenderIds = <String>{};
     for (final turn in turns) {
       final renderId = _assistantRenderIdForTurn(turn);
+      if (_messages.messages.any(
+        (message) =>
+            message.deliveryId.isNotEmpty &&
+            message.id == '${turn.requestId}/assistant',
+      )) {
+        continue;
+      }
       activeRenderIds.add(renderId);
       AssistantTurnItemDto? finalItem;
       for (final item in turn.items.reversed) {
@@ -1453,6 +1595,13 @@ class ConversationRuntimeController extends ChangeNotifier {
   ChatMessage _messageFromDto(MessageDto dto) {
     final role = _roleFor(dto.role);
     final type = _typeForDto(dto, null);
+    String groupAvatar(String characterId) {
+      for (final member in _group?.members ?? const <OwnedGroupMember>[]) {
+        if (member.characterId == characterId) return member.characterAvatar;
+      }
+      return '';
+    }
+
     final task = type == MessageType.agentTask
         ? _agentTaskPayload(dto.content)
         : const <String, dynamic>{};
@@ -1463,16 +1612,21 @@ class ConversationRuntimeController extends ChangeNotifier {
       sourceConversationId: dto.sourceConversationId,
       sourceScope: dto.sourceScope,
       sourceRevision: dto.sourceRevision,
-      renderId: dto.requestId.trim().isEmpty
+      renderId: dto.deliveryId.isNotEmpty
+          ? 'group-delivery:${dto.deliveryId}'
+          : dto.requestId.trim().isEmpty
           ? dto.id
           : role == MessageRole.assistant
           ? _assistantRenderId(dto.requestId)
           : dto.requestId.trim(),
       characterId: dto.characterId,
       characterName: dto.characterName,
-      characterAvatar: dto.characterAvatar,
+      characterAvatar: dto.characterAvatar.isEmpty
+          ? groupAvatar(dto.characterId)
+          : dto.characterAvatar,
       groupRoundId: dto.groupRoundId,
       deliveryId: dto.deliveryId,
+      deliveryIndex: dto.deliveryIndex,
       role: role,
       type: type,
       content: dto.content,
@@ -1780,6 +1934,7 @@ class ConversationRuntimeController extends ChangeNotifier {
       _resetHistory();
       _lastError = null;
       _sending = false;
+      _groupDiscussionMode = false;
       notifyListeners();
     }
     try {
@@ -1795,6 +1950,11 @@ class ConversationRuntimeController extends ChangeNotifier {
                 Map<String, dynamic>.from(snapshotData['group'] as Map),
               )
             : null;
+        if (_group == null ||
+            !_group!.allowCharacterMentions ||
+            _group!.activeMembers.length < 2) {
+          _groupDiscussionMode = false;
+        }
         _groupMentions = <Map<String, dynamic>>[];
         _messages.clear();
         for (final message in _chatService.owned.messages(result)) {
@@ -1922,6 +2082,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     if (_ownedRequestId.isNotEmpty)
       _chatService.owned.stopLocal('当前对话已切换，回复已中断。');
     _ownedRequestId = '';
+    _groupSending = false;
     _runtimeEpoch++;
     _eventCancellation?.cancel('runtime disconnected');
     _eventCancellation = null;
@@ -1943,11 +2104,14 @@ class ConversationRuntimeController extends ChangeNotifier {
     String? characterAvatar,
     String? groupRoundId,
     String? deliveryId,
+    int? deliveryIndex,
     Map<String, dynamic>? sourceScope,
     int? sourceRevision,
     String? id,
     String? renderId,
     String? content,
+    bool? reasoningComplete,
+    bool? outputComplete,
     int? sequence,
     MessageStatus? status,
     AssistantTurnDto? assistantTurn,
@@ -1966,12 +2130,13 @@ class ConversationRuntimeController extends ChangeNotifier {
       characterAvatar: characterAvatar ?? message.characterAvatar,
       groupRoundId: groupRoundId ?? message.groupRoundId,
       deliveryId: deliveryId ?? message.deliveryId,
+      deliveryIndex: deliveryIndex ?? message.deliveryIndex,
       role: message.role,
       type: message.type,
       content: content ?? message.content,
       reasoningContent: message.reasoningContent,
-      reasoningComplete: message.reasoningComplete,
-      outputComplete: message.outputComplete,
+      reasoningComplete: reasoningComplete ?? message.reasoningComplete,
+      outputComplete: outputComplete ?? message.outputComplete,
       reasoningDurationMs: message.reasoningDurationMs,
       time: message.time,
       sequence: sequence ?? message.sequence,
@@ -2178,6 +2343,14 @@ class ConversationRuntimeController extends ChangeNotifier {
   bool _isLiveAssistantMessage(ChatMessage message) {
     if (message.role != MessageRole.assistant) return false;
     return message.id.startsWith('request:') || message.id.startsWith('turn:');
+  }
+
+  bool _isGroupTurn(String requestId) {
+    if (requestId.trim().isEmpty) return false;
+    return _messages.messages.any(
+      (message) =>
+          message.deliveryId.isNotEmpty && message.id == '$requestId/assistant',
+    );
   }
 
   Map<String, dynamic> serializeMessage(ChatMessage message) =>

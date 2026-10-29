@@ -40,7 +40,34 @@ class _FakeOwnedService extends DeviceOwnedChatService {
     String? characterId,
     bool older = false,
     String keyword = '',
-  }) async => {'conversationId': conversationId, 'executionScope': scope()};
+  }) async => {
+    'conversationId': conversationId,
+    'executionScope': scope(),
+    if (owner.groupSnapshot != null) 'snapshot': {'group': owner.groupSnapshot},
+  };
+
+  @override
+  Stream<Map<String, dynamic>> sendGroup({
+    required String requestId,
+    required String message,
+    required String conversationId,
+    required String characterId,
+    required OwnedGroupState group,
+    required List<Map<String, dynamic>> mentions,
+    int? modelConfigId,
+    String? reasoningEffort,
+    bool? reasoningEnabled,
+    String? permissionMode,
+    String? messageStyle,
+    Map<String, dynamic>? context,
+    List<Map<String, dynamic>>? attachments,
+    bool discussionMode = false,
+  }) {
+    owner.submittedRequestId = requestId;
+    owner.submittedGroupMentions = mentions;
+    owner.submittedGroupDiscussionMode = discussionMode;
+    return owner.groupStream!.stream;
+  }
 
   @override
   List<MessageDto> messages(Map<String, dynamic> result) =>
@@ -111,12 +138,16 @@ class _FakeChatService extends ChatService {
   String submittedMessage = '';
   String submittedRequestId = '';
   String submittedStyle = '';
+  List<Map<String, dynamic>> submittedGroupMentions = const [];
+  bool submittedGroupDiscussionMode = false;
   int submitCount = 0;
   Completer<void>? mutation;
   List<MessageDto> Function(String)? snapshotMessages;
   List<AssistantTurnDto> snapshotTurns = [];
   bool failAfterCompleted = false;
   StreamController<Map<String, dynamic>>? streamed;
+  StreamController<Map<String, dynamic>>? groupStream;
+  Map<String, dynamic>? groupSnapshot;
   bool moreTurns = false;
   String turnCursor = '';
   String requestedTurnCursor = '';
@@ -222,6 +253,207 @@ Map<String, dynamic> _event({
 }
 
 void main() {
+  test('群成员并发流各自更新且分别完成', () async {
+    SharedPreferences.setMockInitialValues({});
+    final events = StreamController<ChatStreamEvent>.broadcast();
+    final phases = StreamController<Map<String, dynamic>>();
+    final service = _FakeChatService(events)
+      ..groupStream = phases
+      ..groupSnapshot = {
+        'conversationId': 'conversation-1',
+        'conversationRoleId': 'role',
+        'roleOwnerId': 'device',
+        'members': [
+          {
+            'memberId': 'a',
+            'characterId': 'role-a',
+            'characterName': '甲',
+            'characterAvatar': 'avatar-a',
+            'status': 'active',
+          },
+          {
+            'memberId': 'b',
+            'characterId': 'role-b',
+            'characterName': '乙',
+            'characterAvatar': 'avatar-b',
+            'status': 'active',
+          },
+        ],
+      };
+    final controller = ConversationRuntimeController(service);
+    await controller.openConversation('conversation-1', characterId: 'role');
+    final sending = controller.sendText('@所有成员 你好');
+    await Future<void>.delayed(Duration.zero);
+    Future<void> emit(Map<String, dynamic> event) async {
+      phases.add(event);
+      await Future<void>.delayed(Duration.zero);
+    }
+
+    final scopeA = {
+      ...(service.owned as _FakeOwnedService).scope(),
+      'roleId': 'role-a',
+      'requestId': 'child-a',
+    };
+    final scopeB = {
+      ...(service.owned as _FakeOwnedService).scope(),
+      'roleId': 'role-b',
+      'requestId': 'child-b',
+    };
+    Map<String, dynamic> member(
+      String type,
+      String id,
+      int index,
+      Map<String, dynamic> scope,
+    ) => {
+      'type': type,
+      'conversationId': 'conversation-1',
+      'groupRoundId': 'round',
+      'deliveryId': id,
+      'childRequestId': scope['requestId'],
+      'deliveryIndex': index,
+      'characterId': scope['roleId'],
+      'characterName': id == 'a' ? '甲' : '乙',
+      'executionScope': scope,
+    };
+    await emit(member('group.delivery.started', 'a', 0, scopeA));
+    await emit(member('group.delivery.started', 'b', 1, scopeB));
+    events.add(
+      ChatStreamEvent(
+        'agent_ui_event',
+        _event(
+          sequence: 1,
+          id: 'start-a',
+          type: 'turn.started',
+          requestId: 'child-a',
+        ),
+      ),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(
+      controller.messages
+          .where((message) => message.role == MessageRole.assistant)
+          .length,
+      2,
+    );
+    await emit(member('started', 'a', 0, scopeA));
+    await emit(member('started', 'b', 1, scopeB));
+    await emit({...member('delta', 'a', 0, scopeA), 'text': '甲回复'});
+    await emit({...member('delta', 'b', 1, scopeB), 'text': '乙回复'});
+    await emit(member('group.delivery.completed', 'b', 1, scopeB));
+    events.add(const ChatStreamEvent('snapshot.required', {}));
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    final rows = controller.messages
+        .where((message) => message.deliveryId.isNotEmpty)
+        .toList();
+    expect(rows.map((message) => message.content), ['甲回复', '乙回复']);
+    expect(rows.map((message) => message.characterAvatar), [
+      'avatar-a',
+      'avatar-b',
+    ]);
+    expect(rows.map((message) => message.status), [
+      MessageStatus.streaming,
+      MessageStatus.delivered,
+    ]);
+    expect(controller.sending, isTrue);
+    await emit(member('group.delivery.completed', 'a', 0, scopeA));
+    await emit({
+      'type': 'group.completed',
+      'data': {
+        'conversationId': 'conversation-1',
+        'userMessageId': '${service.submittedRequestId}/user',
+        'deliveries': [
+          {
+            'requestId': 'child-a',
+            'deliveryId': 'a',
+            'groupRoundId': 'round',
+            'executionScope': scopeA,
+            'reply': '甲回复',
+            'saved': true,
+          },
+          {
+            'requestId': 'child-b',
+            'deliveryId': 'b',
+            'groupRoundId': 'round',
+            'executionScope': scopeB,
+            'reply': '乙回复',
+            'saved': true,
+          },
+        ],
+      },
+    });
+    await phases.close();
+    await sending;
+    expect(
+      controller.messages
+          .where((message) => message.deliveryId.isNotEmpty)
+          .length,
+      2,
+    );
+    expect(controller.sending, isFalse);
+    events.add(
+      ChatStreamEvent(
+        'agent_ui_event',
+        _event(
+          sequence: 1,
+          id: 'late-group-start',
+          type: 'turn.started',
+          requestId: 'child-b',
+        ),
+      ),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(controller.sending, isFalse);
+    controller.dispose();
+    await events.close();
+  });
+  test('群聊讨论模式发送空点名并声明讨论调度', () async {
+    SharedPreferences.setMockInitialValues({});
+    final events = StreamController<ChatStreamEvent>.broadcast();
+    final phases = StreamController<Map<String, dynamic>>();
+    final service = _FakeChatService(events)
+      ..groupStream = phases
+      ..groupSnapshot = {
+        'conversationId': 'conversation-1',
+        'conversationRoleId': 'role',
+        'roleOwnerId': 'device',
+        'membershipRevision': 1,
+        'settingsRevision': 2,
+        'groupSettings': {'allowCharacterMentions': true, 'maxAutoReplies': 6},
+        'members': [
+          {
+            'memberId': 'a',
+            'characterId': 'role-a',
+            'characterName': '甲',
+            'status': 'active',
+          },
+          {
+            'memberId': 'b',
+            'characterId': 'role-b',
+            'characterName': '乙',
+            'status': 'active',
+          },
+        ],
+      };
+    final controller = ConversationRuntimeController(service);
+    await controller.openConversation('conversation-1', characterId: 'role');
+    controller.setGroupDiscussionMode(true);
+    final sending = controller.sendText('讨论小商家服务方案');
+    await Future<void>.delayed(Duration.zero);
+    expect(service.submittedGroupDiscussionMode, isTrue);
+    expect(service.submittedGroupMentions, isEmpty);
+    phases.add({
+      'type': 'group.completed',
+      'data': {
+        'conversationId': 'conversation-1',
+        'userMessageId': '${service.submittedRequestId}/user',
+        'deliveries': [],
+      },
+    });
+    await phases.close();
+    await sending;
+    controller.dispose();
+    await events.close();
+  });
   test('发送立即显示占位，思考和正文分别结束且等待保存确认', () async {
     SharedPreferences.setMockInitialValues({});
     final events = StreamController<ChatStreamEvent>.broadcast();

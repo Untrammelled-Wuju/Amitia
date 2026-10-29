@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,6 +20,70 @@ import (
 	"github.com/u-ai/backend/internal/migration"
 	"gorm.io/gorm"
 )
+
+func TestProjectGroupResourceForSnapshotRemovesDuplicatedAvatars(t *testing.T) {
+	avatar := strings.Repeat("x", 256<<10)
+	round := map[string]any{
+		"roundId":        "round",
+		"conversationId": "chat",
+		"deliveries": []any{
+			map[string]any{"deliveryId": "one", "characterAvatar": avatar},
+			map[string]any{"deliveryId": "two", "characterAvatar": avatar},
+		},
+	}
+	encoded, err := json.Marshal(round)
+	if err != nil {
+		t.Fatal(err)
+	}
+	projected, err := projectGroupResourceForSnapshot(coordination.Resource{Kind: "group-round", Body: encoded})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var restored map[string]any
+	if err := json.Unmarshal(projected.Body, &restored); err != nil {
+		t.Fatal(err)
+	}
+	deliveries, _ := restored["deliveries"].([]any)
+	if len(projected.Body) > 4096 || len(deliveries) != 2 {
+		t.Fatalf("群轮次快照仍包含重复头像: bytes=%d deliveries=%d", len(projected.Body), len(deliveries))
+	}
+	for _, raw := range deliveries {
+		delivery, _ := raw.(map[string]any)
+		if delivery["characterAvatar"] != nil {
+			t.Fatal("群轮次快照保留了投递头像")
+		}
+	}
+	conversation := map[string]any{
+		"conversationId":   "chat",
+		"conversationType": "group",
+		"members": []any{
+			map[string]any{"characterId": "one", "characterAvatar": avatar},
+			map[string]any{"characterId": "two", "characterAvatar": avatar},
+		},
+	}
+	encoded, err = json.Marshal(conversation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	projected, err = projectGroupResourceForSnapshot(coordination.Resource{Kind: "conversation", Body: encoded})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var projectedConversation map[string]any
+	if err := json.Unmarshal(projected.Body, &projectedConversation); err != nil {
+		t.Fatal(err)
+	}
+	projectedMembers, _ := projectedConversation["members"].([]any)
+	if len(projected.Body) > 4096 || len(projectedMembers) != 2 {
+		t.Fatalf("群会话快照仍包含重复头像: bytes=%d members=%d", len(projected.Body), len(projectedMembers))
+	}
+	for _, raw := range projectedMembers {
+		member, _ := raw.(map[string]any)
+		if member["characterAvatar"] != nil {
+			t.Fatal("群会话快照保留了成员头像")
+		}
+	}
+}
 
 func TestMeshLegacyHistoryPagesAndCursorOwnership(t *testing.T) {
 	p := setupMeshLocalDataPort(t)

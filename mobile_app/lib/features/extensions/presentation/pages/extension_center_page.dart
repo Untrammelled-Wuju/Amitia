@@ -8,6 +8,7 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/services/extension_service.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/ui_runtime/channel_plugin_navigation.dart';
 import '../../../../core/ui_runtime/mobile_extension_slot.dart';
 import '../../../../core/ui_runtime/ui_navigation_registry.dart';
 import '../../../../core/ui_runtime/ui_runtime_controller.dart';
@@ -60,9 +61,29 @@ class ExtensionCenterPage extends ConsumerWidget {
     WidgetRef ref,
     ExtensionCenterView view,
   ) {
-    final navigationItems = UINavigationRegistry.resolve(
-      ref.watch(uiRuntimeProvider).valueOrNull,
-    ).where((item) => !item.builtin).toList(growable: false);
+    final snapshot = ref.watch(uiRuntimeProvider).valueOrNull;
+    final channelExtensionIds = ChannelPluginNavigationRegistry.extensionIds(
+      snapshot,
+    );
+    final navigationItems = UINavigationRegistry.resolve(snapshot)
+        .where(
+          (item) =>
+              !item.builtin && !channelExtensionIds.contains(item.extensionId),
+        )
+        .toList(growable: false);
+    final installed = _withoutChannelCards(view.installed, channelExtensionIds);
+    final updates = _withoutChannelCards(view.updates, channelExtensionIds);
+    final needsAction = _withoutChannelCards(
+      view.needsAction,
+      channelExtensionIds,
+    );
+    final discover = _withoutChannelCards(view.discover, channelExtensionIds);
+    final visibleCards = <ExtensionCenterCard>[
+      ...installed,
+      ...discover,
+      ...updates,
+      ...needsAction,
+    ];
     return ListView(
       padding: EdgeInsets.fromLTRB(
         AppSpacing.pagePadding,
@@ -130,7 +151,7 @@ class ExtensionCenterPage extends ConsumerWidget {
             ),
           ),
         ],
-        if (view.all.isEmpty) ...[
+        if (visibleCards.isEmpty) ...[
           SizedBox(height: AppSpacing.lg),
           Text('已安装', style: AppTypography.label(context)),
           Padding(
@@ -145,14 +166,14 @@ class ExtensionCenterPage extends ConsumerWidget {
             ),
           ),
         ],
-        if (view.updates.isNotEmpty) ...[
+        if (updates.isNotEmpty) ...[
           SizedBox(height: AppSpacing.lg),
           Text(
-            '可更新 (${view.updates.length})',
+            '可更新 (${updates.length})',
             style: AppTypography.sectionTitle(context),
           ),
           SizedBox(height: AppSpacing.sm),
-          ...view.updates.map(
+          ...updates.map(
             (card) => AmitiaExtensionCard(
               extensionId: card.extensionId,
               name: card.displayName,
@@ -171,14 +192,14 @@ class ExtensionCenterPage extends ConsumerWidget {
             ),
           ),
         ],
-        if (view.needsAction.isNotEmpty) ...[
+        if (needsAction.isNotEmpty) ...[
           SizedBox(height: AppSpacing.lg),
           Text(
-            '需要处理 (${view.needsAction.length})',
+            '需要处理 (${needsAction.length})',
             style: AppTypography.sectionTitle(context),
           ),
           SizedBox(height: AppSpacing.sm),
-          ...view.needsAction.map(
+          ...needsAction.map(
             (card) => AmitiaExtensionCard(
               extensionId: card.extensionId,
               name: card.displayName,
@@ -197,10 +218,10 @@ class ExtensionCenterPage extends ConsumerWidget {
             ),
           ),
         ],
-        if (view.installed.isNotEmpty) ...[
+        if (installed.isNotEmpty) ...[
           Text('已安装', style: AppTypography.sectionTitle(context)),
           SizedBox(height: AppSpacing.sm),
-          ...view.installed.map(
+          ...installed.map(
             (card) => AmitiaExtensionCard(
               extensionId: card.extensionId,
               name: card.displayName,
@@ -218,11 +239,11 @@ class ExtensionCenterPage extends ConsumerWidget {
             ),
           ),
         ],
-        if (view.discover.isNotEmpty) ...[
+        if (discover.isNotEmpty) ...[
           SizedBox(height: AppSpacing.lg),
           Text('发现', style: AppTypography.sectionTitle(context)),
           SizedBox(height: AppSpacing.sm),
-          ...view.discover.map(
+          ...discover.map(
             (card) => AmitiaExtensionCard(
               extensionId: card.extensionId,
               name: card.displayName,
@@ -240,6 +261,15 @@ class ExtensionCenterPage extends ConsumerWidget {
       ],
     );
   }
+}
+
+List<ExtensionCenterCard> _withoutChannelCards(
+  List<ExtensionCenterCard> cards,
+  Set<String> channelExtensionIds,
+) {
+  return cards
+      .where((card) => !channelExtensionIds.contains(card.extensionId))
+      .toList(growable: false);
 }
 
 class _CenterEntry extends StatelessWidget {

@@ -45,6 +45,7 @@ class ChatMessage {
   final String characterAvatar;
   final String groupRoundId;
   final String deliveryId;
+  final int? deliveryIndex;
   final MessageRole role;
   final MessageType type;
   final String content;
@@ -85,6 +86,7 @@ class ChatMessage {
     this.characterAvatar = '',
     this.groupRoundId = '',
     this.deliveryId = '',
+    this.deliveryIndex,
     required this.role,
     required this.type,
     required this.content,

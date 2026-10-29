@@ -11,7 +11,7 @@ import { ownedImageAttachment, ownedAudioAttachment, ownedAudioURL, ownedFileAtt
 import { sameOwnedAuthority } from "@/runtime/owned-speech-result";
 import { parseConversationReference } from "@/runtime/device-owned-conversation-reference";
 import { ownedChatRuntimeRequest } from "@/runtime/owned-chat-management";
-import type { OwnedGroupChatResponse } from "@/runtime/device-owned-chat";
+import type { OwnedGroupChatResponse, OwnedGroupState } from "@/runtime/device-owned-chat";
 import { resolveGroupMentions } from "./groupMentions";
 
 export function useWebChatSend(
@@ -39,6 +39,9 @@ export function useWebChatSend(
   activeTurnId?: Ref<string>,
   beginPendingAssistant?: (requestId: string, characterId?: string) => void,
   failPendingAssistant?: (requestId: string) => void,
+  groupSending?: Ref<boolean>,
+  groupDiscussion?: Ref<boolean>,
+  groupConversation?: Ref<OwnedGroupState | null>,
 ) {
   const owned = useDeviceOwnedConversation();
   const { messageStyle } = useChatAppearancePreference();
@@ -140,6 +143,8 @@ export function useWebChatSend(
           ? "[图片]"
           : safeText;
 
+    const groupReply = Boolean(groupConversation?.value) || Boolean(groupDiscussion?.value);
+    const createdAt = new Date().toISOString();
     messages.value.push({
       id: userMsgLocalId,
       requestId: requestEnvelope.requestId,
@@ -153,11 +158,25 @@ export function useWebChatSend(
       ...(ownedExtra ? { attachments: [{ ...ownedExtra, url: ownedAttachmentURL(ownedExtra), downloadUrl: ownedAttachmentURL(ownedExtra) }] } : {}),
       status: "sending",
       conversationId: convId.value,
-      createdAt: new Date().toISOString(),
+      createdAt,
       replyToMessageId: replyTarget?.value?.id || undefined,
       replyToRole: replyTarget?.value?.role || undefined,
       replyToExcerpt: replyTarget?.value?.content || undefined,
     });
+    if (!groupReply) {
+      messages.value.push({
+        id: `${requestEnvelope.requestId}/assistant`,
+        uiKey: `request:${requestEnvelope.requestId}`,
+        requestId: requestEnvelope.requestId,
+        role: "assistant",
+        characterId: originalRole,
+        content: "",
+        status: "queued",
+        conversationId: convId.value,
+        createdAt,
+      });
+      beginPendingAssistant?.(requestEnvelope.requestId, originalRole);
+    }
     scrollToBottom(true);
     sending.value = true;
     modelError.value = "";
@@ -194,13 +213,16 @@ export function useWebChatSend(
         }
         const group = originalConversation ? await owned.groupState(originalConversation, originalRole) : null;
         if (group) {
+          failPendingAssistant?.(requestEnvelope.requestId);
+          const pendingIndex = messages.value.findIndex((message) => message.id === `${requestEnvelope.requestId}/assistant` && message.status === "queued");
+          if (pendingIndex >= 0) messages.value.splice(pendingIndex, 1);
+          const groupAvatar = (roleId?: string) => group.members.find((member) => member.characterId === roleId)?.characterAvatar || "";
+          if (groupSending) groupSending.value = true;
           const groupView = await owned.query(originalConversation, originalRole);
           expectedExecutionScope = groupView.executionScope;
           if (!sameOwnedAuthority(originalReply?.executionScope || expectedExecutionScope, expectedExecutionScope) && originalReply) throw new Error("引用消息的群会话权限已变化，请重新选择");
-          const activeMentions = resolveGroupMentions(
-            sendContent,
-            group.members,
-          );
+          const discussion = Boolean(groupDiscussion?.value);
+          const activeMentions = discussion ? [] : resolveGroupMentions(sendContent, group.members);
           let response: OwnedGroupChatResponse | undefined;
           response = await owned.sendGroup({
             requestId: requestEnvelope.requestId,
@@ -218,22 +240,30 @@ export function useWebChatSend(
             group: {
               expectedMembershipRevision: group.membershipRevision,
               expectedSettingsRevision: group.settingsRevision,
+              mode: discussion ? "discussion" : "standard",
               ...(replyTarget?.value?.id ? { replyToMessageId: replyTarget.value.id } : {}),
             },
           }, (event) => {
             if (convId.value !== activeConversation || characterId.value !== originalRole) return;
+            if (event.type === "group.delivery.started" && event.deliveryId) {
+              const key = `group-delivery:${event.deliveryId}`;
+              if (!messages.value.some((message) => message.uiKey === key)) messages.value.push({ id: event.childRequestId ? `${event.childRequestId}/assistant` : key, uiKey: key, requestId: event.childRequestId, role: "assistant", content: "", status: "streaming", createdAt: new Date().toISOString(), characterId: event.characterId, characterName: event.characterName, characterAvatar: groupAvatar(event.characterId), conversationId: event.conversationId, groupRoundId: event.groupRoundId, deliveryId: event.deliveryId, deliveryIndex: event.deliveryIndex ?? 0 });
+            }
             if (event.type === "started" && event.executionScope && event.deliveryId) {
               const userIndex = messages.value.findIndex((message) => message.id === userMsgLocalId);
               if (userIndex >= 0) messages.value[userIndex] = { ...messages.value[userIndex], id: `${requestEnvelope.requestId}/user`, ownerId: event.executionScope.resourceOwnerId, sourceRevision: 1, status: "completed", executionScope: event.executionScope, conversationId: event.conversationId, sourceConversationId: event.conversationId };
               const assistantId = `${event.executionScope.requestId}/assistant`;
               const existing = messages.value.findIndex((message) => message.uiKey === `group-delivery:${event.deliveryId}`);
-              const assistant = { id: assistantId, uiKey: `group-delivery:${event.deliveryId}`, ownerId: event.executionScope.resourceOwnerId, requestId: event.executionScope.requestId, role: "assistant", content: "", reasoningContent: "", status: "streaming", reasoningComplete: false, outputComplete: false, createdAt: new Date().toISOString(), characterId: event.characterId, characterName: event.characterName, characterAvatar: event.characterAvatar, conversationId: event.conversationId, sourceConversationId: event.conversationId, executionScope: event.executionScope, groupRoundId: event.groupRoundId, deliveryId: event.deliveryId };
-              if (existing >= 0) messages.value[existing] = { ...messages.value[existing], ...assistant };
+              const assistant = { id: assistantId, uiKey: `group-delivery:${event.deliveryId}`, ownerId: event.executionScope.resourceOwnerId, requestId: event.executionScope.requestId, role: "assistant", content: "", reasoningContent: "", status: "streaming", reasoningComplete: false, outputComplete: false, createdAt: new Date().toISOString(), characterId: event.characterId, characterName: event.characterName, characterAvatar: groupAvatar(event.characterId), conversationId: event.conversationId, sourceConversationId: event.conversationId, executionScope: event.executionScope, groupRoundId: event.groupRoundId, deliveryId: event.deliveryId, deliveryIndex: event.deliveryIndex ?? 0 };
+              if (existing >= 0) {
+                const current = messages.value[existing];
+                messages.value[existing] = current.saved ? { ...assistant, ...current, executionScope: event.executionScope } : { ...current, ...assistant, createdAt: current.createdAt || assistant.createdAt };
+              }
               else messages.value.push(assistant);
             }
             if (event.type === "delta" && event.deliveryId) {
               const index = messages.value.findIndex((message) => message.uiKey === `group-delivery:${event.deliveryId}`);
-              if (index >= 0) {
+              if (index >= 0 && !messages.value[index].saved) {
                 const field = event.reasoning ? "reasoningContent" : "content";
                 messages.value[index] = { ...messages.value[index], [field]: (messages.value[index][field] || "") + (event.text || ""), reasoningComplete: !event.reasoning, outputComplete: false };
               }
@@ -246,9 +276,14 @@ export function useWebChatSend(
               const index = messages.value.findIndex((message) => message.uiKey === `group-delivery:${event.deliveryId}`);
               if (index >= 0) messages.value[index] = { ...messages.value[index], reasoningComplete: true, outputComplete: true };
             }
+            if (event.type === "group.delivery.completed" && event.deliveryId) {
+              const index = messages.value.findIndex((message) => message.uiKey === `group-delivery:${event.deliveryId}`);
+              if (index >= 0) messages.value[index] = { ...messages.value[index], status: "completed", saved: true, reasoningComplete: true, outputComplete: true };
+            }
             if (event.type === "group.delivery.failed" && event.deliveryId) {
               const index = messages.value.findIndex((message) => message.uiKey === `group-delivery:${event.deliveryId}`);
               if (index >= 0) messages.value[index] = { ...messages.value[index], content: messages.value[index].content || event.text || "生成失败", status: "failed", reasoningComplete: true, outputComplete: true };
+              else messages.value.push({ id: `group-delivery:${event.deliveryId}`, uiKey: `group-delivery:${event.deliveryId}`, role: "assistant", content: event.text || "生成失败", status: "failed", createdAt: new Date().toISOString(), characterId: event.characterId, characterName: event.characterName, groupRoundId: event.groupRoundId, deliveryId: event.deliveryId, deliveryIndex: event.deliveryIndex ?? 0 });
             }
             scrollToBottom(true);
           });
@@ -272,13 +307,13 @@ export function useWebChatSend(
               sourceConversationId: parseConversationReference(response.conversationId)?.id || response.conversationId,
               characterId: delivery.executionScope.roleId,
               characterName: delivery.characterName,
-              characterAvatar: delivery.characterAvatar,
+              characterAvatar: groupAvatar(delivery.executionScope.roleId),
               executionScope: delivery.executionScope,
               groupRoundId: response.groupRoundId,
               deliveryId: delivery.deliveryId,
               saved: delivery.saved,
               memoryStatus: delivery.memoryStatus,
-              createdAt: new Date().toISOString(),
+              createdAt: index >= 0 ? messages.value[index].createdAt : new Date().toISOString(),
             };
             if (index >= 0) messages.value[index] = { ...messages.value[index], ...assistant };
             else messages.value.push(assistant);
@@ -288,14 +323,11 @@ export function useWebChatSend(
           if (response.status === "completed_with_errors") modelError.value = "部分群成员回复失败，可在成员面板查看后重新点名";
           notifyDesktopPetChatState("assistant_finished", requestEnvelope.requestId);
           if (replyTarget) replyTarget.value = null;
-          try {
-            await onConversationCreated?.(response.conversationId);
-          } catch {
+          void Promise.resolve().then(() => onConversationCreated?.(response.conversationId)).catch(() => {
             if (convId.value === response.conversationId && characterId.value === originalRole) ElMessage.warning("群消息已保存，会话列表刷新失败，请稍后刷新");
-          }
+          });
           return;
         }
-        beginPendingAssistant?.(requestEnvelope.requestId, originalRole);
         const response = await owned.send({ requestId: requestEnvelope.requestId, conversationId: convId.value || undefined, ...(draftProjectId ? { projectId: draftProjectId } : {}), characterId: expectedExecutionScope.roleId, permissionMode: permissionMode?.value || undefined, modelConfigId: modelConfigId?.value, reasoningEffort: reasoningEffort?.value, reasoningEnabled: reasoningEnabled?.value, messageStyle: messageStyle.value, expectedExecutionScope, message: sendContent, context, attachments, quote }, (event) => {
           if (convId.value !== activeConversation || characterId.value !== originalRole) return;
           if (event.type === "started") {
@@ -307,7 +339,10 @@ export function useWebChatSend(
               localStorage.setItem("webchat-conv-id", event.conversationId);
               window.dispatchEvent(new CustomEvent("amitia:owned-runtime-refresh", { detail: { conversationId: event.conversationId } }));
             }
-            messages.value.push({ id: assistantId, uiKey: `request:${requestEnvelope.requestId}`, ownerId: event.executionScope?.resourceOwnerId, requestId: requestEnvelope.requestId, role: "assistant", content: "", reasoningContent: "", status: "streaming", reasoningComplete: false, outputComplete: false, createdAt: new Date().toISOString(), characterId: event.executionScope?.roleId, conversationId: event.conversationId, executionScope: event.executionScope });
+            const assistantIndex = messages.value.findIndex((message) => message.role === "assistant" && message.requestId === requestEnvelope.requestId);
+            const startedAssistant = { id: assistantId, uiKey: `request:${requestEnvelope.requestId}`, ownerId: event.executionScope?.resourceOwnerId, requestId: requestEnvelope.requestId, role: "assistant", status: "streaming", characterId: event.executionScope?.roleId || originalRole, conversationId: event.conversationId, executionScope: event.executionScope };
+            if (assistantIndex >= 0) messages.value[assistantIndex] = { ...messages.value[assistantIndex], ...startedAssistant };
+            else messages.value.push({ ...startedAssistant, content: "", reasoningContent: "", reasoningComplete: false, outputComplete: false, createdAt: new Date().toISOString() });
           }
 					if (event.type === "transcribed") {
 						const userIndex = messages.value.findIndex((message) => message.id === `${requestEnvelope.requestId}/user` && message.ownerId === event.executionScope?.resourceOwnerId);
@@ -348,13 +383,12 @@ export function useWebChatSend(
       modelError.value = errMsg;
       const index = messages.value.findIndex((message) => message.id === userMsgLocalId);
       if (index >= 0) messages.value[index] = { ...messages.value[index], status: "failed" };
-      if (owned.enabled.value) {
-        const assistantIndex = messages.value.findIndex((message) => message.id === `${requestEnvelope.requestId}/assistant`);
-        if (assistantIndex >= 0) messages.value[assistantIndex] = { ...messages.value[assistantIndex], status: "interrupted" };
-      }
+      const assistantIndex = messages.value.findIndex((message) => message.id === `${requestEnvelope.requestId}/assistant`);
+      if (assistantIndex >= 0) messages.value[assistantIndex] = { ...messages.value[assistantIndex], status: "interrupted" };
       sending.value = false;
       notifyDesktopPetChatState("assistant_error", requestEnvelope.requestId, errMsg);
     } finally {
+      if (groupSending) groupSending.value = false;
       isSubmitting.value = false;
       fetchWebMsgCount?.();
     }
@@ -364,7 +398,8 @@ export function useWebChatSend(
 
   async function handleStop() {
     try {
-      if (activeTurnId?.value && convId.value) await ownedChatRuntimeRequest("interrupt", { conversationId: convId.value, turnId: activeTurnId.value }, characterId.value);
+      if (groupSending?.value) await owned.interrupt();
+      else if (activeTurnId?.value && convId.value) await ownedChatRuntimeRequest("interrupt", { conversationId: convId.value, turnId: activeTurnId.value }, characterId.value);
       else await owned.interrupt();
     } catch (error: any) { ElMessage.error(error?.message || "停止失败"); }
   }

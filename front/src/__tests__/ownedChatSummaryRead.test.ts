@@ -138,6 +138,17 @@ describe("会话切换加载状态", () => {
     expect(api.conversationLoading.value).toBe(false);
   });
 
+  it("启动加载遇到瞬时失败后自动重试并渲染消息", async () => {
+    mocks.query
+      .mockRejectedValueOnce(new Error("服务尚未就绪"))
+      .mockResolvedValueOnce({ rows: [{ id: "recovered", role: "assistant", content: "恢复后的消息" }], snapshot: { ownerId: "a", resources: [{ kind: "conversation", body: { id: "chat", title: "恢复会话" } }] } });
+    const messages = ref<any[]>([]);
+    const api = useWebChatConversation(messages, ref("chat"), ref("role"), ref(""), ref(""), ref(""), ref(""), ref(false), vi.fn(), vi.fn(), undefined, 0);
+    await api.loadCharacterConversation({ retryOnFailure: true });
+    expect(mocks.query).toHaveBeenCalledTimes(2);
+    expect(messages.value.map((message) => message.content)).toEqual(["恢复后的消息"]);
+  });
+
   it("切换时优先使用侧边栏已加载的真实标题", async () => {
     let finish!: (value: unknown) => void;
     mocks.query.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
@@ -243,5 +254,26 @@ describe("保留式会话刷新", () => {
     expect(messages.value).toEqual([]);
     finish({ rows: [], snapshot: { ownerId: "a", resources: [{ kind: "conversation", body: { id: "chat", title: "会话" } }] } });
     await pending;
+  });
+
+  it("进入空白新对话时清空群聊状态和标题", async () => {
+    mocks.query.mockResolvedValueOnce({
+      rows: [],
+      snapshot: {
+        ownerId: "a",
+        group: { conversationId: "group-chat", title: "旧群聊", members: [] },
+        resources: [{ kind: "conversation", body: { id: "group-chat", title: "旧群聊" } }],
+      },
+    });
+    const conversationId = ref("group-chat");
+    const title = ref("");
+    const api = useWebChatConversation(ref([]), conversationId, ref("role"), title, ref(""), ref(""), ref(""), ref(false), vi.fn(), vi.fn(), undefined, 0);
+    await api.loadCharacterConversation();
+    expect(api.group.value?.conversationId).toBe("group-chat");
+    conversationId.value = "";
+    await api.loadCharacterConversation();
+    expect(api.group.value).toBeNull();
+    expect(title.value).toBe("");
+    expect(api.conversationLoading.value).toBe(false);
   });
 });

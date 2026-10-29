@@ -634,12 +634,16 @@ func (s *OwnershipStore) ListPage(ctx context.Context, kind, role string, query 
 		}
 		resource.Body = json.RawMessage(body)
 		resource.UpdatedAt = ordered
-		if kind == "message" {
+		if kind == "message" || kind == "checkpoint" {
 			encoded, err := json.Marshal(resource)
 			if err != nil {
 				return nil, "", err
 			}
-			if pageBytes+len(encoded)+1 > 3<<20 {
+			pageLimit := 2 << 20
+			if kind == "checkpoint" {
+				pageLimit = 1 << 20
+			}
+			if pageBytes+len(encoded)+1 > pageLimit {
 				if len(resources) == 0 {
 					return nil, "", ErrPendingLimit
 				}

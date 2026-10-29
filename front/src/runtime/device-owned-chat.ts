@@ -4,6 +4,7 @@ import type { OwnedAttachment } from "./device-owned-attachments";
 import type { OwnedConversationOrigin } from "./device-owned-conversation-reference";
 import { sameOwnedAuthority } from "./owned-speech-result";
 import { normalizeCitationSnapshot, type CitationSnapshotEntry } from "@/conversation/runtime/citationSnapshot";
+import { recordClientError } from "./client-error-tracker";
 
 export interface OwnedExecutionScope {
   memoryRoleId?: string;
@@ -65,7 +66,7 @@ export interface OwnedChatToolProgress {
 }
 
 export interface OwnedChatEvent {
-  type: "started" | "transcribed" | "delta" | "task" | "tool-started" | "tool-completed" | "reasoning-completed" | "output-completed" | "group.delivery.started" | "group.delivery.failed" | "group.round.completed" | "group.completed" | "completed" | "interrupted" | "failed";
+  type: "started" | "transcribed" | "delta" | "task" | "tool-started" | "tool-completed" | "reasoning-completed" | "output-completed" | "group.delivery.started" | "group.delivery.completed" | "group.delivery.failed" | "group.round.completed" | "group.completed" | "completed" | "interrupted" | "failed";
   task?: { coordinationId: string; status: string };
   progress?: OwnedChatToolProgress;
   executionScope?: OwnedExecutionScope;
@@ -79,6 +80,7 @@ export interface OwnedChatEvent {
   data?: OwnedChatResponse;
   groupRoundId?: string;
   deliveryId?: string;
+  childRequestId?: string;
   deliveryIndex?: number;
   characterId?: string;
   characterName?: string;
@@ -132,8 +134,8 @@ export interface OwnedGroupDelivery {
   characterId: string;
   roleOwnerId: string;
   characterName: string;
-  characterAvatar?: string;
   orderIndex: number;
+  turnIndex?: number;
   source: string;
   status: "queued" | "starting" | "running" | "completed" | "failed" | "cancelled";
   error?: string;
@@ -158,6 +160,7 @@ export interface OwnedGroupChatRequest extends Omit<OwnedChatRequest, "character
     expectedMembershipRevision: number;
     expectedSettingsRevision: number;
     replyToMessageId?: string;
+    mode?: "standard" | "discussion";
   };
   mentions: OwnedGroupMention[];
 }
@@ -411,7 +414,7 @@ export async function streamOwnedGroupChat(request: OwnedGroupChatRequest, signa
       const known = scopes.get(event.deliveryId);
       if (known && known !== fingerprint) throw new Error("群成员投递身份在流中发生变化");
       scopes.set(event.deliveryId, fingerprint);
-    } else if (event.type === "delta" || event.type === "transcribed" || event.type === "task" || event.type === "tool-started" || event.type === "tool-completed" || event.type === "reasoning-completed" || event.type === "output-completed") {
+    } else if (event.type === "delta" || event.type === "transcribed" || event.type === "task" || event.type === "tool-started" || event.type === "tool-completed" || event.type === "reasoning-completed" || event.type === "output-completed" || event.type === "group.delivery.completed") {
       if (!event.deliveryId || !event.executionScope || !scopes.get(event.deliveryId) || scopes.get(event.deliveryId) !== scopeFingerprint(validateScope(event.executionScope, event.executionScope.requestId))) throw new Error("群成员流事件与投递身份不一致");
     }
     onEvent(event);
@@ -437,6 +440,9 @@ export async function streamOwnedGroupChat(request: OwnedGroupChatRequest, signa
     }
     if (buffered.trim() || !terminal || !completed) throw new Error("群聊连接已断开，结果尚未确认；不会自动重新发送");
     return completed;
+  } catch (error) {
+    if (!signal.aborted) recordClientError({ source: "group-chat-stream", message: `${error instanceof Error ? error.message : String(error)}; receivedBytes=${totalBytes}; requestId=${request.requestId}` });
+    throw error;
   } finally {
     await reader.cancel().catch(() => undefined);
     reader.releaseLock();

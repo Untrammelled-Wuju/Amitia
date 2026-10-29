@@ -24,6 +24,11 @@ function field(message: any, camel: string, snake: string) {
 }
 
 export function compareChatMessages(a: any, b: any): number {
+  if (a?.groupRoundId && a.groupRoundId === b?.groupRoundId && a?.deliveryId && b?.deliveryId) {
+    const aIndex = numericValue(a.deliveryIndex);
+    const bIndex = numericValue(b.deliveryIndex);
+    if (aIndex !== null && bIndex !== null && aIndex !== bIndex) return aIndex - bIndex;
+  }
   const aId = String(a?.id || "");
   const bId = String(b?.id || "");
   const aAnchorId = String(a?.anchorMessageId || "");

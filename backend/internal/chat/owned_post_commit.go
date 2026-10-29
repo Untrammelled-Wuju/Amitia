@@ -44,7 +44,7 @@ func (s *service) PlanOwnedTitle(ctx context.Context, inference business.Inferen
 				return "", err
 			}
 			title := strings.TrimSpace(conversation.Title)
-			if title != "" && title != strings.TrimSpace(inference.Message) && title != "新对话" {
+			if !business.NeedsOwnedConversationTitle(title, inference.Message) {
 				return "", nil
 			}
 		}

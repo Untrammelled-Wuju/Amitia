@@ -22,6 +22,7 @@ import 'extension_view_invalidator.dart';
 import 'system_service.dart';
 import 'user_feedback_service.dart';
 import 'channel_service.dart';
+import 'channel_sandbox_service.dart';
 import 'workspace_service.dart';
 import 'device_mesh_service.dart';
 import 'device_owned_speech_service.dart';
@@ -175,6 +176,10 @@ final asrServiceProvider = Provider<ASRService>(
 
 final extensionServiceProvider = Provider<ExtensionService>(
   (ref) => ExtensionService(_getDynamicServiceApi(ref)),
+);
+
+final channelSandboxServiceProvider = Provider<ChannelSandboxService>(
+  (ref) => ChannelSandboxService(_getDynamicServiceApi(ref)),
 );
 
 final kernelExtensionEnablementProvider = FutureProvider<Map<String, bool>>((

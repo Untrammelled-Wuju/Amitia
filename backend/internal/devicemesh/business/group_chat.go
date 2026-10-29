@@ -9,7 +9,9 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
@@ -30,6 +32,8 @@ const (
 	GroupDeliveryCancelled        = "cancelled"
 	GroupInvitationAccepted       = "accepted"
 	GroupInviteReplyTool          = "conversation.invite_reply"
+	GroupModeStandard             = "standard"
+	GroupModeDiscussion           = "discussion"
 )
 
 var (
@@ -37,12 +41,14 @@ var (
 	ErrGroupSettingsChanged = errors.New("群设置已变化，请刷新后重试")
 	ErrGroupTargetInvalid   = errors.New("目标角色不在当前群聊中或不可执行")
 	ErrGroupBudgetExhausted = errors.New("本轮角色接话已达到上限，可手动继续")
+	errDiscussionHalted     = errors.New("多角色讨论已停止")
 )
 
 type GroupMessageOptions struct {
 	ExpectedMembershipRevision *int64 `json:"expectedMembershipRevision,omitempty"`
 	ExpectedSettingsRevision   *int64 `json:"expectedSettingsRevision,omitempty"`
 	ReplyToMessageID           string `json:"replyToMessageId,omitempty"`
+	Mode                       string `json:"mode,omitempty"`
 }
 
 type GroupMention struct {
@@ -59,6 +65,7 @@ type PreparedGroupReply struct {
 	DeliveryID          string `json:"deliveryId"`
 	SourceMessageID     string `json:"sourceMessageId"`
 	DeliveryIndex       int    `json:"deliveryIndex"`
+	ContextSequence     int64  `json:"contextSequence,omitempty"`
 }
 
 type GroupReplyContext struct {
@@ -66,6 +73,7 @@ type GroupReplyContext struct {
 	Delivery     GroupDelivery
 	State        coordination.GroupState
 	SourceMember coordination.GroupMember
+	Mode         string
 }
 
 type GroupDelivery struct {
@@ -78,9 +86,9 @@ type GroupDelivery struct {
 	CharacterID       string `json:"characterId"`
 	RoleOwnerID       string `json:"roleOwnerId"`
 	CharacterName     string `json:"characterName"`
-	CharacterAvatar   string `json:"characterAvatar,omitempty"`
 	CharacterRevision int64  `json:"characterRevision"`
 	OrderIndex        int    `json:"orderIndex"`
+	TurnIndex         int    `json:"turnIndex,omitempty"`
 	Source            string `json:"source"`
 	Status            string `json:"status"`
 	Error             string `json:"error,omitempty"`
@@ -101,6 +109,7 @@ type GroupRound struct {
 	MembershipRevision int64             `json:"membershipRevision"`
 	SettingsRevision   int64             `json:"settingsRevision"`
 	AutoReplyCount     int               `json:"autoReplyCount"`
+	Mode               string            `json:"mode,omitempty"`
 	CreatedAt          string            `json:"createdAt"`
 	UpdatedAt          string            `json:"updatedAt"`
 	Deliveries         []GroupDelivery   `json:"deliveries"`
@@ -276,16 +285,25 @@ func (e *Engine) CreateGroupConversation(ctx context.Context, request Request, i
 	return GroupMutationResponse{Group: state, Acknowledgement: ack, Saved: true}, nil
 }
 
-func (e *Engine) AcceptGroupInvitations(ctx context.Context, inference Inference, sourceMessageID string, proposals []GroupInviteProposal) error {
+func (e *Engine) AcceptGroupInvitations(ctx context.Context, inference Inference, generation Generation, sourceMessageID string, proposals []GroupInviteProposal) error {
+	if inference.Group == nil || !inference.Group.State.IsGroup() || !inference.Group.State.Settings.AllowCharacterMentions {
+		if len(proposals) == 0 {
+			return nil
+		}
+		return errors.New("当前会话未允许角色互相邀请")
+	}
+	proposals = append(proposals, resolveGroupTextInvitations(inference.Group.State, generation.Text, inference.Scope.RoleID)...)
+	if len(proposals) > 3 {
+		proposals = proposals[:3]
+	}
 	if len(proposals) == 0 {
 		return nil
-	}
-	if inference.Group == nil || !inference.Group.State.IsGroup() || !inference.Group.State.Settings.AllowCharacterMentions {
-		return errors.New("当前会话未允许角色互相邀请")
 	}
 	if sourceMessageID == "" || inference.Scope.ConversationRoleID == "" {
 		return coordination.ErrWrongOwner
 	}
+	unlock := e.lock("group-invitations\x00" + inference.Scope.SpaceID + "\x00" + inference.Group.Delivery.GroupRoundID)
+	defer unlock()
 	scope := inference.Scope
 	if port, ok := e.data.(coordination.GroupStatePort); ok {
 		current, stateErr := port.GroupState(ctx, scope, inference.ConversationID)
@@ -311,6 +329,9 @@ func (e *Engine) AcceptGroupInvitations(ctx context.Context, inference Inference
 	var round GroupRound
 	if json.Unmarshal(roundResource.Body, &round) != nil || round.ConversationID != inference.ConversationID || round.RoundID != inference.Group.Delivery.GroupRoundID {
 		return coordination.ErrRequestConflict
+	}
+	if round.Mode == GroupModeDiscussion {
+		return nil
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	mutations := make([]coordination.Mutation, 0)
@@ -342,7 +363,7 @@ func (e *Engine) AcceptGroupInvitations(ctx context.Context, inference Inference
 		round.AutoReplyCount++
 		invitation := GroupInvitation{InvitationID: uuid.NewString(), ConversationID: round.ConversationID, RoundID: round.RoundID, SourceMessageID: sourceMessageID, SourceDeliveryID: inference.Group.Delivery.DeliveryID, SourceCharacterID: inference.Scope.RoleID, TargetMemberID: member.MemberID, TargetCharacterID: member.CharacterID, TargetCharacterName: member.CharacterName, Status: GroupInvitationAccepted, CreatedAt: now}
 		round.Invitations = append(round.Invitations, invitation)
-		delivery := GroupDelivery{DeliveryID: uuid.NewString(), GroupRoundID: round.RoundID, ChildRequestID: round.RootRequestID + "/reply/" + uuid.NewString(), MemberID: member.MemberID, CharacterID: member.CharacterID, RoleOwnerID: member.RoleOwnerID, CharacterName: member.CharacterName, CharacterAvatar: member.CharacterAvatar, CharacterRevision: member.CharacterRevision, OrderIndex: member.OrderIndex, Source: "character", Status: GroupDeliveryQueued, CreatedAt: now, UpdatedAt: now}
+		delivery := GroupDelivery{DeliveryID: uuid.NewString(), GroupRoundID: round.RoundID, ChildRequestID: round.RootRequestID + "/reply/" + uuid.NewString(), MemberID: member.MemberID, CharacterID: member.CharacterID, RoleOwnerID: member.RoleOwnerID, CharacterName: member.CharacterName, CharacterRevision: member.CharacterRevision, OrderIndex: member.OrderIndex, Source: "character", Status: GroupDeliveryQueued, CreatedAt: now, UpdatedAt: now}
 		round.Deliveries = append(round.Deliveries, delivery)
 		deliveryMembers[member.MemberID] = true
 		encodedInvitation, err := json.Marshal(invitation)
@@ -380,6 +401,97 @@ func groupRequestFingerprint(request Request) string {
 
 func normalizeGroupMention(member coordination.GroupMember) GroupMention {
 	return GroupMention{MemberID: member.MemberID, CharacterID: member.CharacterID, RoleOwnerID: member.RoleOwnerID}
+}
+
+func resolveRequestedGroupMentions(state coordination.GroupState, mentions []GroupMention) ([]GroupMention, error) {
+	if len(mentions) > 0 {
+		return mentions, nil
+	}
+	member, ok := state.ActiveMember(state.ConversationRoleID)
+	if !ok {
+		return nil, ErrGroupTargetInvalid
+	}
+	return []GroupMention{normalizeGroupMention(member)}, nil
+}
+
+func resolveDiscussionMembers(state coordination.GroupState) ([]coordination.GroupMember, error) {
+	active := make([]coordination.GroupMember, 0, len(state.Members))
+	for _, member := range state.Members {
+		if member.Status == coordination.GroupMemberStatusActive {
+			active = append(active, member)
+		}
+	}
+	sort.SliceStable(active, func(left, right int) bool {
+		return active[left].OrderIndex < active[right].OrderIndex
+	})
+	if len(active) < 2 {
+		return nil, errors.New("多角色讨论至少需要两个有效成员")
+	}
+	start := 0
+	for index, member := range active {
+		if member.CharacterID == state.ConversationRoleID {
+			start = index
+			break
+		}
+	}
+	turns := state.Settings.MaxAutoReplies
+	if turns < 2 {
+		return nil, errors.New("多角色讨论至少需要两次有效发言")
+	}
+	result := make([]coordination.GroupMember, 0, turns)
+	for turn := 0; turn < turns; turn++ {
+		result = append(result, active[(start+turn)%len(active)])
+	}
+	return result, nil
+}
+
+func groupMentionBoundary(value rune) bool {
+	return unicode.IsSpace(value) || strings.ContainsRune("，。！？、,.!?;；:：", value)
+}
+
+func resolveGroupTextInvitations(state coordination.GroupState, text, sourceCharacterID string) []GroupInviteProposal {
+	members := make([]coordination.GroupMember, 0, len(state.Members))
+	for _, member := range state.Members {
+		if member.Status == coordination.GroupMemberStatusActive && strings.TrimSpace(member.CharacterName) != "" && member.CharacterID != sourceCharacterID {
+			members = append(members, member)
+		}
+	}
+	sort.SliceStable(members, func(left, right int) bool {
+		leftLength := len([]rune(strings.TrimSpace(members[left].CharacterName)))
+		rightLength := len([]rune(strings.TrimSpace(members[right].CharacterName)))
+		if leftLength != rightLength {
+			return leftLength > rightLength
+		}
+		return members[left].OrderIndex < members[right].OrderIndex
+	})
+	runes := []rune(text)
+	seen := make(map[string]bool)
+	result := make([]GroupInviteProposal, 0, 3)
+	for index := 0; index < len(runes); index++ {
+		if runes[index] != '@' {
+			continue
+		}
+		for _, member := range members {
+			name := []rune(strings.TrimSpace(member.CharacterName))
+			end := index + 1 + len(name)
+			if len(name) == 0 || end > len(runes) || string(runes[index+1:end]) != string(name) {
+				continue
+			}
+			if end < len(runes) && !groupMentionBoundary(runes[end]) {
+				continue
+			}
+			if !seen[member.MemberID] {
+				seen[member.MemberID] = true
+				result = append(result, GroupInviteProposal{TargetMemberID: member.MemberID, TargetCharacterID: member.CharacterID, TargetCharacterName: member.CharacterName})
+			}
+			index = end - 1
+			break
+		}
+		if len(result) == 3 {
+			break
+		}
+	}
+	return result
 }
 
 func resolveGroupTargets(state coordination.GroupState, mentions []GroupMention, all bool) ([]coordination.GroupMember, error) {
@@ -852,9 +964,31 @@ func (e *Engine) RunGroupEvents(ctx context.Context, request Request, emit func(
 	if request.Group.ExpectedSettingsRevision != nil && state.SettingsRevision != *request.Group.ExpectedSettingsRevision {
 		return GroupResponse{}, ErrGroupSettingsChanged
 	}
-	targets, err := resolveGroupTargets(state, request.Mentions, false)
-	if err != nil {
-		return GroupResponse{}, err
+	mode := strings.TrimSpace(request.Group.Mode)
+	if mode == "" {
+		mode = GroupModeStandard
+	}
+	if mode != GroupModeStandard && mode != GroupModeDiscussion {
+		return GroupResponse{}, errors.New("群聊模式无效")
+	}
+	var targets []coordination.GroupMember
+	if mode == GroupModeDiscussion {
+		if !state.Settings.AllowCharacterMentions {
+			return GroupResponse{}, errors.New("当前会话未允许角色互相讨论")
+		}
+		targets, err = resolveDiscussionMembers(state)
+		if err != nil {
+			return GroupResponse{}, err
+		}
+	} else {
+		mentions, mentionErr := resolveRequestedGroupMentions(state, request.Mentions)
+		if mentionErr != nil {
+			return GroupResponse{}, mentionErr
+		}
+		targets, err = resolveGroupTargets(state, mentions, false)
+		if err != nil {
+			return GroupResponse{}, err
+		}
 	}
 	conversationResource, err := e.data.(coordination.ResourcePort).Resource(ctx, scope, "conversation", state.ConversationID)
 	if err != nil {
@@ -883,14 +1017,18 @@ func (e *Engine) RunGroupEvents(ctx context.Context, request Request, emit func(
 		return GroupResponse{}, err
 	}
 	deliveries := make([]GroupDelivery, 0, len(targets))
-	for _, member := range targets {
+	for turnIndex, member := range targets {
 		deliveryID := uuid.NewString()
-		deliveries = append(deliveries, GroupDelivery{DeliveryID: deliveryID, GroupRoundID: roundID, ChildRequestID: request.RequestID + "/reply/" + deliveryID, MemberID: member.MemberID, CharacterID: member.CharacterID, RoleOwnerID: member.RoleOwnerID, CharacterName: member.CharacterName, CharacterAvatar: member.CharacterAvatar, CharacterRevision: member.CharacterRevision, OrderIndex: member.OrderIndex, Source: "user", Status: GroupDeliveryQueued, CreatedAt: now, UpdatedAt: now})
+		source := "user"
+		if mode == GroupModeDiscussion {
+			source = "discussion"
+		}
+		deliveries = append(deliveries, GroupDelivery{DeliveryID: deliveryID, GroupRoundID: roundID, ChildRequestID: request.RequestID + "/reply/" + deliveryID, MemberID: member.MemberID, CharacterID: member.CharacterID, RoleOwnerID: member.RoleOwnerID, CharacterName: member.CharacterName, CharacterRevision: member.CharacterRevision, OrderIndex: member.OrderIndex, TurnIndex: turnIndex, Source: source, Status: GroupDeliveryQueued, CreatedAt: now, UpdatedAt: now})
 	}
 	conversation["updatedAt"] = now
 	conversation["lastMessageSequence"] = userSequence
 	conversation["characterId"] = state.ConversationRoleID
-	round := GroupRound{RoundID: roundID, ConversationID: state.ConversationID, RootRequestID: request.RequestID, RequestFingerprint: fingerprint, TriggerMessageID: userMessageID, TriggerMessage: request.Message, TriggerSequence: userSequence, Status: GroupRoundQueued, MembershipRevision: state.MembershipRevision, SettingsRevision: state.SettingsRevision, CreatedAt: now, UpdatedAt: now, Deliveries: deliveries}
+	round := GroupRound{RoundID: roundID, ConversationID: state.ConversationID, RootRequestID: request.RequestID, RequestFingerprint: fingerprint, TriggerMessageID: userMessageID, TriggerMessage: request.Message, TriggerSequence: userSequence, Status: GroupRoundQueued, MembershipRevision: state.MembershipRevision, SettingsRevision: state.SettingsRevision, Mode: mode, CreatedAt: now, UpdatedAt: now, Deliveries: deliveries}
 	roundBody, err := json.Marshal(round)
 	if err != nil {
 		return GroupResponse{}, err
@@ -980,7 +1118,7 @@ func (e *Engine) CreateGroupReplyRequest(ctx context.Context, request Request, i
 	round := GroupRound{RoundID: roundID, ConversationID: state.ConversationID, RootRequestID: request.RequestID, RequestFingerprint: fingerprint, TriggerMessageID: input.SourceMessageID, TriggerMessage: userMessage.Content, TriggerSequence: userMessage.Sequence, Status: GroupRoundQueued, MembershipRevision: state.MembershipRevision, SettingsRevision: state.SettingsRevision, CreatedAt: now, UpdatedAt: now}
 	mutations := make([]coordination.Mutation, 0, len(targets)+1)
 	for _, member := range targets {
-		delivery := GroupDelivery{DeliveryID: uuid.NewString(), GroupRoundID: roundID, ChildRequestID: request.RequestID + "/reply/" + uuid.NewString(), MemberID: member.MemberID, CharacterID: member.CharacterID, RoleOwnerID: member.RoleOwnerID, CharacterName: member.CharacterName, CharacterAvatar: member.CharacterAvatar, CharacterRevision: member.CharacterRevision, OrderIndex: member.OrderIndex, Source: "user", Status: GroupDeliveryQueued, CreatedAt: now, UpdatedAt: now}
+		delivery := GroupDelivery{DeliveryID: uuid.NewString(), GroupRoundID: roundID, ChildRequestID: request.RequestID + "/reply/" + uuid.NewString(), MemberID: member.MemberID, CharacterID: member.CharacterID, RoleOwnerID: member.RoleOwnerID, CharacterName: member.CharacterName, CharacterRevision: member.CharacterRevision, OrderIndex: member.OrderIndex, Source: "user", Status: GroupDeliveryQueued, CreatedAt: now, UpdatedAt: now}
 		round.Deliveries = append(round.Deliveries, delivery)
 		encoded, marshalErr := json.Marshal(delivery)
 		if marshalErr != nil {
@@ -1085,7 +1223,7 @@ func (e *Engine) RetryGroupDelivery(ctx context.Context, request Request, roundI
 		return GroupResponse{}, ErrGroupTargetInvalid
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	delivery := GroupDelivery{DeliveryID: uuid.NewString(), GroupRoundID: retryRoundID, ChildRequestID: request.RequestID + "/reply/" + uuid.NewString(), MemberID: member.MemberID, CharacterID: member.CharacterID, RoleOwnerID: member.RoleOwnerID, CharacterName: member.CharacterName, CharacterAvatar: member.CharacterAvatar, CharacterRevision: member.CharacterRevision, OrderIndex: member.OrderIndex, Source: "retry:" + failed.DeliveryID, Status: GroupDeliveryQueued, CreatedAt: now, UpdatedAt: now}
+	delivery := GroupDelivery{DeliveryID: uuid.NewString(), GroupRoundID: retryRoundID, ChildRequestID: request.RequestID + "/reply/" + uuid.NewString(), MemberID: member.MemberID, CharacterID: member.CharacterID, RoleOwnerID: member.RoleOwnerID, CharacterName: member.CharacterName, CharacterRevision: member.CharacterRevision, OrderIndex: member.OrderIndex, Source: "retry:" + failed.DeliveryID, Status: GroupDeliveryQueued, CreatedAt: now, UpdatedAt: now}
 	round := GroupRound{RoundID: retryRoundID, ConversationID: state.ConversationID, RootRequestID: request.RequestID, RequestFingerprint: fingerprint, TriggerMessageID: original.TriggerMessageID, TriggerMessage: original.TriggerMessage, TriggerSequence: original.TriggerSequence, Status: GroupRoundQueued, MembershipRevision: state.MembershipRevision, SettingsRevision: state.SettingsRevision, CreatedAt: now, UpdatedAt: now, Deliveries: []GroupDelivery{delivery}}
 	encodedDelivery, err := json.Marshal(delivery)
 	if err != nil {
@@ -1099,6 +1237,13 @@ func (e *Engine) RetryGroupDelivery(ctx context.Context, request Request, roundI
 		return GroupResponse{}, err
 	}
 	return e.executeGroupRound(ctx, scope, state, round, nil)
+}
+
+func groupDeliveryEvent(event Event, delivery GroupDelivery, index int, roundID string) Event {
+	event.GroupRoundID, event.DeliveryID, event.DeliveryIndex = roundID, delivery.DeliveryID, index
+	event.CharacterID, event.CharacterName, event.RoleOwnerID = delivery.CharacterID, delivery.CharacterName, delivery.RoleOwnerID
+	event.CharacterAvatar = ""
+	return event
 }
 
 func (e *Engine) executeGroupRound(ctx context.Context, scope coordination.ExecutionScope, state coordination.GroupState, round GroupRound, emit func(Event) error) (GroupResponse, error) {
@@ -1122,96 +1267,254 @@ func (e *Engine) executeGroupRound(ctx context.Context, scope coordination.Execu
 	round.Status = GroupRoundRunning
 	failed := false
 	cancelled := false
-	for index := 0; index < len(round.Deliveries); index++ {
-		delivery := &round.Deliveries[index]
-		if delivery.Status == GroupDeliveryCompleted || delivery.Status == GroupDeliveryCancelled {
-			continue
+	var emitMu sync.Mutex
+	var safeEmit func(Event) error
+	if emit != nil {
+		safeEmit = func(event Event) error {
+			emitMu.Lock()
+			defer emitMu.Unlock()
+			return emit(event)
 		}
-		if cause := context.Cause(ctx); cause != nil {
-			delivery.Status, delivery.Error = GroupDeliveryCancelled, cause.Error()
-			delivery.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
-			if err := e.updateGroupDelivery(ctx, scope, round, *delivery); err != nil {
-				return result, err
-			}
-			cancelled = true
-			continue
-		}
-		if delivery.Source == "character" {
-			if port, ok := e.data.(coordination.GroupStatePort); ok {
-				currentGroup, groupErr := port.GroupState(ctx, scope, round.ConversationID)
-				if groupErr == nil && (!currentGroup.Settings.AllowCharacterMentions || currentGroup.SettingsRevision != state.SettingsRevision) {
-					delivery.Status, delivery.Error = GroupDeliveryCancelled, "角色互相 @ 已关闭"
-					delivery.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
-					if err := e.updateGroupDelivery(ctx, scope, round, *delivery); err != nil {
-						return result, err
-					}
-					failed = true
+	}
+	type deliveryResult struct {
+		index          int
+		delivery       GroupDelivery
+		response       Response
+		err            error
+		bookkeepingErr error
+	}
+	processed := make(map[string]bool)
+	for {
+		batch := make([]int, 0, len(round.Deliveries))
+		if round.Mode == GroupModeDiscussion {
+			nextIndex := -1
+			for index, delivery := range round.Deliveries {
+				if processed[delivery.DeliveryID] || delivery.Status == GroupDeliveryCompleted || delivery.Status == GroupDeliveryCancelled {
 					continue
 				}
-				if groupErr == nil {
-					state = currentGroup
+				if nextIndex < 0 || delivery.TurnIndex < round.Deliveries[nextIndex].TurnIndex {
+					nextIndex = index
 				}
 			}
-		}
-		delivery.Status = GroupDeliveryStarting
-		delivery.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
-		if err := e.updateGroupDelivery(ctx, scope, round, *delivery); err != nil {
-			return result, err
-		}
-		if emit != nil {
-			if err := emit(Event{Type: "group.delivery.started", ConversationID: round.ConversationID, Scope: scope, GroupRoundID: round.RoundID, DeliveryID: delivery.DeliveryID, DeliveryIndex: index, CharacterID: delivery.CharacterID, CharacterName: delivery.CharacterName, CharacterAvatar: delivery.CharacterAvatar, RoleOwnerID: delivery.RoleOwnerID}); err != nil {
-				failed = true
-				delivery.Status, delivery.Error = GroupDeliveryFailed, err.Error()
-				delivery.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
-				if updateErr := e.updateGroupDelivery(ctx, scope, round, *delivery); updateErr != nil {
-					return result, updateErr
-				}
-				continue
-			}
-		}
-		member, active := state.ActiveMember(delivery.CharacterID)
-		if !active || member.MemberID != delivery.MemberID {
-			failed = true
-			delivery.Status, delivery.Error = GroupDeliveryFailed, ErrGroupTargetInvalid.Error()
-			if err := e.updateGroupDelivery(ctx, scope, round, *delivery); err != nil {
-				return result, err
-			}
-			continue
-		}
-		delivery.Status = GroupDeliveryRunning
-		if err := e.updateGroupDelivery(ctx, scope, round, *delivery); err != nil {
-			return result, err
-		}
-		request := Request{SpaceID: scope.SpaceID, DeviceID: scope.InitiatorDeviceID, TargetDeviceID: scope.TargetDeviceID, CoreID: scope.CoreID, RoleID: delivery.CharacterID, ConversationID: round.ConversationID, RequestID: delivery.ChildRequestID, Message: round.TriggerMessage, Group: &GroupMessageOptions{}, PreparedReply: &PreparedGroupReply{UserMessageID: round.TriggerMessageID, UserMessageRevision: 1, UserSequence: round.TriggerSequence, GroupRoundID: round.RoundID, DeliveryID: delivery.DeliveryID, SourceMessageID: round.TriggerMessageID, DeliveryIndex: index}}
-		var childEmit func(Event) error
-		if emit != nil {
-			childEmit = func(event Event) error {
-				event.GroupRoundID, event.DeliveryID, event.DeliveryIndex = round.RoundID, delivery.DeliveryID, index
-				event.CharacterID, event.CharacterName, event.CharacterAvatar, event.RoleOwnerID = delivery.CharacterID, delivery.CharacterName, delivery.CharacterAvatar, delivery.RoleOwnerID
-				return emit(event)
-			}
-		}
-		response, runErr := e.runEventsLocked(ctx, request, childEmit)
-		if cause := context.Cause(ctx); runErr != nil && cause != nil {
-			cancelled = true
-			delivery.Status, delivery.Error = GroupDeliveryCancelled, cause.Error()
-			delivery.TurnID, delivery.ExecutionID = response.TurnID, response.ExecutionID
-		} else if runErr != nil {
-			failed = true
-			delivery.Status, delivery.Error = GroupDeliveryFailed, runErr.Error()
-			delivery.TurnID, delivery.ExecutionID = response.TurnID, response.ExecutionID
-			if emit != nil {
-				_ = emit(Event{Type: "group.delivery.failed", ConversationID: round.ConversationID, Scope: scope, GroupRoundID: round.RoundID, DeliveryID: delivery.DeliveryID, DeliveryIndex: index, CharacterID: delivery.CharacterID, CharacterName: delivery.CharacterName, CharacterAvatar: delivery.CharacterAvatar, RoleOwnerID: delivery.RoleOwnerID, Text: DescribeRuntimeError(runErr).UserMessage})
+			if nextIndex >= 0 {
+				processed[round.Deliveries[nextIndex].DeliveryID] = true
+				batch = append(batch, nextIndex)
 			}
 		} else {
-			delivery.Status, delivery.MessageID = GroupDeliveryCompleted, response.RequestID+"/assistant"
-			delivery.TurnID, delivery.ExecutionID = response.TurnID, response.ExecutionID
-			response.GroupRoundID, response.DeliveryID, response.CharacterName, response.CharacterAvatar = round.RoundID, delivery.DeliveryID, delivery.CharacterName, delivery.CharacterAvatar
-			result.Deliveries = append(result.Deliveries, response)
+			for index, delivery := range round.Deliveries {
+				if !processed[delivery.DeliveryID] && delivery.Status != GroupDeliveryCompleted && delivery.Status != GroupDeliveryCancelled {
+					processed[delivery.DeliveryID] = true
+					batch = append(batch, index)
+				}
+			}
 		}
-		delivery.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
-		if err := e.updateGroupDelivery(ctx, scope, round, *delivery); err != nil {
-			return result, err
+		if len(batch) == 0 {
+			break
+		}
+		results := make(chan deliveryResult, len(batch))
+		for _, index := range batch {
+			delivery := round.Deliveries[index]
+			currentRound := round
+			currentState := state
+			go func(index int, delivery GroupDelivery) {
+				item := deliveryResult{index: index, delivery: delivery}
+				defer func() { results <- item }()
+				finish := func(status string, err error) {
+					item.delivery.Status = status
+					if err != nil {
+						item.delivery.Error = err.Error()
+					}
+					item.delivery.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+					item.bookkeepingErr = e.updateGroupDelivery(ctx, scope, currentRound, item.delivery)
+					if status == GroupDeliveryFailed && err != nil && safeEmit != nil {
+						_ = safeEmit(Event{Type: "group.delivery.failed", ConversationID: currentRound.ConversationID, Scope: scope, GroupRoundID: currentRound.RoundID, DeliveryID: delivery.DeliveryID, DeliveryIndex: index, CharacterID: delivery.CharacterID, CharacterName: delivery.CharacterName, RoleOwnerID: delivery.RoleOwnerID, Text: DescribeRuntimeError(err).UserMessage})
+					}
+				}
+				if cause := context.Cause(ctx); cause != nil {
+					item.err = cause
+					finish(GroupDeliveryCancelled, cause)
+					return
+				}
+				if delivery.Source == "character" || delivery.Source == "discussion" {
+					if port, ok := e.data.(coordination.GroupStatePort); ok {
+						current, err := port.GroupState(ctx, scope, currentRound.ConversationID)
+						if err != nil {
+							item.err = err
+							finish(GroupDeliveryFailed, err)
+							return
+						}
+						if !current.Settings.AllowCharacterMentions || current.SettingsRevision != currentState.SettingsRevision {
+							if delivery.Source == "discussion" {
+								item.err = errors.New("群设置已变化，多角色讨论已停止")
+							} else {
+								item.err = errors.New("角色互相 @ 已关闭")
+							}
+							finish(GroupDeliveryCancelled, item.err)
+							return
+						}
+						if delivery.Source == "discussion" && current.MembershipRevision != currentRound.MembershipRevision {
+							item.err = errors.New("群成员已变化，多角色讨论已停止")
+							finish(GroupDeliveryCancelled, item.err)
+							return
+						}
+						currentState = current
+					}
+				}
+				member, active := currentState.ActiveMember(delivery.CharacterID)
+				if !active || member.MemberID != delivery.MemberID {
+					item.err = ErrGroupTargetInvalid
+					finish(GroupDeliveryFailed, item.err)
+					return
+				}
+				item.delivery.Status = GroupDeliveryStarting
+				item.delivery.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+				if err := e.updateGroupDelivery(ctx, scope, currentRound, item.delivery); err != nil {
+					item.bookkeepingErr = err
+					return
+				}
+				if safeEmit != nil {
+					if err := safeEmit(Event{Type: "group.delivery.started", ConversationID: currentRound.ConversationID, Scope: scope, GroupRoundID: currentRound.RoundID, DeliveryID: delivery.DeliveryID, ChildRequestID: delivery.ChildRequestID, DeliveryIndex: index, CharacterID: delivery.CharacterID, CharacterName: delivery.CharacterName, RoleOwnerID: delivery.RoleOwnerID}); err != nil {
+						item.err = err
+						finish(GroupDeliveryFailed, err)
+						return
+					}
+				}
+				item.delivery.Status = GroupDeliveryRunning
+				if err := e.updateGroupDelivery(ctx, scope, currentRound, item.delivery); err != nil {
+					item.bookkeepingErr = err
+					return
+				}
+				message, sourceMessageID := currentRound.TriggerMessage, currentRound.TriggerMessageID
+				if delivery.Source == "character" {
+					for _, invitation := range currentRound.Invitations {
+						if invitation.TargetMemberID != delivery.MemberID || invitation.Status != GroupInvitationAccepted {
+							continue
+						}
+						resource, err := e.data.(coordination.ResourcePort).Resource(ctx, scope, "message", invitation.SourceMessageID)
+						if err != nil || resource == nil {
+							if err == nil {
+								err = errors.New("接话来源消息不存在")
+							}
+							item.err = err
+							finish(GroupDeliveryFailed, err)
+							return
+						}
+						var source struct {
+							Content string `json:"content"`
+						}
+						if err := json.Unmarshal(resource.Body, &source); err != nil {
+							item.err = err
+							finish(GroupDeliveryFailed, err)
+							return
+						}
+						message, sourceMessageID = source.Content, invitation.SourceMessageID
+						break
+					}
+				}
+				if delivery.Source == "discussion" && delivery.TurnIndex > 0 {
+					var previous *GroupDelivery
+					for previousIndex := range currentRound.Deliveries {
+						candidate := &currentRound.Deliveries[previousIndex]
+						if candidate.TurnIndex == delivery.TurnIndex-1 {
+							previous = candidate
+							break
+						}
+					}
+					if previous == nil || previous.Status != GroupDeliveryCompleted || previous.MessageID == "" {
+						item.err = errors.New("讨论上一位角色发言不存在")
+						finish(GroupDeliveryFailed, item.err)
+						return
+					}
+					resource, err := e.data.(coordination.ResourcePort).Resource(ctx, scope, "message", previous.MessageID)
+					if err != nil || resource == nil {
+						if err == nil {
+							err = errors.New("讨论上一位角色发言不存在")
+						}
+						item.err = err
+						finish(GroupDeliveryFailed, err)
+						return
+					}
+					var source struct {
+						Content string `json:"content"`
+					}
+					if err := json.Unmarshal(resource.Body, &source); err != nil {
+						item.err = err
+						finish(GroupDeliveryFailed, err)
+						return
+					}
+					message, sourceMessageID = source.Content, previous.MessageID
+				}
+				request := Request{SpaceID: scope.SpaceID, DeviceID: scope.InitiatorDeviceID, TargetDeviceID: scope.TargetDeviceID, CoreID: scope.CoreID, RoleID: delivery.CharacterID, ConversationID: currentRound.ConversationID, RequestID: delivery.ChildRequestID, Message: message, Group: &GroupMessageOptions{Mode: currentRound.Mode}, PreparedReply: &PreparedGroupReply{UserMessageID: currentRound.TriggerMessageID, UserMessageRevision: 1, UserSequence: currentRound.TriggerSequence, GroupRoundID: currentRound.RoundID, DeliveryID: delivery.DeliveryID, SourceMessageID: sourceMessageID, DeliveryIndex: index}}
+				if delivery.Source == "user" {
+					request.PreparedReply.ContextSequence = currentRound.TriggerSequence
+				}
+				var childEmit func(Event) error
+				if safeEmit != nil {
+					childEmit = func(event Event) error {
+						return safeEmit(groupDeliveryEvent(event, delivery, index, currentRound.RoundID))
+					}
+				}
+				response, runErr := e.runEventsLocked(ctx, request, childEmit)
+				item.response = response
+				item.delivery.TurnID, item.delivery.ExecutionID = response.TurnID, response.ExecutionID
+				if runErr != nil && (context.Cause(ctx) != nil || response.Interrupted || errors.Is(runErr, ErrInterrupted) || errors.Is(runErr, context.Canceled) || strings.TrimSpace(runErr.Error()) == ErrInterrupted.Error()) {
+					item.err = context.Cause(ctx)
+					if item.err == nil {
+						item.err = ErrInterrupted
+					}
+					finish(GroupDeliveryCancelled, item.err)
+					return
+				}
+				if runErr != nil {
+					item.err = runErr
+					finish(GroupDeliveryFailed, runErr)
+					return
+				}
+				item.delivery.MessageID = response.RequestID + "/assistant"
+				item.response.GroupRoundID, item.response.DeliveryID, item.response.CharacterName, item.response.CharacterAvatar = currentRound.RoundID, delivery.DeliveryID, delivery.CharacterName, ""
+				finish(GroupDeliveryCompleted, nil)
+				if item.bookkeepingErr == nil && safeEmit != nil {
+					_ = safeEmit(Event{Type: "group.delivery.completed", ConversationID: currentRound.ConversationID, Scope: response.Scope, GroupRoundID: currentRound.RoundID, DeliveryID: delivery.DeliveryID, DeliveryIndex: index, CharacterID: delivery.CharacterID, CharacterName: delivery.CharacterName, RoleOwnerID: delivery.RoleOwnerID})
+				}
+			}(index, delivery)
+		}
+		completed := make([]deliveryResult, len(batch))
+		for range batch {
+			item := <-results
+			for i, index := range batch {
+				if index == item.index {
+					completed[i] = item
+					break
+				}
+			}
+		}
+		haltDiscussion := false
+		haltReason := errDiscussionHalted
+		for _, item := range completed {
+			if item.bookkeepingErr != nil {
+				return result, item.bookkeepingErr
+			}
+			round.Deliveries[item.index] = item.delivery
+			if item.delivery.Status == GroupDeliveryCancelled {
+				if errors.Is(item.err, errDiscussionHalted) {
+					failed = true
+				} else {
+					cancelled = true
+					haltReason = item.err
+				}
+				if round.Mode == GroupModeDiscussion {
+					haltDiscussion = true
+				}
+			}
+			if item.delivery.Status == GroupDeliveryFailed {
+				failed = true
+				if round.Mode == GroupModeDiscussion {
+					haltDiscussion = true
+				}
+			}
+			if item.delivery.Status == GroupDeliveryCompleted {
+				result.Deliveries = append(result.Deliveries, item.response)
+			}
 		}
 		if latestResource, latestErr := e.data.(coordination.ResourcePort).Resource(ctx, scope, "group-round", round.RoundID); latestErr == nil && latestResource != nil {
 			var latest GroupRound
@@ -1228,6 +1531,21 @@ func (e *Engine) executeGroupRound(ctx context.Context, scope coordination.Execu
 				round = latest
 			}
 		}
+		if haltDiscussion {
+			for index := range round.Deliveries {
+				delivery := &round.Deliveries[index]
+				if delivery.Status == GroupDeliveryCompleted || delivery.Status == GroupDeliveryFailed || delivery.Status == GroupDeliveryCancelled {
+					continue
+				}
+				delivery.Status = GroupDeliveryCancelled
+				delivery.Error = haltReason.Error()
+				delivery.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+				if err := e.updateGroupDelivery(ctx, scope, round, *delivery); err != nil {
+					return result, err
+				}
+			}
+			break
+		}
 	}
 	if cancelled {
 		round.Status = GroupRoundCancelled
@@ -1242,6 +1560,9 @@ func (e *Engine) executeGroupRound(ctx context.Context, scope coordination.Execu
 	}
 	if err := e.coordination.CompleteRequest(context.WithoutCancel(ctx), scope); err != nil {
 		return result, err
+	}
+	if round.Status != GroupRoundCancelled && len(result.Deliveries) > 0 {
+		_ = e.finishOwnedGroupTitle(ctx, scope, state, round.TriggerMessage, result.Deliveries)
 	}
 	result.Status = round.Status
 	if emit != nil {

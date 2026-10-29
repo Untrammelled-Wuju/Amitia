@@ -52,7 +52,7 @@ const router = createRouter({
   ],
 });
 
-router.beforeEach(async (to) => {
+router.beforeEach(async (to, from) => {
   if (!isRuntimeRouteAvailable(to.path)) {
     return { path: "/404", query: { reason: "runtime-capability-unavailable" } };
   }
@@ -98,7 +98,7 @@ router.beforeEach(async (to) => {
   }
 
   const isPublic = PUBLIC_PATHS.has(to.path);
-  const completed = await readOnboardingCompleted(false);
+  const completed = await readOnboardingCompleted(from.path === "/onboarding" && to.path !== "/onboarding");
   const deviceOnboardingComplete = completed !== true && await canSkipCoreOnboarding();
 
   if (to.path === "/onboarding") {

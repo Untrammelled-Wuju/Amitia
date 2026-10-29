@@ -67,6 +67,8 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
   final Set<String> _registeredStyleTargets = <String>{};
   String _lifecycleMountKey = '';
   bool _lifecycleRunning = false;
+  Timer? _refreshTimer;
+  bool _refreshRunning = false;
 
   @override
   void initState() {
@@ -96,6 +98,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
         oldWidget.extensionId != widget.extensionId ||
         oldWidget.contributionId != widget.contributionId) {
       _lifecycleMountKey = '';
+      _refreshTimer?.cancel();
       _registerStyleTargets();
       widget.dataSourceLoader?.invalidate(
         widget.extensionId,
@@ -111,6 +114,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     for (final target in _registeredStyleTargets) {
       AmitiaStyleTargetRegistry.unregister(target);
     }
@@ -610,7 +614,9 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
 
   Future<void> _runMountLifecycle() async {
     final lifecycle = widget.document.lifecycle;
-    if (lifecycle == null || lifecycle.onMount.isEmpty || _lifecycleRunning) {
+    if (lifecycle == null ||
+        (lifecycle.onMount.isEmpty && lifecycle.onRefresh.isEmpty) ||
+        _lifecycleRunning) {
       return;
     }
     final key =
@@ -618,6 +624,32 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     if (_lifecycleMountKey == key) return;
     _lifecycleMountKey = key;
     _lifecycleRunning = true;
+    _refreshTimer?.cancel();
+    final interval = lifecycle.refreshIntervalMs;
+    if (interval > 0 && lifecycle.onRefresh.isNotEmpty) {
+      _refreshTimer = Timer.periodic(
+        Duration(milliseconds: interval.clamp(1000, 60000)),
+        (_) async {
+          if (!mounted ||
+              _refreshRunning ||
+              WidgetsBinding.instance.lifecycleState !=
+                  AppLifecycleState.resumed ||
+              ModalRoute.of(context)?.isCurrent == false) {
+            return;
+          }
+          _refreshRunning = true;
+          try {
+            await _handleActions(
+              lifecycle.onRefresh,
+              nodeId: 'lifecycle:refresh',
+              reportFailure: false,
+            );
+          } finally {
+            _refreshRunning = false;
+          }
+        },
+      );
+    }
     try {
       await _handleActions(
         lifecycle.onMount,
@@ -1005,6 +1037,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     final subtitle = node.props?['subtitle']?.toString().trim() ?? '';
     final bordered = node.props?['bordered'] != false;
     final content = Column(
+      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (title.isNotEmpty) ...[
@@ -1046,7 +1079,11 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       if (index > 0 && gap > 0) children.add(SizedBox(height: gap));
       children.add(_buildNode(context, node.children[index], depth + 1));
     }
-    return Column(crossAxisAlignment: alignment, children: children);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: alignment,
+      children: children,
+    );
   }
 
   Widget _buildRow(BuildContext context, SchemaUINode node, int depth) {
@@ -1150,6 +1187,14 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
 
   Widget _buildGrid(BuildContext context, SchemaUINode node, int depth) {
     final gap = _dimension(node.props?['gap'], AppSpacing.sm);
+    final rawAspectRatio =
+        node.props?['childAspectRatio'] ?? node.props?['aspectRatio'];
+    final aspectRatio =
+        ((rawAspectRatio is num
+                    ? rawAspectRatio.toDouble()
+                    : double.tryParse(rawAspectRatio?.toString() ?? '') ?? 1)
+                .clamp(0.25, 4))
+            .toDouble();
     return LayoutBuilder(
       builder: (context, constraints) {
         final columns = _gridColumnCount(node, constraints.maxWidth, gap);
@@ -1159,6 +1204,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
           physics: const NeverScrollableScrollPhysics(),
           crossAxisSpacing: gap,
           mainAxisSpacing: gap,
+          childAspectRatio: aspectRatio,
           children: node.children
               .map((child) => _buildNode(context, child, depth + 1))
               .toList(),
@@ -1209,6 +1255,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       child: Padding(
         padding: EdgeInsets.all(AppSpacing.md),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (title.isNotEmpty) ...[
@@ -2716,7 +2763,8 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     final variant =
         node.props?['variant']?.toString().trim().toLowerCase() ?? 'line';
     final status = node.props?['status']?.toString().trim().toLowerCase() ?? '';
-    final showText = node.props?['showText'] != false;
+    final indeterminate = node.props?['indeterminate'] == true;
+    final showText = node.props?['showText'] != false && !indeterminate;
     final strokeWidth = _dimension(
       node.props?['strokeWidth'],
       6,
@@ -2738,7 +2786,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
               width: 64,
               height: 64,
               child: CircularProgressIndicator(
-                value: progress,
+                value: indeterminate ? null : progress,
                 strokeWidth: strokeWidth,
                 color: color,
                 backgroundColor: context.accentSoft,
@@ -2756,11 +2804,14 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        AmitiaProgressBar(
-          progress: progress,
-          height: strokeWidth,
-          color: color,
-        ),
+        if (indeterminate)
+          LinearProgressIndicator(minHeight: strokeWidth, color: color)
+        else
+          AmitiaProgressBar(
+            progress: progress,
+            height: strokeWidth,
+            color: color,
+          ),
         if (showText) ...[
           const SizedBox(height: 4),
           Text('${percentage.round()}%', style: AppTypography.caption(context)),
@@ -2865,6 +2916,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       child: Padding(
         padding: EdgeInsets.all(AppSpacing.md),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(title, style: AppTypography.sectionTitle(context)),
@@ -2899,6 +2951,9 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
   Widget _buildRuntimeStatus(BuildContext context, SchemaUINode node) {
     final status = (node.props?['status'] ?? node.props?['state'] ?? 'unknown')
         .toString();
+    final statusText =
+        (node.props?['statusText'] ?? node.props?['value'] ?? status)
+            .toString();
     final label = (node.props?['label'] ?? '运行时状态').toString();
     final message = (node.props?['message'] ?? node.props?['detail'] ?? '')
         .toString();
@@ -2913,6 +2968,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       child: Padding(
         padding: EdgeInsets.all(AppSpacing.md),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
@@ -2920,7 +2976,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
                 Expanded(
                   child: Text(label, style: AppTypography.label(context)),
                 ),
-                AmitiaStatusBadge(label: status, type: badgeType),
+                AmitiaStatusBadge(label: statusText, type: badgeType),
               ],
             ),
             if (message.trim().isNotEmpty) ...[

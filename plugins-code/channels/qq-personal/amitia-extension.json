@@ -9,7 +9,7 @@
     "description": {
       "default": "通过 OneBot 11 反向 WebSocket 将 SnowLuma 个人 QQ 协议端接入 Amitia，支持 Windows、Linux 原生运行及 Docker 部署。"
     },
-    "version": "0.2.29",
+    "version": "0.2.44",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -52,8 +52,8 @@
         "type": "service",
         "entryPoint": "launcher.mjs",
         "timeout": "30s",
-        "memory": 268435456,
-        "maxSubprocesses": 1,
+        "memory": 1073741824,
+        "maxSubprocesses": 256,
         "hostAccess": {
           "filesystem": {
             "mode": "read_write",
@@ -67,7 +67,7 @@
           },
           "process": {
             "mode": "direct",
-            "maxProcesses": 1
+            "maxProcesses": 256
           }
         }
       },
@@ -309,6 +309,28 @@
           },
           "spec": {
             "actions": [
+              {
+                "action_id": "mobile-form",
+                "risk_level": "low",
+                "target": {
+                  "command": "channel.invoke",
+                  "type": "host_command"
+                },
+                "title": {
+                  "default": "读取手机端 QQ 个人号表单"
+                }
+              },
+              {
+                "action_id": "install-mobile-runtime",
+                "risk_level": "high",
+                "target": {
+                  "command": "channel.invoke",
+                  "type": "host_command"
+                },
+                "title": {
+                  "default": "安装手机 QQ 与 SnowLuma"
+                }
+              },
               {
                 "action_id": "status",
                 "risk_level": "low",
@@ -670,6 +692,88 @@
             "mode": "replace",
             "priority": 211,
             "providerId": "qq-personal-novnc",
+            "trustLevel": "official"
+          }
+        },
+        {
+          "id": "qq-personal-snowluma-webui-mobile",
+          "kind": "ui_provider",
+          "name": {
+            "default": "SnowLuma WebUI（手机）"
+          },
+          "description": {
+            "default": "在手机渠道工作区中打开 SnowLuma WebUI。"
+          },
+          "spec": {
+            "capability": "workspace.tab",
+            "entries": {
+              "mobile": {
+                "type": "external_web_ui",
+                "url": "http://127.0.0.1:5099/",
+                "allowedOrigins": [
+                  "http://127.0.0.1:5099"
+                ]
+              }
+            },
+            "metadata": {
+              "workspace": "channel.workspace",
+              "tabId": "snowluma-webui",
+              "title": "SnowLuma WebUI",
+              "icon": "connection",
+              "order": 31,
+              "routePrefix": "/channels/qq-personal",
+              "contextMatch": {
+                "channelId": [
+                  "qq_personal"
+                ]
+              },
+              "keepMounted": true,
+              "storage": "persistent"
+            },
+            "mode": "replace",
+            "priority": 211,
+            "providerId": "qq-personal-snowluma-webui-mobile",
+            "trustLevel": "official"
+          }
+        },
+        {
+          "id": "qq-personal-novnc-mobile",
+          "kind": "ui_provider",
+          "name": {
+            "default": "noVNC（手机）"
+          },
+          "description": {
+            "default": "在手机渠道工作区中打开 noVNC 远程桌面。"
+          },
+          "spec": {
+            "capability": "workspace.tab",
+            "entries": {
+              "mobile": {
+                "type": "external_web_ui",
+                "url": "http://127.0.0.1:6081/",
+                "allowedOrigins": [
+                  "http://127.0.0.1:6081"
+                ]
+              }
+            },
+            "metadata": {
+              "workspace": "channel.workspace",
+              "tabId": "novnc-desktop",
+              "title": "noVNC",
+              "icon": "connection",
+              "order": 30,
+              "routePrefix": "/channels/qq-personal",
+              "contextMatch": {
+                "channelId": [
+                  "qq_personal"
+                ]
+              },
+              "keepMounted": true,
+              "storage": "persistent"
+            },
+            "mode": "replace",
+            "priority": 211,
+            "providerId": "qq-personal-novnc-mobile",
             "trustLevel": "official"
           }
         }

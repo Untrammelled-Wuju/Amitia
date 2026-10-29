@@ -4,7 +4,54 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('reload_schema result invokes the host schema reloader', (tester) async {
+  testWidgets('refresh lifecycle polls and stops when disposed', (
+    tester,
+  ) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    var calls = 0;
+    final document = SchemaUIDocument.fromJson({
+      'schemaVersion': 'schema-ui/1',
+      'type': 'document',
+      'lifecycle': {
+        'refreshIntervalMs': 1000,
+        'onMount': [
+          {'action_id': 'status', 'target': 'host_command'},
+        ],
+        'onRefresh': [
+          {'action_id': 'status', 'target': 'host_command'},
+        ],
+      },
+      'children': <dynamic>[],
+    });
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SchemaUIRenderer(
+            document: document,
+            extensionId: 'test',
+            contributionId: 'test',
+            embedded: true,
+            onActionDispatch: (_) async {
+              calls++;
+              return <String, dynamic>{};
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    final initial = calls;
+    await tester.pump(const Duration(seconds: 1));
+    expect(calls, greaterThan(initial));
+    await tester.pumpWidget(const SizedBox());
+    final disposed = calls;
+    await tester.pump(const Duration(seconds: 2));
+    expect(calls, disposed);
+  });
+
+  testWidgets('reload_schema result invokes the host schema reloader', (
+    tester,
+  ) async {
     var reloadCount = 0;
     final document = SchemaUIDocument(
       children: const <SchemaUINode>[

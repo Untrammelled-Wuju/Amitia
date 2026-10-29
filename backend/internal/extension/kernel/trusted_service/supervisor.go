@@ -1295,6 +1295,11 @@ func (s *ProcessSupervisor) stop(ctx context.Context, req StopRequest) (*StopRes
 		_ = os.RemoveAll(tempDir)
 	}
 
+	if req.Reason == "uninstall" {
+		if err := cleanupOwnedRuntime(inst.WorkingDir, inst.ExtensionID); err != nil {
+			return nil, fmt.Errorf("trusted_service: cleanup owned runtime: %w", err)
+		}
+	}
 	inst.MarkStopped()
 	if s.ownerStore != nil && inst.ProcessInstanceID != "" {
 		if err := s.ownerStore.RemoveOwnership(inst.ProcessInstanceID); err != nil {

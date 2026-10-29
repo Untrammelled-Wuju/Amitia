@@ -5,174 +5,649 @@
   "lifecycle": {
     "onMount": [
       {
-        "action_id": "status",
+        "action_id": "mobile-form",
         "target": "host_command",
-        "input": { "channelId": "qq_personal" },
-        "statePath": "status"
+        "input": {
+          "channelId": "qq_personal",
+          "action": "mobile-form",
+          "input": {}
+        },
+        "statePath": "mobileConfig"
       },
       {
-        "action_id": "config",
+        "action_id": "status",
         "target": "host_command",
-        "input": { "channelId": "qq_personal" },
-        "statePath": "config"
+        "input": {
+          "channelId": "qq_personal"
+        },
+        "statePath": "status"
+      }
+    ],
+    "refreshIntervalMs": 1500,
+    "onRefresh": [
+      {
+        "action_id": "status",
+        "target": "host_command",
+        "input": {
+          "channelId": "qq_personal"
+        },
+        "statePath": "status"
       }
     ]
   },
   "actions": [
-    { "actionId": "status", "target": "host_command" },
-    { "actionId": "config", "target": "host_command" },
-    { "actionId": "connect", "target": "host_command" },
-    { "actionId": "disconnect", "target": "host_command" }
+    {
+      "actionId": "mobile-form",
+      "target": "host_command"
+    },
+    {
+      "actionId": "status",
+      "target": "host_command"
+    },
+    {
+      "actionId": "install-mobile-runtime",
+      "target": "host_command"
+    },
+    {
+      "actionId": "connect",
+      "target": "host_command"
+    },
+    {
+      "actionId": "disconnect",
+      "target": "host_command"
+    }
   ],
   "children": [
     {
       "id": "qq-personal-page",
-      "type": "page",
+      "type": "stack",
       "children": [
         {
-          "id": "qq-personal-status",
-          "type": "key_value",
-          "props": { "title": "连接状态", "columns": 1 },
-          "bindings": [
-            { "path": "items", "source": "state", "sourcePath": "status.data" }
-          ]
-        },
-        {
-          "id": "qq-personal-notice",
-          "type": "alert",
+          "id": "qq-personal-overview",
+          "type": "stack",
           "props": {
-            "type": "info",
-            "title": "SnowLuma 反向 WebSocket",
-            "description": "在 SnowLuma 网络配置中新建 WebSocket 客户端，填写反向 WebSocket 地址和 Token。WebUI 与 noVNC 地址、账号密码见下方已保存配置，桌面端会直接展示并支持一键复制。"
-          }
-        },
-        {
-          "id": "qq-personal-config",
-          "type": "section",
-          "props": { "title": "桥接配置" },
+            "gap": 8
+          },
           "children": [
             {
-              "id": "qq-personal-token",
-              "type": "field",
-              "props": { "label": "OneBot Token", "variant": "password" },
-              "bindings": [
-                { "path": "credentials.token", "source": "form", "default": "" }
-              ]
-            },
-            {
-              "id": "qq-personal-trigger",
-              "type": "select",
+              "id": "qq-personal-connection-state",
+              "type": "runtime_status",
               "props": {
-                "label": "群聊触发方式",
-                "options": [
-                  { "label": "仅 @机器人", "value": "mention" },
-                  { "label": "所有群消息", "value": "all" },
-                  { "label": "指定前缀", "value": "prefix" }
-                ]
+                "label": "QQ 个人号桥接",
+                "status": "等待状态",
+                "message": "正在读取连接状态"
               },
               "bindings": [
-                { "path": "credentials.groupTrigger", "source": "form", "default": "mention" }
-              ]
-            },
-            {
-              "id": "qq-personal-prefix",
-              "type": "field",
-              "props": { "label": "群聊触发前缀", "placeholder": "Amitia" },
-              "bindings": [
-                { "path": "credentials.triggerPrefix", "source": "form", "default": "Amitia" }
-              ]
-            },
-            {
-              "id": "qq-personal-webui-port",
-              "type": "field",
-              "props": { "label": "SnowLuma WebUI 端口", "placeholder": "5099" },
-              "bindings": [
-                { "path": "credentials.webuiPort", "source": "form", "default": "5099" }
-              ]
-            },
-            {
-              "id": "qq-personal-novnc-port",
-              "type": "field",
-              "props": { "label": "noVNC 端口", "placeholder": "6081" },
-              "bindings": [
-                { "path": "credentials.novncPort", "source": "form", "default": "6081" }
-              ]
-            },
-            {
-              "id": "qq-personal-save",
-              "type": "button",
-              "props": { "text": "保存并启用", "type": "primary" },
-              "actions": [
                 {
-                  "action_id": "connect",
-                  "target": "host_command",
-                  "input": {
-                    "channelId": "qq_personal",
-                    "config": {
-                      "token": "$form.credentials.token",
-                      "groupTrigger": "$form.credentials.groupTrigger",
-                      "triggerPrefix": "$form.credentials.triggerPrefix",
-                      "webuiPort": "$form.credentials.webuiPort",
-                      "novncPort": "$form.credentials.novncPort"
-                    }
+                  "path": "status",
+                  "source": "state",
+                  "sourcePath": "status.displayStatus.connectionVariant"
+                },
+                {
+                  "path": "statusText",
+                  "source": "state",
+                  "sourcePath": "status.displayStatus.connectionLabel"
+                },
+                {
+                  "path": "message",
+                  "source": "state",
+                  "sourcePath": "status.displayStatus.lastActivity"
+                }
+              ]
+            },
+            {
+              "id": "qq-personal-metrics",
+              "type": "grid",
+              "props": {
+                "columns": 2,
+                "gap": 10,
+                "childAspectRatio": 3.0
+              },
+              "children": [
+                {
+                  "id": "metric-account",
+                  "type": "stack",
+                  "props": {
+                    "gap": 2
                   },
-                  "statePath": "connectResult"
+                  "children": [
+                    {
+                      "id": "metric-account-label",
+                      "type": "text",
+                      "props": {
+                        "text": "QQ 号",
+                        "variant": "caption"
+                      }
+                    },
+                    {
+                      "id": "metric-account-value",
+                      "type": "text",
+                      "props": {
+                        "text": "未连接",
+                        "variant": "body"
+                      },
+                      "bindings": [
+                        {
+                          "path": "text",
+                          "source": "state",
+                          "sourcePath": "status.displayStatus.qqAccount"
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
-                  "action_id": "status",
-                  "target": "host_command",
-                  "input": { "channelId": "qq_personal" },
-                  "statePath": "status"
-                }
-              ]
-            },
-            {
-              "id": "qq-personal-refresh",
-              "type": "button",
-              "props": { "text": "刷新状态" },
-              "actions": [
-                {
-                  "action_id": "status",
-                  "target": "host_command",
-                  "input": { "channelId": "qq_personal" },
-                  "statePath": "status"
-                }
-              ]
-            },
-            {
-              "id": "qq-personal-disconnect",
-              "type": "button",
-              "props": { "text": "断开连接", "type": "danger" },
-              "actions": [
-                {
-                  "action_id": "disconnect",
-                  "target": "host_command",
-                  "input": { "channelId": "qq_personal" },
-                  "confirmation": "确认断开 QQ 个人号桥接？",
-                  "statePath": "disconnectResult"
+                  "id": "metric-clients",
+                  "type": "stack",
+                  "props": {
+                    "gap": 2
+                  },
+                  "children": [
+                    {
+                      "id": "metric-clients-label",
+                      "type": "text",
+                      "props": {
+                        "text": "客户端",
+                        "variant": "caption"
+                      }
+                    },
+                    {
+                      "id": "metric-clients-value",
+                      "type": "text",
+                      "props": {
+                        "text": "0",
+                        "variant": "body"
+                      },
+                      "bindings": [
+                        {
+                          "path": "text",
+                          "source": "state",
+                          "sourcePath": "status.displayStatus.clients"
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
-                  "action_id": "status",
-                  "target": "host_command",
-                  "input": { "channelId": "qq_personal" },
-                  "statePath": "status"
+                  "id": "metric-received",
+                  "type": "stack",
+                  "props": {
+                    "gap": 2
+                  },
+                  "children": [
+                    {
+                      "id": "metric-received-label",
+                      "type": "text",
+                      "props": {
+                        "text": "接收",
+                        "variant": "caption"
+                      }
+                    },
+                    {
+                      "id": "metric-received-value",
+                      "type": "text",
+                      "props": {
+                        "text": "0",
+                        "variant": "body"
+                      },
+                      "bindings": [
+                        {
+                          "path": "text",
+                          "source": "state",
+                          "sourcePath": "status.displayStatus.received"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "id": "metric-replies",
+                  "type": "stack",
+                  "props": {
+                    "gap": 2
+                  },
+                  "children": [
+                    {
+                      "id": "metric-replies-label",
+                      "type": "text",
+                      "props": {
+                        "text": "回复",
+                        "variant": "caption"
+                      }
+                    },
+                    {
+                      "id": "metric-replies-value",
+                      "type": "text",
+                      "props": {
+                        "text": "0",
+                        "variant": "body"
+                      },
+                      "bindings": [
+                        {
+                          "path": "text",
+                          "source": "state",
+                          "sourcePath": "status.displayStatus.replies"
+                        }
+                      ]
+                    }
+                  ]
                 }
               ]
             }
           ]
         },
         {
-          "id": "qq-personal-saved-config",
-          "type": "key_value",
-          "props": { "title": "已保存配置", "columns": 1 },
-          "bindings": [
-            { "path": "items", "source": "state", "sourcePath": "config.data" }
+          "id": "qq-personal-runtime-card",
+          "type": "stack",
+          "props": {
+            "gap": 8
+          },
+          "children": [
+            {
+              "id": "qq-personal-mobile-state",
+              "type": "runtime_status",
+              "props": {
+                "label": "手机运行环境",
+                "status": "未准备",
+                "message": "点击安装后，在手机 Linux 环境准备 QQ 与图形桌面"
+              },
+              "bindings": [
+                {
+                  "path": "status",
+                  "source": "state",
+                  "sourcePath": "status.displayStatus.mobileVariant"
+                },
+                {
+                  "path": "statusText",
+                  "source": "state",
+                  "sourcePath": "status.displayStatus.mobileLabel"
+                },
+                {
+                  "path": "message",
+                  "source": "state",
+                  "sourcePath": "status.displayStatus.mobileDetail"
+                }
+              ]
+            },
+            {
+              "id": "qq-personal-snowluma-progress",
+              "type": "progress",
+              "props": {
+                "showText": false,
+                "status": "active"
+              },
+              "bindings": [
+                {
+                  "path": "percentage",
+                  "source": "state",
+                  "sourcePath": "status.snowlumaInstall.percent",
+                  "default": 0
+                },
+                {
+                  "path": "indeterminate",
+                  "source": "state",
+                  "sourcePath": "status.mobileRuntimeSummary.running",
+                  "default": false
+                }
+              ]
+            },
+            {
+              "id": "qq-personal-runtime-actions",
+              "type": "button_group",
+              "children": [
+                {
+                  "id": "qq-personal-install-snowluma",
+                  "type": "button",
+                  "props": {
+                    "text": "开始安装 QQ 与 SnowLuma",
+                    "type": "primary"
+                  },
+                  "actions": [
+                    {
+                      "action_id": "install-mobile-runtime",
+                      "target": "host_command",
+                      "input": {
+                        "channelId": "qq_personal",
+                        "action": "install-mobile-runtime",
+                        "input": {
+                          "config": {
+                            "token": "$form.credentials.token",
+                            "groupTrigger": "$form.credentials.groupTrigger",
+                            "triggerPrefix": "$form.credentials.triggerPrefix",
+                            "webuiPort": "$form.credentials.webuiPort",
+                            "novncPort": "$form.credentials.novncPort"
+                          }
+                        }
+                      },
+                      "statePath": "installResult"
+                    },
+                    {
+                      "action_id": "status",
+                      "target": "host_command",
+                      "input": {
+                        "channelId": "qq_personal"
+                      },
+                      "statePath": "status"
+                    }
+                  ]
+                },
+                {
+                  "id": "qq-personal-refresh",
+                  "type": "button",
+                  "props": {
+                    "text": "刷新状态",
+                    "type": "secondary"
+                  },
+                  "actions": [
+                    {
+                      "action_id": "status",
+                      "target": "host_command",
+                      "input": {
+                        "channelId": "qq_personal"
+                      },
+                      "statePath": "status"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "qq-personal-connection-settings",
+          "type": "stack",
+          "props": {
+            "gap": 12
+          },
+          "children": [
+            {
+              "id": "qq-personal-bridge-fields",
+              "type": "card",
+              "props": {
+                "title": "OneBot 接入",
+                "shadow": "never"
+              },
+              "children": [
+                {
+                  "id": "qq-personal-token",
+                  "type": "field",
+                  "props": {
+                    "label": "OneBot Token",
+                    "variant": "password",
+                    "placeholder": "填写 OneBot Token"
+                  },
+                  "bindings": [
+                    {
+                      "path": "credentials.token",
+                      "source": "form",
+                      "default": ""
+                    }
+                  ]
+                },
+                {
+                  "id": "qq-personal-trigger",
+                  "type": "select",
+                  "props": {
+                    "label": "群聊触发方式",
+                    "options": [
+                      {
+                        "label": "仅 @机器人",
+                        "value": "mention"
+                      },
+                      {
+                        "label": "所有群消息",
+                        "value": "all"
+                      },
+                      {
+                        "label": "指定前缀",
+                        "value": "prefix"
+                      }
+                    ]
+                  },
+                  "bindings": [
+                    {
+                      "path": "credentials.groupTrigger",
+                      "source": "form",
+                      "default": "mention"
+                    }
+                  ]
+                },
+                {
+                  "id": "qq-personal-prefix",
+                  "type": "field",
+                  "props": {
+                    "label": "群聊触发前缀",
+                    "placeholder": "Amitia"
+                  },
+                  "bindings": [
+                    {
+                      "path": "credentials.triggerPrefix",
+                      "source": "form",
+                      "default": "Amitia"
+                    }
+                  ]
+                },
+                {
+                  "id": "qq-personal-webui-port",
+                  "type": "field",
+                  "props": {
+                    "label": "SnowLuma WebUI 端口",
+                    "variant": "number",
+                    "placeholder": "5099"
+                  },
+                  "bindings": [
+                    {
+                      "path": "credentials.webuiPort",
+                      "source": "form",
+                      "default": "5099"
+                    }
+                  ]
+                },
+                {
+                  "id": "qq-personal-novnc-port",
+                  "type": "field",
+                  "props": {
+                    "label": "noVNC 端口",
+                    "variant": "number",
+                    "placeholder": "6081"
+                  },
+                  "bindings": [
+                    {
+                      "path": "credentials.novncPort",
+                      "source": "form",
+                      "default": "6081"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "qq-personal-form-actions",
+              "type": "button_group",
+              "children": [
+                {
+                  "id": "qq-personal-save",
+                  "type": "button",
+                  "props": {
+                    "text": "保存并启用",
+                    "type": "primary"
+                  },
+                  "actions": [
+                    {
+                      "action_id": "connect",
+                      "target": "host_command",
+                      "input": {
+                        "channelId": "qq_personal",
+                        "config": {
+                          "token": "$form.credentials.token",
+                          "groupTrigger": "$form.credentials.groupTrigger",
+                          "triggerPrefix": "$form.credentials.triggerPrefix",
+                          "webuiPort": "$form.credentials.webuiPort",
+                          "novncPort": "$form.credentials.novncPort"
+                        }
+                      },
+                      "statePath": "connectResult"
+                    },
+                    {
+                      "action_id": "mobile-form",
+                      "target": "host_command",
+                      "input": {
+                        "channelId": "qq_personal",
+                        "action": "mobile-form",
+                        "input": {}
+                      },
+                      "statePath": "mobileConfig"
+                    },
+                    {
+                      "action_id": "status",
+                      "target": "host_command",
+                      "input": {
+                        "channelId": "qq_personal"
+                      },
+                      "statePath": "status"
+                    }
+                  ]
+                },
+                {
+                  "id": "qq-personal-disconnect",
+                  "type": "button",
+                  "props": {
+                    "text": "断开连接",
+                    "type": "danger",
+                    "plain": true
+                  },
+                  "actions": [
+                    {
+                      "action_id": "disconnect",
+                      "target": "host_command",
+                      "input": {
+                        "channelId": "qq_personal"
+                      },
+                      "confirmation": "确认断开 QQ 个人号桥接？",
+                      "statePath": "disconnectResult"
+                    },
+                    {
+                      "action_id": "status",
+                      "target": "host_command",
+                      "input": {
+                        "channelId": "qq_personal"
+                      },
+                      "statePath": "status"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "qq-personal-access",
+          "type": "stack",
+          "props": {
+            "gap": 8
+          },
+          "children": [
+            {
+              "id": "qq-personal-reverse-endpoint",
+              "type": "card",
+              "props": {
+                "title": "反向 WebSocket",
+                "shadow": "never"
+              },
+              "children": [
+                {
+                  "id": "qq-personal-reverse-url",
+                  "type": "text",
+                  "props": {
+                    "text": "等待读取地址",
+                    "variant": "body"
+                  },
+                  "bindings": [
+                    {
+                      "path": "text",
+                      "source": "state",
+                      "sourcePath": "mobileConfig.display.reverseWebSocketUrl"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "qq-personal-webui-access",
+              "type": "card",
+              "props": {
+                "title": "SnowLuma WebUI",
+                "shadow": "never"
+              },
+              "children": [
+                {
+                  "id": "qq-personal-webui-url",
+                  "type": "text",
+                  "props": {
+                    "text": "等待读取地址",
+                    "variant": "body"
+                  },
+                  "bindings": [
+                    {
+                      "path": "text",
+                      "source": "state",
+                      "sourcePath": "mobileConfig.display.webuiUrl"
+                    }
+                  ]
+                },
+                {
+                  "id": "qq-personal-webui-account",
+                  "type": "key_value",
+                  "props": {
+                    "columns": 1,
+                    "bordered": false
+                  },
+                  "bindings": [
+                    {
+                      "path": "items",
+                      "source": "state",
+                      "sourcePath": "mobileConfig.display.credentials"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "qq-personal-novnc-access",
+              "type": "card",
+              "props": {
+                "title": "noVNC 远程桌面",
+                "shadow": "never"
+              },
+              "children": [
+                {
+                  "id": "qq-personal-novnc-url",
+                  "type": "text",
+                  "props": {
+                    "text": "等待读取地址",
+                    "variant": "body"
+                  },
+                  "bindings": [
+                    {
+                      "path": "text",
+                      "source": "state",
+                      "sourcePath": "mobileConfig.display.novncUrl"
+                    }
+                  ]
+                }
+              ]
+            }
           ]
         }
-      ]
+      ],
+      "props": {
+        "gap": 12
+      }
     }
   ],
-  "theme": { "mode": "auto" },
+  "theme": {
+    "mode": "auto"
+  },
   "accessibility": {
     "enabled": true,
     "keyboardNav": true,
@@ -180,9 +655,9 @@
   },
   "performanceBudget": {
     "maxRenderTimeMs": 120,
-    "maxLayoutCount": 180,
-    "maxNodeCount": 180,
-    "maxDataFetchCount": 2,
+    "maxLayoutCount": 220,
+    "maxNodeCount": 220,
+    "maxDataFetchCount": 4,
     "maxActionCount": 12
   }
 }

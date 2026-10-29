@@ -32,10 +32,10 @@ export function splitBubbleText(content: string, complete: boolean): string[] {
     }
     i++;
   }
-  if (complete) {
+  {
     let tail = content.slice(start).trim();
     if (!code) {
-      for (let size = bubbleSeparator.length - 1; size >= 4; size--) {
+      for (let size = bubbleSeparator.length - 1; size >= (complete ? 4 : 1); size--) {
         if (tail.endsWith(bubbleSeparator.slice(0, size))) {
           tail = tail.slice(0, -size).trim();
           break;

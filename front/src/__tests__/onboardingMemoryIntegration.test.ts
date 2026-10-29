@@ -29,6 +29,8 @@ describe("引导初始记忆接入", () => {
     expect(mocks.write).toHaveBeenCalledWith(scope, expect.any(String), expect.objectContaining({ action: "create", partition: "profile", key: "称呼", value: "小明" }));
     expect(mocks.post).not.toHaveBeenCalled();
     expect(onboarding.onboardingComplete.value).toBe(true);
+    expect(mocks.push).toHaveBeenCalledWith("/chat");
+    expect(onboarding.entering.value).toBe(false);
     wrapper.unmount();
     vi.clearAllTimers();
     vi.useRealTimers();
@@ -41,6 +43,7 @@ describe("引导初始记忆接入", () => {
     await onboarding.handleEnterAmitia();
     expect(onboarding.onboardingComplete.value).toBe(false);
     expect(onboarding.stageError.value).toBe("数据所有者尚未确认保存");
+    expect(onboarding.entering.value).toBe(false);
     await onboarding.handleEnterAmitia();
     expect(mocks.write.mock.calls[0][1]).toBe(mocks.write.mock.calls[1][1]);
     expect(mocks.push).not.toHaveBeenCalled();

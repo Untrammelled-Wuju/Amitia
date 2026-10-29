@@ -56,6 +56,7 @@ export function useConversationRuntime(
     snapshot?: ConversationSnapshot,
   ) => void | Promise<void>,
   onConversationActivityChanged?: (conversationId: string) => void | Promise<void>,
+  groupSending?: Ref<boolean>,
 ) {
   const owned = useDeviceOwnedConversation();
   const reducer = new AgentEventReducer();
@@ -79,6 +80,11 @@ export function useConversationRuntime(
   let streamOpen = false;
   let recoverySnapshotRequired = false;
   let disposed = false;
+
+  function isGroupTurn(requestId: unknown): boolean {
+    const id = String(requestId || "").trim();
+    return Boolean(id && persistedMessages.value.some((message) => message.deliveryId && (message.requestId === id || message.id === `${id}/assistant`)));
+  }
 
   function syncReducerState() {
     automationStatus.value = projectAutomationStatus(reducer.turns);
@@ -205,8 +211,9 @@ export function useConversationRuntime(
     const next = persistedMessages.value.map((message, index) => {
       if (message.role === "assistant" && message.requestId) { activeRequestIds.add(message.requestId); pendingAssistantRequests.delete(message.requestId); }
       const turn = turnByMessageId.get(String(message?.id || "")) || (message?.role === "assistant" && message?.requestId ? turnList.find((item) => item.requestId === message.requestId) : undefined);
-      const key = turn ? assistantRowKey(turn) : getMessageUIKey(message, index);
-      const candidate = turn
+      const requestId = String(message?.requestId || "").trim();
+      const key = message.deliveryId ? `group-delivery:${message.deliveryId}` : turn ? assistantRowKey(turn) : message.role === "assistant" && requestId && message.id === `${requestId}/assistant` ? `request:${requestId}` : getMessageUIKey(message, index);
+      const candidate = turn && (!message.deliveryId || turn.items?.some((item) => item.type === "tool_call"))
         ? {
             ...message,
             uiKey: key,
@@ -220,7 +227,7 @@ export function useConversationRuntime(
             status: isTerminalTurn(turn.status) ? normalizedTurnStatus(turn.status) : message.status,
             state: isTerminalTurn(turn.status) ? normalizedTurnStatus(turn.status) : message.state,
           }
-        : message;
+        : message.deliveryId || key.startsWith("request:") ? { ...message, uiKey: key } : message;
       const signature = `persisted:${messageSignature(candidate)}${turn ? `:${turnSignature(turn)}` : ""}`;
       const previous = projectionCache.get(key);
       const row = previous && projectionSignatures.get(key) === signature ? previous : candidate;
@@ -313,11 +320,12 @@ export function useConversationRuntime(
     }
 
     const turn = event.turnId ? reducer.turn(event.turnId) : undefined;
+    const groupTurn = isGroupTurn(event.requestId);
     if (event.type === "turn.waiting" && event.status === "needs_reconciliation") {
-      sending.value = false;
+      if (!groupSending?.value && !groupTurn) sending.value = false;
     }
     if (event.type === "turn.queued" || event.type === "turn.started") {
-      sending.value = true;
+      if (!groupTurn) sending.value = true;
       if (event.type === "turn.started") {
         notifyDesktopPetChatState("assistant_thinking", event.requestId || turn?.id || "");
       }
@@ -328,7 +336,7 @@ export function useConversationRuntime(
     }
 
     if (["turn.completed", "turn.failed", "turn.interrupted"].includes(event.type)) {
-      sending.value = false;
+      if (!groupSending?.value && !groupTurn) sending.value = false;
       if (event.type === "turn.failed") {
         notifyDesktopPetChatState(
           "assistant_error",
@@ -348,15 +356,29 @@ export function useConversationRuntime(
 
   function applySnapshot(snapshot: ConversationSnapshot) {
     if (Number(snapshot.version) !== 1) throw new Error(`Unsupported conversation snapshot version: ${snapshot.version}`);
+    const completedTurns = reducer.turns.filter((turn) => isTerminalTurn(turn.status) && turn.conversationId === conversationId.value);
     reducer.reset(snapshot.turns || [], Number(snapshot.lastEventSequence || 0), snapshot.activeTurn || null);
+    const savedRequestIds = new Set((snapshot.messages || []).filter((message) => message.role === "assistant").map((message) => String(message.requestId || message.request_id || "").trim()).filter(Boolean));
+    reducer.mergeTurns(completedTurns.filter((turn) => turn.requestId && savedRequestIds.has(turn.requestId) && !(snapshot.turns || []).some((current) => current.requestId === turn.requestId && current.id !== turn.id)));
     turnHistoryCursor.value = String(snapshot.turnHistory?.nextCursor || "");
     hasMoreTurnHistory.value = snapshot.turnHistory?.hasMore === true;
     syncReducerState();
     const active = reducer.turn(reducer.activeTurnId);
-    sending.value = !!active && active.status !== "needs_reconciliation";
     publishApprovalState({ action: "reset", conversationId: conversationId.value });
     for (const approval of snapshot.approvals || []) publishApprovalState({ action: "requested", ...approval });
-    persistedMessages.value = (snapshot.messages || []).map((message) => normalizeRealtimeMessage(message));
+    const previousGroupMessages = groupSending?.value ? persistedMessages.value.filter((message) => message.groupRoundId && message.deliveryId || message.role === "user" && message.status === "sending") : [];
+    const snapshotMessages = (snapshot.messages || []).map((message) => normalizeRealtimeMessage(message));
+    const snapshotIds = new Set(snapshotMessages.map((message) => String(message.id || "")));
+    const sameDelivery = (a: any, b: any) => Boolean(a.deliveryId && b.deliveryId && a.deliveryId === b.deliveryId && a.groupRoundId && a.groupRoundId === b.groupRoundId);
+    persistedMessages.value = [...snapshotMessages.map((message) => {
+      const previous = previousGroupMessages.find((item) => item.id === message.id || sameDelivery(item, message));
+      if (sameDelivery(previous || {}, message)) {
+        if (message.status === "streaming") return { ...message, ...previous, uiKey: `group-delivery:${message.deliveryId}` };
+        return { ...previous, ...message, createdAt: previous?.createdAt || message.createdAt, uiKey: `group-delivery:${message.deliveryId}`, saved: true, status: message.status || "completed" };
+      }
+      return previous && previous.status === "streaming" ? { ...message, ...previous } : message;
+    }), ...previousGroupMessages.filter((message) => !snapshotIds.has(String(message.id || "")) && !snapshotMessages.some((item) => sameDelivery(message, item) || message.requestId && item.role === message.role && item.requestId === message.requestId))];
+    sending.value = Boolean(groupSending?.value) || (!!active && !isGroupTurn(active.requestId) && active.status !== "needs_reconciliation");
     projectTurns();
   }
 
@@ -383,12 +405,17 @@ export function useConversationRuntime(
   function beginPendingAssistant(requestId: string, characterId?: string) {
     const id = String(requestId || "").trim();
     if (!id) return;
-    pendingAssistantRequests.set(id, {
+    const request = {
       requestId: id,
       characterId: String(characterId || "").trim(),
       createdAt: new Date().toISOString(),
-    });
-    projectTurns();
+    };
+    pendingAssistantRequests.set(id, request);
+    const existingKeys = new Set(messages.value.map((message) => getMessageUIKey(message)));
+    const optimisticRows = persistedMessages.value.filter((message) => message.requestId === id && (message.role === "user" || message.role === "assistant")).map((message) => message.role === "assistant" ? { ...pendingAssistantMessage(request), ...message } : message).filter((message) => !existingKeys.has(getMessageUIKey(message)));
+    if (!optimisticRows.some((message) => message.role === "assistant") && !existingKeys.has(`request:${id}`)) optimisticRows.push(pendingAssistantMessage(request));
+    if (optimisticRows.length) messages.value = [...messages.value, ...optimisticRows];
+    scheduleProjection();
   }
 
   function failPendingAssistant(requestId: string) {
@@ -642,6 +669,7 @@ export function useConversationRuntime(
   window.addEventListener("amitia:execution-scope-changed", invalidateRuntimeAuthority);
 
   watch(persistedMessages, scheduleProjection, { deep: true });
+  if (groupSending) watch(groupSending, (current, previous) => { if (previous && !current) sending.value = false; });
   projectTurns();
 
   return {

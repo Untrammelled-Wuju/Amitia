@@ -59,6 +59,7 @@
     "ld-linux-aarch64.so.1",
     "libstdc++.so",
     "libgcc_s.so",
+    "libatomic.so",
     "libpthread.so",
     "libdl.so",
     "librt.so",

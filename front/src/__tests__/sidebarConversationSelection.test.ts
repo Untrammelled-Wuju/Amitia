@@ -122,7 +122,7 @@ describe("sidebar conversation selection", () => {
       chat.sidebar.recent = [conversation];
       chat.sidebar.projects = [project];
       await flushPromises();
-      expect(wrapper.findAll(".section-caption > span").map((item) => item.text())).toEqual(["最近", "项目"]);
+      expect(wrapper.findAll(".section-caption > span").map((item) => item.text())).toEqual(["聊天", "项目"]);
     } finally {
       wrapper.unmount();
     }

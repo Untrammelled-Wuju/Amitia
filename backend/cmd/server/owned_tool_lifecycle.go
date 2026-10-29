@@ -113,7 +113,7 @@ func (r *meshOwnedToolRuntime) OwnedReplyCommitted(ctx context.Context, inferenc
 	}
 	r.services.KernelContainer.ToolFacade.AfterReplyContext(ctx, ownedToolScope(inference, ""), kernel.ReplyView{MessageID: messageID, CharacterID: inference.Scope.RoleID, ConversationID: inference.ConversationID, Channel: "device-mesh", Content: generation.Text, CreatedAt: time.Now().UTC()})
 	if inference.Group != nil {
-		if err := r.services.OwnedBusiness.AcceptGroupInvitations(ctx, inference, messageID, r.takeGroupInvites(inference.Scope.ExecutionID)); err != nil {
+		if err := r.services.OwnedBusiness.AcceptGroupInvitations(ctx, inference, generation, messageID, r.takeGroupInvites(inference.Scope.ExecutionID)); err != nil {
 			return err
 		}
 	}

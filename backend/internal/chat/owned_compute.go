@@ -39,7 +39,11 @@ func ownedPromptContext(ctx context.Context, inference business.Inference, knowl
 	stableExpression, dynamic := ownedExpressionPrompt(ctx, inference, &role)
 	parts = append(parts, stableExpression...)
 	if inference.Group != nil {
-		parts = append(parts, "【群聊发言约束】\n当前会话包含多个角色。你只能以当前角色身份发言，不得代写其他角色。历史中其他角色的发言会明确标注说话者，不属于你的历史发言。只有用户明确点名、手动请求，或你通过宿主提供的群聊邀请能力成功邀请时，目标角色才会接话。")
+		if inference.Group.Mode == business.GroupModeDiscussion {
+			parts = append(parts, "【多角色圆桌讨论】\n当前是多角色圆桌讨论。你只能以当前角色身份发言，不得代写其他角色。请直接回应用户议题和前一位角色的观点，明确表达同意、反对或补充，并推动讨论前进。避免复述已经达成一致的内容，不要询问用户下一位该由谁发言，也不要声称其他角色已经发表尚未出现在群聊记录中的观点。")
+		} else {
+			parts = append(parts, "【群聊发言约束】\n当前会话包含多个角色。你只能以当前角色身份发言，不得代写其他角色。历史中其他角色的发言会明确标注说话者，不属于你的历史发言。只有用户明确点名、手动请求，或你通过宿主提供的群聊邀请能力成功邀请时，目标角色才会接话。")
+		}
 	}
 	if inference.MessageStyle == "bubble" {
 		parts = append(parts, bubbleMessageInstruction)

@@ -74,7 +74,7 @@
       </button>
       <template #dropdown>
         <el-dropdown-menu>
-          <el-dropdown-item v-if="conversation.projectId" command="__recent__">移回最近</el-dropdown-item>
+          <el-dropdown-item v-if="conversation.projectId" command="__recent__">移回聊天</el-dropdown-item>
           <el-dropdown-item
             v-for="project in availableProjects"
             :key="project.id"

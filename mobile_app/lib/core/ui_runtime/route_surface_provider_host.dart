@@ -49,6 +49,7 @@ class RouteSurfaceProviderHost extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (route.startsWith('/channels/')) return child;
     final capability = capabilityForBuiltinRoute(route);
     if (capability == null) return child;
     final snapshot = ref.watch(uiRuntimeProvider).valueOrNull;

@@ -1132,7 +1132,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
                       title: const Text('允许角色互相 @'),
-                      subtitle: const Text('角色可在回复完成后邀请另一位成员接话'),
+                      subtitle: const Text('角色可邀请另一位成员接话，也可参与多角色讨论'),
                       value: group.allowCharacterMentions,
                       onChanged: busy
                           ? null
@@ -2880,6 +2880,20 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                       ),
                       label: Text('@${member.characterName}'),
                       onPressed: () => _insertGroupMention(member),
+                    ),
+                  ),
+                if (_runtime.group != null)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: FilterChip(
+                      avatar: const Icon(Icons.groups_outlined, size: 16),
+                      label: const Text('多角色讨论'),
+                      selected: _runtime.groupDiscussionMode,
+                      onSelected:
+                          _runtime.group!.allowCharacterMentions &&
+                              _runtime.group!.activeMembers.length >= 2
+                          ? _runtime.setGroupDiscussionMode
+                          : null,
                     ),
                   ),
               ],

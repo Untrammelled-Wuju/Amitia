@@ -14,7 +14,7 @@
           <h4>成员</h4>
           <div class="member-list">
             <div v-for="member in activeMembers" :key="member.memberId" class="member-row">
-              <el-avatar :size="34" :src="member.characterAvatar || undefined">{{ member.characterName.slice(0, 1) }}</el-avatar>
+              <el-avatar :size="34" :src="member.characterAvatar || undefined" fit="cover">{{ member.characterName.slice(0, 1) }}</el-avatar>
               <div class="member-copy">
                 <strong>{{ member.characterName }}</strong>
                 <span>{{ member.historyStartSequence > 0 ? "加入后历史可见" : "可见完整历史" }}</span>
@@ -28,7 +28,7 @@
         <section class="group-section">
           <h4>成员设置</h4>
           <div class="setting-row">
-            <div><strong>允许角色互相 @</strong><span>角色可在回复完成后邀请另一位有效成员接话</span></div>
+            <div><strong>允许角色互相 @</strong><span>角色可邀请另一位成员接话，也可参与多角色讨论</span></div>
             <el-switch :model-value="group.groupSettings.allowCharacterMentions" :loading="savingSettings" @update:model-value="toggleMentions" />
           </div>
         </section>
@@ -46,7 +46,7 @@
           <div class="invite-list">
             <label v-for="character in availableCharacters" :key="character.id" class="invite-row">
               <el-checkbox :model-value="selected.has(character.id)" @update:model-value="toggleSelection(character.id, Boolean($event))" />
-              <el-avatar :size="30" :src="character.avatar || undefined">{{ character.name.slice(0, 1) }}</el-avatar>
+              <el-avatar :size="30" :src="character.avatar || undefined" fit="cover">{{ character.name.slice(0, 1) }}</el-avatar>
               <span>{{ character.name }}</span>
             </label>
           </div>
@@ -64,7 +64,7 @@
           <div class="invite-list">
             <label v-for="character in availableCharacters" :key="character.id" class="invite-row">
               <el-checkbox :model-value="selected.has(character.id)" @update:model-value="toggleSelection(character.id, Boolean($event))" />
-              <el-avatar :size="30" :src="character.avatar || undefined">{{ character.name.slice(0, 1) }}</el-avatar>
+              <el-avatar :size="30" :src="character.avatar || undefined" fit="cover">{{ character.name.slice(0, 1) }}</el-avatar>
               <span>{{ character.name }}</span>
             </label>
           </div>
@@ -107,7 +107,7 @@ const nameDraft = ref("");
 const failedDeliveries = ref<OwnedGroupDelivery[]>([]);
 const activeMembers = computed(() => (props.group?.members || []).filter((member) => member.status === "active").sort((left, right) => left.orderIndex - right.orderIndex));
 const activeCharacterIDs = computed(() => new Set(activeMembers.value.map((member) => member.characterId)));
-const availableCharacters = computed(() => props.characters.filter((character) => !activeCharacterIDs.value.has(character.id)));
+const availableCharacters = computed(() => props.characters.filter((character) => character.id !== props.roleId && !activeCharacterIDs.value.has(character.id)));
 
 watch(() => props.visible, (visible) => {
   if (!visible) selected.value = new Set();
@@ -220,6 +220,8 @@ async function retry(delivery: OwnedGroupDelivery) {
 .group-section h4 { margin: 0; font-size: 13px; }
 .member-list, .invite-list { display: flex; flex-direction: column; gap: 8px; }
 .member-row { padding: 8px 10px; border: 1px solid var(--border-subtle); border-radius: 10px; }
+.member-row :deep(.el-avatar), .invite-row :deep(.el-avatar) { flex: 0 0 auto; }
+.member-row :deep(.el-avatar img), .invite-row :deep(.el-avatar img) { width: 100%; height: 100%; object-fit: cover; }
 .failed-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--danger-color, #d14343) 35%, var(--border-subtle)); border-radius: 10px; }
 .member-copy { flex: 1; overflow: hidden; }
 .member-copy strong, .invite-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -17,6 +17,7 @@ enum UIProviderEntryType {
   builtinNative,
   declarative,
   webModule,
+  externalWebUi,
   schemaRenderer,
   webRestricted,
   webIsolated,
@@ -38,6 +39,7 @@ abstract final class UICapability {
   static const conversationComposer = 'conversation.composer';
   static const conversationOverlay = 'conversation.overlay';
   static const channelPresentation = 'channel.presentation';
+  static const workspaceTab = 'workspace.tab';
   static const characterShell = 'character.shell';
   static const characterDetail = 'character.detail';
   static const memoryShell = 'memory.shell';
@@ -66,6 +68,7 @@ abstract final class UICapability {
     conversationComposer,
     conversationOverlay,
     channelPresentation,
+    workspaceTab,
     characterShell,
     characterDetail,
     memoryShell,
@@ -106,6 +109,8 @@ class UIProviderEntry {
   final String? schemaPath;
   final String? exportName;
   final String? contentHash;
+  final String? url;
+  final List<String> allowedOrigins;
 
   const UIProviderEntry({
     this.contributionId,
@@ -114,6 +119,8 @@ class UIProviderEntry {
     this.schemaPath,
     this.exportName,
     this.contentHash,
+    this.url,
+    this.allowedOrigins = const <String>[],
   });
 
   factory UIProviderEntry.fromJson(Map<String, dynamic> json) {
@@ -122,6 +129,7 @@ class UIProviderEntry {
       'builtin_native' => UIProviderEntryType.builtinNative,
       'declarative' => UIProviderEntryType.declarative,
       'web_module' => UIProviderEntryType.webModule,
+      'external_web_ui' => UIProviderEntryType.externalWebUi,
       'schema_renderer' => UIProviderEntryType.schemaRenderer,
       'web_restricted' => UIProviderEntryType.webRestricted,
       'web_isolated' => UIProviderEntryType.webIsolated,
@@ -134,6 +142,11 @@ class UIProviderEntry {
       schemaPath: json['schemaPath']?.toString(),
       exportName: json['exportName']?.toString(),
       contentHash: json['contentHash']?.toString(),
+      url: json['url']?.toString(),
+      allowedOrigins: ((json['allowedOrigins'] as List?) ?? const [])
+          .map((item) => item.toString().trim())
+          .where((item) => item.isNotEmpty)
+          .toList(growable: false),
     );
   }
 }

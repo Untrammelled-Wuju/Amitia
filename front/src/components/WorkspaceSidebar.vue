@@ -68,7 +68,7 @@
 
         <div class="thread-section">
           <div class="section-caption project-caption">
-            <span>最近</span>
+            <span>聊天</span>
             <button type="button" class="section-add" data-amitia-ui="app.sidebar.item" title="新建对话" aria-label="新建对话" @click="handleNewChat">
               <el-icon><Plus /></el-icon>
             </button>

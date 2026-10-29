@@ -86,4 +86,9 @@ async function invokeComposerAction(actionId: string) {
   align-items: center;
   opacity: 0.85;
 }
+.composer-extension-host__attachments:empty,
+.composer-extension-host__hints:empty,
+.composer-extension-host:has(.composer-extension-host__attachments:empty):has(.composer-extension-host__hints:empty) {
+  display: none;
+}
 </style>

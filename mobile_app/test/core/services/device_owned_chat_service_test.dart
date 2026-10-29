@@ -222,6 +222,13 @@ void main() {
           'text': 'A',
         },
         {
+          'type': 'group.delivery.completed',
+          'conversationId': 'chat',
+          'groupRoundId': 'round',
+          'deliveryId': 'delivery-a',
+          'executionScope': first,
+        },
+        {
           'type': 'started',
           'conversationId': 'chat',
           'groupRoundId': 'round',
@@ -269,6 +276,7 @@ void main() {
     expect(events.map((event) => event['type']), [
       'started',
       'delta',
+      'group.delivery.completed',
       'started',
       'delta',
       'group.completed',

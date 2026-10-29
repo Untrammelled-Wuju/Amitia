@@ -39,6 +39,41 @@ type meshLegacyCursor struct {
 	SearchHash   string `json:"searchHash,omitempty"`
 }
 
+func projectGroupResourceForSnapshot(resource coordination.Resource) (coordination.Resource, error) {
+	if resource.Kind != "group-round" && resource.Kind != "group-delivery" && resource.Kind != "conversation" {
+		return resource, nil
+	}
+	var document map[string]any
+	if err := json.Unmarshal(resource.Body, &document); err != nil {
+		return resource, err
+	}
+	if resource.Kind == "conversation" {
+		if document["conversationType"] != "group" {
+			return resource, nil
+		}
+		members, _ := document["members"].([]any)
+		for _, raw := range members {
+			member, _ := raw.(map[string]any)
+			delete(member, "characterAvatar")
+		}
+	} else {
+		delete(document, "characterAvatar")
+	}
+	if resource.Kind == "group-round" {
+		deliveries, _ := document["deliveries"].([]any)
+		for _, raw := range deliveries {
+			delivery, _ := raw.(map[string]any)
+			delete(delivery, "characterAvatar")
+		}
+	}
+	encoded, err := json.Marshal(document)
+	if err != nil {
+		return resource, err
+	}
+	resource.Body = encoded
+	return resource, nil
+}
+
 func encodeMeshLegacyCursor(cursor meshLegacyCursor) string {
 	encoded, _ := json.Marshal(cursor)
 	return base64.RawURLEncoding.EncodeToString(encoded)
@@ -290,6 +325,9 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 	}
 	usableMemories := make(map[string]bool)
 	for _, kind := range []string{"memory", "conversation", "message", "summary", "working", "profile", "episodic", "fact", "vector", "graph", "continuity", business.EmotionSnapshotKind, "checkpoint", "project", "tool-result", "worldbook", "group-round", "group-delivery", "group-invitation", coordination.RuntimeStateKindPsyche, coordination.RuntimeStateKindRelationship, coordination.RuntimeStateKindNeeds} {
+		if query.Management && query.RuntimeTurns && query.ResourceKind == "" && kind != "conversation" && kind != "message" && kind != "checkpoint" {
+			continue
+		}
 		if kind == "tool-result" && !query.RuntimeTurns {
 			continue
 		}
@@ -361,6 +399,11 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 			}
 		}
 		for _, resource := range resources {
+			projected, err := projectGroupResourceForSnapshot(resource)
+			if err != nil {
+				return snapshot, err
+			}
+			resource = projected
 			if query.Management {
 				snapshot.Resources = append(snapshot.Resources, resource)
 				continue
@@ -449,6 +492,11 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 			if seen[resource.Kind+"/"+resource.ID] {
 				continue
 			}
+			projected, err := projectGroupResourceForSnapshot(resource)
+			if err != nil {
+				return snapshot, err
+			}
+			resource = projected
 			snapshot.Resources = append(snapshot.Resources, resource)
 			snapshot.GroupRoles[resource.ID] = groupRoles[resource.ID]
 		}

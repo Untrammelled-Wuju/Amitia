@@ -315,6 +315,7 @@ export class SnowLumaRuntimeManager {
   private fingerprint = ""
   private readonly allowedRoot: string
   private readonly installer: SnowLumaInstaller
+  private environment: NodeJS.ProcessEnv = {}
 
   constructor(allowedRoot = moduleDataDir()) {
     this.allowedRoot = path.resolve(allowedRoot)
@@ -323,6 +324,10 @@ export class SnowLumaRuntimeManager {
 
   nativeRoot(config: QQPersonalConfig): string {
     return this.installer.installedRoot() || effectiveSnowLumaRoot(config.snowlumaRoot, this.allowedRoot)
+  }
+
+  setEnvironment(environment: NodeJS.ProcessEnv): void {
+    this.environment = { ...environment }
   }
 
   installState(): SnowLumaInstallStatus {
@@ -410,6 +415,7 @@ export class SnowLumaRuntimeManager {
       cwd: root,
       env: {
         ...process.env,
+        ...this.environment,
         NO_COLOR: "1",
         SNOWLUMA_HOOK_AUTOLOAD: "1",
         SNOWLUMA_UPDATE_ROOT: root,

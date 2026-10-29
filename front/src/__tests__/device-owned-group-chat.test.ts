@@ -42,6 +42,7 @@ describe("多角色群聊流", () => {
     const frames = [
       { type: "started", conversationId: "chat", groupRoundId: "round", deliveryId: "delivery-a", characterId: "role-a", executionScope: a },
       { type: "delta", conversationId: "chat", groupRoundId: "round", deliveryId: "delivery-a", text: "A 回复", executionScope: a },
+      { type: "group.delivery.completed", conversationId: "chat", groupRoundId: "round", deliveryId: "delivery-a", executionScope: a },
       { type: "started", conversationId: "chat", groupRoundId: "round", deliveryId: "delivery-b", characterId: "role-b", executionScope: b },
       { type: "delta", conversationId: "chat", groupRoundId: "round", deliveryId: "delivery-b", text: "B 回复", executionScope: b },
       { type: "group.completed", data: { conversationId: "chat", requestId: "request", groupRoundId: "round", status: "completed", userMessageId: "request/user", saved: true, deliveries } },
@@ -51,7 +52,7 @@ describe("多角色群聊流", () => {
     const seen: string[] = [];
     const request = { requestId: "request", conversationId: "chat", characterId: "role-a", message: "@小夏 @小林", group: { expectedMembershipRevision: 1, expectedSettingsRevision: 1 }, mentions: [] } as OwnedGroupChatRequest;
     const result = await streamOwnedGroupChat(request, new AbortController().signal, (event) => seen.push(event.type));
-    expect(seen).toEqual(["started", "delta", "started", "delta", "group.completed"]);
+    expect(seen).toEqual(["started", "delta", "group.delivery.completed", "started", "delta", "group.completed"]);
     expect(result.deliveries.map((delivery) => delivery.characterName)).toEqual(["小夏", "小林"]);
   });
 

@@ -4,15 +4,12 @@
       class="onboarding-world"
       :data-level="Math.min(currentStage, 7)"
       :data-stage-current="currentStage"
-      :data-entry-preparing="entryPreparing ? 'true' : null"
-      :data-entering="enteringState"
     >
-      <StarfieldBg />
-
       <button
         class="ob-back"
         :class="{ show: currentStage > 0 }"
         type="button"
+        :disabled="entering"
         @click="prevStage"
       >
         上一步
@@ -62,6 +59,7 @@
           @detect="detectModel"
         />
         <el-alert v-else :title="configurationExplanation" type="info" :closable="false" show-icon />
+        <p v-if="stageError" class="ob-error" role="alert">{{ stageError }}</p>
       </section>
 
       <div class="ob-guide-actions">
@@ -77,14 +75,13 @@
           v-else-if="currentStage === 2"
           class="ob-model-setup-next"
           type="button"
-          :disabled="configurationChecking || (canConfigureModels && !isModelFormValid)"
+          :disabled="entering || configurationChecking || (canConfigureModels && !isModelFormValid)"
           @click="handleStartUsing"
         >
-          开始使用
+          {{ entering ? "正在保存" : "开始使用" }}
         </button>
       </div>
 
-      <AmitiaEntryTransition />
     </div>
   </div>
 </template>
@@ -93,18 +90,16 @@
 import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { apiClient } from "@/ui-index";
-import StarfieldBg from "./components/StarfieldBg.vue";
 import StageDeployMode from "./components/StageDeployMode.vue";
 import StageRuntimeSetup from "./components/StageRuntimeSetup.vue";
 import StageModelConfig from "./components/StageModelConfig.vue";
-import AmitiaEntryTransition from "./components/AmitiaEntryTransition.vue";
 import { useImmersiveOnboarding } from "./composables/useImmersiveOnboarding";
 
 import "./styles/onboarding.css";
 import "./styles/stages.css";
 import "./styles/typography.css";
 import "./styles/stage-specific.css";
-import "./styles/entry-transition.css";
+import "./styles/simple-guide.css";
 
 const router = useRouter();
 
@@ -113,6 +108,8 @@ const {
   configurationChecking,
   configurationExplanation,
   currentStage,
+  stageError,
+  entering,
   deployMode,
   serverURL,
   detectingModels,
@@ -127,12 +124,10 @@ const {
   modelType,
   modelProvider,
   modelProtocol,
-  entryPreparing,
-  enteringState,
   nextStage,
   prevStage,
   detectModel,
-  startEntryTransition,
+  handleEnterAmitia,
 } = useImmersiveOnboarding();
 
 const deployStageRef = ref<{ continueFlow: () => void } | null>(null);
@@ -164,7 +159,7 @@ async function onHealthCheckDone() {
 }
 
 function handleStartUsing() {
-  if (!canConfigureModels.value) { void startEntryTransition(); return; }
+  if (!canConfigureModels.value) { void handleEnterAmitia(); return; }
   modelFieldErrors.value = {};
   if (!modelBaseUrl.value.trim()) modelFieldErrors.value.baseUrl = true;
   if (modelType.value !== "local" && !modelApiKey.value.trim()) {
@@ -172,7 +167,7 @@ function handleStartUsing() {
   }
   if (!modelName.value.trim()) modelFieldErrors.value.modelName = true;
   if (Object.keys(modelFieldErrors.value).length > 0) return;
-  startEntryTransition();
+  void handleEnterAmitia();
 }
 
 function checkRemoteConnection() {
@@ -205,6 +200,6 @@ function checkRemoteConnection() {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #070708;
+  background: var(--workbench-bg);
 }
 </style>

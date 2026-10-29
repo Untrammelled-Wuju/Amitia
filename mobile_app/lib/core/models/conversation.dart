@@ -113,6 +113,7 @@ class MessageDto {
   final String characterAvatar;
   final String groupRoundId;
   final String deliveryId;
+  final int? deliveryIndex;
   final String role;
   final String content;
   final String reasoningContent;
@@ -152,6 +153,7 @@ class MessageDto {
     this.characterAvatar = '',
     this.groupRoundId = '',
     this.deliveryId = '',
+    this.deliveryIndex,
     required this.role,
     required this.content,
     this.reasoningContent = '',
@@ -199,6 +201,7 @@ class MessageDto {
       characterAvatar: (json['characterAvatar'] ?? '').toString(),
       groupRoundId: (json['groupRoundId'] ?? '').toString(),
       deliveryId: (json['deliveryId'] ?? '').toString(),
+      deliveryIndex: (json['deliveryIndex'] as num?)?.toInt(),
       role: json['role'] as String? ?? '',
       content: json['content'] as String? ?? '',
       reasoningContent: json['reasoningContent'] as String? ?? '',

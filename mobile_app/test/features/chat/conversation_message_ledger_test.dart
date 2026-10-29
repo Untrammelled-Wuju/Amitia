@@ -26,6 +26,24 @@ ChatMessage _message({
 }
 
 void main() {
+  test('群聊并发回复按投递顺序稳定排列', () {
+    final ledger = ConversationMessageLedger();
+    ChatMessage reply(String id, int index, int sequence) => ChatMessage(
+      id: id,
+      renderId: 'group-delivery:$id',
+      groupRoundId: 'round',
+      deliveryId: id,
+      deliveryIndex: index,
+      role: MessageRole.assistant,
+      type: MessageType.text,
+      content: id,
+      time: DateTime(2026),
+      sequence: sequence,
+    );
+    ledger.upsert(reply('second', 1, 2));
+    ledger.upsert(reply('first', 0, 3));
+    expect(ledger.messages.map((item) => item.id), ['first', 'second']);
+  });
   test('不同设备的同名消息和渲染编号独立保存并拒绝不明确的查找', () {
     final ledger = ConversationMessageLedger();
     final device = _message(sourceOwnerId: 'device', content: '设备历史');
@@ -35,10 +53,19 @@ void main() {
     expect(ledger.length, 2);
     expect(ledger.findById('assistant-1'), isNull);
     expect(ledger.findByRenderId('turn-1'), isNull);
-    expect(ledger.findById('assistant-1', sourceOwnerId: 'device')?.content, '设备历史');
+    expect(
+      ledger.findById('assistant-1', sourceOwnerId: 'device')?.content,
+      '设备历史',
+    );
     ledger.upsert(_message(sourceOwnerId: 'core', content: '修改云端记录'));
-    expect(ledger.findById('assistant-1', sourceOwnerId: 'device')?.content, '设备历史');
-    expect(ledger.findById('assistant-1', sourceOwnerId: 'core')?.content, '修改云端记录');
+    expect(
+      ledger.findById('assistant-1', sourceOwnerId: 'device')?.content,
+      '设备历史',
+    );
+    expect(
+      ledger.findById('assistant-1', sourceOwnerId: 'core')?.content,
+      '修改云端记录',
+    );
     ledger.remove(device);
     expect(ledger.messages.single.sourceOwnerId, 'core');
   });
@@ -46,7 +73,10 @@ void main() {
   test('读取版本变化会更新归属消息状态', () {
     final ledger = ConversationMessageLedger();
     ledger.upsert(_message(sourceOwnerId: 'device', sourceRevision: 1));
-    expect(ledger.upsert(_message(sourceOwnerId: 'device', sourceRevision: 2)), isTrue);
+    expect(
+      ledger.upsert(_message(sourceOwnerId: 'device', sourceRevision: 2)),
+      isTrue,
+    );
     expect(ledger.messages.single.sourceRevision, 2);
   });
   test('同一 renderId 从实时 Turn 更新为持久消息时只保留一条', () {
@@ -55,11 +85,7 @@ void main() {
 
     expect(
       ledger.upsert(
-        _message(
-          id: 'message-1',
-          characterId: 'character-1',
-          content: '最终回复',
-        ),
+        _message(id: 'message-1', characterId: 'character-1', content: '最终回复'),
       ),
       isTrue,
     );

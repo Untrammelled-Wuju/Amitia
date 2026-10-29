@@ -184,9 +184,10 @@ void main() {
     _expectRootHeaderSurface(tester);
     _expectRootContentTop(tester, find.byType(ProfileHubPage));
     expect(find.text('我的空间'), findsOneWidget);
-    for (final label in ['角色', '创意工坊', '游戏模式', '渠道接入', '设置']) {
+    for (final label in ['角色', '创意工坊', '游戏模式', '设置']) {
       expect(find.text(label), findsOneWidget);
     }
+    expect(find.text('渠道消息'), findsNothing);
     expect(find.text('管理和切换对话角色'), findsNothing);
     expect(find.text('角色卡、工作流与桌宠'), findsNothing);
 

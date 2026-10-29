@@ -438,6 +438,7 @@ Stream<Map<String, dynamic>> decodeOwnedGroupChatStream(
         'task',
         'reasoning-completed',
         'output-completed',
+        'group.delivery.completed',
       }.contains(type)) {
         final deliveryId = (event['deliveryId'] ?? '').toString();
         final scope = event['executionScope'];
@@ -1885,6 +1886,7 @@ class DeviceOwnedChatService {
     String? messageStyle,
     Map<String, dynamic>? context,
     List<Map<String, dynamic>>? attachments,
+    bool discussionMode = false,
   }) async* {
     if (_active != null || !enabled) throw StateError('当前回复尚未结束或设备服务尚未就绪');
     final origin = parseConversationReference(conversationId);
@@ -1922,10 +1924,13 @@ class DeviceOwnedChatService {
               if (origin != null) 'conversationId': origin['id'],
             },
           if (attachments != null) 'attachments': attachments,
-          'mentions': mentions,
+          'mentions': discussionMode
+              ? const <Map<String, dynamic>>[]
+              : mentions,
           'group': {
             'expectedMembershipRevision': group.membershipRevision,
             'expectedSettingsRevision': group.settingsRevision,
+            'mode': discussionMode ? 'discussion' : 'standard',
           },
         },
         headers: {'Accept': 'text/event-stream'},

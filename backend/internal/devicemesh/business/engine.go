@@ -117,6 +117,7 @@ type Event struct {
 	Reasoning       bool                        `json:"reasoning,omitempty"`
 	GroupRoundID    string                      `json:"groupRoundId,omitempty"`
 	DeliveryID      string                      `json:"deliveryId,omitempty"`
+	ChildRequestID  string                      `json:"childRequestId,omitempty"`
 	DeliveryIndex   int                         `json:"deliveryIndex,omitempty"`
 	CharacterID     string                      `json:"characterId,omitempty"`
 	CharacterName   string                      `json:"characterName,omitempty"`
@@ -558,6 +559,22 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 	if err := coordination.ValidateSnapshot(scope, snapshot); err != nil {
 		return Response{}, err
 	}
+	if request.PreparedReply != nil && request.PreparedReply.ContextSequence > 0 {
+		resources := snapshot.Resources[:0]
+		for _, resource := range snapshot.Resources {
+			if resource.Kind == "message" {
+				var message struct {
+					ConversationID string `json:"conversationId"`
+					Sequence       int64  `json:"sequence"`
+				}
+				if json.Unmarshal(resource.Body, &message) == nil && message.ConversationID == request.ConversationID && message.Sequence > request.PreparedReply.ContextSequence {
+					continue
+				}
+			}
+			resources = append(resources, resource)
+		}
+		snapshot.Resources = resources
+	}
 	var historicalSnapshot *coordination.DataSnapshot
 	if port, ok := e.data.(coordination.HistoricalDataPort); ok && scope.Coordinated && conversationRoute.HistoricalID != "" {
 		historicalQuery := dataQuery
@@ -796,7 +813,11 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 	inference.PreparedReply = request.PreparedReply
 	if prepared != nil && snapshot.Group != nil {
 		sourceMember, _ := snapshot.Group.ActiveMember(scope.RoleID)
-		inference.Group = &GroupReplyContext{State: *snapshot.Group, Delivery: GroupDelivery{DeliveryID: prepared.DeliveryID, GroupRoundID: prepared.GroupRoundID, ChildRequestID: request.RequestID, CharacterID: scope.RoleID, CharacterName: role.Name, CharacterAvatar: role.Avatar, RoleOwnerID: scope.RoleOwnerID, MemberID: sourceMember.MemberID, Source: "user", Status: GroupDeliveryRunning}, SourceMember: sourceMember}
+		mode := GroupModeStandard
+		if request.Group != nil && strings.TrimSpace(request.Group.Mode) != "" {
+			mode = request.Group.Mode
+		}
+		inference.Group = &GroupReplyContext{State: *snapshot.Group, Delivery: GroupDelivery{DeliveryID: prepared.DeliveryID, GroupRoundID: prepared.GroupRoundID, ChildRequestID: request.RequestID, CharacterID: scope.RoleID, CharacterName: role.Name, RoleOwnerID: scope.RoleOwnerID, MemberID: sourceMember.MemberID, Source: "user", Status: GroupDeliveryRunning}, SourceMember: sourceMember, Mode: mode}
 	}
 	inference.ModelConfigID, inference.ReasoningEffort, inference.ReasoningEnabled = request.ModelConfigID, request.ReasoningEffort, request.ReasoningEnabled
 	inference.MessageStyle = request.MessageStyle
@@ -971,7 +992,14 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 	}
 	assistantSequence := userSequence + 1
 	var conversationRevision int64
+	var unlockGroupReply func()
 	if prepared != nil {
+		unlockGroupReply = e.lock("group-reply-save\x00" + scope.SpaceID + "\x00" + scope.ResourceOwnerID + "\x00" + request.ConversationID)
+		defer func() {
+			if unlockGroupReply != nil {
+				unlockGroupReply()
+			}
+		}()
 		conversation, conversationRevision, err = e.ownedConversationForReply(ctx, scope, request.ConversationID, conversation, version(snapshot, "conversation", request.ConversationID))
 		if err != nil {
 			return response, err
@@ -982,6 +1010,9 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 		output = append(output, coordination.Mutation{Kind: "conversation", ID: request.ConversationID, RoleID: coordination.StorageRole(scope, "conversation"), ExpectedRevision: conversationRevision, Body: body(conversation)})
 	}
 	assistantDocument["sequence"], assistantDocument["reasoningDurationMs"] = assistantSequence, generation.ReasoningDurationMS
+	if prepared != nil {
+		assistantDocument["deliveryIndex"] = prepared.DeliveryIndex
+	}
 	if len(generation.CitationSnapshot) == 0 {
 		assistantDocument["citationSnapshot"] = json.RawMessage("[]")
 	} else {
@@ -999,6 +1030,10 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 	if err := e.submit(ctx, scope, "reply", output, response.Evidence...); err != nil {
 		response.Saved = false
 		return response, fmt.Errorf("回复尚未确认保存: %w", err)
+	}
+	if unlockGroupReply != nil {
+		unlockGroupReply()
+		unlockGroupReply = nil
 	}
 	checkpointRevision, err := e.ownedCheckpointRevision(ctx, scope)
 	if err != nil {

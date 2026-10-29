@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
@@ -118,5 +119,69 @@ func TestOwnedTitleRejectsModeChangeDuringGeneration(t *testing.T) {
 	}
 	if err := json.Unmarshal(resource.Body, &content); err != nil || content.Title != "介绍项目" {
 		t.Fatalf("expired title was saved: %s %v", resource.Body, err)
+	}
+}
+
+func TestOwnedGroupTitleGeneratesOnceAndPreservesManualRename(t *testing.T) {
+	engine, db, _, model := engineHarness(t)
+	response, err := engine.Run(t.Context(), Request{SpaceID: "core", DeviceID: "a", CoreID: "core", ConversationID: "group-conversation", RequestID: "group-title-source", Message: "创建群聊"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope := response.Scope
+	scope.ConversationRoleID = "role"
+	store := coordination.NewOwnershipStore(db, "a")
+	resource, err := store.Get(t.Context(), "conversation", "group-conversation")
+	if err != nil || resource == nil {
+		t.Fatalf("conversation missing: %+v %v", resource, err)
+	}
+	var document map[string]any
+	if err := json.Unmarshal(resource.Body, &document); err != nil {
+		t.Fatal(err)
+	}
+	document["title"] = "新群聊"
+	document["conversationType"] = "group"
+	document["groupSettings"] = map[string]any{"allowCharacterMentions": true, "maxAutoReplies": 5}
+	stageScope := scope
+	stageScope.RequestID += "|seed-group"
+	if _, err := store.Apply(t.Context(), coordination.Commit{Scope: stageScope, Mutations: []coordination.Mutation{{Kind: "conversation", ID: "group-conversation", RoleID: "role", ExpectedRevision: resource.Revision, Body: body(document)}}}); err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	engine.model = ownedTitleTestModel{testModel: model, plan: func(_ context.Context, inference Inference, generation Generation) (string, error) {
+		calls++
+		if inference.Message != "讨论如何服务小商家" || !strings.Contains(generation.Text, "大肥鱼：先做访谈") || !strings.Contains(generation.Text, "小林：再设计套餐") {
+			t.Fatalf("unexpected title input: %q %q", inference.Message, generation.Text)
+		}
+		return "商家增长讨论", nil
+	}}
+	state := coordination.GroupState{ConversationID: "group-conversation", ConversationRoleID: "role", RoleOwnerID: "a", ConversationType: "group"}
+	deliveries := []Response{{CharacterName: "大肥鱼", Generation: Generation{Text: "先做访谈"}}, {CharacterName: "小林", Generation: Generation{Text: "再设计套餐"}}}
+	ctx := coordination.WithScope(t.Context(), scope)
+	if err := engine.finishOwnedGroupTitle(ctx, scope, state, "讨论如何服务小商家", deliveries); err != nil {
+		t.Fatal(err)
+	}
+	resource, err = store.Get(t.Context(), "conversation", "group-conversation")
+	if err != nil || resource == nil {
+		t.Fatalf("title conversation missing: %+v %v", resource, err)
+	}
+	if err := json.Unmarshal(resource.Body, &document); err != nil || document["title"] != "商家增长讨论" {
+		t.Fatalf("group title not saved: %s %v", resource.Body, err)
+	}
+	document["title"] = "手动群名"
+	stageScope = scope
+	stageScope.RequestID += "|manual-group-title"
+	if _, err := store.Apply(t.Context(), coordination.Commit{Scope: stageScope, Mutations: []coordination.Mutation{{Kind: "conversation", ID: "group-conversation", RoleID: "role", ExpectedRevision: resource.Revision, Body: body(document)}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.finishOwnedGroupTitle(ctx, scope, state, "再次讨论", deliveries); err != nil {
+		t.Fatal(err)
+	}
+	resource, err = store.Get(t.Context(), "conversation", "group-conversation")
+	if err != nil || resource == nil {
+		t.Fatalf("renamed conversation missing: %+v %v", resource, err)
+	}
+	if err := json.Unmarshal(resource.Body, &document); err != nil || document["title"] != "手动群名" || calls != 1 {
+		t.Fatalf("manual title overwritten: %s calls=%d %v", resource.Body, calls, err)
 	}
 }

@@ -304,8 +304,8 @@ onUnmounted(() => {
 .profile-menu__item .el-icon { font-size: 15px; }
 .profile-menu__item:disabled { cursor: wait; opacity: 0.7; }
 .user-profile { display: grid; place-items: center; width: 38px; height: 38px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--text-secondary); cursor: pointer; }
-.user-profile:hover { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
-.user-avatar { display: grid; place-items: center; width: 28px; height: 28px; flex: 0 0 auto; border-radius: 50%; background: var(--tp-selection); color: var(--text-primary); font-size: var(--ac-font-size-sm); overflow: hidden; }
+.user-profile:hover { background: transparent; color: var(--text-primary); }
+.user-avatar { display: grid; place-items: center; width: 28px; height: 28px; flex: 0 0 auto; border-radius: 50%; background: transparent; color: var(--text-primary); font-size: var(--ac-font-size-sm); overflow: hidden; }
 .user-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .side-nav :deep(button:not(:disabled):focus-visible), .side-menu :deep(.el-menu-item:focus-visible), .side-menu :deep(.el-sub-menu__title:focus-visible) { outline: 2px solid var(--ac-color-primary); outline-offset: -2px; }
 .side-nav-tooltip-anchor { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }

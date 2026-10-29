@@ -14,9 +14,10 @@ describe("bubble message delivery", () => {
   });
   beforeEach(() => { vi.resetModules(); localStorage.clear(); });
 
-  it("delivers only delimited text and flushes the tail at completion", () => {
-    expect(splitBubbleText("第一段[AMI", false)).toEqual([]);
-    expect(splitBubbleText("第一段[AMITIA_BR]第二段", false)).toEqual(["第一段"]);
+  it("renders the tail while withholding incomplete delimiters", () => {
+    expect(splitBubbleText("第一段[AMI", false)).toEqual(["第一段"]);
+    expect(splitBubbleText("第一段[AMITIA_BR]第二段", false)).toEqual(["第一段", "第二段"]);
+    expect(splitBubbleText("第一段[", false)).toEqual(["第一段"]);
     expect(splitBubbleText("第一段[AMITIA_BR]第二段", true)).toEqual(["第一段", "第二段"]);
     expect(splitBubbleText("[AMITIA_BR]第一段[AMITIA_BR][AMITIA_BR]", true)).toEqual(["第一段"]);
     expect(splitBubbleText("中断的尾段[AMITI", true)).toEqual(["中断的尾段"]);
@@ -36,12 +37,12 @@ describe("bubble message delivery", () => {
       { id: "result1", turnId: "t1", conversationId: "c1", sequence: 4, type: "tool_result", status: "completed", callId: "call-1", toolName: "read_file" },
     ] };
     const projected = projectBubbleContent(message, turn);
-    expect(projected.map(item => item.kind)).toEqual(["thinking", "turn", "text"]);
+    expect(projected.map(item => item.kind)).toEqual(["thinking", "turn", "text", "text"]);
     expect(projected[0]).toMatchObject({ content: "", complete: false });
     expect(projected[1].kind === "turn" && projected[1].turn.items).toHaveLength(2);
     expect(projectBubbleContent(message, turn)).toEqual(projected);
     const completed = projectBubbleContent(message, { ...turn, status: "interrupted" });
-    expect(completed.map(item => item.key).slice(0, 3)).toEqual(projected.map(item => item.key));
+    expect(completed.map(item => item.key)).toEqual(projected.map(item => item.key));
     expect(completed.at(-1)).toMatchObject({ kind: "text", content: "未完成" });
   });
 
@@ -68,9 +69,9 @@ describe("bubble message delivery", () => {
       props: { message: normalizeAIMessage({ id: "m1", role: "assistant", status: "streaming", content: "完成的消息[AMITIA_BR]隐藏的消息" }), pending: true },
       global: { stubs: { MarkdownContent: { props: ["source", "streaming"], template: '<p :data-streaming="streaming">{{ source }}</p>' } } },
     });
-    expect(wrapper.findAll('[data-bubble-kind="text"]')).toHaveLength(1);
-    expect(wrapper.text()).not.toContain("隐藏的消息");
-    expect(wrapper.get("p").attributes("data-streaming")).toBe("false");
+    expect(wrapper.findAll('[data-bubble-kind="text"]')).toHaveLength(2);
+    expect(wrapper.text()).toContain("隐藏的消息");
+    expect(wrapper.findAll("p").every(p => p.attributes("data-streaming") === "false")).toBe(true);
     await wrapper.setProps({ message: normalizeAIMessage({ id: "m1", role: "assistant", status: "sent", content: "完成的消息[AMITIA_BR]隐藏的消息" }), pending: false });
     expect(wrapper.findAll('[data-bubble-kind="text"]')).toHaveLength(2);
     expect(wrapper.text()).not.toContain("[AMITIA_BR]");

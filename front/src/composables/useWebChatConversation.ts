@@ -73,6 +73,10 @@ export function useWebChatConversation(
     localStorage.setItem(owned.enabled.value ? `webchat-char-id:${owned.coreId.value}:${owned.roleOwnerId.value}` : "webchat-char-id", c.id);
   }
 
+  function clearGroupConversation() {
+    group.value = null;
+  }
+
   async function handleSwitchChar(c: any) {
     try {
       await ElMessageBox.confirm(
@@ -96,7 +100,7 @@ export function useWebChatConversation(
     if (owned.enabled.value) await chatStore.fetchSidebar().catch(() => undefined);
   }
 
-  async function loadCharacterConversation(options: { preserve?: boolean } = {}) {
+  async function loadCharacterConversation(options: { preserve?: boolean; retryOnFailure?: boolean } = {}) {
     const conversationID = String(convId.value || "").trim();
     const preserve = options.preserve === true;
     const generation = ++conversationLoadGeneration;
@@ -106,7 +110,7 @@ export function useWebChatConversation(
       if (generation === conversationLoadGeneration) conversationLoading.value = false;
       convTitle.value = "";
       messages.value = [];
-      group.value = null;
+      clearGroupConversation();
       return;
     }
     convId.value = conversationID;
@@ -118,7 +122,17 @@ export function useWebChatConversation(
     try {
       if (owned.enabled.value) {
         const selectedRole = characterId.value;
-        const result = await owned.query(conversationID, selectedRole);
+        let result;
+        for (let attempt = 0; ; attempt++) {
+          try {
+            result = await owned.query(conversationID, selectedRole);
+            break;
+          } catch (error) {
+            if (!options.retryOnFailure || attempt >= 2 || generation !== conversationLoadGeneration || convId.value !== conversationID || characterId.value !== selectedRole) throw error;
+            await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+          }
+        }
+        if (!result) return;
         if (generation !== conversationLoadGeneration || convId.value !== conversationID || characterId.value !== selectedRole) return;
         messages.value = owned.messages(result);
         group.value = result.snapshot.group || null;
@@ -207,6 +221,7 @@ export function useWebChatConversation(
     showCharPicker,
     showMemories,
     selectCharacter,
+    clearGroupConversation,
     handleSwitchChar,
     loadCharacterConversation,
     fetchConversations,

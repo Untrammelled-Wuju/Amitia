@@ -44,6 +44,16 @@ describe("云端可用性恢复与中断通知", () => {
     expect(mocks.get.mock.calls.filter(([path]) => path.endsWith("/coordination/me"))).toHaveLength(2);
   });
 
+  it("持久化角色失效时回退到首个可用角色", async () => {
+    mocks.get.mockImplementation(async (path: string) => ({ data: path.endsWith("/coordination/me")
+      ? { coreId: "C", coordinationAvailable: true, policy: { coordinated: true, providerEpoch: 1, modeRevision: 1, permissionRevision: 1, selectedRole: "missing" } }
+      : { roles: [{ id: "role-a", name: "角色甲", revision: 1 }, { id: "role-b", name: "角色乙", revision: 1 }], roleOwnerId: "C" } }));
+    const { useDeviceOwnedConversation } = await import("../composables/useDeviceOwnedConversation");
+    const owned = useDeviceOwnedConversation();
+    await owned.refresh();
+    expect(owned.selectInitialRole("also-missing")).toBe("role-a");
+  });
+
   it("旧版持久化的核心切换提示不会在升级后恢复", async () => {
     localStorage.setItem(stateKey, JSON.stringify({ coreId: "B", notice: providerNotice }));
     const { useDeviceOwnedConversation } = await import("../composables/useDeviceOwnedConversation");

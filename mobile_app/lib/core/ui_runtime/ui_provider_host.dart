@@ -5,6 +5,7 @@ import 'ui_provider.dart';
 import 'ui_runtime_controller.dart';
 import 'renderers/schema_provider_host.dart';
 import 'renderers/sandbox_web_provider_host.dart';
+import 'renderers/external_web_ui_provider_host.dart';
 import '../../app/theme/design_tokens.dart';
 import '../../app/theme/app_text_scaler.dart';
 import '../widgets/amitia_visual_scope.dart';
@@ -86,6 +87,13 @@ class _UIProviderHostState extends ConsumerState<UIProviderHost> {
           context: renderContext,
           actions: widget.actions,
           onFailure: _advanceFallback,
+        );
+      case UIProviderEntryType.externalWebUi:
+        return ExternalWebUIProviderHost(
+          provider: provider,
+          entry: entry,
+          context: renderContext,
+          fallback: widget.fallback,
         );
       case UIProviderEntryType.webModule:
         // Flutter release builds are AOT; downloadable Dart/native modules

@@ -125,8 +125,6 @@ export function useImmersiveOnboarding() {
   });
 
   const entering = ref(false);
-  const entryPreparing = ref(false);
-  const enteringState = ref<string | null>(null);
   const onboardingComplete = ref(false);
 
   const stageCaptions = [
@@ -500,25 +498,10 @@ const res = await post<any>("/api/model/detect-models", {
     memoryComplete.value = true;
   }
 
-  async function startEntryTransition() {
-    if (entering.value || entryPreparing.value) return;
-
-    entryPreparing.value = true;
-    import("@/views/web-chat/WebChatView.vue");
-    await new Promise((resolve) => setTimeout(resolve, 1780));
-    entryPreparing.value = false;
-    enteringState.value = "true";
-
-    setTimeout(() => {
-      enteringState.value = "complete";
-    }, 2200);
-
-    handleEnterAmitia();
-  }
-
   async function handleEnterAmitia() {
     if (entering.value) return;
     entering.value = true;
+    stageError.value = "";
     const context = configurationContext.value;
 
     try {
@@ -632,17 +615,14 @@ const res = await post<any>("/api/model/detect-models", {
       const nextCacheVersion = Date.now();
       localStorage.setItem("char_cache_version", String(nextCacheVersion));
 
-      setTimeout(() => {
-        router.push("/chat");
-      }, 2700);
+      await router.push("/chat");
     } catch (err: any) {
       stageError.value =
         err?.message ||
         err?.response?.data?.message ||
         "设置过程中出现错误，请重试";
+    } finally {
       entering.value = false;
-      enteringState.value = null;
-      entryPreparing.value = false;
     }
   }
 
@@ -699,8 +679,6 @@ const res = await post<any>("/api/model/detect-models", {
     permissions,
     entering,
     characterCreatedInSession,
-    entryPreparing,
-    enteringState,
     onboardingComplete,
     currentCaption,
     stageCount,
@@ -709,6 +687,5 @@ const res = await post<any>("/api/model/detect-models", {
     prevStage,
     detectModel,
     handleEnterAmitia,
-    startEntryTransition,
   };
 }

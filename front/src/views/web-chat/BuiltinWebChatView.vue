@@ -165,6 +165,15 @@ SPDX-License-Identifier: AGPL-3.0-only
       <div v-if="group" class="group-composer-members" aria-label="群成员点名">
         <button v-for="member in activeGroupMembers" :key="member.memberId" type="button" @click="insertGroupMention(member)">@{{ member.characterName }}</button>
         <button type="button" class="mention-all" @click="insertAllGroupMentions">@所有成员</button>
+        <button
+          type="button"
+          class="discussion-mode"
+          :class="{ 'is-active': groupDiscussion }"
+          :aria-pressed="groupDiscussion"
+          :disabled="activeGroupMembers.length < 2 || !group.groupSettings.allowCharacterMentions"
+          :title="!group.groupSettings.allowCharacterMentions ? '请先在群成员设置中开启角色互相 @' : '让多个角色按顺序进行多轮讨论'"
+          @click="groupDiscussion = !groupDiscussion"
+        >{{ groupDiscussion ? "讨论模式已开启" : "多角色讨论" }}</button>
       </div>
       <UIProviderHost
       capability="conversation.composer"
@@ -519,19 +528,15 @@ async function handleNewChat(event?: CustomEvent) {
   const providedId = event?.detail?.conversationId;
   try {
     if (providedId) {
-      disconnectAndResetConversation();
+      resetConversationScope();
       convId.value = providedId;
-      convTitle.value = "";
-      replyTarget.value = null;
       await router.replace({ path: "/chat", query: { conversationId: providedId } });
       nextTick(() => scrollToBottom(true));
       connectSSE();
       return;
     }
-    disconnectAndResetConversation();
+    resetConversationScope();
     convId.value = "";
-    convTitle.value = "";
-    replyTarget.value = null;
     selectedPermissionMode.value = loadChatPermissionMode();
     await startDraftConversation();
     await router.replace({ path: "/chat" });
@@ -782,6 +787,10 @@ const {
   characterId,
 );
 
+const groupSending = ref(false);
+const groupDiscussion = ref(false);
+const groupConversation = ref<OwnedGroupState | null>(null);
+
 const {
   messages,
   activeTurnId,
@@ -812,6 +821,7 @@ const {
   async () => {
     await chatStore.fetchSidebar();
   },
+  groupSending,
 );
 
 loadOlderRuntimeTurns = loadOlderConversationTurns;
@@ -825,6 +835,19 @@ function disconnectAndResetConversation() {
   if (owned.enabled.value && sending.value) owned.stopLocal(ownedConversationSwitchNotice, true);
   disconnectSSE();
   resetConversationMessages();
+}
+
+function resetConversationScope() {
+  disconnectAndResetConversation();
+  convTitle.value = "";
+  replyTarget.value = null;
+  convSummary.value = "";
+  showSummaryDrawer.value = false;
+  showGroupMembers.value = false;
+  groupConversation.value = null;
+  groupDiscussion.value = false;
+  messageContentLoading.value = false;
+  clearGroupConversation();
 }
 
 const {
@@ -867,6 +890,7 @@ const {
     void connectSSE(false);
     await fetchConversations();
     await chatStore.fetchSidebar();
+    syncConversationTitleFromSidebar(conversationId);
   },
   selectedModelId,
   selectedReasoningEffort,
@@ -875,6 +899,9 @@ const {
   activeTurnId,
   beginPendingAssistant,
   failPendingAssistant,
+  groupSending,
+  groupDiscussion,
+  groupConversation,
 );
 
 const {
@@ -886,6 +913,7 @@ const {
   showCharPicker,
   showMemories,
   selectCharacter,
+  clearGroupConversation,
   handleSwitchChar,
   loadCharacterConversation,
   fetchConversations,
@@ -905,8 +933,23 @@ const {
   connectSSE,
   reloadConversationSnapshot,
 );
+watch(group, (value) => { groupConversation.value = value; }, { immediate: true, flush: "sync" });
 const activeGroupMembers = computed<OwnedGroupMember[]>(() => (group.value?.members || []).filter((member) => member.status === "active").sort((left, right) => left.orderIndex - right.orderIndex));
 const lastUserMessageId = computed(() => [...persistedMessages.value].reverse().find((message) => message.role === "user" && message.id && !String(message.id).startsWith("client:"))?.id || "");
+
+function syncConversationTitleFromSidebar(conversationId: string) {
+  const id = String(conversationId || "").trim();
+  if (!id || id !== String(convId.value || "")) return;
+  const rows = [
+    ...chatStore.sidebar.pinned,
+    ...chatStore.sidebar.recent,
+    ...chatStore.sidebar.projects.flatMap((project) => project.conversations),
+  ];
+  const title = String(rows.find((conversation) => conversation.id === id)?.title || "").trim();
+  if (!title) return;
+  convTitle.value = title;
+  if (group.value) group.value = { ...group.value, title };
+}
 
 const conversationSwitching = computed(() => conversationLoading.value || messageContentLoading.value);
 
@@ -999,7 +1042,7 @@ watch(
     if (nextOwner) {
       try { await owned.refresh(); } catch (error: any) { modelError.value = error?.message || '无法确认通知执行核心'; return; }
       if (owned.coreId.value !== nextOwner) {
-        disconnectAndResetConversation();
+        resetConversationScope();
         convId.value = '';
         modelError.value = '通知所属核心与当前核心不同，请先切换至原核心后打开';
         return;
@@ -1013,10 +1056,8 @@ watch(
       selectCharacter(selected);
     }
     if (!nextId) {
-      disconnectAndResetConversation();
+      resetConversationScope();
       convId.value = "";
-      convTitle.value = "";
-      replyTarget.value = null;
       selectedPermissionMode.value = loadChatPermissionMode();
       await loadConversationWorkspace("", String(route.query.projectId || ""));
       return;
@@ -1024,7 +1065,11 @@ watch(
     if (nextId === convId.value && !roleChanged) return;
     if (owned.enabled.value && sending.value) owned.stopLocal(ownedConversationSwitchNotice, true);
     convId.value = nextId;
-    await loadCharacterConversation();
+    try {
+      await loadCharacterConversation({ retryOnFailure: true });
+    } catch (error) {
+      if ((convId.value || "") === nextId) modelError.value = error instanceof Error ? error.message : "聊天数据加载失败，请重试";
+    }
   },
 );
 
@@ -1061,9 +1106,20 @@ function insertAllGroupMentions() {
 }
 
 function handleGroupChanged(next: OwnedGroupState) {
+  if (String(next.conversationId || "") !== String(convId.value || "")) return;
   group.value = next;
   convTitle.value = next.title || convTitle.value;
 }
+
+watch(convId, () => {
+  groupDiscussion.value = false;
+}, { flush: "sync" });
+watch(
+  () => [group.value?.groupSettings.allowCharacterMentions, activeGroupMembers.value.length] as const,
+  ([allowed, memberCount]) => {
+    if (!allowed || memberCount < 2) groupDiscussion.value = false;
+  },
+);
 
 async function handleGroupReplied() {
   await loadCharacterConversation();
@@ -1138,7 +1194,7 @@ onMounted(async () => {
     if (ownedDataRefreshPromise) return ownedDataRefreshPromise;
     ownedDataRefreshPromise = (async () => {
       const tasks: Promise<unknown>[] = [chatStore.fetchSidebar()];
-      if (convId.value) tasks.push(loadCharacterConversation({ preserve }));
+      if (convId.value) tasks.push(loadCharacterConversation({ preserve, retryOnFailure: true }));
       const results = await Promise.allSettled(tasks);
       const failure = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
       if (failure) throw failure.reason;
@@ -1157,14 +1213,14 @@ onMounted(async () => {
       syncOwnedCharacters();
       const notificationOwner = String(route.query.ownerId || '');
       if (notificationOwner && notificationOwner !== owned.coreId.value) {
-        disconnectAndResetConversation();
+        resetConversationScope();
         convId.value = '';
         modelError.value = '通知所属核心与当前核心不同，请先切换至原核心后打开';
         return;
       }
       const notificationRole = String(route.query.characterId || '');
       if (notificationRole && !characters.value.some((role) => role.id === notificationRole)) {
-        disconnectAndResetConversation();
+        resetConversationScope();
         convId.value = '';
         modelError.value = '通知所属角色不可用，无法打开会话';
         return;
@@ -1192,7 +1248,7 @@ onMounted(async () => {
           syncOwnedCharacters();
           const notificationOwner = String(route.query.ownerId || '');
           if (notificationOwner && notificationOwner !== owned.coreId.value) {
-            disconnectAndResetConversation(); convId.value = '';
+            resetConversationScope(); convId.value = '';
             modelError.value = '通知所属核心与当前核心不同，请先切换至原核心后打开';
             return;
           }
@@ -1305,6 +1361,9 @@ function handleScopeChanged() {
 .group-composer-members button { flex: 0 0 auto; min-height: 26px; padding: 2px 9px; border: 1px solid var(--surface-border); border-radius: 999px; background: var(--bg-surface, var(--chat-surface-bg)); color: var(--text-secondary); cursor: pointer; font-size: 11px; }
 .group-composer-members button:hover, .group-composer-members button:focus-visible { border-color: var(--ac-color-primary); color: var(--text-primary); outline: none; }
 .group-composer-members .mention-all { color: var(--ac-color-primary); }
+.group-composer-members .discussion-mode { color: var(--ac-color-primary); }
+.group-composer-members .discussion-mode.is-active { border-color: var(--ac-color-primary); background: color-mix(in srgb, var(--ac-color-primary) 14%, var(--bg-surface, var(--chat-surface-bg))); color: var(--text-primary); }
+.group-composer-members .discussion-mode:disabled { cursor: not-allowed; opacity: 0.5; }
 .chat-surface--sidebar .composer-region { right: min(320px, 32%); }
 .chat-scroll-fade { position: absolute; left: 0; right: 0; z-index: 2; pointer-events: none; }
 .chat-scroll-fade--top { top: 0; height: var(--chat-header-h, 44px); background: linear-gradient(to bottom, color-mix(in srgb, var(--chat-surface-bg) 96%, transparent), color-mix(in srgb, var(--chat-surface-bg) 0%, transparent)); }

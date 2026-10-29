@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "component": "libatomic1",
+  "distribution": "ubuntu",
+  "release": "24.04",
+  "architecture": "arm64",
+  "package": "libatomic1",
+  "version": "14-20240412-0ubuntu1",
+  "archiveFileName": "libatomic1_14-20240412-0ubuntu1_arm64.deb",
+  "sourceUrl": "https://ports.ubuntu.com/ubuntu-ports/pool/main/g/gcc-14/libatomic1_14-20240412-0ubuntu1_arm64.deb",
+  "sha256": "017fa4bd88e8ff1cbaf75a26765b8c1255a5cd91d6ce838273bcb64190f15e37"
+}

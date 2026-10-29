@@ -8,6 +8,7 @@ class ChannelPresentationDescriptor {
   final String icon;
   final int order;
   final int priority;
+  final bool singleConversation;
   final Map<String, dynamic> capabilities;
 
   const ChannelPresentationDescriptor({
@@ -18,6 +19,7 @@ class ChannelPresentationDescriptor {
     required this.icon,
     required this.order,
     required this.priority,
+    this.singleConversation = false,
     required this.capabilities,
   });
 }
@@ -60,6 +62,7 @@ abstract final class ChannelPresentationRegistry {
             : _text(provider.metadata['icon']),
         order: _integer(provider.metadata['order'], 1000),
         priority: provider.priority,
+        singleConversation: provider.metadata['singleConversation'] == true,
         capabilities: rawCapabilities is Map
             ? Map<String, dynamic>.from(rawCapabilities)
             : const <String, dynamic>{},

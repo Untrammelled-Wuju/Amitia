@@ -163,11 +163,13 @@ class SchemaUIActionBinding {
 class SchemaUILifecycle {
   final List<SchemaUIActionBinding> onMount;
   final List<SchemaUIActionBinding> onRefresh;
+  final int refreshIntervalMs;
   final List<SchemaUIActionBinding> onSuccess;
 
   const SchemaUILifecycle({
     this.onMount = const [],
     this.onRefresh = const [],
+    this.refreshIntervalMs = 0,
     this.onSuccess = const [],
   });
 
@@ -177,6 +179,7 @@ class SchemaUILifecycle {
         json['onMount'],
         SchemaUIActionBinding.fromJson,
       ),
+      refreshIntervalMs: (json['refreshIntervalMs'] as num?)?.toInt() ?? 0,
       onRefresh: SchemaUINode._parseList(
         json['onRefresh'],
         SchemaUIActionBinding.fromJson,

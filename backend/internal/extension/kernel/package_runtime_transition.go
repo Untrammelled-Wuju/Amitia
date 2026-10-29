@@ -54,6 +54,11 @@ func (r *Runtime) stopExtensionRuntimeInstances(ctx context.Context, extID domai
 			failures = append(failures, fmt.Errorf("unregister service definition %s: %w", definitionID, err))
 		}
 	}
+	if len(failures) == 0 && reason == runtime_supervisor.StopReasonUninstall && r.container.TrustedServiceSupervisor != nil {
+		if err := r.container.TrustedServiceSupervisor.CleanupOwnedRuntime(extensionID); err != nil {
+			failures = append(failures, fmt.Errorf("cleanup owned runtime assets: %w", err))
+		}
+	}
 	return errors.Join(failures...)
 }
 

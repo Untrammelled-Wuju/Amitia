@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/app_routes.dart';
+import '../../features/channels/presentation/pages/channel_plugin_workspace_page.dart';
 import 'ui_provider.dart';
 import 'ui_provider_host.dart';
 
@@ -80,8 +81,8 @@ bool _hasSafeProviderRouteSyntax(String path) {
       );
 }
 
-class _ProviderRouteSpec {
-  const _ProviderRouteSpec({
+class UIRegisteredProviderRoute {
+  const UIRegisteredProviderRoute({
     required this.registry,
     required this.id,
     required this.path,
@@ -118,8 +119,11 @@ List<UIProviderDefinition> _activeRegistries(UIProviderSnapshot snapshot) {
   return providers;
 }
 
-List<_ProviderRouteSpec> _routeSpecs(UIProviderSnapshot snapshot) {
-  final specs = <_ProviderRouteSpec>[];
+List<UIRegisteredProviderRoute> resolveProviderRoutes(
+  UIProviderSnapshot? snapshot,
+) {
+  if (snapshot == null) return const <UIRegisteredProviderRoute>[];
+  final specs = <UIRegisteredProviderRoute>[];
   final platform = currentUIPlatform();
   for (final registry in _activeRegistries(snapshot)) {
     final rawRoutes = registry.metadata['routes'];
@@ -152,7 +156,7 @@ List<_ProviderRouteSpec> _routeSpecs(UIProviderSnapshot snapshot) {
       }
       final rawPriority = row['priority'];
       specs.add(
-        _ProviderRouteSpec(
+        UIRegisteredProviderRoute(
           registry: registry,
           id: id,
           path: path,
@@ -180,12 +184,12 @@ List<_ProviderRouteSpec> _routeSpecs(UIProviderSnapshot snapshot) {
 /// Keys for routes that survived compatibility, ownership, core-namespace and
 /// path-conflict checks. Used by navigation registries to hide stale links.
 Set<String> effectiveProviderRouteKeys(UIProviderSnapshot snapshot) =>
-    _routeSpecs(
+    resolveProviderRoutes(
       snapshot,
     ).map((spec) => '${spec.registry.providerId}\u0000${spec.path}').toSet();
 
 Set<String> effectiveExtensionRouteKeys(UIProviderSnapshot snapshot) =>
-    _routeSpecs(
+    resolveProviderRoutes(
       snapshot,
     ).map((spec) => '${spec.registry.extensionId}\u0000${spec.path}').toSet();
 
@@ -193,7 +197,7 @@ Set<String> effectiveExtensionRouteKeys(UIProviderSnapshot snapshot) =>
 /// recreate GoRouter unless the effective extension route table actually changes.
 String uiRouteRegistrySignature(UIProviderSnapshot? snapshot) {
   if (snapshot == null) return 'builtin';
-  final rows = _routeSpecs(snapshot)
+  final rows = resolveProviderRoutes(snapshot)
       .map(
         (spec) => <String, Object?>{
           'registry': spec.registry.providerId,
@@ -214,7 +218,7 @@ String uiRouteRegistrySignature(UIProviderSnapshot? snapshot) {
 /// are deterministic: higher route/provider priority wins and core paths are protected.
 List<RouteBase> buildProviderRoutes(UIProviderSnapshot? snapshot) {
   if (snapshot == null) return const <RouteBase>[];
-  return _routeSpecs(snapshot)
+  return resolveProviderRoutes(snapshot)
       .map((spec) {
         final routeName =
             'ui-provider-${spec.registry.extensionId}-${spec.registry.providerId}-${spec.id}'
@@ -222,18 +226,29 @@ List<RouteBase> buildProviderRoutes(UIProviderSnapshot? snapshot) {
         return GoRoute(
           name: routeName,
           path: spec.path,
-          builder: (context, state) => UIProviderHost(
-            capability: spec.capability,
-            providerId: spec.providerId,
-            context: <String, dynamic>{
+          builder: (context, state) {
+            final providerContext = <String, dynamic>{
               'route': state.uri.toString(),
               'pathParameters': state.pathParameters,
               'queryParameters': state.uri.queryParameters,
               'routeRegistryProviderId': spec.registry.providerId,
               ..._routeIdentity(state.pathParameters),
-            },
-            fallback: ProviderRouteUnavailable(providerId: spec.providerId),
-          ),
+            };
+            if (spec.path.startsWith('/channels/')) {
+              return ChannelPluginWorkspacePage(
+                providerId: spec.providerId,
+                capability: spec.capability,
+                route: spec.path,
+                context: providerContext,
+              );
+            }
+            return UIProviderHost(
+              capability: spec.capability,
+              providerId: spec.providerId,
+              context: providerContext,
+              fallback: ProviderRouteUnavailable(providerId: spec.providerId),
+            );
+          },
         );
       })
       .toList(growable: false);

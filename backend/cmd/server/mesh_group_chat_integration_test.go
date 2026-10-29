@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/character"
@@ -19,9 +21,16 @@ import (
 
 type groupScopeIntegrationModel struct {
 	*threeCoreMemoryModel
-	engine  *business.Engine
-	service *coordination.Service
-	roles   coordination.DataPort
+	engine   *business.Engine
+	service  *coordination.Service
+	roles    coordination.DataPort
+	parallel *parallelGroupBarrier
+}
+
+type parallelGroupBarrier struct {
+	mu    sync.Mutex
+	count int
+	ready chan struct{}
 }
 
 type failingOnceGroupModel struct {
@@ -40,15 +49,49 @@ type autoInviteGroupModel struct {
 	*groupScopeIntegrationModel
 }
 
-func (m *autoInviteGroupModel) OwnedReplyCommitted(ctx context.Context, inference business.Inference, _ business.Generation, messageID string) error {
+type discussionFailingSecondModel struct {
+	*groupScopeIntegrationModel
+	mu    sync.Mutex
+	calls []string
+}
+
+type interruptSecondGroupModel struct {
+	*groupScopeIntegrationModel
+	started chan struct{}
+	once    sync.Once
+}
+
+type groupTitleIntegrationModel struct {
+	*groupScopeIntegrationModel
+	mu          sync.Mutex
+	titleCalls  int
+	lastMessage string
+}
+
+func (m *groupTitleIntegrationModel) PlanOwnedTitle(_ context.Context, inference business.Inference, generation business.Generation) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.titleCalls++
+	m.lastMessage = inference.Message
+	if !strings.Contains(generation.Text, "记忆联测回复") {
+		return "", errors.New("群聊标题缺少角色回复上下文")
+	}
+	return "商家增长讨论", nil
+}
+
+func (m *autoInviteGroupModel) GenerateOwnedReply(ctx context.Context, inference business.Inference) (business.Generation, error) {
+	generation, err := m.groupScopeIntegrationModel.GenerateOwnedReply(ctx, inference)
+	if err == nil && inference.Message == "自动接话" {
+		generation.Text = "@自动接话角色 请接话"
+	}
+	return generation, err
+}
+
+func (m *autoInviteGroupModel) OwnedReplyCommitted(ctx context.Context, inference business.Inference, generation business.Generation, messageID string) error {
 	if inference.Group == nil || inference.Scope.RoleID != "one" || inference.Message != "自动接话" {
 		return nil
 	}
-	member, ok := inference.Group.State.ActiveMember("two")
-	if !ok {
-		return nil
-	}
-	return m.engine.AcceptGroupInvitations(ctx, inference, messageID, []business.GroupInviteProposal{{InvitationID: "auto-two", TargetMemberID: member.MemberID, TargetCharacterID: member.CharacterID, TargetCharacterName: member.CharacterName}})
+	return m.engine.AcceptGroupInvitations(ctx, inference, generation, messageID, nil)
 }
 
 func (m *blockingGroupModel) GenerateOwnedReply(ctx context.Context, input business.Inference) (business.Generation, error) {
@@ -73,7 +116,44 @@ func (m *failingOnceGroupModel) GenerateOwnedReply(ctx context.Context, input bu
 	return m.groupScopeIntegrationModel.GenerateOwnedReply(ctx, input)
 }
 
+func (m *discussionFailingSecondModel) GenerateOwnedReply(ctx context.Context, input business.Inference) (business.Generation, error) {
+	if input.Group != nil && input.Group.Mode == business.GroupModeDiscussion {
+		m.mu.Lock()
+		m.calls = append(m.calls, input.Scope.RoleID)
+		failed := len(m.calls) == 2
+		m.mu.Unlock()
+		if failed {
+			return business.Generation{}, errors.New("模拟讨论中段角色失败")
+		}
+	}
+	return m.groupScopeIntegrationModel.GenerateOwnedReply(ctx, input)
+}
+
+func (m *interruptSecondGroupModel) GenerateOwnedReply(ctx context.Context, input business.Inference) (business.Generation, error) {
+	if input.Group != nil && input.Scope.RoleID == "two" {
+		m.once.Do(func() { close(m.started) })
+		<-ctx.Done()
+		return business.Generation{}, ctx.Err()
+	}
+	return m.groupScopeIntegrationModel.GenerateOwnedReply(ctx, input)
+}
+
 func (m *groupScopeIntegrationModel) GenerateOwnedReply(ctx context.Context, input business.Inference) (business.Generation, error) {
+	if m.parallel != nil && input.Message == "@所有成员 你好" {
+		m.parallel.mu.Lock()
+		m.parallel.count++
+		if m.parallel.count == 2 {
+			close(m.parallel.ready)
+		}
+		m.parallel.mu.Unlock()
+		select {
+		case <-m.parallel.ready:
+		case <-time.After(5 * time.Second):
+			return business.Generation{}, errors.New("群成员未并发启动")
+		case <-ctx.Done():
+			return business.Generation{}, ctx.Err()
+		}
+	}
 	if input.Scope.ConversationRoleID != "" {
 		if err := m.engine.WithExecutionScope(ctx, input.Scope, func(context.Context) error { return nil }); err != nil {
 			return business.Generation{}, err
@@ -171,6 +251,13 @@ func TestGroupChatInvitesMemberPersistsOneInputAndRunsEachRole(t *testing.T) {
 	if roundErr != nil || roundResource == nil || json.Unmarshal(roundResource.Body, &storedRound) != nil || len(storedRound.Deliveries) != 1 || storedRound.Deliveries[0].Status != business.GroupDeliveryCompleted {
 		t.Fatalf("群聊轮次未保存最终投递状态: %+v", storedRound)
 	}
+	defaultTurn := fixture.request(t, caller, http.MethodPost, "/api/device-mesh/v1/business/messages", map[string]any{"requestId": "group-default", "characterId": "two", "conversationId": first.Data.ConversationID, "message": "未点名消息", "group": map[string]any{"expectedMembershipRevision": invitation.Data.Group.MembershipRevision, "expectedSettingsRevision": invitation.Data.Group.SettingsRevision}, "mentions": []map[string]any{}}, http.StatusOK)
+	var defaultResult struct {
+		Data business.GroupResponse `json:"data"`
+	}
+	if json.Unmarshal(defaultTurn, &defaultResult) != nil || defaultResult.Data.Status != business.GroupRoundCompleted || len(defaultResult.Data.Deliveries) != 1 || defaultResult.Data.Deliveries[0].Scope.RoleID != "one" {
+		t.Fatalf("未点名消息未由群聊默认角色回复: %s", defaultTurn)
+	}
 	manual := fixture.request(t, caller, http.MethodPost, "/api/device-mesh/v1/business/conversations/"+first.Data.ConversationID+"/reply-requests", map[string]any{"requestId": "group-manual", "characterId": "one", "sourceMessageId": result.Data.UserMessageID, "members": []map[string]any{{"memberId": secondMemberID, "characterId": "two"}}}, http.StatusOK)
 	var manualResult struct {
 		Data business.GroupResponse `json:"data"`
@@ -178,6 +265,7 @@ func TestGroupChatInvitesMemberPersistsOneInputAndRunsEachRole(t *testing.T) {
 	if json.Unmarshal(manual, &manualResult) != nil || !manualResult.Data.Saved || manualResult.Data.UserMessageID != result.Data.UserMessageID || len(manualResult.Data.Deliveries) != 1 || manualResult.Data.Deliveries[0].Scope.RoleID != "two" {
 		t.Fatalf("手动点名未复用原用户消息: %s", manual)
 	}
+	model.parallel = &parallelGroupBarrier{ready: make(chan struct{})}
 	all := fixture.request(t, caller, http.MethodPost, "/api/device-mesh/v1/business/messages", map[string]any{"requestId": "group-all", "characterId": "one", "conversationId": first.Data.ConversationID, "message": "@所有成员 你好", "group": map[string]any{"expectedMembershipRevision": invitation.Data.Group.MembershipRevision, "expectedSettingsRevision": invitation.Data.Group.SettingsRevision}, "mentions": []map[string]any{{"memberId": firstMemberID, "characterId": "one"}, {"memberId": secondMemberID, "characterId": "two"}}}, http.StatusOK)
 	var allResult struct {
 		Data business.GroupResponse `json:"data"`
@@ -209,7 +297,7 @@ func TestGroupChatInvitesMemberPersistsOneInputAndRunsEachRole(t *testing.T) {
 			assistantMessages++
 		}
 	}
-	if userMessages != 3 || assistantMessages != 5 {
+	if userMessages != 4 || assistantMessages != 6 {
 		t.Fatalf("消息身份或数量错误: users=%d assistants=%d", userMessages, assistantMessages)
 	}
 }
@@ -243,6 +331,49 @@ func TestCreateEmptyGroupConversationWithoutModelMessage(t *testing.T) {
 		if resource.Kind == "message" {
 			t.Fatal("创建空群聊不应生成用户消息")
 		}
+	}
+}
+
+func TestGroupChatAutoGeneratesTitleAfterFirstRound(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	schemas := newThreeCoreSchemas(t)
+	fixture := newThreeCoreFixture(t, "core-group-title", schemas)
+	model := &groupTitleIntegrationModel{groupScopeIntegrationModel: &groupScopeIntegrationModel{threeCoreMemoryModel: &threeCoreMemoryModel{core: fixture.core}, service: fixture.services.DeviceMesh.Coordination, roles: fixture.services.DeviceMesh}}
+	fixture.services.OwnedBusiness = business.NewEngine(model.service, model.roles, model)
+	model.engine = fixture.services.OwnedBusiness
+	caller := newThreeCoreFixture(t, "device-group-title", schemas)
+	pairThreeCoreFixtures(t, caller, fixture)
+	policy, err := fixture.services.DeviceMesh.Coordination.Get(t.Context(), fixture.core, caller.device.DeviceID.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ensureCoordinatedForTest(t, fixture, caller, policy.ModeRevision)
+	created := fixture.request(t, caller, http.MethodPost, "/api/device-mesh/v1/business/conversations/group", map[string]any{"requestId": "group-title-create", "characterId": "one", "members": []map[string]any{{"characterId": "two"}}}, http.StatusOK)
+	var response struct {
+		Data business.GroupMutationResponse `json:"data"`
+	}
+	if json.Unmarshal(created, &response) != nil || !response.Data.Saved {
+		t.Fatalf("创建群聊失败: %s", created)
+	}
+	turn := fixture.request(t, caller, http.MethodPost, "/api/device-mesh/v1/business/messages", map[string]any{"requestId": "group-title-turn", "characterId": "one", "conversationId": response.Data.Group.ConversationID, "message": "讨论如何服务小商家", "group": map[string]any{"expectedMembershipRevision": 1, "expectedSettingsRevision": 1}, "mentions": []map[string]any{}}, http.StatusOK)
+	var result struct {
+		Data business.GroupResponse `json:"data"`
+	}
+	if json.Unmarshal(turn, &result) != nil || result.Data.Status != business.GroupRoundCompleted || len(result.Data.Deliveries) != 1 {
+		t.Fatalf("群聊首轮失败: %s", turn)
+	}
+	resource, err := coordination.NewOwnershipStore(fixture.services.KernelContainer.DeviceRegistry.Database(), fixture.core).Get(t.Context(), "conversation", response.Data.Group.ConversationID)
+	if err != nil || resource == nil {
+		t.Fatalf("群聊会话缺失: %+v %v", resource, err)
+	}
+	var conversation struct {
+		Title string `json:"title"`
+	}
+	model.mu.Lock()
+	titleCalls, lastMessage := model.titleCalls, model.lastMessage
+	model.mu.Unlock()
+	if err := json.Unmarshal(resource.Body, &conversation); err != nil || conversation.Title != "商家增长讨论" || titleCalls != 1 || lastMessage != "讨论如何服务小商家" {
+		t.Fatalf("群聊标题未生成: title=%q calls=%d message=%q body=%s err=%v", conversation.Title, titleCalls, lastMessage, resource.Body, err)
 	}
 }
 
@@ -501,6 +632,77 @@ func TestGroupChatInterruptPersistsCancelledRound(t *testing.T) {
 	}
 }
 
+func TestGroupDiscussionInterruptAfterFirstReplyStopsRemainingTurns(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	schemas := newThreeCoreSchemas(t)
+	fixture := newThreeCoreFixture(t, "core-group-discussion-interrupt", schemas)
+	baseModel := &groupScopeIntegrationModel{threeCoreMemoryModel: &threeCoreMemoryModel{core: fixture.core}, service: fixture.services.DeviceMesh.Coordination, roles: fixture.services.DeviceMesh}
+	model := &interruptSecondGroupModel{groupScopeIntegrationModel: baseModel, started: make(chan struct{})}
+	fixture.services.OwnedBusiness = business.NewEngine(baseModel.service, baseModel.roles, model)
+	baseModel.engine = fixture.services.OwnedBusiness
+	caller := newThreeCoreFixture(t, "device-group-discussion-interrupt", schemas)
+	pairThreeCoreFixtures(t, caller, fixture)
+	policy, err := fixture.services.DeviceMesh.Coordination.Get(t.Context(), fixture.core, caller.device.DeviceID.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ensureCoordinatedForTest(t, fixture, caller, policy.ModeRevision)
+	ensureGroupCharacter(t, fixture, "two", "中断讨论角色乙", "enabled")
+	createdRaw := fixture.request(t, caller, http.MethodPost, "/api/device-mesh/v1/business/conversations/group", map[string]any{"requestId": "group-discussion-interrupt-create", "characterId": "one", "members": []map[string]any{{"characterId": "two"}}}, http.StatusOK)
+	var created struct {
+		Data business.GroupMutationResponse `json:"data"`
+	}
+	if json.Unmarshal(createdRaw, &created) != nil || !created.Data.Saved {
+		t.Fatalf("创建讨论中断测试群聊失败: %s", createdRaw)
+	}
+	settingsRaw := fixture.request(t, caller, http.MethodPatch, "/api/device-mesh/v1/business/conversations/"+created.Data.Group.ConversationID+"/group-settings", map[string]any{"requestId": "group-discussion-interrupt-enable", "characterId": "one", "expectedSettingsRevision": 1, "allowCharacterMentions": true}, http.StatusOK)
+	var settings struct {
+		Data business.GroupMutationResponse `json:"data"`
+	}
+	if json.Unmarshal(settingsRaw, &settings) != nil || settings.Data.Group.SettingsRevision != 2 {
+		t.Fatalf("讨论中断测试设置失败: %s", settingsRaw)
+	}
+	requestID := "group-discussion-interrupt-turn"
+	interrupted := make(chan bool, 1)
+	go func() {
+		<-model.started
+		credential, loadErr := caller.local.LoadCredential()
+		if loadErr != nil {
+			interrupted <- false
+			return
+		}
+		interrupted <- fixture.services.OwnedBusiness.Interrupt(credential.SpaceID.String(), caller.device.DeviceID.String(), requestID)
+	}()
+	fixture.request(t, caller, http.MethodPost, "/api/device-mesh/v1/business/messages", map[string]any{"requestId": requestID, "characterId": "one", "conversationId": created.Data.Group.ConversationID, "message": "首个角色完成后停止", "group": map[string]any{"expectedMembershipRevision": 1, "expectedSettingsRevision": 2, "mode": "discussion"}, "mentions": []map[string]any{}}, http.StatusConflict)
+	if !<-interrupted {
+		t.Fatal("讨论中的第二个角色未被中断")
+	}
+	view := fixture.request(t, caller, http.MethodGet, "/api/device-mesh/v1/business/conversations/"+created.Data.Group.ConversationID+"?characterId=one", nil, http.StatusOK)
+	var snapshot struct {
+		Data business.QueryResult `json:"data"`
+	}
+	if json.Unmarshal(view, &snapshot) != nil {
+		t.Fatalf("中断后讨论快照无效: %s", view)
+	}
+	var round business.GroupRound
+	for _, resource := range snapshot.Data.Snapshot.Resources {
+		if resource.Kind == "group-round" && json.Unmarshal(resource.Body, &round) == nil && round.RootRequestID == requestID {
+			break
+		}
+	}
+	if round.Status != business.GroupRoundCancelled || len(round.Deliveries) != coordination.GroupDefaultAutoReplies {
+		t.Fatalf("中断后的讨论轮次状态错误: %+v", round)
+	}
+	if round.Deliveries[0].Status != business.GroupDeliveryCompleted {
+		t.Fatalf("首个角色完成状态丢失: %+v", round.Deliveries[0])
+	}
+	for _, delivery := range round.Deliveries[1:] {
+		if delivery.Status != business.GroupDeliveryCancelled || delivery.Error != business.ErrInterrupted.Error() {
+			t.Fatalf("中断后的后续角色未取消: %+v", delivery)
+		}
+	}
+}
+
 func TestGroupChatRetryIsIdempotentAndKeepsSingleReply(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	schemas := newThreeCoreSchemas(t)
@@ -643,6 +845,171 @@ func TestGroupChatAutoInvitationRunsAppendedDelivery(t *testing.T) {
 	for _, delivery := range round.Deliveries {
 		if delivery.Status != business.GroupDeliveryCompleted {
 			t.Fatalf("自动接话投递未完成: %+v", delivery)
+		}
+	}
+}
+
+func TestGroupDiscussionRunsBoundedSequentialCharacterAgents(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	schemas := newThreeCoreSchemas(t)
+	fixture := newThreeCoreFixture(t, "core-group-discussion", schemas)
+	model := &groupScopeIntegrationModel{threeCoreMemoryModel: &threeCoreMemoryModel{core: fixture.core}, service: fixture.services.DeviceMesh.Coordination, roles: fixture.services.DeviceMesh}
+	fixture.services.OwnedBusiness = business.NewEngine(model.service, model.roles, model)
+	model.engine = fixture.services.OwnedBusiness
+	caller := newThreeCoreFixture(t, "device-group-discussion", schemas)
+	pairThreeCoreFixtures(t, caller, fixture)
+	policy, err := fixture.services.DeviceMesh.Coordination.Get(t.Context(), fixture.core, caller.device.DeviceID.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ensureCoordinatedForTest(t, fixture, caller, policy.ModeRevision)
+	ensureGroupCharacter(t, fixture, "two", "讨论角色乙", "enabled")
+	createdRaw := fixture.request(t, caller, http.MethodPost, "/api/device-mesh/v1/business/conversations/group", map[string]any{"requestId": "group-discussion-create", "characterId": "one", "members": []map[string]any{{"characterId": "two"}}}, http.StatusOK)
+	var created struct {
+		Data business.GroupMutationResponse `json:"data"`
+	}
+	if json.Unmarshal(createdRaw, &created) != nil || !created.Data.Saved {
+		t.Fatalf("创建讨论群聊失败: %s", createdRaw)
+	}
+	settingsRaw := fixture.request(t, caller, http.MethodPatch, "/api/device-mesh/v1/business/conversations/"+created.Data.Group.ConversationID+"/group-settings", map[string]any{"requestId": "group-discussion-enable", "characterId": "one", "expectedSettingsRevision": 1, "allowCharacterMentions": true}, http.StatusOK)
+	var settings struct {
+		Data business.GroupMutationResponse `json:"data"`
+	}
+	if json.Unmarshal(settingsRaw, &settings) != nil || settings.Data.Group.SettingsRevision != 2 {
+		t.Fatalf("讨论群设置失败: %s", settingsRaw)
+	}
+	turnRaw := fixture.request(t, caller, http.MethodPost, "/api/device-mesh/v1/business/messages", map[string]any{"requestId": "group-discussion-turn", "characterId": "one", "conversationId": created.Data.Group.ConversationID, "message": "讨论如何服务小商家", "group": map[string]any{"expectedMembershipRevision": 1, "expectedSettingsRevision": 2, "mode": "discussion"}, "mentions": []map[string]any{}}, http.StatusOK)
+	var turn struct {
+		Data business.GroupResponse `json:"data"`
+	}
+	if json.Unmarshal(turnRaw, &turn) != nil || turn.Data.Status != business.GroupRoundCompleted || len(turn.Data.Deliveries) != 6 {
+		t.Fatalf("多角色讨论未完成: %s", turnRaw)
+	}
+	wantRoles := []string{"one", "two", "one", "two", "one", "two"}
+	for index, delivery := range turn.Data.Deliveries {
+		if delivery.Scope.RoleID != wantRoles[index] {
+			t.Fatalf("讨论发言顺序错误: %d=%s", index, delivery.Scope.RoleID)
+		}
+	}
+	roundResource, err := coordination.NewOwnershipStore(fixture.services.KernelContainer.DeviceRegistry.Database(), fixture.core).Get(t.Context(), "group-round", turn.Data.GroupRoundID)
+	var round business.GroupRound
+	if err != nil || roundResource == nil || json.Unmarshal(roundResource.Body, &round) != nil || round.Mode != business.GroupModeDiscussion || len(round.Deliveries) != 6 {
+		t.Fatalf("讨论轮次未持久化: %+v %v", round, err)
+	}
+	for index, delivery := range round.Deliveries {
+		if delivery.TurnIndex != index || delivery.Status != business.GroupDeliveryCompleted || delivery.Source != "discussion" {
+			t.Fatalf("讨论投递状态错误: %+v", delivery)
+		}
+	}
+	if strings.Contains(string(roundResource.Body), "characterAvatar") {
+		t.Fatal("群轮次持久化重复保存了角色头像")
+	}
+}
+
+func TestGroupDiscussionStopsDownstreamAfterCharacterFailure(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	schemas := newThreeCoreSchemas(t)
+	fixture := newThreeCoreFixture(t, "core-group-discussion-failure", schemas)
+	baseModel := &groupScopeIntegrationModel{threeCoreMemoryModel: &threeCoreMemoryModel{core: fixture.core}, service: fixture.services.DeviceMesh.Coordination, roles: fixture.services.DeviceMesh}
+	model := &discussionFailingSecondModel{groupScopeIntegrationModel: baseModel}
+	fixture.services.OwnedBusiness = business.NewEngine(baseModel.service, baseModel.roles, model)
+	baseModel.engine = fixture.services.OwnedBusiness
+	caller := newThreeCoreFixture(t, "device-group-discussion-failure", schemas)
+	pairThreeCoreFixtures(t, caller, fixture)
+	policy, err := fixture.services.DeviceMesh.Coordination.Get(t.Context(), fixture.core, caller.device.DeviceID.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ensureCoordinatedForTest(t, fixture, caller, policy.ModeRevision)
+	ensureGroupCharacter(t, fixture, "two", "失败讨论角色乙", "enabled")
+	ensureGroupCharacter(t, fixture, "three", "失败讨论角色丙", "enabled")
+	createdRaw := fixture.request(t, caller, http.MethodPost, "/api/device-mesh/v1/business/conversations/group", map[string]any{"requestId": "group-discussion-failure-create", "characterId": "one", "members": []map[string]any{{"characterId": "two"}, {"characterId": "three"}}}, http.StatusOK)
+	var created struct {
+		Data business.GroupMutationResponse `json:"data"`
+	}
+	if json.Unmarshal(createdRaw, &created) != nil || !created.Data.Saved {
+		t.Fatalf("创建讨论失败测试群聊失败: %s", createdRaw)
+	}
+	settingsRaw := fixture.request(t, caller, http.MethodPatch, "/api/device-mesh/v1/business/conversations/"+created.Data.Group.ConversationID+"/group-settings", map[string]any{"requestId": "group-discussion-failure-enable", "characterId": "one", "expectedSettingsRevision": 1, "allowCharacterMentions": true}, http.StatusOK)
+	var settings struct {
+		Data business.GroupMutationResponse `json:"data"`
+	}
+	if json.Unmarshal(settingsRaw, &settings) != nil || settings.Data.Group.SettingsRevision != 2 {
+		t.Fatalf("讨论失败测试设置未保存: %s", settingsRaw)
+	}
+	turnRaw := fixture.request(t, caller, http.MethodPost, "/api/device-mesh/v1/business/messages", map[string]any{"requestId": "group-discussion-failure-turn", "characterId": "one", "conversationId": created.Data.Group.ConversationID, "message": "讨论中段失败", "group": map[string]any{"expectedMembershipRevision": 1, "expectedSettingsRevision": 2, "mode": "discussion"}, "mentions": []map[string]any{}}, http.StatusOK)
+	var turn struct {
+		Data business.GroupResponse `json:"data"`
+	}
+	if json.Unmarshal(turnRaw, &turn) != nil || turn.Data.Status != business.GroupRoundCompletedWithErrors || len(turn.Data.Deliveries) != 1 {
+		t.Fatalf("讨论中段失败返回错误: %s", turnRaw)
+	}
+	model.mu.Lock()
+	calls := append([]string(nil), model.calls...)
+	model.mu.Unlock()
+	if len(calls) != 2 {
+		t.Fatalf("讨论失败后仍执行了后续角色: %#v", calls)
+	}
+	roundResource, err := coordination.NewOwnershipStore(fixture.services.KernelContainer.DeviceRegistry.Database(), fixture.core).Get(t.Context(), "group-round", turn.Data.GroupRoundID)
+	var round business.GroupRound
+	if err != nil || roundResource == nil || json.Unmarshal(roundResource.Body, &round) != nil || len(round.Deliveries) != 6 {
+		t.Fatalf("讨论失败轮次未持久化: %+v %v", round, err)
+	}
+	if round.Deliveries[0].Status != business.GroupDeliveryCompleted || round.Deliveries[1].Status != business.GroupDeliveryFailed {
+		t.Fatalf("讨论前两次投递状态错误: %+v", round.Deliveries[:2])
+	}
+	for _, delivery := range round.Deliveries[2:] {
+		if delivery.Status != business.GroupDeliveryCancelled || delivery.Error != "多角色讨论已停止" {
+			t.Fatalf("讨论失败后的下游投递未停止: %+v", delivery)
+		}
+	}
+}
+
+func TestGroupDiscussionEightMembersUsesStableRoundRobin(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	schemas := newThreeCoreSchemas(t)
+	fixture := newThreeCoreFixture(t, "core-group-discussion-eight", schemas)
+	model := &groupScopeIntegrationModel{threeCoreMemoryModel: &threeCoreMemoryModel{core: fixture.core}, service: fixture.services.DeviceMesh.Coordination, roles: fixture.services.DeviceMesh}
+	fixture.services.OwnedBusiness = business.NewEngine(model.service, model.roles, model)
+	model.engine = fixture.services.OwnedBusiness
+	caller := newThreeCoreFixture(t, "device-group-discussion-eight", schemas)
+	pairThreeCoreFixtures(t, caller, fixture)
+	policy, err := fixture.services.DeviceMesh.Coordination.Get(t.Context(), fixture.core, caller.device.DeviceID.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ensureCoordinatedForTest(t, fixture, caller, policy.ModeRevision)
+	members := make([]map[string]any, 0, 7)
+	for index := 2; index <= 8; index++ {
+		id := fmt.Sprintf("members-%d", index)
+		ensureGroupCharacter(t, fixture, id, fmt.Sprintf("八人群角色%d", index), "enabled")
+		members = append(members, map[string]any{"characterId": id})
+	}
+	createdRaw := fixture.request(t, caller, http.MethodPost, "/api/device-mesh/v1/business/conversations/group", map[string]any{"requestId": "group-discussion-eight-create", "characterId": "one", "members": members}, http.StatusOK)
+	var created struct {
+		Data business.GroupMutationResponse `json:"data"`
+	}
+	if json.Unmarshal(createdRaw, &created) != nil || !created.Data.Saved || len(created.Data.Group.Members) != 8 {
+		t.Fatalf("创建八人群聊失败: %s", createdRaw)
+	}
+	settingsRaw := fixture.request(t, caller, http.MethodPatch, "/api/device-mesh/v1/business/conversations/"+created.Data.Group.ConversationID+"/group-settings", map[string]any{"requestId": "group-discussion-eight-enable", "characterId": "one", "expectedSettingsRevision": 1, "allowCharacterMentions": true}, http.StatusOK)
+	var settings struct {
+		Data business.GroupMutationResponse `json:"data"`
+	}
+	if json.Unmarshal(settingsRaw, &settings) != nil || settings.Data.Group.SettingsRevision != 2 {
+		t.Fatalf("八人群聊设置失败: %s", settingsRaw)
+	}
+	turnRaw := fixture.request(t, caller, http.MethodPost, "/api/device-mesh/v1/business/messages", map[string]any{"requestId": "group-discussion-eight-turn", "characterId": "one", "conversationId": created.Data.Group.ConversationID, "message": "八人讨论", "group": map[string]any{"expectedMembershipRevision": 1, "expectedSettingsRevision": 2, "mode": "discussion"}, "mentions": []map[string]any{}}, http.StatusOK)
+	var turn struct {
+		Data business.GroupResponse `json:"data"`
+	}
+	if json.Unmarshal(turnRaw, &turn) != nil || turn.Data.Status != business.GroupRoundCompleted || len(turn.Data.Deliveries) != coordination.GroupDefaultAutoReplies {
+		t.Fatalf("八人讨论未完成: %s", turnRaw)
+	}
+	want := []string{"one", "members-2", "members-3", "members-4", "members-5", "members-6"}
+	for index, delivery := range turn.Data.Deliveries {
+		if delivery.Scope.RoleID != want[index] {
+			t.Fatalf("八人讨论顺序错误: index=%d got=%s want=%s", index, delivery.Scope.RoleID, want[index])
 		}
 	}
 }

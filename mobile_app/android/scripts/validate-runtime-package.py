@@ -57,6 +57,10 @@ REQUIRED_METADATA = {
 FORBIDDEN_RUNTIME_DIRS = {"config", "data", "cache", "logs", "run", "workspaces"}
 
 REQUIRED_ROOTFS_EXECUTABLES = {"usr/bin/true"}
+REQUIRED_ROOTFS_FILES = {
+    "usr/lib/aarch64-linux-gnu/libatomic.so.1",
+    "usr/lib/aarch64-linux-gnu/libatomic.so.1.2.0",
+}
 
 
 def normalize_member_name(name: str) -> str:
@@ -179,10 +183,17 @@ def validate(package_path: str) -> dict[str, object]:
 
         rootfs_path = payloads["rootfs"]["path"]
         rootfs_seen: set[str] = set()
+        rootfs_files_seen: set[str] = set()
         rootfs_errors: list[str] = []
         with tarfile.open(fileobj=archive.open(rootfs_path), mode="r|xz") as rootfs:
             for member in rootfs:
                 name = normalize_member_name(member.name)
+                if name in REQUIRED_ROOTFS_FILES:
+                    rootfs_files_seen.add(name)
+                    if name.endswith(".so.1") and not member.issym():
+                        rootfs_errors.append("rootfs library link is not a symlink: " + name)
+                    if name.endswith(".1.2.0") and not member.isfile():
+                        rootfs_errors.append("rootfs library is not a regular file: " + name)
                 if name in REQUIRED_ROOTFS_EXECUTABLES:
                     rootfs_seen.add(name)
                     if not member.isfile():
@@ -191,6 +202,8 @@ def validate(package_path: str) -> dict[str, object]:
                         rootfs_errors.append("rootfs executable is not executable: " + name)
         for required in sorted(REQUIRED_ROOTFS_EXECUTABLES - rootfs_seen):
             rootfs_errors.append("rootfs executable is missing: " + required)
+        for required in sorted(REQUIRED_ROOTFS_FILES - rootfs_files_seen):
+            rootfs_errors.append("rootfs library is missing: " + required)
         if rootfs_errors:
             raise RuntimeError("; ".join(rootfs_errors))
 

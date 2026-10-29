@@ -113,6 +113,13 @@ class ConversationMessageLedger {
   }
 
   int _compare(ChatMessage a, ChatMessage b) {
+    if (a.groupRoundId.isNotEmpty &&
+        a.groupRoundId == b.groupRoundId &&
+        a.deliveryIndex != null &&
+        b.deliveryIndex != null &&
+        a.deliveryIndex != b.deliveryIndex) {
+      return a.deliveryIndex!.compareTo(b.deliveryIndex!);
+    }
     final aSequence = a.sequence;
     final bSequence = b.sequence;
     if (aSequence != null && bSequence != null && aSequence != bSequence) {
@@ -132,6 +139,7 @@ class ConversationMessageLedger {
         mapEquals(a.sourceScope, b.sourceScope) &&
         a.renderId == b.renderId &&
         a.characterId == b.characterId &&
+        a.deliveryIndex == b.deliveryIndex &&
         a.role == b.role &&
         a.type == b.type &&
         a.content == b.content &&

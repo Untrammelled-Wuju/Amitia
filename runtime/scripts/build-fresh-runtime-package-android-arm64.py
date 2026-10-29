@@ -3,6 +3,7 @@ import hashlib
 import io
 import json
 import shutil
+import subprocess
 import tarfile
 import tempfile
 import zipfile
@@ -60,13 +61,41 @@ def extract_node(archive, destination):
         wrapper.write_text(f'#!/bin/sh\nexec "$(dirname "$0")/node" "$(dirname "$0")/../lib/node_modules/npm/bin/{cli}" "$@"\n', encoding="utf-8")
 
 
+def read_ar_member(archive, member_name, destination):
+    with archive.open("rb") as source:
+        if source.read(8) != b"!<arch>\n":
+            raise ValueError(f"invalid Debian archive: {archive}")
+        while True:
+            header = source.read(60)
+            if not header:
+                break
+            if len(header) != 60 or header[58:60] != b"`\n":
+                raise ValueError(f"invalid ar member header: {archive}")
+            name = header[0:16].decode("ascii").strip().rstrip("/")
+            size = int(header[48:58].decode("ascii").strip())
+            offset = source.tell()
+            if name == member_name:
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                with destination.open("wb") as output:
+                    remaining = size
+                    while remaining:
+                        chunk = source.read(min(remaining, 1024 * 1024))
+                        if not chunk:
+                            raise ValueError(f"truncated ar member: {member_name}")
+                        output.write(chunk)
+                        remaining -= len(chunk)
+                return
+            source.seek(offset + size + (size % 2))
+    raise ValueError(f"missing ar member: {member_name}")
+
+
 def verify_elf(path):
     with path.open("rb") as stream:
         if stream.read(4) != b"\x7fELF":
             raise ValueError(f"invalid ELF binary: {path}")
 
 
-def compress_rootfs(source, destination):
+def compress_rootfs(source, destination, library_archive=None, node_executable=None):
     required_dirs = (
         "opt/amitia",
         "etc/amitia",
@@ -77,23 +106,71 @@ def compress_rootfs(source, destination):
         "run/amitia",
         "home/amitia",
     )
-    with tarfile.open(source, "r:gz") as archive, tarfile.open(destination, "w:xz", preset=3) as output:
-        existing = set()
-        for member in archive:
-            existing.add(member.name.rstrip("/"))
-            stream = archive.extractfile(member) if member.isfile() else None
-            output.addfile(member, stream)
-        for name in required_dirs:
-            if name not in existing:
-                member = tarfile.TarInfo(name)
-                member.type = tarfile.DIRTYPE
-                member.mode = 0o755
-                output.addfile(member)
-        if "etc/ssl/certs/ca-certificates.crt" not in existing:
-            member = tarfile.TarInfo("etc/ssl/certs/ca-certificates.crt")
-            member.mode = 0o644
-            member.size = 0
-            output.addfile(member, io.BytesIO())
+    capture = tempfile.TemporaryDirectory(prefix="amitia-rootfs-library-")
+    library_tar = None
+    try:
+        if library_archive is not None:
+            if node_executable is None:
+                raise ValueError("node executable is required for the library archive")
+            compressed = Path(capture.name) / "data.tar.zst"
+            decompressed = Path(capture.name) / "data.tar"
+            read_ar_member(library_archive, "data.tar.zst", compressed)
+            subprocess.run([
+                str(node_executable),
+                "-e",
+                "const fs=require('fs'),z=require('zlib');fs.writeFileSync(process.argv[2],z.zstdDecompressSync(fs.readFileSync(process.argv[1])))",
+                str(compressed),
+                str(decompressed),
+            ], check=True, capture_output=True)
+            library_tar = tarfile.open(decompressed, "r:")
+
+        with tarfile.open(source, "r:gz") as archive, tarfile.open(destination, "w:xz", preset=3) as output:
+            existing = set()
+            for member in archive:
+                existing.add(member.name.rstrip("/"))
+                stream = archive.extractfile(member) if member.isfile() else None
+                output.addfile(member, stream)
+            for name in required_dirs:
+                if name not in existing:
+                    member = tarfile.TarInfo(name)
+                    member.type = tarfile.DIRTYPE
+                    member.mode = 0o755
+                    output.addfile(member)
+            if "etc/ssl/certs/ca-certificates.crt" not in existing:
+                member = tarfile.TarInfo("etc/ssl/certs/ca-certificates.crt")
+                member.mode = 0o644
+                member.size = 0
+                output.addfile(member, io.BytesIO())
+            if library_tar is not None:
+                required_library_members = {
+                    "usr/lib/aarch64-linux-gnu/libatomic.so.1",
+                    "usr/lib/aarch64-linux-gnu/libatomic.so.1.2.0",
+                }
+                added = set()
+                for member in library_tar:
+                    name = member.name[2:] if member.name.startswith("./") else member.name
+                    if name not in required_library_members:
+                        continue
+                    if name in existing:
+                        continue
+                    info = tarfile.TarInfo(name)
+                    info.mode = member.mode
+                    info.type = member.type
+                    info.linkname = member.linkname
+                    if member.isfile():
+                        data = library_tar.extractfile(member).read()
+                        info.size = len(data)
+                        output.addfile(info, io.BytesIO(data))
+                    else:
+                        output.addfile(info)
+                    added.add(name)
+                missing = required_library_members - existing - added
+                if missing:
+                    raise ValueError("missing rootfs libraries: " + ", ".join(sorted(missing)))
+    finally:
+        if library_tar is not None:
+            library_tar.close()
+        capture.cleanup()
 
 
 def create_runtime_tar(root, destination):
@@ -136,6 +213,8 @@ def main():
     parser.add_argument("--backend", required=True)
     parser.add_argument("--node-archive", required=True)
     parser.add_argument("--rootfs-archive", required=True)
+    parser.add_argument("--libatomic-deb", required=True)
+    parser.add_argument("--node-executable", required=True)
     parser.add_argument("--qdrant-archive", required=True)
     parser.add_argument("--surrealdb", required=True)
     parser.add_argument("--source-commit", required=True)
@@ -150,10 +229,15 @@ def main():
         raise ValueError("source commit must be a 40-character hex revision")
     node_archive = Path(args.node_archive).resolve()
     rootfs_archive = Path(args.rootfs_archive).resolve()
+    libatomic_deb = Path(args.libatomic_deb).resolve()
+    node_executable = Path(args.node_executable).resolve()
     node_lock = json.loads((project / "runtime/artifacts/node/linux-arm64/node-runtime-lock.json").read_text(encoding="utf-8"))
     rootfs_lock = json.loads((project / "runtime/artifacts/ubuntu-rootfs/linux-arm64/ubuntu-rootfs-lock.json").read_text(encoding="utf-8"))
-    if digest(node_archive) != node_lock["sha256"] or digest(rootfs_archive) != rootfs_lock["sha256"]:
-        raise ValueError("locked Node or rootfs archive hash mismatch")
+    libatomic_lock = json.loads((project / "runtime/artifacts/ubuntu-rootfs/linux-arm64/libatomic1-lock.json").read_text(encoding="utf-8"))
+    if digest(node_archive) != node_lock["sha256"] or digest(rootfs_archive) != rootfs_lock["sha256"] or digest(libatomic_deb) != libatomic_lock["sha256"]:
+        raise ValueError("locked Node, rootfs or libatomic archive hash mismatch")
+    if not node_executable.is_file():
+        raise ValueError("Node executable is unavailable")
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="amitia-runtime-fresh-", dir=output.parent) as temporary:
         stage = Path(temporary)
@@ -176,7 +260,7 @@ def main():
         payload.mkdir()
         rootfs_tar = payload / "rootfs.tar.xz"
         runtime_tar = payload / "runtime.tar.xz"
-        compress_rootfs(rootfs_archive, rootfs_tar)
+        compress_rootfs(rootfs_archive, rootfs_tar, libatomic_deb, node_executable)
         create_runtime_tar(program, runtime_tar)
 
         metadata = stage / "metadata"

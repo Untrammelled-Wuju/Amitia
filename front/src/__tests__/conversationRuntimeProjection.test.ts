@@ -97,6 +97,114 @@ describe("conversation runtime projection", () => {
     });
   });
 
+  it("keeps the assistant row key when a snapshot has the message but no turn", async () => {
+    const persisted = ref<any[]>([]);
+    const runtime = useConversationRuntime(ref("conversation-1"), persisted, ref(false), () => undefined);
+    runtime.beginPendingAssistant("request-1", "role-1");
+    expect(runtime.messages.value.find(row => row.role === "assistant")?.uiKey).toBe("request:request-1");
+    mocks.snapshot.value = { version: 1, lastEventSequence: 0, turns: [], messages: [
+      { id: "request-1/assistant", requestId: "request-1", role: "assistant", content: "完成", conversationId: "conversation-1" },
+    ] };
+    await runtime.loadSnapshot(false);
+    expect(runtime.messages.value.filter(row => row.role === "assistant")).toHaveLength(1);
+    expect(runtime.messages.value.find(row => row.role === "assistant")?.uiKey).toBe("request:request-1");
+    runtime.cleanup();
+  });
+
+  it("publishes the user message and assistant thinking placeholder to the visible list synchronously", () => {
+    const persisted = ref<any[]>([]);
+    const runtime = useConversationRuntime(ref("conversation-1"), persisted, ref(true), () => undefined);
+    persisted.value.push({ id: "client:request-1", uiKey: "client:request-1", requestId: "request-1", role: "user", content: "你好", status: "sending", createdAt: "2026-10-28T00:00:00Z" });
+    persisted.value.push({ id: "request-1/assistant", uiKey: "request:request-1", requestId: "request-1", role: "assistant", characterId: "role-1", content: "", status: "queued", createdAt: "2026-10-28T00:00:00Z" });
+    runtime.beginPendingAssistant("request-1", "role-1");
+    expect(runtime.messages.value.map((row) => row.role)).toEqual(["user", "assistant"]);
+    expect(runtime.messages.value[1]).toMatchObject({ uiKey: "request:request-1", characterId: "role-1", status: "queued", assistantTurn: { status: "queued" } });
+    runtime.cleanup();
+  });
+
+  it("keeps a completed turn visible while its saved message arrives before the turn snapshot", async () => {
+    const runtime = useConversationRuntime(ref("conversation-1"), ref<any[]>([]), ref(false), () => undefined);
+    await runtime.applyEvent(event(1, "turn.started"));
+    await runtime.applyEvent(event(2, "text.completed", { blockId: "text-1", blockSequence: 1, messageId: "request-1/assistant", payload: { content: "完成回复" } }));
+    mocks.snapshot.value = { version: 1, lastEventSequence: 3, turns: [], messages: [
+      { id: "request-1/assistant", requestId: "request-1", role: "assistant", content: "完成回复", conversationId: "conversation-1" },
+    ] };
+    await runtime.applyEvent(event(3, "turn.completed", { messageId: "request-1/assistant" }));
+    const row = runtime.messages.value.find(message => message.role === "assistant");
+    expect(row?.uiKey).toBe("request:request-1");
+    expect(row?.assistantTurn?.items).toMatchObject([{ type: "text", content: "完成回复" }]);
+    runtime.cleanup();
+  });
+
+  it("保留并发群聊流消息直到对应快照出现", async () => {
+    const sending = ref(true);
+    const groupSending = ref(true);
+    const persisted = ref<any[]>([
+      { id: "reply-a", role: "assistant", requestId: "request-a", groupRoundId: "round", deliveryId: "a", deliveryIndex: 0, content: "甲的流内容", status: "streaming" },
+      { id: "reply-b", role: "assistant", requestId: "request-b", groupRoundId: "round", deliveryId: "b", deliveryIndex: 1, content: "乙的流内容", status: "streaming" },
+    ]);
+    const runtime = useConversationRuntime(ref("conversation-1"), persisted, sending, () => undefined, undefined, undefined, groupSending);
+    mocks.snapshot.value = { version: 1, lastEventSequence: 0, messages: [], turns: [] };
+    await runtime.loadSnapshot(false);
+    expect(runtime.messages.value.map((row) => row.content)).toEqual(["甲的流内容", "乙的流内容"]);
+    expect(sending.value).toBe(true);
+    mocks.snapshot.value = { version: 1, lastEventSequence: 0, messages: [{ ...persisted.value[0], content: "旧内容" }], turns: [] };
+    await runtime.loadSnapshot(false);
+    expect(runtime.messages.value.map((row) => row.content)).toEqual(["甲的流内容", "乙的流内容"]);
+    expect(runtime.messages.value.map((row) => row.uiKey)).toEqual(["group-delivery:a", "group-delivery:b"]);
+    groupSending.value = false;
+    mocks.snapshot.value = { version: 1, lastEventSequence: 0, messages: [], turns: [] };
+    await runtime.loadSnapshot(false);
+    expect(runtime.messages.value).toHaveLength(0);
+    runtime.cleanup();
+  });
+
+  it("投递占位和已保存快照属于同一角色回复", async () => {
+    const groupSending = ref(true);
+    const persisted = ref<any[]>([{ id: "group-delivery:a", uiKey: "group-delivery:a", role: "assistant", groupRoundId: "round", deliveryId: "a", status: "streaming", content: "" }]);
+    const runtime = useConversationRuntime(ref("conversation-1"), persisted, ref(true), () => undefined, undefined, undefined, groupSending);
+    mocks.snapshot.value = { version: 1, lastEventSequence: 0, turns: [], messages: [{ id: "child-a/assistant", requestId: "child-a", role: "assistant", groupRoundId: "round", deliveryId: "a", status: "completed", content: "甲回复" }] };
+    await runtime.loadSnapshot(false);
+    expect(runtime.messages.value.filter((row) => row.deliveryId === "a")).toHaveLength(1);
+    runtime.cleanup();
+  });
+
+  it("投递占位与运行时事件只显示一条回复", async () => {
+    const persisted = ref<any[]>([{ id: "child-a/assistant", requestId: "child-a", role: "assistant", groupRoundId: "round", deliveryId: "a", status: "streaming", content: "" }]);
+    const runtime = useConversationRuntime(ref("conversation-1"), persisted, ref(true), () => undefined, undefined, undefined, ref(true));
+    await runtime.applyEvent(event(1, "turn.started", { requestId: "child-a", turnId: "turn-a" }));
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(runtime.messages.value.filter((row) => row.role === "assistant")).toHaveLength(1);
+    expect(runtime.messages.value[0].uiKey).toBe("group-delivery:a");
+    runtime.cleanup();
+  });
+
+  it("群聊结束后旧快照和迟到成员事件不会重新占用发送状态", async () => {
+    const sending = ref(false);
+    const groupSending = ref(true);
+    const persisted = ref<any[]>([{ id: "child-a/assistant", requestId: "child-a", role: "assistant", groupRoundId: "round", deliveryId: "a", status: "completed", content: "完成" }]);
+    const runtime = useConversationRuntime(ref("conversation-1"), persisted, sending, () => undefined, undefined, undefined, groupSending);
+    mocks.snapshot.value = { version: 1, lastEventSequence: 0, messages: persisted.value, turns: [] };
+    await runtime.loadSnapshot(false);
+    expect(sending.value).toBe(true);
+    groupSending.value = false;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(sending.value).toBe(false);
+    await runtime.applyEvent(event(1, "turn.started", { requestId: "child-a", turnId: "turn-a" }));
+    expect(sending.value).toBe(false);
+    runtime.cleanup();
+  });
+
+  it("群聊流式回复不会切换到另一套运行时渲染", async () => {
+    const persisted = ref<any[]>([{ id: "child-a/assistant", requestId: "child-a", role: "assistant", groupRoundId: "round", deliveryId: "a", status: "streaming", content: "流式正文" }]);
+    const runtime = useConversationRuntime(ref("conversation-1"), persisted, ref(true), () => undefined, undefined, undefined, ref(true));
+    await runtime.applyEvent(event(1, "turn.started", { requestId: "child-a", turnId: "turn-a" }));
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(runtime.messages.value[0].content).toBe("流式正文");
+    expect(runtime.messages.value[0].assistantTurn).toBeUndefined();
+    runtime.cleanup();
+  });
+
   it("clears stale message state after receiving completed history", async () => {
     const persisted = ref<any[]>([{ id: "message-1", requestId: "request-1", role: "assistant", content: "成功回复", status: "interrupted", state: "interrupted" }]);
     const runtime = useConversationRuntime(ref("conversation-1"), persisted, ref(false), () => undefined);

@@ -78,6 +78,12 @@ function unwrap<T>(response: any): T {
   return response?.data?.code === 200 && response.data.data !== undefined ? response.data.data : response.data;
 }
 
+function normalizeOwnedGroupMutation(group: OwnedGroupState, ownerId?: string) {
+  const conversationId = String(group?.conversationId || "").trim();
+  if (!conversationId || !ownerId || parseConversationReference(conversationId)) return group;
+  return { ...group, conversationId: conversationReference({ ownerId, id: conversationId }) };
+}
+
 function stamp(core: string, state: MeshPolicy | null) {
   return `${core}:${state?.providerEpoch}:${state?.modeRevision}:${state?.permissionRevision}`;
 }
@@ -233,9 +239,10 @@ export function useDeviceOwnedConversation() {
   }
 
   function selectInitialRole(saved?: string): string {
-    const requested = policy.value?.selectedRole || saved || "";
-    if (requested) return roles.value.some((role) => role.id === requested) ? requested : "";
-    return roles.value.length === 1 ? roles.value[0].id : "";
+    for (const requested of [policy.value?.selectedRole, saved]) {
+      if (requested && roles.value.some((role) => role.id === requested)) return requested;
+    }
+    return roles.value[0]?.id || "";
   }
 
   const historyKey = (conversationId: string, characterId: string, keyword = "") => JSON.stringify([conversationId, characterId, keyword]);
@@ -581,10 +588,10 @@ export function useDeviceOwnedConversation() {
   async function inviteGroupMembers(conversationId: string, characterId: string, members: Array<{ characterId: string; shareHistory: boolean }>, expectedMembershipRevision: number) {
     const origin = parseConversationReference(conversationId);
     const requestId = crypto.randomUUID();
-    const result = unwrap<{ group: OwnedGroupState; saved: boolean }>(await apiClient.post(`/api/device-mesh/v1/business/conversations/${encodeURIComponent(origin?.id || conversationId)}/members`, { requestId, characterId, members, expectedMembershipRevision, ...(origin ? { conversationOrigin: origin } : {}) }));
+    const result = unwrap<{ group: OwnedGroupState; acknowledgement?: { ownerId: string }; saved: boolean }>(await apiClient.post(`/api/device-mesh/v1/business/conversations/${encodeURIComponent(origin?.id || conversationId)}/members`, { requestId, characterId, members, expectedMembershipRevision, ...(origin ? { conversationOrigin: origin } : {}) }));
     if (!result.saved) throw new Error("群成员尚未获得数据所有者确认");
     invalidateWithoutInterrupt();
-    return result.group;
+    return normalizeOwnedGroupMutation(result.group, result.acknowledgement?.ownerId || origin?.ownerId);
   }
 
   async function createGroupConversation(characterId: string, members: Array<{ characterId: string; shareHistory: boolean }>) {
@@ -594,28 +601,25 @@ export function useDeviceOwnedConversation() {
     const result = unwrap<{ group: OwnedGroupState; acknowledgement: { ownerId: string }; saved: boolean }>(await apiClient.post("/api/device-mesh/v1/business/conversations/group", { requestId, characterId, members }));
     if (!result.saved || !result.group?.conversationId || !result.acknowledgement?.ownerId) throw new Error("群聊尚未获得数据所有者确认");
     invalidateWithoutInterrupt();
-    return {
-      ...result.group,
-      conversationId: conversationReference({ ownerId: result.acknowledgement.ownerId, id: result.group.conversationId }),
-    };
+    return normalizeOwnedGroupMutation(result.group, result.acknowledgement.ownerId);
   }
 
   async function removeGroupMember(conversationId: string, characterId: string, memberId: string, expectedMembershipRevision: number) {
     const origin = parseConversationReference(conversationId);
     const requestId = crypto.randomUUID();
-    const result = unwrap<{ group: OwnedGroupState; saved: boolean }>(await apiClient.delete(`/api/device-mesh/v1/business/conversations/${encodeURIComponent(origin?.id || conversationId)}/members/${encodeURIComponent(memberId)}`, { data: { requestId, characterId, expectedMembershipRevision } }));
+    const result = unwrap<{ group: OwnedGroupState; acknowledgement?: { ownerId: string }; saved: boolean }>(await apiClient.delete(`/api/device-mesh/v1/business/conversations/${encodeURIComponent(origin?.id || conversationId)}/members/${encodeURIComponent(memberId)}`, { data: { requestId, characterId, expectedMembershipRevision } }));
     if (!result.saved) throw new Error("群成员变更尚未获得数据所有者确认");
     invalidateWithoutInterrupt();
-    return result.group;
+    return normalizeOwnedGroupMutation(result.group, result.acknowledgement?.ownerId || origin?.ownerId);
   }
 
   async function updateGroupSettings(conversationId: string, characterId: string, expectedSettingsRevision: number, changes: { name?: string; allowCharacterMentions?: boolean; maxAutoReplies?: number; memberOrder?: string[] }) {
     const origin = parseConversationReference(conversationId);
     const requestId = crypto.randomUUID();
-    const result = unwrap<{ group: OwnedGroupState; saved: boolean }>(await apiClient.patch(`/api/device-mesh/v1/business/conversations/${encodeURIComponent(origin?.id || conversationId)}/group-settings`, { requestId, characterId, expectedSettingsRevision, ...changes }));
+    const result = unwrap<{ group: OwnedGroupState; acknowledgement?: { ownerId: string }; saved: boolean }>(await apiClient.patch(`/api/device-mesh/v1/business/conversations/${encodeURIComponent(origin?.id || conversationId)}/group-settings`, { requestId, characterId, expectedSettingsRevision, ...changes }));
     if (!result.saved) throw new Error("群设置尚未获得数据所有者确认");
     invalidateWithoutInterrupt();
-    return result.group;
+    return normalizeOwnedGroupMutation(result.group, result.acknowledgement?.ownerId || origin?.ownerId);
   }
 
   async function requestGroupReplies(conversationId: string, characterId: string, sourceMessageId: string, members: Array<{ memberId: string; characterId: string; roleOwnerId?: string }>) {

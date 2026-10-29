@@ -302,9 +302,6 @@
         </div>
       </div>
 
-      <div class="ob-model-page-spoken">
-        连接成功后，Amitia 才能理解并回应你。
-      </div>
     </div>
   </div>
 </template>

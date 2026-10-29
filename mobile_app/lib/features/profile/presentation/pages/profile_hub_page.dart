@@ -8,6 +8,8 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/ui_runtime/ui_navigation_registry.dart';
+import '../../../../core/ui_runtime/ui_runtime_controller.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_icons.dart';
 import '../../../../core/widgets/hub_entry_card.dart';
@@ -16,36 +18,49 @@ import '../../../../core/widgets/profile_avatar.dart';
 class ProfileHubPage extends ConsumerWidget {
   const ProfileHubPage({super.key});
 
-  static const _entries = <_ProfileEntry>[
-    _ProfileEntry(
-      title: '角色',
-      icon: AmitiaIconGlyph.characters,
-      route: AppRoutes.meCharacters,
-    ),
-    _ProfileEntry(
-      title: '创意工坊',
-      icon: AmitiaIconGlyph.workshop,
-      route: AppRoutes.workshop,
-    ),
-    _ProfileEntry(
-      title: '游戏模式',
-      icon: AmitiaIconGlyph.game,
-      route: AppRoutes.gameCenter,
-    ),
-    _ProfileEntry(
-      title: '渠道接入',
-      icon: AmitiaIconGlyph.channels,
-      route: AppRoutes.channelMessages,
-    ),
-    _ProfileEntry(
-      title: '设置',
-      icon: AmitiaIconGlyph.settings,
-      route: AppRoutes.settings,
-    ),
-  ];
+  static const _charactersEntry = _ProfileEntry(
+    title: '角色',
+    icon: AmitiaIconGlyph.characters,
+    route: AppRoutes.meCharacters,
+  );
+  static const _workshopEntry = _ProfileEntry(
+    title: '创意工坊',
+    icon: AmitiaIconGlyph.workshop,
+    route: AppRoutes.workshop,
+  );
+  static const _gameEntry = _ProfileEntry(
+    title: '游戏模式',
+    icon: AmitiaIconGlyph.game,
+    route: AppRoutes.gameCenter,
+  );
+  static const _channelsEntry = _ProfileEntry(
+    title: '渠道消息',
+    icon: AmitiaIconGlyph.channels,
+    route: AppRoutes.channelMessages,
+  );
+  static const _settingsEntry = _ProfileEntry(
+    title: '设置',
+    icon: AmitiaIconGlyph.settings,
+    route: AppRoutes.settings,
+  );
+
+  List<_ProfileEntry> _entries(WidgetRef ref) {
+    final snapshot = ref.watch(uiRuntimeProvider).valueOrNull;
+    final showChannels = UINavigationRegistry.resolve(
+      snapshot,
+    ).any((item) => item.id == UINavigationRegistry.channelMessagesItem.id);
+    return <_ProfileEntry>[
+      _charactersEntry,
+      _workshopEntry,
+      _gameEntry,
+      if (showChannels) _channelsEntry,
+      _settingsEntry,
+    ];
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final entries = _entries(ref);
     final profile = ref.watch(currentSpaceProfileProvider).valueOrNull;
     final name = (profile?.displayName ?? '').trim().isEmpty
         ? '我的空间'
@@ -133,12 +148,12 @@ class ProfileHubPage extends ConsumerWidget {
             ),
             child: Column(
               children: [
-                for (var index = 0; index < _entries.length; index++)
+                for (var index = 0; index < entries.length; index++)
                   HubEntryCard(
-                    icon: _entries[index].icon,
-                    title: _entries[index].title,
-                    onTap: () => context.push(_entries[index].route),
-                    showDivider: index < _entries.length - 1,
+                    icon: entries[index].icon,
+                    title: entries[index].title,
+                    onTap: () => context.push(entries[index].route),
+                    showDivider: index < entries.length - 1,
                   ),
               ],
             ),

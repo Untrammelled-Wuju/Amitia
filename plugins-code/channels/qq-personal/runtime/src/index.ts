@@ -6,7 +6,7 @@ import path from "node:path"
 import Fastify from "fastify"
 import cors from "@fastify/cors"
 import { OneBotBridge } from "./onebot.js"
-import { dataFilePath, isRuntimeModeSupported, loadConfig, moduleDataDir, normalizeConfig, saveConfig, type QQPersonalConfig } from "./config.js"
+import { dataFilePath, isRuntimeModeSupported, loadConfig, moduleDataDir, normalizeConfig, registerOwnedRuntime, saveConfig, type QQPersonalConfig } from "./config.js"
 import { parseOneBotMessage, shouldHandleMessage, applyPrefix, type ParsedQQMessage } from "./message.js"
 import { buildInboundPayload, forwardInbound } from "./inbound.js"
 import { changeWebuiPassword, evaluatePassword, readSnowLumaInfo } from "./snowluma-info.js"
@@ -17,6 +17,7 @@ import { authorizeServiceRequest } from "./service-auth.js"
 import { downloadMedia, sendMedia, synthesizeVoice } from "./outbound.js"
 import { IdempotencyStore } from "./idempotency.js"
 import { startDockerService } from "./docker-service.js"
+import { MobileQQRuntime } from "./mobile-runtime.js"
 
 const env = process.env
 const app = Fastify({ logger: { level: env.LOG_LEVEL || "info" } })
@@ -32,6 +33,7 @@ const peers = new PeerStore()
 const outboundRequests = new IdempotencyStore()
 const credentialStore = new CredentialStore(path.dirname(dataFilePath("qq-personal-config.json")))
 const runtimeManager = new SnowLumaRuntimeManager()
+const mobileRuntime = new MobileQQRuntime(moduleDataDir(), runtimeManager)
 let lastError = ""
 let messageCount = 0
 let replyCount = 0
@@ -50,6 +52,8 @@ const serviceIdentity = {
   moduleId: inboundConfig.moduleId,
   token: inboundConfig.serviceAuthToken,
 }
+
+registerOwnedRuntime(inboundConfig.extensionId)
 
 app.addHook("onRequest", async (request, reply) => {
   const pathname = request.url.split("?")[0]
@@ -142,24 +146,39 @@ async function publicConfig() {
     runtimeMode: config.runtimeMode,
     webuiPort: config.webuiPort,
     novncPort: config.novncPort,
-    novncEnabled: config.runtimeMode === "docker",
+    novncEnabled: config.runtimeMode === "docker" || mobileRuntime.status().installed,
     containerName: config.containerName,
     dockerBin: config.dockerBin,
     webuiUrl: snowluma.webuiUrl,
-    novncUrl: snowluma.novncUrl,
+    novncUrl: mobileRuntime.status().installed ? `http://127.0.0.1:${config.novncPort}/vnc.html` : snowluma.novncUrl,
     webuiUser: snowluma.webuiUser,
     webuiPassword: snowluma.webuiPassword,
     webuiPasswordState: snowluma.webuiPasswordState,
-    novncPassword: snowluma.novncPassword,
+    novncPassword: mobileRuntime.status().desktopPassword || snowluma.novncPassword,
     snowlumaError: snowluma.error,
     runtimeStatus: runtimeManager.status(),
     snowlumaInstall: runtimeManager.installState(),
     runtimeLogLines: runtimeManager.recentLines(),
+    mobileRuntime: mobileRuntime.status(),
   }
 }
 
 function statusPayload() {
   const status = bridge.status()
+  const mobile = mobileRuntime.summary()
+  const connectionLabel = status.connected ? "QQ 已连接" : config.enabled ? "等待 QQ 登录" : "桥接已停用"
+  const connectionVariant = status.connected ? "success" : config.enabled ? "warning" : "neutral"
+  const mobileLabels: Record<string, string> = {
+    idle: "运行环境未准备",
+    preparing: "正在准备手机运行环境",
+    dependencies: "正在准备图形依赖",
+    qq: "正在安装 QQ",
+    prepared: "QQ 运行文件已准备",
+    snowluma: "正在安装 SnowLuma",
+    waiting_login: "等待 QQ 登录",
+    failed: "运行环境异常",
+    interrupted: "安装已中断",
+  }
   return {
     data: {
       provider: "snowluma",
@@ -180,6 +199,19 @@ function statusPayload() {
       lastError,
       snowluma: runtimeManager.status(),
       snowlumaInstall: runtimeManager.installState(),
+      mobileRuntimeSummary: mobile,
+      displayStatus: {
+        connectionLabel,
+        connectionVariant,
+        qqAccount: status.accountIds[0] || "未连接",
+        clients: String(status.clients),
+        received: String(messageCount),
+        replies: String(replyCount),
+        lastActivity: status.lastSeenAt || "暂无",
+        mobileLabel: mobileLabels[mobile.phase] || mobile.phase,
+        mobileVariant: mobile.phase === "waiting_login" ? "success" : mobile.phase === "failed" || mobile.phase === "interrupted" ? "error" : mobile.running ? "warning" : "neutral",
+        mobileDetail: mobile.error || mobile.detail || "尚未开始安装",
+      },
     },
   }
 }
@@ -217,6 +249,46 @@ app.post("/api/action", async (request, reply) => {
   const input = (body.input && typeof body.input === "object" && !Array.isArray(body.input)
     ? body.input
     : {}) as Record<string, unknown>
+  if (action === "install-mobile-runtime") {
+    if (process.platform !== "linux" || process.arch !== "arm64") return reply.status(400).send({ success: false, error: "手机运行环境需要 Linux ARM64" })
+    const requested = input.config && typeof input.config === "object" && !Array.isArray(input.config) ? input.config as Partial<QQPersonalConfig> : {}
+    config = normalizeConfig({ ...config, ...requested, runtimeMode: "native", enabled: true }, config)
+    saveConfig(config)
+    mobileRuntime.install(config)
+    return reply.send({ success: true, data: mobileRuntime.status() })
+  }
+  if (action === "mobile-form") {
+    const current = await publicConfig()
+    return reply.send({
+      success: true,
+      data: {
+        form_state: {
+          credentials: {
+            token: current.token,
+            groupTrigger: current.groupTrigger,
+            triggerPrefix: current.triggerPrefix,
+            webuiPort: String(current.webuiPort),
+            novncPort: String(current.novncPort),
+          },
+        },
+        display: {
+          reverseWebSocketUrl: current.reverseWebSocketUrl,
+          webuiUrl: current.webuiUrl,
+          novncUrl: current.novncUrl,
+          webuiUser: current.webuiUser,
+          webuiPassword: current.webuiPassword,
+          webuiPasswordState: current.webuiPasswordState,
+          novncPassword: current.novncPassword,
+          runtimeMode: current.runtimeMode,
+          credentials: {
+            "WebUI 账号": current.webuiUser || "admin",
+            "WebUI 密码": current.webuiPassword || "等待启动后生成",
+            "noVNC 密码": current.novncPassword || "等待安装后生成",
+          },
+        },
+      },
+    })
+  }
   if (action === "install-snowluma") {
     const requested = (input.config && typeof input.config === "object" && !Array.isArray(input.config)
       ? input.config
@@ -306,6 +378,10 @@ app.post("/api/connect", async (request, reply) => {
   }
   if (!next.token) return reply.status(400).send({ success: false, error: "OneBot Token 不能为空" })
   try {
+    await mobileRuntime.ensureDesktop(next)
+    if (next.runtimeMode === "native" && !runtimeManager.installState().installed) {
+      return reply.status(400).send({ success: false, error: "请先安装 SnowLuma 与手机 QQ 运行环境" })
+    }
     const runtimeStatus = await runtimeManager.start(next)
     if (next.runtimeMode === "native" && !runtimeStatus.running) {
       return reply.status(400).send({ success: false, error: runtimeStatus.error || "SnowLuma 启动失败" })
@@ -323,7 +399,7 @@ app.post("/api/disconnect", async (_request, reply) => {
   config = { ...config, enabled: false }
   saveConfig(config)
   bridge.disconnectClients()
-  await runtimeManager.stop()
+  await mobileRuntime.stop()
   return reply.send({ success: true })
 })
 
@@ -474,8 +550,12 @@ try {
     await runtimeManager.start(config)
   } else {
     try {
-      await runtimeManager.start(config)
+      if (config.enabled && runtimeManager.installState().installed) {
+        await mobileRuntime.ensureDesktop(config)
+        await runtimeManager.start(config)
+      }
     } catch (error) {
+      mobileRuntime.recordError(error)
       runtimeManager.recordError(config.runtimeMode, error instanceof Error ? error.message : String(error))
       app.log.error({ error: runtimeManager.status().error }, "SnowLuma 原生运行环境启动失败")
     }
@@ -487,7 +567,7 @@ try {
 
 const shutdown = async () => {
   bridge.close()
-  await runtimeManager.stop()
+  await mobileRuntime.stop()
   await app.close()
 }
 
