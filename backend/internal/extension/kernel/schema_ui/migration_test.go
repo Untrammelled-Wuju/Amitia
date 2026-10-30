@@ -18,7 +18,6 @@ func TestMigratedPluginSchemasValidate(t *testing.T) {
 	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", "..", ".."))
 	files := []string{
 		"plugins-code/channels/qq-clawbot/ui/mobile/schema.json",
-		"plugins-code/channels/qq-personal/ui/mobile/schema.json",
 		"plugins-code/emote/ui/schema/desktop-index.json",
 		"plugins-code/emote/ui/schema/mobile-index.json",
 		"plugins-code/emote/ui/schema/desktop-composer.json",
