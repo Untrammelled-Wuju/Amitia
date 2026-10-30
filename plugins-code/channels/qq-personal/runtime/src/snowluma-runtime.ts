@@ -427,7 +427,7 @@ export class SnowLumaRuntimeManager {
         ...this.environment,
         NO_COLOR: "1",
         NODE_OPTIONS: nodeOptions,
-        SNOWLUMA_HOOK_AUTOLOAD: "1",
+        SNOWLUMA_HOOK_AUTOLOAD: this.environment.SNOWLUMA_HOOK_AUTOLOAD || "1",
         SNOWLUMA_UPDATE_ROOT: root,
         SNOWLUMA_LOG_DIR: path.join(root, "logs"),
         SNOWLUMA_WEBUI_PORT: String(config.webuiPort),

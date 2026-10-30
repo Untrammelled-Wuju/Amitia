@@ -7,6 +7,7 @@ import * as tar from "tar"
 
 export const SNOWLUMA_VERSION = "2.2.0"
 export const SNOWLUMA_RELEASE_BASE_URL = "https://api.github.com/repos/SnowLuma/SnowLuma/releases/tags"
+const DOWNLOAD_TIMEOUT_MS = 180_000
 
 export type SnowLumaInstallPhase =
   | "idle"
@@ -204,6 +205,7 @@ async function downloadAsset(asset: SnowLumaReleaseAsset, destination: string, f
   const response = await fetchImpl(asset.browser_download_url, {
     headers: { "User-Agent": "Amitia-QQ-Personal-Plugin" },
     redirect: "follow",
+    signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
   })
   if (!response.ok || !response.body) throw new Error(`下载 SnowLuma 失败：HTTP ${response.status}`)
   fs.mkdirSync(path.dirname(destination), { recursive: true, mode: 0o700 })

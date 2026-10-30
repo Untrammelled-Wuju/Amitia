@@ -77,6 +77,18 @@ Linux 原生模式需要用户自行准备 Linux QQ、Xvfb、窗口管理器、V
 
 准备完成后，在插件中选择“Linux 原生”并点击“安装 SnowLuma”。插件负责下载、校验、安装、启动 SnowLuma 和生成首次 OneBot 配置，不负责安装 Linux QQ、Xvfb、VNC/noVNC 或其他系统依赖。
 
+## Android 本机运行与状态判定
+
+Android 使用项目内置的 Ubuntu/PRoot、Linux ARM64 QQ、Xvfb、noVNC 和 SnowLuma，不要求另装 Termux。QQ 安装包固定从腾讯官方地址下载并校验 SHA-256；准备记录包含 QQ 版本，版本不匹配时重新准备运行文件，保留独立的 QQ 用户目录。
+
+手机部署属于[官方标注的实验性路径](https://snowluma.github.io/zh/docs/guide/deploy/mobile)。QQ 界面已登录、Hook 控制套接字存在、OneBot WebSocket 已连接都不能单独证明消息收发可用。插件只在 SnowLuma 的 `get_status` 或心跳同时返回 `online=true`、`good=true` 时报告协议就绪，并单独记录最后一条真实入站消息的时间。
+
+兼容层只处理运行环境差异，不合成 QQ 登录事件。预加载器覆盖 QQ 模块路径的 `open` 与 `fopen` 系列读取，只固定主线程的进程识别名称，保留 QQ 工作线程原名。
+
+`/api/health` 的 `onebotConnected`、`hookReady`、`protocolReady` 和 `lastMessageAt` 分别表示传输连接、Hook 控制端点、协议健康和真实消息活动。手动请求 `/api/health?nativeDiagnostics=true` 可执行一次原生目标解析，结果只返回解析状态、目标字段名和候选数量，不返回原生地址或消息正文；常规状态轮询不执行该诊断。
+
+完整验收需使用另一个账号发送新消息，依次核对 QQ 桌面、Hook 接收事件、插件入站记录和 Amitia 会话。静态目标解析成功或客户端登录成功不等同于收消息验收通过。
+
 ## 凭据读取
 
 - 原生模式：插件读取 SnowLuma 数据目录中的 `config/webui.json`，并从托管进程首次启动输出中安全捕获临时密码。

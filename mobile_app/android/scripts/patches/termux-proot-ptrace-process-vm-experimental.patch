@@ -1,0 +1,253 @@
+--- a/src/compat.h
++++ b/src/compat.h
+@@ -153,6 +153,9 @@
+ #    ifndef PTRACE_EVENT_EXIT
+ #        define PTRACE_EVENT_EXIT	6
+ #    endif
++#    ifndef PTRACE_EVENT_STOP
++#        define PTRACE_EVENT_STOP	128
++#    endif
+ #    ifndef PTRACE_EVENT_SECCOMP
+ #        define PTRACE_EVENT_SECCOMP	7
+ #    endif
+--- a/src/tracee/tracee.h
++++ b/src/tracee/tracee.h
+@@ -156,6 +156,8 @@
+ 		bool tracing_started;
+ 		bool ignore_loader_syscalls;
+ 		bool ignore_syscalls;
++		bool seized;
++		bool interrupt_pending;
+ 		word_t options;
+ 		bool is_zombie;
+ 	} as_ptracee;
+--- a/src/ptrace/ptrace.h
++++ b/src/ptrace/ptrace.h
+@@ -27,6 +27,7 @@
+ 
+ extern int translate_ptrace_enter(Tracee *tracee);
+ extern int translate_ptrace_exit(Tracee *tracee);
++extern int translate_process_vm_enter(Tracee *tracee, Tracee *target, bool writing);
+ extern void attach_to_ptracer(Tracee *ptracee, Tracee *ptracer);
+ extern void detach_from_ptracer(Tracee *ptracee);
+ 
+--- a/src/ptrace/ptrace.c
++++ b/src/ptrace/ptrace.c
+@@ -29,6 +29,7 @@
+ #include <sys/param.h>  /* MIN(), MAX(), */
+ #include <sys/wait.h>   /* __WALL, */
+ #include <string.h>     /* memcpy(3), */
++#include <stdlib.h>     /* malloc(3), free(3), */
+ 
+ #include "ptrace/ptrace.h"
+ #include "ptrace/user.h"
+@@ -82,6 +83,90 @@
+ 	CASE_STR(PTRACE_GET_THREAD_AREA)	CASE_STR(PTRACE_SET_THREAD_AREA)
+ 	CASE_STR(PTRACE_GETVFPREGS)	CASE_STR(PTRACE_SINGLEBLOCK)	CASE_STR(PTRACE_ARCH_PRCTL)
+ 	default: return "PTRACE_???"; }
++}
++
++int translate_process_vm_enter(Tracee *tracee, Tracee *target, bool writing)
++{
++	word_t local_iov_address = peek_reg(tracee, ORIGINAL, SYSARG_2);
++	word_t local_count = peek_reg(tracee, ORIGINAL, SYSARG_3);
++	word_t remote_iov_address = peek_reg(tracee, ORIGINAL, SYSARG_4);
++	word_t remote_count = peek_reg(tracee, ORIGINAL, SYSARG_5);
++	word_t flags = peek_reg(tracee, ORIGINAL, SYSARG_6);
++	size_t local_index = 0;
++	size_t remote_index = 0;
++	size_t local_offset = 0;
++	size_t remote_offset = 0;
++	ssize_t total = 0;
++
++	if (flags != 0)
++		return -EINVAL;
++	if (local_count > 1024 || remote_count > 1024)
++		return -EINVAL;
++
++	while (local_index < local_count && remote_index < remote_count) {
++		struct iovec local;
++		struct iovec remote;
++		char *buffer;
++		size_t local_remaining;
++		size_t remote_remaining;
++		size_t length;
++		int status;
++
++		status = read_data(tracee, &local, local_iov_address + local_index * sizeof(local), sizeof(local));
++		if (status < 0)
++			return status;
++		status = read_data(tracee, &remote, remote_iov_address + remote_index * sizeof(remote), sizeof(remote));
++		if (status < 0)
++			return status;
++
++		local_remaining = local.iov_len - local_offset;
++		remote_remaining = remote.iov_len - remote_offset;
++		length = local_remaining < remote_remaining ? local_remaining : remote_remaining;
++		if (length == 0) {
++			if (local_remaining == 0)
++				local_index++;
++			if (remote_remaining == 0)
++				remote_index++;
++			local_offset = 0;
++			remote_offset = 0;
++			continue;
++		}
++
++		buffer = malloc(length);
++		if (buffer == NULL)
++			return -ENOMEM;
++
++		if (writing) {
++			status = read_data(tracee, buffer, (word_t) local.iov_base + local_offset, length);
++			if (status == 0)
++				status = write_data(target, (word_t) remote.iov_base + remote_offset, buffer, length);
++		}
++		else {
++			status = read_data(target, buffer, (word_t) remote.iov_base + remote_offset, length);
++			if (status == 0)
++				status = write_data(tracee, (word_t) local.iov_base + local_offset, buffer, length);
++		}
++		free(buffer);
++		if (status < 0) {
++			if (total == 0)
++				return status;
++			break;
++		}
++
++		total += length;
++		local_offset += length;
++		remote_offset += length;
++		if (local_offset == local.iov_len) {
++			local_index++;
++			local_offset = 0;
++		}
++		if (remote_offset == remote.iov_len) {
++			remote_index++;
++			remote_offset = 0;
++		}
++	}
++
++	return total;
+ }
+ 
+ /**
+@@ -182,6 +267,39 @@
+ 
+ 	/* The ATTACH, SEIZE, and INTERRUPT requests are the only ones
+ 	 * where the ptracee is in an unknown state.  */
++	if (request == PTRACE_SEIZE) {
++		ptracer = tracee;
++		ptracee = get_tracee(ptracer, pid, false);
++		if (ptracee == NULL)
++			return -ESRCH;
++
++		if (address != 0 || PTRACEE.ptracer != NULL || ptracee == ptracer)
++			return -EPERM;
++
++		attach_to_ptracer(ptracee, ptracer);
++		PTRACEE.seized = true;
++		PTRACEE.options = data;
++		return 0;
++	}
++
++	if (request == PTRACE_INTERRUPT) {
++		ptracer = tracee;
++		ptracee = get_tracee(ptracer, pid, false);
++		if (ptracee == NULL || PTRACEE.ptracer != ptracer)
++			return -ESRCH;
++		if (!PTRACEE.seized)
++			return -EIO;
++		if (!ptracee->running)
++			return 0;
++
++		PTRACEE.interrupt_pending = true;
++		if (kill(pid, SIGSTOP) < 0) {
++			PTRACEE.interrupt_pending = false;
++			return -errno;
++		}
++		return 0;
++	}
++
+ 	if (request == PTRACE_ATTACH) {
+ 		ptracer = tracee;
+ 		ptracee = get_tracee(ptracer, pid, false);
+@@ -548,7 +666,7 @@
+ 
+ 		status = ptrace(PTRACE_GETREGSET, pid, address, &local_iovec);
+ 		if (status < 0)
+-			return status;
++			return -errno;
+ 
+ 		remote_iovec_len = local_iovec.iov_len =
+ 			MIN(remote_iovec_len, local_iovec.iov_len);
+@@ -595,7 +713,7 @@
+ 
+ 		status = ptrace(PTRACE_SETREGSET, pid, address, &local_iovec);
+ 		if (status < 0)
+-			return status;
++			return -errno;
+ 
+ 		return 0;  /* Don't restart the ptracee.  */
+ 	}
+--- a/src/ptrace/wait.c
++++ b/src/ptrace/wait.c
+@@ -294,6 +294,10 @@
+ 			break;
+ 
+ 		default:
++				if (PTRACEE.interrupt_pending) {
++					PTRACEE.interrupt_pending = false;
++					event = ((SIGTRAP | (PTRACE_EVENT_STOP << 8)) << 8) | 0x7f;
++				}
+ 			PTRACEE.tracing_started = true;
+ 			break;
+ 		}
+--- a/src/syscall/enter.c
++++ b/src/syscall/enter.c
+@@ -1457,7 +1457,45 @@
+ 	case PR_wait4:
+ 	case PR_waitpid:
+ 		status = translate_wait_enter(tracee);
++		break;
++
++	case PR_process_vm_readv:
++	case PR_process_vm_writev: {
++		word_t target_pid = peek_reg(tracee, ORIGINAL, SYSARG_1);
++		Tracee *target = get_tracee(tracee, (pid_t) target_pid, false);
++		Tracee *candidate;
++		word_t result;
++
++		if (target == NULL) {
++			status = 0;
++			break;
++		}
++		if (target->as_ptracee.ptracer != tracee) {
++			Tracee *memory_target = NULL;
++
++			LIST_FOREACH(candidate, get_tracees_list_head(), link) {
++				if (candidate->heap != target->heap)
++					continue;
++				if (candidate->as_ptracee.ptracer != tracee)
++					continue;
++				if (candidate->running)
++					continue;
++				memory_target = candidate;
++				break;
++			}
++			target = memory_target;
++		}
++		if (target == NULL) {
++			status = 0;
++			break;
++		}
++
++		result = translate_process_vm_enter(tracee, target, syscall_number == PR_process_vm_writev);
++		poke_reg(tracee, SYSARG_RESULT, result);
++		set_sysnum(tracee, PR_void);
++		status = 0;
+ 		break;
++	}
+ 
+ 	case PR_brk:
+ 		translate_brk_enter(tracee);

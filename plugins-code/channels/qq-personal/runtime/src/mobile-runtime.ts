@@ -5,6 +5,8 @@ import { MobileDesktop } from "./mobile-desktop.js"
 import { prepareMobileEnvironment, mobileEnvironmentReady } from "./mobile-environment.js"
 import type { SnowLumaRuntimeManager } from "./snowluma-runtime.js"
 import { linkMobileEnvironment } from "./mobile-links.js"
+import { MOBILE_QQ_VERSION } from "./mobile-qq-package.js"
+import { SNOWLUMA_VERSION } from "./snowluma-installer.js"
 
 interface MobileRuntimeState {
   running: boolean
@@ -27,6 +29,7 @@ export class MobileQQRuntime {
   private readonly stateFile: string
   private readonly desktop: MobileDesktop
   private state: MobileRuntimeState
+  private hookTask: Promise<void> | null = null
 
   constructor(dataRoot: string, private readonly snowluma: SnowLumaRuntimeManager) {
     this.root = path.join(dataRoot, "mobile")
@@ -63,11 +66,16 @@ export class MobileQQRuntime {
       desktopPassword: this.desktop.credentials(),
       desktopError: this.desktop.error(),
       desktopHooked: this.desktop.usesSnowLumaHook(),
+      hookTargetDiagnostics: this.desktop.targetDiagnostics(),
     }
   }
 
   async hookProcessIds(): Promise<number[]> {
     return this.desktop.hookProcessIds()
+  }
+
+  async inspectHookTargets(): Promise<string> {
+    return this.desktop.inspectHookTargets()
   }
 
   install(config: QQPersonalConfig): void {
@@ -94,15 +102,18 @@ export class MobileQQRuntime {
       })
     }
     await linkMobileEnvironment(this.root)
-    fs.writeFileSync(path.join(this.root, "prepared.json"), JSON.stringify({ schemaVersion: 1 }), { mode: 0o600 })
+    fs.writeFileSync(path.join(this.root, "prepared.json"), JSON.stringify({ schemaVersion: 1, qqVersion: MOBILE_QQ_VERSION }), { mode: 0o600 })
     await this.ensureDesktop(config)
     this.setState({ running: true, phase: "snowluma", detail: "安装并启动 SnowLuma", error: "" })
-    await this.snowluma.install(config)
+    const existing = this.snowluma.installState()
+    const needsInstall = !existing.installed || existing.installedVersion !== SNOWLUMA_VERSION
+    if (needsInstall) await this.snowluma.install(config)
+    else await this.snowluma.start(config)
     const deadline = Date.now() + 20 * 60 * 1000
     while (Date.now() < deadline) {
       const install = this.snowluma.installState()
-      if (install.phase === "failed") throw new Error(install.error)
-      if (install.phase === "completed" && this.snowluma.status().running) {
+      if (needsInstall && install.phase === "failed") throw new Error(install.error)
+      if ((!needsInstall || install.phase === "completed") && this.snowluma.status().running) {
         try {
           const response = await fetch(`http://127.0.0.1:${config.webuiPort}/`, { signal: AbortSignal.timeout(2000) })
           await response.body?.cancel()
@@ -122,7 +133,7 @@ export class MobileQQRuntime {
     if (config.runtimeMode !== "native" || !fs.existsSync(path.join(this.root, "prepared.json"))) return
     try {
       await this.desktop.start(config.novncPort)
-      this.snowluma.setEnvironment(this.desktop.environment())
+      this.snowluma.setEnvironment({ ...this.desktop.snowlumaEnvironment(), SNOWLUMA_HOOK_AUTOLOAD: "0" })
     } catch (error) {
       this.recordError(error)
       throw error
@@ -130,13 +141,14 @@ export class MobileQQRuntime {
   }
 
   async attachSnowLumaHook(config: QQPersonalConfig): Promise<void> {
-    if (config.runtimeMode !== "native" || !this.snowluma.status().running || this.desktop.usesSnowLumaHook()) return
-    await this.restartDesktopWithHook(config)
+    if (config.runtimeMode !== "native" || !this.snowluma.status().running) return
+    if (!this.desktop.usesSnowLumaHook()) await this.restartDesktopWithHook(config)
+    this.armSnowLumaHook()
   }
 
   markWaitingLogin(): void {
     const detail = this.desktop.usesSnowLumaHook()
-      ? "Hook 已预加载，请打开 QQ 桌面登录；SnowLuma 加载按钮将直接重连"
+      ? "等待 QQ 登录，服务就绪后自动加载 SnowLuma"
       : "运行环境已启动，请打开 QQ 桌面登录"
     this.setState({ running: false, phase: "waiting_login", detail, error: "" })
   }
@@ -151,7 +163,23 @@ export class MobileQQRuntime {
     if (!hookLibrary) return
     await this.desktop.stop()
     await this.desktop.start(config.novncPort, { snowlumaHookLibrary: hookLibrary })
-    this.snowluma.setEnvironment(this.desktop.environment())
+    this.snowluma.setEnvironment({ ...this.desktop.snowlumaEnvironment(), SNOWLUMA_HOOK_AUTOLOAD: "0" })
+  }
+
+  private armSnowLumaHook(): void {
+    if (this.hookTask) return
+    this.hookTask = this.desktop.startSnowLumaHook()
+      .catch(error => {
+        this.setState({
+          running: false,
+          phase: "failed",
+          detail: "SnowLuma Hook 加载失败",
+          error: error instanceof Error ? error.message : String(error),
+        })
+      })
+      .finally(() => {
+        this.hookTask = null
+      })
   }
 
   recordError(error: unknown): void {

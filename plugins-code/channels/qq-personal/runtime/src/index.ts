@@ -3,6 +3,7 @@ process.on("unhandledRejection", (reason) => {
 })
 
 import path from "node:path"
+import fs from "node:fs"
 import Fastify from "fastify"
 import cors from "@fastify/cors"
 import { OneBotBridge } from "./onebot.js"
@@ -18,6 +19,7 @@ import { downloadMedia, sendMedia, synthesizeVoice } from "./outbound.js"
 import { IdempotencyStore } from "./idempotency.js"
 import { startDockerService } from "./docker-service.js"
 import { MobileQQRuntime } from "./mobile-runtime.js"
+import { snowlumaHookRuntimeDirectory } from "./mobile-desktop.js"
 import { ChannelEventStore } from "./event-store.js"
 
 const env = process.env
@@ -172,8 +174,8 @@ function statusPayload() {
   const snowlumaInstall = runtimeManager.installState()
   const snowluma = runtimeManager.status()
   const fullyInstalled = mobile.installed && (snowlumaInstall.installed || snowluma.running)
-  const connectionLabel = status.connected ? "QQ 已连接" : config.enabled ? "等待 QQ 登录" : "桥接已停用"
-  const connectionVariant = status.connected ? "success" : config.enabled ? "warning" : "neutral"
+  const connectionLabel = status.protocolReady ? "QQ 协议就绪" : status.connected ? "OneBot 已连接，QQ 协议未就绪" : config.enabled ? mobile.desktopHooked ? "等待 QQ 协议就绪" : "等待 QQ 登录" : "桥接已停用"
+  const connectionVariant = status.protocolReady ? "success" : config.enabled ? "warning" : "neutral"
   const mobileLabels: Record<string, string> = {
     idle: "运行环境未准备",
     preparing: "正在准备手机运行环境",
@@ -181,17 +183,19 @@ function statusPayload() {
     qq: "正在安装 QQ",
     prepared: "QQ 运行文件已准备",
     snowluma: "正在安装 SnowLuma",
-    waiting_login: "等待 QQ 登录",
+    waiting_login: "等待 QQ 协议就绪",
     failed: "运行环境异常",
     interrupted: "安装已中断",
   }
   return {
     data: {
       provider: "snowluma",
-      status: status.connected ? "online" : config.enabled ? "waiting" : "disconnected",
+      status: status.protocolReady ? "online" : config.enabled ? "waiting" : "disconnected",
       running: true,
       connected: status.connected,
-      qqOnline: status.connected,
+      qqOnline: status.protocolReady,
+      protocolReady: status.protocolReady,
+      lastMessageAt: status.lastMessageAt,
       accountId: status.accountIds[0] || "",
       accountIds: status.accountIds,
       clients: status.clients,
@@ -220,10 +224,10 @@ function statusPayload() {
         received: String(counts.inbound),
         replies: String(counts.outbound),
         lastActivity: status.lastSeenAt || "暂无",
-        mobileLabel: status.connected ? "QQ 已连接" : mobileLabels[mobile.phase] || mobile.phase,
-        mobileVariant: status.connected ? "success" : mobile.phase === "waiting_login" ? "success" : mobile.phase === "failed" || mobile.phase === "interrupted" ? "error" : mobile.running ? "warning" : "neutral",
+        mobileLabel: status.connected ? connectionLabel : mobileLabels[mobile.phase] || mobile.phase,
+        mobileVariant: status.connected ? connectionVariant : mobile.phase === "failed" || mobile.phase === "interrupted" ? "error" : mobile.running || mobile.phase === "waiting_login" ? "warning" : "neutral",
         mobileDetail: status.connected
-          ? `SnowLuma 已接入 OneBot，账号 ${status.accountIds[0] || "已连接"}`
+          ? status.protocolReady ? `QQ 协议已就绪，账号 ${status.accountIds[0] || "已连接"}` : "OneBot 已连接，但 SnowLuma 尚未确认 QQ 收发通道可用"
           : mobile.error || mobile.detail || "尚未开始安装",
         installActionLabel: fullyInstalled ? "重新安装 QQ 与 SnowLuma" : "开始安装 QQ 与 SnowLuma",
       },
@@ -254,30 +258,51 @@ function deliveryFingerprint(body: Record<string, unknown>, target: { kind: stri
   })
 }
 
-app.get("/api/health", async () => {
+app.get("/api/health", async request => {
+  if ((request.query as Record<string, unknown>).nativeDiagnostics === "true") await mobileRuntime.inspectHookTargets()
   const mobile = mobileRuntime.summary()
   const snowluma = runtimeManager.status()
   const snowlumaInstall = runtimeManager.installState()
   const fullyInstalled = mobile.installed && (snowlumaInstall.installed || snowluma.running)
   const hookPids = await mobileRuntime.hookProcessIds()
   const logLines = runtimeManager.recentLines()
-    .filter(line => /\[(Hook|QQHook|LoginProbe)\]/.test(line))
+    .filter(line => /\[(Hook|QQHook|LoginProbe|HookFrame)\]/.test(line))
     .slice(-20)
+  const loaderLogLines = (() => {
+    try {
+      return fs.readFileSync(path.join(snowlumaHookRuntimeDirectory(), "amitia-hook-loader.log"), "utf8")
+        .split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(Boolean)
+        .slice(-200)
+    } catch {
+      return []
+    }
+  })()
   return {
     success: true,
     bridgeReady: true,
-    qqOnline: bridge.status().connected,
+    qqOnline: bridge.status().protocolReady,
+    onebotConnected: bridge.status().connected,
+    protocolReady: bridge.status().protocolReady,
+    lastMessageAt: bridge.status().lastMessageAt,
     qqRuntimeInstalled: mobile.installed,
     protocol: "snowluma",
     protocolVersion: snowlumaInstall.version,
     protocolInstalled: snowlumaInstall.installed,
-    inboundReady: bridge.status().connected,
-    outboundReady: bridge.status().connected,
+    inboundReady: bridge.status().protocolReady,
+    outboundReady: bridge.status().protocolReady,
     snowlumaInstalled: snowlumaInstall.installed,
     snowlumaRunning: snowluma.running,
     hookReady: hookPids.length > 0,
     hookProcessIds: hookPids,
+    hookTargetDiagnostics: mobile.hookTargetDiagnostics,
     hookLogLines: logLines,
+    snowlumaError: snowluma.error,
+    snowlumaLogLines: runtimeManager.recentLines().slice(-200),
+    loaderLogLines,
+    hookLoaderLogLines: loaderLogLines.filter(line => /hook|signal|dlopen|dlsym|thread|error|failed/i.test(line)).slice(-40),
+    qqRuntimeError: mobile.error,
     installActionLabel: fullyInstalled ? "重新安装 QQ 与 SnowLuma" : "开始安装 QQ 与 SnowLuma",
   }
 })

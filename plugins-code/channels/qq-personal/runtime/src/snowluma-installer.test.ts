@@ -55,9 +55,11 @@ test("installs a verified SnowLuma package with shared writable data", async () 
       },
     ],
   }
-  const fetchImpl = async (input: string | URL | Request): Promise<Response> => {
+  let downloadSignal: AbortSignal | undefined
+  const fetchImpl = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     const url = String(input)
     if (url.includes("/releases/tags/")) return new Response(JSON.stringify(release), { status: 200 })
+    downloadSignal = init?.signal ?? undefined
     return new Response(bytes, { status: 200, headers: { "content-type": "application/gzip" } })
   }
   const allowedRoot = path.join(work, "plugin-data")
@@ -71,6 +73,7 @@ test("installs a verified SnowLuma package with shared writable data", async () 
   })
   assert.equal(status.phase, "completed")
   assert.equal(status.percent, 100)
+  assert.ok(downloadSignal instanceof AbortSignal)
   const pointer = readInstallPointer(allowedRoot)
   assert(pointer)
   assert.equal(pointer.version, "2.2.0")

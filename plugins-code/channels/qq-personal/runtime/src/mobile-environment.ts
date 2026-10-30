@@ -2,7 +2,7 @@ import { execFile, spawn } from "node:child_process"
 import { randomUUID } from "node:crypto"
 import fs from "node:fs/promises"
 import path from "node:path"
-import { downloadMobileQQ } from "./mobile-qq-package.js"
+import { downloadMobileQQ, MOBILE_QQ_VERSION } from "./mobile-qq-package.js"
 
 export type InstallProgress = (phase: string, detail: string) => void
 export type RunCommand = (command: string, args: string[]) => Promise<void>
@@ -178,7 +178,8 @@ export async function prepareMobileEnvironment(
 
 export async function mobileEnvironmentReady(directory: string): Promise<boolean> {
   try {
-    if (JSON.parse(await fs.readFile(path.join(directory, "prepared.json"), "utf8")).schemaVersion !== 1) return false
+    const prepared = JSON.parse(await fs.readFile(path.join(directory, "prepared.json"), "utf8"))
+    if (prepared.schemaVersion !== 1 || prepared.qqVersion !== MOBILE_QQ_VERSION) return false
     await Promise.all(["prepared.json", "root/opt/QQ/qq", "root/usr/bin/Xvfb", "root/usr/bin/x11vnc", "root/usr/bin/xkbcomp", "root/usr/share/X11/xkb/rules/evdev", "root/usr/share/X11/xkb/symbols/us"].map(relative => fs.access(path.join(directory, relative))))
     return true
   } catch { return false }

@@ -3,6 +3,7 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import test from "node:test"
+import { MOBILE_QQ_VERSION } from "./mobile-qq-package.js"
 import {
   mobileAptOptions,
   mobileEnvironmentReady,
@@ -83,6 +84,8 @@ test("prepared runtime is reusable only with its required keyboard files", async
     await fs.mkdir(path.dirname(file), { recursive: true })
     await fs.writeFile(file, "test")
   }
+  assert.equal(await mobileEnvironmentReady(directory), false)
+  await fs.writeFile(path.join(directory, "prepared.json"), JSON.stringify({ schemaVersion: 1, qqVersion: MOBILE_QQ_VERSION }))
   assert.equal(await mobileEnvironmentReady(directory), true)
   await fs.rm(path.join(directory, "root/usr/bin/xkbcomp"))
   assert.equal(await mobileEnvironmentReady(directory), false)

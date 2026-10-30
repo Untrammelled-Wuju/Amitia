@@ -76,6 +76,7 @@ execFileSync(process.env.AMITIA_ZIG || "zig", [
   "-Wl,-z,defs",
   "-Wl,-z,noexecstack",
   "-Wl,-soname,libamitia-snowluma-loader.so",
+  `-Wl,--version-script=${path.join(root, "native/linux-arm64/snowluma-hook-loader.map")}`,
   "-o",
   path.join(stagingRoot, "modules/qq-personal-service/native/libamitia-snowluma-loader.so"),
   path.join(root, "native/linux-arm64/snowluma-hook-loader.c"),

@@ -11,9 +11,33 @@ const net = require("node:net")
 const PIPE_MAGIC = 0x31504851
 const PIPE_VERSION = 1
 const HEADER_SIZE = 40
-const PIPE_OP_LOGIN_STATE = 7
-const PIPE_OP_LOGIN_IDENTITY_HINT = 17
-const PIPE_FLAG_LOGGED_IN = 1 << 2
+
+function attachFrameLog(socket) {
+  let pending = Buffer.alloc(0)
+  socket.on("data", chunk => {
+    pending = pending.length ? Buffer.concat([pending, chunk]) : chunk
+    while (pending.length >= HEADER_SIZE) {
+      if (pending.readUInt32LE(0) !== PIPE_MAGIC || pending.readUInt16LE(4) !== PIPE_VERSION) {
+        pending = Buffer.alloc(0)
+        return
+      }
+      const cmdLength = pending.readUInt32LE(20)
+      const msgLength = pending.readUInt32LE(24)
+      const bodyLength = pending.readUInt32LE(28)
+      const length = HEADER_SIZE + cmdLength + msgLength + bodyLength
+      if (pending.length < length) return
+      const op = pending.readUInt16LE(6)
+      if (op === 5 || op === 7 || op === 22) {
+        const message = pending.subarray(HEADER_SIZE + cmdLength, HEADER_SIZE + cmdLength + msgLength).toString("utf8").slice(0, 500)
+        console.error(`[HookFrame] op=${op} status=${pending.readInt32LE(12)} flags=${pending.readUInt32LE(16)} detail=${message || "-"}`)
+      } else if (op === 6 || op === 21) {
+        const cmd = pending.subarray(HEADER_SIZE, HEADER_SIZE + cmdLength).toString("utf8")
+        console.error(`[HookFrame] op=${op} status=${pending.readInt32LE(12)} cmd=${cmd || "-"} body=${bodyLength}`)
+      }
+      pending = pending.subarray(length)
+    }
+  })
+}
 
 function fileText(file) {
   if (typeof file === "string") return file
@@ -116,38 +140,11 @@ async function promiseReadFile(file, options) {
   return originalPromiseReadFile(file, options)
 }
 
-function loginStateFrame(uin) {
-  const frame = Buffer.alloc(HEADER_SIZE)
-  frame.writeUInt32LE(PIPE_MAGIC, 0)
-  frame.writeUInt16LE(PIPE_VERSION, 4)
-  frame.writeUInt16LE(PIPE_OP_LOGIN_STATE, 6)
-  frame.writeUInt32LE(PIPE_FLAG_LOGGED_IN, 16)
-  frame.writeBigUInt64LE(BigInt(uin), 32)
-  return frame
-}
-
-function wrapControlSocket(socket) {
-  const write = socket.write.bind(socket)
-  let injected = false
-  socket.write = (chunk, ...args) => {
-    if (!injected && Buffer.isBuffer(chunk) && chunk.length >= HEADER_SIZE &&
-        chunk.readUInt32LE(0) === PIPE_MAGIC && chunk.readUInt16LE(4) === PIPE_VERSION &&
-        chunk.readUInt16LE(6) === PIPE_OP_LOGIN_IDENTITY_HINT) {
-      const uin = chunk.readBigUInt64LE(32)
-      if (uin > 0n) {
-        injected = true
-        setTimeout(() => socket.emit("data", loginStateFrame(uin)), 100)
-      }
-    }
-    return write(chunk, ...args)
-  }
-}
-
 const createConnection = net.createConnection.bind(net)
 net.createConnection = (...args) => {
   const socket = createConnection(...args)
   const target = args[0] && typeof args[0] === "object" ? args[0].path : args[0]
-  if (/mojo\.\d+\.control\.sock$/.test(String(target || ""))) wrapControlSocket(socket)
+  if (/mojo\.\d+\.(control|recv)\.sock$/.test(String(target || ""))) attachFrameLog(socket)
   return socket
 }
 
@@ -157,4 +154,4 @@ if (process.platform === "linux") {
   fs.promises.readFile = promiseReadFile
 }
 
-module.exports = { deviceInodeKey, loginStateFrame, syntheticLocks, syntheticProcessEnvironment }
+module.exports = { attachFrameLog, deviceInodeKey, syntheticLocks, syntheticProcessEnvironment }

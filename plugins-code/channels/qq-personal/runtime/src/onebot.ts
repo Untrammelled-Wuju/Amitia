@@ -29,6 +29,7 @@ interface OneBotResponse {
 }
 
 interface PendingAction {
+  action: string
   socket: WebSocket
   resolve: (value: unknown) => void
   reject: (reason: Error) => void
@@ -37,6 +38,8 @@ interface PendingAction {
 
 export interface BridgeConnectionStatus {
   connected: boolean
+  protocolReady: boolean
+  lastMessageAt: string
   clients: number
   accountIds: string[]
   connectedAt: string
@@ -64,6 +67,8 @@ export class OneBotBridge {
   private sockets = new Set<WebSocket>()
   private pending = new Map<string, PendingAction>()
   private accountBySocket = new Map<WebSocket, string>()
+  private healthBySocket = new Map<WebSocket, boolean>()
+  private lastMessageAt = ""
   private connectedAt = ""
   private lastSeenAt = ""
   private handler: ((event: OneBotEvent) => Promise<void>) | null = null
@@ -116,21 +121,31 @@ export class OneBotBridge {
     socket.on("close", () => {
       this.sockets.delete(socket)
       this.accountBySocket.delete(socket)
+      this.healthBySocket.delete(socket)
       this.failPending(new Error("OneBot WebSocket 已断开"), socket)
       if (!this.sockets.size) this.connectedAt = ""
     })
     socket.on("error", () => {
       this.sockets.delete(socket)
       this.accountBySocket.delete(socket)
+      this.healthBySocket.delete(socket)
       this.failPending(new Error("OneBot WebSocket 连接异常"), socket)
       if (!this.sockets.size) this.connectedAt = ""
     })
-    void this.callAction("get_login_info", {})
+    void this.callActionOnSocket(socket, "get_login_info", {})
       .then((data) => {
         const accountId = String((data as Record<string, unknown>)?.user_id || "")
-        if (accountId) this.accountBySocket.set(socket, accountId)
+        if (accountId && this.sockets.has(socket)) this.accountBySocket.set(socket, accountId)
       })
       .catch(() => {})
+    void this.callActionOnSocket(socket, "get_status", {})
+      .catch(() => { if (this.sockets.has(socket)) this.healthBySocket.set(socket, false) })
+  }
+
+  private recordHealth(socket: WebSocket, value: unknown): void {
+    if (!this.sockets.has(socket) || !value || typeof value !== "object") return
+    const status = value as Record<string, unknown>
+    this.healthBySocket.set(socket, status.good === true && status.online === true)
   }
 
   private handleMessage(socket: WebSocket, raw: string): void {
@@ -144,7 +159,7 @@ export class OneBotBridge {
     const echo = String((payload as OneBotResponse).echo || "")
     if (echo) {
       const pending = this.pending.get(echo)
-      if (!pending) return
+      if (!pending || pending.socket !== socket) return
       clearTimeout(pending.timer)
       this.pending.delete(echo)
       const response = payload as OneBotResponse
@@ -156,13 +171,16 @@ export class OneBotBridge {
         pending.reject(new Error(response.wording || response.message || "OneBot action failed"))
         return
       }
+      if (pending.action === "get_status") this.recordHealth(socket, response.data)
       pending.resolve(response.data ?? response)
       return
     }
     const event = payload as OneBotEvent
+    if (event.post_type === "meta_event" && event.meta_event_type === "heartbeat") this.recordHealth(socket, event.status)
     const selfId = String(event.self_id || "")
     if (selfId) this.accountBySocket.set(socket, selfId)
     if (this.handler && event.post_type === "message") {
+      this.lastMessageAt = new Date().toISOString()
       void this.handler(event).catch(() => {})
     }
   }
@@ -170,13 +188,17 @@ export class OneBotBridge {
   async callAction(action: string, params: Record<string, unknown>, timeoutMs = 15000): Promise<unknown> {
     const socket = this.activeSocket()
     if (!socket) throw new Error("SnowLuma OneBot 尚未连接")
+    return this.callActionOnSocket(socket, action, params, timeoutMs)
+  }
+
+  private async callActionOnSocket(socket: WebSocket, action: string, params: Record<string, unknown>, timeoutMs = 15000): Promise<unknown> {
     const echo = randomUUID()
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(echo)
         reject(new Error(`OneBot action timeout: ${action}`))
       }, timeoutMs)
-      this.pending.set(echo, { socket, resolve, reject, timer })
+      this.pending.set(echo, { action, socket, resolve, reject, timer })
       try {
         socket.send(JSON.stringify({ action, params, echo }), (error) => {
           if (!error) return
@@ -206,6 +228,8 @@ export class OneBotBridge {
     const accountIds = Array.from(new Set(Array.from(this.accountBySocket.values()).filter(Boolean)))
     return {
       connected: this.sockets.size > 0,
+      protocolReady: this.healthBySocket.get(this.activeSocket()!) === true,
+      lastMessageAt: this.lastMessageAt,
       clients: this.sockets.size,
       accountIds,
       connectedAt: this.connectedAt,
@@ -220,6 +244,7 @@ export class OneBotBridge {
     }
     this.sockets.clear()
     this.accountBySocket.clear()
+    this.healthBySocket.clear()
     this.connectedAt = ""
   }
 
