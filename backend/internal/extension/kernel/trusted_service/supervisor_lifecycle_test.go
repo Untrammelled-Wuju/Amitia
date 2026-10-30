@@ -180,7 +180,15 @@ func TestLifecycleStopRemovesChildrenAfterParentExits(t *testing.T) {
 	if _, err := s.Stop(context.Background(), StopRequest{ServiceID: def.ServiceID, Reason: "update"}); err != nil {
 		t.Fatal(err)
 	}
-	if procIsAlive(childPID) {
+	gone := false
+	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
+		if !procIsAlive(childPID) {
+			gone = true
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !gone {
 		t.Fatal("child survived parent exit")
 	}
 	if !procIsAlive(unrelated.Process.Pid) {
