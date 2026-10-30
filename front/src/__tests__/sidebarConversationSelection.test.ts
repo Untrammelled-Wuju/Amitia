@@ -193,8 +193,8 @@ describe("侧边栏项目弹窗", () => {
       document.querySelector<HTMLElement>(".project-folder-dropzone")?.dispatchEvent(dropEvent);
       await flushPromises();
       expect(input?.value).toBe("第一个文件夹");
-      expect(document.body.textContent).toContain("主文件夹");
-      expect(document.body.textContent).toContain("子文件夹");
+      expect(document.body.textContent).toContain("主工作区");
+      expect(document.body.textContent).toContain("子工作区");
       [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "创建项目")?.click();
       await flushPromises();
       expect(mocks.registerProjectWorkspaces).toHaveBeenCalledWith(["/tmp/第二个文件夹"]);
