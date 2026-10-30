@@ -265,7 +265,7 @@ func (c *Config) BrowserRuntimeConfig() *BrowserRuntimeProviderConfig {
 
 var AppCfg *Config
 
-const DefaultAppVersion = "26.2.0-beta.18"
+const DefaultAppVersion = "26.2.0-beta.19"
 
 var providerIDRegex = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{2,127}$`)
 

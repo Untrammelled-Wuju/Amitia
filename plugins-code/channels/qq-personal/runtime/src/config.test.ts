@@ -17,3 +17,10 @@ test("allows Docker and native mode on Windows and Linux", () => {
     assert.equal(normalizeRuntimeModeForPlatform("native", "docker", platform), "native")
   }
 })
+
+test("removes the Android native runtime mode", () => {
+  const environment = { AMITIA_RUNTIME_MODE: "android-proot" }
+  assert.equal(isRuntimeModeSupported("docker", "linux", environment), false)
+  assert.equal(isRuntimeModeSupported("native", "linux", environment), false)
+  assert.equal(normalizeRuntimeModeForPlatform("native", "native", "linux", environment), "docker")
+})

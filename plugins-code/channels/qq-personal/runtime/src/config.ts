@@ -37,8 +37,7 @@ export function registerOwnedRuntime(extensionId: string): void {
   const receipt = path.join(process.cwd(), ".amitia-owned-runtime.json")
   fs.writeFileSync(`${receipt}.tmp`, JSON.stringify({
     extensionId,
-    paths: [path.join(relative, "snowluma"), path.join(relative, "mobile")],
-    linksFile: path.join(relative, "mobile", "links.json"),
+    paths: [path.join(relative, "snowluma")],
   }), { mode: 0o600 })
   fs.renameSync(`${receipt}.tmp`, receipt)
 }
@@ -57,18 +56,20 @@ function normalizeText(raw: unknown, fallback: string): string {
   return value || fallback
 }
 
-export function isRuntimeModeSupported(mode: string, platform = process.platform): mode is SnowLumaRuntimeMode {
+export function isRuntimeModeSupported(mode: string, platform = process.platform, environment = process.env): mode is SnowLumaRuntimeMode {
+  if (environment.AMITIA_RUNTIME_MODE === "android-proot") return false
   if (platform === "darwin") return mode === "docker"
   return mode === "docker" || (mode === "native" && (platform === "win32" || platform === "linux"))
 }
 
-export function normalizeRuntimeModeForPlatform(raw: unknown, fallback: SnowLumaRuntimeMode, platform = process.platform): SnowLumaRuntimeMode {
-  if (typeof raw === "string" && isRuntimeModeSupported(raw, platform)) return raw
-  if (isRuntimeModeSupported(fallback, platform)) return fallback
+export function normalizeRuntimeModeForPlatform(raw: unknown, fallback: SnowLumaRuntimeMode, platform = process.platform, environment = process.env): SnowLumaRuntimeMode {
+  if (typeof raw === "string" && isRuntimeModeSupported(raw, platform, environment)) return raw
+  if (isRuntimeModeSupported(fallback, platform, environment)) return fallback
   return "docker"
 }
 
 function defaultRuntimeMode(): SnowLumaRuntimeMode {
+  if (process.env.AMITIA_RUNTIME_MODE === "android-proot") return "docker"
   if (process.env.QQ_PERSONAL_RUNTIME_MODE && isRuntimeModeSupported(process.env.QQ_PERSONAL_RUNTIME_MODE)) return process.env.QQ_PERSONAL_RUNTIME_MODE
   return process.platform === "win32" ? "native" : "docker"
 }

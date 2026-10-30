@@ -9,7 +9,7 @@
     "description": {
       "default": "通过 QQ Bot WebSocket 接入 QQ 私聊和群聊消息。"
     },
-    "version": "1.0.19",
+    "version": "1.0.20",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [

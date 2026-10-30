@@ -33,9 +33,7 @@
     "platforms": [
       "windows",
       "linux",
-      "macos",
-      "android",
-      "ios"
+      "macos"
     ]
   },
   "modules": [
@@ -299,135 +297,6 @@
           ]
         },
         {
-          "id": "qq-personal-mobile-page",
-          "kind": "ui_page",
-          "name": {
-            "default": "QQ 个人号（手机）"
-          },
-          "description": {
-            "default": "在手机端查看和管理 QQ 个人号桥接。"
-          },
-          "spec": {
-            "actions": [
-              {
-                "action_id": "mobile-form",
-                "risk_level": "low",
-                "target": {
-                  "command": "channel.invoke",
-                  "type": "host_command"
-                },
-                "title": {
-                  "default": "读取手机端 QQ 个人号表单"
-                }
-              },
-              {
-                "action_id": "mobile-access",
-                "risk_level": "low",
-                "target": {
-                  "command": "channel.invoke",
-                  "type": "host_command"
-                },
-                "title": {
-                  "default": "刷新手机端访问凭据"
-                }
-              },
-              {
-                "action_id": "install-mobile-runtime",
-                "risk_level": "high",
-                "target": {
-                  "command": "channel.invoke",
-                  "type": "host_command"
-                },
-                "title": {
-                  "default": "安装手机 QQ 与 SnowLuma"
-                }
-              },
-              {
-                "action_id": "status",
-                "risk_level": "low",
-                "target": {
-                  "command": "channel.status",
-                  "type": "host_command"
-                },
-                "title": {
-                  "default": "查询 QQ 个人号状态"
-                }
-              },
-              {
-                "action_id": "config",
-                "risk_level": "low",
-                "target": {
-                  "command": "channel.config",
-                  "type": "host_command"
-                },
-                "title": {
-                  "default": "读取 QQ 个人号配置"
-                }
-              },
-              {
-                "action_id": "connect",
-                "risk_level": "medium",
-                "target": {
-                  "command": "channel.connect",
-                  "type": "host_command"
-                },
-                "title": {
-                  "default": "启用 QQ 个人号桥接"
-                }
-              },
-              {
-                "action_id": "disconnect",
-                "risk_level": "medium",
-                "target": {
-                  "command": "channel.disconnect",
-                  "type": "host_command"
-                },
-                "title": {
-                  "default": "断开 QQ 个人号连接"
-                }
-              }
-            ],
-            "contract_version": 1,
-            "contribution_id": "qq-personal-mobile-page",
-            "display": {
-              "description": {
-                "default": "配置 SnowLuma OneBot 11 桥接。"
-              },
-              "icon": "connection",
-              "title": {
-                "default": "QQ 个人号"
-              }
-            },
-            "entry": {
-              "content_hash": "",
-              "schema_path": "modules/qq-personal-ui/mobile/schema.json",
-              "type": "schema_renderer"
-            },
-            "extension_id": "com.amitia/channel-qq-personal",
-            "integrity": {
-              "definition_hash": "qq-personal-page-v1"
-            },
-            "kind": "schema_page",
-            "module_id": "qq-personal-ui",
-            "sandbox": {
-              "type": "schema_renderer"
-            },
-            "slot": {
-              "contract_version": 1,
-              "slot_id": "provider.page.provider"
-            },
-            "visibility": {
-              "platforms": [
-                "android",
-                "ios"
-              ]
-            }
-          },
-          "requiredPermissions": [
-            "service.network.request"
-          ]
-        },
-        {
           "id": "qq-personal-routes",
           "kind": "ui_provider",
           "name": {
@@ -448,9 +317,6 @@
               "electron_windows": {
                 "type": "declarative"
               },
-              "mobile": {
-                "type": "declarative"
-              },
               "web": {
                 "type": "declarative"
               }
@@ -465,8 +331,7 @@
                   "group": "character",
                   "groupLabel": "角色",
                   "groupIcon": "character",
-                  "order": 46,
-                  "mobile": true
+                  "order": 46
                 }
               ],
               "routes": [
@@ -522,10 +387,6 @@
                 "contentHash": "pending",
                 "styleHash": "pending"
               },
-              "mobile": {
-                "contributionId": "qq-personal-mobile-page",
-                "type": "schema_renderer"
-              },
               "web": {
                 "contributionId": "qq-personal-page",
                 "type": "web_module",
@@ -565,9 +426,6 @@
                 "type": "declarative"
               },
               "electron_windows": {
-                "type": "declarative"
-              },
-              "mobile": {
                 "type": "declarative"
               },
               "web": {
@@ -703,88 +561,6 @@
             "mode": "replace",
             "priority": 211,
             "providerId": "qq-personal-novnc",
-            "trustLevel": "official"
-          }
-        },
-        {
-          "id": "qq-personal-snowluma-webui-mobile",
-          "kind": "ui_provider",
-          "name": {
-            "default": "SnowLuma WebUI（手机）"
-          },
-          "description": {
-            "default": "在手机渠道工作区中打开 SnowLuma WebUI。"
-          },
-          "spec": {
-            "capability": "workspace.tab",
-            "entries": {
-              "mobile": {
-                "type": "external_web_ui",
-                "url": "http://127.0.0.1:5099/",
-                "allowedOrigins": [
-                  "http://127.0.0.1:5099"
-                ]
-              }
-            },
-            "metadata": {
-              "workspace": "channel.workspace",
-              "tabId": "snowluma-webui",
-              "title": "SnowLuma WebUI",
-              "icon": "connection",
-              "order": 31,
-              "routePrefix": "/channels/qq-personal",
-              "contextMatch": {
-                "channelId": [
-                  "qq_personal"
-                ]
-              },
-              "keepMounted": true,
-              "storage": "persistent"
-            },
-            "mode": "replace",
-            "priority": 211,
-            "providerId": "qq-personal-snowluma-webui-mobile",
-            "trustLevel": "official"
-          }
-        },
-        {
-          "id": "qq-personal-novnc-mobile",
-          "kind": "ui_provider",
-          "name": {
-            "default": "noVNC（手机）"
-          },
-          "description": {
-            "default": "在手机渠道工作区中打开 noVNC 远程桌面。"
-          },
-          "spec": {
-            "capability": "workspace.tab",
-            "entries": {
-              "mobile": {
-                "type": "external_web_ui",
-                "url": "http://127.0.0.1:6081/vnc.html",
-                "allowedOrigins": [
-                  "http://127.0.0.1:6081"
-                ]
-              }
-            },
-            "metadata": {
-              "workspace": "channel.workspace",
-              "tabId": "novnc-desktop",
-              "title": "noVNC",
-              "icon": "connection",
-              "order": 30,
-              "routePrefix": "/channels/qq-personal",
-              "contextMatch": {
-                "channelId": [
-                  "qq_personal"
-                ]
-              },
-              "keepMounted": true,
-              "storage": "persistent"
-            },
-            "mode": "replace",
-            "priority": 211,
-            "providerId": "qq-personal-novnc-mobile",
             "trustLevel": "official"
           }
         }

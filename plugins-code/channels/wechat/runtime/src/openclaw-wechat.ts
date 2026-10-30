@@ -565,21 +565,18 @@ export class OpenClawWechatManager {
         return Buffer.concat([cipher.update(data), cipher.final()]);
     }
     async stopPolling(): Promise<void> {
+        const token = this.token;
+        const baseUrl = this.state.baseUrl;
         this.polling = false;
         this.pollGeneration++;
         this.pollAbort?.abort();
-        if (this.token) {
-            try {
-                await notifyStop({
-                    baseUrl: this.state.baseUrl,
-                    token: this.token,
-                });
-            }
-            catch {
-            }
-        }
-        if (this.pollPromise) {
-            await this.pollPromise;
+        this.pollAbort = null;
+        this.pollPromise = null;
+        if (token) {
+            void notifyStop({
+                baseUrl,
+                token,
+            }).catch(() => undefined);
         }
     }
     async resetLogin(): Promise<void> {

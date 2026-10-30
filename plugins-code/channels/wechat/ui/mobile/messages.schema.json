@@ -22,7 +22,28 @@
         },
         "statePath": "messages"
       }
-    ]
+    ],
+    "onRefresh": [
+      {
+        "action_id": "status",
+        "target": "host_command",
+        "input": {
+          "channelId": "wechat"
+        },
+        "statePath": "status"
+      },
+      {
+        "action_id": "messages",
+        "target": "host_command",
+        "input": {
+          "channelId": "wechat",
+          "limit": 200,
+          "offset": 0
+        },
+        "statePath": "messages"
+      }
+    ],
+    "refreshIntervalMs": 5000
   },
   "actions": [
     {
@@ -54,7 +75,7 @@
             {
               "path": "items",
               "source": "state",
-              "sourcePath": "status.data"
+              "sourcePath": "status"
             }
           ]
         },
@@ -87,7 +108,7 @@
             {
               "path": "content",
               "source": "state",
-              "sourcePath": "messages.data"
+              "sourcePath": "messages"
             }
           ]
         },

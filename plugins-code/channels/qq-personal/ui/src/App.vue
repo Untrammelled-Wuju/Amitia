@@ -68,7 +68,6 @@ const platformLabel = computed(() => ({
   win32: "Windows",
   linux: "Linux",
   darwin: "macOS",
-  android: "Android",
 })[config.value.platform] || config.value.platform || "当前系统")
 const nativeModeLabel = computed(() => ({
   win32: "Windows 原生",

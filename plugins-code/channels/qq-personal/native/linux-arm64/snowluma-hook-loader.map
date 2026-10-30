@@ -1,9 +1,0 @@
-GLIBC_2.17 {
-  global:
-    process_vm_readv;
-    process_vm_writev;
-    ptrace;
-    waitpid;
-    send;
-    recv;
-};

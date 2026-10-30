@@ -11,24 +11,23 @@
           "channelId": "wechat"
         },
         "statePath": "status"
-      },
+      }
+    ],
+    "onRefresh": [
       {
-        "action_id": "config",
+        "action_id": "status",
         "target": "host_command",
         "input": {
           "channelId": "wechat"
         },
-        "statePath": "config"
+        "statePath": "status"
       }
-    ]
+    ],
+    "refreshIntervalMs": 5000
   },
   "actions": [
     {
       "actionId": "status",
-      "target": "host_command"
-    },
-    {
-      "actionId": "config",
       "target": "host_command"
     },
     {
@@ -47,16 +46,99 @@
       "children": [
         {
           "id": "wechat-mobile-status",
-          "type": "key_value",
+          "type": "runtime_status",
           "props": {
-            "title": "连接状态",
-            "columns": 1
+            "label": "微信连接状态"
           },
           "bindings": [
             {
-              "path": "items",
+              "path": "status",
               "source": "state",
-              "sourcePath": "status.data"
+              "sourcePath": "status.status"
+            },
+            {
+              "path": "statusText",
+              "source": "state",
+              "sourcePath": "status.status"
+            },
+            {
+              "path": "message",
+              "source": "state",
+              "sourcePath": "status.lastError"
+            }
+          ]
+        },
+        {
+          "id": "wechat-mobile-account",
+          "type": "field",
+          "props": {
+            "label": "微信账号",
+            "placeholder": "未登录"
+          },
+          "bindings": [
+            {
+              "path": "value",
+              "source": "state",
+              "sourcePath": "status.accountId",
+              "default": ""
+            }
+          ],
+          "visibleWhen": [
+            {
+              "field": "status.status",
+              "operator": "==",
+              "value": "connected"
+            }
+          ]
+        },
+        {
+          "id": "wechat-mobile-message",
+          "type": "field",
+          "props": {
+            "label": "当前提示",
+            "variant": "textarea",
+            "rows": 2
+          },
+          "bindings": [
+            {
+              "path": "value",
+              "source": "state",
+              "sourcePath": "status.message",
+              "default": ""
+            }
+          ],
+          "visibleWhen": [
+            {
+              "field": "status.message",
+              "operator": "not_null"
+            },
+            {
+              "field": "status.status",
+              "operator": "!=",
+              "value": "connected"
+            }
+          ]
+        },
+        {
+          "id": "wechat-mobile-error",
+          "type": "field",
+          "props": {
+            "label": "连接错误",
+            "variant": "textarea",
+            "rows": 2
+          },
+          "bindings": [
+            {
+              "path": "value",
+              "source": "state",
+              "sourcePath": "status.lastError",
+              "default": ""
+            }
+          ],
+          "visibleWhen": [
+            {
+              "field": "status.lastError",
+              "operator": "not_null"
             }
           ]
         },
@@ -73,19 +155,27 @@
             {
               "path": "src",
               "source": "state",
-              "sourcePath": "status.data.qrImageUrl"
+              "sourcePath": "connectResult.data.qrImageUrl"
             }
           ],
           "visibleWhen": [
             {
-              "field": "status.data.qrImageUrl",
+              "field": "connectResult.data.qrImageUrl",
               "operator": "not_null"
+            },
+            {
+              "field": "status.status",
+              "operator": "!=",
+              "value": "connected"
             }
           ]
         },
         {
           "id": "wechat-mobile-actions",
-          "type": "button_group",
+          "type": "row",
+          "props": {
+            "gap": 12
+          },
           "children": [
             {
               "id": "wechat-mobile-refresh",
@@ -109,14 +199,17 @@
               "id": "wechat-mobile-connect",
               "type": "button",
               "props": {
-                "text": "扫码登录"
+                "text": "获取或刷新二维码"
               },
               "actions": [
                 {
                   "action_id": "connect",
                   "target": "host_command",
                   "input": {
-                    "channelId": "wechat"
+                    "channelId": "wechat",
+                    "config": {
+                      "force": true
+                    }
                   },
                   "statePath": "connectResult"
                 },
@@ -127,6 +220,13 @@
                     "channelId": "wechat"
                   },
                   "statePath": "status"
+                }
+              ],
+              "visibleWhen": [
+                {
+                  "field": "status.status",
+                  "operator": "!=",
+                  "value": "connected"
                 }
               ]
             },
@@ -155,21 +255,14 @@
                   },
                   "statePath": "status"
                 }
+              ],
+              "visibleWhen": [
+                {
+                  "field": "status.status",
+                  "operator": "==",
+                  "value": "connected"
+                }
               ]
-            }
-          ]
-        },
-        {
-          "id": "wechat-mobile-config",
-          "type": "code",
-          "props": {
-            "language": "json"
-          },
-          "bindings": [
-            {
-              "path": "content",
-              "source": "state",
-              "sourcePath": "config.data"
             }
           ]
         }

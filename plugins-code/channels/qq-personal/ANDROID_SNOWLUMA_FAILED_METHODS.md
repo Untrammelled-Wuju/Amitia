@@ -665,10 +665,10 @@ Amitia 回复数=0
 - 独立测试向 `0xffff00000000` 执行 `mmap(MAP_FIXED_NOREPLACE)`，原生 ARM64 Linux 成功，当前 Android 模拟器返回 `ENOMEM(12)`。
 - 当前 Android 用户态虚拟地址布局不能提供官方注入器要求的固定高地址映射；这不是 ptrace 请求、wait status、寄存器读写或 `process_vm` 传输本身的错误。
 
-源码实验补丁：
+源码实验补丁状态：
 
 ```text
-mobile_app/android/scripts/patches/termux-proot-ptrace-process-vm-experimental.patch
+已删除
 ```
 
-该补丁尚未接入正式 Runtime Package 构建，也没有替换项目现有 `libamitia_proot.so`。继续在该方向绕过地址限制，需要为 QQ 目标进程增加高地址影子映射和全局地址翻译，复杂度和稳定性风险都高于 SnowLuma 回调兼容层，因此不作为当前推荐路径。
+该补丁未接入正式 Runtime Package 构建，也没有替换项目现有 `libamitia_proot.so`。当前 ARM64 PRoot 已恢复为仅应用项目既有 Android 基线补丁的 `v5.1.107.78` 构建。继续在该方向绕过地址限制，需要为 QQ 目标进程增加高地址影子映射和全局地址翻译，复杂度和稳定性风险都高于 SnowLuma 回调兼容层，因此不作为当前推荐路径。

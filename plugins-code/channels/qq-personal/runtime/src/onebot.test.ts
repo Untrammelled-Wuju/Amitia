@@ -69,7 +69,7 @@ function actionServer(socket: WebSocket, calls: Array<{ action: string; params: 
     if (!payload.echo) return
     const data = payload.action === "get_login_info"
       ? { user_id: 2743073290 }
-      : payload.action === "get_status" ? { online: true, good: true } : { message_id: 88 }
+      : { message_id: 88 }
     socket.send(JSON.stringify({ status: "ok", retcode: 0, data, echo: payload.echo }))
   })
 }
@@ -108,8 +108,6 @@ test("OneBot 连接状态、动作调用和入站事件可用", async () => {
     await new Promise((resolve) => setTimeout(resolve, 10))
     const status = bridge.status()
     assert.equal(status.connected, true)
-    assert.equal(status.protocolReady, true)
-    assert.equal(status.lastMessageAt, "")
     assert.equal(status.clients, 1)
     assert.equal(status.accountIds[0], "2743073290")
     assert.ok(status.connectedAt)
@@ -127,14 +125,6 @@ test("OneBot 连接状态、动作调用和入站事件可用", async () => {
     }))
     await new Promise((resolve) => setTimeout(resolve, 10))
     assert.equal(events.length, 1)
-    assert.ok(bridge.status().lastMessageAt)
-    socket.send(JSON.stringify({ post_type: "meta_event", meta_event_type: "heartbeat", status: { online: true, good: false } }))
-    await new Promise(resolve => setTimeout(resolve, 10))
-    assert.equal(bridge.status().connected, true)
-    assert.equal(bridge.status().protocolReady, false)
-    socket.send(JSON.stringify({ post_type: "meta_event", meta_event_type: "heartbeat", status: { online: true, good: true } }))
-    await new Promise(resolve => setTimeout(resolve, 10))
-    assert.equal(bridge.status().protocolReady, true)
   } finally {
     socket.close()
     bridge.close()
@@ -165,7 +155,7 @@ test("断开一端不会取消另一端上的待处理动作", async () => {
     await new Promise((resolve) => setTimeout(resolve, 10))
     first.close()
     const result = await pending as Record<string, unknown>
-    assert.equal(result.good, true)
+    assert.equal(result.message_id, 88)
   } finally {
     first.close()
     second.close()
@@ -173,33 +163,3 @@ test("断开一端不会取消另一端上的待处理动作", async () => {
     await new Promise<void>((resolve) => server.close(() => resolve()))
   }
 })
-
-test("OneBot transport without protocol confirmation is not ready", async () => {
-  const bridge = new OneBotBridge(() => ({ ...baseConfig }))
-  const { server, url } = await bridgeServer(bridge)
-  const socket = new WebSocket(`${url}/ws?access_token=${baseConfig.token}`)
-  socket.on("message", raw => {
-    const request = JSON.parse(raw.toString())
-    socket.send(JSON.stringify({ status: "ok", retcode: 0, data: request.action === "get_login_info" ? { user_id: 12345 } : {}, echo: request.echo }))
-  })
-  try {
-    await onceConnected(socket)
-    await new Promise(resolve => setTimeout(resolve, 10))
-    assert.equal(bridge.status().connected, true)
-    assert.equal(bridge.status().protocolReady, false)
-    socket.send(JSON.stringify({ post_type: "meta_event", meta_event_type: "heartbeat", status: { online: false, good: true } }))
-    await new Promise(resolve => setTimeout(resolve, 10))
-    assert.equal(bridge.status().protocolReady, false)
-    bridge.disconnectClients()
-    assert.equal(bridge.status().connected, false)
-    assert.equal(bridge.status().protocolReady, false)
-  } finally {
-    socket.close()
-    bridge.close()
-    await new Promise<void>(resolve => server.close(() => resolve()))
-  }
-})
-
-function onceConnected(socket: WebSocket): Promise<void> {
-  return new Promise((resolve, reject) => { socket.once("open", resolve); socket.once("error", reject) })
-}

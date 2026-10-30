@@ -9,18 +9,20 @@
         "target": "host_command",
         "input": { "channelId": "qq" },
         "statePath": "status"
-      },
+      }
+    ],
+    "onRefresh": [
       {
-        "action_id": "config",
+        "action_id": "status",
         "target": "host_command",
         "input": { "channelId": "qq" },
-        "statePath": "config"
+        "statePath": "status"
       }
-    ]
+    ],
+    "refreshIntervalMs": 5000
   },
   "actions": [
     { "actionId": "status", "target": "host_command" },
-    { "actionId": "config", "target": "host_command" },
     { "actionId": "connect", "target": "host_command" },
     { "actionId": "disconnect", "target": "host_command" }
   ],
@@ -34,7 +36,7 @@
           "type": "key_value",
           "props": { "title": "连接状态", "columns": 1 },
           "bindings": [
-            { "path": "items", "source": "state", "sourcePath": "status.data" }
+            { "path": "items", "source": "state", "sourcePath": "status" }
           ]
         },
         {
@@ -99,6 +101,9 @@
                   "input": { "channelId": "qq" },
                   "statePath": "status"
                 }
+              ],
+              "visibleWhen": [
+                { "field": "status.qqOnline", "operator": "!=", "value": true }
               ]
             },
             {
@@ -119,6 +124,9 @@
                   "input": { "channelId": "qq" },
                   "statePath": "status"
                 }
+              ],
+              "visibleWhen": [
+                { "field": "status.qqOnline", "operator": "==", "value": true }
               ]
             },
             {
@@ -134,14 +142,6 @@
                 }
               ]
             }
-          ]
-        },
-        {
-          "id": "qq-saved-config",
-          "type": "key_value",
-          "props": { "title": "已保存配置", "columns": 1 },
-          "bindings": [
-            { "path": "items", "source": "state", "sourcePath": "config.data" }
           ]
         }
       ]

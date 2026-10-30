@@ -42,3 +42,18 @@ test("does not treat a WeChat business error as a successful send", async () => 
         globalThis.fetch = previous;
     }
 });
+
+test("reset login does not wait for an in-flight WeChat long poll", async () => {
+    const manager = new OpenClawWechatManager() as any;
+    const controller = new AbortController();
+    manager.polling = true;
+    manager.pollGeneration = 1;
+    manager.pollAbort = controller;
+    manager.pollPromise = new Promise(() => undefined);
+    const startedAt = Date.now();
+    await manager.resetLogin();
+    assert.ok(Date.now() - startedAt < 1000);
+    assert.equal(controller.signal.aborted, true);
+    assert.equal(manager.getState().status, "idle");
+    assert.equal(manager.pollPromise, null);
+});
