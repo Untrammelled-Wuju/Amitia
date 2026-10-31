@@ -430,23 +430,23 @@ class _AmitiaIconPainter extends CustomPainter {
 
   void _extensions(Canvas canvas, Paint stroke) {
     for (final tile in [
-      RRect.fromLTRBR(5.5, 5.5, 10.6, 10.6, const Radius.circular(1.35)),
-      RRect.fromLTRBR(13.4, 5.5, 18.5, 10.6, const Radius.circular(1.35)),
-      RRect.fromLTRBR(5.5, 13.4, 10.6, 18.5, const Radius.circular(1.35)),
+      RRect.fromLTRBR(5, 5, 10.45, 10.45, const Radius.circular(1.45)),
+      RRect.fromLTRBR(13.55, 5, 19, 10.45, const Radius.circular(1.45)),
+      RRect.fromLTRBR(5, 13.55, 10.45, 19, const Radius.circular(1.45)),
     ]) {
       canvas.drawRRect(tile, stroke);
     }
     final upperLink = Path()
-      ..moveTo(13.4, 15.8)
-      ..lineTo(15.6, 15.8)
-      ..cubicTo(17.15, 15.8, 18.4, 14.65, 18.4, 13.6)
-      ..lineTo(18.4, 13.4);
+      ..moveTo(13.55, 16.1)
+      ..lineTo(15.9, 16.1)
+      ..cubicTo(17.7, 16.1, 19, 14.8, 19, 13.75)
+      ..lineTo(19, 13.55);
     canvas.drawPath(upperLink, stroke);
     final lowerLink = Path()
-      ..moveTo(15.8, 13.4)
-      ..lineTo(15.8, 15.6)
-      ..cubicTo(15.8, 17.15, 14.65, 18.4, 13.6, 18.4)
-      ..lineTo(13.4, 18.4);
+      ..moveTo(16.1, 13.55)
+      ..lineTo(16.1, 15.9)
+      ..cubicTo(16.1, 17.7, 14.8, 19, 13.75, 19)
+      ..lineTo(13.55, 19);
     canvas.drawPath(lowerLink, stroke);
   }
 
