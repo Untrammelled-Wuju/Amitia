@@ -10,6 +10,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
@@ -278,6 +279,31 @@ class DefaultProotSessionTest {
         assertNotNull(exit)
         assertTrue("After stop(), exit should have stopRequested=true", exit!!.stopRequested)
         assertTrue(result is ProotStopResult.Graceful || result is ProotStopResult.Forced)
+        session.close()
+    }
+
+    @Test
+    fun stop_completesBeforeExitObserverReturns() {
+        val process = execProcess(sleepCmd(60))
+        val observerEntered = CountDownLatch(1)
+        val releaseObserver = CountDownLatch(1)
+        val session = DefaultProotSession("test-stop-observer", process, ProotObserver { event ->
+            if (event is ProotEvent.Exited) {
+                observerEntered.countDown()
+                releaseObserver.await(2, TimeUnit.SECONDS)
+            }
+        }, testGeneration)
+        session.activate()
+        Thread.sleep(200)
+
+        val startedAt = System.nanoTime()
+        val result = session.stop(2000)
+        val elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt)
+
+        assertTrue("stop should complete independently from exit observers, took ${elapsedMillis}ms", elapsedMillis < 1000)
+        assertTrue(result is ProotStopResult.Graceful)
+        assertTrue(observerEntered.await(1, TimeUnit.SECONDS))
+        releaseObserver.countDown()
         session.close()
     }
 

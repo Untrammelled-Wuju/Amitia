@@ -194,9 +194,7 @@ internal class DefaultProotSession(
                 exitCode = exitCode,
                 stopRequested = stopRequested.get(),
             )
-            exitRef.set(exit)
-            publishTerminalOnce(exit)
-            exitDeferred.complete(exit)
+            publishExit(exit)
         } else {
             startExitWatcher()
             if (started.compareAndSet(false, true) && !terminalPublished.get()) {
@@ -269,9 +267,7 @@ internal class DefaultProotSession(
                     exitCode = code,
                     stopRequested = stopRequested.get(),
                 )
-                exitRef.set(exit)
-                publishTerminalOnce(exit)
-                exitDeferred.complete(exit)
+                publishExit(exit)
             } catch (e: InterruptedException) {
                 if (isProcessDead()) {
                     awaitOutputDrain()
@@ -282,9 +278,7 @@ internal class DefaultProotSession(
                         exitCode = exitCode,
                         stopRequested = stopRequested.get(),
                     )
-                    exitRef.set(exit)
-                    publishTerminalOnce(exit)
-                    exitDeferred.complete(exit)
+                    publishExit(exit)
                 } else {
                     watcherFailureRef.set(e.message ?: "interrupted")
                     publishWatcherFailure(e.message ?: "interrupted")
@@ -299,9 +293,7 @@ internal class DefaultProotSession(
                         exitCode = exitCode,
                         stopRequested = stopRequested.get(),
                     )
-                    exitRef.set(exit)
-                    publishTerminalOnce(exit)
-                    exitDeferred.complete(exit)
+                    publishExit(exit)
                 } else {
                     watcherFailureRef.set(e.message ?: "unknown watcher error")
                     publishWatcherFailure(e.message ?: "unknown watcher error")
@@ -310,6 +302,12 @@ internal class DefaultProotSession(
                 watcherExecutor.shutdown()
             }
         }
+    }
+
+    private fun publishExit(exit: ProotExit) {
+        exitRef.set(exit)
+        exitDeferred.complete(exit)
+        publishTerminalOnce(exit)
     }
 
     private fun awaitOutputDrain() {
