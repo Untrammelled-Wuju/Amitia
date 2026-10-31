@@ -7,6 +7,7 @@ import 'package:amitia_app/core/models/reminder.dart';
 import 'package:amitia_app/core/services/extension_service.dart';
 import 'package:amitia_app/core/services/providers.dart';
 import 'package:amitia_app/core/ui_runtime/routing/builtin_route_catalog.dart';
+import 'package:amitia_app/core/widgets/amitia_scaffold.dart';
 import 'package:amitia_app/core/widgets/amitia_icons.dart';
 import 'package:amitia_app/core/widgets/amitia_popup_menu.dart';
 import 'package:amitia_app/core/widgets/main_tab_scaffold.dart';
@@ -437,5 +438,43 @@ void main() {
     await tester.binding.handlePopRoute();
     await tester.pump();
     expect(exitCalls, 1);
+  });
+
+  testWidgets('聊天页带查询参数时第一次系统返回不退出应用', (tester) async {
+    var exitCalls = 0;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'SystemNavigator.pop') {
+          exitCalls++;
+        }
+        return null;
+      },
+    );
+    addTearDown(() {
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      );
+    });
+    final router = GoRouter(
+      initialLocation: '/chat?conversationId=conversation-1',
+      routes: [
+        GoRoute(
+          path: '/chat',
+          builder: (context, state) =>
+              const AmitiaScaffold(body: Center(child: Text('聊天页'))),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await tester.pumpAndSettle();
+
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+
+    expect(exitCalls, 0);
+    expect(find.text('再按一次退出应用'), findsOneWidget);
   });
 }

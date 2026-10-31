@@ -57,20 +57,21 @@ class _AmitiaScaffoldState extends State<AmitiaScaffold> {
   Widget build(BuildContext context) {
     final router = GoRouter.of(context);
     final currentLocation = router.routerDelegate.currentConfiguration.fullPath;
+    final currentPath = Uri.tryParse(currentLocation)?.path ?? currentLocation;
     final pageId = amitiaStylePageId(currentLocation);
     final pageTarget = amitiaStyleTargetForPage(pageId);
     final pageStyle = context.amitiaStyleFor(pageTarget);
     final shellStyle = context.amitiaStyleFor('app.shell');
-    final isChatPage = currentLocation == AppRoutes.chat;
+    final isChatPage = currentPath == AppRoutes.chat;
     final isMainTabPage = <String>{
       AppRoutes.conversations,
       AppRoutes.tasks,
       AppRoutes.memoryHub,
       AppRoutes.extensions,
       AppRoutes.me,
-    }.contains(currentLocation);
+    }.contains(currentPath);
     final isTopLevelPage =
-        currentLocation == '/onboarding' || currentLocation == '/privacy';
+        currentPath == '/onboarding' || currentPath == '/privacy';
     final canPop = router.canPop();
 
     final content = AmitiaStyleTarget(

@@ -374,9 +374,7 @@ if (mounted) _runtime.setWorkspace(null);
         _runtimeRegistry.keyForController(_runtime) ?? conversationId;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      context.go(
-        '${AppRoutes.chat}?conversationId=${Uri.encodeQueryComponent(conversationId)}',
-      );
+      replaceChatRouteWithConversation(context, conversationId);
     });
   }
 
