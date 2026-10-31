@@ -23,7 +23,7 @@ class _MainTabScaffoldState extends ConsumerState<MainTabScaffold> {
     _MainTabDestination(label: '消息', icon: AmitiaIconGlyph.messages),
     _MainTabDestination(label: '任务', icon: AmitiaIconGlyph.tasks),
     _MainTabDestination(label: '记忆', icon: AmitiaIconGlyph.memory),
-    _MainTabDestination(label: '插件', icon: AmitiaIconGlyph.plugins),
+    _MainTabDestination(label: '扩展', icon: AmitiaIconGlyph.extensions),
     _MainTabDestination(label: '我的', icon: AmitiaIconGlyph.profile),
   ];
 
@@ -145,7 +145,12 @@ class _MainTabButton extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            AmitiaIcon(destination.icon, size: 21, color: color),
+            AmitiaIcon(
+              key: ValueKey('main-tab-icon-${destination.label}'),
+              destination.icon,
+              size: 21,
+              color: color,
+            ),
             const SizedBox(height: 2),
             Text(
               destination.label,

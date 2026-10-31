@@ -32,7 +32,7 @@ class ExtensionCenterPage extends ConsumerWidget {
     return AmitiaScaffold(
       handlesSystemBack: false,
       appBar: AmitiaAppBar(
-        title: '插件',
+        title: '扩展',
         backgroundColor: context.surfacePrimary,
         toolbarHeight: AmitiaAppBar.rootPageToolbarHeight,
         actions: [

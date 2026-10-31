@@ -137,7 +137,7 @@ void main() {
     expect(find.byKey(const ValueKey('main-tab-消息')), findsOneWidget);
     expect(find.byKey(const ValueKey('main-tab-任务')), findsOneWidget);
     expect(find.byKey(const ValueKey('main-tab-记忆')), findsOneWidget);
-    expect(find.byKey(const ValueKey('main-tab-插件')), findsOneWidget);
+    expect(find.byKey(const ValueKey('main-tab-扩展')), findsOneWidget);
     expect(find.byKey(const ValueKey('main-tab-我的')), findsOneWidget);
     expect(find.byKey(const ValueKey('message-search-field')), findsOneWidget);
     _expectRootHeaderSurface(tester);
@@ -173,8 +173,17 @@ void main() {
     expect(find.text('关系与概念连接'), findsNothing);
     expect(find.text('暂无最近记忆'), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('main-tab-插件')));
+    expect(
+      tester
+          .widget<AmitiaIcon>(
+            find.byKey(const ValueKey('main-tab-icon-扩展')),
+          )
+          .glyph,
+      AmitiaIconGlyph.extensions,
+    );
+    await tester.tap(find.byKey(const ValueKey('main-tab-扩展')));
     await tester.pumpAndSettle();
+    expect(find.text('扩展'), findsWidgets);
     expect(find.text('扩展包'), findsOneWidget);
     _expectRootHeaderSurface(tester);
     _expectRootContentTop(tester, find.byType(ExtensionCenterPage));

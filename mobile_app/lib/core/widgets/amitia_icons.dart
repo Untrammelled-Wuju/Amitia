@@ -6,7 +6,7 @@ enum AmitiaIconGlyph {
   messages,
   tasks,
   memory,
-  plugins,
+  extensions,
   profile,
   add,
   search,
@@ -149,7 +149,7 @@ class AmitiaIcon extends StatelessWidget {
       Icons.auto_awesome => AmitiaIconGlyph.skill,
       Icons.account_tree_outlined ||
       Icons.schema_outlined => AmitiaIconGlyph.workflow,
-      Icons.extension_outlined || Icons.extension => AmitiaIconGlyph.plugins,
+      Icons.extension_outlined || Icons.extension => AmitiaIconGlyph.extensions,
       Icons.system_update_alt => AmitiaIconGlyph.update,
       Icons.warning_amber_outlined ||
       Icons.warning_amber => AmitiaIconGlyph.warning,
@@ -245,8 +245,8 @@ class _AmitiaIconPainter extends CustomPainter {
         _tasks(canvas, stroke);
       case AmitiaIconGlyph.memory:
         _memory(canvas, stroke, fill);
-      case AmitiaIconGlyph.plugins:
-        _plugins(canvas, stroke, fill);
+      case AmitiaIconGlyph.extensions:
+        _extensions(canvas, stroke, fill);
       case AmitiaIconGlyph.profile:
         _profile(canvas, stroke);
       case AmitiaIconGlyph.add:
@@ -428,25 +428,18 @@ class _AmitiaIconPainter extends CustomPainter {
     canvas.drawCircle(const Offset(12.2, 12), 1.15, fill);
   }
 
-  void _plugins(Canvas canvas, Paint stroke, Paint fill) {
-    final body = Path()
-      ..moveTo(8.1, 6.2)
-      ..lineTo(15.9, 6.2)
-      ..quadraticBezierTo(18.2, 6.2, 18.2, 8.5)
-      ..lineTo(18.2, 12.5)
-      ..quadraticBezierTo(18.2, 15.3, 15.5, 15.3)
-      ..lineTo(8.5, 15.3)
-      ..quadraticBezierTo(5.8, 15.3, 5.8, 12.5)
-      ..lineTo(5.8, 8.5)
-      ..quadraticBezierTo(5.8, 6.2, 8.1, 6.2);
-    canvas.drawPath(body, stroke);
-    _lines(canvas, stroke, [(9.3, 3.6, 9.3, 6.4), (14.7, 3.6, 14.7, 6.4)]);
-    final cord = Path()
-      ..moveTo(12, 15.3)
-      ..cubicTo(12, 17.5, 13.6, 18.2, 15.8, 18.2)
-      ..cubicTo(18.2, 18.2, 19.4, 19.4, 19.4, 21);
-    canvas.drawPath(cord, stroke);
-    canvas.drawCircle(const Offset(19.4, 21), 0.85, fill);
+  void _extensions(Canvas canvas, Paint stroke, Paint fill) {
+    final core = RRect.fromLTRBR(4.2, 8.8, 14.8, 19.4, const Radius.circular(2.5));
+    final module = RRect.fromLTRBR(14.9, 3.4, 20.7, 9.2, const Radius.circular(1.7));
+    canvas.drawRRect(core, stroke);
+    canvas.drawRRect(module, stroke);
+    _polyline(canvas, stroke, [
+      const Offset(12.1, 8.8),
+      const Offset(12.1, 6.3),
+      const Offset(14.9, 6.3),
+    ]);
+    canvas.drawCircle(const Offset(9.5, 14.1), 1.05, fill);
+    canvas.drawCircle(const Offset(17.8, 6.3), 0.9, fill);
   }
 
   void _profile(Canvas canvas, Paint stroke) {
