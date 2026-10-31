@@ -246,7 +246,7 @@ class _AmitiaIconPainter extends CustomPainter {
       case AmitiaIconGlyph.memory:
         _memory(canvas, stroke, fill);
       case AmitiaIconGlyph.extensions:
-        _extensions(canvas, stroke, fill);
+        _extensions(canvas, stroke);
       case AmitiaIconGlyph.profile:
         _profile(canvas, stroke);
       case AmitiaIconGlyph.add:
@@ -428,18 +428,26 @@ class _AmitiaIconPainter extends CustomPainter {
     canvas.drawCircle(const Offset(12.2, 12), 1.15, fill);
   }
 
-  void _extensions(Canvas canvas, Paint stroke, Paint fill) {
-    final core = RRect.fromLTRBR(4.2, 8.8, 14.8, 19.4, const Radius.circular(2.5));
-    final module = RRect.fromLTRBR(14.9, 3.4, 20.7, 9.2, const Radius.circular(1.7));
-    canvas.drawRRect(core, stroke);
-    canvas.drawRRect(module, stroke);
-    _polyline(canvas, stroke, [
-      const Offset(12.1, 8.8),
-      const Offset(12.1, 6.3),
-      const Offset(14.9, 6.3),
-    ]);
-    canvas.drawCircle(const Offset(9.5, 14.1), 1.05, fill);
-    canvas.drawCircle(const Offset(17.8, 6.3), 0.9, fill);
+  void _extensions(Canvas canvas, Paint stroke) {
+    for (final tile in [
+      RRect.fromLTRBR(3.8, 3.8, 10, 10, const Radius.circular(1.6)),
+      RRect.fromLTRBR(14, 3.8, 20.2, 10, const Radius.circular(1.6)),
+      RRect.fromLTRBR(3.8, 14, 10, 20.2, const Radius.circular(1.6)),
+    ]) {
+      canvas.drawRRect(tile, stroke);
+    }
+    final upperLink = Path()
+      ..moveTo(14, 17.1)
+      ..lineTo(17.3, 17.1)
+      ..cubicTo(18.85, 17.1, 20.1, 15.85, 20.1, 14.6)
+      ..lineTo(20.1, 14);
+    canvas.drawPath(upperLink, stroke);
+    final lowerLink = Path()
+      ..moveTo(17.1, 14)
+      ..lineTo(17.1, 17.3)
+      ..cubicTo(17.1, 18.85, 15.85, 20.1, 14.6, 20.1)
+      ..lineTo(14, 20.1);
+    canvas.drawPath(lowerLink, stroke);
   }
 
   void _profile(Canvas canvas, Paint stroke) {
