@@ -143,7 +143,7 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
           case 'read': await service.markConversationRead(row.id, lastTerminalTurnSequence: row.lastTerminalTurnSequence, characterId: row.characterId);
           case 'pin': await service.setConversationPinned(row.id, true);
           case 'move': await service.moveConversationToProject(row.id, target);
-          case 'delete': await service.deleteConversation(row.id);
+          case 'delete': await service.deleteConversation(row.id, characterId: row.characterId);
         }
         succeeded.add(row.id);
       } catch (error, stackTrace) {
@@ -1100,7 +1100,7 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
     );
     if (confirmed != true) return;
     try {
-      await ref.read(chatServiceProvider).deleteConversation(conv.id);
+      await ref.read(chatServiceProvider).deleteConversation(conv.id, characterId: conv.characterId);
       ref.invalidate(conversationListProvider);
       ref.invalidate(conversationSidebarProvider);
       if (mounted) amitiaSnackBar(context, '对话已删除');

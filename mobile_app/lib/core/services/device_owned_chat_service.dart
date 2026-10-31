@@ -880,18 +880,17 @@ class DeviceOwnedChatService {
         ? parseConversationReference(id)
         : null;
     final role = selectRole(characterId ?? resource?['roleId']?.toString());
-    if (kind == 'conversation') {
-      await query(id, characterId: role);
-      resource = _resources['$kind/$id'];
-    }
-    if (resource == null) {
-      if (origin != null) throw StateError('请先加载该会话并确认当前数据来源后再修改');
+    if (kind == 'conversation' || resource == null) {
+      if (origin != null && kind != 'conversation') {
+        throw StateError('请先加载该记录并确认当前数据来源后再修改');
+      }
       final result = await _api.get<Map<String, dynamic>>(
         '/api/device-mesh/v1/business/resources',
         queryParameters: {
           'kind': kind,
-          'id': id,
+          'id': origin?['id'] ?? id,
           'characterId': role,
+          if (origin != null) 'targetDeviceId': origin['ownerId'],
           if (expectedScope != null)
             'memoryView': memoryViewForScope(expectedScope),
         },
@@ -905,7 +904,14 @@ class DeviceOwnedChatService {
       }
     }
     if (captured != revision) throw StateError('服务状态已变化，请重新加载后再操作');
-    if (resource == null || resource['deleted'] == true) {
+    if (resource?['deleted'] == true) {
+      if (deleted) {
+        _resources.clear();
+        return;
+      }
+      throw StateError('该记录不在当前数据来源中，请在原设备管理历史数据');
+    }
+    if (resource == null) {
       throw StateError('该记录不在当前数据来源中，请在原设备管理历史数据');
     }
     if (resource['readOnly'] == true || resource['origin'] == 'legacy') {
@@ -961,14 +967,17 @@ class DeviceOwnedChatService {
         'clear': clear,
       },
     );
-    if (captured != revision) throw StateError('服务状态已变化，请重新加载确认操作结果');
-    if (((kind == 'project' || changes.containsKey('projectId')) &&
+    if ((deleted && ack?['requestId'] != requestId) ||
+        ((kind == 'project' || changes.containsKey('projectId')) &&
             ack?['requestId'] != requestId) ||
         ack?['ownerId'] != resource['ownerId'] ||
         ack?['versions'] is! Map ||
         (ack!['versions'] as Map)['$kind/$resourceId'] !=
             (expectedRevision ?? resource['revision'] as int) + 1)
       throw StateError('数据所有者尚未确认操作结果');
+    if (captured != revision && !deleted) {
+      throw StateError('服务状态已变化，请重新加载确认操作结果');
+    }
     _resources.clear();
   }
 

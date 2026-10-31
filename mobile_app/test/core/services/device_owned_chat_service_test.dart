@@ -30,8 +30,11 @@ class _OwnedApi implements BackendServiceApi {
   bool summaryMode = false;
   Map<String, dynamic>? dataExecutionScope;
   Completer<Map<String, dynamic>>? deferred;
+  Completer<Map<String, dynamic>>? conversationDeferred;
+  void Function()? postCallback;
   final pages = <Map<String, dynamic>>[];
   final queries = <Map<String, dynamic>>[];
+  final resourceQueries = <Map<String, dynamic>>[];
   Map<String, dynamic>? streamRequest;
   Stream<List<int>> Function(Map<String, dynamic> request)? streamHandler;
   String queryPath = '';
@@ -67,12 +70,20 @@ class _OwnedApi implements BackendServiceApi {
             ],
           }
           as T;
-    if (path.endsWith('/resources'))
+    if (path.endsWith('/resources')) {
+      resourceQueries.add(
+        Map<String, dynamic>.from(queryParameters ?? {}),
+      );
       return {
             'resource': summaryMode ? null : resource,
-            if (summaryMode) 'executionScope': scope(),
+            'executionScope': scope(),
           }
           as T;
+    }
+    if (conversationDeferred != null &&
+        path.contains('/business/conversations/')) {
+      return await conversationDeferred!.future as T;
+    }
     if (deferred != null) return await deferred!.future as T;
     queries.add(Map<String, dynamic>.from(queryParameters ?? {}));
     if (pages.isNotEmpty) return pages.removeAt(0) as T;
@@ -130,9 +141,17 @@ class _OwnedApi implements BackendServiceApi {
     }
     if (path.endsWith('/projections/rebuild') && projectionResponse != null)
       return projectionResponse as T;
-    if (editAck != null) return editAck as T;
+    if (path.endsWith('/resources/edit')) postCallback?.call();
+    if (editAck != null) {
+      return {
+        ...editAck!,
+        if (editAck!['requestId'] == null)
+          'requestId': editRequest?['requestId'],
+      } as T;
+    }
     return {
           'ownerId': wrongAck ? 'other-device' : 'device-a',
+          'requestId': editRequest?['requestId'],
           'versions': {'message/message': 8},
         }
         as T;
@@ -1291,9 +1310,104 @@ void main() {
     await service.edit('conversation', id, changes: {'archived': true});
     expect(api.editRequest?['id'], 'chat');
     expect(api.editRequest?['expectedRevision'], 7);
-    expect(api.queries.last['conversationOwnerId'], 'device-a');
+    expect(api.resourceQueries.last['targetDeviceId'], 'device-a');
     await service.edit('conversation', id, changes: {'archived': true});
     expect(api.editRequest?['changes'], {'archived': true});
+  });
+
+  test('删除会话不受并发历史查询覆盖上下文影响', () async {
+    final api = _OwnedApi();
+    api.resource = {
+      'kind': 'conversation',
+      'id': 'chat',
+      'ownerId': 'device-a',
+      'roleId': 'role-a',
+      'revision': 7,
+      'deleted': false,
+      'body': {'id': 'chat', 'title': '对话'},
+    };
+    api.editAck = {
+      'ownerId': 'device-a',
+      'versions': {'conversation/chat': 8},
+    };
+    final service = DeviceOwnedChatService(
+      api,
+      providerKey: () => 'https://provider',
+    );
+    await service.refresh();
+    api.conversationDeferred = Completer<Map<String, dynamic>>();
+    final activeQuery = service.query('meshconv1:device-a:chat');
+    final deletion = service.edit(
+      'conversation',
+      'meshconv1:device-a:chat',
+      deleted: true,
+    );
+    api.conversationDeferred!.complete({
+      'executionScope': scope(),
+      'snapshot': {
+        'ownerId': 'device-a',
+        'resources': [api.resource],
+      },
+    });
+    await deletion;
+    await activeQuery;
+    expect(api.editRequest?['deleted'], isTrue);
+    expect(api.editRequest?['id'], 'chat');
+    expect(api.resourceQueries.last['targetDeviceId'], 'device-a');
+  });
+
+  test('删除获得后端确认后不因轮询状态变化误报失败', () async {
+    final api = _OwnedApi();
+    api.resource = {
+      'kind': 'conversation',
+      'id': 'chat',
+      'ownerId': 'device-a',
+      'roleId': 'role-a',
+      'revision': 7,
+      'deleted': false,
+      'body': {'id': 'chat', 'title': '对话'},
+    };
+    api.editAck = {
+      'ownerId': 'device-a',
+      'versions': {'conversation/chat': 8},
+    };
+    final service = DeviceOwnedChatService(
+      api,
+      providerKey: () => 'https://provider',
+    );
+    await service.refresh();
+    api.postCallback = () => service.stopLocal('provider changed');
+    await service.edit(
+      'conversation',
+      'meshconv1:device-a:chat',
+      deleted: true,
+    );
+    expect(api.editRequest?['deleted'], isTrue);
+    expect(service.revision, greaterThan(0));
+  });
+
+  test('已删除会话的重复删除按成功处理', () async {
+    final api = _OwnedApi();
+    api.resource = {
+      'kind': 'conversation',
+      'id': 'chat',
+      'ownerId': 'device-a',
+      'roleId': 'role-a',
+      'revision': 8,
+      'deleted': true,
+      'body': null,
+    };
+    final service = DeviceOwnedChatService(
+      api,
+      providerKey: () => 'https://provider',
+    );
+    await service.refresh();
+    await service.edit(
+      'conversation',
+      'meshconv1:device-a:chat',
+      deleted: true,
+    );
+    expect(api.editRequest, isNull);
   });
 
   test('Core 与历史设备分别分页，已结束的数据源不会重新开启', () async {
