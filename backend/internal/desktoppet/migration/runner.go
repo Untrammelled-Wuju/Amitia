@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	migrationcore "github.com/u-ai/backend/internal/migration"
+	"github.com/u-ai/backend/pkg/util"
 )
 
 var ErrRunnerNotInitialized = errors.New("migration runner: no plans registered")
@@ -568,10 +569,7 @@ func (r *Runner) requestReadCutover(ctx context.Context, op *MigrationOperation,
 	}
 	ok, err := r.repo.UpdateOperationStageCAS(ctx, op.ID, StageVerifying, StageReadCutover, nil)
 	if err != nil || !ok {
-		if err == nil {
-			err = errors.New("stage CAS returned false")
-		}
-		return &RunnerError{Code: "STAGE_TRANSITION_FAILED", Message: "读切转阶段转换失败: " + err.Error()}
+		return &RunnerError{Code: "STAGE_TRANSITION_FAILED", Message: "读切转阶段转换失败: " + util.OriginalErrorMessage(err, "stage CAS returned false")}
 	}
 	return nil
 }
@@ -621,10 +619,7 @@ func (r *Runner) requestWriteCutover(ctx context.Context, op *MigrationOperation
 		}
 		ok, err := r.repo.UpdateOperationStageCAS(ctx, op.ID, StageReadCutover, StageWriteCutover, nil)
 		if err != nil || !ok {
-			if err == nil {
-				err = errors.New("stage CAS returned false")
-			}
-			return &RunnerError{Code: "STAGE_TRANSITION_FAILED", Message: "写切转阶段转换失败: " + err.Error()}
+			return &RunnerError{Code: "STAGE_TRANSITION_FAILED", Message: "写切转阶段转换失败: " + util.OriginalErrorMessage(err, "stage CAS returned false")}
 		}
 		op.Stage = StageWriteCutover
 	}
@@ -647,10 +642,7 @@ func (r *Runner) requestWriteCutover(ctx context.Context, op *MigrationOperation
 		}
 		ok, err := r.repo.UpdateOperationStageCAS(ctx, op.ID, StageWriteCutover, StageLegacyWriteBlocked, nil)
 		if err != nil || !ok {
-			if err == nil {
-				err = errors.New("stage CAS returned false")
-			}
-			return &RunnerError{Code: "STAGE_TRANSITION_FAILED", Message: "旧写阻断阶段转换失败: " + err.Error()}
+			return &RunnerError{Code: "STAGE_TRANSITION_FAILED", Message: "旧写阻断阶段转换失败: " + util.OriginalErrorMessage(err, "stage CAS returned false")}
 		}
 		op.Stage = StageLegacyWriteBlocked
 	}
@@ -663,10 +655,7 @@ func (r *Runner) requestWriteCutover(ctx context.Context, op *MigrationOperation
 		}
 		ok, err := r.repo.UpdateOperationStageCAS(ctx, op.ID, StageLegacyWriteBlocked, StageCompleted, nil)
 		if err != nil || !ok {
-			if err == nil {
-				err = errors.New("stage CAS returned false")
-			}
-			return &RunnerError{Code: "STAGE_TRANSITION_FAILED", Message: "完成阶段转换失败: " + err.Error()}
+			return &RunnerError{Code: "STAGE_TRANSITION_FAILED", Message: "完成阶段转换失败: " + util.OriginalErrorMessage(err, "stage CAS returned false")}
 		}
 	}
 	return nil

@@ -17,6 +17,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/dev_mode"
+	"github.com/u-ai/backend/pkg/util"
 )
 
 type DevModeAPI struct {
@@ -211,7 +212,7 @@ func (api *DevModeAPI) grantTrust(c *gin.Context) {
 	id := dev_mode.WorkspaceID(c.Param("id"))
 	workspace, err := container.DevModeRegistry.Get(id)
 	if err != nil || workspace.OwnerSpaceID != kernelAPIUser(c) {
-		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+		c.JSON(http.StatusForbidden, gin.H{"error": util.OriginalErrorMessage(err, "dev workspace forbidden")})
 		return
 	}
 	if err := container.DevModeRegistry.GrantDevTrust(id); err != nil {
@@ -230,7 +231,7 @@ func (api *DevModeAPI) revokeTrust(c *gin.Context) {
 	id := dev_mode.WorkspaceID(c.Param("id"))
 	workspace, err := container.DevModeRegistry.Get(id)
 	if err != nil || workspace.OwnerSpaceID != kernelAPIUser(c) {
-		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+		c.JSON(http.StatusForbidden, gin.H{"error": util.OriginalErrorMessage(err, "dev workspace forbidden")})
 		return
 	}
 	if err := container.DevModeRegistry.RevokeDevTrust(id); err != nil {
@@ -571,7 +572,7 @@ func (api *DevModeAPI) closeSession(c *gin.Context) {
 	id := dev_mode.WorkspaceID(c.Param("id"))
 	workspace, workspaceErr := container.DevModeRegistry.Get(id)
 	if workspaceErr != nil || workspace.OwnerSpaceID != kernelAPIUser(c) {
-		c.JSON(http.StatusForbidden, gin.H{"error": workspaceErr.Error()})
+		c.JSON(http.StatusForbidden, gin.H{"error": util.OriginalErrorMessage(workspaceErr, "dev workspace forbidden")})
 		return
 	}
 	sess, err := container.DevModeSessions.GetByWorkspace(id)

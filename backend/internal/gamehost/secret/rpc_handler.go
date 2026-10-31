@@ -7,6 +7,7 @@ import (
 
 	kernelsecret "github.com/u-ai/backend/internal/extension/kernel/secret"
 	"github.com/u-ai/backend/internal/gamehost/rpc"
+	"github.com/u-ai/backend/pkg/util"
 )
 
 type SecretRPCHandler struct {
@@ -91,11 +92,7 @@ func (h releaseHandler) Handle(ctx context.Context, request rpc.RPCRequest) (rpc
 		Reason  string `json:"reason"`
 	}
 	if err := json.Unmarshal(request.Payload, &payload); err != nil || payload.LeaseID == "" {
-		message := "leaseId is required"
-		if err != nil {
-			message += ": " + err.Error()
-		}
-		return rpc.RPCResponse{RequestID: request.ID, Error: &rpc.RPCRoutedError{Code: "INVALID_PAYLOAD", Message: message}}, nil
+		return rpc.RPCResponse{RequestID: request.ID, Error: &rpc.RPCRoutedError{Code: "INVALID_PAYLOAD", Message: util.OriginalErrorMessage(err, "leaseId is required")}}, nil
 	}
 	if request.Generation <= 0 {
 		return rpc.RPCResponse{RequestID: request.ID, Error: &rpc.RPCRoutedError{Code: "INVALID_GENERATION", Message: "trusted generation must be positive"}}, nil
@@ -116,11 +113,7 @@ func (h queryHandler) Handle(ctx context.Context, request rpc.RPCRequest) (rpc.R
 		LeaseID string `json:"leaseId"`
 	}
 	if err := json.Unmarshal(request.Payload, &payload); err != nil || payload.LeaseID == "" {
-		message := "leaseId is required"
-		if err != nil {
-			message += ": " + err.Error()
-		}
-		return rpc.RPCResponse{RequestID: request.ID, Error: &rpc.RPCRoutedError{Code: "INVALID_PAYLOAD", Message: message}}, nil
+		return rpc.RPCResponse{RequestID: request.ID, Error: &rpc.RPCRoutedError{Code: "INVALID_PAYLOAD", Message: util.OriginalErrorMessage(err, "leaseId is required")}}, nil
 	}
 	if request.Generation <= 0 {
 		return rpc.RPCResponse{RequestID: request.ID, Error: &rpc.RPCRoutedError{Code: "INVALID_GENERATION", Message: "trusted generation must be positive"}}, nil

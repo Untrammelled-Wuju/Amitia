@@ -28,6 +28,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
 	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/internal/runtimeidentity"
+	"github.com/u-ai/backend/pkg/util"
 )
 
 type BootstrapValidatorAdapter struct {
@@ -324,7 +325,7 @@ func makePairingOfferHandler(deps *RouterDeps) gin.HandlerFunc {
 		}
 		parsedEndpoint, endpointErr := url.Parse(endpoint)
 		if endpointErr != nil || parsedEndpoint.Host == "" || parsedEndpoint.User != nil || (parsedEndpoint.Scheme != "http" && parsedEndpoint.Scheme != "https") || parsedEndpoint.RawQuery != "" || parsedEndpoint.Fragment != "" || (parsedEndpoint.Path != "" && parsedEndpoint.Path != "/") {
-			c.JSON(400, gin.H{"code": "mesh.pairing_invalid", "message": endpointErr.Error()})
+			c.JSON(400, gin.H{"code": "mesh.pairing_invalid", "message": util.OriginalErrorMessage(endpointErr, "服务提供者地址无效")})
 			return
 		}
 		endpoint = parsedEndpoint.Scheme + "://" + parsedEndpoint.Host
@@ -404,7 +405,7 @@ func makePairingClaimHandler(deps *RouterDeps) gin.HandlerFunc {
 		}
 		platform, err := runtimeidentity.ParsePlatform(req.Platform)
 		if err != nil || platform == runtimeidentity.PlatformUnknown {
-			c.JSON(400, gin.H{"code": "mesh.pairing_invalid", "message": err.Error()})
+			c.JSON(400, gin.H{"code": "mesh.pairing_invalid", "message": util.OriginalErrorMessage(err, "invalid platform")})
 			return
 		}
 		result, err := deps.PairingSvc.Claim(c.Request.Context(), pairing.ClaimRequest{

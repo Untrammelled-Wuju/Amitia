@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/middleware"
+	"github.com/u-ai/backend/pkg/util"
 )
 
 const previewPolicy = "sandbox allow-scripts; default-src 'none'; img-src https: http: data: blob:; style-src 'unsafe-inline' https: http:; script-src 'unsafe-inline' https: http:; font-src https: http: data:; connect-src 'none'; frame-src https: http: data: blob:; media-src https: http: data: blob:; base-uri https: http:; form-action 'none'"
@@ -23,7 +24,7 @@ type previewDocument struct {
 func (h *Handler) CreatePreview(c *gin.Context) {
 	actor, err := middleware.GetActorFromContext(c)
 	if err != nil || actor == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": util.OriginalErrorMessage(err, "authentication context unavailable")})
 		return
 	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 5*1024*1024)
@@ -69,7 +70,7 @@ func (h *Handler) CreatePreview(c *gin.Context) {
 func (h *Handler) DeletePreview(c *gin.Context) {
 	actor, err := middleware.GetActorFromContext(c)
 	if err != nil || actor == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": util.OriginalErrorMessage(err, "authentication context unavailable")})
 		return
 	}
 	id := c.Param("previewId")

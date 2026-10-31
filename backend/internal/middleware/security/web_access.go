@@ -24,6 +24,7 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/credential"
 	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
 	"github.com/u-ai/backend/internal/runtimeidentity"
+	"github.com/u-ai/backend/pkg/util"
 	"golang.org/x/crypto/argon2"
 	amitialog "log"
 )
@@ -468,7 +469,7 @@ func RegisterWebAccessSetupRoutes(router gin.IRouter, svc *WebAccessService, dev
 		}
 		device, err := devices.GetDevice(c.Request.Context(), actor.DeviceID)
 		if err != nil || device == nil || device.SpaceID != actor.SpaceID || device.TrustState != host_registry.DeviceTrustTrusted || device.Platform != runtimeidentity.PlatformWeb {
-			c.JSON(http.StatusForbidden, gin.H{"code": 403, "msg": err.Error()})
+			c.JSON(http.StatusForbidden, gin.H{"code": 403, "msg": util.OriginalErrorMessage(err, "当前设备不能启用 Web 访问")})
 			return
 		}
 		password, bindErr := bindWebAccessPassword(c)

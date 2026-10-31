@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/middleware"
+	"github.com/u-ai/backend/pkg/util"
 )
 
 type Handler struct {
@@ -88,7 +89,7 @@ func (h *Handler) GetMetadata(c *gin.Context) {
 	id := ID(c.Param("artifactId"))
 	actor, err := middleware.GetActorFromContext(c)
 	if err != nil || actor == nil {
-		c.JSON(401, gin.H{"error": err.Error()})
+		c.JSON(401, gin.H{"error": util.OriginalErrorMessage(err, "authentication context unavailable")})
 		return
 	}
 	owner := string(actor.SpaceID)
@@ -104,7 +105,7 @@ func (h *Handler) GetContent(c *gin.Context) {
 	id := ID(c.Param("artifactId"))
 	actor, err := middleware.GetActorFromContext(c)
 	if err != nil || actor == nil {
-		c.JSON(401, gin.H{"error": err.Error()})
+		c.JSON(401, gin.H{"error": util.OriginalErrorMessage(err, "authentication context unavailable")})
 		return
 	}
 	owner := string(actor.SpaceID)
@@ -120,7 +121,7 @@ func (h *Handler) GetMediaTicket(c *gin.Context) {
 	id := ID(c.Param("artifactId"))
 	actor, err := middleware.GetActorFromContext(c)
 	if err != nil || actor == nil {
-		c.JSON(401, gin.H{"error": err.Error()})
+		c.JSON(401, gin.H{"error": util.OriginalErrorMessage(err, "authentication context unavailable")})
 		return
 	}
 	owner := string(actor.SpaceID)
@@ -187,7 +188,7 @@ func (h *Handler) Delete(c *gin.Context) {
 	id := ID(c.Param("artifactId"))
 	actor, err := middleware.GetActorFromContext(c)
 	if err != nil || actor == nil {
-		c.JSON(401, gin.H{"error": err.Error()})
+		c.JSON(401, gin.H{"error": util.OriginalErrorMessage(err, "authentication context unavailable")})
 		return
 	}
 	owner := string(actor.SpaceID)

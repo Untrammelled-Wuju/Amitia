@@ -156,6 +156,7 @@ func main() {
 			})
 			return true
 		})
+		findings = append(findings, unsafeNilErrorUses(fset, file, parsed)...)
 		for _, declaration := range parsed.Decls {
 			function, ok := declaration.(*ast.FuncDecl)
 			if !ok || function.Body == nil || function.Type.Params == nil {
@@ -236,6 +237,137 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Println("generic backend error responses: 0")
+}
+
+func unsafeNilErrorUses(fset *token.FileSet, file string, parsed *ast.File) []string {
+	findings := []string{}
+	ast.Inspect(parsed, func(node ast.Node) bool {
+		statement, ok := node.(*ast.IfStmt)
+		if !ok {
+			return true
+		}
+		for name := range errorNamesComparedToNil(statement.Cond) {
+			if !orConditionCanReachWithoutError(statement.Cond, name) {
+				continue
+			}
+			selector := firstUnguardedErrorCall(statement.Body, name)
+			if selector != nil {
+				findings = append(findings, fmt.Sprintf("%s:%d: unsafe %s.Error() under OR condition", file, fset.Position(selector.Pos()).Line, name))
+			}
+		}
+		return true
+	})
+	return findings
+}
+
+func firstUnguardedErrorCall(node ast.Node, name string) *ast.SelectorExpr {
+	var found *ast.SelectorExpr
+	ast.Inspect(node, func(child ast.Node) bool {
+		if found != nil {
+			return false
+		}
+		if statement, ok := child.(*ast.IfStmt); ok && guaranteesErrorNonNil(statement.Cond, name) {
+			if statement.Else != nil {
+				found = firstUnguardedErrorCall(statement.Else, name)
+			}
+			return false
+		}
+		call, ok := child.(*ast.CallExpr)
+		if !ok || len(call.Args) != 0 {
+			return true
+		}
+		selector, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok || selector.Sel.Name != "Error" {
+			return true
+		}
+		identifier, ok := selector.X.(*ast.Ident)
+		if ok && identifier.Name == name {
+			found = selector
+			return false
+		}
+		return true
+	})
+	return found
+}
+
+func guaranteesErrorNonNil(expression ast.Expr, name string) bool {
+	switch value := expression.(type) {
+	case *ast.BinaryExpr:
+		switch value.Op {
+		case token.LAND:
+			return guaranteesErrorNonNil(value.X, name) || guaranteesErrorNonNil(value.Y, name)
+		case token.LOR:
+			return guaranteesErrorNonNil(value.X, name) && guaranteesErrorNonNil(value.Y, name)
+		case token.NEQ:
+			if identifier, ok := value.X.(*ast.Ident); ok && identifier.Name == name && isNil(value.Y) {
+				return true
+			}
+			if identifier, ok := value.Y.(*ast.Ident); ok && identifier.Name == name && isNil(value.X) {
+				return true
+			}
+		}
+	case *ast.ParenExpr:
+		return guaranteesErrorNonNil(value.X, name)
+	case *ast.UnaryExpr:
+		return guaranteesErrorNonNil(value.X, name)
+	}
+	return false
+}
+
+func errorNamesComparedToNil(expression ast.Expr) map[string]bool {
+	names := map[string]bool{}
+	ast.Inspect(expression, func(node ast.Node) bool {
+		binary, ok := node.(*ast.BinaryExpr)
+		if !ok || binary.Op != token.NEQ {
+			return true
+		}
+		if identifier, ok := binary.X.(*ast.Ident); ok && isNil(binary.Y) {
+			names[identifier.Name] = true
+		}
+		if identifier, ok := binary.Y.(*ast.Ident); ok && isNil(binary.X) {
+			names[identifier.Name] = true
+		}
+		return true
+	})
+	return names
+}
+
+func orConditionCanReachWithoutError(expression ast.Expr, name string) bool {
+	switch value := expression.(type) {
+	case *ast.BinaryExpr:
+		if value.Op != token.LOR {
+			return false
+		}
+		return binaryContainsErrorNotNil(value.X, name) ||
+			binaryContainsErrorNotNil(value.Y, name) ||
+			orConditionCanReachWithoutError(value.X, name) ||
+			orConditionCanReachWithoutError(value.Y, name)
+	case *ast.ParenExpr:
+		return orConditionCanReachWithoutError(value.X, name)
+	case *ast.UnaryExpr:
+		return orConditionCanReachWithoutError(value.X, name)
+	}
+	return false
+}
+
+func binaryContainsErrorNotNil(expression ast.Expr, name string) bool {
+	switch value := expression.(type) {
+	case *ast.BinaryExpr:
+		if value.Op == token.NEQ {
+			if identifier, ok := value.X.(*ast.Ident); ok && identifier.Name == name && isNil(value.Y) {
+				return true
+			}
+			if identifier, ok := value.Y.(*ast.Ident); ok && identifier.Name == name && isNil(value.X) {
+				return true
+			}
+		}
+		return binaryContainsErrorNotNil(value.X, name) || binaryContainsErrorNotNil(value.Y, name)
+	case *ast.ParenExpr:
+		return binaryContainsErrorNotNil(value.X, name)
+	case *ast.UnaryExpr:
+		return binaryContainsErrorNotNil(value.X, name)
+	}
+	return false
 }
 
 func existingLogImportName(parsed *ast.File) string {

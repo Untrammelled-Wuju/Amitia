@@ -252,7 +252,7 @@ func (h *Handler) Test(c *gin.Context) {
 		Message string `json:"message"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil || req.Message == "" {
-		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
+		util.ErrorResponse(c, response.InvalidParams, util.OriginalErrorMessage(err, "message is required"), nil)
 		return
 	}
 	if h.chatTester == nil {

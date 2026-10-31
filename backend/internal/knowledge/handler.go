@@ -115,7 +115,7 @@ func (h *Handler) UploadRevision(c *gin.Context) {
 func revisionParam(c *gin.Context) (int64, bool) {
 	value, err := strconv.ParseInt(strings.TrimSpace(c.Param("revision")), 10, 64)
 	if err != nil || value <= 0 {
-		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
+		util.ErrorResponse(c, response.InvalidParams, util.OriginalErrorMessage(err, "知识源版本必须是正整数"), nil)
 		return 0, false
 	}
 	return value, true
@@ -406,7 +406,7 @@ func (h *Handler) RecheckOrphanAuditLatest(c *gin.Context) {
 func (h *Handler) ListOrphanAuditRechecks(c *gin.Context) {
 	limit, err := strconv.Atoi(strings.TrimSpace(c.DefaultQuery("limit", "10")))
 	if err != nil || limit < 1 || limit > 30 {
-		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
+		util.ErrorResponse(c, response.OperationFailed, util.OriginalErrorMessage(err, "巡检分页参数必须在 1 到 30 之间"), nil)
 		return
 	}
 	items, err := h.service.ListOrphanAuditRechecks(c.Request.Context(), requestidentity.ResolveGin(c), c.Param("id"), limit)

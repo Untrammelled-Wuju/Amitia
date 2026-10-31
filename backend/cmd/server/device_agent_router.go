@@ -28,6 +28,7 @@ import (
 	"github.com/u-ai/backend/internal/workbenchterminal"
 	"github.com/u-ai/backend/internal/workspace"
 	"github.com/u-ai/backend/pkg/app"
+	"github.com/u-ai/backend/pkg/util"
 )
 
 var localMeshHandler *agent.LocalHandler
@@ -260,7 +261,7 @@ func registerDeviceAgentDesktopPetRoutes(
 			RuntimeID string `json:"runtimeId"`
 		}
 		if err := c.ShouldBindJSON(&request); err != nil || strings.TrimSpace(request.RuntimeID) == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
+			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": util.OriginalErrorMessage(err, "runtimeId is required")})
 			return
 		}
 		if err := services.DeviceRepository.RequireOwned(c.Request.Context(), string(actor.SpaceID), deviceID); err != nil {

@@ -11,6 +11,8 @@ import (
 	"github.com/u-ai/backend/internal/androidlinux/terminal"
 	terminaltools "github.com/u-ai/backend/internal/androidlinux/terminal/tools"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
+	"github.com/u-ai/backend/internal/runtimehost"
+	"github.com/u-ai/backend/pkg/platform"
 	"github.com/u-ai/backend/pkg/util"
 )
 
@@ -98,7 +100,11 @@ func TestPermissionRequirements(t *testing.T) {
 
 func createTestRuntimeHostForTools() *testToolsRuntimeHost {
 	return &testToolsRuntimeHost{
-		desc: platform.NewRuntimeDescriptor(platform.HostPlatformAndroid, platform.RuntimeKindProot, platform.GuestPlatformLinux),
+		desc: platform.RuntimeDescriptor{
+			Host:  platform.HostPlatformAndroid,
+			Kind:  platform.RuntimeKindProot,
+			Guest: platform.GuestPlatformLinux,
+		},
 		paths: util.RuntimePaths{
 			WorkspaceDir: "/tmp/test",
 		},
@@ -119,8 +125,8 @@ func (t *testToolsRuntimeHost) Descriptor() platform.RuntimeDescriptor {
 	return t.desc
 }
 
-func (t *testToolsRuntimeHost) Capabilities() *testToolsCaps {
-	return &testToolsCaps{support: t.caps}
+func (t *testToolsRuntimeHost) Capabilities() *runtimehost.HostCapabilities {
+	return runtimehost.NewTestCapabilitiesForTest(t.caps)
 }
 
 func (t *testToolsRuntimeHost) Paths() util.RuntimePaths {
@@ -133,20 +139,4 @@ func (t *testToolsRuntimeHost) RuntimeInstanceID() string {
 
 func (t *testToolsRuntimeHost) Processes() runtimehost.ProcessSupervisor {
 	return nil
-}
-
-type testToolsCaps struct {
-	support map[runtimehost.HostCapabilityID]runtimehost.CapabilitySupport
-}
-
-func (c *testToolsCaps) Support(id runtimehost.HostCapabilityID) runtimehost.CapabilitySupport {
-	return c.support[id]
-}
-
-func (c *testToolsCaps) Supports(id runtimehost.HostCapabilityID) bool {
-	return c.support[id] == runtimehost.SupportSupported
-}
-
-func (c *testToolsCaps) RequirementSatisfied(req runtimehost.CapabilityRequirement) bool {
-	return c.support[req.ID] >= req.Minimum
 }

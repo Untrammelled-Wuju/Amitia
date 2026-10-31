@@ -206,7 +206,7 @@ func bindPreviewText(c *gin.Context) (string, bool) {
 func (h *Handler) PreviewConfig(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil || id <= 0 {
-		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
+		util.ErrorResponse(c, response.InvalidParams, util.OriginalErrorMessage(err, "语音配置编号无效"), nil)
 		return
 	}
 	text, ok := bindPreviewText(c)
@@ -350,12 +350,12 @@ func (h *Handler) CloneVoice(c *gin.Context) {
 	if cfg == nil && requestedConfigID != "" {
 		id, parseErr := strconv.Atoi(requestedConfigID)
 		if parseErr != nil || id <= 0 {
-			util.ErrorResponse(c, response.InvalidParams, parseErr.Error(), nil)
+			util.ErrorResponse(c, response.InvalidParams, util.OriginalErrorMessage(parseErr, "语音配置编号无效"), nil)
 			return
 		}
 		selected, getErr := h.service.GetProviderConfigByID(id)
 		if getErr != nil || selected == nil {
-			util.ErrorResponse(c, response.InvalidParams, getErr.Error(), nil)
+			util.ErrorResponse(c, response.InvalidParams, util.OriginalErrorMessage(getErr, "语音配置不可用"), nil)
 			return
 		}
 		cfg = selected
@@ -364,7 +364,7 @@ func (h *Handler) CloneVoice(c *gin.Context) {
 		var activeErr error
 		cfg, activeErr = h.service.GetActive()
 		if activeErr != nil || cfg == nil {
-			util.ErrorResponse(c, response.InvalidParams, activeErr.Error(), nil)
+			util.ErrorResponse(c, response.InvalidParams, util.OriginalErrorMessage(activeErr, "未配置启用的语音提供方"), nil)
 			return
 		}
 	}

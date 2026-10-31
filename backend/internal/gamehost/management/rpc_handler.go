@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	ghrpc "github.com/u-ai/backend/internal/gamehost/rpc"
 	"github.com/u-ai/backend/pkg/gameplugin/protocol"
+	"github.com/u-ai/backend/pkg/util"
 )
 
 type RPCHandler struct {
@@ -65,7 +66,7 @@ func (h *RPCHandler) InvokeRPC(c *gin.Context) {
 		return
 	}
 	if namespace, _, err := ghrpc.ParseMethod(req.Method); err != nil || ghrpc.IsReservedNamespace(namespace) {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": util.OriginalErrorMessage(err, "reserved RPC namespace")})
 		return
 	}
 	if req.Timeout < 0 || req.Timeout > 120000 {

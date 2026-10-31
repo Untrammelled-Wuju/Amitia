@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/pkg/util"
 )
 
 type Handler struct {
@@ -166,7 +167,7 @@ func (h *Handler) readResource(c *gin.Context) {
 	offset, offsetErr := strconv.ParseInt(c.DefaultQuery("offset", "0"), 10, 64)
 	maxBytes, sizeErr := strconv.ParseInt(c.DefaultQuery("maxBytes", "1048576"), 10, 64)
 	if offsetErr != nil || sizeErr != nil || offset < 0 || maxBytes <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": offsetErr.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": util.OriginalErrorMessage(offsetErr, util.OriginalErrorMessage(sizeErr, "工作区读取分页参数无效"))})
 		return
 	}
 	if maxBytes > MaxDirectRead {

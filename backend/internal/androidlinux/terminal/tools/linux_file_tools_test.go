@@ -137,8 +137,12 @@ func TestRegisterLinuxFileTools_NonAndroidLinux(t *testing.T) {
 
 	registry := capability.NewToolRegistry()
 
-	host := createTestToolsRuntimeHost()
-	host.desc = platform.NewRuntimeDescriptor(platform.HostPlatformLinux, platform.RuntimeKindNative, platform.GuestPlatformLinux)
+	host := createTestFileRuntimeHost()
+	host.desc = platform.RuntimeDescriptor{
+		Host:  platform.HostPlatformLinux,
+		Kind:  platform.RuntimeKindNativeProcess,
+		Guest: platform.GuestPlatformLinux,
+	}
 
 	err := registrar.RegisterLinuxFileTools(host, registry)
 	assert.NoError(t, err)
@@ -157,7 +161,11 @@ func TestRegisterLinuxFileTools_NonAndroidLinux(t *testing.T) {
 
 func createTestFileRuntimeHost() *testToolsRuntimeHost {
 	return &testToolsRuntimeHost{
-		desc: platform.NewRuntimeDescriptor(platform.HostPlatformAndroid, platform.RuntimeKindProot, platform.GuestPlatformLinux),
+		desc: platform.RuntimeDescriptor{
+			Host:  platform.HostPlatformAndroid,
+			Kind:  platform.RuntimeKindProot,
+			Guest: platform.GuestPlatformLinux,
+		},
 		paths: util.RuntimePaths{
 			WorkspaceDir: "/tmp/test",
 		},
@@ -167,4 +175,30 @@ func createTestFileRuntimeHost() *testToolsRuntimeHost {
 			runtimehost.CapFilesystemLocal:      runtimehost.SupportSupported,
 		},
 	}
+}
+
+type testToolsRuntimeHost struct {
+	desc  platform.RuntimeDescriptor
+	paths util.RuntimePaths
+	caps  map[runtimehost.HostCapabilityID]runtimehost.CapabilitySupport
+}
+
+func (h *testToolsRuntimeHost) Descriptor() platform.RuntimeDescriptor {
+	return h.desc
+}
+
+func (h *testToolsRuntimeHost) Capabilities() *runtimehost.HostCapabilities {
+	return runtimehost.NewTestCapabilitiesForTest(h.caps)
+}
+
+func (h *testToolsRuntimeHost) Paths() util.RuntimePaths {
+	return h.paths
+}
+
+func (h *testToolsRuntimeHost) Processes() runtimehost.ProcessSupervisor {
+	return nil
+}
+
+func (h *testToolsRuntimeHost) RuntimeInstanceID() string {
+	return "test-tools-runtime"
 }

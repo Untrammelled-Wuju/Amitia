@@ -521,7 +521,7 @@ func (h *CoordinatorHandler) SwitchRelease(c *gin.Context) {
 	installationID := c.Param("installationId")
 	var payload switchReleasePayload
 	if err := c.ShouldBindJSON(&payload); err != nil || strings.TrimSpace(payload.TargetReleaseID) == "" {
-		util.ErrorResponse(c, response.InvalidParams, err.Error(), gin.H{"errorCode": ErrCodeInstallationInvalid})
+		util.ErrorResponse(c, response.InvalidParams, util.OriginalErrorMessage(err, "targetReleaseId is required"), gin.H{"errorCode": ErrCodeInstallationInvalid})
 		return
 	}
 	actor, err := middleware.GetActorFromContext(c)
@@ -554,7 +554,7 @@ func (h *CoordinatorHandler) Upgrade(c *gin.Context) {
 	installationID := c.Param("installationId")
 	var payload switchReleasePayload
 	if err := c.ShouldBindJSON(&payload); err != nil || strings.TrimSpace(payload.TargetReleaseID) == "" {
-		util.ErrorResponse(c, response.InvalidParams, err.Error(), gin.H{"errorCode": ErrCodeInstallationInvalid})
+		util.ErrorResponse(c, response.InvalidParams, util.OriginalErrorMessage(err, "targetReleaseId is required"), gin.H{"errorCode": ErrCodeInstallationInvalid})
 		return
 	}
 	actor, err := middleware.GetActorFromContext(c)
@@ -587,7 +587,7 @@ func (h *CoordinatorHandler) Downgrade(c *gin.Context) {
 	installationID := c.Param("installationId")
 	var payload downgradePayload
 	if err := c.ShouldBindJSON(&payload); err != nil || strings.TrimSpace(payload.TargetReleaseID) == "" {
-		util.ErrorResponse(c, response.InvalidParams, err.Error(), gin.H{"errorCode": ErrCodeInstallationInvalid})
+		util.ErrorResponse(c, response.InvalidParams, util.OriginalErrorMessage(err, "targetReleaseId is required"), gin.H{"errorCode": ErrCodeInstallationInvalid})
 		return
 	}
 	actor, err := middleware.GetActorFromContext(c)

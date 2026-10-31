@@ -16,6 +16,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/agent_skill"
+	"github.com/u-ai/backend/pkg/util"
 )
 
 func (api *KernelAPI) registerAgentSkillRoutes(group *gin.RouterGroup) {
@@ -131,7 +132,7 @@ func (api *KernelAPI) installAgentSkillImport(c *gin.Context) {
 		ScopeID       string          `json:"scopeId"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil || strings.TrimSpace(body.PreviewID) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": util.OriginalErrorMessage(err, "previewId is required")})
 		return
 	}
 	if body.ScopeType == "" {

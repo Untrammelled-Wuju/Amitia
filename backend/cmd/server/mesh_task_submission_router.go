@@ -21,6 +21,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
 	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/internal/runtimeidentity"
+	"github.com/u-ai/backend/pkg/util"
 )
 
 type meshTaskSubmission struct {
@@ -203,7 +204,7 @@ func registerMeshTaskSubmissionRouter(group *gin.RouterGroup, services *AppServi
 			if input.TaskCatalogReference != nil || definition != nil {
 				writeMeshTaskSubmissionError(c, err)
 			} else {
-				c.JSON(http.StatusNotFound, gin.H{"message": err.Error()})
+				c.JSON(http.StatusNotFound, gin.H{"message": util.OriginalErrorMessage(err, "任务定义不存在")})
 			}
 			return
 		}

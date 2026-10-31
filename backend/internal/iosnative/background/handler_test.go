@@ -243,6 +243,7 @@ func TestHandler_TaskSubmit_RefreshWithTaskDefinitionID(t *testing.T) {
 	req := baseBackgroundRequest(OperationTaskSubmit)
 	req.Payload["systemClass"] = string(BackgroundClassRefresh)
 	req.Payload["identifier"] = "maintenance"
+	req.Payload["taskRunId"] = "run-001"
 	req.Payload["taskDefinitionID"] = "def-001"
 	resp := h.Execute(context.Background(), req)
 
@@ -274,7 +275,7 @@ func TestHandler_TaskCancel_Success(t *testing.T) {
 
 	req := baseBackgroundRequest(OperationTaskCancel)
 	req.Payload["systemClass"] = string(BackgroundClassRefresh)
-	req.Payload["RequestId"] = "req-001"
+	req.Payload["taskRunId"] = "req-001"
 	resp := h.Execute(context.Background(), req)
 
 	if resp.Status != "ok" {

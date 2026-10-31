@@ -16,6 +16,10 @@ type ToolRegistrar interface {
 		host runtimehost.RuntimeHost,
 		registry *capability.ToolRegistry,
 	) error
+	RegisterLinuxFileTools(
+		host runtimehost.RuntimeHost,
+		registry *capability.ToolRegistry,
+	) error
 }
 
 type terminalToolRegistrar struct{}

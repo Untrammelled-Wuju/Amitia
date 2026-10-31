@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
+	"github.com/u-ai/backend/pkg/util"
 	amitialog "log"
 )
 
@@ -291,7 +292,7 @@ func (api *WorkflowAPI) createDeviceWorkflow(c *gin.Context) {
 	var def json.RawMessage
 	raw, err := c.GetRawData()
 	if err != nil || len(raw) == 0 || !json.Valid(raw) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": util.OriginalErrorMessage(err, "workflow definition must be valid JSON")})
 		return
 	}
 	def = raw
@@ -306,7 +307,7 @@ func (api *WorkflowAPI) createDeviceWorkflow(c *gin.Context) {
 func (api *WorkflowAPI) updateDeviceWorkflow(c *gin.Context) {
 	raw, err := c.GetRawData()
 	if err != nil || len(raw) == 0 || !json.Valid(raw) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": util.OriginalErrorMessage(err, "workflow definition must be valid JSON")})
 		return
 	}
 	var object map[string]any

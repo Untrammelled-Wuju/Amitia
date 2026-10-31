@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/pkg/util"
 	amitialog "log"
 )
 
@@ -66,7 +67,7 @@ func (h *MediaHandler) Handle(c *gin.Context) {
 	defer file.Close()
 	info, err := file.Stat()
 	if err != nil || info.IsDir() || info.Size() <= 0 || info.Size() > maxChannelResourceBytes {
-		c.JSON(http.StatusNotFound, gin.H{"code": http.StatusNotFound, "msg": err.Error()})
+		c.JSON(http.StatusNotFound, gin.H{"code": http.StatusNotFound, "msg": util.OriginalErrorMessage(err, "频道媒体资源不可用")})
 		return
 	}
 	contentType := mediaContentType(path.Base(fullPath), file)

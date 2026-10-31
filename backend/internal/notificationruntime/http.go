@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/auth"
+	"github.com/u-ai/backend/pkg/util"
 )
 
 type RegisterDeviceRequest struct {
@@ -282,7 +283,7 @@ func RegisterRoutes(router *gin.RouterGroup, runtime *Runtime) {
 		}
 		registered, err := runtime.repo.GetDeviceForPlatform(c.Request.Context(), spaceID, deviceID, request.Platform)
 		if err != nil || registered == nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": util.OriginalErrorMessage(err, "通知设备注册结果不可用")})
 			return
 		}
 		go runtime.CatchUpLiveActivity(*registered)

@@ -730,10 +730,13 @@ func (e *containerPlanExecutor) executeDirectInstallSaga(ctx context.Context, pl
 		SourceType: package_security.SourceLocalFile,
 		LocalPath:  artifact.ArchivePath,
 	})
-	if err != nil || securityReport == nil || !securityReport.Passed {
-		if err == nil {
-			err = fmt.Errorf("archive security rejected package (%s)", securityRejectionDetail(securityReport))
-		}
+	if err != nil {
+		result.Status = "failed"
+		result.Error = err.Error()
+		return 0, err
+	}
+	if securityReport == nil || !securityReport.Passed {
+		err = fmt.Errorf("archive security rejected package (%s)", securityRejectionDetail(securityReport))
 		result.Status = "failed"
 		result.Error = err.Error()
 		return 0, err

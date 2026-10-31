@@ -1,7 +1,7 @@
 package browser
 
 import (
-	"path/filepath"
+	"path"
 	"strings"
 	"time"
 	"unicode"
@@ -37,7 +37,7 @@ func SanitizeFilename(name string) string {
 		return "download"
 	}
 
-	name = filepath.Base(name)
+	name = path.Base(strings.ReplaceAll(name, "\\", "/"))
 	name = strings.ReplaceAll(name, "..", "")
 	name = strings.ReplaceAll(name, "/", "")
 	name = strings.ReplaceAll(name, "\\", "")

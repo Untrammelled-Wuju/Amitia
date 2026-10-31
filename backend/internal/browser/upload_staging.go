@@ -1,7 +1,7 @@
 package browser
 
 import (
-	"path/filepath"
+	"path"
 	"strings"
 )
 
@@ -27,7 +27,7 @@ func SanitizeUploadFilename(name string) string {
 		return "upload"
 	}
 
-	name = filepath.Base(name)
+	name = path.Base(strings.ReplaceAll(name, "\\", "/"))
 	name = strings.ReplaceAll(name, "..", "")
 	name = strings.ReplaceAll(name, "/", "")
 	name = strings.ReplaceAll(name, "\\", "")

@@ -8,6 +8,7 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/middleware/security"
+	"github.com/u-ai/backend/pkg/util"
 )
 
 func registerMeshChatManagementRouter(mesh *gin.RouterGroup, services *AppServices, coreID string) {
@@ -27,7 +28,7 @@ func registerMeshChatManagementRouter(mesh *gin.RouterGroup, services *AppServic
 			}
 			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20)
 			if err := c.ShouldBindJSON(&payload); err != nil || payload.ExpectedScope == nil || strings.TrimSpace(payload.CharacterID) == "" {
-				c.JSON(400, gin.H{"message": err.Error()})
+				c.JSON(400, gin.H{"message": util.OriginalErrorMessage(err, "聊天管理参数无效或缺少原服务范围")})
 				return
 			}
 			payload.Operation = operation

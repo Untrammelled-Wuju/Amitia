@@ -4,6 +4,8 @@ package builtin
 
 import (
 	"context"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/qdrant/go-client/qdrant"
@@ -16,16 +18,27 @@ import (
 
 type testRuntimeHost struct {
 	runtimehost.RuntimeHost
+	root string
 }
 
-func newTestRuntimeHost() *testRuntimeHost {
-	return &testRuntimeHost{}
+func newTestRuntimeHost(t *testing.T) *testRuntimeHost {
+	t.Helper()
+	return &testRuntimeHost{root: t.TempDir()}
 }
 
 func (h *testRuntimeHost) Descriptor() platform.RuntimeDescriptor {
+	host := platform.HostPlatformUnknown
+	switch runtime.GOOS {
+	case "windows":
+		host = platform.HostPlatformWindows
+	case "linux":
+		host = platform.HostPlatformLinux
+	case "darwin":
+		host = platform.HostPlatformMacOS
+	}
 	return platform.RuntimeDescriptor{
 		Guest:        platform.GuestPlatformLinux,
-		Host:         platform.HostPlatformWindows,
+		Host:         host,
 		Kind:         platform.RuntimeKindNativeProcess,
 		Architecture: "amd64",
 	}
@@ -42,11 +55,15 @@ func (h *testRuntimeHost) Capabilities() *runtimehost.HostCapabilities {
 }
 
 func (h *testRuntimeHost) Paths() util.RuntimePaths {
+	root := h.root
+	if root == "" {
+		root = filepath.Join("testdata", "runtime")
+	}
 	return util.RuntimePaths{
-		Root:      "C:\\AmitiaTest",
-		ConfigDir: "C:\\AmitiaTest\\config",
-		DataDir:   "C:\\AmitiaTest\\data",
-		TempDir:   "C:\\AmitiaTest\\tmp",
+		Root:      root,
+		ConfigDir: filepath.Join(root, "config"),
+		DataDir:   filepath.Join(root, "data"),
+		TempDir:   filepath.Join(root, "tmp"),
 	}
 }
 
@@ -67,7 +84,7 @@ func TestQdrantProviderFactorySetsDescriptor(t *testing.T) {
 				},
 			},
 		},
-		Host: newTestRuntimeHost(),
+		Host: newTestRuntimeHost(t),
 	}
 
 	inst, err := factory.Build(ctx)
@@ -100,7 +117,7 @@ func TestQdrantProviderBuildInitializesResolvers(t *testing.T) {
 				},
 			},
 		},
-		Host: newTestRuntimeHost(),
+		Host: newTestRuntimeHost(t),
 	}
 
 	inst, err := factory.Build(ctx)
@@ -139,7 +156,7 @@ func TestQdrantProviderStartRequiresInstall(t *testing.T) {
 				},
 			},
 		},
-		Host: newTestRuntimeHost(),
+		Host: newTestRuntimeHost(t),
 	}
 
 	inst, err := factory.Build(ctx)
@@ -163,7 +180,7 @@ func TestQdrantProviderStopIsIdempotent(t *testing.T) {
 				},
 			},
 		},
-		Host: newTestRuntimeHost(),
+		Host: newTestRuntimeHost(t),
 	}
 
 	inst, err := factory.Build(ctx)
@@ -185,7 +202,7 @@ func TestQdrantProviderCapabilityBeforeReady(t *testing.T) {
 				},
 			},
 		},
-		Host: newTestRuntimeHost(),
+		Host: newTestRuntimeHost(t),
 	}
 
 	inst, err := factory.Build(ctx)

@@ -24,6 +24,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/schedule"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
 	"github.com/u-ai/backend/internal/middleware/security"
+	"github.com/u-ai/backend/pkg/util"
 	amitialog "log"
 )
 
@@ -445,7 +446,7 @@ func (api *WorkflowAPI) workflowSyncConflicts(c *gin.Context) {
 	if raw := strings.TrimSpace(c.Query("limit")); raw != "" {
 		parsed, err := strconv.Atoi(raw)
 		if err != nil || parsed <= 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			c.JSON(http.StatusBadRequest, gin.H{"error": util.OriginalErrorMessage(err, "limit must be positive")})
 			return
 		}
 		if parsed > 500 {
@@ -493,14 +494,14 @@ func (api *WorkflowAPI) workflowSyncEvents(c *gin.Context) {
 	}
 	afterCursor, err := strconv.ParseInt(afterRaw, 10, 64)
 	if err != nil || afterCursor < 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": util.OriginalErrorMessage(err, "afterCursor must be non-negative")})
 		return
 	}
 	limit := 200
 	if raw := strings.TrimSpace(c.Query("limit")); raw != "" {
 		parsed, parseErr := strconv.Atoi(raw)
 		if parseErr != nil || parsed <= 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": parseErr.Error()})
+			c.JSON(http.StatusBadRequest, gin.H{"error": util.OriginalErrorMessage(parseErr, "limit must be positive")})
 			return
 		}
 		if parsed > 1000 {
@@ -1244,7 +1245,7 @@ func (api *WorkflowAPI) importWorkflow(c *gin.Context) {
 	}
 	raw, err := c.GetRawData()
 	if err != nil || len(raw) == 0 || !json.Valid(raw) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": util.OriginalErrorMessage(err, "workflow definition must be valid JSON")})
 		return
 	}
 	var header struct {

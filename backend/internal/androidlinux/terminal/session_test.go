@@ -25,8 +25,8 @@ func (t *testRuntimeHost) Descriptor() platform.RuntimeDescriptor {
 	return t.desc
 }
 
-func (t *testRuntimeHost) Capabilities() *testCaps {
-	return &testCaps{support: t.caps}
+func (t *testRuntimeHost) Capabilities() *runtimehost.HostCapabilities {
+	return runtimehost.NewTestCapabilitiesForTest(t.caps)
 }
 
 func (t *testRuntimeHost) Paths() util.RuntimePaths {
@@ -41,25 +41,13 @@ func (t *testRuntimeHost) Processes() runtimehost.ProcessSupervisor {
 	return nil
 }
 
-type testCaps struct {
-	support map[runtimehost.HostCapabilityID]runtimehost.CapabilitySupport
-}
-
-func (c *testCaps) Support(id runtimehost.HostCapabilityID) runtimehost.CapabilitySupport {
-	return c.support[id]
-}
-
-func (c *testCaps) Supports(id runtimehost.HostCapabilityID) bool {
-	return c.support[id] == runtimehost.SupportSupported
-}
-
-func (c *testCaps) RequirementSatisfied(req runtimehost.CapabilityRequirement) bool {
-	return c.support[req.ID] >= req.Minimum
-}
-
 func newTestRuntimeHost() *testRuntimeHost {
 	return &testRuntimeHost{
-		desc:  platform.NewRuntimeDescriptor(platform.HostPlatformAndroid, platform.RuntimeKindProot, platform.GuestPlatformLinux),
+		desc: platform.RuntimeDescriptor{
+			Host:  platform.HostPlatformAndroid,
+			Kind:  platform.RuntimeKindProot,
+			Guest: platform.GuestPlatformLinux,
+		},
 		paths: util.RuntimePaths{WorkspaceDir: "/tmp/test-workspace"},
 		caps: map[runtimehost.HostCapabilityID]runtimehost.CapabilitySupport{
 			runtimehost.CapProcessSpawn:         runtimehost.SupportSupported,
@@ -73,7 +61,11 @@ func TestIsAndroidLinuxRuntime(t *testing.T) {
 	androidHost := newTestRuntimeHost()
 
 	nonProotHost := &testRuntimeHost{
-		desc:  platform.NewRuntimeDescriptor(platform.HostPlatformAndroid, platform.RuntimeKindNativeProcess, platform.GuestPlatformAndroid),
+		desc: platform.RuntimeDescriptor{
+			Host:  platform.HostPlatformAndroid,
+			Kind:  platform.RuntimeKindNativeProcess,
+			Guest: platform.GuestPlatformAndroid,
+		},
 		paths: util.RuntimePaths{WorkspaceDir: "/tmp"},
 		caps: map[runtimehost.HostCapabilityID]runtimehost.CapabilitySupport{
 			runtimehost.CapProcessSpawn:         runtimehost.SupportSupported,
@@ -82,7 +74,11 @@ func TestIsAndroidLinuxRuntime(t *testing.T) {
 	}
 
 	linuxHost := &testRuntimeHost{
-		desc:  platform.NewRuntimeDescriptor(platform.HostPlatformLinux, platform.RuntimeKindNativeProcess, platform.GuestPlatformLinux),
+		desc: platform.RuntimeDescriptor{
+			Host:  platform.HostPlatformLinux,
+			Kind:  platform.RuntimeKindNativeProcess,
+			Guest: platform.GuestPlatformLinux,
+		},
 		paths: util.RuntimePaths{WorkspaceDir: "/tmp"},
 		caps: map[runtimehost.HostCapabilityID]runtimehost.CapabilitySupport{
 			runtimehost.CapProcessSpawn:         runtimehost.SupportSupported,
@@ -230,9 +226,8 @@ func TestSessionOwnership(t *testing.T) {
 	}
 
 	sess := &Session{
-		Owner:        owner,
-		SessionOwner: owner,
-		State:        SessionRunning,
+		Owner: owner,
+		State: SessionRunning,
 	}
 
 	assert.True(t, sess.BelongsTo(owner))
@@ -316,7 +311,7 @@ func TestOutputBufferTruncation(t *testing.T) {
 		buf.Append(TerminalStreamPTY, []byte("test data"), time.Now())
 	}
 
-	chunks, _, truncated := buf.Read(0, 1024)
+	_, _, truncated := buf.Read(0, 1024)
 	assert.True(t, truncated || buf.ChunkCount() < 5)
 }
 

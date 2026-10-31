@@ -24,7 +24,11 @@ func TestNewProvider(t *testing.T) {
 
 func TestNewProviderWrongRuntime(t *testing.T) {
 	host := &testRuntimeHost{
-		desc: platform.NewRuntimeDescriptor(platform.HostPlatformWindows, platform.RuntimeKindNativeProcess, platform.GuestPlatformWindows),
+		desc: platform.RuntimeDescriptor{
+			Host:  platform.HostPlatformWindows,
+			Kind:  platform.RuntimeKindNativeProcess,
+			Guest: platform.GuestPlatformWindows,
+		},
 		paths: util.RuntimePaths{
 			WorkspaceDir: "/tmp/test",
 		},
@@ -149,7 +153,6 @@ func (e *stdError) Error() string {
 }
 
 func TestProviderConstantValues(t *testing.T) {
-	assert.Equal(t, "android_linux", string(RuntimeTypeAndroidLinux))
 	assert.Equal(t, "terminal.open", OpOpen)
 	assert.Equal(t, "terminal.write", OpWrite)
 	assert.Equal(t, "terminal.read", OpRead)

@@ -14,6 +14,7 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/devicemesh/lan"
 	"github.com/u-ai/backend/internal/devicemesh/proof"
+	"github.com/u-ai/backend/pkg/util"
 )
 
 func (h *LocalHandler) handlePinnedPairing(c *gin.Context) {
@@ -106,7 +107,7 @@ func (h *LocalHandler) handlePinnedPairing(c *gin.Context) {
 	defer response.Body.Close()
 	result, err := io.ReadAll(io.LimitReader(response.Body, (1<<20)+1))
 	if err != nil || len(result) > 1<<20 || !json.Valid(result) {
-		c.JSON(502, gin.H{"message": err.Error()})
+		c.JSON(502, gin.H{"message": util.OriginalErrorMessage(err, "配对服务响应无效")})
 		return
 	}
 	c.Header("Cache-Control", "no-store")

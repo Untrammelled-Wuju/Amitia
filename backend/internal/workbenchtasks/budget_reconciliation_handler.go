@@ -10,6 +10,7 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/mindruntime"
+	"github.com/u-ai/backend/pkg/util"
 )
 
 type BudgetReconciliationReader interface {
@@ -41,7 +42,7 @@ func (h *Handler) budgetReconciliation(c *gin.Context) {
 	if c.Query("limit") != "" {
 		parsed, err := strconv.Atoi(c.Query("limit"))
 		if err != nil || parsed < 1 || parsed > 200 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "errorCode": "invalid_page"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": util.OriginalErrorMessage(err, "分页数量必须在 1 到 200 之间"), "errorCode": "invalid_page"})
 			return
 		}
 		limit = parsed
@@ -58,7 +59,7 @@ func (h *Handler) budgetReconciliation(c *gin.Context) {
 			var err error
 			sequence, err = strconv.ParseInt(raw, 10, 64)
 			if err != nil || sequence < 0 {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "errorCode": "invalid_page"})
+				c.JSON(http.StatusBadRequest, gin.H{"error": util.OriginalErrorMessage(err, "核对游标序号必须为非负数"), "errorCode": "invalid_page"})
 				return
 			}
 		}

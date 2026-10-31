@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/devicemesh/lan"
+	"github.com/u-ai/backend/pkg/util"
 	amitialog "log"
 )
 
@@ -52,7 +53,7 @@ func (h *LocalHandler) handleProviderProxy(c *gin.Context) {
 	host, _, err := net.SplitHostPort(c.Request.RemoteAddr)
 	ip := net.ParseIP(host)
 	if err != nil || ip == nil || !ip.IsLoopback() {
-		c.JSON(403, gin.H{"message": err.Error()})
+		c.JSON(403, gin.H{"message": util.OriginalErrorMessage(err, "仅允许本机访问云端连接通道")})
 		return
 	}
 	h.providerMu.Lock()
@@ -76,7 +77,7 @@ func (h *LocalHandler) handleProviderProxy(c *gin.Context) {
 	c.Request = c.Request.WithContext(requestContext)
 	credential, err := h.credStore.LoadCredential()
 	if err != nil || credential == nil || !time.Now().Before(credential.ExpiresAt) {
-		c.JSON(401, gin.H{"message": err.Error()})
+		c.JSON(401, gin.H{"message": util.OriginalErrorMessage(err, "云端绑定凭证不可用，请重新配对")})
 		return
 	}
 	path := c.Param("path")
@@ -97,7 +98,7 @@ func (h *LocalHandler) handleProviderProxy(c *gin.Context) {
 	}
 	target, err := url.Parse(credential.CloudBaseUrl)
 	if err != nil || target.Host == "" || target.User != nil || (target.Scheme != "https" && target.Scheme != "http") {
-		c.JSON(503, gin.H{"message": err.Error()})
+		c.JSON(503, gin.H{"message": util.OriginalErrorMessage(err, "云端服务地址无效")})
 		return
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()

@@ -249,7 +249,7 @@ func (h *Handler) VoiceTranscribe(c *gin.Context) {
 		AudioUrl string `json:"audioUrl"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil || body.AudioUrl == "" {
-		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
+		util.ErrorResponse(c, response.InvalidParams, util.OriginalErrorMessage(err, "audioUrl is required"), nil)
 		return
 	}
 

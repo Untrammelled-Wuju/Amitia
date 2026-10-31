@@ -19,6 +19,7 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/middleware/security"
+	"github.com/u-ai/backend/pkg/util"
 )
 
 func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, coreID string) {
@@ -150,7 +151,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 		query := coordination.DataQuery{ConversationID: c.Param("conversationId"), HistoricalRoleID: c.Query("historicalRoleId"), ListConversations: c.Param("conversationId") == "", Limit: 128}
 		search, searchErr := coordination.NormalizeConversationSearch(c.Query("keyword"))
 		if searchErr != nil || search != "" && !query.ListConversations {
-			c.JSON(400, gin.H{"message": searchErr.Error()})
+			c.JSON(400, gin.H{"message": util.OriginalErrorMessage(searchErr, "搜索关键词仅支持会话列表")})
 			return
 		}
 		query.SearchQuery = search
@@ -179,7 +180,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 		if value := c.Query("limit"); value != "" {
 			limit, err := strconv.Atoi(value)
 			if err != nil || limit < 1 || limit > 128 {
-				c.JSON(400, gin.H{"message": err.Error()})
+				c.JSON(400, gin.H{"message": util.OriginalErrorMessage(err, "聊天历史分页参数无效")})
 				return
 			}
 			query.Limit = limit
@@ -289,7 +290,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 			}
 			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 16<<10)
 			if err := c.ShouldBindJSON(&input); err != nil || input.ExpectedScope == nil {
-				c.JSON(400, gin.H{"message": err.Error()})
+				c.JSON(400, gin.H{"message": util.OriginalErrorMessage(err, "投影重建请求缺少原始执行范围")})
 				return
 			}
 			request.RoleID, request.TargetDeviceID, expected = input.RoleID, input.TargetDeviceID, input.ExpectedScope

@@ -12,6 +12,7 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/middleware/security"
+	"github.com/u-ai/backend/pkg/util"
 )
 
 func registerMeshMemoryManagementRouter(mesh *gin.RouterGroup, services *AppServices, coreID string) {
@@ -27,7 +28,7 @@ func registerMeshMemoryManagementRouter(mesh *gin.RouterGroup, services *AppServ
 				var err error
 				limit, err = strconv.Atoi(value)
 				if err != nil || limit < 1 || limit > 128 {
-					c.JSON(400, gin.H{"message": err.Error()})
+					c.JSON(400, gin.H{"message": util.OriginalErrorMessage(err, "记忆分页参数无效")})
 					return
 				}
 			}
@@ -37,7 +38,7 @@ func registerMeshMemoryManagementRouter(mesh *gin.RouterGroup, services *AppServ
 			if raw := c.Query("retentionLevel"); raw != "" {
 				value, err := strconv.Atoi(raw)
 				if err != nil || value < 1 || value > 5 {
-					c.JSON(400, gin.H{"message": err.Error()})
+					c.JSON(400, gin.H{"message": util.OriginalErrorMessage(err, "记忆等级参数无效")})
 					return
 				}
 				query.RetentionLevel = value
@@ -78,7 +79,7 @@ func registerMeshMemoryManagementRouter(mesh *gin.RouterGroup, services *AppServ
 				ConversationOrigin *business.ConversationOrigin `json:"conversationOrigin"`
 			}
 			if err != nil || json.Unmarshal(payload, &metadata) != nil || metadata.ExpectedScope == nil {
-				c.JSON(400, gin.H{"message": err.Error()})
+				c.JSON(400, gin.H{"message": util.OriginalErrorMessage(err, "记忆操作参数无效或缺少原服务范围")})
 				return
 			}
 			if _, err := uuid.Parse(metadata.RequestID); err != nil {

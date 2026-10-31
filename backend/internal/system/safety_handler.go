@@ -46,7 +46,7 @@ func (h *Handler) HandleSafetyEvent(c *gin.Context) {
 		ExpectedRevision int64 `json:"expectedRevision"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil || body.ExpectedRevision < 1 {
-		c.JSON(400, gin.H{"message": err.Error()})
+		c.JSON(400, gin.H{"message": util.OriginalErrorMessage(err, "expectedRevision must be positive")})
 		return
 	}
 	actor, ok := auth.FromContext(c.Request.Context())

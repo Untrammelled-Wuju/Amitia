@@ -400,7 +400,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 					RuntimeID string `json:"runtimeId"`
 				}
 				if err := c.ShouldBindJSON(&request); err != nil || strings.TrimSpace(request.RuntimeID) == "" {
-					c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
+					c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": util.OriginalErrorMessage(err, "runtimeId is required")})
 					return
 				}
 				runtimeID := strings.TrimSpace(request.RuntimeID)

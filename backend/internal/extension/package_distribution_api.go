@@ -13,6 +13,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/package_distribution"
 	middlewaresecurity "github.com/u-ai/backend/internal/middleware/security"
+	"github.com/u-ai/backend/pkg/util"
 )
 
 func registerPackageDistributionRoutes(group *gin.RouterGroup, runtime *Runtime) {
@@ -51,7 +52,7 @@ func checkPackageDistributionUpdate(c *gin.Context, runtime *Runtime) {
 		ExtensionID string `json:"extensionId"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil || strings.TrimSpace(body.ExtensionID) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": util.OriginalErrorMessage(err, "extensionId is required")})
 		return
 	}
 	currentVersion, err := installedExtensionVersion(c.Request.Context(), runtime, body.ExtensionID)
@@ -307,7 +308,7 @@ func previewPackageRollback(c *gin.Context, runtime *Runtime) {
 		ScopeID       string `json:"scopeId"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil || strings.TrimSpace(body.ExtensionID) == "" || strings.TrimSpace(body.TargetVersion) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": util.OriginalErrorMessage(err, "extensionId and targetVersion are required")})
 		return
 	}
 	scopeType := strings.TrimSpace(body.ScopeType)
