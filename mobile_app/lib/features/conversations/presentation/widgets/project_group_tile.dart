@@ -78,27 +78,21 @@ class ProjectGroupTile extends ConsumerWidget {
         project.available &&
         project.workspaces.isNotEmpty;
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 3, 12, 3),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
           Material(
             color: Colors.transparent,
             child: InkWell(
-              borderRadius: BorderRadius.circular(12),
+              key: ValueKey('project-header-${project.id}'),
               onTap: onToggle,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 9, 6, 9),
+                padding: const EdgeInsets.fromLTRB(16, 9, 8, 9),
                 child: Row(
                   children: [
-                    Container(
+                    SizedBox(
                       width: 38,
                       height: 38,
-                      decoration: BoxDecoration(
-                        color: context.accentPrimary.withValues(alpha: 0.10),
-                        borderRadius: BorderRadius.circular(11),
-                      ),
                       child: Icon(
                         primary == null
                             ? Icons.folder_outlined
@@ -287,9 +281,7 @@ class ProjectGroupTile extends ConsumerWidget {
               duration: const Duration(milliseconds: 190),
               curve: Curves.easeOutCubic,
               child: expanded
-                  ? Padding(
-                      padding: const EdgeInsets.only(left: 12),
-                      child: Column(
+                  ? Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: conversations.isEmpty
                             ? [
@@ -342,14 +334,12 @@ class ProjectGroupTile extends ConsumerWidget {
                                     ),
                                   ),
                               ],
-                      ),
                     )
                   : const SizedBox.shrink(),
             ),
           ),
           const Divider(height: 1),
-        ],
-      ),
+      ],
     );
   }
 }

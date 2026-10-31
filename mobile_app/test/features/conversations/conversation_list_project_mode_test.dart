@@ -74,6 +74,16 @@ void main() {
     expect(find.text('项目'), findsOneWidget);
     expect(find.text('项目 A'), findsOneWidget);
     expect(find.text('项目内对话'), findsNothing);
+    final projectHeader = find.byKey(
+      const ValueKey('project-header-project-a'),
+    );
+    expect(tester.widget<InkWell>(projectHeader).borderRadius, isNull);
+    expect(
+      tester.getSize(projectHeader).width,
+      tester
+          .getSize(find.byKey(const ValueKey('project-conversation-list')))
+          .width,
+    );
 
     await tester.tap(find.text('项目 A'));
     await tester.pumpAndSettle();
@@ -82,5 +92,16 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('message-create-button')));
     await tester.pumpAndSettle();
     expect(find.text('新项目'), findsOneWidget);
+
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('conversation-view-switch')));
+    await tester.pumpAndSettle();
+    expect(find.text('切换为消息模式'), findsOneWidget);
+
+    await tester.tap(find.text('切换'));
+    await tester.pumpAndSettle();
+    expect(find.text('消息'), findsOneWidget);
+    expect(find.text('项目'), findsNothing);
   });
 }

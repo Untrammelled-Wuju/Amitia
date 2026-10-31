@@ -3095,7 +3095,8 @@ return const <String, dynamic>{};
     );
 
     final builtinConversation = AmitiaScaffold(
-      resizeToAvoidBottomInset: false,
+      key: const ValueKey('chat-scaffold'),
+      resizeToAvoidBottomInset: true,
       body: Stack(
         key: const ValueKey('ime-single-scaffold-20260805-0325'),
         fit: StackFit.expand,

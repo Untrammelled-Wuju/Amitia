@@ -99,6 +99,14 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
       );
       if (confirmed != true || !mounted) return;
       ref.invalidate(conversationSidebarProvider);
+    } else {
+      final confirmed = await showAmitiaConfirmDialog(
+        context,
+        title: '切换为消息模式',
+        message: '项目将收起，对话会恢复为普通消息列表。项目和其中的对话不会被删除。',
+        confirmLabel: '切换',
+      );
+      if (confirmed != true || !mounted) return;
     }
     setState(() => _projectMode = enabled);
     final preferences = await SharedPreferences.getInstance();
