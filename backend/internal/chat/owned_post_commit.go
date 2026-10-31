@@ -23,7 +23,7 @@ func (s *service) PlanOwnedTitle(ctx context.Context, inference business.Inferen
 		if resource.Deleted {
 			continue
 		}
-		if resource.Kind == "message" {
+		if resource.Kind == "message" && resource.ID != inference.Scope.RequestID+"/assistant" {
 			var message struct {
 				Role           string `json:"role"`
 				Content        string `json:"content"`

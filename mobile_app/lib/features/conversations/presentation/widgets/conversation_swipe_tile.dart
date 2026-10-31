@@ -32,6 +32,7 @@ class _ConversationSwipeTileState extends State<ConversationSwipeTile> {
   static const _actionCount = 3;
   double _offset = 0;
   bool _busy = false;
+  bool _dragging = false;
 
   double get _maxOffset => _actionExtent * _actionCount;
 
@@ -45,8 +46,8 @@ class _ConversationSwipeTileState extends State<ConversationSwipeTile> {
   void _handleDragEnd(DragEndDetails details) {
     if (!widget.enabled || _busy) return;
     final velocity = details.primaryVelocity ?? 0;
-    final shouldOpen = velocity < -250 || (_offset.abs() > _maxOffset / 3);
-    setState(() => _offset = shouldOpen ? -_maxOffset : 0);
+    final shouldOpen = velocity.abs() > 250 ? velocity < 0 : _offset.abs() > _maxOffset / 2;
+    setState(() { _dragging = false; _offset = shouldOpen ? -_maxOffset : 0; });
   }
 
   Future<void> _run(Future<void> Function() action) async {
@@ -104,11 +105,13 @@ class _ConversationSwipeTileState extends State<ConversationSwipeTile> {
             ),
           ),
           AnimatedContainer(
-            duration: _busy ? Duration.zero : const Duration(milliseconds: 170),
+            width: double.infinity,
+            duration: _busy || _dragging ? Duration.zero : const Duration(milliseconds: 170),
             curve: Curves.easeOutCubic,
             transform: Matrix4.translationValues(_offset, 0, 0),
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
+              onHorizontalDragStart: (_) { if (widget.enabled && !_busy) setState(() => _dragging = true); },
               onHorizontalDragUpdate: _handleDragUpdate,
               onHorizontalDragEnd: _handleDragEnd,
               onTap: open ? () => setState(() => _offset = 0) : null,

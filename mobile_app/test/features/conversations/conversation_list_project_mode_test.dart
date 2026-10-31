@@ -51,7 +51,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          conversationListProvider.overrideWith((ref) async => []),
+          conversationListProvider.overrideWith((ref) async => project.conversations),
           characterListProvider.overrideWith(
             (ref) async => [CharacterDto(id: 'role-a', name: '角色 A')],
           ),
@@ -65,6 +65,15 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('消息'), findsOneWidget);
+    await tester.longPress(find.text('项目内对话'));
+    await tester.pumpAndSettle();
+    expect(find.text('重命名'), findsOneWidget);
+    expect(find.text('置顶'), findsWidgets);
+    expect(find.text('归档'), findsWidgets);
+    expect(find.text('标为已读'), findsWidgets);
+    expect(find.text('删除'), findsOneWidget);
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('conversation-view-switch')));
     await tester.pumpAndSettle();
     expect(find.text('切换为项目模式'), findsOneWidget);
@@ -88,6 +97,29 @@ void main() {
     await tester.tap(find.text('项目 A'));
     await tester.pumpAndSettle();
     expect(find.text('项目内对话'), findsOneWidget);
+
+    await tester.longPress(find.text('项目内对话'));
+    await tester.pumpAndSettle();
+    expect(find.text('重命名'), findsOneWidget);
+    expect(find.text('标为已读'), findsWidgets);
+    expect(find.text('调整所属项目'), findsOneWidget);
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('批量选择'));
+    await tester.pumpAndSettle();
+    expect(find.text('选择对话'), findsOneWidget);
+    await tester.tap(find.text('项目内对话'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isTrue);
+    await tester.longPress(find.text('项目内对话'));
+    await tester.pumpAndSettle();
+    expect(find.text('归档'), findsWidgets);
+    expect(find.text('移动到项目'), findsOneWidget);
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('退出多选'));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const ValueKey('message-create-button')));
     await tester.pumpAndSettle();

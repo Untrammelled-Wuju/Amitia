@@ -1281,6 +1281,21 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
+  test('会话缓存清空后按原始归属重新加载并归档', () async {
+    final api = _OwnedApi();
+    api.resource = {'kind': 'conversation', 'id': 'chat', 'ownerId': 'device-a', 'roleId': 'role-a', 'revision': 7, 'deleted': false, 'body': {'id': 'chat', 'title': '对话'}};
+    api.editAck = {'ownerId': 'device-a', 'versions': {'conversation/chat': 8}};
+    final service = DeviceOwnedChatService(api, providerKey: () => 'https://provider');
+    await service.refresh();
+    final id = conversationReference({'ownerId': 'device-a', 'id': 'chat'});
+    await service.edit('conversation', id, changes: {'archived': true});
+    expect(api.editRequest?['id'], 'chat');
+    expect(api.editRequest?['expectedRevision'], 7);
+    expect(api.queries.last['conversationOwnerId'], 'device-a');
+    await service.edit('conversation', id, changes: {'archived': true});
+    expect(api.editRequest?['changes'], {'archived': true});
+  });
+
   test('Core 与历史设备分别分页，已结束的数据源不会重新开启', () async {
     final api = _OwnedApi();
     final service = DeviceOwnedChatService(

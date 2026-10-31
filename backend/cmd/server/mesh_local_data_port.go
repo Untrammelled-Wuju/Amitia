@@ -524,7 +524,44 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 			return snapshot, err
 		}
 		for index, resourceIndex := range conversationIndexes {
-			snapshot.Resources[resourceIndex].Body = enriched[index]
+			resource := &snapshot.Resources[resourceIndex]
+			resource.Body = enriched[index]
+			if query.ListConversations {
+				active := business.RuntimeManager().RuntimeSnapshot(business.RuntimeKey(scope, resource.ID)).ActiveTurn
+				if active != nil {
+					var document map[string]any
+					if err := json.Unmarshal(resource.Body, &document); err != nil {
+						return snapshot, err
+					}
+					document["isGenerating"] = true
+					label := "正在生成回复"
+					for i := len(active.Blocks) - 1; i >= 0; i-- {
+						block := active.Blocks[i]
+						switch block.Type {
+						case "reasoning":
+							label = "正在思考"
+						case "text":
+							if content := strings.TrimSpace(block.Content); content != "" {
+								label = content
+							}
+						case "tool_call":
+							label = "正在使用工具"
+							if name, ok := block.Payload["toolName"].(string); ok && strings.TrimSpace(name) != "" {
+								label = "正在使用 " + strings.TrimSpace(name) + " 工具"
+							}
+						default:
+							continue
+						}
+						break
+					}
+					document["activityLabel"] = label
+					encoded, err := json.Marshal(document)
+					if err != nil {
+						return snapshot, err
+					}
+					resource.Body = encoded
+				}
+			}
 		}
 	}
 	if query.ResourceKind == "" && len(query.Vector) > 0 {

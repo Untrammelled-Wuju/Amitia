@@ -77,6 +77,7 @@ func TestEnrichConversationActivityUsesActiveAndTerminalTurns(t *testing.T) {
 	bodies, err := EnrichConversationActivityBodies(db, []json.RawMessage{
 		json.RawMessage(`{"id":"running","lastReadTurnSequence":0}`),
 		json.RawMessage(`{"id":"terminal","lastReadTurnSequence":1}`),
+		json.RawMessage(`{"id":"running","lastMessagePreview":"所有者最新消息","lastMessage":"所有者最新消息","lastMessageRole":"user"}`),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -95,5 +96,12 @@ func TestEnrichConversationActivityUsesActiveAndTerminalTurns(t *testing.T) {
 	if terminal["unreadCompletedCount"] != float64(0) ||
 		terminal["activityLabel"] != nil && terminal["activityLabel"] != "" {
 		t.Fatalf("terminal conversation projection = %+v", terminal)
+	}
+	var owned map[string]any
+	if err := json.Unmarshal(bodies[2], &owned); err != nil {
+		t.Fatal(err)
+	}
+	if owned["lastMessage"] != "所有者最新消息" || owned["lastMessageRole"] != "user" {
+		t.Fatalf("owner preview overwritten: %+v", owned)
 	}
 }

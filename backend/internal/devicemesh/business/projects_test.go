@@ -95,12 +95,16 @@ func TestConversationProjectAssignmentIsRejected(t *testing.T) {
 	if _, err := engine.Run(t.Context(), Request{SpaceID: "core", DeviceID: "a", CoreID: "core", RoleID: "role", RequestID: "conversation-create", ConversationID: "conversation", Message: "hello"}); err != nil {
 		t.Fatal(err)
 	}
-	edit := EditRequest{ExpectedScope: &query.Scope, RoleID: "role", RequestID: "move-project", Kind: "conversation", ID: "conversation", ExpectedRevision: 1, Changes: map[string]json.RawMessage{"projectId": body(project.Project.ID)}}
+	conversation, err := coordination.NewOwnershipStore(db, "a").Get(t.Context(), "conversation", "conversation")
+	if err != nil || conversation == nil {
+		t.Fatalf("conversation=%+v error=%v", conversation, err)
+	}
+	edit := EditRequest{ExpectedScope: &query.Scope, RoleID: "role", RequestID: "move-project", Kind: "conversation", ID: "conversation", ExpectedRevision: conversation.Revision, Changes: map[string]json.RawMessage{"projectId": body(project.Project.ID)}}
 	if _, err := engine.Edit(t.Context(), request, edit); err != nil {
 		t.Fatal(err)
 	}
 	row, err := coordination.NewOwnershipStore(db, "a").Get(t.Context(), "conversation", "conversation")
-	if err != nil || row.Revision != 2 {
+	if err != nil || row.Revision != conversation.Revision+1 {
 		t.Fatal("project assignment did not change conversation")
 	}
 	var document struct {

@@ -1,5 +1,5 @@
 <template>
-  <aside class="workspace-sidebar" data-amitia-ui="app.workspace-sidebar">
+  <aside class="workspace-sidebar" data-amitia-ui="app.workspace-sidebar" @contextmenu.capture="handleBatchContextMenu">
     <div class="workspace-panel-header">
       <button
         type="button"
@@ -43,6 +43,7 @@
             :conversation="conversation"
             :active="conversation.id === activeConversationId"
             :projects="chatStore.sidebar.projects"
+            :selecting="batchSelecting" :selected="selectedIds.includes(conversation.id)"
             @select="handleSelectConversation"
             @rename="handleConversationRename"
             @toggle-pin="handleToggleConversationPin"
@@ -59,6 +60,7 @@
             :active="project.id === chatStore.currentProjectId"
             :active-conversation-id="activeConversationId"
             :projects="chatStore.sidebar.projects"
+            :selecting="batchSelecting" :selected-ids="selectedIds"
             @select="handleSelectConversation"
             @create-conversation="handleCreateProjectConversation"
             @command="handleProjectCommand"
@@ -75,6 +77,7 @@
         <div class="thread-section">
           <div class="section-caption project-caption">
             <span>聊天</span>
+            <button type="button" class="section-add" :title="batchSelecting ? '退出多选' : '批量选择'" @click="toggleBatchSelection">☑</button>
             <button type="button" class="section-add" data-amitia-ui="app.sidebar.item" title="新建对话" aria-label="新建对话" @click="handleNewChat">
               <el-icon><Plus /></el-icon>
             </button>
@@ -85,6 +88,7 @@
             :conversation="conversation"
             :active="conversation.id === activeConversationId"
             :projects="chatStore.sidebar.projects"
+            :selecting="batchSelecting" :selected="selectedIds.includes(conversation.id)"
             @select="handleSelectConversation"
             @rename="handleConversationRename"
             @toggle-pin="handleToggleConversationPin"
@@ -108,6 +112,7 @@
         <div class="thread-section">
           <div class="section-caption project-caption">
             <span>项目</span>
+            <button type="button" class="section-add" :title="batchSelecting ? '退出多选' : '批量选择'" @click="toggleBatchSelection">☑</button>
             <button type="button" class="section-add" data-amitia-ui="app.sidebar.item" title="新增项目" aria-label="新增项目" @click="handleAddProject">
               <el-icon><Plus /></el-icon>
             </button>
@@ -119,6 +124,7 @@
             :active="project.id === chatStore.currentProjectId"
             :active-conversation-id="activeConversationId"
             :projects="chatStore.sidebar.projects"
+            :selecting="batchSelecting" :selected-ids="selectedIds"
             @select="handleSelectConversation"
             @create-conversation="handleCreateProjectConversation"
             @command="handleProjectCommand"
@@ -219,6 +225,7 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ChatDotRound, FolderOpened, Plus, Search } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
+import { openContextMenu, type ContextMenuAction } from "./context-menu/contextMenuStore";
 import { useChatStore, type ConversationItem, type ProjectItem, type ProjectWorkspace } from "@/stores/chat";
 import { useApi } from "@/composables/useApi";
 import NewConversationIcon from "@/components/icons/NewConversationIcon.vue";
@@ -324,9 +331,53 @@ async function handleGroupCreated(group: OwnedGroupState, baseRoleId: string, pr
 }
 
 async function handleSelectConversation(conversation: ConversationItem) {
+  if (batchSelecting.value) {
+    selectedIds.value = selectedIds.value.includes(conversation.id) ? selectedIds.value.filter((id) => id !== conversation.id) : [...selectedIds.value, conversation.id];
+    return;
+  }
   chatStore.currentProjectId = conversation.projectId || "";
   chatStore.setConversationId(conversation.id);
   await router.push({ path: "/chat", query: { conversationId: conversation.id } });
+}
+
+const batchSelecting = ref(false);
+const selectedIds = ref<string[]>([]);
+const batchRows = computed(() => [...chatStore.sidebar.pinned, ...chatStore.sidebar.recent, ...chatStore.sidebar.projects.flatMap((project) => project.conversations)]);
+function toggleBatchSelection() { batchSelecting.value = !batchSelecting.value; selectedIds.value = []; }
+async function batchOperation(action: string, projectId = "") {
+  if (action === "delete") {
+    const confirmed = await ElMessageBox.confirm(`确定删除选中的 ${selectedIds.value.length} 个对话吗？`, "批量删除", { type: "warning" }).then(() => true).catch(handleProjectDialogDismiss);
+    if (!confirmed) return;
+  }
+  const failures: string[] = [];
+  const succeeded: string[] = [];
+  for (const id of selectedIds.value) {
+    const row = batchRows.value.find((item) => item.id === id);
+    if (!row) { failures.push(`${id}: 对话不存在`); continue; }
+    try {
+      const changes = action === "archive" ? { archived: true } : action === "pin" ? { pinned: true } : action === "read" ? { lastReadTurnSequence: Number(row.lastTerminalTurnSequence || 0) } : action === "move" ? { projectId } : {};
+      await owned.edit("conversation", id, changes, { deleted: action === "delete", characterId: row.characterId });
+      succeeded.push(id);
+    } catch (error) { failures.push(`${row.title || id}: ${error instanceof Error ? error.stack || error.message : String(error)}`); }
+  }
+  selectedIds.value = selectedIds.value.filter((id) => !succeeded.includes(id));
+  await chatStore.fetchSidebar();
+  if ((action === "delete" || action === "archive") && succeeded.includes(activeConversationId.value)) await router.replace({ path: "/chat" });
+  if (failures.length) await ElMessageBox.alert(failures.join("\n\n"), `已完成 ${succeeded.length} 项，失败 ${failures.length} 项`, { customClass: "batch-errors" });
+  else ElMessage.success(`已完成 ${succeeded.length} 项`);
+}
+function handleBatchContextMenu(event: MouseEvent) {
+  if (!batchSelecting.value || !(event.target as Element).closest(".thread-row")) return;
+  event.preventDefault(); event.stopPropagation();
+  const disabled = selectedIds.value.length === 0;
+  const items: ContextMenuAction[] = [
+    { id: "all", label: "全选", action: () => { selectedIds.value = [...new Set(batchRows.value.map((row) => row.id))]; } },
+    ...[["archive", "归档"], ["read", "标为已读"], ["pin", "置顶"]].map(([id, label]) => ({ id, label, disabled, action: () => batchOperation(id) })),
+    { id: "move", label: "移动到项目", disabled, children: [{ id: "ungrouped", label: "移出项目", action: () => batchOperation("move") }, ...chatStore.sidebar.projects.filter((project) => !project.readOnly).map((project) => ({ id: project.id, label: project.name, action: () => batchOperation("move", project.id) }))] },
+    { id: "delete", label: "删除", danger: true, disabled, action: () => batchOperation("delete") },
+    { id: "cancel", label: "取消多选", action: toggleBatchSelection },
+  ];
+  openContextMenu({ x: event.clientX, y: event.clientY, title: `已选择 ${selectedIds.value.length} 个对话`, items });
 }
 
 async function handleConversationRename(conversation: ConversationItem, title: string) {
@@ -674,7 +725,8 @@ onUnmounted(() => {
 .thread-expand:hover { background: var(--workbench-sidebar-hover); }
 .thread-section { display: flex; flex-direction: column; gap: 1px; padding: 4px 0; }
 .thread-section + .thread-section { margin-top: 6px; border-top: 1px solid var(--surface-border); padding-top: 10px; }
-.project-caption { display: flex; align-items: center; justify-content: space-between; }
+.project-caption { display: flex; align-items: center; gap: 2px; }
+.project-caption > span { margin-right: auto; }
 .section-add, .project-action { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--text-muted); cursor: pointer; }
 .section-add:hover, .project-action:hover { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
 .section-add { opacity: 0; pointer-events: none; transition: opacity 0.16s ease, background-color 0.16s ease, color 0.16s ease; }

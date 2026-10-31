@@ -110,7 +110,8 @@ func EnrichConversationActivityBodies(db *gorm.DB, bodies []json.RawMessage) ([]
 			parsed[index]["activeToolName"] = row.ActiveToolName
 			parsed[index]["activeTaskTitle"] = row.ActiveTaskTitle
 		}
-		if row.LastMessagePreview != "" {
+		storedPreview, _ := parsed[index]["lastMessagePreview"].(string)
+		if row.LastMessagePreview != "" && strings.TrimSpace(storedPreview) == "" {
 			parsed[index]["lastMessagePreview"] = row.LastMessagePreview
 			parsed[index]["lastMessage"] = row.LastMessagePreview
 			parsed[index]["lastMessageType"] = row.LastMessageType

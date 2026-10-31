@@ -76,7 +76,7 @@ describe("sidebar conversation selection", () => {
       chat.sidebar.recent = [conversation];
       await router.replace({ path: "/chat", query: { conversationId: conversation.id } });
       await flushPromises();
-      expect(wrapper.get('[aria-current="page"]').text()).toBe(conversation.title);
+      expect(wrapper.get('[aria-current="page"] .thread-title').text()).toBe(conversation.title);
       await wrapper.get('[data-amitia-ui="workspace.new-chat"]').trigger("click");
       await flushPromises();
       expect(mocks.startDraft).toHaveBeenCalledOnce();
@@ -92,7 +92,7 @@ describe("sidebar conversation selection", () => {
     try {
       chat.sidebar.recent = [conversation];
       await flushPromises();
-      expect(wrapper.get('[aria-current="page"]').text()).toBe(conversation.title);
+      expect(wrapper.get('[aria-current="page"] .thread-title').text()).toBe(conversation.title);
     } finally {
       wrapper.unmount();
     }
@@ -126,6 +126,22 @@ describe("sidebar conversation selection", () => {
     } finally {
       wrapper.unmount();
     }
+  });
+
+  it("enables selection for chats and project conversations together", async () => {
+    const { wrapper, chat } = await renderSidebar("/chat");
+    const projectConversation = { ...conversation, id: "project-conversation", projectId: "project" };
+    chat.sidebar.recent = [conversation];
+    chat.sidebar.projects = [{ id: "project", name: "项目", workspaceId: "", deviceId: "", rootUri: "", workspaces: [], primaryWorkspaceId: "", available: true, status: "available", conversationCount: 1, conversations: [projectConversation] }];
+    await flushPromises();
+    await wrapper.findAll('[title="批量选择"]')[0].trigger("click");
+    await wrapper.get('.project-main').trigger('click');
+    await flushPromises();
+    expect(wrapper.findAll('.thread-row input[type="checkbox"]')).toHaveLength(2);
+    await wrapper.findAll('.thread-main')[0].trigger('click');
+    expect((wrapper.findAll('.thread-row input[type="checkbox"]')[0].element as HTMLInputElement).checked).toBe(true);
+    expect(wrapper.findAll('[title="退出多选"]')).toHaveLength(2);
+    wrapper.unmount();
   });
 
   it("shows the project empty state only when there are no projects", async () => {

@@ -120,7 +120,11 @@ func TestDeletingConversationRemovesOwnedChildrenAndPreventsResurrection(t *test
 	if _, err := engine.Run(t.Context(), request); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := engine.Edit(t.Context(), request, EditRequest{RoleID: "role", RequestID: "delete", Kind: "conversation", ID: "conversation", ExpectedRevision: 1, Deleted: true}); err != nil {
+	conversation, err := coordination.NewOwnershipStore(db, "a").Get(t.Context(), "conversation", "conversation")
+	if err != nil || conversation == nil {
+		t.Fatalf("conversation=%+v error=%v", conversation, err)
+	}
+	if _, err := engine.Edit(t.Context(), request, EditRequest{RoleID: "role", RequestID: "delete", Kind: "conversation", ID: "conversation", ExpectedRevision: conversation.Revision, Deleted: true}); err != nil {
 		t.Fatal(err)
 	}
 	store := coordination.NewOwnershipStore(db, "a")
@@ -133,7 +137,7 @@ func TestDeletingConversationRemovesOwnedChildrenAndPreventsResurrection(t *test
 			t.Fatalf("conversation child %s survived: %+v %v", kind, rows, err)
 		}
 	}
-	_, err := store.Apply(t.Context(), coordination.Commit{Scope: coordination.ExecutionScope{ResourceOwnerID: "a", RoleID: "role", RequestID: "resurrect"}, Mutations: []coordination.Mutation{{Kind: "conversation", ID: "conversation", RoleID: "role", ExpectedRevision: 2, Body: json.RawMessage(`{"id":"conversation"}`)}}})
+	_, err = store.Apply(t.Context(), coordination.Commit{Scope: coordination.ExecutionScope{ResourceOwnerID: "a", RoleID: "role", RequestID: "resurrect"}, Mutations: []coordination.Mutation{{Kind: "conversation", ID: "conversation", RoleID: "role", ExpectedRevision: conversation.Revision, Body: json.RawMessage(`{"id":"conversation"}`)}}})
 	if !errors.Is(err, coordination.ErrResourceVersion) {
 		t.Fatalf("deleted conversation restored: %v", err)
 	}

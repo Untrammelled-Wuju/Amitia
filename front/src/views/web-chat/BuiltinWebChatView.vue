@@ -968,6 +968,8 @@ function syncConversationTitleFromSidebar(conversationId: string) {
   if (group.value) group.value = { ...group.value, title };
 }
 
+watch(() => chatStore.sidebar, () => syncConversationTitleFromSidebar(convId.value));
+
 const conversationSwitching = computed(() => conversationLoading.value || messageContentLoading.value);
 
 function handleConversationContentLoading(id: string) {

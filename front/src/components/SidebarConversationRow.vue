@@ -14,6 +14,7 @@
       @keydown.space.prevent="emit('select', conversation)"
       @contextmenu="openConversationContextMenu"
     >
+      <input v-if="selecting" type="checkbox" :checked="selected" tabindex="-1" :aria-label="`选择 ${conversation.title}`" @click.stop="emit('select', conversation)" />
       <span class="thread-avatar-wrap">
         <el-avatar :size="compact ? 38 : 42" :src="role?.avatar || undefined" fit="cover">{{ avatarInitial }}</el-avatar>
         <span v-if="unreadCount > 0" class="thread-unread" :aria-label="`${unreadCount} 条未读`">{{ unreadLabel }}</span>
@@ -66,6 +67,8 @@ const props = defineProps<{
   conversation: ConversationItem;
   active: boolean;
   compact?: boolean;
+  selecting?: boolean;
+  selected?: boolean;
   projects?: ProjectItem[];
 }>();
 

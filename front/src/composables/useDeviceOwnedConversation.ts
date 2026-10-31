@@ -390,6 +390,10 @@ export function useDeviceOwnedConversation() {
     const origin = kind === "conversation" ? parseConversationReference(id) : undefined;
     const characterId = options.characterId || resource?.roleId || selectInitialRole();
     if (!characterId) throw new Error("请先指定当前数据所属的角色");
+    if (kind === "conversation") {
+      await query(id, characterId);
+      resource = resourceCache.get(`${kind}/${id}`);
+    }
     if (!resource) {
       if (origin) throw new Error("请先加载该会话并确认当前数据来源后再修改");
       const result = unwrap<{ resource: MeshResource | null; executionScope: OwnedExecutionScope }>(await apiClient.get("/api/device-mesh/v1/business/resources", { params: { kind, id, characterId } }));

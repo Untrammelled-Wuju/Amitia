@@ -585,8 +585,9 @@ async function loadClientRuntimeSession(id: string) {
 }
 
 watch(() => [conversationId.value, historyMessages.value, projectionContributions.value] as const, rebuildConversationEventLog, { deep: true });
-watch(conversationId, (id) => {
-  emit("contentLoading", id);
+watch(conversationId, (id, previousId) => {
+  const adoptingDraft = !previousId && Boolean(id) && props.sending && props.messages.length > 0;
+  if (!adoptingDraft) emit("contentLoading", id);
   void Promise.allSettled([
     loadDurableConversationEventWindow(id),
     loadClientRuntimeSession(id),

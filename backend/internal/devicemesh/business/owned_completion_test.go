@@ -102,6 +102,35 @@ func TestOwnedReplyNormalizesEmptyCitationSnapshot(t *testing.T) {
 	}
 }
 
+func TestOwnedConversationPreviewTracksBothSides(t *testing.T) {
+	engine, db, _, model := engineHarness(t)
+	model.generate = func(context.Context, Inference) (Generation, error) {
+		return Generation{Text: "助手回复"}, nil
+	}
+	for _, request := range []Request{
+		{SpaceID: "core", DeviceID: "a", CoreID: "core", RoleID: "role", ConversationID: "preview", RequestID: "preview-one", Message: "第一条"},
+		{SpaceID: "core", DeviceID: "a", CoreID: "core", RoleID: "role", ConversationID: "preview", RequestID: "preview-two", Message: "第二条"},
+	} {
+		if _, err := engine.Run(t.Context(), request); err != nil {
+			t.Fatal(err)
+		}
+		row, err := coordination.NewOwnershipStore(db, "a").Get(t.Context(), "conversation", "preview")
+		if err != nil || row == nil {
+			t.Fatalf("conversation=%+v error=%v", row, err)
+		}
+		var value struct {
+			LastMessagePreview string `json:"lastMessagePreview"`
+			LastMessageRole    string `json:"lastMessageRole"`
+		}
+		if err := json.Unmarshal(row.Body, &value); err != nil {
+			t.Fatal(err)
+		}
+		if value.LastMessagePreview != "助手回复" || value.LastMessageRole != "assistant" {
+			t.Fatalf("preview=%+v", value)
+		}
+	}
+}
+
 type phaseTitleModel struct {
 	*testModel
 	titles int

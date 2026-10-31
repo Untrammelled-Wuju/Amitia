@@ -58,6 +58,8 @@
           :conversation="conversation"
           :active="conversation.id === activeConversationId"
           :projects="projects"
+          :selecting="selecting"
+          :selected="selectedIds?.includes(conversation.id)"
           compact
           @select="emit('select', $event)"
           @rename="(item, title) => emit('renameConversation', item, title)"
@@ -94,6 +96,8 @@ const props = defineProps<{
   active: boolean;
   activeConversationId: string;
   projects?: ProjectItem[];
+  selecting?: boolean;
+  selectedIds?: string[];
 }>();
 
 const emit = defineEmits<{

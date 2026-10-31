@@ -26,11 +26,15 @@ class ProjectGroupTile extends ConsumerWidget {
     required this.onCreateConversation,
     required this.onAction,
     this.busy = false,
+    this.selecting = false,
+    this.selectedIds = const {},
   });
 
   final ProjectDto project;
   final bool expanded;
   final bool busy;
+  final bool selecting;
+  final Set<String> selectedIds;
   final VoidCallback onToggle;
   final ValueChanged<ConversationDto> onOpenConversation;
   final ValueChanged<ConversationDto> onConversationLongPress;
@@ -305,6 +309,7 @@ class ProjectGroupTile extends ConsumerWidget {
                                   index++
                                 )
                                   ConversationSwipeTile(
+                                    enabled: !selecting,
                                     pinned: conversations[index].pinnedAt
                                         .trim()
                                         .isNotEmpty,
@@ -317,7 +322,9 @@ class ProjectGroupTile extends ConsumerWidget {
                                     onMarkRead: () => onConversationMarkRead(
                                       conversations[index],
                                     ),
-                                    child: ConversationListTile(
+                                    child: Row(children: [
+                                      if (selecting) Checkbox(value: selectedIds.contains(conversations[index].id), onChanged: (_) => onOpenConversation(conversations[index])),
+                                      Expanded(child: ConversationListTile(
                                       conversation: conversations[index],
                                       timeText: formatConversationTime(
                                         conversations[index].updatedAt,
@@ -331,7 +338,8 @@ class ProjectGroupTile extends ConsumerWidget {
                                           onConversationLongPress(
                                             conversations[index],
                                           ),
-                                    ),
+                                    )),
+                                    ]),
                                   ),
                               ],
                     )

@@ -880,6 +880,10 @@ class DeviceOwnedChatService {
         ? parseConversationReference(id)
         : null;
     final role = selectRole(characterId ?? resource?['roleId']?.toString());
+    if (kind == 'conversation') {
+      await query(id, characterId: role);
+      resource = _resources['$kind/$id'];
+    }
     if (resource == null) {
       if (origin != null) throw StateError('请先加载该会话并确认当前数据来源后再修改');
       final result = await _api.get<Map<String, dynamic>>(

@@ -728,6 +728,12 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 		}
 	}
 	conversation["updatedAt"] = now
+	if prepared == nil && (!hasIngress || !ingress.SuppressReplyPersistence) {
+		conversation["lastMessagePreview"] = ownedMessagePreview(request.Message)
+		conversation["lastMessage"] = ownedMessagePreview(request.Message)
+		conversation["lastMessageRole"] = "user"
+		conversation["lastMessageType"] = "text"
+	}
 	previousMessageSequence := conversation["lastMessageSequence"]
 	userSequence := nextOwnedMessageSequence(snapshot, request.ConversationID)
 	if prepared != nil {
@@ -1022,10 +1028,25 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 		assistantSequence = ownedConversationSequence(conversation) + 1
 		conversation["lastMessageSequence"] = assistantSequence
 		conversation["lastMessagePreview"] = ownedMessagePreview(generation.Text)
+		conversation["lastMessage"] = ownedMessagePreview(generation.Text)
 		conversation["lastMessageRole"] = "assistant"
 		conversation["lastMessageType"] = "text"
 		conversation["updatedAt"] = time.Now().UTC().Format(time.RFC3339Nano)
 		output = append(output, coordination.Mutation{Kind: "conversation", ID: request.ConversationID, RoleID: coordination.StorageRole(scope, "conversation"), ExpectedRevision: conversationRevision, Body: body(conversation)})
+	} else if !generation.Suppressed && (!hasIngress || !ingress.SuppressReplyPersistence) {
+		conversation, conversationRevision, err = e.ownedConversationForReply(ctx, scope, request.ConversationID, conversation, version(snapshot, "conversation", request.ConversationID))
+		if err != nil {
+			return response, err
+		}
+		if ownedConversationSequence(conversation) <= assistantSequence {
+			conversation["lastMessageSequence"] = assistantSequence
+			conversation["lastMessagePreview"] = ownedMessagePreview(generation.Text)
+			conversation["lastMessage"] = ownedMessagePreview(generation.Text)
+			conversation["lastMessageRole"] = "assistant"
+			conversation["lastMessageType"] = "text"
+			conversation["updatedAt"] = time.Now().UTC().Format(time.RFC3339Nano)
+			output = append(output, coordination.Mutation{Kind: "conversation", ID: request.ConversationID, RoleID: coordination.StorageRole(scope, "conversation"), ExpectedRevision: conversationRevision, Body: body(conversation)})
+		}
 	}
 	assistantDocument["sequence"], assistantDocument["reasoningDurationMs"] = assistantSequence, generation.ReasoningDurationMS
 	if prepared != nil {

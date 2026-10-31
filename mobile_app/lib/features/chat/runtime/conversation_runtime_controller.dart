@@ -174,10 +174,11 @@ class ConversationRuntimeController extends ChangeNotifier {
       return '正在生成回复';
     }
     for (final message in _messages.messages.reversed) {
+      if (message.role != MessageRole.assistant || message.status != MessageStatus.streaming) continue;
       final content = message.content.trim();
       if (content.isNotEmpty) return content;
     }
-    return '';
+    return _sending ? '正在思考' : '';
   }
 
   Object? get lastError => _lastError;
