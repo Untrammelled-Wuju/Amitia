@@ -502,12 +502,10 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
           return a.name.compareTo(b.name);
         });
         if (projects.isEmpty) {
-          return CompactEmptyState(
+          return const AmitiaEmptyState(
             icon: Icons.folder_outlined,
             title: '还没有项目',
-            message: '新建项目后，可以把对话和群聊集中到同一个工作区。',
-            actionLabel: '新建项目',
-            onAction: _showCreateProject,
+            subtitle: '新建项目后，可以把对话和群聊集中到同一个工作区。',
           );
         }
         return ListView.builder(

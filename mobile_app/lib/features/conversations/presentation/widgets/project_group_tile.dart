@@ -309,6 +309,9 @@ class ProjectGroupTile extends ConsumerWidget {
                                   index++
                                 )
                                   ConversationSwipeTile(
+                                    key: ValueKey(
+                                      'project-conversation-${conversations[index].id}',
+                                    ),
                                     enabled: !selecting,
                                     pinned: conversations[index].pinnedAt
                                         .trim()

@@ -2,9 +2,12 @@ import 'package:amitia_app/core/models/character.dart';
 import 'package:amitia_app/core/models/conversation.dart';
 import 'package:amitia_app/core/models/project.dart';
 import 'package:amitia_app/core/services/providers.dart';
+import 'package:amitia_app/core/widgets/amitia_misc.dart';
 import 'package:amitia_app/core/widgets/amitia_popup_menu.dart';
 import 'package:amitia_app/core/widgets/main_tab_scaffold.dart';
+import 'package:amitia_app/core/widgets/compact_empty_state.dart';
 import 'package:amitia_app/features/conversations/presentation/pages/conversation_list_page.dart';
+import 'package:amitia_app/features/conversations/presentation/widgets/conversation_list_tile.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -85,6 +88,118 @@ void main() {
     await tester.pumpAndSettle();
     final secondTop = tester.getTopLeft(find.byType(AmitiaPopupSurface)).dy;
     expect(secondTop, isNot(firstTop));
+  });
+
+  testWidgets('项目空状态与消息列表使用相同的无容器布局', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final router = GoRouter(
+      initialLocation: '/conversations',
+      routes: [
+        GoRoute(
+          path: '/conversations',
+          builder: (context, state) => const ConversationListPage(),
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          conversationListProvider.overrideWith((ref) async => []),
+          characterListProvider.overrideWith(
+            (ref) async => [CharacterDto(id: 'role-a', name: '角色 A')],
+          ),
+          conversationSidebarProvider.overrideWith(
+            (ref) async => const ConversationSidebarDto(projects: []),
+          ),
+        ],
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('conversation-view-switch')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('切换'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AmitiaEmptyState), findsOneWidget);
+    expect(find.byType(CompactEmptyState), findsNothing);
+    expect(find.text('还没有项目'), findsOneWidget);
+  });
+
+  testWidgets('项目标题只展开，展开后的对话才进入详情', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final project = ProjectDto(
+      id: 'project-a',
+      name: '项目 A',
+      workspaceId: 'workspace-a',
+      workspaces: const [
+        ProjectWorkspaceDto(
+          id: 'workspace-a',
+          deviceId: 'device-a',
+          name: '主目录',
+          kind: 'local',
+          rootUri: 'amitia://workspace/@workspace-a/',
+        ),
+      ],
+      primaryWorkspaceId: 'workspace-a',
+      conversations: [
+        ConversationDto(
+          id: 'conversation-a',
+          projectId: 'project-a',
+          characterId: 'role-a',
+          title: '项目内对话',
+        ),
+      ],
+    );
+    final router = GoRouter(
+      initialLocation: '/conversations',
+      routes: [
+        GoRoute(
+          path: '/conversations',
+          builder: (context, state) => const ConversationListPage(),
+        ),
+        GoRoute(
+          path: '/chat',
+          builder: (context, state) =>
+              const Scaffold(body: Center(child: Text('对话详情'))),
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          conversationListProvider.overrideWith(
+            (ref) async => project.conversations,
+          ),
+          characterListProvider.overrideWith(
+            (ref) async => [CharacterDto(id: 'role-a', name: '角色 A')],
+          ),
+          conversationSidebarProvider.overrideWith(
+            (ref) async => ConversationSidebarDto(projects: [project]),
+          ),
+        ],
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('conversation-view-switch')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('切换'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('项目 A'));
+    await tester.pumpAndSettle();
+    expect(router.routerDelegate.currentConfiguration.uri.path, '/conversations');
+    expect(find.text('项目内对话'), findsOneWidget);
+
+    expect(find.byType(ConversationListTile), findsOneWidget);
+    final conversationTile = tester.widget<ConversationListTile>(
+      find.byType(ConversationListTile),
+    );
+    expect(conversationTile.selecting, isFalse);
+    conversationTile.onTap();
+    await tester.pumpAndSettle();
+    expect(find.text('对话详情'), findsOneWidget);
   });
 
   testWidgets('消息页切换项目模式后展示项目列表和新项目入口', (tester) async {
