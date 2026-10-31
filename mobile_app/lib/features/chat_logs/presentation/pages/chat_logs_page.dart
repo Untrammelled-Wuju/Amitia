@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:dio/dio.dart';
 
 import '../../../../app/amitia_page_route.dart';
 import '../../../../app/theme/app_colors.dart';
@@ -11,8 +12,12 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/models/character.dart';
 import '../../../../core/models/conversation.dart';
 import '../../../../core/models/project.dart';
+import '../../../../core/errors/original_error.dart';
+import '../../../../core/backend_transport/backend_service_api.dart';
+import '../../../../core/backend_transport/errors/backend_transport_error.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_message.dart';
+import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../shared/models/models.dart';
 import '../../../conversation/rendering/assistant_identity.dart';
@@ -31,6 +36,9 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
   bool _loading = true;
   String _error = '';
   String _restoringId = '';
+  bool _selecting = false;
+  bool _batchBusy = false;
+  final Set<String> _selected = {};
   String _projectFilter = '';
   final _searchController = TextEditingController();
   Timer? _searchTimer;
@@ -96,7 +104,7 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
                   ),
                 ),
             ],
-            onChanged: (value) {
+            onChanged: _batchBusy ? null : (value) {
               setState(() => _projectFilter = value ?? '');
               unawaited(_load());
             },
@@ -104,6 +112,7 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
           SizedBox(height: AppSpacing.sm),
           TextField(
             controller: _searchController,
+            enabled: !_batchBusy,
             decoration: InputDecoration(
               hintText: '搜索标题或消息内容',
               prefixIcon: const Icon(Icons.search),
@@ -122,6 +131,7 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
   }
 
   Future<void> _load() async {
+    if (_batchBusy) return;
     final ticket = ++_loadRequest;
     final projectId = _projectFilter;
     final keyword = _searchController.text;
@@ -134,7 +144,10 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
           .read(chatServiceProvider)
           .archivedConversations(projectId: projectId, keyword: keyword);
       if (!mounted || ticket != _loadRequest) return;
-      setState(() => _conversations = conversations);
+      setState(() {
+        _conversations = conversations;
+        _selected.removeWhere((id) => !conversations.any((row) => row.id == id));
+      });
     } catch (error) {
       if (!mounted || ticket != _loadRequest) return;
       setState(() => _error = error.toString());
@@ -172,16 +185,96 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
     }
   }
 
+  Future<void> _batchAction({required bool delete}) async {
+    if (_batchBusy || _selected.isEmpty) return;
+    if (delete) {
+      final confirmed = await showAmitiaConfirmDialog(context, title: '永久删除', message: '确定永久删除选中的 ${_selected.length} 个对话及消息吗？记忆会保留，此操作无法撤销。', confirmLabel: '永久删除', isDestructive: true);
+      if (confirmed != true || !mounted) return;
+    }
+    _loadRequest++;
+    setState(() { _batchBusy = true; _loading = false; });
+    final failures = <String>[];
+    final succeeded = <String>[];
+    final service = ref.read(chatServiceProvider);
+    for (final conversation in _conversations.where((row) => _selected.contains(row.id)).toList()) {
+      try {
+        if (delete) {
+          await service.deleteConversation(conversation.id, characterId: conversation.characterId);
+        } else {
+          await service.restoreArchivedConversation(conversation.id, characterId: conversation.characterId);
+        }
+        succeeded.add(conversation.id);
+      } catch (error, stackTrace) {
+        reportOriginalError(error, stackTrace, source: 'archive-batch');
+        failures.add('${_conversationTitle(conversation)}: ${_batchErrorText(error, stackTrace)}');
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _batchBusy = false;
+      _selected.removeAll(succeeded);
+      _conversations = _conversations.where((row) => !succeeded.contains(row.id)).toList();
+    });
+    ref.invalidate(conversationListProvider);
+    ref.invalidate(conversationSidebarProvider);
+    ref.read(conversationCollectionRevisionProvider.notifier).state++;
+    if (failures.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已完成 ${succeeded.length} 项')));
+    } else {
+      await showDialog<void>(context: context, builder: (context) => AlertDialog(title: Text('已完成 ${succeeded.length} 项，失败 ${failures.length} 项'), content: SingleChildScrollView(child: SelectableText(failures.join('\n\n'))), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('关闭'))]));
+    }
+  }
+
+  String _batchErrorText(Object error, StackTrace stackTrace) {
+    final parts = <String>[];
+    final seen = <Object>{};
+    Object? current = error;
+    while (current != null && seen.add(current)) {
+      parts.add('$current');
+      parts.add(originalErrorText(current));
+      if (current is ServiceApiException) parts.add('code: ${current.code}\ndetail: ${current.detail}');
+      if (current is DioException) {
+        parts.add('response: ${current.response?.data}\nstack: ${current.stackTrace}');
+        current = current.error;
+      } else if (current is BackendTransportError) {
+        current = current.cause;
+      } else {
+        current = null;
+      }
+    }
+    parts.add('$stackTrace');
+    return parts.join('\n');
+  }
+
+  void _toggleSelected(String id) {
+    if (_batchBusy) return;
+    setState(() { if (!_selected.remove(id)) _selected.add(id); });
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.listen<int>(conversationCollectionRevisionProvider, (previous, next) {
       if (previous != next) unawaited(_load());
     });
-    return AmitiaScaffold(
+    return PopScope(
+      canPop: !_selecting,
+      onPopInvokedWithResult: (didPop, result) { if (!didPop && _selecting && !_batchBusy) setState(() { _selecting = false; _selected.clear(); }); },
+      child: AmitiaScaffold(
       appBar: AmitiaAppBar(title: '归档对话', showBackButton: true),
       body: Column(
         children: [
           _buildFilters(context),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+            child: Wrap(spacing: 4, children: [
+              TextButton(onPressed: _batchBusy ? null : () => setState(() { _selecting = !_selecting; _selected.clear(); }), child: Text(_selecting ? '取消多选' : '多选')),
+              if (_selecting) ...[
+                TextButton(onPressed: _batchBusy || _conversations.isEmpty ? null : () => setState(() { if (_conversations.every((row) => _selected.contains(row.id))) { _selected.clear(); } else { _selected.addAll(_conversations.map((row) => row.id)); } }), child: Text(_conversations.isNotEmpty && _conversations.every((row) => _selected.contains(row.id)) ? '取消全选' : '全选')),
+                TextButton(onPressed: _batchBusy || _selected.isEmpty ? null : () => _batchAction(delete: false), child: const Text('撤销')),
+                TextButton(onPressed: _batchBusy || _selected.isEmpty ? null : () => _batchAction(delete: true), child: const Text('删除（永久）')),
+              ],
+            ]),
+          ),
           Expanded(
             child: RefreshIndicator(
               onRefresh: _load,
@@ -210,7 +303,7 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
                           borderRadius: BorderRadius.circular(12),
                           child: InkWell(
                             borderRadius: BorderRadius.circular(12),
-                            onTap: () => Navigator.of(context).push(
+                            onTap: _batchBusy ? null : () => _selecting ? _toggleSelected(conversation.id) : Navigator.of(context).push(
                               amitiaSlideRoute<void>(
                                 builder: (_) => ArchivedConversationDetailPage(
                                   conversation: conversation,
@@ -224,6 +317,7 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
                               padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
                               child: Row(
                                 children: [
+                                  if (_selecting) IgnorePointer(child: Checkbox(value: _selected.contains(conversation.id), onChanged: (_) {})),
                                   Icon(
                                     Icons.inventory_2_outlined,
                                     color: context.textTertiary,
@@ -253,7 +347,7 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
                                       ],
                                     ),
                                   ),
-                                  TextButton(
+                                  if (!_selecting) TextButton(
                                     onPressed: _restoringId.isEmpty
                                         ? () => _restore(conversation)
                                         : null,
@@ -277,6 +371,7 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
             ),
           ),
         ],
+      ),
       ),
     );
   }

@@ -1,6 +1,6 @@
 <template>
   <div class="project-block" data-amitia-ui="app.sidebar.item">
-    <div class="project-row" :class="{ active: active }">
+    <div class="project-row" :class="{ active: active }" @contextmenu="openProjectContextMenu">
       <button
         type="button"
         class="project-main"
@@ -34,18 +34,7 @@
         </button>
         <template #dropdown>
           <el-dropdown-menu>
-            <el-dropdown-item command="newChat" :disabled="!project.available || project.readOnly">新建对话</el-dropdown-item>
-            <el-dropdown-item v-if="!project.readOnly" command="rename">重命名项目</el-dropdown-item>
-            <el-dropdown-item v-if="!project.readOnly" command="addWorkspace">{{ workspaces.length ? "添加子工作区" : "添加主工作区" }}</el-dropdown-item>
-            <el-dropdown-item v-for="workspace in workspaces" :key="workspace.id" :command="`primary:${workspace.id}`" :disabled="workspace.id === project.primaryWorkspaceId">
-              {{ workspace.id === project.primaryWorkspaceId ? "主工作区" : "子工作区" }}：{{ workspace.name }}{{ workspace.id === project.primaryWorkspaceId ? "" : "（设为主工作区）" }}
-            </el-dropdown-item>
-            <el-dropdown-item v-for="workspace in workspaces" :key="`remove:${workspace.id}`" :command="`removeWorkspace:${workspace.id}`">
-              移除工作区：{{ workspace.name }}
-            </el-dropdown-item>
-            <el-dropdown-item v-if="!project.readOnly" command="pin">{{ project.pinnedAt ? "取消置顶" : "置顶" }}</el-dropdown-item>
-            <el-dropdown-item command="open" :disabled="!project.available">在资源管理器中打开主工作区</el-dropdown-item>
-            <el-dropdown-item v-if="!project.readOnly" command="remove" divided>从侧边栏移除</el-dropdown-item>
+            <el-dropdown-item v-for="item in projectCommands" :key="item.command" :command="item.command" :disabled="item.disabled" :divided="item.divided">{{ item.label }}</el-dropdown-item>
           </el-dropdown-menu>
         </template>
       </el-dropdown>
@@ -62,6 +51,7 @@
           :selected="selectedIds?.includes(conversation.id)"
           compact
           @select="emit('select', $event)"
+          @start-batch="emit('startBatch', $event)"
           @rename="(item, title) => emit('renameConversation', item, title)"
           @toggle-pin="emit('togglePinConversation', $event)"
           @archive="emit('archiveConversation', $event)"
@@ -89,6 +79,8 @@ import { computed, ref } from "vue";
 import { FolderOpened, MoreFilled, Plus } from "@element-plus/icons-vue";
 import type { ConversationItem, ProjectItem } from "@/stores/chat";
 import { useConversationDisclosure } from "@/composables/useConversationDisclosure";
+import { isDesktopShell } from "@/runtime/runtime-capabilities";
+import { openContextMenu } from "./context-menu/contextMenuStore";
 import SidebarConversationRow from "./SidebarConversationRow.vue";
 
 const props = defineProps<{
@@ -102,6 +94,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   select: [conversation: ConversationItem];
+  startBatch: [conversation: ConversationItem];
   createConversation: [project: ProjectItem];
   command: [project: ProjectItem, command: string | number | object];
   renameConversation: [conversation: ConversationItem, title: string];
@@ -115,6 +108,28 @@ const emit = defineEmits<{
 
 const expanded = ref(false);
 const workspaces = computed(() => props.project.workspaces || []);
+const projectCommands = computed(() => {
+  const project = props.project;
+  const result: Array<{ command: string; label: string; disabled?: boolean; divided?: boolean }> = [
+    { command: "newChat", label: "新建对话", disabled: !project.available || project.readOnly },
+  ];
+  if (!project.readOnly) result.push(
+    { command: "rename", label: "重命名项目" },
+    { command: "addWorkspace", label: workspaces.value.length ? "添加子工作区" : "添加主工作区" },
+  );
+  for (const workspace of workspaces.value) result.push({ command: `primary:${workspace.id}`, label: `${workspace.id === project.primaryWorkspaceId ? "主工作区" : "子工作区"}：${workspace.name}${workspace.id === project.primaryWorkspaceId ? "" : "（设为主工作区）"}`, disabled: workspace.id === project.primaryWorkspaceId });
+  for (const workspace of workspaces.value) result.push({ command: `removeWorkspace:${workspace.id}`, label: `移除工作区：${workspace.name}` });
+  if (!project.readOnly) result.push({ command: "pin", label: project.pinnedAt ? "取消置顶" : "置顶" });
+  result.push({ command: "open", label: "在资源管理器中打开主工作区", disabled: !project.available });
+  if (!project.readOnly) result.push({ command: "remove", label: "从侧边栏移除", divided: true });
+  return result;
+});
+function openProjectContextMenu(event: MouseEvent) {
+  if (!isDesktopShell()) return;
+  event.preventDefault();
+  event.stopPropagation();
+  openContextMenu({ x: event.clientX, y: event.clientY, title: props.project.name, items: projectCommands.value.map((item) => ({ id: item.command, label: item.label, disabled: item.disabled, separatorBefore: item.divided, action: () => emit("command", props.project, item.command) })) });
+}
 const {
   visible: visibleConversations,
   hasMore: hasMoreConversations,

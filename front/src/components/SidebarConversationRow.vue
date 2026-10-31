@@ -81,6 +81,7 @@ const emit = defineEmits<{
   open: [conversation: ConversationItem];
   markRead: [conversation: ConversationItem];
   delete: [conversation: ConversationItem];
+  startBatch: [conversation: ConversationItem];
 }>();
 
 const editing = ref(false);
@@ -164,6 +165,12 @@ function openConversationContextMenu(event: MouseEvent) {
         label: "重命名",
         icon: EditPen,
         action: beginRename,
+      },
+      {
+        id: "select-conversations",
+        label: "多选",
+        icon: CircleCheck,
+        action: () => emit("startBatch", props.conversation),
       },
       {
         id: "pin-conversation",

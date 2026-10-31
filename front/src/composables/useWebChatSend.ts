@@ -51,9 +51,15 @@ export function useWebChatSend(
   const generating = sending;
   const pendingVideoFile = ref<File | null>(null);
   const activeSendConversations = new Map<string, string>();
+  let draftGeneration = 0;
 
   function currentSendKey() {
-    return convId.value || "__draft__";
+    return convId.value || `__draft__:${draftGeneration}`;
+  }
+
+  function resetForNewDraft() {
+    draftGeneration++;
+    syncSendState();
   }
 
   function syncSendState() {
@@ -131,6 +137,7 @@ export function useWebChatSend(
 
   async function doActualSend(text: unknown, audioUrl?: string, voiceMessage?: boolean, videoUrl?: string, ownedAudio?: OwnedAttachment, ownedExtra?: OwnedAttachment) {
     const originalConversation = convId.value;
+    const sendGeneration = draftGeneration;
     const originalRole = characterId.value;
     const originalReply = replyTarget?.value ? JSON.parse(JSON.stringify(replyTarget.value)) : undefined;
     let activeConversation = originalConversation;
@@ -202,6 +209,7 @@ export function useWebChatSend(
         if (!originalRole) throw new Error("请选择调用角色后发送消息");
         const prepared = await owned.data("working", originalRole);
         let expectedExecutionScope = prepared.executionScope;
+        if (sendGeneration !== draftGeneration) return;
         if (expectedExecutionScope.roleId !== originalRole || convId.value !== originalConversation || characterId.value !== originalRole) throw new Error("对话或角色已变化，原消息未发送");
         if (draftProjectReference) {
           const project = parseOwnedProjectReference(draftProjectReference);
@@ -232,6 +240,7 @@ export function useWebChatSend(
           quote = { ownerId: originalReply.ownerId, characterId: originalReply.characterId, conversationId: source?.id || originalReply.sourceConversationId, messageId: originalReply.id, expectedRevision: originalReply.sourceRevision, contentHash, expectedExecutionScope: originalReply.executionScope };
         }
         const group = originalConversation ? await owned.groupState(originalConversation, originalRole) : null;
+        if (sendGeneration !== draftGeneration || convId.value !== originalConversation || characterId.value !== originalRole) return;
         if (group) {
           failPendingAssistant?.(requestEnvelope.requestId);
           const pendingIndex = messages.value.findIndex((message) => message.id === `${requestEnvelope.requestId}/assistant` && message.status === "queued");
@@ -244,6 +253,7 @@ export function useWebChatSend(
           const discussion = Boolean(groupDiscussion?.value);
           const activeMentions = discussion ? [] : resolveGroupMentions(sendContent, group.members);
           let response: OwnedGroupChatResponse | undefined;
+          if (sendGeneration !== draftGeneration || convId.value !== originalConversation || characterId.value !== originalRole) return;
           response = await owned.sendGroup({
             requestId: requestEnvelope.requestId,
             conversationId: originalConversation,
@@ -264,7 +274,7 @@ export function useWebChatSend(
               ...(replyTarget?.value?.id ? { replyToMessageId: replyTarget.value.id } : {}),
             },
           }, (event) => {
-            if (convId.value !== activeConversation || characterId.value !== originalRole) return;
+            if (convId.value !== activeConversation || characterId.value !== originalRole || sendGeneration !== draftGeneration) return;
             if (event.type === "group.delivery.started" && event.deliveryId) {
               const key = `group-delivery:${event.deliveryId}`;
               if (!messages.value.some((message) => message.uiKey === key)) messages.value.push({ id: event.childRequestId ? `${event.childRequestId}/assistant` : key, uiKey: key, requestId: event.childRequestId, role: "assistant", content: "", status: "streaming", createdAt: new Date().toISOString(), characterId: event.characterId, characterName: event.characterName, characterAvatar: groupAvatar(event.characterId), conversationId: event.conversationId, groupRoundId: event.groupRoundId, deliveryId: event.deliveryId, deliveryIndex: event.deliveryIndex ?? 0 });
@@ -307,13 +317,9 @@ export function useWebChatSend(
             }
             scrollToBottom(true);
           });
-          if (convId.value !== activeConversation || characterId.value !== originalRole) {
+          if (convId.value !== activeConversation || characterId.value !== originalRole || sendGeneration !== draftGeneration) {
             activeSendConversations.set(requestEnvelope.requestId, response.conversationId);
             notifyDesktopPetChatState("assistant_finished", requestEnvelope.requestId);
-            void Promise.resolve().then(() => onConversationCreated?.(response.conversationId)).catch((error) => {
-  console.error("[original-error]", error);
-  return undefined;
-});
             return;
           }
           const userIndex = messages.value.findIndex((message) => message.id === userMsgLocalId || message.id === `${requestEnvelope.requestId}/user`);
@@ -358,8 +364,9 @@ if (convId.value === response.conversationId && characterId.value === originalRo
           });
           return;
         }
-        const response = await owned.send({ requestId: requestEnvelope.requestId, conversationId: convId.value || undefined, ...(draftProjectId ? { projectId: draftProjectId } : {}), characterId: expectedExecutionScope.roleId, permissionMode: permissionMode?.value || undefined, modelConfigId: modelConfigId?.value, reasoningEffort: reasoningEffort?.value, reasoningEnabled: reasoningEnabled?.value, messageStyle: messageStyle.value, expectedExecutionScope, message: sendContent, context, attachments, quote }, (event) => {
-          if (convId.value !== activeConversation || characterId.value !== originalRole) return;
+        if (sendGeneration !== draftGeneration || convId.value !== originalConversation || characterId.value !== originalRole) return;
+        const response = await owned.send({ requestId: requestEnvelope.requestId, conversationId: originalConversation || undefined, ...(draftProjectId ? { projectId: draftProjectId } : {}), characterId: expectedExecutionScope.roleId, permissionMode: permissionMode?.value || undefined, modelConfigId: modelConfigId?.value, reasoningEffort: reasoningEffort?.value, reasoningEnabled: reasoningEnabled?.value, messageStyle: messageStyle.value, expectedExecutionScope, message: sendContent, context, attachments, quote }, (event) => {
+          if (convId.value !== activeConversation || characterId.value !== originalRole || sendGeneration !== draftGeneration) return;
           if (event.type === "started") {
             const userIndex = messages.value.findIndex((message) => message.id === userMsgLocalId);
             if (userIndex >= 0) messages.value[userIndex] = { ...messages.value[userIndex], id: `${requestEnvelope.requestId}/user`, ownerId: event.executionScope?.resourceOwnerId, sourceRevision: 1, status: "completed", executionScope: event.executionScope, conversationId: event.conversationId };
@@ -390,13 +397,9 @@ if (convId.value === response.conversationId && characterId.value === originalRo
           if (index >= 0 && (event.type === "interrupted" || event.type === "failed")) messages.value[index] = { ...messages.value[index], status: event.type === "failed" ? "failed" : "interrupted", errorCode: event.errorCode, saved: event.data?.saved === true };
           scrollToBottom(true);
         });
-        if (convId.value !== activeConversation || characterId.value !== originalRole) {
+        if (convId.value !== activeConversation || characterId.value !== originalRole || sendGeneration !== draftGeneration) {
           activeSendConversations.set(requestEnvelope.requestId, response.conversationId);
           notifyDesktopPetChatState("assistant_finished", requestEnvelope.requestId);
-          void Promise.resolve().then(() => onConversationCreated?.(response.conversationId)).catch((error) => {
-  console.error("[original-error]", error);
-  return undefined;
-});
           return;
         }
         const index = messages.value.findIndex((message) => message.id === assistantId);
@@ -422,7 +425,7 @@ if (convId.value === response.conversationId && characterId.value === originalRo
     } catch (err: any) {
       const errMsg = err?.message || "发送失败";
       failPendingAssistant?.(requestEnvelope.requestId);
-      if (convId.value === activeConversation && characterId.value === originalRole) {
+      if (convId.value === activeConversation && characterId.value === originalRole && sendGeneration === draftGeneration) {
         modelError.value = errMsg;
         const index = messages.value.findIndex((message) => message.id === userMsgLocalId);
         if (index >= 0) messages.value[index] = { ...messages.value[index], status: "failed" };
@@ -431,7 +434,7 @@ if (convId.value === response.conversationId && characterId.value === originalRo
       }
       notifyDesktopPetChatState("assistant_error", requestEnvelope.requestId, errMsg);
     } finally {
-      if (groupSending) groupSending.value = false;
+      if (groupSending && sendGeneration === draftGeneration && convId.value === activeConversation) groupSending.value = false;
       activeSendConversations.delete(requestEnvelope.requestId);
       syncSendState();
       fetchWebMsgCount?.();
@@ -499,6 +502,7 @@ if (convId.value === response.conversationId && characterId.value === originalRo
     handleStop,
     handleRetry,
     handleClear,
+    resetForNewDraft,
     isSubmitting,
     generating,
   };

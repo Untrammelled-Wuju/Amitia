@@ -45,6 +45,7 @@
             :projects="chatStore.sidebar.projects"
             :selecting="batchSelecting" :selected="selectedIds.includes(conversation.id)"
             @select="handleSelectConversation"
+            @start-batch="startBatchSelection"
             @rename="handleConversationRename"
             @toggle-pin="handleToggleConversationPin"
             @archive="handleArchiveConversation"
@@ -62,6 +63,7 @@
             :projects="chatStore.sidebar.projects"
             :selecting="batchSelecting" :selected-ids="selectedIds"
             @select="handleSelectConversation"
+            @start-batch="startBatchSelection"
             @create-conversation="handleCreateProjectConversation"
             @command="handleProjectCommand"
             @rename-conversation="handleConversationRename"
@@ -75,7 +77,7 @@
         </div>
 
         <div class="thread-section">
-          <div class="section-caption project-caption">
+          <div class="section-caption project-caption" @contextmenu="openSectionContextMenu($event, 'chat')">
             <span>聊天</span>
             <button type="button" class="section-add" :title="batchSelecting ? '退出多选' : '批量选择'" @click="toggleBatchSelection">☑</button>
             <button type="button" class="section-add" data-amitia-ui="app.sidebar.item" title="新建对话" aria-label="新建对话" @click="handleNewChat">
@@ -90,6 +92,7 @@
             :projects="chatStore.sidebar.projects"
             :selecting="batchSelecting" :selected="selectedIds.includes(conversation.id)"
             @select="handleSelectConversation"
+            @start-batch="startBatchSelection"
             @rename="handleConversationRename"
             @toggle-pin="handleToggleConversationPin"
             @archive="handleArchiveConversation"
@@ -110,7 +113,7 @@
         </div>
 
         <div class="thread-section">
-          <div class="section-caption project-caption">
+          <div class="section-caption project-caption" @contextmenu="openSectionContextMenu($event, 'project')">
             <span>项目</span>
             <button type="button" class="section-add" :title="batchSelecting ? '退出多选' : '批量选择'" @click="toggleBatchSelection">☑</button>
             <button type="button" class="section-add" data-amitia-ui="app.sidebar.item" title="新增项目" aria-label="新增项目" @click="handleAddProject">
@@ -126,6 +129,7 @@
             :projects="chatStore.sidebar.projects"
             :selecting="batchSelecting" :selected-ids="selectedIds"
             @select="handleSelectConversation"
+            @start-batch="startBatchSelection"
             @create-conversation="handleCreateProjectConversation"
             @command="handleProjectCommand"
             @rename-conversation="handleConversationRename"
@@ -234,6 +238,7 @@ import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversa
 import type { OwnedGroupState } from "@/runtime/device-owned-chat";
 import { useConversationDisclosure } from "@/composables/useConversationDisclosure";
 import { useConversationWorkspace } from "@/composables/useConversationWorkspace";
+import { isDesktopShell } from "@/runtime/runtime-capabilities";
 import SearchModal from "./SearchModal.vue";
 import SidebarConversationRow from "./SidebarConversationRow.vue";
 import SidebarProjectBlock from "./SidebarProjectBlock.vue";
@@ -299,6 +304,7 @@ async function handleNewChat() {
   try {
     await startDraftConversation();
     await router.push({ path: "/chat" });
+    window.dispatchEvent(new CustomEvent("amitia:draft-created"));
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : "新建对话失败");
   }
@@ -344,6 +350,16 @@ const batchSelecting = ref(false);
 const selectedIds = ref<string[]>([]);
 const batchRows = computed(() => [...chatStore.sidebar.pinned, ...chatStore.sidebar.recent, ...chatStore.sidebar.projects.flatMap((project) => project.conversations)]);
 function toggleBatchSelection() { batchSelecting.value = !batchSelecting.value; selectedIds.value = []; }
+function startBatchSelection(conversation: ConversationItem) { batchSelecting.value = true; selectedIds.value = [conversation.id]; }
+function openSectionContextMenu(event: MouseEvent, section: "chat" | "project") {
+  if (!isDesktopShell()) return;
+  event.preventDefault();
+  event.stopPropagation();
+  openContextMenu({ x: event.clientX, y: event.clientY, title: section === "chat" ? "聊天" : "项目", items: [
+    { id: "select", label: batchSelecting.value ? "取消多选" : "多选", action: toggleBatchSelection },
+    { id: "add", label: section === "chat" ? "新建对话" : "新增项目", action: section === "chat" ? handleNewChat : handleAddProject },
+  ] });
+}
 async function batchOperation(action: string, projectId = "") {
   if (action === "delete") {
     const confirmed = await ElMessageBox.confirm(`确定删除选中的 ${selectedIds.value.length} 个对话吗？`, "批量删除", { type: "warning" }).then(() => true).catch(handleProjectDialogDismiss);
@@ -370,8 +386,10 @@ function handleBatchContextMenu(event: MouseEvent) {
   if (!batchSelecting.value || !(event.target as Element).closest(".thread-row")) return;
   event.preventDefault(); event.stopPropagation();
   const disabled = selectedIds.value.length === 0;
+  const selectableIds = [...new Set(batchRows.value.map((row) => row.id))];
+  const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.value.includes(id));
   const items: ContextMenuAction[] = [
-    { id: "all", label: "全选", action: () => { selectedIds.value = [...new Set(batchRows.value.map((row) => row.id))]; } },
+    { id: "all", label: allSelected ? "取消全选" : "全选", disabled: selectableIds.length === 0, action: () => { selectedIds.value = allSelected ? selectedIds.value.filter((id) => !selectableIds.includes(id)) : [...new Set([...selectedIds.value, ...selectableIds])]; } },
     ...[["archive", "归档"], ["read", "标为已读"], ["pin", "置顶"]].map(([id, label]) => ({ id, label, disabled, action: () => batchOperation(id) })),
     { id: "move", label: "移动到项目", disabled, children: [{ id: "ungrouped", label: "移出项目", action: () => batchOperation("move") }, ...chatStore.sidebar.projects.filter((project) => !project.readOnly).map((project) => ({ id: project.id, label: project.name, action: () => batchOperation("move", project.id) }))] },
     { id: "delete", label: "删除", danger: true, disabled, action: () => batchOperation("delete") },
@@ -432,6 +450,7 @@ async function handleCreateProjectConversation(project: ProjectItem) {
   try {
     await startDraftConversation(project.id);
     await router.push({ path: "/chat", query: { projectId: project.id } });
+    window.dispatchEvent(new CustomEvent("amitia:draft-created"));
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : "新建项目对话失败");
   }

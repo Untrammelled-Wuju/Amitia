@@ -37,7 +37,7 @@ class ProjectGroupTile extends ConsumerWidget {
   final Set<String> selectedIds;
   final VoidCallback onToggle;
   final ValueChanged<ConversationDto> onOpenConversation;
-  final ValueChanged<ConversationDto> onConversationLongPress;
+  final void Function(ConversationDto, Offset) onConversationLongPress;
   final Future<void> Function(ConversationDto) onConversationPin;
   final Future<void> Function(ConversationDto) onConversationArchive;
   final Future<void> Function(ConversationDto) onConversationMarkRead;
@@ -322,10 +322,10 @@ class ProjectGroupTile extends ConsumerWidget {
                                     onMarkRead: () => onConversationMarkRead(
                                       conversations[index],
                                     ),
-                                    child: Row(children: [
-                                      if (selecting) Checkbox(value: selectedIds.contains(conversations[index].id), onChanged: (_) => onOpenConversation(conversations[index])),
-                                      Expanded(child: ConversationListTile(
+                                    child: ConversationListTile(
                                       conversation: conversations[index],
+                                      selecting: selecting,
+                                      selected: selectedIds.contains(conversations[index].id),
                                       timeText: formatConversationTime(
                                         conversations[index].updatedAt,
                                       ),
@@ -334,12 +334,12 @@ class ProjectGroupTile extends ConsumerWidget {
                                       onTap: () => onOpenConversation(
                                         conversations[index],
                                       ),
-                                      onLongPress: () =>
+                                      onLongPressAt: (position) =>
                                           onConversationLongPress(
                                             conversations[index],
+                                            position,
                                           ),
-                                    )),
-                                    ]),
+                                    ),
                                   ),
                               ],
                     )

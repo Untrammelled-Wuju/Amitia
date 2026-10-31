@@ -44,10 +44,15 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
   final Map<String, ConversationDto> _selected = {};
   final Set<String> _expandedProjects = <String>{};
   Timer? _activityPollTimer;
+  late final bool Function() _backHandler;
+  late final ConversationBackHandler _backRegistry;
 
   @override
   void initState() {
     super.initState();
+    _backHandler = _handleSelectionBack;
+    _backRegistry = ref.read(conversationBackHandlerProvider);
+    _backRegistry.onBack = _backHandler;
     _loadViewMode();
     _activityPollTimer = Timer.periodic(
       const Duration(seconds: 2),
@@ -57,8 +62,15 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
 
   @override
   void dispose() {
+    if (identical(_backRegistry.onBack, _backHandler)) _backRegistry.onBack = null;
     _activityPollTimer?.cancel();
     super.dispose();
+  }
+
+  bool _handleSelectionBack() {
+    if (!_selecting) return false;
+    if (!_batchBusy) setState(() { _selecting = false; _selected.clear(); });
+    return true;
   }
 
   void _pollLiveActivity() {
@@ -78,14 +90,18 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
     });
   }
 
-  Future<void> _showBatchMenu() async {
+  Future<void> _showBatchMenu(Offset position) async {
     if (_batchBusy) return;
-    final size = MediaQuery.sizeOf(context);
+    final conversations = _projectMode
+        ? (ref.read(conversationSidebarProvider).valueOrNull?.projects.where((project) => project.hiddenAt.isEmpty).expand((project) => project.conversations).toList() ?? <ConversationDto>[])
+        : (ref.read(conversationListProvider).valueOrNull ?? <ConversationDto>[]);
+    final selectable = {for (final row in conversations) if (row.archivedAt.isEmpty && !_isChannelConversation(row)) row.id: row};
+    final allSelected = selectable.isNotEmpty && selectable.keys.every(_selected.containsKey);
     final action = await showAmitiaPopupMenu<String>(
       context: context,
-      anchorRect: Rect.fromCenter(center: Offset(size.width / 2, size.height / 2), width: 1, height: 1),
+      anchorRect: Rect.fromCenter(center: position, width: 1, height: 1),
       items: [
-        const PopupMenuItem(value: 'all', child: AmitiaPopupMenuLabel(icon: Icons.select_all, label: '全选')),
+        PopupMenuItem(value: 'all', enabled: selectable.isNotEmpty, child: AmitiaPopupMenuLabel(icon: Icons.select_all, label: allSelected ? '取消全选' : '全选')),
         PopupMenuItem(value: 'archive', enabled: _selected.isNotEmpty, child: const AmitiaPopupMenuLabel(icon: Icons.archive_outlined, label: '归档')),
         PopupMenuItem(value: 'read', enabled: _selected.isNotEmpty, child: const AmitiaPopupMenuLabel(icon: Icons.mark_chat_read_outlined, label: '标为已读')),
         PopupMenuItem(value: 'pin', enabled: _selected.isNotEmpty, child: const AmitiaPopupMenuLabel(icon: Icons.push_pin_outlined, label: '置顶')),
@@ -95,10 +111,13 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
     );
     if (!mounted || action == null) return;
     if (action == 'all') {
-      final conversations = _projectMode
-          ? (ref.read(conversationSidebarProvider).valueOrNull?.projects.expand((project) => project.conversations).toList() ?? <ConversationDto>[])
-          : (ref.read(conversationListProvider).valueOrNull ?? <ConversationDto>[]);
-      setState(() { for (final row in conversations) { if (row.archivedAt.isEmpty && !_isChannelConversation(row)) _selected[row.id] = row; } });
+      setState(() {
+        if (allSelected) {
+          for (final id in selectable.keys) { _selected.remove(id); }
+        } else {
+          _selected.addAll(selectable);
+        }
+      });
       return;
     }
     String target = '';
@@ -252,7 +271,12 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
         if (character.id.isNotEmpty) character.id: character,
     };
 
-    return AmitiaScaffold(
+    return PopScope(
+      canPop: !_selecting,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _handleSelectionBack();
+      },
+      child: AmitiaScaffold(
       handlesSystemBack: false,
       appBar: AmitiaAppBar(
         titleWidget: Row(
@@ -401,6 +425,7 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
           ),
         ],
       ),
+      ),
     );
   }
 
@@ -439,17 +464,16 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
               onPin: () => _setConversationPinned(conversation),
               onArchive: () => _archiveConversation(conversation),
               onMarkRead: () => _markConversationRead(conversation),
-              child: Row(children: [
-                if (_selecting) Checkbox(value: _selected.containsKey(conversation.id), onChanged: (_) => _toggleSelection(conversation)),
-                Expanded(child: ConversationListTile(
+              child: ConversationListTile(
                 conversation: conversation,
+                selecting: _selecting,
+                selected: _selected.containsKey(conversation.id),
                 character: charactersById[conversation.characterId],
                 timeText: formatConversationTime(conversation.updatedAt),
                 showDivider: index < filtered.length - 1,
                 onTap: () => _selecting ? _toggleSelection(conversation) : _openConversation(conversation),
-                onLongPress: () => _selecting ? _showBatchMenu() : _showActionsSheet(conversation),
-              )),
-              ]),
+                onLongPressAt: (position) => _selecting ? _showBatchMenu(position) : _showActionsSheet(conversation, position),
+              ),
             );
           },
         );
@@ -505,7 +529,7 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
                 }
               }),
               onOpenConversation: (conversation) => _selecting ? _toggleSelection(conversation) : _openConversation(conversation),
-              onConversationLongPress: (conversation) => _selecting ? _showBatchMenu() : _showActionsSheet(conversation),
+              onConversationLongPress: (conversation, position) => _selecting ? _showBatchMenu(position) : _showActionsSheet(conversation, position),
               onConversationPin: _setConversationPinned,
               onConversationArchive: _archiveConversation,
               onConversationMarkRead: _markConversationRead,
@@ -856,16 +880,16 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
     await ref.read(conversationSidebarProvider.future);
   }
 
-  Future<void> _showActionsSheet(ConversationDto conv) async {
-    final size = MediaQuery.sizeOf(context);
+  Future<void> _showActionsSheet(ConversationDto conv, Offset position) async {
     final action = await showAmitiaPopupMenu<String>(
       context: context,
-      anchorRect: Rect.fromCenter(center: Offset(size.width / 2, size.height / 2), width: 1, height: 1),
+      anchorRect: Rect.fromCenter(center: position, width: 1, height: 1),
       items: [
         const PopupMenuItem(value: 'rename', child: AmitiaPopupMenuLabel(icon: Icons.edit_outlined, label: '重命名')),
         PopupMenuItem(value: 'pin', child: AmitiaPopupMenuLabel(icon: Icons.push_pin_outlined, label: conv.pinnedAt.trim().isEmpty ? '置顶' : '取消置顶')),
         const PopupMenuItem(value: 'archive', child: AmitiaPopupMenuLabel(icon: Icons.archive_outlined, label: '归档')),
         const PopupMenuItem(value: 'read', child: AmitiaPopupMenuLabel(icon: Icons.mark_chat_read_outlined, label: '标为已读')),
+        const PopupMenuItem(value: 'select', child: AmitiaPopupMenuLabel(icon: Icons.checklist_rounded, label: '多选')),
         PopupMenuItem(value: 'move', child: AmitiaPopupMenuLabel(icon: Icons.drive_file_move_outline, label: conv.projectId.isEmpty ? '移动到项目' : '调整所属项目')),
         const PopupMenuItem(value: 'delete', child: AmitiaPopupMenuLabel(icon: Icons.delete_outline, label: '删除')),
       ],
@@ -876,6 +900,7 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
       case 'pin': await _setConversationPinned(conv);
       case 'archive': await _archiveConversation(conv);
       case 'read': await _markConversationRead(conv);
+      case 'select': setState(() { _selecting = true; _selected.clear(); _selected[conv.id] = conv; });
       case 'move': await _showMoveConversationSheet(conv);
       case 'delete': await _deleteConversation(conv);
     }

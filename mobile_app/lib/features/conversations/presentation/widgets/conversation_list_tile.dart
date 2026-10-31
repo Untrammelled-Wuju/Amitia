@@ -39,6 +39,9 @@ class ConversationListTile extends ConsumerWidget {
     required this.showDivider,
     required this.onTap,
     this.onLongPress,
+    this.onLongPressAt,
+    this.selecting = false,
+    this.selected = false,
     this.character,
   });
 
@@ -48,6 +51,9 @@ class ConversationListTile extends ConsumerWidget {
   final bool showDivider;
   final VoidCallback onTap;
   final VoidCallback? onLongPress;
+  final ValueChanged<Offset>? onLongPressAt;
+  final bool selecting;
+  final bool selected;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -83,11 +89,13 @@ class ConversationListTile extends ConsumerWidget {
               (isGenerating ? '正在生成回复…' : '打开查看对话');
     final pinned = conversation.pinnedAt.trim().isNotEmpty;
 
-    return Material(
+    return GestureDetector(
+      onLongPressStart: onLongPressAt == null ? null : (details) => onLongPressAt!(details.globalPosition),
+      child: Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        onLongPress: onLongPress,
+        onLongPress: onLongPressAt == null ? onLongPress : null,
         child: Column(
           children: [
             SizedBox(
@@ -99,6 +107,8 @@ class ConversationListTile extends ConsumerWidget {
                 ),
                 child: Row(
                   children: [
+                    if (selecting)
+                      IgnorePointer(child: Checkbox(value: selected, onChanged: (_) {})),
                     Stack(
                       clipBehavior: Clip.none,
                       children: [
@@ -238,6 +248,7 @@ class ConversationListTile extends ConsumerWidget {
               ),
           ],
         ),
+      ),
       ),
     );
   }

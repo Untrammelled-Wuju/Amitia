@@ -281,7 +281,7 @@ func (e *Engine) Edit(ctx context.Context, authority Request, edit EditRequest) 
 	}
 	ack := coordination.Acknowledgement{RequestID: scope.RequestID, OwnerID: scope.ResourceOwnerID, Versions: map[string]int64{edit.Kind + "/" + edit.ID: resource.Revision + 1, "checkpoint/" + receiptID: 1}}
 	proof := body(map[string]any{"hash": fingerprint, "roleRevision": scope.RoleRevision, "acknowledgement": ack})
-	return e.commit(ctx, coordination.Commit{Scope: scope, Mutations: []coordination.Mutation{{Kind: edit.Kind, ID: edit.ID, RoleID: coordination.StorageRole(scope, edit.Kind), SourceID: resource.SourceID, ExpectedRevision: resource.Revision, Deleted: edit.Deleted, Body: body(document)}, {Kind: "checkpoint", ID: receiptID, RoleID: scope.RoleID, Body: proof}}})
+	return e.commit(ctx, coordination.Commit{Scope: scope, Mutations: []coordination.Mutation{{Kind: edit.Kind, ID: edit.ID, RoleID: coordination.StorageRole(scope, edit.Kind), SourceID: resource.SourceID, ExpectedRevision: resource.Revision, Deleted: edit.Deleted, KeepConversationMemories: edit.Kind == "conversation" && edit.Deleted, Body: body(document)}, {Kind: "checkpoint", ID: receiptID, RoleID: scope.RoleID, Body: proof}}})
 }
 
 func workspacesPrimaryCandidate(items []ProjectWorkspace) string {

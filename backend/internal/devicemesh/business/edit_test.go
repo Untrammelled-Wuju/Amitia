@@ -1,6 +1,7 @@
 package business
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -114,11 +115,23 @@ func TestMessageEditedDuringGenerationRejectsLateReply(t *testing.T) {
 	}
 }
 
-func TestDeletingConversationRemovesOwnedChildrenAndPreventsResurrection(t *testing.T) {
+func TestDeletingConversationPreservesMemoriesAndPreventsResurrection(t *testing.T) {
 	engine, db, _, _ := engineHarness(t)
 	request := Request{SpaceID: "core", DeviceID: "a", CoreID: "core", ConversationID: "conversation", RequestID: "turn", Message: "tea"}
 	if _, err := engine.Run(t.Context(), request); err != nil {
 		t.Fatal(err)
+	}
+	store := coordination.NewOwnershipStore(db, "a")
+	preserved := map[string]map[string]coordination.Resource{}
+	for _, kind := range []string{"memory", "fact", "vector", "graph"} {
+		rows, err := store.List(t.Context(), kind, "role", false)
+		if err != nil || len(rows) == 0 {
+			t.Fatalf("missing %s before deletion: %+v %v", kind, rows, err)
+		}
+		preserved[kind] = map[string]coordination.Resource{}
+		for _, row := range rows {
+			preserved[kind][row.ID] = row
+		}
 	}
 	conversation, err := coordination.NewOwnershipStore(db, "a").Get(t.Context(), "conversation", "conversation")
 	if err != nil || conversation == nil {
@@ -127,14 +140,25 @@ func TestDeletingConversationRemovesOwnedChildrenAndPreventsResurrection(t *test
 	if _, err := engine.Edit(t.Context(), request, EditRequest{RoleID: "role", RequestID: "delete", Kind: "conversation", ID: "conversation", ExpectedRevision: conversation.Revision, Deleted: true}); err != nil {
 		t.Fatal(err)
 	}
-	store := coordination.NewOwnershipStore(db, "a")
-	for _, kind := range []string{"conversation", "message", "checkpoint", "memory", "fact", "vector", "graph", "working"} {
+	for _, kind := range []string{"conversation", "message", "checkpoint", "working"} {
 		rows, err := store.List(t.Context(), kind, "role", false)
 		if kind == "checkpoint" && len(rows) == 1 && rows[0].ID == "edit/delete" {
 			rows = nil
 		}
 		if err != nil || len(rows) != 0 {
 			t.Fatalf("conversation child %s survived: %+v %v", kind, rows, err)
+		}
+	}
+	for kind, before := range preserved {
+		rows, err := store.List(t.Context(), kind, "role", false)
+		if err != nil || len(rows) != len(before) {
+			t.Fatalf("preserved %s: %+v %v", kind, rows, err)
+		}
+		for _, row := range rows {
+			original, ok := before[row.ID]
+			if !ok || row.Revision != original.Revision || !bytes.Equal(row.Body, original.Body) {
+				t.Fatalf("memory data changed: %s %+v", kind, row)
+			}
 		}
 	}
 	_, err = store.Apply(t.Context(), coordination.Commit{Scope: coordination.ExecutionScope{ResourceOwnerID: "a", RoleID: "role", RequestID: "resurrect"}, Mutations: []coordination.Mutation{{Kind: "conversation", ID: "conversation", RoleID: "role", ExpectedRevision: conversation.Revision, Body: json.RawMessage(`{"id":"conversation"}`)}}})

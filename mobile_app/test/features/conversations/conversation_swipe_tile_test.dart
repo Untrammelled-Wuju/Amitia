@@ -32,6 +32,24 @@ void main() {
     expect(find.text('归档'), findsOneWidget);
     expect(find.text('标为已读'), findsOneWidget);
 
+    final messageBefore = tester.getTopLeft(find.text('测试消息')).dx;
+    final actionBefore = tester.getTopLeft(find.text('归档')).dx;
+    final gesture = await tester.startGesture(tester.getCenter(find.text('归档')));
+    await gesture.moveBy(const Offset(50, 0));
+    await tester.pump();
+    await gesture.moveBy(const Offset(35, 0));
+    await tester.pump();
+    final messageMovement = tester.getTopLeft(find.text('测试消息')).dx - messageBefore;
+    final actionMovement = tester.getTopLeft(find.text('归档')).dx - actionBefore;
+    expect(messageMovement, greaterThan(0));
+    expect(actionMovement, closeTo(messageMovement, 0.1));
+    await gesture.moveBy(const Offset(150, 0));
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(tester.widget<AnimatedContainer>(find.byType(AnimatedContainer).first).transform!.storage[12], 0);
+    await tester.drag(find.text('测试消息'), const Offset(-240, 0));
+    await tester.pumpAndSettle();
+
     await tester.dragFrom(tester.getTopLeft(find.byKey(const ValueKey('swipe-tile'))) + const Offset(300, 38), const Offset(160, 0));
     await tester.pumpAndSettle();
     final transform = tester.widget<AnimatedContainer>(find.byType(AnimatedContainer).first).transform!;

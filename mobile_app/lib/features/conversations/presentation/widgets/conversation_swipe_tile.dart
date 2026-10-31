@@ -36,6 +36,15 @@ class _ConversationSwipeTileState extends State<ConversationSwipeTile> {
 
   double get _maxOffset => _actionExtent * _actionCount;
 
+  @override
+  void didUpdateWidget(covariant ConversationSwipeTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.enabled && oldWidget.enabled) {
+      _offset = 0;
+      _dragging = false;
+    }
+  }
+
   void _handleDragUpdate(DragUpdateDetails details) {
     if (!widget.enabled || _busy) return;
     setState(() {
@@ -69,11 +78,21 @@ class _ConversationSwipeTileState extends State<ConversationSwipeTile> {
   Widget build(BuildContext context) {
     final open = _offset.abs() > 1;
     return ClipRect(
-      child: Stack(
+      child: LayoutBuilder(builder: (context, constraints) => GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onHorizontalDragStart: (_) { if (widget.enabled && !_busy) setState(() => _dragging = true); },
+        onHorizontalDragUpdate: _handleDragUpdate,
+        onHorizontalDragEnd: _handleDragEnd,
+        onHorizontalDragCancel: () { if (_dragging) setState(() { _dragging = false; _offset = _offset.abs() > _maxOffset / 2 ? -_maxOffset : 0; }); },
+        child: Stack(
         children: [
-          Positioned.fill(
-            child: Align(
-              alignment: Alignment.centerRight,
+          AnimatedPositioned(
+            duration: _busy || _dragging ? Duration.zero : const Duration(milliseconds: 170),
+            curve: Curves.easeOutCubic,
+            left: constraints.maxWidth + _offset,
+            top: 0,
+            bottom: 0,
+            width: _maxOffset,
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -102,7 +121,6 @@ class _ConversationSwipeTileState extends State<ConversationSwipeTile> {
                   ),
                 ],
               ),
-            ),
           ),
           AnimatedContainer(
             width: double.infinity,
@@ -111,9 +129,6 @@ class _ConversationSwipeTileState extends State<ConversationSwipeTile> {
             transform: Matrix4.translationValues(_offset, 0, 0),
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onHorizontalDragStart: (_) { if (widget.enabled && !_busy) setState(() => _dragging = true); },
-              onHorizontalDragUpdate: _handleDragUpdate,
-              onHorizontalDragEnd: _handleDragEnd,
               onTap: open ? () => setState(() => _offset = 0) : null,
               child: AbsorbPointer(
                 absorbing: open || _busy,
@@ -144,6 +159,7 @@ class _ConversationSwipeTileState extends State<ConversationSwipeTile> {
             ),
         ],
       ),
+      )),
     );
   }
 }

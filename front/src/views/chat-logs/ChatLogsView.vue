@@ -10,6 +10,7 @@
       <div class="archive-filters">
         <el-select
           v-model="projectFilter"
+          :disabled="batchBusy"
           clearable
           placeholder="全部项目"
           @change="loadConversations"
@@ -23,10 +24,19 @@
         </el-select>
         <el-input
           v-model="keyword"
+          :disabled="batchBusy"
           clearable
           placeholder="搜索标题或消息内容"
           @input="scheduleSearch"
         />
+      </div>
+      <div class="archive-batch-actions">
+        <el-button size="small" :disabled="batchBusy" @click="toggleSelectionMode">{{ selecting ? '取消多选' : '多选' }}</el-button>
+        <template v-if="selecting">
+          <el-button size="small" :disabled="batchBusy || !conversations.length" @click="toggleAll">{{ allSelected ? '取消全选' : '全选' }}</el-button>
+          <el-button size="small" :disabled="batchBusy || !selectedIds.length" @click="batchAction('restore')">撤销</el-button>
+          <el-button size="small" type="danger" :disabled="batchBusy || !selectedIds.length" @click="batchAction('delete')">删除（永久）</el-button>
+        </template>
       </div>
       <div
         v-for="conversation in conversations"
@@ -34,7 +44,8 @@
         class="archive-item"
         :class="{ active: conversation.id === selectedId }"
       >
-        <button type="button" class="archive-item-main" @click="selectConversation(conversation)">
+        <input v-if="selecting" type="checkbox" :checked="selectedIds.includes(conversation.id)" :disabled="batchBusy" :aria-label="`选择 ${conversationTitle(conversation)}`" @change="toggleSelected(conversation.id)" />
+        <button type="button" class="archive-item-main" :disabled="batchBusy" @click="selecting ? toggleSelected(conversation.id) : selectConversation(conversation)">
           <ArchiveConversationIcon class="archive-item-icon" />
           <span class="archive-item-copy">
             <strong>{{ conversationTitle(conversation) }}</strong>
@@ -42,7 +53,7 @@
           </span>
         </button>
         <el-button
-          text
+          v-if="!selecting" text
           size="small"
           :loading="restoringId === conversation.id"
           @click.stop="restoreConversation(conversation)"
@@ -122,11 +133,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Refresh } from "@element-plus/icons-vue";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
 import ArchiveConversationIcon from "@/components/ArchiveConversationIcon.vue";
 import ChatBubble from "@/components/ChatBubble.vue";
 import { useChatStore } from "@/stores/chat";
+import { originalErrorMessage, originalErrorDetail } from "@/runtime/original-error";
 import {
   getMessageCharacterId,
   shouldShowAssistantIdentity,
@@ -164,6 +176,10 @@ const characters = ref<any[]>([]);
 const projectFilter = ref("");
 const keyword = ref("");
 const selectedId = ref("");
+const selecting = ref(false);
+const selectedIds = ref<string[]>([]);
+const batchBusy = ref(false);
+const allSelected = computed(() => conversations.value.length > 0 && conversations.value.every((row) => selectedIds.value.includes(row.id)));
 const loading = ref(false);
 const messageLoading = ref(false);
 const restoringId = ref("");
@@ -229,6 +245,52 @@ function scheduleSearch() {
   searchTimer = setTimeout(loadConversations, 280);
 }
 
+function toggleSelectionMode() { selecting.value = !selecting.value; selectedIds.value = []; }
+function toggleSelected(id: string) { selectedIds.value = selectedIds.value.includes(id) ? selectedIds.value.filter((item) => item !== id) : [...selectedIds.value, id]; }
+function toggleAll() { selectedIds.value = allSelected.value ? [] : conversations.value.map((item) => item.id); }
+function batchErrorText(error: unknown): string {
+  const parts: string[] = [];
+  const seen = new Set<unknown>();
+  let current: unknown = error;
+  while (current != null && !seen.has(current)) {
+    seen.add(current);
+    const value = current as { stack?: unknown; cause?: unknown };
+    for (const text of [String(current), originalErrorMessage(current), originalErrorDetail(current), typeof value.stack === "string" ? value.stack : undefined]) {
+      if (text && !parts.includes(text)) parts.push(text);
+    }
+    current = typeof current === "object" ? value.cause : undefined;
+  }
+  return parts.join("\n");
+}
+async function batchAction(action: "restore" | "delete") {
+  if (batchBusy.value || !selectedIds.value.length) return;
+  if (action === "delete") {
+    const confirmed = await ElMessageBox.confirm(`确定永久删除选中的 ${selectedIds.value.length} 个对话及消息吗？记忆会保留，此操作无法撤销。`, "永久删除", { type: "warning", confirmButtonText: "永久删除", cancelButtonText: "取消" }).then(() => true).catch((error) => { if (error === "cancel" || error === "close") return false; throw error; });
+    if (!confirmed) return;
+  }
+  batchBusy.value = true;
+  listRequest++;
+  loading.value = false;
+  const failures: string[] = [];
+  const success: string[] = [];
+  try {
+    for (const id of [...selectedIds.value]) {
+      const row = conversations.value.find((item) => item.id === id);
+      if (!row) continue;
+      try {
+        await owned.edit("conversation", id, action === "restore" ? { archived: false } : {}, { deleted: action === "delete", characterId: row.characterId });
+        success.push(id);
+      } catch (error) { failures.push(`${conversationTitle(row)}: ${batchErrorText(error)}`); }
+    }
+    conversations.value = conversations.value.filter((item) => !success.includes(item.id));
+    selectedIds.value = selectedIds.value.filter((id) => !success.includes(id));
+    if (success.includes(selectedId.value)) { selectedId.value = ""; messageRequest++; messages.value = []; }
+    try { await chatStore.fetchSidebar(); } catch (error) { failures.push(`刷新会话列表: ${batchErrorText(error)}`); }
+    if (failures.length) await ElMessageBox.alert(failures.join("\n\n"), `已完成 ${success.length} 项，失败 ${failures.length} 项`, { customClass: "archive-batch-error" });
+    else ElMessage.success(`已完成 ${success.length} 项`);
+  } finally { batchBusy.value = false; }
+}
+
 async function loadFilters() {
   if (!await owned.refresh()) throw new Error(owned.notice.value || "设备对话服务尚未就绪");
   const role = owned.selectInitialRole(localStorage.getItem(`webchat-char-id:${owned.coreId.value}:${owned.roleOwnerId.value}`) || "");
@@ -239,6 +301,7 @@ async function loadFilters() {
 }
 
 async function loadConversations() {
+  if (batchBusy.value) return;
   const ticket = ++listRequest;
   const projectId = projectFilter.value;
   const search = keyword.value.trim().toLowerCase();
@@ -255,6 +318,7 @@ async function loadConversations() {
       const rightOrder = Number.isNaN(rightTime) ? 0 : rightTime;
       return rightOrder - leftOrder;
     });
+    selectedIds.value = selectedIds.value.filter((id) => conversations.value.some((item) => item.id === id));
     if (selectedId.value && !conversations.value.some((item) => item.id === selectedId.value)) {
       selectedId.value = "";
       messageRequest++;
@@ -371,6 +435,9 @@ onBeforeUnmount(() => {
 .archive-list-header { min-height: 36px; padding: 0 6px 8px; }
 .archive-filters { display: grid; gap: 6px; padding: 0 2px 8px; }
 .archive-filters :deep(.el-select), .archive-filters :deep(.el-input) { width: 100%; }
+.archive-batch-actions { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 2px 8px; }
+.archive-batch-actions :deep(.el-button + .el-button) { margin-left: 0; }
+:global(.archive-batch-error .el-message-box__message) { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
 .archive-item { display: flex; align-items: center; gap: 4px; width: 100%; min-height: 52px; padding: 2px 4px 2px 2px; border-radius: 8px; color: var(--text-secondary); }
 .archive-item:hover, .archive-item.active { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
 .archive-item.active { background: var(--workbench-sidebar-active); }

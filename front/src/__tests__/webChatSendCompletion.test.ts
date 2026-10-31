@@ -17,6 +17,62 @@ describe("saved reply completion", () => {
     }
     mocks.groupState.mockResolvedValue(null);
   });
+  it("does not reopen an old conversation when its response finishes after a new draft", async () => {
+    const scope = { coreId: "core", resourceOwnerId: "owner", roleId: "role" };
+    let complete: (value: any) => void = () => {};
+    let emit: (event: any) => void = () => {};
+    let requestId = "";
+    mocks.refresh.mockResolvedValue(true);
+    mocks.data.mockResolvedValue({ executionScope: scope });
+    mocks.send.mockImplementation((request, onEvent) => {
+      requestId = request.requestId;
+      emit = onEvent;
+      onEvent({ type: "started", conversationId: "old", executionScope: scope });
+      return new Promise(resolve => { complete = resolve; });
+    });
+    const messages = ref<any[]>([]);
+    const conversation = ref("");
+    const created = vi.fn();
+    const send = useWebChatSend(messages, conversation, ref("role"), ref(false), ref(""), ref(false), ref(null), ref(null), ref(null), ref(null), ref(null), () => {}, () => {}, ref(null), undefined, undefined, created);
+    const pending = send.handleSend("旧消息");
+    await flushPromises();
+    expect(conversation.value).toBe("old");
+    send.resetForNewDraft();
+    conversation.value = "";
+    messages.value = [];
+    emit({ type: "delta", conversationId: "old", executionScope: scope, text: "旧回复" });
+    complete({ requestId, conversationId: "old", executionScope: scope, reply: "旧回复", saved: true });
+    await pending;
+    expect(conversation.value).toBe("");
+    expect(messages.value).toEqual([]);
+    expect(created).not.toHaveBeenCalled();
+    expect(send.isSubmitting.value).toBe(false);
+  });
+  it("rejects late started events from an earlier empty draft", async () => {
+    const scope = { coreId: "core", resourceOwnerId: "owner", roleId: "role" };
+    let complete: (value: any) => void = () => {};
+    let emit: (event: any) => void = () => {};
+    mocks.refresh.mockResolvedValue(true);
+    mocks.data.mockResolvedValue({ executionScope: scope });
+    mocks.send.mockImplementation((request, onEvent) => {
+      emit = onEvent;
+      return new Promise(resolve => { complete = resolve; });
+    });
+    const messages = ref<any[]>([]);
+    const conversation = ref("");
+    const created = vi.fn();
+    const send = useWebChatSend(messages, conversation, ref("role"), ref(false), ref(""), ref(false), ref(null), ref(null), ref(null), ref(null), ref(null), () => {}, () => {}, ref(null), undefined, undefined, created);
+    const pending = send.handleSend("旧草稿");
+    await flushPromises();
+    send.resetForNewDraft();
+    messages.value = [];
+    emit({ type: "started", conversationId: "old", executionScope: scope });
+    complete({ requestId: "old-request", conversationId: "old", executionScope: scope, reply: "旧回复", saved: true });
+    await pending;
+    expect(conversation.value).toBe("");
+    expect(messages.value).toEqual([]);
+    expect(created).not.toHaveBeenCalled();
+  });
   it("群聊保存后不等待会话列表刷新即可恢复发送", async () => {
     const scope = { coreId: "core", resourceOwnerId: "owner", roleId: "role" };
     mocks.refresh.mockResolvedValue(true);

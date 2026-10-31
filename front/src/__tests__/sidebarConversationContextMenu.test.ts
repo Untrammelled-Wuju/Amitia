@@ -84,6 +84,7 @@ describe("桌面端消息右键菜单", () => {
     expect(contextMenuState.items.map((item) => item.label)).toEqual([
       "打开对话",
       "重命名",
+      "多选",
       "置顶",
       "标为已读",
       "归档",
@@ -99,6 +100,7 @@ describe("桌面端消息右键菜单", () => {
     expect(moveTargets[1].disabled).toBe(true);
 
     contextMenuState.items.find((item) => item.id === "open-conversation")?.action?.();
+    contextMenuState.items.find((item) => item.id === "select-conversations")?.action?.();
     contextMenuState.items.find((item) => item.id === "pin-conversation")?.action?.();
     contextMenuState.items.find((item) => item.id === "mark-conversation-read")?.action?.();
     contextMenuState.items.find((item) => item.id === "archive-conversation")?.action?.();
@@ -106,6 +108,7 @@ describe("桌面端消息右键菜单", () => {
     moveTargets[2].action?.();
 
     expect(wrapper.emitted("open")?.[0]).toEqual([conversation]);
+    expect(wrapper.emitted("startBatch")?.[0]).toEqual([conversation]);
     expect(wrapper.emitted("togglePin")?.[0]).toEqual([conversation]);
     expect(wrapper.emitted("markRead")?.[0]).toEqual([conversation]);
     expect(wrapper.emitted("archive")?.[0]).toEqual([conversation]);

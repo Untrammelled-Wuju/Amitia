@@ -550,9 +550,9 @@ class ChatService {
     }
   }
 
-  Future<bool> deleteConversation(String id) async {
+  Future<bool> deleteConversation(String id, {String? characterId}) async {
     await _requireOwned();
-    await owned.edit('conversation', id, deleted: true);
+    await owned.edit('conversation', id, deleted: true, characterId: characterId);
     return true;
   }
 
@@ -605,9 +605,9 @@ class ChatService {
     return;
   }
 
-  Future<void> restoreArchivedConversation(String id) async {
+  Future<void> restoreArchivedConversation(String id, {String? characterId}) async {
     await _requireOwned();
-    await owned.edit('conversation', id, changes: {'archived': false});
+    await owned.edit('conversation', id, changes: {'archived': false}, characterId: characterId);
     return;
   }
 

@@ -366,6 +366,14 @@ final conversationSidebarProvider =
     });
 
 final activeConversationIdProvider = StateProvider<String>((ref) => '');
+class ConversationBackHandler {
+  bool Function()? onBack;
+}
+
+final conversationBackHandlerProvider = Provider<ConversationBackHandler>(
+  (ref) => ConversationBackHandler(),
+);
+
 final conversationCollectionRevisionProvider = StateProvider<int>((ref) => 0);
 
 /// Authoritative session snapshots pushed by the UI Host SSE path.

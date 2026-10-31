@@ -1,21 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_typography.dart';
+import '../services/providers.dart';
 import 'amitia_icons.dart';
 
-class MainTabScaffold extends StatefulWidget {
+class MainTabScaffold extends ConsumerStatefulWidget {
   const MainTabScaffold({super.key, required this.navigationShell});
 
   final StatefulNavigationShell navigationShell;
 
   @override
-  State<MainTabScaffold> createState() => _MainTabScaffoldState();
+  ConsumerState<MainTabScaffold> createState() => _MainTabScaffoldState();
 }
 
-class _MainTabScaffoldState extends State<MainTabScaffold> {
+class _MainTabScaffoldState extends ConsumerState<MainTabScaffold> {
   DateTime? _lastBackPress;
 
   static const _destinations = <_MainTabDestination>[
@@ -39,6 +41,11 @@ class _MainTabScaffoldState extends State<MainTabScaffold> {
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
+        if (widget.navigationShell.currentIndex == 0 &&
+            ref.read(conversationBackHandlerProvider).onBack?.call() == true) {
+          _lastBackPress = null;
+          return;
+        }
         if (widget.navigationShell.currentIndex != 0) {
           _lastBackPress = null;
           _switchToTab(0);

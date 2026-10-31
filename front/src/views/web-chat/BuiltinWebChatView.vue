@@ -536,6 +536,7 @@ async function handleNewChat(event?: CustomEvent) {
       connectSSE();
       return;
     }
+    resetForNewDraft();
     resetConversationScope();
     convId.value = "";
     selectedPermissionMode.value = loadChatPermissionMode();
@@ -867,6 +868,15 @@ function resetConversationScope() {
   clearGroupConversation();
 }
 
+function handleSidebarDraftCreated() {
+  resetForNewDraft();
+  resetConversationScope();
+  convId.value = "";
+  modelError.value = "";
+  selectedPermissionMode.value = loadChatPermissionMode();
+  nextTick(() => inputRef.value?.focus());
+}
+
 const {
   onImageAttached,
   onImageRemoved,
@@ -880,6 +890,7 @@ const {
   handleStop,
   handleRetry,
   handleClear,
+  resetForNewDraft,
   generating,
   isSubmitting,
 } = useWebChatSend(
@@ -900,10 +911,12 @@ const {
   undefined,
   replyTarget,
   async (conversationId) => {
+    if (convId.value !== conversationId) return;
     await router.replace({
       path: "/chat",
       query: { conversationId },
     });
+    if (convId.value !== conversationId) return;
     void connectSSE(false);
     await fetchConversations();
     await chatStore.fetchSidebar();
@@ -1183,6 +1196,7 @@ onMounted(async () => {
   startChatLayoutObserver();
   window.addEventListener("resize", updateViewport);
   window.addEventListener("amitia:execution-scope-changed", handleScopeChanged);
+  window.addEventListener("amitia:draft-created", handleSidebarDraftCreated);
   void loadLlmModels();
   let ownedInitialized = false;
   let ownedInitializationPromise: Promise<void> | null = null;
@@ -1327,6 +1341,7 @@ onUnmounted(() => {
   chatLayoutObserver?.disconnect();
   chatLayoutObserver = null;
   window.removeEventListener("amitia:execution-scope-changed", handleScopeChanged);
+  window.removeEventListener("amitia:draft-created", handleSidebarDraftCreated);
   ownedDisposed = true;
   if (ownedPolicyTimer) clearInterval(ownedPolicyTimer);
   ownedPolicyTimer = null;

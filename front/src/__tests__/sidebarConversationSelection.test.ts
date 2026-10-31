@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import WorkspaceSidebar from "../components/WorkspaceSidebar.vue";
 import { useChatStore } from "../stores/chat";
 import SidebarProjectBlock from "../components/SidebarProjectBlock.vue";
+import SidebarConversationRow from "../components/SidebarConversationRow.vue";
+import { contextMenuState, closeContextMenu } from "../components/context-menu/contextMenuStore";
 
 const mocks = vi.hoisted(() => ({ get: vi.fn(), startDraft: vi.fn(), pickProjectWorkspace: vi.fn(), registerProjectWorkspaces: vi.fn(), createProjectFromWorkspaces: vi.fn() }));
 
@@ -31,6 +33,7 @@ vi.mock("../ui-runtime/navigationRegistry", async () => {
   };
 });
 vi.mock("../components/SearchModal.vue", () => ({ default: { template: "<div />" } }));
+vi.mock("@/runtime/runtime-capabilities", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), isDesktopShell: () => true }));
 
 const conversation = {
   id: "sent-conversation",
@@ -87,6 +90,20 @@ describe("sidebar conversation selection", () => {
     }
   });
 
+  it("requests a fresh draft even when the current route is already the draft route", async () => {
+    const { wrapper } = await renderSidebar("/chat");
+    const listener = vi.fn();
+    window.addEventListener("amitia:draft-created", listener);
+    try {
+      await wrapper.get('[data-amitia-ui="workspace.new-chat"]').trigger("click");
+      await flushPromises();
+      expect(listener).toHaveBeenCalledOnce();
+    } finally {
+      window.removeEventListener("amitia:draft-created", listener);
+      wrapper.unmount();
+    }
+  });
+
   it("selects the conversation title when opening an existing conversation directly", async () => {
     const { wrapper, chat } = await renderSidebar(`/chat?conversationId=${conversation.id}`);
     try {
@@ -128,6 +145,32 @@ describe("sidebar conversation selection", () => {
     }
   });
 
+  it("分组标题右键只提供多选与对应新增操作", async () => {
+    const { wrapper } = await renderSidebar("/chat");
+    const headings = wrapper.findAll('.project-caption');
+    await headings[0].trigger('contextmenu');
+    expect(contextMenuState.items.map((item) => item.label)).toEqual(['多选', '新建对话']);
+    await contextMenuState.items[0].action?.();
+    await flushPromises();
+    await headings[1].trigger('contextmenu');
+    expect(contextMenuState.items.map((item) => item.label)).toEqual(['取消多选', '新增项目']);
+    closeContextMenu();
+    wrapper.unmount();
+  });
+
+  it("项目右键与更多菜单使用相同命令和禁用状态", async () => {
+    const { wrapper, chat } = await renderSidebar("/chat");
+    const project = { id: "project-context", name: "右键项目", workspaceId: "main", deviceId: "source", rootUri: "amitia://workspace/@main/", workspaces: [{ id: "main", deviceId: "source", name: "主目录", kind: "local", rootUri: "amitia://workspace/@main/" }, { id: "sub", deviceId: "source", name: "子目录", kind: "local", rootUri: "amitia://workspace/@sub/" }], primaryWorkspaceId: "main", available: true, status: "available", conversationCount: 0, conversations: [] };
+    chat.sidebar.projects = [project];
+    await flushPromises();
+    await wrapper.get('.project-row').trigger('contextmenu');
+    expect(contextMenuState.title).toBe('右键项目');
+    expect(contextMenuState.items.map((item) => item.label)).toEqual(['新建对话', '重命名项目', '添加子工作区', '主工作区：主目录', '子工作区：子目录（设为主工作区）', '移除工作区：主目录', '移除工作区：子目录', '置顶', '在资源管理器中打开主工作区', '从侧边栏移除']);
+    expect(contextMenuState.items.find((item) => item.id === 'primary:main')?.disabled).toBe(true);
+    closeContextMenu();
+    wrapper.unmount();
+  });
+
   it("enables selection for chats and project conversations together", async () => {
     const { wrapper, chat } = await renderSidebar("/chat");
     const projectConversation = { ...conversation, id: "project-conversation", projectId: "project" };
@@ -141,6 +184,46 @@ describe("sidebar conversation selection", () => {
     await wrapper.findAll('.thread-main')[0].trigger('click');
     expect((wrapper.findAll('.thread-row input[type="checkbox"]')[0].element as HTMLInputElement).checked).toBe(true);
     expect(wrapper.findAll('[title="退出多选"]')).toHaveLength(2);
+    wrapper.unmount();
+  });
+
+  it("starts multi-selection from a project conversation and selects that conversation", async () => {
+    const { wrapper, chat } = await renderSidebar("/chat");
+    const projectConversation = { ...conversation, id: "project-conversation", projectId: "project" };
+    chat.sidebar.recent = [conversation];
+    chat.sidebar.projects = [{ id: "project", name: "项目", workspaceId: "", deviceId: "", rootUri: "", workspaces: [], primaryWorkspaceId: "", available: true, status: "available", conversationCount: 1, conversations: [projectConversation] }];
+    await flushPromises();
+    await wrapper.get('.project-main').trigger('click');
+    await flushPromises();
+    const rows = wrapper.findAllComponents(SidebarConversationRow);
+    rows[1].vm.$emit("startBatch", projectConversation);
+    await flushPromises();
+    const checkboxes = wrapper.findAll('.thread-row input[type="checkbox"]');
+    expect(checkboxes).toHaveLength(2);
+    expect((checkboxes[0].element as HTMLInputElement).checked).toBe(false);
+    expect((checkboxes[1].element as HTMLInputElement).checked).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("toggles select all and deselect all across chat and project conversations", async () => {
+    const { wrapper, chat } = await renderSidebar("/chat");
+    const projectConversation = { ...conversation, id: "project-conversation", projectId: "project" };
+    chat.sidebar.recent = [conversation];
+    chat.sidebar.projects = [{ id: "project", name: "项目", workspaceId: "", deviceId: "", rootUri: "", workspaces: [], primaryWorkspaceId: "", available: true, status: "available", conversationCount: 1, conversations: [projectConversation] }];
+    await flushPromises();
+    await wrapper.get('.project-main').trigger('click');
+    await wrapper.findAll('[title="批量选择"]')[0].trigger('click');
+    await wrapper.findAll('.thread-main')[0].trigger('contextmenu');
+    expect(contextMenuState.items[0].label).toBe('全选');
+    await contextMenuState.items[0].action?.();
+    await flushPromises();
+    expect(wrapper.findAll('.thread-row input[type="checkbox"]').every((item) => (item.element as HTMLInputElement).checked)).toBe(true);
+    await wrapper.findAll('.thread-main')[0].trigger('contextmenu');
+    expect(contextMenuState.items[0].label).toBe('取消全选');
+    await contextMenuState.items[0].action?.();
+    await flushPromises();
+    expect(wrapper.findAll('.thread-row input[type="checkbox"]').every((item) => !(item.element as HTMLInputElement).checked)).toBe(true);
+    closeContextMenu();
     wrapper.unmount();
   });
 
