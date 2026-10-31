@@ -13,7 +13,6 @@ import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_icons.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_popup_menu.dart';
-import '../../../../core/widgets/compact_empty_state.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/models/character.dart';
 import '../../../../core/models/conversation.dart';
@@ -542,22 +541,12 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
 
   Widget _buildError(Object error, VoidCallback retry) {
     if (error.toString().contains('没有可用角色')) {
-      return ListView(
-        padding: EdgeInsets.fromLTRB(
-          AppSpacing.pagePadding,
-          AppSpacing.xs,
-          AppSpacing.pagePadding,
-          AppSpacing.lg,
-        ),
-        children: [
-          CompactEmptyState(
-            icon: Icons.person_add_alt_1_outlined,
-            title: '还没有可用角色',
-            message: '创建角色后即可开始聊天和创建群聊。',
-            actionLabel: '创建角色',
-            onAction: () => context.push(AppRoutes.charactersCreate),
-          ),
-        ],
+      return AmitiaEmptyState(
+        icon: Icons.person_add_alt_1_outlined,
+        title: '还没有可用角色',
+        subtitle: '创建角色后即可开始聊天和创建群聊。',
+        actionText: '创建角色',
+        onAction: () => context.push(AppRoutes.charactersCreate),
       );
     }
     return Center(
