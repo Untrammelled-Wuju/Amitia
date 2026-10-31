@@ -54,9 +54,22 @@ export default defineConfig({
   },
   resolve: {
     dedupe: ["vue", "@vue/runtime-core", "@vue/runtime-dom"],
-    alias: {
-      "@": resolve(__dirname, "../front/src"),
-    },
+    alias: [
+      {
+        find: /^@element-plus\/icons-vue(?:\?.*)?$/,
+        replacement: resolve(
+          __dirname,
+          "../front/src/components/icons/element-plus-icons.ts",
+        ),
+      },
+      {
+        find: "@",
+        replacement: resolve(__dirname, "../front/src"),
+      },
+    ],
+  },
+  optimizeDeps: {
+    exclude: ["@element-plus/icons-vue"],
   },
   build: {
     emptyOutDir: true,

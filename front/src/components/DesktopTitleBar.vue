@@ -4,6 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useAppStore } from "@/stores/app";
 import { isDesktopShell } from "@/runtime/runtime-capabilities";
 import { setWindowLayerFallback, useWindowLayerState } from "@/composables/useWindowLayer";
+import AmitiaIcon from "@/components/icons/AmitiaIcon.vue";
 
 const props = defineProps<{ transparent?: boolean }>();
 const appStore = useAppStore();
@@ -181,16 +182,10 @@ async function handleClose() {
         :aria-label="appStore.sidebarCollapsed ? '展开导航' : '收起导航'"
         @click="appStore.toggleSidebar"
       >
-        <svg v-if="appStore.sidebarCollapsed" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect x="3.5" y="4" width="17" height="16" rx="3" stroke="currentColor" stroke-width="1.25"/>
-          <path d="M9 4.8V19.2" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/>
-          <path d="M12.6 8.9L15.4 12L12.6 15.1" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        <svg v-else viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect x="3.5" y="4" width="17" height="16" rx="3" stroke="currentColor" stroke-width="1.25"/>
-          <path d="M9 4.8V19.2" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/>
-          <path d="M15.4 8.9L12.6 12L15.4 15.1" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
+        <AmitiaIcon
+          :name="appStore.sidebarCollapsed ? 'panelLeft' : 'panelLeftClose'"
+          :stroke-width="1.6"
+        />
       </button>
       <div v-if="!hasOnboardingWorld" class="nav-buttons">
         <button
@@ -201,9 +196,7 @@ async function handleClose() {
           :disabled="!canGoBack"
           @click="handleGoBack"
         >
-          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M15 18L9 12L15 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
+          <AmitiaIcon name="back" :stroke-width="1.6" />
         </button>
         <button
           type="button"
@@ -213,9 +206,7 @@ async function handleClose() {
           :disabled="!canGoForward"
           @click="handleGoForward"
         >
-          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
+          <AmitiaIcon name="chevronRight" :stroke-width="1.6" />
         </button>
       </div>
     </div>
@@ -224,9 +215,7 @@ async function handleClose() {
 
     <div v-if="showCustomWindowActions" class="window-actions">
       <div class="icon no-drag" title="最小化" aria-label="最小化" @click="handleMinimize">
-        <svg viewBox="0 0 1024 1024">
-          <path d="M863.7 552.5H160.3c-10.6 0-19.2-8.6-19.2-19.2v-41.7c0-10.6 8.6-19.2 19.2-19.2h703.3c10.6 0 19.2 8.6 19.2 19.2v41.7c0 10.6-8.5 19.2-19.1 19.2z" />
-        </svg>
+        <AmitiaIcon name="minimize" :stroke-width="1.5" />
       </div>
       <div
         class="icon no-drag"
@@ -234,18 +223,13 @@ async function handleClose() {
         :aria-label="isMaximized ? '窗口化' : '最大化'"
         @click="handleToggleMaximize"
       >
-        <svg v-if="!isMaximized" viewBox="0 0 1024 1024">
-          <path d="M770.9 923.3H253.1c-83.8 0-151.9-68.2-151.9-151.9V253.6c0-83.8 68.2-151.9 151.9-151.9h517.8c83.8 0 151.9 68.2 151.9 151.9v517.8c0 83.8-68.1 151.9-151.9 151.9zM253.1 181.7c-39.7 0-71.9 32.3-71.9 71.9v517.8c0 39.7 32.3 71.9 71.9 71.9h517.8c39.7 0 71.9-32.3 71.9-71.9V253.6c0-39.7-32.3-71.9-71.9-71.9H253.1z" />
-        </svg>
-        <svg v-else viewBox="0 0 1024 1024">
-          <path d="M812.2 65H351.6c-78.3 0-142.5 61.1-147.7 138.1-77 5.1-138.1 69.4-138.1 147.7v460.6c0 81.6 66.4 148 148 148h460.6c78.3 0 142.5-61.1 147.7-138.1 77-5.1 138.1-69.4 138.1-147.7V213c0-81.6-66.4-148-148-148z m-45.8 746.3c0 50.7-41.3 92-92 92H213.8c-50.7 0-92-41.3-92-92V350.7c0-50.7 41.3-92 92-92h460.6c50.7 0 92 41.3 92 92v460.6z m137.8-137.7c0 47.3-35.8 86.3-81.8 91.4V350.7c0-81.6-66.4-148-148-148H260.2c5.1-45.9 44.2-81.8 91.4-81.8h460.6c50.7 0 92 41.3 92 92v460.7z" />
-        </svg>
+        <AmitiaIcon
+          :name="isMaximized ? 'restore' : 'maximize'"
+          :stroke-width="1.5"
+        />
       </div>
       <div class="icon no-drag close" title="关闭" aria-label="关闭" @click="handleClose">
-        <svg viewBox="0 0 1024 1024">
-          <path d="M897.6 183.5L183 898.1c-7.5 7.5-19.6 7.5-27.1 0l-29.5-29.5c-7.5-7.5-7.5-19.6 0-27.1L841 126.9c7.5-7.5 19.6-7.5 27.1 0l29.5 29.5c7.5 7.4 7.5 19.6 0 27.1z" />
-          <path d="M183 126.9l714.7 714.7c7.5 7.5 7.5 19.6 0 27.1l-29.5 29.5c-7.5 7.5-19.6 7.5-27.1 0L126.4 183.5c-7.5-7.5-7.5-19.6 0-27.1l29.5-29.5c7.4-7.5 19.6-7.5 27.1 0z" />
-        </svg>
+        <AmitiaIcon name="close" :stroke-width="1.5" />
       </div>
     </div>
   </div>
@@ -373,7 +357,7 @@ async function handleClose() {
 #WindowControlButtons .icon svg {
   width: 14px;
   height: 14px;
-  fill: currentColor;
+  fill: none;
 }
 #WindowControlButtons.is-overlay-blocked {
   pointer-events: none;

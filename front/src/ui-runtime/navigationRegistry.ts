@@ -7,10 +7,10 @@ import {
   Collection,
   DataAnalysis,
   DataLine,
+  Extensions,
   Film,
   List,
   MagicStick,
-  Menu,
   Odometer,
   Share,
   StarFilled,
@@ -87,11 +87,11 @@ const iconMap: Record<string, Component> = {
   graph: Share,
   timeline: Timer,
   workshop: MagicStick,
-  extension: Menu,
+  extension: Extensions,
 };
 
 export function resolveNavigationIcon(name?: string): Component {
-  return iconMap[String(name || "extension").toLowerCase()] ?? Menu;
+  return iconMap[String(name || "extension").toLowerCase()] ?? Extensions;
 }
 
 const builtinItems: UINavigationItem[] = [
@@ -102,7 +102,7 @@ const builtinItems: UINavigationItem[] = [
   { id: "continuity.threads", route: "/continuity", label: "持续事项", description: "跟踪跨对话的长期目标、承诺和进展。", icon: ContinuityIcon, group: "continuity", order: 75, mobile: true },
   { id: "workshop.game-center", route: "/game-center", label: "游戏模式", description: "安装、运行并查看游戏插件。", icon: GamepadIcon, group: "workshop", order: 80, runtimeCapability: "gameMode" },
   { id: "workshop", route: "/creative-workshop", label: "创意工坊", description: "创建角色卡、桌宠和其他创作内容。", icon: MagicStick, group: "workshop", order: 85, match: ["/creative-workshop"] },
-  { id: "extensions", route: "/extensions", label: "扩展中心", description: "管理扩展包、工作流、MCP 和 Agent Skills。", icon: Menu, group: "extensions", order: 90, match: ["/extensions", "/kernel"] },
+  { id: "extensions", route: "/extensions", label: "扩展中心", description: "管理扩展包、工作流、MCP 和 Agent Skills。", icon: Extensions, group: "extensions", order: 90, match: ["/extensions", "/kernel"] },
 ];
 
 const channelCenterItem: UINavigationItem = {

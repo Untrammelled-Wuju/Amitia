@@ -23,10 +23,23 @@ const apiProxy = {
 
 export default defineConfig({
   plugins: [vue()],
+  optimizeDeps: {
+    exclude: ["@element-plus/icons-vue"],
+  },
   resolve: {
-    alias: {
-      "@": resolve(__dirname, "src"),
-    },
+    alias: [
+      {
+        find: /^@element-plus\/icons-vue(?:\?.*)?$/,
+        replacement: resolve(
+          __dirname,
+          "src/components/icons/element-plus-icons.ts",
+        ),
+      },
+      {
+        find: "@",
+        replacement: resolve(__dirname, "src"),
+      },
+    ],
   },
   server: {
     port: 0,

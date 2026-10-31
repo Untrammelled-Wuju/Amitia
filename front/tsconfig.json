@@ -13,7 +13,12 @@
     "rootDir": ".",
     "jsx": "preserve",
     "jsxImportSource": "vue",
-    "paths": { "@/*": ["./src/*"] }
+    "paths": {
+      "@/*": ["./src/*"],
+      "@element-plus/icons-vue": [
+        "./src/components/icons/element-plus-icons.ts"
+      ]
+    }
   },
   "include": ["src", "env.d.ts", "vite-env.d.ts"]
 }

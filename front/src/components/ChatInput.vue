@@ -495,10 +495,7 @@ SPDX-License-Identifier: AGPL-3.0-only
               :aria-label="voiceMode ? '切换到文字输入' : '切换到语音输入'"
             >
               <el-icon v-if="voiceMode">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
-                  <rect x="2" y="5" width="20" height="14" rx="2" />
-                  <path d="M6 9h2m3 0h2m3 0h2M6 12h2m3 0h2m3 0h2M7 15h10" />
-                </svg>
+                <Keyboard />
               </el-icon>
               <el-icon v-else><Microphone /></el-icon>
             </el-button>
@@ -542,6 +539,7 @@ import {
   Check,
   CloseBold,
   MagicStick,
+  Keyboard,
   Microphone,
   Plus,
   Top,

@@ -9,6 +9,10 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": resolve(__dirname, "src"),
+      "@element-plus/icons-vue": resolve(
+        __dirname,
+        "src/components/icons/element-plus-icons.ts",
+      ),
     },
   },
   test: {

@@ -201,7 +201,7 @@ defineExpose({ stopVoice });
   height: 28px;
   fill: none;
   stroke: var(--ac-color-text-secondary);
-  stroke-width: 1.6;
+  stroke-width: 1.8;
   stroke-linecap: round;
   stroke-linejoin: round;
   transition: stroke 0.2s;
