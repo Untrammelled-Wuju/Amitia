@@ -22,4 +22,22 @@ void main() {
     expect(conversation.messageCount, 2);
     expect(conversation.lastMessage, '最后一条消息');
   });
+
+  test('conversation parser accepts live activity and unread projection', () {
+    final conversation = ConversationDto.fromJson({
+      'id': 'conversation-1',
+      'isGenerating': true,
+      'unreadCompletedCount': 3,
+      'activityLabel': '正在使用 workspace.read 工具',
+      'activeToolName': 'workspace.read',
+      'lastMessagePreview': '已经完成的内容',
+      'lastMessageType': 'text',
+    });
+
+    expect(conversation.isGenerating, isTrue);
+    expect(conversation.unreadCompletedCount, 3);
+    expect(conversation.activityLabel, '正在使用 workspace.read 工具');
+    expect(conversation.activeToolName, 'workspace.read');
+    expect(conversation.lastMessage, '已经完成的内容');
+  });
 }

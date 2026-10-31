@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	amitialog "log"
 	"time"
 )
 
@@ -29,7 +30,9 @@ type TrustServiceConfig struct {
 func NewTrustService(cfg TrustServiceConfig) *TrustService {
 	store := NewPublisherStore()
 	for _, root := range cfg.BuiltinRoots {
-		_ = store.RegisterBuiltinRoot(root.PublisherID, root)
+		if err := store.RegisterBuiltinRoot(root.PublisherID, root); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	userTrust := NewUserTrustStore()
 	revocationList := NewRevocationList("local")
@@ -207,11 +210,17 @@ func (s *TrustService) Restore(snapshot TrustSnapshot) error {
 	}
 	for _, identity := range snapshot.Publishers {
 		if identity.Source == TrustSourceBuiltin {
-			_ = s.store.RegisterBuiltinRoot(identity.PublisherID, identity)
+			if err := s.store.RegisterBuiltinRoot(identity.PublisherID, identity); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		} else if identity.Source == TrustSourceOfficialFeed {
-			_ = s.store.RegisterFromOfficialFeed(identity)
+			if err := s.store.RegisterFromOfficialFeed(identity); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		} else if identity.Source == TrustSourceUserDecision {
-			_ = s.store.RegisterUserDecision(identity)
+			if err := s.store.RegisterUserDecision(identity); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}
 	s.revocationList.Restore(snapshot.Revocations)

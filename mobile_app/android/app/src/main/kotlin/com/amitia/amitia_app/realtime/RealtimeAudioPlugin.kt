@@ -296,7 +296,9 @@ class RealtimeAudioPlugin : FlutterPlugin,
             while (capturing.get() && audioRecord === recorder) {
                 val count = try {
                     recorder.read(buffer, 0, buffer.size)
-                } catch (_: Throwable) {
+                } catch (originalError299: Throwable) {
+                  originalError299.printStackTrace()
+
                     break
                 }
                 if (count > 0) {
@@ -332,15 +334,21 @@ class RealtimeAudioPlugin : FlutterPlugin,
         audioRecord = null
         try {
             recorder?.stop()
-        } catch (_: Throwable) {
+        } catch (originalError335: Throwable) {
+          originalError335.printStackTrace()
+
         }
         try {
             recorder?.release()
-        } catch (_: Throwable) {
+        } catch (originalError339: Throwable) {
+          originalError339.printStackTrace()
+
         }
         try {
             captureThread?.join(250)
-        } catch (_: InterruptedException) {
+        } catch (originalError343: InterruptedException) {
+          originalError343.printStackTrace()
+
             Thread.currentThread().interrupt()
         }
         captureThread = null

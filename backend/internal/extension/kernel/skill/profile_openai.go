@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"go.yaml.in/yaml/v3"
+	amitialog "log"
 )
 
 type OpenAIProfileAdapter struct{}
@@ -75,7 +76,9 @@ func (a *OpenAIProfileAdapter) Analyze(ctx context.Context, pkg SkillPackageView
 
 	var value openAIVerbatimYAML
 	var rawMap map[string]interface{}
-	_ = node.Decode(&rawMap)
+	if err := node.Decode(&rawMap); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	if err := node.Decode(&value); err != nil {
 		overlay.Errors = append(overlay.Errors, SkillError{
 			Code: "OPENAI_YAML_INVALID", Message: "agents/openai.yaml fields are invalid: " + err.Error(), Path: "agents/openai.yaml",

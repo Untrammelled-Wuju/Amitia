@@ -15,6 +15,7 @@ import (
 	"github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/runtimeidentity"
+	amitialog "log"
 )
 
 // ProviderLifecyclePort is the minimal interface AcquisitionService needs to
@@ -1009,7 +1010,9 @@ func (s *AcquisitionService) rollbackPlan(ctx context.Context, plan *Acquisition
 			if installerReg != nil {
 				installer, err := installerReg.Resolve(plan.Candidate.Install.Method)
 				if err == nil {
-					_ = installer.Rollback(ctx, plan.InstalledCapability)
+					if err := installer.Rollback(ctx, plan.InstalledCapability); err != nil {
+						amitialog.Printf("[original-error] %v", err)
+					}
 				}
 			}
 		case "enable":

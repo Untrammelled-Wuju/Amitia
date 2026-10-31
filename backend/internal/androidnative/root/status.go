@@ -59,13 +59,13 @@ func DeriveRootState(status RootStatus) string {
 }
 
 const (
-	RootStateUnsupported          = "unsupported"
-	RootStateNotRooted            = "not_rooted"
-	RootStateAuthorizationUnknown = "authorization_unknown"
+	RootStateUnsupported           = "unsupported"
+	RootStateNotRooted             = "not_rooted"
+	RootStateAuthorizationUnknown  = "authorization_unknown"
 	RootStateAuthorizationRequired = "authorization_required"
-	RootStateAuthorized           = "authorized"
-	RootStateDenied               = "denied"
-	RootStateUnavailable          = "unavailable"
+	RootStateAuthorized            = "authorized"
+	RootStateDenied                = "denied"
+	RootStateUnavailable           = "unavailable"
 )
 
 const (
@@ -77,10 +77,10 @@ const (
 )
 
 const (
-	PermissionRootInspect  = "android.root.inspect"
-	PermissionRootRequest  = "android.root.request"
-	PermissionRootExecute  = "android.root.execute"
-	PermissionRootShell    = "android.root.shell"
+	PermissionRootInspect = "android.root.inspect"
+	PermissionRootRequest = "android.root.request"
+	PermissionRootExecute = "android.root.execute"
+	PermissionRootShell   = "android.root.shell"
 )
 
 func init() {

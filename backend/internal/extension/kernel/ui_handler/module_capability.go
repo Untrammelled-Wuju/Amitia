@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/ui_provider"
+	amitialog "log"
 )
 
 var providerModuleCapabilityKey = newProviderModuleCapabilityKey()
@@ -27,9 +28,15 @@ func newProviderModuleCapabilityKey() []byte {
 
 func providerModuleCapability(providerID string, expiresAt int64) string {
 	mac := hmac.New(sha256.New, providerModuleCapabilityKey)
-	_, _ = mac.Write([]byte(providerID))
-	_, _ = mac.Write([]byte(":"))
-	_, _ = mac.Write([]byte(strconv.FormatInt(expiresAt, 10)))
+	if _, err := mac.Write([]byte(providerID)); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if _, err := mac.Write([]byte(":")); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if _, err := mac.Write([]byte(strconv.FormatInt(expiresAt, 10))); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	signature := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 	return strconv.FormatInt(expiresAt, 10) + "." + signature
 }

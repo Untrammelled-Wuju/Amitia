@@ -19,7 +19,9 @@ export function useAppUIHost(isPublicPage: Readonly<Ref<boolean>>) {
   onMounted(() => {
     disposeExtensionListener = extensionUIStore.setupExtensionChangeListener();
     disposeNavigation = window.amitiaDesktop?.onUINavigate((target: string) => {
-      if (isNavigationAllowed(target)) void router.push(target).catch(() => {});
+      if (isNavigationAllowed(target)) void router.push(target).catch((error) => {
+  console.error("[original-error]", error);
+});
     });
   });
 

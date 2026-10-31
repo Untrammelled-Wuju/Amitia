@@ -11,6 +11,7 @@ import (
 
 	proc "github.com/u-ai/backend/internal/platform/process"
 	"github.com/u-ai/backend/internal/runtimehost"
+	amitialog "log"
 )
 
 func (p *browserProcess) Start() (pid int, handle proc.ProcessTreeHandle, err error) {
@@ -90,7 +91,9 @@ func (p *browserProcess) Stop(handle proc.ProcessTreeHandle, pid int, gracePerio
 	}
 
 	if pid > 0 {
-		_ = syscall.Kill(pid, syscall.SIGTERM)
+		if err := syscall.Kill(pid, syscall.SIGTERM); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		deadline := time.Now().Add(gracePeriod)
 		for time.Now().Before(deadline) {
 			if !isProcessAliveByPID(pid) {
@@ -99,7 +102,9 @@ func (p *browserProcess) Stop(handle proc.ProcessTreeHandle, pid int, gracePerio
 			time.Sleep(50 * time.Millisecond)
 		}
 		if isProcessAliveByPID(pid) {
-			_ = syscall.Kill(pid, syscall.SIGKILL)
+			if err := syscall.Kill(pid, syscall.SIGKILL); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}
 

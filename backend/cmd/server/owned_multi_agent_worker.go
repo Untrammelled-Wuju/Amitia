@@ -16,6 +16,7 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/mindruntime"
+	amitialog "log"
 )
 
 type ownedWorkerEngine interface {
@@ -183,7 +184,9 @@ func (r *ownedMultiAgentWorkerRunner) run(ctx context.Context, cancel context.Ca
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			if latest, found, err := r.tracker.Get(context.Background(), childID); err == nil && found && !latest.IsTerminal() {
-				_, _ = r.tracker.TransitionCAS(context.Background(), childID, latest.StatusVersion, interaction.InteractionStatusInterrupted)
+				if _, err := r.tracker.TransitionCAS(context.Background(), childID, latest.StatusVersion, interaction.InteractionStatusInterrupted); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 		}
 	}()
@@ -192,7 +195,9 @@ func (r *ownedMultiAgentWorkerRunner) run(ctx context.Context, cancel context.Ca
 		return
 	}
 	if !stored.CancelRequestedAt.IsZero() {
-		_ = r.cancelRecord(context.Background(), childID)
+		if err := r.cancelRecord(context.Background(), childID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return
 	}
 	if _, err = r.tracker.TransitionCAS(ctx, childID, stored.StatusVersion, interaction.InteractionStatusProcessing); err != nil {
@@ -204,7 +209,9 @@ func (r *ownedMultiAgentWorkerRunner) run(ctx context.Context, cancel context.Ca
 		return
 	}
 	if cancelled {
-		_ = r.cancelRecord(context.Background(), childID)
+		if err := r.cancelRecord(context.Background(), childID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return
 	}
 	watchDone := make(chan struct{})

@@ -37,8 +37,9 @@ export async function resolveUIClientInfo(): Promise<UIClientInfo> {
           appVersion: environment.version?.trim() || String(packageMeta.version ?? "").trim(),
         };
       }
-    } catch {
-      // Fall back to browser-visible metadata below.
+    } catch (error) {
+  console.error("[original-error]", error);
+// Fall back to browser-visible metadata below.
     }
   }
   return getUIClientInfo();

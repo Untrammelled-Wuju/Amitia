@@ -58,7 +58,7 @@ func writeInstallationError(c *gin.Context, err error) {
 		util.ErrorResponse(c, httpCode, ie.Message, gin.H{"errorCode": ie.Code})
 		return
 	}
-	util.ErrorResponse(c, response.InternalError, "服务器内部错误", nil)
+	util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 }
 
 func writeInstallationOwnershipError(c *gin.Context, err error) {
@@ -127,12 +127,12 @@ func (h *CoordinatorHandler) InstallRelease(c *gin.Context) {
 	}
 	var payload installPackagePayload
 	if err := c.ShouldBindJSON(&payload); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", gin.H{"errorCode": ErrCodeInstallationFailed})
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), gin.H{"errorCode": ErrCodeInstallationFailed})
 		return
 	}
 	actorID, err := middleware.ResolveActorID(c)
 	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 	deviceCtx := h.buildDeviceCtx(c, actorID)
@@ -154,7 +154,7 @@ func (h *CoordinatorHandler) InstallRelease(c *gin.Context) {
 func (h *CoordinatorHandler) ListInstallations(c *gin.Context) {
 	actorID, err := middleware.ResolveActorID(c)
 	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 	deviceID, ok := requireDeviceID(c)
@@ -188,7 +188,7 @@ func (h *CoordinatorHandler) GetInstallation(c *gin.Context) {
 	}
 	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 	deviceID, ok := requireDeviceID(c)
@@ -230,7 +230,7 @@ func (h *CoordinatorHandler) GetRuntimeSettings(c *gin.Context) {
 	installationID := strings.TrimSpace(c.Param("installationId"))
 	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 	deviceID, ok := requireDeviceID(c)
@@ -257,7 +257,7 @@ func (h *CoordinatorHandler) EnableInstallation(c *gin.Context) {
 	}
 	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 	deviceID, ok := requireDeviceID(c)
@@ -291,7 +291,7 @@ func (h *CoordinatorHandler) DisableInstallation(c *gin.Context) {
 	}
 	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 	deviceID, ok := requireDeviceID(c)
@@ -325,7 +325,7 @@ func (h *CoordinatorHandler) UpdateDefaultAction(c *gin.Context) {
 	}
 	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 	deviceID, ok := requireDeviceID(c)
@@ -338,7 +338,7 @@ func (h *CoordinatorHandler) UpdateDefaultAction(c *gin.Context) {
 	}
 	var payload updateDefaultActionPayload
 	if err := c.ShouldBindJSON(&payload); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", gin.H{"errorCode": ErrCodeActionNotFound})
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), gin.H{"errorCode": ErrCodeActionNotFound})
 		return
 	}
 	actionKey := strings.TrimSpace(payload.ActionKey)
@@ -370,12 +370,12 @@ func (h *CoordinatorHandler) UpdateRuntimeSettings(c *gin.Context) {
 	}
 	var payload UpdateRuntimeSettingsRequest
 	if err := c.ShouldBindJSON(&payload); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", gin.H{"errorCode": ErrCodeInstallationFailed})
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), gin.H{"errorCode": ErrCodeInstallationFailed})
 		return
 	}
 	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 	deviceID, ok := requireDeviceID(c)
@@ -431,7 +431,7 @@ func (h *CoordinatorHandler) Recenter(c *gin.Context) {
 	}
 	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 	deviceID, ok := requireDeviceID(c)
@@ -470,7 +470,7 @@ func (h *CoordinatorHandler) PlayAction(c *gin.Context) {
 	}
 	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 	deviceID, ok := requireDeviceID(c)
@@ -494,7 +494,7 @@ func (h *CoordinatorHandler) Uninstall(c *gin.Context) {
 	installationID := c.Param("installationId")
 	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 	deviceID, ok := requireDeviceID(c)
@@ -521,12 +521,12 @@ func (h *CoordinatorHandler) SwitchRelease(c *gin.Context) {
 	installationID := c.Param("installationId")
 	var payload switchReleasePayload
 	if err := c.ShouldBindJSON(&payload); err != nil || strings.TrimSpace(payload.TargetReleaseID) == "" {
-		util.ErrorResponse(c, response.InvalidParams, "targetReleaseId 不能为空", gin.H{"errorCode": ErrCodeInstallationInvalid})
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), gin.H{"errorCode": ErrCodeInstallationInvalid})
 		return
 	}
 	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 	deviceID, ok := requireDeviceID(c)
@@ -554,12 +554,12 @@ func (h *CoordinatorHandler) Upgrade(c *gin.Context) {
 	installationID := c.Param("installationId")
 	var payload switchReleasePayload
 	if err := c.ShouldBindJSON(&payload); err != nil || strings.TrimSpace(payload.TargetReleaseID) == "" {
-		util.ErrorResponse(c, response.InvalidParams, "targetReleaseId 不能为空", gin.H{"errorCode": ErrCodeInstallationInvalid})
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), gin.H{"errorCode": ErrCodeInstallationInvalid})
 		return
 	}
 	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 	deviceID, ok := requireDeviceID(c)
@@ -587,12 +587,12 @@ func (h *CoordinatorHandler) Downgrade(c *gin.Context) {
 	installationID := c.Param("installationId")
 	var payload downgradePayload
 	if err := c.ShouldBindJSON(&payload); err != nil || strings.TrimSpace(payload.TargetReleaseID) == "" {
-		util.ErrorResponse(c, response.InvalidParams, "targetReleaseId 不能为空", gin.H{"errorCode": ErrCodeInstallationInvalid})
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), gin.H{"errorCode": ErrCodeInstallationInvalid})
 		return
 	}
 	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 	deviceID, ok := requireDeviceID(c)
@@ -621,7 +621,7 @@ func (h *CoordinatorHandler) Repair(c *gin.Context) {
 	installationID := c.Param("installationId")
 	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 	deviceID, ok := requireDeviceID(c)
@@ -648,7 +648,7 @@ func (h *CoordinatorHandler) GetOperationStatus(c *gin.Context) {
 	operationID := c.Param("operationId")
 	actorID, err := middleware.ResolveActorID(c)
 	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 	deviceID, ok := requireDeviceID(c)
@@ -667,7 +667,7 @@ func (h *CoordinatorHandler) CancelOperation(c *gin.Context) {
 	operationID := c.Param("operationId")
 	actorID, err := middleware.ResolveActorID(c)
 	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 	deviceID, ok := requireDeviceID(c)

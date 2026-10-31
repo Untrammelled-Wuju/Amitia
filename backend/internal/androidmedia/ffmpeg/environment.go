@@ -9,17 +9,17 @@ import (
 )
 
 const (
-	AndroidFFmpegUnavilable          = "ANDROID_MEDIA_FFMPEG_UNAVAILABLE"
+	AndroidFFmpegUnavilable            = "ANDROID_MEDIA_FFMPEG_UNAVAILABLE"
 	AndroidFFmpegRuntimePackageMissing = "ANDROID_MEDIA_FFMPEG_RUNTIME_PACKAGE_MISSING"
-	AndroidFFmpegArchUnsupported     = "ANDROID_MEDIA_FFMPEG_ARCH_UNSUPPORTED"
+	AndroidFFmpegArchUnsupported       = "ANDROID_MEDIA_FFMPEG_ARCH_UNSUPPORTED"
 )
 
 type AndroidEnvironmentConfig struct {
-	ExpectedArch    ffmpeg.Architecture
-	Platform        string
-	FFmpegPath      string
-	FFprobePath     string
-	BundleRootPath  string
+	ExpectedArch   ffmpeg.Architecture
+	Platform       string
+	FFmpegPath     string
+	FFprobePath    string
+	BundleRootPath string
 }
 
 func DefaultAndroidEnvironmentConfig() AndroidEnvironmentConfig {

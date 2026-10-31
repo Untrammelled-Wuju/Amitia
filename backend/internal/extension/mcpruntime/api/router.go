@@ -21,6 +21,7 @@ import (
 	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
+	amitialog "log"
 )
 
 type ConnectionManager interface {
@@ -136,7 +137,9 @@ func (h *Handler) createServer(c *gin.Context) {
 	}
 	if err != nil {
 		if record.ID != "" {
-			_ = h.services.Repository.DeleteServer(context.Background(), record.ID)
+			if err := h.services.Repository.DeleteServer(context.Background(), record.ID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		respond(c, nil, err)
 		return
@@ -177,7 +180,9 @@ func (h *Handler) updateServer(c *gin.Context) {
 		if record.Enabled == 1 {
 			go h.reconnectAndSync(context.Background(), record.ID)
 		} else {
-			_ = h.services.Tools.UnregisterServer(c, record.ID)
+			if err := h.services.Tools.UnregisterServer(c, record.ID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			go h.services.Connections.Disconnect(context.Background(), record.ID)
 		}
 	}
@@ -196,7 +201,9 @@ func (h *Handler) deleteServer(c *gin.Context) {
 		problem(c, http.StatusConflict, "MCP_SERVER_PACKAGE_MANAGED", "该 MCP 服务由扩展包管理，请卸载扩展包")
 		return
 	}
-	_ = h.services.Tools.UnregisterServer(c, id)
+	if err := h.services.Tools.UnregisterServer(c, id); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	references, err := h.services.Repository.CredentialReferences(c, id)
 	if err == nil {
 		h.cancelServerTasks(c, id)
@@ -209,7 +216,9 @@ func (h *Handler) deleteServer(c *gin.Context) {
 	}
 	if err == nil {
 		for _, reference := range references {
-			_ = h.services.Secrets.Delete(context.Background(), reference)
+			if err := h.services.Secrets.Delete(context.Background(), reference); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}
 	respond(c, gin.H{"deleted": err == nil}, err)
@@ -226,7 +235,9 @@ func (h *Handler) cancelServerTasks(ctx context.Context, serverID string) {
 		if task.Status != "working" && task.Status != "input_required" {
 			continue
 		}
-		_, _ = h.services.Connections.Call(limited, serverID, "tasks/cancel", map[string]any{"taskId": task.RemoteTaskID}, client.CallOptions{Timeout: time.Second})
+		if _, err := h.services.Connections.Call(limited, serverID, "tasks/cancel", map[string]any{"taskId": task.RemoteTaskID}, client.CallOptions{Timeout: time.Second}); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		if limited.Err() != nil {
 			return
 		}
@@ -641,7 +652,9 @@ func (h *Handler) storeCredential(ctx context.Context, server mcp.Server, value 
 	}
 	_, err = h.services.Repository.PutCredentialReference(ctx, server.ID, server.AuthType, reference, "", nil)
 	if err != nil {
-		_ = h.services.Secrets.Delete(ctx, reference)
+		if err := h.services.Secrets.Delete(ctx, reference); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return err
 }

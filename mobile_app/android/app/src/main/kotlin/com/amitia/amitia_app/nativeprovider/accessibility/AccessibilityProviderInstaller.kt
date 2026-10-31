@@ -15,7 +15,9 @@ internal object AccessibilityProviderInstaller {
     fun installedVersion(context: Context): String? {
         return try {
             context.packageManager.getPackageInfo(PROVIDER_PACKAGE, 0).versionName
-        } catch (_: Throwable) {
+        } catch (originalError18: Throwable) {
+          originalError18.printStackTrace()
+
             null
         }
     }
@@ -43,7 +45,9 @@ internal object AccessibilityProviderInstaller {
             }
             context.startActivity(intent)
             true
-        } catch (_: Throwable) {
+        } catch (originalError46: Throwable) {
+          originalError46.printStackTrace()
+
             false
         }
     }
@@ -59,7 +63,9 @@ internal object AccessibilityProviderInstaller {
         return try {
             context.startActivity(intent)
             true
-        } catch (_: Throwable) {
+        } catch (originalError62: Throwable) {
+          originalError62.printStackTrace()
+
             false
         }
     }

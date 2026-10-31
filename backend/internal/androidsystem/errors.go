@@ -24,8 +24,8 @@ const (
 )
 
 const (
-	PermissionNotificationRead   = "android.notification.read"
-	PermissionNotificationPost   = "android.notification.post"
+	PermissionNotificationRead    = "android.notification.read"
+	PermissionNotificationPost    = "android.notification.post"
 	PermissionNotificationControl = "android.notification.control"
 )
 

@@ -2,11 +2,10 @@
 
 package ssh
 
-
 type HostKeyPolicy string
 
 const (
-	HostKeyPolicyReject  HostKeyPolicy = "reject"
+	HostKeyPolicyReject    HostKeyPolicy = "reject"
 	HostKeyPolicyAcceptNew HostKeyPolicy = "accept_new"
 )
 

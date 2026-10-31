@@ -4,6 +4,7 @@ package process
 
 import (
 	"fmt"
+	amitialog "log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -42,7 +43,11 @@ func startProcessTreeWithLimits(cmd *exec.Cmd, limits ResourceLimits) (ProcessTr
 	if err := os.Mkdir(group, 0o755); err != nil {
 		return 0, fmt.Errorf("process: create pre-exec cgroup: %w", err)
 	}
-	cleanup := func() { _ = os.Remove(group) }
+	cleanup := func() {
+		if err := os.Remove(group); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+	}
 	if limits.MaxMemoryBytes > 0 {
 		if err := writeCgroupValue(group, "memory.max", strconv.FormatUint(limits.MaxMemoryBytes, 10)); err != nil {
 			cleanup()
@@ -81,7 +86,9 @@ func startProcessTreeWithLimits(cmd *exec.Cmd, limits ResourceLimits) (ProcessTr
 	cmd.SysProcAttr.UseCgroupFD = true
 	cmd.SysProcAttr.CgroupFD = int(fd.Fd())
 	err = cmd.Start()
-	_ = fd.Close()
+	if err := fd.Close(); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	if err != nil {
 		cleanup()
 		return 0, fmt.Errorf("process: atomic cgroup start (clone3): %w", err)

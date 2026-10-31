@@ -18,6 +18,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
 	"github.com/u-ai/backend/internal/extension/kernel/trust"
+	amitialog "log"
 )
 
 func (r *Runtime) ExecuteInstall(ctx context.Context, archivePath string) (KernelInstallResult, error) {
@@ -272,7 +273,9 @@ func (r *Runtime) ExecuteInstall(ctx context.Context, archivePath string) (Kerne
 				Module:    string(contrib.ModuleID),
 				Enabled:   false,
 			}
-			_ = r.container.ContributionRegistry.Register(bc)
+			if err := r.container.ContributionRegistry.Register(bc); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}
 

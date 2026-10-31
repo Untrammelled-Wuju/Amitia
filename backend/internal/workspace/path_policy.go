@@ -9,12 +9,12 @@ import (
 )
 
 const (
-	MaxPathDepth     = 64
-	MaxPathSegment   = 255
-	MaxDirectRead    = 1 << 20
-	MaxSingleWrite   = 64 << 20
-	MaxListEntries   = 500
-	MaxRecursive     = 10000
+	MaxPathDepth      = 64
+	MaxPathSegment    = 255
+	MaxDirectRead     = 1 << 20
+	MaxSingleWrite    = 64 << 20
+	MaxListEntries    = 500
+	MaxRecursive      = 10000
 	MaxRecursiveBytes = 1 << 30
 )
 

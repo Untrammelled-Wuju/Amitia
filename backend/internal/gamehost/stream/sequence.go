@@ -30,7 +30,7 @@ func (g *sequenceGenerator) Reset() {
 }
 
 type sequenceManager struct {
-	mu        sync.RWMutex
+	mu         sync.RWMutex
 	generators map[string]*sequenceGenerator
 }
 

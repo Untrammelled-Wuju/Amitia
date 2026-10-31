@@ -7,12 +7,12 @@ import (
 )
 
 type NativeTraceContext struct {
-	RequestId     string
-	Platform      string
-	Operation     string
-	Generation    uint64
-	ConnectionID  uint64
-	StartTime     time.Time
+	RequestId    string
+	Platform     string
+	Operation    string
+	Generation   uint64
+	ConnectionID uint64
+	StartTime    time.Time
 }
 
 func (c *NativeTraceContext) Duration() time.Duration {

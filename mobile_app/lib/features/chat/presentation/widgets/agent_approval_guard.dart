@@ -42,14 +42,20 @@ class _AgentApprovalGuardState extends ConsumerState<AgentApprovalGuard> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(toolName, style: AppTypography.sectionTitle(dialogContext)),
+                  Text(
+                    toolName,
+                    style: AppTypography.sectionTitle(dialogContext),
+                  ),
                   SizedBox(height: AppSpacing.xs),
                   Text(
                     '本次批准仅允许当前工具调用继续执行，不会更改会话的权限模式。',
                     style: AppTypography.bodySmall(dialogContext),
                   ),
                   SizedBox(height: AppSpacing.md),
-                  Text('风险等级：$riskLevel', style: AppTypography.caption(dialogContext)),
+                  Text(
+                    '风险等级：$riskLevel',
+                    style: AppTypography.caption(dialogContext),
+                  ),
                   SizedBox(height: AppSpacing.sm),
                   Text('参数', style: AppTypography.label(dialogContext)),
                   SizedBox(height: AppSpacing.xs),
@@ -64,10 +70,9 @@ class _AgentApprovalGuardState extends ConsumerState<AgentApprovalGuard> {
                     child: SingleChildScrollView(
                       child: SelectableText(
                         arguments,
-                        style: AppTypography.caption(dialogContext).copyWith(
-                          fontFamily: 'monospace',
-                          height: 1.5,
-                        ),
+                        style: AppTypography.caption(
+                          dialogContext,
+                        ).copyWith(fontFamily: 'monospace', height: 1.5),
                       ),
                     ),
                   ),
@@ -89,7 +94,8 @@ class _AgentApprovalGuardState extends ConsumerState<AgentApprovalGuard> {
       );
       if (approved == null || !mounted) return;
       await ref
-          .read(conversationRuntimeControllerProvider)
+          .read(conversationRuntimeRegistryProvider)
+          .sessionForConversation(widget.conversationId)
           .resolveApproval(id, approved);
     } finally {
       _dialogOpen = false;
@@ -103,23 +109,33 @@ class _AgentApprovalGuardState extends ConsumerState<AgentApprovalGuard> {
     if (raw.isEmpty) return '无参数';
     try {
       return const JsonEncoder.withIndent('  ').convert(jsonDecode(raw));
-    } catch (_) {
-      return raw.length > 8000 ? raw.substring(0, 8000) : raw;
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return raw.length > 8000 ? raw.substring(0, 8000) : raw;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final runtime = ref.watch(conversationRuntimeControllerProvider);
     final conversationId = widget.conversationId.trim();
-    final approvals = runtime.pendingApprovals
-        .where((item) =>
-            conversationId.isNotEmpty &&
-            (item['conversationId'] ?? '').toString().trim() == conversationId)
-        .toList(growable: false);
+    final registry = ref.watch(conversationRuntimeRegistryProvider);
+    final runtime = conversationId.isEmpty
+        ? null
+        : registry.sessionForConversation(conversationId);
+    final approvals =
+        (runtime?.pendingApprovals ?? const <Map<String, dynamic>>[])
+            .where(
+              (item) =>
+                  conversationId.isNotEmpty &&
+                  (item['conversationId'] ?? '').toString().trim() ==
+                      conversationId,
+            )
+            .toList(growable: false);
     if (_dialogOpen &&
         _activeApprovalId.isNotEmpty &&
-        !approvals.any((item) => (item['id'] ?? '').toString() == _activeApprovalId)) {
+        !approvals.any(
+          (item) => (item['id'] ?? '').toString() == _activeApprovalId,
+        )) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || !_dialogOpen) return;
         Navigator.of(context, rootNavigator: true).maybePop();

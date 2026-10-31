@@ -303,8 +303,9 @@ async function copyExample() {
     }
     await navigator.clipboard.writeText(activeExample.value.json);
     ElMessage.success("示例 JSON 已复制");
-  } catch {
-    ElMessage.warning("复制失败，请手动选择示例内容");
+  } catch (error) {
+  console.error("[original-error]", error);
+ElMessage.warning(error instanceof Error ? error.message : String(error));
   }
 }
 

@@ -11,8 +11,9 @@ export function resolveActionFramePath(actionConfigPath: string, frameFile: stri
   try {
     normalizePackagePath(actionConfigPath);
     resolvedRelative = resolveActionResourcePackagePath(actionConfigPath, frameFile);
-  } catch {
-    if (frameFile.split("/").includes("..") || frameFile.split("\\").includes("..")) throw new Error(`FRAME_PATH_TRAVERSAL: ${frameFile}`);
+  } catch (error) {
+  console.error("[original-error]", error);
+if (frameFile.split("/").includes("..") || frameFile.split("\\").includes("..")) throw new Error(`FRAME_PATH_TRAVERSAL: ${frameFile}`);
     throw new Error(`FRAME_PATH_OUTSIDE_PACKAGE: ${frameFile}`);
   }
 

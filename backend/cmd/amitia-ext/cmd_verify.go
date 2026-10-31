@@ -11,6 +11,7 @@ import (
 
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/trust"
+	amitialog "log"
 )
 
 func runVerify(args []string, output *Output) int {
@@ -71,7 +72,9 @@ func runVerify(args []string, output *Output) int {
 			Algorithm:   trust.AlgorithmEd25519,
 			State:       trust.KeyStateActive,
 		}
-		_ = store.RegisterDevelopment(resolvedPublisher, pubKeyEntry)
+		if err := store.RegisterDevelopment(resolvedPublisher, pubKeyEntry); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		verifier := trust.NewSignatureVerifier(store)
 
 		doc, err := trust.ParseSignatureDocument(pkg.V2Signature)

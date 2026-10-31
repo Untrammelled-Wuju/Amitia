@@ -2,6 +2,7 @@ package workbenchterminal
 
 import (
 	"context"
+	amitialog "log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,6 +20,8 @@ func terminateTerminalProcessTree(pid int) {
 		defer cancel()
 		command := exec.CommandContext(ctx, filepath.Join(root, "System32", "taskkill.exe"), "/T", "/F", "/PID", strconv.Itoa(pid))
 		command.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: 0x08000000}
-		_ = command.Run()
+		if err := command.Run(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 }

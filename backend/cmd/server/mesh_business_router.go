@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -120,7 +122,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 		}
 		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 512<<10)
 		if err := c.ShouldBindJSON(&payload); err != nil {
-			c.JSON(400, gin.H{"message": "持续事项参数无效"})
+			c.JSON(400, gin.H{"message": err.Error()})
 			return
 		}
 		if payload.ExpectedScope == nil || payload.ExpectedCoreID == "" || payload.ExpectedOwnerID == "" || payload.ExpectedModeRevision < 1 {
@@ -148,7 +150,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 		query := coordination.DataQuery{ConversationID: c.Param("conversationId"), HistoricalRoleID: c.Query("historicalRoleId"), ListConversations: c.Param("conversationId") == "", Limit: 128}
 		search, searchErr := coordination.NormalizeConversationSearch(c.Query("keyword"))
 		if searchErr != nil || search != "" && !query.ListConversations {
-			c.JSON(400, gin.H{"message": "会话搜索参数无效"})
+			c.JSON(400, gin.H{"message": searchErr.Error()})
 			return
 		}
 		query.SearchQuery = search
@@ -177,7 +179,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 		if value := c.Query("limit"); value != "" {
 			limit, err := strconv.Atoi(value)
 			if err != nil || limit < 1 || limit > 128 {
-				c.JSON(400, gin.H{"message": "聊天历史分页数量无效"})
+				c.JSON(400, gin.H{"message": err.Error()})
 				return
 			}
 			query.Limit = limit
@@ -287,7 +289,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 			}
 			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 16<<10)
 			if err := c.ShouldBindJSON(&input); err != nil || input.ExpectedScope == nil {
-				c.JSON(400, gin.H{"message": "索引重建参数无效，请刷新后重试"})
+				c.JSON(400, gin.H{"message": err.Error()})
 				return
 			}
 			request.RoleID, request.TargetDeviceID, expected = input.RoleID, input.TargetDeviceID, input.ExpectedScope
@@ -329,7 +331,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 		var edit business.EditRequest
 		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 512<<10)
 		if err := c.ShouldBindJSON(&edit); err != nil {
-			c.JSON(400, gin.H{"message": "数据修改参数无效"})
+			c.JSON(400, gin.H{"message": err.Error()})
 			return
 		}
 		if edit.ExpectedScope == nil || edit.ExpectedScope.CoreID == "" || edit.ExpectedScope.ResourceOwnerID == "" || edit.ExpectedScope.ModeRevision < 1 {
@@ -390,7 +392,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 		}
 		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 16<<10)
 		if err := c.ShouldBindJSON(&request); err != nil {
-			c.JSON(400, gin.H{"message": "授权参数无效"})
+			c.JSON(400, gin.H{"message": err.Error()})
 			return
 		}
 		if request.ExpectedCoreID != coreID {
@@ -440,7 +442,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 		var request business.Request
 		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4<<20)
 		if err := c.ShouldBindJSON(&request); err != nil {
-			c.JSON(400, gin.H{"code": "mesh.invalid_message", "message": "消息参数无效"})
+			c.JSON(400, gin.H{"code": "mesh.invalid_message", "message": err.Error()})
 			return
 		}
 		if err := business.ValidateAttachments(request.Attachments); err != nil {
@@ -467,14 +469,21 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 				return
 			}
 		}
-		messageContext := business.WithIngress(c.Request.Context(), business.Ingress{Source: "owned", Channel: "web", ThreadID: threadID})
+		messageContext := ownedMessageContext(c.Request.Context(), threadID)
 		streaming := strings.Contains(c.GetHeader("Accept"), "text/event-stream")
 		var emit func(business.Event) error
 		if streaming {
+			var emitMu sync.Mutex
+			var clientDisconnected atomic.Bool
 			emit = func(event business.Event) error {
 				if err := c.Request.Context().Err(); err != nil {
-					return err
+					clientDisconnected.Store(true)
 				}
+				if clientDisconnected.Load() {
+					return nil
+				}
+				emitMu.Lock()
+				defer emitMu.Unlock()
 				c.Header("Cache-Control", "no-store")
 				c.Header("X-Accel-Buffering", "no")
 				c.SSEvent("message", event)
@@ -516,7 +525,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 		}
 		response, err := services.OwnedBusiness.RunEvents(messageContext, request, emit)
 		if err == nil && response.Saved && services.ContinuityOwner != nil && threadID != "" {
-			if observeErr := services.ContinuityOwner.Observe(c.Request.Context(), owner, response.Scope.RoleID, threadID, continuity.ObservePayload{Version: "v1", ThreadID: threadID, SpaceID: owner.SpaceID, CharacterID: response.Scope.RoleID, ConversationID: response.ConversationID, RequestID: response.RequestID, ExecutionID: response.ExecutionID, UserMessage: request.Message, AssistantReply: response.Text, Source: "owned"}); observeErr != nil {
+			if observeErr := services.ContinuityOwner.Observe(context.WithoutCancel(c.Request.Context()), owner, response.Scope.RoleID, threadID, continuity.ObservePayload{Version: "v1", ThreadID: threadID, SpaceID: owner.SpaceID, CharacterID: response.Scope.RoleID, ConversationID: response.ConversationID, RequestID: response.RequestID, ExecutionID: response.ExecutionID, UserMessage: request.Message, AssistantReply: response.Text, Source: "owned"}); observeErr != nil {
 				err = fmt.Errorf("回复已保存，持续事项同步失败: %w", observeErr)
 			}
 		}
@@ -574,4 +583,11 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 		}
 		c.JSON(200, gin.H{"code": 200, "data": response, "msg": "操作成功"})
 	})
+}
+
+func ownedMessageContext(ctx context.Context, threadID string) context.Context {
+	return business.WithIngress(
+		context.WithoutCancel(ctx),
+		business.Ingress{Source: "owned", Channel: "web", ThreadID: threadID},
+	)
 }

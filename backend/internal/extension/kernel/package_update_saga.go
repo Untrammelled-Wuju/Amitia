@@ -19,6 +19,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
+	amitialog "log"
 )
 
 type PackageUpdateDiff struct {
@@ -61,7 +62,9 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	}
 	current, err := r.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(confirmed.session.ExtensionID))
 	if err != nil {
-		_ = r.container.PackageRepository.SetOperation(context.Background(), "package-operation-"+uuid.NewString(), "failed", "check_installed", "PACKAGE_NOT_INSTALLED", fmt.Sprintf("extension %s is not installed", confirmed.session.ExtensionID), true, PackageWriteGuard{})
+		if err := r.container.PackageRepository.SetOperation(context.Background(), "package-operation-"+uuid.NewString(), "failed", "check_installed", "PACKAGE_NOT_INSTALLED", fmt.Sprintf("extension %s is not installed", confirmed.session.ExtensionID), true, PackageWriteGuard{}); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return KernelInstallResult{}, fmt.Errorf("PACKAGE_NOT_INSTALLED: extension %s is not installed", confirmed.session.ExtensionID)
 	}
 	if err := validatePackageOwner(current, request.SpaceID, request.ScopeType, request.ScopeID); err != nil {
@@ -127,14 +130,20 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	}
 	lease, leaseErr := r.acquirePackageExtensionLease(ctx, confirmed.session.ExtensionID, operationID)
 	if leaseErr != nil {
-		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "acquire_lease", "PACKAGE_OPERATION_LEASE_CONFLICT", leaseErr.Error(), true, PackageWriteGuard{})
+		if err := r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "acquire_lease", "PACKAGE_OPERATION_LEASE_CONFLICT", leaseErr.Error(), true, PackageWriteGuard{}); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return KernelInstallResult{}, fmt.Errorf("kernel: extension %s has an active operation: %w", confirmed.session.ExtensionID, leaseErr)
 	}
 	leaseGuard := r.newPackageLeaseGuard(confirmed.session.ExtensionID, operationID)
 	sagaCtx, startErr := leaseGuard.Start(ctx)
 	if startErr != nil {
-		_ = r.releasePackageExtensionLease(context.Background(), confirmed.session.ExtensionID, operationID)
-		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "start_lease_guard", "PACKAGE_OPERATION_LEASE_CONFLICT", startErr.Error(), true, PackageWriteGuard{})
+		if err := r.releasePackageExtensionLease(context.Background(), confirmed.session.ExtensionID, operationID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "start_lease_guard", "PACKAGE_OPERATION_LEASE_CONFLICT", startErr.Error(), true, PackageWriteGuard{}); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return KernelInstallResult{}, fmt.Errorf("kernel: lease guard start failed: %w", startErr)
 	}
 	defer func() {
@@ -155,22 +164,30 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	guard := packageWriteGuard(lease)
 	lockedSession, err := r.container.PackageRepository.GetPreview(ctx, request.SessionID, request.SpaceID, request.ScopeType, request.ScopeID)
 	if err != nil {
-		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "lock_preview_session", "PACKAGE_PREVIEW_SESSION_LOCK_FAILED", err.Error(), true, guard)
+		if err := r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "lock_preview_session", "PACKAGE_PREVIEW_SESSION_LOCK_FAILED", err.Error(), true, guard); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return KernelInstallResult{}, err
 	}
 	if lockedSession.Status == "consumed" {
 		return r.completedPackageInstallResult(ctx, request.SpaceID, request.SessionID)
 	}
 	if lockedSession.Status != "ready" && lockedSession.Status != "awaiting_confirmation" {
-		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "lock_preview_session", "PACKAGE_PREVIEW_SESSION_STATUS", fmt.Sprintf("status %s", lockedSession.Status), true, guard)
+		if err := r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "lock_preview_session", "PACKAGE_PREVIEW_SESSION_STATUS", fmt.Sprintf("status %s", lockedSession.Status), true, guard); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return KernelInstallResult{}, fmt.Errorf("kernel: preview session status %s", lockedSession.Status)
 	}
 	if request.ExpectedExtensionID == "" || request.ExpectedExtensionID != string(current.ExtensionID) {
-		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "validate_extension_id", "PACKAGE_UPDATE_ID_MISMATCH", "expected extension id must match installed extension", true, guard)
+		if err := r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "validate_extension_id", "PACKAGE_UPDATE_ID_MISMATCH", "expected extension id must match installed extension", true, guard); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return KernelInstallResult{}, fmt.Errorf("PACKAGE_UPDATE_ID_MISMATCH: expected extension id must match installed extension")
 	}
 	if confirmed.artifact.ArtifactID == current.PackageID || confirmed.session.Version == current.InstalledVersion.String() {
-		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "validate_target_version", "PACKAGE_UPDATE_TARGET_UNCHANGED", "update target must have a different version and artifact", true, guard)
+		if err := r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "validate_target_version", "PACKAGE_UPDATE_TARGET_UNCHANGED", "update target must have a different version and artifact", true, guard); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return KernelInstallResult{}, fmt.Errorf("PACKAGE_UPDATE_TARGET_UNCHANGED: update target must have a different version and artifact")
 	}
 
@@ -406,7 +423,9 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	}
 	if err := r.prepareGameHostExtensionAfterPackageGenerationChange(ctx, confirmed.session.ExtensionID); err != nil {
 		failErr := r.failPackageUpdateOperation(op.OperationID, "prepare_game_host_generation", err, compensation, guard)
-		_ = r.prepareGameHostExtensionAfterPackageGenerationChange(context.Background(), confirmed.session.ExtensionID)
+		if err := r.prepareGameHostExtensionAfterPackageGenerationChange(context.Background(), confirmed.session.ExtensionID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return KernelInstallResult{}, failErr
 	}
 	if err := r.restoreExtensionAfterPackageSwap(ctx, current.ExtensionID, wasEnabled); err != nil {
@@ -418,7 +437,9 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	}
 	if err := r.FinalizePackageOperation(ctx, op.OperationID, confirmed.session.ExtensionID, leaseGuard, guard); err != nil {
 		if compensation != nil {
-			_ = compensation.run()
+			if err := compensation.run(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		return KernelInstallResult{}, err
 	}

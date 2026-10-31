@@ -15,15 +15,15 @@ type bindingKey struct {
 }
 
 type bindingEntry struct {
-	KernelLease  kernelsecret.LeaseID
-	RuntimeID    string
-	ServiceID    string
-	Ref          string
-	ExtensionID  string
-	Generation   int64
-	Purpose      Purpose
-	Revoked      bool
-	RevokedAt    int64
+	KernelLease kernelsecret.LeaseID
+	RuntimeID   string
+	ServiceID   string
+	Ref         string
+	ExtensionID string
+	Generation  int64
+	Purpose     Purpose
+	Revoked     bool
+	RevokedAt   int64
 }
 
 type LeaseBindingIndex struct {
@@ -204,9 +204,9 @@ type TopologyServiceView interface {
 }
 
 type SecretRefBindingError struct {
-	Ref     string
+	Ref       string
 	ServiceID string
-	Reason  string
+	Reason    string
 }
 
 func (e *SecretRefBindingError) Error() string {

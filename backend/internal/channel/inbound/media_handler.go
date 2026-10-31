@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	amitialog "log"
 )
 
 const maxChannelResourceBytes = 50 << 20
@@ -54,18 +55,18 @@ func (h *MediaHandler) Handle(c *gin.Context) {
 	}
 	_, _, fullPath, err := h.resolver.ResolveResourceLink(strings.TrimSpace(c.Param("token")))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"code": http.StatusNotFound, "msg": "resource not found"})
+		c.JSON(http.StatusNotFound, gin.H{"code": http.StatusNotFound, "msg": err.Error()})
 		return
 	}
 	file, err := os.Open(fullPath)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"code": http.StatusNotFound, "msg": "resource not found"})
+		c.JSON(http.StatusNotFound, gin.H{"code": http.StatusNotFound, "msg": err.Error()})
 		return
 	}
 	defer file.Close()
 	info, err := file.Stat()
 	if err != nil || info.IsDir() || info.Size() <= 0 || info.Size() > maxChannelResourceBytes {
-		c.JSON(http.StatusNotFound, gin.H{"code": http.StatusNotFound, "msg": "resource not found"})
+		c.JSON(http.StatusNotFound, gin.H{"code": http.StatusNotFound, "msg": err.Error()})
 		return
 	}
 	contentType := mediaContentType(path.Base(fullPath), file)
@@ -104,6 +105,8 @@ func mediaContentType(name string, file *os.File) string {
 	}
 	header := make([]byte, 512)
 	count, _ := file.Read(header)
-	_, _ = file.Seek(0, 0)
+	if _, err := file.Seek(0, 0); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	return http.DetectContentType(header[:count])
 }

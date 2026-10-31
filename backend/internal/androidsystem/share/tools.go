@@ -46,12 +46,12 @@ func buildSendTool(rt capability.RuntimeBinding) capability.ToolDefinition {
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          ToolIDSend,
-		ModelName:   "android.share.send",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Android Share Send",
-		Description: "Send content via Android Sharesheet. Uses ACTION_SEND/ACTION_SEND_MULTIPLE with createChooser. User must select target app.",
-		InputSchema: inputSchema,
+		ID:           ToolIDSend,
+		ModelName:    "android.share.send",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Android Share Send",
+		Description:  "Send content via Android Sharesheet. Uses ACTION_SEND/ACTION_SEND_MULTIPLE with createChooser. User must select target app.",
+		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
 			{Capability: PermissionSend, Risk: "high"},

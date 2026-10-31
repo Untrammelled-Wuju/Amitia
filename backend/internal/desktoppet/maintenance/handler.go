@@ -116,7 +116,7 @@ func (h *Handler) CutoverRead(c *gin.Context) {
 		OperationID string `json:"operationId"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", gin.H{"errorCode": "MAINTENANCE_INVALID_PARAMS"})
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), gin.H{"errorCode": "MAINTENANCE_INVALID_PARAMS"})
 		return
 	}
 	if req.OperationID == "" {
@@ -135,7 +135,7 @@ func (h *Handler) CutoverWrite(c *gin.Context) {
 		OperationID string `json:"operationId"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", gin.H{"errorCode": "MAINTENANCE_INVALID_PARAMS"})
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), gin.H{"errorCode": "MAINTENANCE_INVALID_PARAMS"})
 		return
 	}
 	if req.OperationID == "" {
@@ -160,7 +160,7 @@ func writeMaintenanceError(c *gin.Context, err error) {
 		util.ErrorResponse(c, response.InternalError, re.Message, gin.H{"errorCode": re.Code})
 		return
 	}
-	util.ErrorResponse(c, response.InternalError, "服务器内部错误", nil)
+	util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 }
 
 type maintenanceError struct {

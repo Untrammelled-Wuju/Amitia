@@ -8,17 +8,17 @@ import (
 )
 
 type EventEnvelope struct {
-	ID          string
-	TypeID      string
-	Version     int
-	PluginID    domain.PluginID
-	RuntimeID   domain.RuntimeInstanceID
-	ServiceID   domain.ServiceID
-	Method      string
-	Payload     json.RawMessage
-	Metadata    map[string]json.RawMessage
-	TraceID     string
-	OccurredAt   int64
+	ID         string
+	TypeID     string
+	Version    int
+	PluginID   domain.PluginID
+	RuntimeID  domain.RuntimeInstanceID
+	ServiceID  domain.ServiceID
+	Method     string
+	Payload    json.RawMessage
+	Metadata   map[string]json.RawMessage
+	TraceID    string
+	OccurredAt int64
 }
 
 type PublishEventOption func(*publishEventConfig)

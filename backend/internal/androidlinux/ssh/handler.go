@@ -41,16 +41,16 @@ func (h *Handler) handleStatus(ctx context.Context) (map[string]any, error) {
 
 func (h *Handler) handleExec(ctx context.Context, payload map[string]any) (map[string]any, error) {
 	req := SSHExecRequest{
-		Host:        getStringKey(payload, "host"),
-		Port:        getIntKey(payload, "port", 0),
-		User:        getStringKey(payload, "user"),
-		Command:     getStringKey(payload, "command"),
-		Stdin:       getStringKey(payload, "stdin"),
-		Environment: getStringMapKey(payload, "environment"),
-		WorkingDir:  getStringKey(payload, "workingDir"),
-		HostKey:     getStringKey(payload, "hostKey"),
-		PrivateKey:  getStringKey(payload, "privateKey"),
-		Password:    getStringKey(payload, "password"),
+		Host:          getStringKey(payload, "host"),
+		Port:          getIntKey(payload, "port", 0),
+		User:          getStringKey(payload, "user"),
+		Command:       getStringKey(payload, "command"),
+		Stdin:         getStringKey(payload, "stdin"),
+		Environment:   getStringMapKey(payload, "environment"),
+		WorkingDir:    getStringKey(payload, "workingDir"),
+		HostKey:       getStringKey(payload, "hostKey"),
+		PrivateKey:    getStringKey(payload, "privateKey"),
+		Password:      getStringKey(payload, "password"),
 		HostKeyPolicy: getStringKey(payload, "hostKeyPolicy"),
 	}
 

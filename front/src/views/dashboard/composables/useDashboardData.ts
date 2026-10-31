@@ -136,8 +136,9 @@ export function useDashboardData() {
         month: "numeric",
         day: "numeric",
       });
-    } catch {
-      return d;
+    } catch (error) {
+  console.error("[original-error]", error);
+return d;
     }
   }
 
@@ -145,7 +146,9 @@ export function useDashboardData() {
     try {
       const data = (await get<any>("/api/health")) || {};
       health.value = { ...health.value, ...data };
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
 
   async function fetchModelInfo() {
@@ -155,13 +158,17 @@ export function useDashboardData() {
         const active = configs.find((c: any) => c.isActive);
         if (active) modelName.value = active.modelName || active.name || "";
       }
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
 
   async function fetchAccessRisk() {
     try {
       accessRisk.value = await get<any>("/api/security/exposure-check");
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
 
   async function fetchRuntimeHealth() {
@@ -192,7 +199,9 @@ export function useDashboardData() {
           },
         ],
       };
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
 
   async function runHealthCheck() {
@@ -214,8 +223,9 @@ export function useDashboardData() {
           },
         ],
       };
-    } catch {
-    } finally {
+    } catch (error) {
+  console.error("[original-error]", error);
+} finally {
       runtimeHealthLoading.value = false;
     }
   }
@@ -243,7 +253,9 @@ export function useDashboardData() {
           timestamp: new Date().toISOString(),
         };
       }
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
 
   async function runDiagnostics() {
@@ -268,8 +280,9 @@ export function useDashboardData() {
         summary: { ok: passed, warn: checks.length - passed, error: 0 },
         timestamp: new Date().toISOString(),
       };
-    } catch {
-    } finally {
+    } catch (error) {
+  console.error("[original-error]", error);
+} finally {
       diagLoading.value = false;
     }
   }
@@ -278,7 +291,9 @@ export function useDashboardData() {
     try {
       const r = await get<any>("/api/logs/recent/errors", { limit: 20 });
       recentErrors.value = r?.items || [];
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
 
   async function fetchActiveChar() {
@@ -288,7 +303,9 @@ export function useDashboardData() {
         characters.value = chars;
         totalChars.value = chars.length;
       }
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
 
   async function fetchTodayStats() {
@@ -298,14 +315,18 @@ export function useDashboardData() {
         todayMessages.value = data.todayMessages || 0;
         totalConvs.value = data.totalConversations || 0;
       }
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
     try {
       if (!await owned.refresh()) throw new Error("当前记忆服务尚未就绪");
       const characterId = owned.selectInitialRole(getActiveCharacterId());
       if (!characterId) { totalMemories.value = 0; return; }
       const mem = await get<any>("/api/device-mesh/v1/business/memories", { characterId, memoryView: "all", mode: "keyword", limit: 1 });
       if (mem) totalMemories.value = mem.total || 0;
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
 
   async function fetchUsageOverview() {
@@ -317,8 +338,9 @@ export function useDashboardData() {
       usageOverviewNotice.value = `${usageScopeLabel(data)}的文本模型实际调用，按 UTC 统计；自 ${data.meteringSince} 开始计量，之前的用量未知`;
       if (data.todayUnknownUsageCalls > 0) usageOverviewNotice.value += `；${data.todayUnknownUsageCalls} 次调用未返回 Token，已知 ${data.todayKnownTokens} Token`;
       if (data.businessStatus === "unavailable") usageOverviewNotice.value += "；Owner 业务统计暂不可用";
-    } catch {
-      todayCalls.value = null;
+    } catch (error) {
+  console.error("[original-error]", error);
+todayCalls.value = null;
       todayTokens.value = null;
       usageOverviewNotice.value = "使用统计读取失败，请刷新重试";
     }
@@ -331,8 +353,9 @@ export function useDashboardData() {
       dailyData.value = periodic.daily;
       usageBusinessReady.value = periodic.businessStatus === "ready";
       usageDailyNotice.value = usageBusinessReady.value ? "" : "Owner 业务统计不可用，趋势中的业务数量暂缺";
-    } catch {
-      dailyData.value = [];
+    } catch (error) {
+  console.error("[original-error]", error);
+dailyData.value = [];
       usageBusinessReady.value = false;
       usageDailyNotice.value = "使用趋势读取失败，请刷新重试";
     }
@@ -342,7 +365,9 @@ export function useDashboardData() {
     try {
       const r = await get<any>("/api/imports/batches", { limit: 5 });
       recentImports.value = r?.items || [];
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
 
   function getActiveCharacterId(): string {
@@ -369,8 +394,9 @@ export function useDashboardData() {
         { characterId: charId },
       );
       psycheState.value = projectOwnedRuntimeState(data) as import("../../../types").PsycheStateSnapshot;
-    } catch {
-      psycheState.value = null;
+    } catch (error) {
+  console.error("[original-error]", error);
+psycheState.value = null;
     } finally {
       psycheLoading.value = false;
     }
@@ -383,7 +409,9 @@ export function useDashboardData() {
       feedbackTotal.value = data?.total || 0;
       feedbackByType.value = data?.byType || {};
       feedbackRecent.value = Array.isArray(data?.recent) ? data.recent : [];
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
 
   async function refreshAll() {

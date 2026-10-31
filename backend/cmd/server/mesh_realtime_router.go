@@ -20,6 +20,7 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	voicewake "github.com/u-ai/backend/internal/devicemesh/wake"
 	"github.com/u-ai/backend/internal/middleware/security"
+	amitialog "log"
 )
 
 type ownedRealtimeTicket struct {
@@ -77,7 +78,7 @@ func registerMeshRealtimeRouter(mesh *gin.RouterGroup, services *AppServices, co
 		}
 		request := input.Request
 		if _, err := uuid.Parse(request.RequestID); err != nil {
-			c.JSON(400, gin.H{"message": "通话请求编号必须为 UUID"})
+			c.JSON(400, gin.H{"message": err.Error()})
 			return
 		}
 		origin, valid := ownedRealtimeOrigin(c.GetHeader("Origin"))
@@ -209,7 +210,9 @@ func registerMeshRealtimePublicRoutes(router *gin.Engine, services *AppServices)
 		wakeArmed := false
 		defer func() {
 			if wakeDetector != nil {
-				_ = wakeDetector.Unload()
+				if err := wakeDetector.Unload(); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 		}()
 		for {
@@ -260,7 +263,9 @@ func registerMeshRealtimePublicRoutes(router *gin.Engine, services *AppServices)
 				return
 			case "wake_arm":
 				if wakeDetector != nil {
-					_ = wakeDetector.Unload()
+					if err := wakeDetector.Unload(); err != nil {
+						amitialog.Printf("[original-error] %v", err)
+					}
 				}
 				wakeDetector, wakeConfigID, err = loadMeshWakeDetector(ctx, services.DB, input.ConfigID)
 				if err != nil {

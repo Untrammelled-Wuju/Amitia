@@ -88,8 +88,9 @@ export function useVoiceInput(
       recordingStartTime = Date.now();
       recorder.start();
       recording.value = true;
-    } catch {
-      if (version !== requestVersion) return;
+    } catch (error) {
+  console.error("[original-error]", error);
+if (version !== requestVersion) return;
       holding.value = false;
       cancelled = true;
       audioChunks = [];

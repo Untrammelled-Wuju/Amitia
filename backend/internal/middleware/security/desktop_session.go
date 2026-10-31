@@ -20,6 +20,7 @@ import (
 	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 	"gorm.io/gorm"
+	amitialog "log"
 )
 
 const (
@@ -159,20 +160,20 @@ func (s *DesktopSessionService) CreateSession(c *gin.Context) {
 
 	var req createSessionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"code": 400, "msg": "invalid request"})
+		c.JSON(400, gin.H{"code": 400, "msg": err.Error()})
 		return
 	}
 
 	expected, err := s.resolveLocalToken("")
 	if err != nil {
-		c.JSON(500, gin.H{"code": 500, "msg": "local token not configured"})
+		c.JSON(500, gin.H{"code": 500, "msg": err.Error()})
 		return
 	}
 	_ = expected
 
 	tokenBytes := make([]byte, 32)
 	if _, err := rand.Read(tokenBytes); err != nil {
-		c.JSON(500, gin.H{"code": 500, "msg": "failed to generate session"})
+		c.JSON(500, gin.H{"code": 500, "msg": err.Error()})
 		return
 	}
 	sessionToken := base64.RawURLEncoding.EncodeToString(tokenBytes)
@@ -180,7 +181,9 @@ func (s *DesktopSessionService) CreateSession(c *gin.Context) {
 	tokenHashStr := base64.RawURLEncoding.EncodeToString(tokenHash[:])
 
 	now := time.Now()
-	_ = s.pruneStaleSessions(now)
+	if err := s.pruneStaleSessions(now); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	session := &DesktopSession{
 		ID:                generateSessionID(),
 		SpaceID:           string(actor.SpaceID),
@@ -193,7 +196,7 @@ func (s *DesktopSessionService) CreateSession(c *gin.Context) {
 	}
 
 	if err := s.db.Create(session).Error; err != nil {
-		c.JSON(500, gin.H{"code": 500, "msg": "failed to store session"})
+		c.JSON(500, gin.H{"code": 500, "msg": err.Error()})
 		return
 	}
 
@@ -230,7 +233,9 @@ func (s *DesktopSessionService) ValidateSessionWithContext(ctx context.Context, 
 	}
 
 	if time.Now().After(session.ExpiresAt) {
-		_ = s.revokeSessionWithContext(ctx, &session)
+		if err := s.revokeSessionWithContext(ctx, &session); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, ErrDesktopSessionInvalid
 	}
 
@@ -329,7 +334,7 @@ func (s *DesktopSessionService) RotateToken(c *gin.Context) {
 
 	newToken, err := generateSecureToken()
 	if err != nil {
-		c.JSON(500, gin.H{"code": 500, "msg": "failed to generate token"})
+		c.JSON(500, gin.H{"code": 500, "msg": err.Error()})
 		return
 	}
 
@@ -344,19 +349,23 @@ func (s *DesktopSessionService) RotateToken(c *gin.Context) {
 		UpdatedAt:  time.Now().UTC(),
 	}
 	if err := s.db.Create(journal).Error; err != nil {
-		c.JSON(500, gin.H{"code": 500, "msg": "failed to create rotation journal"})
+		c.JSON(500, gin.H{"code": 500, "msg": err.Error()})
 		return
 	}
 
 	rotatedOldVersion, rotatedNewVersion, err := s.credentials.Rotate(newToken)
 	if err != nil {
-		_ = s.db.Delete(journal).Error
-		c.JSON(500, gin.H{"code": 500, "msg": "failed to rotate credential"})
+		if err := s.db.Delete(journal).Error; err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		c.JSON(500, gin.H{"code": 500, "msg": err.Error()})
 		return
 	}
 
 	if rotatedOldVersion != oldVersion || rotatedNewVersion != newVersion {
-		_ = s.db.Delete(journal).Error
+		if err := s.db.Delete(journal).Error; err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		c.JSON(500, gin.H{"code": 500, "msg": "credential rotation version mismatch"})
 		return
 	}
@@ -367,8 +376,10 @@ func (s *DesktopSessionService) RotateToken(c *gin.Context) {
 		"stage":      RotationStageCredentialSwitched,
 		"updated_at": journal.UpdatedAt,
 	}).Error; err != nil {
-		_ = s.db.Delete(journal).Error
-		c.JSON(500, gin.H{"code": 500, "msg": "failed to update journal"})
+		if err := s.db.Delete(journal).Error; err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		c.JSON(500, gin.H{"code": 500, "msg": err.Error()})
 		return
 	}
 
@@ -376,27 +387,33 @@ func (s *DesktopSessionService) RotateToken(c *gin.Context) {
 		"status":     DesktopSessionStatusRevoked,
 		"revoked_at": time.Now().UTC(),
 	}).Error; err != nil {
-		_ = s.db.Delete(journal).Error
-		c.JSON(500, gin.H{"code": 500, "msg": "failed to revoke old sessions"})
+		if err := s.db.Delete(journal).Error; err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		c.JSON(500, gin.H{"code": 500, "msg": err.Error()})
 		return
 	}
 
 	journal.Stage = RotationStageSessionsRevoked
 	journal.UpdatedAt = time.Now().UTC()
-	_ = s.db.Model(journal).Updates(map[string]interface{}{
+	if err := s.db.Model(journal).Updates(map[string]interface{}{
 		"stage":      RotationStageSessionsRevoked,
 		"updated_at": journal.UpdatedAt,
-	}).Error
+	}).Error; err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 
 	now := time.Now().UTC()
 	journal.Stage = RotationStageCompleted
 	journal.UpdatedAt = now
 	journal.CompletedAt = now
-	_ = s.db.Model(journal).Updates(map[string]interface{}{
+	if err := s.db.Model(journal).Updates(map[string]interface{}{
 		"stage":        RotationStageCompleted,
 		"updated_at":   now,
 		"completed_at": now,
-	}).Error
+	}).Error; err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 
 	c.JSON(200, gin.H{"code": 200, "msg": "token rotated"})
 }
@@ -414,7 +431,9 @@ func (s *DesktopSessionService) RecoverRotationJournals(ctx context.Context) err
 		switch journal.Stage {
 		case RotationStagePrepared:
 			if currentVersion == journal.OldVersion {
-				_ = s.db.WithContext(ctx).Delete(&journal).Error
+				if err := s.db.WithContext(ctx).Delete(&journal).Error; err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			} else {
 				return fmt.Errorf("recovery: prepared journal with mismatched old version")
 			}
@@ -427,22 +446,26 @@ func (s *DesktopSessionService) RecoverRotationJournals(ctx context.Context) err
 					return fmt.Errorf("recovery: failed to revoke sessions: %w", err)
 				}
 				now := time.Now().UTC()
-				_ = s.db.WithContext(ctx).Model(&journal).Updates(map[string]interface{}{
+				if err := s.db.WithContext(ctx).Model(&journal).Updates(map[string]interface{}{
 					"stage":        RotationStageCompleted,
 					"updated_at":   now,
 					"completed_at": now,
-				}).Error
+				}).Error; err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			} else {
 				return fmt.Errorf("recovery: credential_switched journal with mismatched new version")
 			}
 		case RotationStageSessionsRevoked:
 			if currentVersion == journal.NewVersion {
 				now := time.Now().UTC()
-				_ = s.db.WithContext(ctx).Model(&journal).Updates(map[string]interface{}{
+				if err := s.db.WithContext(ctx).Model(&journal).Updates(map[string]interface{}{
 					"stage":        RotationStageCompleted,
 					"updated_at":   now,
 					"completed_at": now,
-				}).Error
+				}).Error; err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			} else {
 				return fmt.Errorf("recovery: sessions_revoked journal with mismatched new version")
 			}
@@ -557,16 +580,18 @@ func DesktopSessionAuthMiddleware(sessionSvc *DesktopSessionService) gin.Handler
 		session, err := sessionSvc.ValidateSessionWithContext(c.Request.Context(), sessionToken)
 		if err != nil {
 			if errors.Is(err, ErrDesktopSessionStoreUnavailable) {
-				c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "本地会话存储暂时不可用", "retryable": true})
+				c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": err.Error(), "retryable": true})
 				c.Abort()
 				return
 			}
-			c.JSON(401, gin.H{"code": 401, "msg": "invalid session"})
+			c.JSON(401, gin.H{"code": 401, "msg": err.Error()})
 			c.Abort()
 			return
 		}
 
-		_ = sessionSvc.TouchSessionWithContext(c.Request.Context(), session)
+		if err := sessionSvc.TouchSessionWithContext(c.Request.Context(), session); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 
 		actor := buildSessionActor(session)
 		applySessionActorToContext(c, actor)

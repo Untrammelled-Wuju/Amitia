@@ -15,6 +15,7 @@ import (
 
 	_ "github.com/glebarez/go-sqlite"
 	"gorm.io/gorm"
+	amitialog "log"
 )
 
 func CreateConsistentSnapshot(ctx context.Context, db *gorm.DB, destination string) error {
@@ -77,8 +78,16 @@ func Inspect(path string) (int64, string, error) {
 }
 
 func removeSnapshotFiles(path string) {
-	_ = os.Remove(path)
-	_ = os.Remove(path + "-wal")
-	_ = os.Remove(path + "-shm")
-	_ = os.Remove(path + "-journal")
+	if err := os.Remove(path); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := os.Remove(path + "-wal"); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := os.Remove(path + "-shm"); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := os.Remove(path + "-journal"); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }

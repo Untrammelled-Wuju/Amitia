@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/mindruntime"
 	"github.com/u-ai/backend/pkg/util"
+	amitialog "log"
 )
 
 type runtimeDebugInteractionRow struct {
@@ -57,9 +58,11 @@ func (h *Handler) RuntimeDebugSnapshot(c *gin.Context) {
 
 	interactionRows := make([]runtimeDebugInteractionRow, 0)
 	if h.db != nil && h.db.Migrator().HasTable("interaction_records") {
-		_ = h.db.Table("interaction_records").
+		if err := h.db.Table("interaction_records").
 			Select("id,space_id,character_id,conversation_id,priority,path_type,status,status_version,cancel_reason,deadline_at,created_at,updated_at").
-			Order("updated_at DESC").Limit(100).Scan(&interactionRows).Error
+			Order("updated_at DESC").Limit(100).Scan(&interactionRows).Error; err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 
 	activeInteractions := 0
@@ -119,9 +122,11 @@ func (h *Handler) RuntimeDebugSnapshot(c *gin.Context) {
 
 	deliveryRows := make([]runtimeDebugDeliveryRow, 0)
 	if h.db != nil && h.db.Migrator().HasTable("delivery_intents") {
-		_ = h.db.Table("delivery_intents").
+		if err := h.db.Table("delivery_intents").
 			Select("channel,status,retry_count,lease_owner,created_at,sent_at,delivered_at").
-			Order("created_at DESC").Limit(100).Scan(&deliveryRows).Error
+			Order("created_at DESC").Limit(100).Scan(&deliveryRows).Error; err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	deliveries := make([]map[string]interface{}, 0, len(deliveryRows))
 	for _, row := range deliveryRows {
@@ -138,9 +143,11 @@ func (h *Handler) RuntimeDebugSnapshot(c *gin.Context) {
 
 	toolRows := make([]runtimeDebugToolRow, 0)
 	if h.db != nil && h.db.Migrator().HasTable("extension_runs") {
-		_ = h.db.Table("extension_runs").
+		if err := h.db.Table("extension_runs").
 			Select("extension_id,skill_id,status,idempotency_key,finished_at,created_at").
-			Order("created_at DESC").Limit(100).Scan(&toolRows).Error
+			Order("created_at DESC").Limit(100).Scan(&toolRows).Error; err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	tools := make([]map[string]interface{}, 0, len(toolRows))
 	for _, row := range toolRows {

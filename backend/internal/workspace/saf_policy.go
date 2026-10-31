@@ -22,14 +22,14 @@ const (
 )
 
 const (
-	SAFStatTimeout  = 5 * 1000_000_000
-	SAFListTimeout  = 10 * 1000_000_000
-	SAFReadTimeout  = 15 * 1000_000_000
-	SAFWriteTimeout = 30 * 1000_000_000
-	SAFMkdirTimeout = 10 * 1000_000_000
+	SAFStatTimeout   = 5 * 1000_000_000
+	SAFListTimeout   = 10 * 1000_000_000
+	SAFReadTimeout   = 15 * 1000_000_000
+	SAFWriteTimeout  = 30 * 1000_000_000
+	SAFMkdirTimeout  = 10 * 1000_000_000
 	SAFRenameTimeout = 10 * 1000_000_000
-	SAFMoveTimeout  = 30 * 1000_000_000
-	SAFCopyTimeout  = 30 * 1000_000_000
+	SAFMoveTimeout   = 30 * 1000_000_000
+	SAFCopyTimeout   = 30 * 1000_000_000
 	SAFDeleteTimeout = 30 * 1000_000_000
 )
 

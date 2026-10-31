@@ -17,8 +17,8 @@ type ResourceReader interface {
 }
 
 type PhysicalResourceReader struct {
-	policy    Policy
-	resolver  *resourceuri.PhysicalResolver
+	policy   Policy
+	resolver *resourceuri.PhysicalResolver
 }
 
 func NewPhysicalResourceReader(policy Policy, resolver *resourceuri.PhysicalResolver) *PhysicalResourceReader {

@@ -181,8 +181,9 @@ async function runCheck(row: Row, url: string, validate?: (data: any) => boolean
     row.state = "done";
     row.stateText = "已完成";
     return true;
-  } catch {
-    row.state = "error";
+  } catch (error) {
+  console.error("[original-error]", error);
+row.state = "error";
     row.stateText = "失败";
     return false;
   }
@@ -197,8 +198,9 @@ async function verifyPrivateDeviceAuth(baseURL: string): Promise<boolean> {
       credentials: window.amitiaDesktop ? "same-origin" : "include",
     });
     return res.ok;
-  } catch {
-    return false;
+  } catch (error) {
+  console.error("[original-error]", error);
+return false;
   }
 }
 

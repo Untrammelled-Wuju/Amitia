@@ -418,8 +418,9 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
           final decoded = jsonDecode(credentialText);
           if (decoded is! Map) throw const FormatException();
           credential = decoded;
-        } catch (_) {
-          _showMessage('凭据必须是 JSON 对象', error: true);
+        } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+_showMessage('凭据必须是 JSON 对象', error: true);
           return;
         }
       }
@@ -527,7 +528,9 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
       try {
         final decoded = jsonDecode(value);
         if (decoded is Map) return Map<String, dynamic>.from(decoded);
-      } catch (_) {}
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
     }
     return <String, dynamic>{};
   }
@@ -545,7 +548,9 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
     try {
       final decoded = jsonDecode(raw);
       if (decoded is List) return decoded.map((item) => item.toString()).toList(growable: false);
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
     return raw.split('\n').map((item) => item.trim()).where((item) => item.isNotEmpty).toList(growable: false);
   }
 }

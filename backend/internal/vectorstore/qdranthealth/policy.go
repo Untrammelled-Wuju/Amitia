@@ -5,10 +5,10 @@ package qdranthealth
 import "time"
 
 const (
-	DefaultStartupTimeout            = 60 * time.Second
-	MobileCompactStartupTimeout      = 180 * time.Second
-	MobileBalancedStartupTimeout     = 120 * time.Second
-	MobilePerformanceStartupTimeout  = 90 * time.Second
+	DefaultStartupTimeout           = 60 * time.Second
+	MobileCompactStartupTimeout     = 180 * time.Second
+	MobileBalancedStartupTimeout    = 120 * time.Second
+	MobilePerformanceStartupTimeout = 90 * time.Second
 
 	DefaultInitialDelay = 200 * time.Millisecond
 	DefaultMaxDelay     = 5 * time.Second

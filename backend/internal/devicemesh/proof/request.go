@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	amitialog "log"
 	"net/http"
 	"strings"
 	"time"
@@ -50,7 +51,9 @@ func RequestBody(request *http.Request) ([]byte, error) {
 		return nil, nil
 	}
 	body, err := io.ReadAll(io.LimitReader(request.Body, (64<<20)+1))
-	_ = request.Body.Close()
+	if err := request.Body.Close(); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	if err != nil || len(body) > 64<<20 {
 		return nil, ErrProof
 	}

@@ -1,5 +1,7 @@
 import 'package:dio/dio.dart';
 
+import '../errors/original_error.dart';
+
 import '../runtime/backend/backend_topology_resolver.dart';
 import 'mobile_cloud_device_credential_store.dart';
 
@@ -92,13 +94,7 @@ class MobileDeviceMeshProvisioning {
       final message = body is Map
           ? (body['message'] ?? body['msg'] ?? '').toString().trim()
           : '';
-      final status = error.response?.statusCode;
-      throw StateError(
-        message.isNotEmpty
-            ? message
-            : 'Device Mesh bootstrap exchange failed' +
-                  (status == null ? '' : ' (' + status.toString() + ')'),
-      );
+      throw StateError(message.isNotEmpty ? message : originalErrorText(error));
     } finally {
       dio.close(force: true);
     }

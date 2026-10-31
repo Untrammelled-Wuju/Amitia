@@ -364,8 +364,9 @@ class HistoricalMemoryCard extends StatelessWidget {
     try {
       final date = DateTime.parse(timeStr);
       return '${date.month}/${date.day}';
-    } catch (_) {
-      return timeStr;
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return timeStr;
     }
   }
 
@@ -743,8 +744,9 @@ class HistoricalMemoryCard extends StatelessWidget {
       if (diff.inDays == 0) return '${diff.inHours}小时前';
       if (diff.inDays < 7) return '${diff.inDays}天前';
       return '${time.month}/${time.day}';
-    } catch (_) {
-      return timeStr;
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return timeStr;
     }
   }
 }

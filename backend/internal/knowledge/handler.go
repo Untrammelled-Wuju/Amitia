@@ -23,7 +23,7 @@ func writeKnowledgeError(c *gin.Context, err error) {
 		return
 	}
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		util.ErrorResponse(c, response.OperationFailed, "知识库资源不存在", nil)
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
 	util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
@@ -71,7 +71,7 @@ func (h *Handler) GetSourceOutline(c *gin.Context) {
 func (h *Handler) Upload(c *gin.Context) {
 	file, err := c.FormFile("file")
 	if err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "缺少 file 上传字段", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	opened, err := file.Open()
@@ -94,7 +94,7 @@ func (h *Handler) Upload(c *gin.Context) {
 func (h *Handler) UploadRevision(c *gin.Context) {
 	file, err := c.FormFile("file")
 	if err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "缺少 file 上传字段", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	opened, err := file.Open()
@@ -115,7 +115,7 @@ func (h *Handler) UploadRevision(c *gin.Context) {
 func revisionParam(c *gin.Context) (int64, bool) {
 	value, err := strconv.ParseInt(strings.TrimSpace(c.Param("revision")), 10, 64)
 	if err != nil || value <= 0 {
-		util.ErrorResponse(c, response.InvalidParams, "revision 必须为正整数", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return 0, false
 	}
 	return value, true
@@ -327,7 +327,7 @@ func (h *Handler) AuditVectors(c *gin.Context) {
 	limit, _ := strconv.Atoi(strings.TrimSpace(c.Query("limit")))
 	result, err := h.service.AuditVectors(c.Request.Context(), requestidentity.ResolveGin(c), limit)
 	if err != nil {
-		util.ErrorResponse(c, response.OperationFailed, "向量抽样核验失败，请检查 Qdrant 状态并重试", nil)
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, result)
@@ -337,7 +337,7 @@ func (h *Handler) AuditOrphanVectors(c *gin.Context) {
 	limit, _ := strconv.Atoi(strings.TrimSpace(c.Query("limit")))
 	result, err := h.service.AuditOrphanVectors(c.Request.Context(), requestidentity.ResolveGin(c), limit)
 	if err != nil {
-		util.ErrorResponse(c, response.OperationFailed, "孤儿向量核验失败，请检查 Qdrant 状态并重试", nil)
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, result)
@@ -347,7 +347,7 @@ func (h *Handler) AuditOrphanVectorPage(c *gin.Context) {
 	limit, _ := strconv.Atoi(strings.TrimSpace(c.Query("limit")))
 	result, err := h.service.AuditOrphanVectorPage(c.Request.Context(), requestidentity.ResolveGin(c), limit, c.Query("cursor"))
 	if err != nil {
-		util.ErrorResponse(c, response.OperationFailed, "孤儿向量分页巡检失败，请检查游标或 Qdrant 状态", nil)
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, result)
@@ -363,7 +363,7 @@ func (h *Handler) ListOrphanAuditSessions(c *gin.Context) {
 	}
 	sessions, err := h.service.ListOrphanAuditSessions(c.Request.Context(), requestidentity.ResolveGin(c), limit)
 	if err != nil {
-		util.ErrorResponse(c, response.OperationFailed, "巡检历史读取失败", nil)
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, map[string]any{"items": sessions})
@@ -372,17 +372,17 @@ func (h *Handler) ListOrphanAuditSessions(c *gin.Context) {
 func (h *Handler) ListOrphanAuditPageReceipts(c *gin.Context) {
 	after, err := strconv.Atoi(strings.TrimSpace(c.DefaultQuery("after", "0")))
 	if err != nil {
-		util.ErrorResponse(c, response.OperationFailed, "无效的巡检回执页号", nil)
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
 	limit, err := strconv.Atoi(strings.TrimSpace(c.DefaultQuery("limit", "25")))
 	if err != nil {
-		util.ErrorResponse(c, response.OperationFailed, "无效的巡检回执分页限制", nil)
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
 	result, err := h.service.ListOrphanAuditPageReceipts(c.Request.Context(), requestidentity.ResolveGin(c), c.Param("id"), after, limit)
 	if err != nil {
-		util.ErrorResponse(c, response.OperationFailed, "巡检回执不存在或校验失败", nil)
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, result)
@@ -394,10 +394,10 @@ func (h *Handler) RecheckOrphanAuditLatest(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, ErrOrphanRecheckCooldown) {
 			c.Header("Retry-After", "30")
-			c.JSON(http.StatusTooManyRequests, gin.H{"code": 429, "msg": "正在复核或处于冷却期，请稍后再试"})
+			c.JSON(http.StatusTooManyRequests, gin.H{"code": 429, "msg": err.Error()})
 			return
 		}
-		util.ErrorResponse(c, response.OperationFailed, "孤儿向量二次核验失败，请检查权限或向量服务", nil)
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, result)
@@ -406,12 +406,12 @@ func (h *Handler) RecheckOrphanAuditLatest(c *gin.Context) {
 func (h *Handler) ListOrphanAuditRechecks(c *gin.Context) {
 	limit, err := strconv.Atoi(strings.TrimSpace(c.DefaultQuery("limit", "10")))
 	if err != nil || limit < 1 || limit > 30 {
-		util.ErrorResponse(c, response.OperationFailed, "无效的复核历史查询范围", nil)
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
 	items, err := h.service.ListOrphanAuditRechecks(c.Request.Context(), requestidentity.ResolveGin(c), c.Param("id"), limit)
 	if err != nil {
-		util.ErrorResponse(c, response.OperationFailed, "无法读取巡检复核历史", nil)
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, map[string]any{"items": items})
@@ -491,18 +491,18 @@ func (h *Handler) ListRecoveryReviews(c *gin.Context) {
 
 func writeRecoveryReviewError(c *gin.Context, err error) {
 	if errors.Is(err, ErrRecoveryReviewHistoryInvalid) {
-		c.JSON(http.StatusConflict, gin.H{"code": 409, "msg": "恢复审查状态与操作记录不一致，已禁止继续审批；可由管理员核查后撤销"})
+		c.JSON(http.StatusConflict, gin.H{"code": 409, "msg": err.Error()})
 		return
 	}
 	if errors.Is(err, ErrRecoveryReviewConflict) || errors.Is(err, ErrRecoveryReviewEvidenceInvalid) {
-		c.JSON(http.StatusConflict, gin.H{"code": 409, "msg": "恢复审查申请冲突或复核证据已失效，请重新巡检和复核"})
+		c.JSON(http.StatusConflict, gin.H{"code": 409, "msg": err.Error()})
 		return
 	}
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
-	c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "恢复审查请求无效或当前不可用"})
+	c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
 }
 
 func (h *Handler) ListRecoveryReviewEvents(c *gin.Context) {

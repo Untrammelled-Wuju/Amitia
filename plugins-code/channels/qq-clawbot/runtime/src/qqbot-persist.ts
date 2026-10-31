@@ -16,7 +16,9 @@ export function loadQQBotConfig(): { appId: string; token: string; sandbox: bool
         return cfg
       }
     }
-  } catch {}
+  } catch (error) {
+  console.error("[original-error]", error);
+}
   return null
 }
 
@@ -25,11 +27,15 @@ export function saveQQBotConfig(config: { appId: string; token: string; sandbox:
     const dir = path.dirname(CONFIG_FILE)
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), "utf-8")
-  } catch {}
+  } catch (error) {
+  console.error("[original-error]", error);
+}
 }
 
 export function clearQQBotConfig(): void {
   try {
     if (fs.existsSync(CONFIG_FILE)) fs.unlinkSync(CONFIG_FILE)
-  } catch {}
+  } catch (error) {
+  console.error("[original-error]", error);
+}
 }

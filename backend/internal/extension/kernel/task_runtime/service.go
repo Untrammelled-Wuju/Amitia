@@ -128,7 +128,9 @@ func (s *TaskRuntimeService) publishTaskEvent(ctx context.Context, eventType Tas
 	}
 	for _, observer := range observers {
 		if observer != nil {
-			_ = observer.TaskEvent(ctx, event)
+			if err := observer.TaskEvent(ctx, event); err != nil {
+				log.Printf("[original-error] %v", err)
+			}
 		}
 	}
 	return nil
@@ -211,7 +213,9 @@ func (s *TaskRuntimeService) Shutdown(ctx context.Context) {
 	s.mu.Unlock()
 
 	for _, h := range hosts {
-		_ = h.Cancel(ctx, "application_shutdown")
+		if err := h.Cancel(ctx, "application_shutdown"); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 	}
 
 	if s.dispatchCancel != nil {
@@ -921,7 +925,9 @@ func (s *TaskRuntimeService) executeTaskRun(ctx context.Context, run *TaskRun) {
 	}
 	beforeStart, err := s.store.GetTaskRun(taskCtx, run.TaskRunID)
 	if err != nil || beforeStart == nil || beforeStart.Generation != run.Generation || beforeStart.ExecutionAttemptID != run.ExecutionAttemptID || beforeStart.Status != RunStatusRunning {
-		_ = host.Cancel(context.WithoutCancel(taskCtx), "任务启动前状态已变化")
+		if err := host.Cancel(context.WithoutCancel(taskCtx), "任务启动前状态已变化"); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 		if err == nil && beforeStart != nil && beforeStart.Status == RunStatusCancelling {
 			s.handleFinished(ctx, run, "cancelled", nil, "", "", "任务已取消")
 		}
@@ -952,7 +958,9 @@ func (s *TaskRuntimeService) executeTaskRun(ctx context.Context, run *TaskRun) {
 	} else if run.ScopeSnapshotID != "" && run.Status != RunStatusPaused && run.Status != RunStatusPausing {
 		latest, err := s.store.GetTaskRun(context.WithoutCancel(ctx), run.TaskRunID)
 		if err == nil && latest != nil && latest.Generation == run.Generation && latest.ExecutionAttemptID == run.ExecutionAttemptID && !latest.Status.IsTerminal() {
-			_ = s.markTaskRecoveryUnknown(context.WithoutCancel(ctx), latest)
+			if err := s.markTaskRecoveryUnknown(context.WithoutCancel(ctx), latest); err != nil {
+				log.Printf("[original-error] %v", err)
+			}
 		}
 	}
 }
@@ -1489,7 +1497,9 @@ func (s *TaskRuntimeService) handleCrash(ctx context.Context, run *TaskRun, def 
 	if run.ScopeSnapshotID != "" {
 		_, owned, authorityErr := s.taskAuthority(ctx, run.ScopeSnapshotID, run.InvocationID, run.ExtensionID, run.ModuleID)
 		if owned || authorityErr != nil {
-			_ = s.markTaskRecoveryUnknown(context.WithoutCancel(ctx), current)
+			if err := s.markTaskRecoveryUnknown(context.WithoutCancel(ctx), current); err != nil {
+				log.Printf("[original-error] %v", err)
+			}
 			return
 		}
 	}
@@ -1602,7 +1612,9 @@ func (s *TaskRuntimeService) failRun(ctx context.Context, run *TaskRun, code Tas
 					return
 				}
 			}
-			_ = s.markTaskRecoveryUnknown(context.WithoutCancel(ctx), current)
+			if err := s.markTaskRecoveryUnknown(context.WithoutCancel(ctx), current); err != nil {
+				log.Printf("[original-error] %v", err)
+			}
 			return
 		}
 	}
@@ -1780,7 +1792,9 @@ func (s *TaskRuntimeService) Cancel(ctx context.Context, taskRunID, reason strin
 	s.mu.RUnlock()
 
 	if ok {
-		_ = host.Cancel(ctx, reason)
+		if err := host.Cancel(ctx, reason); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 	}
 
 	return nil

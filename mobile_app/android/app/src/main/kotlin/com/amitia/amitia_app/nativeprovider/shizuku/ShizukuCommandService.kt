@@ -30,6 +30,8 @@ class ShizukuCommandService : IPrivilegedCommandService.Stub() {
         return try {
             super.onTransact(code, data, reply, flags)
         } catch (e: Exception) {
+          e.printStackTrace()
+
             false
         }
     }
@@ -69,7 +71,9 @@ class ShizukuCommandService : IPrivilegedCommandService.Stub() {
                 processManager.destroyAll()
                 ioExecutor.shutdownNow()
                 ioExecutor.awaitTermination(250, TimeUnit.MILLISECONDS)
-            } catch (_: Exception) {
+            } catch (originalError72: Exception) {
+              originalError72.printStackTrace()
+
             } finally {
                 System.exit(0)
             }
@@ -193,7 +197,9 @@ class ShizukuCommandService : IPrivilegedCommandService.Stub() {
             val duration = System.currentTimeMillis() - startTime
             try {
                 process?.destroyForcibly()
-            } catch (_: Exception) {}
+            } catch (originalError196: Exception) {
+              originalError196.printStackTrace()
+            }
 
             ShizukuCommandResult(
                 exitCode = -1,
@@ -219,7 +225,9 @@ class ShizukuCommandService : IPrivilegedCommandService.Stub() {
                 sb.append(line).append("\n")
                 if (Thread.currentThread().isInterrupted) break
             }
-        } catch (_: Exception) {}
+        } catch (originalError222: Exception) {
+          originalError222.printStackTrace()
+        }
         return sb.toString()
     }
 

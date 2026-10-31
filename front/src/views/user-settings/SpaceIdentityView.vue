@@ -20,6 +20,7 @@ import { onMounted, reactive, ref } from "vue";
 import { ElMessage } from "element-plus";
 import { apiClient } from "@/composables/useApi";
 import { getWebDeviceMeshIdentity } from "@/runtime/web-device-mesh";
+import { originalErrorMessage } from "@/runtime/original-error";
 
 const loading = ref(false);
 const identity = reactive({ spaceId: "", instanceId: "", deviceId: "", runtimeId: "" });
@@ -50,7 +51,7 @@ async function loadIdentity() {
       })(),
     ]);
     const failed = results.filter((result) => result.status === "rejected");
-    if (failed.length) ElMessage.error("部分身份信息加载失败，请重新打开页面重试");
+    if (failed.length) ElMessage.error(failed.map((result) => originalErrorMessage((result as PromiseRejectedResult).reason)).join("\n"));
   } finally {
     loading.value = false;
   }
@@ -65,8 +66,9 @@ async function copyIdentity(value: string) {
       await navigator.clipboard.writeText(value);
     }
     ElMessage.success("已复制");
-  } catch {
-    ElMessage.error("复制失败，请手动选择文本");
+  } catch (error) {
+  console.error("[original-error]", error);
+ElMessage.error(error instanceof Error ? error.message : String(error));
   }
 }
 

@@ -7,6 +7,7 @@ import (
 
 	"github.com/u-ai/backend/internal/migration"
 	"gorm.io/gorm"
+	amitialog "log"
 )
 
 type SQLiteAdapter struct {
@@ -28,21 +29,27 @@ func NewSQLiteAdapter(db *gorm.DB, backupDir string) *SQLiteAdapter {
 }
 
 func (a *SQLiteAdapter) CheckpointWAL() {
-	_ = a.DB.Exec("PRAGMA wal_checkpoint(PASSIVE)").Error
+	if err := a.DB.Exec("PRAGMA wal_checkpoint(PASSIVE)").Error; err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (a *SQLiteAdapter) RunIntegrityCheck() {
 	var results []struct {
 		Ok string `gorm:"column:integrity_check"`
 	}
-	_ = a.DB.Raw("PRAGMA integrity_check").Scan(&results)
+	if err := a.DB.Raw("PRAGMA integrity_check").Scan(&results); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (a *SQLiteAdapter) RunForeignKeyCheck() {
 	var results []struct {
 		Ok string `gorm:"column:foreign_key_check"`
 	}
-	_ = a.DB.Raw("PRAGMA foreign_key_check").Scan(&results)
+	if err := a.DB.Raw("PRAGMA foreign_key_check").Scan(&results); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (a *SQLiteAdapter) GetSQLiteFiles() []SQLiteFileInfo {
@@ -50,7 +57,9 @@ func (a *SQLiteAdapter) GetSQLiteFiles() []SQLiteFileInfo {
 		Name string `gorm:"column:name"`
 		File string `gorm:"column:file"`
 	}
-	_ = a.DB.Raw("PRAGMA database_list").Scan(&rows)
+	if err := a.DB.Raw("PRAGMA database_list").Scan(&rows); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 
 	var files []SQLiteFileInfo
 	for _, row := range rows {
@@ -121,7 +130,9 @@ func copyFile(src, dst string) error {
 }
 
 func (a *SQLiteAdapter) Migrate() error {
-	_ = context.Background()
+	if err := context.Background(); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	return nil
 }
 

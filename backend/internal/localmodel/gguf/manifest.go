@@ -9,28 +9,28 @@ import (
 )
 
 type GGUFModelManifest struct {
-	LocalModelID     string            `json:"localModelId"`
-	ResourceURI      string            `json:"resourceUri"`
-	Engine           string            `json:"engine"`
-	ContentHash      string            `json:"contentHash"`
-	SizeBytes        int64             `json:"sizeBytes"`
-	GGUFVersion      int               `json:"ggufVersion"`
-	Architecture     string            `json:"architecture"`
-	DisplayName      string            `json:"displayName"`
-	Description      string            `json:"description"`
-	Author           string            `json:"author"`
-	FileType         string            `json:"fileType"`
-	Quantization     string            `json:"quantization"`
-	ContextLength    int               `json:"contextLength"`
-	EmbeddingLength  int               `json:"embeddingLength"`
-	HeadCount        int               `json:"headCount"`
-	BlockCount       int               `json:"blockCount"`
-	ChatTemplate     string            `json:"chatTemplate"`
-	PoolingType      string            `json:"poolingType"`
-	SupportsEmbedding bool             `json:"supportsEmbedding"`
-	Capabilities     []string          `json:"capabilities"`
-	SplitFiles       []GGUFSplitFile   `json:"splitFiles,omitempty"`
-	ImportedAt       time.Time         `json:"importedAt"`
+	LocalModelID      string          `json:"localModelId"`
+	ResourceURI       string          `json:"resourceUri"`
+	Engine            string          `json:"engine"`
+	ContentHash       string          `json:"contentHash"`
+	SizeBytes         int64           `json:"sizeBytes"`
+	GGUFVersion       int             `json:"ggufVersion"`
+	Architecture      string          `json:"architecture"`
+	DisplayName       string          `json:"displayName"`
+	Description       string          `json:"description"`
+	Author            string          `json:"author"`
+	FileType          string          `json:"fileType"`
+	Quantization      string          `json:"quantization"`
+	ContextLength     int             `json:"contextLength"`
+	EmbeddingLength   int             `json:"embeddingLength"`
+	HeadCount         int             `json:"headCount"`
+	BlockCount        int             `json:"blockCount"`
+	ChatTemplate      string          `json:"chatTemplate"`
+	PoolingType       string          `json:"poolingType"`
+	SupportsEmbedding bool            `json:"supportsEmbedding"`
+	Capabilities      []string        `json:"capabilities"`
+	SplitFiles        []GGUFSplitFile `json:"splitFiles,omitempty"`
+	ImportedAt        time.Time       `json:"importedAt"`
 }
 
 type GGUFSplitFile struct {
@@ -49,22 +49,22 @@ func BuildManifest(meta *GGUFMetadata, header *GGUFHeader, resourceURI string) (
 	}
 
 	manifest := &GGUFModelManifest{
-		ResourceURI:      resourceURI,
-		Engine:           "llama.cpp",
-		GGUFVersion:      int(header.Version),
-		Architecture:     arch,
-		DisplayName:      meta.GetString("general.name"),
-		Description:      meta.GetString("general.description"),
-		Author:           meta.GetString("general.author"),
-		FileType:         generalFileTypeToStr(meta, arch),
-		Quantization:     meta.GetString("general.quantization_version"),
-		ContextLength:    int(meta.GetUint32(arch + ".context_length")),
-		EmbeddingLength:  int(meta.GetUint32(arch + ".embedding_length")),
-		HeadCount:        int(meta.GetUint32(arch + ".attention.head_count")),
-		BlockCount:       int(meta.GetUint32(arch + ".block_count")),
-		ChatTemplate:     meta.GetString("tokenizer.chat_template"),
+		ResourceURI:       resourceURI,
+		Engine:            "llama.cpp",
+		GGUFVersion:       int(header.Version),
+		Architecture:      arch,
+		DisplayName:       meta.GetString("general.name"),
+		Description:       meta.GetString("general.description"),
+		Author:            meta.GetString("general.author"),
+		FileType:          generalFileTypeToStr(meta, arch),
+		Quantization:      meta.GetString("general.quantization_version"),
+		ContextLength:     int(meta.GetUint32(arch + ".context_length")),
+		EmbeddingLength:   int(meta.GetUint32(arch + ".embedding_length")),
+		HeadCount:         int(meta.GetUint32(arch + ".attention.head_count")),
+		BlockCount:        int(meta.GetUint32(arch + ".block_count")),
+		ChatTemplate:      meta.GetString("tokenizer.chat_template"),
 		SupportsEmbedding: detectSupportsEmbedding(meta, arch),
-		Capabilities:     detectCapabilities(meta, arch),
+		Capabilities:      detectCapabilities(meta, arch),
 	}
 
 	if pooling := meta.GetString(arch + ".pooling_type"); pooling != "" {
@@ -135,7 +135,7 @@ func detectSupportsEmbedding(meta *GGUFMetadata, arch string) bool {
 
 func detectCapabilities(meta *GGUFMetadata, arch string) []string {
 	caps := []string{"text"}
-	if meta.GetUint32(arch + ".embedding_length") > 0 {
+	if meta.GetUint32(arch+".embedding_length") > 0 {
 		caps = append(caps, "embedding")
 	}
 	if strings.Contains(meta.GetString("tokenizer.chat_template"), "tool") ||

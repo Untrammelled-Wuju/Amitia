@@ -22,6 +22,7 @@ const resourcesRoot = resolve(desktopRoot, "resources");
 const coreRoot = resolve(resourcesRoot, "core");
 const stageRoot = resolve(resourcesRoot, "release-runtime");
 const manifestPath = resolve(stageRoot, ".release-runtime-assets.json");
+const prepareLocalModelRuntimePath = resolve(repositoryRoot, "scripts", "prepare-local-model-runtime.mjs");
 const powershellRequiredFiles = [
   "pwsh.exe",
   "pwsh.dll",
@@ -269,6 +270,13 @@ export async function prepareReleaseRuntimeAssets() {
 
   rmSync(stageRoot, { recursive: true, force: true });
   mkdirSync(stageRoot, { recursive: true });
+  run(process.execPath, [
+    prepareLocalModelRuntimePath,
+    "--target",
+    target,
+    "--dest",
+    join(stageRoot, "llama"),
+  ]);
 
   const coreName = platform === "windows" ? "AmitiaCore.exe" : "AmitiaCore";
   const coreSource = join(coreRoot, coreName);

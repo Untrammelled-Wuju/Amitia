@@ -116,7 +116,9 @@ class _DevConsolePageState extends ConsumerState<DevConsolePage> {
       try {
         final decoded = jsonDecode(line);
         if (decoded is Map) structured = Map<String, dynamic>.from(decoded);
-      } catch (_) {}
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
       return <String, dynamic>{
         ...row,
         'message': structured['@message'] ?? structured['message'] ?? line,

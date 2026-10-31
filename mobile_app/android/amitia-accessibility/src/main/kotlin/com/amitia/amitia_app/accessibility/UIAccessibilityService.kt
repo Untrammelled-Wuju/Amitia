@@ -328,7 +328,9 @@ class UIAccessibilityService : AccessibilityService() {
                 value.valueAt(index)?.let { result.addAll(it) }
             }
             if (result.isNotEmpty()) result else windows.orEmpty()
-        } catch (_: Throwable) {
+        } catch (originalError331: Throwable) {
+          originalError331.printStackTrace()
+
             windows.orEmpty()
         }
     }
@@ -370,14 +372,18 @@ class UIAccessibilityService : AccessibilityService() {
         }
         try {
             if (!dispatchLatch.await(5, TimeUnit.SECONDS)) return false
-        } catch (_: InterruptedException) {
+        } catch (originalError373: InterruptedException) {
+          originalError373.printStackTrace()
+
             Thread.currentThread().interrupt()
             return false
         }
         dispatchError.get()?.let { throw it }
         return try {
             latch.await(5, TimeUnit.SECONDS) && result.get()
-        } catch (_: InterruptedException) {
+        } catch (originalError380: InterruptedException) {
+          originalError380.printStackTrace()
+
             Thread.currentThread().interrupt()
             false
         }

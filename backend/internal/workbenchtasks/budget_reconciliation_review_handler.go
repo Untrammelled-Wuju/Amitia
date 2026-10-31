@@ -42,7 +42,7 @@ func (h *Handler) budgetReconciliationReview(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 2048)
 	var payload budgetEvidenceReviewRequest
 	if err := c.ShouldBindJSON(&payload); err != nil || (payload.Kind != "model" && payload.Kind != "tool") || !(validResourceID(payload.RecordID) && len(payload.RecordID) <= 255) || !validResourceID(payload.EvidenceRef) || len(payload.EvidenceRef) < 8 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "证据类型或引用无效", "errorCode": "invalid_evidence"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "errorCode": "invalid_evidence"})
 		return
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)

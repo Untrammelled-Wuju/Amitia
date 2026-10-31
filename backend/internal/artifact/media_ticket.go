@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	amitialog "log"
 	"strings"
 	"time"
 )
@@ -83,6 +84,8 @@ func (s *mediaTicketSigner) Validate(ticket string, id ID) (string, error) {
 
 func (s *mediaTicketSigner) sign(value string) string {
 	mac := hmac.New(sha256.New, s.key)
-	_, _ = mac.Write([]byte(value))
+	if _, err := mac.Write([]byte(value)); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }

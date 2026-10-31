@@ -47,16 +47,18 @@ async function requireCanonicalPlayerPath() {
   for (const required of [canonicalBridgePath, canonicalEnginePath, managerPath]) {
     try {
       await access(required);
-    } catch {
-      errors.push(`REQUIRED: missing canonical desktop-pet player file ${relative(projectRoot, required)}`);
+    } catch (error) {
+  console.error("[original-error]", error);
+errors.push(`REQUIRED: missing canonical desktop-pet player file ${relative(projectRoot, required)}`);
     }
   }
 
   let manager = "";
   try {
     manager = await readFile(managerPath, "utf8");
-  } catch {
-    return;
+  } catch (error) {
+  console.error("[original-error]", error);
+return;
   }
 
   if (!manager.includes('import { AnimationPlayerBridge } from "./animation-player-bridge"')) {

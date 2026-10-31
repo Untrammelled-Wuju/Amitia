@@ -3,12 +3,12 @@ package homekit
 import "fmt"
 
 const (
-	AutomationTypeEvent         = "event"
-	AutomationTypeCalendar      = "calendar"
-	AutomationTypePresence      = "presence"
+	AutomationTypeEvent          = "event"
+	AutomationTypeCalendar       = "calendar"
+	AutomationTypePresence       = "presence"
 	AutomationTypeCharacteristic = "characteristic"
-	AutomationTypeTimerLegacy   = "timer_legacy"
-	AutomationTypeUnknown       = "unknown"
+	AutomationTypeTimerLegacy    = "timer_legacy"
+	AutomationTypeUnknown        = "unknown"
 )
 
 var SupportedAutomationTypes = map[string]bool{
@@ -25,8 +25,8 @@ var PresenceEventScopes = map[string]bool{
 }
 
 var PresenceEventTypes = map[string]bool{
-	"arrives":  true,
-	"leaves":   true,
+	"arrives": true,
+	"leaves":  true,
 }
 
 type TriggerConditionInput struct {

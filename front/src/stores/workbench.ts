@@ -96,8 +96,9 @@ function loadSessions(): Record<string, WorkbenchSession> {
       result[key] = parseSession(value);
     }
     return result;
-  } catch {
-    return {};
+  } catch (error) {
+  console.error("[original-error]", error);
+return {};
   }
 }
 
@@ -186,7 +187,9 @@ export const useWorkbenchStore = defineStore("workbench", () => {
       try {
         const parsed = new URL(input.resourceUri);
         if (!["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password || !parsed.hostname) return null;
-      } catch { return null; }
+      } catch (error) {
+  console.error("[original-error]", error);
+return null; }
     }
     const key = normalizeConversation(input.conversationId);
     if (key === '__proto__' || key === 'constructor' || key === 'prototype') return null;
@@ -272,7 +275,9 @@ export const useWorkbenchStore = defineStore("workbench", () => {
     if (persistTimer !== undefined) clearTimeout(persistTimer);
     persistTimer = undefined;
     if (typeof localStorage === "undefined") return;
-    try { localStorage.setItem(storageKey, JSON.stringify(sessions.value)); } catch {}
+    try { localStorage.setItem(storageKey, JSON.stringify(sessions.value)); } catch (error) {
+  console.error("[original-error]", error);
+}
   }
   watch(sessions, () => {
     if (persistTimer !== undefined) clearTimeout(persistTimer);

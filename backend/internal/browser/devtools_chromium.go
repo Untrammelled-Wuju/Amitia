@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/u-ai/backend/internal/timeoutpolicy"
+	amitialog "log"
 	"strconv"
 	"strings"
 	"sync"
@@ -185,7 +186,9 @@ func (d *chromiumDevTools) readEvents(store map[string][]devToolsEvent, key stri
 		Limit int  `json:"limit"`
 		Clear bool `json:"clear"`
 	}
-	_ = json.Unmarshal(input, &req)
+	if err := json.Unmarshal(input, &req); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	if req.Limit <= 0 {
 		req.Limit = 100
 	}

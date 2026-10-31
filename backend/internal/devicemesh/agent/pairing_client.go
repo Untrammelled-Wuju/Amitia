@@ -25,7 +25,7 @@ func (h *LocalHandler) handlePinnedPairing(c *gin.Context) {
 	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 32<<10)
 	if err := c.ShouldBindJSON(&request); err != nil {
-		c.JSON(400, gin.H{"message": "局域网配对参数无效"})
+		c.JSON(400, gin.H{"message": err.Error()})
 		return
 	}
 	client, err := NewPinnedBootstrapClient(request.Endpoint)
@@ -35,7 +35,7 @@ func (h *LocalHandler) handlePinnedPairing(c *gin.Context) {
 	}
 	identity, err := h.identity.Load()
 	if err != nil {
-		c.JSON(503, gin.H{"message": "当前设备身份不可用"})
+		c.JSON(503, gin.H{"message": err.Error()})
 		return
 	}
 	h.mu.RLock()
@@ -44,7 +44,7 @@ func (h *LocalHandler) handlePinnedPairing(c *gin.Context) {
 	credential, credentialErr := h.credStore.LoadCredential()
 	h.mu.RUnlock()
 	if credentialErr != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "当前配对状态不可用，请稍后重试"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": credentialErr.Error()})
 		return
 	}
 	if localCore == "" {
@@ -60,9 +60,9 @@ func (h *LocalHandler) handlePinnedPairing(c *gin.Context) {
 	}
 	if _, err := client.ProviderPath(c.Request.Context(), request.Endpoint.URL, request.Endpoint.CoreID, localCore); err != nil {
 		if errors.Is(err, coordination.ErrProviderCycle) {
-			c.JSON(http.StatusConflict, gin.H{"code": "pairing.provider_topology_invalid", "message": "该设备已在当前服务连接链中，不能反向或重复扫码添加"})
+			c.JSON(http.StatusConflict, gin.H{"code": "pairing.provider_topology_invalid", "message": err.Error()})
 		} else {
-			c.JSON(http.StatusBadGateway, gin.H{"code": "pairing.provider_unavailable", "message": "无法验证局域网服务身份或连接链，请恢复连接后重试"})
+			c.JSON(http.StatusBadGateway, gin.H{"code": "pairing.provider_unavailable", "message": err.Error()})
 		}
 		return
 	}
@@ -81,7 +81,7 @@ func (h *LocalHandler) handlePinnedPairing(c *gin.Context) {
 	signed := proof.New(identity.PublicKey, request.Endpoint.CoreID, uuid.NewString(), body, time.Now())
 	signed.Signature, err = h.identity.Sign(signed.SigningBytes())
 	if err != nil {
-		c.JSON(503, gin.H{"message": "设备身份签名失败"})
+		c.JSON(503, gin.H{"message": err.Error()})
 		return
 	}
 	encoded, err := json.Marshal(struct {
@@ -89,24 +89,24 @@ func (h *LocalHandler) handlePinnedPairing(c *gin.Context) {
 		Proof *proof.Proof `json:"proof"`
 	}{ClaimBody: body, Proof: &signed})
 	if err != nil {
-		c.JSON(500, gin.H{"message": "设备配对请求编码失败"})
+		c.JSON(500, gin.H{"message": err.Error()})
 		return
 	}
 	upstream, err := http.NewRequestWithContext(c.Request.Context(), "POST", strings.TrimRight(request.Endpoint.URL, "/")+"/api/public/device-mesh/v1/pairing/claim", bytes.NewReader(encoded))
 	if err != nil {
-		c.JSON(400, gin.H{"message": "局域网配对地址无效"})
+		c.JSON(400, gin.H{"message": err.Error()})
 		return
 	}
 	upstream.Header.Set("Content-Type", "application/json")
 	response, err := client.httpClient.Do(upstream)
 	if err != nil {
-		c.JSON(502, gin.H{"message": "局域网服务身份验证或连接失败"})
+		c.JSON(502, gin.H{"message": err.Error()})
 		return
 	}
 	defer response.Body.Close()
 	result, err := io.ReadAll(io.LimitReader(response.Body, (1<<20)+1))
 	if err != nil || len(result) > 1<<20 || !json.Valid(result) {
-		c.JSON(502, gin.H{"message": "局域网配对响应无效"})
+		c.JSON(502, gin.H{"message": err.Error()})
 		return
 	}
 	c.Header("Cache-Control", "no-store")

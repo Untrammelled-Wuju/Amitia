@@ -3,6 +3,7 @@ package workbenchterminal
 import (
 	"context"
 	"errors"
+	amitialog "log"
 )
 
 func (h *Handler) validateTask(ctx context.Context, owner, id, conversationID string) error {
@@ -15,12 +16,16 @@ func (h *Handler) validateTask(ctx context.Context, owner, id, conversationID st
 	}
 	if h.taskVerifier == nil || !taskIDPattern.MatchString(s.taskID) ||
 		!conversationPattern.MatchString(conversationID) || s.conversationID != conversationID {
-		_ = h.manager.RevokeSession(owner, id)
+		if err := h.manager.RevokeSession(owner, id); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return ErrTaskBinding
 	}
 	if err = h.taskVerifier(ctx, s.workspaceURI, s.taskID, conversationID); err != nil {
 		if errors.Is(err, ErrTaskBinding) {
-			_ = h.manager.RevokeSession(owner, id)
+			if err := h.manager.RevokeSession(owner, id); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		return err
 	}

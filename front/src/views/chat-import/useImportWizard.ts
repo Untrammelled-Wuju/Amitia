@@ -53,7 +53,9 @@ export function useImportWizard() {
       characters.value = Array.isArray(result)
         ? result
         : result?.characters || result?.data || [];
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
 
   async function handleParse() {
@@ -88,8 +90,9 @@ export function useImportWizard() {
       importedConvId.value = "";
       importedOwnerConversationId.value = "";
       importedExecutionScope.value = null;
-    } catch {
-    } finally {
+    } catch (error) {
+  console.error("[original-error]", error);
+} finally {
       parsing.value = false;
     }
   }
@@ -217,7 +220,9 @@ export function useImportWizard() {
       const r = await fetchBatchesApi({ page: batchPage.value, pageSize: 20 });
       batches.value = r?.items || [];
       batchTotal.value = r?.total || 0;
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
 
   async function viewBatch(id: string) {
@@ -225,7 +230,9 @@ export function useImportWizard() {
       const r = await fetchBatchDetailApi(id);
       detailItems.value = r?.items || r || [];
       detailVisible.value = true;
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
 
   async function delBatch(id: string) {
@@ -234,7 +241,9 @@ export function useImportWizard() {
       await deleteBatchApi(id);
       ElMessage.success("已删除");
       await fetchBatches();
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
 
   async function promoteBatch(batch: any) {

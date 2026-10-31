@@ -98,7 +98,10 @@ export async function forwardInbound(config: InboundClientConfig, payload: Inbou
     body: JSON.stringify(payload),
     signal: AbortSignal.timeout(600000),
   })
-  const body = await response.json().catch(() => ({})) as { code?: number; msg?: string }
+  const body = await response.json().catch((error) => {
+    console.error("[original-error]", error)
+    return {}
+  }) as { code?: number; msg?: string }
   if (!response.ok || body.code !== 200) {
     throw new Error(`QQ 个人号入站失败 HTTP ${response.status}: ${body.msg || "宿主拒绝请求"}`)
   }

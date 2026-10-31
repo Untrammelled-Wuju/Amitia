@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	amitialog "log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -118,6 +119,8 @@ func (h *DurableHostIdentity) GetHostSessionID() string {
 
 func randomID(prefix string) string {
 	b := make([]byte, 8)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	return prefix + "-" + hex.EncodeToString(b)
 }

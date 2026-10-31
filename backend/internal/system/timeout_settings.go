@@ -54,7 +54,7 @@ func (h *Handler) TimeoutSettings(c *gin.Context) {
 func (h *Handler) UpdateTimeoutSettings(c *gin.Context) {
 	var settings timeoutpolicy.Settings
 	if err := c.ShouldBindJSON(&settings); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"msg": "超时设置格式错误"})
+		c.JSON(http.StatusBadRequest, gin.H{"msg": err.Error()})
 		return
 	}
 	if err := timeoutpolicy.Validate(settings); err != nil {
@@ -69,7 +69,7 @@ func (h *Handler) UpdateTimeoutSettings(c *gin.Context) {
 		return
 	}
 	if err := svc.UpdateTimeoutSettingsContext(c.Request.Context(), settings); err != nil {
-		util.ErrorResponse(c, 409, "保存超时设置失败", nil)
+		util.ErrorResponse(c, 409, err.Error(), nil)
 		return
 	}
 	c.Header("X-Amitia-Timeout-Disabled", strconv.FormatBool(settings.Disabled))

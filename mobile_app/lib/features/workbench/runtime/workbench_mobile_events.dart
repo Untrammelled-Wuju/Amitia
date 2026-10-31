@@ -59,7 +59,9 @@ class WorkbenchMobileEvents {
         state['tabs'] = tabs;
         state['index'] = index;
         await prefs.setString(keyFor(conversationId), jsonEncode(state));
-      } catch (_) {}
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
     });
     return _writes;
   }
@@ -145,7 +147,9 @@ class WorkbenchMobileEvents {
         await prefs.setString(keyFor(conversation), jsonEncode(state));
         lastChangedConversation = conversation;
         revision.value += 1;
-      } catch (_) {}
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
     });
     return _writes;
   }

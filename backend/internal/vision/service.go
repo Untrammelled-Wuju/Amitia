@@ -227,7 +227,7 @@ func (s *service) testVolcengineConnection(cfg *VisionConfig) (map[string]interf
 	defer resp.Body.Close()
 	rb, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != 200 {
-		return map[string]interface{}{"success": false, "message": fmt.Sprintf("API返回 %d: %s", resp.StatusCode, truncate(string(rb), 300)), "latency": latency}, nil
+		return map[string]interface{}{"success": false, "message": fmt.Sprintf("API返回 %d: %s", resp.StatusCode, string(rb)), "latency": latency}, nil
 	}
 	return map[string]interface{}{"success": true, "message": "连接成功", "latency": latency}, nil
 }
@@ -258,7 +258,7 @@ func (s *service) testOpenAICompatibleConnection(cfg *VisionConfig) (map[string]
 	defer resp.Body.Close()
 	rb, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != 200 {
-		return map[string]interface{}{"success": false, "message": fmt.Sprintf("API返回 %d: %s", resp.StatusCode, truncate(string(rb), 300)), "latency": latency}, nil
+		return map[string]interface{}{"success": false, "message": fmt.Sprintf("API返回 %d: %s", resp.StatusCode, string(rb)), "latency": latency}, nil
 	}
 	return map[string]interface{}{"success": true, "message": "连接成功", "latency": latency}, nil
 }
@@ -290,7 +290,7 @@ func (s *service) testGeminiConnection(cfg *VisionConfig) (map[string]interface{
 	defer resp.Body.Close()
 	rb, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != 200 {
-		return map[string]interface{}{"success": false, "message": fmt.Sprintf("API返回 %d: %s", resp.StatusCode, truncate(string(rb), 300)), "latency": latency}, nil
+		return map[string]interface{}{"success": false, "message": fmt.Sprintf("API返回 %d: %s", resp.StatusCode, string(rb)), "latency": latency}, nil
 	}
 	return map[string]interface{}{"success": true, "message": "连接成功", "latency": latency}, nil
 }

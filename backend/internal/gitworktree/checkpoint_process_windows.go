@@ -1,6 +1,7 @@
 package gitworktree
 
 import (
+	amitialog "log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,8 +20,12 @@ func terminateCheckpointTestProcess(command *exec.Cmd) {
 	if root := os.Getenv("SystemRoot"); root != "" {
 		path := filepath.Join(root, "System32", "taskkill.exe")
 		if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() {
-			_ = exec.Command(path, "/T", "/F", "/PID", strconv.Itoa(command.Process.Pid)).Run()
+			if err := exec.Command(path, "/T", "/F", "/PID", strconv.Itoa(command.Process.Pid)).Run(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}
-	_ = command.Process.Kill()
+	if err := command.Process.Kill(); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/trust"
+	amitialog "log"
 )
 
 type PackagePublisherKeyRecord struct {
@@ -131,7 +132,11 @@ func (r *PackageTrustRepository) MarkActive(ctx context.Context, mutation trust.
 	if err != nil {
 		return fmt.Errorf("kernel: begin trust activation: %w", err)
 	}
-	defer func() { _ = tx.Rollback() }()
+	defer func() {
+		if err := tx.Rollback(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+	}()
 	var existing int
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM extension_package_security_audit
 		WHERE event_id = ? AND event_type = 'trust_policy_active'`, mutation.MutationID+":active").Scan(&existing); err != nil {

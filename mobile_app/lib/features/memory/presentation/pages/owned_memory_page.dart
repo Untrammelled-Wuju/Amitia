@@ -89,7 +89,9 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
     final owned = ref.read(memoryDataSourceProvider);
     try {
       _role = owned.selectRole(widget.characterId);
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
     if (_role.isEmpty && owned.roles.isNotEmpty)
       _role = owned.roles.first['id'].toString();
     _memoryView = widget.characterId == null

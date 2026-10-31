@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -35,6 +36,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
   final Map<String, int> _testStates = <String, int>{};
   List<Map<String, dynamic>> _configs = const <Map<String, dynamic>>[];
   List<Map<String, dynamic>> _providers = const <Map<String, dynamic>>[];
+  List<Map<String, dynamic>> _localModels = const <Map<String, dynamic>>[];
   List<Map<String, dynamic>> _routes = const [];
   bool _loading = true;
   bool _busy = false;
@@ -92,6 +94,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
           await _loadConfigs(),
           await _loadProviders(),
           _isText
+              ? await ref.read(modelConfigServiceProvider).localModels()
+              : <Map<String, dynamic>>[],
+          _isText
               ? await ref.read(modelConfigServiceProvider).routes()
               : <Map<String, dynamic>>[],
         ],
@@ -102,7 +107,8 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
         _configs = values[1] as List<Map<String, dynamic>>;
         _visionSuspended = values[0] as bool;
         _providers = values[2] as List<Map<String, dynamic>>;
-        _routes = values[3] as List<Map<String, dynamic>>;
+        _localModels = values[3] as List<Map<String, dynamic>>;
+        _routes = values[4] as List<Map<String, dynamic>>;
         _canConfigure = true;
         _loading = false;
       });
@@ -522,6 +528,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     final id = _idOf(config);
     setState(() => _testStates[id] = 1);
     try {
+      Map<String, dynamic>? result;
       switch (widget.modelType) {
         case 'vision':
           await ref.read(visionServiceProvider).test(id);
@@ -537,8 +544,22 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
           break;
         case 'text':
         default:
-          await ref.read(modelConfigServiceProvider).test(id);
+          result = await ref.read(modelConfigServiceProvider).test(id);
           break;
+      }
+      if (result != null) {
+        final test = result['test'];
+        final success =
+            result['success'] == true ||
+            result['status'] == 'ok' ||
+            (test is Map && test['success'] == true);
+        if (!success) {
+          final message =
+              result['message'] ??
+              (test is Map ? test['message'] : null) ??
+              '模型测试未通过';
+          throw StateError(message.toString());
+        }
       }
       if (mounted) setState(() => _testStates[id] = 2);
     } catch (e) {
@@ -658,6 +679,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
         (existing?['defaultReasoningEffort'] ?? 'high').toString();
     bool detecting = false;
     List<Map<String, dynamic>> detectedModels = const <Map<String, dynamic>>[];
+    final providerConfig = _providerConfigMap(existing?['providerConfig']);
 
     await showAmitiaEditor<void>(
       context,
@@ -713,6 +735,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
               widget.modelType == 'text' && providerCtrl.text == 'openai'
               ? 'openai:${selectedProtocol.isEmpty ? 'openai_responses' : selectedProtocol}'
               : providerCtrl.text;
+          final embedded = selectedProvider?['runtimeKind'] == 'embedded';
           return SafeArea(
             child: Padding(
               padding: EdgeInsets.fromLTRB(
@@ -743,7 +766,8 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                       )
                     else
                       DropdownButtonFormField<String>(
-                        value:
+                        key: ValueKey<String>('provider-$selectedChoice'),
+                        initialValue:
                             providerChoices.any(
                               (choice) => choice['value'] == selectedChoice,
                             )
@@ -759,7 +783,21 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                             .map(
                               (choice) => DropdownMenuItem<String>(
                                 value: choice['value'].toString(),
-                                child: Text(choice['name'].toString()),
+                                enabled:
+                                    (choice['provider']
+                                        as Map<String, dynamic>)['available'] !=
+                                    false,
+                                child: Text(
+                                  (choice['provider']
+                                              as Map<
+                                                String,
+                                                dynamic
+                                              >)['available'] ==
+                                          false
+                                      ? '${choice['name']} · ${(choice['provider'] as Map<String, dynamic>)['unavailableReason'] ?? '不可用'}'
+                                      : choice['name'].toString(),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
                             )
                             .toList(growable: false),
@@ -774,34 +812,75 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                             providerCtrl.text = (provider['id'] ?? '')
                                 .toString();
                             selectedProtocol = choice['protocol'].toString();
+                            providerConfig.clear();
                             final defaultBase =
                                 (provider['defaultBaseUrl'] ?? '').toString();
                             final defaultModel =
                                 (provider['defaultModel'] ?? '').toString();
                             if (baseUrlCtrl.text.trim().isEmpty &&
-                                defaultBase.isNotEmpty)
+                                defaultBase.isNotEmpty) {
                               baseUrlCtrl.text = defaultBase;
+                            }
                             if (modelCtrl.text.trim().isEmpty &&
-                                defaultModel.isNotEmpty)
+                                defaultModel.isNotEmpty) {
                               modelCtrl.text = defaultModel;
+                            }
+                            if (provider['runtimeKind'] == 'embedded') {
+                              apiKeyCtrl.clear();
+                              baseUrlCtrl.clear();
+                              for (final field
+                                  in (provider['configFields'] as List? ??
+                                          const [])
+                                      .whereType<Map>()) {
+                                final key = (field['key'] ?? '').toString();
+                                if (key.isNotEmpty &&
+                                    field['default'] != null &&
+                                    !key.toLowerCase().contains('uri')) {
+                                  providerConfig[key] = field['default'];
+                                }
+                              }
+                            }
                           });
                         },
                       ),
                     SizedBox(height: AppSpacing.md),
-                    _SheetField(
-                      label: 'API Key',
-                      controller: apiKeyCtrl,
-                      hint: existing == null ? '输入 API Key' : '留空则保持原 Key',
-                      obscure: true,
-                    ),
-                    SizedBox(height: AppSpacing.md),
-                    _SheetField(
-                      label: 'API 地址',
-                      controller: baseUrlCtrl,
-                      hint:
-                          (selectedProvider?['defaultBaseUrl'] ?? 'https://...')
-                              .toString(),
-                    ),
+                    if (!embedded) ...<Widget>[
+                      _SheetField(
+                        label: 'API Key',
+                        controller: apiKeyCtrl,
+                        hint: existing == null ? '输入 API Key' : '留空则保持原 Key',
+                        obscure: true,
+                      ),
+                      SizedBox(height: AppSpacing.md),
+                      _SheetField(
+                        label: 'API 地址',
+                        controller: baseUrlCtrl,
+                        hint:
+                            (selectedProvider?['defaultBaseUrl'] ??
+                                    'https://...')
+                                .toString(),
+                      ),
+                    ],
+                    if (embedded) ...<Widget>[
+                      for (final field
+                          in (selectedProvider?['configFields'] as List? ??
+                                  const [])
+                              .whereType<Map>())
+                        if (!const <String>[
+                          'baseUrl',
+                          'apiKey',
+                          'modelName',
+                        ].contains((field['key'] ?? '').toString()))
+                          _buildLocalModelField(
+                            sheetContext,
+                            Map<String, dynamic>.from(field),
+                            providerConfig,
+                            selectedProvider!,
+                            modelCtrl,
+                            setSheetState,
+                            intent!,
+                          ),
+                    ],
                     SizedBox(height: AppSpacing.md),
                     if (widget.modelType == 'voice') ...<Widget>[
                       _SheetField(
@@ -970,8 +1049,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                                 )
                                 .toList(growable: false),
                             onChanged: (value) {
-                              if (value != null)
+                              if (value != null) {
                                 setSheetState(() => modelCtrl.text = value);
+                              }
                             },
                           ),
                         ],
@@ -994,7 +1074,10 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                         ),
                         const SizedBox(height: 4),
                         DropdownButtonFormField<String>(
-                          value:
+                          key: ValueKey<String>(
+                            'reasoning-$defaultReasoningEffort',
+                          ),
+                          initialValue:
                               const <String>[
                                 'low',
                                 'medium',
@@ -1169,6 +1252,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                                     .trim(),
                                 realtimeSecretKey: realtimeSecretKeyCtrl.text
                                     .trim(),
+                                providerConfig: providerConfig,
                                 isActive: isActive,
                               );
                             },
@@ -1205,6 +1289,220 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     realtimeSecretKeyCtrl.dispose();
   }
 
+  Map<String, dynamic> _providerConfigMap(dynamic raw) {
+    if (raw is Map) {
+      return raw.map((key, value) => MapEntry(key.toString(), value));
+    }
+    if (raw is String && raw.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map) {
+          return decoded.map((key, value) => MapEntry(key.toString(), value));
+        }
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
+    }
+    return <String, dynamic>{};
+  }
+
+  Widget _buildLocalModelField(
+    BuildContext context,
+    Map<String, dynamic> field,
+    Map<String, dynamic> config,
+    Map<String, dynamic> provider,
+    TextEditingController modelCtrl,
+    StateSetter setSheetState,
+    CoreConfigurationIntent intent,
+  ) {
+    final key = (field['key'] ?? '').toString();
+    final label = (field['label'] ?? key).toString();
+    final type = (field['type'] ?? 'text').toString();
+    final hint = (field['placeholder'] ?? '').toString();
+    final formats = ((provider['modelFormats'] as List?) ?? const [])
+        .map((value) => value.toString())
+        .toSet();
+    final models = _localModels
+        .where(
+          (model) =>
+              formats.isEmpty ||
+              formats.contains((model['format'] ?? '').toString()),
+        )
+        .toList(growable: false);
+    Widget control;
+    if (type == 'modelFile') {
+      final selected = (config[key] ?? '').toString();
+      control = Column(
+        children: <Widget>[
+          DropdownButtonFormField<String>(
+            key: ValueKey<String>('model-$key-$selected'),
+            initialValue:
+                models.any((model) => model['resourceUri'] == selected)
+                ? selected
+                : null,
+            isExpanded: true,
+            decoration: InputDecoration(
+              labelText: label,
+              border: const OutlineInputBorder(),
+              isDense: true,
+              hintText: hint.isEmpty ? '选择已导入的模型文件' : hint,
+            ),
+            items: models
+                .map(
+                  (model) => DropdownMenuItem<String>(
+                    value: (model['resourceUri'] ?? '').toString(),
+                    child: Text(
+                      '${model['name'] ?? model['filename']} · ${(model['format'] ?? '').toString().toUpperCase()}',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                )
+                .toList(growable: false),
+            onChanged: (value) {
+              if (value == null) return;
+              setSheetState(() => config[key] = value);
+            },
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: <Widget>[
+              OutlinedButton.icon(
+                onPressed: () => _pickAndUploadModel(
+                  context,
+                  key,
+                  config,
+                  provider,
+                  modelCtrl,
+                  setSheetState,
+                  intent,
+                ),
+                icon: const Icon(Icons.upload_file, size: 18),
+                label: Text('导入$label'),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  selected.isEmpty ? '尚未选择' : selected,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.caption(context),
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
+    } else if (type == 'boolean') {
+      control = AmitiaSwitchTile(
+        title: label,
+        value: config[key] == true,
+        onChanged: (value) => setSheetState(() => config[key] = value),
+      );
+    } else if (type == 'select') {
+      final options = ((field['options'] as List?) ?? const [])
+          .whereType<Map>();
+      control = DropdownButtonFormField<String>(
+        key: ValueKey<String>(
+          'select-$key-${(config[key] ?? field['default'] ?? '').toString()}',
+        ),
+        initialValue: (config[key] ?? field['default'] ?? '').toString(),
+        decoration: InputDecoration(
+          labelText: label,
+          border: const OutlineInputBorder(),
+          isDense: true,
+        ),
+        items: options
+            .map(
+              (option) => DropdownMenuItem<String>(
+                value: (option['value'] ?? '').toString(),
+                child: Text(
+                  (option['label'] ?? option['value'] ?? '').toString(),
+                ),
+              ),
+            )
+            .toList(growable: false),
+        onChanged: (value) {
+          if (value != null) setSheetState(() => config[key] = value);
+        },
+      );
+    } else {
+      control = TextFormField(
+        initialValue: (config[key] ?? field['default'] ?? '').toString(),
+        keyboardType: type == 'number'
+            ? TextInputType.number
+            : TextInputType.text,
+        decoration: InputDecoration(
+          labelText: label,
+          hintText: hint,
+          border: const OutlineInputBorder(),
+          isDense: true,
+        ),
+        onChanged: (value) {
+          config[key] = type == 'number'
+              ? (num.tryParse(value) ?? field['default'] ?? 0)
+              : value;
+        },
+      );
+    }
+    return Padding(
+      padding: EdgeInsets.only(bottom: AppSpacing.md),
+      child: control,
+    );
+  }
+
+  Future<void> _pickAndUploadModel(
+    BuildContext context,
+    String key,
+    Map<String, dynamic> config,
+    Map<String, dynamic> provider,
+    TextEditingController modelCtrl,
+    StateSetter setSheetState,
+    CoreConfigurationIntent intent,
+  ) async {
+    final formats = ((provider['modelFormats'] as List?) ?? const [])
+        .map((value) => value.toString())
+        .where((value) => value.isNotEmpty)
+        .toList(growable: false);
+    final picked = await FilePicker.platform.pickFiles(
+      type: FileType.any,
+      withData: false,
+    );
+    final file = picked?.files.single;
+    final path = file?.path;
+    if (file == null || path == null) return;
+    final supported = formats.isEmpty ? <String>['gguf', 'mnn'] : formats;
+    final lowerName = file.name.toLowerCase();
+    if (!supported.any((format) => lowerName.endsWith('.$format'))) {
+      _toast('请选择 ${supported.join(' 或 ').toUpperCase()} 模型文件', error: true);
+      return;
+    }
+    try {
+      if (!await _ensureConfiguration(intent)) return;
+      final uploaded = await intent.run(
+        () => ref
+            .read(modelConfigServiceProvider)
+            .uploadLocalModel(
+              path,
+              file.name,
+              name: file.name.replaceFirst(RegExp(r'\.[^.]+$'), ''),
+            ),
+      );
+      final refreshed = await intent.run(
+        () => ref.read(modelConfigServiceProvider).localModels(),
+      );
+      if (!mounted) return;
+      setState(() => _localModels = refreshed);
+      setSheetState(() {
+        config[key] = (uploaded['resourceUri'] ?? '').toString();
+        config['localModelId'] ??= (uploaded['name'] ?? '').toString();
+        if (modelCtrl.text.trim().isEmpty) {
+          modelCtrl.text = (uploaded['name'] ?? '').toString();
+        }
+      });
+    } catch (error) {
+      if (mounted) _toast('模型导入失败：$error', error: true);
+    }
+  }
+
   Future<void> _saveConfig(
     Map<String, dynamic>? existing, {
     required CoreConfigurationIntent intent,
@@ -1233,19 +1531,28 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     required String realtimeAppId,
     required String realtimeAccessToken,
     required String realtimeSecretKey,
+    required Map<String, dynamic> providerConfig,
     required bool isActive,
   }) async {
     if (await _blockIndependentVision()) return;
     if (!mounted) return;
     final id = existing == null ? '' : _idOf(existing);
+    final selectedProvider = _providers
+        .where((item) => (item['id'] ?? '').toString() == provider)
+        .firstOrNull;
+    final embedded = selectedProvider?['runtimeKind'] == 'embedded';
     final data = <String, dynamic>{
       'name': name,
       'apiType': provider,
       if (widget.modelType == 'text' && protocol.isNotEmpty)
         'protocol': protocol,
-      'baseUrl': baseUrl,
+      if (!embedded) 'baseUrl': baseUrl,
       'isActive': isActive ? 1 : 0,
-      if (apiKey.isNotEmpty) 'apiKey': apiKey,
+      if (!embedded && apiKey.isNotEmpty) 'apiKey': apiKey,
+      if (embedded) 'providerConfig': providerConfig,
+      if (embedded &&
+          int.tryParse('${providerConfig['contextSize'] ?? ''}') != null)
+        'contextWindow': int.parse('${providerConfig['contextSize']}'),
     };
     if (widget.modelType == 'voice') {
       final parsedSpeed =
@@ -1269,10 +1576,12 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
           ? 'volc.megatts.timbre'
           : cloneResourceId;
       data['realtimeAppId'] = realtimeAppId;
-      if (realtimeAccessToken.isNotEmpty)
+      if (realtimeAccessToken.isNotEmpty) {
         data['realtimeAccessToken'] = realtimeAccessToken;
-      if (realtimeSecretKey.isNotEmpty)
+      }
+      if (realtimeSecretKey.isNotEmpty) {
         data['realtimeSecretKey'] = realtimeSecretKey;
+      }
     } else {
       data['modelName'] = model;
       if (widget.modelType == 'text') {
@@ -1285,6 +1594,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
             .clamp(0.0, 2.0)
             .toDouble();
         data['maxTokens'] = (int.tryParse(maxTokens) ?? 4096).clamp(1, 1048576);
+        if (embedded && data['maxTokens'] != null) {
+          data['maxOutputTokens'] = data['maxTokens'];
+        }
         data['timeoutSeconds'] = (int.tryParse(timeoutSeconds) ?? 60).clamp(
           1,
           3600,

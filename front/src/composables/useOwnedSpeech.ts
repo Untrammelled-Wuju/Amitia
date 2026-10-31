@@ -41,7 +41,9 @@ export function useOwnedSpeech(onInvalidated: () => void = () => {}) {
         if (captured !== generation || activeScope !== currentScope) return;
         const role = roles?.roles?.find((item: any) => item.id === currentScope.roleId);
         if (deployment.mode !== "cloud" || status?.coreId !== currentScope.coreId || status?.policy?.providerEpoch !== currentScope.providerEpoch || status?.policy?.modeRevision !== currentScope.modeRevision || status?.policy?.permissionRevision !== currentScope.permissionRevision || status?.policy?.coordinated !== currentScope.coordinated || roles?.roleOwnerId !== currentScope.roleOwnerId || role?.revision !== currentScope.roleRevision) invalidate();
-      } catch { if (captured === generation && activeScope === currentScope) invalidate(); }
+      } catch (error) {
+  console.error("[original-error]", error);
+if (captured === generation && activeScope === currentScope) invalidate(); }
       finally { checkingRole = false; }
     }, 1000);
   }

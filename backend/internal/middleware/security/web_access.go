@@ -25,6 +25,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 	"golang.org/x/crypto/argon2"
+	amitialog "log"
 )
 
 const (
@@ -194,7 +195,9 @@ func (s *WebAccessService) ValidateSession(token string) bool {
 		return false
 	}
 	mac := hmac.New(sha256.New, secret)
-	_, _ = mac.Write([]byte(parts[0]))
+	if _, err := mac.Write([]byte(parts[0])); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	expected := mac.Sum(nil)
 	if !hmac.Equal(sig, expected) {
 		return false
@@ -224,7 +227,9 @@ func (s *WebAccessService) issueSessionLocked(now time.Time) (string, error) {
 	}
 	encoded := base64.RawURLEncoding.EncodeToString(rawPayload)
 	mac := hmac.New(sha256.New, secret)
-	_, _ = mac.Write([]byte(encoded))
+	if _, err := mac.Write([]byte(encoded)); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	return encoded + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil)), nil
 }
 
@@ -238,11 +243,15 @@ func (s *WebAccessService) persistLocked() error {
 		return fmt.Errorf("web access: write state: %w", err)
 	}
 	if err := os.Chmod(tmp, 0o600); err != nil {
-		_ = os.Remove(tmp)
+		if err := os.Remove(tmp); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return fmt.Errorf("web access: chmod state: %w", err)
 	}
 	if err := os.Rename(tmp, s.path); err != nil {
-		_ = os.Remove(tmp)
+		if err := os.Remove(tmp); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return fmt.Errorf("web access: commit state: %w", err)
 	}
 	return nil
@@ -417,19 +426,19 @@ func RegisterWebAccessPublicRoutes(group *gin.RouterGroup, svc *WebAccessService
 		c.Header("Cache-Control", "no-store")
 		password, bindErr := bindWebAccessPassword(c)
 		if bindErr != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "请输入访问密码"})
+			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": bindErr.Error()})
 			return
 		}
 		token, err := svc.Login(password, c.Request.RemoteAddr)
 		if err != nil {
 			switch {
 			case errors.Is(err, ErrWebAccessNotConfigured):
-				c.JSON(http.StatusPreconditionRequired, gin.H{"code": 428, "msg": "Web 访问密码尚未设置"})
+				c.JSON(http.StatusPreconditionRequired, gin.H{"code": 428, "msg": err.Error()})
 			case errors.Is(err, ErrWebAccessRateLimited):
 				c.Header("Retry-After", "30")
-				c.JSON(http.StatusTooManyRequests, gin.H{"code": 429, "msg": "尝试次数过多，请稍后再试"})
+				c.JSON(http.StatusTooManyRequests, gin.H{"code": 429, "msg": err.Error()})
 			default:
-				c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "msg": "访问密码错误"})
+				c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "msg": err.Error()})
 			}
 			return
 		}
@@ -459,12 +468,12 @@ func RegisterWebAccessSetupRoutes(router gin.IRouter, svc *WebAccessService, dev
 		}
 		device, err := devices.GetDevice(c.Request.Context(), actor.DeviceID)
 		if err != nil || device == nil || device.SpaceID != actor.SpaceID || device.TrustState != host_registry.DeviceTrustTrusted || device.Platform != runtimeidentity.PlatformWeb {
-			c.JSON(http.StatusForbidden, gin.H{"code": 403, "msg": "只有已配对的 Web 设备可以设置 Web 访问密码"})
+			c.JSON(http.StatusForbidden, gin.H{"code": 403, "msg": err.Error()})
 			return
 		}
 		password, bindErr := bindWebAccessPassword(c)
 		if bindErr != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "请输入访问密码"})
+			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": bindErr.Error()})
 			return
 		}
 		token, err := svc.Setup(password)

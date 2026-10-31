@@ -634,8 +634,9 @@ function formatTime(d: string): string {
       " " +
       date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })
     );
-  } catch {
-    return d;
+  } catch (error) {
+  console.error("[original-error]", error);
+return d;
   }
 }
 

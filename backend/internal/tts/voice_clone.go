@@ -75,7 +75,7 @@ func CloneVoiceWithContext(ctx context.Context, apiKey string, appKey string, ac
 
 	rawBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("音色复刻返回 %d: %s", resp.StatusCode, truncateStr(string(rawBody), 300))
+		return nil, fmt.Errorf("音色复刻返回 %d: %s", resp.StatusCode, string(rawBody))
 	}
 
 	var result VoiceCloneResponse
@@ -126,7 +126,7 @@ func DeleteClonedVoiceWithContext(ctx context.Context, apiKey string, appKey str
 	defer resp.Body.Close()
 	rawBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != 200 {
-		return fmt.Errorf("删除返回 %d: %s", resp.StatusCode, truncateStr(string(rawBody), 200))
+		return fmt.Errorf("删除返回 %d: %s", resp.StatusCode, string(rawBody))
 	}
 	return nil
 }
@@ -186,7 +186,7 @@ func CloneVoiceV1WithContext(ctx context.Context, accessToken string, appId stri
 
 	rawBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("V1 复刻返回 %d: %s", resp.StatusCode, truncateStr(string(rawBody), 300))
+		return nil, fmt.Errorf("V1 复刻返回 %d: %s", resp.StatusCode, string(rawBody))
 	}
 
 	return &VoiceCloneResponse{

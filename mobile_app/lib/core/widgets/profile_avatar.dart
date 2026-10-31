@@ -183,8 +183,9 @@ class ProfileAvatar extends StatelessWidget {
             fit: BoxFit.cover,
             errorBuilder: (_, __, ___) => _buildInitial(context),
           );
-        } catch (_) {
-          return _buildInitial(context);
+        } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return _buildInitial(context);
         }
       }
     }

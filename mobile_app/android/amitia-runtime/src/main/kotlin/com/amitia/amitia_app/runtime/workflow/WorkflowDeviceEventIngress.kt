@@ -45,8 +45,10 @@ class WorkflowDeviceEventIngress(
             reportExecutor.execute {
                 completion(runCatching { outbox.flush(client) })
             }
-        } catch (_: RejectedExecutionException) {
-            completion(Result.failure(IllegalStateException("workflow device report queue is full")))
+        } catch (originalError48: RejectedExecutionException) {
+          originalError48.printStackTrace()
+
+            completion(Result.failure(IllegalStateException("workflow device report queue is full: ${originalError48.message}", originalError48)))
         }
     }
 
@@ -132,8 +134,10 @@ class WorkflowDeviceEventIngress(
                     completion(delivered)
                 }
             }
-        } catch (_: RejectedExecutionException) {
-            completion(Result.failure(IllegalStateException("workflow device event queue is full")))
+        } catch (originalError135: RejectedExecutionException) {
+          originalError135.printStackTrace()
+
+            completion(Result.failure(IllegalStateException("workflow device event queue is full: ${originalError135.message}", originalError135)))
         }
     }
 
@@ -143,8 +147,10 @@ class WorkflowDeviceEventIngress(
     ) {
         try {
             reportExecutor.execute { completion(block()) }
-        } catch (_: RejectedExecutionException) {
-            completion(Result.failure(IllegalStateException("workflow device report queue is full")))
+        } catch (originalError146: RejectedExecutionException) {
+          originalError146.printStackTrace()
+
+            completion(Result.failure(IllegalStateException("workflow device report queue is full: ${originalError146.message}", originalError146)))
         }
     }
 

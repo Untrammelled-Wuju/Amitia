@@ -29,8 +29,9 @@ watch(() => props.src, async (source, _, onCleanup) => {
     if (!response.data.type.startsWith("image/")) throw new Error("图片资源不可用");
     objectUrl = URL.createObjectURL(response.data);
     resolved.value = objectUrl;
-  } catch {
-    if (!disposed) failed.value = true;
+  } catch (error) {
+  console.error("[original-error]", error);
+if (!disposed) failed.value = true;
   }
 }, { immediate: true });
 </script>

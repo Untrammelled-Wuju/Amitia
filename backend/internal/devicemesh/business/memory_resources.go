@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	amitialog "log"
 )
 
 func (e *Engine) prepareMemoryMutations(ctx context.Context, scope coordination.ExecutionScope, conversation string, derived []DerivedMemory, snapshot *coordination.DataSnapshot) ([]coordination.Mutation, error) {
@@ -35,7 +36,9 @@ func (e *Engine) prepareMemoryMutations(ctx context.Context, scope coordination.
 		}
 		if protected[kind+"/"+item.Key] {
 			var content map[string]json.RawMessage
-			_ = json.Unmarshal(item.Body, &content)
+			if err := json.Unmarshal(item.Body, &content); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			source := MemoryText(content, "source")
 			if source != "manual" && source != "reviewed" {
 				continue

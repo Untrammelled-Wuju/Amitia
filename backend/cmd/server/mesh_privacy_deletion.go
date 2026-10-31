@@ -14,6 +14,7 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"gorm.io/gorm"
+	amitialog "log"
 )
 
 type privacyDeletionReference struct {
@@ -282,7 +283,9 @@ func (p *meshLocalDataPort) advancePrivacyDeletion(ctx context.Context, scope co
 			job.LastError = err.Error()
 			job.Status = "failed"
 			job.FailedCount = 1
-			_ = p.savePrivacyDeletion(ctx, scope, job, revision)
+			if err := p.savePrivacyDeletion(ctx, scope, job, revision); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return privacyDeletionResponse(job), nil
 		}
 		job.PrimaryCompleted = true
@@ -336,7 +339,9 @@ func (p *meshLocalDataPort) advancePrivacyDeletion(ctx context.Context, scope co
 func privacyDeletionResponse(job privacyDeletionJob) map[string]any {
 	raw, _ := json.Marshal(job.MemoryDeletionStatus)
 	var result map[string]any
-	_ = json.Unmarshal(raw, &result)
+	if err := json.Unmarshal(raw, &result); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	result["lastError"] = job.LastError
 	result["attempts"], result["maxAttempts"], result["nextRetryAt"], result["automaticRetryStopped"] = job.Attempts, 5, job.NextRetryAt, job.Attempts >= 5 && job.Status != "completed"
 	return result
@@ -570,7 +575,9 @@ func runOwnedPrivacyDeletions(ctx context.Context, p *meshLocalDataPort) {
 							if err != nil {
 								job.LastError = err.Error()
 							}
-							_ = p.savePrivacyDeletion(ctx, item.job.ExecutionScope, job, current.Revision)
+							if err := p.savePrivacyDeletion(ctx, item.job.ExecutionScope, job, current.Revision); err != nil {
+								amitialog.Printf("[original-error] %v", err)
+							}
 						}
 					}
 				}

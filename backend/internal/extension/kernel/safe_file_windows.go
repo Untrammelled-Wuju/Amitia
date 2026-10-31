@@ -12,6 +12,7 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+	amitialog "log"
 )
 
 type platformPathIdentity struct {
@@ -81,7 +82,9 @@ func openPlatformRestoreRoot(absolutePath string) (*platformRestoreDirectory, er
 	}
 	identity, err := captureWindowsHandleIdentity(handle, true)
 	if err != nil {
-		_ = windows.CloseHandle(handle)
+		if err := windows.CloseHandle(handle); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, err
 	}
 	return &platformRestoreDirectory{handle: handle, pathIdentity: identity}, nil
@@ -108,7 +111,9 @@ func (directory *platformRestoreDirectory) openExistingChildDirectory(name strin
 	}
 	identity, err := captureWindowsHandleIdentity(handle, true)
 	if err != nil {
-		_ = windows.CloseHandle(handle)
+		if err := windows.CloseHandle(handle); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, err
 	}
 	return &platformRestoreDirectory{handle: handle, pathIdentity: identity}, nil
@@ -139,7 +144,9 @@ func (directory *platformRestoreDirectory) createChildDirectoryExclusive(name st
 	}
 	identity, err := captureWindowsHandleIdentity(handle, true)
 	if err != nil {
-		_ = windows.CloseHandle(handle)
+		if err := windows.CloseHandle(handle); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, err
 	}
 	return &platformRestoreDirectory{handle: handle, pathIdentity: identity}, nil
@@ -158,7 +165,9 @@ func (directory *platformRestoreDirectory) openRegularFile(name string) (*os.Fil
 	}
 	identity, err := captureWindowsHandleIdentity(handle, false)
 	if err != nil {
-		_ = windows.CloseHandle(handle)
+		if err := windows.CloseHandle(handle); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, platformPathIdentity{}, err
 	}
 	return os.NewFile(uintptr(handle), name), identity, nil
@@ -174,7 +183,9 @@ func safeCreateFilePlatform(parent *platformRestoreDirectory, name string) (*os.
 	}
 	identity, err := captureWindowsHandleIdentity(handle, false)
 	if err != nil {
-		_ = windows.CloseHandle(handle)
+		if err := windows.CloseHandle(handle); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, platformPathIdentity{}, err
 	}
 	return os.NewFile(uintptr(handle), name), identity, nil
@@ -277,7 +288,9 @@ func openPlatformFileParent(absoluteRoot string, absoluteFilePath string) (*plat
 	}
 	relativeParent, err := filepath.Rel(absoluteRoot, filepath.Dir(absoluteFilePath))
 	if err != nil {
-		_ = current.close()
+		if err := current.close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, "", err
 	}
 	if relativeParent == "." {
@@ -286,10 +299,14 @@ func openPlatformFileParent(absoluteRoot string, absoluteFilePath string) (*plat
 	for _, component := range strings.Split(filepath.Clean(relativeParent), string(filepath.Separator)) {
 		child, err := current.openExistingChildDirectory(component)
 		if err != nil {
-			_ = current.close()
+			if err := current.close(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return nil, "", err
 		}
-		_ = current.close()
+		if err := current.close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		current = child
 	}
 	return current, name, nil
@@ -460,10 +477,11 @@ func openWindowsPathMetadataNoFollow(
 			handle,
 			&information,
 		); err != nil {
-		_ =
-			windows.CloseHandle(
-				handle,
-			)
+		if err := windows.CloseHandle(
+			handle,
+		); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 
 		return windows.InvalidHandle,
 			empty,
@@ -708,15 +726,17 @@ func safeCreateFilePlatformPathLegacy(
 			handle,
 			&information,
 		); err != nil {
-		_ =
-			windows.CloseHandle(
-				handle,
-			)
+		if err := windows.CloseHandle(
+			handle,
+		); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 
-		_ =
-			os.Remove(
-				path,
-			)
+		if err := os.Remove(
+			path,
+		); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 
 		return nil,
 			fmt.Errorf(
@@ -732,15 +752,17 @@ func safeCreateFilePlatformPathLegacy(
 			information,
 			false,
 		); err != nil {
-		_ =
-			windows.CloseHandle(
-				handle,
-			)
+		if err := windows.CloseHandle(
+			handle,
+		); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 
-		_ =
-			os.Remove(
-				path,
-			)
+		if err := os.Remove(
+			path,
+		); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 
 		return nil, err
 	}

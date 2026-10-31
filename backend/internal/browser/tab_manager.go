@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	amitialog "log"
 )
 
 type productionTabManager struct {
@@ -153,7 +154,7 @@ func (m *productionTabManager) CloseTab(ctx context.Context, sessionID BrowserSe
 	if err != nil {
 		return &BrowserError{
 			Code:    ErrCodeSessionStale,
-			Message: "session is stale",
+				Message: "session is stale: " + err.Error(),
 		}
 	}
 
@@ -218,7 +219,7 @@ func (m *productionTabManager) GetTab(ctx context.Context, sessionID BrowserSess
 	if err != nil {
 		return BrowserTabInfo{}, &BrowserError{
 			Code:    ErrCodeSessionStale,
-			Message: "session is stale",
+				Message: "session is stale: " + err.Error(),
 		}
 	}
 
@@ -254,7 +255,7 @@ func (m *productionTabManager) ListTabs(ctx context.Context, sessionID BrowserSe
 	if err != nil {
 		return nil, &BrowserError{
 			Code:    ErrCodeSessionStale,
-			Message: "session is stale",
+				Message: "session is stale: " + err.Error(),
 		}
 	}
 
@@ -296,7 +297,7 @@ func (m *productionTabManager) ActivateTab(ctx context.Context, sessionID Browse
 	if err != nil {
 		return &BrowserError{
 			Code:    ErrCodeSessionStale,
-			Message: "session is stale",
+				Message: "session is stale: " + err.Error(),
 		}
 	}
 
@@ -338,7 +339,9 @@ func (m *productionTabManager) CloseAllForSession(ctx context.Context, sessionID
 		if record.info.State == TabStateClosed {
 			continue
 		}
-		_ = m.backend.CloseTarget(ctx, record.targetID)
+		if err := m.backend.CloseTarget(ctx, record.targetID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return nil
 }
@@ -379,7 +382,7 @@ func (m *productionTabManager) ResolveTab(ctx context.Context, sessionID Browser
 	if err != nil {
 		return ResolvedBrowserTab{}, &BrowserError{
 			Code:    ErrCodeSessionStale,
-			Message: "session is stale",
+				Message: "session is stale: " + err.Error(),
 		}
 	}
 

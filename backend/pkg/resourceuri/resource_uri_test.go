@@ -69,6 +69,22 @@ func TestParseNormalizesResourcePath(t *testing.T) {
 	}
 }
 
+func TestParsePreservesPathCaseAndNormalizesRoot(t *testing.T) {
+	u, err := Parse("AMITIA://DATA/Models/Story15M-Q4_0.GGUF")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.Root() != ResourceRootData {
+		t.Fatalf("Root()=%s", u.Root())
+	}
+	if u.RelativePath() != "Models/Story15M-Q4_0.GGUF" {
+		t.Fatalf("RelativePath()=%q", u.RelativePath())
+	}
+	if got := u.String(); got != "amitia://data/Models/Story15M-Q4_0.GGUF" {
+		t.Fatalf("String()=%q", got)
+	}
+}
+
 func TestParseRejectsInvalidScheme(t *testing.T) {
 	bad := []string{
 		"file:///etc/passwd",

@@ -196,7 +196,7 @@ func (h *Handler) TaskMaintenanceConfig(c *gin.Context) {
 func (h *Handler) UpdateTaskMaintenanceConfig(c *gin.Context) {
 	var request TaskMaintenanceUpdate
 	if err := c.ShouldBindJSON(&request); err != nil {
-		util.ErrorResponse(c, http.StatusBadRequest, "任务配置格式错误", nil)
+		util.ErrorResponse(c, http.StatusBadRequest, err.Error(), nil)
 		return
 	}
 	value, err := h.service.UpdateTaskMaintenanceConfig(c.Request.Context(), request)

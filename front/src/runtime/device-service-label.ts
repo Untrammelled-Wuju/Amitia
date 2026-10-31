@@ -34,7 +34,8 @@ export function deviceUnavailableNotice(mode: DeviceServiceMode): string {
 export async function currentDeviceServiceMode(): Promise<DeviceServiceMode> {
   try {
     return (await getDeploymentConfig()).mode;
-  } catch {
-    return "local";
+  } catch (error) {
+  console.error("[original-error]", error);
+return "local";
   }
 }

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/platform/process"
+	amitialog "log"
 )
 
 var (
@@ -579,14 +580,22 @@ func prepareLinuxSlirpLaunch(bwrap string, wrapped []string, executable string, 
 		return sandboxLaunchPlan{}, fmt.Errorf("%w: create slirp resolver config: %v", ErrNetworkSandboxUnavailable, err)
 	}
 	resolverPath := resolverFile.Name()
-	removeResolver := func() { _ = os.Remove(resolverPath) }
+	removeResolver := func() {
+		if err := os.Remove(resolverPath); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+	}
 	if chmodErr := resolverFile.Chmod(0o600); chmodErr != nil {
-		_ = resolverFile.Close()
+		if err := resolverFile.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		removeResolver()
 		return sandboxLaunchPlan{}, fmt.Errorf("%w: protect slirp resolver config: %v", ErrNetworkSandboxUnavailable, chmodErr)
 	}
 	if _, writeErr := resolverFile.WriteString("nameserver 10.0.2.3\noptions ndots:0\n"); writeErr != nil {
-		_ = resolverFile.Close()
+		if err := resolverFile.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		removeResolver()
 		return sandboxLaunchPlan{}, fmt.Errorf("%w: write slirp resolver config: %v", ErrNetworkSandboxUnavailable, writeErr)
 	}
@@ -603,8 +612,12 @@ func prepareLinuxSlirpLaunch(bwrap string, wrapped []string, executable string, 
 	}
 	infoRead, infoWrite, err := os.Pipe()
 	if err != nil {
-		_ = blockRead.Close()
-		_ = blockWrite.Close()
+		if err := blockRead.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := blockWrite.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		removeResolver()
 		return sandboxLaunchPlan{}, fmt.Errorf("%w: create bwrap info pipe: %v", ErrNetworkSandboxUnavailable, err)
 	}
@@ -613,7 +626,9 @@ func prepareLinuxSlirpLaunch(bwrap string, wrapped []string, executable string, 
 	cleanup := func() {
 		for _, file := range all {
 			if file != nil {
-				_ = file.Close()
+				if err := file.Close(); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 		}
 		removeResolver()
@@ -636,8 +651,12 @@ func prepareLinuxSlirpLaunch(bwrap string, wrapped []string, executable string, 
 	plan.AfterStart = func(ctx context.Context, sandboxCmd *exec.Cmd) error {
 		// The child now owns duplicate fd 3/4 handles. Drop the host copies that
 		// are not used for coordination so EOF/readiness semantics remain strict.
-		_ = blockRead.Close()
-		_ = infoWrite.Close()
+		if err := blockRead.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := infoWrite.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 
 		var info bubblewrapInfo
 		decodeCh := make(chan error, 1)
@@ -646,7 +665,9 @@ func prepareLinuxSlirpLaunch(bwrap string, wrapped []string, executable string, 
 		}()
 		select {
 		case decodeErr := <-decodeCh:
-			_ = infoRead.Close()
+			if err := infoRead.Close(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			if decodeErr != nil || info.ChildPID <= 0 {
 				if decodeErr == nil {
 					decodeErr = errors.New("missing child-pid")
@@ -654,10 +675,14 @@ func prepareLinuxSlirpLaunch(bwrap string, wrapped []string, executable string, 
 				return fmt.Errorf("%w: read bubblewrap namespace identity: %v", ErrNetworkSandboxUnavailable, decodeErr)
 			}
 		case <-time.After(10 * time.Second):
-			_ = infoRead.Close()
+			if err := infoRead.Close(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return fmt.Errorf("%w: timed out waiting for bubblewrap namespace identity", ErrNetworkSandboxUnavailable)
 		case <-ctx.Done():
-			_ = infoRead.Close()
+			if err := infoRead.Close(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return fmt.Errorf("%w: sandbox startup canceled: %v", ErrNetworkSandboxUnavailable, ctx.Err())
 		}
 
@@ -680,10 +705,14 @@ func prepareLinuxSlirpLaunch(bwrap string, wrapped []string, executable string, 
 		slirpCmd.ExtraFiles = []*os.File{readyWrite}
 		process.ConfigureProcess(slirpCmd)
 		if startErr := slirpCmd.Start(); startErr != nil {
-			_ = readyWrite.Close()
+			if err := readyWrite.Close(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return fmt.Errorf("%w: start slirp4netns: %v", ErrNetworkSandboxUnavailable, startErr)
 		}
-		_ = readyWrite.Close()
+		if err := readyWrite.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 
 		readyCh := make(chan error, 1)
 		go func() {
@@ -694,28 +723,46 @@ func prepareLinuxSlirpLaunch(bwrap string, wrapped []string, executable string, 
 		select {
 		case readyErr := <-readyCh:
 			if readyErr != nil {
-				_ = slirpCmd.Process.Kill()
-				_ = slirpCmd.Wait()
+				if err := slirpCmd.Process.Kill(); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
+				if err := slirpCmd.Wait(); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 				return fmt.Errorf("%w: slirp4netns failed before readiness: %v", ErrNetworkSandboxUnavailable, readyErr)
 			}
 		case <-time.After(10 * time.Second):
-			_ = slirpCmd.Process.Kill()
-			_ = slirpCmd.Wait()
+			if err := slirpCmd.Process.Kill(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
+			if err := slirpCmd.Wait(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return fmt.Errorf("%w: timed out waiting for slirp4netns readiness", ErrNetworkSandboxUnavailable)
 		case <-ctx.Done():
-			_ = slirpCmd.Process.Kill()
-			_ = slirpCmd.Wait()
+			if err := slirpCmd.Process.Kill(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
+			if err := slirpCmd.Wait(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return fmt.Errorf("%w: slirp4netns startup canceled: %v", ErrNetworkSandboxUnavailable, ctx.Err())
 		}
 
 		// Wait has exactly one owner. The sidecar is terminated by CommandContext
 		// when the plugin lifetime ends, and Pdeathsig also covers abrupt host exit.
-		go func() { _ = slirpCmd.Wait() }()
+		go func() {
+			if err := slirpCmd.Wait(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
+		}()
 
 		if _, writeErr := blockWrite.Write([]byte{1}); writeErr != nil {
 			return fmt.Errorf("%w: release bubblewrap network barrier: %v", ErrNetworkSandboxUnavailable, writeErr)
 		}
-		_ = blockWrite.Close()
+		if err := blockWrite.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil
 	}
 	return plan, nil

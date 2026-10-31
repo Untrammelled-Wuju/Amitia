@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	amitialog "log"
 )
 
 type MisfireService struct {
@@ -228,5 +229,7 @@ func (m *MisfireService) recordMisfire(ctx context.Context, def *ScheduleContrib
 		SkippedCount: skippedCount,
 		Detail:       fmt.Sprintf("missed %d executions", detection.MissedCount),
 	}
-	_ = m.store.PutMisfire(ctx, record)
+	if err := m.store.PutMisfire(ctx, record); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }

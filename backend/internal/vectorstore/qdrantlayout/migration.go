@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	amitialog "log"
 	"os"
 	"path/filepath"
 	"time"
@@ -124,12 +125,16 @@ func (m *migrator) migrateStorage(ctx context.Context, journal *MigrationJournal
 			journal.StorageState = MigrationStateNotRequired
 			return nil
 		}
-		_ = os.Remove(storage)
+		if err := os.Remove(storage); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 
 	journal.StorageSource = legacyStorage
 	journal.StorageTarget = storage
-	_ = m.writeJournal(journal, journalPath)
+	if err := m.writeJournal(journal, journalPath); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 
 	stagingDir := filepath.Join(m.layout.DataRoot, ".storage-migrating")
 	if _, err := os.Stat(stagingDir); err == nil {
@@ -138,20 +143,28 @@ func (m *migrator) migrateStorage(ctx context.Context, journal *MigrationJournal
 	}
 
 	journal.StorageState = MigrationStateCopying
-	_ = m.writeJournal(journal, journalPath)
+	if err := m.writeJournal(journal, journalPath); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 
 	if err := m.opts.Copier.CopyAndVerify(ctx, legacyStorage, stagingDir); err != nil {
 		journal.StorageState = MigrationStateFailed
-		_ = m.writeJournal(journal, journalPath)
+		if err := m.writeJournal(journal, journalPath); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return newMigrationFailed("storage-copy", err)
 	}
 
 	journal.StorageState = MigrationStateVerified
-	_ = m.writeJournal(journal, journalPath)
+	if err := m.writeJournal(journal, journalPath); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 
 	if err := os.Rename(stagingDir, storage); err != nil {
 		journal.StorageState = MigrationStateFailed
-		_ = m.writeJournal(journal, journalPath)
+		if err := m.writeJournal(journal, journalPath); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return newMigrationFailed("storage-rename", err)
 	}
 
@@ -190,12 +203,16 @@ func (m *migrator) migrateSnapshots(ctx context.Context, journal *MigrationJourn
 			journal.SnapshotsState = MigrationStateNotRequired
 			return nil
 		}
-		_ = os.Remove(snapshots)
+		if err := os.Remove(snapshots); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 
 	journal.SnapshotsSource = legacy
 	journal.SnapshotsTarget = snapshots
-	_ = m.writeJournal(journal, journalPath)
+	if err := m.writeJournal(journal, journalPath); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 
 	stagingDir := filepath.Join(m.layout.DataRoot, ".snapshots-migrating")
 	if _, err := os.Stat(stagingDir); err == nil {
@@ -204,20 +221,28 @@ func (m *migrator) migrateSnapshots(ctx context.Context, journal *MigrationJourn
 	}
 
 	journal.SnapshotsState = MigrationStateCopying
-	_ = m.writeJournal(journal, journalPath)
+	if err := m.writeJournal(journal, journalPath); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 
 	if err := m.opts.Copier.CopyAndVerify(ctx, legacy, stagingDir); err != nil {
 		journal.SnapshotsState = MigrationStateFailed
-		_ = m.writeJournal(journal, journalPath)
+		if err := m.writeJournal(journal, journalPath); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return newMigrationFailed("snapshots-copy", err)
 	}
 
 	journal.SnapshotsState = MigrationStateVerified
-	_ = m.writeJournal(journal, journalPath)
+	if err := m.writeJournal(journal, journalPath); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 
 	if err := os.Rename(stagingDir, snapshots); err != nil {
 		journal.SnapshotsState = MigrationStateFailed
-		_ = m.writeJournal(journal, journalPath)
+		if err := m.writeJournal(journal, journalPath); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return newMigrationFailed("snapshots-rename", err)
 	}
 

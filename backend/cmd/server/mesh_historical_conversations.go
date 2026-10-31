@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	amitialog "log"
 )
 
 type meshHistoricalPosition struct {
@@ -98,7 +99,9 @@ func (p *meshLocalDataPort) HistoricalConversationPage(ctx context.Context, scop
 			var id, updated string
 			var raw []byte
 			if err := rows.Scan(&id, &updated, &raw); err != nil {
-				_ = rows.Close()
+				if err := rows.Close(); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 				return result, err
 			}
 			count++
@@ -106,13 +109,17 @@ func (p *meshLocalDataPort) HistoricalConversationPage(ctx context.Context, scop
 				break
 			}
 			if err := appendRow(raw); err != nil {
-				_ = rows.Close()
+				if err := rows.Close(); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 				return result, err
 			}
 			cursor.Owned.ID, cursor.Owned.UpdatedAt = id, updated
 		}
 		err = rows.Err()
-		_ = rows.Close()
+		if err := rows.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		if err != nil {
 			return result, err
 		}

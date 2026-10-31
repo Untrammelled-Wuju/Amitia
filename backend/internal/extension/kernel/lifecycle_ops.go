@@ -376,7 +376,9 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 
 	if err := r.reconcileGameHostExtension(ctx, extensionID); err != nil {
 		tx.rollback(ctx)
-		_ = r.reconcileGameHostExtension(ctx, extensionID)
+		if err := r.reconcileGameHostExtension(ctx, extensionID); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 		r.logEnableStep(operationID, extensionID, "reconcile_game_host", "failed", err)
 		r.persistLifecycleStep(ctx, operationID, "reconcile_game_host", LifecycleStepFailed, err)
 		r.updateLifecycleOperationStatus(ctx, operationID, LifecycleOperationCompensating, "reconcile_game_host", err)
@@ -400,7 +402,9 @@ func (tx *enableTransaction) rollback(ctx context.Context) {
 	var rollbackErrs []error
 
 	if tx.sagaRepo != nil {
-		_ = tx.sagaRepo.UpdateOperationStatus(ctx, tx.operationID, LifecycleOperationCompensating, "rollback", "")
+		if err := tx.sagaRepo.UpdateOperationStatus(ctx, tx.operationID, LifecycleOperationCompensating, "rollback", ""); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 	}
 
 	if tx.uiRegistered {
@@ -471,12 +475,16 @@ func (tx *enableTransaction) rollback(ctx context.Context) {
 		tx.runtime.recordLifecycleOperation(ctx, tx.extID, tx.operationID, "enable_rollback_failed", rollbackErrs)
 		tx.runtime.logEnableStep(tx.operationID, tx.extensionID, "rollback", "failed", fmt.Errorf("%d errors: %v", len(rollbackErrs), rollbackErrs))
 		if tx.sagaRepo != nil {
-			_ = tx.sagaRepo.UpdateOperationStatus(ctx, tx.operationID, LifecycleOperationRequiresRecovery, "rollback", fmt.Sprintf("%d errors", len(rollbackErrs)))
+			if err := tx.sagaRepo.UpdateOperationStatus(ctx, tx.operationID, LifecycleOperationRequiresRecovery, "rollback", fmt.Sprintf("%d errors", len(rollbackErrs))); err != nil {
+				log.Printf("[original-error] %v", err)
+			}
 		}
 	} else {
 		tx.runtime.logEnableStep(tx.operationID, tx.extensionID, "rollback", "succeeded", nil)
 		if tx.sagaRepo != nil {
-			_ = tx.sagaRepo.UpdateOperationStatus(ctx, tx.operationID, LifecycleOperationFailed, "rollback", "")
+			if err := tx.sagaRepo.UpdateOperationStatus(ctx, tx.operationID, LifecycleOperationFailed, "rollback", ""); err != nil {
+				log.Printf("[original-error] %v", err)
+			}
 		}
 	}
 }
@@ -494,7 +502,7 @@ func (r *Runtime) recordLifecycleOperation(ctx context.Context, extID domain.Ext
 		}
 		errMsg = fmt.Sprintf("%v", parts)
 	}
-	_ = r.container.OperationRepository.PutOperation(ctx, sqlite.Operation{
+	if err := r.container.OperationRepository.PutOperation(ctx, sqlite.Operation{
 		OperationID:   operationID,
 		OperationType: opType,
 		ExtensionID:   extID,
@@ -502,7 +510,9 @@ func (r *Runtime) recordLifecycleOperation(ctx context.Context, extID domain.Ext
 		ErrorMessage:  errMsg,
 		StartedAt:     now,
 		FinishedAt:    &now,
-	})
+	}); err != nil {
+		log.Printf("[original-error] %v", err)
+	}
 }
 
 func (r *Runtime) markRequiresRecovery(ctx context.Context, extID domain.ExtensionID, inst domain.ExtensionInstallation) {
@@ -631,18 +641,26 @@ func (r *Runtime) RecoverLifecycleOperations(ctx context.Context) error {
 		case LifecycleOperationRunning:
 			if op.OperationType == "enable" {
 				if lastCompletedStep == "register_ui" {
-					_ = r.sagaRepo.UpdateOperationStatus(ctx, op.OperationID, LifecycleOperationCompleted, "register_ui", "")
+					if err := r.sagaRepo.UpdateOperationStatus(ctx, op.OperationID, LifecycleOperationCompleted, "register_ui", ""); err != nil {
+						log.Printf("[original-error] %v", err)
+					}
 					continue
 				}
 				extInst, instErr := r.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(op.ExtensionID))
 				if instErr != nil {
-					_ = r.sagaRepo.UpdateOperationStatus(ctx, op.OperationID, LifecycleOperationRequiresRecovery, lastCompletedStep, instErr.Error())
+					if err := r.sagaRepo.UpdateOperationStatus(ctx, op.OperationID, LifecycleOperationRequiresRecovery, lastCompletedStep, instErr.Error()); err != nil {
+						log.Printf("[original-error] %v", err)
+					}
 					continue
 				}
 				if extInst.EnablementState == domain.EnablementEnabled {
-					_ = r.sagaRepo.UpdateOperationStatus(ctx, op.OperationID, LifecycleOperationCompleted, lastCompletedStep, "")
+					if err := r.sagaRepo.UpdateOperationStatus(ctx, op.OperationID, LifecycleOperationCompleted, lastCompletedStep, ""); err != nil {
+						log.Printf("[original-error] %v", err)
+					}
 				} else {
-					_ = r.sagaRepo.UpdateOperationStatus(ctx, op.OperationID, LifecycleOperationRequiresRecovery, lastCompletedStep, "extension not enabled after recovery")
+					if err := r.sagaRepo.UpdateOperationStatus(ctx, op.OperationID, LifecycleOperationRequiresRecovery, lastCompletedStep, "extension not enabled after recovery"); err != nil {
+						log.Printf("[original-error] %v", err)
+					}
 				}
 			}
 		case LifecycleOperationCompensating, LifecycleOperationRequiresRecovery:
@@ -650,7 +668,9 @@ func (r *Runtime) RecoverLifecycleOperations(ctx context.Context) error {
 				ExtensionID:     domain.ExtensionID(op.ExtensionID),
 				EnablementState: domain.EnablementRequiresRecovery,
 			})
-			_ = r.sagaRepo.UpdateOperationStatus(ctx, op.OperationID, LifecycleOperationRequiresRecovery, lastCompletedStep, "")
+			if err := r.sagaRepo.UpdateOperationStatus(ctx, op.OperationID, LifecycleOperationRequiresRecovery, lastCompletedStep, ""); err != nil {
+				log.Printf("[original-error] %v", err)
+			}
 		}
 	}
 	return nil
@@ -951,7 +971,9 @@ func (r *Runtime) Uninstall(ctx context.Context, extensionID string) error {
 	}
 	if version != "" {
 		if parsed, pErr := domain.ParseVersion(version); pErr == nil {
-			_ = r.container.DefinitionRepository.DeleteExtension(ctx, extID, parsed)
+			if err := r.container.DefinitionRepository.DeleteExtension(ctx, extID, parsed); err != nil {
+				log.Printf("[original-error] %v", err)
+			}
 		}
 	}
 

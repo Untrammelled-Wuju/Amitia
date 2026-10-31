@@ -100,9 +100,9 @@ const (
 )
 
 type StrategyResult struct {
-	Outcome  ExecutionOutcome
-	Result   InteractionResult
-	Error    error
+	Outcome ExecutionOutcome
+	Result  InteractionResult
+	Error   error
 }
 
 func (s StrategyResult) CanFallback() bool {

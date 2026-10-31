@@ -60,6 +60,7 @@
     "libstdc++.so",
     "libgcc_s.so",
     "libatomic.so",
+    "libgomp.so",
     "libpthread.so",
     "libdl.so",
     "librt.so",

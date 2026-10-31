@@ -132,8 +132,9 @@ function fmtDay(d: string) {
       day: "numeric",
       weekday: "short",
     }).format(new Date(d));
-  } catch {
-    return d;
+  } catch (error) {
+  console.error("[original-error]", error);
+return d;
   }
 }
 
@@ -145,8 +146,9 @@ function fmtTime(d: string) {
       minute: "2-digit",
       hour12: false,
     }).format(new Date(d));
-  } catch {
-    return "";
+  } catch (error) {
+  console.error("[original-error]", error);
+return "";
   }
 }
 

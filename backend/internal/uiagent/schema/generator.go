@@ -80,9 +80,9 @@ func (g *SchemaUIGenerator) Generate(
 		textProps, _ := json.Marshal(map[string]any{"text": description})
 		children = []SchemaUINode{
 			{
-				Type:   schema_ui.NodeText,
-				ID:     generateNodeID("text"),
-				Props:  textProps,
+				Type:  schema_ui.NodeText,
+				ID:    generateNodeID("text"),
+				Props: textProps,
 			},
 		}
 	}

@@ -107,7 +107,9 @@ class CharacterAvatar extends ConsumerWidget {
             fit: BoxFit.cover,
             errorBuilder: (_, __, ___) => fallback,
           );
-        } catch (_) {}
+        } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
       } else if (value.startsWith('https://') || value.startsWith('http://')) {
         image = Image.network(
           value,

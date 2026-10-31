@@ -208,8 +208,9 @@ class SchemaUIBridgeController {
   Future<void> _safeRevoke(String id) async {
     try {
       await _service.revokeSchemaUISession(id);
-    } catch (_) {
-      // Revocation is best effort. The server also expires abandoned UI sessions.
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+// Revocation is best effort. The server also expires abandoned UI sessions.
     }
   }
 

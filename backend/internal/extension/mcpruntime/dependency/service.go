@@ -10,6 +10,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/mcpruntime"
 	"github.com/u-ai/backend/internal/scriptruntime/commandenv"
 	"gorm.io/gorm"
+	amitialog "log"
 )
 
 type ConnectionManager interface {
@@ -142,14 +143,20 @@ func (s *Service) Install(ctx context.Context, request InstallRequest) (InstallR
 	linked := []mcp.DependencyLink{}
 	fail := func(code string, cause error) (InstallResult, error) {
 		result.Status = "failed"
-		_ = s.repository.UpdateOperation(context.Background(), operation.ID, "failed", result, code, safeMessage(cause))
+		if err := s.repository.UpdateOperation(context.Background(), operation.ID, "failed", result, code, safeMessage(cause)); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		for _, link := range linked {
-			_ = s.repository.DeleteDependencyLink(context.Background(), link.AgentSkillExtensionID, link.ServerID, link.DependencyName)
+			if err := s.repository.DeleteDependencyLink(context.Background(), link.AgentSkillExtensionID, link.ServerID, link.DependencyName); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		for _, id := range created {
 			count, _ := s.repository.ServerDependencyReferenceCount(context.Background(), id)
 			if count == 0 {
-				_ = s.repository.DeleteServer(context.Background(), id)
+				if err := s.repository.DeleteServer(context.Background(), id); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 		}
 		return result, cause
@@ -234,7 +241,9 @@ func (s *Service) Install(ctx context.Context, request InstallRequest) (InstallR
 	}
 	if len(result.AuthorizationServerIDs) > 0 {
 		result.Status = "awaiting_authorization"
-		_ = s.repository.UpdateOperation(ctx, operation.ID, "awaiting_authorization", result, "", "")
+		if err := s.repository.UpdateOperation(ctx, operation.ID, "awaiting_authorization", result, "", ""); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return result, nil
 	}
 	if len(result.Missing) > 0 {

@@ -8,7 +8,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       <span class="card-title">灾难恢复备份</span>
     </template>
     <div class="backup-create-grid">
-      <el-input v-model="passphrase" type="password" show-password autocomplete="new-password" placeholder="可选口令，设置后归档加密" />
+      <el-input v-model="passphrase" type="password" show-password autocomplete="new-password" placeholder="备份口令（至少 8 位）" />
       <el-input v-model="passphraseConfirm" type="password" show-password autocomplete="new-password" placeholder="再次输入口令" />
       <el-button type="primary" :loading="creating" :disabled="!canCreate" @click="createBackup">创建完整备份</el-button>
     </div>
@@ -53,7 +53,7 @@ const backups = ref<DataPortabilityBackup[]>([]);
 const passphrase = ref("");
 const passphraseConfirm = ref("");
 
-const canCreate = computed(() => !passphrase.value || (passphrase.value.length >= 8 && passphrase.value === passphraseConfirm.value));
+const canCreate = computed(() => passphrase.value.length >= 8 && passphrase.value === passphraseConfirm.value);
 
 async function loadBackups() {
   loaded.value = false;
@@ -88,8 +88,9 @@ async function removeBackup(backup: DataPortabilityBackup) {
       confirmButtonText: "删除",
       cancelButtonText: "取消",
     });
-  } catch {
-    return;
+  } catch (error) {
+  console.error("[original-error]", error);
+return;
   }
   try {
     await deleteDataPortabilityBackup(backup.name);

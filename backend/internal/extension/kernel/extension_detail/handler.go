@@ -3,6 +3,7 @@ package extension_detail
 import (
 	"context"
 	"encoding/json"
+	amitialog "log"
 	"net/http"
 	"strings"
 )
@@ -71,7 +72,9 @@ func parseSubResource(path, extensionID string) string {
 func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func writeError(w http.ResponseWriter, status int, err error) {
@@ -81,7 +84,9 @@ func writeError(w http.ResponseWriter, status int, err error) {
 	if err != nil {
 		msg = err.Error()
 	}
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
+	if err := json.NewEncoder(w).Encode(map[string]string{"error": msg}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 var _ = context.Background

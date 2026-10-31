@@ -12,6 +12,7 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+	amitialog "log"
 )
 
 const supervisorFlag = "--supervise"
@@ -73,16 +74,22 @@ func runSupervisor(args []string) error {
 	defer windows.CloseHandle(processInfo.Process)
 
 	if err := windows.AssignProcessToJobObject(job, processInfo.Process); err != nil {
-		_ = windows.TerminateProcess(processInfo.Process, 1)
+		if err := windows.TerminateProcess(processInfo.Process, 1); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return err
 	}
 	if _, err := windows.ResumeThread(processInfo.Thread); err != nil {
-		_ = windows.TerminateJobObject(job, 1)
+		if err := windows.TerminateJobObject(job, 1); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return err
 	}
 
 	fmt.Printf("AMITIA_CORE_PID=%d\n", processInfo.ProcessId)
-	_ = os.Stdout.Sync()
+	if err := os.Stdout.Sync(); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 
 	terminate := make(chan struct{}, 1)
 	go func() {
@@ -106,19 +113,25 @@ func runSupervisor(args []string) error {
 
 	exited := make(chan struct{}, 1)
 	go func() {
-		_, _ = windows.WaitForSingleObject(processInfo.Process, windows.INFINITE)
+		if _, err := windows.WaitForSingleObject(processInfo.Process, windows.INFINITE); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		exited <- struct{}{}
 	}()
 
 	select {
 	case <-terminate:
-		_ = windows.TerminateJobObject(job, 1)
+		if err := windows.TerminateJobObject(job, 1); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		<-exited
 	case <-exited:
 	}
 
 	var exitCode uint32
-	_ = windows.GetExitCodeProcess(processInfo.Process, &exitCode)
+	if err := windows.GetExitCodeProcess(processInfo.Process, &exitCode); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	if exitCode != 0 {
 		return fmt.Errorf("core exited with code %d", exitCode)
 	}

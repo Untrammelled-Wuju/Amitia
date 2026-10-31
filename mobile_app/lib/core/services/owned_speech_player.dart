@@ -86,8 +86,9 @@ class OwnedSpeechPlayer {
         unawaited(
           audio
               .assertCurrent()
-              .catchError((Object _) async {
-                if (generation == _generation) await stop();
+              .catchError((Object error, StackTrace stackTrace) async {
+  print("[original-error] $error\n$stackTrace");
+if (generation == _generation) await stop();
               })
               .whenComplete(() => _checking = false),
         );
@@ -111,8 +112,9 @@ class OwnedSpeechPlayer {
         onEnded?.call();
         unawaited(stop());
       });
-    } catch (_) {
-      if (generation == _generation) await stop();
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+if (generation == _generation) await stop();
       if (directory != null && await directory.exists()) {
         await directory.delete(recursive: true);
       }
@@ -143,12 +145,16 @@ class OwnedSpeechPlayer {
           'operation': 'media.audio.stop',
           'payload': <String, dynamic>{},
         });
-      } catch (_) {}
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
     }
     if (directory != null) {
       try {
         if (await directory.exists()) await directory.delete(recursive: true);
-      } catch (_) {}
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
     }
   }
 

@@ -14,8 +14,9 @@ export function fmtShort(d: string): string {
   if (!d) return "";
   try {
     return new Date(d).toLocaleDateString("zh-CN");
-  } catch {
-    return d;
+  } catch (error) {
+  console.error("[original-error]", error);
+return d;
   }
 }
 
@@ -23,8 +24,9 @@ export function fmtTime(d: string): string {
   if (!d) return "";
   try {
     return new Date(d).toLocaleString("zh-CN");
-  } catch {
-    return d;
+  } catch (error) {
+  console.error("[original-error]", error);
+return d;
   }
 }
 

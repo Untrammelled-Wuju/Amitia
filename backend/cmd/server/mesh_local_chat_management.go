@@ -18,6 +18,7 @@ import (
 	"github.com/u-ai/backend/internal/chat/importbatch"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"gorm.io/gorm"
+	amitialog "log"
 )
 
 type ownedChatManagementRecord struct {
@@ -86,7 +87,9 @@ func (p *meshLocalDataPort) chatManagementRecords(ctx context.Context, role stri
 	for _, conversation := range conversations {
 		raw, _ := json.Marshal(conversation)
 		var body map[string]any
-		_ = json.Unmarshal(raw, &body)
+		if err := json.Unmarshal(raw, &body); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		records = append(records, ownedChatManagementRecord{ID: conversation.ID, Kind: "conversation", Legacy: true, Revision: conversation.Revision, Body: body})
 		var messages []chat.Message
 		if err := legacyDB.Where("conversation_id=? AND character_id=? AND deleted_at IS NULL", conversation.ID, role).Order("id").Find(&messages).Error; err != nil {
@@ -95,7 +98,9 @@ func (p *meshLocalDataPort) chatManagementRecords(ctx context.Context, role stri
 		for _, message := range messages {
 			raw, _ := json.Marshal(message)
 			var body map[string]any
-			_ = json.Unmarshal(raw, &body)
+			if err := json.Unmarshal(raw, &body); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			records = append(records, ownedChatManagementRecord{ID: message.ID, Kind: "message", Legacy: true, Revision: message.Revision, Body: body})
 		}
 		var otherRoles int64
@@ -110,7 +115,9 @@ func (p *meshLocalDataPort) chatManagementRecords(ctx context.Context, role stri
 			for _, summary := range summaries {
 				raw, _ := json.Marshal(summary)
 				var body map[string]any
-				_ = json.Unmarshal(raw, &body)
+				if err := json.Unmarshal(raw, &body); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 				records = append(records, ownedChatManagementRecord{ID: fmt.Sprint(summary.ID), Kind: "summary", Legacy: true, Body: body})
 			}
 		}

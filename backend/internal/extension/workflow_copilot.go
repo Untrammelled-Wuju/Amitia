@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
+	amitialog "log"
 )
 
 const maxWorkflowAIInstructionBytes = 20_000
@@ -71,7 +72,9 @@ func (api *WorkflowAPI) aiRepair(c *gin.Context) {
 		return
 	}
 	var req workflowAIRequest
-	_ = c.ShouldBindJSON(&req)
+	if err := c.ShouldBindJSON(&req); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	instruction := strings.TrimSpace(req.Instruction)
 	if instruction == "" {
 		instruction = "检查当前工作流并修复所有能够确定的 DAG、数据引用、节点配置和可执行性问题；不要改变原始业务目标。"
@@ -90,7 +93,9 @@ func (api *WorkflowAPI) aiExplain(c *gin.Context) {
 		return
 	}
 	var req workflowAIRequest
-	_ = c.ShouldBindJSON(&req)
+	if err := c.ShouldBindJSON(&req); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	instruction := strings.TrimSpace(req.Instruction)
 	if instruction == "" {
 		instruction = "解释这个工作流做什么、数据怎样流动、可能失败在哪里，以及有哪些明确可执行的改进建议。"

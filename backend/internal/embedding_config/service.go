@@ -169,7 +169,7 @@ func (s *service) TestConnection(id int) (map[string]interface{}, error) {
 	defer resp.Body.Close()
 	rb, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != 200 {
-		return map[string]interface{}{"success": false, "message": fmt.Sprintf("API返回 %d: %s", resp.StatusCode, truncate(string(rb), 300)), "latency": latency}, nil
+		return map[string]interface{}{"success": false, "message": fmt.Sprintf("API返回 %d: %s", resp.StatusCode, string(rb)), "latency": latency}, nil
 	}
 	return map[string]interface{}{"success": true, "message": "连接成功", "latency": latency}, nil
 }

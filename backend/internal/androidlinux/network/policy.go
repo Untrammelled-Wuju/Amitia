@@ -22,8 +22,8 @@ type Policy struct {
 	AllowPrivateNetwork bool
 	AllowLoopback       bool
 
-	DenyLinkLocal bool
-	DenyMulticast bool
+	DenyLinkLocal   bool
+	DenyMulticast   bool
 	DenyUnspecified bool
 
 	UserAgent             string

@@ -111,8 +111,9 @@ function writeJsonAtomic(file: string, value: unknown): void {
   fs.renameSync(temporary, file)
   try {
     fs.chmodSync(file, 0o600)
-  } catch {
-    return
+  } catch (error) {
+  console.error("[original-error]", error);
+return
   }
 }
 
@@ -128,8 +129,9 @@ function writeShutdownBridge(root: string): string {
   let current = ""
   try {
     current = fs.readFileSync(file, "utf8")
-  } catch {
-    current = ""
+  } catch (error) {
+  console.error("[original-error]", error);
+current = ""
   }
   if (current !== source) fs.writeFileSync(file, source, { mode: 0o600 })
   return file
@@ -153,8 +155,9 @@ function validateManagedPath(candidate: string, allowedRoot: string, label: stri
   const canonical = (value: string) => {
     try {
       return fs.realpathSync(value)
-    } catch {
-      return path.resolve(value)
+    } catch (error) {
+  console.error("[original-error]", error);
+return path.resolve(value)
     }
   }
   if (!isInside(canonical(allowedRoot), canonical(candidate))) {
@@ -168,8 +171,9 @@ export function validateNativeSnowLuma(root: string, allowedRoot = moduleDataDir
   const entryPoint = path.join(resolvedRoot, "index.mjs")
   try {
     if (!fs.statSync(entryPoint).isFile()) throw new Error()
-  } catch {
-    throw new Error(`SnowLuma 目录中缺少 index.mjs：${resolvedRoot}`)
+  } catch (error) {
+  console.error("[original-error]", error);
+throw new Error(`SnowLuma 目录中缺少 index.mjs：${resolvedRoot}`)
   }
   assertSupportedProjectNode()
   return { nodeBin: process.execPath, entryPoint }
@@ -213,8 +217,9 @@ function dockerInspect(bin: string, container: string, timeoutMs = 4000): Promis
       try {
         const parsed = JSON.parse(String(stdout || "[]")) as unknown
         resolve(Array.isArray(parsed) && parsed[0] && typeof parsed[0] === "object" ? parsed[0] as Record<string, unknown> : {})
-      } catch {
-        reject(new Error("docker inspect 输出无法解析"))
+      } catch (error) {
+  console.error("[original-error]", error);
+reject(new Error("docker inspect 输出无法解析"))
       }
     })
   })
@@ -228,11 +233,12 @@ export async function resolveReverseWebSocketTarget(config: QQPersonalConfig, pl
   let inspection: Record<string, unknown> = {}
   try {
     inspection = await dockerInspect(resolveDockerBin(config.dockerBin), config.containerName)
-  } catch {
-    const host = platform === "linux" ? "127.0.0.1" : "host.docker.internal"
+  } catch (error) {
+  console.error("[original-error]", error);
+const host = platform === "linux" ? "127.0.0.1" : "host.docker.internal"
     return {
       url: `ws://${host}:${config.listenPort}${suffix}`,
-      warning: platform === "linux" ? "无法检查容器网络；Linux 请使用 host 网络模式" : "",
+      warning: `${error instanceof Error ? error.message : String(error)}${platform === "linux" ? "；无法检查容器网络；Linux 请使用 host 网络模式" : ""}`,
     }
   }
   const hostConfig = inspection.HostConfig && typeof inspection.HostConfig === "object" ? inspection.HostConfig as Record<string, unknown> : {}
@@ -353,8 +359,9 @@ export class SnowLumaRuntimeManager {
             await this.start(config)
             this.recordError("native", `${failure}，已回滚到上一版本`)
             return
-          } catch {
-            this.recordError("native", failure)
+          } catch (error) {
+  console.error("[original-error]", error);
+this.recordError("native", failure)
             return
           }
         }
@@ -482,23 +489,26 @@ export class SnowLumaRuntimeManager {
         if (!error) return
         try {
           child.kill("SIGTERM")
-        } catch {
-          return
+        } catch (error) {
+  console.error("[original-error]", error);
+return
         }
       })
     } else {
       try {
         child.kill("SIGTERM")
-      } catch {
-        return
+      } catch (error) {
+  console.error("[original-error]", error);
+return
       }
     }
     const stopped = await exited
     if (!stopped && child.exitCode === null) {
       try {
         child.kill("SIGKILL")
-      } catch {
-        this.error = "SnowLuma 进程未能退出"
+      } catch (error) {
+  console.error("[original-error]", error);
+this.error = "SnowLuma 进程未能退出"
       }
     }
   }

@@ -56,8 +56,9 @@ export function registerRealtimeMediaHandlers(getMainWindow: () => BrowserWindow
           return;
         }
         callback({ video: preferred });
-      } catch {
-        callback({});
+      } catch (error) {
+  console.error("[original-error]", error);
+callback({});
       }
     },
     { useSystemPicker: true },

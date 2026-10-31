@@ -10,6 +10,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/runtimeidentity"
+	amitialog "log"
 )
 
 type PermissionDecisionHostPolicy func(ctx context.Context, subject EffectiveSubject, permID string) (allowed bool, handled bool)
@@ -336,22 +337,52 @@ func permissionViewRevision(subject EffectiveSubject, checks []PermissionCheck) 
 		return stable[i].Detail < stable[j].Detail
 	})
 	h := sha256.New()
-	_, _ = h.Write([]byte(subject.RuntimeID))
-	_, _ = h.Write([]byte{0})
-	_, _ = h.Write([]byte(subject.PluginID))
-	_, _ = h.Write([]byte{0})
-	_, _ = h.Write([]byte(subject.ServiceID))
-	_, _ = h.Write([]byte{0})
-	_, _ = h.Write([]byte(subject.ModuleID))
-	_, _ = h.Write([]byte{0})
-	_, _ = h.Write([]byte(subject.ExtensionID))
+	if _, err := h.Write([]byte(subject.RuntimeID)); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if _, err := h.Write([]byte{0}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if _, err := h.Write([]byte(subject.PluginID)); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if _, err := h.Write([]byte{0}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if _, err := h.Write([]byte(subject.ServiceID)); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if _, err := h.Write([]byte{0}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if _, err := h.Write([]byte(subject.ModuleID)); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if _, err := h.Write([]byte{0}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if _, err := h.Write([]byte(subject.ExtensionID)); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	for _, check := range stable {
-		_, _ = h.Write([]byte{0})
-		_, _ = h.Write([]byte(check.PermissionID))
-		_, _ = h.Write([]byte{0, byte(check.Decision), 0})
-		_, _ = h.Write([]byte(check.Reason))
-		_, _ = h.Write([]byte{0})
-		_, _ = h.Write([]byte(check.Detail))
+		if _, err := h.Write([]byte{0}); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if _, err := h.Write([]byte(check.PermissionID)); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if _, err := h.Write([]byte{0, byte(check.Decision), 0}); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if _, err := h.Write([]byte(check.Reason)); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if _, err := h.Write([]byte{0}); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if _, err := h.Write([]byte(check.Detail)); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return "prev-" + hex.EncodeToString(h.Sum(nil)[:16])
 }

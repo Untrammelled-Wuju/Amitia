@@ -5,6 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
   <div class="desktop-root" :class="{ 'is-titlebar-overlay': isOnboardingPage }">
     <DesktopTitleBar :transparent="isOnboardingPage" />
+    <AppContextMenu />
     <div class="desktop-stage">
       <UpdateDialog />
       <AgentApprovalGuard />
@@ -32,6 +33,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script setup lang="ts">
 import { computed, onErrorCaptured, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRouter, useRoute } from "vue-router";
+import { ElMessage } from "element-plus";
 import { AppLayout } from "./ui-index";
 import { apiClient } from "./ui-index";
 import PrivacyConsent from "./components/PrivacyConsent.vue";
@@ -50,7 +52,8 @@ import { normalizeStylePageId } from "./ui-runtime/stylePage";
 import RouteSurfaceHost from "./components/ui-runtime/RouteSurfaceHost.vue";
 import { useAppUIHost } from "./composables/useAppUIHost";
 import ApplicationBackground from "./components/ApplicationBackground.vue";
-import { isServiceTransitionMessage } from "./runtime/service-transition";
+import AppContextMenu from "./components/context-menu/AppContextMenu.vue";
+import { originalErrorMessage } from "./runtime/original-error";
 
 const router = useRouter();
 const route = useRoute();
@@ -105,19 +108,7 @@ watch(
 );
 
 onErrorCaptured((err, _instance, info) => {
-  const errorMessage = err instanceof Error ? err.message : String(err);
-  if (errorMessage.includes("Cannot read properties of null") || errorMessage.includes("Cannot set properties of null") || errorMessage.includes("reading 'type'") || errorMessage.includes("reading 'exposed'") || errorMessage.includes("setting '__vrv_devtools'")) {
-    console.warn("[App] suppressed unmount error:", errorMessage);
-    return false;
-  }
-  if (isServiceTransitionMessage(errorMessage)) {
-    console.warn("[App] suppressed service transition error:", errorMessage);
-    return false;
-  }
-  if (errorMessage.includes("Request failed") || errorMessage.includes("404") || errorMessage.includes("401") || errorMessage.includes("500")) {
-    console.warn("[App] API error suppressed:", errorMessage);
-    return false;
-  }
+  const errorMessage = originalErrorMessage(err);
   console.error("[App] render error:", err, info);
   renderError.value = true;
   capturedError.value = errorMessage;
@@ -131,7 +122,10 @@ onMounted(async () => {
 
   try {
     await themeRuntime.loadFromServer();
-  } catch {}
+  } catch (error) {
+    console.error("[original-error]", error);
+    ElMessage.error(originalErrorMessage(error));
+  }
 
   try {
     const onboardingRes = await apiClient.get("/api/public/onboarding/status");
@@ -140,12 +134,18 @@ onMounted(async () => {
       router.replace("/onboarding");
       return;
     }
-  } catch {}
+  } catch (error) {
+    console.error("[original-error]", error);
+    ElMessage.error(originalErrorMessage(error));
+  }
 
   extensionUIStore
     .refreshSnapshot()
     .then(() => syncProviderRoutes(router, extensionUIStore))
-    .catch(() => {});
+    .catch((error) => {
+      console.error("[original-error]", error);
+      ElMessage.error(originalErrorMessage(error));
+    });
 });
 
 watch(

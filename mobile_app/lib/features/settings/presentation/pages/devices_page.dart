@@ -469,7 +469,7 @@ class _DeviceTileState extends State<_DeviceTile> {
       if (!silent)
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('同步状态暂不可用')));
+        ).showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {
       if (mounted && identical(intent, widget.item.intent))
         setState(() => _syncLoading = false);

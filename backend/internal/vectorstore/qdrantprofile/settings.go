@@ -5,108 +5,108 @@ package qdrantprofile
 import "fmt"
 
 type Settings struct {
-	ID                       ID
-	LogLevel                 string
-	BindHost                 string
-	MaxRequestSizeMB         uint64
-	MaxWorkers               uint64
-	EnableCORS               bool
-	EnableTLS                bool
+	ID                        ID
+	LogLevel                  string
+	BindHost                  string
+	MaxRequestSizeMB          uint64
+	MaxWorkers                uint64
+	EnableCORS                bool
+	EnableTLS                 bool
 	EnableSnapshotURLRecovery bool
-	TelemetryDisabled        bool
-	ClusterEnabled           bool
-	OnDiskPayload            bool
-	UpdateConcurrency        uint64
-	WALCapacityMB            uint64
-	WALSegmentsAhead         uint64
-	MaxSearchThreads         uint64
-	OptimizerCPUBudget       int64
-	DefaultSegmentNumber     uint64
-	IndexingThresholdKB      uint64
-	FlushIntervalSeconds     uint64
-	MaxOptimizationThreads   uint64
-	MaxIndexingThreads       uint64
-	HNSWOnDisk               bool
+	TelemetryDisabled         bool
+	ClusterEnabled            bool
+	OnDiskPayload             bool
+	UpdateConcurrency         uint64
+	WALCapacityMB             uint64
+	WALSegmentsAhead          uint64
+	MaxSearchThreads          uint64
+	OptimizerCPUBudget        int64
+	DefaultSegmentNumber      uint64
+	IndexingThresholdKB       uint64
+	FlushIntervalSeconds      uint64
+	MaxOptimizationThreads    uint64
+	MaxIndexingThreads        uint64
+	HNSWOnDisk                bool
 }
 
 func CompactSettings() Settings {
 	return Settings{
-		ID:                       ProfileMobileCompact,
-		LogLevel:                 "INFO",
-		BindHost:                 "127.0.0.1",
-		MaxRequestSizeMB:         8,
-		MaxWorkers:               1,
-		EnableCORS:               false,
-		EnableTLS:                false,
+		ID:                        ProfileMobileCompact,
+		LogLevel:                  "INFO",
+		BindHost:                  "127.0.0.1",
+		MaxRequestSizeMB:          8,
+		MaxWorkers:                1,
+		EnableCORS:                false,
+		EnableTLS:                 false,
 		EnableSnapshotURLRecovery: false,
-		TelemetryDisabled:        true,
-		ClusterEnabled:           false,
-		OnDiskPayload:            true,
-		UpdateConcurrency:        1,
-		WALCapacityMB:            8,
-		WALSegmentsAhead:         0,
-		MaxSearchThreads:         1,
-		OptimizerCPUBudget:       1,
-		DefaultSegmentNumber:     1,
-		IndexingThresholdKB:      50000,
-		FlushIntervalSeconds:     15,
-		MaxOptimizationThreads:   1,
-		MaxIndexingThreads:       2,
-		HNSWOnDisk:               true,
+		TelemetryDisabled:         true,
+		ClusterEnabled:            false,
+		OnDiskPayload:             true,
+		UpdateConcurrency:         1,
+		WALCapacityMB:             8,
+		WALSegmentsAhead:          0,
+		MaxSearchThreads:          1,
+		OptimizerCPUBudget:        1,
+		DefaultSegmentNumber:      1,
+		IndexingThresholdKB:       50000,
+		FlushIntervalSeconds:      15,
+		MaxOptimizationThreads:    1,
+		MaxIndexingThreads:        2,
+		HNSWOnDisk:                true,
 	}
 }
 
 func BalancedSettings() Settings {
 	return Settings{
-		ID:                       ProfileMobileBalanced,
-		LogLevel:                 "INFO",
-		BindHost:                 "127.0.0.1",
-		MaxRequestSizeMB:         16,
-		MaxWorkers:               2,
-		EnableCORS:               false,
-		EnableTLS:                false,
+		ID:                        ProfileMobileBalanced,
+		LogLevel:                  "INFO",
+		BindHost:                  "127.0.0.1",
+		MaxRequestSizeMB:          16,
+		MaxWorkers:                2,
+		EnableCORS:                false,
+		EnableTLS:                 false,
 		EnableSnapshotURLRecovery: false,
-		TelemetryDisabled:        true,
-		ClusterEnabled:           false,
-		OnDiskPayload:            true,
-		UpdateConcurrency:        1,
-		WALCapacityMB:            16,
-		WALSegmentsAhead:         0,
-		MaxSearchThreads:         2,
-		OptimizerCPUBudget:       1,
-		DefaultSegmentNumber:     1,
-		IndexingThresholdKB:      20000,
-		FlushIntervalSeconds:     10,
-		MaxOptimizationThreads:   1,
-		MaxIndexingThreads:       2,
-		HNSWOnDisk:               false,
+		TelemetryDisabled:         true,
+		ClusterEnabled:            false,
+		OnDiskPayload:             true,
+		UpdateConcurrency:         1,
+		WALCapacityMB:             16,
+		WALSegmentsAhead:          0,
+		MaxSearchThreads:          2,
+		OptimizerCPUBudget:        1,
+		DefaultSegmentNumber:      1,
+		IndexingThresholdKB:       20000,
+		FlushIntervalSeconds:      10,
+		MaxOptimizationThreads:    1,
+		MaxIndexingThreads:        2,
+		HNSWOnDisk:                false,
 	}
 }
 
 func PerformanceSettings() Settings {
 	return Settings{
-		ID:                       ProfileMobilePerformance,
-		LogLevel:                 "INFO",
-		BindHost:                 "127.0.0.1",
-		MaxRequestSizeMB:         32,
-		MaxWorkers:               2,
-		EnableCORS:               false,
-		EnableTLS:                false,
+		ID:                        ProfileMobilePerformance,
+		LogLevel:                  "INFO",
+		BindHost:                  "127.0.0.1",
+		MaxRequestSizeMB:          32,
+		MaxWorkers:                2,
+		EnableCORS:                false,
+		EnableTLS:                 false,
 		EnableSnapshotURLRecovery: false,
-		TelemetryDisabled:        true,
-		ClusterEnabled:           false,
-		OnDiskPayload:            true,
-		UpdateConcurrency:        2,
-		WALCapacityMB:            32,
-		WALSegmentsAhead:         0,
-		MaxSearchThreads:         2,
-		OptimizerCPUBudget:       2,
-		DefaultSegmentNumber:     1,
-		IndexingThresholdKB:      10000,
-		FlushIntervalSeconds:     5,
-		MaxOptimizationThreads:   1,
-		MaxIndexingThreads:       4,
-		HNSWOnDisk:               false,
+		TelemetryDisabled:         true,
+		ClusterEnabled:            false,
+		OnDiskPayload:             true,
+		UpdateConcurrency:         2,
+		WALCapacityMB:             32,
+		WALSegmentsAhead:          0,
+		MaxSearchThreads:          2,
+		OptimizerCPUBudget:        2,
+		DefaultSegmentNumber:      1,
+		IndexingThresholdKB:       10000,
+		FlushIntervalSeconds:      5,
+		MaxOptimizationThreads:    1,
+		MaxIndexingThreads:        4,
+		HNSWOnDisk:                false,
 	}
 }
 

@@ -197,7 +197,9 @@ internal class AndroidRuntimeServiceHost(
         for (listener in ArrayList(listeners)) {
             try {
                 listener.onServiceHostEvent(event)
-            } catch (_: Throwable) {
+            } catch (originalError200: Throwable) {
+              originalError200.printStackTrace()
+
             }
         }
     }

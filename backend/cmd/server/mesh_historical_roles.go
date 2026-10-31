@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	amitialog "log"
 	"sort"
 )
 
@@ -18,7 +19,9 @@ func (p *meshLocalDataPort) HistoricalRoles(ctx context.Context, scope coordinat
 	for rows.Next() {
 		var id string
 		if err := rows.Scan(&id); err != nil {
-			_ = rows.Close()
+			if err := rows.Close(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return nil, err
 		}
 		if id != "" {
@@ -26,7 +29,9 @@ func (p *meshLocalDataPort) HistoricalRoles(ctx context.Context, scope coordinat
 		}
 	}
 	err = rows.Err()
-	_ = rows.Close()
+	if err := rows.Close(); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	if err != nil {
 		return nil, err
 	}

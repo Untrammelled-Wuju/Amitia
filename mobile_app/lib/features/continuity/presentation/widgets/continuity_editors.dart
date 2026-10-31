@@ -231,7 +231,9 @@ class _ContinuityWaitEditorState extends State<_ContinuityWaitEditor> {
     try {
       final decoded = jsonDecode(_conditionController.text.trim());
       if (decoded is Map) return Map<String, dynamic>.from(decoded);
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
     return null;
   }
 

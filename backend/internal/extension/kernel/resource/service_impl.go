@@ -2,6 +2,7 @@ package resource
 
 import (
 	"context"
+	amitialog "log"
 	"time"
 )
 
@@ -105,7 +106,9 @@ func (s *DefaultResourceOwnershipService) TransferOwnership(ctx context.Context,
 	if request.Action == TransferDetach {
 		resource.DeleteStrategy = StrategyRetain
 		resource.UpdatedAt = time.Now()
-		_ = s.store.UpdateResourceState(ctx, resource.ResourceID, StateOrphaned)
+		if err := s.store.UpdateResourceState(ctx, resource.ResourceID, StateOrphaned); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil
 	}
 

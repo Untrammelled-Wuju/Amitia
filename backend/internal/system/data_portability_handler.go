@@ -12,14 +12,17 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/system/dataportability"
 	"github.com/u-ai/backend/pkg/util"
+	amitialog "log"
 )
 
 func (h *Handler) DataPortabilityPreviewExport(c *gin.Context) {
 	var body struct {
-		Scope       string `json:"scope"`
-		Profile     string `json:"profile"`
-		CharacterID string `json:"characterId"`
-		Passphrase  string `json:"passphrase"`
+		Scope              string `json:"scope"`
+		Profile            string `json:"profile"`
+		CharacterID        string `json:"characterId"`
+		Passphrase         string `json:"passphrase"`
+		IncludeModelAssets bool   `json:"includeModelAssets"`
+		IncludeSecrets     bool   `json:"includeSecrets"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		util.ErrorResponse(c, http.StatusBadRequest, err.Error(), nil)
@@ -31,10 +34,12 @@ func (h *Handler) DataPortabilityPreviewExport(c *gin.Context) {
 		return
 	}
 	result, err := svc.PreviewDataPortabilityExport(c.Request.Context(), ExportRequest{
-		Scope:       dataportability.BackupScope(strings.TrimSpace(body.Scope)),
-		Profile:     dataportability.BackupProfile(strings.TrimSpace(body.Profile)),
-		CharacterID: strings.TrimSpace(body.CharacterID),
-		Passphrase:  body.Passphrase,
+		Scope:              dataportability.BackupScope(strings.TrimSpace(body.Scope)),
+		Profile:            dataportability.BackupProfile(strings.TrimSpace(body.Profile)),
+		CharacterID:        strings.TrimSpace(body.CharacterID),
+		Passphrase:         body.Passphrase,
+		IncludeModelAssets: body.IncludeModelAssets,
+		IncludeSecrets:     body.IncludeSecrets,
 	})
 	if err != nil {
 		respondDataPortabilityError(c, err)
@@ -45,10 +50,12 @@ func (h *Handler) DataPortabilityPreviewExport(c *gin.Context) {
 
 func (h *Handler) DataPortabilityExport(c *gin.Context) {
 	var body struct {
-		Scope       string `json:"scope"`
-		Profile     string `json:"profile"`
-		CharacterID string `json:"characterId"`
-		Passphrase  string `json:"passphrase"`
+		Scope              string `json:"scope"`
+		Profile            string `json:"profile"`
+		CharacterID        string `json:"characterId"`
+		Passphrase         string `json:"passphrase"`
+		IncludeModelAssets bool   `json:"includeModelAssets"`
+		IncludeSecrets     bool   `json:"includeSecrets"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		util.ErrorResponse(c, http.StatusBadRequest, err.Error(), nil)
@@ -60,10 +67,12 @@ func (h *Handler) DataPortabilityExport(c *gin.Context) {
 		return
 	}
 	result, err := svc.ExportDataPortability(c.Request.Context(), ExportRequest{
-		Scope:       dataportability.BackupScope(strings.TrimSpace(body.Scope)),
-		Profile:     dataportability.BackupProfile(strings.TrimSpace(body.Profile)),
-		CharacterID: strings.TrimSpace(body.CharacterID),
-		Passphrase:  body.Passphrase,
+		Scope:              dataportability.BackupScope(strings.TrimSpace(body.Scope)),
+		Profile:            dataportability.BackupProfile(strings.TrimSpace(body.Profile)),
+		CharacterID:        strings.TrimSpace(body.CharacterID),
+		Passphrase:         body.Passphrase,
+		IncludeModelAssets: body.IncludeModelAssets,
+		IncludeSecrets:     body.IncludeSecrets,
 	})
 	if err != nil {
 		respondDataPortabilityError(c, err)
@@ -99,7 +108,7 @@ func (h *Handler) DataPortabilityInspectImport(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, dataportability.MaxPackageSizeBytes)
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
-		util.ErrorResponse(c, http.StatusBadRequest, "缺少导入归档", nil)
+		util.ErrorResponse(c, http.StatusBadRequest, err.Error(), nil)
 		return
 	}
 	defer file.Close()
@@ -120,18 +129,24 @@ func (h *Handler) DataPortabilityInspectImport(c *gin.Context) {
 	}
 	if _, err := io.Copy(output, file); err != nil {
 		output.Close()
-		_ = os.Remove(uploadPath)
+		if err := os.Remove(uploadPath); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		util.ErrorResponse(c, http.StatusInternalServerError, err.Error(), nil)
 		return
 	}
 	if err := output.Close(); err != nil {
-		_ = os.Remove(uploadPath)
+		if err := os.Remove(uploadPath); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		util.ErrorResponse(c, http.StatusInternalServerError, err.Error(), nil)
 		return
 	}
 	result, err := svc.InspectDataPortabilityImport(c.Request.Context(), uploadPath, c.PostForm("passphrase"))
 	if err != nil {
-		_ = os.Remove(uploadPath)
+		if err := os.Remove(uploadPath); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		respondDataPortabilityError(c, err)
 		return
 	}
@@ -290,6 +305,7 @@ func respondDataPortabilityErrorWithResult(c *gin.Context, err error, result map
 	case errors.Is(err, dataportability.ErrBackupScopeInvalid),
 		errors.Is(err, dataportability.ErrBackupProfileInvalid),
 		errors.Is(err, dataportability.ErrBackupPassphraseWeak),
+		errors.Is(err, dataportability.ErrBackupEncryptionRequired),
 		errors.Is(err, dataportability.ErrImportCollisionPolicyInvalid),
 		errors.Is(err, dataportability.ErrRestoreSchemaUnsupported),
 		errors.Is(err, dataportability.ErrImportFormatUnsupported):

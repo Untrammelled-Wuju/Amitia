@@ -42,7 +42,7 @@ func (h *Handler) pickSAFDirectory(c *gin.Context) {
 	mount, cancelled, err := h.service.PickSAFDirectory(c.Request.Context())
 	if err != nil {
 		if errors.Is(err, ErrSAFUnavailable) {
-			c.JSON(http.StatusNotImplemented, gin.H{"error": "当前设备不支持系统目录选择"})
+			c.JSON(http.StatusNotImplemented, gin.H{"error": err.Error()})
 			return
 		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -166,7 +166,7 @@ func (h *Handler) readResource(c *gin.Context) {
 	offset, offsetErr := strconv.ParseInt(c.DefaultQuery("offset", "0"), 10, 64)
 	maxBytes, sizeErr := strconv.ParseInt(c.DefaultQuery("maxBytes", "1048576"), 10, 64)
 	if offsetErr != nil || sizeErr != nil || offset < 0 || maxBytes <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid file read range"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": offsetErr.Error()})
 		return
 	}
 	if maxBytes > MaxDirectRead {

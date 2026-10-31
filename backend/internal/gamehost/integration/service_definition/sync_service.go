@@ -13,11 +13,11 @@ type ownedDefinition struct {
 }
 
 type FullSyncReport struct {
-	TotalExtensions    int                            `json:"totalExtensions"`
-	SyncedDefinitions  int                            `json:"syncedDefinitions"`
-	FailedDefinitions  int                            `json:"failedDefinitions"`
-	Errors             []error                        `json:"errors,omitempty"`
-	DefinitionErrors   map[string]error               `json:"definitionErrors,omitempty"`
+	TotalExtensions   int              `json:"totalExtensions"`
+	SyncedDefinitions int              `json:"syncedDefinitions"`
+	FailedDefinitions int              `json:"failedDefinitions"`
+	Errors            []error          `json:"errors,omitempty"`
+	DefinitionErrors  map[string]error `json:"definitionErrors,omitempty"`
 }
 
 type ReconcileReport struct {
@@ -31,9 +31,9 @@ type ReconcileReport struct {
 }
 
 type RemoveReport struct {
-	ExtensionID   string  `json:"extensionId"`
-	RemovedCount  int     `json:"removedCount"`
-	Errors        []error `json:"errors,omitempty"`
+	ExtensionID  string  `json:"extensionId"`
+	RemovedCount int     `json:"removedCount"`
+	Errors       []error `json:"errors,omitempty"`
 }
 
 type DefinitionSyncService struct {

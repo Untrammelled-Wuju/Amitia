@@ -14,7 +14,9 @@ import { useChatInputPreference } from "@/composables/useChatInputPreference";
 const { sendOnEnter, setSendOnEnter } = useChatInputPreference();
 function update(value: boolean) {
   try { setSendOnEnter(value); }
-  catch { ElMessage.error("保存发送方式失败，请重试"); }
+  catch (error) {
+  console.error("[original-error]", error);
+ElMessage.error(error instanceof Error ? error.message : String(error)); }
 }
 </script>
 

@@ -3,9 +3,9 @@ package conformance
 import "fmt"
 
 type CaseResult struct {
-	Name    string
-	Passed  bool
-	Err     error
+	Name   string
+	Passed bool
+	Err    error
 }
 
 func (r CaseResult) Error() string {

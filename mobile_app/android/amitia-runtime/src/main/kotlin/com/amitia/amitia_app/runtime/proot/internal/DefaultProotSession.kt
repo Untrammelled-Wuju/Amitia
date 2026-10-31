@@ -43,7 +43,9 @@ internal class DefaultProotSession(
         return try {
             process.exitValue()
             false
-        } catch (e: IllegalThreadStateException) { true }
+        } catch (e: IllegalThreadStateException) {
+          e.printStackTrace()
+         true }
     }
 
     override fun requestStop() {
@@ -60,6 +62,8 @@ internal class DefaultProotSession(
         return try {
             exitDeferred.get(timeoutMillis, java.util.concurrent.TimeUnit.MILLISECONDS)?.exitCode
         } catch (e: Exception) {
+          e.printStackTrace()
+
             exitRef.get()?.exitCode
         }
     }
@@ -74,7 +78,9 @@ internal class DefaultProotSession(
             process.destroy()
             val graceful = try {
                 exitDeferred.get(graceMillis, java.util.concurrent.TimeUnit.MILLISECONDS)
-            } catch (_: Exception) {
+            } catch (originalError77: Exception) {
+              originalError77.printStackTrace()
+
                 null
             }
             if (graceful != null) {
@@ -82,14 +88,20 @@ internal class DefaultProotSession(
                 ProotStopResult.Graceful(sessionId, code)
             } else {
                 process.destroyForcibly()
-                try { exitDeferred.get(5, java.util.concurrent.TimeUnit.SECONDS) } catch (_: Exception) {}
+                try { exitDeferred.get(5, java.util.concurrent.TimeUnit.SECONDS) } catch (originalError85: Exception) {
+                  originalError85.printStackTrace()
+                }
                 val code = exitRef.get()?.exitCode
                 ProotStopResult.Forced(sessionId, code)
             }
         } catch (e: InterruptedException) {
+          e.printStackTrace()
+
             Thread.currentThread().interrupt()
             process.destroyForcibly()
-            try { exitDeferred.get(5, java.util.concurrent.TimeUnit.SECONDS) } catch (_: Exception) {}
+            try { exitDeferred.get(5, java.util.concurrent.TimeUnit.SECONDS) } catch (originalError92: Exception) {
+              originalError92.printStackTrace()
+            }
             val code = exitRef.get()?.exitCode
             ProotStopResult.Forced(sessionId, code)
         } catch (e: Exception) {
@@ -100,9 +112,15 @@ internal class DefaultProotSession(
 
     override fun close() {
         if (closed.compareAndSet(false, true)) {
-            try { stdoutPump.stop() } catch (_: Throwable) {}
-            try { stderrPump.stop() } catch (_: Throwable) {}
-            try { if (process.isAlive) process.destroyForcibly() } catch (_: Throwable) {}
+            try { stdoutPump.stop() } catch (originalError103: Throwable) {
+              originalError103.printStackTrace()
+            }
+            try { stderrPump.stop() } catch (originalError104: Throwable) {
+              originalError104.printStackTrace()
+            }
+            try { if (process.isAlive) process.destroyForcibly() } catch (originalError105: Throwable) {
+              originalError105.printStackTrace()
+            }
             shutdownWatcherExecutor()
         }
     }
@@ -112,14 +130,20 @@ internal class DefaultProotSession(
         forceTimeoutMs: Long,
     ): ProotTerminationResult {
         if (!process.isAlive) {
-            val code = try { process.exitValue() } catch (_: IllegalThreadStateException) { null }
+            val code = try { process.exitValue() } catch (originalError115: IllegalThreadStateException) {
+              originalError115.printStackTrace()
+             null }
             return ProotTerminationResult.ConfirmedExited(code)
         }
 
-        try { process.destroy() } catch (_: Throwable) {}
+        try { process.destroy() } catch (originalError119: Throwable) {
+          originalError119.printStackTrace()
+        }
         val gracefulExit = try {
             exitDeferred.get(gracefulTimeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)?.exitCode
-        } catch (_: Exception) {
+        } catch (originalError122: Exception) {
+          originalError122.printStackTrace()
+
             null
         }
         if (gracefulExit != null) {
@@ -127,14 +151,20 @@ internal class DefaultProotSession(
         }
 
         if (!process.isAlive) {
-            val code = try { process.exitValue() } catch (_: IllegalThreadStateException) { null }
+            val code = try { process.exitValue() } catch (originalError130: IllegalThreadStateException) {
+              originalError130.printStackTrace()
+             null }
             return ProotTerminationResult.ConfirmedExited(code)
         }
 
-        try { process.destroyForcibly() } catch (_: Throwable) {}
+        try { process.destroyForcibly() } catch (originalError134: Throwable) {
+          originalError134.printStackTrace()
+        }
         val forcedExit = try {
             exitDeferred.get(forceTimeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)?.exitCode
-        } catch (_: Exception) {
+        } catch (originalError137: Exception) {
+          originalError137.printStackTrace()
+
             null
         }
         if (forcedExit != null) {
@@ -142,7 +172,9 @@ internal class DefaultProotSession(
         }
 
         if (!process.isAlive) {
-            val code = try { process.exitValue() } catch (_: IllegalThreadStateException) { null }
+            val code = try { process.exitValue() } catch (originalError145: IllegalThreadStateException) {
+              originalError145.printStackTrace()
+             null }
             return ProotTerminationResult.ConfirmedExited(code)
         }
 
@@ -176,7 +208,9 @@ internal class DefaultProotSession(
     private fun shutdownWatcherExecutor() {
         try {
             watcherExecutor.shutdown()
-        } catch (_: Throwable) {}
+        } catch (originalError179: Throwable) {
+          originalError179.printStackTrace()
+        }
     }
 
     private fun waitForRealExit(): Int {
@@ -192,7 +226,9 @@ internal class DefaultProotSession(
                 }
 
                 return exitCode
-            } catch (_: InterruptedException) {
+            } catch (originalError195: InterruptedException) {
+              originalError195.printStackTrace()
+
                 interrupted = true
 
                 if (!process.isAlive) {
@@ -204,7 +240,7 @@ internal class DefaultProotSession(
 
                 retries++
                 if (retries >= MAX_WATCHER_RETRY) {
-                    throw InterruptedException("watcher retry exhausted after $retries attempts")
+                    throw InterruptedException("watcher retry exhausted after $retries attempts: ${originalError195.message}")
                 }
             }
         }
@@ -214,7 +250,9 @@ internal class DefaultProotSession(
         return try {
             process.exitValue()
             true
-        } catch (_: IllegalThreadStateException) {
+        } catch (originalError217: IllegalThreadStateException) {
+          originalError217.printStackTrace()
+
             false
         }
     }
@@ -298,7 +336,9 @@ internal class DefaultProotSession(
     }
 
     private fun safeNotify(event: ProotEvent) {
-        try { observer.onEvent(event) } catch (_: Throwable) {}
+        try { observer.onEvent(event) } catch (originalError301: Throwable) {
+          originalError301.printStackTrace()
+        }
     }
 
     private companion object {
@@ -330,7 +370,9 @@ internal class InputStreamPump(
                         val line = reader.readLine() ?: break
                         onData(line, sequence.incrementAndGet())
                     }
-                } catch (_: Throwable) {}
+                } catch (originalError333: Throwable) {
+                  originalError333.printStackTrace()
+                }
                 finally { running.set(false) }
             }.apply {
                 isDaemon = true
@@ -351,7 +393,9 @@ internal class InputStreamPump(
         if (pumpThread === Thread.currentThread()) return
         try {
             pumpThread.join(timeoutMillis)
-        } catch (_: InterruptedException) {
+        } catch (originalError354: InterruptedException) {
+          originalError354.printStackTrace()
+
             Thread.currentThread().interrupt()
         }
     }

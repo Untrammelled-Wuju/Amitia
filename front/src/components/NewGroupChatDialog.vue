@@ -31,6 +31,28 @@
       </section>
       <section>
         <div class="selector-heading">
+          <div><strong>创建到项目</strong><span>可选；不选择时进入默认消息列表</span></div>
+        </div>
+        <el-select
+          v-model="selectedProjectId"
+          class="project-select"
+          :loading="projectsLoading"
+          :disabled="creating || projectsLoading"
+          data-amitia-ui="new-group.project"
+        >
+          <el-option label="不加入项目（默认消息）" value="__none__" />
+          <el-option
+            v-for="project in projects"
+            :key="project.id"
+            :label="projectOptionLabel(project)"
+            :value="project.id"
+          />
+        </el-select>
+        <span v-if="projectsError" class="project-status">{{ projectsError }}</span>
+        <span v-else-if="!projectsLoading && projects.length === 0" class="project-status">当前角色暂无可选项目，仍可创建到默认消息列表。</span>
+      </section>
+      <section>
+        <div class="selector-heading">
           <div><strong>邀请角色</strong><span>至少选择 1 个，最多共 8 个群成员</span></div>
           <span>{{ selected.size }} 已选择</span>
         </div>
@@ -63,7 +85,7 @@
 import { computed, ref, watch } from "vue";
 import { Check } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
-import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
+import { useDeviceOwnedConversation, type OwnedProject } from "@/composables/useDeviceOwnedConversation";
 import type { OwnedGroupState } from "@/runtime/device-owned-chat";
 
 const props = defineProps<{
@@ -73,7 +95,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{
   "update:visible": [value: boolean];
-  created: [group: OwnedGroupState, baseRoleId: string];
+  created: [group: OwnedGroupState, baseRoleId: string, projectId: string];
 }>();
 
 const owned = useDeviceOwnedConversation();
@@ -81,23 +103,63 @@ const baseRoleId = ref("");
 const selected = ref(new Set<string>());
 const shareHistory = ref(false);
 const creating = ref(false);
+const projects = ref<OwnedProject[]>([]);
+const selectedProjectId = ref("__none__");
+const projectsLoading = ref(false);
+const projectsError = ref("");
+let projectsLoadSequence = 0;
 const inviteCharacters = computed(() => props.characters.filter((character) => character.id !== baseRoleId.value));
 const canCreate = computed(() => Boolean(baseRoleId.value && selected.value.size > 0 && selected.value.size < 8));
 
 watch(() => props.visible, (visible) => {
-  if (!visible) return;
+  projectsLoadSequence++;
+  if (!visible) {
+    projectsLoading.value = false;
+    return;
+  }
   selected.value = new Set();
   shareHistory.value = false;
-  baseRoleId.value = props.characters.some((character) => character.id === props.defaultRoleId)
+  const initialRoleId = props.characters.some((character) => character.id === props.defaultRoleId)
     ? String(props.defaultRoleId)
     : props.characters[0]?.id || "";
+  baseRoleId.value = initialRoleId;
+  selectedProjectId.value = "__none__";
+  void loadProjects(initialRoleId);
 });
 
 function selectBaseRole(id: string) {
+  if (baseRoleId.value === id) return;
   baseRoleId.value = id;
   const next = new Set(selected.value);
   next.delete(id);
   selected.value = next;
+  selectedProjectId.value = "__none__";
+  void loadProjects(id);
+}
+
+async function loadProjects(characterId: string) {
+  const sequence = ++projectsLoadSequence;
+  projects.value = [];
+  projectsError.value = "";
+  if (!characterId) return;
+  projectsLoading.value = true;
+  try {
+    const result = await owned.projects(characterId);
+    if (sequence !== projectsLoadSequence || !props.visible || baseRoleId.value !== characterId) return;
+    projects.value = result.projects
+      .filter((project) => !project.readOnly && !project.hiddenAt && project.workspaces.length > 0)
+      .sort((left, right) => Number(Boolean(right.pinnedAt)) - Number(Boolean(left.pinnedAt)) || left.title.localeCompare(right.title, "zh-CN"));
+  } catch (error) {
+    if (sequence !== projectsLoadSequence || !props.visible || baseRoleId.value !== characterId) return;
+    projectsError.value = `项目加载失败：${error instanceof Error ? error.message : String(error)}`;
+  } finally {
+    if (sequence === projectsLoadSequence) projectsLoading.value = false;
+  }
+}
+
+function projectOptionLabel(project: OwnedProject): string {
+  const primary = project.workspaces.find((workspace) => workspace.id === project.primaryWorkspaceId) || project.workspaces[0];
+  return primary ? `${project.title} · ${primary.name}` : project.title;
 }
 
 function toggleCharacter(id: string) {
@@ -111,8 +173,9 @@ async function create() {
   if (!canCreate.value || creating.value) return;
   creating.value = true;
   try {
-    const group = await owned.createGroupConversation(baseRoleId.value, Array.from(selected.value).map((characterId) => ({ characterId, shareHistory: shareHistory.value })));
-    emit("created", group, baseRoleId.value);
+    const projectId = selectedProjectId.value === "__none__" ? "" : selectedProjectId.value;
+    const group = await owned.createGroupConversation(baseRoleId.value, Array.from(selected.value).map((characterId) => ({ characterId, shareHistory: shareHistory.value })), projectId);
+    emit("created", group, baseRoleId.value, projectId);
     emit("update:visible", false);
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : "创建群聊失败");
@@ -137,5 +200,7 @@ async function create() {
 .role-option :deep(.el-avatar) { flex: 0 0 34px; }
 .role-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .selection-check { flex: 0 0 auto; color: var(--ac-color-primary); }
+.project-select { width: 100%; }
+.project-status { color: var(--text-muted); font-size: 11px; }
 @media (max-width: 560px) { .role-grid { grid-template-columns: 1fr; } }
 </style>

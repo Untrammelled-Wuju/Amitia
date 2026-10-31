@@ -13,6 +13,7 @@ import (
 	"github.com/u-ai/backend/internal/system/dataportability"
 	"gorm.io/gorm"
 	"io"
+	"strings"
 )
 
 const ComponentIDModelConfigs = "model.configs"
@@ -41,6 +42,7 @@ type modelConfigExportRecord struct {
 	APIType            string  `json:"api_type"`
 	Protocol           string  `json:"protocol"`
 	BaseURL            string  `json:"base_url"`
+	APIKey             string  `json:"api_key,omitempty"`
 	ModelName          string  `json:"model_name"`
 	Temperature        float64 `json:"temperature"`
 	MaxTokens          int     `json:"max_tokens"`
@@ -68,6 +70,18 @@ func (c *ModelConfigBackupContributor) Plan(ctx context.Context, req dataportabi
 	}
 	var count int64
 	c.DB.WithContext(ctx).Model(&ModelConfig{}).Count(&count)
+	var secretCount int64
+	c.DB.WithContext(ctx).Table("model_configs").Where("api_key IS NOT NULL AND TRIM(api_key) <> ''").Count(&secretCount)
+	var providerConfigs []string
+	if err := c.DB.WithContext(ctx).Table("model_configs").Pluck("provider_config_json", &providerConfigs).Error; err != nil {
+		return nil, err
+	}
+	for _, raw := range providerConfigs {
+		if containsSensitiveModelProviderField(raw) {
+			secretCount++
+			break
+		}
+	}
 
 	return []dataportability.BackupComponentPlan{
 		{
@@ -78,6 +92,7 @@ func (c *ModelConfigBackupContributor) Plan(ctx context.Context, req dataportabi
 			SourceOfTruth: false,
 			ItemCount:     count,
 			EstimatedSize: count * 1024,
+			Sensitive:     secretCount > 0,
 		},
 	}, nil
 }
@@ -93,7 +108,7 @@ func (c *ModelConfigBackupContributor) Export(ctx context.Context, req dataporta
 	defer compW.Close()
 
 	rows, err := c.DB.WithContext(ctx).Table("model_configs").Select(
-		"id, name, api_type, protocol, base_url, model_name, temperature, max_tokens, context_window, max_output_tokens, budget_rate_version, budget_input_rate, budget_output_rate, capabilities_json, provider_config_json, top_p, timeout_seconds, retry_count, is_active, last_test_status, last_test_message, last_test_at, created_at, updated_at",
+		"id, name, api_type, protocol, base_url, api_key, model_name, temperature, max_tokens, context_window, max_output_tokens, budget_rate_version, budget_input_rate, budget_output_rate, capabilities_json, provider_config_json, top_p, timeout_seconds, retry_count, is_active, last_test_status, last_test_message, last_test_at, created_at, updated_at",
 	).Rows()
 	if err != nil {
 		return err
@@ -104,6 +119,10 @@ func (c *ModelConfigBackupContributor) Export(ctx context.Context, req dataporta
 		var rec modelConfigExportRecord
 		if err := c.DB.ScanRows(rows, &rec); err != nil {
 			continue
+		}
+		if !req.IncludeSecrets {
+			rec.APIKey = ""
+			rec.ProviderConfigJSON = redactModelProviderSecrets(rec.ProviderConfigJSON)
 		}
 		data, err := json.Marshal(rec)
 		if err != nil {
@@ -134,6 +153,7 @@ func (c *ModelConfigBackupContributor) PreviewImport(ctx context.Context, req da
 	}
 
 	lines := splitModelConfigLines(data)
+	missingAPIKeys := 0
 	for _, line := range lines {
 		if len(line) == 0 {
 			continue
@@ -143,6 +163,9 @@ func (c *ModelConfigBackupContributor) PreviewImport(ctx context.Context, req da
 			continue
 		}
 		preview.ItemCount++
+		if strings.TrimSpace(rec.APIKey) == "" {
+			missingAPIKeys++
+		}
 
 		var existing struct {
 			ID   int
@@ -158,6 +181,11 @@ func (c *ModelConfigBackupContributor) PreviewImport(ctx context.Context, req da
 			})
 		}
 	}
+	if req.Manifest == nil || !req.Manifest.IncludesSecrets {
+		preview.Warnings = append(preview.Warnings, "迁移包未包含模型 API Key，导入后相关模型需要重新授权或在目标设备补填")
+	} else if missingAPIKeys > 0 {
+		preview.Warnings = append(preview.Warnings, fmt.Sprintf("%d 条模型配置没有 API Key，导入后需要确认模型是否可使用", missingAPIKeys))
+	}
 
 	return []dataportability.ImportComponentPreview{preview}, nil
 }
@@ -169,6 +197,8 @@ func (c *ModelConfigBackupContributor) Import(ctx context.Context, req dataporta
 		CharacterPolicy:    req.CharacterPolicy,
 		DefaultCharacterID: req.DefaultCharacterID,
 		ActivateImported:   req.ActivateImported,
+		IncludeSecrets:     req.Manifest != nil && req.Manifest.IncludesSecrets,
+		AllowLegacySecrets: req.Manifest != nil && req.Manifest.SecretsPolicy == 0 && req.Manifest.Encrypted,
 		IdentityMap:        req.IdentityMap,
 		SecretProvider:     req.SecretProvider,
 	}
@@ -198,6 +228,7 @@ func (c *ModelConfigBackupContributor) RestoreModelConfigs(ctx context.Context, 
 }
 
 func (c *ModelConfigBackupContributor) restoreModelConfigLines(ctx context.Context, lines [][]byte, opts dataportability.RestoreOptions) error {
+	activateImportedID := 0
 	for _, line := range lines {
 		if len(line) == 0 {
 			continue
@@ -205,6 +236,9 @@ func (c *ModelConfigBackupContributor) restoreModelConfigLines(ctx context.Conte
 		var rec modelConfigExportRecord
 		if err := json.Unmarshal(line, &rec); err != nil {
 			return fmt.Errorf("模型配置备份记录无效: %w", err)
+		}
+		if containsSensitiveModelProviderField(rec.ProviderConfigJSON) && !opts.IncludeSecrets && !opts.AllowLegacySecrets {
+			return fmt.Errorf("模型配置 %s 包含未授权的供应商凭证", rec.Name)
 		}
 
 		var existing struct{ ID int }
@@ -247,6 +281,9 @@ func (c *ModelConfigBackupContributor) restoreModelConfigLines(ctx context.Conte
 			"last_test_message":    rec.LastTestMessage,
 			"last_test_at":         rec.LastTestAt,
 		}
+		if opts.IncludeSecrets && strings.TrimSpace(rec.APIKey) != "" {
+			updates["api_key"] = rec.APIKey
+		}
 
 		if newID == rec.ID && existing.ID != 0 {
 			if err := c.DB.WithContext(ctx).Table("model_configs").Where("id = ?", rec.ID).Updates(updates).Error; err != nil {
@@ -255,6 +292,26 @@ func (c *ModelConfigBackupContributor) restoreModelConfigLines(ctx context.Conte
 		} else {
 			updates["id"] = newID
 			if err := c.DB.WithContext(ctx).Table("model_configs").Create(updates).Error; err != nil {
+				return err
+			}
+		}
+		if opts.ActivateImported && rec.IsActive != 0 && activateImportedID == 0 {
+			activateImportedID = newID
+		}
+	}
+
+	if activateImportedID != 0 {
+		var imported struct {
+			APIKey string
+		}
+		if err := c.DB.WithContext(ctx).Table("model_configs").Select("api_key").Where("id = ?", activateImportedID).Scan(&imported).Error; err != nil {
+			return err
+		}
+		if strings.TrimSpace(imported.APIKey) != "" {
+			if err := c.DB.WithContext(ctx).Table("model_configs").Where("1 = 1").Update("is_active", 0).Error; err != nil {
+				return err
+			}
+			if err := c.DB.WithContext(ctx).Table("model_configs").Where("id = ?", activateImportedID).Update("is_active", 1).Error; err != nil {
 				return err
 			}
 		}
@@ -277,6 +334,92 @@ func readAllModelConfig(r io.Reader) ([]byte, error) {
 			}
 			return result, err
 		}
+	}
+}
+
+var modelProviderSecretMarkers = []string{
+	"api_key",
+	"apikey",
+	"access_key",
+	"private_key",
+	"password",
+	"passwd",
+	"secret",
+	"token",
+	"credential",
+}
+
+func isSensitiveModelProviderKey(key string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(key))
+	for _, marker := range modelProviderSecretMarkers {
+		if strings.Contains(normalized, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func containsSensitiveModelProviderField(raw string) bool {
+	var value interface{}
+	if json.Unmarshal([]byte(raw), &value) != nil {
+		return strings.TrimSpace(raw) != "" && strings.TrimSpace(raw) != "{}"
+	}
+	return valueContainsSensitiveModelProviderField(value)
+}
+
+func valueContainsSensitiveModelProviderField(value interface{}) bool {
+	switch typed := value.(type) {
+	case map[string]interface{}:
+		for key, child := range typed {
+			if isSensitiveModelProviderKey(key) || valueContainsSensitiveModelProviderField(child) {
+				return true
+			}
+		}
+	case []interface{}:
+		for _, child := range typed {
+			if valueContainsSensitiveModelProviderField(child) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func redactModelProviderSecrets(raw string) string {
+	if strings.TrimSpace(raw) == "" {
+		return raw
+	}
+	var value interface{}
+	if json.Unmarshal([]byte(raw), &value) != nil {
+		return "{}"
+	}
+	redacted := redactModelProviderValue(value)
+	data, err := json.Marshal(redacted)
+	if err != nil {
+		return "{}"
+	}
+	return string(data)
+}
+
+func redactModelProviderValue(value interface{}) interface{} {
+	switch typed := value.(type) {
+	case map[string]interface{}:
+		result := make(map[string]interface{}, len(typed))
+		for key, child := range typed {
+			if isSensitiveModelProviderKey(key) {
+				continue
+			}
+			result[key] = redactModelProviderValue(child)
+		}
+		return result
+	case []interface{}:
+		result := make([]interface{}, 0, len(typed))
+		for _, child := range typed {
+			result = append(result, redactModelProviderValue(child))
+		}
+		return result
+	default:
+		return value
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"container/heap"
 	"context"
 	"encoding/json"
+	amitialog "log"
 	"math"
 	"sort"
 	"time"
@@ -71,7 +72,9 @@ func (s *OwnershipStore) SemanticSearch(ctx context.Context, role string, query 
 		hit := semanticHit{vector: Resource{OwnerID: s.ownerID, Kind: "vector", RoleID: role}, memory: Resource{OwnerID: s.ownerID, Kind: "memory", RoleID: role}}
 		var vectorBody, memoryBody []byte
 		if err := rows.Scan(&hit.vector.ID, &hit.vector.SourceID, &hit.vector.Revision, &vectorBody, &hit.memory.Revision, &memoryBody); err != nil {
-			_ = rows.Close()
+			if err := rows.Close(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return nil, err
 		}
 		hit.vector.Body = json.RawMessage(vectorBody)
@@ -115,7 +118,9 @@ func (s *OwnershipStore) SemanticSearch(ctx context.Context, role string, query 
 		}
 	}
 	err = rows.Err()
-	_ = rows.Close()
+	if err := rows.Close(); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	if err != nil {
 		return nil, err
 	}

@@ -14,15 +14,17 @@ export async function gracefulShutdown(options: ShutdownOptions): Promise<void> 
   if (flushProgress) {
     try {
       flushProgress();
-    } catch {
-    }
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
 
   if (finalCheckpoint) {
     try {
       await finalCheckpoint();
-    } catch {
-    }
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
 
   if (!rpc.isClosed()) {
@@ -31,8 +33,9 @@ export async function gracefulShutdown(options: ShutdownOptions): Promise<void> 
         task_run_id: taskRunId,
         reason,
       });
-    } catch {
-    }
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
 
   await sleep(100);

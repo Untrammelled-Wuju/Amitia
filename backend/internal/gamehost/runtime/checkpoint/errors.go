@@ -5,9 +5,9 @@ import (
 )
 
 type CheckpointError struct {
-	Op   string
-	Kind string
-	ID   string
+	Op    string
+	Kind  string
+	ID    string
 	Cause error
 }
 

@@ -14,6 +14,7 @@ import (
 	proc "github.com/u-ai/backend/internal/platform/process"
 	"github.com/u-ai/backend/internal/runtimehost"
 	"golang.org/x/sys/windows"
+	amitialog "log"
 )
 
 func (p *browserProcess) Start() (pid int, handle proc.ProcessTreeHandle, err error) {
@@ -82,9 +83,13 @@ func (p *browserProcess) Stop(handle proc.ProcessTreeHandle, pid int, gracePerio
 	}
 
 	if handle != 0 {
-		_ = exec.Command("taskkill", "/T", "/F", "/PID", fmt.Sprintf("%d", int(handle))).Run()
+		if err := exec.Command("taskkill", "/T", "/F", "/PID", fmt.Sprintf("%d", int(handle))).Run(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	} else if pid > 0 {
-		_ = exec.Command("taskkill", "/T", "/F", "/PID", fmt.Sprintf("%d", pid)).Run()
+		if err := exec.Command("taskkill", "/T", "/F", "/PID", fmt.Sprintf("%d", pid)).Run(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 
 	p.mu.Lock()
@@ -118,11 +123,15 @@ func killProcessTreeHandle(handle proc.ProcessTreeHandle) {
 	if handle == 0 {
 		return
 	}
-	_ = exec.Command("taskkill", "/T", "/F", "/PID", fmt.Sprintf("%d", int(handle))).Run()
+	if err := exec.Command("taskkill", "/T", "/F", "/PID", fmt.Sprintf("%d", int(handle))).Run(); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func removeProfileDir(path string) {
-	_ = os.RemoveAll(path)
+	if err := os.RemoveAll(path); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func makeProfileDir(path string) error {

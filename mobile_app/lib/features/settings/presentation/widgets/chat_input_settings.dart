@@ -21,8 +21,9 @@ class _ChatInputSettingsState extends ConsumerState<ChatInputSettings> {
   Future<void> _load() async {
     try {
       await ref.read(chatInputPreferencesProvider.notifier).init();
-    } catch (_) {
-      _error = '无法读取发送方式';
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+_error = '无法读取发送方式';
     }
     if (mounted) setState(() => _busy = false);
   }
@@ -33,11 +34,12 @@ class _ChatInputSettingsState extends ConsumerState<ChatInputSettings> {
       await ref
           .read(chatInputPreferencesProvider.notifier)
           .setSendOnEnter(value);
-    } catch (_) {
-      if (mounted) {
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('保存发送方式失败，请重试')));
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
       }
     } finally {
       if (mounted) setState(() => _busy = false);

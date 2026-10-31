@@ -14,6 +14,7 @@ import (
 	"github.com/u-ai/backend/internal/system/dataportability"
 	"gorm.io/gorm"
 	"io"
+	"strings"
 )
 
 const ComponentIDSettings = "settings.records"
@@ -51,12 +52,49 @@ func isSettingsKeyPortable(key string) bool {
 	return !settingsDenylist[key]
 }
 
+var settingsSecretMarkers = []string{
+	"api_key",
+	"apikey",
+	"access_key",
+	"private_key",
+	"password",
+	"passwd",
+	"secret",
+	"token",
+	"credential",
+}
+
+func isSettingsKeySensitive(key string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(key))
+	for _, marker := range settingsSecretMarkers {
+		if strings.Contains(normalized, marker) {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *SettingsBackupContributor) Plan(ctx context.Context, req dataportability.BackupRequest) ([]dataportability.BackupComponentPlan, error) {
 	if req.EffectiveScope() != dataportability.ScopeAll && req.EffectiveScope() != dataportability.ScopeSettings {
 		return nil, nil
 	}
+	var keys []string
+	if err := c.DB.WithContext(ctx).Table("app_settings").Where("deleted_at IS NULL").Pluck("key", &keys).Error; err != nil {
+		return nil, err
+	}
 	var count int64
-	c.DB.WithContext(ctx).Table("app_settings").Count(&count)
+	hasSensitive := false
+	for _, key := range keys {
+		if !isSettingsKeyPortable(key) {
+			continue
+		}
+		sensitive := isSettingsKeySensitive(key)
+		hasSensitive = hasSensitive || sensitive
+		if sensitive && !req.IncludeSecrets {
+			continue
+		}
+		count++
+	}
 
 	estimatedSize := count * 256
 
@@ -68,7 +106,7 @@ func (c *SettingsBackupContributor) Plan(ctx context.Context, req dataportabilit
 			Required:      false,
 			SourceOfTruth: false,
 			Rebuildable:   false,
-			Sensitive:     false,
+			Sensitive:     hasSensitive,
 			ItemCount:     count,
 			EstimatedSize: estimatedSize,
 		},
@@ -85,7 +123,7 @@ func (c *SettingsBackupContributor) Export(ctx context.Context, req dataportabil
 	}
 	defer compW.Close()
 
-	rows, err := c.DB.WithContext(ctx).Table("app_settings").Select("key, value, updated_at").Rows()
+	rows, err := c.DB.WithContext(ctx).Table("app_settings").Select("key, value, updated_at").Where("deleted_at IS NULL").Rows()
 	if err != nil {
 		return err
 	}
@@ -98,6 +136,9 @@ func (c *SettingsBackupContributor) Export(ctx context.Context, req dataportabil
 			continue
 		}
 		if !isSettingsKeyPortable(rec.Key) {
+			continue
+		}
+		if isSettingsKeySensitive(rec.Key) && !req.IncludeSecrets {
 			continue
 		}
 		data, err := json.Marshal(rec)
@@ -123,6 +164,9 @@ func (c *SettingsBackupContributor) PreviewImport(ctx context.Context, req datap
 		ComponentID: ComponentIDSettings,
 		Kind:        dataportability.KindNDJSON,
 		LogicalName: "settings.records.v1",
+	}
+	if req.Manifest != nil && !req.Manifest.IncludesSecrets {
+		preview.Warnings = append(preview.Warnings, "迁移包未包含 API Key、令牌或口令等敏感设置，导入后需要在目标设备重新配置")
 	}
 
 	scanner := bufio.NewScanner(rc)
@@ -159,6 +203,8 @@ func (c *SettingsBackupContributor) Import(ctx context.Context, req dataportabil
 		CharacterPolicy:    req.CharacterPolicy,
 		DefaultCharacterID: req.DefaultCharacterID,
 		ActivateImported:   req.ActivateImported,
+		IncludeSecrets:     req.Manifest != nil && req.Manifest.IncludesSecrets,
+		AllowLegacySecrets: req.Manifest != nil && req.Manifest.SecretsPolicy == 0 && req.Manifest.Encrypted,
 		IdentityMap:        req.IdentityMap,
 		SecretProvider:     req.SecretProvider,
 	}
@@ -193,6 +239,9 @@ func (c *SettingsBackupContributor) RestoreSettings(ctx context.Context, in data
 			}
 			if rec.Key == "" {
 				return fmt.Errorf("设置备份缺少配置键")
+			}
+			if isSettingsKeySensitive(rec.Key) && !opts.IncludeSecrets && !opts.AllowLegacySecrets {
+				return fmt.Errorf("敏感设置 %s 未获得迁移授权", rec.Key)
 			}
 			if _, err := store.Upsert(rec.Key, rec.Value); err != nil {
 				return err

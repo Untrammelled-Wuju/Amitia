@@ -354,7 +354,9 @@ class _McpInteractionGuardState extends ConsumerState<McpInteractionGuard> {
       try {
         final decoded = jsonDecode(value);
         if (decoded is Map) return Map<String, dynamic>.from(decoded);
-      } catch (_) {}
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
     }
     return <String, dynamic>{};
   }
@@ -363,8 +365,9 @@ class _McpInteractionGuardState extends ConsumerState<McpInteractionGuard> {
     try {
       final text = const JsonEncoder.withIndent('  ').convert(value);
       return text.length > 10000 ? '${text.substring(0, 10000)}…' : text;
-    } catch (_) {
-      final text = value.toString();
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+final text = value.toString();
       return text.length > 10000 ? '${text.substring(0, 10000)}…' : text;
     }
   }

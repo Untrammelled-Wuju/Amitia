@@ -17,6 +17,7 @@ import (
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 	"gorm.io/gorm"
+	amitialog "log"
 )
 
 type Handler struct {
@@ -30,7 +31,7 @@ func NewHandler(svc Service) *Handler {
 func (h *Handler) List(c *gin.Context) {
 	configs, err := h.service.List()
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "查询失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, configs)
@@ -39,7 +40,7 @@ func (h *Handler) List(c *gin.Context) {
 func (h *Handler) ListSummaries(c *gin.Context) {
 	configs, err := h.service.List()
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "查询失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	summaries := make([]TtsConfigSummary, 0, len(configs))
@@ -205,7 +206,7 @@ func bindPreviewText(c *gin.Context) (string, bool) {
 func (h *Handler) PreviewConfig(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil || id <= 0 {
-		util.ErrorResponse(c, response.InvalidParams, "voiceConfigId 无效", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	text, ok := bindPreviewText(c)
@@ -259,7 +260,7 @@ func (h *Handler) PreviewClonedVoice(c *gin.Context) {
 func (h *Handler) ListClonedVoices(c *gin.Context) {
 	voices, err := h.service.ListClonedVoices(requestSpaceID(c))
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "查询复刻音色失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, voices)
@@ -335,10 +336,10 @@ func (h *Handler) CloneVoice(c *gin.Context) {
 			cfg = boundCfg
 		} else if errors.Is(ownerErr, gorm.ErrRecordNotFound) {
 			if existing, globalErr := h.service.GetClonedVoiceBySpeakerID(requestedSpeakerID); globalErr == nil && existing != nil {
-				util.ErrorResponse(c, response.OperationFailed, "该 speakerId 已属于其他用户", nil)
+				util.ErrorResponse(c, response.OperationFailed, ownerErr.Error(), nil)
 				return
 			} else if globalErr != nil && !errors.Is(globalErr, gorm.ErrRecordNotFound) {
-				util.ErrorResponse(c, response.InternalError, "检查 speakerId 所有权失败", nil)
+				util.ErrorResponse(c, response.InternalError, ownerErr.Error(), nil)
 				return
 			}
 		} else {
@@ -349,12 +350,12 @@ func (h *Handler) CloneVoice(c *gin.Context) {
 	if cfg == nil && requestedConfigID != "" {
 		id, parseErr := strconv.Atoi(requestedConfigID)
 		if parseErr != nil || id <= 0 {
-			util.ErrorResponse(c, response.InvalidParams, "voiceConfigId 无效", nil)
+			util.ErrorResponse(c, response.InvalidParams, parseErr.Error(), nil)
 			return
 		}
 		selected, getErr := h.service.GetProviderConfigByID(id)
 		if getErr != nil || selected == nil {
-			util.ErrorResponse(c, response.InvalidParams, "指定的 TTS 配置不存在", nil)
+			util.ErrorResponse(c, response.InvalidParams, getErr.Error(), nil)
 			return
 		}
 		cfg = selected
@@ -363,7 +364,7 @@ func (h *Handler) CloneVoice(c *gin.Context) {
 		var activeErr error
 		cfg, activeErr = h.service.GetActive()
 		if activeErr != nil || cfg == nil {
-			util.ErrorResponse(c, response.InvalidParams, "请先配置并启用 TTS 服务", nil)
+			util.ErrorResponse(c, response.InvalidParams, activeErr.Error(), nil)
 			return
 		}
 	}
@@ -384,7 +385,7 @@ func (h *Handler) CloneVoice(c *gin.Context) {
 
 	file, header, err := c.Request.FormFile("audio")
 	if err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请上传音频文件", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	defer file.Close()
@@ -440,10 +441,10 @@ func (h *Handler) CloneVoice(c *gin.Context) {
 		resultWasOwned = true
 	} else if errors.Is(ownerErr, gorm.ErrRecordNotFound) {
 		if existing, globalErr := h.service.GetClonedVoiceBySpeakerID(result.SpeakerID); globalErr == nil && existing != nil {
-			util.ErrorResponse(c, response.OperationFailed, "服务商返回的 speakerId 已属于其他用户", nil)
+			util.ErrorResponse(c, response.OperationFailed, ownerErr.Error(), nil)
 			return
 		} else if globalErr != nil && !errors.Is(globalErr, gorm.ErrRecordNotFound) {
-			util.ErrorResponse(c, response.InternalError, "检查复刻音色所有权失败", nil)
+			util.ErrorResponse(c, response.InternalError, ownerErr.Error(), nil)
 			return
 		}
 	} else {
@@ -466,9 +467,11 @@ func (h *Handler) CloneVoice(c *gin.Context) {
 		// Only roll back a newly created provider voice. Retraining an already
 		// owned slot must never delete the previously valid provider resource.
 		if !resultWasOwned {
-			_ = DeleteClonedVoiceWithContext(c.Request.Context(), apiKey, appKey, accessKey, voice.SpeakerID)
+			if err := DeleteClonedVoiceWithContext(c.Request.Context(), apiKey, appKey, accessKey, voice.SpeakerID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
-		util.ErrorResponse(c, response.InternalError, "保存复刻音色元数据失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 
@@ -483,7 +486,7 @@ func (h *Handler) DeleteClonedVoice(c *gin.Context) {
 	}
 	spaceID := requestSpaceID(c)
 	if _, err := h.service.GetClonedVoice(spaceID, speakerID); err != nil {
-		util.ErrorResponse(c, response.NotFound, "复刻音色不存在或不属于当前用户", nil)
+		util.ErrorResponse(c, response.NotFound, err.Error(), nil)
 		return
 	}
 
@@ -502,7 +505,7 @@ func (h *Handler) DeleteClonedVoice(c *gin.Context) {
 		return
 	}
 	if err := h.configurationService(c.Request.Context()).DeleteClonedVoiceMetadata(spaceID, speakerID); err != nil {
-		util.ErrorResponse(c, response.InternalError, "服务商音色已删除，但清理 Core 元数据失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	util.SuccessMsgResponse(c, "已删除", nil)

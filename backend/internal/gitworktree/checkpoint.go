@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"hash"
+	amitialog "log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -329,7 +330,9 @@ func (w *boundedTestEvidence) Write(p []byte) (int, error) {
 		w.digest = sha256.New()
 	}
 	n := len(p)
-	_, _ = w.digest.Write(p)
+	if _, err := w.digest.Write(p); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	w.bytes += int64(n)
 	if w.bytes > maxTestEvidenceBytes {
 		w.truncated = true
@@ -469,9 +472,13 @@ func (m *Manager) RunCheckpointTest(ctx context.Context, repoRoot, id, taskID, c
 		}
 	}
 	if lookupErr != nil {
-		_, _ = evidence.Write([]byte("test runner executable is unavailable\n"))
+		if _, err := evidence.Write([]byte("test runner executable is unavailable\n")); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	} else if runErr != nil && evidence.bytes == 0 {
-		_, _ = evidence.Write([]byte("test runner failed without output\n"))
+		if _, err := evidence.Write([]byte("test runner failed without output\n")); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	duration := time.Since(started).Milliseconds()
 	exit := 0

@@ -40,9 +40,9 @@ func (l ValidationErrorList) HasErrors() bool {
 }
 
 type ConfigError struct {
-	Op   string
-	Kind string
-	ID   string
+	Op    string
+	Kind  string
+	ID    string
 	Cause error
 }
 

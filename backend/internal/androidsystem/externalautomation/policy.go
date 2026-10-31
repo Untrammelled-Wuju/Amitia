@@ -8,7 +8,7 @@ import (
 type Policy struct {
 	MaxResolveResults int
 
-	MaxExtras         int
+	MaxExtras          int
 	MaxExtraValueBytes int
 
 	MaxCategories int
@@ -28,7 +28,7 @@ func DefaultPolicy() Policy {
 	return Policy{
 		MaxResolveResults: 20,
 
-		MaxExtras:         32,
+		MaxExtras:          32,
 		MaxExtraValueBytes: 16 * 1024,
 
 		MaxCategories: 8,

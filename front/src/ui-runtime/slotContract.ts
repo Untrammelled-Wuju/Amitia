@@ -117,7 +117,9 @@ export function defineClientSlotStore<
         },
         clearPersisted() {
           if (!persistKey) return;
-          try { globalThis.localStorage?.removeItem(persistKey); } catch {}
+          try { globalThis.localStorage?.removeItem(persistKey); } catch (error) {
+  console.error("[original-error]", error);
+}
         },
         dispose() {
           if (!active) return;
@@ -140,13 +142,17 @@ function loadClientSlotStoreState<State>(persistKey: string | undefined, init: (
     try {
       const value = globalThis.localStorage?.getItem(persistKey);
       if (value != null) return JSON.parse(value) as State;
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
   return cloneClientSlotStoreState(init());
 }
 
 function writeClientSlotStoreState<State>(persistKey: string, state: State): void {
-  try { globalThis.localStorage?.setItem(persistKey, JSON.stringify(state)); } catch {}
+  try { globalThis.localStorage?.setItem(persistKey, JSON.stringify(state)); } catch (error) {
+  console.error("[original-error]", error);
+}
 }
 
 export interface ClientSlotContract<

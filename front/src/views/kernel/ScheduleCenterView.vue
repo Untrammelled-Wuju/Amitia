@@ -400,8 +400,9 @@ function formatDate(s?: string): string {
   if (!s) return "";
   try {
     return new Date(s).toLocaleString("zh-CN");
-  } catch {
-    return s;
+  } catch (error) {
+  console.error("[original-error]", error);
+return s;
   }
 }
 
@@ -477,6 +478,7 @@ async function loadCircuit(scheduleId: string) {
   try {
     circuit.value = await getCircuit(scheduleId);
   } catch (e: any) {
+  console.error("[original-error]", e);
     circuit.value = null;
   } finally {
     subLoading.value = false;

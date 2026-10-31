@@ -18,6 +18,7 @@ import (
 	"github.com/u-ai/backend/internal/tts"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
+	amitialog "log"
 )
 
 type meshLocalDataPort struct {
@@ -802,12 +803,16 @@ func (p *meshLocalDataPort) HistoricalConversations(ctx context.Context, scope c
 	for rows.Next() {
 		var raw []byte
 		if err := rows.Scan(&raw); err != nil {
-			_ = rows.Close()
+			if err := rows.Close(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return nil, err
 		}
 		var value map[string]any
 		if err := json.Unmarshal(raw, &value); err != nil {
-			_ = rows.Close()
+			if err := rows.Close(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return nil, err
 		}
 		value["ownerId"] = p.ownerID
@@ -818,13 +823,17 @@ func (p *meshLocalDataPort) HistoricalConversations(ctx context.Context, scope c
 		seen[id] = true
 		encoded, err := json.Marshal(value)
 		if err != nil {
-			_ = rows.Close()
+			if err := rows.Close(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return nil, err
 		}
 		result = append(result, encoded)
 	}
 	err = rows.Err()
-	_ = rows.Close()
+	if err := rows.Close(); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	if err != nil {
 		return nil, err
 	}

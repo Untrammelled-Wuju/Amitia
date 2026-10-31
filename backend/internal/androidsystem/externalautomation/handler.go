@@ -129,14 +129,14 @@ func (h *ExternalAutomationHandler) handleOpenApp(ctx context.Context, request a
 		RequestID: request.RequestID,
 		Status:    "success",
 		Result: map[string]any{
-			"success":         result.Success,
-			"operation":       result.Operation,
-			"targetPackage":   result.TargetPackage,
-			"targetComponent": result.TargetComponent,
-			"resolved":        result.Resolved,
-			"started":         result.Started,
+			"success":            result.Success,
+			"operation":          result.Operation,
+			"targetPackage":      result.TargetPackage,
+			"targetComponent":    result.TargetComponent,
+			"resolved":           result.Resolved,
+			"started":            result.Started,
 			"userActionRequired": result.UserActionRequired,
-			"timestamp":       result.Timestamp,
+			"timestamp":          result.Timestamp,
 		},
 	}
 }
@@ -180,12 +180,12 @@ func (h *ExternalAutomationHandler) handleOpenURI(ctx context.Context, request a
 		RequestID: request.RequestID,
 		Status:    "success",
 		Result: map[string]any{
-			"success":         result.Success,
-			"operation":       result.Operation,
-			"targetPackage":   result.TargetPackage,
-			"targetComponent": result.TargetComponent,
+			"success":            result.Success,
+			"operation":          result.Operation,
+			"targetPackage":      result.TargetPackage,
+			"targetComponent":    result.TargetComponent,
 			"userActionRequired": result.UserActionRequired,
-			"timestamp":       result.Timestamp,
+			"timestamp":          result.Timestamp,
 		},
 	}
 }
@@ -205,10 +205,10 @@ func (h *ExternalAutomationHandler) handleOpenSettings(ctx context.Context, requ
 		RequestID: request.RequestID,
 		Status:    "success",
 		Result: map[string]any{
-			"success":           result.Success,
-			"operation":         result.Operation,
+			"success":            result.Success,
+			"operation":          result.Operation,
 			"userActionRequired": result.UserActionRequired,
-			"timestamp":         result.Timestamp,
+			"timestamp":          result.Timestamp,
 		},
 	}
 }
@@ -228,12 +228,12 @@ func (h *ExternalAutomationHandler) handleInvokeIntent(ctx context.Context, requ
 		RequestID: request.RequestID,
 		Status:    "success",
 		Result: map[string]any{
-			"success":         result.Success,
-			"operation":       result.Operation,
-			"targetPackage":   result.TargetPackage,
-			"targetComponent": result.TargetComponent,
+			"success":            result.Success,
+			"operation":          result.Operation,
+			"targetPackage":      result.TargetPackage,
+			"targetComponent":    result.TargetComponent,
 			"userActionRequired": result.UserActionRequired,
-			"timestamp":       result.Timestamp,
+			"timestamp":          result.Timestamp,
 		},
 	}
 }

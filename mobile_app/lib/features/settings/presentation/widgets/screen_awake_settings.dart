@@ -30,8 +30,9 @@ class _ScreenAwakeSettingsState extends ConsumerState<ScreenAwakeSettings> {
         _enabled = enabled;
         _loaded = true;
       });
-    } catch (_) {
-      if (mounted) setState(() => _loaded = false);
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+if (mounted) setState(() => _loaded = false);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -44,11 +45,12 @@ class _ScreenAwakeSettingsState extends ConsumerState<ScreenAwakeSettings> {
           .read(screenAwakeServiceProvider)
           .setEnabled(enabled);
       if (mounted) setState(() => _enabled = saved);
-    } catch (_) {
-      if (mounted) {
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('屏幕常亮设置保存失败，请重试')));
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
       }
     } finally {
       if (mounted) setState(() => _busy = false);

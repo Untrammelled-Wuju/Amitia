@@ -27,5 +27,5 @@ type clipboardError struct {
 	message string
 }
 
-func (e *clipboardError) Error() string  { return e.message }
-func (e *clipboardError) Code() string   { return e.code }
+func (e *clipboardError) Error() string { return e.message }
+func (e *clipboardError) Code() string  { return e.code }

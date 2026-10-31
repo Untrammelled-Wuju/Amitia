@@ -1138,7 +1138,9 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
             .map((e) => Map<String, dynamic>.from(e))
             .toList();
       }
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
     if (arguments.isEmpty) {
       if (mounted)
         ScaffoldMessenger.of(
@@ -1520,7 +1522,9 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
       try {
         final decoded = jsonDecode(value);
         if (decoded is Map) return Map<String, dynamic>.from(decoded);
-      } catch (_) {}
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
     }
     return <String, dynamic>{};
   }

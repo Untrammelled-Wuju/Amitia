@@ -419,8 +419,9 @@ class DesktopPetMobileRuntimeNotifier
       await _localPlaybackQuiesce;
       try {
         await _inboundSerial;
-      } catch (_) {
-        // A prior connection's handler must never poison the serial queue for a
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+// A prior connection's handler must never poison the serial queue for a
         // fresh websocket generation. The concrete socket fence below prevents
         // stale work from being applied to this connection.
       }
@@ -503,7 +504,10 @@ class DesktopPetMobileRuntimeNotifier
 
           _inboundSerial = _inboundSerial.then<void>(
             (_) => processMessage(),
-            onError: (Object _, StackTrace __) => processMessage(),
+            onError: (Object error, StackTrace stackTrace) {
+              print("[original-error] $error\n$stackTrace");
+              processMessage();
+            },
           );
         },
         onError: (Object error, StackTrace stack) =>
@@ -576,8 +580,9 @@ class DesktopPetMobileRuntimeNotifier
       state = state.copyWith(error: error.toString(), updatedAt: DateTime.now());
       try {
         await socket.close(4003, 'protocol_violation');
-      } catch (_) {
-        // Socket teardown is best-effort after a protocol violation. The
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+// Socket teardown is best-effort after a protocol violation. The
         // concrete socket fence prevents a failed close from contaminating the
         // next websocket generation.
       }
@@ -1609,8 +1614,9 @@ class DesktopPetMobileRuntimeNotifier
     if (state.rendererLoaded) {
       try {
         rendererStop = await _native('desktop.pet.renderer.stop');
-      } catch (_) {
-        if (tracked != null) {
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+if (tracked != null) {
           _playback = tracked;
           _startPlaybackPoll(tracked);
         }
@@ -2122,7 +2128,10 @@ class DesktopPetMobileRuntimeNotifier
     // preserved _pendingPosition is retried by the next caller.
     final next = _positionFlushSerial.then<void>(
       (_) => _runPositionFlush(),
-      onError: (Object _, StackTrace __) => _runPositionFlush(),
+      onError: (Object error, StackTrace stackTrace) {
+        print("[original-error] $error\n$stackTrace");
+        _runPositionFlush();
+      },
     );
     _positionFlushSerial = next;
     await next;
@@ -2276,7 +2285,9 @@ class DesktopPetMobileRuntimeNotifier
           updatedAt: DateTime.now(),
         );
       }
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
   }
 
   BackendServiceApi _localApiRequired() {
@@ -2319,8 +2330,9 @@ class DesktopPetMobileRuntimeNotifier
   ) async {
     try {
       await socket.close(code, reason);
-    } catch (_) {
-      // Socket teardown must never surface as an unhandled asynchronous error.
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+// Socket teardown must never surface as an unhandled asynchronous error.
       // Connection identity is fenced separately, so close failure cannot make
       // the stale socket authoritative again.
     }
@@ -2409,8 +2421,9 @@ class DesktopPetMobileRuntimeNotifier
       // invalid. The native renderer treats an already-unloaded surface as a
       // harmless failure and the catch below keeps disconnect idempotent.
       await _native('desktop.pet.renderer.stop');
-    } catch (_) {
-      // The authoritative websocket session is already gone. Do not synthesize
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+// The authoritative websocket session is already gone. Do not synthesize
       // lifecycle events from an uncertain transport; the next desired-state
       // reconciliation re-establishes the renderer from physical state.
     }

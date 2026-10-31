@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/u-ai/backend/internal/timeoutpolicy"
+	amitialog "log"
 	"strings"
 	"sync"
 	"time"
@@ -26,7 +27,9 @@ func wrapPostconditionHandler(base StepHandler, nodeID string, expr *WorkflowExp
 		return base
 	}
 	var inputMap map[string]any
-	_ = json.Unmarshal(workflowInput, &inputMap)
+	if err := json.Unmarshal(workflowInput, &inputMap); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	if inputMap == nil {
 		inputMap = make(map[string]any)
 	}
@@ -899,7 +902,9 @@ func (e *WorkflowExecutor) startRunHeartbeat(ctx context.Context, executionID st
 	writeHeartbeat := func() {
 		persistCtx, persistCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer persistCancel()
-		_ = store.HeartbeatRun(persistCtx, executionID, time.Now().UTC())
+		if err := store.HeartbeatRun(persistCtx, executionID, time.Now().UTC()); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	writeHeartbeat()
 	go func() {
@@ -947,7 +952,9 @@ func (e *WorkflowExecutor) ReapStuck(ctx context.Context, staleAfter, waitingDev
 		_, locallyActive := e.active[run.ExecutionID]
 		e.activeMu.Unlock()
 		if locallyActive {
-			_ = store.HeartbeatRun(context.WithoutCancel(ctx), run.ExecutionID, now)
+			if err := store.HeartbeatRun(context.WithoutCancel(ctx), run.ExecutionID, now); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			continue
 		}
 
@@ -1107,12 +1114,14 @@ func (e *WorkflowExecutor) ConfirmControlledRun(ctx context.Context, executionID
 	e.emitRunLifecycle(ctx, runLifecycleEvent("updated", *run))
 	resume := *run
 	go func() {
-		_, _ = e.Execute(context.Background(), ExecuteRequest{
+		if _, err := e.Execute(context.Background(), ExecuteRequest{
 			WorkflowID: resume.WorkflowID,
 			Input:      resume.Input,
 			Context:    resume.Context,
 			Options:    resume.Context.ExecutionOptions,
-		})
+		}); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}()
 	return run, nil, nil
 }
@@ -1484,7 +1493,9 @@ func (e *WorkflowExecutor) Execute(ctx context.Context, req ExecuteRequest) (res
 			// workflow-level timeout/cancel cannot strand committed side effects.
 			if workflowNeedsDeclaredCompensation(wf, result.Steps) {
 				compCtx := context.WithoutCancel(ctx)
-				_ = e.markRunCompensating(compCtx, executionID)
+				if err := e.markRunCompensating(compCtx, executionID); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 				result.CompensationResults = e.compensateDeclaredWorkflow(compCtx, wf, result.Steps, req.Input, req.Context, journal)
 			}
 			result.Duration = time.Since(start)
@@ -1592,7 +1603,9 @@ func (e *WorkflowExecutor) Execute(ctx context.Context, req ExecuteRequest) (res
 							conditionErr = compileErr
 						} else {
 							var inputMap map[string]any
-							_ = json.Unmarshal(req.Input, &inputMap)
+							if err := json.Unmarshal(req.Input, &inputMap); err != nil {
+								amitialog.Printf("[original-error] %v", err)
+							}
 							if inputMap == nil {
 								inputMap = make(map[string]any)
 							}
@@ -1727,7 +1740,9 @@ func (e *WorkflowExecutor) Execute(ctx context.Context, req ExecuteRequest) (res
 				if ner.step.Attempt > 0 {
 					attemptID = fmt.Sprintf("%s/%s/g%d/a%d", executionID, ner.nodeID, req.Context.Generation, ner.step.Attempt)
 				}
-				_ = e.runStore.SaveStep(execCtx, StepRun{ExecutionID: executionID, WorkflowID: req.WorkflowID, NodeID: ner.nodeID, TraceID: req.Context.TraceID, AttemptID: attemptID, DeviceID: deviceID, RuntimeID: runtimeID, ToolCallID: toolCallID, IdempotencyKey: idempotencyKey, Status: ner.step.Status, Input: ner.input, Output: ner.step.Output, Error: ner.step.Error, Attempt: ner.step.Attempt, StartedAt: finishedAt.Add(-ner.step.Duration), FinishedAt: &finishedAt})
+				if err := e.runStore.SaveStep(execCtx, StepRun{ExecutionID: executionID, WorkflowID: req.WorkflowID, NodeID: ner.nodeID, TraceID: req.Context.TraceID, AttemptID: attemptID, DeviceID: deviceID, RuntimeID: runtimeID, ToolCallID: toolCallID, IdempotencyKey: idempotencyKey, Status: ner.step.Status, Input: ner.input, Output: ner.step.Output, Error: ner.step.Error, Attempt: ner.step.Attempt, StartedAt: finishedAt.Add(-ner.step.Duration), FinishedAt: &finishedAt}); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 
 			if ner.step.Status == "paused" {
@@ -1756,14 +1771,16 @@ func (e *WorkflowExecutor) Execute(ctx context.Context, req ExecuteRequest) (res
 				outputsMu.Unlock()
 
 				if e.checkpoint != nil && !ner.restored {
-					_ = e.checkpoint.Save(execCtx, Checkpoint{
+					if err := e.checkpoint.Save(execCtx, Checkpoint{
 						WorkflowID:  req.WorkflowID,
 						ExecutionID: executionID,
 						NodeID:      ner.nodeID,
 						Input:       ner.input,
 						Output:      ner.step.Output,
 						CompletedAt: time.Now(),
-					})
+					}); err != nil {
+						amitialog.Printf("[original-error] %v", err)
+					}
 				}
 
 				if wf.Limits.MaxOutputBytes > 0 && int64(len(ner.step.Output)) > wf.Limits.MaxOutputBytes {
@@ -1859,7 +1876,9 @@ func (e *WorkflowExecutor) Execute(ctx context.Context, req ExecuteRequest) (res
 		result.Error = failError
 
 		if workflowNeedsDeclaredCompensation(wf, result.Steps) {
-			_ = e.markRunCompensating(context.WithoutCancel(execCtx), executionID)
+			if err := e.markRunCompensating(context.WithoutCancel(execCtx), executionID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			result.CompensationResults = e.compensateDeclaredWorkflow(execCtx, wf, result.Steps, req.Input, req.Context, journal)
 		} else if e.compensation != nil {
 			result.CompensationResults = e.compensation.Compensate(ctx, result.Steps)
@@ -2216,11 +2235,13 @@ func (e *WorkflowExecutor) compensateDeclaredWorkflow(ctx context.Context, def W
 		idemKey := BuildCompensationIdempotencyKey(def.ID, execution.InvocationID, compNode.ID)
 		startedAt := time.Now().UTC()
 		if store != nil {
-			_ = store.SaveCompensation(persistCtx, CompensationRecord{
+			if err := store.SaveCompensation(persistCtx, CompensationRecord{
 				ExecutionID: execution.InvocationID, WorkflowID: def.ID, NodeID: original.ID,
 				Generation: execution.Generation, Status: "running", IdempotencyKey: idemKey,
 				Input: input, StartedAt: startedAt, UpdatedAt: startedAt,
-			})
+			}); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 
 		compExecution := execution
@@ -2237,11 +2258,13 @@ func (e *WorkflowExecutor) compensateDeclaredWorkflow(ctx context.Context, def W
 		}
 		if store != nil {
 			completed := now
-			_ = store.SaveCompensation(persistCtx, CompensationRecord{
+			if err := store.SaveCompensation(persistCtx, CompensationRecord{
 				ExecutionID: execution.InvocationID, WorkflowID: def.ID, NodeID: original.ID,
 				Generation: execution.Generation, Status: status, Attempt: compStep.Attempt, IdempotencyKey: idemKey,
 				Input: input, Output: compStep.Output, Error: errText, StartedAt: startedAt, CompletedAt: &completed, UpdatedAt: now,
-			})
+			}); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		results = append(results, CompensationResult{NodeID: original.ID, Status: status, Error: errText, ExecutedAt: now})
 	}
@@ -2313,7 +2336,7 @@ func (e *WorkflowExecutor) saveAttempt(ctx context.Context, workflowID string, n
 		toolCallID = fmt.Sprintf("%s/%s", execution.InvocationID, node.ID)
 	}
 	attemptID := fmt.Sprintf("%s/%s/g%d/a%d", execution.InvocationID, node.ID, execution.Generation, attempt)
-	_ = store.SaveAttempt(persistCtx, StepAttemptRun{
+	if err := store.SaveAttempt(persistCtx, StepAttemptRun{
 		ExecutionID:    execution.InvocationID,
 		WorkflowID:     workflowID,
 		NodeID:         node.ID,
@@ -2333,7 +2356,9 @@ func (e *WorkflowExecutor) saveAttempt(ctx context.Context, workflowID string, n
 		NextBackoffMS:  nextBackoff.Milliseconds(),
 		StartedAt:      startedAt,
 		FinishedAt:     finishedAt,
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (e *WorkflowExecutor) executeStep(ctx context.Context, handler StepHandler, node WorkflowNode, input json.RawMessage, limits WorkflowLimits, journal *SideEffectJournal, workflowID string) StepResult {
@@ -2568,7 +2593,9 @@ func workflowDefinitionFromCompiled(dag *CompiledWorkflowDAG) WorkflowDefinition
 			Step:                 WorkflowStepInput{OnError: WorkflowOnError{Mode: string(cnode.OnError.Mode)}},
 		}
 		if len(cnode.Runtime) > 0 {
-			_ = json.Unmarshal(cnode.Runtime, &node.Runtime)
+			if err := json.Unmarshal(cnode.Runtime, &node.Runtime); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		if cnode.Postcondition != nil {
 			if raw, err := json.Marshal(cnode.Postcondition); err == nil {
@@ -2597,7 +2624,9 @@ func (e *WorkflowExecutor) compensateCompiledFailure(ctx context.Context, req Co
 	if !workflowNeedsDeclaredCompensation(def, result.Steps) {
 		return
 	}
-	_ = e.markRunCompensating(context.WithoutCancel(ctx), result.ExecutionID)
+	if err := e.markRunCompensating(context.WithoutCancel(ctx), result.ExecutionID); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	result.CompensationResults = e.compensateDeclaredWorkflow(ctx, def, result.Steps, req.Input, req.Context, req.Journal)
 	result.Status = workflowResultTerminalStatus(result)
 }
@@ -2805,7 +2834,9 @@ func (e *WorkflowExecutor) ExecuteCompiled(ctx context.Context, req CompiledExec
 					shouldRun, err := EvaluateExpression(cnode.When, ExpressionEvalConfig{
 						Input: func() map[string]any {
 							var m map[string]any
-							_ = json.Unmarshal(req.Input, &m)
+							if err := json.Unmarshal(req.Input, &m); err != nil {
+								amitialog.Printf("[original-error] %v", err)
+							}
 							if m == nil {
 								m = make(map[string]any)
 							}
@@ -3029,7 +3060,9 @@ func workflowRuntimeValues(execution ExecutionContext) map[string]any {
 
 func (e *WorkflowExecutor) resolveInputTemplate(template map[string]any, input json.RawMessage, outputs map[string]json.RawMessage, outputsMu *sync.RWMutex, execution ExecutionContext) map[string]any {
 	var inputMap map[string]any
-	_ = json.Unmarshal(input, &inputMap)
+	if err := json.Unmarshal(input, &inputMap); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	if inputMap == nil {
 		inputMap = make(map[string]any)
 	}
@@ -3265,7 +3298,9 @@ func (h workflowExecutionLeaseHandle) close() {
 		h.cancel()
 	}
 	if h.store != nil {
-		_ = h.store.ReleaseExecutionLease(context.Background(), h.lease)
+		if err := h.store.ReleaseExecutionLease(context.Background(), h.lease); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 }
 

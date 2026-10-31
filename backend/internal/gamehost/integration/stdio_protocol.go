@@ -12,6 +12,7 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/handshake"
 	"github.com/u-ai/backend/internal/gamehost/ipc"
 	"github.com/u-ai/backend/internal/gamehost/runtime"
+	amitialog "log"
 )
 
 type GameHostStdioProtocolHandler struct {
@@ -97,13 +98,17 @@ func (h *GameHostStdioProtocolHandler) Attach(
 	}
 
 	if h.readyGate == nil {
-		_ = h.controlPlane.Detach(context.Background(), conn.ID)
+		if err := h.controlPlane.Detach(context.Background(), conn.ID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, fmt.Errorf("gamehost stdio: ready gate is unavailable")
 	}
 	waitCtx, cancel := context.WithTimeout(ctx, h.readyTimeout)
 	defer cancel()
 	if err := h.readyGate.WaitReady(waitCtx, string(conn.ID)); err != nil {
-		_ = h.controlPlane.Detach(context.Background(), conn.ID)
+		if err := h.controlPlane.Detach(context.Background(), conn.ID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, fmt.Errorf("gamehost stdio: plugin handshake did not reach ready: %w", err)
 	}
 

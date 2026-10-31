@@ -39,10 +39,10 @@ func InitLogger(logPath string) {
 	Logger.SetLevel(logrus.InfoLevel)
 }
 
-func Info(args ...interface{})  { Logger.Info(args...) }
+func Info(args ...interface{})                 { Logger.Info(args...) }
 func Infof(format string, args ...interface{}) { Logger.Infof(format, args...) }
-func Error(args ...interface{}) { Logger.Error(args...) }
-func Warn(args ...interface{})  { Logger.Warn(args...) }
-func Debug(args ...interface{}) { Logger.Debug(args...) }
+func Error(args ...interface{})                { Logger.Error(args...) }
+func Warn(args ...interface{})                 { Logger.Warn(args...) }
+func Debug(args ...interface{})                { Logger.Debug(args...) }
 
 func WithFields(fields logrus.Fields) *logrus.Entry { return Logger.WithFields(fields) }

@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	amitialog "log"
 	"strings"
 	"sync"
 	"time"
@@ -137,7 +138,9 @@ func (s *PackageConfirmationKeyStore) signConfirmation(claims packageConfirmatio
 	}
 	encoded := base64.RawURLEncoding.EncodeToString(payload)
 	mac := hmac.New(sha256.New, s.activeKey.Secret)
-	_, _ = mac.Write([]byte(encoded))
+	if _, err := mac.Write([]byte(encoded)); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	signature := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 	return encoded + "." + signature + "." + s.activeKey.KeyID, nil
 }
@@ -180,7 +183,9 @@ func (s *PackageConfirmationKeyStore) verifyConfirmation(token string) (packageC
 func (s *PackageConfirmationKeyStore) verifyWithKey(entry *confirmationKeyEntry, encoded string, provided []byte) (packageConfirmationClaims, error) {
 	var claims packageConfirmationClaims
 	mac := hmac.New(sha256.New, entry.Secret)
-	_, _ = mac.Write([]byte(encoded))
+	if _, err := mac.Write([]byte(encoded)); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	if !hmac.Equal(mac.Sum(nil), provided) {
 		return claims, fmt.Errorf("kernel: confirmation token invalid")
 	}

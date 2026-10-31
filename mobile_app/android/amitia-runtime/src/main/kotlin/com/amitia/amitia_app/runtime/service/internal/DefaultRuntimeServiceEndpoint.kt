@@ -46,7 +46,9 @@ internal class DefaultRuntimeServiceEndpoint(
         for (listener in listenerSnapshot) {
             try {
                 listener.onServiceHostEvent(event)
-            } catch (_: Throwable) {
+            } catch (originalError49: Throwable) {
+              originalError49.printStackTrace()
+
             }
         }
     }
@@ -56,7 +58,9 @@ internal class DefaultRuntimeServiceEndpoint(
         for (listener in snapshot) {
             try {
                 listener.onServiceHostEvent(event)
-            } catch (_: Throwable) {
+            } catch (originalError59: Throwable) {
+              originalError59.printStackTrace()
+
             }
         }
     }

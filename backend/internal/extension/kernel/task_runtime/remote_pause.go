@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/deviceruntime/protocol"
+	amitialog "log"
 	"time"
 )
 
@@ -129,7 +130,9 @@ func (s *TaskRuntimeService) pauseRemoteTask(ctx context.Context, run *TaskRun, 
 		case <-deadline.Done():
 			cleanup, finish := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
 			defer finish()
-			_ = s.remoteExecutor.Cancel(cleanup, current)
+			if err := s.remoteExecutor.Cancel(cleanup, current); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return s.failPause(cleanup, current, "设备暂停超时，停止结果尚未确认")
 		case <-ticker.C:
 		}

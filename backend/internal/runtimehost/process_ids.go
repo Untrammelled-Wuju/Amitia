@@ -3,7 +3,7 @@
 package runtimehost
 
 const (
-	ProcessIDQdrant        ProcessID = "amitia.qdrant"
-	ProcessIDSurrealDB     ProcessID = "amitia.surrealdb"
-	ProcessIDBrowser       ProcessID = "amitia.browser"
+	ProcessIDQdrant    ProcessID = "amitia.qdrant"
+	ProcessIDSurrealDB ProcessID = "amitia.surrealdb"
+	ProcessIDBrowser   ProcessID = "amitia.browser"
 )

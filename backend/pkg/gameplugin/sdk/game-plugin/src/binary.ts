@@ -212,7 +212,7 @@ export async function binaryUpload(
     return ref;
   } finally {
     if (!sealed) {
-      try { await binaryAbort(client, created.id, opts); } catch { /* best-effort cleanup */ }
+      try { await binaryAbort(client, created.id, opts); } catch (error) { console.error("[original-error]", error); }
     }
   }
 }

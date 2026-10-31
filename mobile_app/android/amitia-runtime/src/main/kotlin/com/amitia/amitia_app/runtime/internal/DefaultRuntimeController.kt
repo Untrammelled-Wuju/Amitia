@@ -380,6 +380,8 @@ internal class DefaultRuntimeController(
         val result = try {
             startupDetector.awaitStartup(request)
         } catch (error: InterruptedException) {
+          error.printStackTrace()
+
             RuntimeStartupResult.Cancelled(generation)
         } catch (error: Throwable) {
             RuntimeStartupResult.Failed(
@@ -541,7 +543,9 @@ internal class DefaultRuntimeController(
         if (current.state != RuntimeState.FAILED) return
         val liveSession = try {
             serviceHost.currentSession()
-        } catch (_: Throwable) {
+        } catch (originalError544: Throwable) {
+          originalError544.printStackTrace()
+
             return
         }
         if (liveSession != null && liveSession.isAlive()) return
@@ -573,13 +577,17 @@ internal class DefaultRuntimeController(
         activeDetectorGeneration.set(-1L)
         try {
             startupDetector.cancel()
-        } catch (_: Throwable) {
+        } catch (originalError576: Throwable) {
+          originalError576.printStackTrace()
+
         }
         val thread = startupDetectionThread.get()
         if (thread != null && thread !== Thread.currentThread() && thread.isAlive) {
             try {
                 thread.interrupt()
-            } catch (_: Throwable) {
+            } catch (originalError582: Throwable) {
+              originalError582.printStackTrace()
+
             }
             // Keep the reference until the worker actually exits. A new
             // generation must not reuse the shared detector while the old
@@ -601,7 +609,9 @@ internal class DefaultRuntimeController(
 
                     val session = try {
                         serviceHost.currentSession()
-                    } catch (_: Throwable) {
+                    } catch (originalError604: Throwable) {
+                      originalError604.printStackTrace()
+
                         null
                     }
                     if (session != null && session.isAlive()) {
@@ -620,7 +630,9 @@ internal class DefaultRuntimeController(
                     }
                     Thread.sleep(SERVICE_SESSION_POLL_MS)
                 }
-            } catch (_: InterruptedException) {
+            } catch (originalError623: InterruptedException) {
+              originalError623.printStackTrace()
+
                 Thread.currentThread().interrupt()
             } finally {
                 serviceSessionWatchdogThread.compareAndSet(Thread.currentThread(), null)
@@ -646,7 +658,9 @@ internal class DefaultRuntimeController(
         if (thread != null && thread !== Thread.currentThread() && thread.isAlive) {
             try {
                 thread.interrupt()
-            } catch (_: Throwable) {
+            } catch (originalError649: Throwable) {
+              originalError649.printStackTrace()
+
             }
         }
     }
@@ -708,7 +722,9 @@ internal class DefaultRuntimeController(
             }
             jobRef.set(job)
             pendingRecoveryJob.set(job)
-        } catch (_: Throwable) {
+        } catch (originalError711: Throwable) {
+          originalError711.printStackTrace()
+
         }
     }
 
@@ -746,7 +762,9 @@ internal class DefaultRuntimeController(
         if (job != null) {
             try {
                 job.cancel()
-            } catch (_: Throwable) {
+            } catch (originalError749: Throwable) {
+              originalError749.printStackTrace()
+
             }
         } else {
             // After process recreation there is no in-memory RuntimeRecoveryJob,
@@ -759,7 +777,9 @@ internal class DefaultRuntimeController(
             if (resetBudget) {
                 recoveryPolicy.resetBudget()
             }
-        } catch (_: Throwable) {
+        } catch (originalError762: Throwable) {
+          originalError762.printStackTrace()
+
         }
     }
 
@@ -768,7 +788,9 @@ internal class DefaultRuntimeController(
         runCatching { desiredStateStore.markReady(generation) }
         try {
             recoveryPolicy.recordReady(generation)
-        } catch (_: Throwable) {
+        } catch (originalError771: Throwable) {
+          originalError771.printStackTrace()
+
         }
     }
 
@@ -1495,7 +1517,9 @@ internal class DefaultRuntimeController(
 
     private fun finishInstallFailure(error: RuntimeError) {
         verifiedRuntimeVersionRef.set(null)
-        val bootstrap = try { bootstrapper?.bootstrap() } catch (_: Throwable) { null }
+        val bootstrap = try { bootstrapper?.bootstrap() } catch (originalError1498: Throwable) {
+          originalError1498.printStackTrace()
+         null }
         val target = when (bootstrap) {
             is RuntimeBootstrapResult.InstalledStopped -> RuntimeState.INSTALLED
             is RuntimeBootstrapResult.NotInstalled -> RuntimeState.NOT_INSTALLED
@@ -1566,7 +1590,9 @@ internal class DefaultRuntimeController(
             )
         }
 
-        val bootstrap = try { bootstrapper?.bootstrap() } catch (_: Throwable) { null }
+        val bootstrap = try { bootstrapper?.bootstrap() } catch (originalError1569: Throwable) {
+          originalError1569.printStackTrace()
+         null }
         val runtimeVersion = (bootstrap as? RuntimeBootstrapResult.InstalledStopped)?.runtimeVersion
             ?: before.runtimeVersion
         if (runtimeVersion == null) {
@@ -1798,7 +1824,9 @@ internal class DefaultRuntimeController(
 
     private fun finishRepairFailure(error: RuntimeError, previousRuntimeVersion: String?) {
         verifiedRuntimeVersionRef.set(null)
-        val bootstrap = try { bootstrapper?.bootstrap() } catch (_: Throwable) { null }
+        val bootstrap = try { bootstrapper?.bootstrap() } catch (originalError1801: Throwable) {
+          originalError1801.printStackTrace()
+         null }
         val target = when (bootstrap) {
             is RuntimeBootstrapResult.InstalledStopped -> RuntimeState.INSTALLED
             is RuntimeBootstrapResult.NotInstalled -> RuntimeState.NOT_INSTALLED

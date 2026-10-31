@@ -15,6 +15,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/mcpruntime/auth"
 	"github.com/u-ai/backend/internal/extension/mcpruntime/client"
 	"github.com/u-ai/backend/internal/extension/mcpruntime/protocol"
+	amitialog "log"
 )
 
 // OAuthTokens is the OAuth capability required by the MCP connection manager.
@@ -95,7 +96,9 @@ func (m *Manager) Connect(ctx context.Context, serverID string) error {
 	if _, ok := m.Connection(serverID); ok {
 		return nil
 	}
-	_ = m.repository.SetServerStatus(context.Background(), server.ID, "connecting", "", "", nil)
+	if err := m.repository.SetServerStatus(context.Background(), server.ID, "connecting", "", "", nil); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	clientCapabilities := m.clientCapabilities(ctx, server.ID)
 
 	var connection *client.Connection
@@ -126,7 +129,9 @@ func (m *Manager) Connect(ctx context.Context, serverID string) error {
 		var ok bool
 		connection, ok = conn.ClientConnection()
 		if !ok {
-			_ = m.stdio.Close(context.Background(), server.ID)
+			if err := m.stdio.Close(context.Background(), server.ID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return m.fail(server.ID, fmt.Errorf("MCP_SERVER_NOT_READY"))
 		}
 	case "streamable_http":
@@ -156,7 +161,9 @@ func (m *Manager) Connect(ctx context.Context, serverID string) error {
 		var ok bool
 		connection, ok = conn.ClientConnection()
 		if !ok {
-			_ = m.remote.Close(context.Background(), server.ID)
+			if err := m.remote.Close(context.Background(), server.ID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return m.fail(server.ID, fmt.Errorf("MCP_SERVER_NOT_READY"))
 		}
 	default:
@@ -178,7 +185,9 @@ func (m *Manager) Connect(ctx context.Context, serverID string) error {
 		Instructions:     initialized.Instructions,
 	}
 	if err := m.repository.SetServerStatus(ctx, server.ID, "ready", "", "", persisted); err != nil {
-		_ = m.Disconnect(context.Background(), server.ID)
+		if err := m.Disconnect(context.Background(), server.ID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return err
 	}
 
@@ -187,7 +196,9 @@ func (m *Manager) Connect(ctx context.Context, serverID string) error {
 	m.mu.Unlock()
 	for _, handler := range handlers {
 		if err := handler(ctx, server.ID); err != nil {
-			_ = m.Disconnect(context.Background(), server.ID)
+			if err := m.Disconnect(context.Background(), server.ID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return err
 		}
 	}
@@ -302,7 +313,9 @@ func (m *Manager) fail(serverID string, err error) error {
 		code = message[:index]
 	}
 	if m.repository != nil {
-		_ = m.repository.SetServerStatus(context.Background(), serverID, "disconnected", code, message, nil)
+		if err := m.repository.SetServerStatus(context.Background(), serverID, "disconnected", code, message, nil); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return err
 }
@@ -345,7 +358,9 @@ func (m *Manager) scheduleReconnect(serverID string) {
 				return
 			}
 		}
-		_ = m.repository.SetServerStatus(context.Background(), serverID, "degraded", "MCP_RECONNECT_LIMIT_REACHED", "reconnect limit reached", nil)
+		if err := m.repository.SetServerStatus(context.Background(), serverID, "degraded", "MCP_RECONNECT_LIMIT_REACHED", "reconnect limit reached", nil); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}()
 }
 

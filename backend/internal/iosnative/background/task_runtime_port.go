@@ -8,13 +8,13 @@ import (
 type TaskRunStatus string
 
 const (
-	TaskRunStatusQueued     TaskRunStatus = "queued"
-	TaskRunStatusRunning    TaskRunStatus = "running"
-	TaskRunStatusPaused     TaskRunStatus = "paused"
-	TaskRunStatusCompleted  TaskRunStatus = "completed"
-	TaskRunStatusFailed     TaskRunStatus = "failed"
-	TaskRunStatusCancelled  TaskRunStatus = "cancelled"
-	TaskRunStatusExpired    TaskRunStatus = "expired"
+	TaskRunStatusQueued    TaskRunStatus = "queued"
+	TaskRunStatusRunning   TaskRunStatus = "running"
+	TaskRunStatusPaused    TaskRunStatus = "paused"
+	TaskRunStatusCompleted TaskRunStatus = "completed"
+	TaskRunStatusFailed    TaskRunStatus = "failed"
+	TaskRunStatusCancelled TaskRunStatus = "cancelled"
+	TaskRunStatusExpired   TaskRunStatus = "expired"
 )
 
 type TaskRunRecord struct {

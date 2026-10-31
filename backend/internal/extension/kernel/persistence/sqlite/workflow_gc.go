@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"fmt"
+	amitialog "log"
 	"time"
 )
 
@@ -68,7 +69,11 @@ func (r *WorkflowExecutionRepository) CollectGarbage(ctx context.Context, now ti
 	if err != nil {
 		return out, fmt.Errorf("workflow gc begin: %w", err)
 	}
-	defer func() { _ = tx.Rollback() }()
+	defer func() {
+		if err := tx.Rollback(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+	}()
 
 	terminal := `('succeeded','failed','cancelled','cancel_timeout','cancel_failed','dropped','compensated','compensation_failed','manual_intervention_required')`
 

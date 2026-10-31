@@ -65,7 +65,7 @@ func (r *ImageResourceResolver) ResolveAndValidate(ctx context.Context, input Im
 	info, err := os.Stat(localPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, ImageInputSummary{}, &Error{Code: ErrResourceNotFound, Message: "image file not found", HTTPStatus: http.StatusNotFound}
+			return nil, ImageInputSummary{}, &Error{Code: ErrResourceNotFound, Message: "image file not found: " + err.Error(), HTTPStatus: http.StatusNotFound}
 		}
 		return nil, ImageInputSummary{}, &Error{Code: ErrResourceDenied, Message: fmt.Sprintf("cannot access image: %v", err), HTTPStatus: http.StatusForbidden}
 	}
@@ -101,10 +101,10 @@ func (r *ImageResourceResolver) ResolveAndValidate(ctx context.Context, input Im
 	}
 
 	summary := ImageInputSummary{
-		MIME:  mimeType,
-		Width: config.Width,
+		MIME:   mimeType,
+		Width:  config.Width,
 		Height: config.Height,
-		Bytes: fileSize,
+		Bytes:  fileSize,
 	}
 
 	return data, summary, nil
@@ -153,7 +153,7 @@ func isSupportedMIME(mime string, supported []string) bool {
 func encodeBase64(data []byte) string {
 	const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 	var buf bytes.Buffer
-	buf.Grow((len(data)+2)/3 * 4)
+	buf.Grow((len(data) + 2) / 3 * 4)
 	for i := 0; i < len(data); i += 3 {
 		var n int
 		var b1, b2, b3 byte

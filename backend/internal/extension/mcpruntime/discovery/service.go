@@ -12,6 +12,7 @@ import (
 
 	"github.com/u-ai/backend/internal/extension/mcpruntime"
 	"github.com/u-ai/backend/internal/extension/mcpruntime/client"
+	amitialog "log"
 )
 
 var identifierPattern = regexp.MustCompile(`[^a-z0-9_]+`)
@@ -70,7 +71,9 @@ func (s *Service) Discover(ctx context.Context, serverID string) error {
 		return err
 	}
 	var capabilities map[string]json.RawMessage
-	_ = json.Unmarshal([]byte(server.CapabilitiesJSON), &capabilities)
+	if err := json.Unmarshal([]byte(server.CapabilitiesJSON), &capabilities); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	if _, ok := capabilities["tools"]; ok {
 		if err := s.discoverTools(ctx, server); err != nil {
 			return err
@@ -110,7 +113,9 @@ func (s *Service) refresh(serverID string) {
 	s.mu.Unlock()
 	go func() {
 		defer func() { s.mu.Lock(); s.refreshing[serverID] = false; s.mu.Unlock() }()
-		_ = s.Discover(context.Background(), serverID)
+		if err := s.Discover(context.Background(), serverID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}()
 }
 
@@ -297,7 +302,9 @@ func hashJSON(value any) string {
 }
 func classifyRisk(raw json.RawMessage) (string, []string) {
 	var values map[string]any
-	_ = json.Unmarshal(raw, &values)
+	if err := json.Unmarshal(raw, &values); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	hints := []string{}
 	readOnly, _ := values["readOnlyHint"].(bool)
 	destructive, _ := values["destructiveHint"].(bool)

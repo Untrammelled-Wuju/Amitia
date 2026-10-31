@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	amitialog "log"
 	"os"
 	"path/filepath"
 )
@@ -70,7 +71,9 @@ func (w *atomicWriter) Write(ctx context.Context, path string, content []byte) e
 
 	defer func() {
 		if tmpPath != "" {
-			_ = os.Remove(tmpPath)
+			if err := os.Remove(tmpPath); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}()
 
@@ -118,7 +121,9 @@ func (w *atomicWriter) syncParent(dir string) {
 		return
 	}
 	defer f.Close()
-	_ = f.Sync()
+	if err := f.Sync(); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func randomHex(n int) string {

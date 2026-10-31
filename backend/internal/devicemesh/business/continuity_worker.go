@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/continuity"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	amitialog "log"
 )
 
 func continuityRequest(scope coordination.ExecutionScope) Request {
@@ -42,28 +43,40 @@ func (e *Engine) TickContinuity(ctx context.Context) error {
 func (e *Engine) tickContinuityLocation(ctx context.Context, location coordination.ContinuityLocation) {
 	if err := e.coordination.Validate(ctx, location.Scope); err != nil {
 		if errors.Is(err, coordination.ErrScopeExpired) || errors.Is(err, coordination.ErrWrongOwner) {
-			_ = e.coordination.ForgetContinuity(ctx, location)
+			if err := e.coordination.ForgetContinuity(ctx, location); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		} else {
-			_ = e.coordination.DeferContinuity(ctx, location, time.Minute)
+			if err := e.coordination.DeferContinuity(ctx, location, time.Minute); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		return
 	}
 	if err := coordination.ValidateRoleRevision(ctx, e.data, location.Scope); err != nil {
-		_ = e.coordination.DeferContinuity(ctx, location, time.Minute)
+		if err := e.coordination.DeferContinuity(ctx, location, time.Minute); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return
 	}
 	request := continuityRequest(location.Scope)
 	document, _, err := e.Continuity(ctx, request, ContinuityMutation{ID: location.ID, Action: "read", rawRead: true})
 	if err != nil {
-		_ = e.coordination.DeferContinuity(ctx, location, time.Minute)
+		if err := e.coordination.DeferContinuity(ctx, location, time.Minute); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return
 	}
 	if document.Thread.Revision < location.Revision {
-		_ = e.coordination.DeferContinuity(ctx, location, time.Minute)
+		if err := e.coordination.DeferContinuity(ctx, location, time.Minute); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return
 	}
 	if document.Thread.Status.IsTerminal() || document.Thread.Status == continuity.ThreadStatusPaused {
-		_ = e.coordination.ForgetContinuity(ctx, location)
+		if err := e.coordination.ForgetContinuity(ctx, location); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return
 	}
 	if document.Lease != nil && document.Lease.State == "running" {
@@ -71,7 +84,9 @@ func (e *Engine) tickContinuityLocation(ctx context.Context, location coordinati
 			request.RequestID = uuid.NewString()
 			_, _, _ = e.Continuity(ctx, request, ContinuityMutation{ID: location.ID, ExpectedRevision: document.Thread.Revision, Action: "mark_unknown"})
 		}
-		_ = e.coordination.DeferContinuity(ctx, location, 15*time.Second)
+		if err := e.coordination.DeferContinuity(ctx, location, 15*time.Second); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return
 	}
 	claimed := false
@@ -85,12 +100,16 @@ func (e *Engine) tickContinuityLocation(ctx context.Context, location coordinati
 		lease, ack, claimErr := e.Continuity(ctx, request, ContinuityMutation{ID: location.ID, ExpectedRevision: document.Thread.Revision, Action: "claim", WaitID: wait.ID})
 		if claimErr == nil && lease.Lease != nil && ack.Versions["continuity/"+location.ID] == lease.Thread.Revision {
 			claimed = true
-			_ = e.executeContinuity(ctx, lease, wait)
+			if err := e.executeContinuity(ctx, lease, wait); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		break
 	}
 	if !claimed {
-		_ = e.coordination.DeferContinuity(ctx, location, 15*time.Second)
+		if err := e.coordination.DeferContinuity(ctx, location, 15*time.Second); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 }
 
@@ -188,7 +207,9 @@ func (e *Engine) RunContinuityWorker(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			_ = e.TickContinuity(ctx)
+			if err := e.TickContinuity(ctx); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}
 }

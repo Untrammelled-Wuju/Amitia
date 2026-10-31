@@ -148,9 +148,6 @@ func (w *hostAPIAuditWriter) RecordCall(ctx context.Context, request host_api.Ca
 	if result.Error != nil {
 		errorCode = result.Error.Code
 		errorMessage = result.Error.Message
-		if len(errorMessage) > 1024 {
-			errorMessage = errorMessage[:1024] + "...[truncated]"
-		}
 	}
 	sideEffect := ""
 	if len(result.SideEffects) > 0 {
@@ -159,9 +156,6 @@ func (w *hostAPIAuditWriter) RecordCall(ctx context.Context, request host_api.Ca
 			parts = append(parts, fmt.Sprintf("%s:%s:%s", se.Kind, se.Target, se.Detail))
 		}
 		sideEffect = strings.Join(parts, "; ")
-		if len(sideEffect) > 2048 {
-			sideEffect = sideEffect[:2048] + "...[truncated]"
-		}
 	}
 	entry := sqlite.HostAPIAuditLog{
 		CallID:               callID,
@@ -397,7 +391,9 @@ func (t *resourceHandleTable) closeAll(extensionID string) {
 	for id, h := range t.handles {
 		if h.extensionID == extensionID {
 			if h.file != nil {
-				_ = h.file.Close()
+				if err := h.file.Close(); err != nil {
+					log.Printf("[original-error] %v", err)
+				}
 			}
 			delete(t.handles, id)
 		}
@@ -411,7 +407,9 @@ func (t *resourceHandleTable) cleanupExpired() {
 	for id, h := range t.handles {
 		if !h.expiresAt.IsZero() && now.After(h.expiresAt) {
 			if h.file != nil {
-				_ = h.file.Close()
+				if err := h.file.Close(); err != nil {
+					log.Printf("[original-error] %v", err)
+				}
 			}
 			delete(t.handles, id)
 		}
@@ -1078,7 +1076,9 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 				}
 				if !h.expiresAt.IsZero() && time.Now().UTC().After(h.expiresAt) {
 					if h.file != nil {
-						_ = h.file.Close()
+						if err := h.file.Close(); err != nil {
+							log.Printf("[original-error] %v", err)
+						}
 					}
 					handleTable.remove(p.HandleID)
 					return host_api.CallResult{
@@ -1213,7 +1213,9 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 					}, nil
 				}
 				if h.file != nil {
-					_ = h.file.Close()
+					if err := h.file.Close(); err != nil {
+						log.Printf("[original-error] %v", err)
+					}
 				}
 				output, _ := json.Marshal(map[string]any{"ok": true})
 				return host_api.CallResult{

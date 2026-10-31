@@ -19,6 +19,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/nativebridge"
 	"github.com/u-ai/backend/pkg/resourceuri"
+	amitialog "log"
 )
 
 const androidScreenCaptureOperation = "screen_capture.capture"
@@ -182,7 +183,9 @@ func (h *mediaScreenshotHandler) Execute(
 
 	uri, err := h.resolver.Reverse(path)
 	if err != nil {
-		_ = os.Remove(path)
+		if err := os.Remove(path); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return failure(androidmedia.SCREENSHOT_RESOURCE_INVALID, "map screenshot resource: "+err.Error())
 	}
 
@@ -229,7 +232,9 @@ func (h *mediaScreenshotHandler) gcArtifacts(dir string) {
 		}
 		info, err := entry.Info()
 		if err == nil && info.ModTime().Before(cutoff) {
-			_ = os.Remove(filepath.Join(dir, entry.Name()))
+			if err := os.Remove(filepath.Join(dir, entry.Name())); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}
 }

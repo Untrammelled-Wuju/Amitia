@@ -170,3 +170,12 @@ func (s runtimeSettings) sloTarget(level string) time.Duration {
 		return 0
 	}
 }
+
+func runtimeFeatures(settings runtimeSettings) config.KnowledgeFeatureConfig {
+	return config.KnowledgeFeatureConfig{
+		RetrievalPolicyEnabled:      settings.RetrievalPolicyEnabled,
+		RetrievalPolicyShadow:       settings.RetrievalPolicyShadow,
+		CanonicalReaderEnabled:      settings.CanonicalReaderEnabled,
+		AgenticInvestigationEnabled: settings.AgenticInvestigationEnabled,
+	}
+}

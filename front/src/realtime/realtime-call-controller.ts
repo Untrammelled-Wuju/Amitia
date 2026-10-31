@@ -314,8 +314,12 @@ export class RealtimeCallController {
   private flushPlayback(): void {
     if (this.playbackGeneration) this.sendPlaybackProgress(this.playbackGeneration);
     for (const source of this.activeSources) {
-      try { source.stop(); } catch {}
-      try { source.disconnect(); } catch {}
+      try { source.stop(); } catch (error) {
+  console.error("[original-error]", error);
+}
+      try { source.disconnect(); } catch (error) {
+  console.error("[original-error]", error);
+}
     }
     this.activeSources.clear();
     this.sourcePlayback.clear();
@@ -405,21 +409,29 @@ export class RealtimeCallController {
     this.stopVisualSource("screen");
     if (this.audioNode) {
       this.audioNode.onaudioprocess = null;
-      try { this.audioNode.disconnect(); } catch {}
+      try { this.audioNode.disconnect(); } catch (error) {
+  console.error("[original-error]", error);
+}
       this.audioNode = null;
     }
     if (this.silenceGain) {
-      try { this.silenceGain.disconnect(); } catch {}
+      try { this.silenceGain.disconnect(); } catch (error) {
+  console.error("[original-error]", error);
+}
       this.silenceGain = null;
     }
     this.audioStream?.getTracks().forEach((track) => track.stop());
     this.audioStream = null;
     if (this.audioContext && this.audioContext.state !== "closed") {
-      try { await this.audioContext.close(); } catch {}
+      try { await this.audioContext.close(); } catch (error) {
+  console.error("[original-error]", error);
+}
     }
     this.audioContext = null;
     if (this.playbackContext && this.playbackContext.state !== "closed") {
-      try { await this.playbackContext.close(); } catch {}
+      try { await this.playbackContext.close(); } catch (error) {
+  console.error("[original-error]", error);
+}
     }
     this.playbackContext = null;
     this.mediaState = { audio: false, camera: false, screen: false, muted: false };

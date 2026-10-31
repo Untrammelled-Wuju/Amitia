@@ -109,8 +109,9 @@ async function handleChannelChange(value: string | number | boolean) {
     ElMessage.success(
       allowBetaChannel.value ? "已加入测试版通道" : "已回到正式版通道",
     );
-  } catch {
-    ElMessage.error("切换更新通道失败");
+  } catch (error) {
+  console.error("[original-error]", error);
+ElMessage.error(error instanceof Error ? error.message : String(error));
   } finally {
     channelSaving.value = false;
   }
@@ -125,15 +126,17 @@ onMounted(async () => {
 
   try {
     version.value = await api.getCurrentVersion();
-  } catch {
-    version.value = "—";
+  } catch (error) {
+  console.error("[original-error]", error);
+version.value = "—";
   }
 
   try {
     const channel = await api.getUpdateChannel();
     allowBetaChannel.value = channel?.allowBetaChannel === true;
-  } catch {
-    allowBetaChannel.value = false;
+  } catch (error) {
+  console.error("[original-error]", error);
+allowBetaChannel.value = false;
   }
 
   api.getReleaseNotes().then((notes) => {

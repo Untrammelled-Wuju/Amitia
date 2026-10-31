@@ -12,11 +12,11 @@ type UIIntent struct {
 
 	ExecContext *execution.ExecutionContext `json:"-"`
 
-	Action          UIActionType `json:"action"`
-	Description     string       `json:"description"`
-	Target          UITarget     `json:"target"`
-	Constraints     UIConstraints `json:"constraints"`
-	DesiredOutcome  string       `json:"desiredOutcome,omitempty"`
+	Action         UIActionType  `json:"action"`
+	Description    string        `json:"description"`
+	Target         UITarget      `json:"target"`
+	Constraints    UIConstraints `json:"constraints"`
+	DesiredOutcome string        `json:"desiredOutcome,omitempty"`
 }
 
 type UITarget struct {

@@ -79,9 +79,9 @@ type probeChapter struct {
 }
 
 type probeOutput struct {
-	Format   *probeFormat    `json:"format,omitempty"`
-	Streams  []probeStream   `json:"streams,omitempty"`
-	Chapters []probeChapter  `json:"chapters,omitempty"`
+	Format   *probeFormat   `json:"format,omitempty"`
+	Streams  []probeStream  `json:"streams,omitempty"`
+	Chapters []probeChapter `json:"chapters,omitempty"`
 }
 
 type FullProbeResult struct {
@@ -90,10 +90,10 @@ type FullProbeResult struct {
 	FormatNames []string
 	FormatLong  string
 
-	DurationMS int64
+	DurationMS  int64
 	StartTimeMS int64
-	BitRate    int64
-	SizeBytes  int64
+	BitRate     int64
+	SizeBytes   int64
 
 	Streams  []FullStreamInfo
 	Chapters []FullChapterInfo
@@ -106,19 +106,19 @@ type FullProbeResult struct {
 }
 
 type FullStreamInfo struct {
-	Index          int
-	Type           string
-	Codec          string
-	CodecLongName  string
-	Profile        string
-	DurationMS     int64
-	BitRate        int64
-	Language       string
-	Disposition    StreamDisposition
-	Tags           map[string]string
-	Video          *VideoStreamInfo
-	Audio          *AudioStreamInfo
-	Subtitle       *SubtitleStreamInfo
+	Index         int
+	Type          string
+	Codec         string
+	CodecLongName string
+	Profile       string
+	DurationMS    int64
+	BitRate       int64
+	Language      string
+	Disposition   StreamDisposition
+	Tags          map[string]string
+	Video         *VideoStreamInfo
+	Audio         *AudioStreamInfo
+	Subtitle      *SubtitleStreamInfo
 }
 
 type StreamDisposition struct {
@@ -137,19 +137,19 @@ type StreamDisposition struct {
 }
 
 type VideoStreamInfo struct {
-	Width        int
-	Height       int
-	PixelFormat  string
-	FrameRateNum int64
-	FrameRateDen int64
-	SAR          string
-	DAR          string
-	ColorSpace   string
-	ColorTransfer string
+	Width          int
+	Height         int
+	PixelFormat    string
+	FrameRateNum   int64
+	FrameRateDen   int64
+	SAR            string
+	DAR            string
+	ColorSpace     string
+	ColorTransfer  string
 	ColorPrimaries string
-	Rotation     int
-	Level        int
-	FieldOrder   string
+	Rotation       int
+	Level          int
+	FieldOrder     string
 }
 
 type AudioStreamInfo struct {
@@ -166,7 +166,7 @@ type SubtitleStreamInfo struct {
 }
 
 type FullChapterInfo struct {
-	ID    int64
+	ID      int64
 	StartMS int64
 	EndMS   int64
 	Title   string

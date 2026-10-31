@@ -27,7 +27,7 @@ func registerMeshMemoryManagementRouter(mesh *gin.RouterGroup, services *AppServ
 				var err error
 				limit, err = strconv.Atoi(value)
 				if err != nil || limit < 1 || limit > 128 {
-					c.JSON(400, gin.H{"message": "记忆分页参数无效"})
+					c.JSON(400, gin.H{"message": err.Error()})
 					return
 				}
 			}
@@ -37,7 +37,7 @@ func registerMeshMemoryManagementRouter(mesh *gin.RouterGroup, services *AppServ
 			if raw := c.Query("retentionLevel"); raw != "" {
 				value, err := strconv.Atoi(raw)
 				if err != nil || value < 1 || value > 5 {
-					c.JSON(400, gin.H{"message": "记忆等级参数无效"})
+					c.JSON(400, gin.H{"message": err.Error()})
 					return
 				}
 				query.RetentionLevel = value
@@ -45,7 +45,7 @@ func registerMeshMemoryManagementRouter(mesh *gin.RouterGroup, services *AppServ
 			if raw := c.Query("pinned"); raw != "" {
 				value, err := strconv.ParseBool(raw)
 				if err != nil {
-					c.JSON(400, gin.H{"message": "固定记忆参数无效"})
+					c.JSON(400, gin.H{"message": err.Error()})
 					return
 				}
 				query.Pinned = &value
@@ -78,11 +78,11 @@ func registerMeshMemoryManagementRouter(mesh *gin.RouterGroup, services *AppServ
 				ConversationOrigin *business.ConversationOrigin `json:"conversationOrigin"`
 			}
 			if err != nil || json.Unmarshal(payload, &metadata) != nil || metadata.ExpectedScope == nil {
-				c.JSON(400, gin.H{"message": "记忆操作参数无效或缺少原服务范围"})
+				c.JSON(400, gin.H{"message": err.Error()})
 				return
 			}
 			if _, err := uuid.Parse(metadata.RequestID); err != nil {
-				c.JSON(400, gin.H{"message": "记忆操作请求编号无效"})
+				c.JSON(400, gin.H{"message": err.Error()})
 				return
 			}
 			request := business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: metadata.TargetDeviceID, RoleID: metadata.RoleID, HistoricalRoleID: metadata.HistoricalRoleID, RequestID: metadata.RequestID, ExpectedScope: metadata.ExpectedScope, ConversationOrigin: metadata.ConversationOrigin}
@@ -128,7 +128,7 @@ func registerMeshMemoryManagementRouter(mesh *gin.RouterGroup, services *AppServ
 			return
 		}
 		if _, err := uuid.Parse(payload.RequestID); err != nil {
-			c.JSON(400, gin.H{"message": "迁移请求编号无效"})
+			c.JSON(400, gin.H{"message": err.Error()})
 			return
 		}
 		ack, err := services.OwnedBusiness.TransferMemory(c.Request.Context(), business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: payload.TargetDeviceID, RoleID: payload.RoleID, RequestID: payload.RequestID, ExpectedScope: payload.ExpectedScope}, payload.MemoryTransferInput)

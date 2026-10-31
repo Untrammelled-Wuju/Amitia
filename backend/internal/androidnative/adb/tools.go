@@ -41,11 +41,11 @@ func buildStatusTool(runtime capability.RuntimeBinding) capability.ToolDefinitio
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          "android.adb.status",
-		ModelName:   "android.adb.status",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "ADB Status",
-		Description: "查询ADB后端可用性与设备连接状态。",
+		ID:           "android.adb.status",
+		ModelName:    "android.adb.status",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "ADB Status",
+		Description:  "查询ADB后端可用性与设备连接状态。",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -114,11 +114,11 @@ func buildDevicesTool(runtime capability.RuntimeBinding) capability.ToolDefiniti
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          "android.adb.devices",
-		ModelName:   "android.adb.devices",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "ADB Devices",
-		Description: "枚举当前ADB连接的设备列表与授权状态。",
+		ID:           "android.adb.devices",
+		ModelName:    "android.adb.devices",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "ADB Devices",
+		Description:  "枚举当前ADB连接的设备列表与授权状态。",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -202,11 +202,11 @@ func buildExecuteTool(runtime capability.RuntimeBinding) capability.ToolDefiniti
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          "android.adb.execute",
-		ModelName:   "android.adb.execute",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "ADB Execute",
-		Description: "在已授权的ADB设备上执行受控shell命令（仅只读诊断命令：getprop/id/uname）。",
+		ID:           "android.adb.execute",
+		ModelName:    "android.adb.execute",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "ADB Execute",
+		Description:  "在已授权的ADB设备上执行受控shell命令（仅只读诊断命令：getprop/id/uname）。",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{

@@ -130,13 +130,13 @@ func (h *ClipboardHandler) handleRead(ctx context.Context, request androidsystem
 		RequestID: request.RequestID,
 		Status:    "success",
 		Result: map[string]any{
-			"hasContent":  result.HasContent,
-			"text":        result.Text,
-			"mimeType":    result.MIMEType,
-			"itemCount":   result.ItemCount,
-			"truncated":   result.Truncated,
-			"sensitive":   result.Sensitive,
-			"generation":  result.Generation,
+			"hasContent": result.HasContent,
+			"text":       result.Text,
+			"mimeType":   result.MIMEType,
+			"itemCount":  result.ItemCount,
+			"truncated":  result.Truncated,
+			"sensitive":  result.Sensitive,
+			"generation": result.Generation,
 		},
 	}
 }
@@ -231,7 +231,7 @@ func (h *ClipboardHandler) handleClear(ctx context.Context, request androidsyste
 	return androidsystem.SystemResponse{
 		RequestID: request.RequestID,
 		Status:    "success",
-		Result: map[string]any{"cleared": true},
+		Result:    map[string]any{"cleared": true},
 	}
 }
 

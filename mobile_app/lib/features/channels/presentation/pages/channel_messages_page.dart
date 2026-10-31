@@ -685,8 +685,9 @@ class _ChannelMessageBubble extends StatelessWidget {
         errorBuilder: (_, _, _) =>
             Text('图片解码失败', style: AppTypography.label(context)),
       );
-    } catch (_) {
-      return Text('图片解码失败', style: AppTypography.label(context));
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return Text(error.toString(), style: AppTypography.label(context));
     }
   }
 }

@@ -78,7 +78,9 @@ class _ToolboxDatabaseStatusPageState extends ConsumerState<ToolboxDatabaseStatu
       try {
         final statsResult = await svc.chatStats();
         stats = statsResult as Map<String, dynamic>? ?? {};
-      } catch (_) {}
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
 
       if (mounted) {
         setState(() {

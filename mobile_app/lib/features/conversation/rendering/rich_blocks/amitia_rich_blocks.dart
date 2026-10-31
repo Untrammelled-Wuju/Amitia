@@ -346,8 +346,9 @@ class _AmitiaToolBlockState extends State<AmitiaToolBlock> {
     const encoder = JsonEncoder.withIndent('  ');
     try {
       return encoder.convert(value);
-    } catch (_) {
-      return value.toString();
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return value.toString();
     }
   }
 
@@ -804,8 +805,9 @@ class _ResolvedImageState extends State<_ResolvedImage> {
               fit: widget.fit,
               errorBuilder: (_, _, _) => _ImageFailure(alt: widget.image.alt),
             );
-          } catch (_) {
-            return _ImageFailure(alt: widget.image.alt);
+          } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return _ImageFailure(alt: widget.image.alt);
           }
         }
         if (uri.scheme == 'http' || uri.scheme == 'https') {
@@ -1860,8 +1862,9 @@ class AmitiaFallbackBlock extends StatelessWidget {
     const encoder = JsonEncoder.withIndent('  ');
     try {
       return encoder.convert(value);
-    } catch (_) {
-      return value.toString();
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return value.toString();
     }
   }
 }

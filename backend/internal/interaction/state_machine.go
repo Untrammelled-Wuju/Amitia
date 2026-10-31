@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	amitialog "log"
 )
 
 type InteractionStatus string
@@ -237,7 +238,9 @@ func (r *InteractionRecord) Snapshot() InteractionRecord {
 	var recoveryCopy *RecoveryDescriptor
 	if r.RecoveryDescriptor != nil {
 		if serialized, err := json.Marshal(r.RecoveryDescriptor); err == nil {
-			_ = json.Unmarshal(serialized, &recoveryCopy)
+			if err := json.Unmarshal(serialized, &recoveryCopy); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}
 	return InteractionRecord{

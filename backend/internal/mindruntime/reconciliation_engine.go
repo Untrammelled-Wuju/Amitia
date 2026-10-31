@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	amitialog "log"
 	"sort"
 	"strings"
 	"sync"
@@ -115,11 +116,7 @@ func (e *ReconciliationEngine) RepairDiff(ctx context.Context, scanID string, di
 }
 
 func safeRepairError(err error) string {
-	msg := err.Error()
-	if len(msg) > 200 {
-		msg = msg[:200]
-	}
-	return strings.TrimSpace(msg)
+	return strings.TrimSpace(err.Error())
 }
 
 func (e *ReconciliationEngine) RunScan(ctx context.Context, target ReconciliationTarget, strategy ReconciliationStrategy, startCursor string) (*ReconciliationScan, error) {
@@ -329,7 +326,9 @@ func (e *ReconciliationEngine) RunWorker(ctx context.Context, interval time.Dura
 			if strategy == "" {
 				strategy = StrategyManualConfirm
 			}
-			_, _ = e.RunScan(ctx, target.Target, strategy, target.Cursor)
+			if _, err := e.RunScan(ctx, target.Target, strategy, target.Cursor); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}
 	run()

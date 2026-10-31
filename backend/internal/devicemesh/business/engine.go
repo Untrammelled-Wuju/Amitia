@@ -15,6 +15,7 @@ import (
 	"github.com/u-ai/backend/internal/conversationstream"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/memorypolicy"
+	amitialog "log"
 )
 
 var ErrUncertainExecution = errors.New("上次执行的结果尚未确认，请查询结果后再继续，系统不会重复执行已发起的动作")
@@ -332,6 +333,15 @@ func conversationProjectID(snapshot coordination.DataSnapshot, conversationID st
 		return strings.TrimSpace(document.ProjectID)
 	}
 	return ""
+}
+
+func ownedMessagePreview(content string) string {
+	value := strings.Join(strings.Fields(strings.TrimSpace(content)), " ")
+	runes := []rune(value)
+	if len(runes) > 120 {
+		return string(runes[:120]) + "…"
+	}
+	return value
 }
 
 func conversationWorkingDirectory(snapshot coordination.DataSnapshot, conversationID string) string {
@@ -700,6 +710,9 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 	if projectID != "" {
 		conversation["projectId"] = projectID
 	}
+	conversation["lastMessagePreview"] = ownedMessagePreview(request.Message)
+	conversation["lastMessageRole"] = "user"
+	conversation["lastMessageType"] = "text"
 	if request.WorkingDirectory != "" {
 		conversation["workingDirectory"] = request.WorkingDirectory
 	}
@@ -871,7 +884,9 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 				payload["source"] = inference.Ingress.Source
 			}
 		}
-		_, _ = ownedRuntimeManager.Publish(context.WithoutCancel(ctx), conversationstream.AgentUIEvent{ConversationID: RuntimeKey(scope, request.ConversationID), RequestID: scope.RequestID, TurnID: scope.TurnID, ExecutionID: scope.ExecutionID, MessageID: messageID, Type: eventType, Status: status, Payload: payload}, false)
+		if _, err := ownedRuntimeManager.Publish(context.WithoutCancel(ctx), conversationstream.AgentUIEvent{ConversationID: RuntimeKey(scope, request.ConversationID), RequestID: scope.RequestID, TurnID: scope.TurnID, ExecutionID: scope.ExecutionID, MessageID: messageID, Type: eventType, Status: status, Payload: payload}, false); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		saveContext, saveCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer saveCancel()
 		if err := e.persistOwnedRuntime(saveContext, scope, request.ConversationID, finalErr); err != nil {
@@ -1006,6 +1021,9 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 		}
 		assistantSequence = ownedConversationSequence(conversation) + 1
 		conversation["lastMessageSequence"] = assistantSequence
+		conversation["lastMessagePreview"] = ownedMessagePreview(generation.Text)
+		conversation["lastMessageRole"] = "assistant"
+		conversation["lastMessageType"] = "text"
 		conversation["updatedAt"] = time.Now().UTC().Format(time.RFC3339Nano)
 		output = append(output, coordination.Mutation{Kind: "conversation", ID: request.ConversationID, RoleID: coordination.StorageRole(scope, "conversation"), ExpectedRevision: conversationRevision, Body: body(conversation)})
 	}
@@ -1263,7 +1281,9 @@ func memoryMutations(scope coordination.ExecutionScope, conversation string, der
 			MemoryType     string `json:"memoryType"`
 			MemorySubtype  string `json:"memorySubtype"`
 		}
-		_ = json.Unmarshal(item.Body, &metadata)
+		if err := json.Unmarshal(item.Body, &metadata); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		state := memorypolicy.NewLifecycle(metadata.RetentionLevel, metadata.Pinned, metadata.Importance, time.Now())
 		if metadata.RetentionLevel == 0 {
 			state = memorypolicy.AssignLifecycle(metadata.MemoryType, metadata.MemorySubtype, metadata.Importance, metadata.Pinned, time.Now())

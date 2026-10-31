@@ -16,6 +16,7 @@ import (
 	"github.com/u-ai/backend/internal/embedding"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
+	amitialog "log"
 )
 
 type Service interface {
@@ -215,17 +216,23 @@ func (s *service) Upload(ctx context.Context, tenantID, logicalName, filename, m
 	}
 
 	if existing, findErr := s.repo.FindBySHA(tenantID, stored.SHA256); findErr == nil && existing != nil {
-		_ = s.storage.Delete(stored.Key)
+		if err := s.storage.Delete(stored.Key); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		job, _ := s.repo.LatestJobForSource(tenantID, existing.ID)
 		return existing, job, nil
 	} else if findErr != nil && !errors.Is(findErr, gorm.ErrRecordNotFound) {
-		_ = s.storage.Delete(stored.Key)
+		if err := s.storage.Delete(stored.Key); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, nil, findErr
 	}
 
 	alias, err := s.repo.EnsureAlias(tenantID)
 	if err != nil {
-		_ = s.storage.Delete(stored.Key)
+		if err := s.storage.Delete(stored.Key); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, nil, err
 	}
 	now := time.Now().UTC()
@@ -242,7 +249,9 @@ func (s *service) Upload(ctx context.Context, tenantID, logicalName, filename, m
 		CreatedAt: now, UpdatedAt: now,
 	}
 	if err := s.repo.CreateSource(src, job); err != nil {
-		_ = s.storage.Delete(stored.Key)
+		if err := s.storage.Delete(stored.Key); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, nil, err
 	}
 	s.schedule(s.rootCtx, job.ID)
@@ -283,19 +292,25 @@ func (s *service) UploadRevision(ctx context.Context, tenantID, sourceID, filena
 		return nil, nil, err
 	}
 	if same, findErr := s.repo.FindSourceRevisionBySHA(tenantID, sourceID, stored.SHA256); findErr == nil && same != nil {
-		_ = s.storage.Delete(stored.Key)
+		if err := s.storage.Delete(stored.Key); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		if same.Revision == src.Revision {
 			job, _ := s.repo.LatestJobForSource(tenantID, sourceID)
 			return same, job, nil
 		}
 		return nil, nil, fmt.Errorf("same content already exists as revision %d", same.Revision)
 	} else if findErr != nil && !errors.Is(findErr, gorm.ErrRecordNotFound) {
-		_ = s.storage.Delete(stored.Key)
+		if err := s.storage.Delete(stored.Key); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, nil, findErr
 	}
 	alias, err := s.repo.EnsureAlias(tenantID)
 	if err != nil {
-		_ = s.storage.Delete(stored.Key)
+		if err := s.storage.Delete(stored.Key); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, nil, err
 	}
 	now := time.Now().UTC()
@@ -310,7 +325,9 @@ func (s *service) UploadRevision(ctx context.Context, tenantID, sourceID, filena
 		Stage: "queued", Status: JobStatusQueued, CursorJSON: `{"ordinal":0}`, LastCommittedOrdinal: -1, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := s.repo.CreateSourceRevision(revision, job); err != nil {
-		_ = s.storage.Delete(stored.Key)
+		if err := s.storage.Delete(stored.Key); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, nil, err
 	}
 	s.schedule(s.rootCtx, job.ID)
@@ -402,9 +419,13 @@ func (s *service) PurgeSourceRevision(ctx context.Context, tenantID, sourceID st
 	}
 	if purged != nil && strings.TrimSpace(purged.StorageKey) != "" {
 		if err := s.storage.Delete(purged.StorageKey); err == nil {
-			_ = s.repo.ClearPurgedRevisionStorageKey(tenantID, sourceID, revision)
+			if err := s.repo.ClearPurgedRevisionStorageKey(tenantID, sourceID, revision); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		} else {
-			_ = s.repo.UpdateSourceRevision(tenantID, sourceID, revision, map[string]any{"last_error": "storage_gc: " + err.Error()})
+			if err := s.repo.UpdateSourceRevision(tenantID, sourceID, revision, map[string]any{"last_error": "storage_gc: " + err.Error()}); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}
 	return s.repo.GetSourceRevision(tenantID, sourceID, revision)
@@ -439,7 +460,9 @@ func (s *service) GarbageCollect(ctx context.Context, tenantID string) (int, err
 				return purgedCount, err
 			}
 			if err := s.storage.Delete(item.StorageKey); err == nil {
-				_ = s.repo.ClearPurgedRevisionStorageKey(tenantID, item.SourceID, item.Revision)
+				if err := s.repo.ClearPurgedRevisionStorageKey(tenantID, item.SourceID, item.Revision); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 		}
 	}
@@ -582,7 +605,9 @@ func (s *service) startJobHeartbeat(ctx context.Context, jobID string) func() {
 			case <-ctx.Done():
 				return
 			case t := <-ticker.C:
-				_ = s.repo.UpdateJob(jobID, map[string]any{"heartbeat_at": t.UTC()})
+				if err := s.repo.UpdateJob(jobID, map[string]any{"heartbeat_at": t.UTC()}); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 		}
 	}()
@@ -633,14 +658,20 @@ func (s *service) processJob(ctx context.Context, jobID string) {
 		return
 	}
 
-	_ = s.repo.UpdateJob(job.ID, map[string]any{"stage": "inspect", "heartbeat_at": now, "last_error": ""})
-	_ = s.repo.UpdateSourceRevision(job.TenantID, job.SourceID, job.SourceRevision, map[string]any{"status": RevisionStatusProcessing, "last_error": ""})
+	if err := s.repo.UpdateJob(job.ID, map[string]any{"stage": "inspect", "heartbeat_at": now, "last_error": ""}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := s.repo.UpdateSourceRevision(job.TenantID, job.SourceID, job.SourceRevision, map[string]any{"status": RevisionStatusProcessing, "last_error": ""}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	// A replacement revision is blue/green: while it is processing the current
 	// active source stays ready and visible. Only initial ingestion exposes the
 	// processing state through knowledge_sources.
 	updateActiveProgress := src.Revision == job.SourceRevision && src.Status != SourceStatusReady && src.Status != SourceStatusReadyDegraded
 	if updateActiveProgress {
-		_ = s.repo.UpdateSource(job.TenantID, src.ID, map[string]any{"status": SourceStatusProcessing, "last_error": ""})
+		if err := s.repo.UpdateSource(job.TenantID, src.ID, map[string]any{"status": SourceStatusProcessing, "last_error": ""}); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	stopHeartbeat := s.startJobHeartbeat(ctx, job.ID)
 	defer stopHeartbeat()
@@ -653,10 +684,16 @@ func (s *service) processJob(ctx context.Context, jobID string) {
 		s.failJob(job, src, revision, err)
 		return
 	}
-	_ = s.repo.UpdateJob(job.ID, map[string]any{"stage": "parse", "expected_units": info.EstimatedUnits})
-	_ = s.repo.UpdateSourceRevision(job.TenantID, job.SourceID, job.SourceRevision, map[string]any{"expected_units": info.EstimatedUnits})
+	if err := s.repo.UpdateJob(job.ID, map[string]any{"stage": "parse", "expected_units": info.EstimatedUnits}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := s.repo.UpdateSourceRevision(job.TenantID, job.SourceID, job.SourceRevision, map[string]any{"expected_units": info.EstimatedUnits}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	if updateActiveProgress {
-		_ = s.repo.UpdateSource(job.TenantID, src.ID, map[string]any{"expected_units": info.EstimatedUnits})
+		if err := s.repo.UpdateSource(job.TenantID, src.ID, map[string]any{"expected_units": info.EstimatedUnits}); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 
 	cursor := Cursor{Ordinal: job.LastCommittedOrdinal + 1}
@@ -728,7 +765,9 @@ func (s *service) processJob(ctx context.Context, jobID string) {
 		return
 	}
 
-	_ = s.repo.UpdateJob(job.ID, map[string]any{"stage": "index"})
+	if err := s.repo.UpdateJob(job.ID, map[string]any{"stage": "index"}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	indexed, degraded, warnings := s.indexer.ProcessSource(ctx, job.TenantID, src.ID, job.SourceRevision)
 	if err := ctx.Err(); err != nil {
 		return
@@ -785,7 +824,9 @@ func (s *service) processRollbackJob(ctx context.Context, job *IngestJob, src *S
 	}
 	stopHeartbeat := s.startJobHeartbeat(ctx, job.ID)
 	defer stopHeartbeat()
-	_ = s.repo.UpdateJob(job.ID, map[string]any{"stage": "rollback_index", "last_error": ""})
+	if err := s.repo.UpdateJob(job.ID, map[string]any{"stage": "rollback_index", "last_error": ""}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	indexed, degraded, warnings := s.indexer.ProcessSource(ctx, job.TenantID, src.ID, job.SourceRevision)
 	if errors.Is(ctx.Err(), context.Canceled) {
 		return
@@ -818,13 +859,15 @@ func (s *service) processRollbackJob(ctx context.Context, job *IngestJob, src *S
 		"status": status, "expected_units": revision.ExpectedUnits, "processed_units": revision.ProcessedUnits,
 		"failed_units": revision.FailedUnits, "indexed_chunks": indexed, "last_error": lastError,
 	}
-	_, _ = s.repo.FinalizeIngestJobIfRunning(job.TenantID, job.ID, src.ID, job.SourceRevision, map[string]any{
+	if _, err := s.repo.FinalizeIngestJobIfRunning(job.TenantID, job.ID, src.ID, job.SourceRevision, map[string]any{
 		"status": JobStatusCompleted, "stage": "completed", "processed_units": childCount, "indexed_chunks": indexed,
 		"last_error": lastError, "finished_at": finished, "heartbeat_at": finished,
 	}, map[string]any{
 		"status": revisionStatus, "indexed_chunks": indexed, "last_error": lastError,
 		"activated_at": finished, "retain_until": nil,
-	}, sourceUpdates, s.revisionRetention())
+	}, sourceUpdates, s.revisionRetention()); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (s *service) processReindexJob(ctx context.Context, job *IngestJob, src *Source) {
@@ -833,7 +876,9 @@ func (s *service) processReindexJob(ctx context.Context, job *IngestJob, src *So
 	}
 	stopHeartbeat := s.startJobHeartbeat(ctx, job.ID)
 	defer stopHeartbeat()
-	_ = s.repo.UpdateJob(job.ID, map[string]any{"stage": "index", "last_error": ""})
+	if err := s.repo.UpdateJob(job.ID, map[string]any{"stage": "index", "last_error": ""}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	indexed, degraded, warnings := s.indexer.ProcessSource(ctx, job.TenantID, src.ID, job.SourceRevision)
 	if errors.Is(ctx.Err(), context.Canceled) {
 		return
@@ -858,10 +903,12 @@ func (s *service) processReindexJob(ctx context.Context, job *IngestJob, src *So
 	if src.Revision == job.SourceRevision {
 		sourceUpdates = map[string]any{"status": status, "indexed_chunks": indexed, "last_error": lastError}
 	}
-	_, _ = s.repo.FinalizeIngestJobIfRunning(job.TenantID, job.ID, src.ID, job.SourceRevision, map[string]any{
+	if _, err := s.repo.FinalizeIngestJobIfRunning(job.TenantID, job.ID, src.ID, job.SourceRevision, map[string]any{
 		"status": JobStatusCompleted, "stage": "completed", "processed_units": childCount, "indexed_chunks": indexed,
 		"last_error": lastError, "finished_at": finished, "heartbeat_at": finished,
-	}, map[string]any{"status": revisionStatus, "indexed_chunks": indexed, "last_error": lastError}, sourceUpdates, s.revisionRetention())
+	}, map[string]any{"status": revisionStatus, "indexed_chunks": indexed, "last_error": lastError}, sourceUpdates, s.revisionRetention()); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (s *service) failReindexJob(job *IngestJob, err error) {
@@ -869,9 +916,11 @@ func (s *service) failReindexJob(job *IngestJob, err error) {
 		return
 	}
 	now := time.Now().UTC()
-	_, _ = s.repo.FailJobIfRunning(job.ID, map[string]any{
+	if _, err := s.repo.FailJobIfRunning(job.ID, map[string]any{
 		"status": JobStatusFailed, "stage": "failed", "last_error": err.Error(), "finished_at": now, "heartbeat_at": now,
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (s *service) failJob(job *IngestJob, src *Source, revision *SourceRevision, err error) {
@@ -880,16 +929,20 @@ func (s *service) failJob(job *IngestJob, src *Source, revision *SourceRevision,
 	}
 	now := time.Now().UTC()
 	if revision == nil {
-		_, _ = s.repo.FailJobIfRunning(job.ID, map[string]any{"status": JobStatusFailed, "stage": "failed", "last_error": err.Error(), "finished_at": now, "heartbeat_at": now})
+		if _, err := s.repo.FailJobIfRunning(job.ID, map[string]any{"status": JobStatusFailed, "stage": "failed", "last_error": err.Error(), "finished_at": now, "heartbeat_at": now}); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return
 	}
 	var sourceUpdates map[string]any
 	if src != nil && src.Revision == job.SourceRevision && src.Status != SourceStatusReady && src.Status != SourceStatusReadyDegraded {
 		sourceUpdates = map[string]any{"status": SourceStatusFailed, "last_error": err.Error()}
 	}
-	_, _ = s.repo.FinalizeIngestJobIfRunning(job.TenantID, job.ID, job.SourceID, job.SourceRevision, map[string]any{
+	if _, err := s.repo.FinalizeIngestJobIfRunning(job.TenantID, job.ID, job.SourceID, job.SourceRevision, map[string]any{
 		"status": JobStatusFailed, "stage": "failed", "last_error": err.Error(), "finished_at": now, "heartbeat_at": now,
-	}, map[string]any{"status": RevisionStatusFailed, "last_error": err.Error(), "retain_until": now.Add(s.revisionRetention())}, sourceUpdates, s.revisionRetention())
+	}, map[string]any{"status": RevisionStatusFailed, "last_error": err.Error(), "retain_until": now.Add(s.revisionRetention())}, sourceUpdates, s.revisionRetention()); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (s *service) revisionRetention() time.Duration {
@@ -929,7 +982,9 @@ func (s *service) maintenanceLoop(ctx context.Context) {
 					passTimeout = defaultRuntimeSettings().MaintenanceTenantPassTimeout
 				}
 				passCtx, cancel := context.WithTimeout(ctx, passTimeout)
-				_ = s.reconcileTenant(passCtx, tenantID, s.settings.MaxOutboxesPerPass)
+				if err := s.reconcileTenant(passCtx, tenantID, s.settings.MaxOutboxesPerPass); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 				cancel()
 			}
 		}
@@ -1048,15 +1103,19 @@ func (s *service) reconcileTenant(ctx context.Context, tenantID string, maxOutbo
 		}
 		if err := s.indexer.processClaimedOutbox(ctx, *ob, lease); err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				_, _ = s.repo.FinishOutboxLease(tenantID, ob.ID, ob.LeaseToken, map[string]any{
+				if _, err := s.repo.FinishOutboxLease(tenantID, ob.ID, ob.LeaseToken, map[string]any{
 					"status": "pending", "last_error": err.Error(), "next_attempt_at": time.Now().UTC(),
-				})
+				}); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 				return err
 			}
 			next := time.Now().UTC().Add(s.settings.outboxRetryDelay(ob.RetryCount))
-			_, _ = s.repo.FinishOutboxLease(tenantID, ob.ID, ob.LeaseToken, map[string]any{
+			if _, err := s.repo.FinishOutboxLease(tenantID, ob.ID, ob.LeaseToken, map[string]any{
 				"status": "failed", "retry_count": ob.RetryCount + 1, "last_error": err.Error(), "next_attempt_at": next,
-			})
+			}); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			continue
 		}
 		changed, finishErr := s.repo.FinishOutboxLease(tenantID, ob.ID, ob.LeaseToken, map[string]any{"status": "done", "last_error": "", "next_attempt_at": nil})
@@ -1118,9 +1177,15 @@ func (s *service) refreshSourceIndexState(tenantID, sourceID string) {
 		revisionUpdates["status"] = RevisionStatusReady
 		revisionUpdates["last_error"] = ""
 	}
-	_ = s.repo.UpdateSource(tenantID, sourceID, updates)
-	_ = s.repo.UpdateSourceRevision(tenantID, sourceID, src.Revision, revisionUpdates)
+	if err := s.repo.UpdateSource(tenantID, sourceID, updates); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := s.repo.UpdateSourceRevision(tenantID, sourceID, src.Revision, revisionUpdates); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	if job, err := s.repo.LatestJobForSource(tenantID, sourceID); err == nil && job != nil {
-		_ = s.repo.UpdateJob(job.ID, map[string]any{"indexed_chunks": indexed})
+		if err := s.repo.UpdateJob(job.ID, map[string]any{"indexed_chunks": indexed}); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 }

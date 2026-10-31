@@ -13,6 +13,7 @@ import (
 	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/pkg/database/qdrant"
 	"gorm.io/gorm"
+	amitialog "log"
 )
 
 type SystemStatus string
@@ -290,8 +291,12 @@ func (c *ComponentChecker) Evaluate() (SystemStatus, string) { return c.evaluate
 
 func NewStartupReadinessService(db *gorm.DB, ext *extension.Runtime) *ReadinessService {
 	svc := NewReadinessService()
-	_ = svc.Register(NewComponentChecker("sqlite", true, makeSQLitePingChecker(db)))
-	_ = svc.Register(NewComponentChecker("extension", true, makeExtensionPingChecker(ext)))
+	if err := svc.Register(NewComponentChecker("sqlite", true, makeSQLitePingChecker(db))); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := svc.Register(NewComponentChecker("extension", true, makeExtensionPingChecker(ext))); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	return svc
 }
 

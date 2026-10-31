@@ -110,10 +110,13 @@ func TestConfigurationCoreSwitchRejectsPreviousConfigurationRequests(t *testing.
 		t.Fatal("provider switch did not cancel old configuration request")
 	}
 	router := configurationProviderRouter(db)
-	for _, path := range []string{"/embedding/2/activate", "/vision/2/activate", "/imagegen/2/activate", "/config/import"} {
+	for _, path := range []string{"/embedding/2/activate", "/vision/2/activate", "/imagegen/2/activate"} {
 		if code := configurationHTTPResult(t, router, ctx, http.MethodPost, path, `{"settings":{"late":"forbidden"}}`); code == 200 || code == 0 {
 			t.Fatalf("old Core accepted configuration write: %s", path)
 		}
+	}
+	if code := configurationHTTPResult(t, router, ctx, http.MethodPut, "/config", `{"settings":{"late":"forbidden"}}`); code == 200 || code == 0 {
+		t.Fatal("old Core accepted configuration write: /config")
 	}
 	var count int64
 	if err := db.Table("app_settings").Count(&count).Error; err != nil || count != 0 {

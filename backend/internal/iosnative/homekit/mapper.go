@@ -25,14 +25,14 @@ func AuthorizationStatusToCanonical(status AuthorizationStatus) string {
 
 func MapCapabilityState(status AuthorizationStatus, enabledByUser, initialized, initialLoadCompleted bool, homeCount int) HomeKitState {
 	state := HomeKitState{
-		Supported:              true,
-		EnabledByUser:          enabledByUser,
-		Initialized:            initialized,
-		InitialLoadCompleted:   initialLoadCompleted,
-		Authorization:          string(status),
-		HomeCount:              homeCount,
-		CanRead:                status == AuthAuthorized,
-		CanControl:             status == AuthAuthorized,
+		Supported:            true,
+		EnabledByUser:        enabledByUser,
+		Initialized:          initialized,
+		InitialLoadCompleted: initialLoadCompleted,
+		Authorization:        string(status),
+		HomeCount:            homeCount,
+		CanRead:              status == AuthAuthorized,
+		CanControl:           status == AuthAuthorized,
 	}
 
 	switch status {
@@ -130,14 +130,14 @@ func MapErrorToNativeBridge(errCode string) string {
 }
 
 type HomeKitState struct {
-	Supported              bool   `json:"supported"`
-	EnabledByUser          bool   `json:"enabledByUser"`
-	Initialized            bool   `json:"initialized"`
-	InitialLoadCompleted   bool   `json:"initialLoadCompleted"`
-	Authorization          string `json:"authorization"`
-	HomeCount              int    `json:"homeCount"`
-	CanRead                bool   `json:"canRead"`
-	CanControl             bool   `json:"canControl"`
-	State                  string `json:"state"`
-	Reason                 string `json:"reason,omitempty"`
+	Supported            bool   `json:"supported"`
+	EnabledByUser        bool   `json:"enabledByUser"`
+	Initialized          bool   `json:"initialized"`
+	InitialLoadCompleted bool   `json:"initialLoadCompleted"`
+	Authorization        string `json:"authorization"`
+	HomeCount            int    `json:"homeCount"`
+	CanRead              bool   `json:"canRead"`
+	CanControl           bool   `json:"canControl"`
+	State                string `json:"state"`
+	Reason               string `json:"reason,omitempty"`
 }

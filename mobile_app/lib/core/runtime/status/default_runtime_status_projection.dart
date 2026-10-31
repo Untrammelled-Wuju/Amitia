@@ -74,7 +74,10 @@ class DefaultRuntimeStatusProjection implements RuntimeStatusProjection {
 
     _bridgeSubscription = _bridge.snapshots.listen(
       _handleBridgeSnapshot,
-      onError: (_) => _handleBridgeError(),
+      onError: (Object error, StackTrace stackTrace) {
+        print("[original-error] $error\n$stackTrace");
+        _handleBridgeError();
+      },
     );
 
     final currentBridge = await _bridge.snapshot();
@@ -84,7 +87,10 @@ class DefaultRuntimeStatusProjection implements RuntimeStatusProjection {
     if (_transportStateSource case final source?) {
       _transportSubscription = source.snapshots.listen(
         _handleTransportState,
-        onError: (_) => _handleTransportError(),
+        onError: (Object error, StackTrace stackTrace) {
+          print("[original-error] $error\n$stackTrace");
+          _handleTransportError();
+        },
       );
       _handleTransportState(source.current);
     }
@@ -102,8 +108,9 @@ class DefaultRuntimeStatusProjection implements RuntimeStatusProjection {
         _lastConnection = result;
         _rederive();
       }
-    } catch (_) {
-      if (!_disposed) {
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+if (!_disposed) {
         _lastConnection = BackendConnectionUnavailable();
         _rederive();
       }

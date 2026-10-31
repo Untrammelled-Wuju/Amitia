@@ -133,7 +133,7 @@ func (g *DefaultGateway) Call(ctx context.Context, request CallRequest) CallResu
 				Status: StatusRejected,
 				Error: &Error{
 					Code:    ErrorCodeHostUnavailable,
-					Message: "host_api: audit write failed (fail closed for side-effect route)",
+						Message: "host_api: audit write failed (fail closed for side-effect route): " + err.Error(),
 				},
 			}
 			g.recordAudit(ctx, request, result)

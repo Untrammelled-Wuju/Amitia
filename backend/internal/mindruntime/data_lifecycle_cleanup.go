@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	amitialog "log"
 )
 
 func (c *DataLifecycleCoordinator) scheduleOutboxCleanupLocked(tombstone DeletionTombstone) []OutboxCleanupItem {
@@ -367,7 +368,9 @@ func (c *DataLifecycleCoordinator) updateTombstoneAfterCleanup(items []OutboxCle
 				tombstone.Status = DeletionStatusCleaning
 			}
 			c.tombstones[key] = tombstone
-			_ = c.persistTombstoneLocked(tombstone)
+			if err := c.persistTombstoneLocked(tombstone); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			break
 		}
 	}

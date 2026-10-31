@@ -8,6 +8,7 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/contracts"
 	"github.com/u-ai/backend/internal/gamehost/control"
 	"github.com/u-ai/backend/internal/gamehost/domain"
+	amitialog "log"
 )
 
 type ControlAuditAdapter struct {
@@ -58,7 +59,9 @@ func (a *ControlAuditAdapter) RecordTransition(evt control.AuthorityAuditEvent) 
 		Metadata:            metadataJSON,
 	}
 
-	_, _ = a.eventService.Publish(nil, "gamehost.control.audit", 1, payloadJSON, opts)
+	if _, err := a.eventService.Publish(nil, "gamehost.control.audit", 1, payloadJSON, opts); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (a *ControlAuditAdapter) resolveExtensionID(pluginID domain.PluginID) string {

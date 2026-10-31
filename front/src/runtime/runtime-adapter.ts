@@ -30,8 +30,9 @@ async function resolveLocalRuntimeBaseURL(): Promise<string> {
     if (endpoint?.httpBaseURL) {
       LOCAL_DEVICE_RUNTIME_BASE_URL = endpoint.httpBaseURL.replace(/\/+$/, "");
     }
-  } catch {
-    return LOCAL_DEVICE_RUNTIME_BASE_URL;
+  } catch (error) {
+  console.error("[original-error]", error);
+return LOCAL_DEVICE_RUNTIME_BASE_URL;
   }
   return LOCAL_DEVICE_RUNTIME_BASE_URL;
 }
@@ -184,8 +185,9 @@ export async function getDeploymentConfig(): Promise<DeploymentModeConfig> {
           return cachedConfig;
         }
       }
-    } catch {
-      // Invalid browser-local deployment config falls back to same-origin Cloud UI.
+    } catch (error) {
+  console.error("[original-error]", error);
+// Invalid browser-local deployment config falls back to same-origin Cloud UI.
     }
     if ((import.meta as any).env?.DEV && (import.meta as any).env?.VITE_WEB_LOCAL_MODE === "true") {
       cachedConfig = { mode: "local" };
@@ -255,7 +257,10 @@ if (typeof window !== "undefined" && window.amitiaDesktop?.onRuntimeStatusChange
           window.dispatchEvent(new CustomEvent("amitia:runtime-connection-changed"));
         }
       })
-      .catch(() => undefined);
+      .catch((error) => {
+  console.error("[original-error]", error);
+  return undefined;
+});
   });
 }
 
@@ -263,8 +268,9 @@ if (typeof window !== "undefined" && window.amitiaDesktop?.onRuntimeStatusChange
 function sameOrigin(a: string, b: string): boolean {
   try {
     return new URL(a).origin === new URL(b).origin;
-  } catch {
-    return false;
+  } catch (error) {
+  console.error("[original-error]", error);
+return false;
   }
 }
 
@@ -361,7 +367,9 @@ export async function deprovisionCurrentDeviceMesh(baseURL: string, originalInte
         try {
           const payload = await response.json();
           message = String(payload?.message || payload?.msg || message);
-        } catch {}
+        } catch (error) {
+  console.error("[original-error]", error);
+}
         throw new Error(message);
       }
       const acknowledgement = await response.json();

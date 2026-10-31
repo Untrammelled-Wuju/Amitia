@@ -114,8 +114,9 @@ class NotificationReplyOutbox {
         (left, right) => left.createdAtMillis.compareTo(right.createdAtMillis),
       );
       return entries;
-    } catch (_) {
-      return <PendingNotificationReply>[];
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return <PendingNotificationReply>[];
     }
   }
 

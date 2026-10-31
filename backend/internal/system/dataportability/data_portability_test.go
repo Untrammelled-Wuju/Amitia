@@ -4,8 +4,11 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/glebarez/sqlite"
@@ -24,7 +27,7 @@ func newPortabilityFixture(t *testing.T) (*gorm.DB, *dataportability.Coordinator
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&character.Character{}, &chat.Conversation{}, &chat.Message{}, &coresystem.AppSetting{}); err != nil {
+	if err := db.AutoMigrate(&character.Character{}, &chat.Conversation{}, &chat.Message{}, &chat.ModelConfig{}, &coresystem.AppSetting{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Exec(`CREATE TABLE IF NOT EXISTS kernel_device_owned_resources (
@@ -46,7 +49,7 @@ func newPortabilityFixture(t *testing.T) (*gorm.DB, *dataportability.Coordinator
 		t.Fatal(err)
 	}
 	coord := dataportability.NewCoordinator(dataDir, "test", "test", "migrations-v1-1", dataportability.NewStagingManager(dataDir))
-	if err := coord.RegisterContributors(dataportability.NewCharacterContributor(db), chat.NewChatBackupContributor(db), coresystem.NewSettingsBackupContributor(db), business.NewRuntimeStateBackupContributor(sqlDB)); err != nil {
+	if err := coord.RegisterContributors(dataportability.NewCharacterContributor(db), chat.NewChatBackupContributor(db), coresystem.NewSettingsBackupContributor(db), chat.NewModelConfigBackupContributor(db), business.NewRuntimeStateBackupContributor(sqlDB)); err != nil {
 		t.Fatal(err)
 	}
 	return db, coord, dataDir
@@ -210,5 +213,186 @@ func TestSettingsImportIgnoresContributorsOutsideArchive(t *testing.T) {
 	}
 	if err := coord.CancelStagedImport(ticket.ID); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestSensitiveSettingsRequireEncryptionAndRoundTrip(t *testing.T) {
+	db, coord, dataDir := newPortabilityFixture(t)
+	if err := db.Create(&coresystem.AppSetting{Key: "api_key", Value: "settings-secret"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&chat.ModelConfig{
+		Name:               "private-model",
+		APIType:            "openai",
+		BaseURL:            "https://example.invalid",
+		APIKey:             "model-secret",
+		ModelName:          "private",
+		IsActive:           1,
+		ProviderConfigJSON: `{"endpoint":"private","nested":{"accessToken":"provider-secret"},"mode":"safe"}`,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := coord.CreateBackup(context.Background(), dataportability.BackupRequest{
+		Scope:          dataportability.ScopeSettings,
+		Profile:        dataportability.ProfilePortable,
+		Purpose:        dataportability.PurposeMigration,
+		IncludeSecrets: true,
+	}, "", nil); !errors.Is(err, dataportability.ErrBackupEncryptionRequired) {
+		t.Fatalf("unencrypted secret export error = %v", err)
+	}
+
+	portable, err := coord.CreateBackup(context.Background(), dataportability.BackupRequest{
+		Scope:   dataportability.ScopeSettings,
+		Profile: dataportability.ProfilePortable,
+		Purpose: dataportability.PurposeMigration,
+	}, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if portable.Manifest.IncludesSecrets {
+		t.Fatal("portable export marked secrets as included")
+	}
+	for _, component := range portable.Manifest.Components {
+		if component.ID == coresystem.ComponentIDSettings || component.ID == chat.ComponentIDModelConfigs {
+			if !component.Sensitive {
+				t.Fatalf("%s lost its sensitive marker", component.ID)
+			}
+		}
+	}
+	assertArchiveOmitsSecrets(t, portable.Path, "settings-secret", "model-secret", "provider-secret")
+	ticket, err := coord.StageImport(context.Background(), portable.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	warned := false
+	for _, component := range ticket.Preview.Components {
+		if component.ComponentID == chat.ComponentIDModelConfigs && len(component.Warnings) > 0 {
+			warned = true
+		}
+	}
+	if !warned {
+		t.Fatal("portable preview did not warn about omitted model credentials")
+	}
+	if err := coord.CancelStagedImport(ticket.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	secretBackup, err := coord.CreateBackup(context.Background(), dataportability.BackupRequest{
+		Scope:          dataportability.ScopeSettings,
+		Profile:        dataportability.ProfilePortable,
+		Purpose:        dataportability.PurposeMigration,
+		IncludeSecrets: true,
+		Passphrase:     "secret export passphrase",
+	}, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !secretBackup.Manifest.IncludesSecrets || !dataportability.IsEncryptedFile(secretBackup.Path) {
+		t.Fatal("secret export was not encrypted or recorded")
+	}
+	decrypted := filepath.Join(dataDir, "secret-export.amitia-backup")
+	if err := dataportability.DecryptFile(secretBackup.Path, decrypted, "secret export passphrase"); err != nil {
+		t.Fatal(err)
+	}
+	assertArchiveContainsSecrets(t, decrypted, "settings-secret", "model-secret", "provider-secret")
+}
+
+func TestSensitiveModelImportReauthorizesAndActivatesUsableConfig(t *testing.T) {
+	db, coord, dataDir := newPortabilityFixture(t)
+	seedPortabilityFixture(t, db)
+	if err := db.Create(&chat.ModelConfig{
+		Name:               "private-model",
+		APIType:            "openai",
+		BaseURL:            "https://example.invalid",
+		APIKey:             "model-secret",
+		ModelName:          "private",
+		IsActive:           1,
+		ProviderConfigJSON: `{"endpoint":"private","nested":{"accessToken":"provider-secret"},"mode":"safe"}`,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	backup, err := coord.CreateBackup(context.Background(), dataportability.BackupRequest{
+		Scope:          dataportability.ScopeSettings,
+		Profile:        dataportability.ProfilePortable,
+		Purpose:        dataportability.PurposeMigration,
+		IncludeSecrets: true,
+		Passphrase:     "secret import passphrase",
+	}, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decrypted := filepath.Join(dataDir, "secret-import.amitia-backup")
+	if err := dataportability.DecryptFile(backup.Path, decrypted, "secret import passphrase"); err != nil {
+		t.Fatal(err)
+	}
+	ticket, err := coord.StageImport(context.Background(), decrypted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ticket.Preview == nil || !ticket.Preview.Manifest.IncludesSecrets {
+		t.Fatal("secret import preview lost manifest metadata")
+	}
+	if _, err := coord.CommitStagedImport(context.Background(), ticket.ID, dataportability.CollisionDuplicate, true); err != nil {
+		t.Fatal(err)
+	}
+	var active []chat.ModelConfig
+	if err := db.Where("is_active = 1").Find(&active).Error; err != nil {
+		t.Fatal(err)
+	}
+	if len(active) != 1 || active[0].ID == 0 || active[0].APIKey != "model-secret" {
+		t.Fatalf("active imported config = %#v", active)
+	}
+}
+
+func assertArchiveOmitsSecrets(t *testing.T, path string, secrets ...string) {
+	t.Helper()
+	reader, err := dataportability.NewArchiveReader(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	for _, id := range []string{coresystem.ComponentIDSettings, chat.ComponentIDModelConfigs} {
+		rc, err := reader.OpenComponent("datasets/" + id + ".ndjson")
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, readErr := io.ReadAll(rc)
+		rc.Close()
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		for _, secret := range secrets {
+			if strings.Contains(string(data), secret) {
+				t.Fatalf("%s leaked %s", id, secret)
+			}
+		}
+	}
+}
+
+func assertArchiveContainsSecrets(t *testing.T, path string, secrets ...string) {
+	t.Helper()
+	reader, err := dataportability.NewArchiveReader(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	var data []byte
+	for _, id := range []string{coresystem.ComponentIDSettings, chat.ComponentIDModelConfigs} {
+		rc, err := reader.OpenComponent("datasets/" + id + ".ndjson")
+		if err != nil {
+			t.Fatal(err)
+		}
+		part, readErr := io.ReadAll(rc)
+		rc.Close()
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		data = append(data, part...)
+	}
+	for _, secret := range secrets {
+		if !strings.Contains(string(data), secret) {
+			t.Fatalf("archive omitted %s", secret)
+		}
 	}
 }

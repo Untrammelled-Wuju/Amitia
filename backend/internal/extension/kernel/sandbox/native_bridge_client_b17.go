@@ -47,7 +47,10 @@ static amitia_ish_command_t make_command(
     return cmd;
 }
 */
-import "C"
+import (
+	"C"
+	amitialog "log"
+)
 
 import (
 	"context"
@@ -696,7 +699,9 @@ func (b *iosNativeBridgeClient) drainAndStop(ctx context.Context, fullStop bool)
 		b.mu.RUnlock()
 
 		if stillActive {
-			_ = b.Cancel(ctx, execID)
+			if err := b.Cancel(ctx, execID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			cancelTimer := time.NewTimer(CommandCancelTimeout)
 			defer cancelTimer.Stop()
 			select {

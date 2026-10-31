@@ -16,6 +16,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/extension/kernel"
+	amitialog "log"
 )
 
 type MigrationService struct {
@@ -474,10 +475,12 @@ func (s *MigrationService) MigrateOne(
 
 	defer func() {
 		if releaseRequired {
-			_ = s.target.Release(
+			if err := s.target.Release(
 				context.Background(),
 				checkpoint,
-			)
+			); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}()
 
@@ -592,7 +595,7 @@ func (s *MigrationService) MigrateOne(
 			),
 		)
 	if err != nil {
-		_ = s.updateCheckpoint(
+		if err := s.updateCheckpoint(
 			context.Background(),
 			&checkpoint,
 			kernel.LegacyMigrationCheckpointUpdate{
@@ -600,7 +603,9 @@ func (s *MigrationService) MigrateOne(
 				CurrentStep: "preview_failed",
 				LastError:   err.Error(),
 			},
-		)
+		); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 
 		return err
 	}
@@ -698,7 +703,7 @@ func (s *MigrationService) MigrateOne(
 			},
 		)
 	if err != nil {
-		_ = s.updateCheckpoint(
+		if err := s.updateCheckpoint(
 			context.Background(),
 			&checkpoint,
 			kernel.LegacyMigrationCheckpointUpdate{
@@ -709,7 +714,9 @@ func (s *MigrationService) MigrateOne(
 				ArtifactID:       preview.ArtifactID,
 				LastError:        err.Error(),
 			},
-		)
+		); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 
 		return err
 	}

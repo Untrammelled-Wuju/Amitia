@@ -21,8 +21,9 @@ function readKeyFile(file: string): Buffer | null {
     const hex = raw.toString("utf8").trim()
     if (/^[0-9a-f]{64}$/i.test(hex)) return Buffer.from(hex, "hex")
     return null
-  } catch {
-    return null
+  } catch (error) {
+  console.error("[original-error]", error);
+return null
   }
 }
 
@@ -64,8 +65,9 @@ export class CredentialStore {
     let parsed: StoredRecord
     try {
       parsed = JSON.parse(fs.readFileSync(this.secretPath, "utf8")) as StoredRecord
-    } catch {
-      return ""
+    } catch (error) {
+  console.error("[original-error]", error);
+return ""
     }
     if (!parsed || parsed.version !== 1 || !parsed.data || !parsed.iv || !parsed.tag) return ""
     try {
@@ -74,8 +76,9 @@ export class CredentialStore {
       decipher.setAuthTag(Buffer.from(parsed.tag, "base64"))
       const plain = Buffer.concat([decipher.update(Buffer.from(parsed.data, "base64")), decipher.final()])
       return plain.toString("utf8")
-    } catch {
-      return ""
+    } catch (error) {
+  console.error("[original-error]", error);
+return ""
     }
   }
 
@@ -103,8 +106,9 @@ export class CredentialStore {
   clear(): void {
     try {
       fs.rmSync(this.secretPath, { force: true })
-    } catch {
-      return
+    } catch (error) {
+  console.error("[original-error]", error);
+return
     }
   }
 }

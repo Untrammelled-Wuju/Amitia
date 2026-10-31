@@ -29,26 +29,34 @@ export function initLogger(): void {
   console.log = (...args: unknown[]) => {
     try {
       origLog(...args);
-    } catch (_) {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
     if (logStream) {
       const msg = `[${new Date().toISOString()}] [LOG] ${args.map(String).join(" ")}\n`;
       try {
         logStream.write(msg);
-      } catch (_) {}
+      } catch (error) {
+  console.error("[original-error]", error);
+}
     }
   };
 
   console.error = (...args: unknown[]) => {
     try {
       origError(...args);
-    } catch (_) {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
     if (logStream) {
       const text = args.map(String).join(" ");
       const level = /deprecationwarning/i.test(text) ? "[WARN]" : "[ERROR]";
       const msg = `[${new Date().toISOString()}] ${level} ${text}\n`;
       try {
         logStream.write(msg);
-      } catch (_) {}
+      } catch (error) {
+  console.error("[original-error]", error);
+}
     }
     recordDesktopClientError({
       message: args.map((value) => value instanceof Error ? value.message : String(value)).join(" "),

@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/continuity"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	amitialog "log"
 )
 
 type OwnedContinuity struct {
@@ -749,7 +750,9 @@ func (e *Engine) PresentManagedContinuity(ctx context.Context, document OwnedCon
 		return PresentContinuity(document, scope, time.Now())
 	}
 	scope.RoleID, scope.RoleRevision = role.ID, role.Revision
-	_ = coordination.ResolveMemoryScope(&scope, "")
+	if err := coordination.ResolveMemoryScope(&scope, ""); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	scope.ContinuityRoleID = partition
 	document.MemoryPartition = partition
 	document.ReadOnly = false

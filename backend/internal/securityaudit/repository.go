@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"gorm.io/gorm"
+	amitialog "log"
 	"time"
 )
 
@@ -62,6 +63,8 @@ func (r *Repository) ListSpaceEventsByType(spaceID, eventType string, limit int)
 func (r *Repository) EnsureTable() error { return r.db.AutoMigrate(&AuditEvent{}) }
 func newEventID() string {
 	b := make([]byte, 18)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	return "ae_" + base64.RawURLEncoding.EncodeToString(b)
 }

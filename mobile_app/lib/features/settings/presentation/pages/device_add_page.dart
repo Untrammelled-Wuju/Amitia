@@ -81,8 +81,9 @@ class _DeviceAddPageState extends ConsumerState<DeviceAddPage> {
               )
               .toList(growable: false),
         );
-    } catch (_) {
-      if (mounted) setState(() => _approvals = const []);
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+if (mounted) setState(() => _approvals = const []);
     } finally {
       _refreshingApprovals = false;
     }
@@ -433,7 +434,9 @@ class _DeviceAddPageState extends ConsumerState<DeviceAddPage> {
         ref.invalidate(backendTransportProvider);
         try {
           await ref.read(mobileBackendLifecycleProvider).reconcile(deployment);
-        } catch (_) {}
+        } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
       }
       if (mounted) _show('配对失败：${_message(error)}');
     } finally {

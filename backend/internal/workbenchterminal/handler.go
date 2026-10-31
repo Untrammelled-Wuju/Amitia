@@ -12,6 +12,7 @@ import (
 	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/workbenchhttp"
 	"github.com/u-ai/backend/internal/workspace"
+	amitialog "log"
 )
 
 var rootPattern = regexp.MustCompile(`^amitia://workspace/@([a-zA-Z0-9_-]{1,128})/$`)
@@ -28,7 +29,9 @@ func NewHandler(service *workspace.Service, verifiers ...TaskVerifier) *Handler 
 	h := &Handler{manager: NewManager(), workspace: service}
 	if journal, err := defaultTaskReceiptJournal(); err == nil {
 		h.manager.EnableTaskReceipts(journal)
-		_ = journal.Prune()
+		if err := journal.Prune(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	if len(verifiers) > 0 {
 		h.taskVerifier = verifiers[0]
@@ -69,13 +72,13 @@ func terminalOwner(c *gin.Context, conversationID string) (string, bool) {
 func (h *Handler) respondError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, ErrReceiptUnavailable):
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "终端运行凭据存储不可用"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 	case errors.Is(err, ErrClosed):
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "终端服务正在关闭"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 	case errors.Is(err, ErrUnavailable):
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "终端进程启动器不可用"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 	case errors.Is(err, ErrTaskBinding):
-		c.JSON(http.StatusForbidden, gin.H{"error": "任务终端关联已撤销或不属于当前对话"})
+		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 	case errors.Is(err, ErrInvalid):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 	case errors.Is(err, ErrNotFound):
@@ -83,7 +86,7 @@ func (h *Handler) respondError(c *gin.Context, err error) {
 	case errors.Is(err, ErrLimit), errors.Is(err, ErrExited):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 	default:
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "终端进程不可用"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 	}
 }
 func (h *Handler) open(c *gin.Context) {
@@ -111,7 +114,7 @@ func (h *Handler) open(c *gin.Context) {
 	}
 	cwd, err := h.workspace.LocalWorkspaceRoot(matches[1])
 	if err != nil {
-		c.JSON(http.StatusForbidden, gin.H{"error": "只能在可写的本机 Workspace 中启动终端"})
+		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 		return
 	}
 	if request.TaskID != "" {

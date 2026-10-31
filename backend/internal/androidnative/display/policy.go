@@ -3,9 +3,9 @@ package display
 import "github.com/u-ai/backend/internal/extension/kernel/capability"
 
 const (
-	RuntimeID    = "android_native_display"
-	MaxDisplays  = 32
-	DefaultDisplayID = 0
+	RuntimeID            = "android_native_display"
+	MaxDisplays          = 32
+	DefaultDisplayID     = 0
 	MinAPIGestureDisplay = 30
 	APITopologyDisplay   = 36
 	APIGestureMin        = 30

@@ -9,7 +9,7 @@ const (
 	MaxQueryRangeDays = 366
 
 	TitleMaxLengthRunes = 1024
-	NotesMaxLength     = 16 * 1024
+	NotesMaxLength      = 16 * 1024
 
 	MinRecurrenceInterval = 1
 	MaxRecurrenceInterval = 999
@@ -23,7 +23,7 @@ const (
 )
 
 var validAccessLevels = map[string]bool{
-	"write_only": true,
+	"write_only":  true,
 	"full_access": true,
 }
 

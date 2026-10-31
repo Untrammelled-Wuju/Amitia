@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
+	amitialog "log"
 )
 
 const resourceQuarantineDDL = `CREATE TABLE IF NOT EXISTS extension_package_resource_quarantine (
@@ -693,7 +694,14 @@ func copyFileAndRemoveByHandle(sourceRoot string, sourcePath string, targetRoot 
 	if err != nil {
 		return err
 	}
-	cleanup := func() { _ = temp.File.Close(); _ = targetParent.removeChild(temp.Name) }
+	cleanup := func() {
+		if err := temp.File.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := targetParent.removeChild(temp.Name); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+	}
 	if _, err := io.Copy(temp.File, source); err != nil {
 		cleanup()
 		return err
@@ -707,7 +715,9 @@ func copyFileAndRemoveByHandle(sourceRoot string, sourcePath string, targetRoot 
 		return err
 	}
 	if err := targetParent.removeChild(temp.Name); err != nil {
-		_ = temp.File.Close()
+		if err := temp.File.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return err
 	}
 	if err := temp.File.Close(); err != nil {
@@ -1355,7 +1365,9 @@ func createRestoreDirectoriesSafely(validated *validatedRestorePath) error {
 	validated.DirectoryChain = append(validated.DirectoryChain, root)
 
 	if !root.identity().same(validated.PlatformComponents[0].Identity) {
-		_ = root.close()
+		if err := root.close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return NewPackageError(
 			PackageErrCodeResourceRestorePathRace,
 			409,
@@ -1379,7 +1391,9 @@ func createRestoreDirectoriesSafely(validated *validatedRestorePath) error {
 	existingCount := len(components) - missingCount
 
 	if existingCount < 0 || len(validated.PlatformComponents) != existingCount+1 {
-		_ = root.close()
+		if err := root.close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return NewPackageError(
 			PackageErrCodeResourceRestorePathRace,
 			409,
@@ -1390,7 +1404,9 @@ func createRestoreDirectoriesSafely(validated *validatedRestorePath) error {
 	for index, expected := range validated.MissingComponents {
 		actual := components[existingCount+index]
 		if actual != expected {
-			_ = root.close()
+			if err := root.close(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return NewPackageError(
 				PackageErrCodeResourceRestorePathRace,
 				409,
@@ -1419,7 +1435,9 @@ func createRestoreDirectoriesSafely(validated *validatedRestorePath) error {
 
 			expected := validated.PlatformComponents[index+1]
 			if filepath.Clean(expected.Path) != filepath.Clean(currentPath) || !child.identity().same(expected.Identity) {
-				_ = child.close()
+				if err := child.close(); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 				return NewPackageError(
 					PackageErrCodeResourceRestorePathRace,
 					409,
@@ -1465,7 +1483,9 @@ func createPlatformDirectoryPath(absoluteRoot string, absoluteDirectory string) 
 
 	relative, err := filepath.Rel(absoluteRoot, absoluteDirectory)
 	if err != nil {
-		_ = current.close()
+		if err := current.close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return err
 	}
 
@@ -1480,11 +1500,15 @@ func createPlatformDirectoryPath(absoluteRoot string, absoluteDirectory string) 
 		}
 
 		if openErr != nil {
-			_ = current.close()
+			if err := current.close(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return openErr
 		}
 
-		_ = current.close()
+		if err := current.close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		current = child
 	}
 
@@ -1498,7 +1522,9 @@ func prepareRestoreTargetPath(targetPath string, extRoot string) (*validatedRest
 	}
 
 	if err := createRestoreDirectoriesSafely(validated); err != nil {
-		_ = validated.Close()
+		if err := validated.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, err
 	}
 	validated.TargetName = filepath.Base(validated.AbsTargetPath)
@@ -1568,7 +1594,14 @@ func createPreparedRestoreTempHandle(validated *validatedRestorePath, source io.
 	if err != nil {
 		return nil, NewPackageError(PackageErrCodeResourceRestoreIncomplete, 500, fmt.Errorf("kernel: create restore temp: %w", err))
 	}
-	cleanup := func() { _ = temp.File.Close(); _ = validated.ParentDirectory.removeChild(temp.Name) }
+	cleanup := func() {
+		if err := temp.File.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := validated.ParentDirectory.removeChild(temp.Name); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+	}
 	hasher := sha256.New()
 	if _, err := io.Copy(io.MultiWriter(temp.File, hasher), source); err != nil {
 		cleanup()
@@ -1593,7 +1626,14 @@ func publishPreparedRestoreTempHandleNoReplace(validated *validatedRestorePath, 
 	if validated == nil || validated.ParentDirectory == nil || temp == nil || temp.File == nil {
 		return NewPackageError(PackageErrCodeResourceRestorePathRace, 409, fmt.Errorf("kernel: restore publish handles missing"))
 	}
-	cleanup := func() { _ = temp.File.Close(); _ = validated.ParentDirectory.removeChild(temp.Name) }
+	cleanup := func() {
+		if err := temp.File.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := validated.ParentDirectory.removeChild(temp.Name); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+	}
 	tempHash, err := computeOpenFileContentHash(temp.File)
 	if err != nil {
 		cleanup()
@@ -1637,7 +1677,9 @@ func publishPreparedRestoreTempHandleNoReplace(validated *validatedRestorePath, 
 		return NewPackageError(PackageErrCodeResourceSnapshotHashMismatch, 409, fmt.Errorf("kernel: published restore target hash mismatch"))
 	}
 	if err := validated.ParentDirectory.removeChild(temp.Name); err != nil {
-		_ = temp.File.Close()
+		if err := temp.File.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return err
 	}
 	if err := temp.File.Close(); err != nil {

@@ -16,5 +16,5 @@ export function parseConversationReference(reference: string): OwnedConversation
 
 export function ownedConversationRow(row: any, ownerId: string): any {
   const origin = row.conversationOrigin || { ownerId, id: row.id };
-  return { ...row, id: conversationReference(origin), resourceId: row.id, ownerId, conversationOrigin: origin, origin: row.origin, readOnly: row.readOnly === true || row.origin === "legacy", pinnedAt: typeof row.pinned === "boolean" ? row.pinned ? row.updatedAt || "pinned" : "" : row.pinnedAt, archivedAt: typeof row.archived === "boolean" ? row.archived ? row.updatedAt || "archived" : "" : row.archivedAt };
+  return { ...row, characterId: String(row.characterId || row.roleId || "").trim(), id: conversationReference(origin), resourceId: row.id, ownerId, conversationOrigin: origin, origin: row.origin, readOnly: row.readOnly === true || row.origin === "legacy", pinnedAt: typeof row.pinned === "boolean" ? row.pinned ? row.updatedAt || "pinned" : "" : row.pinnedAt, archivedAt: typeof row.archived === "boolean" ? row.archived ? row.updatedAt || "archived" : "" : row.archivedAt };
 }

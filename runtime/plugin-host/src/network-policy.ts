@@ -9,10 +9,13 @@ function disableProperty(target: Record<string, unknown>, property: string): voi
       enumerable: false,
       writable: false,
     });
-  } catch {
-    try {
+  } catch (error) {
+  process.stderr.write("[original-error] " + String(error) + "\n");
+try {
       target[property] = undefined;
-    } catch {}
+    } catch (error) {
+  process.stderr.write("[original-error] " + String(error) + "\n");
+}
   }
 }
 

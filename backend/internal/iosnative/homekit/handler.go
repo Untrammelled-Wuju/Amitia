@@ -203,8 +203,8 @@ func (h *HomeKitHandler) handleCharacteristicsRead(ctx context.Context, request 
 		return h.errorResponse(request, ErrCharacteristicNotFound, "missing required field: characteristicId")
 	}
 	return h.bridgeCall(ctx, request, OperationCharacteristicsRead, map[string]any{
-		"serviceId":         serviceID,
-		"characteristicId":  charID,
+		"serviceId":        serviceID,
+		"characteristicId": charID,
 	})
 }
 
@@ -280,4 +280,3 @@ func (h *HomeKitHandler) errorResponse(request nativebridge.Request, code, messa
 		},
 	}
 }
-

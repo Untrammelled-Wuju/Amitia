@@ -85,8 +85,9 @@ const prettyArguments = computed(() => {
   if (!raw) return "无参数";
   try {
     return JSON.stringify(JSON.parse(raw), null, 2);
-  } catch {
-    return raw.slice(0, 8000);
+  } catch (error) {
+  console.error("[original-error]", error);
+return raw.slice(0, 8000);
   }
 });
 

@@ -124,8 +124,9 @@ class NotificationCallActionOutbox {
         (left, right) => left.createdAtMillis.compareTo(right.createdAtMillis),
       );
       return entries;
-    } catch (_) {
-      return <PendingNotificationCallAction>[];
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return <PendingNotificationCallAction>[];
     }
   }
 

@@ -182,7 +182,7 @@ app.post("/api/login/start", async (_req, reply) => {
     }
     catch (err: any) {
         console.error("[Sidecar]", err);
-        return reply.status(500).send({ success: false, message: "服务器错误" });
+        return reply.status(500).send({ success: false, message: err instanceof Error ? err.message : String(err) });
     }
 });
 app.post("/api/login/rescan", async (_req, reply) => {
@@ -207,7 +207,7 @@ app.post("/api/login/rescan", async (_req, reply) => {
     }
     catch (err: any) {
         console.error("[Sidecar]", err);
-        return reply.status(500).send({ success: false, message: "服务器错误" });
+        return reply.status(500).send({ success: false, message: err instanceof Error ? err.message : String(err) });
     }
 });
 app.post("/api/login/wait", async (req, reply) => {
@@ -243,7 +243,7 @@ app.post("/api/login/wait", async (req, reply) => {
     }
     catch (err: any) {
         console.error("[Sidecar]", err);
-        return reply.status(500).send({ success: false, message: "服务器错误" });
+        return reply.status(500).send({ success: false, message: err instanceof Error ? err.message : String(err) });
     }
 });
 app.get("/api/qrcode", async (_req, reply) => {
@@ -267,7 +267,7 @@ app.post("/api/login/reconnect", async (_req, reply) => {
     }
     catch (err: any) {
         console.error("[Sidecar]", err);
-        return reply.status(500).send({ success: false, message: "服务器错误" });
+        return reply.status(500).send({ success: false, message: err instanceof Error ? err.message : String(err) });
     }
 });
 app.post("/api/send", async (req, reply) => {
@@ -296,7 +296,7 @@ app.post("/api/send", async (req, reply) => {
     }
     catch (err: any) {
         console.error("[Sidecar]", err);
-        return reply.status(500).send({ success: false, message: "服务器错误" });
+        return reply.status(500).send({ success: false, message: err instanceof Error ? err.message : String(err) });
     }
 });
 app.post("/api/send-voice", async (req, reply) => {
@@ -361,7 +361,9 @@ app.post("/api/send-image", async (req, reply) => {
                 buffer = Buffer.from(await response.arrayBuffer());
                 break;
             }
-            catch { }
+            catch (error) {
+  console.error("[original-error]", error);
+}
         }
         if (!buffer)
             throw new Error("表情资源下载失败");

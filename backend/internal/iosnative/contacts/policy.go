@@ -6,30 +6,30 @@ import (
 )
 
 const (
-	DefaultLimitList    = 50
-	MaxLimitList        = 200
-	DefaultLimitSearch  = 20
-	MaxLimitSearch      = 100
-	DefaultLimitPhoto   = 1
-	MaxLimitPhoto       = 10
+	DefaultLimitList   = 50
+	MaxLimitList       = 200
+	DefaultLimitSearch = 20
+	MaxLimitSearch     = 100
+	DefaultLimitPhoto  = 1
+	MaxLimitPhoto      = 10
 
 	TitleMaxLengthRunes = 1024
-	NotesMaxLength     = 16 * 1024
+	NotesMaxLength      = 16 * 1024
 
 	OrganizationMaxLength = 1024
 	DepartmentMaxLength   = 1024
 	JobTitleMaxLength     = 1024
 
-	MaxPhoneNumbers   = 50
-	MaxEmailAddresses = 50
+	MaxPhoneNumbers    = 50
+	MaxEmailAddresses  = 50
 	MaxPostalAddresses = 20
 	MaxURLs            = 50
 	MaxDates           = 50
 	MaxSocialProfiles  = 50
 	MaxInstantMessages = 50
 
-	MaxPhotoBytes = 10 * 1024 * 1024
-	MaxPhotoPixels = 20_000_000
+	MaxPhotoBytes     = 10 * 1024 * 1024
+	MaxPhotoPixels    = 20_000_000
 	MaxPhotoDimension = 8192
 
 	PhoneLabelMaxLength   = 128
@@ -39,11 +39,11 @@ const (
 	SocialLabelMaxLength  = 128
 	DateLabelMaxLength    = 128
 
-	TimeoutStatusAuth       = 2000000000
-	TimeoutSearchGetList    = 5000000000
-	TimeoutContainersGroups = 5000000000
+	TimeoutStatusAuth         = 2000000000
+	TimeoutSearchGetList      = 5000000000
+	TimeoutContainersGroups   = 5000000000
 	TimeoutCreateUpdateDelete = 5000000000
-	TimeoutPhoto            = 10000000000
+	TimeoutPhoto              = 10000000000
 )
 
 func ClampListLimit(limit int) int {

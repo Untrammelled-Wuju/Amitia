@@ -386,7 +386,10 @@ async function refresh() {
     const [pluginResult, runtimeResult, developerResult] = await Promise.all([
       api.get<{ items?: Plugin[] }>("/api/game-center/plugins", { page: 1, pageSize: 100 }),
       api.get<{ items?: Runtime[] }>("/api/game-center/runtimes", { page: 1, pageSize: 100 }),
-      api.get<{ enabled?: boolean }>("/api/game-center/developer-access").catch(() => ({ enabled: false })),
+      api.get<{ enabled?: boolean }>("/api/game-center/developer-access").catch((error) => {
+        console.error("[original-error]", error);
+        return { enabled: false };
+      }),
     ]);
     plugins.value = pluginResult?.items ?? [];
     runtimes.value = runtimeResult?.items ?? [];
@@ -405,8 +408,9 @@ function currentGameAgentContext() {
     try {
       const cached = JSON.parse(localStorage.getItem("uai-default-char") || "{}");
       characterId = cached?.id ? String(cached.id).trim() : "";
-    } catch {
-      characterId = "";
+    } catch (error) {
+  console.error("[original-error]", error);
+characterId = "";
     }
   }
   return {
@@ -434,8 +438,9 @@ async function bindRuntimeAgentContext(runtimeId: string) {
       currentGameAgentContext(),
       { timeout: 10000 },
     );
-  } catch {
-    // Context binding is best-effort from the UI because a runtime may be in
+  } catch (error) {
+  console.error("[original-error]", error);
+// Context binding is best-effort from the UI because a runtime may be in
     // the middle of a restart. The Agent bridge also refreshes the binding on
     // every real tool invocation, so a transient bind failure must not make
     // Game Center itself unusable.
@@ -775,8 +780,9 @@ async function invokeRpc() {
   try {
     const text = rpcPayload.value.trim();
     payload = text ? JSON.parse(text) : undefined;
-  } catch {
-    ElMessage.error("Payload 必须是合法 JSON");
+  } catch (error) {
+  console.error("[original-error]", error);
+ElMessage.error("Payload 必须是合法 JSON");
     return;
   }
   rpcLoading.value = true;

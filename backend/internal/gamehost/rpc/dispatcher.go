@@ -12,6 +12,7 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/ipc"
 	"github.com/u-ai/backend/internal/gamehost/notification"
 	"github.com/u-ai/backend/pkg/gameplugin/protocol"
+	amitialog "log"
 )
 
 var _ ipc.Dispatcher = (*RPCDispatcher)(nil)
@@ -89,7 +90,9 @@ func (d *RPCDispatcher) Dispatch(ctx context.Context, source ipc.DispatchSource,
 		if cancelReq, ok := ParseCancelEnvelope(&envelope); ok {
 			dm := d.getLifecycle()
 			if dm != nil {
-				_ = dm.HandleCancel(source.Peer, cancelReq)
+				if err := dm.HandleCancel(source.Peer, cancelReq); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 			return nil
 		}

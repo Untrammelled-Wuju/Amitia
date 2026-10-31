@@ -61,7 +61,9 @@ class _AmitiaAppRootState extends ConsumerState<AmitiaAppRoot> {
     await ref.read(uiStylePatchProvider.notifier).init();
     try {
       await ref.read(backgroundPreferencesProvider.notifier).init();
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
     await ref.read(chatPermissionPreferencesProvider.notifier).init();
     final deploymentNotifier = ref.read(
       mobileDeploymentConfigProvider.notifier,
@@ -114,8 +116,9 @@ class _AmitiaAppRootState extends ConsumerState<AmitiaAppRoot> {
         }
         unawaited(_showUpdatePrompt(update));
       });
-    } catch (_) {
-      return;
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return;
     }
   }
 

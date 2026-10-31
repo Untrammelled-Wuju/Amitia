@@ -216,16 +216,18 @@ function targetSelector(target: string): string | null {
     const nodeSelector = `[data-amitia-node-target="${escapeAttribute(value)}"]`;
     try {
       if (document.querySelector(nodeSelector)) return nodeSelector;
-    } catch {
-    }
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
   if (/^(html|body|\*)$/i.test(value)) return value.toLowerCase();
   if (/^(#|\.|\[|:)/.test(value) || /[\s>+~,]/.test(value)) {
     try {
       document.querySelector(value);
       return value;
-    } catch {
-      return null;
+    } catch (error) {
+  console.error("[original-error]", error);
+return null;
     }
   }
   if (/^[a-zA-Z][a-zA-Z0-9-]*$/.test(value)) return value.toLowerCase();
@@ -359,8 +361,9 @@ function hasUniqueId(element: Element): boolean {
   if (!id) return false;
   try {
     return document.querySelectorAll(`#${escapeIdentifier(id)}`).length === 1;
-  } catch {
-    return false;
+  } catch (error) {
+  console.error("[original-error]", error);
+return false;
   }
 }
 
@@ -492,8 +495,9 @@ export function inspectDomTargets(options: DomInspectionOptions = {}): DomInspec
     if (selector) {
       try {
         elements = Array.from(document.querySelectorAll(selector));
-      } catch {
-        elements = [];
+      } catch (error) {
+  console.error("[original-error]", error);
+elements = [];
       }
     }
   } else {

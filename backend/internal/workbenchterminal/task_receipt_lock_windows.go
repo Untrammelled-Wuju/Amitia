@@ -1,6 +1,7 @@
 package workbenchterminal
 
 import (
+	amitialog "log"
 	"os"
 	"runtime"
 	"syscall"
@@ -19,7 +20,9 @@ func lockReceiptJournal(path string, timeout time.Duration) (func(), error) {
 	}
 	info, err := os.Lstat(path)
 	if err != nil || !info.Mode().IsRegular() {
-		_ = file.Close()
+		if err := file.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, ErrInvalid
 	}
 	overlapped := &syscall.Overlapped{}
@@ -31,11 +34,15 @@ func lockReceiptJournal(path string, timeout time.Duration) (func(), error) {
 			break
 		}
 		if lockErr != syscall.Errno(33) && lockErr != syscall.Errno(158) && lockErr != syscall.Errno(167) {
-			_ = file.Close()
+			if err := file.Close(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return nil, lockErr
 		}
 		if time.Now().After(deadline) {
-			_ = file.Close()
+			if err := file.Close(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return nil, ErrReceiptUnavailable
 		}
 		time.Sleep(15 * time.Millisecond)
@@ -43,6 +50,8 @@ func lockReceiptJournal(path string, timeout time.Duration) (func(), error) {
 	return func() {
 		_, _, _ = receiptUnlockFile.Call(file.Fd(), 0, 1, 0, uintptr(unsafe.Pointer(overlapped)))
 		runtime.KeepAlive(overlapped)
-		_ = file.Close()
+		if err := file.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}, nil
 }

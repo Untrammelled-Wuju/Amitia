@@ -14,6 +14,7 @@ import (
 	"github.com/u-ai/backend/internal/uiagent/schema"
 	"github.com/u-ai/backend/internal/uiagent/source"
 	"github.com/u-ai/backend/internal/workspace"
+	amitialog "log"
 )
 
 var (
@@ -327,63 +328,89 @@ func uiagentModifyHandler(ctx context.Context, execCtx tool.ToolExecutionContext
 
 		result, err := uiAgentSourceEditor.ApplyPatchesTx(ctx, tx, srcReq)
 		if err != nil {
-			_ = uiAgentSourceEditor.RollbackTx(ctx, tx)
+			if err := uiAgentSourceEditor.RollbackTx(ctx, tx); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return tool.ErrorResult("modify_failed", fmt.Sprintf("modification failed: %v", err))
 		}
 
 		if len(result.ChangedFiles) == 0 {
-			_ = uiAgentSourceEditor.RollbackTx(ctx, tx)
+			if err := uiAgentSourceEditor.RollbackTx(ctx, tx); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return tool.ErrorResult("no_changes", "no files were modified")
 		}
 
 		diffResult, err := uiAgentSourceEditor.PreviewDiff(ctx, tx)
 		if err != nil {
-			_ = uiAgentSourceEditor.RollbackTx(ctx, tx)
+			if err := uiAgentSourceEditor.RollbackTx(ctx, tx); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return tool.ErrorResult("preview_failed", fmt.Sprintf("preview diff failed: %v", err))
 		}
 		result.DiffPreview = diffResult.UnifiedDiff
 
 		previewEditor, ok := uiAgentSourceEditor.(source.PreviewTransactionEditor)
 		if !ok {
-			_ = uiAgentSourceEditor.RollbackTx(ctx, tx)
+			if err := uiAgentSourceEditor.RollbackTx(ctx, tx); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return tool.ErrorResult("preview_unavailable", "source editor does not support pre-commit preview transactions")
 		}
 		if err := previewEditor.MaterializePreviewTx(ctx, tx); err != nil {
-			_ = uiAgentSourceEditor.RollbackTx(ctx, tx)
+			if err := uiAgentSourceEditor.RollbackTx(ctx, tx); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return tool.ErrorResult("preview_failed", fmt.Sprintf("failed to materialize transaction for preview: %v", err))
 		}
 
 		if uiAgentPreviewMgr == nil || uiAgentObserver == nil {
-			_ = uiAgentSourceEditor.RollbackTx(ctx, tx)
+			if err := uiAgentSourceEditor.RollbackTx(ctx, tx); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return tool.ErrorResult("preview_unavailable", "source validation requires preview manager and observer")
 		}
 		platform := detectSourcePreviewPlatform(result.ChangedFiles)
 		if platform == "" {
-			_ = uiAgentSourceEditor.RollbackTx(ctx, tx)
+			if err := uiAgentSourceEditor.RollbackTx(ctx, tx); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return tool.ErrorResult("preview_unavailable", "unable to determine source preview platform")
 		}
 		previewSession, previewErr := uiAgentPreviewMgr.Create(workspaceID, nil)
 		if previewErr != nil {
-			_ = uiAgentSourceEditor.RollbackTx(ctx, tx)
+			if err := uiAgentSourceEditor.RollbackTx(ctx, tx); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return tool.ErrorResult("preview_failed", fmt.Sprintf("preview session creation failed: %v", previewErr))
 		}
 		previewSession.Target = &preview.PreviewTarget{WorkspaceID: workspaceID, Platform: platform, SourceType: "source"}
 		previewSession.TransactionID = tx.ID
 		obs, obsErr := uiAgentObserver.Capture(ctx, previewSession.ID)
 		if obsErr != nil {
-			_ = uiAgentSourceEditor.RollbackTx(ctx, tx)
-			_ = uiAgentPreviewMgr.Terminate(previewSession.ID)
+			if err := uiAgentSourceEditor.RollbackTx(ctx, tx); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
+			if err := uiAgentPreviewMgr.Terminate(previewSession.ID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return tool.ErrorResult("preview_failed", fmt.Sprintf("preview observation failed: %v", obsErr))
 		}
 		if preview.ShouldBlockCommit(obs) {
-			_ = uiAgentSourceEditor.RollbackTx(ctx, tx)
+			if err := uiAgentSourceEditor.RollbackTx(ctx, tx); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			if !wantPreview {
-				_ = uiAgentPreviewMgr.Terminate(previewSession.ID)
+				if err := uiAgentPreviewMgr.Terminate(previewSession.ID); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 			return tool.ErrorResult("preview_validation_failed", fmt.Sprintf("preview blocked commit: %s", strings.Join(obs.AllErrors(), "; ")))
 		}
 		if err := previewEditor.FinalizePreviewTx(ctx, tx); err != nil {
-			_ = uiAgentSourceEditor.RollbackTx(ctx, tx)
+			if err := uiAgentSourceEditor.RollbackTx(ctx, tx); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return tool.ErrorResult("commit_failed", fmt.Sprintf("commit failed after preview: %v", err))
 		}
 
@@ -398,7 +425,9 @@ func uiagentModifyHandler(ctx context.Context, execCtx tool.ToolExecutionContext
 		if wantPreview {
 			response["previewRef"] = previewSession.ID
 		} else {
-			_ = uiAgentPreviewMgr.Terminate(previewSession.ID)
+			if err := uiAgentPreviewMgr.Terminate(previewSession.ID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 
 		resultJSON, _ := json.Marshal(response)

@@ -56,15 +56,15 @@ type PingRequest struct {
 }
 
 type PingResult struct {
-	Host           string  `json:"host"`
-	ResolvedIP     string  `json:"resolvedIp"`
-	Sent           int     `json:"sent"`
-	Received       int     `json:"received"`
-	LossPercent    float64 `json:"lossPercent"`
-	MinMs          float64 `json:"minMs"`
-	AvgMs          float64 `json:"avgMs"`
-	MaxMs          float64 `json:"maxMs"`
-	Mode           string  `json:"mode"`
+	Host        string  `json:"host"`
+	ResolvedIP  string  `json:"resolvedIp"`
+	Sent        int     `json:"sent"`
+	Received    int     `json:"received"`
+	LossPercent float64 `json:"lossPercent"`
+	MinMs       float64 `json:"minMs"`
+	AvgMs       float64 `json:"avgMs"`
+	MaxMs       float64 `json:"maxMs"`
+	Mode        string  `json:"mode"`
 }
 
 type TCPProbeRequest struct {
@@ -82,14 +82,14 @@ type TCPProbeResult struct {
 }
 
 type HTTPRequest struct {
-	Method          string            `json:"method"`
-	URL             string            `json:"url"`
-	Headers         map[string]string `json:"headers,omitempty"`
-	Body            string            `json:"body,omitempty"`
-	BodyBase64      string            `json:"bodyBase64,omitempty"`
-	TimeoutMS       int               `json:"timeoutMs,omitempty"`
-	FollowRedirects *bool             `json:"followRedirects,omitempty"`
-	MaxResponseBytes int64            `json:"maxResponseBytes,omitempty"`
+	Method           string            `json:"method"`
+	URL              string            `json:"url"`
+	Headers          map[string]string `json:"headers,omitempty"`
+	Body             string            `json:"body,omitempty"`
+	BodyBase64       string            `json:"bodyBase64,omitempty"`
+	TimeoutMS        int               `json:"timeoutMs,omitempty"`
+	FollowRedirects  *bool             `json:"followRedirects,omitempty"`
+	MaxResponseBytes int64             `json:"maxResponseBytes,omitempty"`
 }
 
 type HTTPResponse struct {

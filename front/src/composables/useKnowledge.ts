@@ -467,7 +467,15 @@ export interface KnowledgeSearchResponse {
   originalQuery: string;
   effectiveQuery: string;
   queryComplexity: "simple" | "complex" | "comparison" | string;
+  requestedRetrievalLevel: "auto" | "none" | "fast" | "deep" | "agentic" | string;
   retrievalLevel: "none" | "fast" | "deep" | "agentic" | string;
+  routingMode: "chat" | "diagnostic" | string;
+  policyMode: "active" | "active_shadow" | "legacy" | "legacy_shadow" | "diagnostic" | string;
+  routeReason: string;
+  shadowLevel?: string;
+  shadowReason?: string;
+  routeDegraded: boolean;
+  routeDegradationReason?: string;
   queryHistory?: string[];
   degraded: boolean;
   temporalMode: "current" | "historical" | "all" | string;
@@ -678,6 +686,7 @@ export function useKnowledge() {
     sourceIds?: string[];
     minScore?: number;
     retrievalLevel?: "auto" | "none" | "fast" | "deep" | "agentic";
+    routingMode?: "chat" | "diagnostic";
     contextualQuery?: string;
     temporalMode?: "current" | "historical" | "all";
     asOf?: string;
@@ -685,12 +694,14 @@ export function useKnowledge() {
     searching.value = true;
     try {
       const temporalMode = options?.temporalMode ?? "current";
+      const retrievalLevel = options?.retrievalLevel ?? "auto";
       const result = await post<KnowledgeSearchResponse>("/api/knowledge/search", {
         query: query.trim(),
         limit: options?.limit ?? 8,
         sourceIds: options?.sourceIds ?? [],
         minScore: options?.minScore ?? 0,
-        retrievalLevel: options?.retrievalLevel ?? "auto",
+        retrievalLevel,
+        routingMode: options?.routingMode ?? (retrievalLevel === "auto" ? "chat" : "diagnostic"),
         ...(options?.contextualQuery?.trim() ? { contextualQuery: options.contextualQuery.trim() } : {}),
         temporalMode,
         ...(temporalMode === "historical" && options?.asOf ? { asOf: options.asOf } : {}),
@@ -858,7 +869,10 @@ export function useKnowledge() {
       return result;
     } catch (error) {
       resetRecoveryReviewState();
-      await fetchRecoveryReviews(auditId).catch(() => null);
+      await fetchRecoveryReviews(auditId).catch((error) => {
+  console.error("[original-error]", error);
+  return null;
+});
       throw error;
     } finally {
       reviewingRecovery.value = false;
@@ -882,7 +896,10 @@ export function useKnowledge() {
       return result;
     } catch (error) {
       resetRecoveryReviewState();
-      await fetchRecoveryReviews(auditId).catch(() => null);
+      await fetchRecoveryReviews(auditId).catch((error) => {
+  console.error("[original-error]", error);
+  return null;
+});
       throw error;
     } finally {
       reviewingRecovery.value = false;
@@ -920,7 +937,10 @@ export function useKnowledge() {
       }
       orphanPageTotals.value = result.totals;
       orphanVectorPage.value = result;
-      await fetchOrphanAuditSessions().catch(() => null);
+      await fetchOrphanAuditSessions().catch((error) => {
+  console.error("[original-error]", error);
+  return null;
+});
       return result;
     } finally {
       pagingOrphans.value = false;
@@ -935,7 +955,10 @@ export function useKnowledge() {
         get<KnowledgeRetrievalSLOSummary>("/api/knowledge/slo"),
         get<{ items?: KnowledgeRetrievalTraceSummary[] }>("/api/knowledge/traces", { limit }),
         get<{ items?: KnowledgeBenchmarkRunSummary[] }>("/api/knowledge/benchmark/runs", { limit }),
-        fetchIndexOutboxHealth().catch(() => null),
+        fetchIndexOutboxHealth().catch((error) => {
+  console.error("[original-error]", error);
+  return null;
+}),
       ]);
       runtimeStatus.value = runtime;
       sloSummary.value = slo;

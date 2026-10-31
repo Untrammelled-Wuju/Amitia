@@ -7,6 +7,7 @@ import (
 
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/memorypolicy"
+	amitialog "log"
 )
 
 func modelMemoryDerived(derived []DerivedMemory) []DerivedMemory {
@@ -57,7 +58,9 @@ func editMemoryLifecycle(document map[string]json.RawMessage, changes map[string
 			var content struct {
 				Importance int `json:"importance"`
 			}
-			_ = json.Unmarshal(document["content"], &content)
+			if err := json.Unmarshal(document["content"], &content); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			assigned := memorypolicy.NewLifecycle(0, false, content.Importance, now)
 			state.RetentionLevel, state.MemoryStrength = assigned.RetentionLevel, assigned.MemoryStrength
 		}
@@ -99,7 +102,9 @@ func reinforceMemoryMutations(mutations []coordination.Mutation, snapshot coordi
 			continue
 		}
 		if index, exists := indices[resource.ID]; exists {
-			_ = json.Unmarshal(mutations[index].Body, &document)
+			if err := json.Unmarshal(mutations[index].Body, &document); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			memorypolicy.WriteLifecycle(document, state.Reinforce(now))
 			mutations[index].Body = body(document)
 		} else {

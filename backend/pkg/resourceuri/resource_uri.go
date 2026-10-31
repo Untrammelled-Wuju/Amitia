@@ -35,7 +35,7 @@ func Parse(raw string) (ResourceURI, error) {
 		return ResourceURI{}, fmt.Errorf("%q: %w: query not allowed", raw, ErrInvalidPath)
 	}
 
-	u, err := url.Parse("amitia://" + strings.ToLower(rest))
+	u, err := url.Parse("amitia://" + rest)
 	if err != nil {
 		return ResourceURI{}, fmt.Errorf("%q: %w: %v", raw, ErrInvalidPath, err)
 	}

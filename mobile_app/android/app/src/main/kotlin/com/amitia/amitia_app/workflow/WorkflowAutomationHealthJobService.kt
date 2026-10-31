@@ -47,7 +47,9 @@ class WorkflowAutomationHealthJobService : JobService() {
                 },
             )
             true
-        } catch (_: Throwable) {
+        } catch (originalError50: Throwable) {
+          originalError50.printStackTrace()
+
             WorkflowDeviceEventIngress(app).flushPending { finish() }
             true
         }

@@ -255,7 +255,7 @@ import AutomationStatusIndicator from "../../components/AutomationStatusIndicato
 import { useWebChatScroll } from "../../composables/useWebChatScroll";
 import { useWebChatSend } from "../../composables/useWebChatSend";
 import { useWebChatConversation } from "../../composables/useWebChatConversation";
-import { ownedConversationSwitchNotice, useDeviceOwnedConversation } from "../../composables/useDeviceOwnedConversation";
+import { useDeviceOwnedConversation } from "../../composables/useDeviceOwnedConversation";
 import { OwnedChatStateChangedError, pollOwnedChat } from "@/runtime/owned-chat-poll";
 import { useConversationWorkspace } from "../../composables/useConversationWorkspace";
 import {
@@ -368,8 +368,9 @@ const cachedDef = (() => {
   try {
     const v = localStorage.getItem("uai-default-char");
     return v ? JSON.parse(v) : null;
-  } catch {
-    return null;
+  } catch (error) {
+  console.error("[original-error]", error);
+return null;
   }
 })();
 const charName = ref(cachedDef?.name || "");
@@ -647,8 +648,9 @@ async function loadLlmModels() {
       const active = llmModels.value.find((model: any) => !!model.isActive);
       selectedModelId.value = Number((active || llmModels.value[0]).id || 0);
     }
-  } catch {
-    llmModels.value = [];
+  } catch (error) {
+  console.error("[original-error]", error);
+llmModels.value = [];
   }
 }
 
@@ -661,7 +663,9 @@ function loadDraftModelSettings() {
     selectedReasoningEffort.value = String(draft.reasoningEffort || "high");
     selectedReasoningEnabled.value = draft.reasoningEnabled === true;
     selectedPermissionMode.value = loadChatPermissionMode();
-  } catch {}
+  } catch (error) {
+  console.error("[original-error]", error);
+}
 }
 
 function applyConversationSettings(conversation?: Record<string, any>) {
@@ -690,7 +694,9 @@ function saveModelSettingsDraft(
         reasoningEnabled,
       }),
     );
-  } catch {}
+  } catch (error) {
+  console.error("[original-error]", error);
+}
 }
 
 async function handlePermissionModeChange(mode: string) {
@@ -710,9 +716,10 @@ async function handlePermissionModeChange(mode: string) {
       "conversation", convId.value,
       { permissionMode: next },
     );
-  } catch {
-    await reloadConversationSnapshot();
-    ElMessage.error("保存权限模式失败");
+  } catch (error) {
+  console.error("[original-error]", error);
+await reloadConversationSnapshot();
+    ElMessage.error(error instanceof Error ? error.message : String(error));
   }
 }
 
@@ -746,9 +753,10 @@ async function handleModelSettingChange(
         reasoningEnabled: nextReasoningEnabled,
       },
     );
-  } catch {
-    await reloadConversationSnapshot();
-    ElMessage.error("保存模型设置失败");
+  } catch (error) {
+  console.error("[original-error]", error);
+await reloadConversationSnapshot();
+    ElMessage.error(error instanceof Error ? error.message : String(error));
   }
 }
 
@@ -815,7 +823,10 @@ const {
     applySnapshotWorkspace(workspace, String(conversation?.projectId || ""));
     applyHistorySnapshot(snapshot?.messageHistory);
     if (conversation?.id) {
-      await chatStore.markConversationRead(String(conversation.id), Number(conversation.lastTerminalTurnSequence || 0)).catch(() => undefined);
+      await chatStore.markConversationRead(String(conversation.id), Number(conversation.lastTerminalTurnSequence || 0)).catch((error) => {
+  console.error("[original-error]", error);
+  return undefined;
+});
     }
   },
   async () => {
@@ -832,9 +843,15 @@ function resetConversationMessages() {
 }
 
 function disconnectAndResetConversation() {
-  if (owned.enabled.value && sending.value) owned.stopLocal(ownedConversationSwitchNotice, true);
   disconnectSSE();
   resetConversationMessages();
+  sending.value = false;
+  isSubmitting.value = false;
+  if (groupSending.value) groupSending.value = false;
+  void chatStore.fetchSidebar().catch((error) => {
+  console.error("[original-error]", error);
+  return undefined;
+});
 }
 
 function resetConversationScope() {
@@ -1023,7 +1040,10 @@ watch(
       if ((convId.value || "") === requestedId) {
         convSummary.value = summary;
       }
-    }).catch(() => undefined);
+    }).catch((error) => {
+  console.error("[original-error]", error);
+  return undefined;
+});
   },
   { immediate: true },
 );
@@ -1063,7 +1083,6 @@ watch(
       return;
     }
     if (nextId === convId.value && !roleChanged) return;
-    if (owned.enabled.value && sending.value) owned.stopLocal(ownedConversationSwitchNotice, true);
     convId.value = nextId;
     try {
       await loadCharacterConversation({ retryOnFailure: true });
@@ -1088,7 +1107,10 @@ watch(showSummaryDrawer, (visible) => {
     if ((convId.value || "") === requestedId) {
       convSummary.value = summary;
     }
-    }).catch(() => undefined);
+    }).catch((error) => {
+  console.error("[original-error]", error);
+  return undefined;
+});
 });
 
 function handleViewSummary() {

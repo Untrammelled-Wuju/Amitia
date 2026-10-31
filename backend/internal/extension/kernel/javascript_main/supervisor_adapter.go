@@ -16,6 +16,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	"github.com/u-ai/backend/internal/extension/kernel/script_host"
+	amitialog "log"
 )
 
 type SupervisorFactory struct {
@@ -204,7 +205,9 @@ func (m *managedPluginHost) Start(ctx context.Context) error {
 	result := m.host.Start(ctx)
 	if !result.Success {
 		if m.factory != nil {
-			_ = m.factory.Remove(m.host.InstanceID())
+			if err := m.factory.Remove(m.host.InstanceID()); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		return fmt.Errorf("javascript_main: start failed: %s", result.Reason)
 	}

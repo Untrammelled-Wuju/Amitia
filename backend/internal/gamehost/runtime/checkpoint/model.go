@@ -9,11 +9,11 @@ import (
 )
 
 const (
-	MetadataSchemaVersion   = 1
-	MaxReasonLength         = 256
-	MaxCheckpointSize       = 1 << 20
-	MaxMetadataEntries      = 64
-	MaxMetadataValueLength  = 4096
+	MetadataSchemaVersion    = 1
+	MaxReasonLength          = 256
+	MaxCheckpointSize        = 1 << 20
+	MaxMetadataEntries       = 64
+	MaxMetadataValueLength   = 4096
 	MaxServicesPerCheckpoint = 64
 )
 
@@ -35,11 +35,11 @@ type RuntimeMetadata struct {
 }
 
 type ServiceCheckpoint struct {
-	ServiceID domain.ServiceID           `json:"serviceId"`
+	ServiceID domain.ServiceID            `json:"serviceId"`
 	State     runtime.ServiceRuntimeState `json:"state"`
-	Required  bool                       `json:"required"`
-	UpdatedAt time.Time                  `json:"updatedAt"`
-	Reason    string                     `json:"reason,omitempty"`
+	Required  bool                        `json:"required"`
+	UpdatedAt time.Time                   `json:"updatedAt"`
+	Reason    string                      `json:"reason,omitempty"`
 }
 
 type RuntimeCheckpoint struct {
@@ -68,12 +68,12 @@ type RuntimeCheckpoint struct {
 
 func (m RuntimeMetadata) Clone() RuntimeMetadata {
 	clone := RuntimeMetadata{
-		SchemaVersion:     m.SchemaVersion,
-		RuntimeID:         m.RuntimeID,
-		PluginID:          m.PluginID,
-		ExtensionID:       m.ExtensionID,
-		PluginVersion:     m.PluginVersion,
-		CreatedAt:         m.CreatedAt,
+		SchemaVersion:      m.SchemaVersion,
+		RuntimeID:          m.RuntimeID,
+		PluginID:           m.PluginID,
+		ExtensionID:        m.ExtensionID,
+		PluginVersion:      m.PluginVersion,
+		CreatedAt:          m.CreatedAt,
 		DescriptorRevision: m.DescriptorRevision,
 	}
 	if m.Metadata != nil {

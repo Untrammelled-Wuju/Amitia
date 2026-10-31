@@ -11,6 +11,7 @@ import (
 	kernelmcp "github.com/u-ai/backend/internal/extension/kernel/mcp"
 	"github.com/u-ai/backend/internal/extension/mcpruntime/discovery"
 	mcpservice "github.com/u-ai/backend/internal/extension/mcpruntime/service"
+	amitialog "log"
 )
 
 // mcpAcquisitionRuntime bridges capability acquisition to the canonical MCP
@@ -67,7 +68,9 @@ func (r *mcpAcquisitionRuntime) ConnectAndDiscover(ctx context.Context, req acqu
 		}
 		tools, err = conn.ListTools(ctx)
 		if err != nil {
-			_ = r.remote.Close(ctx, req.ServerID)
+			if err := r.remote.Close(ctx, req.ServerID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return nil, fmt.Errorf("MCP runtime remote discovery: %w", err)
 		}
 	default:
@@ -88,7 +91,9 @@ func (r *mcpAcquisitionRuntime) ConnectAndDiscover(ctx context.Context, req acqu
 		}
 		tools, err = conn.ListTools(ctx)
 		if err != nil {
-			_ = r.stdio.Close(ctx, req.ServerID)
+			if err := r.stdio.Close(ctx, req.ServerID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return nil, fmt.Errorf("MCP runtime stdio discovery: %w", err)
 		}
 	}
@@ -97,7 +102,9 @@ func (r *mcpAcquisitionRuntime) ConnectAndDiscover(ctx context.Context, req acqu
 	for _, item := range tools {
 		annotations := map[string]any{}
 		if len(item.Annotations) > 0 {
-			_ = json.Unmarshal(item.Annotations, &annotations)
+			if err := json.Unmarshal(item.Annotations, &annotations); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		descriptors = append(descriptors, capability.MCPToolDescriptor{
 			ServerID:     req.ServerID,

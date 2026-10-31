@@ -6,7 +6,7 @@ import (
 )
 
 type BlobInfo struct {
-	Digest   BlobDigest
+	Digest    BlobDigest
 	SizeBytes int64
 }
 

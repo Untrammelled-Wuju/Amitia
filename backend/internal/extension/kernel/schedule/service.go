@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	amitialog "log"
 )
 
 type ScheduleService struct {
@@ -762,9 +763,15 @@ func (s *ScheduleService) Uninstall(ctx context.Context, scheduleID string) erro
 	if err := s.store.PutState(ctx, state); err != nil {
 		return err
 	}
-	_ = s.store.DeleteTriggersBySchedule(ctx, scheduleID)
-	_ = s.store.DeleteCircuit(ctx, scheduleID)
-	_ = s.store.DeleteDefinition(ctx, scheduleID)
+	if err := s.store.DeleteTriggersBySchedule(ctx, scheduleID); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := s.store.DeleteCircuit(ctx, scheduleID); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := s.store.DeleteDefinition(ctx, scheduleID); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	return nil
 }
 
@@ -903,7 +910,9 @@ func (s *ScheduleService) Quarantine(ctx context.Context, scheduleID string, rea
 	if err == nil && state != nil {
 		state.Status = DefinitionStatusCreated
 		state.UpdatedAt = now.UTC()
-		_ = s.store.PutState(ctx, state)
+		if err := s.store.PutState(ctx, state); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return nil
 }

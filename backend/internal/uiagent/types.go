@@ -7,14 +7,14 @@ import (
 type UIActionType string
 
 const (
-	ActionCreate          UIActionType = "create"
-	ActionModify          UIActionType = "modify"
-	ActionRemove          UIActionType = "remove"
-	ActionMove            UIActionType = "move"
-	ActionRestyle         UIActionType = "restyle"
-	ActionRestructure     UIActionType = "restructure"
-	ActionBindData        UIActionType = "bind_data"
-	ActionAddAction       UIActionType = "add_action"
+	ActionCreate           UIActionType = "create"
+	ActionModify           UIActionType = "modify"
+	ActionRemove           UIActionType = "remove"
+	ActionMove             UIActionType = "move"
+	ActionRestyle          UIActionType = "restyle"
+	ActionRestructure      UIActionType = "restructure"
+	ActionBindData         UIActionType = "bind_data"
+	ActionAddAction        UIActionType = "add_action"
 	ActionReplaceComponent UIActionType = "replace_component"
 )
 

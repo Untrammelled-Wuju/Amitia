@@ -43,7 +43,9 @@ class RuntimeRecoveryJobService : JobService() {
                 },
             )
             true
-        } catch (_: Throwable) {
+        } catch (originalError46: Throwable) {
+          originalError46.printStackTrace()
+
             // If start was never accepted, the same token is still persisted.
             // Re-schedule explicitly because returning false tells Android this
             // particular JobService invocation has finished.

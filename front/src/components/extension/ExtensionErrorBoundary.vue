@@ -43,8 +43,9 @@ onErrorCaptured((err: unknown) => {
       timestamp: Date.now(),
       recoverable: !abdicated,
     });
-  } catch {
-  }
+  } catch (error) {
+  console.error("[original-error]", error);
+}
   return false;
 });
 

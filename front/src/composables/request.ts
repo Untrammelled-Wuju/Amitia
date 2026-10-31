@@ -18,6 +18,7 @@ import {
 } from "@/runtime/runtime-adapter";
 import { getDeviceTimezone } from "@/utils/requestEnvelope";
 import { resolveUIHostDeviceId } from "@/ui-runtime/deviceIdentity";
+import { originalErrorDetail, originalErrorMessage } from "@/runtime/original-error";
 
 const BASE_URL = (import.meta as any).env?.VITE_API_URL || "";
 
@@ -54,40 +55,18 @@ export function classifyError(
       : typeof problem?.status === "number"
         ? problem.status
         : 0;
-  const message =
-    problem?.message ||
-    problem?.msg ||
-    problem?.title ||
-    axiosError?.message ||
-    "Network error";
-  const detail = problem?.detail;
+  const message = originalErrorMessage(body ?? axiosError, "Unknown error");
+  const detail = originalErrorDetail(body ?? axiosError);
 
   if (!body && axiosError) {
-    if (
-      axiosError.code === "ECONNABORTED" ||
-      axiosError.message?.includes("timeout")
-    ) {
-      return {
-        code: ERR.TIMEOUT,
-        message: "Request timed out",
-        severity: "toast",
-      };
-    }
-    if (
-      axiosError.code === "ERR_NETWORK" ||
-      axiosError.message?.includes("Network Error")
-    ) {
-      return {
-        code: ERR.SERVICE_UNAVAILABLE,
-        message: "核心服务连接中...",
-        severity: "toast",
-      };
-    }
-    return { code: ERR.SERVICE_UNAVAILABLE, message, severity: "toast" };
+    const code = axiosError.code === "ECONNABORTED" || axiosError.message?.includes("timeout")
+      ? ERR.TIMEOUT
+      : ERR.SERVICE_UNAVAILABLE;
+    return { code, message, detail, severity: "toast", raw: axiosError };
   }
 
   if (!body) {
-    return { code: ERR.INTERNAL, message: "Unknown error", severity: "toast" };
+    return { code: ERR.INTERNAL, message, detail, severity: "toast" };
   }
 
   if (

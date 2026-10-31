@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"fmt"
 	"io"
+	amitialog "log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,7 +41,9 @@ func UnzipFile(zipPath, targetDir string) error {
 			return err
 		}
 		if err := extractZipEntry(file, cleanPath); err != nil {
-			_ = os.Remove(cleanPath)
+			if err := os.Remove(cleanPath); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return fmt.Errorf("解压 %s 失败: %w", file.Name, err)
 		}
 	}

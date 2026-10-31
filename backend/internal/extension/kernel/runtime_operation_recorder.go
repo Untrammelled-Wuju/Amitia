@@ -8,6 +8,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
+	amitialog "log"
 )
 
 func (r *Runtime) recordRuntimeOperation(ctx context.Context, extID domain.ExtensionID, opType string, rtErr *runtime_supervisor.RuntimeError) {
@@ -15,7 +16,7 @@ func (r *Runtime) recordRuntimeOperation(ctx context.Context, extID domain.Exten
 		return
 	}
 	now := time.Now().UTC()
-	_ = r.container.OperationRepository.PutOperation(ctx, sqlite.Operation{
+	if err := r.container.OperationRepository.PutOperation(ctx, sqlite.Operation{
 		OperationID:   fmt.Sprintf("rtop-%s-%d", extID, now.UnixNano()),
 		OperationType: opType,
 		ExtensionID:   extID,
@@ -24,7 +25,9 @@ func (r *Runtime) recordRuntimeOperation(ctx context.Context, extID domain.Exten
 		ErrorMessage:  rtErr.Error(),
 		StartedAt:     now,
 		FinishedAt:    &now,
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (r *Runtime) recordRuntimeStopFailure(ctx context.Context, extID domain.ExtensionID, opType string, instanceID string, err error) {
@@ -37,7 +40,7 @@ func (r *Runtime) recordRuntimeStopFailure(ctx context.Context, extID domain.Ext
 		err,
 	)
 	now := time.Now().UTC()
-	_ = r.container.OperationRepository.PutOperation(ctx, sqlite.Operation{
+	if err := r.container.OperationRepository.PutOperation(ctx, sqlite.Operation{
 		OperationID:   fmt.Sprintf("rtop-%s-%d", extID, now.UnixNano()),
 		OperationType: opType,
 		ExtensionID:   extID,
@@ -46,7 +49,9 @@ func (r *Runtime) recordRuntimeStopFailure(ctx context.Context, extID domain.Ext
 		ErrorMessage:  rtErr.Error(),
 		StartedAt:     now,
 		FinishedAt:    &now,
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (c *Container) recordReconcileFailure(ctx context.Context, extID domain.ExtensionID, result runtime_supervisor.ReconcileResult) {
@@ -58,7 +63,7 @@ func (c *Container) recordReconcileFailure(ctx context.Context, extID domain.Ext
 		return
 	}
 	now := time.Now().UTC()
-	_ = c.OperationRepository.PutOperation(ctx, sqlite.Operation{
+	if err := c.OperationRepository.PutOperation(ctx, sqlite.Operation{
 		OperationID:   fmt.Sprintf("rtop-%s-%d", extID, now.UnixNano()),
 		OperationType: "recover",
 		ExtensionID:   extID,
@@ -67,5 +72,7 @@ func (c *Container) recordReconcileFailure(ctx context.Context, extID domain.Ext
 		ErrorMessage:  rtErr.Error(),
 		StartedAt:     now,
 		FinishedAt:    &now,
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }

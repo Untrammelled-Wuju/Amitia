@@ -163,8 +163,9 @@ function normalizePersonalityConfig(value: unknown) {
   if (typeof value === "string") {
     try {
       return { ...DEFAULT_CONFIG, ...JSON.parse(value) };
-    } catch {
-      return { ...DEFAULT_CONFIG };
+    } catch (error) {
+  console.error("[original-error]", error);
+return { ...DEFAULT_CONFIG };
     }
   }
   return { ...DEFAULT_CONFIG, ...(value as Record<string, number>) };
@@ -196,7 +197,9 @@ onMounted(async () => {
     try {
       const data = await get<any>("/api/characters/" + cid);
       if (data) applyCharacter(data);
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
   if (!charId.value) {
     try {
@@ -208,7 +211,9 @@ onMounted(async () => {
       if (active) {
         applyCharacter(active);
       }
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
 
   try {
@@ -223,13 +228,17 @@ onMounted(async () => {
       genderForm.userAddressingStyle = rp.userAddressingStyle;
       genderForm.genderExpression = rp.genderExpression ?? 30;
     }
-  } catch {}
+  } catch (error) {
+  console.error("[original-error]", error);
+}
 
   if (!charId.value) {
     try {
       const authority = await get<{ roleAuthority: string }>("/api/characters/authority");
       roleAuthority.value = authority.roleAuthority || "";
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
 
 });
@@ -308,8 +317,9 @@ async function resetConfig() {
       }, roleAuthorityConfig(roleAuthority.value));
     }
     ElMessage.success("已重置为默认配置");
-  } catch {
-    ElMessage.warning("重置失败，请先保存角色后再试");
+  } catch (error) {
+  console.error("[original-error]", error);
+ElMessage.warning(error instanceof Error ? error.message : String(error));
   } finally {
     resetting.value = false;
   }
@@ -328,8 +338,9 @@ async function editCharPrompt() {
       ElMessage.info("请先保存角色后再编辑提示词");
     }
     showPromptEditor.value = true;
-  } catch {
-    ElMessage.error("加载提示词失败");
+  } catch (error) {
+  console.error("[original-error]", error);
+ElMessage.error(error instanceof Error ? error.message : String(error));
   } finally {
     promptLoading.value = false;
   }

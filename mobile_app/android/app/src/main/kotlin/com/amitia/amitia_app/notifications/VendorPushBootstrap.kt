@@ -153,7 +153,9 @@ object VendorPushBootstrap {
                 ?.trim()
                 .orEmpty()
             store(context, "mipush", token)
-        } catch (_: Throwable) {
+        } catch (originalError156: Throwable) {
+          originalError156.printStackTrace()
+
         }
     }
 
@@ -173,7 +175,9 @@ object VendorPushBootstrap {
                 ?.trim()
                 .orEmpty()
             store(context, "hms", token)
-        } catch (_: Throwable) {
+        } catch (originalError176: Throwable) {
+          originalError176.printStackTrace()
+
         }
     }
 
@@ -209,7 +213,9 @@ object VendorPushBootstrap {
             }
             clientClass.getMethod("getPushToken", callbackClass)
                 .invoke(client, callback)
-        } catch (_: Throwable) {
+        } catch (originalError212: Throwable) {
+          originalError212.printStackTrace()
+
         }
     }
 
@@ -250,7 +256,9 @@ object VendorPushBootstrap {
                 String::class.java,
                 callbackClass,
             ).invoke(null, context, appKey, appSecret, callback)
-        } catch (_: Throwable) {
+        } catch (originalError253: Throwable) {
+          originalError253.printStackTrace()
+
         }
     }
 
@@ -284,7 +292,9 @@ object VendorPushBootstrap {
             clientClass.getMethod("turnOnPush", listenerClass)
                 .invoke(client, listener)
             refreshVivoRegId(clientClass, client, context)
-        } catch (_: Throwable) {
+        } catch (originalError287: Throwable) {
+          originalError287.printStackTrace()
+
         }
     }
 
@@ -317,7 +327,9 @@ object VendorPushBootstrap {
             }
             clientClass.getMethod("getRegId", queryClass)
                 .invoke(client, callback)
-        } catch (_: Throwable) {
+        } catch (originalError320: Throwable) {
+          originalError320.printStackTrace()
+
         }
     }
 
@@ -401,7 +413,9 @@ object VendorPushBootstrap {
     private fun classAvailable(name: String): Boolean = try {
         Class.forName(name)
         true
-    } catch (_: Throwable) {
+    } catch (originalError404: Throwable) {
+      originalError404.printStackTrace()
+
         false
     }
 }

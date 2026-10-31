@@ -208,6 +208,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
         initialConversationId: state.uri.queryParameters['conversationId'],
         initialCharacterId: state.uri.queryParameters['characterId'],
         initialProjectId: state.uri.queryParameters['projectId'],
+        initialDraftId: state.uri.queryParameters['draftId'],
       ),
     ),
   ),
@@ -826,7 +827,9 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
     pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
-      child: const ToolboxFileBrowserPage(),
+      child: ToolboxFileBrowserPage(
+        initialRootUri: state.uri.queryParameters['rootUri'] ?? '',
+      ),
     ),
   ),
   GoRoute(

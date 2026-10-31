@@ -17,6 +17,7 @@ import (
 
 	"github.com/u-ai/backend/internal/extension/kernel/serviceauth"
 	"github.com/u-ai/backend/internal/platform/process"
+	amitialog "log"
 )
 
 type StdioProtocolSessionMeta struct {
@@ -708,9 +709,15 @@ func (s *ProcessSupervisor) startRPCService(processCtx context.Context, instance
 	}
 
 	if err := s.startContainedService(processCtx, instance, def, cmd, launchPlan); err != nil {
-		_ = stdinPipe.Close()
-		_ = stdoutPipe.Close()
-		_ = stderrPipe.Close()
+		if err := stdinPipe.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := stdoutPipe.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := stderrPipe.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return cmd, err
 	}
 
@@ -843,9 +850,15 @@ func (s *ProcessSupervisor) startManagedStdioProtocolService(
 	}
 
 	if err := s.startContainedService(processCtx, instance, def, cmd, launchPlan); err != nil {
-		_ = stdinPipe.Close()
-		_ = stdoutPipe.Close()
-		_ = stderrPipe.Close()
+		if err := stdinPipe.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := stdoutPipe.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := stderrPipe.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return cmd, err
 	}
 
@@ -997,7 +1010,9 @@ func (s *ProcessSupervisor) abortStartupProcess(inst *ServiceInstance, cmd *exec
 	}
 	s.killProcessTree(inst)
 	if inst.claimWaitOwner() {
-		_ = cmd.Wait()
+		if err := cmd.Wait(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	handle := process.ProcessTreeHandle(inst.procHandle)
 	if handle != 0 {
@@ -1133,9 +1148,11 @@ func (s *ProcessSupervisor) watchProcess(inst *ServiceInstance, cmd *exec.Cmd) {
 			"exit_code": exitCode,
 		})
 		inst.SetState(ServiceStateQuarantined)
-		_ = s.quarantine.Quarantine(inst.ServiceID, inst.InstanceID, QuarantineFrequentCrash,
+		if err := s.quarantine.Quarantine(inst.ServiceID, inst.InstanceID, QuarantineFrequentCrash,
 			fmt.Sprintf("exited with code %d, restarts %d/%d", exitCode, inst.RestartCount, policy.MaxRestarts),
-			map[string]any{"exit_code": exitCode, "restarts": inst.RestartCount})
+			map[string]any{"exit_code": exitCode, "restarts": inst.RestartCount}); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 }
 
@@ -1173,9 +1190,11 @@ func (s *ProcessSupervisor) restart(inst *ServiceInstance) {
 		s.log("error", "restart failed", map[string]any{"service": inst.ServiceID, "error": err.Error(), "restarts": nextCount})
 		if nextCount >= inst.Definition.Recovery.MaxRestarts {
 			inst.SetState(ServiceStateQuarantined)
-			_ = s.quarantine.Quarantine(inst.ServiceID, inst.InstanceID, QuarantineFrequentCrash,
+			if err := s.quarantine.Quarantine(inst.ServiceID, inst.InstanceID, QuarantineFrequentCrash,
 				fmt.Sprintf("restart failed, restarts %d/%d", nextCount, inst.Definition.Recovery.MaxRestarts),
-				map[string]any{"restarts": nextCount})
+				map[string]any{"restarts": nextCount}); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	} else {
 		s.log("info", "service restarted", map[string]any{"service": inst.ServiceID, "restarts": nextCount, "instance": inst.InstanceID})
@@ -1261,7 +1280,9 @@ func (s *ProcessSupervisor) stop(ctx context.Context, req StopRequest) (*StopRes
 
 	if inst.rpcSession != nil && !req.Force {
 		_, shutdownCancel := context.WithTimeout(stopCtx, grace)
-		_ = inst.rpcSession.Shutdown(grace)
+		if err := inst.rpcSession.Shutdown(grace); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		shutdownCancel()
 	}
 
@@ -1292,7 +1313,9 @@ func (s *ProcessSupervisor) stop(ctx context.Context, req StopRequest) (*StopRes
 
 	if def.Shutdown.RemoveTempDir {
 		tempDir := filepath.Join(s.rootDir, "temp", req.ServiceID, inst.InstanceID)
-		_ = os.RemoveAll(tempDir)
+		if err := os.RemoveAll(tempDir); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 
 	if req.Reason == "uninstall" {
@@ -1359,7 +1382,9 @@ func (s *ProcessSupervisor) killProcessTree(inst *ServiceInstance) {
 		if pid > 0 {
 			proc, err := os.FindProcess(pid)
 			if err == nil {
-				_ = proc.Kill()
+				if err := proc.Kill(); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 		}
 	}
@@ -1500,7 +1525,9 @@ func (s *ProcessSupervisor) Quarantine(serviceID, reason string) error {
 		"service": serviceID,
 		"reason":  reason,
 	})
-	_ = s.quarantine.Quarantine(serviceID, inst.InstanceID, QuarantineHostAPIViolation, reason, nil)
+	if err := s.quarantine.Quarantine(serviceID, inst.InstanceID, QuarantineHostAPIViolation, reason, nil); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	_, err := s.Stop(context.Background(), StopRequest{ServiceID: serviceID, Reason: reason, Force: true})
 	return err
 }

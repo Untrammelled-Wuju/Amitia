@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/schedule"
+	amitialog "log"
 )
 
 func (s *Service) Update(ctx context.Context, caller Caller, id string, generation int64, request CreateReminderRequest) (*Reminder, error) {
@@ -34,7 +35,9 @@ func (s *Service) Update(ctx context.Context, caller Caller, id string, generati
 	var stored struct {
 		CreateHash string `json:"createHash"`
 	}
-	_ = json.Unmarshal(existing.Target.InputTemplate, &stored)
+	if err := json.Unmarshal(existing.Target.InputTemplate, &stored); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	def.Target.InputTemplate, err = json.Marshal(struct {
 		*Reminder
 		CreateHash string `json:"createHash"`

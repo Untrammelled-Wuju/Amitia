@@ -132,8 +132,9 @@ async function collectDirectoryFiles(repositoryRoot, spec, output) {
   let stat;
   try {
     stat = await fs.stat(basePath);
-  } catch {
-    throw new Error(`freeze scope directory missing: ${spec.base}`);
+  } catch (error) {
+  console.error("[original-error]", error);
+throw new Error(`freeze scope directory missing: ${spec.base}`);
   }
   if (!stat.isDirectory()) {
     throw new Error(`freeze scope path is not a directory: ${spec.base}`);
@@ -176,8 +177,9 @@ export async function collectFreezeEntries(repositoryRoot) {
     let stat;
     try {
       stat = await fs.stat(absolute);
-    } catch {
-      throw new Error(`freeze scope file missing: ${relativePath}`);
+    } catch (error) {
+  console.error("[original-error]", error);
+throw new Error(`freeze scope file missing: ${relativePath}`);
     }
     if (!stat.isFile()) {
       throw new Error(`freeze scope path is not a file: ${relativePath}`);

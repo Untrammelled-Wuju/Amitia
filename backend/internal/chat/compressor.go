@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	amitialog "log"
 )
 
 type ConversationSummary struct {
@@ -104,7 +105,7 @@ func (c *Compressor) MaybeCompress(ctx context.Context, convID string) {
 		SummaryText: summary, ParentSummaryID: parentID,
 		CompressedAt: time.Now().Format("2006-01-02 15:04:05"),
 	}
-	_ = db.Transaction(func(tx *gorm.DB) error {
+	if err := db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&cs).Error; err != nil {
 			return err
 		}
@@ -116,7 +117,9 @@ func (c *Compressor) MaybeCompress(ctx context.Context, convID string) {
 			return fmt.Errorf("conversation compression source changed concurrently")
 		}
 		return nil
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (c *Compressor) generateSummary(ctx context.Context, conversationText, parentSummary string) string {

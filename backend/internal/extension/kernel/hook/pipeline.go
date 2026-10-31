@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	amitialog "log"
 )
 
 type Pipeline struct {
@@ -495,7 +496,9 @@ func (p *Pipeline) handleFailure(ctx context.Context, contrib HookContributionDe
 	outcome := ProcessFailure(fctx)
 
 	if outcome.DisableContrib {
-		_ = p.ContribStore.SetEnabled(ctx, contrib.ContributionID, false)
+		if err := p.ContribStore.SetEnabled(ctx, contrib.ContributionID, false); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 }
 

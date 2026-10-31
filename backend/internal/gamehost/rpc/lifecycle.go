@@ -8,6 +8,7 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/ipc"
 	"github.com/u-ai/backend/pkg/gameplugin/protocol"
+	amitialog "log"
 )
 
 type RequestLifecycleManager struct {
@@ -236,7 +237,9 @@ func (m *RequestLifecycleManager) HandleCancel(
 		cp := m.getCP()
 		if cp != nil {
 			cancelEnv := BuildCancelEnvelope(correlation.DownstreamReqID, "upstream cancelled")
-			_ = cp.Send(context.Background(), correlation.DownstreamPeer, cancelEnv)
+			if err := cp.Send(context.Background(), correlation.DownstreamPeer, cancelEnv); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}
 

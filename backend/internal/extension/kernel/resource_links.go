@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	amitialog "log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -85,7 +86,9 @@ func (m *ResourceLinkManager) Sign(extensionID, scope, relativePath string) (str
 	}
 	encoded := base64.RawURLEncoding.EncodeToString(payload)
 	mac := hmac.New(sha256.New, m.key)
-	_, _ = mac.Write([]byte(encoded))
+	if _, err := mac.Write([]byte(encoded)); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	signature := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 	return "/api/extension/resources/" + encoded + "." + signature, nil
 }
@@ -99,7 +102,9 @@ func (m *ResourceLinkManager) Resolve(token string) (ResourceLinkTarget, string,
 		return ResourceLinkTarget{}, "", errors.New("invalid resource token")
 	}
 	mac := hmac.New(sha256.New, m.key)
-	_, _ = mac.Write([]byte(parts[0]))
+	if _, err := mac.Write([]byte(parts[0])); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	expected := mac.Sum(nil)
 	actual, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil || !hmac.Equal(expected, actual) {

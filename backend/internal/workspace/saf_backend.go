@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	amitialog "log"
 	"sort"
 	"strings"
 	"time"
@@ -208,7 +209,9 @@ func (b *SAFBackend) Write(ctx context.Context, mount WorkspaceMount, path strin
 		if err != nil {
 			// Best-effort rollback: a failed initial write must not masquerade as
 			// a successfully created empty file.
-			_ = b.bridge.Delete(ctx, grantID, createdRef.DocumentID)
+			if err := b.bridge.Delete(ctx, grantID, createdRef.DocumentID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return WorkspaceEntry{}, b.mapNativeError(err)
 		}
 	}

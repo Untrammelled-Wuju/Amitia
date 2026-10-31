@@ -436,8 +436,9 @@ function formatDate(s?: string): string {
   if (!s) return "";
   try {
     return new Date(s).toLocaleString("zh-CN");
-  } catch {
-    return s;
+  } catch (error) {
+  console.error("[original-error]", error);
+return s;
   }
 }
 

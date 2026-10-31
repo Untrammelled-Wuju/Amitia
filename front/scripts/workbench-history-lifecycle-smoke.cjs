@@ -2,7 +2,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const ts = (() => { try { return require('typescript'); } catch { return require(path.resolve(path.dirname(process.execPath), '../lib/node_modules/typescript')); } })();
+const ts = (() => { try { return require('typescript'); } catch (error) {
+  console.error("[original-error]", error);
+return require(path.resolve(path.dirname(process.execPath), '../lib/node_modules/typescript')); } })();
 const file = path.resolve(__dirname,'../src/components/workbench/WorkbenchTasksView.vue');
 const script = fs.readFileSync(file,'utf8').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)?.[1];
 assert.ok(script);

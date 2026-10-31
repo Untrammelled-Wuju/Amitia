@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -97,6 +96,8 @@ class _BackupPageState extends ConsumerState<BackupPage> {
     String? characterId;
     final passphrase = TextEditingController();
     var encrypted = false;
+    var includeModelAssets = true;
+    var includeSecrets = false;
     return showDialog<Map<String, dynamic>>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -128,8 +129,13 @@ class _BackupPageState extends ConsumerState<BackupPage> {
                     DropdownMenuItem(value: 'portable', child: Text('可迁移格式')),
                     DropdownMenuItem(value: 'full', child: Text('完整格式')),
                   ],
-                  onChanged: (value) =>
-                      setDialogState(() => profile = value ?? 'portable'),
+                  onChanged: (value) => setDialogState(() {
+                    profile = value ?? 'portable';
+                    if (profile == 'full') {
+                      includeSecrets = true;
+                      encrypted = true;
+                    }
+                  }),
                 ),
                 if (scope == 'character')
                   DropdownButtonFormField<String>(
@@ -148,10 +154,28 @@ class _BackupPageState extends ConsumerState<BackupPage> {
                   ),
                 CheckboxListTile(
                   contentPadding: EdgeInsets.zero,
+                  title: const Text('包含已导入的本地模型文件'),
+                  value: includeModelAssets,
+                  onChanged: (value) =>
+                      setDialogState(() => includeModelAssets = value ?? false),
+                ),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('包含 API Key、令牌等敏感配置'),
+                  value: includeSecrets,
+                  onChanged: (value) => setDialogState(() {
+                    includeSecrets = value ?? false;
+                    if (includeSecrets) encrypted = true;
+                  }),
+                ),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
                   title: const Text('使用口令加密'),
                   value: encrypted,
-                  onChanged: (value) =>
-                      setDialogState(() => encrypted = value ?? false),
+                  onChanged: includeSecrets
+                      ? null
+                      : (value) =>
+                            setDialogState(() => encrypted = value ?? false),
                 ),
                 if (encrypted)
                   TextField(
@@ -175,12 +199,17 @@ class _BackupPageState extends ConsumerState<BackupPage> {
                     (characterId == null || characterId!.isEmpty)) {
                   return;
                 }
-                if (encrypted && passphrase.text.length < 8) return;
+                if ((encrypted || includeSecrets) &&
+                    passphrase.text.length < 8) {
+                  return;
+                }
                 Navigator.pop(dialogContext, {
                   'scope': scope,
                   'profile': profile,
                   'characterId': scope == 'character' ? characterId : '',
                   'passphrase': encrypted ? passphrase.text : '',
+                  'includeModelAssets': includeModelAssets,
+                  'includeSecrets': includeSecrets,
                 });
               },
               child: const Text('生成导出包'),
@@ -230,7 +259,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
     });
   }
 
-  Future<String?> _askPassphrase(String title) {
+  Future<String?> _askPassphrase(String title, {bool allowEmpty = true}) {
     final controller = TextEditingController();
     return showDialog<String>(
       context: context,
@@ -240,7 +269,9 @@ class _BackupPageState extends ConsumerState<BackupPage> {
           controller: controller,
           obscureText: true,
           autofocus: true,
-          decoration: const InputDecoration(labelText: '口令，未加密可留空'),
+          decoration: InputDecoration(
+            labelText: allowEmpty ? '口令，未加密可留空' : '口令（至少 8 位）',
+          ),
         ),
         actions: [
           TextButton(
@@ -311,16 +342,37 @@ class _BackupPageState extends ConsumerState<BackupPage> {
                     Text(
                       '导出范围：${_scopeLabel((manifest['scope'] ?? '').toString())}',
                     ),
+                    Text(
+                      '敏感配置：${manifest['includesSecrets'] == true ? '已包含' : '未包含'}',
+                    ),
                     const SizedBox(height: 12),
                     ...components.map((component) {
                       final collisions = component['collisions'] is List
                           ? (component['collisions'] as List).length
                           : 0;
+                      final warnings = component['warnings'] is List
+                          ? (component['warnings'] as List)
+                                .map((item) => item.toString())
+                                .join('；')
+                          : '';
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 6),
-                        child: Text(
-                          '${component['logicalName'] ?? component['componentId']} · '
-                          '${component['itemCount'] ?? 0} 条 · 冲突 $collisions',
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${component['logicalName'] ?? component['componentId']} · '
+                              '${component['itemCount'] ?? 0} 条 · 冲突 $collisions',
+                            ),
+                            if (warnings.isNotEmpty)
+                              Text(
+                                warnings,
+                                style: TextStyle(
+                                  color: context.warning,
+                                  fontSize: 12,
+                                ),
+                              ),
+                          ],
                         ),
                       );
                     }),
@@ -344,7 +396,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
                     ),
                     CheckboxListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: const Text('导入后启用角色和配置'),
+                      title: const Text('导入后启用角色和可用配置'),
                       value: activate,
                       onChanged: (value) =>
                           setDialogState(() => activate = value ?? false),
@@ -387,82 +439,13 @@ class _BackupPageState extends ConsumerState<BackupPage> {
     });
   }
 
-  Future<void> _exportConfig() async {
-    await _run('配置导出', () async {
-      final result = await ref
-          .read(backendServiceProvider)
-          .post<Map<String, dynamic>>('/api/config/export');
-      if (result?['exported'] != true) {
-        throw StateError((result?['error'] ?? '配置导出失败').toString());
-      }
-      final output = await FilePicker.platform.saveFile(
-        dialogTitle: '保存 Amitia 配置',
-        fileName: 'amitia-config.json',
-        type: FileType.custom,
-        allowedExtensions: const ['json'],
-      );
-      if (output == null || output.isEmpty) return;
-      await File(output).writeAsString(
-        const JsonEncoder.withIndent('  ').convert(result),
-        flush: true,
-      );
-      _show('配置已导出');
-    });
-  }
-
-  Future<void> _importConfig() async {
-    await _run('配置导入', () async {
-      final picked = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: const ['json'],
-      );
-      if (picked == null || picked.files.isEmpty) return;
-      final path = picked.files.first.path;
-      if (path == null || path.isEmpty) throw StateError('无法读取所选配置文件');
-      final raw = await File(path).readAsString();
-      final api = ref.read(backendServiceProvider);
-      final preview = await api.post<Map<String, dynamic>>(
-        '/api/config/import/preview',
-        data: {'raw': raw},
-      );
-      if (preview?['valid'] != true) {
-        throw StateError((preview?['error'] ?? '配置文件无效').toString());
-      }
-      if (!mounted) return;
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('确认导入配置'),
-          content: Text(
-            '共 ${preview?['itemCount'] ?? 0} 项配置；新增 ${preview?['newCount'] ?? 0} 项，修改 ${preview?['changed'] ?? 0} 项，未变化 ${preview?['unchanged'] ?? 0} 项。继续后会覆盖同名设置。',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('导入'),
-            ),
-          ],
-        ),
-      );
-      if (confirmed != true) return;
-      final result = await api.post<Map<String, dynamic>>(
-        '/api/config/import/confirm',
-        data: {'raw': raw},
-      );
-      if (result?['imported'] != true) {
-        throw StateError((result?['error'] ?? '配置导入失败').toString());
-      }
-      _show('已导入 ${result?['importedCount'] ?? 0} 项配置');
-    });
-  }
-
   Future<void> _createBackup() async {
-    final passphrase = await _askPassphrase('创建完整备份');
+    final passphrase = await _askPassphrase('创建完整备份', allowEmpty: false);
     if (passphrase == null) return;
+    if (passphrase.length < 8) {
+      _show('完整备份口令至少需要 8 位', error: true);
+      return;
+    }
     await _run('备份', () async {
       final result = await ref
           .read(backendServiceProvider)
@@ -647,12 +630,6 @@ class _BackupPageState extends ConsumerState<BackupPage> {
                   ('完整备份', Icons.save_outlined, _createBackup),
                   ('迁移检查', Icons.sync_alt_outlined, _checkMigrations),
                   ('清理缓存', Icons.cleaning_services_outlined, _cleanupTemp),
-                  (
-                    '导出配置',
-                    Icons.settings_backup_restore_outlined,
-                    _exportConfig,
-                  ),
-                  ('导入配置', Icons.settings_suggest_outlined, _importConfig),
                 ],
               ),
               SizedBox(height: AppSpacing.sectionGap),

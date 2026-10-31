@@ -78,13 +78,13 @@ func registerCloudGameCenterGateway(apiGroup *gin.RouterGroup, services *AppServ
 		deviceID := runtimeidentity.ParseDeviceID(targetDeviceID)
 		spaceID := runtimeidentity.SpaceID(actor.SpaceID)
 		if err := services.DeviceMesh.DeviceReg.RequireDeviceOwnedBy(c.Request.Context(), spaceID, deviceID); err != nil {
-			c.JSON(http.StatusForbidden, gin.H{"code": 403, "msg": "target device is not owned by current user"})
+			c.JSON(http.StatusForbidden, gin.H{"code": 403, "msg": err.Error()})
 			return
 		}
 
 		body, err := io.ReadAll(io.LimitReader(c.Request.Body, maxGameCenterProxyBody+1))
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "failed to read request body"})
+			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
 			return
 		}
 		if len(body) > maxGameCenterProxyBody {
@@ -106,7 +106,7 @@ func registerCloudGameCenterGateway(apiGroup *gin.RouterGroup, services *AppServ
 		}
 		payload, err := json.Marshal(proxyReq)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": "failed to encode game center request"})
+			c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": err.Error()})
 			return
 		}
 		invokeCtx, cancel := context.WithTimeout(c.Request.Context(), 90*time.Second)
@@ -129,7 +129,7 @@ func registerCloudGameCenterGateway(apiGroup *gin.RouterGroup, services *AppServ
 		}
 		var proxyResp gameCenterProxyResponse
 		if err := json.Unmarshal(result.Structured, &proxyResp); err != nil {
-			c.JSON(http.StatusBadGateway, gin.H{"code": 502, "msg": "invalid game center response from device"})
+			c.JSON(http.StatusBadGateway, gin.H{"code": 502, "msg": err.Error()})
 			return
 		}
 		for key, value := range proxyResp.Headers {

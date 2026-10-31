@@ -5,10 +5,10 @@ import "time"
 type AuthorizationLevel string
 
 const (
-	AuthorizationNotDetermined     AuthorizationLevel = "not_determined"
-	AuthorizationRestricted        AuthorizationLevel = "restricted"
-	AuthorizationDenied            AuthorizationLevel = "denied"
-	AuthorizationFullAccess        AuthorizationLevel = "full_access"
+	AuthorizationNotDetermined    AuthorizationLevel = "not_determined"
+	AuthorizationRestricted       AuthorizationLevel = "restricted"
+	AuthorizationDenied           AuthorizationLevel = "denied"
+	AuthorizationFullAccess       AuthorizationLevel = "full_access"
 	AuthorizationLegacyAuthorized AuthorizationLevel = "legacy_authorized"
 )
 
@@ -35,8 +35,8 @@ type ReminderListInfo struct {
 
 	Title string `json:"title"`
 
-	SourceID     string `json:"sourceId,omitempty"`
-	SourceTitle  string `json:"sourceTitle,omitempty"`
+	SourceID    string `json:"sourceId,omitempty"`
+	SourceTitle string `json:"sourceTitle,omitempty"`
 
 	Type string `json:"type,omitempty"`
 
@@ -265,8 +265,8 @@ type UpdateReminderResult struct {
 }
 
 type CompleteReminderResult struct {
-	ReminderID  string `json:"reminderId"`
-	Completed   bool   `json:"completed"`
+	ReminderID   string     `json:"reminderId"`
+	Completed    bool       `json:"completed"`
 	CompletionAt *time.Time `json:"completionAt,omitempty"`
 }
 
@@ -286,16 +286,16 @@ type ListsListResult struct {
 }
 
 type AuthorizationStatusResult struct {
-	Level            string `json:"level"`
-	EffectiveLevel   string `json:"effectiveLevel"`
-	CanRead          bool   `json:"canRead"`
-	CanCreate        bool   `json:"canCreate"`
-	CanUpdate        bool   `json:"canUpdate"`
-	CanDelete        bool   `json:"canDelete"`
-	CanListReminderLists bool `json:"canListReminderLists"`
+	Level                string `json:"level"`
+	EffectiveLevel       string `json:"effectiveLevel"`
+	CanRead              bool   `json:"canRead"`
+	CanCreate            bool   `json:"canCreate"`
+	CanUpdate            bool   `json:"canUpdate"`
+	CanDelete            bool   `json:"canDelete"`
+	CanListReminderLists bool   `json:"canListReminderLists"`
 }
 
 type AuthorizationRequestResult struct {
-	Level    string `json:"level"`
-	Granted  bool   `json:"granted"`
+	Level   string `json:"level"`
+	Granted bool   `json:"granted"`
 }

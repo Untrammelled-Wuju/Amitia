@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	amitialog "log"
 	"sync"
 	"time"
 )
@@ -199,7 +200,9 @@ func (c *Coordinator) startComponent(ctx context.Context, meta BootstrapComponen
 		}
 		c.journal.RecordStartup(entry)
 		if c.store != nil {
-			_ = c.store.PersistStartup(ctx, entry)
+			if err := c.store.PersistStartup(ctx, entry); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		err := component.Start(startCtx)
 		if err == nil {
@@ -214,7 +217,9 @@ func (c *Coordinator) startComponent(ctx context.Context, meta BootstrapComponen
 		entry.Error = err.Error()
 		c.journal.RecordStartup(entry)
 		if c.store != nil {
-			_ = c.store.PersistStartup(ctx, entry)
+			if err := c.store.PersistStartup(ctx, entry); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		if c.audit != nil {
 			c.audit.RecordStartupEvent(ctx, StartupAuditEvent{
@@ -291,7 +296,9 @@ func (c *Coordinator) startComponent(ctx context.Context, meta BootstrapComponen
 	}
 	c.journal.RecordStartup(entry)
 	if c.store != nil {
-		_ = c.store.PersistStartup(ctx, entry)
+		if err := c.store.PersistStartup(ctx, entry); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	if c.audit != nil {
 		c.audit.RecordStartupEvent(ctx, StartupAuditEvent{

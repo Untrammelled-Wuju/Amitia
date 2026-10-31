@@ -13,15 +13,16 @@ import (
 
 	"github.com/u-ai/backend/internal/media/ffmpeg"
 	"github.com/u-ai/backend/internal/media/metadata"
+	amitialog "log"
 )
 
 type Converter struct {
-	backend    *ffmpeg.Runner
-	ffmpegPath string
+	backend     *ffmpeg.Runner
+	ffmpegPath  string
 	ffprobePath string
-	config     ffmpeg.Config
-	tempDir    string
-	mu         sync.Mutex
+	config      ffmpeg.Config
+	tempDir     string
+	mu          sync.Mutex
 }
 
 func NewConverter(backend *ffmpeg.Runner, ffmpegPath, ffprobePath string, config ffmpeg.Config, tempDir string) *Converter {
@@ -42,7 +43,7 @@ func (c *Converter) Convert(ctx context.Context, source metadata.MediaMetadata, 
 	conversionArgs := c.buildFFmpegArgs(source, request, plan, inputPath, outputPath)
 
 	progress := &progressTracker{
-		totalMs: source.DurationMs,
+		totalMs:  source.DurationMs,
 		onUpdate: opts.OnProgress,
 	}
 
@@ -67,7 +68,9 @@ func (c *Converter) Convert(ctx context.Context, source metadata.MediaMetadata, 
 
 	verifyResult, err := c.verifyOutput(outputPath, request, plan)
 	if err != nil {
-		_ = os.Remove(outputPath)
+		if err := os.Remove(outputPath); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, err
 	}
 
@@ -89,20 +92,20 @@ func (c *Converter) buildFFmpegArgs(source metadata.MediaMetadata, request Conve
 	videoArgs := (*ffmpeg.VideoConversionArgs)(nil)
 	if request.Video != nil {
 		v := &ffmpeg.VideoConversionArgs{
-			Mode:        resolveVideoMode(plan.VideoMode()),
-			Codec:       plan.VideoPlan.Codec,
-			QualityMode: plan.VideoPlan.QualityMode,
-			Quality:     plan.VideoPlan.Quality,
-			BitRateKbps: plan.VideoPlan.BitRateKbps,
-			MaxBitRateKbps: plan.VideoPlan.MaxBitRateKbps,
-			Width:       plan.VideoPlan.Width,
-			Height:      plan.VideoPlan.Height,
-			Fit:         plan.VideoPlan.Fit,
-			FrameRateNum: plan.VideoPlan.FrameRateNum,
-			FrameRateDen: plan.VideoPlan.FrameRateDen,
-			PixelFormat: plan.VideoPlan.PixelFormat,
+			Mode:                 resolveVideoMode(plan.VideoMode()),
+			Codec:                plan.VideoPlan.Codec,
+			QualityMode:          plan.VideoPlan.QualityMode,
+			Quality:              plan.VideoPlan.Quality,
+			BitRateKbps:          plan.VideoPlan.BitRateKbps,
+			MaxBitRateKbps:       plan.VideoPlan.MaxBitRateKbps,
+			Width:                plan.VideoPlan.Width,
+			Height:               plan.VideoPlan.Height,
+			Fit:                  plan.VideoPlan.Fit,
+			FrameRateNum:         plan.VideoPlan.FrameRateNum,
+			FrameRateDen:         plan.VideoPlan.FrameRateDen,
+			PixelFormat:          plan.VideoPlan.PixelFormat,
 			NormalizeOrientation: plan.VideoPlan.NormalizeOrientation,
-			StreamIndex: plan.VideoPlan.StreamIndex,
+			StreamIndex:          plan.VideoPlan.StreamIndex,
 		}
 		videoArgs = v
 	}
@@ -110,13 +113,13 @@ func (c *Converter) buildFFmpegArgs(source metadata.MediaMetadata, request Conve
 	audioArgs := (*ffmpeg.AudioConversionArgs)(nil)
 	if request.Audio != nil {
 		a := &ffmpeg.AudioConversionArgs{
-			Mode:             resolveAudioMode(plan.AudioMode()),
-			Codec:            plan.AudioPlan.Codec,
-			BitRateKbps:      plan.AudioPlan.BitRateKbps,
-			SampleRate:       plan.AudioPlan.SampleRate,
-			Channels:         plan.AudioPlan.Channels,
-			ChannelLayout:    plan.AudioPlan.ChannelLayout,
-			StreamIndex:      plan.AudioPlan.StreamIndex,
+			Mode:              resolveAudioMode(plan.AudioMode()),
+			Codec:             plan.AudioPlan.Codec,
+			BitRateKbps:       plan.AudioPlan.BitRateKbps,
+			SampleRate:        plan.AudioPlan.SampleRate,
+			Channels:          plan.AudioPlan.Channels,
+			ChannelLayout:     plan.AudioPlan.ChannelLayout,
+			StreamIndex:       plan.AudioPlan.StreamIndex,
 			NormalizeLoudness: plan.AudioPlan.NormalizeLoudness,
 		}
 		audioArgs = a
@@ -161,13 +164,13 @@ func (c *Converter) verifyOutput(outputPath string, request ConvertRequest, plan
 	}
 
 	result := &ConversionResult{
-		MediaKind:     string(metadata.DetermineMediaKind(convertStreams(fullProbe.Streams))),
-		Container:     ffmpeg.ParseContainer(fullProbe.FormatLong),
-		DurationMs:    fullProbe.DurationMS,
-		SizeBytes:      info.Size(),
-		ContentHash:   hash,
-		Transcoded:    plan.RequiresTranscode,
-		MetadataMode:  request.Metadata.Mode,
+		MediaKind:    string(metadata.DetermineMediaKind(convertStreams(fullProbe.Streams))),
+		Container:    ffmpeg.ParseContainer(fullProbe.FormatLong),
+		DurationMs:   fullProbe.DurationMS,
+		SizeBytes:    info.Size(),
+		ContentHash:  hash,
+		Transcoded:   plan.RequiresTranscode,
+		MetadataMode: request.Metadata.Mode,
 	}
 
 	for _, s := range fullProbe.Streams {

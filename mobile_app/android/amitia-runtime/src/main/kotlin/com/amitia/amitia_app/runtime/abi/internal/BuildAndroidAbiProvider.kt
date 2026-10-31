@@ -33,7 +33,9 @@ internal class BuildAndroidAbiProvider(
                 } else {
                     null
                 }
-            } catch (_: Throwable) {
+            } catch (originalError36: Throwable) {
+              originalError36.printStackTrace()
+
                 null
             }
         }

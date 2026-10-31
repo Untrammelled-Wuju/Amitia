@@ -7,8 +7,8 @@ import (
 )
 
 var (
-	globalSupervisor     runtimehost.ProcessSupervisor
-	globalSupervisorMu   sync.RWMutex
+	globalSupervisor   runtimehost.ProcessSupervisor
+	globalSupervisorMu sync.RWMutex
 )
 
 func SetGlobalRuntimeSupervisor(s runtimehost.ProcessSupervisor) {

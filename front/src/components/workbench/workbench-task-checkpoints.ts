@@ -56,7 +56,8 @@ export async function loadTaskCheckpoints(conversationId: string, coordinationId
   const response = await readWorkbenchTasks(conversationId, characterId, signal, coordinationId);
   try {
     return parseTaskCheckpoints(response, conversationId, coordinationId);
-  } catch {
-    throw new WorkbenchTaskReadError('持久检查点证据无效，旧任务快照已丢弃', true);
+  } catch (error) {
+  console.error("[original-error]", error);
+throw new WorkbenchTaskReadError('持久检查点证据无效，旧任务快照已丢弃', true);
   }
 }

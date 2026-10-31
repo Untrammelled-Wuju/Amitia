@@ -113,11 +113,15 @@ class NativeBridgeRelayClient {
 
       socket.listen(
         _handleMessage,
-        onError: (_) => _handleDisconnect(),
+        onError: (Object error, StackTrace stackTrace) {
+          print("[original-error] $error\n$stackTrace");
+          _handleDisconnect();
+        },
         onDone: () => _handleDisconnect(),
         cancelOnError: false,
       );
     } catch (e) {
+  print("[original-error] $e");
       _connecting = false;
       _scheduleReconnect();
     }
@@ -138,7 +142,9 @@ class NativeBridgeRelayClient {
       } else {
         _eventController.add(envelope);
       }
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
   }
 
   Future<void> _handlePlatformRequest(RelayEnvelope request) async {

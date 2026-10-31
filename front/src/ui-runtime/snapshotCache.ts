@@ -11,8 +11,9 @@ export function saveLastKnownGoodSnapshot(platform: string, deviceId: string, sn
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(key(platform, deviceId, backendNamespace), JSON.stringify({ savedAt: Date.now(), snapshot }));
-  } catch {
-    // Cache failure must never make the UI runtime unavailable.
+  } catch (error) {
+  console.error("[original-error]", error);
+// Cache failure must never make the UI runtime unavailable.
   }
 }
 
@@ -23,7 +24,8 @@ export function loadLastKnownGoodSnapshot(platform: string, deviceId: string, ba
     if (!raw) return null;
     const parsed = JSON.parse(raw) as { snapshot?: UIContributionSnapshot };
     return parsed.snapshot ?? null;
-  } catch {
-    return null;
+  } catch (error) {
+  console.error("[original-error]", error);
+return null;
   }
 }

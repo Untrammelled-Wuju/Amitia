@@ -371,8 +371,9 @@ async function loadNonBlocking(generation: number, original: TaskRun) {
   try {
     const loaded = await fetchTaskResult(original.taskRunId, original);
     if (generation === loadGeneration) result.value = loaded;
-  } catch {
-    if (generation === loadGeneration) result.value = null;
+  } catch (error) {
+  console.error("[original-error]", error);
+if (generation === loadGeneration) result.value = null;
   }
 }
 
@@ -414,8 +415,9 @@ async function pollProgress() {
       const loaded = await fetchTask(original.taskRunId, original);
       if (generation === loadGeneration) task.value = loaded;
     }
-  } catch {
-    if (generation === loadGeneration) stopPolling();
+  } catch (error) {
+  console.error("[original-error]", error);
+if (generation === loadGeneration) stopPolling();
   }
 }
 
@@ -440,8 +442,9 @@ async function onCancel() {
       "取消任务",
       { type: "warning", confirmButtonText: "取消任务", cancelButtonText: "保留" },
     );
-  } catch {
-    return;
+  } catch (error) {
+  console.error("[original-error]", error);
+return;
   }
   acting.value = true;
   try {
@@ -574,8 +577,9 @@ function pretty(value: unknown) {
   if (value === undefined || value === null) return "—";
   try {
     return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
+  } catch (error) {
+  console.error("[original-error]", error);
+return String(value);
   }
 }
 

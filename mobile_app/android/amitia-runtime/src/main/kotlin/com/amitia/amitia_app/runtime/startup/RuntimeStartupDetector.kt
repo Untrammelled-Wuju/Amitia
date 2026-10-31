@@ -136,7 +136,9 @@ internal class DefaultRuntimeStartupDetector(
                 if (!request.session.isAlive()) break
                 try {
                     Thread.sleep(minOf(POLL_GRANULARITY_MS, sleepTargetMs - clock.nowEpochMillis()))
-                } catch (_: InterruptedException) {
+                } catch (originalError139: InterruptedException) {
+                  originalError139.printStackTrace()
+
                     // cancel() interrupts the detector worker to shorten shutdown.
                     // The interruption is fully consumed here because this loop
                     // returns Cancelled immediately; re-interrupting would leak a
@@ -211,7 +213,9 @@ internal class DefaultRuntimeStartupDetector(
                 return null
             }
             request.endpoint.copy(host = host, port = port)
-        } catch (_: Throwable) {
+        } catch (originalError214: Throwable) {
+          originalError214.printStackTrace()
+
             null
         }
     }
@@ -277,7 +281,9 @@ internal class DefaultRuntimeStartupDetector(
         if (thread != null && thread !== Thread.currentThread() && thread.isAlive) {
             try {
                 thread.interrupt()
-            } catch (_: Throwable) {
+            } catch (originalError280: Throwable) {
+              originalError280.printStackTrace()
+
             }
         }
         // Do not clear activeRequest here. The running awaitStartup call owns

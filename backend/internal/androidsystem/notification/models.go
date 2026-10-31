@@ -22,22 +22,22 @@ type NotificationActionProjection struct {
 }
 
 type NotificationProjection struct {
-	NotificationID  string                         `json:"notificationRef"`
-	PackageName     string                         `json:"packageName"`
-	AppLabel        string                         `json:"appLabel"`
-	PostedAt        int64                          `json:"postedAt"`
-	Title           string                         `json:"title"`
-	Text            string                         `json:"text"`
-	SubText         string                         `json:"subText"`
-	Category        string                         `json:"category"`
-	Ongoing         bool                           `json:"ongoing"`
-	Clearable       bool                           `json:"clearable"`
-	GroupKey        string                         `json:"groupKey"`
-	ChannelID       string                         `json:"channelId"`
-	Importance      int                            `json:"importance"`
-	HasContentAction bool                          `json:"hasContentAction"`
-	Actions         []NotificationActionProjection `json:"actions,omitempty"`
-	Generation      uint64                         `json:"generation"`
+	NotificationID   string                         `json:"notificationRef"`
+	PackageName      string                         `json:"packageName"`
+	AppLabel         string                         `json:"appLabel"`
+	PostedAt         int64                          `json:"postedAt"`
+	Title            string                         `json:"title"`
+	Text             string                         `json:"text"`
+	SubText          string                         `json:"subText"`
+	Category         string                         `json:"category"`
+	Ongoing          bool                           `json:"ongoing"`
+	Clearable        bool                           `json:"clearable"`
+	GroupKey         string                         `json:"groupKey"`
+	ChannelID        string                         `json:"channelId"`
+	Importance       int                            `json:"importance"`
+	HasContentAction bool                           `json:"hasContentAction"`
+	Actions          []NotificationActionProjection `json:"actions,omitempty"`
+	Generation       uint64                         `json:"generation"`
 }
 
 type ListInput struct {
@@ -110,7 +110,7 @@ type CancelOwnResult struct {
 }
 
 type DismissResult struct {
-	Requested bool `json:"requested"`
+	Requested bool  `json:"requested"`
 	Dismissed *bool `json:"dismissed,omitempty"`
 }
 
@@ -133,11 +133,11 @@ const (
 )
 
 const (
-	StateUnsupported                  = "unsupported"
-	StateListenerNotGranted           = "listener_not_granted"
-	StateListenerGrantedNotConnected  = "listener_granted_not_connected"
-	StateListenerConnected            = "listener_connected"
-	StatePostPermissionDenied         = "post_permission_denied"
+	StateUnsupported                 = "unsupported"
+	StateListenerNotGranted          = "listener_not_granted"
+	StateListenerGrantedNotConnected = "listener_granted_not_connected"
+	StateListenerConnected           = "listener_connected"
+	StatePostPermissionDenied        = "post_permission_denied"
 )
 
 const (

@@ -37,7 +37,7 @@ type parseWarning struct {
 func (h *Handler) GetImportsBatches(c *gin.Context) {
 	batches, err := h.importRepo.List(c.Request.Context(), webChatSpaceID(c), 200)
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "读取导入批次失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	items := make([]map[string]any, 0, len(batches))
@@ -50,11 +50,11 @@ func (h *Handler) GetImportsBatches(c *gin.Context) {
 func (h *Handler) GetImportsBatchDetail(c *gin.Context) {
 	batch, items, err := h.importRepo.Get(c.Request.Context(), webChatSpaceID(c), strings.TrimSpace(c.Param("id")))
 	if errors.Is(err, importbatch.ErrNotFound) {
-		util.ErrorResponse(c, response.DataNotFound, "导入批次不存在", nil)
+		util.ErrorResponse(c, response.DataNotFound, err.Error(), nil)
 		return
 	}
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "读取导入批次失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, importBatchView(batch, items))
@@ -63,11 +63,11 @@ func (h *Handler) GetImportsBatchDetail(c *gin.Context) {
 func (h *Handler) GetImportsBatchSummary(c *gin.Context) {
 	batch, items, err := h.importRepo.Get(c.Request.Context(), webChatSpaceID(c), strings.TrimSpace(c.Param("id")))
 	if errors.Is(err, importbatch.ErrNotFound) {
-		util.ErrorResponse(c, response.DataNotFound, "导入批次不存在", nil)
+		util.ErrorResponse(c, response.DataNotFound, err.Error(), nil)
 		return
 	}
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "读取导入批次失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, map[string]any{"summary": map[string]any{
@@ -81,15 +81,15 @@ func (h *Handler) GetImportsBatchSummary(c *gin.Context) {
 func (h *Handler) DeleteImportsBatch(c *gin.Context) {
 	err := h.importRepo.DeleteReady(c.Request.Context(), webChatSpaceID(c), strings.TrimSpace(c.Param("id")))
 	if errors.Is(err, importbatch.ErrNotFound) {
-		util.ErrorResponse(c, response.DataNotFound, "导入批次不存在", nil)
+		util.ErrorResponse(c, response.DataNotFound, err.Error(), nil)
 		return
 	}
 	if errors.Is(err, importbatch.ErrDeleteNotAllowed) {
-		util.ErrorResponse(c, response.BusinessError, "已加入设备聊天的导入批次不能删除", nil)
+		util.ErrorResponse(c, response.BusinessError, err.Error(), nil)
 		return
 	}
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "删除导入批次失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, map[string]any{"deleted": true})
@@ -98,11 +98,11 @@ func (h *Handler) DeleteImportsBatch(c *gin.Context) {
 func (h *Handler) GenerateImportsBatchSummary(c *gin.Context) {
 	batch, items, err := h.importRepo.Get(c.Request.Context(), webChatSpaceID(c), strings.TrimSpace(c.Param("id")))
 	if errors.Is(err, importbatch.ErrNotFound) {
-		util.ErrorResponse(c, response.DataNotFound, "导入批次不存在", nil)
+		util.ErrorResponse(c, response.DataNotFound, err.Error(), nil)
 		return
 	}
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "读取导入消息失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	if len(items) == 0 {
@@ -120,7 +120,7 @@ func (h *Handler) GenerateImportsBatchSummary(c *gin.Context) {
 	userPrompt := "请为以下对话生成摘要：\n\n" + strings.Join(lines, "\n")
 	summaryText, _, _, err := h.chatSvc.GenerateWorkshopJSON(context.Background(), systemPrompt, userPrompt)
 	if err != nil {
-		util.ErrorResponse(c, response.OperationFailed, "生成摘要失败", err.Error())
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), err.Error())
 		return
 	}
 	var parsed map[string]any
@@ -135,7 +135,7 @@ func (h *Handler) GenerateImportsBatchSummary(c *gin.Context) {
 		return
 	}
 	if err := h.importRepo.SetSummary(c.Request.Context(), webChatSpaceID(c), batch.ID, summaryText); err != nil {
-		util.ErrorResponse(c, response.InternalError, "保存导入摘要失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, map[string]any{"summary": summaryText})
@@ -144,7 +144,7 @@ func (h *Handler) GenerateImportsBatchSummary(c *gin.Context) {
 func (h *Handler) ParseImportsText(c *gin.Context) {
 	var body map[string]any
 	if err := c.ShouldBindJSON(&body); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "解析参数无效", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	text, _ := body["rawText"].(string)
@@ -217,7 +217,7 @@ func (h *Handler) ConfirmImports(c *gin.Context) {
 	}
 	var body map[string]any
 	if err := c.ShouldBindJSON(&body); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "导入参数无效", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	roleID, _ := body["characterId"].(string)
@@ -227,7 +227,7 @@ func (h *Handler) ConfirmImports(c *gin.Context) {
 		return
 	}
 	if err := h.requireWebChatCharacter(roleID, actor.SpaceID.String()); err != nil {
-		util.ErrorResponse(c, response.DataNotFound, "角色不存在", nil)
+		util.ErrorResponse(c, response.DataNotFound, err.Error(), nil)
 		return
 	}
 	title, _ := body["title"].(string)
@@ -318,7 +318,7 @@ func (h *Handler) ConfirmImports(c *gin.Context) {
 	}
 	stored, storedItems, duplicate, err := h.importRepo.CreateOrGet(c.Request.Context(), batch, items)
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "保存导入批次失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, map[string]any{

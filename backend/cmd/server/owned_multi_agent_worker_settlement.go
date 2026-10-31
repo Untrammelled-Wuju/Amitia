@@ -7,6 +7,7 @@ import (
 
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/interaction"
+	amitialog "log"
 )
 
 func (r *ownedMultiAgentWorkerRunner) settleWorker(runCtx context.Context, childID string, req interaction.WorkerRunRequest, response business.Response, runErr error) {
@@ -24,13 +25,19 @@ func (r *ownedMultiAgentWorkerRunner) settleWorker(runCtx context.Context, child
 	}
 	switch classifyOwnedWorkerSettlement(runCtx.Err() != nil || !record.CancelRequestedAt.IsZero(), response, runErr) {
 	case interaction.InteractionStatusCompleted:
-		_, _ = r.tracker.Complete(context.Background(), childID, record.StatusVersion, response.Text)
+		if _, err := r.tracker.Complete(context.Background(), childID, record.StatusVersion, response.Text); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	case interaction.InteractionStatusInterrupted:
-		_, _ = r.tracker.TransitionCAS(context.Background(), childID, record.StatusVersion, interaction.InteractionStatusInterrupted)
+		if _, err := r.tracker.TransitionCAS(context.Background(), childID, record.StatusVersion, interaction.InteractionStatusInterrupted); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	default:
 		if runErr == nil {
 			runErr = errors.New("owned worker result was not fully committed")
 		}
-		_, _ = r.tracker.Fail(context.Background(), childID, record.StatusVersion, "owned_worker_failed", runErr.Error())
+		if _, err := r.tracker.Fail(context.Background(), childID, record.StatusVersion, "owned_worker_failed", runErr.Error()); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 }

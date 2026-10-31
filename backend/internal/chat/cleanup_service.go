@@ -11,6 +11,7 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/pipelinecheckpoint"
 	"gorm.io/gorm"
+	amitialog "log"
 )
 
 // CleanupRequest describes a destructive chat-cleanup selection. All filters
@@ -195,7 +196,9 @@ func (s *service) ConfirmCleanup(previewID, confirmText, spaceID string, context
 		return nil, err
 	}
 	for _, id := range plan.ConversationIDs {
-		_ = pipelinecheckpoint.New(s.db).ResetConversation(id)
+		if err := pipelinecheckpoint.New(s.db).ResetConversation(id); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return &CleanupResult{ConversationCount: len(plan.ConversationIDs), MessageCount: plan.MessageCount, MemoryCount: deletedMemories}, nil
 }

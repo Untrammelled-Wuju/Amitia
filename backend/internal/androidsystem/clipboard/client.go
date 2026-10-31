@@ -63,9 +63,9 @@ func (c *hostClipboardClient) Status(ctx context.Context) (ClipboardCapabilitySt
 	defer c.mu.Unlock()
 
 	return ClipboardCapabilityState{
-		Supported:   false,
-		State:       StateUnsupported,
-		Reason:      "android native host source not available",
+		Supported:    false,
+		State:        StateUnsupported,
+		Reason:       "android native host source not available",
 		MaxTextBytes: MaxClipboardTextBytes,
 	}, &clipboardError{code: CLIPBOARD_HOST_UNAVAILABLE, message: "android native host source not available"}
 }

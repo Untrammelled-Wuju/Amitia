@@ -211,7 +211,7 @@ func (api *DevModeAPI) grantTrust(c *gin.Context) {
 	id := dev_mode.WorkspaceID(c.Param("id"))
 	workspace, err := container.DevModeRegistry.Get(id)
 	if err != nil || workspace.OwnerSpaceID != kernelAPIUser(c) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "workspace ownership mismatch"})
+		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 		return
 	}
 	if err := container.DevModeRegistry.GrantDevTrust(id); err != nil {
@@ -230,7 +230,7 @@ func (api *DevModeAPI) revokeTrust(c *gin.Context) {
 	id := dev_mode.WorkspaceID(c.Param("id"))
 	workspace, err := container.DevModeRegistry.Get(id)
 	if err != nil || workspace.OwnerSpaceID != kernelAPIUser(c) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "workspace ownership mismatch"})
+		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 		return
 	}
 	if err := container.DevModeRegistry.RevokeDevTrust(id); err != nil {
@@ -253,7 +253,9 @@ func (api *DevModeAPI) buildWorkspace(c *gin.Context) {
 	}
 	id := dev_mode.WorkspaceID(c.Param("id"))
 	var req buildRequest
-	_ = c.ShouldBindJSON(&req)
+	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("[original-error] %v", err)
+	}
 	opts := dev_mode.BuildOptions{
 		SourceMap:        true,
 		Deterministic:    true,
@@ -288,7 +290,9 @@ func (api *DevModeAPI) reloadWorkspace(c *gin.Context) {
 	}
 	id := dev_mode.WorkspaceID(c.Param("id"))
 	var req reloadRequest
-	_ = c.ShouldBindJSON(&req)
+	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("[original-error] %v", err)
+	}
 	if req.Reason == "" {
 		req.Reason = "manual"
 	}
@@ -567,7 +571,7 @@ func (api *DevModeAPI) closeSession(c *gin.Context) {
 	id := dev_mode.WorkspaceID(c.Param("id"))
 	workspace, workspaceErr := container.DevModeRegistry.Get(id)
 	if workspaceErr != nil || workspace.OwnerSpaceID != kernelAPIUser(c) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "workspace ownership mismatch"})
+		c.JSON(http.StatusForbidden, gin.H{"error": workspaceErr.Error()})
 		return
 	}
 	sess, err := container.DevModeSessions.GetByWorkspace(id)
@@ -634,7 +638,9 @@ func (api *DevModeAPI) streamEvents(c *gin.Context) {
 		api.sseMu.Unlock()
 	}()
 
-	_, _ = fmt.Fprintf(c.Writer, "event: connected\ndata: {\"workspaceId\":\"%s\",\"clientId\":\"%s\"}\n\n", id, clientID)
+	if _, err := fmt.Fprintf(c.Writer, "event: connected\ndata: {\"workspaceId\":\"%s\",\"clientId\":\"%s\"}\n\n", id, clientID); err != nil {
+		log.Printf("[original-error] %v", err)
+	}
 	flusher.Flush()
 
 	heartbeat := time.NewTicker(15 * time.Second)
@@ -647,14 +653,18 @@ func (api *DevModeAPI) streamEvents(c *gin.Context) {
 		case <-notify:
 			return
 		case <-heartbeat.C:
-			_, _ = fmt.Fprintf(c.Writer, ": heartbeat\n\n")
+			if _, err := fmt.Fprintf(c.Writer, ": heartbeat\n\n"); err != nil {
+				log.Printf("[original-error] %v", err)
+			}
 			flusher.Flush()
 		case ev, ok := <-eventCh:
 			if !ok {
 				return
 			}
 			data, _ := json.Marshal(serializeReloadEvent(ev))
-			_, _ = fmt.Fprintf(c.Writer, "event: reload\ndata: %s\n\n", data)
+			if _, err := fmt.Fprintf(c.Writer, "event: reload\ndata: %s\n\n", data); err != nil {
+				log.Printf("[original-error] %v", err)
+			}
 			flusher.Flush()
 		}
 	}

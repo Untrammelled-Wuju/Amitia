@@ -20,6 +20,7 @@ export interface DataPortabilityExportPreview {
   profile: DataPortabilityProfile;
   characterId: string;
   encrypted: boolean;
+  includeSecrets: boolean;
   components: DataPortabilityComponent[];
   estimatedSize: number;
 }
@@ -52,6 +53,8 @@ export interface DataPortabilityImportPreview {
       scope: DataPortabilityScope;
       characterId?: string;
       encrypted: boolean;
+      includesSecrets: boolean;
+      secretsPolicy?: number;
       sourcePlatform: string;
       requiresReindex: boolean;
     };
@@ -100,6 +103,8 @@ export async function previewDataPortabilityExport(payload: {
   profile: DataPortabilityProfile;
   characterId?: string;
   passphrase?: string;
+  includeModelAssets?: boolean;
+  includeSecrets?: boolean;
 }) {
   const response = await apiClient.post<DataPortabilityExportPreview>("/api/data-portability/exports/preview", payload);
   return response.data;
@@ -110,6 +115,8 @@ export async function exportDataPortability(payload: {
   profile: DataPortabilityProfile;
   characterId?: string;
   passphrase?: string;
+  includeModelAssets?: boolean;
+  includeSecrets?: boolean;
 }) {
   const response = await apiClient.post<DataPortabilityExportResult>("/api/data-portability/exports", payload);
   return response.data;

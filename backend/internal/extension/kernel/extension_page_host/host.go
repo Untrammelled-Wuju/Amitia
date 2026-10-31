@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	amitialog "log"
 	"strings"
 	"sync"
 	"time"
@@ -671,7 +672,9 @@ func (h *PageHost) HandleExtensionUninstalled(ctx context.Context, extensionID E
 		return count, err
 	}
 	for _, def := range defs {
-		_ = h.registry.Unregister(ctx, def.contributionID)
+		if err := h.registry.Unregister(ctx, def.contributionID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return count, nil
 }

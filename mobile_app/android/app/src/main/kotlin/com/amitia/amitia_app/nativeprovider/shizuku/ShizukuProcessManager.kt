@@ -166,7 +166,9 @@ internal class ShizukuProcessManager {
                     managed.stdin.closeQuietly()
                     managed.stdout.close()
                     managed.stderr.close()
-                } catch (_: Exception) {
+                } catch (originalError169: Exception) {
+                  originalError169.printStackTrace()
+
                 }
             }
         }
@@ -202,7 +204,9 @@ internal class ShizukuProcessManager {
             if (finished.get() || !isAlive()) {
                 try {
                     process.exitValue()
-                } catch (_: Exception) {
+                } catch (originalError205: Exception) {
+                  originalError205.printStackTrace()
+
                     null
                 }
             } else {
@@ -213,9 +217,13 @@ internal class ShizukuProcessManager {
             try {
                 process.exitValue()
                 false
-            } catch (_: IllegalThreadStateException) {
+            } catch (originalError216: IllegalThreadStateException) {
+              originalError216.printStackTrace()
+
                 true
-            } catch (_: Throwable) {
+            } catch (originalError218: Throwable) {
+              originalError218.printStackTrace()
+
                 false
             }
     }
@@ -238,7 +246,9 @@ internal class ShizukuProcessManager {
                         if (read < 0) break
                         if (read > 0) append(chunk, read)
                     }
-                } catch (_: Exception) {
+                } catch (originalError241: Exception) {
+                  originalError241.printStackTrace()
+
                 } finally {
                     close()
                 }
@@ -295,16 +305,22 @@ internal class ShizukuProcessManager {
         try {
             exitValue()
             false
-        } catch (_: IllegalThreadStateException) {
+        } catch (originalError298: IllegalThreadStateException) {
+          originalError298.printStackTrace()
+
             true
-        } catch (_: Throwable) {
+        } catch (originalError300: Throwable) {
+          originalError300.printStackTrace()
+
             false
         }
 
     private fun OutputStream.closeQuietly() {
         try {
             close()
-        } catch (_: Exception) {
+        } catch (originalError307: Exception) {
+          originalError307.printStackTrace()
+
         }
     }
 

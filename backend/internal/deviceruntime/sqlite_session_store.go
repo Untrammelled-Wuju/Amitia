@@ -10,6 +10,7 @@ import (
 
 	"github.com/u-ai/backend/internal/deviceruntime/protocol"
 	"github.com/u-ai/backend/internal/runtimeidentity"
+	amitialog "log"
 )
 
 type SQLiteSessionStore struct {
@@ -499,7 +500,9 @@ func (s *SQLiteSessionStore) WithinTx(ctx context.Context, fn func(SessionTx) er
 	}
 	storeTx := &SQLiteSessionStoreTx{tx: tx}
 	if err := fn(storeTx); err != nil {
-		_ = tx.Rollback()
+		if err := tx.Rollback(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return err
 	}
 	return tx.Commit()

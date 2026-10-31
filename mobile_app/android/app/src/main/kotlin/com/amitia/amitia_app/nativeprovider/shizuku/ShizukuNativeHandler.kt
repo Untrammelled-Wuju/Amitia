@@ -77,7 +77,9 @@ internal class ShizukuNativeHandler(
             Shizuku.addBinderReceivedListenerSticky(binderReceivedListener)
             Shizuku.addBinderDeadListener(binderDeadListener)
             Shizuku.addRequestPermissionResultListener(permissionResultListener)
-        } catch (_: Exception) {
+        } catch (originalError80: Exception) {
+          originalError80.printStackTrace()
+
         }
     }
 
@@ -135,22 +137,30 @@ internal class ShizukuNativeHandler(
                 "binderAlive" to pingBinder(),
                 "preV11" to try {
                     Shizuku.isPreV11()
-                } catch (_: Exception) {
+                } catch (originalError138: Exception) {
+                  originalError138.printStackTrace()
+
                     false
                 },
                 "latestServiceVersion" to try {
                     Shizuku.getLatestServiceVersion()
-                } catch (_: Exception) {
+                } catch (originalError143: Exception) {
+                  originalError143.printStackTrace()
+
                     -1
                 },
                 "serverPatchVersion" to try {
                     Shizuku.getServerPatchVersion()
-                } catch (_: Exception) {
+                } catch (originalError148: Exception) {
+                  originalError148.printStackTrace()
+
                     -1
                 },
                 "selinuxContext" to try {
                     Shizuku.getSELinuxContext()
-                } catch (_: Exception) {
+                } catch (originalError153: Exception) {
+                  originalError153.printStackTrace()
+
                     ""
                 },
             ),
@@ -259,6 +269,8 @@ internal class ShizukuNativeHandler(
         val binder = try {
             SystemServiceHelper.getSystemService(serviceName)
         } catch (error: Exception) {
+          error.printStackTrace()
+
             null
         } ?: return errorResponse(request.requestId, "SHIZUKU_SYSTEM_SERVICE_NOT_FOUND", "system service not found: $serviceName")
         return successResponse(
@@ -269,7 +281,9 @@ internal class ShizukuNativeHandler(
                 "binderAlive" to binder.isBinderAlive,
                 "interfaceDescriptor" to try {
                     binder.interfaceDescriptor.orEmpty()
-                } catch (_: Exception) {
+                } catch (originalError272: Exception) {
+                  originalError272.printStackTrace()
+
                     ""
                 },
             ),
@@ -481,7 +495,9 @@ internal class ShizukuNativeHandler(
 
         val rationaleRequired = try {
             Shizuku.shouldShowRequestPermissionRationale()
-        } catch (_: Exception) {
+        } catch (originalError484: Exception) {
+          originalError484.printStackTrace()
+
             false
         }
         if (rationaleRequired) {
@@ -494,11 +510,13 @@ internal class ShizukuNativeHandler(
 
         val result = try {
             requestPermissionAsync().get(60, TimeUnit.SECONDS)
-        } catch (_: TimeoutException) {
+        } catch (originalError497: TimeoutException) {
+          originalError497.printStackTrace()
+
             return errorResponse(
                 request.requestId,
                 "SHIZUKU_PERMISSION_TIMEOUT",
-                "Shizuku permission request timed out",
+                "Shizuku permission request timed out: ${originalError497.message ?: originalError497.javaClass.simpleName}",
             )
         } catch (error: Exception) {
             return errorResponse(
@@ -557,7 +575,9 @@ internal class ShizukuNativeHandler(
         } else {
             try {
                 Shizuku.requestPermission(code)
-            } catch (_: Exception) {
+            } catch (originalError560: Exception) {
+              originalError560.printStackTrace()
+
                 completePermissionWaiter(code, -1)
             }
         }
@@ -811,17 +831,23 @@ internal class ShizukuNativeHandler(
 
         val granted = try {
             Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
-        } catch (_: Exception) {
+        } catch (originalError814: Exception) {
+          originalError814.printStackTrace()
+
             false
         }
         val uid = try {
             Shizuku.getUid()
-        } catch (_: Exception) {
+        } catch (originalError819: Exception) {
+          originalError819.printStackTrace()
+
             -1
         }
         val version = try {
             Shizuku.getVersion()
-        } catch (_: Exception) {
+        } catch (originalError824: Exception) {
+          originalError824.printStackTrace()
+
             -1
         }
         val sui = isSuiBinder()
@@ -873,9 +899,13 @@ internal class ShizukuNativeHandler(
             try {
                 appContext.packageManager.getPackageInfo(packageName, 0)
                 true
-            } catch (_: PackageManager.NameNotFoundException) {
+            } catch (originalError876: PackageManager.NameNotFoundException) {
+              originalError876.printStackTrace()
+
                 false
-            } catch (_: Exception) {
+            } catch (originalError878: Exception) {
+              originalError878.printStackTrace()
+
                 false
             }
         }
@@ -894,7 +924,9 @@ internal class ShizukuNativeHandler(
     private fun isSuiBinder(): Boolean {
         return try {
             Sui.isSui()
-        } catch (_: Exception) {
+        } catch (originalError897: Exception) {
+          originalError897.printStackTrace()
+
             false
         }
     }
@@ -902,7 +934,9 @@ internal class ShizukuNativeHandler(
     private fun pingBinder(): Boolean {
         return try {
             Shizuku.pingBinder()
-        } catch (_: Exception) {
+        } catch (originalError905: Exception) {
+          originalError905.printStackTrace()
+
             false
         }
     }
@@ -910,7 +944,9 @@ internal class ShizukuNativeHandler(
     private fun shouldShowPermissionRationale(): Boolean {
         return try {
             Shizuku.shouldShowRequestPermissionRationale()
-        } catch (_: Exception) {
+        } catch (originalError913: Exception) {
+          originalError913.printStackTrace()
+
             false
         }
     }
@@ -922,7 +958,9 @@ internal class ShizukuNativeHandler(
     private fun authorized(): Boolean {
         return try {
             pingBinder() && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
-        } catch (_: Exception) {
+        } catch (originalError925: Exception) {
+          originalError925.printStackTrace()
+
             false
         }
     }
@@ -968,7 +1006,9 @@ internal class ShizukuNativeHandler(
             Shizuku.removeBinderReceivedListener(binderReceivedListener)
             Shizuku.removeBinderDeadListener(binderDeadListener)
             Shizuku.removeRequestPermissionResultListener(permissionResultListener)
-        } catch (_: Exception) {
+        } catch (originalError971: Exception) {
+          originalError971.printStackTrace()
+
         }
         ShizukuCommandServiceHolder.unbindService()
     }

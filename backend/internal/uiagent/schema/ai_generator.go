@@ -15,8 +15,8 @@ type LLMSchemaCallFunc func(ctx interface{}, promptJSON []byte) ([]byte, error)
 // AISchemaGenerator produces SchemaUIDocuments using an LLM.
 // Heuristic fallback is prohibited in production paths.
 type AISchemaGenerator struct {
-	catalog       *ComponentCatalog
-	llmCall       LLMSchemaCallFunc
+	catalog        *ComponentCatalog
+	llmCall        LLMSchemaCallFunc
 	allowHeuristic bool
 }
 

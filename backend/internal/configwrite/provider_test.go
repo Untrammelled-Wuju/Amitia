@@ -39,7 +39,6 @@ func configurationProviderRouter(db *gorm.DB) *gin.Engine {
 	appctx := &app.AppContext{DB: db}
 	settings := system.NewHandler(system.NewService(appctx, ""), db, nil, nil, nil, nil, nil)
 	router.PUT("/config", settings.UpdateConfig)
-	router.POST("/config/import", settings.ConfigImportConfirm)
 	router.PUT("/theme", settings.UpdateTheme)
 	router.PUT("/mood", settings.MoodDetectionConfig)
 	return router
@@ -90,7 +89,6 @@ func TestConfigurationProvidersAndSettingsRejectRevocationAndAdministratorABA(t 
 	}
 	for _, request := range []struct{ method, path, body string }{
 		{http.MethodPut, "/config", `{"theme":"late","settings":{"k":"v"}}`},
-		{http.MethodPost, "/config/import", `{"settings":{"k":"v"}}`},
 		{http.MethodPut, "/theme", `{"theme":"late"}`},
 		{http.MethodPut, "/mood", `{"enabled":true,"threshold":0.2}`},
 	} {
@@ -115,7 +113,7 @@ func TestConfigurationProvidersAndSettingsRejectRevocationAndAdministratorABA(t 
 			t.Fatalf("fresh provider authority refused: %s %d", name, code)
 		}
 	}
-	if code := configurationHTTPResult(t, router, fresh, http.MethodPost, "/config/import", `{"settings":{"k":"fresh"}}`); code != 200 {
+	if code := configurationHTTPResult(t, router, fresh, http.MethodPut, "/config", `{"settings":{"k":"fresh"}}`); code != 200 {
 		t.Fatalf("fresh settings authority refused: %d", code)
 	}
 }
@@ -180,7 +178,7 @@ func TestConfigurationAppSettingsImportRollsBackWholeBatch(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if code := configurationHTTPResult(t, configurationProviderRouter(db), ctx, http.MethodPost, "/config/import", `{"settings":{"aaa":"partial","seed":"changed","zzz":"fail"}}`); code == 200 || code == 0 {
+			if code := configurationHTTPResult(t, configurationProviderRouter(db), ctx, http.MethodPut, "/config", `{"settings":{"aaa":"partial","seed":"changed","zzz":"fail"}}`); code == 200 || code == 0 {
 				t.Fatal("failed settings batch reported success")
 			}
 			var count int64

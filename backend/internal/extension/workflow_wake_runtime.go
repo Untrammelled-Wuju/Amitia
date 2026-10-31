@@ -15,6 +15,7 @@ import (
 	"github.com/u-ai/backend/internal/asr"
 	realtime "github.com/u-ai/backend/internal/devicemesh/wake"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
+	amitialog "log"
 )
 
 const (
@@ -347,7 +348,9 @@ func (r *Runtime) processWorkflowWakeAudio(ctx context.Context, pcm []byte, devi
 			// workflows. Remove it so subsequent frames do not hot-loop failures;
 			// the normal refresh path will recreate it after configuration/backend
 			// recovery.
-			_ = entry.detector.Unload()
+			if err := entry.detector.Unload(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			delete(state.detectors, configID)
 			processErr := fmt.Errorf("wake detector %s process: %w", configID, err)
 			detectorErrors = append(detectorErrors, processErr)
@@ -486,13 +489,17 @@ func (s *workflowWakeRuntimeState) reconcileDetectors(ctx context.Context, desir
 	for configID, existing := range s.detectors {
 		record, ok := desired[configID]
 		if !ok {
-			_ = existing.detector.Unload()
+			if err := existing.detector.Unload(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			delete(s.detectors, configID)
 			continue
 		}
 		desiredHash, err := workflowWakeDetectorConfigHash(record)
 		if err != nil {
-			_ = existing.detector.Unload()
+			if err := existing.detector.Unload(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			delete(s.detectors, configID)
 			delete(desired, configID)
 			s.lastErr = errors.Join(s.lastErr, fmt.Errorf("resolve wake detector config %s: %w", configID, err))
@@ -502,7 +509,9 @@ func (s *workflowWakeRuntimeState) reconcileDetectors(ctx context.Context, desir
 			delete(desired, configID)
 			continue
 		}
-		_ = existing.detector.Unload()
+		if err := existing.detector.Unload(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		delete(s.detectors, configID)
 	}
 	for configID, record := range desired {
@@ -527,7 +536,9 @@ func (s *workflowWakeRuntimeState) reconcileDetectors(ctx context.Context, desir
 		}
 		phrases, err := decodeWorkflowWakePhrases(record.Phrases)
 		if err != nil {
-			_ = detector.Unload()
+			if err := detector.Unload(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			s.lastErr = errors.Join(s.lastErr, fmt.Errorf("wake config %s: %w", configID, err))
 			continue
 		}
@@ -539,7 +550,9 @@ func (s *workflowWakeRuntimeState) reconcileDetectors(ctx context.Context, desir
 			Threshold:        record.Threshold,
 			CooldownMS:       record.CooldownMS,
 		}); err != nil {
-			_ = detector.Unload()
+			if err := detector.Unload(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			s.lastErr = errors.Join(s.lastErr, fmt.Errorf("load wake detector %s: %w", configID, err))
 			continue
 		}
@@ -564,7 +577,9 @@ func (s *workflowWakeRuntimeState) close() {
 
 func (s *workflowWakeRuntimeState) replaceDetectors(next map[string]*workflowWakeDetectorState) {
 	for _, entry := range s.detectors {
-		_ = entry.detector.Unload()
+		if err := entry.detector.Unload(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	if next == nil {
 		next = make(map[string]*workflowWakeDetectorState)

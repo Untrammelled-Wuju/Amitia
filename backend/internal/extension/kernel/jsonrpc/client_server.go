@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	amitialog "log"
 	"sync"
 	"time"
 )
@@ -165,15 +166,21 @@ func (c *Client) handleRequest(ctx context.Context, req *Request) {
 		if !ok {
 			rpcErr = InternalError(err.Error())
 		}
-		_ = c.transport.Write(EncodeErrorResponse(req.ID, rpcErr))
+		if err := c.transport.Write(EncodeErrorResponse(req.ID, rpcErr)); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return
 	}
 	resp, err := EncodeResponse(req.ID, result)
 	if err != nil {
-		_ = c.transport.Write(EncodeErrorResponse(req.ID, InternalError(err.Error())))
+		if err := c.transport.Write(EncodeErrorResponse(req.ID, InternalError(err.Error()))); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return
 	}
-	_ = c.transport.Write(resp)
+	if err := c.transport.Write(resp); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (c *Client) Close() error {
@@ -345,15 +352,21 @@ func (s *Server) handleRequest(ctx context.Context, req *Request) {
 		if !ok {
 			rpcErr = InternalError(err.Error())
 		}
-		_ = s.transport.Write(EncodeErrorResponse(req.ID, rpcErr))
+		if err := s.transport.Write(EncodeErrorResponse(req.ID, rpcErr)); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return
 	}
 	resp, err := EncodeResponse(req.ID, result)
 	if err != nil {
-		_ = s.transport.Write(EncodeErrorResponse(req.ID, InternalError(err.Error())))
+		if err := s.transport.Write(EncodeErrorResponse(req.ID, InternalError(err.Error()))); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return
 	}
-	_ = s.transport.Write(resp)
+	if err := s.transport.Write(resp); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (s *Server) Close() error {

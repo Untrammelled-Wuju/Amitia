@@ -6,17 +6,17 @@ import (
 )
 
 const (
-	DefaultScanDurationMs = 10000
-	MaxScanDurationMs     = 30000
-	DefaultMaxResults     = 50
-	MaxResultsLimit       = 200
-	MaxScanTTLSeconds     = 120
-	MaxWriteBytes         = 512
-	DefaultConnectTimeoutMs = 15000
-	MaxConnectTimeoutMs   = 60000
-	MinConnectTimeoutMs   = 1000
+	DefaultScanDurationMs           = 10000
+	MaxScanDurationMs               = 30000
+	DefaultMaxResults               = 50
+	MaxResultsLimit                 = 200
+	MaxScanTTLSeconds               = 120
+	MaxWriteBytes                   = 512
+	DefaultConnectTimeoutMs         = 15000
+	MaxConnectTimeoutMs             = 60000
+	MinConnectTimeoutMs             = 1000
 	MaxConcurrentConnectionsDefault = 4
-	DefaultEventRateLimit = 10
+	DefaultEventRateLimit           = 10
 )
 
 var uuidRegex = regexp.MustCompile(`(?i)^[0-9a-f]{4}(?:[0-9a-f]{4})?(?:[0-9a-f]{12})?$|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)

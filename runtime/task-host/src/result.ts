@@ -37,8 +37,9 @@ export async function processResult(
   let serialized: string | undefined;
   try {
     serialized = JSON.stringify(output);
-  } catch {
-    return { task_run_id: taskRunId, status: "failed", error: { code: "task_output_not_serializable", message: "任务输出无法序列化为 JSON" } };
+  } catch (error) {
+  console.error("[original-error]", error);
+return { task_run_id: taskRunId, status: "failed", error: { code: "task_output_not_serializable", message: "任务输出无法序列化为 JSON" } };
   }
 
   if (typeof serialized !== "string") {

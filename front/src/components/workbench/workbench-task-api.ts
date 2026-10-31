@@ -33,7 +33,9 @@ export function registerWorkbenchBudgetEvidence(conversationId: string, characte
 async function requestWorkbenchTasks(conversationId: string, characterId: string, signal: AbortSignal, coordinationId?: string, evidence?: WorkbenchBudgetEvidenceQuery, registration?: BudgetEvidenceRegistration): Promise<Record<string, unknown>> {
   let origin: ReturnType<typeof parseConversationReference>;
   try { origin = parseConversationReference(conversationId); }
-  catch { throw new WorkbenchTaskReadError('无法确认任务所属会话和角色，请重新打开对话', true); }
+  catch (error) {
+  console.error("[original-error]", error);
+throw new WorkbenchTaskReadError('无法确认任务所属会话和角色，请重新打开对话', true); }
   if (!origin || !characterId) throw new WorkbenchTaskReadError('无法确认任务所属会话和角色，请重新打开对话', true);
   const owned = useDeviceOwnedConversation();
   try {

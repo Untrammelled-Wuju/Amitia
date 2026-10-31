@@ -7,9 +7,9 @@ import (
 )
 
 type ResumeResult struct {
-	Replayed int
-	Entries  []QueueEntry
-	Latest   Sequence
+	Replayed   int
+	Entries    []QueueEntry
+	Latest     Sequence
 	Generation StreamGeneration
 }
 

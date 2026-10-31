@@ -74,8 +74,9 @@ async function saveCharPrompt() {
     ElMessage.success("提示词已保存");
     emit("update:modelValue", false);
     emit("saved");
-  } catch {
-    ElMessage.error("保存失败");
+  } catch (error) {
+  console.error("[original-error]", error);
+ElMessage.error(error instanceof Error ? error.message : String(error));
   } finally {
     promptSaving.value = false;
   }
@@ -85,8 +86,9 @@ async function copyPrompt() {
   try {
     await navigator.clipboard.writeText(props.editingPrompt);
     ElMessage.success("已复制到剪贴板");
-  } catch {
-    ElMessage.warning("复制失败，请手动选择复制");
+  } catch (error) {
+  console.error("[original-error]", error);
+ElMessage.warning(error instanceof Error ? error.message : String(error));
   }
 }
 </script>

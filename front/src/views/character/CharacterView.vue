@@ -535,7 +535,10 @@ const characterExtensionContext = computed(() => ({
 const { tabs: characterExtensionTabs } = useCharacterExtensionTabs(characterExtensionContext);
 
 onMounted(async () => {
-  await Promise.allSettled([loadPackHistory(), loadTemplates()]);
+  const settled = await Promise.allSettled([loadPackHistory(), loadTemplates()]);
+  for (const result of settled) {
+    if (result.status === "rejected") console.error("[original-error]", result.reason);
+  }
   await loadVoices();
   await loadCharacters();
   const id = route.params.id as string;
@@ -564,8 +567,9 @@ async function loadTemplates() {
     const r = await apiClient.get("/api/character-templates");
     const data = r.data?.data || r.data || [];
     templates.value = Array.isArray(data) ? data : [];
-  } catch {
-    templates.value = [];
+  } catch (error) {
+  console.error("[original-error]", error);
+templates.value = [];
   } finally {
     templateLoading.value = false;
   }
@@ -602,18 +606,21 @@ async function loadVoices() {
     voicePresets.value = Array.isArray(data) ? data : [];
   } else {
     voicePresets.value = [];
+    ElMessage.error(presetsResult.reason instanceof Error ? presetsResult.reason.message : String(presetsResult.reason));
   }
   if (configsResult.status === "fulfilled") {
     const data = configsResult.value.data?.data || configsResult.value.data;
     voiceConfigs.value = Array.isArray(data) ? data : [];
   } else {
     voiceConfigs.value = [];
+    ElMessage.error(configsResult.reason instanceof Error ? configsResult.reason.message : String(configsResult.reason));
   }
   if (clonesResult.status === "fulfilled") {
     const data = clonesResult.value.data?.data || clonesResult.value.data;
     clonedVoices.value = Array.isArray(data) ? data : [];
   } else {
     clonedVoices.value = [];
+    ElMessage.error(clonesResult.reason instanceof Error ? clonesResult.reason.message : String(clonesResult.reason));
   }
 }
 
@@ -627,8 +634,9 @@ async function loadCharacters() {
     if (!Array.isArray(rows) || rows.some((row: any) => row.roleAuthority !== authority)) throw new Error("角色数据归属已变化，请重新加载");
     collectionAuthority.value = authority;
     characters.value = rows;
-  } catch {
-    collectionAuthority.value = "";
+  } catch (error) {
+  console.error("[original-error]", error);
+collectionAuthority.value = "";
   }
 }
 
@@ -709,8 +717,9 @@ function prettyJson(value: unknown): string {
   try {
     const parsed = typeof value === "string" ? JSON.parse(value) : value;
     return JSON.stringify(parsed ?? {}, null, 2);
-  } catch {
-    return String(value);
+  } catch (error) {
+  console.error("[original-error]", error);
+return String(value);
   }
 }
 

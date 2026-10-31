@@ -203,7 +203,7 @@ func registerMeshTaskSubmissionRouter(group *gin.RouterGroup, services *AppServi
 			if input.TaskCatalogReference != nil || definition != nil {
 				writeMeshTaskSubmissionError(c, err)
 			} else {
-				c.JSON(http.StatusNotFound, gin.H{"message": "设备任务定义不存在"})
+				c.JSON(http.StatusNotFound, gin.H{"message": err.Error()})
 			}
 			return
 		}

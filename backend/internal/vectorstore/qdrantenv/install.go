@@ -10,6 +10,7 @@ import (
 
 	"github.com/u-ai/backend/pkg/platform"
 	"github.com/u-ai/backend/pkg/util"
+	amitialog "log"
 )
 
 type InstallRequest struct {
@@ -77,7 +78,9 @@ func (i *ensureInstaller) EnsureInstalled(req InstallRequest) error {
 				return NewArchiveExtractionError(archivePath, err)
 			}
 			if i.hasExecError(req.Target.BinaryPath) {
-				_ = i.ensureExecutable(req.Target.BinaryPath, guest)
+				if err := i.ensureExecutable(req.Target.BinaryPath, guest); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 			return nil
 		}

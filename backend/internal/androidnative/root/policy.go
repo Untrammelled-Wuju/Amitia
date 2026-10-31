@@ -20,12 +20,12 @@ const (
 )
 
 var allowedEnvKeys = map[string]bool{
-	"PATH":    true,
-	"TMPDIR":  true,
-	"LANG":    true,
-	"LC_ALL":  true,
-	"HOME":    true,
-	"USER":    true,
+	"PATH":   true,
+	"TMPDIR": true,
+	"LANG":   true,
+	"LC_ALL": true,
+	"HOME":   true,
+	"USER":   true,
 }
 
 var shellExecutables = []string{

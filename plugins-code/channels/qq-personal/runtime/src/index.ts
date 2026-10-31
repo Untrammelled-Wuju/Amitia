@@ -88,8 +88,9 @@ async function resolveConversationTitle(message: ParsedQQMessage): Promise<strin
       const info = await bridge.callAction("get_stranger_info", { user_id: message.senderId }) as Record<string, unknown>
       value = String(info?.card || info?.nickname || "").trim() || fallback
     }
-  } catch {
-    value = fallback
+  } catch (error) {
+  console.error("[original-error]", error);
+value = fallback
   }
   conversationTitles.set(key, { value, expiresAt: now + 10 * 60 * 1000 })
   return value

@@ -168,7 +168,7 @@ func (h *DebugHandler) InvokeTool(c *gin.Context) {
 	}
 	var req debugToolInvokeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "invalid tool invocation payload"})
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
 		return
 	}
 	req.ToolID = strings.TrimSpace(req.ToolID)

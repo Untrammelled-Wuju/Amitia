@@ -44,7 +44,7 @@ func (h *Handler) RegisterPublicMedia(r *gin.Engine) {
 func (h *Handler) Upload(c *gin.Context) {
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
-		c.JSON(400, gin.H{"error": "artifact.invalid_upload", "message": "missing file"})
+		c.JSON(400, gin.H{"error": err.Error(), "message": err.Error()})
 		return
 	}
 	defer file.Close()
@@ -55,8 +55,12 @@ func (h *Handler) Upload(c *gin.Context) {
 		sourceVal = string(SourceUserUpload)
 	}
 	actor, err := middleware.GetActorFromContext(c)
-	if err != nil || actor == nil {
-		c.JSON(401, gin.H{"error": "artifact.unauthorized", "message": "authentication required"})
+	if err != nil {
+		c.JSON(401, gin.H{"error": err.Error(), "message": err.Error()})
+		return
+	}
+	if actor == nil {
+		c.JSON(401, gin.H{"error": "middleware.GetActorFromContext returned nil actor", "message": "middleware.GetActorFromContext returned nil actor"})
 		return
 	}
 	owner := string(actor.SpaceID)
@@ -84,7 +88,7 @@ func (h *Handler) GetMetadata(c *gin.Context) {
 	id := ID(c.Param("artifactId"))
 	actor, err := middleware.GetActorFromContext(c)
 	if err != nil || actor == nil {
-		c.JSON(401, gin.H{"error": "artifact.unauthorized"})
+		c.JSON(401, gin.H{"error": err.Error()})
 		return
 	}
 	owner := string(actor.SpaceID)
@@ -100,7 +104,7 @@ func (h *Handler) GetContent(c *gin.Context) {
 	id := ID(c.Param("artifactId"))
 	actor, err := middleware.GetActorFromContext(c)
 	if err != nil || actor == nil {
-		c.JSON(401, gin.H{"error": "artifact.unauthorized"})
+		c.JSON(401, gin.H{"error": err.Error()})
 		return
 	}
 	owner := string(actor.SpaceID)
@@ -116,7 +120,7 @@ func (h *Handler) GetMediaTicket(c *gin.Context) {
 	id := ID(c.Param("artifactId"))
 	actor, err := middleware.GetActorFromContext(c)
 	if err != nil || actor == nil {
-		c.JSON(401, gin.H{"error": "artifact.unauthorized"})
+		c.JSON(401, gin.H{"error": err.Error()})
 		return
 	}
 	owner := string(actor.SpaceID)
@@ -127,7 +131,7 @@ func (h *Handler) GetMediaTicket(c *gin.Context) {
 	}
 	ticket, expiresAt, err := h.ticketSigner.Issue(art.ID, art.OwnerSpaceID)
 	if err != nil {
-		c.JSON(500, gin.H{"error": "artifact.media_ticket_failed", "message": err.Error()})
+		c.JSON(500, gin.H{"error": err.Error(), "message": err.Error()})
 		return
 	}
 	c.Header("Cache-Control", "no-store")
@@ -141,7 +145,7 @@ func (h *Handler) GetMediaContent(c *gin.Context) {
 	id := ID(c.Param("artifactId"))
 	owner, err := h.ticketSigner.Validate(c.Param("ticket"), id)
 	if err != nil {
-		c.JSON(401, gin.H{"error": "artifact.unauthorized", "message": err.Error()})
+		c.JSON(401, gin.H{"error": err.Error(), "message": err.Error()})
 		return
 	}
 	art, err := h.svc.GetOwned(c.Request.Context(), owner, id)
@@ -183,7 +187,7 @@ func (h *Handler) Delete(c *gin.Context) {
 	id := ID(c.Param("artifactId"))
 	actor, err := middleware.GetActorFromContext(c)
 	if err != nil || actor == nil {
-		c.JSON(401, gin.H{"error": "artifact.unauthorized"})
+		c.JSON(401, gin.H{"error": err.Error()})
 		return
 	}
 	owner := string(actor.SpaceID)

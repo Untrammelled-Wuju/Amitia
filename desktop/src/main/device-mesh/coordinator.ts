@@ -118,8 +118,9 @@ export class DeviceMeshCoordinator {
         this.emitState(status.state);
       }
       return status;
-    } catch {
-      return null;
+    } catch (error) {
+  console.error("[original-error]", error);
+return null;
     }
   }
 
@@ -130,14 +131,18 @@ export class DeviceMeshCoordinator {
         this.lastDeviceId = identity.deviceId;
         this.lastRuntimeId = identity.runtimeId;
       }
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
 
   private async pollLoop(): Promise<void> {
     while (!this.stopped) {
       try {
         await this.refreshStatus();
-      } catch {}
+      } catch (error) {
+  console.error("[original-error]", error);
+}
       await new Promise((resolve) => {
         this.pollTimer = setTimeout(resolve, this.pollIntervalMs);
       });
@@ -159,7 +164,9 @@ export class DeviceMeshCoordinator {
     if (!win || win.isDestroyed()) return;
     try {
       win.webContents.send(channel, payload);
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
 }
 

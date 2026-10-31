@@ -8,32 +8,32 @@ import (
 type JournalEntryKind string
 
 const (
-	JournalEntryExecutionStarted   JournalEntryKind = "execution.started"
-	JournalEntryExecutionCompleted JournalEntryKind = "execution.completed"
-	JournalEntryExecutionFailed    JournalEntryKind = "execution.failed"
-	JournalEntryAcquisitionStarted JournalEntryKind = "acquisition.started"
-	JournalEntryAcquisitionReady   JournalEntryKind = "acquisition.ready"
-	JournalEntryAcquisitionFailed  JournalEntryKind = "acquisition.failed"
-	JournalEntryResumeCreated      JournalEntryKind = "resume.created"
-	JournalEntryResumeCompleted    JournalEntryKind = "resume.completed"
-	JournalEntryUIRefinement       JournalEntryKind = "ui.refinement"
-	JournalEntryToolInvoke         JournalEntryKind = "tool.invoke"
-	JournalEntryTaskStateChange    JournalEntryKind = "task.state_change"
-	JournalEntryProviderReady      JournalEntryKind = "provider.ready"
+	JournalEntryExecutionStarted    JournalEntryKind = "execution.started"
+	JournalEntryExecutionCompleted  JournalEntryKind = "execution.completed"
+	JournalEntryExecutionFailed     JournalEntryKind = "execution.failed"
+	JournalEntryAcquisitionStarted  JournalEntryKind = "acquisition.started"
+	JournalEntryAcquisitionReady    JournalEntryKind = "acquisition.ready"
+	JournalEntryAcquisitionFailed   JournalEntryKind = "acquisition.failed"
+	JournalEntryResumeCreated       JournalEntryKind = "resume.created"
+	JournalEntryResumeCompleted     JournalEntryKind = "resume.completed"
+	JournalEntryUIRefinement        JournalEntryKind = "ui.refinement"
+	JournalEntryToolInvoke          JournalEntryKind = "tool.invoke"
+	JournalEntryTaskStateChange     JournalEntryKind = "task.state_change"
+	JournalEntryProviderReady       JournalEntryKind = "provider.ready"
 	JournalEntryProviderUnavailable JournalEntryKind = "provider.unavailable"
 )
 
 type JournalEntry struct {
-	EntryID          string          `json:"entryId"`
-	RootExecutionID  string          `json:"rootExecutionId"`
-	ExecutionID      string          `json:"executionId"`
-	Kind             JournalEntryKind `json:"kind"`
-	TraceID          string          `json:"traceId,omitempty"`
-	InvocationID     string          `json:"invocationId,omitempty"`
-	Summary          string          `json:"summary,omitempty"`
-	Metadata         map[string]any  `json:"metadata,omitempty"`
-	Sequence         int64           `json:"sequence"`
-	RecordedAt       time.Time       `json:"recordedAt"`
+	EntryID         string           `json:"entryId"`
+	RootExecutionID string           `json:"rootExecutionId"`
+	ExecutionID     string           `json:"executionId"`
+	Kind            JournalEntryKind `json:"kind"`
+	TraceID         string           `json:"traceId,omitempty"`
+	InvocationID    string           `json:"invocationId,omitempty"`
+	Summary         string           `json:"summary,omitempty"`
+	Metadata        map[string]any   `json:"metadata,omitempty"`
+	Sequence        int64            `json:"sequence"`
+	RecordedAt      time.Time        `json:"recordedAt"`
 }
 
 type InMemoryJournal struct {

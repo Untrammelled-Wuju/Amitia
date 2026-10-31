@@ -16,9 +16,9 @@ type IdentityResponse struct {
 }
 
 type Identity struct {
-	Title     string
-	Version   string
-	Confirmed bool
+	Title       string
+	Version     string
+	Confirmed   bool
 	ConfirmedAt time.Time
 }
 

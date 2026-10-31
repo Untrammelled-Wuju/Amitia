@@ -87,6 +87,8 @@ class AndroidBundledRuntimePackageSource(
                 TrustedRuntimePackageSource.createReference(finalFile)
             )
         } catch (e: java.io.FileNotFoundException) {
+          e.printStackTrace()
+
             RuntimePackageSourceResult.Failed(
                 RuntimePackageSourceErrorCode.BUNDLED_PACKAGE_MISSING,
                 "Bundled package asset not found: ${TrustedRuntimePackageSource.ASSET_PATH}"

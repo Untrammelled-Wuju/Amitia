@@ -136,8 +136,9 @@ function fmtDate(dateStr: string): string {
   if (!dateStr) return "";
   try {
     return new Date(dateStr).toLocaleString("zh-CN");
-  } catch {
-    return dateStr;
+  } catch (error) {
+  console.error("[original-error]", error);
+return dateStr;
   }
 }
 </script>

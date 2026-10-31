@@ -246,7 +246,9 @@ func (e *containerPlanExecutor) Execute(ctx context.Context, plan lifecycle_mana
 			}
 			result.Applied = append(result.Applied, "update_installation")
 		}
-		_ = e.enablement.SetEnablement(ctx, extSubject, enablement.EnablementEnabled)
+		if err := e.enablement.SetEnablement(ctx, extSubject, enablement.EnablementEnabled); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 		result.Applied = append(result.Applied, "set_enablement")
 		if e.installer != nil {
 			if err := e.installer.ActivateContributions(ctx, extID); err != nil {
@@ -254,7 +256,9 @@ func (e *containerPlanExecutor) Execute(ctx context.Context, plan lifecycle_mana
 					recoveryInst := *plan.CurrentState.Installation
 					recoveryInst.EnablementState = domain.EnablementRequiresRecovery
 					recoveryInst.UpdatedAt = time.Now().UTC()
-					_ = e.instRepo.PutInstallation(ctx, recoveryInst)
+					if err := e.instRepo.PutInstallation(ctx, recoveryInst); err != nil {
+						log.Printf("[original-error] %v", err)
+					}
 				}
 				result.Status = "failed"
 				result.Error = err.Error()
@@ -285,7 +289,9 @@ func (e *containerPlanExecutor) Execute(ctx context.Context, plan lifecycle_mana
 			}
 			result.Applied = append(result.Applied, "update_installation")
 		}
-		_ = e.enablement.SetEnablement(ctx, extSubject, enablement.EnablementDisabled)
+		if err := e.enablement.SetEnablement(ctx, extSubject, enablement.EnablementDisabled); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 		result.Applied = append(result.Applied, "set_enablement")
 		if e.installer != nil {
 			if err := e.installer.DeactivateContributions(ctx, extID); err != nil {
@@ -293,7 +299,9 @@ func (e *containerPlanExecutor) Execute(ctx context.Context, plan lifecycle_mana
 					recoveryInst := *plan.CurrentState.Installation
 					recoveryInst.EnablementState = domain.EnablementPartiallyDisabled
 					recoveryInst.UpdatedAt = time.Now().UTC()
-					_ = e.instRepo.PutInstallation(ctx, recoveryInst)
+					if err := e.instRepo.PutInstallation(ctx, recoveryInst); err != nil {
+						log.Printf("[original-error] %v", err)
+					}
 				}
 				result.Status = "failed"
 				result.Error = err.Error()
@@ -315,7 +323,9 @@ func (e *containerPlanExecutor) Execute(ctx context.Context, plan lifecycle_mana
 					recoveryInst.InstallationState = domain.InstallationStateUninstallFailed
 					recoveryInst.EnablementState = domain.EnablementRequiresRecovery
 					recoveryInst.UpdatedAt = time.Now().UTC()
-					_ = e.instRepo.PutInstallation(ctx, recoveryInst)
+					if err := e.instRepo.PutInstallation(ctx, recoveryInst); err != nil {
+						log.Printf("[original-error] %v", err)
+					}
 				}
 				result.Status = "failed"
 				result.Error = stopErr.Error()
@@ -327,7 +337,9 @@ func (e *containerPlanExecutor) Execute(ctx context.Context, plan lifecycle_mana
 					recoveryInst.InstallationState = domain.InstallationStateUninstallFailed
 					recoveryInst.EnablementState = domain.EnablementRequiresRecovery
 					recoveryInst.UpdatedAt = time.Now().UTC()
-					_ = e.instRepo.PutInstallation(ctx, recoveryInst)
+					if err := e.instRepo.PutInstallation(ctx, recoveryInst); err != nil {
+						log.Printf("[original-error] %v", err)
+					}
 				}
 				result.Status = "failed"
 				result.Error = err.Error()
@@ -335,12 +347,22 @@ func (e *containerPlanExecutor) Execute(ctx context.Context, plan lifecycle_mana
 			}
 			result.Applied = append(result.Applied, "uninstall_contributions")
 		}
-		_ = e.enablement.SetEnablement(ctx, extSubject, enablement.EnablementDisabled)
-		_ = e.contribRepo.DeleteContributions(ctx, extID)
-		_ = e.moduleRepo.DeleteModules(ctx, extID)
-		_ = e.instRepo.DeleteInstallation(ctx, extID)
+		if err := e.enablement.SetEnablement(ctx, extSubject, enablement.EnablementDisabled); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
+		if err := e.contribRepo.DeleteContributions(ctx, extID); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
+		if err := e.moduleRepo.DeleteModules(ctx, extID); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
+		if err := e.instRepo.DeleteInstallation(ctx, extID); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 		if plan.CurrentState.Definition != nil {
-			_ = e.defRepo.DeleteExtension(ctx, extID, plan.CurrentState.Definition.Version)
+			if err := e.defRepo.DeleteExtension(ctx, extID, plan.CurrentState.Definition.Version); err != nil {
+				log.Printf("[original-error] %v", err)
+			}
 		}
 		result.Applied = append(result.Applied, "uninstall")
 		runtimegate.Set(string(extID), false)
@@ -532,7 +554,9 @@ func (w *containerAuditWriter) Record(ctx context.Context, event lifecycle_manag
 		op.FinishedAt = &now
 	}
 
-	_ = w.opRepo.PutOperation(ctx, op)
+	if err := w.opRepo.PutOperation(ctx, op); err != nil {
+		log.Printf("[original-error] %v", err)
+	}
 }
 
 type containerExtensionSummaryProvider struct {
@@ -751,7 +775,9 @@ func (e *containerPlanExecutor) executeDirectInstallSaga(ctx context.Context, pl
 
 	installRoot := e.packageSecurity.GetInstallRoot()
 	if installRoot == "" {
-		_ = e.packageSecurity.GetStagingManager().Cleanup(context.Background(), staging.ID)
+		if err := e.packageSecurity.GetStagingManager().Cleanup(context.Background(), staging.ID); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 		result.Status = "failed"
 		result.Error = "install root not configured"
 		return 0, fmt.Errorf("install root not configured")
@@ -759,20 +785,26 @@ func (e *containerPlanExecutor) executeDirectInstallSaga(ctx context.Context, pl
 
 	installDir := filepath.Join(installRoot, string(definition.ID))
 	if err := os.MkdirAll(installDir, 0755); err != nil {
-		_ = e.packageSecurity.GetStagingManager().Cleanup(context.Background(), staging.ID)
+		if err := e.packageSecurity.GetStagingManager().Cleanup(context.Background(), staging.ID); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 		result.Status = "failed"
 		result.Error = fmt.Sprintf("create install dir: %v", err)
 		return 0, err
 	}
 
 	if err := copyDir(staging.Path, installDir); err != nil {
-		_ = e.packageSecurity.GetStagingManager().Cleanup(context.Background(), staging.ID)
+		if err := e.packageSecurity.GetStagingManager().Cleanup(context.Background(), staging.ID); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 		result.Status = "failed"
 		result.Error = fmt.Sprintf("copy to install dir: %v", err)
 		return 0, err
 	}
 
-	_ = e.packageSecurity.GetStagingManager().Cleanup(context.Background(), staging.ID)
+	if err := e.packageSecurity.GetStagingManager().Cleanup(context.Background(), staging.ID); err != nil {
+		log.Printf("[original-error] %v", err)
+	}
 
 	targetPath := installDir
 	generation := int64(1)

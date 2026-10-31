@@ -15,6 +15,7 @@ import (
 	"github.com/u-ai/backend/internal/deviceruntime/protocol"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/log"
+	amitialog "log"
 )
 
 var (
@@ -677,7 +678,9 @@ type runtimeEventMetadata struct {
 func decodeRuntimeEventMetadata(payload []byte) runtimeEventMetadata {
 	var meta runtimeEventMetadata
 	if len(payload) > 0 {
-		_ = json.Unmarshal(payload, &meta)
+		if err := json.Unmarshal(payload, &meta); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	meta.CommandID = strings.TrimSpace(meta.CommandID)
 	meta.PlaybackInstanceID = strings.TrimSpace(meta.PlaybackInstanceID)

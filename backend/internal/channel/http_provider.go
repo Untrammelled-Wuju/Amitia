@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	amitialog "log"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -238,7 +239,9 @@ func (p *HTTPProvider) Send(ctx context.Context, request SendRequest) (SendResul
 	}
 	payload := map[string]any{}
 	if len(request.Payload) > 0 {
-		_ = json.Unmarshal(request.Payload, &payload)
+		if err := json.Unmarshal(request.Payload, &payload); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	for source, target := range map[string]string{
 		"content":          "content",

@@ -88,7 +88,7 @@ export class ChannelEventStore {
       id: `${Date.now()}:${this.state.logs.length}`,
       level,
       event,
-      message: message.trim().slice(0, 4000),
+      message: message.trim(),
       createdAt: new Date().toISOString(),
     })
     if (this.state.logs.length > MAX_LOGS) this.state.logs.splice(0, this.state.logs.length - MAX_LOGS)
@@ -130,8 +130,9 @@ export class ChannelEventStore {
         messages: Array.isArray(parsed.messages) ? parsed.messages : [],
         logs: Array.isArray(parsed.logs) ? parsed.logs : [],
       }
-    } catch {
-      return { messages: [], logs: [] }
+    } catch (error) {
+  console.error("[original-error]", error);
+return { messages: [], logs: [] }
     }
   }
 

@@ -44,16 +44,16 @@ type SSHExecResult struct {
 }
 
 type HostKeyScanRequest struct {
-	Host    string `json:"host"`
-	Port    int    `json:"port"`
-	TimeoutMs int64 `json:"timeoutMs,omitempty"`
+	Host      string `json:"host"`
+	Port      int    `json:"port"`
+	TimeoutMs int64  `json:"timeoutMs,omitempty"`
 }
 
 type HostKeyScanResult struct {
-	Host       string   `json:"host"`
-	Port       int      `json:"port"`
-	Algorithms []string `json:"algorithms"`
-	RawKeys    []string `json:"rawKeys"`
+	Host         string   `json:"host"`
+	Port         int      `json:"port"`
+	Algorithms   []string `json:"algorithms"`
+	RawKeys      []string `json:"rawKeys"`
 	Fingerprints []string `json:"fingerprints"`
 }
 
@@ -68,11 +68,11 @@ type KnownHost struct {
 }
 
 type SSHSession struct {
-	ID         string
-	Host       string
-	Port       int
-	User       string
-	Client     interface{}
-	LastUsed   time.Time
-	CreatedAt  time.Time
+	ID        string
+	Host      string
+	Port      int
+	User      string
+	Client    interface{}
+	LastUsed  time.Time
+	CreatedAt time.Time
 }

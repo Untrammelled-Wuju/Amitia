@@ -87,7 +87,9 @@ onMounted(async () => {
   try {
     const about = await get<Record<string, unknown>>("/api/about");
     if (about?.license) license.value = String(about.license);
-  } catch {}
+  } catch (error) {
+  console.error("[original-error]", error);
+}
 });
 </script>
 

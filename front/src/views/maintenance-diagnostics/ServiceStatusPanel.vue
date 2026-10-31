@@ -69,6 +69,7 @@ async function handleFetchStatus() {
   try {
     statusData.value = await fetchStatusApi();
   } catch (e: any) {
+  console.error("[original-error]", e);
     // silent
   } finally {
     statusLoading.value = false;

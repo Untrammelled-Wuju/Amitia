@@ -170,8 +170,9 @@ function fmtDate(d: string) {
   if (!d) return "";
   try {
     return new Date(d).toLocaleString("zh-CN");
-  } catch {
-    return d;
+  } catch (error) {
+  console.error("[original-error]", error);
+return d;
   }
 }
 

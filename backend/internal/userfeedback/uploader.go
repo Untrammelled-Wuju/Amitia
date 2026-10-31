@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	amitialog "log"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -118,7 +119,9 @@ func encodeUpload(ticket *Ticket, payload []byte) ([]byte, string, error) {
 		if openErr == nil {
 			part, createErr := writer.CreateFormFile("screenshot", ticket.ScreenshotName)
 			if createErr == nil {
-				_, _ = io.Copy(part, file)
+				if _, err := io.Copy(part, file); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 			file.Close()
 		}

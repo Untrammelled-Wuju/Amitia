@@ -41,8 +41,9 @@ export function loadChatPermissionMode(
       target.setItem(CHAT_PERMISSION_MODE_STORAGE_KEY, mode);
       return mode;
     }
-  } catch {
-    return "request_approval";
+  } catch (error) {
+  console.error("[original-error]", error);
+return "request_approval";
   }
   return "request_approval";
 }
@@ -58,7 +59,9 @@ export function saveChatPermissionMode(
       CHAT_PERMISSION_MODE_STORAGE_KEY,
       normalizeChatPermissionMode(value),
     );
-  } catch {}
+  } catch (error) {
+  console.error("[original-error]", error);
+}
 }
 
 export function useChatPermissionPreference() {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
 	"github.com/u-ai/backend/internal/uiagent/schema"
+	amitialog "log"
 )
 
 type defaultPatchGenerator struct {
@@ -210,7 +211,9 @@ func (a *defaultApplier) fixMissingProperty(doc *schema.SchemaUIDocument, nodeTy
 	for _, node := range nodes {
 		var props map[string]any
 		if len(node.Props) > 0 {
-			_ = json.Unmarshal(node.Props, &props)
+			if err := json.Unmarshal(node.Props, &props); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		if props == nil {
 			props = make(map[string]any)
@@ -296,7 +299,9 @@ func (a *defaultApplier) fixDangerousProperty(doc *schema.SchemaUIDocument, node
 	for _, node := range nodes {
 		var props map[string]any
 		if len(node.Props) > 0 {
-			_ = json.Unmarshal(node.Props, &props)
+			if err := json.Unmarshal(node.Props, &props); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		if props != nil {
 			if val, exists := props[propName]; exists {

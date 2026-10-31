@@ -9,6 +9,7 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/contracts"
 	"github.com/u-ai/backend/internal/gamehost/control"
 	"github.com/u-ai/backend/internal/gamehost/domain"
+	amitialog "log"
 )
 
 type ControlMetricsAdapter struct {
@@ -38,7 +39,9 @@ func (a *ControlMetricsAdapter) RecordOutputDecision(runtimeID domain.RuntimeIns
 		"reason":    reason,
 		"allowed":   allowed,
 	})
-	_, _ = a.eventService.Publish(context.Background(), "gamehost.control.metrics", 1, payloadJSON, event.PublishOptions{Metadata: metadataJSON})
+	if _, err := a.eventService.Publish(context.Background(), "gamehost.control.metrics", 1, payloadJSON, event.PublishOptions{Metadata: metadataJSON}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 var _ control.MetricsSink = (*ControlMetricsAdapter)(nil)

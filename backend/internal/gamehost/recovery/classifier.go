@@ -19,17 +19,17 @@ type CheckpointStoreReader interface {
 }
 
 type RuntimeMetadataView struct {
-	RuntimeID         domain.RuntimeInstanceID
-	PluginID          domain.PluginID
-	ExtensionID       string
+	RuntimeID          domain.RuntimeInstanceID
+	PluginID           domain.PluginID
+	ExtensionID        string
 	DescriptorRevision string
 }
 
 type RuntimeCheckpointView struct {
-	RuntimeID         domain.RuntimeInstanceID
-	PluginID          domain.PluginID
-	RuntimeState      domain.RuntimeState
-	CleanShutdown     bool
+	RuntimeID          domain.RuntimeInstanceID
+	PluginID           domain.PluginID
+	RuntimeState       domain.RuntimeState
+	CleanShutdown      bool
 	DescriptorRevision string
 }
 
@@ -66,11 +66,11 @@ func (c *DefaultCheckpointClassifier) Classify(ctx context.Context, runtimeID do
 
 	if currentRevision != "" && metadata.DescriptorRevision != currentRevision {
 		return CheckpointInfo{
-			Class:     CheckpointStale,
-			RuntimeID: metadata.RuntimeID,
-			PluginID:  metadata.PluginID,
+			Class:       CheckpointStale,
+			RuntimeID:   metadata.RuntimeID,
+			PluginID:    metadata.PluginID,
 			ExtensionID: metadata.ExtensionID,
-			Revision:  metadata.DescriptorRevision,
+			Revision:    metadata.DescriptorRevision,
 		}, nil
 	}
 

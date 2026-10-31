@@ -535,7 +535,9 @@ func (p *appReadSwitchPort) VerifyProductionReaderNotLegacy(ctx context.Context)
 		return fmt.Errorf("installation database not available to verify production reader")
 	}
 	var legacyTableCount int64
-	_ = db.WithContext(ctx).Table("desktop_pet_installation_legacy").Count(&legacyTableCount)
+	if err := db.WithContext(ctx).Table("desktop_pet_installation_legacy").Count(&legacyTableCount); err != nil {
+		log.Printf("[original-error] %v", err)
+	}
 	return verifyDesktopPetProductionReader(ctx, p.services.InstallationRepo)
 }
 

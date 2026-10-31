@@ -65,8 +65,6 @@ export function sanitize(fields: Record<string, unknown>): Record<string, unknow
   for (const [key, value] of Object.entries(fields)) {
     if (SENSITIVE_KEYS.some((re) => re.test(key))) {
       out[key] = "***REDACTED***";
-    } else if (typeof value === "string" && value.length > 4096) {
-      out[key] = `${value.slice(0, 4096)}...[truncated]`;
     } else {
       out[key] = value;
     }

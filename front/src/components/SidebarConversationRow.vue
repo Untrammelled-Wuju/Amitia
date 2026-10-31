@@ -12,89 +12,55 @@
       @click="emit('select', conversation)"
       @keydown.enter.prevent="emit('select', conversation)"
       @keydown.space.prevent="emit('select', conversation)"
+      @contextmenu="openConversationContextMenu"
     >
-      <el-icon v-if="!compact && activityState === 'idle'"><ChatLineRound /></el-icon>
-      <span
-        v-else-if="activityState !== 'idle'"
-        class="conversation-activity"
-        :class="`is-${activityState}`"
-        :aria-label="activityState === 'generating' ? '正在生成' : '有未读回复'"
-        role="status"
-      >
-        <span v-if="activityState === 'generating'" class="conversation-activity__spinner"></span>
-        <span v-else class="conversation-activity__dot"></span>
+      <span class="thread-avatar-wrap">
+        <el-avatar :size="compact ? 38 : 42" :src="role?.avatar || undefined" fit="cover">{{ avatarInitial }}</el-avatar>
+        <span v-if="unreadCount > 0" class="thread-unread" :aria-label="`${unreadCount} 条未读`">{{ unreadLabel }}</span>
       </span>
-      <input
-        v-if="editing"
-        ref="inputRef"
-        v-model="draftTitle"
-        class="thread-name-input"
-        @click.stop
-        @keydown.enter.prevent="saveRename"
-        @keydown.esc.prevent="cancelRename"
-        @blur="saveRename"
-      />
-      <span v-else class="thread-title" :title="conversation.title || '新对话'" @dblclick.stop.prevent="beginRename">{{ conversation.title || "新对话" }}</span>
+      <span class="thread-copy">
+        <span class="thread-heading">
+          <el-icon v-if="isPinned" class="thread-pin"><CollectionTag /></el-icon>
+          <input
+            v-if="editing"
+            ref="inputRef"
+            v-model="draftTitle"
+            class="thread-name-input"
+            @click.stop
+            @keydown.enter.prevent="saveRename"
+            @keydown.esc.prevent="cancelRename"
+            @blur="saveRename"
+          />
+          <span v-else class="thread-title" :title="conversation.title || '新对话'" @dblclick.stop.prevent="beginRename">{{ conversation.title || "新对话" }}</span>
+          <span class="thread-meta">
+            <time>{{ timeLabel }}</time>
+            <span v-if="conversation.isGenerating" class="thread-spinner" aria-label="正在生成"></span>
+          </span>
+        </span>
+        <span class="thread-preview" :title="previewText">{{ previewText }}</span>
+      </span>
     </div>
-    <button
-      type="button"
-      class="thread-action"
-      :class="{ active: isPinned }"
-      :title="isPinned ? '取消置顶' : '置顶'"
-      :aria-label="isPinned ? '取消置顶' : '置顶'"
-      @click.stop="emit('togglePin', conversation)"
-    >
-      <svg
-        class="thread-action-icon pin-icon"
-        viewBox="0 0 24 24"
-        fill="none"
-        aria-hidden="true"
-      >
-        <path
-          d="M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"
-          stroke="currentColor"
-          stroke-width="1.7"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        />
-      </svg>
-    </button>
-    <button
-      type="button"
-      class="thread-action"
-      title="归档"
-      aria-label="归档"
-      @click.stop="emit('archive', conversation)"
-    >
-      <ArchiveConversationIcon class="thread-action-icon" />
-    </button>
-    <el-dropdown trigger="click" @command="(value: string) => emit('move', conversation, value === '__recent__' ? '' : value)">
-      <button type="button" class="thread-action" title="移动到项目" aria-label="移动到项目" @click.stop>
-        <el-icon class="thread-action-icon"><MoreFilled /></el-icon>
-      </button>
-      <template #dropdown>
-        <el-dropdown-menu>
-          <el-dropdown-item v-if="conversation.projectId" command="__recent__">移回聊天</el-dropdown-item>
-          <el-dropdown-item
-            v-for="project in availableProjects"
-            :key="project.id"
-            :command="project.id"
-            :disabled="project.id === conversation.projectId"
-          >
-            移入项目：{{ project.name }}
-          </el-dropdown-item>
-          <el-dropdown-item v-if="!availableProjects.length && conversation.projectId" disabled>暂无其他项目</el-dropdown-item>
-        </el-dropdown-menu>
-      </template>
-    </el-dropdown>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, ref } from "vue";
-import { ChatLineRound, MoreFilled } from "@element-plus/icons-vue";
+import {
+  Box,
+  ChatLineRound,
+  CircleCheck,
+  CollectionTag,
+  Delete,
+  EditPen,
+  FolderOpened,
+} from "@element-plus/icons-vue";
 import type { ConversationItem, ProjectItem } from "@/stores/chat";
-import ArchiveConversationIcon from "./ArchiveConversationIcon.vue";
+import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
+import { isDesktopShell } from "@/runtime/runtime-capabilities";
+import {
+  openContextMenu,
+  type ContextMenuAction,
+} from "./context-menu/contextMenuStore";
 
 const props = defineProps<{
   conversation: ConversationItem;
@@ -109,14 +75,130 @@ const emit = defineEmits<{
   togglePin: [conversation: ConversationItem];
   archive: [conversation: ConversationItem];
   move: [conversation: ConversationItem, projectId: string];
+  open: [conversation: ConversationItem];
+  markRead: [conversation: ConversationItem];
+  delete: [conversation: ConversationItem];
 }>();
 
 const editing = ref(false);
 const draftTitle = ref("");
 const inputRef = ref<HTMLInputElement | null>(null);
+const owned = useDeviceOwnedConversation();
 const isPinned = computed(() => Boolean(props.conversation.pinnedAt));
 const availableProjects = computed(() => (props.projects || []).filter((project) => !project.readOnly && !project.hiddenAt));
-const activityState = computed(() => props.conversation.isGenerating ? "generating" : props.conversation.hasUnread ? "unread" : "idle");
+const role = computed(() => owned.roles.value.find((item) => item.id === props.conversation.characterId));
+const avatarInitial = computed(() => (role.value?.name || props.conversation.title || "AI").trim().slice(0, 1));
+const unreadCount = computed(() => Math.max(0, Number(props.conversation.unreadCompletedCount || (props.conversation.hasUnread ? 1 : 0))));
+const unreadLabel = computed(() => unreadCount.value > 99 ? "99+" : String(unreadCount.value));
+const previewText = computed(() => {
+  if (props.conversation.isGenerating && props.conversation.activityLabel) return props.conversation.activityLabel;
+  const content = String(props.conversation.lastMessage || props.conversation.lastMessagePreview || "").trim().replace(/\s+/g, " ");
+  if (content) return content;
+  const type = String(props.conversation.lastMessageType || "").toLowerCase();
+  if (type === "image") return "[图片]";
+  if (type === "video") return "[视频]";
+  if (type === "audio" || type === "voice") return "[语音]";
+  if (type === "file") return "[文件]";
+  return props.conversation.isGenerating ? "正在生成回复…" : "暂无消息";
+});
+const timeLabel = computed(() => {
+  const time = new Date(String(props.conversation.updatedAt || ""));
+  if (Number.isNaN(time.getTime())) return "";
+  const now = new Date();
+  if (time.toDateString() === now.toDateString()) return `${String(time.getHours()).padStart(2, "0")}:${String(time.getMinutes()).padStart(2, "0")}`;
+  return `${time.getMonth() + 1}/${time.getDate()}`;
+});
+
+function moveTargets(): ContextMenuAction[] {
+  const targets: ContextMenuAction[] = [];
+  if (props.conversation.projectId) {
+    targets.push({
+      id: "move-recent",
+      label: "移回聊天",
+      icon: ChatLineRound,
+      action: () => emit("move", props.conversation, ""),
+    });
+  }
+  for (const project of availableProjects.value) {
+    targets.push({
+      id: `move-project-${project.id}`,
+      label: `移入项目：${project.name}`,
+      icon: FolderOpened,
+      disabled: project.id === props.conversation.projectId,
+      action: () => emit("move", props.conversation, project.id),
+    });
+  }
+  if (!targets.length) {
+    targets.push({
+      id: "move-empty",
+      label: props.conversation.projectId ? "暂无其他项目" : "暂无可用项目",
+      icon: FolderOpened,
+      disabled: true,
+    });
+  }
+  return targets;
+}
+
+function openConversationContextMenu(event: MouseEvent) {
+  if (!isDesktopShell()) return;
+  const target = event.target instanceof Element ? event.target : null;
+  if (target?.closest("input, textarea, [contenteditable='true']")) return;
+  event.preventDefault();
+  event.stopPropagation();
+  openContextMenu({
+    x: event.clientX,
+    y: event.clientY,
+    title: props.conversation.title || "新对话",
+    items: [
+      {
+        id: "open-conversation",
+        label: "打开对话",
+        icon: ChatLineRound,
+        action: () => emit("open", props.conversation),
+      },
+      {
+        id: "rename-conversation",
+        label: "重命名",
+        icon: EditPen,
+        action: beginRename,
+      },
+      {
+        id: "pin-conversation",
+        label: isPinned.value ? "取消置顶" : "置顶",
+        icon: CollectionTag,
+        separatorBefore: true,
+        action: () => emit("togglePin", props.conversation),
+      },
+      {
+        id: "mark-conversation-read",
+        label: "标为已读",
+        icon: CircleCheck,
+        disabled: unreadCount.value <= 0,
+        action: () => emit("markRead", props.conversation),
+      },
+      {
+        id: "archive-conversation",
+        label: "归档",
+        icon: Box,
+        action: () => emit("archive", props.conversation),
+      },
+      {
+        id: "move-conversation",
+        label: "移动到项目",
+        icon: FolderOpened,
+        children: moveTargets(),
+      },
+      {
+        id: "delete-conversation",
+        label: "删除对话",
+        icon: Delete,
+        danger: true,
+        separatorBefore: true,
+        action: () => emit("delete", props.conversation),
+      },
+    ],
+  });
+}
 
 async function beginRename() {
   editing.value = true;
@@ -142,10 +224,12 @@ function cancelRename() {
 
 <style scoped>
 .thread-row {
+  position: relative;
   display: flex;
+  width: 100%;
   min-width: 0;
   align-items: center;
-  min-height: 30px;
+  min-height: 58px;
   border-radius: 6px;
   color: var(--text-secondary);
 }
@@ -160,11 +244,13 @@ function cancelRename() {
 .thread-main {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 9px;
   min-width: 0;
   flex: 1;
-  min-height: 30px; line-height: 1.45;
-  padding: 0 4px 0 8px;
+  width: 100%;
+  min-height: 58px;
+  line-height: 1.35;
+  padding: 6px 7px;
   border: 0;
   background: transparent;
   color: inherit;
@@ -177,6 +263,52 @@ function cancelRename() {
   outline: 2px solid var(--ac-color-primary);
   outline-offset: -2px;
 }
+.thread-avatar-wrap {
+  position: relative;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+}
+.thread-avatar-wrap :deep(.el-avatar) {
+  background: color-mix(in srgb, var(--ac-color-primary) 16%, var(--surface-bg-elevated));
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+.thread-unread {
+  position: absolute;
+  top: -4px;
+  right: -5px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--surface-bg);
+  border-radius: 9px;
+  background: var(--el-color-danger);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+}
+.thread-copy {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  padding-right: 48px;
+}
+.thread-heading {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
 .thread-main .thread-title {
   flex: 1;
   min-width: 0;
@@ -184,26 +316,44 @@ function cancelRename() {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.conversation-activity {
-  display: grid;
-  place-items: center;
-  width: 16px;
-  height: 16px;
-  flex: 0 0 16px;
+.thread-pin {
+  flex: 0 0 auto;
+  color: var(--ac-color-primary);
+  font-size: 12px;
 }
-.conversation-activity__spinner {
-  width: 13px;
-  height: 13px;
+.thread-meta {
+  position: absolute;
+  top: 1px;
+  right: 0;
+  width: 42px;
+  min-height: 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 3px;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1;
+  text-align: right;
+  margin-left: auto;
+}
+.thread-spinner {
+  width: 11px;
+  height: 11px;
   border: 1.6px solid color-mix(in srgb, var(--ac-color-primary) 28%, transparent);
   border-top-color: var(--ac-color-primary);
   border-radius: 50%;
   animation: conversation-activity-spin 0.75s linear infinite;
 }
-.conversation-activity__dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--ac-color-primary);
+.thread-preview {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: var(--ac-font-size-xs);
+  line-height: 1.3;
 }
 @keyframes conversation-activity-spin {
   to {
@@ -211,7 +361,7 @@ function cancelRename() {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .conversation-activity__spinner {
+  .thread-spinner {
     animation-duration: 1.6s;
   }
 }
@@ -219,7 +369,7 @@ function cancelRename() {
   flex: 1;
   min-width: 0;
   width: 100%;
-  min-height: 28px;
+  min-height: 24px;
   padding: 3px 6px;
   border: 1px solid var(--ac-color-primary);
   border-radius: 5px;
@@ -228,53 +378,14 @@ function cancelRename() {
   font: inherit;
   outline: none;
 }
-.thread-action {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  flex: 0 0 auto;
-  padding: 0;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  opacity: 0;
-  pointer-events: none;
-  transition:
-    opacity 0.16s ease,
-    background-color 0.16s ease,
-    color 0.16s ease;
-}
-.thread-row:hover .thread-action,
-.thread-row:focus-within .thread-action {
-  opacity: 1;
-  pointer-events: auto;
-}
-.thread-action:hover,
-.thread-action:focus-visible,
-.thread-action.active {
-  background: var(--control-hover-bg);
-  color: var(--ac-color-primary);
-  outline: none;
-}
-.thread-action-icon { width: 15px; height: 15px; }
-.thread-action.active .pin-icon path {
-  fill: currentColor;
-}
 .thread-row.compact {
-  min-height: 27px;
+  min-height: 52px;
   font-size: var(--ac-font-size-xs);
 }
 .thread-row.compact .thread-main {
-  min-height: 27px; line-height: 1.45;
+  min-height: 52px;
+  line-height: 1.35;
 }
-.thread-row.compact .thread-action {
-  width: 22px;
-  height: 22px;
-}
-
 button, .thread-main, .thread-name-input { line-height: 1.45; }
 button:not(:disabled):focus-visible { outline: 2px solid var(--ac-color-primary); outline-offset: -2px; }
 </style>

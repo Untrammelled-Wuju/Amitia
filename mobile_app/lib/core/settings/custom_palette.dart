@@ -59,8 +59,9 @@ class CustomPalette {
           orElse: () => ThemeTextMode.auto,
         ),
       );
-    } catch (_) {
-      return const CustomPalette();
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return const CustomPalette();
     }
   }
 }

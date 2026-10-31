@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	amitialog "log"
 )
 
 func (c *DataLifecycleCoordinator) ReleaseExpiredRecalcLeases() {
@@ -279,7 +280,9 @@ func (c *DataLifecycleCoordinator) GenerateRecalculationTasks(tombstone Deletion
 	tasks := c.buildRecalculationTasksLocked(tombstone)
 
 	c.recalcTasks = append(c.recalcTasks, tasks...)
-	_ = c.persistRecalculationTasksLocked(tasks)
+	if err := c.persistRecalculationTasksLocked(tasks); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	DefaultMetricsCollector.IncrementCounter("data_lifecycle", "recalc_tasks_generated", int64(len(tasks)))
 
 	return tasks

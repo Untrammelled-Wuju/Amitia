@@ -16,6 +16,7 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
 	"github.com/u-ai/backend/internal/middleware/security"
+	amitialog "log"
 )
 
 type TaskAPI struct {
@@ -330,7 +331,9 @@ func (api *TaskAPI) cancelTask(c *gin.Context) {
 	var body struct {
 		Reason string `json:"reason"`
 	}
-	_ = c.ShouldBindJSON(&body)
+	if err := c.ShouldBindJSON(&body); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	if body.Reason == "" {
 		body.Reason = "user_requested"
 	}
@@ -361,7 +364,9 @@ func (api *TaskAPI) pauseTask(c *gin.Context) {
 		Reason     string `json:"reason"`
 		Generation int64  `json:"generation"`
 	}
-	_ = c.ShouldBindJSON(&body)
+	if err := c.ShouldBindJSON(&body); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	if body.Reason == "" {
 		body.Reason = "user_requested"
 	}
@@ -383,7 +388,9 @@ func (api *TaskAPI) resumeTask(c *gin.Context) {
 		Generation int64  `json:"generation"`
 		ResumeKind string `json:"resumeKind"`
 	}
-	_ = c.ShouldBindJSON(&body)
+	if err := c.ShouldBindJSON(&body); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	if err := svc.ResumeTask(c.Request.Context(), task_runtime.ResumeTaskRequest{TaskRunID: taskRunID, Generation: body.Generation, ResumeKind: body.ResumeKind}); err != nil {
 		writeTaskError(c, err)
 		return

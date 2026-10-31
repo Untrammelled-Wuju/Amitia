@@ -187,8 +187,9 @@ export class ChatStateBridge {
     if (this.callbacks.onStateChange) {
       try {
         this.callbacks.onStateChange(state, actionKey);
-      } catch {
-        void 0;
+      } catch (error) {
+  console.error("[original-error]", error);
+void 0;
       }
     }
     if (this.petWindow && !this.petWindow.isDestroyed()) {
@@ -199,8 +200,9 @@ export class ChatStateBridge {
       };
       try {
         this.petWindow.webContents.send(PET_CHAT_STATE_CHANNEL, payload);
-      } catch {
-        void 0;
+      } catch (error) {
+  console.error("[original-error]", error);
+void 0;
       }
     }
   }

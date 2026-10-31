@@ -9,8 +9,9 @@ export function getUIHostDeviceId(): string {
   }
   try {
     return window.localStorage.getItem(LEGACY_DEVICE_ID_KEY)?.trim() || "";
-  } catch {
-    return "";
+  } catch (error) {
+  console.error("[original-error]", error);
+return "";
   }
 }
 
@@ -20,8 +21,9 @@ export async function resolveUIHostDeviceId(): Promise<string> {
     const identity = await window.amitiaDesktop?.getMeshIdentity?.();
     const meshDeviceId = identity?.deviceId?.trim() ?? "";
     if (meshDeviceId) return meshDeviceId;
-  } catch {
-    // The browser identity below remains stable when Desktop Agent is unavailable.
+  } catch (error) {
+  console.error("[original-error]", error);
+// The browser identity below remains stable when Desktop Agent is unavailable.
   }
   return getWebDeviceMeshIdentity().deviceId;
 }

@@ -7,8 +7,9 @@ const DRAFT_PREFIX = "webchat_draft:";
 function readDraft(key: string): string {
   try {
     return localStorage.getItem(`${DRAFT_PREFIX}${key}`) || "";
-  } catch {
-    return "";
+  } catch (error) {
+  console.error("[original-error]", error);
+return "";
   }
 }
 
@@ -17,7 +18,9 @@ function writeDraft(key: string, value: string) {
     const storageKey = `${DRAFT_PREFIX}${key}`;
     if (value.trim()) localStorage.setItem(storageKey, value);
     else localStorage.removeItem(storageKey);
-  } catch {}
+  } catch (error) {
+  console.error("[original-error]", error);
+}
 }
 
 export function useTextInput(

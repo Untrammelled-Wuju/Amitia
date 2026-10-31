@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
+	amitialog "log"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -29,7 +30,9 @@ func uploadStreamToArk(baseURL, apiKey string, reader io.Reader, fileName string
 	var requestBody bytes.Buffer
 	writer := multipart.NewWriter(&requestBody)
 
-	_ = writer.WriteField("purpose", "user_data")
+	if err := writer.WriteField("purpose", "user_data"); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 
 	part, err := writer.CreateFormFile("file", fileName)
 	if err != nil {

@@ -12,8 +12,9 @@ export interface BusinessCoreProbeResult {
 function sameOrigin(a: string, b: string): boolean {
   try {
     return new URL(a).origin === new URL(b).origin;
-  } catch {
-    return false;
+  } catch (error) {
+  console.error("[original-error]", error);
+return false;
   }
 }
 
@@ -37,8 +38,9 @@ export class BusinessCoreClient {
     try {
       const identity = await getMeshIdentity();
       return { ...(await getDesktopAuthHeaders()), ...(identity?.deviceId ? { 'X-Amitia-Device-ID': identity.deviceId } : {}) };
-    } catch {
-      return {};
+    } catch (error) {
+  console.error("[original-error]", error);
+return {};
     }
   }
 

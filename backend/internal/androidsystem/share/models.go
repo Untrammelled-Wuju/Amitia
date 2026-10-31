@@ -26,18 +26,18 @@ type SharedResource struct {
 }
 
 type ShareSendResult struct {
-	Status            string `json:"status"`
-	ResourceCount     int    `json:"resourceCount"`
-	MIMEType          string `json:"mimeType,omitempty"`
-	UserActionRequired bool  `json:"userActionRequired"`
+	Status             string `json:"status"`
+	ResourceCount      int    `json:"resourceCount"`
+	MIMEType           string `json:"mimeType,omitempty"`
+	UserActionRequired bool   `json:"userActionRequired"`
 }
 
 type IncomingShare struct {
-	ShareID   string           `json:"shareId"`
-	Text      string           `json:"text,omitempty"`
-	Subject   string           `json:"subject,omitempty"`
-	Resources []SharedResource `json:"resources,omitempty"`
-	ReceivedAt int64           `json:"receivedAt"`
+	ShareID    string           `json:"shareId"`
+	Text       string           `json:"text,omitempty"`
+	Subject    string           `json:"subject,omitempty"`
+	Resources  []SharedResource `json:"resources,omitempty"`
+	ReceivedAt int64            `json:"receivedAt"`
 }
 
 type StatusResult struct {
@@ -53,18 +53,18 @@ type StatusResult struct {
 
 type SendResult struct {
 	Status             string `json:"status"`
-	ResourceCount     int    `json:"resourceCount"`
-	MIMEType          string `json:"mimeType,omitempty"`
-	UserActionRequired bool  `json:"userActionRequired"`
+	ResourceCount      int    `json:"resourceCount"`
+	MIMEType           string `json:"mimeType,omitempty"`
+	UserActionRequired bool   `json:"userActionRequired"`
 }
 
 const (
-	MaxResourcesCount    = 10
-	MaxSingleResourceBytes = 100 * 1024 * 1024  // 100 MiB
-	MaxTotalBytes        = 250 * 1024 * 1024  // 250 MiB
-	MaxShareTextBytes    = 1 * 1024 * 1024    // 1 MiB
-	MaxSubjectBytes      = 8 * 1024           // 8 KiB
-	ChooserTitleMaxBytes = 256
+	MaxResourcesCount      = 10
+	MaxSingleResourceBytes = 100 * 1024 * 1024 // 100 MiB
+	MaxTotalBytes          = 250 * 1024 * 1024 // 250 MiB
+	MaxShareTextBytes      = 1 * 1024 * 1024   // 1 MiB
+	MaxSubjectBytes        = 8 * 1024          // 8 KiB
+	ChooserTitleMaxBytes   = 256
 )
 
 const (
@@ -75,10 +75,10 @@ const (
 )
 
 const (
-	OperationStatus          = "share.status"
-	OperationSend            = "share.send"
-	OperationReceivePending  = "share.receive.pending"
-	OperationReceiveConsume  = "share.receive.consume"
+	OperationStatus         = "share.status"
+	OperationSend           = "share.send"
+	OperationReceivePending = "share.receive.pending"
+	OperationReceiveConsume = "share.receive.consume"
 )
 
 const (

@@ -430,7 +430,9 @@ func (w *defaultTaskWorker) runHeartbeat(ctx context.Context, dispatch protocol.
 			w.mu.Unlock()
 			if w.client != nil {
 				if err := w.client.awaitTaskLease(ctx, dispatch, seq, lease.Confirm); err != nil {
-					_ = w.CancelTask(ctx, dispatch.TaskRunID, dispatch.AttemptID, dispatch.LeaseID)
+					if err := w.CancelTask(ctx, dispatch.TaskRunID, dispatch.AttemptID, dispatch.LeaseID); err != nil {
+						log.Printf("[original-error] %v", err)
+					}
 					return
 				}
 			}

@@ -3,12 +3,12 @@ package media
 import "fmt"
 
 const (
-	DefaultPhotoListLimit = 50
-	MaxPhotoListLimit     = 200
-	DefaultSelectionLimit = 1
-	MaxSelectionLimit     = 10
-	DefaultMaxTotalBytes  = 50 * 1024 * 1024
-	MaxExportBytes        = 100 * 1024 * 1024
+	DefaultPhotoListLimit     = 50
+	MaxPhotoListLimit         = 200
+	DefaultSelectionLimit     = 1
+	MaxSelectionLimit         = 10
+	DefaultMaxTotalBytes      = 50 * 1024 * 1024
+	MaxExportBytes            = 100 * 1024 * 1024
 	DefaultVideoMaxDurationMs = 300000
 	MaxVideoMaxDurationMs     = 600000
 	DefaultAudioMaxDurationMs = 300000

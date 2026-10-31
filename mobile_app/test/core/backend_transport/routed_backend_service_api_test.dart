@@ -171,6 +171,28 @@ void main() {
       );
     });
 
+    test(
+      'knowledge search and diagnostics use the active business Core',
+      () async {
+        await proxy.post(
+          '/api/knowledge/search',
+          data: const {'query': '核对文档', 'routingMode': 'chat'},
+        );
+        await proxy.get('/api/knowledge/runtime');
+        await proxy.get('/api/knowledge/vector-orphans');
+        expect(businessApi.calls.length, 3);
+        expect(deviceLocalApi.calls.length, 0);
+        expect(
+          businessApi.calls.map((call) => call.path),
+          containsAll(<String>[
+            '/api/knowledge/search',
+            '/api/knowledge/runtime',
+            '/api/knowledge/vector-orphans',
+          ]),
+        );
+      },
+    );
+
     test('desktop pet device API routes to device agent', () async {
       await proxy.get('/api/desktop-pets/installations');
       expect(deviceLocalApi.calls.length, 1);

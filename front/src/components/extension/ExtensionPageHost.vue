@@ -140,7 +140,9 @@ async function openPage() {
     });
     if (disposed || token !== pageRequestToken) {
       if (result.sessionId) {
-        void closePageSession(result.sessionId).catch(() => {});
+        void closePageSession(result.sessionId).catch((error) => {
+  console.error("[original-error]", error);
+});
       }
       return;
     }
@@ -215,8 +217,9 @@ async function closePage() {
   }
   try {
     await closePageSession(currentSessionId);
-  } catch {
-  }
+  } catch (error) {
+  console.error("[original-error]", error);
+}
 }
 
 function buildScopeSnapshot(): string {

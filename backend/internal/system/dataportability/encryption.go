@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 
 	"golang.org/x/crypto/argon2"
+	amitialog "log"
 )
 
 const (
@@ -68,9 +69,13 @@ func EncryptFile(sourcePath, destinationPath, passphrase string) error {
 	}
 	keepDestination := false
 	defer func() {
-		_ = destination.Close()
+		if err := destination.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		if !keepDestination {
-			_ = os.Remove(destinationPath)
+			if err := os.Remove(destinationPath); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}()
 
@@ -204,7 +209,9 @@ func DecryptFile(sourcePath, destinationPath, passphrase string) error {
 	keepDestination := false
 	defer func() {
 		if !keepDestination {
-			_ = os.Remove(destinationPath)
+			if err := os.Remove(destinationPath); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}()
 	closeWithError := func(cause error) error {

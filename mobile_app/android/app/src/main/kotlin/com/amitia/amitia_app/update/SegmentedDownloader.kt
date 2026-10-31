@@ -45,6 +45,8 @@ class SegmentedDownloader(
                 isCancelled,
             )
         } catch (error: RangeUnsupportedException) {
+          error.printStackTrace()
+
             downloadSingle(
                 url,
                 target,

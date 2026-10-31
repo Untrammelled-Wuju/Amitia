@@ -57,7 +57,7 @@ func (p Policy) ValidateCreateRequest(req CreateRequest, activeCount int) error 
 	case OverlayKindCustom:
 		return newOverlayError(OVERLAY_INVALID_KIND, "custom kind not supported in this step")
 	default:
-		return newOverlayError(OVERLAY_INVALID_KIND, "invalid overlay kind: " + req.Kind)
+		return newOverlayError(OVERLAY_INVALID_KIND, "invalid overlay kind: "+req.Kind)
 	}
 
 	if req.Content != nil {

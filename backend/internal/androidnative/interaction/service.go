@@ -211,9 +211,9 @@ func (s *Service) clickNode(
 	node, err := s.nodeResolver.ResolveNode(ctx, target.SnapshotID, target.NodeID)
 	if err != nil {
 		if treeErr, ok := err.(*uitree.Error); ok && treeErr.Code == uitree.UI_NODE_STALE {
-			return InteractionResult{}, &Error{Code: INTERACTION_NODE_STALE, Message: "node is stale"}
+			return InteractionResult{}, &Error{Code: INTERACTION_NODE_STALE, Message: "node is stale: " + err.Error()}
 		}
-		return InteractionResult{}, &Error{Code: INTERACTION_NODE_NOT_FOUND, Message: "node not found"}
+		return InteractionResult{}, &Error{Code: INTERACTION_NODE_NOT_FOUND, Message: "node not found: " + err.Error()}
 	}
 
 	bounds := node.Node.Bounds
@@ -383,9 +383,9 @@ func (s *Service) LongClick(ctx context.Context, req LongClickRequest) (Interact
 	node, err := s.nodeResolver.ResolveNode(ctx, target.SnapshotID, target.NodeID)
 	if err != nil {
 		if treeErr, ok := err.(*uitree.Error); ok && treeErr.Code == uitree.UI_NODE_STALE {
-			return InteractionResult{}, &Error{Code: INTERACTION_NODE_STALE, Message: "node is stale"}
+			return InteractionResult{}, &Error{Code: INTERACTION_NODE_STALE, Message: "node is stale: " + err.Error()}
 		}
-		return InteractionResult{}, &Error{Code: INTERACTION_NODE_NOT_FOUND, Message: "node not found"}
+		return InteractionResult{}, &Error{Code: INTERACTION_NODE_NOT_FOUND, Message: "node not found: " + err.Error()}
 	}
 	durationMS := req.DurationMS
 	if durationMS <= 0 {
@@ -447,9 +447,9 @@ func (s *Service) InputText(ctx context.Context, req InputTextRequest) (Interact
 	node, err := s.nodeResolver.ResolveNode(ctx, target.SnapshotID, target.NodeID)
 	if err != nil {
 		if treeErr, ok := err.(*uitree.Error); ok && treeErr.Code == uitree.UI_NODE_STALE {
-			return InteractionResult{}, &Error{Code: INTERACTION_NODE_STALE, Message: "node is stale"}
+			return InteractionResult{}, &Error{Code: INTERACTION_NODE_STALE, Message: "node is stale: " + err.Error()}
 		}
-		return InteractionResult{}, &Error{Code: INTERACTION_NODE_NOT_FOUND, Message: "node not found"}
+		return InteractionResult{}, &Error{Code: INTERACTION_NODE_NOT_FOUND, Message: "node not found: " + err.Error()}
 	}
 	if node.Node.Password {
 		return InteractionResult{}, &Error{Code: INTERACTION_SENSITIVE_INPUT_DENIED, Message: "password field input denied"}
@@ -504,9 +504,9 @@ func (s *Service) ClearText(ctx context.Context, req ClearTextRequest) (Interact
 	node, err := s.nodeResolver.ResolveNode(ctx, target.SnapshotID, target.NodeID)
 	if err != nil {
 		if treeErr, ok := err.(*uitree.Error); ok && treeErr.Code == uitree.UI_NODE_STALE {
-			return InteractionResult{}, &Error{Code: INTERACTION_NODE_STALE, Message: "node is stale"}
+			return InteractionResult{}, &Error{Code: INTERACTION_NODE_STALE, Message: "node is stale: " + err.Error()}
 		}
-		return InteractionResult{}, &Error{Code: INTERACTION_NODE_NOT_FOUND, Message: "node not found"}
+		return InteractionResult{}, &Error{Code: INTERACTION_NODE_NOT_FOUND, Message: "node not found: " + err.Error()}
 	}
 
 	if !node.Node.Editable {
@@ -547,9 +547,9 @@ func (s *Service) Scroll(ctx context.Context, req ScrollRequest) (InteractionRes
 	node, err := s.nodeResolver.ResolveNode(ctx, target.SnapshotID, target.NodeID)
 	if err != nil {
 		if treeErr, ok := err.(*uitree.Error); ok && treeErr.Code == uitree.UI_NODE_STALE {
-			return InteractionResult{}, &Error{Code: INTERACTION_NODE_STALE, Message: "node is stale"}
+			return InteractionResult{}, &Error{Code: INTERACTION_NODE_STALE, Message: "node is stale: " + err.Error()}
 		}
-		return InteractionResult{}, &Error{Code: INTERACTION_NODE_NOT_FOUND, Message: "node not found"}
+		return InteractionResult{}, &Error{Code: INTERACTION_NODE_NOT_FOUND, Message: "node not found: " + err.Error()}
 	}
 	action := NodeActionScrollForward
 	switch req.Direction {

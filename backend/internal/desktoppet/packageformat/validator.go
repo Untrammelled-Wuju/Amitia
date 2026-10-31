@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	amitialog "log"
 	"os"
 	pathpkg "path"
 	"path/filepath"
@@ -1151,7 +1152,9 @@ func (v *Validator) validateCanonicalActionNestedRequiredFields(report *Validati
 	returnTo := require(rawFields["returnTo"], "returnTo", "type")
 	if returnTo != nil {
 		var returnType string
-		_ = json.Unmarshal(returnTo["type"], &returnType)
+		if err := json.Unmarshal(returnTo["type"], &returnType); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		if value, ok := returnTo["actionKey"]; ok && isJSONNull(value) {
 			report.addFinding(Finding{Code: ErrCodeActionConfigInvalid, Severity: SeverityError, Path: action.Config, ActionKey: action.Key, Expected: "string", Actual: "null", Message: "returnTo.actionKey must not be null when present"})
 			valid = false

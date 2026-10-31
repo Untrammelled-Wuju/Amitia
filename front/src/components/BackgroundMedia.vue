@@ -36,7 +36,9 @@ function syncPlayback() {
   if (!video.value) return;
   video.value.muted = true;
   if (!props.animate || props.settings.opacity === 0 || document.hidden) video.value.pause();
-  else void video.value.play().catch(() => { video.value?.pause(); });
+  else void video.value.play().catch((error) => {
+  console.error("[original-error]", error);
+video.value?.pause(); });
 }
 watch(() => props.source, async () => { failed.value = false; await nextTick(); syncPlayback(); });
 watch(() => props.animate, syncPlayback);

@@ -102,7 +102,7 @@ func RegisterRoutes(router *gin.RouterGroup, runtime *Runtime) {
 			return
 		}
 		if err := runtime.AcknowledgeScheduled(c.Request.Context(), spaceID, deviceID, c.Param("id"), request.State); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "无法确认当前设备的通知"})
+			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"code": 200, "data": gin.H{"confirmed": true, "state": request.State}})
@@ -125,7 +125,7 @@ func RegisterRoutes(router *gin.RouterGroup, runtime *Runtime) {
 	group.POST("/devices/register", func(c *gin.Context) {
 		var request RegisterDeviceRequest
 		if err := c.ShouldBindJSON(&request); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "invalid notification device"})
+			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
 			return
 		}
 		spaceID, deviceID, ok := actorScope(c, request.DeviceID)
@@ -277,12 +277,12 @@ func RegisterRoutes(router *gin.RouterGroup, runtime *Runtime) {
 			return
 		}
 		if err := runtime.repo.CancelPendingOutboxByPreferences(c.Request.Context(), spaceID, deviceID, !endpoint.PushEnabled || !endpoint.SystemNotificationsEnabled, !endpoint.MessagePushEnabled, !endpoint.ExecutionActivityEnabled, !endpoint.CallPushEnabled, !endpoint.ReminderPushEnabled); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": "通知偏好尚未同步到待投递队列"})
+			c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": err.Error()})
 			return
 		}
 		registered, err := runtime.repo.GetDeviceForPlatform(c.Request.Context(), spaceID, deviceID, request.Platform)
 		if err != nil || registered == nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": "通知设备保存未确认"})
+			c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": err.Error()})
 			return
 		}
 		go runtime.CatchUpLiveActivity(*registered)
@@ -307,7 +307,7 @@ func RegisterRoutes(router *gin.RouterGroup, runtime *Runtime) {
 		}
 		var request UpdatePreferencesRequest
 		if err := c.ShouldBindJSON(&request); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "invalid notification preferences"})
+			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
 			return
 		}
 		values := map[string]any{}
@@ -373,7 +373,7 @@ func RegisterRoutes(router *gin.RouterGroup, runtime *Runtime) {
 	group.POST("/presence", func(c *gin.Context) {
 		var request PresenceRequest
 		if err := c.ShouldBindJSON(&request); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "invalid presence"})
+			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
 			return
 		}
 		spaceID, deviceID, ok := actorScope(c, request.DeviceID)
@@ -389,7 +389,7 @@ func RegisterRoutes(router *gin.RouterGroup, runtime *Runtime) {
 	group.POST("/live-activities/token", func(c *gin.Context) {
 		var request LiveActivityTokenRequest
 		if err := c.ShouldBindJSON(&request); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "invalid live activity token"})
+			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
 			return
 		}
 		spaceID, deviceID, ok := actorScope(c, request.DeviceID)
@@ -429,7 +429,7 @@ func RegisterRoutes(router *gin.RouterGroup, runtime *Runtime) {
 	group.POST("/calls/incoming", func(c *gin.Context) {
 		var request IncomingCallRequest
 		if err := c.ShouldBindJSON(&request); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "invalid incoming call"})
+			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
 			return
 		}
 		spaceID, _, ok := actorScope(c, "")
@@ -452,7 +452,7 @@ func RegisterRoutes(router *gin.RouterGroup, runtime *Runtime) {
 	group.POST("/calls/:callId/answer", func(c *gin.Context) {
 		var request EndCallRequest
 		if err := c.ShouldBindJSON(&request); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "invalid call answer"})
+			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
 			return
 		}
 		spaceID, deviceID, ok := actorScope(c, "")
@@ -479,7 +479,7 @@ func RegisterRoutes(router *gin.RouterGroup, runtime *Runtime) {
 	group.POST("/calls/:callId/end", func(c *gin.Context) {
 		var request EndCallRequest
 		if err := c.ShouldBindJSON(&request); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "invalid call end"})
+			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
 			return
 		}
 		spaceID, _, ok := actorScope(c, "")

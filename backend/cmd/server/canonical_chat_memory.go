@@ -12,6 +12,7 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/system/dataportability"
+	amitialog "log"
 	"time"
 )
 
@@ -76,7 +77,9 @@ func (r *canonicalChatMemoryRuntime) Recall(ctx context.Context, spaceID, role, 
 			value = document.Content.Text
 		}
 		var record business.Memory
-		_ = json.Unmarshal(resource.Body, &record)
+		if err := json.Unmarshal(resource.Body, &record); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		record.ID, record.SpaceID, record.CharacterID, record.Key, record.Value, record.MemoryType, record.Importance, record.Version = resource.ID, r.spaceID, resource.RoleID, document.Key, value, document.Content.MemoryType, document.Content.Importance, int(resource.Revision)
 		sourceType := "memory"
 		if document.Kind == "episodic" {

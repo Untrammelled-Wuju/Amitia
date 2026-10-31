@@ -11,6 +11,7 @@ import (
 
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/requestidentity"
+	amitialog "log"
 )
 
 type Tool struct {
@@ -59,10 +60,14 @@ func (p *Property) UnmarshalJSON(data []byte) error {
 		p.Type = decodePropertyType(value)
 	}
 	if value, ok := raw["description"]; ok {
-		_ = json.Unmarshal(value, &p.Description)
+		if err := json.Unmarshal(value, &p.Description); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	if value, ok := raw["enum"]; ok {
-		_ = json.Unmarshal(value, &p.Enum)
+		if err := json.Unmarshal(value, &p.Enum); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return nil
 }

@@ -75,7 +75,8 @@ export async function loadBudgetEvidence(conversationId: string, characterId: st
   const result = await readWorkbenchTasks(conversationId, characterId, signal, coordinationId, request);
   try {
     return parseBudgetEvidencePage(result, { coordinationId, parentInteractionId, kind });
-  } catch {
-    throw new WorkbenchTaskReadError('预算核对证据校验失败，请重新授权后刷新', true);
+  } catch (error) {
+  console.error("[original-error]", error);
+throw new WorkbenchTaskReadError('预算核对证据校验失败，请重新授权后刷新', true);
   }
 }

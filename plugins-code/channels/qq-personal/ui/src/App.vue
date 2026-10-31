@@ -371,8 +371,9 @@ async function openDockerDesktop() {
   try {
     await desktop.openPath(target)
     return true
-  } catch {
-    return false
+  } catch (error) {
+  console.error("[original-error]", error);
+return false
   }
 }
 
@@ -534,8 +535,9 @@ async function copy(value, type) {
   try {
     try {
       copyWithSelection(text)
-    } catch {
-      await invoke("copy-text", { text })
+    } catch (error) {
+  console.error("[original-error]", error);
+await invoke("copy-text", { text })
     }
     const labels = {
       onebot: "OneBot Token",

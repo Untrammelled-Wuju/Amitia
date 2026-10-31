@@ -96,8 +96,9 @@ class _UserFeedbackPageState extends ConsumerState<UserFeedbackPage> {
     try {
       final tickets = await ref.read(userFeedbackServiceProvider).tickets();
       if (mounted) setState(() => _tickets = tickets);
-    } catch (_) {
-      // Keep the previous list when the Core is unavailable.
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+// Keep the previous list when the Core is unavailable.
     }
   }
 

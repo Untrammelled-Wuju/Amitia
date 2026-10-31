@@ -95,8 +95,9 @@ function formatTime(t: string) {
     const d = new Date(t);
     const pad = (n: number) => String(n).padStart(2, "0");
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  } catch {
-    return t;
+  } catch (error) {
+  console.error("[original-error]", error);
+return t;
   }
 }
 
@@ -117,8 +118,9 @@ async function loadHistory() {
     const d = await getScanHistory({ page: page.value, pageSize });
     items.value = d.items || [];
     total.value = d.total || 0;
-  } catch {
-    items.value = [];
+  } catch (error) {
+  console.error("[original-error]", error);
+items.value = [];
     total.value = 0;
   } finally {
     loading.value = false;

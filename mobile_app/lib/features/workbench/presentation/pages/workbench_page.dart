@@ -184,8 +184,9 @@ class _WorkbenchPageState extends ConsumerState<WorkbenchPage> {
           if (index is int && index >= 0 && index < restored.length) requestedIndex = index;
         }
       }
-    } catch (_) {
-      restored.clear();
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+restored.clear();
     }
     if (!mounted || generation != _loadGeneration || epoch != _conversationEpoch || conversation != widget.conversationId) return;
     if (restored.isEmpty) restored.add(const _WorkbenchTab(id: 'initial-files', type: 'files', title: '文件'));

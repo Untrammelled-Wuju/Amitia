@@ -23,9 +23,9 @@ const (
 )
 
 type FileStore struct {
-	dir    storage.DirectoryManager
-	mu     sync.Mutex
-	locks  map[string]*sync.Mutex
+	dir   storage.DirectoryManager
+	mu    sync.Mutex
+	locks map[string]*sync.Mutex
 }
 
 func NewFileStore(dir storage.DirectoryManager) (*FileStore, error) {

@@ -194,7 +194,7 @@ func (c *ADBClient) Execute(ctx context.Context, req ADBExecuteRequest) (ADBExec
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			result.TimedOut = true
-			return result, &PolicyError{Code: ADB_TIMEOUT, Message: "adb execution timed out"}
+			return result, &PolicyError{Code: ADB_TIMEOUT, Message: "adb execution timed out: " + err.Error()}
 		}
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			result.ExitCode = exitErr.ExitCode()
@@ -305,7 +305,7 @@ func (c *ADBClient) ExecuteArgs(ctx context.Context, deviceSerial string, args [
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			result.TimedOut = true
-			return result, &PolicyError{Code: ADB_TIMEOUT, Message: "adb execution timed out"}
+			return result, &PolicyError{Code: ADB_TIMEOUT, Message: "adb execution timed out: " + err.Error()}
 		}
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			result.ExitCode = exitErr.ExitCode()

@@ -76,7 +76,10 @@ async function probeRange(options: SegmentedDownloadOptions): Promise<RangeProbe
     headerValue(response.headers, "content-length") === "1";
   const etag = headerValue(response.headers, "etag");
   const lastModified = headerValue(response.headers, "last-modified");
-  await response.body?.cancel().catch(() => undefined);
+  await response.body?.cancel().catch((error) => {
+  console.error("[original-error]", error);
+  return undefined;
+});
   if (!supported) {
     throw new RangeUnsupportedError(`range probe returned ${response.status}`);
   }
@@ -119,8 +122,9 @@ async function ensureStateDirectory(
   let existing: DownloadState | null = null;
   try {
     existing = JSON.parse(await fs.readFile(metadataPath, "utf8")) as DownloadState;
-  } catch {
-    existing = null;
+  } catch (error) {
+  console.error("[original-error]", error);
+existing = null;
   }
   if (
     !existing ||
@@ -132,7 +136,10 @@ async function ensureStateDirectory(
     existing.chunkCount !== state.chunkCount ||
     existing.expectedSha512 !== state.expectedSha512
   ) {
-    for (const entry of await fs.readdir(directory).catch(() => [])) {
+    for (const entry of await fs.readdir(directory).catch((error) => {
+  console.error("[original-error]", error);
+  return [];
+})) {
       if (entry.endsWith(".part") || entry.endsWith(".partial")) {
         await fs.rm(path.join(directory, entry), { force: true });
       }
@@ -186,7 +193,10 @@ async function streamPart(
     }
     await handle.sync();
   } catch (error) {
-    await handle.close().catch(() => undefined);
+    await handle.close().catch((error) => {
+  console.error("[original-error]", error);
+  return undefined;
+});
     await fs.rm(partial, { force: true });
     throw error;
   }
@@ -215,8 +225,9 @@ async function downloadPart(
       return;
     }
     await fs.rm(target, { force: true });
-  } catch {
-    updateBytes(0);
+  } catch (error) {
+  console.error("[original-error]", error);
+updateBytes(0);
   }
   const retries = Math.max(0, options.retries ?? 3);
   let lastError: unknown;
@@ -236,12 +247,18 @@ async function downloadPart(
         signal: options.signal,
       });
       if (response.status !== 206) {
-        await response.body?.cancel().catch(() => undefined);
+        await response.body?.cancel().catch((error) => {
+  console.error("[original-error]", error);
+  return undefined;
+});
         throw new RangeUnsupportedError(`range request returned ${response.status}`);
       }
       const contentRange = headerValue(response.headers, "content-range");
       if (!contentRange.endsWith(`/${probe.total}`)) {
-        await response.body?.cancel().catch(() => undefined);
+        await response.body?.cancel().catch((error) => {
+  console.error("[original-error]", error);
+  return undefined;
+});
         throw new Error("更新服务器返回了不一致的文件范围");
       }
       await streamPart(response, target, expected, updateBytes, options.signal);
@@ -280,7 +297,10 @@ async function mergeParts(
     if (written !== total) throw new Error("更新文件合并大小不匹配");
     await output.sync();
   } catch (error) {
-    await output.close().catch(() => undefined);
+    await output.close().catch((error) => {
+  console.error("[original-error]", error);
+  return undefined;
+});
     await fs.rm(options.destination, { force: true });
     throw error;
   }

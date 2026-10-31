@@ -323,8 +323,9 @@ final currentSpaceProfileProvider = FutureProvider.autoDispose<SpaceProfile?>((
 ) async {
   try {
     return await ref.read(spaceProfileServiceProvider).fetch();
-  } catch (_) {
-    return null;
+  } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return null;
   }
 });
 
@@ -351,7 +352,9 @@ final conversationCharacterProvider = FutureProvider.autoDispose
         for (final character in characters) {
           if (character.id == id) return character;
         }
-      } catch (_) {}
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
       final character = await service.getById(id);
       return character?.id == id ? character : null;
     });
@@ -412,13 +415,17 @@ final clientRuntimeSessionStateProvider = StreamProvider.autoDispose
                 revision,
               );
               revision = (state['revision'] as num?)?.toInt() ?? revision;
-            } catch (_) {}
+            } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
           }
           if (revision != lastRevision) {
             lastRevision = revision;
             yield state;
           }
-        } catch (_) {}
+        } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
         await Future<void>.delayed(const Duration(seconds: 2));
       }
     });
@@ -458,8 +465,9 @@ final conversationUIEventWindowProvider = StreamProvider.autoDispose
               if (sequence > cursor) cursor = sequence;
             }
             if (page.length < pageSize) break;
-          } catch (_) {
-            break;
+          } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+break;
           }
         }
         if (changed || !emittedInitial) {

@@ -78,14 +78,16 @@ const prettyJson = computed(() => {
   if (typeof data === "string") {
     try {
       return JSON.stringify(JSON.parse(data), null, 2);
-    } catch {
-      return data;
+    } catch (error) {
+  console.error("[original-error]", error);
+return data;
     }
   }
   try {
     return JSON.stringify(data, null, 2);
-  } catch {
-    return String(data);
+  } catch (error) {
+  console.error("[original-error]", error);
+return String(data);
   }
 });
 

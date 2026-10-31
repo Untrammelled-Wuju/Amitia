@@ -91,7 +91,9 @@ internal object AccessibilityProviderClient {
         return withContext(Dispatchers.IO) {
             try {
                 block(provider)
-            } catch (_: Throwable) {
+            } catch (originalError94: Throwable) {
+              originalError94.printStackTrace()
+
                 null
             }
         }
@@ -117,9 +119,11 @@ internal object AccessibilityProviderClient {
         val intent = Intent().setComponent(ComponentName(PROVIDER_PACKAGE, PROVIDER_SERVICE))
         try {
             bound = context.bindService(intent, connection, Context.BIND_AUTO_CREATE)
-        } catch (_: Throwable) {
+        } catch (originalError120: Throwable) {
+          originalError120.printStackTrace()
+
             bound = false
-            pending?.completeExceptionally(IllegalStateException("accessibility provider bind failed"))
+            pending?.completeExceptionally(IllegalStateException("accessibility provider bind failed: ${originalError120.message}", originalError120))
             pending = null
         }
     }

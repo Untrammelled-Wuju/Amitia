@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	amitialog "log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -310,15 +311,21 @@ func CopyVerifiedFile(src SafePath, dst SafePath, expectedHash string, maxBytes 
 	success := false
 	defer func() {
 		if !success {
-			_ = os.Remove(tmpPath)
+			if err := os.Remove(tmpPath); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}()
 	if err := copyAndHash(tmp, src.Resolved, expectedHash, maxBytes); err != nil {
-		_ = tmp.Close()
+		if err := tmp.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return err
 	}
 	if err := tmp.Sync(); err != nil {
-		_ = tmp.Close()
+		if err := tmp.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return fmt.Errorf("storage: failed to sync: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
@@ -425,8 +432,12 @@ func syncParentDir(dir string) {
 	if err != nil {
 		return
 	}
-	_ = f.Sync()
-	_ = f.Close()
+	if err := f.Sync(); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := f.Close(); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func SafeDeleteTree(root CanonicalRoot, targetPath string, expectation DeleteExpectation) (int, int64, error) {

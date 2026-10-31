@@ -16,6 +16,7 @@ import (
 	kerneldomain "github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/observability"
 	"gorm.io/gorm"
+	amitialog "log"
 )
 
 type legacyAgentSkillRow struct {
@@ -66,9 +67,13 @@ func MigrateLegacyAgentSkills(ctx context.Context, db *gorm.DB, runtime *kernel.
 		return nil
 	}
 	startedAt := time.Now().UTC().Format(time.RFC3339Nano)
-	_ = db.WithContext(ctx).Exec(`INSERT INTO extension_agent_skill_cutover(id,status,started_at) VALUES(1,'running',?) ON CONFLICT(id) DO UPDATE SET status='running',last_error='',started_at=excluded.started_at`, startedAt).Error
+	if err := db.WithContext(ctx).Exec(`INSERT INTO extension_agent_skill_cutover(id,status,started_at) VALUES(1,'running',?) ON CONFLICT(id) DO UPDATE SET status='running',last_error='',started_at=excluded.started_at`, startedAt).Error; err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	fail := func(err error) error {
-		_ = db.WithContext(ctx).Exec(`UPDATE extension_agent_skill_cutover SET status='failed',last_error=? WHERE id=1`, err.Error()).Error
+		if err := db.WithContext(ctx).Exec(`UPDATE extension_agent_skill_cutover SET status='failed',last_error=? WHERE id=1`, err.Error()).Error; err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return err
 	}
 	hasMetadata := db.Migrator().HasTable("extension_agent_skill_metadata")
@@ -162,7 +167,9 @@ func MigrateLegacyAgentSkills(ctx context.Context, db *gorm.DB, runtime *kernel.
 				createdAt = time.Now().UTC()
 			}
 			var resourcePaths []string
-			_ = json.Unmarshal([]byte(row.ResourcePathsJSON), &resourcePaths)
+			if err := json.Unmarshal([]byte(row.ResourcePathsJSON), &resourcePaths); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			extensionID := row.ExtensionID
 			if migratedID := migratedIDs[row.ExtensionID]; migratedID != "" {
 				extensionID = migratedID

@@ -8,6 +8,7 @@ import (
 
 	"github.com/u-ai/backend/internal/workspace"
 	"github.com/u-ai/backend/pkg/resourceuri"
+	amitialog "log"
 )
 
 type ResourceMaterializer interface {
@@ -60,12 +61,18 @@ func (m *resourceMaterializer) Materialize(ctx context.Context, rawURI string) (
 	}
 	path := f.Name()
 	if err := m.workspace.CopyTo(ctx, rawURI, f); err != nil {
-		_ = f.Close()
-		_ = os.Remove(path)
+		if err := f.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := os.Remove(path); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return "", nil, err
 	}
 	if err := f.Close(); err != nil {
-		_ = os.Remove(path)
+		if err := os.Remove(path); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return "", nil, err
 	}
 	return path, func() error { return os.Remove(path) }, nil

@@ -144,10 +144,10 @@ type BackgroundCheckpointSetRequest struct {
 }
 
 type BackgroundTaskBinding struct {
-	SystemClass   string `json:"systemClass"`
-	TaskRunID     string `json:"taskRunId"`
-	Generation    int64  `json:"generation"`
-	CreatedAt     string `json:"createdAt"`
+	SystemClass string `json:"systemClass"`
+	TaskRunID   string `json:"taskRunId"`
+	Generation  int64  `json:"generation"`
+	CreatedAt   string `json:"createdAt"`
 }
 
 type BackgroundPendingRequest struct {

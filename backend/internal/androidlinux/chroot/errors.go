@@ -14,16 +14,16 @@ func (e *ChrootError) Error() string {
 }
 
 const (
-	ErrCodeInvalidRequest    = "INVALID_REQUEST"
-	ErrCodeRootFSDenied      = "ROOTFS_DENIED"
-	ErrCodeRootFSNotFound    = "ROOTFS_NOT_FOUND"
-	ErrCodeRootFSInvalid     = "ROOTFS_INVALID"
-	ErrCodeExecDenied        = "EXEC_DENIED"
-	ErrCodeBinaryBlocked     = "BINARY_BLOCKED"
-	ErrCodeEnvBlocked        = "ENV_BLOCKED"
-	ErrCodeTimeout           = "TIMEOUT"
-	ErrCodeCommandFailed     = "COMMAND_FAILED"
-	ErrCodeInternal          = "INTERNAL"
+	ErrCodeInvalidRequest = "INVALID_REQUEST"
+	ErrCodeRootFSDenied   = "ROOTFS_DENIED"
+	ErrCodeRootFSNotFound = "ROOTFS_NOT_FOUND"
+	ErrCodeRootFSInvalid  = "ROOTFS_INVALID"
+	ErrCodeExecDenied     = "EXEC_DENIED"
+	ErrCodeBinaryBlocked  = "BINARY_BLOCKED"
+	ErrCodeEnvBlocked     = "ENV_BLOCKED"
+	ErrCodeTimeout        = "TIMEOUT"
+	ErrCodeCommandFailed  = "COMMAND_FAILED"
+	ErrCodeInternal       = "INTERNAL"
 )
 
 func ErrInvalidRequest(msg string) error {

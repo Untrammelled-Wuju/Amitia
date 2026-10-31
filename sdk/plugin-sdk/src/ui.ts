@@ -635,7 +635,9 @@ async function normalizeUISlotInjectionEffect(effect: UISlotInjectionEffect): Pr
     }
   } catch (error) {
     for (let index = cleanups.length - 1; index >= 0; index--) {
-      try { await cleanups[index]?.(); } catch { /* retain setup failure */ }
+      try { await cleanups[index]?.(); } catch (error) {
+  console.error("[original-error]", error);
+/* retain setup failure */ }
     }
     throw error;
   }
@@ -827,8 +829,9 @@ function assertUIProviderEntry(
       let target: URL;
       try {
         target = new URL(entry.url ?? "");
-      } catch {
-        throw new ValidationError(`external_web_ui url must be an HTTP(S) URL without credentials for ${platform}`);
+      } catch (error) {
+  console.error("[original-error]", error);
+throw new ValidationError(`external_web_ui url must be an HTTP(S) URL without credentials for ${platform}`);
       }
       if (!["http:", "https:"].includes(target.protocol) || target.username || target.password) {
         throw new ValidationError(`external_web_ui url must be an HTTP(S) URL without credentials for ${platform}`);
@@ -840,8 +843,9 @@ function assertUIProviderEntry(
         let origin: URL;
         try {
           origin = new URL(rawOrigin);
-        } catch {
-          throw new ValidationError(`external_web_ui allowedOrigins contains an invalid origin for ${platform}`);
+        } catch (error) {
+  console.error("[original-error]", error);
+throw new ValidationError(`external_web_ui allowedOrigins contains an invalid origin for ${platform}`);
         }
         if (
           !["http:", "https:"].includes(origin.protocol)

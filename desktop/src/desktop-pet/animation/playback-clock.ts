@@ -45,8 +45,9 @@ export class MonotonicPlaybackClock implements PlaybackClock {
         cancel: () => {
           try {
             nativeCaf(nativeId);
-          } catch {
-            void 0;
+          } catch (error) {
+  console.error("[original-error]", error);
+void 0;
           }
         },
       });

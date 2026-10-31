@@ -87,8 +87,9 @@ export function useCharacterConfig() {
     try {
       const parsed = JSON.parse(value);
       return parsed && typeof parsed === "object" ? parsed : {};
-    } catch {
-      return {};
+    } catch (error) {
+  console.error("[original-error]", error);
+return {};
     }
   }
 
@@ -108,8 +109,9 @@ export function useCharacterConfig() {
     templateLoading.value = true;
     try {
       templates.value = (await get<any[]>("/api/character-templates")) || [];
-    } catch {
-      templates.value = [];
+    } catch (error) {
+  console.error("[original-error]", error);
+templates.value = [];
     } finally {
       templateLoading.value = false;
     }
@@ -126,8 +128,9 @@ export function useCharacterConfig() {
       }
       collectionAuthority.value = authority.roleAuthority;
       characters.value = rows;
-    } catch {
-      collectionAuthority.value = "";
+    } catch (error) {
+  console.error("[original-error]", error);
+collectionAuthority.value = "";
     }
   }
 
@@ -320,7 +323,9 @@ export function useCharacterConfig() {
         form.characterBase = "";
         ElMessage.success("已恢复");
       })
-      .catch(() => {});
+      .catch((error) => {
+  console.error("[original-error]", error);
+});
   }
 
   function resetBounds() {
@@ -329,7 +334,9 @@ export function useCharacterConfig() {
         form.boundaryRules = "";
         ElMessage.success("已恢复");
       })
-      .catch(() => {});
+      .catch((error) => {
+  console.error("[original-error]", error);
+});
   }
 
   function selectCharById(id: string) {
@@ -363,7 +370,8 @@ export function useCharacterConfig() {
       }
       return null;
     } catch (err: any) {
-      ElMessage.error("头像上传失败");
+  console.error("[original-error]", err);
+      ElMessage.error(String(err?.message || err));
       return null;
     } finally {
       avatarUploading.value = false;

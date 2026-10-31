@@ -82,8 +82,9 @@ class _NotificationSettingsPageState
         _floatingPreviewEnabled =
             status['enabled'] == true && status['previewEnabled'] != false;
       });
-    } catch (_) {
-      if (!mounted) return;
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+if (!mounted) return;
       setState(() => _floatingPreviewEnabled = false);
     }
   }

@@ -33,9 +33,6 @@ type Service interface {
 	CheckStorageMigrations() map[string]interface{}
 	CheckUpdate() map[string]interface{}
 	CleanupTemp() map[string]interface{}
-	ConfigExport() map[string]interface{}
-	ConfigImportPreviewService(body map[string]interface{}) map[string]interface{}
-	ConfigImportConfirmService(body map[string]interface{}) map[string]interface{}
 	ConfigSettings() map[string]interface{}
 	DeleteLogs() map[string]interface{}
 	DeleteLogsModelErrors() map[string]interface{}

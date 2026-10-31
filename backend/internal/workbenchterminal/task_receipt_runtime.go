@@ -2,6 +2,7 @@ package workbenchterminal
 
 import (
 	"errors"
+	amitialog "log"
 	"time"
 )
 
@@ -23,7 +24,9 @@ func (s *session) recordTaskReceipt(state string) {
 		State: state, ExitCode: exit, LatestSequence: s.lifecycleSequence,
 	}
 	s.mu.Unlock()
-	_ = s.receiptJournal.Record(s.owner, receipt)
+	if err := s.receiptJournal.Record(s.owner, receipt); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (m *Manager) EnableTaskReceipts(journal *TaskReceiptJournal) {
@@ -53,7 +56,9 @@ func (m *Manager) pruneTaskReceipts() {
 	journal := m.receiptJournal
 	m.mu.Unlock()
 	if journal != nil {
-		_ = journal.Prune()
+		if err := journal.Prune(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 }
 

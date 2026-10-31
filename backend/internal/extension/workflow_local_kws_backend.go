@@ -18,6 +18,7 @@ import (
 
 	realtime "github.com/u-ai/backend/internal/devicemesh/wake"
 	workflowmetrics "github.com/u-ai/backend/internal/extension/kernel/workflow"
+	amitialog "log"
 )
 
 const (
@@ -114,11 +115,15 @@ func (w *workflowLocalKWSWake) Load(_ context.Context, cfg realtime.WakeDetector
 		keywords.WriteByte('\n')
 	}
 	if len(phraseMap) == 0 {
-		_ = os.RemoveAll(workDir)
+		if err := os.RemoveAll(workDir); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return errors.New("local wake: phrases are empty after normalization")
 	}
 	if err := os.WriteFile(keywordFile, []byte(keywords.String()), 0o600); err != nil {
-		_ = os.RemoveAll(workDir)
+		if err := os.RemoveAll(workDir); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return fmt.Errorf("local wake: write keyword file: %w", err)
 	}
 
@@ -142,7 +147,9 @@ func (w *workflowLocalKWSWake) Load(_ context.Context, cfg realtime.WakeDetector
 	w.cooldownTill = 0
 	w.resetAudioLocked()
 	if oldWorkDir != "" && oldWorkDir != workDir {
-		_ = os.RemoveAll(oldWorkDir)
+		if err := os.RemoveAll(oldWorkDir); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return nil
 }
@@ -439,19 +446,45 @@ func writePCM16MonoWAV(path string, pcm []byte, sampleRate int) error {
 	}
 	var out bytes.Buffer
 	dataSize := uint32(len(pcm))
-	_ = binary.Write(&out, binary.LittleEndian, [4]byte{'R', 'I', 'F', 'F'})
-	_ = binary.Write(&out, binary.LittleEndian, uint32(36)+dataSize)
-	_, _ = io.WriteString(&out, "WAVEfmt ")
-	_ = binary.Write(&out, binary.LittleEndian, uint32(16))
-	_ = binary.Write(&out, binary.LittleEndian, uint16(1))
-	_ = binary.Write(&out, binary.LittleEndian, uint16(1))
-	_ = binary.Write(&out, binary.LittleEndian, uint32(sampleRate))
-	_ = binary.Write(&out, binary.LittleEndian, uint32(sampleRate*2))
-	_ = binary.Write(&out, binary.LittleEndian, uint16(2))
-	_ = binary.Write(&out, binary.LittleEndian, uint16(16))
-	_, _ = io.WriteString(&out, "data")
-	_ = binary.Write(&out, binary.LittleEndian, dataSize)
-	_, _ = out.Write(pcm)
+	if err := binary.Write(&out, binary.LittleEndian, [4]byte{'R', 'I', 'F', 'F'}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := binary.Write(&out, binary.LittleEndian, uint32(36)+dataSize); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if _, err := io.WriteString(&out, "WAVEfmt "); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := binary.Write(&out, binary.LittleEndian, uint32(16)); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := binary.Write(&out, binary.LittleEndian, uint16(1)); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := binary.Write(&out, binary.LittleEndian, uint16(1)); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := binary.Write(&out, binary.LittleEndian, uint32(sampleRate)); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := binary.Write(&out, binary.LittleEndian, uint32(sampleRate*2)); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := binary.Write(&out, binary.LittleEndian, uint16(2)); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := binary.Write(&out, binary.LittleEndian, uint16(16)); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if _, err := io.WriteString(&out, "data"); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := binary.Write(&out, binary.LittleEndian, dataSize); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if _, err := out.Write(pcm); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	return os.WriteFile(path, out.Bytes(), 0o600)
 }
 

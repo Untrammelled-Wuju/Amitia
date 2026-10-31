@@ -71,7 +71,9 @@ func (r *Runtime) SignUninstallConfirmation(claims PackageUninstallConfirmationC
 	}
 	encoded := base64.RawURLEncoding.EncodeToString(payload)
 	mac := hmac.New(sha256.New, packageConfirmationKey)
-	_, _ = mac.Write([]byte(encoded))
+	if _, err := mac.Write([]byte(encoded)); err != nil {
+		log.Printf("[original-error] %v", err)
+	}
 	signature := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 	return encoded + "." + signature, nil
 }
@@ -83,7 +85,9 @@ func (r *Runtime) VerifyUninstallConfirmation(token string) (PackageUninstallCon
 		return claims, fmt.Errorf("kernel: confirmation token invalid")
 	}
 	mac := hmac.New(sha256.New, packageConfirmationKey)
-	_, _ = mac.Write([]byte(parts[0]))
+	if _, err := mac.Write([]byte(parts[0])); err != nil {
+		log.Printf("[original-error] %v", err)
+	}
 	provided, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil || !hmac.Equal(mac.Sum(nil), provided) {
 		return claims, fmt.Errorf("kernel: confirmation token invalid")
@@ -346,7 +350,9 @@ func (r *Runtime) Install(ctx context.Context, archivePath string) (InstalledExt
 	}
 	target := filepath.Join(r.root, name)
 	backup := target + ".previous"
-	_ = os.RemoveAll(backup)
+	if err := os.RemoveAll(backup); err != nil {
+		log.Printf("[original-error] %v", err)
+	}
 	if _, statErr := os.Stat(target); statErr == nil {
 		if err := os.Rename(target, backup); err != nil {
 			return InstalledExtension{}, err
@@ -354,11 +360,15 @@ func (r *Runtime) Install(ctx context.Context, archivePath string) (InstalledExt
 	}
 	if err := os.Rename(staging, target); err != nil {
 		if _, backupErr := os.Stat(backup); backupErr == nil {
-			_ = os.Rename(backup, target)
+			if err := os.Rename(backup, target); err != nil {
+				log.Printf("[original-error] %v", err)
+			}
 		}
 		return InstalledExtension{}, err
 	}
-	_ = os.RemoveAll(backup)
+	if err := os.RemoveAll(backup); err != nil {
+		log.Printf("[original-error] %v", err)
+	}
 	item := installedFromManifest(pkg.Manifest, target, time.Now().UTC())
 	r.mu.Lock()
 	r.installed[item.ID] = item

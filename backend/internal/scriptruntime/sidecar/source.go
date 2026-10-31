@@ -5,8 +5,8 @@ package sidecar
 type Source string
 
 const (
-	SourceExplicit      Source = "explicit"
-	SourceRuntimePackage Source = "runtime-package"
+	SourceExplicit        Source = "explicit"
+	SourceRuntimePackage  Source = "runtime-package"
 	SourceWorkspaceBundle Source = "workspace-bundle"
 	SourceWorkspaceSource Source = "workspace-source"
 )

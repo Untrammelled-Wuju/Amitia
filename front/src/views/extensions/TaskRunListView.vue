@@ -288,8 +288,9 @@ async function onCancel(task: TaskRun) {
       "取消任务",
       { type: "warning", confirmButtonText: "取消任务", cancelButtonText: "保留" },
     );
-  } catch {
-    return;
+  } catch (error) {
+  console.error("[original-error]", error);
+return;
   }
   actingId.value = task.taskRunId;
   try {

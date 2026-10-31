@@ -31,18 +31,24 @@ export function configureDesktopNotificationHost(platform: NodeJS.Platform = pro
   try {
     userData = app.getPath("userData");
     sessionData = app.getPath("sessionData");
-  } catch {}
+  } catch (error) {
+  console.error("[original-error]", error);
+}
   app.setName("Amitia");
   try {
     if (userData) app.setPath("userData", userData);
     if (sessionData) app.setPath("sessionData", sessionData);
-  } catch {}
+  } catch (error) {
+  console.error("[original-error]", error);
+}
   if (platform === "win32") {
     app.setAppUserModelId("cn.amitia.desktop");
   } else if (platform === "linux") {
     try {
       app.setDesktopName("amitia.desktop");
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
 }
 
@@ -76,7 +82,8 @@ export function createDesktopNotification(
   if (!Notification.isSupported()) return null;
   try {
     return new Notification(desktopNotificationOptions(payload, platform));
-  } catch {
-    return null;
+  } catch (error) {
+  console.error("[original-error]", error);
+return null;
   }
 }

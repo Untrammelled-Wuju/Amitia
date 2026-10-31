@@ -37,8 +37,9 @@ function readLegacyDataDir(locationFile: string): string | null {
       return null;
     }
     return path.resolve(parsed.dataDir);
-  } catch {
-    return null;
+  } catch (error) {
+  console.error("[original-error]", error);
+return null;
   }
 }
 

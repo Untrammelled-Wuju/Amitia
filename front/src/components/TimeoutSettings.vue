@@ -35,7 +35,10 @@ async function load() {
     const response = await apiClient.get("/api/runtime/timeout/config");
     Object.assign(settings, response.data);
     setOperationTimeout(response.config.baseURL || "", settings);
-  } catch { error.value = "无法加载超时设置，请重试"; }
+  } catch (caughtError) {
+    console.error("[original-error]", caughtError);
+    error.value = "无法加载超时设置，请重试";
+  }
   finally { loading.value = false; }
 }
 async function save() {

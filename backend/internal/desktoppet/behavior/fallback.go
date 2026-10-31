@@ -2,6 +2,7 @@ package behavior
 
 import (
 	"fmt"
+	amitialog "log"
 	"strings"
 	"sync"
 )
@@ -176,7 +177,9 @@ func DefaultFallbackGraph() *FallbackGraph {
 	g.AddEdge("formal_greeting", "bow", "wave", "idle_normal")
 	g.AddEdge("wave_gesture", "wave", "idle_normal")
 
-	_ = g.Compile()
+	if err := g.Compile(); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	return g
 }
 

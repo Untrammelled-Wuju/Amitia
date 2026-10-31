@@ -150,7 +150,9 @@ export class UIHostSSE {
       let body: BusinessCoreEnvelope<T> | null = null;
       try {
         body = await response.json() as BusinessCoreEnvelope<T>;
-      } catch {}
+      } catch (error) {
+  console.error("[original-error]", error);
+}
       if (response.ok && body?.code === 200 && body.data !== undefined) return body.data;
       lastMessage = body?.msg || `桌面通知接口返回 ${response.status}`;
       if (body?.code === 401 && attempt === 0) {
@@ -172,7 +174,9 @@ export class UIHostSSE {
       if (contentType.includes("application/json")) {
         try {
           body = await response.json() as BusinessCoreEnvelope<unknown>;
-        } catch {}
+        } catch (error) {
+  console.error("[original-error]", error);
+}
       }
       lastMessage = body?.msg || `桌面通知事件流返回 ${response.status}`;
       if (body?.code === 401 && attempt === 0) {
@@ -199,8 +203,9 @@ export class UIHostSSE {
     let envelope: SSEEventEnvelope;
     try {
       envelope = JSON.parse(dataStr) as SSEEventEnvelope;
-    } catch {
-      return;
+    } catch (error) {
+  console.error("[original-error]", error);
+return;
     }
     if (!this.shouldProcess(envelope)) return;
     switch (eventName) {
@@ -235,8 +240,9 @@ export class UIHostSSE {
     if (!expiresAt) return false;
     try {
       return new Date(expiresAt).getTime() < Date.now();
-    } catch {
-      return false;
+    } catch (error) {
+  console.error("[original-error]", error);
+return false;
     }
   }
 
@@ -263,7 +269,9 @@ export class UIHostSSE {
     const payload = envelope.payload;
     if (!payload) return;
     const acknowledge = (state: string) => {
-      void this.businessCore.fetch('/api/notifications/scheduled/' + encodeURIComponent(envelope.requestId) + '/ack', { method: 'POST', body: JSON.stringify({ state }) }).catch(() => {});
+      void this.businessCore.fetch('/api/notifications/scheduled/' + encodeURIComponent(envelope.requestId) + '/ack', { method: 'POST', body: JSON.stringify({ state }) }).catch((error) => {
+  console.error("[original-error]", error);
+});
     };
     const notification = createDesktopNotification({
       requestId: envelope.requestId,
@@ -314,8 +322,9 @@ export class UIHostSSE {
         ? await dialog.showMessageBox(win, options)
         : await dialog.showMessageBox(options);
       resultIndex = result.response;
-    } catch {
-      resultIndex = buttons.length - 1;
+    } catch (error) {
+  console.error("[original-error]", error);
+resultIndex = buttons.length - 1;
     }
     const result = buttons[resultIndex] || "closed";
     void this.sendDialogResponse(dialogId, result);
@@ -338,7 +347,9 @@ export class UIHostSSE {
         method: "POST",
         body: JSON.stringify({ dialogId, result }),
       },
-    ).catch(() => {});
+    ).catch((error) => {
+  console.error("[original-error]", error);
+});
   }
 
   private getReconnectDelay(): number {

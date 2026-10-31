@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/system"
 	"gorm.io/gorm"
+	amitialog "log"
 )
 
 type Service struct {
@@ -195,7 +196,9 @@ func (s *Service) attemptUpload(id string) {
 		ticket.Status = StatusFailed
 		ticket.LastError = truncateError(uploadErr.Error())
 		ticket.UpdatedAt = now
-		_ = s.repo.Update(ticket)
+		if err := s.repo.Update(ticket); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return
 	}
 	ticket.Status = StatusUploaded
@@ -206,7 +209,9 @@ func (s *Service) attemptUpload(id string) {
 		ticket.RemoteID = result.RemoteID
 		ticket.RemoteURL = result.RemoteURL
 	}
-	_ = s.repo.Update(ticket)
+	if err := s.repo.Update(ticket); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func truncateError(message string) string {
@@ -290,7 +295,9 @@ func decodeSnapshot(ticket *Ticket) *DiagnosticsSnapshot {
 	if ticket == nil || strings.TrimSpace(ticket.Diagnostics) == "" {
 		return snapshot
 	}
-	_ = json.Unmarshal([]byte(ticket.Diagnostics), snapshot)
+	if err := json.Unmarshal([]byte(ticket.Diagnostics), snapshot); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	if snapshot.RecentLines == nil {
 		snapshot.RecentLines = []LogLine{}
 	}

@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/u-ai/backend/internal/platform/process"
+	amitialog "log"
 )
 
 type windowsSandboxConfig struct {
@@ -197,25 +198,43 @@ func prepareWindowsContainerWithLimits(mode, executable string, args []string, w
 	// is not granted access to, and let the script delete itself immediately.
 	file, err := os.CreateTemp("", "amitia-gamehost-sandbox-*.ps1")
 	if err != nil {
-		_ = os.Remove(stateFile)
+		if err := os.Remove(stateFile); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return sandboxLaunchPlan{}, fmt.Errorf("%w: create one-shot Windows sandbox launcher: %v", ErrNetworkSandboxUnavailable, err)
 	}
 	launcherPath := file.Name()
 	if err := file.Chmod(0o600); err != nil {
-		_ = file.Close()
-		_ = os.Remove(launcherPath)
-		_ = os.Remove(stateFile)
+		if err := file.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := os.Remove(launcherPath); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := os.Remove(stateFile); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return sandboxLaunchPlan{}, fmt.Errorf("%w: protect one-shot Windows sandbox launcher: %v", ErrNetworkSandboxUnavailable, err)
 	}
 	if _, err = file.WriteString(script); err != nil {
-		_ = file.Close()
-		_ = os.Remove(launcherPath)
-		_ = os.Remove(stateFile)
+		if err := file.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := os.Remove(launcherPath); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := os.Remove(stateFile); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return sandboxLaunchPlan{}, fmt.Errorf("%w: write one-shot Windows sandbox launcher: %v", ErrNetworkSandboxUnavailable, err)
 	}
 	if err = file.Close(); err != nil {
-		_ = os.Remove(launcherPath)
-		_ = os.Remove(stateFile)
+		if err := os.Remove(launcherPath); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := os.Remove(stateFile); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return sandboxLaunchPlan{}, fmt.Errorf("%w: close one-shot Windows sandbox launcher: %v", ErrNetworkSandboxUnavailable, err)
 	}
 	return sandboxLaunchPlan{
@@ -227,7 +246,11 @@ func prepareWindowsContainerWithLimits(mode, executable string, args []string, w
 		// PowerShell deletes the launcher as its first action. Cleanup is still
 		// required for the failure path where cmd.Start never succeeds, otherwise
 		// a security-sensitive one-shot launcher would remain in the host temp dir.
-		Cleanup: func() { _ = os.Remove(launcherPath) },
+		Cleanup: func() {
+			if err := os.Remove(launcherPath); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
+		},
 	}, nil
 }
 func windowsSandboxProfileName(workingDir, tempDir string) string {
@@ -262,11 +285,15 @@ func writeWindowsSandboxState(path string, payload []byte) error {
 		return fmt.Errorf("%w: write Windows sandbox state: %v", ErrNetworkSandboxUnavailable, err)
 	}
 	if err := os.Chmod(tmp, 0o600); err != nil {
-		_ = os.Remove(tmp)
+		if err := os.Remove(tmp); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return fmt.Errorf("%w: protect Windows sandbox state: %v", ErrNetworkSandboxUnavailable, err)
 	}
 	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
+		if err := os.Remove(tmp); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return fmt.Errorf("%w: commit Windows sandbox state: %v", ErrNetworkSandboxUnavailable, err)
 	}
 	return nil
@@ -345,11 +372,15 @@ func recoverWindowsSandboxRecord(stateFile string) error {
 	launcherPath := file.Name()
 	defer os.Remove(launcherPath)
 	if err := file.Chmod(0o600); err != nil {
-		_ = file.Close()
+		if err := file.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return fmt.Errorf("%w: protect Windows sandbox recovery launcher: %v", ErrNetworkSandboxUnavailable, err)
 	}
 	if _, err := file.WriteString(script); err != nil {
-		_ = file.Close()
+		if err := file.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return fmt.Errorf("%w: write Windows sandbox recovery launcher: %v", ErrNetworkSandboxUnavailable, err)
 	}
 	if err := file.Close(); err != nil {

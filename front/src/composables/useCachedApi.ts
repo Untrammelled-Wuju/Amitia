@@ -19,14 +19,18 @@ export function useCachedApi() {
     try {
       const raw = localStorage.getItem(cacheKey(url));
       if (raw) return JSON.parse(raw) as T;
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
     return null;
   }
 
   function saveCache(url: string, data: any): void {
     try {
       localStorage.setItem(cacheKey(url), JSON.stringify(data));
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
 
   function invalidateCache(prefix: string): void {
@@ -55,7 +59,9 @@ export function useCachedApi() {
           data.value = result;
           saveCache(fullUrl, result);
         }
-      } catch {}
+      } catch (error) {
+  console.error("[original-error]", error);
+}
     };
 
     // Fetch in background (don't await - return immediately)

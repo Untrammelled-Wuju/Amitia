@@ -10,6 +10,7 @@ import (
 
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
+	amitialog "log"
 )
 
 type FinalGateIssue struct {
@@ -84,7 +85,9 @@ func (p *FinalGateProbe) ensureLegacyStore(ctx context.Context) {
 		if p.container != nil && p.container.Store != nil {
 			db := p.container.Store.DB()
 			store := NewLegacyCounterStore(db)
-			_ = store.LoadAll(ctx)
+			if err := store.LoadAll(ctx); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			globalLegacyCallCounter.SetStore(store)
 			globalLegacyReadCounter.SetStore(store)
 		}
@@ -299,12 +302,14 @@ func (p *FinalGateProbe) probePackageReleaseGate(ctx context.Context, report *Fi
 		report.Metrics["files_without_installation"] = filesWithoutInstallation
 		legacyInstalledRoot := filepath.Join(p.container.PackageArtifactStore.root, "installed")
 		var legacyInstalled int64
-		_ = filepath.WalkDir(legacyInstalledRoot, func(path string, entry os.DirEntry, walkErr error) error {
+		if err := filepath.WalkDir(legacyInstalledRoot, func(path string, entry os.DirEntry, walkErr error) error {
 			if walkErr == nil && !entry.IsDir() && entry.Name() == amitiax.ManifestFile {
 				legacyInstalled++
 			}
 			return walkErr
-		})
+		}); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		report.Metrics["orphan_installed_directories"] = legacyInstalled
 		report.Metrics["orphan_installation_generations"] = filesWithoutInstallation
 	}

@@ -359,7 +359,11 @@ func TestNewPhysicalResolverNormalizesRelativeRoots(t *testing.T) {
 	if !filepath.IsAbs(resolved.LocalPath) {
 		t.Fatalf("expected absolute path, got %q", resolved.LocalPath)
 	}
-	expected := filepath.Join(tmp, "relws", "file")
+	resolvedTmp, err := filepath.EvalSymlinks(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := filepath.Join(resolvedTmp, "relws", "file")
 	if resolved.LocalPath != expected {
 		t.Fatalf("LocalPath=%q, want %q", resolved.LocalPath, expected)
 	}

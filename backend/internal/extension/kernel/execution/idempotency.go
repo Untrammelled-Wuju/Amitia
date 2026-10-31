@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
+	amitialog "log"
 )
 
 type IdempotencyState string
@@ -317,7 +318,9 @@ func (g *IdempotencyGuard) Complete(ctx context.Context, res IdempotencyReservat
 		var err error
 		resultJSON, err = storeOwnedToolResult(ctx, workResult)
 		if err != nil {
-			_, _ = g.storage.MarkIndeterminate(context.Background(), key)
+			if _, err := g.storage.MarkIndeterminate(context.Background(), key); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			g.signalFlight(key)
 			return err
 		}
@@ -398,7 +401,9 @@ func (g *IdempotencyGuard) cleanupLoop() {
 			return
 		case <-t.C:
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			_, _ = g.storage.DeleteExpiredCAS(ctx, g.now())
+			if _, err := g.storage.DeleteExpiredCAS(ctx, g.now()); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			cancel()
 		}
 	}

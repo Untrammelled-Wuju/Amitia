@@ -36,7 +36,10 @@ async function deviceKey(deviceId: string): Promise<DeviceKey> {
       } finally { database.close(); }
     })();
     pendingKeys.set(deviceId, pending);
-    pending.catch(() => pendingKeys.delete(deviceId));
+    pending.catch((error) => {
+      console.error("[original-error]", error);
+      pendingKeys.delete(deviceId);
+    });
   }
   return pending;
 }

@@ -25,9 +25,10 @@ describe("项目中首次对话的保存确认", () => {
   function sender() {
     const messages = ref<any[]>([]);
     const convId = ref("");
+    const modelError = ref("");
     const onCreated = vi.fn();
-    const send = useWebChatSend(messages, convId, ref("role"), ref(false), ref(""), ref(false), ref(null), ref(null), ref(null), ref(null), ref(null), vi.fn(), vi.fn(), ref(null), undefined, undefined, onCreated);
-    return { send, messages, convId, onCreated };
+    const send = useWebChatSend(messages, convId, ref("role"), ref(false), modelError, ref(false), ref(null), ref(null), ref(null), ref(null), ref(null), vi.fn(), vi.fn(), ref(null), undefined, undefined, onCreated);
+    return { send, messages, convId, modelError, onCreated };
   }
 
   it("发送时携带发起项目的 projectId，且后续界面切换不改写本次请求", async () => {
@@ -36,7 +37,7 @@ describe("项目中首次对话的保存确认", () => {
     const state = sender();
     const pending = state.send.doActualSend("开始对话");
     await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
-    expect(mocks.send.mock.calls[0][0]).toMatchObject({ projectId: ownedProjectReference("source", "project"), characterId: "role" });
+    expect(mocks.send.mock.calls[0][0]).toMatchObject({ projectId: "project", characterId: "role" });
     mocks.workspace.value = { projectId: ownedProjectReference("source", "other"), workspaceId: "workspace-b", primaryWorkspaceId: "workspace-b", workspaces: [], executionScope: { ...scope, modeRevision: 2 } };
     finish({ conversationId: "conversation", requestId: "request", executionScope: scope, saved: true, reply: "回答" });
     await pending;
@@ -46,12 +47,22 @@ describe("项目中首次对话的保存确认", () => {
     expect(mocks.post).not.toHaveBeenCalled();
   });
 
+  it("项目数据归属与当前执行范围不一致时拒绝发送", async () => {
+    mocks.workspace.value = { projectId: ownedProjectReference("other", "project"), workspaceId: "workspace-a", primaryWorkspaceId: "workspace-a", workspaces: [], executionScope: scope };
+    const state = sender();
+    await state.send.doActualSend("开始对话");
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(state.modelError.value).toBe("项目数据归属已变化，请重新选择项目");
+    expect(state.messages.value.at(-1)?.status).toBe("interrupted");
+  });
+
   it("项目内首次回答失败时不会伪造成功状态", async () => {
     mocks.send.mockRejectedValue(new Error("首次回答失败"));
     const state = sender();
     await state.send.doActualSend("开始对话");
     expect(state.convId.value).toBe("");
-    expect(state.messages.value.at(-1)?.status).toBe("failed");
+    expect(state.messages.value.find((message) => message.role === "user")?.status).toBe("failed");
+    expect(state.messages.value.find((message) => message.role === "assistant")?.status).toBe("interrupted");
     expect(mocks.edit).not.toHaveBeenCalled();
   });
 });

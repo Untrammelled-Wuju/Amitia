@@ -11,6 +11,7 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/extensioncontext"
 	"gorm.io/gorm"
+	amitialog "log"
 )
 
 type ChannelContextLoader struct{}
@@ -166,7 +167,9 @@ func (l *BeliefContextLoader) Load(ctx context.Context, scope InteractionScope, 
 			return FieldUnavailable[any](l.Name()), err
 		}
 		var confidence float64
-		_ = json.Unmarshal(content["confidence"], &confidence)
+		if err := json.Unmarshal(content["confidence"], &confidence); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		beliefs = append(beliefs, ResolvedBelief{Key: business.MemoryText(document, "key"), Value: business.MemoryValue(content), Confidence: confidence})
 	}
 	return FieldReady[any](BeliefSet{Beliefs: beliefs}, l.Name(), version), nil

@@ -633,6 +633,8 @@ private let supportedProtocolVersions: Set<Int> = [1]
                         continuation.resume(returning: base)
                     }
                 } catch {
+                  print("[original-error] \(error)")
+
                     continuation.resume(returning: base)
                 }
             }
@@ -741,6 +743,8 @@ private let supportedProtocolVersions: Set<Int> = [1]
             }
             return nil
         } catch {
+          print("[original-error] \(error)")
+
             return nil
         }
     }

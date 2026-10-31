@@ -91,6 +91,7 @@ async function send() {
         current.abort();
       }
     } catch (cause) {
+  console.error("[original-error]", cause);
       if (ticket === generation && controller === current) {
         error.value = "无法确认当前 Core 服务，调用已中断；恢复服务后再发起调用。";
         current.abort();

@@ -95,8 +95,9 @@ class _MobileUIHostCommandHostState extends State<MobileUIHostCommandHost> {
       if (!mounted) return;
       try {
         widget.router.go(target);
-      } catch (_) {
-        // Unknown/removed extension routes are ignored. The host must remain alive.
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+// Unknown/removed extension routes are ignored. The host must remain alive.
       }
     });
   }
@@ -152,8 +153,9 @@ class _MobileUIHostCommandHostState extends State<MobileUIHostCommandHost> {
         hostClientId: responseHostClientId,
         hostSessionId: responseHostSessionId,
       );
-    } catch (_) {
-      // The server owns timeout/cancellation. A lost response must not crash UI.
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+// The server owns timeout/cancellation. A lost response must not crash UI.
     }
   }
 

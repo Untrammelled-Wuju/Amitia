@@ -7,10 +7,10 @@ import (
 )
 
 type DirectoryError struct {
-	Op      string
-	Kind    string
-	Path    string
-	Cause   error
+	Op    string
+	Kind  string
+	Path  string
+	Cause error
 }
 
 func (e *DirectoryError) Error() string {

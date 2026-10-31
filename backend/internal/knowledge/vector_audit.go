@@ -8,6 +8,7 @@ import (
 	"time"
 
 	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
+	amitialog "log"
 )
 
 const maxVectorAuditSample = 100
@@ -54,8 +55,12 @@ func vectorAuditDailyOffset(total, limit int64, tenantID string, now time.Time) 
 		return 0
 	}
 	h := fnv.New64a()
-	_, _ = h.Write([]byte(tenantID))
-	_, _ = h.Write([]byte(now.UTC().Format("2006-01-02")))
+	if _, err := h.Write([]byte(tenantID)); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if _, err := h.Write([]byte(now.UTC().Format("2006-01-02"))); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	return int64(h.Sum64() % uint64(total-limit+1))
 }
 

@@ -64,8 +64,12 @@ class ConversationRuntimeController extends ChangeNotifier {
     this._chatService, {
     ChatPermissionPreferencesNotifier? permissionPreferences,
     ChatAppearancePreferencesNotifier? appearancePreferences,
+    bool Function(String conversationId)? isConversationVisible,
+    void Function(String conversationId)? onBackgroundCompletion,
   }) : _permissionPreferences = permissionPreferences,
        _appearancePreferences = appearancePreferences,
+       _isConversationVisible = isConversationVisible,
+       _onBackgroundCompletion = onBackgroundCompletion,
        _permissionMode = normalizeChatPermissionMode(
          permissionPreferences?.mode,
        ) {
@@ -78,6 +82,8 @@ class ConversationRuntimeController extends ChangeNotifier {
   final ChatService _chatService;
   final ChatPermissionPreferencesNotifier? _permissionPreferences;
   final ChatAppearancePreferencesNotifier? _appearancePreferences;
+  final bool Function(String conversationId)? _isConversationVisible;
+  final void Function(String conversationId)? _onBackgroundCompletion;
   final ConversationMessageLedger _messages = ConversationMessageLedger();
   final AgentEventReducer _agentReducer = AgentEventReducer();
   final MarkdownStreamScheduler _streamScheduler = MarkdownStreamScheduler();
@@ -110,6 +116,7 @@ class ConversationRuntimeController extends ChangeNotifier {
   bool _ownedPolling = false;
   String _ownedNotice = '';
   String _ownedRequestId = '';
+  final Set<String> _terminalRequestIds = <String>{};
   String _conversationCoreId = '';
   Map<String, dynamic>? _realtimeScope;
   OwnedGroupState? _group;
@@ -126,6 +133,53 @@ class ConversationRuntimeController extends ChangeNotifier {
   String get conversationTitle => _conversationTitle;
   ConversationWorkspaceDto? get workspace => _workspace;
   bool get sending => _sending;
+  bool get isGenerating {
+    final active = _agentReducer.turn(_agentReducer.activeTurnId);
+    return _sending ||
+        active != null && active.status != 'needs_reconciliation';
+  }
+
+  String get activityPreview {
+    final automation = automationStatus;
+    if (automation != null) return automation.label;
+    final turns = [..._agentReducer.turns]
+      ..sort((left, right) => right.sequence.compareTo(left.sequence));
+    for (final turn in turns) {
+      if (const ['completed', 'failed', 'interrupted'].contains(turn.status)) {
+        continue;
+      }
+      final items = [...turn.items]
+        ..sort((left, right) => right.sequence.compareTo(left.sequence));
+      for (final item in items) {
+        if (!const [
+          'queued',
+          'running',
+          'waiting_tool',
+          'waiting_approval',
+        ].contains(item.status)) {
+          continue;
+        }
+        if (item.type == 'tool_call' && item.toolName.trim().isNotEmpty) {
+          return '正在使用 ${item.toolName.trim()} 工具';
+        }
+        if (item.type == 'agent_task') {
+          final title = item.content.trim();
+          return title.isEmpty ? '正在执行任务' : '正在执行 $title';
+        }
+        if (item.type == 'reasoning') return '正在思考';
+        if (item.type == 'text' && item.content.trim().isNotEmpty) {
+          return item.content.trim();
+        }
+      }
+      return '正在生成回复';
+    }
+    for (final message in _messages.messages.reversed) {
+      final content = message.content.trim();
+      if (content.isNotEmpty) return content;
+    }
+    return '';
+  }
+
   Object? get lastError => _lastError;
   String get state => _sending ? 'sending' : 'idle';
   int get draftEpoch => _draftEpoch;
@@ -156,6 +210,12 @@ class ConversationRuntimeController extends ChangeNotifier {
   void setCharacterId(String? characterId) {
     final value = characterId?.trim() ?? '';
     _characterId = value.isEmpty ? null : value;
+  }
+
+  Future<void> markConversationRead() async {
+    final id = _conversationId?.trim() ?? '';
+    if (id.isEmpty) return;
+    await _chatService.markConversationRead(id, characterId: _characterId);
   }
 
   void setGroupMentions(List<Map<String, dynamic>> mentions) {
@@ -214,13 +274,15 @@ class ConversationRuntimeController extends ChangeNotifier {
 
   Future<OwnedGroupState> createGroupConversation(
     String baseRoleId,
-    List<String> invitedRoleIds,
-  ) async {
+    List<String> invitedRoleIds, {
+    String projectId = '',
+  }) async {
     if (baseRoleId.trim().isEmpty || invitedRoleIds.isEmpty) {
       throw StateError('请选择默认发言角色和至少一个邀请角色');
     }
     final group = await _chatService.owned.createGroupConversation(
       characterId: baseRoleId,
+      projectId: projectId,
       members: invitedRoleIds
           .where((id) => id != baseRoleId)
           .map(
@@ -375,7 +437,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     ChatMessage? quotedMessage,
   }) async {
     final value = text.trim();
-    if (value.isEmpty || _sending) return;
+    if (value.isEmpty || _sending || _ownedRequestId.isNotEmpty) return;
     await _send(
       ChatMessage(
         id: _localId('u'),
@@ -395,7 +457,7 @@ class ConversationRuntimeController extends ChangeNotifier {
 
   Future<void> sendCode(String language, String code) async {
     final body = code.trim();
-    if (body.isEmpty || _sending) return;
+    if (body.isEmpty || _sending || _ownedRequestId.isNotEmpty) return;
     final lang = language.trim().isEmpty ? 'text' : language.trim();
     final content = '```$lang\n$body\n```';
     await _send(
@@ -418,7 +480,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     String mimeType = 'image/*',
     String text = '',
   }) async {
-    if (_sending) return;
+    if (_sending || _ownedRequestId.isNotEmpty) return;
     final content = text.trim().isEmpty ? '[图片]' : text.trim();
     await _send(
       ChatMessage(
@@ -446,7 +508,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     int durationMs = 0,
     String text = '',
   }) async {
-    if (_sending) return;
+    if (_sending || _ownedRequestId.isNotEmpty) return;
     final content = text.trim().isEmpty ? '[视频]' : text.trim();
     await _send(
       ChatMessage(
@@ -475,7 +537,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     int durationMs = 0,
     String text = '',
   }) async {
-    if (_sending) return;
+    if (_sending || _ownedRequestId.isNotEmpty) return;
     final content = text.trim().isEmpty ? '[语音]' : text.trim();
     await _send(
       ChatMessage(
@@ -503,7 +565,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     required int sizeBytes,
     String mimeType = 'application/octet-stream',
   }) async {
-    if (_sending) return;
+    if (_sending || _ownedRequestId.isNotEmpty) return;
     final content = '[文件] $fileName\n$resourceUri';
     await _send(
       ChatMessage(
@@ -523,7 +585,11 @@ class ConversationRuntimeController extends ChangeNotifier {
   }
 
   Future<void> addUserMessage(ChatMessage message) async {
-    if (message.content.trim().isEmpty || _sending) return;
+    if (message.content.trim().isEmpty ||
+        _sending ||
+        _ownedRequestId.isNotEmpty) {
+      return;
+    }
     await _send(message, message: message.content);
   }
 
@@ -537,7 +603,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     String? replyToMessageId,
     ChatMessage? quotedMessage,
   }) async {
-    if (_sending) return;
+    if (_sending || _ownedRequestId.isNotEmpty) return;
     try {
       if (await _chatService.owned.refresh()) {
         await _sendOwned(
@@ -568,9 +634,13 @@ class ConversationRuntimeController extends ChangeNotifier {
     _ownedPolling = true;
     try {
       await _chatService.owned.poll();
-    } catch (_) {
-      if (_chatService.owned.enabled && _ownedRequestId.isNotEmpty)
-        _chatService.owned.stopLocal('云端连接中断，当前回复已暂停；恢复连接后不会自动重新发送。');
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+if (_chatService.owned.enabled && _ownedRequestId.isNotEmpty)
+        _chatService.owned.stopRequest(
+          _ownedRequestId,
+          '云端连接中断，当前回复已暂停；恢复连接后不会自动重新发送。',
+        );
     } finally {
       _ownedPolling = false;
     }
@@ -853,6 +923,7 @@ class ConversationRuntimeController extends ChangeNotifier {
               ),
             );
           project(MessageStatus.delivered);
+          _recordConversationTerminal(_conversationId ?? '', requestId);
         } else if (type == 'interrupted' && event['data'] is Map) {
           final result = event['data'] as Map;
           if (result['saved'] == true) {
@@ -860,6 +931,7 @@ class ConversationRuntimeController extends ChangeNotifier {
             reasoning = (result['reasoning'] ?? reasoning).toString();
           }
           project(MessageStatus.interrupted);
+          _recordConversationTerminal(_conversationId ?? '', requestId);
         }
       }
     } catch (error) {
@@ -885,11 +957,7 @@ class ConversationRuntimeController extends ChangeNotifier {
             _conversationUpdateEpoch++;
             final id = _conversationId?.trim() ?? '';
             if (id.isNotEmpty) {
-              unawaited(
-                _chatService
-                    .markConversationRead(id, characterId: _characterId)
-                    .catchError((Object _) {}),
-              );
+              _recordConversationTerminal(id, requestId);
             }
           }
           notifyListeners();
@@ -1218,6 +1286,14 @@ class ConversationRuntimeController extends ChangeNotifier {
           }
           _groupMentions = <Map<String, dynamic>>[];
           completed = true;
+          for (final delivery
+              in (response['deliveries'] as List? ?? []).whereType<Map>()) {
+            _recordConversationTerminal(
+              sourceConversationId,
+              (delivery['requestId'] ?? delivery['deliveryId'] ?? '')
+                  .toString(),
+            );
+          }
           notifyListeners();
         }
       }
@@ -1449,11 +1525,7 @@ class ConversationRuntimeController extends ChangeNotifier {
       _streamScheduler.flush();
       final id = _conversationId?.trim() ?? '';
       if (id.isNotEmpty) {
-        unawaited(
-          _chatService
-              .markConversationRead(id, characterId: _characterId)
-              .catchError((Object _) {}),
-        );
+        _recordConversationTerminal(id, event.requestId);
         unawaited(_refreshSnapshot(id));
       }
       return;
@@ -1824,7 +1896,7 @@ class ConversationRuntimeController extends ChangeNotifier {
   Future<void> stop() async {
     if (_ownedRequestId.isNotEmpty) {
       try {
-        await _chatService.owned.interrupt();
+        await _chatService.owned.interrupt(_ownedRequestId);
       } catch (error) {
         _lastError = error;
         notifyListeners();
@@ -1974,7 +2046,9 @@ class ConversationRuntimeController extends ChangeNotifier {
         _sending = false;
         await _chatService
             .markConversationRead(id, characterId: _characterId)
-            .catchError((Object _) {});
+            .catchError((Object error, StackTrace stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+});
         await _refreshSnapshot(id);
         _connectEventStream(id);
         notifyListeners();
@@ -2080,12 +2154,36 @@ class ConversationRuntimeController extends ChangeNotifier {
 
   void _disconnectRuntime() {
     if (_ownedRequestId.isNotEmpty)
-      _chatService.owned.stopLocal('当前对话已切换，回复已中断。');
+      _chatService.owned.stopRequest(_ownedRequestId, '当前会话视图已切换，回复已停止。');
     _ownedRequestId = '';
     _groupSending = false;
     _runtimeEpoch++;
     _eventCancellation?.cancel('runtime disconnected');
     _eventCancellation = null;
+  }
+
+  void _recordConversationTerminal(String conversationId, String requestId) {
+    final id = conversationId.trim();
+    if (id.isEmpty) return;
+    final request = requestId.trim().isEmpty
+        ? '${_conversationId ?? ''}:local'
+        : requestId.trim();
+    final key = '$id\u0000$request';
+    if (!_terminalRequestIds.add(key)) return;
+    if (_terminalRequestIds.length > 512) {
+      _terminalRequestIds.remove(_terminalRequestIds.first);
+    }
+    if (_isConversationVisible?.call(id) == true) {
+      unawaited(
+        _chatService
+            .markConversationRead(id, characterId: _characterId)
+            .catchError((Object error, StackTrace stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}),
+      );
+      return;
+    }
+    _onBackgroundCompletion?.call(id);
   }
 
   void _resetHistory() {
@@ -2172,7 +2270,9 @@ class ConversationRuntimeController extends ChangeNotifier {
       if (decoded is List && decoded.isNotEmpty && decoded.first is Map) {
         return Map<String, dynamic>.from(decoded.first as Map);
       }
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
     return const <String, dynamic>{};
   }
 
@@ -2395,9 +2495,200 @@ class ConversationRuntimeController extends ChangeNotifier {
   }
 }
 
-final conversationRuntimeControllerProvider =
-    ChangeNotifierProvider<ConversationRuntimeController>((ref) {
-      final controller = ConversationRuntimeController(
+class ConversationLiveActivity {
+  const ConversationLiveActivity({
+    required this.isGenerating,
+    required this.preview,
+    required this.unreadCompletedCount,
+  });
+
+  final bool isGenerating;
+  final String preview;
+  final int unreadCompletedCount;
+}
+
+class ConversationRuntimeRegistry extends ChangeNotifier {
+  ConversationRuntimeRegistry(
+    this._chatService, {
+    ChatPermissionPreferencesNotifier? permissionPreferences,
+    ChatAppearancePreferencesNotifier? appearancePreferences,
+  }) : _permissionPreferences = permissionPreferences,
+       _appearancePreferences = appearancePreferences;
+
+  final ChatService _chatService;
+  final ChatPermissionPreferencesNotifier? _permissionPreferences;
+  final ChatAppearancePreferencesNotifier? _appearancePreferences;
+  final Map<String, ConversationRuntimeController> _sessions =
+      <String, ConversationRuntimeController>{};
+  final Map<String, VoidCallback> _listeners = <String, VoidCallback>{};
+  final Map<String, int> _backgroundCompletions = <String, int>{};
+  Timer? _notifyTimer;
+  bool _disposed = false;
+  String _visibleConversationId = '';
+
+  String get visibleConversationId => _visibleConversationId;
+  Iterable<ConversationRuntimeController> get sessions =>
+      _sessions.values.toSet();
+
+  ConversationRuntimeController session(String key) {
+    final normalized = key.trim().isEmpty ? '__legacy__' : key.trim();
+    final existing = _sessions[normalized];
+    if (existing != null) return existing;
+    final controller = ConversationRuntimeController(
+      _chatService,
+      permissionPreferences: _permissionPreferences,
+      appearancePreferences: _appearancePreferences,
+      isConversationVisible: (conversationId) =>
+          _visibleConversationId == conversationId.trim(),
+      onBackgroundCompletion: _recordBackgroundCompletion,
+    );
+    _sessions[normalized] = controller;
+    void listener() => _onSessionChanged(normalized, controller);
+    _listeners[normalized] = listener;
+    controller.addListener(listener);
+    return controller;
+  }
+
+  ConversationRuntimeController sessionForConversation(String conversationId) {
+    final id = conversationId.trim();
+    final direct = _sessions[id];
+    if (direct != null) return direct;
+    for (final entry in _sessions.entries) {
+      if (entry.value.conversationId?.trim() == id) return entry.value;
+    }
+    return session(id);
+  }
+
+  String startDraft({ConversationWorkspaceDto? workspace}) {
+    final key =
+        'draft:${DateTime.now().microsecondsSinceEpoch}:${_sessions.length}';
+    session(key).startDraft(workspace: workspace);
+    return key;
+  }
+
+  String aliasSession(String currentKey, String conversationId) {
+    final target = conversationId.trim();
+    if (target.isEmpty) return currentKey;
+    if (currentKey == target ||
+        !_sessions.containsKey(currentKey) && _sessions.containsKey(target)) {
+      return target;
+    }
+    final controller =
+        _sessions[currentKey] ?? _sessions[target] ?? session(currentKey);
+    if (_sessions[target] != null &&
+        !identical(_sessions[target], controller)) {
+      return target;
+    }
+    _sessions.remove(currentKey);
+    final listener = _listeners.remove(currentKey);
+    if (listener != null) controller.removeListener(listener);
+    _sessions[target] = controller;
+    void nextListener() => _onSessionChanged(target, controller);
+    _listeners[target] = nextListener;
+    controller.addListener(nextListener);
+    _scheduleNotify();
+    return target;
+  }
+
+  String? keyForController(ConversationRuntimeController controller) {
+    for (final entry in _sessions.entries) {
+      if (identical(entry.value, controller)) return entry.key;
+    }
+    return null;
+  }
+
+  void setVisibleConversation(String? conversationId) {
+    final next = conversationId?.trim() ?? '';
+    if (_visibleConversationId == next) return;
+    final previous = _visibleConversationId;
+    _visibleConversationId = next;
+    if (previous.isNotEmpty) _backgroundCompletions.remove(previous);
+    if (next.isNotEmpty) {
+      _backgroundCompletions.remove(next);
+      final controller = _findController(next);
+      if (controller != null) {
+        unawaited(controller.markConversationRead().catchError((Object error, StackTrace stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}));
+      }
+    }
+    _scheduleNotify();
+  }
+
+  ConversationLiveActivity? activityFor(String conversationId) {
+    final controller = _findController(conversationId);
+    if (controller == null) return null;
+    final pending = _backgroundCompletions[conversationId.trim()] ?? 0;
+    if (!controller.isGenerating && pending == 0) return null;
+    return ConversationLiveActivity(
+      isGenerating: controller.isGenerating,
+      preview: controller.activityPreview,
+      unreadCompletedCount: pending,
+    );
+  }
+
+  void clearBackgroundCompletions(String conversationId) {
+    if (_backgroundCompletions.remove(conversationId.trim()) != null) {
+      _scheduleNotify();
+    }
+  }
+
+  ConversationRuntimeController? _findController(String conversationId) {
+    final id = conversationId.trim();
+    if (id.isEmpty) return null;
+    final direct = _sessions[id];
+    if (direct != null) return direct;
+    for (final controller in _sessions.values) {
+      if (controller.conversationId?.trim() == id) return controller;
+    }
+    return null;
+  }
+
+  void _recordBackgroundCompletion(String conversationId) {
+    final id = conversationId.trim();
+    if (id.isEmpty || _visibleConversationId == id) return;
+    _backgroundCompletions[id] = (_backgroundCompletions[id] ?? 0) + 1;
+    _scheduleNotify();
+  }
+
+  void _onSessionChanged(String key, ConversationRuntimeController controller) {
+    final conversationId = controller.conversationId?.trim() ?? '';
+    if (conversationId.isNotEmpty &&
+        key.startsWith('draft:') &&
+        !_sessions.containsKey(conversationId)) {
+      aliasSession(key, conversationId);
+      return;
+    }
+    _scheduleNotify();
+  }
+
+  void _scheduleNotify() {
+    if (_notifyTimer != null || _disposed) return;
+    _notifyTimer = Timer(const Duration(milliseconds: 120), () {
+      _notifyTimer = null;
+      if (!_disposed) notifyListeners();
+    });
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _notifyTimer?.cancel();
+    for (final entry in _listeners.entries) {
+      _sessions[entry.key]?.removeListener(entry.value);
+    }
+    _listeners.clear();
+    for (final controller in _sessions.values.toSet()) {
+      controller.dispose();
+    }
+    _sessions.clear();
+    super.dispose();
+  }
+}
+
+final conversationRuntimeRegistryProvider =
+    ChangeNotifierProvider<ConversationRuntimeRegistry>((ref) {
+      final registry = ConversationRuntimeRegistry(
         ref.read(chatServiceProvider),
         appearancePreferences: ref.read(
           chatAppearancePreferencesProvider.notifier,
@@ -2406,6 +2697,12 @@ final conversationRuntimeControllerProvider =
           chatPermissionPreferencesProvider.notifier,
         ),
       );
-      ref.onDispose(controller.dispose);
-      return controller;
+      return registry;
+    });
+
+final conversationRuntimeControllerProvider =
+    ChangeNotifierProvider<ConversationRuntimeController>((ref) {
+      return ref
+          .watch(conversationRuntimeRegistryProvider)
+          .session('__legacy__');
     });

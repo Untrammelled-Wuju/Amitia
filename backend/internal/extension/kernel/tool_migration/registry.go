@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/agent/tool"
+	amitialog "log"
 )
 
 const SystemExtensionID = "system/amitia-core"
@@ -153,7 +154,9 @@ func (r *ToolMigrationRegistry) ExtensionSpec() *SystemExtensionSpec {
 func DefaultMigrationRegistry() *ToolMigrationRegistry {
 	r := NewToolMigrationRegistry()
 	for _, spec := range DefaultToolSpecs() {
-		_ = r.Register(spec)
+		if err := r.Register(spec); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return r
 }

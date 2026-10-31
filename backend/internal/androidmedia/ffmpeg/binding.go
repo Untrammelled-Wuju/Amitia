@@ -6,8 +6,8 @@ import (
 )
 
 type AndroidBindingConfig struct {
-	EnvConfig     AndroidEnvironmentConfig
-	BaseConfig    ffmpeg.Config
+	EnvConfig  AndroidEnvironmentConfig
+	BaseConfig ffmpeg.Config
 }
 
 func DefaultAndroidBindingConfig() AndroidBindingConfig {

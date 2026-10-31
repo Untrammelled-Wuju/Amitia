@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/creack/pty"
+	amitialog "log"
 )
 
 type ptyHandle struct {
@@ -68,8 +69,14 @@ func probePTY() error {
 	if err != nil {
 		return fmt.Errorf("pty probe failed: %w", err)
 	}
-	_ = ptmx.Close()
-	_ = cmd.Process.Kill()
-	_ = cmd.Wait()
+	if err := ptmx.Close(); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := cmd.Process.Kill(); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := cmd.Wait(); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	return nil
 }

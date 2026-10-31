@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/extension/kernel/schedule"
+	amitialog "log"
 )
 
 const UserReminder = "user_reminder"
@@ -209,7 +210,9 @@ func (s *Service) Create(ctx context.Context, caller Caller, request CreateRemin
 		var stored struct {
 			CreateHash string `json:"createHash"`
 		}
-		_ = json.Unmarshal(existing.Target.InputTemplate, &stored)
+		if err := json.Unmarshal(existing.Target.InputTemplate, &stored); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		if stored.CreateHash != requestHash(caller, request) {
 			return nil, schedule.ErrIdempotencyConflict
 		}

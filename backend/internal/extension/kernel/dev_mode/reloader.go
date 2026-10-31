@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	amitialog "log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -342,7 +343,9 @@ func (r *RuntimeReloader) Reload(ctx context.Context, id WorkspaceID, reason str
 		ev.Error = err.Error()
 		ev.CompletedAt = time.Now().UTC()
 		r.emit(id, ev)
-		_ = r.registry.UpdateStatus(id, WorkspaceStatusFailed, err.Error())
+		if err := r.registry.UpdateStatus(id, WorkspaceStatusFailed, err.Error()); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return &ev, err
 	}
 	ev.RevisionID = candidateRev.RevisionID
@@ -357,7 +360,9 @@ func (r *RuntimeReloader) Reload(ctx context.Context, id WorkspaceID, reason str
 		ev.CompletedAt = time.Now().UTC()
 		r.emit(id, ev)
 		r.cleanupCandidateArtifact(candidateRev)
-		_ = r.registry.UpdateStatus(id, WorkspaceStatusFailed, msg)
+		if err := r.registry.UpdateStatus(id, WorkspaceStatusFailed, msg); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return &ev, fmt.Errorf("%w: %s", ErrReloadValidationFailed, msg)
 	}
 	if err := r.validateCandidateArtifact(candidateRev); err != nil {
@@ -366,7 +371,9 @@ func (r *RuntimeReloader) Reload(ctx context.Context, id WorkspaceID, reason str
 		ev.CompletedAt = time.Now().UTC()
 		r.emit(id, ev)
 		r.cleanupCandidateArtifact(candidateRev)
-		_ = r.registry.UpdateStatus(id, WorkspaceStatusFailed, err.Error())
+		if err := r.registry.UpdateStatus(id, WorkspaceStatusFailed, err.Error()); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return &ev, fmt.Errorf("%w: %v", ErrReloadValidationFailed, err)
 	}
 
@@ -380,10 +387,16 @@ func (r *RuntimeReloader) Reload(ctx context.Context, id WorkspaceID, reason str
 		r.emit(id, ev)
 		r.cleanupCandidateArtifact(candidateRev)
 		if candidateInstanceID != "" && runner != nil {
-			_ = runner.StopInstance(ctx, candidateInstanceID)
+			if err := runner.StopInstance(ctx, candidateInstanceID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
-		_ = r.registry.UpdateStatus(id, WorkspaceStatusFailed, healthErr.Error())
-		_ = r.registry.UpdateStatus(id, WorkspaceStatusReady, "")
+		if err := r.registry.UpdateStatus(id, WorkspaceStatusFailed, healthErr.Error()); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := r.registry.UpdateStatus(id, WorkspaceStatusReady, ""); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return &ev, fmt.Errorf("%w: %v", ErrReloadHealthCheckFailed, healthErr)
 	}
 
@@ -396,7 +409,9 @@ func (r *RuntimeReloader) Reload(ctx context.Context, id WorkspaceID, reason str
 		r.emit(id, ev)
 		r.cleanupCandidateArtifact(candidateRev)
 		if candidateInstanceID != "" && runner != nil {
-			_ = runner.StopInstance(ctx, candidateInstanceID)
+			if err := runner.StopInstance(ctx, candidateInstanceID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		return &ev, err
 	}
@@ -417,7 +432,9 @@ func (r *RuntimeReloader) Reload(ctx context.Context, id WorkspaceID, reason str
 
 	ev.Stage = ReloadStageUnload
 	r.emit(id, ev)
-	_ = r.drain(ctx, id)
+	if err := r.drain(ctx, id); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	cleanupFailed := false
 	if oldInstanceID != "" && runner != nil {
 		if drainErr := runner.DrainInstance(ctx, oldInstanceID, drainTimeout); drainErr != nil {
@@ -448,7 +465,9 @@ func (r *RuntimeReloader) Reload(ctx context.Context, id WorkspaceID, reason str
 					NextRetryAt:   time.Now().UTC().Add(30 * time.Second),
 					Status:        CleanupFailurePending,
 				}
-				_ = r.cleanupStore.Save(ctx, failureRecord)
+				if err := r.cleanupStore.Save(ctx, failureRecord); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 		} else {
 			stopCancel()
@@ -549,7 +568,9 @@ func (r *RuntimeReloader) cleanupCandidateArtifact(rev *Revision) {
 	if filepath.Base(rev.ArtifactPath) == "dist" {
 		return
 	}
-	_ = os.RemoveAll(rev.ArtifactPath)
+	if err := os.RemoveAll(rev.ArtifactPath); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (r *RuntimeReloader) CloseDevMode(ctx context.Context, workspaceID WorkspaceID) error {
@@ -573,7 +594,9 @@ func (r *RuntimeReloader) CloseDevMode(ctx context.Context, workspaceID Workspac
 	}
 	if r.sessions != nil {
 		if sess, err := r.sessions.GetByWorkspace(workspaceID); err == nil {
-			_ = r.sessions.Revoke(sess.SessionID)
+			if err := r.sessions.Revoke(sess.SessionID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}
 	if r.preserver != nil {
@@ -643,7 +666,9 @@ func (r *RuntimeReloader) RecoverStaleInstances(ctx context.Context) int {
 
 		newRetryCount := failure.RetryCount + 1
 		if newRetryCount > failure.MaxRetries {
-			_ = store.UpdateRetry(ctx, failure.FailureID, failure.RetryCount, time.Now().UTC().Add(1*time.Hour), CleanupFailureExhausted)
+			if err := store.UpdateRetry(ctx, failure.FailureID, failure.RetryCount, time.Now().UTC().Add(1*time.Hour), CleanupFailureExhausted); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			continue
 		}
 
@@ -652,14 +677,20 @@ func (r *RuntimeReloader) RecoverStaleInstances(ctx context.Context) int {
 			stopErr := runner.StopInstance(stopCtx, failure.OldInstanceID)
 			stopCancel()
 			if stopErr == nil {
-				_ = store.Delete(ctx, failure.FailureID)
+				if err := store.Delete(ctx, failure.FailureID); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 				cleaned++
 			} else {
 				backoff := time.Duration(30*(newRetryCount+1)) * time.Second
-				_ = store.UpdateRetry(ctx, failure.FailureID, newRetryCount, time.Now().UTC().Add(backoff), CleanupFailureRetrying)
+				if err := store.UpdateRetry(ctx, failure.FailureID, newRetryCount, time.Now().UTC().Add(backoff), CleanupFailureRetrying); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 		} else {
-			_ = store.Delete(ctx, failure.FailureID)
+			if err := store.Delete(ctx, failure.FailureID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			cleaned++
 		}
 	}

@@ -16,6 +16,7 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/resource"
 	"github.com/u-ai/backend/internal/gamehost/rpc"
 	"github.com/u-ai/backend/pkg/gameplugin/protocol"
+	amitialog "log"
 )
 
 const (
@@ -99,7 +100,9 @@ func (s *BinaryTransferService) Start(parent context.Context) {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				_ = s.SweepExpired(context.Background(), time.Now().UTC())
+				if err := s.SweepExpired(context.Background(), time.Now().UTC()); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 		}
 	}()
@@ -321,9 +324,13 @@ func (s *BinaryTransferService) handleCreate(ctx context.Context, request rpc.RP
 	if _, exists := s.writes[handle.ObjectID]; exists {
 		s.mu.Unlock()
 		if handle.Abort != nil {
-			_ = handle.Abort()
+			if err := handle.Abort(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
-		_ = s.registry.Release(ctx, handle.ObjectID)
+		if err := s.registry.Release(ctx, handle.ObjectID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		revert()
 		return rpc.RPCResponse{}, fmt.Errorf("binary.create: duplicate object id %s", handle.ObjectID)
 	}
@@ -689,11 +696,17 @@ func (s *BinaryTransferService) abortSession(ctx context.Context, id BinaryObjec
 		return
 	}
 	if session.handle.Abort != nil {
-		_ = session.handle.Abort()
+		if err := session.handle.Abort(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	} else if session.handle.Writer != nil {
-		_ = session.handle.Writer.Close()
+		if err := session.handle.Writer.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
-	_ = s.registry.Release(ctx, id)
+	if err := s.registry.Release(ctx, id); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func sameBinaryOwner(owner BinaryOwner, request rpc.RPCRequest) bool {

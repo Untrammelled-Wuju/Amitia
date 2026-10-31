@@ -7,10 +7,10 @@ import "fmt"
 type ID string
 
 const (
-	ProfileAuto            ID = "auto"
-	ProfileDesktopDefault  ID = "desktop-default"
-	ProfileMobileCompact   ID = "mobile-compact"
-	ProfileMobileBalanced  ID = "mobile-balanced"
+	ProfileAuto              ID = "auto"
+	ProfileDesktopDefault    ID = "desktop-default"
+	ProfileMobileCompact     ID = "mobile-compact"
+	ProfileMobileBalanced    ID = "mobile-balanced"
 	ProfileMobilePerformance ID = "mobile-performance"
 )
 

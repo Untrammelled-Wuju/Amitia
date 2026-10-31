@@ -60,8 +60,9 @@ function parseHttpURL(value: unknown): URL | null {
     const parsed = new URL(value.trim());
     if (!["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password) return null;
     return parsed;
-  } catch {
-    return null;
+  } catch (error) {
+  console.error("[original-error]", error);
+return null;
   }
 }
 
@@ -150,15 +151,17 @@ function isApplicationRequest(url: URL): boolean {
   if (core) {
     try {
       if (url.origin === new URL(core.httpBaseURL).origin) return true;
-    } catch {
-    }
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
   if (!hostWindow || hostWindow.isDestroyed()) return false;
   try {
     const current = new URL(hostWindow.webContents.getURL());
     return current.origin !== "null" && url.origin === current.origin;
-  } catch {
-    return false;
+  } catch (error) {
+  console.error("[original-error]", error);
+return false;
   }
 }
 
@@ -172,8 +175,9 @@ function configureGuestSession(browserSession: Session): void {
     let url: URL;
     try {
       url = new URL(details.url);
-    } catch {
-      callback({ cancel: true });
+    } catch (error) {
+  console.error("[original-error]", error);
+callback({ cancel: true });
       return;
     }
     if (["data:", "blob:", "about:"].includes(url.protocol)) {

@@ -22,8 +22,9 @@ export class ConfigStore {
     try {
       const raw = await readFile(this.filePath, "utf8");
       return validateDeploymentConfig(JSON.parse(raw));
-    } catch {
-      return { mode: "local" };
+    } catch (error) {
+  console.error("[original-error]", error);
+return { mode: "local" };
     }
   }
 
@@ -41,8 +42,9 @@ export class ConfigStore {
       const raw = await readFile(this.autoLaunchPath, "utf8");
       const data = JSON.parse(raw);
       return data.enabled === true;
-    } catch {
-      return false;
+    } catch (error) {
+  console.error("[original-error]", error);
+return false;
     }
   }
 

@@ -224,7 +224,7 @@ func (h *Handler) HandleStatus(c *gin.Context) {
 	}
 
 	if err := coordination.ValidateCurrent(c.Request.Context()); err != nil {
-		c.JSON(409, gin.H{"code": "mesh.management_scope_changed", "message": "Core 或设备权限已变化，请重新加载"})
+		c.JSON(409, gin.H{"code": "mesh.management_scope_changed", "message": err.Error()})
 		return
 	}
 	if !h.requireDevice(c, string(actor.SpaceID), deviceID) {
@@ -241,7 +241,7 @@ func (h *Handler) HandleStatus(c *gin.Context) {
 		c.JSON(200, status)
 		return nil
 	}); err != nil {
-		c.JSON(409, gin.H{"code": "mesh.management_scope_changed", "message": "Core 或设备权限已变化，请重新加载"})
+		c.JSON(409, gin.H{"code": "mesh.management_scope_changed", "message": err.Error()})
 	}
 }
 

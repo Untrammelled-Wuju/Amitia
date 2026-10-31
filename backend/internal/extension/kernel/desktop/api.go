@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	amitialog "log"
 )
 
 type DesktopAPI struct {
@@ -244,7 +245,9 @@ func (api *DesktopAPI) BuildNewSnapshot(c *gin.Context) {
 		HostReservedIDs map[string]bool `json:"hostReservedIds,omitempty"`
 		UserPinnedOrder map[string]int  `json:"userPinnedOrder,omitempty"`
 	}
-	_ = c.ShouldBindJSON(&req)
+	if err := c.ShouldBindJSON(&req); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	sortCtx := SortContext{
 		HostReservedIDs: req.HostReservedIDs,
 		UserPinnedOrder: req.UserPinnedOrder,

@@ -152,8 +152,8 @@ type GitRestoreResult struct {
 }
 
 type GitCommitRequest struct {
-	WorkspaceURI string      `json:"workspaceUri"`
-	Message      string      `json:"message"`
+	WorkspaceURI string       `json:"workspaceUri"`
+	Message      string       `json:"message"`
 	Author       *GitIdentity `json:"author,omitempty"`
 }
 
@@ -224,10 +224,10 @@ type GitPullRequest struct {
 }
 
 type GitPullResult struct {
-	Fetched        bool   `json:"fetched"`
-	FastForwarded  bool   `json:"fastForwarded"`
-	OldHead        string `json:"oldHead,omitempty"`
-	NewHead        string `json:"newHead,omitempty"`
+	Fetched       bool   `json:"fetched"`
+	FastForwarded bool   `json:"fastForwarded"`
+	OldHead       string `json:"oldHead,omitempty"`
+	NewHead       string `json:"newHead,omitempty"`
 }
 
 type GitPushRequest struct {

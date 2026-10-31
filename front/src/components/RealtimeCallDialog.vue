@@ -261,7 +261,10 @@ function createController(): RealtimeCallController {
 }
 
 async function start() {
-  if (controller) await controller.stop().catch(() => undefined);
+  if (controller) await controller.stop().catch((error) => {
+  console.error("[original-error]", error);
+  return undefined;
+});
   controller = createController();
   callDuration.value = 0;
   visionStatus.value = "";
@@ -283,7 +286,10 @@ async function restart() {
 async function stop() {
   const active = controller;
   controller = null;
-  if (active) await active.stop().catch(() => undefined);
+  if (active) await active.stop().catch((error) => {
+  console.error("[original-error]", error);
+  return undefined;
+});
   callState.value = "idle";
   callDuration.value = 0;
   aiSpeaking.value = false;
@@ -339,7 +345,10 @@ async function assignPreview(stream: MediaStream | null, ...targets: Array<Ref<H
   for (const target of targets) {
     if (!target.value) continue;
     target.value.srcObject = stream;
-    if (stream) await target.value.play().catch(() => undefined);
+    if (stream) await target.value.play().catch((error) => {
+  console.error("[original-error]", error);
+  return undefined;
+});
   }
 }
 

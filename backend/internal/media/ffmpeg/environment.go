@@ -5,19 +5,19 @@ import "time"
 type BinarySource string
 
 const (
-	BinarySourceBundled       BinarySource = "bundled"
+	BinarySourceBundled        BinarySource = "bundled"
 	BinarySourceRuntimePackage BinarySource = "runtime_package"
-	BinarySourceSystem        BinarySource = "system"
-	BinarySourceConfigured    BinarySource = "configured"
-	BinarySourceUnavailable   BinarySource = "unavailable"
+	BinarySourceSystem         BinarySource = "system"
+	BinarySourceConfigured     BinarySource = "configured"
+	BinarySourceUnavailable    BinarySource = "unavailable"
 )
 
 type Architecture string
 
 const (
-	ArchARM64  Architecture = "arm64"
-	ArchARM    Architecture = "arm"
-	ArchX86_64 Architecture = "x86_64"
+	ArchARM64   Architecture = "arm64"
+	ArchARM     Architecture = "arm"
+	ArchX86_64  Architecture = "x86_64"
 	ArchUnknown Architecture = "unknown"
 )
 
@@ -56,9 +56,9 @@ func (e *Environment) Complete() bool {
 
 func UnavailableEnvironment(runtimeID string, reason string) *Environment {
 	return &Environment{
-		RuntimeID:    runtimeID,
-		Source:       BinarySourceUnavailable,
-		Available:    false,
-		Diagnostics:  []string{reason},
+		RuntimeID:   runtimeID,
+		Source:      BinarySourceUnavailable,
+		Available:   false,
+		Diagnostics: []string{reason},
 	}
 }

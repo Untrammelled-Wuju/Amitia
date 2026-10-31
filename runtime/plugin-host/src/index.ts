@@ -66,8 +66,9 @@ async function main(): Promise<void> {
     const queueKey = contributionId || "__default__";
     const previous = invokeQueues.get(queueKey) ?? Promise.resolve();
     const run = previous
-      .catch(() => {
-      })
+      .catch((error) => {
+  process.stderr.write("[original-error] " + String(error) + "\n");
+})
       .then(async () => {
         const input = params.input;
         const invocationId = String(message.id);
@@ -119,8 +120,9 @@ async function main(): Promise<void> {
       for (const h of state.cancelHandlers) {
         try {
           h();
-        } catch (e) {
-        }
+        } catch (error) {
+  process.stderr.write("[original-error] " + String(error) + "\n");
+}
       }
     }
   });
@@ -133,8 +135,9 @@ async function main(): Promise<void> {
     if (extension && typeof extension.deactivate === "function") {
       try {
         await extension.deactivate();
-      } catch (e) {
-      }
+      } catch (error) {
+  process.stderr.write("[original-error] " + String(error) + "\n");
+}
     }
     rpc.close();
   });

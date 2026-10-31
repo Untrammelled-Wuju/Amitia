@@ -2,6 +2,7 @@ package platform
 
 import (
 	"fmt"
+	amitialog "log"
 	"net"
 	"os"
 	"path/filepath"
@@ -14,7 +15,9 @@ func isTCPPortInUse(addr string) bool {
 	if err != nil {
 		return false
 	}
-	_ = conn.Close()
+	if err := conn.Close(); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	return true
 }
 
@@ -41,17 +44,27 @@ func writePidFile(dataDir string) error {
 		return err
 	}
 	if _, err := file.WriteString(strconv.Itoa(os.Getpid())); err != nil {
-		_ = file.Close()
-		_ = os.Remove(pidPath)
+		if err := file.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := os.Remove(pidPath); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return err
 	}
 	if err := file.Sync(); err != nil {
-		_ = file.Close()
-		_ = os.Remove(pidPath)
+		if err := file.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := os.Remove(pidPath); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return err
 	}
 	if err := file.Close(); err != nil {
-		_ = os.Remove(pidPath)
+		if err := os.Remove(pidPath); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return err
 	}
 	return nil
@@ -68,7 +81,9 @@ func killExistingServer(addr, dataDir string, readPid func(string) (int, error),
 	}
 	if pid <= 0 {
 		if !portInUse {
-			_ = removePid(dataDir)
+			if err := removePid(dataDir); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return nil
 		}
 		return fmt.Errorf("port %s is occupied by invalid pid %d", addr, pid)
@@ -87,14 +102,18 @@ func killExistingServer(addr, dataDir string, readPid func(string) (int, error),
 	targetImage, err := processImagePath(pid)
 	if err != nil {
 		if !portInUse {
-			_ = removePid(dataDir)
+			if err := removePid(dataDir); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return nil
 		}
 		return fmt.Errorf("resolve process %d executable: %w", pid, err)
 	}
 	if !sameProcessImage(currentImage, targetImage) {
 		if !portInUse {
-			_ = removePid(dataDir)
+			if err := removePid(dataDir); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return nil
 		}
 		return fmt.Errorf("port %s is occupied by pid=%d executable=%s", addr, pid, targetImage)
@@ -105,6 +124,8 @@ func killExistingServer(addr, dataDir string, readPid func(string) (int, error),
 	if err := waitForTCPPortFree(addr, 5*time.Second); err != nil {
 		return err
 	}
-	_ = removePid(dataDir)
+	if err := removePid(dataDir); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	return nil
 }

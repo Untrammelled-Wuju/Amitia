@@ -132,15 +132,15 @@ func (h *packagesHandler) handleNodeNpx(ctx context.Context, payload map[string]
 }
 
 const (
-	OpStatus       = "packages.status"
-	OpAptUpdate    = "packages.apt.update"
-	OpAptInstall   = "packages.apt.install"
-	OpAptQuery     = "packages.apt.query"
-	OpPythonInvoke = "packages.python.invoke"
+	OpStatus        = "packages.status"
+	OpAptUpdate     = "packages.apt.update"
+	OpAptInstall    = "packages.apt.install"
+	OpAptQuery      = "packages.apt.query"
+	OpPythonInvoke  = "packages.python.invoke"
 	OpPythonInstall = "packages.python.install"
-	OpNodeInvoke   = "packages.node.invoke"
-	OpNodeInstall  = "packages.node.install"
-	OpNodeNpx      = "packages.node.npx"
+	OpNodeInvoke    = "packages.node.invoke"
+	OpNodeInstall   = "packages.node.install"
+	OpNodeNpx       = "packages.node.npx"
 )
 
 func parseInt64Field(m map[string]any, key string, defaultVal int64) int64 {
@@ -213,13 +213,13 @@ func aptStatusToMap(s AptStatus) map[string]any {
 
 func pythonStatusToMap(s PythonStatus) map[string]any {
 	return map[string]any{
-		"available":                    s.Available,
-		"version":                      s.Version,
-		"implementation":               s.Implementation,
-		"pipAvailable":                 s.PipAvailable,
-		"pipVersion":                   s.PipVersion,
-		"venvAvailable":                s.VenvAvailable,
-		"managedEnvironmentAvailable":  s.ManagedEnvironmentAvailable,
+		"available":                   s.Available,
+		"version":                     s.Version,
+		"implementation":              s.Implementation,
+		"pipAvailable":                s.PipAvailable,
+		"pipVersion":                  s.PipVersion,
+		"venvAvailable":               s.VenvAvailable,
+		"managedEnvironmentAvailable": s.ManagedEnvironmentAvailable,
 	}
 }
 
@@ -260,7 +260,7 @@ func queryResultToMap(r *PackageInstallResult) map[string]any {
 		installed = append(installed, map[string]any{"name": p.Name, "version": p.Version})
 	}
 	return map[string]any{
-		"queried": r.Requested,
+		"queried":   r.Requested,
 		"installed": installed,
 	}
 }

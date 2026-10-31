@@ -343,7 +343,7 @@ func parseImageItem(ctx context.Context, item map[string]any, client *http.Clien
 		resp, err := dlClient.Do(req)
 		if err != nil {
 			if errors.Is(err, context.DeadlineExceeded) {
-				return imageprovider.GeneratedImage{}, &ProviderError{Code: ErrCodeTimeout, Message: "下载图片超时"}
+				return imageprovider.GeneratedImage{}, &ProviderError{Code: ErrCodeTimeout, Message: "下载图片超时: " + err.Error()}
 			}
 			return imageprovider.GeneratedImage{}, &ProviderError{Code: ErrCodeDownloadFailed, Message: fmt.Sprintf("下载图片失败: %v", err)}
 		}

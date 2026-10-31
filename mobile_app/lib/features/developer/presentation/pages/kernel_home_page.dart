@@ -71,8 +71,9 @@ class _KernelHomePageState extends ConsumerState<KernelHomePage> {
     try {
       final data = await ref.read(backendServiceProvider).get<List<dynamic>>('/api/wasm/modules');
       return data?.length;
-    } catch (_) {
-      return null;
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return null;
     }
   }
 
@@ -83,8 +84,9 @@ class _KernelHomePageState extends ConsumerState<KernelHomePage> {
         fromJson: (value) => Map<String, dynamic>.from(value as Map),
       );
       return (data?['contributions'] as List?)?.length;
-    } catch (_) {
-      return null;
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return null;
     }
   }
 
@@ -95,8 +97,9 @@ class _KernelHomePageState extends ConsumerState<KernelHomePage> {
         fromJson: (value) => Map<String, dynamic>.from(value as Map),
       );
       return (data?['services'] as List?)?.length;
-    } catch (_) {
-      return null;
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return null;
     }
   }
 
@@ -104,8 +107,9 @@ class _KernelHomePageState extends ConsumerState<KernelHomePage> {
     try {
       final runs = await ref.read(extensionTaskServiceProvider).listRuns(limit: 200);
       return runs.length;
-    } catch (_) {
-      return null;
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return null;
     }
   }
 

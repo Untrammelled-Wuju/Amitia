@@ -10,17 +10,20 @@ import (
 	"strings"
 
 	"github.com/u-ai/backend/internal/devicemesh/business"
+	amitialog "log"
 )
 
 func (s *service) GetStorageInfo() map[string]interface{} {
 	dir := s.dataDir
 	var totalSize int64
-	_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+	if err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err == nil && info != nil && !info.IsDir() {
 			totalSize += info.Size()
 		}
 		return nil
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 
 	dbPath := filepath.Join(dir, "app.db")
 	var dbSize int64

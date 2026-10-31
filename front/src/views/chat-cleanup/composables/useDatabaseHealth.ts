@@ -20,8 +20,9 @@ export function useDatabaseHealth() {
       stats.totalConversations = d.totalConversations;
       stats.totalMessages = d.totalMessages;
       stats.dbSize = d.dbSizeFormatted || "--";
-    } catch {
-      stats.totalConversations = 0;
+    } catch (error) {
+  console.error("[original-error]", error);
+stats.totalConversations = 0;
       stats.totalMessages = 0;
       stats.dbSize = "--";
     }

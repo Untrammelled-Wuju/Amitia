@@ -95,7 +95,7 @@ def verify_elf(path):
             raise ValueError(f"invalid ELF binary: {path}")
 
 
-def compress_rootfs(source, destination, library_archive=None, node_executable=None):
+def compress_rootfs(source, destination, library_archives=None, node_executable=None):
     required_dirs = (
         "opt/amitia",
         "etc/amitia",
@@ -107,13 +107,16 @@ def compress_rootfs(source, destination, library_archive=None, node_executable=N
         "home/amitia",
     )
     capture = tempfile.TemporaryDirectory(prefix="amitia-rootfs-library-")
-    library_tar = None
+    library_tars = []
     try:
-        if library_archive is not None:
+        library_archives = library_archives or []
+        if library_archives and node_executable is None:
+            raise ValueError("node executable is required for library archives")
+        for index, library_archive in enumerate(library_archives):
             if node_executable is None:
-                raise ValueError("node executable is required for the library archive")
-            compressed = Path(capture.name) / "data.tar.zst"
-            decompressed = Path(capture.name) / "data.tar"
+                raise ValueError("node executable is required for library archives")
+            compressed = Path(capture.name) / f"data-{index}.tar.zst"
+            decompressed = Path(capture.name) / f"data-{index}.tar"
             read_ar_member(library_archive, "data.tar.zst", compressed)
             subprocess.run([
                 str(node_executable),
@@ -122,7 +125,7 @@ def compress_rootfs(source, destination, library_archive=None, node_executable=N
                 str(compressed),
                 str(decompressed),
             ], check=True, capture_output=True)
-            library_tar = tarfile.open(decompressed, "r:")
+            library_tars.append(tarfile.open(decompressed, "r:"))
 
         with tarfile.open(source, "r:gz") as archive, tarfile.open(destination, "w:xz", preset=3) as output:
             existing = set()
@@ -141,17 +144,17 @@ def compress_rootfs(source, destination, library_archive=None, node_executable=N
                 member.mode = 0o644
                 member.size = 0
                 output.addfile(member, io.BytesIO())
-            if library_tar is not None:
-                required_library_members = {
-                    "usr/lib/aarch64-linux-gnu/libatomic.so.1",
-                    "usr/lib/aarch64-linux-gnu/libatomic.so.1.2.0",
-                }
-                added = set()
+            required_library_members = {
+                "usr/lib/aarch64-linux-gnu/libatomic.so.1",
+                "usr/lib/aarch64-linux-gnu/libatomic.so.1.2.0",
+                "usr/lib/aarch64-linux-gnu/libgomp.so.1",
+                "usr/lib/aarch64-linux-gnu/libgomp.so.1.0.0",
+            }
+            added = set()
+            for library_tar in library_tars:
                 for member in library_tar:
                     name = member.name[2:] if member.name.startswith("./") else member.name
-                    if name not in required_library_members:
-                        continue
-                    if name in existing:
+                    if name not in required_library_members or name in existing:
                         continue
                     info = tarfile.TarInfo(name)
                     info.mode = member.mode
@@ -164,11 +167,11 @@ def compress_rootfs(source, destination, library_archive=None, node_executable=N
                     else:
                         output.addfile(info)
                     added.add(name)
-                missing = required_library_members - existing - added
-                if missing:
-                    raise ValueError("missing rootfs libraries: " + ", ".join(sorted(missing)))
+            missing = required_library_members - existing - added
+            if missing:
+                raise ValueError("missing rootfs libraries: " + ", ".join(sorted(missing)))
     finally:
-        if library_tar is not None:
+        for library_tar in library_tars:
             library_tar.close()
         capture.cleanup()
 
@@ -184,6 +187,7 @@ def create_runtime_tar(root, destination):
         "scripts/node/amitia-node-prepare.sh",
         "scripts/node/amitia-node-probe.sh",
     }
+    executable.update(path.relative_to(root).as_posix() for path in (root / "llama").glob("*") if path.is_file() and (path.name == "llama-server" or path.name.endswith(".so")))
     with tarfile.open(destination, "w:xz", preset=3) as archive:
         for path in sorted(root.rglob("*")):
             if not path.is_file():
@@ -214,9 +218,11 @@ def main():
     parser.add_argument("--node-archive", required=True)
     parser.add_argument("--rootfs-archive", required=True)
     parser.add_argument("--libatomic-deb", required=True)
+    parser.add_argument("--libgomp-deb", required=True)
     parser.add_argument("--node-executable", required=True)
     parser.add_argument("--qdrant-archive", required=True)
     parser.add_argument("--surrealdb", required=True)
+    parser.add_argument("--llama-runtime-dir")
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
@@ -230,12 +236,15 @@ def main():
     node_archive = Path(args.node_archive).resolve()
     rootfs_archive = Path(args.rootfs_archive).resolve()
     libatomic_deb = Path(args.libatomic_deb).resolve()
+    libgomp_deb = Path(args.libgomp_deb).resolve()
     node_executable = Path(args.node_executable).resolve()
+    llama_runtime_dir = Path(args.llama_runtime_dir).resolve() if args.llama_runtime_dir else project / "desktop/resources/release-runtime/llama"
     node_lock = json.loads((project / "runtime/artifacts/node/linux-arm64/node-runtime-lock.json").read_text(encoding="utf-8"))
     rootfs_lock = json.loads((project / "runtime/artifacts/ubuntu-rootfs/linux-arm64/ubuntu-rootfs-lock.json").read_text(encoding="utf-8"))
     libatomic_lock = json.loads((project / "runtime/artifacts/ubuntu-rootfs/linux-arm64/libatomic1-lock.json").read_text(encoding="utf-8"))
-    if digest(node_archive) != node_lock["sha256"] or digest(rootfs_archive) != rootfs_lock["sha256"] or digest(libatomic_deb) != libatomic_lock["sha256"]:
-        raise ValueError("locked Node, rootfs or libatomic archive hash mismatch")
+    libgomp_lock = json.loads((project / "runtime/artifacts/ubuntu-rootfs/linux-arm64/libgomp1-lock.json").read_text(encoding="utf-8"))
+    if digest(node_archive) != node_lock["sha256"] or digest(rootfs_archive) != rootfs_lock["sha256"] or digest(libatomic_deb) != libatomic_lock["sha256"] or digest(libgomp_deb) != libgomp_lock["sha256"]:
+        raise ValueError("locked Node, rootfs, libatomic or libgomp archive hash mismatch")
     if not node_executable.is_file():
         raise ValueError("Node executable is unavailable")
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -251,16 +260,19 @@ def main():
             copy(project / "runtime" / host / "package.json", program / host / "package.json")
         for script in ("amitia-node-prepare.sh", "amitia-node-probe.sh"):
             copy(project / "runtime/scripts/node" / script, program / "scripts/node" / script)
+        if not (llama_runtime_dir / "llama-server").is_file():
+            raise ValueError("locked llama.cpp runtime is unavailable")
+        shutil.copytree(llama_runtime_dir, program / "llama")
         for contract in ("guest-layout.json", "mount-contract.json"):
             copy(project / "runtime/contracts" / contract, program / "manifest" / contract)
-        for path in (program / "backend/amitia-server", program / "node/bin/node", program / "qdrant/bin/qdrant", program / "surrealdb/surreal"):
+        for path in (program / "backend/amitia-server", program / "node/bin/node", program / "qdrant/bin/qdrant", program / "surrealdb/surreal", program / "llama/llama-server"):
             verify_elf(path)
 
         payload = stage / "payload"
         payload.mkdir()
         rootfs_tar = payload / "rootfs.tar.xz"
         runtime_tar = payload / "runtime.tar.xz"
-        compress_rootfs(rootfs_archive, rootfs_tar, libatomic_deb, node_executable)
+        compress_rootfs(rootfs_archive, rootfs_tar, [libatomic_deb, libgomp_deb], node_executable)
         create_runtime_tar(program, runtime_tar)
 
         metadata = stage / "metadata"
@@ -274,6 +286,7 @@ def main():
             make_component("plugin-host", "plugin-host", "plugin-host/dist/index.js", "1.0.0", program / "plugin-host/dist/index.js"),
             make_component("task-host", "task-host", "task-host/dist/index.js", "1.0.0", program / "task-host/dist/index.js"),
             make_component("surrealdb", "surrealdb", "surrealdb/surreal", "2.3.8", program / "surrealdb/surreal"),
+            make_component("llama", "llama", "llama/llama-server", "b12018", program / "llama/llama-server"),
         ]
         write_json(metadata / "component-index.json", {"components": components})
         package_id = "amitia.runtime.android"

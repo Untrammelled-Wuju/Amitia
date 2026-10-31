@@ -44,18 +44,18 @@ const (
 )
 
 type NotificationCapabilityState struct {
-	Supported                bool   `json:"supported"`
-	ListenerDeclared         bool   `json:"listenerDeclared"`
-	ListenerGranted          bool   `json:"listenerGranted"`
-	ListenerConnected        bool   `json:"listenerConnected"`
-	PostPermissionRequired   bool   `json:"postPermissionRequired"`
-	PostPermissionGranted    bool   `json:"postPermissionGranted"`
-	NotificationsEnabled     bool   `json:"notificationsEnabled"`
-	CanRead                  bool   `json:"canRead"`
-	CanDismiss               bool   `json:"canDismiss"`
-	CanPost                  bool   `json:"canPost"`
-	UserActionRequired        bool   `json:"userActionRequired"`
-	State                    string `json:"state"`
+	Supported              bool   `json:"supported"`
+	ListenerDeclared       bool   `json:"listenerDeclared"`
+	ListenerGranted        bool   `json:"listenerGranted"`
+	ListenerConnected      bool   `json:"listenerConnected"`
+	PostPermissionRequired bool   `json:"postPermissionRequired"`
+	PostPermissionGranted  bool   `json:"postPermissionGranted"`
+	NotificationsEnabled   bool   `json:"notificationsEnabled"`
+	CanRead                bool   `json:"canRead"`
+	CanDismiss             bool   `json:"canDismiss"`
+	CanPost                bool   `json:"canPost"`
+	UserActionRequired     bool   `json:"userActionRequired"`
+	State                  string `json:"state"`
 }
 
 type blockedNotificationProvider struct {

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	amitialog "log"
 )
 
 type ApprovalStatus string
@@ -116,7 +117,9 @@ func (b *ApprovalBroker) Await(ctx context.Context, request ApprovalRequest, tim
 	}
 	for _, observer := range requestedObservers {
 		if observer != nil {
-			_ = observer(request)
+			if err := observer(request); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}
 	defer func() {
@@ -213,7 +216,9 @@ func (b *ApprovalBroker) Resolve(id string, approved bool) error {
 	}
 	for _, observer := range resolvedObservers {
 		if observer != nil {
-			_ = observer(request)
+			if err := observer(request); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}
 	entry.decision <- approved
@@ -244,7 +249,9 @@ func (b *ApprovalBroker) expire(id string) error {
 	}
 	for _, observer := range resolvedObservers {
 		if observer != nil {
-			_ = observer(request)
+			if err := observer(request); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}
 	return nil

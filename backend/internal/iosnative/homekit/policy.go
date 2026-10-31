@@ -21,16 +21,16 @@ const (
 
 	MaxActionsPerScene = 100
 
-	StatusListReadTimeout        = 5000000000
-	CharacteristicReadTimeout    = 10000000000
-	CharacteristicWriteTimeout   = 15000000000
-	SceneExecuteTimeout          = 20000000000
-	SceneManageTimeout           = 20000000000
-	AutomationManageTimeout      = 30000000000
+	StatusListReadTimeout      = 5000000000
+	CharacteristicReadTimeout  = 10000000000
+	CharacteristicWriteTimeout = 15000000000
+	SceneExecuteTimeout        = 20000000000
+	SceneManageTimeout         = 20000000000
+	AutomationManageTimeout    = 30000000000
 
-	RiskLevelLow      = "low"
-	RiskLevelMedium   = "medium"
-	RiskLevelHigh     = "high"
+	RiskLevelLow    = "low"
+	RiskLevelMedium = "medium"
+	RiskLevelHigh   = "high"
 )
 
 var HighRiskCharacteristicTypes = map[string]bool{
@@ -43,9 +43,9 @@ var HighRiskCharacteristicTypes = map[string]bool{
 }
 
 var MediumRiskCharacteristicTypes = map[string]bool{
-	"target_temperature": true,
+	"target_temperature":    true,
 	"heating_cooling_state": true,
-	"active":              true,
+	"active":                true,
 }
 
 func ClampLimit(limit, defaultLimit, maxLimit int) int {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
+	amitialog "log"
 )
 
 type StableSnapshotRepository struct {
@@ -143,7 +144,9 @@ func (r *StableSnapshotRepository) ListSnapshotsByCandidate(ctx context.Context,
 			Kind: domain.ContributionKind(contribKind),
 		}
 		if defJSON != "" && defJSON != "{}" {
-			_ = json.Unmarshal([]byte(defJSON), &contrib.Definition)
+			if err := json.Unmarshal([]byte(defJSON), &contrib.Definition); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		if runtimeBindStr != "" && runtimeBindStr != "{}" {
 			var rb domain.RuntimeBinding
@@ -152,10 +155,14 @@ func (r *StableSnapshotRepository) ListSnapshotsByCandidate(ctx context.Context,
 			}
 		}
 		if permJSON != "" && permJSON != "[]" {
-			_ = json.Unmarshal([]byte(permJSON), &contrib.RequiredPermissions)
+			if err := json.Unmarshal([]byte(permJSON), &contrib.RequiredPermissions); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		if scopeJSON != "" && scopeJSON != "{}" {
-			_ = json.Unmarshal([]byte(scopeJSON), &contrib.RequiredScope)
+			if err := json.Unmarshal([]byte(scopeJSON), &contrib.RequiredScope); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		snap.Contributions = append(snap.Contributions, contrib)
 	}

@@ -14,6 +14,7 @@ import (
 	"github.com/u-ai/backend/internal/conversationstream"
 	"github.com/u-ai/backend/internal/nativebridge"
 	"gorm.io/gorm"
+	amitialog "log"
 )
 
 type Runtime struct {
@@ -635,10 +636,14 @@ func (r *Runtime) resolveMetadata(ctx context.Context, event conversationstream.
 		}
 	}
 	if meta.characterID == "" && event.TurnID != "" {
-		_ = r.db.WithContext(ctx).Table("assistant_turns").Select("character_id").Where("id = ?", event.TurnID).Row().Scan(&meta.characterID)
+		if err := r.db.WithContext(ctx).Table("assistant_turns").Select("character_id").Where("id = ?", event.TurnID).Row().Scan(&meta.characterID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	if meta.characterID != "" && meta.characterName == "" {
-		_ = r.db.WithContext(ctx).Table("characters").Select("name").Where("id = ? AND space_id = ?", meta.characterID, meta.spaceID).Row().Scan(&meta.characterName)
+		if err := r.db.WithContext(ctx).Table("characters").Select("name").Where("id = ? AND space_id = ?", meta.characterID, meta.spaceID).Row().Scan(&meta.characterName); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return meta
 }
@@ -817,7 +822,9 @@ func (r *Runtime) sendLiveActivityHeartbeat(ctx context.Context, spaceID string,
 			TTL:            5 * time.Minute,
 		}, result, 0)
 		if result.InvalidToken {
-			_ = r.repo.EndLiveActivity(ctx, endpoint.SpaceID, endpoint.DeviceID, state.RunID, state.Revision)
+			if err := r.repo.EndLiveActivity(ctx, endpoint.SpaceID, endpoint.DeviceID, state.RunID, state.Revision); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}
 }
@@ -932,9 +939,13 @@ func (r *Runtime) catchUpLiveActivityState(endpoint DeviceEndpoint, state Execut
 	}
 	if result.InvalidToken {
 		if event == "start" {
-			_ = r.repo.ClearLiveActivityPushToStartToken(ctx, endpoint.SpaceID, endpoint.DeviceID)
+			if err := r.repo.ClearLiveActivityPushToStartToken(ctx, endpoint.SpaceID, endpoint.DeviceID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		} else {
-			_ = r.repo.EndLiveActivity(ctx, endpoint.SpaceID, endpoint.DeviceID, state.RunID, state.Revision)
+			if err := r.repo.EndLiveActivity(ctx, endpoint.SpaceID, endpoint.DeviceID, state.RunID, state.Revision); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}
 }
@@ -992,13 +1003,15 @@ func (r *Runtime) endSupersededLiveActivities(
 			TTL:            time.Minute,
 		}, result, 0)
 		if result.Accepted || result.InvalidToken {
-			_ = r.repo.EndLiveActivity(
+			if err := r.repo.EndLiveActivity(
 				ctx,
 				endpoint.SpaceID,
 				endpoint.DeviceID,
 				row.RunID,
 				revision,
-			)
+			); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}
 }
@@ -1013,19 +1026,23 @@ func (r *Runtime) sendExecution(ctx context.Context, spaceID string, state Execu
 	}
 	for _, endpoint := range devices {
 		if event == "end" && endpoint.Platform == "ios" && !r.gateway.PreferNative() {
-			_ = r.repo.MarkRunTerminal(
+			if err := r.repo.MarkRunTerminal(
 				ctx,
 				endpoint.SpaceID,
 				endpoint.DeviceID,
 				state.RunID,
 				state.Revision,
-			)
-			_ = r.repo.SupersedePendingLiveActivityStart(
+			); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
+			if err := r.repo.SupersedePendingLiveActivityStart(
 				ctx,
 				endpoint.SpaceID,
 				endpoint.DeviceID,
 				state.RunID,
-			)
+			); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		if !endpoint.ExecutionActivityEnabled {
 			continue
@@ -1073,29 +1090,35 @@ func (r *Runtime) sendExecution(ctx context.Context, spaceID string, state Execu
 					r.recordLiveActivityStart(endpoint)
 				}
 				if result.Accepted && event == "end" {
-					_ = r.repo.EndLiveActivity(
+					if err := r.repo.EndLiveActivity(
 						ctx,
 						endpoint.SpaceID,
 						endpoint.DeviceID,
 						state.RunID,
 						state.Revision,
-					)
+					); err != nil {
+						amitialog.Printf("[original-error] %v", err)
+					}
 				}
 				if result.InvalidToken {
 					if usingPushToStart {
-						_ = r.repo.ClearLiveActivityPushToStartToken(
+						if err := r.repo.ClearLiveActivityPushToStartToken(
 							ctx,
 							endpoint.SpaceID,
 							endpoint.DeviceID,
-						)
+						); err != nil {
+							amitialog.Printf("[original-error] %v", err)
+						}
 					} else {
-						_ = r.repo.EndLiveActivity(
+						if err := r.repo.EndLiveActivity(
 							ctx,
 							endpoint.SpaceID,
 							endpoint.DeviceID,
 							state.RunID,
 							state.Revision,
-						)
+						); err != nil {
+							amitialog.Printf("[original-error] %v", err)
+						}
 					}
 				}
 				if result.Accepted {
@@ -1216,19 +1239,23 @@ func (r *Runtime) CleanupExecutionNotifications(
 			if state.StartedAt.IsZero() {
 				state.StartedAt = now
 			}
-			_ = r.repo.MarkRunTerminal(
+			if err := r.repo.MarkRunTerminal(
 				ctx,
 				endpoint.SpaceID,
 				endpoint.DeviceID,
 				state.RunID,
 				state.Revision,
-			)
-			_ = r.repo.SupersedePendingLiveActivityStart(
+			); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
+			if err := r.repo.SupersedePendingLiveActivityStart(
 				ctx,
 				endpoint.SpaceID,
 				endpoint.DeviceID,
 				state.RunID,
-			)
+			); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			r.queueLiveActivityRetry(ctx, *endpoint, state, "end")
 		}
 		return nil
@@ -1457,14 +1484,16 @@ func (r *Runtime) TestDevicePush(ctx context.Context, spaceID, deviceID string) 
 	if result.Accepted {
 		status = "accepted"
 	}
-	_ = r.repo.UpdateOutbox(ctx, outbox.ID, map[string]any{
+	if err := r.repo.UpdateOutbox(ctx, outbox.ID, map[string]any{
 		"status":              status,
 		"provider":            result.Provider,
 		"provider_message_id": result.ProviderMessageID,
 		"last_error":          result.ErrorMessage,
 		"attempt_count":       1,
 		"updated_at":          time.Now().UTC(),
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	r.recordProviderResult(ctx, *endpoint, envelope, result, 0)
 	return map[string]any{
 		"accepted":          result.Accepted,
@@ -1628,29 +1657,35 @@ func (r *Runtime) sendLiveActivityRetryAttempt(
 		r.recordLiveActivityStart(endpoint)
 	}
 	if result.Accepted && event == "end" && r.repo != nil {
-		_ = r.repo.EndLiveActivity(
+		if err := r.repo.EndLiveActivity(
 			ctx,
 			endpoint.SpaceID,
 			endpoint.DeviceID,
 			envelope.RunID,
 			envelope.Revision,
-		)
+		); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	if result.InvalidToken && r.repo != nil {
 		if usingPushToStart {
-			_ = r.repo.ClearLiveActivityPushToStartToken(
+			if err := r.repo.ClearLiveActivityPushToStartToken(
 				ctx,
 				endpoint.SpaceID,
 				endpoint.DeviceID,
-			)
+			); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		} else {
-			_ = r.repo.EndLiveActivity(
+			if err := r.repo.EndLiveActivity(
 				ctx,
 				endpoint.SpaceID,
 				endpoint.DeviceID,
 				envelope.RunID,
 				envelope.Revision,
-			)
+			); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}
 	return result
@@ -1737,7 +1772,9 @@ func (r *Runtime) outboxRecoveryLoop(ctx context.Context) {
 	if r.repo == nil {
 		return
 	}
-	_ = r.repo.RecoverOutbox(ctx)
+	if err := r.repo.RecoverOutbox(ctx); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	r.enqueueDueOutbox(ctx)
 	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
@@ -1746,7 +1783,9 @@ func (r *Runtime) outboxRecoveryLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			_ = r.repo.ExpireOutbox(ctx)
+			if err := r.repo.ExpireOutbox(ctx); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			r.enqueueDueOutbox(ctx)
 		}
 	}
@@ -1768,35 +1807,43 @@ func (r *Runtime) deliverOutbox(ctx context.Context, id string) {
 		return
 	}
 	if !row.ExpiresAt.IsZero() && !row.ExpiresAt.After(time.Now().UTC()) {
-		_ = r.repo.UpdateOutbox(ctx, row.ID, map[string]any{
+		if err := r.repo.UpdateOutbox(ctx, row.ID, map[string]any{
 			"status":     "failed",
 			"last_error": "notification TTL expired",
-		})
+		}); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return
 	}
 	endpoint, err := r.repo.GetDevice(ctx, row.SpaceID, row.DeviceID)
 	if err != nil {
-		_ = r.repo.UpdateOutbox(ctx, row.ID, map[string]any{
+		if err := r.repo.UpdateOutbox(ctx, row.ID, map[string]any{
 			"status":     "failed",
 			"last_error": "notification device is unavailable or revoked",
-		})
+		}); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return
 	}
 	var envelope PushEnvelope
 	if err := json.Unmarshal([]byte(row.EnvelopeJSON), &envelope); err != nil {
-		_ = r.repo.UpdateOutbox(ctx, row.ID, map[string]any{
+		if err := r.repo.UpdateOutbox(ctx, row.ID, map[string]any{
 			"status":     "failed",
 			"last_error": "invalid notification envelope",
-		})
+		}); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return
 	}
 	job := deliveryJob{endpoint: *endpoint, envelope: envelope}
 	result, retryCount := r.sendWithRetry(ctx, job)
 	if ctx.Err() != nil {
-		_ = r.repo.UpdateOutbox(context.Background(), row.ID, map[string]any{
+		if err := r.repo.UpdateOutbox(context.Background(), row.ID, map[string]any{
 			"status":          "queued",
 			"next_attempt_at": time.Now().UTC(),
-		})
+		}); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return
 	}
 	r.recordProviderResult(ctx, *endpoint, envelope, result, retryCount)
@@ -1816,14 +1863,16 @@ func (r *Runtime) deliverOutbox(ctx context.Context, id string) {
 			status = "retry"
 		}
 	}
-	_ = r.repo.UpdateOutbox(ctx, row.ID, map[string]any{
+	if err := r.repo.UpdateOutbox(ctx, row.ID, map[string]any{
 		"status":              status,
 		"provider":            result.Provider,
 		"provider_message_id": result.ProviderMessageID,
 		"attempt_count":       attemptCount,
-		"last_error":          truncateRunes(result.ErrorMessage, 1024),
+		"last_error":          result.ErrorMessage,
 		"next_attempt_at":     nextAttemptAt,
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (r *Runtime) deliverWithRetry(ctx context.Context, job deliveryJob) {
@@ -1900,7 +1949,7 @@ func (r *Runtime) recordProviderResult(ctx context.Context, endpoint DeviceEndpo
 		Status:            status,
 		ProviderMessageID: result.ProviderMessageID,
 		ErrorCode:         result.ErrorCode,
-		ErrorMessage:      truncateRunes(result.ErrorMessage, 1024),
+		ErrorMessage:      result.ErrorMessage,
 		RetryCount:        retryCount,
 		QueuedAt:          now,
 		ExpiresAt:         now.Add(envelope.TTL),
@@ -1909,7 +1958,9 @@ func (r *Runtime) recordProviderResult(ctx context.Context, endpoint DeviceEndpo
 	if result.Accepted {
 		row.AcceptedAt = &now
 	}
-	_ = r.repo.CreateDelivery(ctx, row)
+	if err := r.repo.CreateDelivery(ctx, row); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func payloadString(payload map[string]any, key string) string {

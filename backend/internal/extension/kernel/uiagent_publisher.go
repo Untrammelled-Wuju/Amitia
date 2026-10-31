@@ -16,6 +16,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_contribution"
 	uischema "github.com/u-ai/backend/internal/uiagent/schema"
+	amitialog "log"
 )
 
 type uiAgentPublisher struct {
@@ -59,12 +60,16 @@ func (p *uiAgentPublisher) Publish(ctx context.Context, workspaceID string, doc 
 		return builtin.UIAgentPublishResult{}, fmt.Errorf("uiagent publisher: write schema: %w", err)
 	}
 	if err := os.Rename(tmp, schemaPath); err != nil {
-		_ = os.Remove(tmp)
+		if err := os.Remove(tmp); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return builtin.UIAgentPublishResult{}, fmt.Errorf("uiagent publisher: publish schema file: %w", err)
 	}
 
 	if err := p.registry.RegisterSchema(extensionID, pageID, doc); err != nil {
-		_ = os.Remove(schemaPath)
+		if err := os.Remove(schemaPath); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return builtin.UIAgentPublishResult{}, fmt.Errorf("uiagent publisher: register canonical schema: %w", err)
 	}
 
@@ -100,17 +105,25 @@ func (p *uiAgentPublisher) Publish(ctx context.Context, workspaceID string, doc 
 		},
 	}
 	if old, getErr := p.host.GetContribution(def.ContributionID); getErr == nil && old != nil {
-		_ = p.host.UnregisterContribution(def.ContributionID)
+		if err := p.host.UnregisterContribution(def.ContributionID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	if err := p.host.RegisterContribution(def); err != nil {
 		p.registry.UnregisterSchema(extensionID, pageID)
-		_ = os.Remove(schemaPath)
+		if err := os.Remove(schemaPath); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return builtin.UIAgentPublishResult{}, fmt.Errorf("uiagent publisher: register UI contribution: %w", err)
 	}
 	if err := p.repo.PutContribution(ctx, def); err != nil {
-		_ = p.host.UnregisterContribution(def.ContributionID)
+		if err := p.host.UnregisterContribution(def.ContributionID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		p.registry.UnregisterSchema(extensionID, pageID)
-		_ = os.Remove(schemaPath)
+		if err := os.Remove(schemaPath); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return builtin.UIAgentPublishResult{}, fmt.Errorf("uiagent publisher: persist UI contribution: %w", err)
 	}
 	return builtin.UIAgentPublishResult{SchemaID: pageID, ContributionID: contributionID}, nil

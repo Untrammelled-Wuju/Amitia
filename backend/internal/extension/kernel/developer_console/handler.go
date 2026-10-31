@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	amitialog "log"
 	"net/http"
 	"strconv"
 	"time"
@@ -282,9 +283,15 @@ func (h *HTTPHandler) handleStream(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			data, _ := json.Marshal(ev)
-			_, _ = w.Write([]byte("data: "))
-			_, _ = w.Write(data)
-			_, _ = w.Write([]byte("\n\n"))
+			if _, err := w.Write([]byte("data: ")); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
+			if _, err := w.Write(data); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
+			if _, err := w.Write([]byte("\n\n")); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			flusher.Flush()
 		}
 	}
@@ -302,10 +309,12 @@ func (h *HTTPHandler) handleExportDiagnostics(w http.ResponseWriter, r *http.Req
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Content-Disposition", `attachment; filename="amitia-diagnostics.json"`)
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		if err := json.NewEncoder(w).Encode(map[string]interface{}{
 			"overview":    overview,
 			"diagnostics": export,
-		})
+		}); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return
 	}
 	writeJSON(w, http.StatusOK, export)
@@ -338,7 +347,9 @@ func parseFilters(r *http.Request) ConsoleFilters {
 func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func writeError(w http.ResponseWriter, status int, err error) {
@@ -348,5 +359,7 @@ func writeError(w http.ResponseWriter, status int, err error) {
 	if err != nil {
 		msg = err.Error()
 	}
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
+	if err := json.NewEncoder(w).Encode(map[string]string{"error": msg}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }

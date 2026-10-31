@@ -214,8 +214,9 @@ class MobileUIHostEventClient {
           !CancelToken.isCancel(error)) {
         _scheduleReconnect();
       }
-    } catch (_) {
-      if (!_disposed && version == _connectionVersion) {
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+if (!_disposed && version == _connectionVersion) {
         _scheduleReconnect();
       }
     }
@@ -244,7 +245,9 @@ class MobileUIHostEventClient {
               hostClientId: _hostClientId,
               hostSessionId: _hostSessionId,
             )
-            .catchError((_) {}),
+            .catchError((Object error, StackTrace stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}),
       );
     });
   }
@@ -268,8 +271,9 @@ class MobileUIHostEventClient {
         if (decoded is Map) {
           _dispatchEvent(eventType, decoded.cast<String, dynamic>());
         }
-      } catch (_) {
-        // Malformed event payloads are isolated from the long-lived stream.
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+// Malformed event payloads are isolated from the long-lived stream.
       }
     }
   }
@@ -482,7 +486,9 @@ class MobileUIHostEventClient {
               hostClientId: _hostClientId,
               hostSessionId: sessionId,
             )
-            .catchError((_) {}),
+            .catchError((Object error, StackTrace stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}),
       );
     }
     _cancelCurrentTransport();

@@ -23,7 +23,7 @@ const (
 type Endpoint int
 
 const (
-	EndpointRoot    Endpoint = iota
+	EndpointRoot Endpoint = iota
 	EndpointHealthz
 	EndpointLivez
 	EndpointReadyz

@@ -9,9 +9,9 @@ import (
 )
 
 type PythonManager struct {
-	detector    *PythonDetector
-	venvMgr     *PythonVenvManager
-	executor    shell.ShellExecutor
+	detector *PythonDetector
+	venvMgr  *PythonVenvManager
+	executor shell.ShellExecutor
 }
 
 func NewPythonManager(detector *PythonDetector, venvMgr *PythonVenvManager, executor shell.ShellExecutor) *PythonManager {

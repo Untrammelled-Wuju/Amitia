@@ -5,6 +5,7 @@ import (
 	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/internal/runtimeidentity"
+
 	"net/http"
 )
 
@@ -53,7 +54,7 @@ func makeAdministratorHandler(deps *RouterDeps) gin.HandlerFunc {
 		}
 		defer finish()
 		if err := deps.DeviceReg.RequireTrustedDevice(c.Request.Context(), actor.SpaceID, device); err != nil {
-			c.JSON(403, gin.H{"code": "mesh.device_not_trusted", "message": "设备未处于有效配对状态"})
+			c.JSON(403, gin.H{"code": "mesh.device_not_trusted", "message": err.Error()})
 			return
 		}
 		var req struct {

@@ -446,4 +446,3 @@ func getBoolField(m map[string]any, key string, defaultVal bool) bool {
 	}
 	return defaultVal
 }
-

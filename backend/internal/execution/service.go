@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	amitialog "log"
 	"sync"
 )
 
@@ -165,7 +166,9 @@ func (s *ExecutionService) ResumeExecution(ctx context.Context, resumeID string)
 		s.resumeContexts[resumeID] = resume
 		s.mu.Unlock()
 		if s.repo != nil {
-			_ = s.repo.UpdateState(ctx, resumeID, ResumeStateInProgress, "")
+			if err := s.repo.UpdateState(ctx, resumeID, ResumeStateInProgress, ""); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}
 
@@ -180,7 +183,9 @@ func (s *ExecutionService) ResumeExecution(ctx context.Context, resumeID string)
 				s.resumeContexts[resumeID] = resume
 				s.mu.Unlock()
 				if s.repo != nil {
-					_ = s.repo.UpdateState(ctx, resumeID, ResumeStateFailed, err.Error())
+					if err := s.repo.UpdateState(ctx, resumeID, ResumeStateFailed, err.Error()); err != nil {
+						amitialog.Printf("[original-error] %v", err)
+					}
 				}
 				return nil, err
 			}
@@ -190,7 +195,9 @@ func (s *ExecutionService) ResumeExecution(ctx context.Context, resumeID string)
 			s.activeContexts[result.ExecutionID] = *result
 			s.mu.Unlock()
 			if s.repo != nil {
-				_ = s.repo.UpdateState(ctx, resumeID, ResumeStateCompleted, "")
+				if err := s.repo.UpdateState(ctx, resumeID, ResumeStateCompleted, ""); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 			s.journal.Record(JournalEntry{
 				RootExecutionID: resume.RootExecutionID,
@@ -207,7 +214,9 @@ func (s *ExecutionService) ResumeExecution(ctx context.Context, resumeID string)
 		s.resumeContexts[resumeID] = resume
 		s.mu.Unlock()
 		if s.repo != nil {
-			_ = s.repo.UpdateState(ctx, resumeID, ResumeStateFailed, "no handler for resume type")
+			if err := s.repo.UpdateState(ctx, resumeID, ResumeStateFailed, "no handler for resume type"); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		return nil, fmt.Errorf("no resume handler for type: %s", resume.Type)
 	}

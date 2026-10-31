@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/mindruntime"
+	amitialog "log"
 )
 
 func (h *Handler) ShadowModeStatus(c *gin.Context) {
@@ -29,7 +30,9 @@ func (h *Handler) ShadowModeStart(c *gin.Context) {
 	var body struct {
 		Phase string `json:"phase"`
 	}
-	_ = c.ShouldBindJSON(&body)
+	if err := c.ShouldBindJSON(&body); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	if body.Phase == "" {
 		body.Phase = string(mindruntime.ShadowPhaseInteraction)
 	}
@@ -185,7 +188,9 @@ func (h *Handler) ShadowModeLoadSim(c *gin.Context) {
 		SustainedRPS    int    `json:"sustainedRps"`
 		BurstRate       int    `json:"burstRate"`
 	}
-	_ = c.ShouldBindJSON(&body)
+	if err := c.ShouldBindJSON(&body); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	cfg := mindruntime.DefaultLoadInjectorConfig()
 	if body.Profile != "" {
 		cfg.Profile = mindruntime.LoadProfile(body.Profile)

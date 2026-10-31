@@ -167,7 +167,9 @@ public class SecurityScopedBookmarkStore: NSObject {
             do {
                 let rootURL = try resolveRootURL(mountId: mountId)
                 rootURL.stopAccessingSecurityScopedResource()
-            } catch {}
+            } catch {
+              print("[original-error] \(error)")
+            }
             queue.async(flags: .barrier) {
                 self.accessingURLs.remove(mountId)
             }
@@ -180,6 +182,8 @@ public class SecurityScopedBookmarkStore: NSObject {
             let rootURL = try resolveRootURL(mountId: mountId)
             return rootURL.startAccessingSecurityScopedResource()
         } catch {
+          print("[original-error] \(error)")
+
             return false
         }
     }
@@ -417,6 +421,8 @@ public class SecurityScopedBookmarkStore: NSObject {
             _ = try resolveRootURL(mountId: mountId)
             return false
         } catch {
+          print("[original-error] \(error)")
+
             return true
         }
     }

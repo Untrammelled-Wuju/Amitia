@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	amitialog "log"
 )
 
 type RuntimePsycheState struct {
@@ -151,7 +152,9 @@ func (e *Engine) RuntimeState(ctx context.Context, request Request) (RuntimeStat
 				continue
 			}
 			var confidence float64
-			_ = json.Unmarshal(content["confidence"], &confidence)
+			if err := json.Unmarshal(content["confidence"], &confidence); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			result.Beliefs = append(result.Beliefs, map[string]any{"key": MemoryText(document, "key"), "value": MemoryValue(content), "confidence": confidence, "conflicted": false})
 		}
 	}

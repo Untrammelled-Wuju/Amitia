@@ -229,9 +229,10 @@ export class ResourceLoader {
     let reader: PackageReader;
     try {
       reader = this.normalizer.getReader(schemaVersion);
-    } catch {
-      throw new Error(
-        `${UNSUPPORTED_SCHEMA_VERSION_ERROR}: ${schemaVersion}`,
+    } catch (error) {
+  console.error("[original-error]", error);
+throw new Error(
+        `${UNSUPPORTED_SCHEMA_VERSION_ERROR}: ${schemaVersion}: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
 
@@ -447,8 +448,9 @@ export class ResourceLoader {
     let reader: PackageReader;
     try {
       reader = this.normalizer.getReader(loaded.manifest.schemaVersion);
-    } catch {
-      reader = this.normalizer.getReader(1);
+    } catch (error) {
+  console.error("[original-error]", error);
+reader = this.normalizer.getReader(1);
     }
 
     let result: ActionReadResult;
@@ -520,8 +522,9 @@ export class ResourceLoader {
         if (schemaVersion === 1) {
           try {
             return resolvePackagePathUnderRoot(installPath, frameFile);
-          } catch {
-            // Surface the original action-relative failure for deterministic
+          } catch (error) {
+  console.error("[original-error]", error);
+// Surface the original action-relative failure for deterministic
             // diagnostics and to avoid silently accepting an unrelated file.
           }
         }

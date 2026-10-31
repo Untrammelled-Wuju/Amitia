@@ -7,22 +7,22 @@ import (
 )
 
 const (
-	MaxResourcesCount        = 10
-	MaxSingleResourceBytes   = 100 * 1024 * 1024
-	MaxTotalBytes            = 250 * 1024 * 1024
-	MaxShareTextBytes        = 1 * 1024 * 1024
-	MaxSubjectBytes          = 8 * 1024
-	ShareTitleMaxBytes       = 256
-	MaxPreviewTitleChars     = 256
-	MaxPreviewSubtitleChars  = 256
-	SharedShareDefaultTimeoutSec = 300
-	MaxIntakeTextBytes       = MaxShareTextBytes
-	MaxIntakeResourcesCount  = MaxResourcesCount
-	MaxIntakeTotalBytes      = MaxTotalBytes
-	StagingMaxStaleAgeHours  = 24
+	MaxResourcesCount             = 10
+	MaxSingleResourceBytes        = 100 * 1024 * 1024
+	MaxTotalBytes                 = 250 * 1024 * 1024
+	MaxShareTextBytes             = 1 * 1024 * 1024
+	MaxSubjectBytes               = 8 * 1024
+	ShareTitleMaxBytes            = 256
+	MaxPreviewTitleChars          = 256
+	MaxPreviewSubtitleChars       = 256
+	SharedShareDefaultTimeoutSec  = 300
+	MaxIntakeTextBytes            = MaxShareTextBytes
+	MaxIntakeResourcesCount       = MaxResourcesCount
+	MaxIntakeTotalBytes           = MaxTotalBytes
+	StagingMaxStaleAgeHours       = 24
 	StagingConsumedRetentionHours = 168
-	URLSchemeHTTP            = "http"
-	URLSchemeHTTPS           = "https"
+	URLSchemeHTTP                 = "http"
+	URLSchemeHTTPS                = "https"
 )
 
 var AllowedURLSchemes = []string{URLSchemeHTTP, URLSchemeHTTPS}

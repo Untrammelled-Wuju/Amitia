@@ -67,7 +67,9 @@ class _BugReportDialogState extends ConsumerState<BugReportDialog> {
         _errorLineLimit = (settings['errorLineLimit'] as num?)?.toInt() ?? 40;
         _maxScreenshotMB = (settings['maxScreenshotMB'] as num?)?.toInt() ?? 6;
       });
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
   }
 
   Future<Map<String, dynamic>> _buildPayload() {

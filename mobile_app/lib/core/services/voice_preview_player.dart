@@ -76,7 +76,9 @@ Future<void> playBackendVoicePreview(
     Future<void>.delayed(const Duration(seconds: 30), () async {
       try {
         if (await cleanupDir!.exists()) await cleanupDir.delete(recursive: true);
-      } catch (_) {}
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
     });
     tempDir = null;
   } finally {
@@ -84,7 +86,9 @@ Future<void> playBackendVoicePreview(
     if (!playbackStarted && tempDir != null) {
       try {
         if (await tempDir.exists()) await tempDir.delete(recursive: true);
-      } catch (_) {}
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
     }
   }
 }

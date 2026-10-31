@@ -11,6 +11,7 @@ import (
 	"github.com/u-ai/backend/internal/continuity"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	amitialog "log"
 )
 
 type ownedContextKey struct{}
@@ -68,8 +69,12 @@ func WithOwnedContext(ctx context.Context, scope coordination.ExecutionScope, da
 			}
 			key, value := business.MemoryText(document, "key"), business.MemoryValue(content)
 			var importance, confidence float64
-			_ = json.Unmarshal(content["importance"], &importance)
-			_ = json.Unmarshal(content["confidence"], &confidence)
+			if err := json.Unmarshal(content["importance"], &importance); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
+			if err := json.Unmarshal(content["confidence"], &confidence); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			memories = append(memories, MemoryItem{Key: key, Value: value, Type: row.Kind, Importance: int(importance), Confidence: int(confidence), Scope: row.RoleID})
 			if row.Kind == "fact" {
 				beliefs = append(beliefs, ResolvedBelief{Key: key, Value: value, Confidence: confidence})

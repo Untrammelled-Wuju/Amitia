@@ -88,7 +88,9 @@ class WorkflowManifestEventReceiver : BroadcastReceiver() {
                         override fun onCompleted(operationResult: RuntimeOperationResult) = pending.finish()
                     },
                 )
-            } catch (_: Throwable) {
+            } catch (originalError91: Throwable) {
+              originalError91.printStackTrace()
+
                 pending.finish()
             }
         }, "amitia-runtime-boot-restore").start()

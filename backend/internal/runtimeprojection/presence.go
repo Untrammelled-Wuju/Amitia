@@ -38,15 +38,15 @@ func NewInMemoryPresenceStore() *InMemoryPresenceStore {
 
 func (s *InMemoryPresenceStore) UpsertPresence(ctx context.Context, event PresenceEvent) error {
 	proj := RuntimeProjection{
-		RuntimeID:         event.RuntimeID,
-		SessionID:         event.SessionID,
-		Identity:          event.Identity,
-		Placement:         event.Placement,
-		Online:            event.Online,
-		Health:            event.Health,
-		Capabilities:      event.Capabilities,
+		RuntimeID:            event.RuntimeID,
+		SessionID:            event.SessionID,
+		Identity:             event.Identity,
+		Placement:            event.Placement,
+		Online:               event.Online,
+		Health:               event.Health,
+		Capabilities:         event.Capabilities,
 		ConnectionGeneration: 0,
-		UpdatedAt:         event.Timestamp,
+		UpdatedAt:            event.Timestamp,
 	}
 	s.projections[event.RuntimeID] = proj
 	return nil

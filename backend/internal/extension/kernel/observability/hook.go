@@ -11,6 +11,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/scope"
+	amitialog "log"
 )
 
 type ExecutionHook struct {
@@ -48,35 +49,41 @@ func (h *ExecutionHook) OnInvocationCreated(ctx context.Context, inv capability.
 		rec.TraceID = NewTraceID()
 	}
 
-	_ = h.writer.WriteInvocation(ctx, rec)
+	if err := h.writer.WriteInvocation(ctx, rec); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	return rec.TraceID
 }
 
 func (h *ExecutionHook) OnInvocationQueued(ctx context.Context, invocationID string) {
 	now := time.Now()
-	_ = h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
+	if err := h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
 		EventID:      NewEventID(),
 		InvocationID: invocationID,
 		EventType:    "invocation.queued",
 		Severity:     "info",
 		Timestamp:    now,
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (h *ExecutionHook) OnInvocationStarted(ctx context.Context, invocationID string) {
 	now := time.Now()
-	_ = h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
+	if err := h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
 		EventID:      NewEventID(),
 		InvocationID: invocationID,
 		EventType:    "invocation.started",
 		Severity:     "info",
 		Timestamp:    now,
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (h *ExecutionHook) OnInvocationFinished(ctx context.Context, invocationID string, status ExecutionStatus, errCode string) {
 	now := time.Now()
-	_ = h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
+	if err := h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
 		EventID:      NewEventID(),
 		InvocationID: invocationID,
 		EventType:    "invocation.finished",
@@ -86,7 +93,9 @@ func (h *ExecutionHook) OnInvocationFinished(ctx context.Context, invocationID s
 			"status":     string(status),
 			"error_code": errCode,
 		},
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (h *ExecutionHook) OnAttemptStarted(ctx context.Context, invocationID string, attemptNumber int, runtimeType, runtimeID string) string {
@@ -103,22 +112,26 @@ func (h *ExecutionHook) OnAttemptStarted(ctx context.Context, invocationID strin
 		StartedAt:     now,
 	}
 
-	_ = h.writer.WriteAttempt(ctx, att)
-	_ = h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
+	if err := h.writer.WriteAttempt(ctx, att); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
 		EventID:      NewEventID(),
 		InvocationID: invocationID,
 		AttemptID:    attemptID,
 		EventType:    "attempt.started",
 		Severity:     "info",
 		Timestamp:    now,
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 
 	return attemptID
 }
 
 func (h *ExecutionHook) OnAttemptFinished(ctx context.Context, invocationID, attemptID string, status ExecutionStatus, errCode string, durationMs int64) {
 	now := time.Now()
-	_ = h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
+	if err := h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
 		EventID:      NewEventID(),
 		InvocationID: invocationID,
 		AttemptID:    attemptID,
@@ -130,7 +143,9 @@ func (h *ExecutionHook) OnAttemptFinished(ctx context.Context, invocationID, att
 			"error_code":  errCode,
 			"duration_ms": durationMs,
 		},
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (h *ExecutionHook) OnPermissionDecision(ctx context.Context, inv capability.ToolInvocationContext, toolID string, result permission.PermissionEvaluationResult) {
@@ -156,7 +171,9 @@ func (h *ExecutionHook) OnPermissionDecision(ctx context.Context, inv capability
 		event.RiskLevel = "high"
 	}
 
-	_ = h.writer.WriteAuditEvent(ctx, event)
+	if err := h.writer.WriteAuditEvent(ctx, event); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (h *ExecutionHook) OnScopeDecision(ctx context.Context, inv capability.ToolInvocationContext, toolID string, req scope.ScopeEvaluationRequest, decision scope.ScopeDecision) {
@@ -185,11 +202,13 @@ func (h *ExecutionHook) OnScopeDecision(ctx context.Context, inv capability.Tool
 		event.RiskLevel = "high"
 	}
 
-	_ = h.writer.WriteAuditEvent(ctx, event)
+	if err := h.writer.WriteAuditEvent(ctx, event); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (h *ExecutionHook) OnCircuitOpen(ctx context.Context, invocationID, runtimeID string) {
-	_ = h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
+	if err := h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
 		EventID:      NewEventID(),
 		InvocationID: invocationID,
 		EventType:    "circuit.opened",
@@ -198,11 +217,13 @@ func (h *ExecutionHook) OnCircuitOpen(ctx context.Context, invocationID, runtime
 		Data: map[string]any{
 			"runtime_id": runtimeID,
 		},
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (h *ExecutionHook) OnCircuitClosed(ctx context.Context, invocationID, runtimeID string) {
-	_ = h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
+	if err := h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
 		EventID:      NewEventID(),
 		InvocationID: invocationID,
 		EventType:    "circuit.closed",
@@ -211,7 +232,9 @@ func (h *ExecutionHook) OnCircuitClosed(ctx context.Context, invocationID, runti
 		Data: map[string]any{
 			"runtime_id": runtimeID,
 		},
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (h *ExecutionHook) RecordLifecycleEvent(ctx context.Context, opType OperationType, actorType ActorType, actorID string, subjectType SubjectType, subjectID string, status ExecutionStatus) {
@@ -233,9 +256,11 @@ func (h *ExecutionHook) RecordLifecycleEvent(ctx context.Context, opType Operati
 		op.FinishedAt = &now
 	}
 
-	_ = h.writer.WriteOperation(ctx, op)
+	if err := h.writer.WriteOperation(ctx, op); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 
-	_ = h.writer.WriteAuditEvent(ctx, AuditEvent{
+	if err := h.writer.WriteAuditEvent(ctx, AuditEvent{
 		AuditID:     NewAuditID(),
 		TraceID:     op.TraceID,
 		OperationID: op.OperationID,
@@ -247,11 +272,13 @@ func (h *ExecutionHook) RecordLifecycleEvent(ctx context.Context, opType Operati
 		Decision:    "completed",
 		Result:      string(status),
 		CreatedAt:   time.Now(),
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (h *ExecutionHook) WriteAuditForGrant(ctx context.Context, grant permission.PermissionGrant, actorType ActorType, actorID string) {
-	_ = h.writer.WriteAuditEvent(ctx, AuditEvent{
+	if err := h.writer.WriteAuditEvent(ctx, AuditEvent{
 		AuditID:       NewAuditID(),
 		TraceID:       NewTraceID(),
 		ActorType:     actorType,
@@ -264,11 +291,13 @@ func (h *ExecutionHook) WriteAuditForGrant(ctx context.Context, grant permission
 		PermissionIDs: []string{grant.PermissionID},
 		GrantID:       grant.GrantID,
 		CreatedAt:     time.Now(),
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (h *ExecutionHook) WriteAuditForScopeBind(ctx context.Context, binding scope.ScopeBinding, actorType ActorType, actorID string) {
-	_ = h.writer.WriteAuditEvent(ctx, AuditEvent{
+	if err := h.writer.WriteAuditEvent(ctx, AuditEvent{
 		AuditID:     NewAuditID(),
 		TraceID:     NewTraceID(),
 		ActorType:   actorType,
@@ -281,7 +310,9 @@ func (h *ExecutionHook) WriteAuditForScopeBind(ctx context.Context, binding scop
 		TargetType:  string(binding.Scope.Type),
 		TargetID:    binding.Scope.CharacterID + binding.Scope.ConversationID + binding.Scope.ExtensionID + binding.Scope.ModuleID,
 		CreatedAt:   time.Now(),
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 // ==================== ExecutionRecorder interface implementation ====================
@@ -303,14 +334,16 @@ func (h *ExecutionHook) BeginInvocation(ctx context.Context, inv capability.Tool
 		opID = NewOperationID()
 	}
 
-	_ = h.writer.WriteTrace(ctx, Trace{
+	if err := h.writer.WriteTrace(ctx, Trace{
 		TraceID:   traceID,
 		RootOpID:  opID,
 		CreatedAt: startedAt,
 		Metadata:  metadata,
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 
-	_ = h.writer.WriteOperation(ctx, OperationRecord{
+	if err := h.writer.WriteOperation(ctx, OperationRecord{
 		OperationID: opID,
 		TraceID:     traceID,
 		Type:        OpToolExecute,
@@ -321,7 +354,9 @@ func (h *ExecutionHook) BeginInvocation(ctx context.Context, inv capability.Tool
 		Status:      StatusRunning,
 		StartedAt:   startedAt,
 		CreatedAt:   startedAt,
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 
 	rec := InvocationRecord{
 		InvocationID:         inv.InvocationID,
@@ -356,13 +391,15 @@ func (h *ExecutionHook) BeginInvocation(ctx context.Context, inv capability.Tool
 }
 
 func (h *ExecutionHook) MarkInvocationRunning(ctx context.Context, invocationID string, startedAt time.Time) error {
-	_ = h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
+	if err := h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
 		EventID:      NewEventID(),
 		InvocationID: invocationID,
 		EventType:    "invocation.running",
 		Severity:     "info",
 		Timestamp:    startedAt,
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 
 	return h.writer.WriteInvocation(ctx, InvocationRecord{
 		InvocationID: invocationID,
@@ -395,7 +432,7 @@ func (h *ExecutionHook) BeginAttempt(ctx context.Context, inv capability.ToolInv
 		return "", err
 	}
 
-	_ = h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
+	if err := h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
 		EventID:      NewEventID(),
 		InvocationID: inv.InvocationID,
 		AttemptID:    attemptID,
@@ -407,7 +444,9 @@ func (h *ExecutionHook) BeginAttempt(ctx context.Context, inv capability.ToolInv
 			"runtime_type":   string(tool.Runtime.RuntimeType),
 			"runtime_id":     tool.Runtime.RuntimeID,
 		},
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 
 	return attemptID, nil
 }
@@ -422,7 +461,7 @@ func (h *ExecutionHook) FinishAttempt(ctx context.Context, attemptID string, res
 		errMsg = result.Error.Message
 	}
 
-	_ = h.writer.WriteAttempt(ctx, ExecutionAttempt{
+	if err := h.writer.WriteAttempt(ctx, ExecutionAttempt{
 		AttemptID:  attemptID,
 		Status:     status,
 		FinishedAt: &finishedAt,
@@ -433,9 +472,11 @@ func (h *ExecutionHook) FinishAttempt(ctx context.Context, attemptID string, res
 		Metadata: map[string]any{
 			"error_message": errMsg,
 		},
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 
-	_ = h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
+	if err := h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
 		EventID:      NewEventID(),
 		InvocationID: result.InvocationID,
 		AttemptID:    attemptID,
@@ -448,7 +489,9 @@ func (h *ExecutionHook) FinishAttempt(ctx context.Context, attemptID string, res
 			"duration_ms": result.DurationMS,
 			"backoff_ms":  backoff.Milliseconds(),
 		},
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 
 	if status == StatusFailed && result.Error != nil {
 		errRec := ErrorRecord{
@@ -465,7 +508,9 @@ func (h *ExecutionHook) FinishAttempt(ctx context.Context, attemptID string, res
 		if h.sanitizer != nil {
 			h.sanitizer.RedactErrorRecord(&errRec, result.Error.Message)
 		}
-		_ = h.writer.WriteErrorRecord(ctx, errRec)
+		if err := h.writer.WriteErrorRecord(ctx, errRec); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 
 	return nil
@@ -510,7 +555,7 @@ func (h *ExecutionHook) FinishInvocation(ctx context.Context, inv capability.Too
 		return err
 	}
 
-	_ = h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
+	if err := h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
 		EventID:      NewEventID(),
 		InvocationID: inv.InvocationID,
 		EventType:    "invocation.finished",
@@ -521,18 +566,22 @@ func (h *ExecutionHook) FinishInvocation(ctx context.Context, inv capability.Too
 			"error_code":  errCode,
 			"duration_ms": result.DurationMS,
 		},
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 
 	return nil
 }
 
 func (h *ExecutionHook) OnRetryScheduled(ctx context.Context, invocationID string, previousAttempt int, nextAttempt int, retryCount int, delayMs int64, reason string) error {
 	reason = deviceOwnedAuditReason(ctx, reason)
-	_ = h.writer.WriteInvocation(ctx, InvocationRecord{
+	if err := h.writer.WriteInvocation(ctx, InvocationRecord{
 		InvocationID: invocationID,
 		Status:       StatusRetrying,
 		RetryCount:   retryCount,
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 
 	return h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
 		EventID:      NewEventID(),
@@ -553,11 +602,13 @@ func (h *ExecutionHook) OnRetryScheduled(ctx context.Context, invocationID strin
 func (h *ExecutionHook) OnTimeoutTriggered(ctx context.Context, invocationID string) error {
 	now := time.Now()
 
-	_ = h.writer.WriteInvocation(ctx, InvocationRecord{
+	if err := h.writer.WriteInvocation(ctx, InvocationRecord{
 		InvocationID: invocationID,
 		Status:       StatusTimedOut,
 		FinishedAt:   &now,
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 
 	return h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
 		EventID:      NewEventID(),
@@ -572,11 +623,13 @@ func (h *ExecutionHook) OnCancelled(ctx context.Context, invocationID string, re
 	reason = deviceOwnedAuditReason(ctx, reason)
 	now := time.Now()
 
-	_ = h.writer.WriteInvocation(ctx, InvocationRecord{
+	if err := h.writer.WriteInvocation(ctx, InvocationRecord{
 		InvocationID: invocationID,
 		Status:       StatusCancelled,
 		FinishedAt:   &now,
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 
 	return h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
 		EventID:      NewEventID(),
@@ -594,14 +647,16 @@ func (h *ExecutionHook) OnPermissionDenied(ctx context.Context, inv capability.T
 	reason = deviceOwnedAuditReason(ctx, reason)
 	now := time.Now()
 
-	_ = h.writer.WriteInvocation(ctx, InvocationRecord{
+	if err := h.writer.WriteInvocation(ctx, InvocationRecord{
 		InvocationID: inv.InvocationID,
 		Status:       StatusDenied,
 		FinishedAt:   &now,
 		ErrorCode:    capability.ErrorCodePermissionDenied,
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 
-	_ = h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
+	if err := h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
 		EventID:      NewEventID(),
 		InvocationID: inv.InvocationID,
 		EventType:    "permission.denied",
@@ -611,7 +666,9 @@ func (h *ExecutionHook) OnPermissionDenied(ctx context.Context, inv capability.T
 			"tool_id": toolID,
 			"reason":  reason,
 		},
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 
 	return h.writer.WriteAuditEvent(ctx, AuditEvent{
 		AuditID:      NewAuditID(),
@@ -637,14 +694,16 @@ func (h *ExecutionHook) OnScopeDenied(ctx context.Context, inv capability.ToolIn
 	reason = deviceOwnedAuditReason(ctx, reason)
 	now := time.Now()
 
-	_ = h.writer.WriteInvocation(ctx, InvocationRecord{
+	if err := h.writer.WriteInvocation(ctx, InvocationRecord{
 		InvocationID: inv.InvocationID,
 		Status:       StatusDenied,
 		FinishedAt:   &now,
 		ErrorCode:    capability.ErrorCodeScopeDenied,
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 
-	_ = h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
+	if err := h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
 		EventID:      NewEventID(),
 		InvocationID: inv.InvocationID,
 		EventType:    "scope.denied",
@@ -654,7 +713,9 @@ func (h *ExecutionHook) OnScopeDenied(ctx context.Context, inv capability.ToolIn
 			"tool_id": toolID,
 			"reason":  reason,
 		},
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 
 	return h.writer.WriteAuditEvent(ctx, AuditEvent{
 		AuditID:      NewAuditID(),
@@ -682,7 +743,7 @@ func (h *ExecutionHook) OnSideEffectRecorded(ctx context.Context, invocationID s
 		if scope, owned := coordination.FromContext(ctx); owned && !scope.Coordinated {
 			effect.Target, effect.Description = "", "设备管理的动作"
 		}
-		_ = h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
+		if err := h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
 			EventID:      NewEventID(),
 			InvocationID: invocationID,
 			EventType:    "side_effect.recorded",
@@ -694,7 +755,9 @@ func (h *ExecutionHook) OnSideEffectRecorded(ctx context.Context, invocationID s
 				"description": effect.Description,
 				"reversible":  effect.Reversible,
 			},
-		})
+		}); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 
 	return h.writer.WriteInvocation(ctx, InvocationRecord{

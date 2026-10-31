@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	amitialog "log"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -51,7 +52,9 @@ func runSupervisor(args []string) error {
 	defer signal.Stop(signals)
 	go func() {
 		<-signals
-		_ = command.Process.Signal(syscall.SIGTERM)
+		if err := command.Process.Signal(syscall.SIGTERM); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}()
 
 	return command.Wait()

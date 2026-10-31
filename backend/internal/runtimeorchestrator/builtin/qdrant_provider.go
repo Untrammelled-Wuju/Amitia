@@ -18,6 +18,7 @@ import (
 	"github.com/u-ai/backend/internal/vectorstore/qdrantprocess"
 	"github.com/u-ai/backend/internal/vectorstore/qdrantprofile"
 	"github.com/u-ai/backend/pkg/platform"
+	amitialog "log"
 )
 
 type QdrantProviderFactory struct{}
@@ -387,7 +388,9 @@ func (c *qdrantProcessController) ReleaseLease(ctx context.Context) error {
 
 func (p *qdrantProvider) releaseLeaseOnFailure(ctx context.Context, lease qdrantprocess.Lease) {
 	if lease != nil {
-		_ = lease.Release(ctx)
+		if err := lease.Release(ctx); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		if p.activeLease == lease {
 			p.activeLease = nil
 		}
@@ -440,16 +443,24 @@ func (p *qdrantProvider) Stop(ctx context.Context) error {
 
 	if p.activeLease != nil {
 		rec := p.activeLease.Record()
-		_ = p.activeLease.MarkStopping(ctx)
+		if err := p.activeLease.MarkStopping(ctx); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 
 		if rec.Child != nil && rec.Child.PID > 0 {
 			supervisor := p.host.Processes()
 			if supervisor != nil {
-				_ = supervisor.Stop(ctx, runtimehost.ProcessIDQdrant)
+				if err := supervisor.Stop(ctx, runtimehost.ProcessIDQdrant); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 		}
-		_ = p.activeLease.MarkExited(ctx)
-		_ = p.activeLease.Release(ctx)
+		if err := p.activeLease.MarkExited(ctx); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := p.activeLease.Release(ctx); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		p.activeLease = nil
 	}
 

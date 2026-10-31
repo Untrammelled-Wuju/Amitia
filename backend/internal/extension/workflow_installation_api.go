@@ -15,6 +15,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
 	"github.com/u-ai/backend/internal/runtimeprofile"
+	amitialog "log"
 )
 
 func (api *WorkflowAPI) lockWorkflowMutation(spaceID, workflowID string) func() {
@@ -101,7 +102,7 @@ func (api *WorkflowAPI) emitWorkflowInstallationEvent(ctx context.Context, typeI
 		return
 	}
 	revision := inst.Revision
-	_, _ = service.Publish(ctx, event.EventTypeID(typeID), 1, payload, event.PublishOptions{
+	if _, err := service.Publish(ctx, event.EventTypeID(typeID), 1, payload, event.PublishOptions{
 		ProducerID:       "host",
 		ProducerType:     event.EventProducerTypeSystem,
 		Domain:           event.EventDomainSync,
@@ -110,7 +111,9 @@ func (api *WorkflowAPI) emitWorkflowInstallationEvent(ctx context.Context, typeI
 		AggregateVersion: &revision,
 		PartitionKey:     inst.OwnerSpaceID,
 		OrderingKey:      inst.OwnerSpaceID,
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func workflowResponse(def workflow.WorkflowDefinition, inst *workflow.WorkflowInstallation) workflowAPIResponse {

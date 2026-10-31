@@ -13,6 +13,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
+	amitialog "log"
 )
 
 func computeInstallPreviewHash(session PackagePreviewSession, preview InstallPreview) string {
@@ -157,14 +158,20 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 	}
 	lease, leaseErr := r.acquirePackageExtensionLease(ctx, session.ExtensionID, operationID)
 	if leaseErr != nil {
-		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "acquire_lease", "PACKAGE_OPERATION_LEASE_CONFLICT", leaseErr.Error(), true, PackageWriteGuard{})
+		if err := r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "acquire_lease", "PACKAGE_OPERATION_LEASE_CONFLICT", leaseErr.Error(), true, PackageWriteGuard{}); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return KernelInstallResult{}, fmt.Errorf("kernel: extension %s has an active operation: %w", session.ExtensionID, leaseErr)
 	}
 	leaseGuard := r.newPackageLeaseGuard(session.ExtensionID, operationID)
 	sagaCtx, startErr := leaseGuard.Start(ctx)
 	if startErr != nil {
-		_ = r.releasePackageExtensionLease(context.Background(), session.ExtensionID, operationID)
-		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "start_lease_guard", "PACKAGE_OPERATION_LEASE_CONFLICT", startErr.Error(), true, PackageWriteGuard{})
+		if err := r.releasePackageExtensionLease(context.Background(), session.ExtensionID, operationID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "start_lease_guard", "PACKAGE_OPERATION_LEASE_CONFLICT", startErr.Error(), true, PackageWriteGuard{}); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return KernelInstallResult{}, fmt.Errorf("kernel: lease guard start failed: %w", startErr)
 	}
 	defer func() {
@@ -185,30 +192,40 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 	guard := packageWriteGuard(lease)
 	lockedSession, err := r.container.PackageRepository.GetPreview(ctx, request.SessionID, request.SpaceID, request.ScopeType, request.ScopeID)
 	if err != nil {
-		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "lock_preview_session", "PACKAGE_PREVIEW_SESSION_LOCK_FAILED", err.Error(), true, guard)
+		if err := r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "lock_preview_session", "PACKAGE_PREVIEW_SESSION_LOCK_FAILED", err.Error(), true, guard); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return KernelInstallResult{}, err
 	}
 	if lockedSession.Status == "consumed" {
 		return r.completedPackageInstallResult(ctx, request.SpaceID, request.SessionID)
 	}
 	if lockedSession.Status != "ready" && lockedSession.Status != "awaiting_confirmation" {
-		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "lock_preview_session", "PACKAGE_PREVIEW_SESSION_STATUS", fmt.Sprintf("status %s", lockedSession.Status), true, guard)
+		if err := r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "lock_preview_session", "PACKAGE_PREVIEW_SESSION_STATUS", fmt.Sprintf("status %s", lockedSession.Status), true, guard); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return KernelInstallResult{}, fmt.Errorf("kernel: preview session status %s", lockedSession.Status)
 	}
 	if _, currentErr := r.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(session.ExtensionID)); currentErr == nil {
-		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "check_already_installed", "PACKAGE_ALREADY_INSTALLED", fmt.Sprintf("extension %s is already installed", session.ExtensionID), true, guard)
+		if err := r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "check_already_installed", "PACKAGE_ALREADY_INSTALLED", fmt.Sprintf("extension %s is already installed", session.ExtensionID), true, guard); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return KernelInstallResult{}, fmt.Errorf("PACKAGE_ALREADY_INSTALLED: extension %s is already installed", session.ExtensionID)
 	}
 
 	var lockedPreview InstallPreview
 	if err := json.Unmarshal([]byte(lockedSession.PreviewResultJSON), &lockedPreview); err != nil {
-		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "recompute_confirmation_authority", "PACKAGE_AUTHORITY_PREVIEW_INVALID", err.Error(), true, guard)
+		if err := r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "recompute_confirmation_authority", "PACKAGE_AUTHORITY_PREVIEW_INVALID", err.Error(), true, guard); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return KernelInstallResult{}, fmt.Errorf("kernel: locked preview corrupt: %w", err)
 	}
 
 	authorityInput, err := r.buildInstallUpdateAuthorityInput(ctx, string(PackageOperationTypeInstall), lockedSession, lockedPreview)
 	if err != nil {
-		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "recompute_confirmation_authority", PackageErrCodeConfirmationStale, err.Error(), true, guard)
+		if err := r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "recompute_confirmation_authority", PackageErrCodeConfirmationStale, err.Error(), true, guard); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return KernelInstallResult{}, err
 	}
 
@@ -216,12 +233,16 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 
 	installEvidence, err := buildPackageConfirmationAuthorityEvidence(operationID, standardClaims, authorityInput)
 	if err != nil {
-		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "validate_confirmation_authority", PackageErrCodeConfirmationStale, err.Error(), true, guard)
+		if err := r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "validate_confirmation_authority", PackageErrCodeConfirmationStale, err.Error(), true, guard); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return KernelInstallResult{}, err
 	}
 
 	if err := r.persistPackageConfirmationAuthorityEvidence(ctx, installEvidence, guard); err != nil {
-		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "persist_authority_evidence", "PACKAGE_EVIDENCE_PERSIST_FAILED", err.Error(), true, guard)
+		if err := r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "persist_authority_evidence", "PACKAGE_EVIDENCE_PERSIST_FAILED", err.Error(), true, guard); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return KernelInstallResult{}, fmt.Errorf("kernel: persist install authority evidence: %w", err)
 	}
 
@@ -253,18 +274,26 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 		_ = committedPath
 		if targetGeneration.Current.GenerationID != "" {
 			if compensationErr := r.compensatePackageGeneration(context.Background(), stableGeneration, targetGeneration, currentSwitched); compensationErr != nil {
-				_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "requires_recovery", name, "PACKAGE_RECOVERY_REQUIRED", compensationErr.Error(), false, guard)
+				if err := r.container.PackageRepository.SetOperation(context.Background(), operationID, "requires_recovery", name, "PACKAGE_RECOVERY_REQUIRED", compensationErr.Error(), false, guard); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 				return KernelInstallResult{}, errors.Join(cause, compensationErr)
 			}
 		}
 		if readModelCommitted {
 			if restoreErr := r.restorePackageReadModelSnapshot(context.Background(), definition.ID, previous, previousDefinition, previousModules, previousContributions, providerSnapshot); restoreErr != nil {
-				_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "requires_recovery", name, "PACKAGE_RECOVERY_REQUIRED", restoreErr.Error(), false, guard)
+				if err := r.container.PackageRepository.SetOperation(context.Background(), operationID, "requires_recovery", name, "PACKAGE_RECOVERY_REQUIRED", restoreErr.Error(), false, guard); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 				return KernelInstallResult{}, errors.Join(cause, restoreErr)
 			}
 		}
-		_ = step(99, name, "failed", "{}", "PACKAGE_INSTALL_FAILED")
-		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", name, "PACKAGE_INSTALL_FAILED", cause.Error(), true, guard)
+		if err := step(99, name, "failed", "{}", "PACKAGE_INSTALL_FAILED"); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", name, "PACKAGE_INSTALL_FAILED", cause.Error(), true, guard); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return KernelInstallResult{}, cause
 	}
 	if err := step(1, StepValidatePreviewSession, "completed", "{}", ""); err != nil {
@@ -385,7 +414,9 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 	readModelCommitted = true
 	artifact.InstalledPath = targetPath
 	if err := r.container.PackageRepository.SetArtifactInstalledPath(ctx, artifact.ArtifactID, targetPath, guard); err != nil {
-		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "requires_recovery", "persist_artifact_metadata", "PACKAGE_RECOVERY_REQUIRED", err.Error(), false, guard)
+		if err := r.container.PackageRepository.SetOperation(context.Background(), operationID, "requires_recovery", "persist_artifact_metadata", "PACKAGE_RECOVERY_REQUIRED", err.Error(), false, guard); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return KernelInstallResult{}, err
 	}
 	commitRepoResult := CommitRepositoryResult{InstallationID: installationID, VersionID: session.Version, ArtifactID: artifact.ArtifactID, GenerationID: targetGeneration.Current.GenerationID}
@@ -405,18 +436,24 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 	}
 	if err := r.reconcileGameHostExtension(ctx, session.ExtensionID); err != nil {
 		result, failErr := fail("reconcile_game_host", err, targetPath)
-		_ = r.reconcileGameHostExtension(context.Background(), session.ExtensionID)
+		if err := r.reconcileGameHostExtension(context.Background(), session.ExtensionID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return result, failErr
 	}
 	if err := r.container.PackageRepository.ConsumePreview(ctx, session.SessionID); err != nil {
-		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "requires_recovery", "consume_preview_session", "PACKAGE_RECOVERY_REQUIRED", err.Error(), false, guard)
+		if err := r.container.PackageRepository.SetOperation(context.Background(), operationID, "requires_recovery", "consume_preview_session", "PACKAGE_RECOVERY_REQUIRED", err.Error(), false, guard); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return KernelInstallResult{}, err
 	}
 	if err := step(9, StepMarkInstallationDisabled, "completed", "{}", ""); err != nil {
 		return KernelInstallResult{}, err
 	}
 	if err := r.recordPackageVersionAfterOperation(ctx, operationID, "install", session.ExtensionID, session.Version, artifact.ArtifactID, targetPath, generationTreeHash, artifact.ArchiveHash, artifact.ManifestHash, artifact.ContentTreeHash, targetGeneration.Current.GenerationID, guard); err != nil {
-		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "requires_recovery", "record_version", "PACKAGE_VERSION_HISTORY_CORRUPTED", err.Error(), false, guard)
+		if err := r.container.PackageRepository.SetOperation(context.Background(), operationID, "requires_recovery", "record_version", "PACKAGE_VERSION_HISTORY_CORRUPTED", err.Error(), false, guard); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return KernelInstallResult{}, err
 	}
 	if err := r.FinalizePackageOperation(ctx, operationID, session.ExtensionID, leaseGuard, guard); err != nil {

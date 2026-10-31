@@ -1110,7 +1110,9 @@ internal class DesktopPetRendererNativeHandler(
         if (view != null) {
             try {
                 windowManager.removeViewImmediate(view)
-            } catch (_: Exception) {
+            } catch (originalError1113: Exception) {
+              originalError1113.printStackTrace()
+
             }
         }
     }
@@ -1186,7 +1188,9 @@ internal class DesktopPetRendererNativeHandler(
                         return try {
                             windowManager.updateViewLayout(view, params)
                             true
-                        } catch (_: Exception) {
+                        } catch (originalError1189: Exception) {
+                          originalError1189.printStackTrace()
+
                             false
                         }
                     }
@@ -1335,7 +1339,9 @@ internal class DesktopPetRendererNativeHandler(
         bitmapCache.get(key)?.let { return it }
         return try {
             BitmapFactory.decodeFile(key)?.also { bitmapCache.put(key, it) }
-        } catch (_: OutOfMemoryError) {
+        } catch (originalError1338: OutOfMemoryError) {
+          originalError1338.printStackTrace()
+
             bitmapCache.evictAll()
             null
         }

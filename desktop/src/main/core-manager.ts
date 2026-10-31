@@ -49,19 +49,22 @@ process.on("exit", () => {
   }
   try {
     removeCoreEndpoint(getAmitiaDataDir(), coreChildPid || undefined);
-  } catch {
-    console.error("[CoreManager] 退出时清理核心端点失败");
+  } catch (error) {
+  console.error("[original-error]", error);
+console.error("[CoreManager] 退出时清理核心端点失败");
   }
   try {
     if (coreProcess && coreProcess.exitCode === null && !coreProcess.killed) {
       try {
         coreProcess.stdin?.write("shutdown\n");
-      } catch {
-      }
+      } catch (error) {
+  console.error("[original-error]", error);
+}
       coreProcess.kill();
     }
-  } catch {
-    return;
+  } catch (error) {
+  console.error("[original-error]", error);
+return;
   }
 });
 
@@ -163,8 +166,9 @@ function migrateConfig(configPath: string): void {
     try {
       const yaml = require("yaml");
       config = yaml.parse(content) || {};
-    } catch {
-      config = {};
+    } catch (error) {
+  console.error("[original-error]", error);
+config = {};
     }
 
     const applicableMigrations = CONFIG_MIGRATIONS.filter(
@@ -295,19 +299,22 @@ function ensureGeneratedRuntimeSecrets(configPath: string): void {
     fs.writeFileSync(tmpPath, output, { encoding: "utf8", mode: 0o600 });
     try {
       fs.chmodSync(tmpPath, 0o600);
-    } catch {
-      // Windows may ignore POSIX permission bits.
+    } catch (error) {
+  console.error("[original-error]", error);
+// Windows may ignore POSIX permission bits.
     }
     try {
       fs.renameSync(tmpPath, configPath);
-    } catch {
-      fs.copyFileSync(tmpPath, configPath);
+    } catch (error) {
+  console.error("[original-error]", error);
+fs.copyFileSync(tmpPath, configPath);
       fs.unlinkSync(tmpPath);
     }
     try {
       fs.chmodSync(configPath, 0o600);
-    } catch {
-      // Windows may ignore POSIX permission bits.
+    } catch (error) {
+  console.error("[original-error]", error);
+// Windows may ignore POSIX permission bits.
     }
   } catch (err) {
     throw new Error(`安全凭据初始化失败: ${err instanceof Error ? err.message : String(err)}`);
@@ -521,6 +528,7 @@ export function startCore(profile: BundledCoreProfile): void {
   });
   runningCoreProfile = profile;
   const pid = coreProcess.pid ?? 0;
+  coreChildPid = pid;
 
   console.log(`[CoreManager] 核心进程已启动, PID: ${pid}, generation: ${currentGeneration}`);
 
@@ -653,14 +661,16 @@ async function forceStopRunner(): Promise<void> {
   if (!child || child.exitCode !== null || child.killed) return;
   try {
     child.stdin?.write("shutdown\n");
-  } catch {
-  }
+  } catch (error) {
+  console.error("[original-error]", error);
+}
   await new Promise((resolve) => setTimeout(resolve, 500));
   if (child.exitCode === null && !child.killed) {
     try {
       child.kill();
-    } catch {
-    }
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
 }
 

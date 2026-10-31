@@ -91,10 +91,10 @@ type SupervisorStateObserver interface {
 }
 
 type SupervisorStateProjection struct {
-	RuntimeID  domain.RuntimeInstanceID
-	InstanceID string
-	ServiceID  domain.ServiceID
-	Health     domain.HealthStatus
+	RuntimeID   domain.RuntimeInstanceID
+	InstanceID  string
+	ServiceID   domain.ServiceID
+	Health      domain.HealthStatus
 	Quarantined bool
-	Generation int64
+	Generation  int64
 }

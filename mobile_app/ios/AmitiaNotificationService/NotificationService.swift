@@ -78,6 +78,8 @@ final class NotificationService: UNNotificationServiceExtension {
           contentHandler(mutable)
         }
       } catch {
+        print("[original-error] \(error)")
+
         contentHandler(mutable)
       }
       self.contentHandler = nil

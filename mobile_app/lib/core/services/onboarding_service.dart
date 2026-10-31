@@ -1,4 +1,6 @@
 import 'package:dio/dio.dart';
+
+import '../errors/original_error.dart';
 import '../runtime/backend/backend_topology_resolver.dart';
 import '../backend_transport/backend_service_api.dart';
 
@@ -183,7 +185,7 @@ class OnboardingService {
           error.type == DioExceptionType.receiveTimeout ||
           error.type == DioExceptionType.sendTimeout)
         throw StateError('配对请求超时，请检查两台设备的连接后重试');
-      throw StateError('无法连接配对服务，请检查局域网地址、设备身份和服务状态');
+      throw StateError(originalErrorText(error));
     } finally {
       dio.close(force: true);
     }

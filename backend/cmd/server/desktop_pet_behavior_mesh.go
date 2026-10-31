@@ -24,6 +24,7 @@ import (
 	"github.com/u-ai/backend/log"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	amitialog "log"
 )
 
 const (
@@ -454,14 +455,16 @@ func (p *desktopPetBehaviorMeshPublisher) processOutboxRow(ctx context.Context, 
 	row.ClaimExpiresAt = &claimExpiresAt
 	var event behavior.BehaviorEventEnvelope
 	if err := json.Unmarshal([]byte(row.PayloadJSON), &event); err != nil {
-		_ = p.db.WithContext(ctx).Model(&desktopPetBehaviorMeshOutbox{}).
+		if err := p.db.WithContext(ctx).Model(&desktopPetBehaviorMeshOutbox{}).
 			Where("cloud_space_id = ? AND event_id = ? AND status = ?", row.CloudSpaceID, row.EventID, "processing").
 			Updates(map[string]interface{}{
 				"status":           "failed",
 				"claim_expires_at": nil,
 				"last_error":       "invalid persisted event payload: " + err.Error(),
 				"updated_at":       now,
-			}).Error
+			}).Error; err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return err
 	}
 	target, err := p.dispatchEvent(
@@ -619,13 +622,17 @@ func (p *desktopPetBehaviorMeshPublisher) resolveTarget(ctx context.Context, mes
 			return nil, fmt.Errorf("desktop pet behavior mesh: validate pinned target %s: %w", target, err)
 		}
 		if resolved.Active {
-			_ = p.saveAffinity(ctx, spaceID.String(), resolved)
+			if err := p.saveAffinity(ctx, spaceID.String(), resolved); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return resolved, nil
 		}
 		// The device authoritatively reports that the old installation/character
 		// binding is no longer active. Invalidate the advisory affinity for future
 		// events, but keep this already-targeted event pinned until TTL expiry.
-		_ = p.invalidateAffinity(ctx, spaceID.String(), characterID, target)
+		if err := p.invalidateAffinity(ctx, spaceID.String(), characterID, target); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, fmt.Errorf("desktop pet behavior mesh: pinned target device %s no longer owns the active installation", target)
 	}
 
@@ -643,12 +650,16 @@ func (p *desktopPetBehaviorMeshPublisher) resolveTarget(ctx context.Context, mes
 					return nil, fmt.Errorf("desktop pet behavior mesh: validate affinity device %s: %w", affinity.DeviceID, resolveErr)
 				}
 				if resolved.Active {
-					_ = p.saveAffinity(ctx, spaceID.String(), resolved)
+					if err := p.saveAffinity(ctx, spaceID.String(), resolved); err != nil {
+						amitialog.Printf("[original-error] %v", err)
+					}
 					return resolved, nil
 				}
 				// An online device has authoritatively denied the old binding. It is
 				// safe to discard this advisory affinity before discovery.
-				_ = p.invalidateAffinity(ctx, spaceID.String(), characterID, affinity.DeviceID)
+				if err := p.invalidateAffinity(ctx, spaceID.String(), characterID, affinity.DeviceID); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 			// An offline advisory affinity is not yet a physical event target. Keep
 			// it for future evidence, but allow discovery of another online device

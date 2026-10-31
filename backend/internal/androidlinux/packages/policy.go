@@ -3,20 +3,20 @@ package packages
 import "time"
 
 type PackagesPolicy struct {
-	Enabled                       bool          `json:"enabled"`
-	AptEnabled                    bool          `json:"aptEnabled"`
-	PythonEnabled                 bool          `json:"pythonEnabled"`
-	NodeEnabled                   bool          `json:"nodeEnabled"`
-	DefaultInvokeTimeout          time.Duration `json:"defaultInvokeTimeout"`
-	MaxInvokeTimeout              time.Duration `json:"maxInvokeTimeout"`
-	DefaultInstallTimeout         time.Duration `json:"defaultInstallTimeout"`
-	MaxInstallTimeout             time.Duration `json:"maxInstallTimeout"`
-	StatusTimeout                 time.Duration `json:"statusTimeout"`
-	DefaultOutputLimit            int64         `json:"defaultOutputLimit"`
-	InstallNoRecommends           bool          `json:"installNoRecommends"`
-	UseAptGet                     bool          `json:"useAptGet"`
-	PythonVenvBaseDir             string        `json:"pythonVenvBaseDir"`
-	NodePackageBaseDir            string        `json:"nodePackageBaseDir"`
+	Enabled               bool          `json:"enabled"`
+	AptEnabled            bool          `json:"aptEnabled"`
+	PythonEnabled         bool          `json:"pythonEnabled"`
+	NodeEnabled           bool          `json:"nodeEnabled"`
+	DefaultInvokeTimeout  time.Duration `json:"defaultInvokeTimeout"`
+	MaxInvokeTimeout      time.Duration `json:"maxInvokeTimeout"`
+	DefaultInstallTimeout time.Duration `json:"defaultInstallTimeout"`
+	MaxInstallTimeout     time.Duration `json:"maxInstallTimeout"`
+	StatusTimeout         time.Duration `json:"statusTimeout"`
+	DefaultOutputLimit    int64         `json:"defaultOutputLimit"`
+	InstallNoRecommends   bool          `json:"installNoRecommends"`
+	UseAptGet             bool          `json:"useAptGet"`
+	PythonVenvBaseDir     string        `json:"pythonVenvBaseDir"`
+	NodePackageBaseDir    string        `json:"nodePackageBaseDir"`
 }
 
 func DefaultPackagesPolicy() PackagesPolicy {

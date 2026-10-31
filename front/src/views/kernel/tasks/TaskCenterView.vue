@@ -600,8 +600,9 @@ async function handleEnqueue() {
   let input: unknown;
   try {
     input = JSON.parse(enqueueForm.value.input);
-  } catch {
-    ElMessage.error("输入 JSON 格式无效");
+  } catch (error) {
+  console.error("[original-error]", error);
+ElMessage.error(error instanceof Error ? error.message : String(error));
     return;
   }
   if (!enqueueForm.value.deviceId) {
@@ -666,8 +667,9 @@ function formatDuration(start?: string, end?: string): string {
 function formatPayload(payload: unknown): string {
   try {
     return JSON.stringify(payload, null, 2);
-  } catch {
-    return String(payload);
+  } catch (error) {
+  console.error("[original-error]", error);
+return String(payload);
   }
 }
 

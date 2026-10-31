@@ -61,8 +61,12 @@ internal class BackgroundKeepAliveNativeHandler(private val context: Context) : 
                             activity.startActivity(intent)
                             opened = true
                             break
-                        } catch (_: ActivityNotFoundException) {
-                        } catch (_: SecurityException) {
+                        } catch (originalError64: ActivityNotFoundException) {
+                          originalError64.printStackTrace()
+
+                        } catch (originalError65: SecurityException) {
+                          originalError65.printStackTrace()
+
                         }
                     }
                     check(opened) { "当前系统无法打开设置，请手动进入应用管理调整" }

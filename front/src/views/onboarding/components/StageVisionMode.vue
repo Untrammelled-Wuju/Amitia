@@ -276,8 +276,9 @@ const selectedProvider = ref("");
 onMounted(async () => {
   try {
     providers.value = (await get<any[]>("/api/vision/providers")) || [];
-  } catch {
-    providers.value = [];
+  } catch (error) {
+  console.error("[original-error]", error);
+providers.value = [];
   }
 });
 

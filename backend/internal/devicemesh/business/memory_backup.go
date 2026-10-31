@@ -10,6 +10,7 @@ import (
 
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/system/dataportability"
+	amitialog "log"
 )
 
 const OwnedMemoryBackupComponent = "memory.owned"
@@ -62,7 +63,9 @@ func (c *MemoryBackupContributor) Export(ctx context.Context, req dataportabilit
 		return err
 	}
 	if err := json.NewEncoder(w).Encode(archive); err != nil {
-		_ = w.Close()
+		if err := w.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return err
 	}
 	return w.Close()

@@ -14,6 +14,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/scope"
 	"github.com/u-ai/backend/internal/extension/kernel/secret"
+	amitialog "log"
 )
 
 type ExecutionPipeline struct {
@@ -91,7 +92,9 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 
 	if p.AuditSink != nil {
 		inputJSON, _ := json.Marshal(request.Input)
-		_ = p.AuditSink.BeginInvocation(ctx, inv, toolID, inputJSON, p.TimeoutCtrl.Now())
+		if err := p.AuditSink.BeginInvocation(ctx, inv, toolID, inputJSON, p.TimeoutCtrl.Now()); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 
 	if result, cancelled := p.checkCancellation(ctx, inv); cancelled {
@@ -141,7 +144,7 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 	if err != nil {
 		return p.finalizeCancellation(ctx, inv, p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 			Code:    capability.ErrorCodeInternalError,
-			Message: "resolve timeout budget failed",
+				Message: "resolve timeout budget failed: " + err.Error(),
 		}))), nil
 	}
 
@@ -154,7 +157,7 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 	if err != nil {
 		return p.finalizeCancellation(ctx, inv, p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 			Code:    capability.ErrorCodeInternalError,
-			Message: "wrap timeout context failed",
+				Message: "wrap timeout context failed: " + err.Error(),
 		}))), nil
 	}
 	defer timeoutCancel()
@@ -316,10 +319,14 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 		if hit {
 			cached := capability.UnifiedToolResult{}
 			if len(idempotencyReservation.PriorWorkResultJSON) > 0 {
-				_ = json.Unmarshal(idempotencyReservation.PriorWorkResultJSON, &cached)
+				if err := json.Unmarshal(idempotencyReservation.PriorWorkResultJSON, &cached); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 			if stream != nil {
-				_ = stream.Finish(timeoutCtx, cached)
+				if err := stream.Finish(timeoutCtx, cached); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 			return p.finalizeCancellation(timeoutCtx, inv, cached), nil
 		}
@@ -388,7 +395,7 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 			result := capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 				Code:     capability.ErrorCodeConcurrencyPolicyInvalid,
 				Category: capability.ToolErrorCategoryResource,
-				Message:  "invalid concurrency policy",
+					Message:  "invalid concurrency policy: " + leaseErr.Error(),
 			})
 			return p.finalizeCancellation(timeoutCtx, inv, result), nil
 		}
@@ -467,7 +474,9 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 		}
 
 		if p.AuditSink != nil {
-			_ = p.AuditSink.OnRetryScheduled(timeoutCtx, inv.InvocationID, attemptNumber, attemptNumber+1, retryCount+1, decision.Delay.Milliseconds(), string(decision.Reason))
+			if err := p.AuditSink.OnRetryScheduled(timeoutCtx, inv.InvocationID, attemptNumber, attemptNumber+1, retryCount+1, decision.Delay.Milliseconds(), string(decision.Reason)); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 
 		if interrupted := RespectBackoff(timeoutCtx, decision.Delay); interrupted {
@@ -529,11 +538,13 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 	if p.IdempotencyGuard != nil && inv.IdempotencyKey != "" && idempotencyReservation.IdempotencyKey != "" {
 		switch result.Status {
 		case capability.ToolResultStatusCancelled, capability.ToolResultStatusTimedOut:
-			_, _ = p.IdempotencyGuard.MarkIndeterminate(timeoutCtx, idempotencyReservation.IdempotencyKey)
+			if _, err := p.IdempotencyGuard.MarkIndeterminate(timeoutCtx, idempotencyReservation.IdempotencyKey); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		case capability.ToolResultStatusSuccess, capability.ToolResultStatusFailed:
 			if err := p.IdempotencyGuard.Complete(timeoutCtx, idempotencyReservation, &result); err != nil {
 				if _, owned := coordination.FromContext(timeoutCtx); owned {
-					result = capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{Code: "device_result_unconfirmed", Message: "工具已发起，但结果尚未获得所有者保存确认，禁止自动重新执行", Retryable: false})
+					result = capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{Code: "device_result_unconfirmed", Message: "工具已发起，但结果尚未获得所有者保存确认，禁止自动重新执行: " + err.Error(), Retryable: false})
 				}
 			}
 		}
@@ -543,7 +554,9 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 		p.SideEffectRec.Record(timeoutCtx, inv.InvocationID, toolID, result.SideEffects)
 	}
 	if p.AuditSink != nil && len(result.SideEffects) > 0 {
-		_ = p.AuditSink.OnSideEffectRecorded(timeoutCtx, inv.InvocationID, result.SideEffects)
+		if err := p.AuditSink.OnSideEffectRecorded(timeoutCtx, inv.InvocationID, result.SideEffects); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 
 	p.recordAuditFinish(timeoutCtx, inv.InvocationID, toolID, string(result.Status), p.TimeoutCtrl.Now().Sub(startTime))
@@ -602,7 +615,9 @@ func (p *ExecutionPipeline) dispatchAttempt(
 	}
 
 	if p.AuditSink != nil && attemptID != "" {
-		_ = p.AuditSink.FinishAttempt(ctx, attemptID, result, p.TimeoutCtrl.Now(), 0)
+		if err := p.AuditSink.FinishAttempt(ctx, attemptID, result, p.TimeoutCtrl.Now(), 0); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 
 	result = p.checkLateResult(ctx, inv, string(request.ToolID), result, budget)
@@ -636,7 +651,9 @@ func (p *ExecutionPipeline) finalizeAttemptResult(
 	}
 
 	if p.AuditSink != nil && result.Status == capability.ToolResultStatusCancelled {
-		_ = p.AuditSink.OnCancelled(ctx, inv.InvocationID, string(getCancelReasonCode(ctx, inv)))
+		if err := p.AuditSink.OnCancelled(ctx, inv.InvocationID, string(getCancelReasonCode(ctx, inv))); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 
 	return result
@@ -689,7 +706,9 @@ func (p *ExecutionPipeline) registerDeadlineAbortHook(ctx context.Context, inv c
 		}
 		abortCtx, abortCancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer abortCancel()
-		_, _ = p.CancellationCtrl.RequestRuntimeAbort(abortCtx, inv.InvocationID, deadlineReason)
+		if _, err := p.CancellationCtrl.RequestRuntimeAbort(abortCtx, inv.InvocationID, deadlineReason); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	})
 }
 
@@ -794,10 +813,14 @@ func (p *ExecutionPipeline) attachRuntimeCanceller(ctx context.Context, tool cap
 	toolCopy := tool
 	invCopy := inv
 
-	_ = p.CancellationCtrl.AttachRuntimeCanceller(inv.InvocationID, func() {
+	if err := p.CancellationCtrl.AttachRuntimeCanceller(inv.InvocationID, func() {
 		reason := capability.ToolCancellationReason{Code: capability.CancellationReasonRuntimeRequested}
-		_, _ = p.Dispatcher.Cancel(ctx, toolCopy, invCopy, reason)
-	})
+		if _, err := p.Dispatcher.Cancel(ctx, toolCopy, invCopy, reason); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func approvalTimeout(err error) bool {
@@ -830,7 +853,9 @@ func (p *ExecutionPipeline) resolveTool(ctx context.Context, toolID string) (cap
 
 func (p *ExecutionPipeline) failWithAudit(ctx context.Context, inv capability.ToolInvocationContext, toolID string, result capability.UnifiedToolResult) capability.UnifiedToolResult {
 	if p.AuditSink != nil {
-		_ = p.AuditSink.FinishInvocation(ctx, inv, result, time.Now())
+		if err := p.AuditSink.FinishInvocation(ctx, inv, result, time.Now()); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return result
 }
@@ -842,7 +867,9 @@ func (p *ExecutionPipeline) finishEarlyResult(ctx context.Context, inv capabilit
 
 func (p *ExecutionPipeline) recordAuditStart(ctx context.Context, invID, toolID string) {
 	if p.AuditSink != nil {
-		_ = p.AuditSink.MarkInvocationRunning(ctx, invID, time.Now())
+		if err := p.AuditSink.MarkInvocationRunning(ctx, invID, time.Now()); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 }
 

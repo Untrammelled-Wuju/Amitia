@@ -2,6 +2,7 @@ package runtimeport
 
 import (
 	"fmt"
+	amitialog "log"
 	"net"
 	"sync"
 )
@@ -21,7 +22,9 @@ func AllocateLoopback() (int, error) {
 			return 0, err
 		}
 		port := listener.Addr().(*net.TCPAddr).Port
-		_ = listener.Close()
+		if err := listener.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		if _, exists := reserved[port]; exists {
 			continue
 		}
@@ -42,16 +45,24 @@ func AllocateLoopbackPair() (int, error) {
 		firstPort := first.Addr().(*net.TCPAddr).Port
 		secondPort := firstPort + 1
 		if secondPort > 65535 {
-			_ = first.Close()
+			if err := first.Close(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			continue
 		}
 		second, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", secondPort))
 		if err != nil {
-			_ = first.Close()
+			if err := first.Close(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			continue
 		}
-		_ = second.Close()
-		_ = first.Close()
+		if err := second.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := first.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		if _, exists := reserved[firstPort]; exists {
 			continue
 		}

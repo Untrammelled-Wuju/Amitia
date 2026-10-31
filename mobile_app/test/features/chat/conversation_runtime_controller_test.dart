@@ -849,6 +849,30 @@ void main() {
     await events.close();
   });
 
+  test('不同会话运行实例可以并发发送并独立保留后台完成数', () async {
+    final events = StreamController<ChatStreamEvent>.broadcast();
+    final service = _FakeChatService(events);
+    final registry = ConversationRuntimeRegistry(service);
+    final first = registry.session('conversation-a');
+    final second = registry.session('conversation-b');
+    await first.openConversation('conversation-a');
+    await second.openConversation('conversation-b');
+    registry.setVisibleConversation('conversation-a');
+
+    await Future.wait([first.sendText('第一条'), second.sendText('第二条')]);
+
+    expect(identical(first, second), isFalse);
+    expect(service.submitCount, 2);
+    final completedConversation = second.conversationId!;
+    expect(
+      registry.activityFor(completedConversation)?.unreadCompletedCount,
+      1,
+    );
+
+    registry.dispose();
+    await events.close();
+  });
+
   test('群聊手动输入和粘贴的成员名称直接生成提及元数据', () {
     final members = [
       OwnedGroupMember.fromJson({

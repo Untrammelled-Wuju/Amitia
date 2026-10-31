@@ -4,13 +4,10 @@ package system
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"os"
 	"runtime"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/u-ai/backend/config"
 )
@@ -48,145 +45,6 @@ func (s *service) ConfigSettings() map[string]interface{} {
 		result[r.Key] = r.Value
 	}
 	return result
-}
-
-func (s *service) ConfigExport() map[string]interface{} {
-	settings := s.ConfigSettings()
-	return map[string]interface{}{
-		"exported":   true,
-		"format":     "amitia-config-v1",
-		"exportedAt": time.Now().UTC().Format(time.RFC3339),
-		"settings":   settings,
-		"data":       settings,
-	}
-}
-
-func (s *service) ConfigImportPreviewService(body map[string]interface{}) map[string]interface{} {
-	settings, err := parseConfigImportPayload(body)
-	if err != nil {
-		return map[string]interface{}{"valid": false, "error": err.Error(), "itemCount": 0}
-	}
-
-	current := s.ConfigSettings()
-	changed := 0
-	unchanged := 0
-	created := 0
-	items := make([]map[string]interface{}, 0, len(settings))
-	for key, value := range settings {
-		old, exists := current[key]
-		status := "unchanged"
-		if !exists {
-			status = "new"
-			created++
-		} else if fmt.Sprint(old) != value {
-			status = "changed"
-			changed++
-		} else {
-			unchanged++
-		}
-		items = append(items, map[string]interface{}{
-			"key":      key,
-			"value":    value,
-			"oldValue": old,
-			"status":   status,
-		})
-	}
-
-	return map[string]interface{}{
-		"valid":     true,
-		"format":    "amitia-config-v1",
-		"itemCount": len(settings),
-		"newCount":  created,
-		"changed":   changed,
-		"unchanged": unchanged,
-		"items":     items,
-		"settings":  settings,
-	}
-}
-
-func (s *service) ConfigImportConfirmService(body map[string]interface{}) map[string]interface{} {
-	result, err := s.ConfigImportConfirmContext(context.Background(), body)
-	if err != nil {
-		return map[string]interface{}{"imported": false, "error": err.Error(), "importedCount": 0}
-	}
-	return result
-}
-
-func parseConfigImportPayload(body map[string]interface{}) (map[string]string, error) {
-	if body == nil {
-		return nil, fmt.Errorf("missing configuration payload")
-	}
-
-	var decoded interface{} = body
-	if raw, ok := body["raw"].(string); ok {
-		if raw == "" {
-			return nil, fmt.Errorf("configuration file is empty")
-		}
-		var value interface{}
-		if err := json.Unmarshal([]byte(raw), &value); err != nil {
-			return nil, fmt.Errorf("invalid configuration JSON: %w", err)
-		}
-		decoded = value
-	}
-
-	root, ok := decoded.(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("configuration root must be an object")
-	}
-	if nested, ok := root["data"].(map[string]interface{}); ok {
-		// Accept a full API response saved by older clients.
-		if _, hasSettings := root["settings"]; !hasSettings {
-			root = nested
-		}
-	}
-
-	candidate := interface{}(root)
-	if value, ok := root["settings"]; ok {
-		candidate = value
-	} else if value, ok := root["data"]; ok {
-		candidate = value
-	}
-
-	result := map[string]string{}
-	switch value := candidate.(type) {
-	case map[string]interface{}:
-		for key, raw := range value {
-			if key == "" || raw == nil {
-				continue
-			}
-			switch typed := raw.(type) {
-			case string:
-				result[key] = typed
-			case bool, float64:
-				result[key] = fmt.Sprint(typed)
-			default:
-				encoded, err := json.Marshal(typed)
-				if err != nil {
-					return nil, fmt.Errorf("encode setting %s: %w", key, err)
-				}
-				result[key] = string(encoded)
-			}
-		}
-	case []interface{}:
-		// Backward compatibility with the old ConfigExport database-row format.
-		for _, entry := range value {
-			row, ok := entry.(map[string]interface{})
-			if !ok {
-				continue
-			}
-			key := fmt.Sprint(row["key"])
-			if key == "" || key == "<nil>" {
-				continue
-			}
-			result[key] = fmt.Sprint(row["value"])
-		}
-	default:
-		return nil, fmt.Errorf("configuration settings must be an object")
-	}
-	if len(result) == 0 {
-		return nil, fmt.Errorf("configuration contains no settings")
-	}
-	return result, nil
 }
 
 func (s *service) GetVersion() map[string]interface{} {

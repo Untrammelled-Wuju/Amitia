@@ -431,7 +431,9 @@ internal class BluetoothAutomationManager(
         fun discoverServices(timeoutMs: Long): Boolean = synchronized(opLock) {
             val gatt = gatt() ?: return false
             val latch = beginOperation()
-            val started = try { gatt.discoverServices() } catch (_: Throwable) { false }
+            val started = try { gatt.discoverServices() } catch (originalError434: Throwable) {
+              originalError434.printStackTrace()
+             false }
             if (!started) { clearOperation(); return false }
             val signalled = latch.await(timeoutMs, TimeUnit.MILLISECONDS)
             val success = signalled && operationStatus?.get() == BluetoothGatt.GATT_SUCCESS
@@ -442,7 +444,9 @@ internal class BluetoothAutomationManager(
         fun readCharacteristic(characteristic: BluetoothGattCharacteristic, timeoutMs: Long): ByteArray? = synchronized(opLock) {
             val gatt = gatt() ?: return null
             val latch = beginOperation(captureValue = true)
-            val started = try { gatt.readCharacteristic(characteristic) } catch (_: Throwable) { false }
+            val started = try { gatt.readCharacteristic(characteristic) } catch (originalError445: Throwable) {
+              originalError445.printStackTrace()
+             false }
             if (!started) { clearOperation(); return null }
             val signalled = latch.await(timeoutMs, TimeUnit.MILLISECONDS)
             val success = signalled && operationStatus?.get() == BluetoothGatt.GATT_SUCCESS
@@ -464,7 +468,9 @@ internal class BluetoothAutomationManager(
                     characteristic.value = value.copyOf()
                     gatt.writeCharacteristic(characteristic)
                 }
-            } catch (_: Throwable) {
+            } catch (originalError467: Throwable) {
+              originalError467.printStackTrace()
+
                 false
             }
             if (!started) { clearOperation(); return false }
@@ -481,7 +487,9 @@ internal class BluetoothAutomationManager(
         @Suppress("DEPRECATION")
         fun setSubscription(characteristic: BluetoothGattCharacteristic, enabled: Boolean, indications: Boolean, timeoutMs: Long): Boolean = synchronized(opLock) {
             val gatt = gatt() ?: return false
-            val local = try { gatt.setCharacteristicNotification(characteristic, enabled) } catch (_: Throwable) { false }
+            val local = try { gatt.setCharacteristicNotification(characteristic, enabled) } catch (originalError484: Throwable) {
+              originalError484.printStackTrace()
+             false }
             if (!local) return false
             val descriptor = characteristic.getDescriptor(CLIENT_CHARACTERISTIC_CONFIG_UUID) ?: return true
             val value = when {
@@ -497,7 +505,9 @@ internal class BluetoothAutomationManager(
                     descriptor.value = value
                     gatt.writeDescriptor(descriptor)
                 }
-            } catch (_: Throwable) {
+            } catch (originalError500: Throwable) {
+              originalError500.printStackTrace()
+
                 false
             }
             if (!started) { clearOperation(); return false }

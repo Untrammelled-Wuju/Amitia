@@ -245,7 +245,9 @@ class SchemaUINode {
       try {
         final decoded = jsonDecode(raw);
         if (decoded is Map<String, dynamic>) return decoded;
-      } catch (_) {}
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
     }
     return null;
   }
@@ -491,7 +493,9 @@ class SchemaUIDocument {
       if (decoded is Map<String, dynamic>) {
         return SchemaUIDocument.fromJson(decoded);
       }
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
     return null;
   }
 }

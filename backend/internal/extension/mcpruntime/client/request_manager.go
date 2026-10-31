@@ -13,6 +13,7 @@ import (
 
 	"github.com/u-ai/backend/internal/extension/mcpruntime/protocol"
 	"github.com/u-ai/backend/internal/extension/mcpruntime/transport"
+	amitialog "log"
 )
 
 type CallOptions struct {
@@ -181,7 +182,9 @@ func (m *RequestManager) sendCancellation(id any, cause error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	_ = m.transport.Send(ctx, message)
+	if err := m.transport.Send(ctx, message); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func withProgressToken(params any, token any) (any, error) {

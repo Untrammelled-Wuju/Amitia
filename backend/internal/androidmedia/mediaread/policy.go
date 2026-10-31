@@ -18,7 +18,7 @@ type Policy struct {
 
 	MaxConcurrentReads int
 
-	NormalizeOrientation  bool
+	NormalizeOrientation   bool
 	StripSensitiveMetadata bool
 }
 
@@ -37,7 +37,7 @@ func DefaultPolicy() Policy {
 
 		MaxConcurrentReads: 2,
 
-		NormalizeOrientation:  true,
+		NormalizeOrientation:   true,
 		StripSensitiveMetadata: true,
 	}
 }

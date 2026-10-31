@@ -155,7 +155,7 @@ func (m *CheckpointManager) SaveStoppedCheckpoint(
 	checkpoint.RuntimeState = domain.RuntimeStateStopped
 	checkpoint.UpdatedAt = now
 	checkpoint.CleanShutdown = cleanShutdown
-	checkpoint.Reason = truncateReason(reason)
+	checkpoint.Reason = reason
 
 	for i := range checkpoint.Services {
 		if !runtime.IsTerminalServiceState(checkpoint.Services[i].State) {
@@ -191,7 +191,7 @@ func (m *CheckpointManager) SaveFailedCheckpoint(
 	checkpoint.RuntimeState = domain.RuntimeStateFailed
 	checkpoint.UpdatedAt = now
 	checkpoint.CleanShutdown = false
-	checkpoint.Reason = truncateReason(reason)
+	checkpoint.Reason = reason
 
 	if err := m.store.SaveCheckpoint(ctx, checkpoint); err != nil {
 		return RuntimeCheckpoint{}, err
@@ -234,11 +234,4 @@ func sortServiceCheckpoints(services []ServiceCheckpoint) {
 	sort.SliceStable(services, func(i, j int) bool {
 		return services[i].ServiceID < services[j].ServiceID
 	})
-}
-
-func truncateReason(reason string) string {
-	if len(reason) > MaxReasonLength {
-		return reason[:MaxReasonLength]
-	}
-	return reason
 }

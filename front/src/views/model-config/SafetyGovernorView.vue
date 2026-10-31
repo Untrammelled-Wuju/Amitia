@@ -226,8 +226,9 @@ async function fetchConfig() {
         auditLogRetentionDays: data.auditLogRetentionDays ?? 30,
       });
     }
-  } catch {
-    // 使用默认值
+  } catch (error) {
+  console.error("[original-error]", error);
+// 使用默认值
   }
 }
 
@@ -247,8 +248,9 @@ async function fetchAuditLogs() {
   try {
     const data = await get<any[]>("/api/safety/audit-logs");
     auditLogs.value = data || [];
-  } catch {
-    auditLogs.value = [];
+  } catch (error) {
+  console.error("[original-error]", error);
+auditLogs.value = [];
   }
 }
 

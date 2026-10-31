@@ -8,6 +8,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
 	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
+	amitialog "log"
 )
 
 type ownedContinuityTaskEventSink struct {
@@ -38,12 +39,14 @@ func wireOwnedContinuityKernelObservers(container *kernel.Container, runtime *ow
 	}
 	if container.WorkflowExecutor != nil {
 		container.WorkflowExecutor.AddRunLifecycleSink(func(ctx context.Context, event workflow.WorkflowRunLifecycleEvent) {
-			_ = runtime.ApplyWorkflow(ctx, continuity.WorkflowLifecycleSignal{
+			if err := runtime.ApplyWorkflow(ctx, continuity.WorkflowLifecycleSignal{
 				Type: event.Type, WorkflowID: event.WorkflowID, ExecutionID: event.ExecutionID,
 				InstallationID: event.InstallationID, SpaceID: event.SpaceID, CharacterID: event.CharacterID,
 				ConversationID: event.ConversationID, OperationID: event.OperationID, InvocationID: event.InvocationID,
 				DeviceID: event.DeviceID, Status: string(event.Status), Error: event.Error, Timestamp: event.Timestamp,
-			})
+			}); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		})
 	}
 	if container.TaskRuntimeService != nil {

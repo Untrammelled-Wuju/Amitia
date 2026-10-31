@@ -2,6 +2,7 @@ package browser
 
 import (
 	"encoding/json"
+	amitialog "log"
 	"sync"
 	"sync/atomic"
 )
@@ -134,16 +135,28 @@ func (d *cdpEventDispatcher) close() {
 }
 
 func safeCallEvent(h func(json.RawMessage), p json.RawMessage) {
-	defer func() { _ = recover() }()
+	defer func() {
+		if err := recover(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+	}()
 	h(p)
 }
 
 func safeCallGeneral(h func(string, json.RawMessage), m string, p json.RawMessage) {
-	defer func() { _ = recover() }()
+	defer func() {
+		if err := recover(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+	}()
 	h(m, p)
 }
 
 func safeCallSessionGeneral(h func(string, string, json.RawMessage), m, sessionID string, p json.RawMessage) {
-	defer func() { _ = recover() }()
+	defer func() {
+		if err := recover(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+	}()
 	h(m, sessionID, p)
 }

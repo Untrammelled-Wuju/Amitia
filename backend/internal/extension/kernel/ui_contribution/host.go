@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	amitialog "log"
 	"sort"
 	"sync"
 	"time"
@@ -405,7 +406,9 @@ func (h *UIHost) DisableExtension(extensionID ExtensionID) {
 	}
 	h.mu.RUnlock()
 	for _, id := range ids {
-		_ = h.Unmount(ContributionID(id))
+		if err := h.Unmount(ContributionID(id)); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 }
 
@@ -602,7 +605,9 @@ func (b *UIBridge) CreateSession(def *UIContributionDefinition, origin string, g
 		permSnapID, err := permFactory(sess.SessionID, sess.ExtensionID, sess.ModuleID, sess.Generation, characterID, conversationID, grantedPerms, sess.ExpiresAt)
 		if err != nil {
 			if scopeFactory != nil && releaser != nil {
-				_ = releaser(sess.ScopeSnapshotID, "")
+				if err := releaser(sess.ScopeSnapshotID, ""); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 			return nil, fmt.Errorf("ui_contribution: create permission snapshot: %w", err)
 		}
@@ -677,7 +682,9 @@ func (b *UIBridge) RevokeSession(sessionID string) {
 	releaseNow := ok && sess.activeRequests == 0
 	b.mu.Unlock()
 	if releaseNow && releaser != nil && (sess.ScopeSnapshotID != "" || sess.PermissionSnapshotID != "") {
-		_ = releaser(sess.ScopeSnapshotID, sess.PermissionSnapshotID)
+		if err := releaser(sess.ScopeSnapshotID, sess.PermissionSnapshotID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 }
 
@@ -702,7 +709,9 @@ func (b *UIBridge) RevokeSessionsByExtension(extensionID ExtensionID) int {
 	if releaser != nil {
 		for _, pair := range pairs {
 			if pair.scope != "" || pair.perm != "" {
-				_ = releaser(pair.scope, pair.perm)
+				if err := releaser(pair.scope, pair.perm); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 		}
 	}
@@ -730,7 +739,9 @@ func (b *UIBridge) RevokeSessionsByContext(characterID, conversationID string) i
 	if releaser != nil {
 		for _, p := range pairs {
 			if p.scope != "" || p.perm != "" {
-				_ = releaser(p.scope, p.perm)
+				if err := releaser(p.scope, p.perm); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 		}
 	}
@@ -810,7 +821,9 @@ func (b *UIBridge) finishRequest(sess *BridgeSession) {
 	releaser := b.snapshotReleaser
 	b.mu.Unlock()
 	if releaseNow && releaser != nil && (sess.ScopeSnapshotID != "" || sess.PermissionSnapshotID != "") {
-		_ = releaser(sess.ScopeSnapshotID, sess.PermissionSnapshotID)
+		if err := releaser(sess.ScopeSnapshotID, sess.PermissionSnapshotID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 }
 
@@ -830,7 +843,9 @@ func (b *UIBridge) handleLog(ctx context.Context, sess *BridgeSession, payload j
 		Level   string `json:"level"`
 		Message string `json:"message"`
 	}
-	_ = json.Unmarshal(payload, &p)
+	if err := json.Unmarshal(payload, &p); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	b.host.logger(p.Level, "ui bridge log", map[string]any{
 		"contribution": sess.ContributionID, "message": p.Message,
 	})
@@ -872,7 +887,9 @@ func (b *UIBridge) handleDataRequest(ctx context.Context, sess *BridgeSession, p
 		Key    string          `json:"key"`
 		Params json.RawMessage `json:"params,omitempty"`
 	}
-	_ = json.Unmarshal(payload, &p)
+	if err := json.Unmarshal(payload, &p); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	if !hasScope(sess.GrantedScopes, p.Key) {
 		return BridgeResponse{OK: false, Error: NewUIError(UIErrScopeDenied, "data source scope not granted: "+p.Key, nil)}
 	}
@@ -948,7 +965,9 @@ func (b *UIBridge) handleDataSubscribe(ctx context.Context, sess *BridgeSession,
 	var p struct {
 		SourceID string `json:"source_id"`
 	}
-	_ = json.Unmarshal(payload, &p)
+	if err := json.Unmarshal(payload, &p); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	if !hasScope(sess.GrantedScopes, p.SourceID) {
 		return BridgeResponse{OK: false, Error: NewUIError(UIErrScopeDenied, "data source scope not granted: "+p.SourceID, nil)}
 	}

@@ -5,11 +5,14 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../app/amitia_page_route.dart';
 import '../../../../app/theme/app_spacing.dart';
+import '../../../../app/theme/app_typography.dart';
 import '../../../../core/models/knowledge.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import 'knowledge_diagnostics_page.dart';
 
 class KnowledgePage extends ConsumerStatefulWidget {
   const KnowledgePage({super.key});
@@ -43,7 +46,9 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
     _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       if (mounted &&
           (_sources.any((item) => item.isBusy) ||
-              _jobs.any((item) => item.status == 'queued' || item.status == 'running'))) {
+              _jobs.any(
+                (item) => item.status == 'queued' || item.status == 'running',
+              ))) {
         unawaited(_load(showLoading: false));
       }
     });
@@ -95,7 +100,18 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
       allowMultiple: false,
       withData: false,
       type: FileType.custom,
-      allowedExtensions: const ['txt', 'md', 'csv', 'json', 'jsonl', 'ndjson', 'pdf', 'doc', 'docx', 'xlsx'],
+      allowedExtensions: const [
+        'txt',
+        'md',
+        'csv',
+        'json',
+        'jsonl',
+        'ndjson',
+        'pdf',
+        'doc',
+        'docx',
+        'xlsx',
+      ],
     );
     if (result == null || result.files.isEmpty || !mounted) return;
     final file = result.files.single;
@@ -108,10 +124,9 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
     if (logicalName == null || !mounted) return;
     setState(() => _uploading = true);
     try {
-      await ref.read(knowledgeServiceProvider).upload(
-            filePath: path,
-            logicalName: logicalName,
-          );
+      await ref
+          .read(knowledgeServiceProvider)
+          .upload(filePath: path, logicalName: logicalName);
       if (!mounted) return;
       amitiaSnackBar(context, '知识源已进入解析队列');
       await _load(showLoading: false);
@@ -128,7 +143,18 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
       allowMultiple: false,
       withData: false,
       type: FileType.custom,
-      allowedExtensions: const ['txt', 'md', 'csv', 'json', 'jsonl', 'ndjson', 'pdf', 'doc', 'docx', 'xlsx'],
+      allowedExtensions: const [
+        'txt',
+        'md',
+        'csv',
+        'json',
+        'jsonl',
+        'ndjson',
+        'pdf',
+        'doc',
+        'docx',
+        'xlsx',
+      ],
     );
     if (result == null || result.files.isEmpty || !mounted) return;
     final path = result.files.single.path;
@@ -137,10 +163,9 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
       return;
     }
     try {
-      await ref.read(knowledgeServiceProvider).uploadRevision(
-            sourceId: source.id,
-            filePath: path,
-          );
+      await ref
+          .read(knowledgeServiceProvider)
+          .uploadRevision(sourceId: source.id, filePath: path);
       if (!mounted) return;
       amitiaSnackBar(context, '新版本已进入解析队列；当前活动版本会保持可用直到切换完成');
       await _load(showLoading: false);
@@ -155,10 +180,18 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('重建索引'),
-        content: Text('重新生成“${source.logicalName.isEmpty ? source.filename : source.logicalName}”活动版本 r${source.revision} 的向量索引？'),
+        content: Text(
+          '重新生成“${source.logicalName.isEmpty ? source.filename : source.logicalName}”活动版本 r${source.revision} 的向量索引？',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('重建')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('重建'),
+          ),
         ],
       ),
     );
@@ -176,7 +209,9 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
 
   Future<void> _showSourceDetail(KnowledgeSourceDto source) async {
     try {
-      final detail = await ref.read(knowledgeServiceProvider).getSourceDetail(source.id);
+      final detail = await ref
+          .read(knowledgeServiceProvider)
+          .getSourceDetail(source.id);
       if (!mounted) return;
       await showModalBottomSheet<void>(
         context: context,
@@ -187,19 +222,47 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
             child: Column(
               children: [
                 ListTile(
-                  title: Text(source.logicalName.isEmpty ? source.filename : source.logicalName),
-                  subtitle: Text('活动版本 r${detail.source.revision} · ${detail.unitCount} units · ${detail.chunkCount} chunks · ${detail.indexHealth}'),
+                  title: Text(
+                    source.logicalName.isEmpty
+                        ? source.filename
+                        : source.logicalName,
+                  ),
+                  subtitle: Text(
+                    '活动版本 r${detail.source.revision} · ${detail.unitCount} units · ${detail.chunkCount} chunks · ${detail.indexHealth}',
+                  ),
                 ),
                 const Divider(height: 1),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        unawaited(
+                          _showSourceOutline(
+                            detail.source,
+                            detail.source.revision,
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.toc_outlined),
+                      label: const Text('Canonical Outline'),
+                    ),
+                  ),
+                ),
                 Expanded(
                   child: ListView.separated(
                     itemCount: detail.revisions.length,
                     separatorBuilder: (_, _) => const Divider(height: 1),
                     itemBuilder: (context, index) {
                       final revision = detail.revisions[index];
-                      final active = revision.revision == detail.source.revision;
+                      final active =
+                          revision.revision == detail.source.revision;
                       return ListTile(
-                        leading: CircleAvatar(child: Text('r${revision.revision}')),
+                        leading: CircleAvatar(
+                          child: Text('r${revision.revision}'),
+                        ),
                         title: Text(revision.filename),
                         subtitle: Text(
                           '${revision.status} · ${revision.processedUnits}/${revision.expectedUnits} units · ${revision.indexedChunks} indexed'
@@ -213,9 +276,16 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
                                 onSelected: (value) {
                                   Navigator.pop(context);
                                   if (value == 'rollback') {
-                                    unawaited(_rollbackRevision(detail.source, revision));
+                                    unawaited(
+                                      _rollbackRevision(
+                                        detail.source,
+                                        revision,
+                                      ),
+                                    );
                                   } else if (value == 'purge') {
-                                    unawaited(_purgeRevision(detail.source, revision));
+                                    unawaited(
+                                      _purgeRevision(detail.source, revision),
+                                    );
                                   }
                                 },
                                 itemBuilder: (context) => [
@@ -246,6 +316,188 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
     }
   }
 
+  Future<void> _showSourceOutline(
+    KnowledgeSourceDto source,
+    int revision,
+  ) async {
+    final items = <KnowledgeOutlineItemDto>[];
+    int? nextAfterOrdinal;
+    bool loading = false;
+    bool started = false;
+    String? error;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          Future<void> load({required bool append}) async {
+            if (loading) return;
+            setSheetState(() {
+              loading = true;
+              error = null;
+            });
+            try {
+              final result = await ref
+                  .read(knowledgeServiceProvider)
+                  .sourceOutline(
+                    sourceId: source.id,
+                    revision: revision,
+                    afterOrdinal: append ? nextAfterOrdinal : null,
+                  );
+              if (!context.mounted) return;
+              setSheetState(() {
+                if (!append) items.clear();
+                items.addAll(result.items);
+                nextAfterOrdinal = result.nextAfterOrdinal;
+              });
+            } catch (value) {
+              if (context.mounted) {
+                setSheetState(() => error = value.toString());
+              }
+            } finally {
+              if (context.mounted) setSheetState(() => loading = false);
+            }
+          }
+
+          if (!started) {
+            started = true;
+            Future.microtask(() => load(append: false));
+          }
+          return SafeArea(
+            child: FractionallySizedBox(
+              heightFactor: 0.88,
+              child: Column(
+                children: [
+                  ListTile(
+                    title: Text(
+                      source.logicalName.isEmpty
+                          ? source.filename
+                          : source.logicalName,
+                    ),
+                    subtitle: Text('Canonical Outline · r$revision'),
+                    trailing: IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  if (loading && items.isEmpty)
+                    const Expanded(
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  else if (error != null && items.isEmpty)
+                    Expanded(
+                      child: AmitiaErrorState(
+                        message: error!,
+                        onRetry: () => load(append: false),
+                      ),
+                    )
+                  else
+                    Expanded(
+                      child: ListView.separated(
+                        itemCount:
+                            items.length + (nextAfterOrdinal == null ? 0 : 1),
+                        separatorBuilder: (_, _) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          if (index >= items.length) {
+                            return Center(
+                              child: TextButton(
+                                onPressed: loading
+                                    ? null
+                                    : () => load(append: true),
+                                child: const Text('加载更多'),
+                              ),
+                            );
+                          }
+                          final item = items[index];
+                          return ListTile(
+                            leading: Text('#${item.ordinal}'),
+                            title: Text(
+                              item.title.isEmpty ? item.unitType : item.title,
+                            ),
+                            subtitle: Text(
+                              '${item.unitType} · ${const JsonEncoder().convert(item.locator)} · ${_short(item.checksum)}',
+                            ),
+                            trailing: TextButton(
+                              onPressed: () => _readOutlineUnit(item),
+                              child: const Text('读取'),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _readOutlineUnit(KnowledgeOutlineItemDto item) async {
+    try {
+      final result = await ref
+          .read(knowledgeServiceProvider)
+          .read(
+            KnowledgeReadRequestDto(
+              unitId: item.id,
+              sourceId: item.sourceId,
+              sourceRevision: item.sourceRevision,
+              beforeUnits: 2,
+              afterUnits: 2,
+              maxUnits: 8,
+              maxRunes: 18000,
+            ),
+          );
+      if (!mounted) return;
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        builder: (context) => SafeArea(
+          child: FractionallySizedBox(
+            heightFactor: 0.82,
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                Text(
+                  '${item.title.isEmpty ? item.unitType : item.title} · r${item.sourceRevision}',
+                  style: AppTypography.sectionTitle(context),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${result.sourceId} · ${result.totalRunes} runes${result.truncated ? ' · 已截断' : ''}',
+                  style: AppTypography.caption(context),
+                ),
+                const Divider(),
+                ...result.units.map(
+                  (unit) => Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${unit.title.isEmpty ? unit.unitType : unit.title} · #${unit.ordinal}',
+                            style: AppTypography.bodySmall(context),
+                          ),
+                          const SizedBox(height: 6),
+                          SelectableText(unit.content),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    } catch (error) {
+      if (mounted) amitiaSnackBar(context, error.toString());
+    }
+  }
+
   Future<void> _rollbackRevision(
     KnowledgeSourceDto source,
     KnowledgeSourceRevisionDto revision,
@@ -258,14 +510,22 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
           '回滚目标会先重建并校验二级索引。切换完成前，当前活动版本 r${source.revision} 仍继续提供检索。',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('开始回滚')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('开始回滚'),
+          ),
         ],
       ),
     );
     if (confirmed != true || !mounted) return;
     try {
-      await ref.read(knowledgeServiceProvider).rollbackRevision(source.id, revision.revision);
+      await ref
+          .read(knowledgeServiceProvider)
+          .rollbackRevision(source.id, revision.revision);
       if (!mounted) return;
       amitiaSnackBar(context, '回滚 r${revision.revision} 任务已入队');
       await _load(showLoading: false);
@@ -286,14 +546,22 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
         title: Text('永久清理 r${revision.revision}'),
         content: const Text('该操作会删除此历史版本的解析数据、原文件和二级索引，完成后不能再回滚。'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('永久清理')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('永久清理'),
+          ),
         ],
       ),
     );
     if (confirmed != true || !mounted) return;
     try {
-      await ref.read(knowledgeServiceProvider).purgeRevision(source.id, revision.revision);
+      await ref
+          .read(knowledgeServiceProvider)
+          .purgeRevision(source.id, revision.revision);
       if (!mounted) return;
       amitiaSnackBar(context, 'r${revision.revision} 已进入清理流程');
       await _load(showLoading: false);
@@ -309,7 +577,10 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
     try {
       final purged = await ref.read(knowledgeServiceProvider).garbageCollect();
       if (!mounted) return;
-      amitiaSnackBar(context, purged > 0 ? '已清理 $purged 个过期历史版本' : '没有达到清理条件的历史版本');
+      amitiaSnackBar(
+        context,
+        purged > 0 ? '已清理 $purged 个过期历史版本' : '没有达到清理条件的历史版本',
+      );
       await _load(showLoading: false);
     } catch (error) {
       if (!mounted) return;
@@ -319,7 +590,8 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
     }
   }
 
-  bool _canPurgeRevision(KnowledgeSourceRevisionDto revision) => revision.canPurge;
+  bool _canPurgeRevision(KnowledgeSourceRevisionDto revision) =>
+      revision.canPurge;
 
   String _revisionRetentionLabel(KnowledgeSourceRevisionDto revision) {
     if (revision.purgedAt.isNotEmpty || revision.status == 'purged') {
@@ -332,7 +604,6 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
     }
     return '保留中';
   }
-
 
   Future<String?> _askLogicalName(String filename) async {
     final controller = TextEditingController(text: filename);
@@ -349,7 +620,10 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(context, controller.text.trim()),
             child: const Text('上传'),
@@ -366,10 +640,18 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('删除知识源'),
-        content: Text('确认删除“${source.logicalName.isEmpty ? source.filename : source.logicalName}”？\n删除后将从聊天检索范围移除。'),
+        content: Text(
+          '确认删除“${source.logicalName.isEmpty ? source.filename : source.logicalName}”？\n删除后将从聊天检索范围移除。',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('删除')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('删除'),
+          ),
         ],
       ),
     );
@@ -432,12 +714,14 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
     }
     setState(() => _searching = true);
     try {
-      final result = await ref.read(knowledgeServiceProvider).search(
-        query,
-        retrievalLevel: _retrievalLevel,
-        temporalMode: _temporalMode,
-        asOf: _temporalMode == 'historical' ? _historicalAsOf : null,
-      );
+      final result = await ref
+          .read(knowledgeServiceProvider)
+          .search(
+            query,
+            retrievalLevel: _retrievalLevel,
+            temporalMode: _temporalMode,
+            asOf: _temporalMode == 'historical' ? _historicalAsOf : null,
+          );
       if (!mounted) return;
       setState(() => _searchResult = result);
     } catch (error) {
@@ -452,7 +736,9 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
     if (_readingEvidenceId.isNotEmpty) return;
     setState(() => _readingEvidenceId = item.id);
     try {
-      final result = await ref.read(knowledgeServiceProvider).read(
+      final result = await ref
+          .read(knowledgeServiceProvider)
+          .read(
             KnowledgeReadRequestDto(
               evidenceId: item.id,
               unitId: item.unitId,
@@ -497,7 +783,12 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
                             final anchor = unit.id == result.anchorUnitId;
                             return Card(
                               margin: const EdgeInsets.only(bottom: 10),
-                              color: anchor ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.28) : null,
+                              color: anchor
+                                  ? Theme.of(context)
+                                        .colorScheme
+                                        .primaryContainer
+                                        .withValues(alpha: 0.28)
+                                  : null,
                               child: Padding(
                                 padding: const EdgeInsets.all(12),
                                 child: Column(
@@ -507,18 +798,27 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
                                       children: [
                                         Expanded(
                                           child: Text(
-                                            unit.title.isEmpty ? (unit.unitType.isEmpty ? '原文单元' : unit.unitType) : unit.title,
-                                            style: const TextStyle(fontWeight: FontWeight.w600),
+                                            unit.title.isEmpty
+                                                ? (unit.unitType.isEmpty
+                                                      ? '原文单元'
+                                                      : unit.unitType)
+                                                : unit.title,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                            ),
                                           ),
                                         ),
-                                        if (anchor) const Chip(label: Text('命中')),
+                                        if (anchor)
+                                          const Chip(label: Text('命中')),
                                       ],
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
                                       '#${unit.ordinal} · ${const JsonEncoder().convert(unit.locator)}'
                                       '${unit.truncated ? ' · 单元已截断' : ''}',
-                                      style: Theme.of(context).textTheme.bodySmall,
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.bodySmall,
                                     ),
                                     const SizedBox(height: 8),
                                     SelectableText(unit.content),
@@ -558,7 +858,13 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
     );
     if (time == null || !mounted) return;
     setState(() {
-      _historicalAsOf = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+      _historicalAsOf = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        time.hour,
+        time.minute,
+      );
     });
   }
 
@@ -590,7 +896,9 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
                               '${job.kind} · source ${_short(job.sourceId)} · r${job.sourceRevision} · ${job.processedUnits}/${job.expectedUnits} · indexed ${job.indexedChunks}'
                               '${job.lastError.isEmpty ? '' : '\n${job.lastError}'}',
                             ),
-                            trailing: (job.status == 'failed' || job.status == 'cancelled')
+                            trailing:
+                                (job.status == 'failed' ||
+                                    job.status == 'cancelled')
                                 ? IconButton(
                                     tooltip: '重试',
                                     onPressed: () {
@@ -599,16 +907,19 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
                                     },
                                     icon: const Icon(Icons.refresh),
                                   )
-                                : (job.status == 'queued' || job.status == 'running')
-                                    ? IconButton(
-                                        tooltip: '取消任务',
-                                        onPressed: () {
-                                          Navigator.pop(context);
-                                          unawaited(_cancel(job));
-                                        },
-                                        icon: const Icon(Icons.stop_circle_outlined),
-                                      )
-                                    : null,
+                                : (job.status == 'queued' ||
+                                      job.status == 'running')
+                                ? IconButton(
+                                    tooltip: '取消任务',
+                                    onPressed: () {
+                                      Navigator.pop(context);
+                                      unawaited(_cancel(job));
+                                    },
+                                    icon: const Icon(
+                                      Icons.stop_circle_outlined,
+                                    ),
+                                  )
+                                : null,
                           );
                         },
                       ),
@@ -627,7 +938,11 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
         title: '全局知识库',
         navigation: AmitiaAppBarNavigation.back,
         actions: [
-          AmitiaIconButton(icon: Icons.receipt_long_outlined, tooltip: '入库任务', onPressed: _showJobs),
+          AmitiaIconButton(
+            icon: Icons.receipt_long_outlined,
+            tooltip: '入库任务',
+            onPressed: _showJobs,
+          ),
           AmitiaIconButton(
             icon: Icons.delete_sweep_outlined,
             tooltip: '清理过期版本',
@@ -638,8 +953,25 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
             tooltip: '一致性检查',
             onPressed: _reconciling ? null : _reconcile,
           ),
-          AmitiaIconButton(icon: Icons.refresh, tooltip: '刷新', onPressed: () => _load(showLoading: false)),
-          AmitiaIconButton(icon: Icons.upload_file, tooltip: '上传知识源', onPressed: _uploading ? null : _upload),
+          AmitiaIconButton(
+            icon: Icons.refresh,
+            tooltip: '刷新',
+            onPressed: () => _load(showLoading: false),
+          ),
+          AmitiaIconButton(
+            icon: Icons.monitor_heart_outlined,
+            tooltip: '运行诊断',
+            onPressed: () => Navigator.of(context).push(
+              amitiaSlideRoute(
+                builder: (_) => const KnowledgeDiagnosticsPage(),
+              ),
+            ),
+          ),
+          AmitiaIconButton(
+            icon: Icons.upload_file,
+            tooltip: '上传知识源',
+            onPressed: _uploading ? null : _upload,
+          ),
         ],
       ),
       body: SafeArea(
@@ -647,31 +979,31 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
         child: _loading
             ? const AmitiaLoadingState(message: '加载知识库…')
             : _error != null
-                ? AmitiaErrorState(message: _error!, onRetry: _load)
-                : RefreshIndicator(
-                    onRefresh: () => _load(showLoading: false),
-                    child: ListView(
-                      padding: EdgeInsets.fromLTRB(
-                        AppSpacing.pagePadding,
-                        AppSpacing.sm,
-                        AppSpacing.pagePadding,
-                        AppSpacing.xl,
-                      ),
-                      children: [
-                        _BoundaryCard(),
-                        const SizedBox(height: 12),
-                        _buildSearchCard(),
-                        const SizedBox(height: 12),
-                        if (_sources.isEmpty)
-                          const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 48),
-                            child: Center(child: Text('暂无知识源，点击右上角上传文件')),
-                          )
-                        else
-                          ..._sources.map(_buildSourceCard),
-                      ],
-                    ),
+            ? AmitiaErrorState(message: _error!, onRetry: _load)
+            : RefreshIndicator(
+                onRefresh: () => _load(showLoading: false),
+                child: ListView(
+                  padding: EdgeInsets.fromLTRB(
+                    AppSpacing.pagePadding,
+                    AppSpacing.sm,
+                    AppSpacing.pagePadding,
+                    AppSpacing.xl,
                   ),
+                  children: [
+                    _BoundaryCard(),
+                    const SizedBox(height: 12),
+                    _buildSearchCard(),
+                    const SizedBox(height: 12),
+                    if (_sources.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 48),
+                        child: Center(child: Text('暂无知识源，点击右上角上传文件')),
+                      )
+                    else
+                      ..._sources.map(_buildSourceCard),
+                  ],
+                ),
+              ),
       ),
     );
   }
@@ -720,7 +1052,7 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
                 DropdownButton<String>(
                   value: _retrievalLevel,
                   items: const [
-                    DropdownMenuItem(value: 'auto', child: Text('自动级别')),
+                    DropdownMenuItem(value: 'auto', child: Text('聊天自动路由')),
                     DropdownMenuItem(value: 'none', child: Text('NONE')),
                     DropdownMenuItem(value: 'fast', child: Text('FAST')),
                     DropdownMenuItem(value: 'deep', child: Text('DEEP')),
@@ -729,7 +1061,9 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
                   onChanged: _searching
                       ? null
                       : (value) {
-                          if (value != null) setState(() => _retrievalLevel = value);
+                          if (value != null) {
+                            setState(() => _retrievalLevel = value);
+                          }
                         },
                 ),
                 DropdownButton<String>(
@@ -742,7 +1076,9 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
                   onChanged: _searching
                       ? null
                       : (value) {
-                          if (value != null) setState(() => _temporalMode = value);
+                          if (value != null) {
+                            setState(() => _temporalMode = value);
+                          }
                         },
                 ),
                 if (_temporalMode == 'historical')
@@ -750,7 +1086,9 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
                     onPressed: _searching ? null : _pickHistoricalAsOf,
                     icon: const Icon(Icons.schedule),
                     label: Text(
-                      _historicalAsOf == null ? '选择历史时点' : _formatDateTime(_historicalAsOf!),
+                      _historicalAsOf == null
+                          ? '选择历史时点'
+                          : _formatDateTime(_historicalAsOf!),
                     ),
                   ),
               ],
@@ -758,9 +1096,12 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
             if (result != null) ...[
               const SizedBox(height: 12),
               Text(
-                '命中 ${result.evidence.length} 条 · ${result.retrievalLevel.toUpperCase()} · ${result.queryComplexity} · ${result.answerState == 'ambiguous' ? '证据冲突' : (result.sufficient ? '证据充分' : '允许无证据/证据不足')}'
+                '命中 ${result.evidence.length} 条 · ${result.routingMode == 'chat' ? '聊天路由' : '诊断指定'} · ${result.retrievalLevel.toUpperCase()} · policy=${result.policyMode} · ${result.queryComplexity} · ${result.answerState == 'ambiguous' ? '证据冲突' : (result.sufficient ? '证据充分' : '允许无证据/证据不足')}'
                 '${result.sufficiencyReason.isEmpty ? '' : ' · gate=${result.sufficiencyReason}'}'
                 '${result.degraded ? ' · 降级检索' : ''}'
+                '${result.routeDegraded ? ' · 路由降级(${result.routeDegradationReason})' : ''}'
+                '${result.requestedRetrievalLevel == result.retrievalLevel ? '' : ' · 请求 ${result.requestedRetrievalLevel} → 实际 ${result.retrievalLevel}'}'
+                '${result.shadowLevel.isEmpty ? '' : ' · shadow ${result.shadowLevel}'}'
                 '${result.ambiguous ? ' · 存在冲突证据' : ''}'
                 ' · ${_temporalModeLabel(result.temporalMode)}'
                 '${result.asOf.isEmpty ? '' : ' · asOf ${_formatIso(result.asOf)}'}',
@@ -768,7 +1109,10 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
               if (result.warnings.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
-                  child: Text(result.warnings.join('；'), style: Theme.of(context).textTheme.bodySmall),
+                  child: Text(
+                    result.warnings.join('；'),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                 ),
               ...result.evidence.map(_buildEvidence),
             ],
@@ -809,7 +1153,9 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
           Align(
             alignment: Alignment.centerRight,
             child: TextButton.icon(
-              onPressed: _readingEvidenceId.isNotEmpty ? null : () => _showEvidenceRead(item),
+              onPressed: _readingEvidenceId.isNotEmpty
+                  ? null
+                  : () => _showEvidenceRead(item),
               icon: _readingEvidenceId == item.id
                   ? const SizedBox.square(
                       dimension: 14,
@@ -825,7 +1171,9 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
   }
 
   Widget _buildSourceCard(KnowledgeSourceDto source) {
-    final title = source.logicalName.isEmpty ? source.filename : source.logicalName;
+    final title = source.logicalName.isEmpty
+        ? source.filename
+        : source.logicalName;
     final job = _latestJob(source.id);
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
@@ -843,7 +1191,10 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+                      Text(
+                        title,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
                       const SizedBox(height: 2),
                       Text(
                         '${source.filename} · rev ${source.revision} · ${_formatBytes(source.sizeBytes)}',
@@ -873,7 +1224,10 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
                   },
                   itemBuilder: (context) => [
                     const PopupMenuItem(value: 'detail', child: Text('版本详情')),
-                    const PopupMenuItem(value: 'revision', child: Text('上传新版本')),
+                    const PopupMenuItem(
+                      value: 'revision',
+                      child: Text('上传新版本'),
+                    ),
                     PopupMenuItem(
                       value: 'reindex',
                       enabled: source.isReady,
@@ -887,7 +1241,9 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
             ),
             if (source.isBusy || source.expectedUnits > 0) ...[
               const SizedBox(height: 10),
-              LinearProgressIndicator(value: source.expectedUnits > 0 ? source.progress : null),
+              LinearProgressIndicator(
+                value: source.expectedUnits > 0 ? source.progress : null,
+              ),
               const SizedBox(height: 4),
               Text(
                 'units ${source.processedUnits}/${source.expectedUnits} · indexed ${source.indexedChunks}',
@@ -909,9 +1265,12 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
                 (job.status == 'queued' || job.status == 'running'))
               Padding(
                 padding: const EdgeInsets.only(top: 8),
-                child: Text('后台准备新版本 r${job.sourceRevision} · ${job.stage}；r${source.revision} 继续提供检索'),
+                child: Text(
+                  '后台准备新版本 r${job.sourceRevision} · ${job.stage}；r${source.revision} 继续提供检索',
+                ),
               ),
-            if (job != null && (job.status == 'failed' || job.status == 'cancelled'))
+            if (job != null &&
+                (job.status == 'failed' || job.status == 'cancelled'))
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton.icon(
@@ -920,7 +1279,8 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
                   label: const Text('重试失败任务'),
                 ),
               ),
-            if (job != null && (job.status == 'queued' || job.status == 'running'))
+            if (job != null &&
+                (job.status == 'queued' || job.status == 'running'))
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton.icon(
@@ -964,7 +1324,8 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
     return parsed == null ? value : _formatDateTime(parsed);
   }
 
-  String _short(String value) => value.length <= 10 ? value : value.substring(0, 10);
+  String _short(String value) =>
+      value.length <= 10 ? value : value.substring(0, 10);
 
   String _formatBytes(int bytes) {
     if (bytes < 1024) return '$bytes B';
@@ -985,12 +1346,13 @@ class _BoundaryCard extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(Icons.info_outline, color: Theme.of(context).colorScheme.primary),
+            Icon(
+              Icons.info_outline,
+              color: Theme.of(context).colorScheme.primary,
+            ),
             const SizedBox(width: 10),
             const Expanded(
-              child: Text(
-                '知识库在当前账户/空间内全局共享，不按角色隔离；它与角色世界书、长期记忆是三个独立领域。',
-              ),
+              child: Text('知识库在当前账户/空间内全局共享，不按角色隔离；它与角色世界书、长期记忆是三个独立领域。'),
             ),
           ],
         ),

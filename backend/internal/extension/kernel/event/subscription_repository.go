@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	amitialog "log"
 	"time"
 )
 
@@ -251,14 +252,30 @@ func scanSubscriptionRow(scanner subscriptionScanner) (EventSubscriptionDefiniti
 	def.Timeout = time.Duration(timeoutMs) * time.Millisecond
 	def.Enabled = enabledInt != 0
 
-	_ = json.Unmarshal([]byte(filterJSON), &def.Filter)
-	_ = json.Unmarshal([]byte(projectionJSON), &def.Projection)
-	_ = json.Unmarshal([]byte(deliveryPolicyJSON), &def.DeliveryPolicy)
-	_ = json.Unmarshal([]byte(retryPolicyJSON), &def.RetryPolicy)
-	_ = json.Unmarshal([]byte(permReqJSON), &def.PermissionRequirements)
-	_ = json.Unmarshal([]byte(scopeRuleJSON), &def.ScopeRule)
-	_ = json.Unmarshal([]byte(depReqJSON), &def.DependencyRequirements)
-	_ = json.Unmarshal([]byte(runtimeBindingJSON), &def.RuntimeBinding)
+	if err := json.Unmarshal([]byte(filterJSON), &def.Filter); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := json.Unmarshal([]byte(projectionJSON), &def.Projection); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := json.Unmarshal([]byte(deliveryPolicyJSON), &def.DeliveryPolicy); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := json.Unmarshal([]byte(retryPolicyJSON), &def.RetryPolicy); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := json.Unmarshal([]byte(permReqJSON), &def.PermissionRequirements); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := json.Unmarshal([]byte(scopeRuleJSON), &def.ScopeRule); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := json.Unmarshal([]byte(depReqJSON), &def.DependencyRequirements); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := json.Unmarshal([]byte(runtimeBindingJSON), &def.RuntimeBinding); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 
 	return def, nil
 }

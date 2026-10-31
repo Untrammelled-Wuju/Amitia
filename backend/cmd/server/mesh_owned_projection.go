@@ -13,6 +13,7 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/graph"
 	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
+	amitialog "log"
 )
 
 type meshProjectionWriter struct {
@@ -113,7 +114,9 @@ func (w *meshProjectionWriter) vector(ctx context.Context, job coordination.Proj
 		return name, err
 	}
 	if err := w.port.store.ValidateProjection(ctx, job); err != nil {
-		_ = remove(name)
+		if err := remove(name); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return name, err
 	}
 	return name, nil
@@ -139,7 +142,9 @@ func (w *meshProjectionWriter) graph(ctx context.Context, job coordination.Proje
 	if err == nil {
 		err = w.port.store.ValidateProjection(ctx, job)
 		if err != nil {
-			_ = writer.DeleteOwnedProjection(ctx, id)
+			if err := writer.DeleteOwnedProjection(ctx, id); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}
 	return "amitia_owned_graph_v1", err
@@ -172,7 +177,9 @@ func (w *meshProjectionWriter) tick(ctx context.Context) error {
 
 func runOwnedProjections(ctx context.Context, port *meshLocalDataPort) {
 	w := &meshProjectionWriter{port: port, collections: map[string]bool{}}
-	_ = w.tick(ctx)
+	if err := w.tick(ctx); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -180,7 +187,9 @@ func runOwnedProjections(ctx context.Context, port *meshLocalDataPort) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			_ = w.tick(ctx)
+			if err := w.tick(ctx); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}
 }

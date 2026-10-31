@@ -55,7 +55,9 @@ internal class RuntimeServiceConnection(
                     com.amitia.amitia_app.runtime.service.RuntimeService::class.java
                 )
                 context.bindService(intent, connection, Context.BIND_AUTO_CREATE)
-            } catch (_: Exception) {
+            } catch (originalError58: Exception) {
+              originalError58.printStackTrace()
+
                 connection.clearEndpoint()
                 false
             }
@@ -66,7 +68,9 @@ internal class RuntimeServiceConnection(
             return try {
                 context.unbindService(connection)
                 true
-            } catch (_: Exception) {
+            } catch (originalError69: Exception) {
+              originalError69.printStackTrace()
+
                 false
             }
         }

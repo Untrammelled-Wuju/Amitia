@@ -12,7 +12,9 @@ async function request(base, suffix, headers = {}) {
   const response = await fetch(`${base}${suffix}`, { method: 'GET', headers: { accept: 'application/json', ...headers }, redirect: 'manual', signal: AbortSignal.timeout(8000) });
   const raw = await response.text();
   let payload;
-  try { payload = JSON.parse(raw); } catch { payload = null; }
+  try { payload = JSON.parse(raw); } catch (error) {
+  console.error("[original-error]", error);
+payload = null; }
   return { status: response.status, payload, cacheControl: response.headers.get('cache-control') || '' };
 }
 

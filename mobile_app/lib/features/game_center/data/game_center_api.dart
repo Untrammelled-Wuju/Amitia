@@ -146,8 +146,9 @@ class GameCenterApi {
         '/api/game-center/developer-access',
       );
       return data?['enabled'] == true;
-    } catch (_) {
-      return false;
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return false;
     }
   }
 

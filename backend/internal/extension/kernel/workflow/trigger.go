@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	amitialog "log"
 	"strings"
 	"sync"
 	"time"
@@ -88,7 +89,9 @@ func (tm *TriggerManager) Register(binding TriggerBinding) {
 	store := tm.store
 	tm.mu.Unlock()
 	if store != nil {
-		_ = store.SaveTrigger(context.Background(), binding)
+		if err := store.SaveTrigger(context.Background(), binding); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 }
 
@@ -212,7 +215,9 @@ func (tm *TriggerManager) HandleStructuredEvent(ctx context.Context, event Workf
 		if _, err := tm.executor.Execute(ctx, ExecuteRequest{WorkflowID: binding.WorkflowID, Input: input, Context: bindingExecution}); err != nil {
 			registry.Rollback(bindingEvent, binding)
 			if hasReceiptStore {
-				_ = receiptStore.ReleaseTriggerReceipt(ctx, effectiveEventID, binding.BindingID)
+				if err := receiptStore.ReleaseTriggerReceipt(ctx, effectiveEventID, binding.BindingID); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 			bindingErrors = append(bindingErrors, fmt.Errorf("workflow trigger binding %s execute: %w", binding.BindingID, err))
 			continue

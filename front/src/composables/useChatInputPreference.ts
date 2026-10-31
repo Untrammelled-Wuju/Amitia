@@ -3,7 +3,9 @@ import { readonly, ref } from "vue";
 const storageKey = "amitia.chat.send-on-enter.desktop.v1";
 function load() {
   try { return localStorage.getItem(storageKey) !== "false"; }
-  catch { return true; }
+  catch (error) {
+  console.error("[original-error]", error);
+return true; }
 }
 const sendOnEnter = ref(load());
 

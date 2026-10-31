@@ -24,7 +24,7 @@ func NewHandler(svc ReleaseService, guard security.OwnershipGuard) *Handler {
 func (h *Handler) ListReleases(c *gin.Context) {
 	actorID, err := middleware.ResolveActorID(c)
 	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 	spaceID := actorID
@@ -41,7 +41,7 @@ func (h *Handler) ListReleasesForPet(c *gin.Context) {
 	petID := c.Param("petId")
 	actorID, err := middleware.ResolveActorID(c)
 	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 	spaceID := actorID
@@ -58,7 +58,7 @@ func (h *Handler) GetRelease(c *gin.Context) {
 	releaseID := c.Param("releaseId")
 	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 	if _, err := h.ownershipGuard.RequireRelease(c.Request.Context(), actor, releaseID); err != nil {
@@ -77,7 +77,7 @@ func (h *Handler) GetReleaseFiles(c *gin.Context) {
 	releaseID := c.Param("releaseId")
 	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 	if _, err := h.ownershipGuard.RequireRelease(c.Request.Context(), actor, releaseID); err != nil {
@@ -96,7 +96,7 @@ func (h *Handler) ArchiveRelease(c *gin.Context) {
 	releaseID := c.Param("releaseId")
 	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 	if _, err := h.ownershipGuard.RequireRelease(c.Request.Context(), actor, releaseID); err != nil {
@@ -114,7 +114,7 @@ func (h *Handler) RevokeRelease(c *gin.Context) {
 	releaseID := c.Param("releaseId")
 	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 	if _, err := h.ownershipGuard.RequireRelease(c.Request.Context(), actor, releaseID); err != nil {
@@ -137,7 +137,7 @@ func (h *Handler) GetPetIdentity(c *gin.Context) {
 	}
 	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 	identity, err := h.svc.GetPetIdentity(c.Request.Context(), string(actor.SpaceID), petID)
@@ -152,7 +152,7 @@ func (h *Handler) DownloadRelease(c *gin.Context) {
 	releaseID := c.Param("releaseId")
 	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 	if _, err := h.ownershipGuard.RequireRelease(c.Request.Context(), actor, releaseID); err != nil {
@@ -192,8 +192,8 @@ func writeReleaseError(c *gin.Context, err error) {
 		return
 	}
 	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, gorm.ErrRecordNotFound) {
-		util.ErrorResponse(c, response.NotFound, "资源不存在", gin.H{"errorCode": "NOT_FOUND"})
+		util.ErrorResponse(c, response.NotFound, err.Error(), gin.H{"errorCode": "NOT_FOUND"})
 		return
 	}
-	util.ErrorResponse(c, response.InternalError, "服务器内部错误", gin.H{"errorCode": "INTERNAL_ERROR"})
+	util.ErrorResponse(c, response.InternalError, err.Error(), gin.H{"errorCode": "INTERNAL_ERROR"})
 }

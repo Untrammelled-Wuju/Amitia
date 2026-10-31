@@ -27,12 +27,12 @@ type Registry interface {
 }
 
 type memoryRegistry struct {
-	mu       sync.RWMutex
-	index    map[RuntimeChannelID]RuntimeChannel
+	mu    sync.RWMutex
+	index map[RuntimeChannelID]RuntimeChannel
 
-	runtimeIndex  map[domain.RuntimeInstanceID]map[RuntimeChannelID]struct{}
-	serviceIndex  map[domain.RuntimeInstanceID]map[domain.ServiceID]map[RuntimeChannelID]struct{}
-	pluginIndex   map[domain.PluginID]map[RuntimeChannelID]struct{}
+	runtimeIndex map[domain.RuntimeInstanceID]map[RuntimeChannelID]struct{}
+	serviceIndex map[domain.RuntimeInstanceID]map[domain.ServiceID]map[RuntimeChannelID]struct{}
+	pluginIndex  map[domain.PluginID]map[RuntimeChannelID]struct{}
 
 	validator *Validator
 }

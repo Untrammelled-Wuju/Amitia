@@ -15,8 +15,9 @@ async function readPayload<T>(response: Response): Promise<T> {
   let payload: any = null;
   try {
     payload = await response.json();
-  } catch {
-    payload = null;
+  } catch (error) {
+  console.error("[original-error]", error);
+payload = null;
   }
   if (!response.ok) {
     throw new Error(String(payload?.msg || payload?.message || `请求失败 (${response.status})`));

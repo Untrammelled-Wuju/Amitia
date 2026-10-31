@@ -107,8 +107,9 @@ async function loadHistoricalRoles() {
   try {
     const roles = await owned.historicalRoles(selectedRole);
     if (ticket === historicalGeneration && selectedRole === role.value && selectedCore === owned.coreId.value) historicalRoles.value = roles;
-  } catch {
-    if (ticket === historicalGeneration) historicalRoles.value = [];
+  } catch (error) {
+  console.error("[original-error]", error);
+if (ticket === historicalGeneration) historicalRoles.value = [];
   }
 }
 watch([owned.roles, viewSelection], () => { if (owned.enabled.value) selectAuthorityRole(); });
@@ -122,7 +123,9 @@ watch(owned.coreId, () => {
 onMounted(() => {
   void initialize();
   window.addEventListener("amitia:runtime-connection-changed", initialize);
-  providerTimer = setInterval(() => { void owned.refresh().catch(() => { loading.value = false; error.value = "当前 Core 的数据服务暂不可用，请恢复服务后重试"; }); }, 3000);
+  providerTimer = setInterval(() => { void owned.refresh().catch((error) => {
+  console.error("[original-error]", error);
+loading.value = false; error.value = "当前 Core 的数据服务暂不可用，请恢复服务后重试"; }); }, 3000);
 });
 onUnmounted(() => {
   generation++;

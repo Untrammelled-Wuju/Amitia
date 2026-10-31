@@ -32,8 +32,8 @@ func newRestrictedHost(descriptor platform.RuntimeDescriptor, paths util.Runtime
 func (h *restrictedHost) Descriptor() platform.RuntimeDescriptor { return h.descriptor }
 func (h *restrictedHost) Capabilities() *HostCapabilities        { return h.capabilities }
 func (h *restrictedHost) Paths() util.RuntimePaths               { return h.paths }
-func (h *restrictedHost) Processes() ProcessSupervisor             { return h.processes }
-func (h *restrictedHost) RuntimeInstanceID() string                { return h.instanceID }
+func (h *restrictedHost) Processes() ProcessSupervisor           { return h.processes }
+func (h *restrictedHost) RuntimeInstanceID() string              { return h.instanceID }
 
 func (h *restrictedHost) configureCapabilities() {
 	h.capabilities.set(CapProcessSpawn, SupportUnsupported)

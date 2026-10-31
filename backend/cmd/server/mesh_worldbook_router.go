@@ -25,7 +25,7 @@ func registerMeshWorldbookRouter(mesh *gin.RouterGroup, services *AppServices, c
 			return
 		}
 		if _, err := uuid.Parse(input.RequestID); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"message": "世界书请求编号无效"})
+			c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 			return
 		}
 		result, err := services.OwnedBusiness.ManageWorldbook(c.Request.Context(), business.Request{
@@ -57,7 +57,7 @@ func registerMeshWorldbookRouter(mesh *gin.RouterGroup, services *AppServices, c
 			return
 		}
 		if _, err := uuid.Parse(input.RequestID); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"message": "世界书匹配请求编号无效"})
+			c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 			return
 		}
 		result, err := services.OwnedBusiness.MatchWorldbook(c.Request.Context(), business.Request{

@@ -108,7 +108,7 @@ func (api *WorkflowAPI) updateAndroidRuntimeHealth(c *gin.Context) {
 	decoder := json.NewDecoder(http.MaxBytesReader(c.Writer, c.Request.Body, 16*1024))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid Android workflow health status"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	headerDeviceID := strings.TrimSpace(c.GetHeader("X-Amitia-Device-ID"))

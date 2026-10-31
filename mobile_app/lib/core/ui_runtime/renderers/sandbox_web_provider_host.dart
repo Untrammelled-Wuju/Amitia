@@ -86,7 +86,9 @@ class _SandboxWebProviderHostState extends ConsumerState<SandboxWebProviderHost>
               '"amitia:host-context", '
               '{detail:{surfaceState:{open:false,dismissToken:Date.now()}}}));',
             )
-            .catchError((_) {}),
+            .catchError((Object error, StackTrace stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}),
       );
     }
   }
@@ -389,8 +391,9 @@ class _SandboxWebProviderHostState extends ConsumerState<SandboxWebProviderHost>
                   '"amitia:native-bridge-response", '
                   '{detail:${jsonEncode(response)}}));';
               await controller.runJavaScript(script);
-            } catch (_) {
-              // Invalid bridge payloads are intentionally ignored. The backend
+            } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+// Invalid bridge payloads are intentionally ignored. The backend
               // bridge remains fail-closed for all privileged operations.
             }
           },
@@ -437,7 +440,9 @@ class _SandboxWebProviderHostState extends ConsumerState<SandboxWebProviderHost>
           await ref
               .read(extensionServiceProvider)
               .revokeWebUISession(createdSessionId);
-        } catch (_) {}
+        } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
       }
       if (!mounted || token != _loadToken) return;
       setState(() {
@@ -534,7 +539,9 @@ class _SandboxWebProviderHostState extends ConsumerState<SandboxWebProviderHost>
           detail:${jsonEncode(resizePayload)}
         }));
       ''');
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
   }
 
   Future<void> _disposeSession() async {
@@ -545,7 +552,9 @@ class _SandboxWebProviderHostState extends ConsumerState<SandboxWebProviderHost>
     if (sid == null) return;
     try {
       await ref.read(extensionServiceProvider).revokeWebUISession(sid);
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
   }
 
   @override

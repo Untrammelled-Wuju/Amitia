@@ -39,7 +39,9 @@ export function workbenchCommandFromEvent(event: AgentUIEvent, currentConversati
     try {
       const url = new URL(resourceUri);
       if (!['http:', 'https:'].includes(url.protocol) || !url.hostname || url.username || url.password) return null;
-    } catch { return null; }
+    } catch (error) {
+  console.error("[original-error]", error);
+return null; }
   }
   if (payload.kind === "file" || payload.kind === "diff") {
     if (!resourceUri || !workspaceUri) return null;
@@ -66,14 +68,17 @@ export function publishWorkbenchEvent(event: AgentUIEvent, currentConversationId
   if (!command || typeof window === "undefined") return false;
   const origin = typeof event.payload?.originDeviceId === "string" ? event.payload.originDeviceId.trim() : "";
   // Preserve event ordering even when Desktop identity resolution is async.
-  dispatchQueue = dispatchQueue.catch(() => {}).then(async () => {
+  dispatchQueue = dispatchQueue.catch((error) => {
+  console.error("[original-error]", error);
+}).then(async () => {
     let resolved: WorkbenchOpenCommand | null = command;
     if (origin && command.browserRef && !command.targetDeviceId) {
       try {
         const [local, deployment] = await Promise.all([resolveUIHostDeviceId(), getDeploymentConfig()]);
         resolved = resolveWorkbenchBrowserTarget(command, origin, local, deployment.mode);
-      } catch {
-        // An unidentified remote Agent tab must never be opened against the
+      } catch (error) {
+  console.error("[original-error]", error);
+// An unidentified remote Agent tab must never be opened against the
         // local runtime. Keep the event unconsumed until identity is known.
         resolved = null;
       }

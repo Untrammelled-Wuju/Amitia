@@ -115,7 +115,9 @@ internal class VirtualDisplayHostManager(
         if (current != null) {
             try {
                 current.shutdown()
-            } catch (_: Throwable) {
+            } catch (originalError118: Throwable) {
+              originalError118.printStackTrace()
+
             }
         }
         VirtualDisplayHostBinderRegistry.clear()
@@ -194,7 +196,9 @@ internal class VirtualDisplayHostManager(
                     .put("force", true)
                     .toString(),
             )
-        } catch (_: Throwable) {
+        } catch (originalError197: Throwable) {
+          originalError197.printStackTrace()
+
         } finally {
             preferences.edit().remove(VirtualDisplayHostContract.KEY_PROCESS_ID).apply()
         }

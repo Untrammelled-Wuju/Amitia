@@ -179,15 +179,18 @@ async function loadSettings() {
       settings.value = { ...settings.value, ...result };
       uploadUrl.value = result.uploadUrl || result.defaultUploadUrl;
     }
-  } catch {}
+  } catch (error) {
+  console.error("[original-error]", error);
+}
 }
 
 async function loadVersion() {
   try {
     const result = await get<{ version?: string }>("/api/version");
     appVersion.value = String(result?.version || "");
-  } catch {
-    appVersion.value = "";
+  } catch (error) {
+  console.error("[original-error]", error);
+appVersion.value = "";
   }
 }
 
@@ -240,7 +243,7 @@ function handleScreenshotInput(event: Event) {
   };
   reader.onerror = () => {
     removeScreenshot();
-    ElMessage.error("读取截图失败");
+    ElMessage.error(reader.error?.message || String(reader.error || "读取截图失败"));
   };
   reader.readAsDataURL(raw);
 }
@@ -258,8 +261,9 @@ async function openPreview() {
     previewUrl.value = String(result?.uploadUrl || payload.uploadUrl || "");
     previewRawOpen.value = [];
     previewVisible.value = true;
-  } catch {
-    ElMessage.error("生成上传预览失败");
+  } catch (error) {
+  console.error("[original-error]", error);
+ElMessage.error(error instanceof Error ? error.message : String(error));
   } finally {
     previewing.value = false;
   }
@@ -277,8 +281,9 @@ async function submit() {
     ElMessage.success("报错信息已提交，正在上传");
     clearClientErrors();
     visible.value = false;
-  } catch {
-    ElMessage.error("提交失败，请稍后重试");
+  } catch (error) {
+  console.error("[original-error]", error);
+ElMessage.error(error instanceof Error ? error.message : String(error));
   } finally {
     submitting.value = false;
   }

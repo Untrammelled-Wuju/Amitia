@@ -9,11 +9,14 @@ import (
 	"github.com/u-ai/backend/internal/runtimehost"
 	"github.com/u-ai/backend/internal/workspace"
 	"github.com/u-ai/backend/pkg/resourceuri"
+	amitialog "log"
 )
 
 func buildMediaService(host runtimehost.RuntimeHost, dataDir string, resolver *resourceuri.PhysicalResolver, workspaceService *workspace.Service) *media.Service {
 	tempDir := filepath.Join(dataDir, "tmp", "media")
-	_ = os.MkdirAll(tempDir, 0o755)
+	if err := os.MkdirAll(tempDir, 0o755); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 
 	config := ffmpeg.DefaultConfig()
 	var backend media.Backend

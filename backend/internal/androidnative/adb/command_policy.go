@@ -10,10 +10,10 @@ type CommandPolicy struct {
 }
 
 type CommandRule struct {
-	AllowNoArgs      bool
-	AllowedArgs      []string
-	ArgValidator     func(args []string) error
-	MaxArgs          int
+	AllowNoArgs  bool
+	AllowedArgs  []string
+	ArgValidator func(args []string) error
+	MaxArgs      int
 }
 
 func NewCommandPolicy() *CommandPolicy {

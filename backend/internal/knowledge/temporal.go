@@ -3,6 +3,7 @@ package knowledge
 import (
 	"encoding/json"
 	"fmt"
+	amitialog "log"
 	"strconv"
 	"strings"
 	"time"
@@ -159,7 +160,9 @@ func firstStringListField(m map[string]any, keys ...string) []string {
 		case string:
 			s := strings.TrimSpace(v)
 			if strings.HasPrefix(s, "[") {
-				_ = json.Unmarshal([]byte(s), &raw)
+				if err := json.Unmarshal([]byte(s), &raw); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			} else {
 				raw = strings.FieldsFunc(s, func(r rune) bool { return r == ',' || r == ';' || r == '，' || r == '；' })
 			}

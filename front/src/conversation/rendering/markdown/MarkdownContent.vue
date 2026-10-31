@@ -100,8 +100,9 @@ async function resolveImage(image: HTMLImageElement) {
     image.src = url;
     image.title = "";
     image.dataset.mediaFailed = "";
-  } catch {
-    image.title = "图片加载失败，点击重试";
+  } catch (error) {
+  console.error("[original-error]", error);
+image.title = "图片加载失败，点击重试";
     image.dataset.mediaFailed = "true";
   } finally {
     delete image.dataset.mediaResolving;

@@ -13,6 +13,7 @@ import (
 
 	"github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/storage"
+	amitialog "log"
 )
 
 const (
@@ -141,33 +142,55 @@ func (p *FileProvider) seal(
 	checksum *Checksum,
 ) (BinaryReference, error) {
 	if actualSize < 0 {
-		_ = tmpFile.Close()
-		_ = os.Remove(tmpFile.Name())
+		if err := tmpFile.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := os.Remove(tmpFile.Name()); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return BinaryReference{}, ErrSizeNegative
 	}
 	if request.ExpectedSize > 0 && actualSize != request.ExpectedSize {
-		_ = tmpFile.Close()
-		_ = os.Remove(tmpFile.Name())
+		if err := tmpFile.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := os.Remove(tmpFile.Name()); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return BinaryReference{}, ErrSizeMismatch
 	}
 	if err := tmpFile.Sync(); err != nil {
-		_ = tmpFile.Close()
-		_ = os.Remove(tmpFile.Name())
+		if err := tmpFile.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := os.Remove(tmpFile.Name()); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return BinaryReference{}, fmt.Errorf("binary: failed to sync file: %w", err)
 	}
 	info, err := tmpFile.Stat()
 	if err != nil {
-		_ = tmpFile.Close()
-		_ = os.Remove(tmpFile.Name())
+		if err := tmpFile.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := os.Remove(tmpFile.Name()); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return BinaryReference{}, fmt.Errorf("binary: failed to stat file before seal: %w", err)
 	}
 	if info.Size() != actualSize {
-		_ = tmpFile.Close()
-		_ = os.Remove(tmpFile.Name())
+		if err := tmpFile.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := os.Remove(tmpFile.Name()); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return BinaryReference{}, ErrSizeMismatch
 	}
 	if err := tmpFile.Close(); err != nil {
-		_ = os.Remove(tmpFile.Name())
+		if err := os.Remove(tmpFile.Name()); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return BinaryReference{}, fmt.Errorf("binary: failed to close file: %w", err)
 	}
 
@@ -200,13 +223,17 @@ func (p *FileProvider) seal(
 
 	computedChecksum, err := computeSHA256(absFinal)
 	if err != nil {
-		_ = os.Remove(absFinal)
+		if err := os.Remove(absFinal); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return BinaryReference{}, err
 	}
 	if checksum != nil {
 		provided := *checksum
 		if err := provided.Validate(); err != nil || !strings.EqualFold(provided.Algorithm, computedChecksum.Algorithm) || !strings.EqualFold(provided.Value, computedChecksum.Value) {
-			_ = os.Remove(absFinal)
+			if err := os.Remove(absFinal); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return BinaryReference{}, ErrChecksumInvalid
 		}
 	}

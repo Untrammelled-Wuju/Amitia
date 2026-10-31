@@ -64,6 +64,9 @@
           @toggle-pin="emit('togglePinConversation', $event)"
           @archive="emit('archiveConversation', $event)"
           @move="(item, projectId) => emit('moveConversation', item, projectId)"
+          @open="emit('openConversation', $event)"
+          @mark-read="emit('markConversationRead', $event)"
+          @delete="emit('deleteConversation', $event)"
         />
         <button
           v-if="canToggleConversations"
@@ -101,6 +104,9 @@ const emit = defineEmits<{
   togglePinConversation: [conversation: ConversationItem];
   archiveConversation: [conversation: ConversationItem];
   moveConversation: [conversation: ConversationItem, projectId: string];
+  openConversation: [conversation: ConversationItem];
+  markConversationRead: [conversation: ConversationItem];
+  deleteConversation: [conversation: ConversationItem];
 }>();
 
 const expanded = ref(false);

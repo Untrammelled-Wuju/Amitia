@@ -209,7 +209,9 @@ export function subscribeProgrammaticConversationNodeDefinitions(handler: () => 
 
 function notifyProgrammaticDefinitionSubscribers(): void {
   for (const handler of Array.from(programmaticDefinitionSubscribers)) {
-    try { handler(); } catch { /* one plugin observer must not break the registry */ }
+    try { handler(); } catch (error) {
+  console.error("[original-error]", error);
+/* one plugin observer must not break the registry */ }
   }
 }
 
@@ -452,8 +454,9 @@ export class ConversationNodeAssembler {
       let match: ProgrammaticConversationNodeMatch | null = null;
       try {
         match = runtime.definition.match(event);
-      } catch {
-        continue;
+      } catch (error) {
+  console.error("[original-error]", error);
+continue;
       }
       if (!match?.contextId?.trim()) continue;
       const contextId = match.contextId.trim();
@@ -486,8 +489,9 @@ export class ConversationNodeAssembler {
             completed: false,
           };
           this.refreshProgrammaticLocation(runtime, contextId, group.current);
-        } catch {
-          group.current = undefined;
+        } catch (error) {
+  console.error("[original-error]", error);
+group.current = undefined;
         }
         continue;
       }
@@ -495,8 +499,9 @@ export class ConversationNodeAssembler {
       if (!group.current) continue;
       try {
         group.current.state = runtime.definition.update(group.current.state, event, match, this.readerFor(runtime, contextId, event));
-      } catch {
-        continue;
+      } catch (error) {
+  console.error("[original-error]", error);
+continue;
       }
       group.current.events.push(event);
       this.refreshProgrammaticLocation(runtime, contextId, group.current);
@@ -591,8 +596,9 @@ export class ConversationNodeAssembler {
     try {
       publication = runtime.definition.publication?.(context);
       data = runtime.definition.buildLocationData(context);
-    } catch {
-      return;
+    } catch (error) {
+  console.error("[original-error]", error);
+return;
     }
     if (!data) return;
     const visibility = publication?.visibility ?? "conversation";
@@ -656,8 +662,9 @@ export function loadConversationEventJournal(conversationId: string): RuntimeCon
     const raw = localStorage.getItem(`${JOURNAL_PREFIX}${conversationId}`);
     const parsed = raw ? JSON.parse(raw) : [];
     return Array.isArray(parsed) ? parsed.map(normalizeEvent).filter((event) => event.conversationId === conversationId) : [];
-  } catch {
-    return [];
+  } catch (error) {
+  console.error("[original-error]", error);
+return [];
   }
 }
 
@@ -670,8 +677,9 @@ export function appendConversationEventJournal(event: RuntimeConversationEvent):
       .sort(compareEvents)
       .slice(-JOURNAL_LIMIT);
     localStorage.setItem(`${JOURNAL_PREFIX}${event.conversationId}`, JSON.stringify(next));
-  } catch {
-    // Storage is only an offline replay optimization. Durable server history is
+  } catch (error) {
+  console.error("[original-error]", error);
+// Storage is only an offline replay optimization. Durable server history is
     // the cross-device source of truth and chat delivery must never depend on it.
   }
 }
@@ -783,8 +791,9 @@ function buildProgrammaticNode(
     view = buildViewNode(context);
     publication = definition.publication?.(context);
     locationData = definition.buildLocationData?.(context);
-  } catch {
-    return null;
+  } catch (error) {
+  console.error("[original-error]", error);
+return null;
   }
   return {
     nodeId: `${definition.id}:${contextId}:${first.id}`,

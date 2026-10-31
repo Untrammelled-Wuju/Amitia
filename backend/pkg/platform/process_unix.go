@@ -5,6 +5,7 @@ package platform
 import (
 	"errors"
 	"fmt"
+	amitialog "log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -40,7 +41,9 @@ func terminateProcess(pid int) error {
 	if err != nil {
 		return err
 	}
-	_ = proc.Signal(syscall.SIGTERM)
+	if err := proc.Signal(syscall.SIGTERM); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	deadline := time.Now().Add(5 * time.Second)
 	for processAlive(pid) {
 		if time.Now().After(deadline) {

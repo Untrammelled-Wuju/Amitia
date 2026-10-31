@@ -12,7 +12,7 @@ func trustedServiceReference(handler gin.HandlerFunc) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		query, err := url.ParseQuery(c.Request.URL.RawQuery)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid service query"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 		serviceID := c.Param("serviceId")
@@ -49,7 +49,7 @@ func (api *TrustedServiceAPI) serviceOperationAlias(handler gin.HandlerFunc, leg
 func (api *TrustedServiceAPI) serviceListOrGet(c *gin.Context) {
 	query, err := url.ParseQuery(c.Request.URL.RawQuery)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid service query"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	if query.Has("service_id") {

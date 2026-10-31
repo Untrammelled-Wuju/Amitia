@@ -5,43 +5,43 @@ package llamacpp
 import "encoding/json"
 
 type LlamaCppProviderConfig struct {
-	LocalModelID    string `json:"localModelId"`
-	Backend         string `json:"backend,omitempty"`
-	Threads         int    `json:"threads,omitempty"`
-	ThreadsBatch    int    `json:"threadsBatch,omitempty"`
-	GPULayers       int    `json:"gpuLayers,omitempty"`
-	ContextSize     int    `json:"contextSize,omitempty"`
-	BatchSize       int    `json:"batchSize,omitempty"`
-	UBatchSize      int    `json:"uBatchSize,omitempty"`
-	FlashAttention  bool   `json:"flashAttention,omitempty"`
-	MMap            bool   `json:"mmap,omitempty"`
-	MLock           bool   `json:"mlock,omitempty"`
-	KVCacheTypeK    string `json:"kvCacheTypeK,omitempty"`
-	KVCacheTypeV    string `json:"kvCacheTypeV,omitempty"`
-	Seed            *int64 `json:"seed,omitempty"`
-	ResourceURI     string `json:"resourceUri,omitempty"`
-	MMProjURI       string `json:"mmprojUri,omitempty"`
-	Temperature     float64 `json:"temperature,omitempty"`
-	TopP            float64 `json:"topP,omitempty"`
-	TopK            int     `json:"topK,omitempty"`
-	MinP            float64 `json:"minP,omitempty"`
+	LocalModelID   string  `json:"localModelId"`
+	Backend        string  `json:"backend,omitempty"`
+	Threads        int     `json:"threads,omitempty"`
+	ThreadsBatch   int     `json:"threadsBatch,omitempty"`
+	GPULayers      int     `json:"gpuLayers,omitempty"`
+	ContextSize    int     `json:"contextSize,omitempty"`
+	BatchSize      int     `json:"batchSize,omitempty"`
+	UBatchSize     int     `json:"uBatchSize,omitempty"`
+	FlashAttention bool    `json:"flashAttention,omitempty"`
+	MMap           bool    `json:"mmap,omitempty"`
+	MLock          bool    `json:"mlock,omitempty"`
+	KVCacheTypeK   string  `json:"kvCacheTypeK,omitempty"`
+	KVCacheTypeV   string  `json:"kvCacheTypeV,omitempty"`
+	Seed           *int64  `json:"seed,omitempty"`
+	ResourceURI    string  `json:"resourceUri,omitempty"`
+	MMProjURI      string  `json:"mmprojUri,omitempty"`
+	Temperature    float64 `json:"temperature,omitempty"`
+	TopP           float64 `json:"topP,omitempty"`
+	TopK           int     `json:"topK,omitempty"`
+	MinP           float64 `json:"minP,omitempty"`
 }
 
 type LlamaCppEmbeddingConfig struct {
-	LocalModelID     string `json:"localModelId"`
-	Backend          string `json:"backend,omitempty"`
-	Threads          int    `json:"threads,omitempty"`
-	GPULayers        int    `json:"gpuLayers,omitempty"`
-	ContextSize      int    `json:"contextSize,omitempty"`
-	BatchSize        int    `json:"batchSize,omitempty"`
-	UBatchSize       int    `json:"uBatchSize,omitempty"`
-	Pooling          string `json:"pooling,omitempty"`
-	Normalize        string `json:"normalize,omitempty"`
-	QueryPrefix      string `json:"queryPrefix,omitempty"`
-	DocumentPrefix   string `json:"documentPrefix,omitempty"`
-	Truncate         bool   `json:"truncate,omitempty"`
-	ResourceURI      string `json:"resourceUri,omitempty"`
-	MMap             bool   `json:"mmap,omitempty"`
+	LocalModelID   string `json:"localModelId"`
+	Backend        string `json:"backend,omitempty"`
+	Threads        int    `json:"threads,omitempty"`
+	GPULayers      int    `json:"gpuLayers,omitempty"`
+	ContextSize    int    `json:"contextSize,omitempty"`
+	BatchSize      int    `json:"batchSize,omitempty"`
+	UBatchSize     int    `json:"uBatchSize,omitempty"`
+	Pooling        string `json:"pooling,omitempty"`
+	Normalize      string `json:"normalize,omitempty"`
+	QueryPrefix    string `json:"queryPrefix,omitempty"`
+	DocumentPrefix string `json:"documentPrefix,omitempty"`
+	Truncate       bool   `json:"truncate,omitempty"`
+	ResourceURI    string `json:"resourceUri,omitempty"`
+	MMap           bool   `json:"mmap,omitempty"`
 }
 
 func ParseProviderConfig(rawJSON string) (LlamaCppProviderConfig, error) {

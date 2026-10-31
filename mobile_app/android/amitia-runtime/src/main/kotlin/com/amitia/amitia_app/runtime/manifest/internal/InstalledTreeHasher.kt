@@ -33,7 +33,9 @@ internal object InstalledTreeHasher {
     private fun collectRecursive(root: File, relPath: String, file: File, result: MutableList<TreeEntry>) {
         val isSymlink = try {
             java.nio.file.Files.isSymbolicLink(file.toPath())
-        } catch (_: Exception) {
+        } catch (originalError36: Exception) {
+          originalError36.printStackTrace()
+
             false
         }
         when {
@@ -75,7 +77,9 @@ internal object InstalledTreeHasher {
     private fun readLinkSafe(file: File): String {
         return try {
             java.nio.file.Files.readSymbolicLink(file.toPath()).toString()
-        } catch (_: Exception) {
+        } catch (originalError78: Exception) {
+          originalError78.printStackTrace()
+
             ""
         }
     }

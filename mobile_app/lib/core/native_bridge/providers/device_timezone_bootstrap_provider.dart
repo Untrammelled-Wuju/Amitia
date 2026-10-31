@@ -34,7 +34,8 @@ final deviceTimezoneBootstrapProvider = FutureProvider<String?>((ref) async {
     final timezone = (result['ianaTimezone'] ?? '').toString().trim();
     DeviceTimezoneCache.update(timezone);
     return DeviceTimezoneCache.hasValue ? DeviceTimezoneCache.ianaTimezone : null;
-  } catch (_) {
-    return null;
+  } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return null;
   }
 });

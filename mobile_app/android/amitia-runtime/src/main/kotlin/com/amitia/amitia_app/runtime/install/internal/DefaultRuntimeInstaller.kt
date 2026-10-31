@@ -419,7 +419,9 @@ internal class DefaultRuntimeInstaller(
                         parent.deleteRecursively()
                     }
                 }
-            } catch (_: Exception) {
+            } catch (originalError422: Exception) {
+              originalError422.printStackTrace()
+
             }
 
             repairCompleted = true
@@ -507,7 +509,9 @@ internal class DefaultRuntimeInstaller(
                         backup.copyRecursively(versionDir, overwrite = true)
                         backup.deleteRecursively()
                     }
-                } catch (_: Exception) {
+                } catch (originalError510: Exception) {
+                  originalError510.printStackTrace()
+
                 }
             }
             throw e
@@ -527,7 +531,9 @@ internal class DefaultRuntimeInstaller(
                     backupVersionDir.deleteRecursively()
                 }
             }
-        } catch (_: Exception) {
+        } catch (originalError530: Exception) {
+          originalError530.printStackTrace()
+
         }
 
         restoreFileBytes(layout.runtimeManifestFile, backup.manifestBytes)
@@ -542,14 +548,18 @@ internal class DefaultRuntimeInstaller(
             if (previousManifest is RuntimeManifestResult.Success && backup.manifestBytes == null) {
                 manifestStore.write(previousManifest.manifest)
             }
-        } catch (_: Exception) {
+        } catch (originalError545: Exception) {
+          originalError545.printStackTrace()
+
         }
         try {
             val previousActive = backup.activeBefore
             if (previousActive is ActiveRuntimeResult.Active) {
                 activeRuntimeManager.activate(previousActive.info.version)
             }
-        } catch (_: Exception) {
+        } catch (originalError552: Exception) {
+          originalError552.printStackTrace()
+
         }
     }
 
@@ -569,7 +579,9 @@ internal class DefaultRuntimeInstaller(
                     tmp.delete()
                 }
             }
-        } catch (_: Exception) {
+        } catch (originalError572: Exception) {
+          originalError572.printStackTrace()
+
         }
     }
 
@@ -623,7 +635,9 @@ internal class DefaultRuntimeInstaller(
             if (stagingDir.exists()) {
                 stagingDir.deleteRecursively()
             }
-        } catch (_: Exception) {
+        } catch (originalError626: Exception) {
+          originalError626.printStackTrace()
+
         }
     }
 
@@ -694,7 +708,9 @@ internal class DefaultRuntimeInstaller(
             if (versionDir.exists()) {
                 versionDir.deleteRecursively()
             }
-        } catch (_: Exception) {
+        } catch (originalError697: Exception) {
+          originalError697.printStackTrace()
+
         }
     }
 

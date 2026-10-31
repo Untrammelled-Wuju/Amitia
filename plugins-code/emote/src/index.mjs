@@ -178,7 +178,9 @@ async function writeChunk(host, handleId, base64Data) {
 async function closeResource(host, handleId) {
   try {
     await host.call("host.resource.close", { handleId });
-  } catch {}
+  } catch (error) {
+  console.error("[original-error]", error);
+}
 }
 
 async function writeBase64File(host, path, base64Data) {
@@ -227,7 +229,9 @@ async function deleteResource(host, path) {
       scope: "data",
       path,
     });
-  } catch {}
+  } catch (error) {
+  console.error("[original-error]", error);
+}
 }
 
 async function hydrateUrls(host, emote) {

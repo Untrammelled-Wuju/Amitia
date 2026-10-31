@@ -229,7 +229,7 @@ func (h *ControlHandler) handleSinkRegister(ctx context.Context, request rpc.RPC
 	if h.declarationProvider != nil {
 		declared, err := h.declarationProvider.DescriptorControlSinks(string(request.PluginID))
 		if err != nil {
-			return rpc.RPCResponse{RequestID: request.ID, Error: &rpc.RPCRoutedError{Code: string(domain.ErrInternal), Message: "failed to load declared control sinks"}}, nil
+			return rpc.RPCResponse{RequestID: request.ID, Error: &rpc.RPCRoutedError{Code: string(domain.ErrInternal), Message: "failed to load declared control sinks: " + err.Error()}}, nil
 		}
 		allowed := false
 		for _, declaration := range declared {

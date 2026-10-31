@@ -94,7 +94,9 @@ function providerOptionLabel(provider: UIProviderDefinition) {
 }
 async function refreshAll() {
   await store.refreshSnapshot(true);
-  await store.loadProfileScope(store.profileScope).catch(() => {});
+  await store.loadProfileScope(store.profileScope).catch((error) => {
+  console.error("[original-error]", error);
+});
 }
 async function changeScope(value: UIProfileScopeKind) {
   try {

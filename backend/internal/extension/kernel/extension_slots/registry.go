@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	amitialog "log"
 	"sort"
 	"sync"
 	"time"
@@ -511,7 +512,9 @@ func (r *SlotRegistry) SupportsKind(slotID SlotID, kind string) bool {
 func DefaultSlotRegistry() *SlotRegistry {
 	r := NewSlotRegistry()
 	for _, def := range DefaultSlots() {
-		_ = r.Register(def)
+		if err := r.Register(def); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return r
 }

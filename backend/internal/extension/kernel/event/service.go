@@ -210,7 +210,9 @@ func (s *Service) UpdateExtensionGeneration(ctx context.Context, extensionID str
 	if err := s.subscriptionReg.UpdateGeneration(ctx, extensionID, generation, defs); err != nil {
 		return err
 	}
-	_, _ = s.deliveryStore.CancelPendingByExtension(ctx, extensionID, "cancel_stale_subscription")
+	if _, err := s.deliveryStore.CancelPendingByExtension(ctx, extensionID, "cancel_stale_subscription"); err != nil {
+		log.Printf("[original-error] %v", err)
+	}
 	return nil
 }
 

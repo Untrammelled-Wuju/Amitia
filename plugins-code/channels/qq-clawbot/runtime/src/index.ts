@@ -47,7 +47,9 @@ function resolveSendTarget(body: any): { peerId: string; groupId: string; toUser
 function appendForwardLog(message: string): void {
   try {
     fs.appendFileSync("forward-debug.log", `${new Date().toISOString()} ${message}\n`)
-  } catch {}
+  } catch (error) {
+  console.error("[original-error]", error);
+}
 }
 
 async function downloadDataUrl(url: string): Promise<{ dataUrl: string; mime: string }> {
@@ -59,8 +61,9 @@ async function downloadDataUrl(url: string): Promise<{ dataUrl: string; mime: st
       dataUrl: `data:${result.contentType};base64,${result.buffer.toString("base64")}`,
       mime: result.contentType,
     }
-  } catch {
-    return { dataUrl: "", mime: "" }
+  } catch (error) {
+  console.error("[original-error]", error);
+return { dataUrl: "", mime: "" }
   }
 }
 
@@ -88,7 +91,9 @@ qq.onMessage(async (msg: QQMessage) => {
     if (previous) {
       try {
         await previous
-      } catch {}
+      } catch (error) {
+  console.error("[original-error]", error);
+}
     }
     let release = () => {}
     const lock = new Promise<void>((resolve) => {
@@ -144,7 +149,10 @@ qq.onMessage(async (msg: QQMessage) => {
         body: JSON.stringify(payload),
         signal: AbortSignal.timeout(600000),
       })
-      const json = await response.json().catch(() => ({}))
+      const json = await response.json().catch((error) => {
+        console.error("[original-error]", error)
+        return {}
+      })
       if (!response.ok || (json?.code && json.code !== 200)) {
         const error = `渠道消息入站失败 [status=${response.status} code=${json?.code || 0}] ${json?.msg || ""}`
         appendForwardLog(error)
@@ -226,8 +234,9 @@ app.post("/api/send-voice", async (req, reply) => {
           : await qq.uploadPrivateMedia(toUserId, audioBuffer, `voice${index}.mp3`, 3)
         if (groupId) await qq.sendGroupVoice(groupId, fileInfo)
         else await qq.sendPrivateVoice(toUserId, fileInfo)
-      } catch {
-        if (groupId) await qq.sendGroupMsg(groupId, part)
+      } catch (error) {
+  console.error("[original-error]", error);
+if (groupId) await qq.sendGroupMsg(groupId, part)
         else await qq.sendPrivateMsg(toUserId, part)
       }
       if (index < parts.length - 1) await new Promise((resolve) => setTimeout(resolve, 800))
@@ -255,7 +264,9 @@ app.post("/api/send-image", async (req, reply) => {
         buffer = Buffer.from(await response.arrayBuffer())
         fileName = path.basename(new URL(url).pathname) || fileName
         break
-      } catch {}
+      } catch (error) {
+  console.error("[original-error]", error);
+}
     }
     if (!buffer) throw new Error("图片资源下载失败")
     const fileInfo = groupId

@@ -241,12 +241,16 @@ func (s *FileStore) lockConversation(ctx context.Context, conversationID string)
 	}
 	for {
 		if err := ctx.Err(); err != nil {
-			_ = file.Close()
+			if err := file.Close(); err != nil {
+				log.Printf("[original-error] %v", err)
+			}
 			return nil, err
 		}
 		acquired, err := tryFileLock(file)
 		if err != nil {
-			_ = file.Close()
+			if err := file.Close(); err != nil {
+				log.Printf("[original-error] %v", err)
+			}
 			return nil, fmt.Errorf("lock conversation event storage: %w", err)
 		}
 		if acquired {
@@ -254,14 +258,18 @@ func (s *FileStore) lockConversation(ctx context.Context, conversationID string)
 				if err := unlockFile(file); err != nil {
 					log.Printf("unlock conversation event storage failed: %v", err)
 				}
-				_ = file.Close()
+				if err := file.Close(); err != nil {
+					log.Printf("[original-error] %v", err)
+				}
 			}, nil
 		}
 		timer := time.NewTimer(10 * time.Millisecond)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			_ = file.Close()
+			if err := file.Close(); err != nil {
+				log.Printf("[original-error] %v", err)
+			}
 			return nil, ctx.Err()
 		case <-timer.C:
 		}
@@ -376,22 +384,36 @@ func (s *FileStore) writeSnapshotLocked(state *fileConversationState, conversati
 	}
 	tempPath := temp.Name()
 	if _, err := temp.Write(data); err != nil {
-		_ = temp.Close()
-		_ = os.Remove(tempPath)
+		if err := temp.Close(); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
+		if err := os.Remove(tempPath); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 		return err
 	}
 	if err := temp.Sync(); err != nil {
-		_ = temp.Close()
-		_ = os.Remove(tempPath)
+		if err := temp.Close(); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
+		if err := os.Remove(tempPath); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 		return err
 	}
 	if err := temp.Close(); err != nil {
-		_ = os.Remove(tempPath)
+		if err := os.Remove(tempPath); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 		return err
 	}
-	_ = os.Remove(path)
+	if err := os.Remove(path); err != nil {
+		log.Printf("[original-error] %v", err)
+	}
 	if err := os.Rename(tempPath, path); err != nil {
-		_ = os.Remove(tempPath)
+		if err := os.Remove(tempPath); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 		return err
 	}
 	return nil
@@ -418,23 +440,37 @@ func (s *FileStore) compactLocked(state *fileConversationState, conversationID s
 	encoder := json.NewEncoder(temp)
 	for _, event := range events {
 		if err := encoder.Encode(event); err != nil {
-			_ = temp.Close()
-			_ = os.Remove(tempPath)
+			if err := temp.Close(); err != nil {
+				log.Printf("[original-error] %v", err)
+			}
+			if err := os.Remove(tempPath); err != nil {
+				log.Printf("[original-error] %v", err)
+			}
 			return err
 		}
 	}
 	if err := temp.Sync(); err != nil {
-		_ = temp.Close()
-		_ = os.Remove(tempPath)
+		if err := temp.Close(); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
+		if err := os.Remove(tempPath); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 		return err
 	}
 	if err := temp.Close(); err != nil {
-		_ = os.Remove(tempPath)
+		if err := os.Remove(tempPath); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 		return err
 	}
-	_ = os.Remove(path)
+	if err := os.Remove(path); err != nil {
+		log.Printf("[original-error] %v", err)
+	}
 	if err := os.Rename(tempPath, path); err != nil {
-		_ = os.Remove(tempPath)
+		if err := os.Remove(tempPath); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 		return err
 	}
 	state.events = append([]AgentUIEvent(nil), events...)

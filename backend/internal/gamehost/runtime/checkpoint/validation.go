@@ -117,8 +117,8 @@ func ServiceConsistency(checkpoint RuntimeCheckpoint) error {
 }
 
 var (
-	errMissingRuntimeID   = errorString("missing runtime id")
-	errMissingPluginID    = errorString("missing plugin id")
+	errMissingRuntimeID    = errorString("missing runtime id")
+	errMissingPluginID     = errorString("missing plugin id")
 	errInvalidRuntimeState = func(s domain.RuntimeState) error {
 		return errorf("invalid runtime state: %s", s)
 	}
@@ -134,7 +134,7 @@ var (
 	errTimestampOrder = func(detail string) error {
 		return errorf("timestamp order violation: %s", detail)
 	}
-	errEmptyServiceID = errorString("empty service id")
+	errEmptyServiceID   = errorString("empty service id")
 	errDuplicateService = func(id domain.ServiceID) error {
 		return errorf("duplicate service id: %s", id)
 	}

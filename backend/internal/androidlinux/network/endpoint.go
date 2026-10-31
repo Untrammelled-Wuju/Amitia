@@ -13,11 +13,11 @@ import (
 type EndpointClass string
 
 const (
-	EndpointPublic    EndpointClass = "public"
-	EndpointPrivate   EndpointClass = "private"
-	EndpointLoopback  EndpointClass = "loopback"
-	EndpointLinkLocal EndpointClass = "link-local"
-	EndpointMulticast EndpointClass = "multicast"
+	EndpointPublic      EndpointClass = "public"
+	EndpointPrivate     EndpointClass = "private"
+	EndpointLoopback    EndpointClass = "loopback"
+	EndpointLinkLocal   EndpointClass = "link-local"
+	EndpointMulticast   EndpointClass = "multicast"
 	EndpointUnspecified EndpointClass = "unspecified"
 )
 
@@ -36,6 +36,7 @@ type Validator struct {
 func NewEndpointValidator(policy Policy) *Resolver {
 	return &Resolver{policy: policy}
 }
+
 type Resolver struct {
 	policy Policy
 }

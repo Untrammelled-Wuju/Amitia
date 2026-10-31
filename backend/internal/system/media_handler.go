@@ -22,7 +22,7 @@ import (
 func (h *Handler) VoiceUpload(c *gin.Context) {
 	file, header, err := c.Request.FormFile("audio")
 	if err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "缺少音频文件", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	defer file.Close()
@@ -80,7 +80,7 @@ func (h *Handler) VoiceUpload(c *gin.Context) {
 func (h *Handler) ImageUpload(c *gin.Context) {
 	file, header, err := c.Request.FormFile("image")
 	if err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "缺少图片文件", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	defer file.Close()
@@ -137,7 +137,7 @@ func (h *Handler) ImageUpload(c *gin.Context) {
 func (h *Handler) VideoUpload(c *gin.Context) {
 	file, header, err := c.Request.FormFile("video")
 	if err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "缺少视频文件", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	defer file.Close()
@@ -249,7 +249,7 @@ func (h *Handler) VoiceTranscribe(c *gin.Context) {
 		AudioUrl string `json:"audioUrl"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil || body.AudioUrl == "" {
-		util.ErrorResponse(c, response.InvalidParams, "缺少audioUrl", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 

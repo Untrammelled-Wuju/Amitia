@@ -91,7 +91,10 @@ func (p *GenerateProvider) Generate(ctx context.Context, req ImageGenerateReques
 	}
 
 	activeConfig, err := p.imagegenSvc.GetActive()
-	if err != nil || activeConfig == nil {
+	if err != nil {
+		return nil, &Error{Code: ErrGenUnavailable, Message: err.Error(), HTTPStatus: http.StatusServiceUnavailable}
+	}
+	if activeConfig == nil {
 		return nil, &Error{Code: ErrGenUnavailable, Message: "no active image generation config", HTTPStatus: http.StatusServiceUnavailable}
 	}
 	if activeConfig.ApiKey == "" {

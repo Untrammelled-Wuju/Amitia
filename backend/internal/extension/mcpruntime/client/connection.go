@@ -10,6 +10,7 @@ import (
 
 	"github.com/u-ai/backend/internal/extension/mcpruntime/protocol"
 	"github.com/u-ai/backend/internal/extension/mcpruntime/transport"
+	amitialog "log"
 )
 
 type State string
@@ -126,7 +127,9 @@ func (c *Connection) Connect(ctx context.Context) error {
 		setter.SetProtocolVersion(initialized.ProtocolVersion)
 	}
 	if starter, ok := c.transport.(interface{ StartServerStream(context.Context) error }); ok {
-		_ = starter.StartServerStream(context.Background())
+		if err := starter.StartServerStream(context.Background()); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return nil
 }
@@ -206,7 +209,9 @@ func (c *Connection) receiveLoop() {
 		}
 		switch kind {
 		case protocol.MessageResponse, protocol.MessageError:
-			_ = c.requests.HandleResponse(message)
+			if err := c.requests.HandleResponse(message); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		case protocol.MessageNotification:
 			c.handleNotification(message)
 		case protocol.MessageRequest:
@@ -284,7 +289,9 @@ func (c *Connection) handleServerRequest(message protocol.Message) {
 	}
 	response, err := protocol.Response(message.ID, result)
 	if err == nil {
-		_ = c.transport.Send(context.Background(), response)
+		if err := c.transport.Send(context.Background(), response); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 }
 
@@ -308,12 +315,16 @@ func mustRawID(value any) json.RawMessage {
 func (c *Connection) sendServerError(id json.RawMessage, rpcErr *protocol.RPCError) {
 	response, err := protocol.ErrorResponse(id, rpcErr)
 	if err == nil {
-		_ = c.transport.Send(context.Background(), response)
+		if err := c.transport.Send(context.Background(), response); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 }
 
 func (c *Connection) failInitialization(ctx context.Context) {
-	_ = c.transport.Close(ctx)
+	if err := c.transport.Close(ctx); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	c.requests.FailAll(protocol.ErrInitialization)
 	c.stopOnce.Do(func() { close(c.stop) })
 	c.setState(StateDisconnected)

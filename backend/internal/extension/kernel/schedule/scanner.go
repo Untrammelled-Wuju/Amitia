@@ -3,6 +3,7 @@ package schedule
 import (
 	"context"
 	"fmt"
+	amitialog "log"
 	"sync"
 	"time"
 )
@@ -79,7 +80,9 @@ func (s *ScheduleScanner) loop() {
 }
 
 func (s *ScheduleScanner) scanOnce() {
-	_, _ = s.ScanOnce(s.ctx)
+	if _, err := s.ScanOnce(s.ctx); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (s *ScheduleScanner) SetMaintenance(maintenance func(context.Context) error) {
@@ -150,7 +153,9 @@ func (s *ScheduleScanner) handleExpired(ctx context.Context, state *ScheduleStat
 	state.NextScheduledAt = nil
 	state.NextEffectiveAt = nil
 	state.UpdatedAt = now
-	_ = s.store.PutState(ctx, state)
+	if err := s.store.PutState(ctx, state); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (s *ScheduleScanner) updateNextRun(ctx context.Context, state *ScheduleState, result *NextRunResult) {
@@ -158,7 +163,9 @@ func (s *ScheduleScanner) updateNextRun(ctx context.Context, state *ScheduleStat
 	state.NextScheduledAt = result.NextScheduledAt
 	state.NextEffectiveAt = result.NextEffectiveAt
 	state.UpdatedAt = now
-	_ = s.store.PutState(ctx, state)
+	if err := s.store.PutState(ctx, state); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (s *ScheduleScanner) ScanOnce(ctx context.Context) (ScanResult, error) {

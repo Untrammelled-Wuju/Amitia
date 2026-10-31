@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/u-ai/backend/pkg/resourceuri"
+	amitialog "log"
 )
 
 type Service struct {
@@ -212,7 +213,9 @@ func (s *Service) RegisterLocalMount(ctx context.Context, name, localRoot string
 				}
 				if existing, ok := s.registry.GetMount(WorkspaceID(rec.id)); ok {
 					if touched, ok := s.registry.TouchMount(existing.ID); ok {
-						_ = s.mountRepo.Touch(string(touched.ID), touched.LastUsedAt)
+						if err := s.mountRepo.Touch(string(touched.ID), touched.LastUsedAt); err != nil {
+							amitialog.Printf("[original-error] %v", err)
+						}
 						return touched, nil
 					}
 					return existing, nil
@@ -238,7 +241,9 @@ func (s *Service) RegisterLocalMount(ctx context.Context, name, localRoot string
 			lastUsedAt: mount.LastUsedAt,
 		}
 		if err := s.mountRepo.Insert(rec); err != nil {
-			_ = s.registry.RemoveMount(ctx, mount.ID)
+			if err := s.registry.RemoveMount(ctx, mount.ID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return WorkspaceMount{}, fmt.Errorf("persist local mount: %w", err)
 		}
 	}
@@ -303,7 +308,9 @@ func (s *Service) RegisterSAFMount(ctx context.Context, name string, grantID str
 						m = refreshed
 					}
 					if touched, touchedOK := s.registry.TouchMount(m.ID); touchedOK {
-						_ = s.mountRepo.Touch(string(touched.ID), touched.LastUsedAt)
+						if err := s.mountRepo.Touch(string(touched.ID), touched.LastUsedAt); err != nil {
+							amitialog.Printf("[original-error] %v", err)
+						}
 						return touched, nil
 					}
 					return m, nil
@@ -382,7 +389,9 @@ func (s *Service) RegisterIsolatedMount(ctx context.Context, name string, backen
 			backendConfig: mount.BackendConfig,
 		}
 		if err := s.mountRepo.Insert(rec); err != nil {
-			_ = s.registry.RemoveMount(ctx, mount.ID)
+			if err := s.registry.RemoveMount(ctx, mount.ID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return WorkspaceMount{}, fmt.Errorf("persist isolated mount: %w", err)
 		}
 	}
@@ -496,7 +505,9 @@ func (s *Service) UpdateRemoteMountConfig(ctx context.Context, mountID Workspace
 
 	if s.mountRepo != nil {
 		configJSON, _ := json.Marshal(config)
-		_ = s.mountRepo.UpdateConfig(string(mountID), string(configJSON), credRef, readOnly)
+		if err := s.mountRepo.UpdateConfig(string(mountID), string(configJSON), credRef, readOnly); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 
 	return updated, nil

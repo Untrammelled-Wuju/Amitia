@@ -41,5 +41,6 @@ func NewRuntimeHost(ctx HostBuildContext) (RuntimeHost, error) {
 
 	return newRestrictedHost(ctx.Descriptor, ctx.Paths), nil
 }
+
 var _ RuntimeHost = (*nativeProcessHost)(nil)
 var _ RuntimeHost = (*restrictedHost)(nil)

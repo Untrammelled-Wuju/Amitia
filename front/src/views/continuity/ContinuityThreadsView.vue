@@ -298,7 +298,9 @@ async function confirmExecution(outcome: "completed" | "abandoned") {
       const input = await ElMessageBox.prompt("请核实原设备的执行结果，填写结果摘要。确认后事项保持暂停，不会重新执行本次等待。", "确认执行已完成", { inputType: "textarea", inputValidator: (value) => !!value.trim() || "请填写结果摘要" });
       result = input.value;
     } else await ElMessageBox.confirm("请先核实原设备状态。放弃后不会重复执行本次等待，已发生的操作仍然保留，事项保持暂停。", "放弃本次执行", { type: "warning" });
-  } catch { return; }
+  } catch (error) {
+  console.error("[original-error]", error);
+return; }
   saving.value = true;
   try { await confirmContinuityExecution(current.thread.id, current.lease.id, outcome, result, original); await reloadDetail(); }
   catch (error) { ElMessage.error(error instanceof Error ? error.message : "执行确认失败"); }
@@ -314,7 +316,9 @@ function statusLabel(status: ThreadStatus) { return statusOptions.find((item) =>
 function tagType(status: ThreadStatus) { return status === "completed" ? "success" : status === "blocked" ? "danger" : status === "waiting" ? "warning" : status === "paused" ? "info" : "primary"; }
 function terminal(status: ThreadStatus) { return status === "completed" || status === "cancelled"; }
 function formatTime(value?: string) { if (!value) return "—"; return new Date(value).toLocaleString(); }
-function eventSummary(raw: string) { try { const data = JSON.parse(raw || "{}"); return String(data.summary || data.error || ""); } catch { return ""; } }
+function eventSummary(raw: string) { try { const data = JSON.parse(raw || "{}"); return String(data.summary || data.error || ""); } catch (error) {
+  console.error("[original-error]", error);
+return ""; } }
 
 async function refresh() {
   let ticket = ++generation;
@@ -389,8 +393,9 @@ async function cancelWait(wait: ContinuityWait) {
   const threadId = detail.value.thread.id;
   try {
     await ElMessageBox.confirm("取消后不会触发自动恢复。", "取消等待条件", { type: "warning" });
-  } catch {
-    return;
+  } catch (error) {
+  console.error("[original-error]", error);
+return;
   }
   try { await cancelContinuityWait(threadId, wait.id, current); await reloadDetail(); }
   catch (error) { ElMessage.error(error instanceof Error ? error.message : "等待条件取消失败"); }
@@ -413,7 +418,9 @@ async function addWait() {
   if (!detail.value) return;
   let condition: Record<string, unknown> = {};
   try { condition = JSON.parse(waitForm.conditionJson || "{}"); }
-  catch { ElMessage.warning("匹配条件不是有效 JSON"); return; }
+  catch (error) {
+  console.error("[original-error]", error);
+ElMessage.warning("匹配条件不是有效 JSON"); return; }
   saving.value = true;
   try {
     await createContinuityWait(detail.value.thread.id, {

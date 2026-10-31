@@ -161,7 +161,7 @@ export function useDeviceManagement() {
     } catch (err: any) {
       if (intent.controller.signal.aborted || intent !== managementIntent) return;
       syncStatus.value = { ...syncStatus.value, [deviceId]: { error: err?.message || "不可用" } };
-      if (notify) ElMessage.warning("同步状态暂不可用");
+      if (notify) ElMessage.warning(String(err?.message || err));
     }
   }
 
@@ -195,8 +195,9 @@ export function useDeviceManagement() {
     const original = managementIntent;
     try {
       await ElMessageBox.confirm(`确定移除「${device.label || device.deviceId}」吗？该设备凭据会立即失效。`, "移除设备", { type: "warning", confirmButtonText: "移除", cancelButtonText: "取消" });
-    } catch {
-      return;
+    } catch (error) {
+  console.error("[original-error]", error);
+return;
     }
     busy.value = device.deviceId;
     try {
@@ -225,7 +226,9 @@ export function useDeviceManagement() {
     const grant = !device.coordination.administrator;
     try {
       await ElMessageBox.confirm(grant ? `「${device.label || device.deviceId}」将可以完整配置当前 Core 并查询 Core 数据。` : '撤销后该设备将立即失去 Core 管理权限。', grant ? '授予云端管理员' : '撤销云端管理员', { type: 'warning', confirmButtonText: '确认', cancelButtonText: '取消' });
-    } catch { return; }
+    } catch (error) {
+  console.error("[original-error]", error);
+return; }
     busy.value = device.deviceId;
     try {
       if (!original || original !== managementIntent) throw new Error("原设备管理页面已变化，请重新确认");
@@ -245,7 +248,9 @@ export function useDeviceManagement() {
     approvalTimer = setInterval(async () => {
       if (disposed || refreshing || !canAdminister.value) return;
       refreshing = true;
-      try { await refreshPairingApprovals(); } catch {}
+      try { await refreshPairingApprovals(); } catch (error) {
+  console.error("[original-error]", error);
+}
       finally { refreshing = false; }
     }, 2000);
   });

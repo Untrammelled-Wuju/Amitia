@@ -11,6 +11,7 @@ import (
 
 	"github.com/u-ai/backend/internal/media/conversion"
 	"github.com/u-ai/backend/internal/media/metadata"
+	amitialog "log"
 )
 
 type Service struct {
@@ -109,18 +110,24 @@ func (s *Service) Convert(ctx context.Context, request conversion.ConvertRequest
 	if request.TargetURI == "" {
 		request.TargetURI, err = s.materializer.URIForLocalPath(stagingPath)
 		if err != nil {
-			_ = s.resourceIO.CleanupStaging(stagingPath)
+			if err := s.resourceIO.CleanupStaging(stagingPath); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return nil, err
 		}
 	}
 
 	result, err := s.backend.Convert(ctx, request, plan, materialized, stagingPath, opts)
 	if err != nil {
-		_ = s.resourceIO.CleanupStaging(stagingPath)
+		if err := s.resourceIO.CleanupStaging(stagingPath); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, err
 	}
 	if err := s.materializer.Publish(ctx, stagingPath, request.TargetURI); err != nil {
-		_ = s.resourceIO.CleanupStaging(stagingPath)
+		if err := s.resourceIO.CleanupStaging(stagingPath); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, err
 	}
 
@@ -189,7 +196,11 @@ func (s *Service) ExecuteFFmpeg(ctx context.Context, request FFmpegExecuteReques
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = s.resourceIO.CleanupStaging(stagingPath) }()
+	defer func() {
+		if err := s.resourceIO.CleanupStaging(stagingPath); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+	}()
 
 	args := []string{"-y", "-hide_banner", "-nostdin", "-loglevel", "error", "-i", inputPath}
 	args = append(args, request.Args...)

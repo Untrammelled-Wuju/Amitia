@@ -75,8 +75,9 @@ onMounted(async () => {
     } else if (status.authenticated) {
       await router.replace(safeRedirect());
     }
-  } catch {
-    // Keep the login form visible; submit will surface a concrete error.
+  } catch (error) {
+  console.error("[original-error]", error);
+// Keep the login form visible; submit will surface a concrete error.
   }
 });
 </script>

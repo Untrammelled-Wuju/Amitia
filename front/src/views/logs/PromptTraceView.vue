@@ -105,8 +105,9 @@ function normalizeTrace(raw: unknown): TraceEntry {
 function pretty(value: unknown): string {
   try {
     return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value ?? "");
+  } catch (error) {
+  console.error("[original-error]", error);
+return String(value ?? "");
   }
 }
 

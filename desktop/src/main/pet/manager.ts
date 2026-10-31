@@ -2655,8 +2655,9 @@ export class DesktopPetManager {
     if (mainWin && !mainWin.isDestroyed()) {
       try {
         mainWin.webContents.send(PET_STATE_CHANNEL, payload);
-      } catch {
-        void 0;
+      } catch (error) {
+  console.error("[original-error]", error);
+void 0;
       }
     }
     this.syncRuntimeState();
@@ -2801,8 +2802,9 @@ export class DesktopPetManager {
       };
       try {
         win.webContents.send(PET_LOAD_ERROR_CHANNEL, payload);
-      } catch {
-        void 0;
+      } catch (error) {
+  console.error("[original-error]", error);
+void 0;
       }
     }
   }
@@ -2972,28 +2974,33 @@ export class DesktopPetManager {
     this.recoveryHandlersAttached = false;
     try {
       powerMonitor.off("resume", this.boundPowerResume);
-    } catch {
-      void 0;
+    } catch (error) {
+  console.error("[original-error]", error);
+void 0;
     }
     try {
       screen.off("display-added", this.boundDisplayAdded);
-    } catch {
-      void 0;
+    } catch (error) {
+  console.error("[original-error]", error);
+void 0;
     }
     try {
       screen.off("display-removed", this.boundDisplayRemoved);
-    } catch {
-      void 0;
+    } catch (error) {
+  console.error("[original-error]", error);
+void 0;
     }
     try {
       screen.off("display-metrics-changed", this.boundDisplayMetricsChanged);
-    } catch {
-      void 0;
+    } catch (error) {
+  console.error("[original-error]", error);
+void 0;
     }
     try {
       app.off("child-process-gone", this.boundChildProcessGone);
-    } catch {
-      void 0;
+    } catch (error) {
+  console.error("[original-error]", error);
+void 0;
     }
     this.clearRecoveryTimers();
     this.recoveryInProgress = false;
@@ -3452,8 +3459,9 @@ export class DesktopPetManager {
       this.captureRuntimeCursor(this.runtimeHandler);
       try {
         this.runtimeHandler.disconnect();
-      } catch {
-        void 0;
+      } catch (error) {
+  console.error("[original-error]", error);
+void 0;
       }
       this.runtimeHandler = null;
     }
@@ -3543,8 +3551,9 @@ export class DesktopPetManager {
       if (!this.isBridgeGenerationCurrent(generation) || this.runtimeHandler !== handler) {
         try {
           handler.disconnect();
-        } catch {
-          void 0;
+        } catch (error) {
+  console.error("[original-error]", error);
+void 0;
         }
         if (this.runtimeHandler === handler) this.runtimeHandler = null;
         return;
@@ -3565,8 +3574,9 @@ export class DesktopPetManager {
         // released here before another generation/attempt can start.
         try {
           candidateHandler.disconnect();
-        } catch {
-          void 0;
+        } catch (error) {
+  console.error("[original-error]", error);
+void 0;
         }
         if (this.runtimeHandler === candidateHandler) this.runtimeHandler = null;
       }
@@ -4311,7 +4321,10 @@ export class DesktopPetManager {
     if (!handler || !handler.isConnected()) return;
 
     this.runtimeStateSync = this.runtimeStateSync
-      .catch(() => undefined)
+      .catch((error) => {
+  console.error("[original-error]", error);
+  return undefined;
+})
       .then(async () => {
         if (this.runtimeHandler !== handler || !handler.isConnected()) return;
         await handler.sendRendererHealth(this.rendererHealthy);

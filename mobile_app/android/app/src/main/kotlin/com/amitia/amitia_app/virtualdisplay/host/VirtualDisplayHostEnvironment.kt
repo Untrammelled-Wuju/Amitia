@@ -44,11 +44,13 @@ internal object VirtualDisplayHostEnvironment {
             val constructor = activityThreadClass.getDeclaredConstructor()
             constructor.isAccessible = true
             return constructor.newInstance()
-        } catch (_: Throwable) {
+        } catch (originalError47: Throwable) {
+          originalError47.printStackTrace()
+
             val current = activityThreadClass.getDeclaredMethod("currentActivityThread")
             current.isAccessible = true
             return current.invoke(null)
-                ?: throw IllegalStateException("Android ActivityThread unavailable")
+                ?: throw IllegalStateException("Android ActivityThread unavailable: ${originalError47.message}", originalError47)
         }
     }
 
@@ -68,7 +70,9 @@ internal object VirtualDisplayHostEnvironment {
             val declared = activityThreadClass.getDeclaredMethod(method)
             declared.isAccessible = true
             declared.invoke(activityThread) as? Context
-        } catch (_: Throwable) {
+        } catch (originalError71: Throwable) {
+          originalError71.printStackTrace()
+
             null
         }
     }
@@ -83,7 +87,9 @@ internal object VirtualDisplayHostEnvironment {
             appInfo.packageName = SHELL_PACKAGE
             setField(bindDataClass, bindData, "appInfo", appInfo)
             setField(activityThreadClass, activityThread, "mBoundApplication", bindData)
-        } catch (_: Throwable) {
+        } catch (originalError86: Throwable) {
+          originalError86.printStackTrace()
+
         }
     }
 
@@ -100,7 +106,9 @@ internal object VirtualDisplayHostEnvironment {
             if (field.get(activityThread) == null) {
                 field.set(activityThread, Instrumentation())
             }
-        } catch (_: Throwable) {
+        } catch (originalError103: Throwable) {
+          originalError103.printStackTrace()
+
         }
     }
 
@@ -113,7 +121,9 @@ internal object VirtualDisplayHostEnvironment {
             constructor.isAccessible = true
             val controller = constructor.newInstance(activityThread)
             setField(activityThreadClass, activityThread, "mConfigurationController", controller)
-        } catch (_: Throwable) {
+        } catch (originalError116: Throwable) {
+          originalError116.printStackTrace()
+
         }
     }
 
@@ -149,7 +159,9 @@ internal object VirtualDisplayHostEnvironment {
         fun ensureMainLooper() {
             try {
                 Class.forName("android.os.Looper").getDeclaredMethod("prepareMainLooper").invoke(null)
-            } catch (_: Throwable) {
+            } catch (originalError152: Throwable) {
+              originalError152.printStackTrace()
+
             }
         }
     }

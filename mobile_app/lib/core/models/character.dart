@@ -111,7 +111,9 @@ class CharacterDto {
         if (decoded is Map) {
           return decoded.map((key, item) => MapEntry(key.toString(), item));
         }
-      } catch (_) {}
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
     }
     return const <String, dynamic>{};
   }

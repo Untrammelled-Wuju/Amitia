@@ -21,6 +21,7 @@ import (
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/tts"
 	"gorm.io/gorm"
+	amitialog "log"
 )
 
 type mcpReconnectController interface {
@@ -304,7 +305,9 @@ func (c *serverAgentAdminController) ExecuteAgentAdminTool(ctx context.Context, 
 		var req struct {
 			TimeoutMS int64 `json:"timeout_ms"`
 		}
-		_ = parseAdminInput(input, &req)
+		if err := parseAdminInput(input, &req); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		if req.TimeoutMS <= 0 {
 			req.TimeoutMS = 60000
 		}
@@ -534,7 +537,9 @@ func routeModelConfigID(route map[string]any) int {
 				return int(i)
 			default:
 				var i int
-				_, _ = fmt.Sscan(fmt.Sprint(v), &i)
+				if _, err := fmt.Sscan(fmt.Sprint(v), &i); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 				return i
 			}
 		}

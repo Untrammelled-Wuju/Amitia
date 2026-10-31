@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	amitialog "log"
 	"os"
 	"path/filepath"
 )
@@ -85,7 +86,9 @@ func (r *ResourceIO) copyAndDelete(src, dst string) error {
 		return fmt.Errorf("failed to sync destination file: %w", err)
 	}
 
-	_ = os.Remove(src)
+	if err := os.Remove(src); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 
 	return nil
 }

@@ -78,6 +78,7 @@ import (
 	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/app"
 	"github.com/u-ai/backend/pkg/util"
+	amitialog "log"
 )
 
 func publicRuntimeCapabilities(services *AppServices) gin.H {
@@ -379,7 +380,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 				})
 				if err != nil {
 					log.Error("failed to register device identity", "error", err)
-					c.JSON(500, gin.H{"code": 500, "msg": "failed to register device"})
+					c.JSON(500, gin.H{"code": 500, "msg": err.Error()})
 					return
 				}
 				c.JSON(200, gin.H{"code": 200, "msg": "ok"})
@@ -399,18 +400,18 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 					RuntimeID string `json:"runtimeId"`
 				}
 				if err := c.ShouldBindJSON(&request); err != nil || strings.TrimSpace(request.RuntimeID) == "" {
-					c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "runtimeId is required"})
+					c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
 					return
 				}
 				runtimeID := strings.TrimSpace(request.RuntimeID)
 				if err := services.DeviceRepository.RequireOwned(c.Request.Context(), string(actor.SpaceID), deviceID); err != nil {
-					c.JSON(http.StatusNotFound, gin.H{"code": 404, "msg": "device not found"})
+					c.JSON(http.StatusNotFound, gin.H{"code": 404, "msg": err.Error()})
 					return
 				}
 				rawTicket, ticket, err := bootstrapTicketRepo.Create(c.Request.Context(), string(actor.SpaceID), deviceID, runtimeID, 10*time.Minute)
 				if err != nil {
 					log.Error("failed to create bootstrap ticket", "error", err)
-					c.JSON(500, gin.H{"code": 500, "msg": "failed to create bootstrap ticket"})
+					c.JSON(500, gin.H{"code": 500, "msg": err.Error()})
 					return
 				}
 				c.JSON(200, gin.H{
@@ -441,7 +442,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 				affected, err := bootstrapTicketRepo.RevokeDeviceTickets(c.Request.Context(), string(actor.SpaceID), deviceID)
 				if err != nil {
 					log.Error("failed to revoke device bootstrap tickets", "error", err)
-					c.JSON(500, gin.H{"code": 500, "msg": "failed to revoke tickets"})
+					c.JSON(500, gin.H{"code": 500, "msg": err.Error()})
 					return
 				}
 				c.JSON(200, gin.H{"code": 200, "msg": "ok", "data": gin.H{"revoked": affected}})
@@ -485,7 +486,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 				cancel()
 				if err != nil {
 					log.Error("插件服务关闭失败:", err)
-					c.JSON(503, gin.H{"code": 503, "msg": "插件服务未能完全停止"})
+					c.JSON(503, gin.H{"code": 503, "msg": err.Error()})
 					return
 				}
 			}
@@ -570,7 +571,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			identity := spaceStore.Identity()
 			profileData, profileErr := spaceStore.ReadProfile()
 			if profileErr != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": "failed to read local profile"})
+				c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": profileErr.Error()})
 				return
 			}
 			c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": gin.H{"identity": identity, "profile": profileData}})
@@ -578,7 +579,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		apiGroup.GET("/space/profile", func(c *gin.Context) {
 			profileData, profileErr := spaceStore.ReadProfile()
 			if profileErr != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": "failed to read local profile"})
+				c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": profileErr.Error()})
 				return
 			}
 			c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": profileData})
@@ -586,7 +587,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		apiGroup.PUT("/space/profile", func(c *gin.Context) {
 			var profileData spaceidentity.Profile
 			if err := c.ShouldBindJSON(&profileData); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "invalid profile"})
+				c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
 				return
 			}
 			if err := spaceStore.WriteProfile(profileData); err != nil {
@@ -1083,7 +1084,9 @@ func requestPanicRecovery() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		defer func() {
 			if recovered := recover(); recovered != nil {
-				_, _ = fmt.Fprintf(gin.DefaultErrorWriter, "\n[Recovery] panic on %s: %v\n%s", c.Request.URL.Path, recovered, runtimedebug.Stack())
+				if _, err := fmt.Fprintf(gin.DefaultErrorWriter, "\n[Recovery] panic on %s: %v\n%s", c.Request.URL.Path, recovered, runtimedebug.Stack()); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 				c.AbortWithStatus(http.StatusInternalServerError)
 			}
 		}()

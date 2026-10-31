@@ -65,7 +65,7 @@ func (h *RPCHandler) InvokeRPC(c *gin.Context) {
 		return
 	}
 	if namespace, _, err := ghrpc.ParseMethod(req.Method); err != nil || ghrpc.IsReservedNamespace(namespace) {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "reserved host RPC namespaces are not available through the management debug endpoint"})
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
 		return
 	}
 	if req.Timeout < 0 || req.Timeout > 120000 {

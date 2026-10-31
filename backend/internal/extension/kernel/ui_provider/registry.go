@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	amitialog "log"
 	"math"
 	"net/url"
 	"sort"
@@ -877,7 +878,9 @@ func NewRegistry() *Registry {
 func NewRegistryWithBuiltins() *Registry {
 	r := NewRegistry()
 	for _, d := range BuiltinProviders() {
-		_ = r.Register(d)
+		if err := r.Register(d); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return r
 }

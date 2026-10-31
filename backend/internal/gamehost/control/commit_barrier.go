@@ -13,7 +13,7 @@ type ControlCommitBarrierImpl struct {
 }
 
 type runtimeBarrier struct {
-	mu       sync.RWMutex
+	mu sync.RWMutex
 }
 
 func NewControlCommitBarrier() *ControlCommitBarrierImpl {

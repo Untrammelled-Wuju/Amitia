@@ -48,7 +48,10 @@ func NewOCRProvider(visionSvc vision.Service) *OCRProvider {
 
 func (p *OCRProvider) OCR(ctx context.Context, req ImageOCRRequest, imageData []byte, summary ImageInputSummary) (*ImageOCRResult, *Error) {
 	cfg, err := p.visionSvc.GetActive()
-	if err != nil || cfg == nil {
+	if err != nil {
+		return nil, &Error{Code: ErrOCRUnavailable, Message: err.Error(), HTTPStatus: http.StatusServiceUnavailable}
+	}
+	if cfg == nil {
 		return nil, &Error{Code: ErrOCRUnavailable, Message: "no active OCR provider configured", HTTPStatus: http.StatusServiceUnavailable}
 	}
 	if cfg.ApiKey == "" && !cfg.IsLocal() {

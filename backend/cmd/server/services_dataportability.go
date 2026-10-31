@@ -9,6 +9,7 @@ import (
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/chat"
+	"github.com/u-ai/backend/internal/chat/localmodel"
 	"github.com/u-ai/backend/internal/devicemesh/agent"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
@@ -49,6 +50,7 @@ func buildDataPortabilityCoordinator(deps dataPortabilityDeps) (*dataportability
 		worldbook.NewWorldbookBackupContributor(deps.KernelDB),
 		system.NewSettingsBackupContributor(deps.DB),
 		chat.NewModelConfigBackupContributor(deps.DB),
+		localmodel.NewArtifactBackupContributor(deps.DB, deps.DataDir),
 		tts.NewVoiceBackupContributor(deps.DB),
 		embedding_config.NewEmbeddingBackupContributor(deps.DB),
 		system.NewResourceBackupContributor(deps.DB, deps.DataDir),

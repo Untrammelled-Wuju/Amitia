@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/u-ai/backend/internal/workbenchhttp"
+	amitialog "log"
 )
 
 const maxStreamLife = 4 * time.Minute
@@ -94,7 +95,9 @@ func (h *Handler) stream(c *gin.Context) {
 	}
 	defer conn.Close()
 	conn.SetReadLimit(8 * 1024)
-	_ = conn.SetReadDeadline(time.Now().Add(75 * time.Second))
+	if err := conn.SetReadDeadline(time.Now().Add(75 * time.Second)); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	conn.SetPongHandler(func(string) error { return conn.SetReadDeadline(time.Now().Add(75 * time.Second)) })
 	ctx, cancel := context.WithTimeout(c.Request.Context(), maxStreamLife)
 	defer cancel()
@@ -143,7 +146,9 @@ func (h *Handler) stream(c *gin.Context) {
 		}
 		snap, changed := session.snapshotAndListen(cursor)
 		if cursor != snap.Cursor || !snap.Running {
-			_ = conn.SetWriteDeadline(time.Now().Add(6 * time.Second))
+			if err := conn.SetWriteDeadline(time.Now().Add(6 * time.Second)); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			if err := conn.WriteJSON(terminalStreamFrame{Type: "snapshot", Snapshot: snap}); err != nil {
 				return
 			}
@@ -158,7 +163,9 @@ func (h *Handler) stream(c *gin.Context) {
 		select {
 		case <-changed:
 		case <-ticker.C:
-			_ = conn.SetWriteDeadline(time.Now().Add(6 * time.Second))
+			if err := conn.SetWriteDeadline(time.Now().Add(6 * time.Second)); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			if err := conn.WriteControl(websocket.PingMessage, []byte("ping"), time.Now().Add(6*time.Second)); err != nil {
 				return
 			}

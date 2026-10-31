@@ -13,9 +13,9 @@ type ServiceHealthSnapshot struct {
 
 	Health domain.HealthStatus
 
-	LastChangedAt time.Time
+	LastChangedAt  time.Time
 	LastObservedAt time.Time
-	Reason        string
+	Reason         string
 }
 
 func (s ServiceHealthSnapshot) Clone() ServiceHealthSnapshot {
@@ -31,8 +31,8 @@ func (s ServiceHealthSnapshot) Clone() ServiceHealthSnapshot {
 }
 
 type QuarantineSnapshot struct {
-	RuntimeID  domain.RuntimeInstanceID
-	ServiceID  domain.ServiceID
+	RuntimeID domain.RuntimeInstanceID
+	ServiceID domain.ServiceID
 
 	Quarantined bool
 	Since       *time.Time
@@ -41,10 +41,10 @@ type QuarantineSnapshot struct {
 
 func (s QuarantineSnapshot) Clone() QuarantineSnapshot {
 	clone := QuarantineSnapshot{
-		RuntimeID:  s.RuntimeID,
-		ServiceID:  s.ServiceID,
+		RuntimeID:   s.RuntimeID,
+		ServiceID:   s.ServiceID,
 		Quarantined: s.Quarantined,
-		Reason:     s.Reason,
+		Reason:      s.Reason,
 	}
 	if s.Since != nil {
 		t := *s.Since
@@ -54,8 +54,8 @@ func (s QuarantineSnapshot) Clone() QuarantineSnapshot {
 }
 
 type RestartSnapshot struct {
-	RuntimeID  domain.RuntimeInstanceID
-	ServiceID  domain.ServiceID
+	RuntimeID domain.RuntimeInstanceID
+	ServiceID domain.ServiceID
 
 	Generation    int64
 	RestartCount  int
@@ -97,10 +97,10 @@ type RuntimeHealthResult struct {
 
 func (r RuntimeHealthResult) Clone() RuntimeHealthResult {
 	clone := RuntimeHealthResult{
-		RuntimeID:      r.RuntimeID,
-		Health:         r.Health,
-		AggregatedAt:   r.AggregatedAt,
-		Reason:         r.Reason,
+		RuntimeID:    r.RuntimeID,
+		Health:       r.Health,
+		AggregatedAt: r.AggregatedAt,
+		Reason:       r.Reason,
 	}
 	if r.ServiceHealths != nil {
 		clone.ServiceHealths = make([]ServiceHealthSnapshot, len(r.ServiceHealths))

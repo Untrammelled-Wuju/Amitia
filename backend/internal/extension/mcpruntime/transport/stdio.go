@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/mcpruntime/protocol"
+	amitialog "log"
 )
 
 type StdioConfig struct {
@@ -141,8 +142,12 @@ func (t *Stdio) Start(ctx context.Context) error {
 	}
 	processTree, err := attachProcessTree(command)
 	if err != nil {
-		_ = command.Process.Kill()
-		_ = command.Wait()
+		if err := command.Process.Kill(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := command.Wait(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		processCancel()
 		t.setState(StateError)
 		return fmt.Errorf("MCP_TRANSPORT_START_FAILED: process tree: %w", err)
@@ -206,7 +211,9 @@ func (t *Stdio) Close(ctx context.Context) error {
 	processCancel := t.processCancel
 	t.mu.Unlock()
 	if stdin != nil {
-		_ = stdin.Close()
+		if err := stdin.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	timer := time.NewTimer(t.config.ShutdownTimeout)
 	defer timer.Stop()
@@ -214,7 +221,9 @@ func (t *Stdio) Close(ctx context.Context) error {
 	case <-t.waitDone:
 	case <-timer.C:
 		if command != nil && command.Process != nil {
-			_ = terminateProcessTree(command, processTree)
+			if err := terminateProcessTree(command, processTree); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		if processCancel != nil {
 			processCancel()
@@ -225,7 +234,9 @@ func (t *Stdio) Close(ctx context.Context) error {
 		}
 	case <-ctx.Done():
 		if command != nil && command.Process != nil {
-			_ = terminateProcessTree(command, processTree)
+			if err := terminateProcessTree(command, processTree); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		if processCancel != nil {
 			processCancel()
@@ -309,7 +320,9 @@ func (t *Stdio) stopProcess() {
 	cancel := t.processCancel
 	t.mu.RUnlock()
 	if command != nil && command.Process != nil {
-		_ = terminateProcessTree(command, processTree)
+		if err := terminateProcessTree(command, processTree); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	if cancel != nil {
 		cancel()

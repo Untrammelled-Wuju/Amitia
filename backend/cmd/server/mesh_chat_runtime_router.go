@@ -16,6 +16,7 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/middleware/security"
+	amitialog "log"
 )
 
 type ownedRuntimeRequest struct {
@@ -223,11 +224,15 @@ func ownedRuntimeDocuments(view business.QueryResult, key string) ([]map[string]
 			}
 			var scope coordination.ExecutionScope
 			if raw, err := json.Marshal(document["scope"]); err == nil {
-				_ = json.Unmarshal(raw, &scope)
+				if err := json.Unmarshal(raw, &scope); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 			if response, ok := document["response"].(map[string]any); ok {
 				raw, _ := json.Marshal(response["executionScope"])
-				_ = json.Unmarshal(raw, &scope)
+				if err := json.Unmarshal(raw, &scope); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 			status, _ := document["status"].(string)
 			if status == "running" && !business.RuntimeManager().HasExecution(key, scope.TurnID) {
@@ -236,7 +241,9 @@ func ownedRuntimeDocuments(view business.QueryResult, key string) ([]map[string]
 			id := strings.TrimPrefix(resource.ID, "turn/")
 			var runtime conversationstream.ActiveTurnState
 			raw, _ := json.Marshal(document["runtime"])
-			_ = json.Unmarshal(raw, &runtime)
+			if err := json.Unmarshal(raw, &runtime); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			items := ownedRuntimeItems(runtime, view.ConversationID, status)
 			if runtimeError, ok := document["error"].(map[string]any); ok && status == "failed" {
 				items = append(items, ownedRuntimeErrorItem(scope.TurnID, view.ConversationID, status, runtimeError))
@@ -268,7 +275,9 @@ func ownedRuntimeApprovals(services *AppServices, scope coordination.ExecutionSc
 			if approval.RequestID == turn["requestId"] && approval.RequestID != "" && approval.TurnID == turn["id"] {
 				raw, _ := json.Marshal(approval)
 				var item map[string]any
-				_ = json.Unmarshal(raw, &item)
+				if err := json.Unmarshal(raw, &item); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 				item["turnId"] = turn["id"]
 				result = append(result, item)
 				break
@@ -300,7 +309,9 @@ func streamOwnedRuntime(c *gin.Context, services *AppServices, request ownedRunt
 			return err
 		}
 		var envelope map[string]any
-		_ = json.Unmarshal(raw, &envelope)
+		if err := json.Unmarshal(raw, &envelope); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		envelope["executionScope"] = scope
 		raw, err = json.Marshal(envelope)
 		if err != nil {

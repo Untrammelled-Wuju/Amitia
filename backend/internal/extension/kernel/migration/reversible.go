@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	amitialog "log"
 	"net/url"
 	"path"
 	"sort"
@@ -425,7 +426,9 @@ func (c *ReversibleMigrationCore) ExecuteForward(ctx context.Context, request Re
 			record.ErrorCode = "forward_failed"
 			record.ErrorMessage = runErr.Error()
 			record.OutputHash = hashMigrationBytes(result.Evidence)
-			_ = c.repo.SaveMigrationStep(context.Background(), &record)
+			if err := c.repo.SaveMigrationStep(context.Background(), &record); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			if request.Preflight.Irreversible || definition.Reversibility == ReversibilityIrreversible {
 				return c.markManual(ctx, op, "irreversible_forward_failed", runErr)
 			}
@@ -436,7 +439,9 @@ func (c *ReversibleMigrationCore) ExecuteForward(ctx context.Context, request Re
 			op.Status = OperationStatusFailed
 			op.ErrorCode = "forward_compensated"
 			op.ErrorMessage = runErr.Error()
-			_ = c.repo.SaveMigrationOperation(context.Background(), op)
+			if err := c.repo.SaveMigrationOperation(context.Background(), op); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return op, runErr
 		}
 		record.Status = "succeeded"
@@ -529,7 +534,9 @@ func (c *ReversibleMigrationCore) compensateReverse(ctx context.Context, request
 			record.ErrorCode = "reverse_failed"
 			record.ErrorMessage = runErr.Error()
 			record.OutputHash = hashMigrationBytes(result.Evidence)
-			_ = c.repo.SaveMigrationStep(context.Background(), &record)
+			if err := c.repo.SaveMigrationStep(context.Background(), &record); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return runErr
 		}
 		record.Status = "reversed"
@@ -586,7 +593,9 @@ func (c *ReversibleMigrationCore) markManual(ctx context.Context, op *MigrationO
 	op.Status = OperationStatusManualIntervention
 	op.ErrorCode = code
 	op.ErrorMessage = cause.Error()
-	_ = c.repo.SaveMigrationOperation(context.Background(), op)
+	if err := c.repo.SaveMigrationOperation(context.Background(), op); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	return op, errors.Join(ErrMigrationManualRecovery, cause)
 }
 
@@ -594,7 +603,9 @@ func (c *ReversibleMigrationCore) markRecovery(ctx context.Context, op *Migratio
 	op.Status = OperationStatusRecoveryRequired
 	op.ErrorCode = code
 	op.ErrorMessage = cause.Error()
-	_ = c.repo.SaveMigrationOperation(context.Background(), op)
+	if err := c.repo.SaveMigrationOperation(context.Background(), op); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	return op, cause
 }
 

@@ -75,7 +75,9 @@ object ShizukuCommandServiceHolder {
                             }
                             deathRecipient = recipient
                             it.linkToDeath(recipient, 0)
-                        } catch (_: Exception) {}
+                        } catch (originalError78: Exception) {
+                          originalError78.printStackTrace()
+                        }
                     } ?: run {
                         stateRef.set(ShizukuServiceState.ERROR)
                     }
@@ -100,6 +102,8 @@ object ShizukuCommandServiceHolder {
             connection = conn
             true
         } catch (e: Exception) {
+          e.printStackTrace()
+
             stateRef.set(ShizukuServiceState.ERROR)
             bindingInProgress = false
             false
@@ -118,7 +122,9 @@ object ShizukuCommandServiceHolder {
         serviceConnectedListeners.forEach { listener ->
             try {
                 listener.invoke()
-            } catch (_: Exception) {
+            } catch (originalError121: Exception) {
+              originalError121.printStackTrace()
+
             }
         }
         serviceConnectedListeners.clear()
@@ -136,17 +142,23 @@ object ShizukuCommandServiceHolder {
             deathRecipient?.let { recipient ->
                 try {
                     svc.asBinder().unlinkToDeath(recipient, 0)
-                } catch (_: Exception) {}
+                } catch (originalError139: Exception) {
+                  originalError139.printStackTrace()
+                }
             }
             deathRecipient = null
             try {
                 svc.destroy()
-            } catch (_: Exception) {}
+            } catch (originalError144: Exception) {
+              originalError144.printStackTrace()
+            }
         } finally {
             connection?.let { conn ->
                 try {
                     Shizuku.unbindUserService(ShizukuCommandService.createArgs(), conn, true)
-                } catch (_: Exception) {}
+                } catch (originalError149: Exception) {
+                  originalError149.printStackTrace()
+                }
             }
             connection = null
             stateRef.set(ShizukuServiceState.DEAD)

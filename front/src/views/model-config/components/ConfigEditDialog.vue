@@ -36,8 +36,9 @@ SPDX-License-Identifier: AGPL-3.0-only
             :key="p.value"
             :label="p.name"
             :value="p.value"
+            :disabled="p.available === false"
           >
-            <span>{{ p.name }}</span>
+            <span>{{ p.available === false ? `${p.name} · ${p.unavailableReason || "不可用"}` : p.name }}</span>
             <span
               style="
                 float: right;
@@ -64,14 +65,24 @@ SPDX-License-Identifier: AGPL-3.0-only
           >
             {{ capLabel(key) }}{{ val ? "" : " x" }}
           </el-tag>
+          <el-tag
+            size="small"
+            :type="currentProviderSchema.available === false ? 'danger' : 'success'"
+          >
+            {{
+              currentProviderSchema.available === false
+                ? currentProviderSchema.unavailableReason || "不可用"
+                : "运行环境可用"
+            }}
+          </el-tag>
         </div>
       </el-form-item>
 
-      <el-form-item label="Base URL" prop="baseUrl">
+      <el-form-item v-if="!isEmbeddedProvider" label="Base URL" prop="baseUrl">
         <el-input v-model="form.baseUrl" placeholder="http://127.0.0.1:11434" />
       </el-form-item>
 
-      <el-form-item :label="isApiKeyOptional ? 'API Key (可选)' : 'API Key'" prop="apiKey">
+      <el-form-item v-if="!isEmbeddedProvider" :label="isApiKeyOptional ? 'API Key (可选)' : 'API Key'" prop="apiKey">
         <el-input
           v-model="form.apiKey"
           type="password"
@@ -87,6 +98,77 @@ SPDX-License-Identifier: AGPL-3.0-only
         </div>
       </el-form-item>
 
+      <template v-if="isEmbeddedProvider">
+        <el-form-item
+          v-for="field in providerFields"
+          :key="field.key"
+          :label="field.label"
+          :required="field.required"
+        >
+          <el-select
+            v-if="field.type === 'modelFile'"
+            :model-value="providerConfig[field.key] || ''"
+            style="width: 100%"
+            :placeholder="field.placeholder || '选择本地模型文件'"
+            @change="(value: string) => setProviderConfig(field.key, value)"
+          >
+            <el-option
+              v-for="model in localModelsForField"
+              :key="model.resourceUri"
+              :label="`${model.name} · ${String(model.format).toUpperCase()} · ${formatBytes(model.sizeBytes)}`"
+              :value="model.resourceUri"
+            />
+          </el-select>
+          <div
+            v-if="field.type === 'modelFile'"
+            style="display: flex; gap: 8px; width: 100%; align-items: center"
+          >
+            <el-button
+              size="small"
+              :loading="uploadingField === field.key"
+              @click="pickModelFile(field.key)"
+            >
+              导入{{ field.label }}
+            </el-button>
+            <span class="form-hint">{{ providerConfig[field.key] || "尚未选择" }}</span>
+          </div>
+          <el-switch
+            v-else-if="field.type === 'boolean'"
+            :model-value="providerConfig[field.key] === true"
+            @update:model-value="(value: boolean) => setProviderConfig(field.key, value)"
+          />
+          <el-select
+            v-else-if="field.type === 'select'"
+            :model-value="providerConfig[field.key] || field.default || ''"
+            style="width: 100%"
+            @change="(value: string) => setProviderConfig(field.key, value)"
+          >
+            <el-option
+              v-for="option in field.options || []"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
+          <el-input-number
+            v-else-if="field.type === 'number'"
+            :model-value="providerConfig[field.key] ?? field.default"
+            style="width: 100%"
+            controls-position="right"
+            @change="(value: number | undefined) => setProviderConfig(field.key, value ?? field.default ?? 0)"
+          />
+          <el-input
+            v-else
+            :model-value="providerConfig[field.key] || ''"
+            :type="field.secret ? 'password' : 'text'"
+            :show-password="field.secret"
+            :placeholder="field.placeholder"
+            @update:model-value="(value: string) => setProviderConfig(field.key, value)"
+          />
+          <div class="form-hint" v-if="field.help">{{ field.help }}</div>
+        </el-form-item>
+      </template>
+
       <el-form-item label="模型名称" prop="modelName">
         <div class="model-detect-wrap">
           <div class="model-detect-row">
@@ -96,7 +178,7 @@ SPDX-License-Identifier: AGPL-3.0-only
               class="model-input"
             />
             <el-button
-              v-if="showDetect"
+              v-if="showDetect && !isEmbeddedProvider"
               type="success"
               size="small"
               :loading="detectingModels"
@@ -223,7 +305,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 
     <template #footer>
       <el-button @click="visible = false">取消</el-button>
-      <el-button type="primary" :loading="saving" @click="emit('save')"
+      <el-button
+        type="primary"
+        :loading="saving"
+        :disabled="currentProviderSchema?.available === false"
+        @click="emit('save')"
         >保存</el-button
       >
     </template>
@@ -249,6 +335,8 @@ const props = defineProps<{
   showDetect?: boolean;
   modelPlaceholder?: string;
   showReasoning?: boolean;
+  localModels?: any[];
+  uploadLocalModel?: (file: File, name?: string) => Promise<any>;
 }>();
 
 const emit = defineEmits<{
@@ -271,6 +359,21 @@ const showAdvanced = computed(() => props.showAdvanced ?? true);
 const showDetect = computed(() => props.showDetect ?? true);
 const modelPlaceholder = computed(() => props.modelPlaceholder ?? "gpt-4o-mini / qwen2.5:7b / deepseek-chat");
 const showReasoningSettings = computed(() => props.showReasoning === true);
+const isEmbeddedProvider = computed(() => props.currentProviderSchema?.runtimeKind === "embedded");
+const providerConfig = computed<Record<string, any>>(() => {
+  props.form.providerConfig ||= {};
+  return props.form.providerConfig;
+});
+const providerFields = computed(() =>
+  (props.currentProviderSchema?.configFields || []).filter(
+    (field: any) => !["baseUrl", "apiKey", "modelName"].includes(field.key),
+  ),
+);
+const localModelsForField = computed(() => {
+  const formats = new Set(props.currentProviderSchema?.modelFormats || []);
+  return (props.localModels || []).filter((model) => formats.size === 0 || formats.has(model.format));
+});
+const uploadingField = ref("");
 const providerChoices = computed(() => props.providers.flatMap((provider) => {
   if (props.showReasoning && provider.id === "openai") {
     return [
@@ -313,6 +416,41 @@ watch(
 function selectModel(modelId: string) {
   props.form.modelName = modelId;
   localDetectError.value = "";
+}
+
+function setProviderConfig(key: string, value: any) {
+  providerConfig.value[key] = value;
+}
+
+function pickModelFile(key: string) {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".gguf,.mnn";
+  input.onchange = async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    uploadingField.value = key;
+    localDetectError.value = "";
+    try {
+      if (!props.uploadLocalModel) throw new Error("本地模型导入接口不可用");
+      const model = await props.uploadLocalModel(file, file.name.replace(/\.[^.]+$/, ""));
+      setProviderConfig(key, model.resourceUri);
+      if (!props.form.modelName) props.form.modelName = model.name;
+      setProviderConfig("localModelId", model.name);
+    } catch (error: any) {
+      localDetectError.value = error?.message || "模型导入失败";
+    } finally {
+      uploadingField.value = "";
+    }
+  };
+  input.click();
+}
+
+function formatBytes(value: number) {
+  const size = Number(value || 0);
+  if (size >= 1024 ** 3) return `${(size / 1024 ** 3).toFixed(2)} GiB`;
+  if (size >= 1024 ** 2) return `${(size / 1024 ** 2).toFixed(1)} MiB`;
+  return `${Math.max(0, Math.round(size / 1024))} KiB`;
 }
 
 function capLabel(key: string | number): string {

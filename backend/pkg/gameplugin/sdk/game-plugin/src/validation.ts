@@ -299,7 +299,8 @@ function canonicalIP(raw: string): string | null {
   try {
     const url = new URL(`http://[${value}]/`);
     return url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
-  } catch {
+  } catch (error) {
+    console.error("[original-error]", error);
     return null;
   }
 }
@@ -411,7 +412,8 @@ function parseInt64(raw: string): boolean {
   try {
     const value = BigInt(raw);
     return value >= 0n && value <= MAX_INT64;
-  } catch {
+  } catch (error) {
+    console.error("[original-error]", error);
     return false;
   }
 }

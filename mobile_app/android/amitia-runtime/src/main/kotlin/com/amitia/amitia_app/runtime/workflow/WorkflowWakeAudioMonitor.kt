@@ -180,11 +180,14 @@ internal class WorkflowWakeAudioMonitor(
                     AudioFormat.ENCODING_PCM_16BIT,
                     max(minimum, CHUNK_BYTES * 4),
                 )
-            } catch (_: Throwable) {
+            } catch (originalError183: Throwable) {
+              originalError183.printStackTrace()
+
                 releaseWakeCaptureLease()
                 afterCapture()
-                reportWakeMonitorState("wake_blocked_by_android", "Microphone recorder initialization failed")
-                reportWakeCapability(false, "Microphone recorder initialization failed")
+                val message = "Microphone recorder initialization failed: ${originalError183.message ?: originalError183.javaClass.simpleName}"
+                reportWakeMonitorState("wake_blocked_by_android", message)
+                reportWakeCapability(false, message)
                 return
             }
             if (recorder.state != AudioRecord.STATE_INITIALIZED) {
@@ -197,12 +200,15 @@ internal class WorkflowWakeAudioMonitor(
             }
             try {
                 recorder.startRecording()
-            } catch (_: Throwable) {
+            } catch (originalError200: Throwable) {
+              originalError200.printStackTrace()
+
                 recorder.release()
                 releaseWakeCaptureLease()
                 afterCapture()
-                reportWakeMonitorState("wake_blocked_by_android", "Microphone recording could not start")
-                reportWakeCapability(false, "Microphone recording could not start")
+                val message = "Microphone recording could not start: ${originalError200.message ?: originalError200.javaClass.simpleName}"
+                reportWakeMonitorState("wake_blocked_by_android", message)
+                reportWakeCapability(false, message)
                 return
             }
             audioRecord = recorder
@@ -219,7 +225,12 @@ internal class WorkflowWakeAudioMonitor(
             while (running.get() && capturing.get() && audioRecord === recorder && !WorkflowMicrophoneArbiter.isRealtimeCaptureActive()) {
                 val count = try {
                     recorder.read(buffer, 0, buffer.size)
-                } catch (_: Throwable) {
+                } catch (originalError222: Throwable) {
+                  originalError222.printStackTrace()
+
+                    val message = "Microphone read failed: ${originalError222.message ?: originalError222.javaClass.simpleName}"
+                    reportWakeMonitorState("wake_blocked_by_android", message)
+                    reportWakeCapability(false, message)
                     break
                 }
                 if (count > 0) {
@@ -253,7 +264,9 @@ internal class WorkflowWakeAudioMonitor(
         while (running.get() || queue.isNotEmpty()) {
             val chunk = try {
                 queue.poll(500L, TimeUnit.MILLISECONDS)
-            } catch (_: InterruptedException) {
+            } catch (originalError256: InterruptedException) {
+              originalError256.printStackTrace()
+
                 Thread.currentThread().interrupt()
                 return
             } ?: continue
@@ -307,11 +320,15 @@ internal class WorkflowWakeAudioMonitor(
             clearQueuedAudio()
             try {
                 recorder.stop()
-            } catch (_: Throwable) {
+            } catch (originalError310: Throwable) {
+              originalError310.printStackTrace()
+
             }
             try {
                 recorder.release()
-            } catch (_: Throwable) {
+            } catch (originalError314: Throwable) {
+              originalError314.printStackTrace()
+
             }
             releaseWakeCaptureLease()
             if (wasCapturing) {

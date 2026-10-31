@@ -253,7 +253,9 @@ async function fetchCharacters() {
     if (Array.isArray(chars)) {
       characters.value = chars;
     }
-  } catch {}
+  } catch (error) {
+  console.error("[original-error]", error);
+}
 }
 
 function onGlobalKeydown(e: KeyboardEvent) {

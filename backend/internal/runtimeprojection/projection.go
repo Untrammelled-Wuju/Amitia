@@ -23,16 +23,16 @@ type RuntimeExtensionProjection struct {
 }
 
 type RuntimeProjection struct {
-	RuntimeID   runtimeidentity.RuntimeID       `json:"runtimeId"`
-	SessionID   runtimeidentity.RuntimeSessionID `json:"sessionId"`
-	Identity    runtimeidentity.Identity         `json:"identity"`
-	Placement   RuntimePlacement                 `json:"placement"`
-	Online      bool                             `json:"online"`
-	Health      string                           `json:"health"`
+	RuntimeID runtimeidentity.RuntimeID        `json:"runtimeId"`
+	SessionID runtimeidentity.RuntimeSessionID `json:"sessionId"`
+	Identity  runtimeidentity.Identity         `json:"identity"`
+	Placement RuntimePlacement                 `json:"placement"`
+	Online    bool                             `json:"online"`
+	Health    string                           `json:"health"`
 
 	Capabilities       []capability.CapabilityID       `json:"capabilities,omitempty"`
 	ProviderInstances  []capability.ProviderInstanceID `json:"providerInstances,omitempty"`
-	ExtensionInstances []RuntimeExtensionProjection   `json:"extensionInstances,omitempty"`
+	ExtensionInstances []RuntimeExtensionProjection    `json:"extensionInstances,omitempty"`
 
 	ConnectionGeneration int64     `json:"connectionGeneration"`
 	UpdatedAt            time.Time `json:"updatedAt"`

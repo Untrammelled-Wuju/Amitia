@@ -637,7 +637,9 @@ String _eventSummary(String raw) {
       final value = decoded['summary'] ?? decoded['error'] ?? '';
       return value.toString();
     }
-  } catch (_) {}
+  } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
   return '';
 }
 

@@ -7,6 +7,7 @@ package process
 import (
 	"bufio"
 	"fmt"
+	amitialog "log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -106,7 +107,9 @@ func regularWritableFile(path string) bool {
 	if err != nil {
 		return false
 	}
-	_ = f.Close()
+	if err := f.Close(); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	return true
 }
 
@@ -163,7 +166,9 @@ func closeProcessTree(handle ProcessTreeHandle) {
 	}
 	// A service must not orphan daemonized children after its root process exits.
 	if _, err := os.Stat(filepath.Join(group, "cgroup.kill")); err == nil {
-		_ = writeCgroupValue(group, "cgroup.kill", "1")
+		if err := writeCgroupValue(group, "cgroup.kill", "1"); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	for i := 0; i < 5; i++ {
 		if err := os.Remove(group); err == nil || os.IsNotExist(err) {

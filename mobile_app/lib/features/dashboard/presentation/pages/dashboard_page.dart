@@ -20,8 +20,9 @@ Future<Map<String, dynamic>?> _safeGet(
     return await ref
         .read(backendServiceProvider)
         .get<Map<String, dynamic>>(path, queryParameters: query);
-  } catch (_) {
-    return null;
+  } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return null;
   }
 }
 

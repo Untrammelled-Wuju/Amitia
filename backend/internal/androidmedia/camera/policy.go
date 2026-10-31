@@ -19,8 +19,8 @@ type Policy struct {
 	MaxWidth  int
 	MaxHeight int
 
-	MaxCaptureTime      time.Duration
-	MinInterval         time.Duration
+	MaxCaptureTime        time.Duration
+	MinInterval           time.Duration
 	MaxConcurrentCaptures int
 
 	StripSensitiveEXIF bool

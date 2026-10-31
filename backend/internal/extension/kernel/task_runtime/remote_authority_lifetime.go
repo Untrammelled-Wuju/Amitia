@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	amitialog "log"
 )
 
 func (s *TaskRuntimeService) waitOwnedRemoteExecution(ctx context.Context, run *TaskRun, executor TaskExecutorPort) error {
@@ -41,9 +42,13 @@ func (s *TaskRuntimeService) waitOwnedRemoteExecution(ctx context.Context, run *
 		if waiter, ok := executor.(interface {
 			CancelAndWait(context.Context, *TaskRun, time.Duration) error
 		}); ok {
-			_ = waiter.CancelAndWait(cancelCtx, run, grace)
+			if err := waiter.CancelAndWait(cancelCtx, run, grace); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		} else {
-			_ = remote.Cancel(cancelCtx, run)
+			if err := remote.Cancel(cancelCtx, run); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}
 	for {

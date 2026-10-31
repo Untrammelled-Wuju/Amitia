@@ -4,6 +4,10 @@ package chat
 
 import (
 	"fmt"
+	"strings"
+	"time"
+
+	"github.com/u-ai/backend/internal/chat/localmodel"
 	"github.com/u-ai/backend/internal/configwrite"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
@@ -263,7 +267,10 @@ func (r *repository) CreateModel(cfg *ModelConfig) error {
 				return err
 			}
 		}
-		return tx.Create(cfg).Error
+		if err := tx.Create(cfg).Error; err != nil {
+			return err
+		}
+		return syncModelArtifactReferences(tx, cfg.ID, cfg.ProviderConfigJSON)
 	})
 }
 
@@ -279,7 +286,14 @@ func (r *repository) UpdateModel(id int, updates map[string]interface{}) error {
 				return err
 			}
 		}
-		return tx.Model(&ModelConfig{}).Where("id = ?", id).Updates(updates).Error
+		if err := tx.Model(&ModelConfig{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+			return err
+		}
+		var updated ModelConfig
+		if err := tx.First(&updated, id).Error; err != nil {
+			return err
+		}
+		return syncModelArtifactReferences(tx, id, updated.ProviderConfigJSON)
 	})
 }
 
@@ -291,6 +305,11 @@ func (r *repository) DeleteModel(id int) error {
 		}
 		if err := tx.Table("model_scenario_routes").Where("model_config_id = ?", id).Update("model_config_id", 0).Error; err != nil {
 			return err
+		}
+		if err := tx.Table("model_artifact_references").Where("model_config_id = ?", id).Delete(nil).Error; err != nil {
+			if !strings.Contains(err.Error(), "no such table") {
+				return err
+			}
 		}
 		return tx.Delete(&target).Error
 	})
@@ -356,6 +375,23 @@ func (r *repository) UpdateModelRoutes(routes []map[string]interface{}) error {
 	})
 }
 
+func syncModelArtifactReferences(tx *gorm.DB, configID int, providerConfig string) error {
+	if err := tx.Table("model_artifact_references").Where("model_config_id = ?", configID).Delete(nil).Error; err != nil {
+		if !strings.Contains(err.Error(), "no such table") {
+			return err
+		}
+		return nil
+	}
+	ids := localmodel.ReferencedArtifactIDs(providerConfig)
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	for _, id := range ids {
+		if err := tx.Exec("INSERT OR IGNORE INTO model_artifact_references(artifact_id,model_config_id,created_at) VALUES(?,?,?)", id, configID, now).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (r *repository) GetConversationByChannel(channel string) (*Conversation, error) {
 	var c Conversation
 	err := r.db.Where("channel = ?", channel).Order("CASE WHEN source = 'system' THEN 0 ELSE 1 END").First(&c).Error
@@ -380,9 +416,7 @@ func (r *repository) ListProviders() []ProviderInfo {
 		{ID: "openrouter", Name: "OpenRouter", Protocol: "openai", DefaultProtocol: "openai_chat", SupportedProtocols: []string{"openai_chat"}, DefaultBaseURL: "https://openrouter.ai/api/v1", DefaultModel: "openai/gpt-4o", DocsURL: "https://openrouter.ai/docs"},
 		{ID: "groq", Name: "Groq", Protocol: "openai", DefaultProtocol: "openai_chat", SupportedProtocols: []string{"openai_chat"}, DefaultBaseURL: "https://api.groq.com/openai/v1", DefaultModel: "llama-3.3-70b-versatile", DocsURL: "https://console.groq.com/docs"},
 		{ID: "together", Name: "Together AI", Protocol: "openai", DefaultProtocol: "openai_chat", SupportedProtocols: []string{"openai_chat"}, DefaultBaseURL: "https://api.together.xyz/v1", DefaultModel: "meta-llama/Llama-3.3-70B-Instruct-Turbo", DocsURL: "https://docs.together.ai"},
-		{ID: "ollama", Name: "Ollama (本地)", Protocol: "ollama", DefaultProtocol: "ollama_chat", SupportedProtocols: []string{"ollama_chat"}, DefaultBaseURL: "http://127.0.0.1:11434", DefaultModel: "llama3.1", DocsURL: "https://ollama.com/library"},
-		{ID: "mnn", Name: "MNN (本地)", Protocol: "mnn", DefaultProtocol: "mnn", SupportedProtocols: []string{"mnn"}, DefaultBaseURL: "", DefaultModel: "", DocsURL: "https://github.com/alibaba/MNN"},
-		{ID: "llama_cpp", Name: "llama.cpp (本地 GGUF)", Protocol: "llama_cpp", DefaultProtocol: "llama_cpp", SupportedProtocols: []string{"llama_cpp"}, DefaultBaseURL: "", DefaultModel: "", DocsURL: "https://github.com/ggerganov/llama.cpp"},
+		{ID: "ollama", Name: "Ollama (外部本地服务)", Protocol: "ollama", DefaultProtocol: "ollama_chat", SupportedProtocols: []string{"ollama_chat"}, DefaultBaseURL: "http://127.0.0.1:11434", DefaultModel: "llama3.1", DocsURL: "https://ollama.com/library"},
 		{ID: "anthropic", Name: "Anthropic (Claude)", Protocol: "anthropic", DefaultProtocol: "anthropic_messages", SupportedProtocols: []string{"anthropic_messages"}, DefaultBaseURL: "https://api.anthropic.com", DefaultModel: "claude-sonnet-4-20250514", DocsURL: "https://docs.anthropic.com"},
 		{ID: "gemini", Name: "Google Gemini", Protocol: "gemini", DefaultProtocol: "gemini_generate_content", SupportedProtocols: []string{"gemini_generate_content"}, DefaultBaseURL: "https://generativelanguage.googleapis.com", DefaultModel: "gemini-2.0-flash", DocsURL: "https://ai.google.dev/gemini-api/docs"},
 		{ID: "custom-http", Name: "自定义 HTTP", Protocol: "openai", DefaultProtocol: "openai_chat", SupportedProtocols: []string{"openai_chat", "openai_responses", "anthropic_messages", "gemini_generate_content", "ollama_chat"}, DefaultBaseURL: "", DefaultModel: "", DocsURL: ""},

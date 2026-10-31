@@ -959,8 +959,9 @@ const activePromptArguments = computed<
             required: Boolean(item.required),
           }))
       : [];
-  } catch {
-    return [];
+  } catch (error) {
+  console.error("[original-error]", error);
+return [];
   }
 });
 const prettyPromptResult = computed(() =>
@@ -1026,7 +1027,10 @@ function openEdit(server: MCPServer) {
   formVisible.value = true;
 }
 async function save() {
-  if (!(await formRef.value?.validate().catch(() => false))) return;
+  if (!(await formRef.value?.validate().catch((error) => {
+  console.error("[original-error]", error);
+  return false;
+}))) return;
   saving.value = true;
   try {
     if (editingId.value) await updateMCPServer(editingId.value, form);
@@ -1160,8 +1164,9 @@ async function loadCapabilities() {
   if (sampling) {
     try {
       Object.assign(samplingConfig, JSON.parse(sampling.configuration || "{}"));
-    } catch {
-      Object.assign(samplingConfig, {
+    } catch (error) {
+  console.error("[original-error]", error);
+Object.assign(samplingConfig, {
         maxTokens: 2048,
         timeoutSeconds: 60,
         maxConcurrent: 1,
@@ -1173,8 +1178,9 @@ async function loadCapabilities() {
   if (tasks) {
     try {
       Object.assign(tasksConfig, JSON.parse(tasks.configuration || "{}"));
-    } catch {
-      Object.assign(tasksConfig, { maxConcurrent: 5, maxTTLSeconds: 86400 });
+    } catch (error) {
+  console.error("[original-error]", error);
+Object.assign(tasksConfig, { maxConcurrent: 5, maxTTLSeconds: 86400 });
     }
   }
   const roots = capabilities.value.find((item) => item.capability === "roots");
@@ -1190,7 +1196,9 @@ async function loadCapabilities() {
             )
             .slice(0, 20)
         : [];
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
 }
 async function toggleCapability(name: MCPCapabilityName, enabled: boolean) {
@@ -1308,8 +1316,9 @@ function openPrompt(prompt: MCPPrompt) {
   for (const argument of (() => {
     try {
       return JSON.parse(prompt.arguments || "[]");
-    } catch {
-      return [];
+    } catch (error) {
+  console.error("[original-error]", error);
+return [];
     }
   })())
     promptValues[argument.name] = "";
@@ -1420,8 +1429,9 @@ function parseArgs(raw: string) {
   try {
     const value = JSON.parse(raw || "[]");
     return Array.isArray(value) ? value.map(String) : [];
-  } catch {
-    return [];
+  } catch (error) {
+  console.error("[original-error]", error);
+return [];
   }
 }
 function transportLabel(value: MCPTransport) {

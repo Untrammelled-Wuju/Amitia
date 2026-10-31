@@ -71,8 +71,9 @@ function readJSON<T>(key: string, fallback: T): T {
   try {
     const raw = localStorage.getItem(key);
     return raw ? JSON.parse(raw) as T : fallback;
-  } catch {
-    return fallback;
+  } catch (error) {
+  console.error("[original-error]", error);
+return fallback;
   }
 }
 

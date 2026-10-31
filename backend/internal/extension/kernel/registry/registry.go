@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
+	amitialog "log"
 )
 
 type RegistrationState string
@@ -200,7 +201,9 @@ func (r *DefaultRegistry) ReplaceGeneration(ctx context.Context, request Contrib
 		result.Unregistered = append(result.Unregistered, old)
 		adapter, ok := r.adapters[old.Definition.Kind]
 		if ok {
-			_ = adapter.OnUnregister(ctx, old)
+			if err := adapter.OnUnregister(ctx, old); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}
 	for _, def := range request.Contributions {
@@ -223,7 +226,9 @@ func (r *DefaultRegistry) ReplaceGeneration(ctx context.Context, request Contrib
 		r.indexAdd(def)
 		adapter, ok := r.adapters[def.Kind]
 		if ok {
-			_ = adapter.OnRegister(ctx, entry)
+			if err := adapter.OnRegister(ctx, entry); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		result.Registered = append(result.Registered, entry)
 	}
@@ -242,7 +247,9 @@ func (r *DefaultRegistry) UnregisterBatch(ctx context.Context, request Contribut
 		}
 		adapter, ok := r.adapters[entry.Definition.Kind]
 		if ok {
-			_ = adapter.OnUnregister(ctx, entry)
+			if err := adapter.OnUnregister(ctx, entry); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		delete(r.entries, id)
 		r.indexRemove(entry.Definition)

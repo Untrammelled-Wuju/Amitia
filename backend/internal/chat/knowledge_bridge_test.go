@@ -14,23 +14,23 @@ import (
 
 func TestKnowledgeRouteDoesNotLeakIntoCompanionChat(t *testing.T) {
 	for _, message := range []string{"早安", "晚安", "陪我", "我累了", "你还记得我昨天说的事吗"} {
-		if got := knowledgeRoute(message); got != "" {
+		if got := knowledge.ResolveChatRoute(message, config.DefaultKnowledgeRuntimeConfig().Features).EffectiveLevel; got != knowledge.RetrievalLevelNone {
 			t.Fatalf("social turn routed %q to %q", message, got)
 		}
 	}
 }
 func TestKnowledgeRouteExplicitDocuments(t *testing.T) {
-	if got := knowledgeRoute("检查PDF第37页的原文"); got == "" {
+	if got := knowledge.ResolveChatRoute("检查PDF第37页的原文", config.DefaultKnowledgeRuntimeConfig().Features).EffectiveLevel; got == knowledge.RetrievalLevelNone {
 		t.Fatal("document request should search")
 	}
-	if got := knowledgeRoute("对比两份知识库资料的冲突"); got != "deep" {
+	if got := knowledge.ResolveChatRoute("对比两份知识库资料的冲突", config.DefaultKnowledgeRuntimeConfig().Features).EffectiveLevel; got != "deep" {
 		t.Fatalf("comparison routed %q", got)
 	}
 }
 
 func TestPhase16ExplicitReadRoutesToAgentic(t *testing.T) {
 	for _, question := range []string{"核对PDF第37页原文", "查看文档 page 3000", "查询 Excel 第500行"} {
-		if got := knowledgeRoute(question); got != "agentic" {
+		if got := knowledge.ResolveChatRoute(question, config.DefaultKnowledgeRuntimeConfig().Features).EffectiveLevel; got != "agentic" {
 			t.Fatalf("expected bounded agentic for explicit file read %q, got %q", question, got)
 		}
 	}
@@ -48,15 +48,15 @@ func TestPhase16CanonicalEvidenceComesFirst(t *testing.T) {
 
 func TestPhase16RouteRolloutModes(t *testing.T) {
 	features := config.DefaultKnowledgeRuntimeConfig().Features
-	active, _, _, _ := chooseKnowledgeRoute("请核对PDF第37页的原文", features)
-	if active != knowledge.RetrievalLevelAgentic {
-		t.Fatalf("new policy ignored explicit file investigation: %q", active)
+	decision := knowledge.ResolveChatRoute("请核对PDF第37页的原文", features)
+	if decision.EffectiveLevel != knowledge.RetrievalLevelAgentic {
+		t.Fatalf("new policy ignored explicit file investigation: %q", decision.EffectiveLevel)
 	}
 	features.RetrievalPolicyEnabled = false
 	features.RetrievalPolicyShadow = true
-	actual, mode, shadow, _ := chooseKnowledgeRoute("请核对PDF第37页的原文", features)
-	if actual != knowledge.RetrievalLevelFast || mode != "legacy_shadow" || shadow != knowledge.RetrievalLevelAgentic {
-		t.Fatalf("shadow must not alter active legacy routing: %q %q %q", actual, mode, shadow)
+	decision = knowledge.ResolveChatRoute("请核对PDF第37页的原文", features)
+	if decision.EffectiveLevel != knowledge.RetrievalLevelFast || decision.PolicyMode != knowledge.PolicyModeLegacyShadow || decision.ShadowLevel != knowledge.RetrievalLevelAgentic {
+		t.Fatalf("shadow must not alter active legacy routing: %#v", decision)
 	}
 }
 

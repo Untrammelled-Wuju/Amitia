@@ -479,8 +479,9 @@ export class AnimationIpcAdapter {
     let cleanRelative: string;
     try {
       cleanRelative = normalizePackagePath(relativePath);
-    } catch {
-      return { url: "", mime: "application/octet-stream" };
+    } catch (error) {
+  console.error("[original-error]", error);
+return { url: "", mime: "application/octet-stream" };
     }
     const resourceIndex = buildResourceIndex(loaded.manifest);
     const indexEntry = resourceIndex.get(cleanRelative);

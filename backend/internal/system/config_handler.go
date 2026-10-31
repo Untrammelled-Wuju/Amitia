@@ -22,28 +22,11 @@ func (h *Handler) UpdateConfig(c *gin.Context) {
 
 func (h *Handler) ConfigSettings(c *gin.Context) { util.SuccessResponse(c, h.service.ConfigSettings()) }
 
-func (h *Handler) ConfigExport(c *gin.Context) { util.SuccessResponse(c, h.service.ConfigExport()) }
-
-func (h *Handler) ConfigImportPreview(c *gin.Context) {
-	var body map[string]interface{}
-	c.ShouldBindJSON(&body)
-	util.SuccessResponse(c, h.service.ConfigImportPreviewService(body))
-}
-
-func (h *Handler) ConfigImportConfirm(c *gin.Context) {
-	var body map[string]interface{}
-	if err := c.ShouldBindJSON(&body); err != nil {
-		util.ErrorResponse(c, 400, err.Error(), nil)
-		return
-	}
-	h.updateScopedAppConfig(c, "import", body)
-}
-
 func (h *Handler) MoodDetectionConfig(c *gin.Context) {
 	if c.Request.Method == http.MethodPut {
 		var body map[string]interface{}
 		if err := c.ShouldBindJSON(&body); err != nil {
-			util.ErrorResponse(c, http.StatusBadRequest, "请求参数错误", err.Error())
+			util.ErrorResponse(c, http.StatusBadRequest, err.Error(), err.Error())
 			return
 		}
 		h.updateScopedAppConfig(c, "mood", body)
@@ -54,7 +37,6 @@ func (h *Handler) MoodDetectionConfig(c *gin.Context) {
 
 type scopedAppConfigurationService interface {
 	UpdateAppConfigContext(context.Context, map[string]interface{}) (map[string]interface{}, error)
-	ConfigImportConfirmContext(context.Context, map[string]interface{}) (map[string]interface{}, error)
 	UpdateMoodDetectionConfigContext(context.Context, map[string]interface{}) (map[string]interface{}, error)
 	UpdateThemeContext(context.Context, map[string]interface{}) (map[string]interface{}, error)
 }
@@ -70,8 +52,6 @@ func (h *Handler) updateScopedAppConfig(c *gin.Context, operation string, body m
 	switch operation {
 	case "config":
 		result, err = svc.UpdateAppConfigContext(c.Request.Context(), body)
-	case "import":
-		result, err = svc.ConfigImportConfirmContext(c.Request.Context(), body)
 	case "mood":
 		result, err = svc.UpdateMoodDetectionConfigContext(c.Request.Context(), body)
 	case "theme":

@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/u-ai/backend/internal/ioshostbridge"
+	amitialog "log"
 	"math/big"
 	"net"
 	"net/http"
@@ -212,7 +213,9 @@ func (s *Server) Close(ctx context.Context) error {
 		}
 	}
 	for _, listener := range s.listeners {
-		_ = listener.Close()
+		if err := listener.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return errors.Join(failures...)
 }

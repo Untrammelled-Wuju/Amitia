@@ -14,6 +14,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	ghdomain "github.com/u-ai/backend/internal/gamehost/domain"
+	amitialog "log"
 )
 
 type networkRouteTopology interface {
@@ -269,7 +270,9 @@ func (h *networkRouteHost) tcpOpen(ctx context.Context, req kernelhostapi.CallRe
 	}
 	handleID, err := h.connections.add(req.RuntimeIdentity, networkConnectionTCP, conn, nil, client.maxConnections())
 	if err != nil {
-		_ = conn.Close()
+		if err := conn.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return kernelhostapi.CallResult{}, fmt.Errorf("%w: %v", kernelhostapi.ErrPermissionDenied, err)
 	}
 	return marshalNetworkOutput(NetworkSocketOpenOutput{
@@ -328,7 +331,9 @@ func (h *networkRouteHost) udpOpen(ctx context.Context, req kernelhostapi.CallRe
 	}
 	handleID, err := h.connections.add(req.RuntimeIdentity, networkConnectionUDP, conn, nil, client.maxConnections())
 	if err != nil {
-		_ = conn.Close()
+		if err := conn.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return kernelhostapi.CallResult{}, fmt.Errorf("%w: %v", kernelhostapi.ErrPermissionDenied, err)
 	}
 	return marshalNetworkOutput(NetworkSocketOpenOutput{
@@ -387,7 +392,9 @@ func (h *networkRouteHost) webSocketOpen(ctx context.Context, req kernelhostapi.
 	}
 	handleID, err := h.connections.add(req.RuntimeIdentity, networkConnectionWebSocket, nil, conn, client.maxConnections())
 	if err != nil {
-		_ = conn.Close()
+		if err := conn.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return kernelhostapi.CallResult{}, fmt.Errorf("%w: %v", kernelhostapi.ErrPermissionDenied, err)
 	}
 	remote := ""

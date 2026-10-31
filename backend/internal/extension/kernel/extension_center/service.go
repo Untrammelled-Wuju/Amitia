@@ -52,29 +52,29 @@ const (
 )
 
 type ExtensionCard struct {
-	ExtensionID           string            `json:"extensionId"`
-	Publisher             string            `json:"publisher"`
-	DisplayName           string            `json:"displayName"`
-	Description           string            `json:"description"`
-	Version               string            `json:"version"`
-	PackageURI            string            `json:"packageUri,omitempty"`
-	Hash                  string            `json:"hash,omitempty"`
-	ArtifactID            string            `json:"artifactId,omitempty"`
-	Icon                  string            `json:"icon,omitempty"`
-	Trust                 TrustLevel        `json:"trust"`
-	Status                ExtensionStatus   `json:"status"`
-	Enabled               bool              `json:"enabled"`
-	UpdateAvailable       bool              `json:"updateAvailable"`
-	ContributionTags      []ContributionTag `json:"contributionTags"`
-	ProvidedCapabilities  []string          `json:"providedCapabilities,omitempty"`
-	Platforms             []string          `json:"platforms"`
-	FailureCount          int               `json:"failureCount"`
-	PermissionRisk        string            `json:"permissionRisk,omitempty"`
-	DevMode               bool              `json:"devMode"`
-	UserModified          bool              `json:"userModified"`
-	Source                string            `json:"source"`
-	InstalledAt           *time.Time        `json:"installedAt,omitempty"`
-	UpdatedAt             *time.Time        `json:"updatedAt,omitempty"`
+	ExtensionID          string            `json:"extensionId"`
+	Publisher            string            `json:"publisher"`
+	DisplayName          string            `json:"displayName"`
+	Description          string            `json:"description"`
+	Version              string            `json:"version"`
+	PackageURI           string            `json:"packageUri,omitempty"`
+	Hash                 string            `json:"hash,omitempty"`
+	ArtifactID           string            `json:"artifactId,omitempty"`
+	Icon                 string            `json:"icon,omitempty"`
+	Trust                TrustLevel        `json:"trust"`
+	Status               ExtensionStatus   `json:"status"`
+	Enabled              bool              `json:"enabled"`
+	UpdateAvailable      bool              `json:"updateAvailable"`
+	ContributionTags     []ContributionTag `json:"contributionTags"`
+	ProvidedCapabilities []string          `json:"providedCapabilities,omitempty"`
+	Platforms            []string          `json:"platforms"`
+	FailureCount         int               `json:"failureCount"`
+	PermissionRisk       string            `json:"permissionRisk,omitempty"`
+	DevMode              bool              `json:"devMode"`
+	UserModified         bool              `json:"userModified"`
+	Source               string            `json:"source"`
+	InstalledAt          *time.Time        `json:"installedAt,omitempty"`
+	UpdatedAt            *time.Time        `json:"updatedAt,omitempty"`
 }
 
 type CenterFilter struct {

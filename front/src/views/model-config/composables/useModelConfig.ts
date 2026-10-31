@@ -46,7 +46,7 @@ function defaultTestMapper(result: any): TestResultData {
 }
 
 export function useModelConfig(options?: ModelConfigOptions) {
-  const { get, post, put, del } = useApi();
+  const { get, post, postUpload, put, del } = useApi();
   const access = useCoreConfigurationAccess();
   const collectionContext = ref("");
   const editorContext = ref("");
@@ -75,6 +75,7 @@ export function useModelConfig(options?: ModelConfigOptions) {
   const configs = ref<any[]>([]);
   const visionSuspended = ref(false);
   const providers = ref<any[]>([]);
+  const localModels = ref<any[]>([]);
   const currentProviderSchema = ref<any>(null);
 
   const dialogVisible = ref(false);
@@ -105,6 +106,7 @@ export function useModelConfig(options?: ModelConfigOptions) {
     retryCount: number;
     supportsReasoning: boolean;
     defaultReasoningEffort: string;
+    providerConfig: Record<string, any>;
     [key: string]: any;
   }>({
     name: "",
@@ -118,6 +120,7 @@ export function useModelConfig(options?: ModelConfigOptions) {
     retryCount: 1,
     supportsReasoning: true,
     defaultReasoningEffort: "high",
+    providerConfig: {},
   });
 
   if (extraFormFields) {
@@ -148,7 +151,14 @@ export function useModelConfig(options?: ModelConfigOptions) {
   const rules: FormRules = {
     name: [{ required: true, message: "请输入名称", trigger: "blur" }],
     apiType: [{ required: true, message: "请选择类型", trigger: "change" }],
-    baseUrl: [{ required: true, message: "请输入 Base URL", trigger: "blur" }],
+    baseUrl: [{
+      validator: (_rule, _value, callback) => {
+        if (currentProviderSchema.value?.runtimeKind === "embedded") return callback();
+        if (!String(form.baseUrl || "").trim()) return callback(new Error("请输入 Base URL"));
+        callback();
+      },
+      trigger: "blur",
+    }],
     modelName: [{ required: true, message: `请输入${modelLabel}名称`, trigger: "blur" }],
   };
 
@@ -185,8 +195,9 @@ export function useModelConfig(options?: ModelConfigOptions) {
     if (!dateStr) return "";
     try {
       return new Date(dateStr).toLocaleString("zh-CN");
-    } catch {
-      return dateStr;
+    } catch (error) {
+  console.error("[original-error]", error);
+return dateStr;
     }
   }
 
@@ -212,8 +223,17 @@ export function useModelConfig(options?: ModelConfigOptions) {
     if (!await allowConfiguration()) return;
     try {
       providers.value = (await get<any[]>(`${apiBase}/providers`)) || [];
-    } catch {
-      providers.value = [];
+    } catch (error) {
+  console.error("[original-error]", error);
+providers.value = [];
+    }
+    if (apiBase === "/api/model") {
+      try {
+        localModels.value = (await get<any[]>("/api/model/local-models")) || [];
+      } catch (error) {
+  console.error("[original-error]", error);
+localModels.value = [];
+      }
     }
     onProviderChange(form.apiType);
   }
@@ -224,6 +244,7 @@ export function useModelConfig(options?: ModelConfigOptions) {
     detectedModels.value = [];
     detectError.value = "";
     const provider = currentProviderSchema.value as any;
+    if (applyDefaults) form.providerConfig = {};
     if (provider && applyDefaults) {
       if (extraFormFields && "protocol" in extraFormFields) {
         form.protocol = provider.defaultProtocol || "";
@@ -234,7 +255,23 @@ export function useModelConfig(options?: ModelConfigOptions) {
       if (provider.defaultModel) {
         form.modelName = provider.defaultModel;
       }
+      if (provider.runtimeKind === "embedded") {
+        form.baseUrl = "";
+        form.apiKey = "";
+        for (const field of provider.configFields || []) {
+          if (field.default !== undefined && field.key !== "resourceUri" && field.key !== "modelResourceUri" && field.key !== "mmprojUri") {
+            form.providerConfig[field.key] = field.default;
+          }
+        }
+      }
     }
+  }
+
+  async function uploadLocalModel(file: File, name = "") {
+    if (!await allowConfiguration(editorContext.value)) throw new Error("模型配置权限已变化");
+    const result = await postUpload<any>("/api/model/local-models", file, "file", coreConfigurationRequestConfig(editorContext.value), { name });
+    await loadProviders();
+    return result;
   }
 
   async function detectModels() {
@@ -280,8 +317,9 @@ export function useModelConfig(options?: ModelConfigOptions) {
         if (transformConfig) fullConfig = transformConfig(fullConfig);
         form.apiKey = fullConfig?.apiKey || "";
         originalApiKey.value = fullConfig?.apiKey || "";
-      } catch {
-        form.apiKey = "";
+      } catch (error) {
+  console.error("[original-error]", error);
+form.apiKey = "";
         originalApiKey.value = "";
       }
       form.modelName = cfg.modelName || "";
@@ -291,6 +329,14 @@ export function useModelConfig(options?: ModelConfigOptions) {
       form.retryCount = cfg.retryCount ?? 1;
       form.supportsReasoning = cfg.supportsReasoning === true;
       form.defaultReasoningEffort = cfg.defaultReasoningEffort || "high";
+      try {
+        form.providerConfig = typeof fullConfig?.providerConfig === "string"
+          ? JSON.parse(fullConfig.providerConfig || "{}")
+          : (fullConfig?.providerConfig || {});
+      } catch (error) {
+  console.error("[original-error]", error);
+form.providerConfig = {};
+      }
     } else {
       form.name = "";
       form.apiType = defaultApiType;
@@ -304,6 +350,7 @@ export function useModelConfig(options?: ModelConfigOptions) {
       form.retryCount = 1;
       form.supportsReasoning = true;
       form.defaultReasoningEffort = "high";
+      form.providerConfig = {};
     }
     if (extraFormFields) {
       for (const [key, defaultVal] of Object.entries(extraFormFields)) {
@@ -320,7 +367,10 @@ export function useModelConfig(options?: ModelConfigOptions) {
   async function saveConfig() {
     if (saving.value || !await allowConfiguration(editorContext.value)) return;
     if (await blockIndependentVision()) return;
-    const valid = await dialogFormRef.value?.validate().catch(() => false);
+    const valid = await dialogFormRef.value?.validate().catch((error) => {
+  console.error("[original-error]", error);
+  return false;
+});
     if (!valid) return;
     if (!await allowConfiguration(editorContext.value)) return;
 
@@ -334,6 +384,17 @@ export function useModelConfig(options?: ModelConfigOptions) {
     saving.value = true;
     try {
       let payload: any = { ...form };
+      if (currentProviderSchema.value?.runtimeKind === "embedded") {
+        delete payload.baseUrl;
+        delete payload.apiKey;
+        payload.providerConfig = form.providerConfig;
+        if (Number(form.providerConfig?.contextSize) > 0) {
+          payload.contextWindow = Number(form.providerConfig.contextSize);
+        }
+        if (Number(form.maxTokens) > 0) {
+          payload.maxOutputTokens = Number(form.maxTokens);
+        }
+      }
       if (transformPayload) {
         payload = transformPayload(payload);
       }
@@ -362,8 +423,9 @@ export function useModelConfig(options?: ModelConfigOptions) {
       dialogVisible.value = false;
       ElMessage.success(editingId.value ? "保存成功" : "新建成功");
       await fetchConfigs();
-    } catch {
-    } finally {
+    } catch (error) {
+  console.error("[original-error]", error);
+} finally {
       saving.value = false;
     }
   }
@@ -379,8 +441,9 @@ export function useModelConfig(options?: ModelConfigOptions) {
       testResult.value = testResultMapper(result);
       testResultVisible.value = true;
       await fetchConfigs();
-    } catch {
-      testResult.value = {
+    } catch (error) {
+  console.error("[original-error]", error);
+testResult.value = {
         success: false,
         latencyMs: 0,
         message: "请求失败",
@@ -400,7 +463,9 @@ export function useModelConfig(options?: ModelConfigOptions) {
       ElMessage.success("已设为默认");
       await fetchConfigs();
       refreshHealth();
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
 
   async function delConfig(id: number) {
@@ -422,7 +487,9 @@ export function useModelConfig(options?: ModelConfigOptions) {
       await del(`${apiBase}/configs/${id}`, coreConfigurationRequestConfig(context));
       ElMessage.success("已删除");
       await fetchConfigs();
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
 
   async function fetchRoutes() {
@@ -438,7 +505,9 @@ export function useModelConfig(options?: ModelConfigOptions) {
       for (const r of scenarioRoutes.value) {
         routeAssignments.value[r.scenario] = r.modelConfigId;
       }
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
 
   async function assignRoute(scenario: string, modelConfigId: number | null) {
@@ -448,8 +517,9 @@ export function useModelConfig(options?: ModelConfigOptions) {
       await put(`${apiBase}/routes`, { routes: [{ scenario, modelConfigId: modelConfigId ?? 0 }] }, coreConfigurationRequestConfig(collectionContext.value));
       ElMessage.success("用途分配已更新");
       await fetchRoutes();
-    } catch {
-      await fetchRoutes();
+    } catch (error) {
+  console.error("[original-error]", error);
+await fetchRoutes();
     }
   }
 
@@ -467,7 +537,9 @@ export function useModelConfig(options?: ModelConfigOptions) {
     visionSuspended.value = status?.mainModelVision === true;
     if (wasSuspended !== visionSuspended.value) await fetchConfigs();
     if (!visionSuspended.value) return false;
-    await ElMessageBox.alert("主模型已开启视觉模式，如需单独启用视觉模型，请先关闭文本模型的支持识图功能", "主模型已接管视觉识别", { confirmButtonText: "知道了" }).catch(() => {});
+    await ElMessageBox.alert("主模型已开启视觉模式，如需单独启用视觉模型，请先关闭文本模型的支持识图功能", "主模型已接管视觉识别", { confirmButtonText: "知道了" }).catch((error) => {
+  console.error("[original-error]", error);
+});
     return true;
   }
 
@@ -475,6 +547,7 @@ export function useModelConfig(options?: ModelConfigOptions) {
     visionSuspended,
     configs,
     providers,
+    localModels,
     currentProviderSchema,
     dialogVisible,
     detectingModels,
@@ -504,6 +577,7 @@ export function useModelConfig(options?: ModelConfigOptions) {
     fetchConfigs,
     loadProviders,
     onProviderChange,
+    uploadLocalModel,
     detectModels,
     showDialog,
     saveConfig,

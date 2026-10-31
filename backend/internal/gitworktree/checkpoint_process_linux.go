@@ -1,6 +1,7 @@
 package gitworktree
 
 import (
+	amitialog "log"
 	"os/exec"
 	"syscall"
 )
@@ -11,6 +12,8 @@ func configureCheckpointTestProcess(command *exec.Cmd) {
 
 func terminateCheckpointTestProcess(command *exec.Cmd) {
 	if command.Process != nil {
-		_ = syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
+		if err := syscall.Kill(-command.Process.Pid, syscall.SIGKILL); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 }

@@ -117,8 +117,9 @@ function formatActionMessage(value: string): string {
       const messages = parsed.with.filter((item): item is string => typeof item === "string" && item.length > 0);
       if (messages.length > 0) return messages.join(" ");
     }
-  } catch {
-  }
+  } catch (error) {
+  console.error("[original-error]", error);
+}
   return value;
 }
 
@@ -242,8 +243,9 @@ onErrorCaptured((err) => {
       timestamp: Date.now(),
       recoverable: true,
     });
-  } catch {
-  }
+  } catch (error) {
+  console.error("[original-error]", error);
+}
   return false;
 });
 
@@ -342,7 +344,9 @@ async function createSession(expectedToken: number): Promise<string | null> {
   if (expectedToken !== restartToken) {
     const staleSid = res.data?.sessionId ?? res.data?.session_id ?? "";
     if (staleSid) {
-      apiClient.delete(`/api/extensions/ui/sessions/${staleSid}`).catch(() => {});
+      apiClient.delete(`/api/extensions/ui/sessions/${staleSid}`).catch((error) => {
+  console.error("[original-error]", error);
+});
     }
     return null;
   }
@@ -360,7 +364,9 @@ async function createSession(expectedToken: number): Promise<string | null> {
     sessionContractVersion.value = 0;
     sessionGeneration.value = 0;
     sessionReady.value = false;
-    apiClient.delete(`/api/extensions/ui/sessions/${sid}`).catch(() => {});
+    apiClient.delete(`/api/extensions/ui/sessions/${sid}`).catch((error) => {
+  console.error("[original-error]", error);
+});
     throw new Error("session 创建响应缺少 token");
   }
   sessionReady.value = true;
@@ -387,8 +393,9 @@ async function disposeSession() {
   activeSessionRegistryKey.value = "";
   try {
     await apiClient.delete(`/api/extensions/ui/sessions/${oldSessionId}`);
-  } catch {
-  }
+  } catch (error) {
+  console.error("[original-error]", error);
+}
   if (registryKey) {
     uiStore.unregisterSession(registryKey);
   }
@@ -500,8 +507,9 @@ async function invokeAction(payload: { action: SchemaUIActionBinding; node: Sche
         confirmButtonText: "确定",
         cancelButtonText: "取消",
       });
-    } catch {
-      return;
+    } catch (error) {
+  console.error("[original-error]", error);
+return;
     }
   }
   actionLoading[action.action_id] = true;
@@ -566,7 +574,7 @@ async function invokeAction(payload: { action: SchemaUIActionBinding; node: Sche
           ElMessage.success("已复制到剪贴板");
         } catch (clipErr) {
           const clipMsg = clipErr instanceof Error ? clipErr.message : String(clipErr);
-          throw new Error(`复制失败: ${clipMsg}`);
+          throw new Error(clipMsg);
         }
       }
       if (data.form_state && typeof data.form_state === "object") {
@@ -605,16 +613,18 @@ async function invokeAction(payload: { action: SchemaUIActionBinding; node: Sche
         timestamp: Date.now(),
         recoverable: true,
       });
-    } catch {
-    }
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   } finally {
     actionLoading[action.action_id] = false;
     if (nodeId) busyNodeIds.delete(nodeId);
     for (const next of actionSucceeded ? followUpActions ?? [] : []) {
       try {
         await invokeAction({ action: next, node }, reportFailure);
-      } catch {
-      }
+      } catch (error) {
+  console.error("[original-error]", error);
+}
     }
   }
 }
@@ -663,7 +673,9 @@ async function retry() {
 
 onMounted(() => {
   loadSchema();
-  restartSession().catch(() => {});
+  restartSession().catch((error) => {
+  console.error("[original-error]", error);
+});
 });
 
 watch(

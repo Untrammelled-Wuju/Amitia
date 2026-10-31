@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
+	amitialog "log"
 )
 
 type WorkflowDefinitionRepository struct {
@@ -80,7 +81,11 @@ func (r *WorkflowDefinitionRepository) Save(ctx context.Context, def workflow.Wo
 	if err != nil {
 		return fmt.Errorf("begin workflow definition save: %w", err)
 	}
-	defer func() { _ = tx.Rollback() }()
+	defer func() {
+		if err := tx.Rollback(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+	}()
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO extension_workflow_definitions
 			(workflow_id, extension_id, module_id, name, description, schema_version, version,
@@ -134,7 +139,11 @@ func (r *WorkflowDefinitionRepository) Delete(ctx context.Context, workflowID st
 	if err != nil {
 		return fmt.Errorf("begin workflow definition delete: %w", err)
 	}
-	defer func() { _ = tx.Rollback() }()
+	defer func() {
+		if err := tx.Rollback(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+	}()
 
 	var source, metadataRaw, definitionHash string
 	sourceErr := tx.QueryRowContext(ctx, `SELECT source, metadata_json, definition_hash FROM extension_workflow_definitions WHERE workflow_id = ?`, workflowID).Scan(&source, &metadataRaw, &definitionHash)
@@ -143,7 +152,9 @@ func (r *WorkflowDefinitionRepository) Delete(ctx context.Context, workflowID st
 	}
 	if source == "user" {
 		var metadata map[string]any
-		_ = json.Unmarshal([]byte(metadataRaw), &metadata)
+		if err := json.Unmarshal([]byte(metadataRaw), &metadata); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		owner := strings.TrimSpace(fmt.Sprint(metadata["ownerSpaceId"]))
 		if err := r.enqueueWorkflowSyncDeleteTx(ctx, tx, owner, workflowID, definitionHash, time.Now().UTC()); err != nil {
 			return err
@@ -247,7 +258,11 @@ func (r *WorkflowDefinitionRepository) saveRevisionWithState(ctx context.Context
 	if err != nil {
 		return nil, fmt.Errorf("begin workflow revision transaction: %w", err)
 	}
-	defer func() { _ = tx.Rollback() }()
+	defer func() {
+		if err := tx.Rollback(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+	}()
 
 	var latest workflow.WorkflowRevision
 	var latestHash string
@@ -729,7 +744,7 @@ func (r *WorkflowDefinitionRepository) maybePruneTriggerReceipts(ctx context.Con
 	// receipts are safe to prune because workflow execution keeps the same durable
 	// idempotency identity. Claimed receipts are pruned only when their execution is
 	// absent (crash before Start) or terminally retryable (failed/cancelled).
-	_, _ = r.db.ExecContext(ctx, `
+	if _, err := r.db.ExecContext(ctx, `
 		DELETE FROM extension_workflow_trigger_receipts AS receipt
 		WHERE receipt.updated_at < ?
 		  AND (
@@ -749,7 +764,9 @@ func (r *WorkflowDefinitionRepository) maybePruneTriggerReceipts(ctx context.Con
 				)
 			)
 		  )
-	`, now.Add(-triggerReceiptRetention))
+	`, now.Add(-triggerReceiptRetention)); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (r *WorkflowDefinitionRepository) CompleteTriggerReceipt(ctx context.Context, eventID, bindingID string) error {
@@ -952,7 +969,11 @@ func (r *WorkflowExecutionRepository) DeleteByWorkflow(ctx context.Context, work
 	if err != nil {
 		return fmt.Errorf("begin workflow execution cleanup: %w", err)
 	}
-	defer func() { _ = tx.Rollback() }()
+	defer func() {
+		if err := tx.Rollback(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+	}()
 	statements := []struct {
 		query string
 		args  []any
@@ -1530,7 +1551,11 @@ func (r *WorkflowExecutionRepository) AcquireExecutionLease(ctx context.Context,
 	if err != nil {
 		return workflow.ExecutionLease{}, fmt.Errorf("begin workflow execution lease: %w", err)
 	}
-	defer func() { _ = tx.Rollback() }()
+	defer func() {
+		if err := tx.Rollback(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+	}()
 
 	var current workflow.ExecutionLease
 	err = tx.QueryRowContext(ctx, `
@@ -1677,7 +1702,9 @@ func (r *WorkflowExecutionRepository) GetStats(ctx context.Context, workflowID s
 	if terminalRuns > 0 {
 		stats.SuccessRate = float64(stats.Succeeded+stats.Compensated) / float64(terminalRuns)
 	}
-	_ = r.db.QueryRowContext(ctx, `SELECT error_message FROM extension_workflow_executions WHERE workflow_id = ? AND error_message != '' ORDER BY started_at DESC LIMIT 1`, workflowID).Scan(&stats.LastError)
+	if err := r.db.QueryRowContext(ctx, `SELECT error_message FROM extension_workflow_executions WHERE workflow_id = ? AND error_message != '' ORDER BY started_at DESC LIMIT 1`, workflowID).Scan(&stats.LastError); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT s.node_id, COUNT(*),

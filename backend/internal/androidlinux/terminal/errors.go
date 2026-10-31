@@ -18,18 +18,18 @@ func (e *Error) Code() string {
 }
 
 const (
-	ErrCodeNotAvailable     = "terminal.not_available"
-	ErrCodeSessionNotFound  = "terminal.session_not_found"
-	ErrCodeSessionLimit     = "terminal.session_limit"
-	ErrCodeScopeDenied      = "terminal.scope_denied"
-	ErrCodeNotRunning       = "terminal.not_running"
-	ErrCodeInputTooLarge    = "terminal.input_too_large"
-	ErrCodeOutputLimit      = "terminal.output_limit"
-	ErrCodeInvalidSize      = "terminal.invalid_size"
-	ErrCodeStartFailed      = "terminal.start_failed"
-	ErrCodeIOFailed         = "terminal.io_failed"
-	ErrCodeCancelled        = "terminal.cancelled"
-	ErrCodeExited           = "terminal.exited"
+	ErrCodeNotAvailable    = "terminal.not_available"
+	ErrCodeSessionNotFound = "terminal.session_not_found"
+	ErrCodeSessionLimit    = "terminal.session_limit"
+	ErrCodeScopeDenied     = "terminal.scope_denied"
+	ErrCodeNotRunning      = "terminal.not_running"
+	ErrCodeInputTooLarge   = "terminal.input_too_large"
+	ErrCodeOutputLimit     = "terminal.output_limit"
+	ErrCodeInvalidSize     = "terminal.invalid_size"
+	ErrCodeStartFailed     = "terminal.start_failed"
+	ErrCodeIOFailed        = "terminal.io_failed"
+	ErrCodeCancelled       = "terminal.cancelled"
+	ErrCodeExited          = "terminal.exited"
 )
 
 func ErrNotAvailable(reason string) *Error {

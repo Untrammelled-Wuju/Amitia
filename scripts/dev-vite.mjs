@@ -35,8 +35,9 @@ const child = spawn(
 const forward = (signal) => {
   try {
     child.kill(signal);
-  } catch {
-    process.exit(1);
+  } catch (error) {
+  console.error("[original-error]", error);
+process.exit(1);
   }
 };
 process.once("SIGINT", () => forward("SIGINT"));

@@ -219,8 +219,9 @@ function validateToolProgress(event: OwnedChatEvent, conversationId: string): Ow
   if (argumentsText) {
     try {
       JSON.parse(argumentsText);
-    } catch {
-      throw new Error("工具事件参数不是有效 JSON");
+    } catch (error) {
+  console.error("[original-error]", error);
+throw new Error("工具事件参数不是有效 JSON");
     }
   }
   const result = progress.result == null ? "" : String(progress.result);
@@ -325,7 +326,10 @@ export async function consumeOwnedChatStream(
     if (buffered.trim() || !terminal || !completed) throw new Error("回复连接已断开，结果尚未确认；不会自动重新发送");
     return completed;
   } finally {
-    await reader.cancel().catch(() => undefined);
+    await reader.cancel().catch((error) => {
+  console.error("[original-error]", error);
+  return undefined;
+});
     reader.releaseLock();
   }
 }
@@ -340,7 +344,10 @@ export async function streamOwnedChat(request: OwnedChatRequest, signal: AbortSi
   });
   const response = await fetch(url, init);
   if (!response.ok || !response.body || !response.headers.get("Content-Type")?.includes("text/event-stream")) {
-    const error = await response.json().catch(() => null);
+    const error = await response.json().catch((error) => {
+  console.error("[original-error]", error);
+  return null;
+});
     throw new Error(error?.message || error?.msg || `设备对话服务不可用 (${response.status})`);
   }
   return consumeOwnedChatStream(response.body, request.requestId, onEvent, request.expectedExecutionScope);
@@ -357,7 +364,10 @@ export async function streamOwnedGroupChat(request: OwnedGroupChatRequest, signa
   });
   const response = await fetch(url, init);
   if (!response.ok || !response.body || !response.headers.get("Content-Type")?.includes("text/event-stream")) {
-    const error = await response.json().catch(() => null);
+    const error = await response.json().catch((error) => {
+  console.error("[original-error]", error);
+  return null;
+});
     throw new Error(error?.message || error?.msg || `群聊服务不可用 (${response.status})`);
   }
   const reader = response.body.getReader();
@@ -444,7 +454,10 @@ export async function streamOwnedGroupChat(request: OwnedGroupChatRequest, signa
     if (!signal.aborted) recordClientError({ source: "group-chat-stream", message: `${error instanceof Error ? error.message : String(error)}; receivedBytes=${totalBytes}; requestId=${request.requestId}` });
     throw error;
   } finally {
-    await reader.cancel().catch(() => undefined);
+    await reader.cancel().catch((error) => {
+  console.error("[original-error]", error);
+  return undefined;
+});
     reader.releaseLock();
   }
 }

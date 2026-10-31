@@ -96,7 +96,9 @@ const logName = ref("");
 const logContent = ref("");
 
 const pretty = (value: any) => JSON.stringify(value ?? {}, null, 2);
-const safe = async <T,>(fn: () => Promise<T>, fallback: T) => { try { return await fn(); } catch { return fallback; } };
+const safe = async <T,>(fn: () => Promise<T>, fallback: T) => { try { return await fn(); } catch (error) {
+  console.error("[original-error]", error);
+return fallback; } };
 
 async function loadAll() {
   loading.value = true;

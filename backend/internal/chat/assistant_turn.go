@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/conversationstream"
 	"gorm.io/gorm"
+	amitialog "log"
 )
 
 const (
@@ -683,12 +684,14 @@ func (r *assistantTurnRecorder) RequireReconciliation(ctx context.Context, cause
 	if cause != nil {
 		message = cause.Error()
 	}
-	_, _ = conversationstream.DefaultManager().Publish(checkCtx, conversationstream.AgentUIEvent{
+	if _, err := conversationstream.DefaultManager().Publish(checkCtx, conversationstream.AgentUIEvent{
 		ConversationID: r.ConversationID, RequestID: r.RequestID, ExecutionID: r.ExecutionID,
 		TurnID: r.TurnID, TurnSequence: r.TurnSequence,
 		Type: "turn.waiting", Status: assistantTurnStatusNeedsReconciliation,
 		Payload: map[string]any{"errorCode": "tool_requires_reconciliation", "internalMessage": message, "recoveryCheckpoint": true},
-	}, true)
+	}, true); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	return nil
 }
 

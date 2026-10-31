@@ -258,8 +258,9 @@ function parseJSON(value?: string): unknown {
   if (!source) return undefined;
   try {
     return JSON.parse(source);
-  } catch {
-    return source;
+  } catch (error) {
+  console.error("[original-error]", error);
+return source;
   }
 }
 
@@ -268,8 +269,9 @@ function stringify(value: unknown): string {
   if (typeof value === "string") return value;
   try {
     return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
+  } catch (error) {
+  console.error("[original-error]", error);
+return String(value);
   }
 }
 

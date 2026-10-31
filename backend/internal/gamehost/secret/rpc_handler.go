@@ -42,7 +42,7 @@ func (h acquireHandler) Handle(ctx context.Context, request rpc.RPCRequest) (rpc
 	}
 	if len(request.Payload) > 0 {
 		if err := json.Unmarshal(request.Payload, &payload); err != nil {
-			return rpc.RPCResponse{RequestID: request.ID, Error: &rpc.RPCRoutedError{Code: "INVALID_PAYLOAD", Message: "invalid acquire payload"}}, nil
+			return rpc.RPCResponse{RequestID: request.ID, Error: &rpc.RPCRoutedError{Code: "INVALID_PAYLOAD", Message: "invalid acquire payload: " + err.Error()}}, nil
 		}
 	}
 
@@ -91,7 +91,11 @@ func (h releaseHandler) Handle(ctx context.Context, request rpc.RPCRequest) (rpc
 		Reason  string `json:"reason"`
 	}
 	if err := json.Unmarshal(request.Payload, &payload); err != nil || payload.LeaseID == "" {
-		return rpc.RPCResponse{RequestID: request.ID, Error: &rpc.RPCRoutedError{Code: "INVALID_PAYLOAD", Message: "leaseId is required"}}, nil
+		message := "leaseId is required"
+		if err != nil {
+			message += ": " + err.Error()
+		}
+		return rpc.RPCResponse{RequestID: request.ID, Error: &rpc.RPCRoutedError{Code: "INVALID_PAYLOAD", Message: message}}, nil
 	}
 	if request.Generation <= 0 {
 		return rpc.RPCResponse{RequestID: request.ID, Error: &rpc.RPCRoutedError{Code: "INVALID_GENERATION", Message: "trusted generation must be positive"}}, nil
@@ -112,7 +116,11 @@ func (h queryHandler) Handle(ctx context.Context, request rpc.RPCRequest) (rpc.R
 		LeaseID string `json:"leaseId"`
 	}
 	if err := json.Unmarshal(request.Payload, &payload); err != nil || payload.LeaseID == "" {
-		return rpc.RPCResponse{RequestID: request.ID, Error: &rpc.RPCRoutedError{Code: "INVALID_PAYLOAD", Message: "leaseId is required"}}, nil
+		message := "leaseId is required"
+		if err != nil {
+			message += ": " + err.Error()
+		}
+		return rpc.RPCResponse{RequestID: request.ID, Error: &rpc.RPCRoutedError{Code: "INVALID_PAYLOAD", Message: message}}, nil
 	}
 	if request.Generation <= 0 {
 		return rpc.RPCResponse{RequestID: request.ID, Error: &rpc.RPCRoutedError{Code: "INVALID_GENERATION", Message: "trusted generation must be positive"}}, nil

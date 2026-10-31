@@ -4,8 +4,8 @@ func InvalidCases() []Case {
 	cases := make([]Case, 0)
 
 	invalidFixtures := []struct {
-		name     string
-		path     string
+		name      string
+		path      string
 		validator Validator
 	}{
 		{"wrong_protocol", "invalid/wrong_protocol.json", EnvelopeValidator{}},

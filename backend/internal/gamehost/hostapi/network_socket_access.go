@@ -17,6 +17,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
+	amitialog "log"
 )
 
 const (
@@ -219,7 +220,9 @@ func (m *networkConnectionManager) shutdown() {
 
 func closeNetworkHandles(handles []*networkConnection) {
 	for _, handle := range handles {
-		_ = handle.close()
+		if err := handle.close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 }
 
@@ -367,9 +370,15 @@ func applyNetworkDeadline(ctx context.Context, timeout time.Duration, setDeadlin
 		return nil, err
 	}
 	stopCancel := context.AfterFunc(ctx, func() {
-		_ = setDeadline(time.Now())
+		if err := setDeadline(time.Now()); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	})
-	return func() { _ = stopCancel() }, nil
+	return func() {
+		if !stopCancel() {
+			amitialog.Printf("[original-error] context cancellation was already stopped")
+		}
+	}, nil
 }
 
 func readApprovedSocket(ctx context.Context, handle *networkConnection, in NetworkSocketReadInput) (NetworkSocketReadOutput, error) {
@@ -521,7 +530,9 @@ func openApprovedWebSocket(ctx context.Context, client *restrictedHTTPClient, in
 	}
 	conn, response, err := dialer.DialContext(ctx, parsed.String(), headers)
 	if response != nil && response.Body != nil {
-		_ = response.Body.Close()
+		if err := response.Body.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	if err != nil {
 		return nil, "", err

@@ -242,7 +242,9 @@ func (c *MeshClient) connectAndServe() error {
 	if err != nil {
 		if response != nil && response.Body != nil {
 			body, _ := io.ReadAll(io.LimitReader(response.Body, 4096))
-			_ = response.Body.Close()
+			if err := response.Body.Close(); err != nil {
+				log.Printf("[original-error] %v", err)
+			}
 			var denied struct {
 				Code string `json:"code"`
 			}
@@ -418,7 +420,9 @@ func (c *MeshClient) readLoop(conn *websocket.Conn) error {
 				return
 			case <-heartbeatTicker.C:
 				if err := c.sendPing(); err != nil {
-					_ = conn.Close()
+					if err := conn.Close(); err != nil {
+						log.Printf("[original-error] %v", err)
+					}
 					return
 				}
 			}
@@ -1248,10 +1252,14 @@ func (c *MeshClient) closeSocket(code int, reason string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.conn != nil {
-		_ = c.conn.WriteControl(websocket.CloseMessage,
+		if err := c.conn.WriteControl(websocket.CloseMessage,
 			websocket.FormatCloseMessage(code, reason),
-			time.Now().Add(2*time.Second))
-		_ = c.conn.Close()
+			time.Now().Add(2*time.Second)); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
+		if err := c.conn.Close(); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 		c.conn = nil
 	}
 }
@@ -1271,10 +1279,14 @@ func (c *MeshClient) closeSocketGen(code int, reason string, gen int64) {
 		if gen > 0 {
 			closeReason = fmt.Sprintf("gen=%d;%s", gen, reason)
 		}
-		_ = c.conn.WriteControl(websocket.CloseMessage,
+		if err := c.conn.WriteControl(websocket.CloseMessage,
 			websocket.FormatCloseMessage(code, closeReason),
-			time.Now().Add(2*time.Second))
-		_ = c.conn.Close()
+			time.Now().Add(2*time.Second)); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
+		if err := c.conn.Close(); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 		c.conn = nil
 	}
 }

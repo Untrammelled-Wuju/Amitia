@@ -446,8 +446,9 @@ async function doInvoke() {
   let parsedInput: unknown;
   try {
     parsedInput = JSON.parse(invokeInput.value);
-  } catch {
-    ElMessage.error("输入JSON格式错误");
+  } catch (error) {
+  console.error("[original-error]", error);
+ElMessage.error(error instanceof Error ? error.message : String(error));
     return;
   }
   invokeLoading.value = true;

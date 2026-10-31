@@ -16,6 +16,7 @@ import (
 	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/internal/sync"
 	"gorm.io/gorm"
+	amitialog "log"
 )
 
 func (s *service) ListConversations(q ConversationQuery) (*ConversationListResponse, error) {
@@ -353,7 +354,9 @@ func (s *service) ExportConversation(convID string, format string) (string, erro
 	charName := ""
 
 	dataDir := "data" + "/" + "exports"
-	_ = os.MkdirAll(dataDir, 0o700)
+	if err := os.MkdirAll(dataDir, 0o700); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 
 	ts := time.Now().Format("20060102_150405")
 	safeTitle := strings.Map(func(r rune) rune {

@@ -5,11 +5,11 @@ import "time"
 type AuthorizationLevel string
 
 const (
-	AuthorizationNotDetermined     AuthorizationLevel = "not_determined"
-	AuthorizationRestricted        AuthorizationLevel = "restricted"
-	AuthorizationDenied            AuthorizationLevel = "denied"
-	AuthorizationWriteOnly         AuthorizationLevel = "write_only"
-	AuthorizationFullAccess        AuthorizationLevel = "full_access"
+	AuthorizationNotDetermined    AuthorizationLevel = "not_determined"
+	AuthorizationRestricted       AuthorizationLevel = "restricted"
+	AuthorizationDenied           AuthorizationLevel = "denied"
+	AuthorizationWriteOnly        AuthorizationLevel = "write_only"
+	AuthorizationFullAccess       AuthorizationLevel = "full_access"
 	AuthorizationLegacyAuthorized AuthorizationLevel = "legacy_authorized"
 )
 
@@ -43,8 +43,8 @@ type CalendarInfo struct {
 
 	Title string `json:"title"`
 
-	SourceID     string `json:"sourceId,omitempty"`
-	SourceTitle  string `json:"sourceTitle,omitempty"`
+	SourceID    string `json:"sourceId,omitempty"`
+	SourceTitle string `json:"sourceTitle,omitempty"`
 
 	Type string `json:"type,omitempty"`
 
@@ -155,8 +155,8 @@ type QueryEventsRequest struct {
 
 	Search string `json:"search,omitempty"`
 
-	IncludeNotes    bool `json:"includeNotes,omitempty"`
-	IncludeAlarms   bool `json:"includeAlarms,omitempty"`
+	IncludeNotes     bool `json:"includeNotes,omitempty"`
+	IncludeAlarms    bool `json:"includeAlarms,omitempty"`
 	IncludeOrganizer bool `json:"includeOrganizer,omitempty"`
 
 	IncludeDeclined bool `json:"includeDeclined,omitempty"`
@@ -244,7 +244,7 @@ type UpdateEventResult struct {
 
 type DeleteEventResult struct {
 	EventID string `json:"eventId"`
-	Deleted bool `json:"deleted"`
+	Deleted bool   `json:"deleted"`
 }
 
 type CalendarsListResult struct {
@@ -253,13 +253,13 @@ type CalendarsListResult struct {
 }
 
 type AuthorizationStatusResult struct {
-	Level          string `json:"level"`
-	EffectiveLevel string `json:"effectiveLevel"`
-	CanCreate      bool   `json:"canCreate"`
-	CanRead        bool   `json:"canRead"`
-	CanUpdate      bool   `json:"canUpdate"`
-	CanDelete      bool   `json:"canDelete"`
-	CanListCalendars bool `json:"canListCalendars"`
+	Level            string `json:"level"`
+	EffectiveLevel   string `json:"effectiveLevel"`
+	CanCreate        bool   `json:"canCreate"`
+	CanRead          bool   `json:"canRead"`
+	CanUpdate        bool   `json:"canUpdate"`
+	CanDelete        bool   `json:"canDelete"`
+	CanListCalendars bool   `json:"canListCalendars"`
 }
 
 type AuthorizationRequestResult struct {

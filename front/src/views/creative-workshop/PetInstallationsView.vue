@@ -824,7 +824,9 @@ function confirmDisableAll() {
         disablingAll.value = false;
       }
     })
-    .catch(() => {});
+    .catch((error) => {
+  console.error("[original-error]", error);
+});
 }
 
 async function onRecenter(item: DesktopPetInstallation) {
@@ -862,8 +864,9 @@ async function loadRuntimeSettings(item: DesktopPetInstallation) {
       resizeForm.idleEnabled = Number(settings.idleEnabled) === 1;
       resizeForm.soundEnabled = Number(settings.soundEnabled) === 1;
     }
-  } catch {
-    // ignore
+  } catch (error) {
+  console.error("[original-error]", error);
+// ignore
   }
 }
 
@@ -1036,7 +1039,9 @@ function onSwitch(item: DesktopPetInstallation) {
         actionTargetId.value = null;
       }
     })
-    .catch(() => {});
+    .catch((error) => {
+  console.error("[original-error]", error);
+});
 }
 
 function onRepair(item: DesktopPetInstallation) {
@@ -1060,7 +1065,9 @@ function onRepair(item: DesktopPetInstallation) {
         actionTargetId.value = null;
       }
     })
-    .catch(() => {});
+    .catch((error) => {
+  console.error("[original-error]", error);
+});
 }
 
 async function onReinstall(item: DesktopPetInstallation) {
@@ -1079,8 +1086,9 @@ async function onReinstall(item: DesktopPetInstallation) {
       );
       const rel = (data?.items || []).find((r) => r.id === releaseId);
       petId = rel?.petId || "";
-    } catch {
-      // ignore
+    } catch (error) {
+  console.error("[original-error]", error);
+// ignore
     }
     if (!petId) {
       ElMessage.warning("无法确定桌宠信息,请使用修复功能");
@@ -1116,7 +1124,9 @@ function confirmUninstall(item: DesktopPetInstallation) {
         actionTargetId.value = null;
       }
     })
-    .catch(() => {});
+    .catch((error) => {
+  console.error("[original-error]", error);
+});
 }
 
 function goBack() {
@@ -1134,8 +1144,9 @@ async function loadAvailablePackages() {
   try {
     const data = await get<{ items: ReleaseOption[]; total: number }>("/api/desktop-pets/releases");
     availableReleases.value = data?.items || [];
-  } catch {
-    availableReleases.value = [];
+  } catch (error) {
+  console.error("[original-error]", error);
+availableReleases.value = [];
   }
 }
 

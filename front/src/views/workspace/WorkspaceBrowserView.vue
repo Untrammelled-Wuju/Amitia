@@ -147,7 +147,9 @@ const gitEntries=computed<any[]>(()=>Array.isArray(gitStatus.value?.entries)?git
 
 async function loadMounts(){loading.value=true;try{const r=await apiClient.get('/api/workspaces');mounts.value=Array.isArray(r.data)?r.data:[];if(activeMount.value){const fresh=mounts.value.find(x=>x.id===activeMount.value?.id);if(fresh)activeMount.value=fresh;}}finally{loading.value=false;}}
 async function selectMount(m:Mount){activeMount.value=m;currentUri.value=m.rootUri;isolatedForm.value.sourceWorkspaceUri=m.rootUri;await list();if(activeTab.value==='git')await loadGit();}
-async function list(){if(!currentUri.value)return;loading.value=true;try{const r=await apiClient.get('/api/workspaces/list',{params:{uri:currentUri.value,limit:500}});entries.value=r.data?.Entries??r.data?.entries??[];}catch{entries.value=[];}finally{loading.value=false;}}
+async function list(){if(!currentUri.value)return;loading.value=true;try{const r=await apiClient.get('/api/workspaces/list',{params:{uri:currentUri.value,limit:500}});entries.value=r.data?.Entries??r.data?.entries??[];}catch (error) {
+  console.error("[original-error]", error);
+entries.value=[];}finally{loading.value=false;}}
 function parentUri(uri:string){const root=activeMount.value?.rootUri||'';if(uri===root)return root;const clean=uri.replace(/\/+$/,'');const slash=clean.lastIndexOf('/');const p=slash>=0?clean.slice(0,slash):root;return p.length>=root.length?p:root;}
 async function up(){currentUri.value=parentUri(currentUri.value);await list();}
 async function openEntry(e:Entry){if(e.type==='directory'){currentUri.value=e.uri;await list();return;}if(!e.readable){ElMessage.warning('该文件不可读取');return;}const r=await apiClient.get('/api/workspaces/read',{params:{uri:e.uri,maxBytes:1048576}});if(!r.data?.isText){ElMessage.warning('当前仅支持预览文本文件');return;}previewName.value=e.name;previewContent.value=String(r.data?.content??'');previewOpen.value=true;}

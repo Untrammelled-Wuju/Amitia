@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	amitialog "log"
 )
 
 type DataLifecycleCoordinator struct {
@@ -183,7 +184,9 @@ func (c *DataLifecycleCoordinator) MarkDeletionComplete(targetID string) (Deleti
 			t.Status = DeletionStatusCompleted
 			t.CompletedAt = &now
 			c.tombstones[key] = t
-			_ = c.persistTombstoneLocked(t)
+			if err := c.persistTombstoneLocked(t); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return t, true
 		}
 	}

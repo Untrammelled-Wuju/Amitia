@@ -3,29 +3,29 @@ package background
 type WorkspaceKind string
 
 const (
-	WorkspaceKindLocal    WorkspaceKind = "local"
-	WorkspaceKindSAF      WorkspaceKind = "saf"
+	WorkspaceKindLocal       WorkspaceKind = "local"
+	WorkspaceKindSAF         WorkspaceKind = "saf"
 	WorkspaceKindIOSDocument WorkspaceKind = "ios_document"
 )
 
 type FileProviderHint string
 
 const (
-	FileProviderICloud      FileProviderHint = "icloud"
-	FileProviderOnMyIPhone  FileProviderHint = "on_my_iphone"
-	FileProviderDropbox     FileProviderHint = "dropbox"
-	FileProviderOneDrive    FileProviderHint = "onedrive"
-	FileProviderUnknown     FileProviderHint = "unknown"
+	FileProviderICloud     FileProviderHint = "icloud"
+	FileProviderOnMyIPhone FileProviderHint = "on_my_iphone"
+	FileProviderDropbox    FileProviderHint = "dropbox"
+	FileProviderOneDrive   FileProviderHint = "onedrive"
+	FileProviderUnknown    FileProviderHint = "unknown"
 )
 
 type FileMountStatus string
 
 const (
-	FileMountStatusAvailable    FileMountStatus = "available"
-	FileMountStatusUnavailable  FileMountStatus = "unavailable"
-	FileMountStatusMissing      FileMountStatus = "missing"
+	FileMountStatusAvailable         FileMountStatus = "available"
+	FileMountStatusUnavailable       FileMountStatus = "unavailable"
+	FileMountStatusMissing           FileMountStatus = "missing"
 	FileMountStatusPermissionRevoked FileMountStatus = "permission_revoked"
-	FileMountStatusUnsupported  FileMountStatus = "unsupported"
+	FileMountStatusUnsupported       FileMountStatus = "unsupported"
 )
 
 type IOSFileImportResult struct {
@@ -45,7 +45,7 @@ type IOSDirectoryMountResult struct {
 }
 
 type IOSFileAccessRequest struct {
-	MountID    string `json:"mountId"`
+	MountID      string `json:"mountId"`
 	RelativePath string `json:"relativePath"`
 }
 
@@ -57,10 +57,10 @@ type IOSFileReadRequest struct {
 }
 
 type IOSFileWriteRequest struct {
-	MountID      string `json:"mountId"`
-	RelativePath string `json:"relativePath"`
+	MountID       string `json:"mountId"`
+	RelativePath  string `json:"relativePath"`
 	ContentBase64 string `json:"contentBase64"`
-	Atomic       bool   `json:"atomic"`
+	Atomic        bool   `json:"atomic"`
 }
 
 type IOSFileMkdirRequest struct {
@@ -75,15 +75,15 @@ type IOSFileRenameRequest struct {
 }
 
 type IOSFileMoveRequest struct {
-	MountID          string `json:"mountId"`
-	RelativePath     string `json:"relativePath"`
-	NewRelativePath  string `json:"newRelativePath"`
+	MountID         string `json:"mountId"`
+	RelativePath    string `json:"relativePath"`
+	NewRelativePath string `json:"newRelativePath"`
 }
 
 type IOSFileCopyRequest struct {
-	MountID          string `json:"mountId"`
-	RelativePath     string `json:"relativePath"`
-	NewRelativePath  string `json:"newRelativePath"`
+	MountID         string `json:"mountId"`
+	RelativePath    string `json:"relativePath"`
+	NewRelativePath string `json:"newRelativePath"`
 }
 
 type IOSFileDeleteRequest struct {
@@ -122,20 +122,20 @@ type IOSFileExportRequest struct {
 }
 
 type IOSFileMountResult struct {
-	WorkspaceID    string           `json:"workspaceId"`
-	RootURI        string           `json:"rootUri"`
-	DisplayName    string           `json:"displayName"`
-	ReadOnly       bool             `json:"readOnly"`
-	Status         FileMountStatus  `json:"status"`
-	ProviderHint   FileProviderHint `json:"providerHint,omitempty"`
+	WorkspaceID  string           `json:"workspaceId"`
+	RootURI      string           `json:"rootUri"`
+	DisplayName  string           `json:"displayName"`
+	ReadOnly     bool             `json:"readOnly"`
+	Status       FileMountStatus  `json:"status"`
+	ProviderHint FileProviderHint `json:"providerHint,omitempty"`
 }
 
 type IOSFileCapabilities struct {
-	AtomicWrite      bool `json:"atomicWrite"`
-	Rename           bool `json:"rename"`
-	Move             bool `json:"move"`
-	Copy             bool `json:"copy"`
-	Delete           bool `json:"delete"`
+	AtomicWrite       bool `json:"atomicWrite"`
+	Rename            bool `json:"rename"`
+	Move              bool `json:"move"`
+	Copy              bool `json:"copy"`
+	Delete            bool `json:"delete"`
 	CoordinatedAccess bool `json:"coordinatedAccess"`
 }
 

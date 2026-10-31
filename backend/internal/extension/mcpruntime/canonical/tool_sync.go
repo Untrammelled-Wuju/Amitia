@@ -9,6 +9,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/mcpruntime"
+	amitialog "log"
 )
 
 // ToolSyncer translates MCP discovery records into the canonical ToolFacade registry.
@@ -40,7 +41,9 @@ func (s *ToolSyncer) RegisterServer(ctx context.Context, serverID string) error 
 		}
 		annotations := map[string]any{}
 		if strings.TrimSpace(tool.AnnotationsJSON) != "" {
-			_ = json.Unmarshal([]byte(tool.AnnotationsJSON), &annotations)
+			if err := json.Unmarshal([]byte(tool.AnnotationsJSON), &annotations); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		inputSchema := json.RawMessage(tool.InputSchemaJSON)
 		if !json.Valid(inputSchema) {

@@ -12,6 +12,7 @@ import (
 	"github.com/u-ai/backend/internal/runtimehost"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
 	surrealdbpkg "github.com/u-ai/backend/pkg/database/surrealdb"
+	amitialog "log"
 )
 
 type SurrealDependency interface {
@@ -254,7 +255,9 @@ func (p *surrealProvider) Stop(ctx context.Context) error {
 	}
 	supervisor := p.host.Processes()
 	if supervisor != nil {
-		_ = supervisor.Stop(ctx, runtimehost.ProcessIDSurrealDB)
+		if err := supervisor.Stop(ctx, runtimehost.ProcessIDSurrealDB); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	for _, fn := range subs {
 		if fn != nil {

@@ -12,8 +12,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/artifact"
 	"github.com/u-ai/backend/internal/character"
+	"github.com/u-ai/backend/internal/chat/localmodel"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/extensioncontext"
 	"github.com/u-ai/backend/internal/graph"
@@ -23,6 +25,7 @@ import (
 	visioncfg "github.com/u-ai/backend/internal/vision"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
+	amitialog "log"
 )
 
 var ErrConversationScopeMismatch = errors.New("conversation scope mismatch")
@@ -125,6 +128,7 @@ type service struct {
 	extensionContext     extensioncontext.Provider
 	localModelMu         sync.Mutex
 	localModels          map[string]LocalModelInfer
+	modelLibrary         *localmodel.Library
 	cleanupMu            sync.Mutex
 	cleanupPlans         map[string]cleanupPlan
 }
@@ -248,7 +252,9 @@ func (s *service) invalidateLocalModels(ctx context.Context) {
 	s.localModelMu.Lock()
 	defer s.localModelMu.Unlock()
 	for key, backend := range s.localModels {
-		_ = backend.Unload(ctx)
+		if err := backend.Unload(ctx); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		delete(s.localModels, key)
 	}
 }
@@ -335,7 +341,11 @@ func NewService(repo Repository, ctx *app.AppContext, comp *Compressor, visionPo
 	if len(recorder) > 0 {
 		r = recorder[0]
 	}
-	svc := &service{repo: repo, charRepo: character.NewRepository(ctx), db: ctx.DB, changeRecorder: r, visionPort: visionPort, wmCache: wmCache, stateProvider: stateProvider, compressor: comp, localModels: make(map[string]LocalModelInfer), cleanupPlans: make(map[string]cleanupPlan)}
+	var modelLibrary *localmodel.Library
+	if config.AppCfg != nil {
+		modelLibrary = localmodel.NewLibrary(ctx.DB, config.AppCfg.Storage.DataDir)
+	}
+	svc := &service{repo: repo, charRepo: character.NewRepository(ctx), db: ctx.DB, changeRecorder: r, visionPort: visionPort, wmCache: wmCache, stateProvider: stateProvider, compressor: comp, localModels: make(map[string]LocalModelInfer), modelLibrary: modelLibrary, cleanupPlans: make(map[string]cleanupPlan)}
 	if comp != nil {
 		comp.model = svc
 	}

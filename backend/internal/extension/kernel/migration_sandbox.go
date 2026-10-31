@@ -13,6 +13,7 @@ import (
 
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
 	"github.com/u-ai/backend/internal/extension/kernel/migration"
+	amitialog "log"
 )
 
 const migrationSQLExecuteTimeout = 10 * time.Second
@@ -114,9 +115,13 @@ func createMigrationSQLExecuteHandler(db *sql.DB) host_api.Handler {
 		committed := false
 		defer func() {
 			if !committed {
-				_, _ = conn.ExecContext(context.Background(), "ROLLBACK")
+				if _, err := conn.ExecContext(context.Background(), "ROLLBACK"); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
-			_ = conn.Close()
+			if err := conn.Close(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}()
 
 		beforeHash, hashErr := computeMigrationSandboxSchemaHash(ctx, conn, extID)

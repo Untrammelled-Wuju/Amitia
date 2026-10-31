@@ -119,8 +119,9 @@ function main() {
       if (mainContent.includes("127.0.0.1:5178")) {
         errors.push("FORBIDDEN: dist/main 包含开发URL硬依赖 (127.0.0.1:5178)");
       }
-    } catch {
-      warnings.push("WARN: 无法读取 dist/main/index.cjs");
+    } catch (error) {
+  console.error("[original-error]", error);
+warnings.push("WARN: 无法读取 dist/main/index.cjs");
     }
   }
 
@@ -152,8 +153,9 @@ function main() {
       if (tsxMatches) {
         errors.push(`FORBIDDEN: pet.html 引用 .tsx 文件: ${tsxMatches.join(", ")}`);
       }
-    } catch {
-      warnings.push("WARN: 无法读取 dist/renderer/pet.html");
+    } catch (error) {
+  console.error("[original-error]", error);
+warnings.push("WARN: 无法读取 dist/renderer/pet.html");
     }
   }
 

@@ -30,16 +30,22 @@ internal interface InstallLock : AutoCloseable {
                 try {
                     lock = channel.tryLock()
                     if (lock != null) break
-                } catch (_: OverlappingFileLockException) {
+                } catch (originalError33: OverlappingFileLockException) {
+                  originalError33.printStackTrace()
+
                 } catch (e: Exception) {
-                    try { raf.close() } catch (_: Exception) {}
+                    try { raf.close() } catch (originalError35: Exception) {
+                      originalError35.printStackTrace()
+                    }
                     return InstallLockResult.Failure(
                         RuntimeInstallErrorCode.IO_ERROR,
                         "failed to acquire lock: ${e.message}"
                     )
                 }
                 if (System.currentTimeMillis() >= deadline) {
-                    try { raf.close() } catch (_: Exception) {}
+                    try { raf.close() } catch (originalError42: Exception) {
+                      originalError42.printStackTrace()
+                    }
                     return InstallLockResult.Failure(
                         RuntimeInstallErrorCode.INSTALL_ALREADY_IN_PROGRESS,
                         "another installation is in progress"
@@ -49,7 +55,9 @@ internal interface InstallLock : AutoCloseable {
             }
 
             val acquiredLock = lock ?: run {
-                try { raf.close() } catch (_: Exception) {}
+                try { raf.close() } catch (originalError52: Exception) {
+                  originalError52.printStackTrace()
+                }
                 return InstallLockResult.Failure(
                     RuntimeInstallErrorCode.IO_ERROR,
                     "lock acquisition completed without a lock",
@@ -78,16 +86,22 @@ internal interface InstallLock : AutoCloseable {
                 try {
                     lock = channel.tryLock()
                     if (lock != null) break
-                } catch (_: OverlappingFileLockException) {
+                } catch (originalError81: OverlappingFileLockException) {
+                  originalError81.printStackTrace()
+
                 } catch (e: Exception) {
-                    try { raf.close() } catch (_: Exception) {}
+                    try { raf.close() } catch (originalError83: Exception) {
+                      originalError83.printStackTrace()
+                    }
                     return InstallLockResult.Failure(
                         RuntimeInstallErrorCode.IO_ERROR,
                         "failed to acquire lock: ${e.message}"
                     )
                 }
                 if (System.currentTimeMillis() >= deadline) {
-                    try { raf.close() } catch (_: Exception) {}
+                    try { raf.close() } catch (originalError90: Exception) {
+                      originalError90.printStackTrace()
+                    }
                     return InstallLockResult.Failure(
                         RuntimeInstallErrorCode.INSTALL_ALREADY_IN_PROGRESS,
                         "another installation is in progress"
@@ -97,7 +111,9 @@ internal interface InstallLock : AutoCloseable {
             }
 
             val acquiredLock = lock ?: run {
-                try { raf.close() } catch (_: Exception) {}
+                try { raf.close() } catch (originalError100: Exception) {
+                  originalError100.printStackTrace()
+                }
                 return InstallLockResult.Failure(
                     RuntimeInstallErrorCode.IO_ERROR,
                     "lock acquisition completed without a lock",
@@ -128,11 +144,15 @@ internal class FileBasedInstallLock(
         if (released.compareAndSet(false, true)) {
             try {
                 lock.release()
-            } catch (_: Exception) {
+            } catch (originalError131: Exception) {
+              originalError131.printStackTrace()
+
             }
             try {
                 raf.close()
-            } catch (_: Exception) {
+            } catch (originalError135: Exception) {
+              originalError135.printStackTrace()
+
             }
         }
     }

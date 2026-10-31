@@ -55,7 +55,9 @@ class _AppUpdatePageState extends ConsumerState<AppUpdatePage> {
       if (mounted) {
         setState(() => _installedApp = installed);
       }
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
     final includeTest = await AppUpdatePreferences.loadIncludeTest(
       defaultValue:
           installed != null && isAppPrereleaseVersion(installed.versionName),
@@ -449,8 +451,9 @@ class _AppUpdatePageState extends ConsumerState<AppUpdatePage> {
             _appError = null;
           });
           return;
-        } catch (_) {
-          return;
+        } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return;
         }
       }
       setState(() {
@@ -496,8 +499,9 @@ class _AppUpdatePageState extends ConsumerState<AppUpdatePage> {
               : '更新安装未完成：${result.message}';
         });
       }
-    } catch (_) {
-      return;
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return;
     }
   }
 

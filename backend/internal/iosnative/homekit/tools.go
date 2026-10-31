@@ -1,20 +1,20 @@
 package homekit
 
 const (
-	ToolIDStatus        = "ios.homekit.status"
+	ToolIDStatus = "ios.homekit.status"
 
-	ToolIDHomesList     = "ios.homekit.homes.list"
-	ToolIDHomesGet      = "ios.homekit.homes.get"
+	ToolIDHomesList = "ios.homekit.homes.list"
+	ToolIDHomesGet  = "ios.homekit.homes.get"
 
-	ToolIDRoomsList     = "ios.homekit.rooms.list"
-	ToolIDZonesList     = "ios.homekit.zones.list"
+	ToolIDRoomsList = "ios.homekit.rooms.list"
+	ToolIDZonesList = "ios.homekit.zones.list"
 
 	ToolIDAccessoriesList = "ios.homekit.accessories.list"
 	ToolIDAccessoriesGet  = "ios.homekit.accessories.get"
 
-	ToolIDServicesList    = "ios.homekit.services.list"
+	ToolIDServicesList = "ios.homekit.services.list"
 
-	ToolIDCharacteristicsList = "ios.homekit.characteristics.list"
+	ToolIDCharacteristicsList  = "ios.homekit.characteristics.list"
 	ToolIDCharacteristicsRead  = "ios.homekit.characteristics.read"
 	ToolIDCharacteristicsWrite = "ios.homekit.characteristics.write"
 
@@ -22,7 +22,7 @@ const (
 	ToolIDScenesGet     = "ios.homekit.scenes.get"
 	ToolIDScenesExecute = "ios.homekit.scenes.execute"
 
-	ToolIDAutomationsList   = "ios.homekit.automations.list"
+	ToolIDAutomationsList = "ios.homekit.automations.list"
 )
 
 const (

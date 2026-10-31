@@ -57,10 +57,10 @@ func NewCrashHandler(ctx CrashContextAccessor, recoveryCoordinator *recovery.Rec
 func (h *crashHandler) HandleProcessExit(ctx context.Context, event ProcessExitEvent) (CrashDecision, error) {
 	if event.Expected {
 		return CrashDecision{
-			Resolution:  CrashDeferToSupervisor,
+			Resolution:   CrashDeferToSupervisor,
 			UpdateHealth: true,
-			Health:      domain.HealthUnknown,
-			Reason:      "planned_stop",
+			Health:       domain.HealthUnknown,
+			Reason:       "planned_stop",
 		}, nil
 	}
 
@@ -71,27 +71,27 @@ func (h *crashHandler) HandleProcessExit(ctx context.Context, event ProcessExitE
 	if ctxAccessor != nil {
 		if ctxAccessor.IsRuntimeShutdown() {
 			return CrashDecision{
-				Resolution:  CrashDeferToSupervisor,
+				Resolution:   CrashDeferToSupervisor,
 				UpdateHealth: false,
-				Reason:      "backend_shutdown",
+				Reason:       "backend_shutdown",
 			}, nil
 		}
 
 		isStopping, err := ctxAccessor.IsRuntimeStopping(event.RuntimeID)
 		if err == nil && isStopping {
 			return CrashDecision{
-				Resolution:  CrashDeferToSupervisor,
+				Resolution:   CrashDeferToSupervisor,
 				UpdateHealth: false,
-				Reason:      "runtime_stopping",
+				Reason:       "runtime_stopping",
 			}, nil
 		}
 
 		isTerminal, err := ctxAccessor.IsRuntimeTerminal(event.RuntimeID)
 		if err == nil && isTerminal {
 			return CrashDecision{
-				Resolution:  CrashDeferToSupervisor,
+				Resolution:   CrashDeferToSupervisor,
 				UpdateHealth: false,
-				Reason:      "runtime_terminal",
+				Reason:       "runtime_terminal",
 			}, nil
 		}
 	}
@@ -180,7 +180,7 @@ func (r *crashRecorder) RecordCrash(runtimeID domain.RuntimeInstanceID, serviceI
 		ServiceID:  serviceID,
 		ExitCode:   exitCode,
 		OccurredAt: now,
-		Reason:     truncateReason(reason),
+		Reason:     reason,
 	}
 }
 

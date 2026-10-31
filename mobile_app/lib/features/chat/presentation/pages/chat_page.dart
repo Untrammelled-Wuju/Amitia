@@ -71,11 +71,13 @@ class ChatPage extends ConsumerStatefulWidget {
     this.initialConversationId,
     this.initialCharacterId,
     this.initialProjectId,
+    this.initialDraftId,
   });
 
   final String? initialConversationId;
   final String? initialCharacterId;
   final String? initialProjectId;
+  final String? initialDraftId;
 
   @override
   ConsumerState<ChatPage> createState() => _ChatPageState();
@@ -84,7 +86,9 @@ class ChatPage extends ConsumerStatefulWidget {
 class _ChatPageState extends ConsumerState<ChatPage> {
   final _scrollController = ScrollController();
   final _composerController = TextEditingController();
-  late final ConversationRuntimeController _runtime;
+  late final ConversationRuntimeRegistry _runtimeRegistry;
+  late ConversationRuntimeController _runtime;
+  late String _runtimeSessionKey;
   late final StateController<String> _activeConversationIdController;
   Map<String, dynamic>? _cachedProviderContext;
   List<ChatMessage>? _cachedMessagesForContext;
@@ -118,44 +122,65 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     _activeConversationIdController = ref.read(
       activeConversationIdProvider.notifier,
     );
-    _runtime = ref.read(conversationRuntimeControllerProvider);
+    _runtimeRegistry = ref.read(conversationRuntimeRegistryProvider);
+    final initialConversationId = widget.initialConversationId?.trim() ?? '';
+    final initialDraftId = widget.initialDraftId?.trim() ?? '';
+    _runtimeSessionKey = initialConversationId.isNotEmpty
+        ? initialConversationId
+        : initialDraftId.isNotEmpty
+        ? initialDraftId
+        : 'draft:${DateTime.now().microsecondsSinceEpoch}';
+    _runtime = _runtimeRegistry.session(_runtimeSessionKey);
     unawaited(
       ref
           .read(chatInputPreferencesProvider.notifier)
           .init()
-          .catchError((Object _) {}),
+          .catchError((Object error, StackTrace stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}),
     );
     unawaited(
       ref
           .read(chatAppearancePreferencesProvider.notifier)
           .init()
-          .catchError((Object _) {}),
+          .catchError((Object error, StackTrace stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}),
     );
     _lastDraftEpoch = _runtime.draftEpoch;
     unawaited(
       ref
           .read(aiNamePreferencesProvider.notifier)
           .init()
-          .catchError((Object _) {}),
+          .catchError((Object error, StackTrace stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}),
     );
     unawaited(
       ref
           .read(aiAvatarPreferencesProvider.notifier)
           .init()
-          .catchError((Object _) {}),
+          .catchError((Object error, StackTrace stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}),
     );
     unawaited(
-      ref.read(aiAvatarShapeProvider.notifier).init().catchError((Object _) {}),
+      ref.read(aiAvatarShapeProvider.notifier).init().catchError((Object error, StackTrace stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}),
     );
     unawaited(
       ref
           .read(userMessageMaterialProvider.notifier)
           .init()
-          .catchError((Object _) {}),
+          .catchError((Object error, StackTrace stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}),
     );
     _lastConversationUpdateEpoch = _runtime.conversationUpdateEpoch;
     _lastSidebarConversationId = _runtime.conversationId?.trim() ?? '';
     _runtime.addListener(_onRuntimeChanged);
+    _runtimeRegistry.setVisibleConversation(initialConversationId);
     _composerController.addListener(_handleComposerChanged);
     _scrollController.addListener(_handleChatScroll);
     WidgetsBinding.instance.addPostFrameCallback(
@@ -170,6 +195,21 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final newConversationId = widget.initialConversationId?.trim() ?? '';
     final oldProjectId = oldWidget.initialProjectId?.trim() ?? '';
     final newProjectId = widget.initialProjectId?.trim() ?? '';
+    final oldDraftId = oldWidget.initialDraftId?.trim() ?? '';
+    final newDraftId = widget.initialDraftId?.trim() ?? '';
+    if (newConversationId.isNotEmpty &&
+        newConversationId != oldConversationId) {
+      _runtimeSessionKey = _runtimeRegistry.aliasSession(
+        _runtimeSessionKey,
+        newConversationId,
+      );
+      _selectRuntime(_runtimeRegistry.session(_runtimeSessionKey));
+    } else if (newConversationId.isEmpty &&
+        newDraftId.isNotEmpty &&
+        newDraftId != oldDraftId) {
+      _runtimeSessionKey = newDraftId;
+      _selectRuntime(_runtimeRegistry.session(newDraftId));
+    }
     final runtimeConversationId = _runtime.conversationId?.trim() ?? '';
     final runtimeProjectId = _runtime.workspace?.projectId.trim() ?? '';
     if (!shouldApplyConversationRoute(
@@ -197,8 +237,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   Future<void> _openInitialConversation() async {
     final initialConversationId = widget.initialConversationId?.trim() ?? '';
+    final initialDraftId = widget.initialDraftId?.trim() ?? '';
     final conversationId = initialConversationId.isNotEmpty
         ? initialConversationId
+        : initialDraftId.isNotEmpty
+        ? ''
         : _activeConversationIdController.state.trim();
     if (!mounted) return;
     if (conversationId.isEmpty) {
@@ -234,11 +277,28 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       _autoFollowOutput = true;
     }
     _lastSidebarConversationId = conversationId;
+    if (conversationId.isNotEmpty) {
+      _runtimeRegistry.setVisibleConversation(conversationId);
+    }
     ref.read(activeConversationIdProvider.notifier).state = conversationId;
     unawaited(_syncComposerDraft());
     _syncCreatedConversationRoute(conversationId);
     setState(() {});
     _scrollToBottom();
+  }
+
+  void _selectRuntime(ConversationRuntimeController runtime) {
+    if (identical(_runtime, runtime)) return;
+    _runtime.removeListener(_onRuntimeChanged);
+    _runtime = runtime;
+    _runtime.addListener(_onRuntimeChanged);
+    _lastDraftEpoch = runtime.draftEpoch;
+    _lastConversationUpdateEpoch = runtime.conversationUpdateEpoch;
+    _lastSidebarConversationId = runtime.conversationId?.trim() ?? '';
+    _runtimeRegistry.setVisibleConversation(
+      runtime.conversationId?.trim() ?? '',
+    );
+    if (mounted) setState(() {});
   }
 
   void _scheduleConversationCollectionRefresh() {
@@ -297,8 +357,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 primaryWorkspaceId: project.primaryWorkspaceId,
               ),
       );
-    } catch (_) {
-      if (mounted) _runtime.setWorkspace(null);
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+if (mounted) _runtime.setWorkspace(null);
     }
   }
 
@@ -309,6 +370,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       return;
     }
     _routeSyncedConversationId = conversationId;
+    _runtimeSessionKey =
+        _runtimeRegistry.keyForController(_runtime) ?? conversationId;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       context.go(
@@ -474,6 +537,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     unawaited(_voiceInputSubscription?.cancel());
     unawaited(_realtimeAudio.stopCapture());
     _runtime.removeListener(_onRuntimeChanged);
+    if (_runtimeRegistry.visibleConversationId ==
+        (_runtime.conversationId?.trim() ?? '')) {
+      _runtimeRegistry.setVisibleConversation('');
+    }
     _scrollController.removeListener(_handleChatScroll);
     _scrollController.dispose();
     _composerController.dispose();
@@ -551,7 +618,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       if (!owned)
         try {
           await ref.read(workspaceServiceProvider).listLocal();
-        } catch (_) {}
+        } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
       ref.invalidate(conversationSidebarProvider);
       final sidebar = await ref.read(conversationSidebarProvider.future);
       if (!mounted) return;
@@ -578,8 +647,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             .take(20)
             .toList(growable: false);
       });
-    } catch (_) {
-      if (!mounted) return;
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+if (!mounted) return;
       _cachedProviderContext = null;
       setState(() => _recentWorkspaces = const <WorkspaceMountDto>[]);
     }
@@ -651,7 +721,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       _runtime.setWorkspace(binding);
       try {
         await ref.read(workspaceServiceProvider).touchLocal(mount.id);
-      } catch (_) {}
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
       await _refreshRecentWorkspaces();
     } catch (error) {
       if (mounted) amitiaSnackBar(context, '切换工作目录失败：$error');
@@ -2344,8 +2416,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               pageSize: 8,
               sort: 'recently_used',
             );
-      } catch (_) {
-        return const <MemoryDto>[];
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return const <MemoryDto>[];
       }
     }
 
@@ -2354,8 +2427,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         return await ref
             .read(profileServiceProvider)
             .list(characterId: characterId, page: 1, pageSize: 5);
-      } catch (_) {
-        return const <ProfileDto>[];
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return const <ProfileDto>[];
       }
     }
 
@@ -2366,8 +2440,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 .read(systemServiceProvider)
                 .chatCompressionStatus(conversationId) ??
             const <String, dynamic>{};
-      } catch (_) {
-        return const <String, dynamic>{};
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return const <String, dynamic>{};
       }
     }
 
@@ -2375,8 +2450,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       try {
         return await ref.read(systemServiceProvider).pipelineStatus() ??
             const <String, dynamic>{};
-      } catch (_) {
-        return const <String, dynamic>{};
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return const <String, dynamic>{};
       }
     }
 
@@ -2939,10 +3015,14 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 onModelChanged: (modelId, effort, enabled) {
                   _runtime
                       .updateModelSettings(modelId, effort, enabled)
-                      .catchError((_) {});
+                      .catchError((Object error, StackTrace stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+});
                 },
                 onPermissionChanged: (mode) {
-                  _runtime.updatePermissionMode(mode).catchError((_) {});
+                  _runtime.updatePermissionMode(mode).catchError((Object error, StackTrace stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+});
                 },
                 onSend: _onSend,
                 onStop: _runtime.stop,
@@ -4386,8 +4466,9 @@ String _turnErrorDetail(AssistantTurnDto? turn) {
   dynamic decoded;
   try {
     decoded = jsonDecode(item.resultJson);
-  } catch (_) {
-    return item.errorCode.trim().isNotEmpty ? item.errorCode : '网络错误';
+  } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return error.toString();
   }
   if (decoded is! Map) {
     return item.errorCode.trim().isNotEmpty ? item.errorCode : '网络错误';
@@ -4397,8 +4478,9 @@ String _turnErrorDetail(AssistantTurnDto? turn) {
     if (value is String) return value.trim();
     try {
       return jsonEncode(value);
-    } catch (_) {
-      return value.toString().trim();
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return value.toString().trim();
     }
   }
 

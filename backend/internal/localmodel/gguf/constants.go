@@ -3,11 +3,11 @@
 package gguf
 
 const (
-	MaxTensorCount  uint64 = 1000000
+	MaxTensorCount   uint64 = 1000000
 	MaxMetadataCount uint64 = 1000000
-	MaxStringLen    uint64 = 1024 * 1024
-	MaxArrayLen     uint64 = 1000000
-	MaxFileSize     int64  = 1024 * 1024 * 1024 * 1024
+	MaxStringLen     uint64 = 1024 * 1024
+	MaxArrayLen      uint64 = 1000000
+	MaxFileSize      int64  = 1024 * 1024 * 1024 * 1024
 )
 
 const (

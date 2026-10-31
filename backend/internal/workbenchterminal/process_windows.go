@@ -5,6 +5,7 @@ package workbenchterminal
 import (
 	"errors"
 	"io"
+	amitialog "log"
 	"os"
 	"os/exec"
 	"sync"
@@ -38,13 +39,19 @@ func launchPipeProcess(cwd string, rows, cols uint16) (process, error) {
 	}
 	stdout, err := command.StdoutPipe()
 	if err != nil {
-		_ = stdin.Close()
+		if err := stdin.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, err
 	}
 	command.Stderr = command.Stdout
 	if err := command.Start(); err != nil {
-		_ = stdin.Close()
-		_ = stdout.Close()
+		if err := stdin.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := stdout.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, err
 	}
 	return &windowsProcess{command: command, stdin: stdin, stdout: stdout}, nil
@@ -58,11 +65,17 @@ func (p *windowsProcess) Mode() string { return "pipe" }
 func (p *windowsProcess) Wait() error  { return p.command.Wait() }
 func (p *windowsProcess) Close() error {
 	p.closeOnce.Do(func() {
-		_ = p.stdin.Close()
-		_ = p.stdout.Close()
+		if err := p.stdin.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := p.stdout.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		if p.command.Process != nil {
 			terminateTerminalProcessTree(p.command.Process.Pid)
-			_ = p.command.Process.Kill()
+			if err := p.command.Process.Kill(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	})
 	return nil

@@ -38,8 +38,8 @@ func NewNotificationHandler(provider androidsystem.SystemProvider) *Notification
 		provider: provider,
 		store:    NewProjectionStore(),
 		state: HandlerCapabilityState{
-			Supported:   false,
-			State:       StateUnsupported,
+			Supported: false,
+			State:     StateUnsupported,
 		},
 	}
 }

@@ -10,6 +10,7 @@ import (
 	meshprotocol "github.com/u-ai/backend/internal/devicemesh/protocol"
 	protocol "github.com/u-ai/backend/internal/deviceruntime/protocol"
 	"github.com/u-ai/backend/internal/runtimeidentity"
+	amitialog "log"
 )
 
 type ConnectionHub struct {
@@ -34,7 +35,9 @@ func (h *ConnectionHub) Attach(sessionID runtimeidentity.RuntimeSessionID, conn 
 	}
 
 	if existing != nil && existing.Generation < conn.Generation {
-		_ = existing.Close(4001, "session_superseded")
+		if err := existing.Close(4001, "session_superseded"); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 
 	h.connections[key] = conn
@@ -161,7 +164,9 @@ func (h *ConnectionHub) CloseSuperseded(sessionID runtimeidentity.RuntimeSession
 	h.mu.RUnlock()
 
 	if ok && c.Generation < generation {
-		_ = c.Close(4001, "session_superseded")
+		if err := c.Close(4001, "session_superseded"); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		h.Detach(sessionID, c.Generation)
 	}
 }
@@ -176,7 +181,9 @@ func (h *ConnectionHub) CloseAll() {
 	h.mu.Unlock()
 
 	for _, c := range conns {
-		_ = c.Close(4000, "server_shutdown")
+		if err := c.Close(4000, "server_shutdown"); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 }
 
@@ -191,7 +198,9 @@ func (h *ConnectionHub) CloseDevice(spaceID runtimeidentity.SpaceID, deviceID ru
 	}
 	h.mu.Unlock()
 	for _, conn := range conns {
-		_ = conn.Close(4003, "device_revoked")
+		if err := conn.Close(4003, "device_revoked"); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 }
 

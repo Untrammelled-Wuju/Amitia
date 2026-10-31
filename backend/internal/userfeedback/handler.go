@@ -30,7 +30,7 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 		UploadURL string `json:"uploadUrl"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "参数无效", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	settings, err := h.service.SaveUploadURL(body.UploadURL)
@@ -44,7 +44,7 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 func (h *Handler) Preview(c *gin.Context) {
 	var body TicketInput
 	if err := c.ShouldBindJSON(&body); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "参数无效", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	applyActorDevice(&body, c)
@@ -59,7 +59,7 @@ func (h *Handler) Preview(c *gin.Context) {
 func (h *Handler) Create(c *gin.Context) {
 	var body TicketInput
 	if err := c.ShouldBindJSON(&body); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "反馈内容无效", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	applyActorDevice(&body, c)

@@ -164,12 +164,12 @@ type MediaProgress struct {
 }
 
 type ConversionPreview struct {
-	RequiresTranscode    bool   `json:"requiresTranscode"`
-	EstimatedOutputBytes int64  `json:"estimatedOutputBytes"`
-	OutputContainer      string `json:"outputContainer"`
-	VideoCodec           string `json:"videoCodec"`
-	AudioCodec           string `json:"audioCodec"`
-	Resolution           string `json:"resolution"`
+	RequiresTranscode    bool     `json:"requiresTranscode"`
+	EstimatedOutputBytes int64    `json:"estimatedOutputBytes"`
+	OutputContainer      string   `json:"outputContainer"`
+	VideoCodec           string   `json:"videoCodec"`
+	AudioCodec           string   `json:"audioCodec"`
+	Resolution           string   `json:"resolution"`
 	Warnings             []string `json:"warnings"`
 }
 
@@ -204,53 +204,53 @@ type ConversionPlan struct {
 }
 
 type VideoPlan struct {
-	Mode             string
-	Codec            string
-	QualityMode      string
-	Quality          int
-	BitRateKbps      int
-	MaxBitRateKbps   int
-	Width            *int
-	Height           *int
-	Fit              string
-	FrameRateNum     int64
-	FrameRateDen     int64
-	PixelFormat      string
+	Mode                 string
+	Codec                string
+	QualityMode          string
+	Quality              int
+	BitRateKbps          int
+	MaxBitRateKbps       int
+	Width                *int
+	Height               *int
+	Fit                  string
+	FrameRateNum         int64
+	FrameRateDen         int64
+	PixelFormat          string
 	NormalizeOrientation bool
-	StreamIndex      *int
+	StreamIndex          *int
 }
 
 type AudioPlan struct {
-	Mode             string
-	Codec            string
-	BitRateKbps      int
-	SampleRate       int
-	Channels         int
-	ChannelLayout    string
-	StreamIndex      *int
+	Mode              string
+	Codec             string
+	BitRateKbps       int
+	SampleRate        int
+	Channels          int
+	ChannelLayout     string
+	StreamIndex       *int
 	NormalizeLoudness bool
 }
 
 type ThumbnailPreset struct {
 	AtMs int64
 
-	Width int
+	Width  int
 	Height int
 
 	Format string
 }
 
 const (
-	ModeCopy     = "copy"
+	ModeCopy      = "copy"
 	ModeTranscode = "transcode"
-	ModeDrop     = "drop"
-	ModeAuto     = "auto"
+	ModeDrop      = "drop"
+	ModeAuto      = "auto"
 )
 
 const (
-	FitContain  = "contain"
-	FitCover    = "cover"
-	FitStretch  = "stretch"
+	FitContain = "contain"
+	FitCover   = "cover"
+	FitStretch = "stretch"
 )
 
 const (
@@ -281,9 +281,9 @@ const (
 )
 
 const (
-	PhaseProbing     = "probing"
-	PhasePlanning    = "planning"
-	PhaseConverting  = "converting"
-	PhaseVerifying   = "verifying"
-	PhaseCommitting  = "committing"
+	PhaseProbing    = "probing"
+	PhasePlanning   = "planning"
+	PhaseConverting = "converting"
+	PhaseVerifying  = "verifying"
+	PhaseCommitting = "committing"
 )

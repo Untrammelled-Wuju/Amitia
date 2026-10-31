@@ -20,7 +20,7 @@ func performTCPProbe(ctx context.Context, host string, port int, timeout time.Du
 	}
 
 	if ip := net.ParseIP(host); ip != nil {
-		result.ResolvedIP =	ip.String()
+		result.ResolvedIP = ip.String()
 		return probeIP(ctx, result, timeout)
 	}
 

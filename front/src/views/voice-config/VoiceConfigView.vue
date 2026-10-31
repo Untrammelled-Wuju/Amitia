@@ -503,7 +503,10 @@ async function showDialog(cfg: TtsConfig | null) {
 
 async function saveConfig() {
   if (saving.value || !await allowConfiguration(editorContext.value)) return;
-  const valid = await formRef.value?.validate().catch(() => false);
+  const valid = await formRef.value?.validate().catch((error) => {
+  console.error("[original-error]", error);
+  return false;
+});
   if (!valid) return;
   if (!await allowConfiguration(editorContext.value)) return;
 
@@ -561,7 +564,9 @@ async function delConfig(id: number) {
     await del("/api/tts/configs/" + id, coreConfigurationRequestConfig(context));
     ElMessage.success("已删除");
     fetchConfigs();
-  } catch {}
+  } catch (error) {
+  console.error("[original-error]", error);
+}
 }
 
 async function testConnection(id: number) {
@@ -690,7 +695,9 @@ async function deleteClone(speakerId: string, name: string) {
     await apiClient.delete("/api/tts/voice-clone", { params: { speakerId }, ...coreConfigurationRequestConfig(context) });
     await fetchClonedVoices();
     ElMessage.success("已删除");
-  } catch {}
+  } catch (error) {
+  console.error("[original-error]", error);
+}
 }
 </script>
 

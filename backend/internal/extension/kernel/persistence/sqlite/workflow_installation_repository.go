@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
+	amitialog "log"
 )
 
 var ErrWorkflowRevisionConflict = errors.New("workflow installation revision conflict")
@@ -256,7 +257,11 @@ func (r *WorkflowDeviceCatalogRepository) ReplaceDevice(ctx context.Context, own
 	if err != nil {
 		return err
 	}
-	defer func() { _ = tx.Rollback() }()
+	defer func() {
+		if err := tx.Rollback(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+	}()
 	if _, err := tx.ExecContext(ctx, `DELETE FROM extension_workflow_device_catalog WHERE owner_space_id = ? AND device_id = ?`, ownerSpaceID, deviceID); err != nil {
 		return err
 	}

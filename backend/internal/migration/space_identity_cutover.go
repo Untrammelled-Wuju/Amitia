@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/u-ai/backend/internal/spaceidentity"
+	amitialog "log"
 )
 
 type identityColumnRename struct {
@@ -438,7 +439,9 @@ func detachLegacyAccountForeignKeys(s *Step) error {
 	writable := true
 	defer func() {
 		if writable {
-			_ = s.DB().Exec("PRAGMA writable_schema=OFF").Error
+			if err := s.DB().Exec("PRAGMA writable_schema=OFF").Error; err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}()
 	for _, update := range updates {

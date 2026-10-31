@@ -193,8 +193,9 @@ async function loadFailures() {
   }
   try {
     failedDeliveries.value = await owned.failedGroupDeliveries(props.conversationId, props.roleId);
-  } catch {
-    failedDeliveries.value = [];
+  } catch (error) {
+  console.error("[original-error]", error);
+failedDeliveries.value = [];
   }
 }
 

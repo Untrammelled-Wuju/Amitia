@@ -36,7 +36,9 @@ class RuntimeLogBridge : EventChannel.StreamHandler, RuntimeLogCallback {
         for (listener in listeners) {
             try {
                 listener.onLog(level, message)
-            } catch (_: Throwable) {}
+            } catch (originalError39: Throwable) {
+              originalError39.printStackTrace()
+            }
         }
     }
 
@@ -50,7 +52,9 @@ class RuntimeLogBridge : EventChannel.StreamHandler, RuntimeLogCallback {
                         "message" to message,
                         "timestamp" to System.currentTimeMillis()
                     ))
-                } catch (_: Throwable) {}
+                } catch (originalError53: Throwable) {
+                  originalError53.printStackTrace()
+                }
             }
         }
         addListener(listener)
@@ -59,7 +63,9 @@ class RuntimeLogBridge : EventChannel.StreamHandler, RuntimeLogCallback {
         for (entry in entries) {
             try {
                 sink.success(entry)
-            } catch (_: Throwable) {
+            } catch (originalError62: Throwable) {
+              originalError62.printStackTrace()
+
             }
         }
     }

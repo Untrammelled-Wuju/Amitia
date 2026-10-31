@@ -78,7 +78,9 @@ internal class WorkflowDeviceEventJournal(context: Context) {
             buildList {
                 for (index in 0 until array.length()) array.optJSONObject(index)?.let(::add)
             }
-        } catch (_: Throwable) {
+        } catch (originalError81: Throwable) {
+          originalError81.printStackTrace()
+
             prefs.edit().remove(KEY_ENTRIES).apply()
             emptyList()
         }

@@ -17,6 +17,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/mcpruntime/auth"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	amitialog "log"
 )
 
 type Repository struct {
@@ -397,7 +398,9 @@ func (r *Repository) ConsumeOAuthSession(ctx context.Context, id, stateHash stri
 			return fmt.Errorf("MCP_OAUTH_STATE_INVALID")
 		}
 		var scopes []string
-		_ = json.Unmarshal([]byte(record.RequestedScopesJSON), &scopes)
+		if err := json.Unmarshal([]byte(record.RequestedScopesJSON), &scopes); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		result = auth.PendingSession{ID: record.ID, ServerID: record.ServerID, StateHash: record.StateHash, CodeVerifierReference: record.CodeVerifierReference, RedirectURI: record.RedirectURI, RequestedScopes: scopes, Status: record.Status, ExpiresAt: expiresAt}
 		return nil
 	})

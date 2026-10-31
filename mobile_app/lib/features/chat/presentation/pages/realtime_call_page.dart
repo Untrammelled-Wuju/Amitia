@@ -275,8 +275,9 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
       final visual = await _visual.status();
       _cameraSupported = visual.cameraSupported;
       _screenSupported = visual.screenSupported;
-    } catch (_) {
-      _cameraSupported = false;
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+_cameraSupported = false;
       _screenSupported = false;
     }
     final client = BackendWebSocketClient(availability.config);
@@ -570,7 +571,9 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
         await session?.send(
           WebSocketTextMessage(jsonEncode(const {'type': 'stop'})),
         );
-      } catch (_) {}
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
     }
     await _audioSubscription?.cancel();
     _audioSubscription = null;
@@ -580,18 +583,26 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
     _wsSubscription = null;
     try {
       await _audio.reset();
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
     try {
       await _visual.reset();
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
     try {
       await session?.close();
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
     final client = _client;
     _client = null;
     try {
       await client?.close();
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
     _aiSpeaking = false;
     _muted = false;
     _wakeArmed = false;

@@ -3,14 +3,14 @@
 package chroot
 
 type ChrootStatus struct {
-	Enabled          bool     `json:"enabled"`
-	DefaultRootFSP   string   `json:"defaultRootfsPath,omitempty"`
-	KnownFSPs        []string `json:"knownRootfsPaths"`
-	MaxFSBytes       int64    `json:"maxFsBytes"`
-	MaxEnvironments  int      `json:"maxEnvironments"`
+	Enabled               bool     `json:"enabled"`
+	DefaultRootFSP        string   `json:"defaultRootfsPath,omitempty"`
+	KnownFSPs             []string `json:"knownRootfsPaths"`
+	MaxFSBytes            int64    `json:"maxFsBytes"`
+	MaxEnvironments       int      `json:"maxEnvironments"`
 	AvailableEnvironments []string `json:"availableEnvironments"`
-	CurrentEnv       string   `json:"currentEnvironment"`
-	ExecBackends     []string `json:"execBackends"`
+	CurrentEnv            string   `json:"currentEnvironment"`
+	ExecBackends          []string `json:"execBackends"`
 }
 
 type ChrootInspectRequest struct {
@@ -18,15 +18,15 @@ type ChrootInspectRequest struct {
 }
 
 type ChrootInspectResult struct {
-	RootFSPath  string `json:"rootfsPath"`
-	Exists      bool   `json:"exists"`
-	Valid       bool   `json:"valid"`
-	TotalBytes  int64  `json:"totalBytes"`
-	FileCount   int    `json:"fileCount"`
-	HasBinSH    bool   `json:"hasBinSh"`
-	HasBinBash  bool   `json:"hasBinBash"`
-	FSType      string `json:"fsType"`
-	Error       string `json:"error,omitempty"`
+	RootFSPath string `json:"rootfsPath"`
+	Exists     bool   `json:"exists"`
+	Valid      bool   `json:"valid"`
+	TotalBytes int64  `json:"totalBytes"`
+	FileCount  int    `json:"fileCount"`
+	HasBinSH   bool   `json:"hasBinSh"`
+	HasBinBash bool   `json:"hasBinBash"`
+	FSType     string `json:"fsType"`
+	Error      string `json:"error,omitempty"`
 }
 
 type ChrootExecRequest struct {

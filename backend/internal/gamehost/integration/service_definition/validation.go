@@ -90,8 +90,8 @@ func (v *DefinitionValidationService) ValidateAll() (*ValidationReport, error) {
 }
 
 type ValidationReport struct {
-	IsValid      bool                    `json:"isValid"`
-	ValidCount   int                     `json:"validCount"`
-	InvalidCount int                     `json:"invalidCount"`
+	IsValid      bool                     `json:"isValid"`
+	ValidCount   int                      `json:"validCount"`
+	InvalidCount int                      `json:"invalidCount"`
 	Errors       []ServiceDefinitionError `json:"errors,omitempty"`
 }

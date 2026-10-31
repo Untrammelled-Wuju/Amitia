@@ -5,6 +5,7 @@ package chat
 import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/agentpermission"
+	"github.com/u-ai/backend/internal/chat/localmodel"
 	"github.com/u-ai/backend/internal/chat/modelprotocol"
 	coreexec "github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/interaction"
@@ -232,14 +233,20 @@ type MessageAttachmentInput struct {
 }
 
 type ProviderInfo struct {
-	ID                 string   `json:"id"`
-	Name               string   `json:"name"`
-	Protocol           string   `json:"protocol"`
-	DefaultProtocol    string   `json:"defaultProtocol"`
-	SupportedProtocols []string `json:"supportedProtocols"`
-	DefaultBaseURL     string   `json:"defaultBaseUrl"`
-	DefaultModel       string   `json:"defaultModel"`
-	DocsURL            string   `json:"docsUrl"`
+	ID                 string                     `json:"id"`
+	Name               string                     `json:"name"`
+	Protocol           string                     `json:"protocol"`
+	DefaultProtocol    string                     `json:"defaultProtocol"`
+	SupportedProtocols []string                   `json:"supportedProtocols"`
+	DefaultBaseURL     string                     `json:"defaultBaseUrl"`
+	DefaultModel       string                     `json:"defaultModel"`
+	DocsURL            string                     `json:"docsUrl"`
+	RuntimeKind        string                     `json:"runtimeKind"`
+	ModelFormats       []string                   `json:"modelFormats,omitempty"`
+	ConfigFields       []localmodel.ProviderField `json:"configFields"`
+	Capabilities       map[string]bool            `json:"capabilities"`
+	Available          bool                       `json:"available"`
+	UnavailableReason  string                     `json:"unavailableReason,omitempty"`
 }
 
 func (ModelConfig) TableName() string { return "model_configs" }

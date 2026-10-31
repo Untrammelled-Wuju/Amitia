@@ -229,7 +229,9 @@ export async function uninstallExtension(id: string): Promise<Record<string, unk
       confirmations,
     });
   } catch (error) {
-    if (disabledForUninstall) await enableExtension(id).catch(() => {});
+    if (disabledForUninstall) await enableExtension(id).catch((error) => {
+  console.error("[original-error]", error);
+});
     throw error;
   }
   const confirmationToken = String(confirmResponse.data?.confirmationToken || "");

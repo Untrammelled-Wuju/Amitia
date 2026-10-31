@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	amitialog "log"
 )
 
 type MemoryTransfer struct {
@@ -99,9 +100,13 @@ func (s *OwnershipStore) validateMemoryTransfer(ctx context.Context, tx *sql.Tx,
 	}
 	if transfer.Kind == "memory" {
 		var root map[string]json.RawMessage
-		_ = json.Unmarshal(originals["memory/"+transfer.ID], &root)
+		if err := json.Unmarshal(originals["memory/"+transfer.ID], &root); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		var key string
-		_ = json.Unmarshal(root["key"], &key)
+		if err := json.Unmarshal(root["key"], &key); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		if key != "" {
 			var count int
 			if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM kernel_device_owned_resources WHERE owner_id=? AND kind='memory' AND role_id=? AND resource_id<>? AND deleted=0 AND json_extract(CAST(body AS TEXT),'$.key')=?`, s.ownerID, transfer.ToRoleID, transfer.ID, key).Scan(&count); err != nil {

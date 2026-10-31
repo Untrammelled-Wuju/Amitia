@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/embedding"
 	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
+	amitialog "log"
 )
 
 const rrfK = 60.0
@@ -173,8 +174,6 @@ func (r *RetrievalRuntime) Search(ctx context.Context, tenantID string, req Sear
 	originalQuery := strings.TrimSpace(req.Query)
 	resp = SearchResponse{
 		Evidence: []Evidence{}, Query: originalQuery, OriginalQuery: originalQuery, Warnings: []string{}, TraceConfigHash: r.settings.ConfigHash,
-		TracePolicyMode: strings.TrimSpace(req.PolicyMode), TraceRouteReason: strings.TrimSpace(req.RouteReason),
-		TraceShadowLevel: strings.TrimSpace(req.ShadowLevel), TraceShadowReason: strings.TrimSpace(req.ShadowReason),
 	}
 	traceCandidateCount := 0
 	traceCandidates := []evidenceCandidate{}
@@ -189,7 +188,9 @@ func (r *RetrievalRuntime) Search(ctx context.Context, tenantID string, req Sear
 					errorCode = "retrieval_cancelled"
 				}
 			}
-			_ = r.repo.RecordRetrievalTrace(tenantID, originalQuery, traceCandidateCount, traceCandidates, resp, time.Since(started), errorCode)
+			if err := r.repo.RecordRetrievalTrace(tenantID, originalQuery, traceCandidateCount, traceCandidates, resp, time.Since(started), errorCode); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}()
 	}
 
@@ -208,10 +209,33 @@ func (r *RetrievalRuntime) Search(ctx context.Context, tenantID string, req Sear
 	if err != nil {
 		return resp, err
 	}
+	routeDecision := ResolveDiagnosticRoute(req.RetrievalLevel, plan.Level, runtimeFeatures(r.settings))
+	if NormalizeRoutingMode(req.RoutingMode) == RoutingModeChat {
+		routeDecision = ResolveChatRoute(originalQuery, runtimeFeatures(r.settings))
+	}
+	if routeDecision.EffectiveLevel != plan.Level {
+		req.RetrievalLevel = routeDecision.EffectiveLevel
+		plan, err = buildQueryPlan(req, limit, r.settings)
+		if err != nil {
+			return resp, err
+		}
+	}
 	resp.OriginalQuery = plan.OriginalQuery
 	resp.EffectiveQuery = plan.EffectiveQuery
 	resp.QueryComplexity = plan.Complexity
+	resp.RequestedRetrievalLevel = routeDecision.RequestedLevel
 	resp.RetrievalLevel = plan.Level
+	resp.RoutingMode = routeDecision.RoutingMode
+	resp.PolicyMode = routeDecision.PolicyMode
+	resp.RouteReason = routeDecision.RouteReason
+	resp.ShadowLevel = routeDecision.ShadowLevel
+	resp.ShadowReason = routeDecision.ShadowReason
+	resp.RouteDegraded = routeDecision.Degraded
+	resp.RouteDegradationReason = routeDecision.RouteDegradationReason
+	resp.TracePolicyMode = routeDecision.PolicyMode
+	resp.TraceRouteReason = routeDecision.RouteReason
+	resp.TraceShadowLevel = routeDecision.ShadowLevel
+	resp.TraceShadowReason = routeDecision.ShadowReason
 	resp.QueryHistory = append([]string(nil), plan.QueryHistory...)
 	resp.TraceBudgetMs = plan.Timeout.Milliseconds()
 	resp.TraceCandidateLimit = plan.CandidateLimit
@@ -705,10 +729,18 @@ func (r *Repository) ListRetrievalTraces(tenantID string, limit int) ([]Retrieva
 			Warnings: []string{}, Candidates: []RetrievalCandidateTrace{}, Evidence: []RetrievalEvidenceTrace{},
 			QueryPlan: RetrievalQueryPlanTrace{QueryHistory: []string{}},
 		}
-		_ = json.Unmarshal([]byte(row.WarningsJSON), &item.Warnings)
-		_ = json.Unmarshal([]byte(row.CandidateTraceJSON), &item.Candidates)
-		_ = json.Unmarshal([]byte(row.EvidenceTraceJSON), &item.Evidence)
-		_ = json.Unmarshal([]byte(row.QueryPlanJSON), &item.QueryPlan)
+		if err := json.Unmarshal([]byte(row.WarningsJSON), &item.Warnings); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := json.Unmarshal([]byte(row.CandidateTraceJSON), &item.Candidates); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := json.Unmarshal([]byte(row.EvidenceTraceJSON), &item.Evidence); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := json.Unmarshal([]byte(row.QueryPlanJSON), &item.QueryPlan); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		if item.Warnings == nil {
 			item.Warnings = []string{}
 		}

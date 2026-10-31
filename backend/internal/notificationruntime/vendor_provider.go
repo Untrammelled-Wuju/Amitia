@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	amitialog "log"
 	"net/http"
 	"net/url"
 	"os"
@@ -250,7 +251,9 @@ func (p *HuaweiProvider) Send(ctx context.Context, endpoint DeviceEndpoint, enve
 		return result
 	}
 	var decoded map[string]any
-	_ = json.Unmarshal(responseBody, &decoded)
+	if err := json.Unmarshal(responseBody, &decoded); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	code := anyString(decoded["code"])
 	if code != "" && code != "80000000" {
 		result.ErrorCode = "hms_" + code
@@ -796,7 +799,9 @@ func (p *HonorProvider) Send(ctx context.Context, endpoint DeviceEndpoint, envel
 		return result
 	}
 	var decoded map[string]any
-	_ = json.Unmarshal(responseBody, &decoded)
+	if err := json.Unmarshal(responseBody, &decoded); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	code := anyInt(decoded["code"])
 	if code != 0 {
 		result.ErrorCode = fmt.Sprintf("honor_%d", code)

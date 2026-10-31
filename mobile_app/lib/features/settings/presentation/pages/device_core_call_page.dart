@@ -70,8 +70,9 @@ class _DeviceCoreCallPageState extends ConsumerState<DeviceCoreCallPage> {
         setState(() => _error = state['coreId'] != _core ? '云端服务提供者已从「$_core」切换为「${state['coreId']}」，当前调用已中断。' : 'Core 服务已暂停，当前调用已中断。');
         current?.cancel(_error);
       }
-    } catch (_) {
-      if (mounted && identical(current, _cancel) && _running) {
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+if (mounted && identical(current, _cancel) && _running) {
         setState(() => _error = '无法确认当前 Core 服务，调用已中断；恢复服务后再发起调用。');
         current?.cancel(_error);
       }

@@ -61,7 +61,7 @@ func setupDeviceAgentRouter(ctx *app.AppContext, services *AppServices) (*gin.En
 		}
 		if config.AppCfg.DesktopPetRuntime.Enabled {
 			if err := deviceAgentDesktopPetReady(services); err != nil {
-				c.JSON(503, gin.H{"code": 503, "msg": "not_ready", "data": gin.H{"status": "not_ready", "reason": err.Error()}})
+				c.JSON(503, gin.H{"code": 503, "msg": err.Error(), "data": gin.H{"status": "not_ready", "reason": err.Error()}})
 				return
 			}
 		}
@@ -240,7 +240,7 @@ func registerDeviceAgentDesktopPetRoutes(
 			Platform:          runtimeidentity.Platform(strings.TrimSpace(request.Platform)),
 			AppVersion:        strings.TrimSpace(request.AppVersion),
 		}); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": "failed to register device"})
+			c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": err.Error()})
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok"})
@@ -260,11 +260,11 @@ func registerDeviceAgentDesktopPetRoutes(
 			RuntimeID string `json:"runtimeId"`
 		}
 		if err := c.ShouldBindJSON(&request); err != nil || strings.TrimSpace(request.RuntimeID) == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "runtimeId is required"})
+			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
 			return
 		}
 		if err := services.DeviceRepository.RequireOwned(c.Request.Context(), string(actor.SpaceID), deviceID); err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"code": 404, "msg": "device not found"})
+			c.JSON(http.StatusNotFound, gin.H{"code": 404, "msg": err.Error()})
 			return
 		}
 		rawTicket, ticket, err := bootstrapTicketRepo.Create(
@@ -275,7 +275,7 @@ func registerDeviceAgentDesktopPetRoutes(
 			10*time.Minute,
 		)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": "failed to create bootstrap ticket"})
+			c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": err.Error()})
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{

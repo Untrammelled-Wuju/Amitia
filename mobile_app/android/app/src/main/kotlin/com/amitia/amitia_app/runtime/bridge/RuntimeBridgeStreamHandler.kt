@@ -61,14 +61,18 @@ internal class RuntimeBridgeStreamHandler(
                 runtimeAvailable = runtimeAvailable,
             )
             sink.success(mapped)
-        } catch (_: Exception) {
+        } catch (originalError64: Exception) {
+          originalError64.printStackTrace()
+
             try {
                 sink.error(
                     "RUNTIME_EVENT_EMIT_FAILED",
-                    "runtime snapshot event mapping failed",
+                    "runtime snapshot event mapping failed: ${originalError64.message ?: originalError64.javaClass.simpleName}",
                     null,
                 )
-            } catch (_: Exception) {
+            } catch (originalError71: Exception) {
+              originalError71.printStackTrace()
+
             }
         }
     }

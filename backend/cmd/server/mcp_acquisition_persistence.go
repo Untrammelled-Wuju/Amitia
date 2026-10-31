@@ -11,6 +11,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/mcpruntime/auth"
 	mcpservice "github.com/u-ai/backend/internal/extension/mcpruntime/service"
 	"gorm.io/gorm"
+	amitialog "log"
 )
 
 type mcpAcquisitionPersistence struct {
@@ -58,17 +59,25 @@ func (p *mcpAcquisitionPersistence) SaveMCPConfiguration(ctx context.Context, na
 	if len(env) > 0 {
 		raw, err := json.Marshal(env)
 		if err != nil {
-			_ = p.repository.DeleteServer(ctx, server.ID)
+			if err := p.repository.DeleteServer(ctx, server.ID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return "", err
 		}
 		reference, err := p.secrets.Put(ctx, "mcp/"+server.ID+"/stdio_env", raw)
 		if err != nil {
-			_ = p.repository.DeleteServer(ctx, server.ID)
+			if err := p.repository.DeleteServer(ctx, server.ID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return "", err
 		}
 		if _, err := p.repository.PutCredentialReference(ctx, server.ID, "stdio_env", reference, "", nil); err != nil {
-			_ = p.secrets.Delete(ctx, reference)
-			_ = p.repository.DeleteServer(ctx, server.ID)
+			if err := p.secrets.Delete(ctx, reference); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
+			if err := p.repository.DeleteServer(ctx, server.ID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return "", err
 		}
 	}
@@ -124,7 +133,9 @@ func (p *mcpExistingConnector) EnableExistingMCP(ctx context.Context, id string)
 	}
 	if err := runtime.Connections.Connect(ctx, id); err != nil {
 		input.Enabled = server.Enabled == 1
-		_, _ = p.repository.UpdateServer(context.WithoutCancel(ctx), id, input)
+		if _, err := p.repository.UpdateServer(context.WithoutCancel(ctx), id, input); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return err
 	}
 	return nil

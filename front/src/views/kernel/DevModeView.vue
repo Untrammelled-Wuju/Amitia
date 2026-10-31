@@ -448,8 +448,9 @@ function formatDate(s: string): string {
     const d = new Date(s);
     if (d.getTime() === 0 || isNaN(d.getTime())) return "-";
     return d.toLocaleString("zh-CN");
-  } catch {
-    return s;
+  } catch (error) {
+  console.error("[original-error]", error);
+return s;
   }
 }
 

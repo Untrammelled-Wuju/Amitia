@@ -11,9 +11,9 @@ type DisplayListenerRegistry interface {
 }
 
 type Listener struct {
-	mu        sync.RWMutex
-	subs      map[string]chan DisplayEvent
-	nextID    uint64
+	mu     sync.RWMutex
+	subs   map[string]chan DisplayEvent
+	nextID uint64
 }
 
 func NewListener() *Listener {
@@ -39,7 +39,7 @@ func (l *Listener) Subscribe() (<-chan DisplayEvent, func()) {
 	id := l.nextID
 	l.nextID++
 	ch := make(chan DisplayEvent, 8)
-	subID := string(rune('s'+id))
+	subID := string(rune('s' + id))
 	l.subs[subID] = ch
 	cancel := func() {
 		l.mu.Lock()

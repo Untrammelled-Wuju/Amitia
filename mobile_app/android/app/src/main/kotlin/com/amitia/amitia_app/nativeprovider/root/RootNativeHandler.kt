@@ -194,7 +194,9 @@ internal class RootNativeHandler(
         val suPath = suPaths.firstOrNull { path ->
             try {
                 File(path).exists()
-            } catch (_: Exception) {
+            } catch (originalError197: Exception) {
+              originalError197.printStackTrace()
+
                 false
             }
         }
@@ -237,7 +239,9 @@ internal class RootNativeHandler(
             }
             val output = process.inputStream.bufferedReader().readText()
             process.exitValue() == 0 && output.contains("uid=0")
-        } catch (_: Exception) {
+        } catch (originalError240: Exception) {
+          originalError240.printStackTrace()
+
             false
         }
     }

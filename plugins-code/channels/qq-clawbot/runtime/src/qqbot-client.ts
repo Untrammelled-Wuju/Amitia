@@ -111,7 +111,9 @@ export class QQBotClient {
         messageCount: this._messageCount,
         replyCount: this._replyCount,
       }), "utf-8")
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
 
   private loadStats(): void {
@@ -122,7 +124,9 @@ export class QQBotClient {
       const data = JSON.parse(fs.readFileSync(statsPath, "utf-8"))
       if (typeof data.messageCount === "number") this._messageCount = data.messageCount
       if (typeof data.replyCount === "number") this._replyCount = data.replyCount
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
 
   onMessage(handler: MessageHandler): void {
@@ -200,7 +204,9 @@ export class QQBotClient {
     this.ws.on("message", (data: Buffer) => {
       try {
         this.handleGatewayMessage(JSON.parse(data.toString()) as GatewayPayload)
-      } catch {}
+      } catch (error) {
+  console.error("[original-error]", error);
+}
     })
     this.ws.on("close", (code: number, reason: Buffer) => {
       const reasonStr = reason.toString()
@@ -460,7 +466,9 @@ export class QQBotClient {
     for (const handler of this.handlers) {
       try {
         void handler(msg)
-      } catch {}
+      } catch (error) {
+  console.error("[original-error]", error);
+}
     }
   }
 
@@ -604,8 +612,9 @@ export class QQBotClient {
       const buffer = Buffer.from(await resp.arrayBuffer())
       const contentType = resp.headers.get("content-type") || "image/png"
       return { buffer, contentType }
-    } catch {
-      return null
+    } catch (error) {
+  console.error("[original-error]", error);
+return null
     }
   }
 

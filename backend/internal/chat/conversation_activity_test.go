@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"testing"
 
@@ -18,7 +19,7 @@ func TestEnrichConversationActivityUsesActiveAndTerminalTurns(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer sqlDB.Close()
-	if err := db.AutoMigrate(&Conversation{}, &AssistantTurn{}); err != nil {
+	if err := db.AutoMigrate(&Conversation{}, &AssistantTurn{}, &AssistantTurnItem{}, &Message{}); err != nil {
 		t.Fatal(err)
 	}
 	conversations := []Conversation{
@@ -36,6 +37,27 @@ func TestEnrichConversationActivityUsesActiveAndTerminalTurns(t *testing.T) {
 	if err := db.Create(&turns).Error; err != nil {
 		t.Fatal(err)
 	}
+	if err := db.Create(&AssistantTurnItem{
+		ID:             "item-1",
+		TurnID:         "turn-1",
+		ConversationID: "running",
+		Sequence:       1,
+		ItemType:       assistantTurnItemToolCall,
+		Status:         "running",
+		ToolName:       "workspace.read",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&Message{
+		ID:             "message-1",
+		ConversationID: "running",
+		Role:           "assistant",
+		Sequence:       2,
+		MsgType:        "text",
+		Content:        "最新回复",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
 	if err := EnrichConversationActivity(db, conversations); err != nil {
 		t.Fatal(err)
 	}
@@ -51,5 +73,27 @@ func TestEnrichConversationActivityUsesActiveAndTerminalTurns(t *testing.T) {
 	}
 	if conversations[1].HasUnread {
 		t.Fatalf("read conversation remained unread: %+v", conversations[1])
+	}
+	bodies, err := EnrichConversationActivityBodies(db, []json.RawMessage{
+		json.RawMessage(`{"id":"running","lastReadTurnSequence":0}`),
+		json.RawMessage(`{"id":"terminal","lastReadTurnSequence":1}`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var running map[string]any
+	if err := json.Unmarshal(bodies[0], &running); err != nil {
+		t.Fatal(err)
+	}
+	if running["activityLabel"] != "正在使用 workspace.read 工具" || running["lastMessage"] != "最新回复" || running["unreadCompletedCount"] != float64(1) {
+		t.Fatalf("running conversation projection = %+v", running)
+	}
+	var terminal map[string]any
+	if err := json.Unmarshal(bodies[1], &terminal); err != nil {
+		t.Fatal(err)
+	}
+	if terminal["unreadCompletedCount"] != float64(0) ||
+		terminal["activityLabel"] != nil && terminal["activityLabel"] != "" {
+		t.Fatalf("terminal conversation projection = %+v", terminal)
 	}
 }

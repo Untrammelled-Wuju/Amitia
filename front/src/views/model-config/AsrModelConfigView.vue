@@ -276,8 +276,9 @@ async function pollResult() {
       recognizing.value = false;
       if (["success", "completed"].includes(taskStatus.value.toLowerCase())) ElMessage.success("ASR 识别完成");
     }
-  } catch {
-    stopPolling();
+  } catch (error) {
+  console.error("[original-error]", error);
+stopPolling();
     recognizing.value = false;
   }
 }

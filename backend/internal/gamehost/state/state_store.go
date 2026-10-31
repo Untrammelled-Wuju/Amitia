@@ -24,13 +24,13 @@ type Options struct {
 }
 
 type LatestStateStore struct {
-	mu               sync.RWMutex
-	index            map[string]*stateEntry
-	runtimeIndex     map[domain.RuntimeInstanceID]map[string]struct{}
-	serviceIndex     map[domain.RuntimeInstanceID]map[domain.ServiceID]map[string]struct{}
-	pluginIndex      map[domain.PluginID]map[string]*struct{}
-	opts             Options
-	globalVersion    atomic.Uint64
+	mu            sync.RWMutex
+	index         map[string]*stateEntry
+	runtimeIndex  map[domain.RuntimeInstanceID]map[string]struct{}
+	serviceIndex  map[domain.RuntimeInstanceID]map[domain.ServiceID]map[string]struct{}
+	pluginIndex   map[domain.PluginID]map[string]*struct{}
+	opts          Options
+	globalVersion atomic.Uint64
 }
 
 type stateEntry struct {

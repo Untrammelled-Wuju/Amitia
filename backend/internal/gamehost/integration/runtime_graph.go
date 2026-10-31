@@ -770,20 +770,20 @@ func resolveGamePluginEntry(bundlePath, moduleID, entryPoint string) (string, er
 }
 
 type bootServiceInfo struct {
-	ID                ghdomain.ServiceID
-	ModuleID          string
-	Name              string
-	RuntimeType       string
-	EntryPoint        string
-	Protocol          string
-	Env               map[string]string
-	Arguments         []string
-	Network           trusted_service.ServiceNetworkPolicy
-	Limits            trusted_service.ServiceResourceLimits
-	ExecutablePath    string
-	ExecutableSHA256  string
-	IntegrityValue    string
-	Dependencies      []trusted_service.LibraryDep
+	ID                  ghdomain.ServiceID
+	ModuleID            string
+	Name                string
+	RuntimeType         string
+	EntryPoint          string
+	Protocol            string
+	Env                 map[string]string
+	Arguments           []string
+	Network             trusted_service.ServiceNetworkPolicy
+	Limits              trusted_service.ServiceResourceLimits
+	ExecutablePath      string
+	ExecutableSHA256    string
+	IntegrityValue      string
+	Dependencies        []trusted_service.LibraryDep
 	SandboxReadOnlyRoot string
 }
 

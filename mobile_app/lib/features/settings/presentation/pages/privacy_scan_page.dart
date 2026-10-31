@@ -66,7 +66,9 @@ class _PrivacyScanPageState extends ConsumerState<PrivacyScanPage> {
       Map<String, dynamic> deletionStats = const {};
       try {
         deletionStats = await service.deletionStats();
-      } catch (_) {}
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
       final findings = _maps(data['items']);
       final history = _maps(data['history']);
       if (!mounted) return;
@@ -185,7 +187,9 @@ class _PrivacyScanPageState extends ConsumerState<PrivacyScanPage> {
           _latest = history.isEmpty ? null : history.first;
         }
       });
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
   }
 
   Future<void> _export(String format) async {
@@ -317,7 +321,9 @@ class _PrivacyScanPageState extends ConsumerState<PrivacyScanPage> {
     try {
       final stats = await ref.read(privacyServiceProvider).deletionStats();
       if (mounted) setState(() => _deletionStats = stats);
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
   }
 
   @override

@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	amitialog "log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -104,8 +105,12 @@ func writeInstanceFile(path string, value string) error {
 		os.O_WRONLY,
 		0o600,
 	); err == nil {
-		_ = file.Sync()
-		_ = file.Close()
+		if err := file.Sync(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := file.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return os.Rename(tmp, path)
 }

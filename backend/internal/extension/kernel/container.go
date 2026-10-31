@@ -59,6 +59,7 @@ import (
 	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/pkg/resourceuri"
+	amitialog "log"
 )
 
 type MCPDuplicateDetail struct {
@@ -85,7 +86,7 @@ type ChannelSandboxPolicySource interface {
 }
 
 type Container struct {
-	ChannelSandbox ChannelSandboxPolicySource
+	ChannelSandbox         ChannelSandboxPolicySource
 	Store                  *sqlite.Store
 	TransactionManager     *sqlite.TransactionManager
 	DefinitionRepository   domain.DefinitionRepository
@@ -387,7 +388,9 @@ func (c *Container) Recover(ctx context.Context) error {
 				Module:    string(cd.ModuleID),
 				Enabled:   true,
 			}
-			_ = c.ContributionRegistry.Register(bc)
+			if err := c.ContributionRegistry.Register(bc); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		extSubject := enablement.StateSubject{
 			Kind: enablement.SubjectExtension,
@@ -395,9 +398,13 @@ func (c *Container) Recover(ctx context.Context) error {
 		}
 		if _, err := c.EnablementStore.Get(ctx, extSubject); err != nil {
 			if inst.EnablementState == domain.EnablementEnabled {
-				_ = c.EnablementStore.SetEnablement(ctx, extSubject, enablement.EnablementEnabled)
+				if err := c.EnablementStore.SetEnablement(ctx, extSubject, enablement.EnablementEnabled); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			} else {
-				_ = c.EnablementStore.SetEnablement(ctx, extSubject, enablement.EnablementDisabled)
+				if err := c.EnablementStore.SetEnablement(ctx, extSubject, enablement.EnablementDisabled); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 		}
 		if inst.EnablementState == domain.EnablementEnabled || inst.EnablementState == domain.EnablementRequiresRecovery {
@@ -427,7 +434,9 @@ func (c *Container) Recover(ctx context.Context) error {
 					ID:       string(mod.ID),
 					ParentID: string(inst.ExtensionID),
 				}
-				_ = c.EnablementStore.SetEnablement(ctx, modSubject, enablement.EnablementEnabled)
+				if err := c.EnablementStore.SetEnablement(ctx, modSubject, enablement.EnablementEnabled); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 
 			gameHostOwned := make(map[domain.ModuleID]struct{})
@@ -530,5 +539,7 @@ func (c *Container) markRequiresRecovery(ctx context.Context, inst domain.Extens
 	}
 	inst.EnablementState = domain.EnablementRequiresRecovery
 	inst.UpdatedAt = time.Now().UTC()
-	_ = c.InstallationRepository.PutInstallation(ctx, inst)
+	if err := c.InstallationRepository.PutInstallation(ctx, inst); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }

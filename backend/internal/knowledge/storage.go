@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	amitialog "log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -78,9 +79,13 @@ func (s *Storage) Save(ctx context.Context, tenantID, sourceID string, revision 
 	tmpName := tmp.Name()
 	committed := false
 	defer func() {
-		_ = tmp.Close()
+		if err := tmp.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		if !committed {
-			_ = os.Remove(tmpName)
+			if err := os.Remove(tmpName); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}()
 

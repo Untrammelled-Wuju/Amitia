@@ -45,7 +45,7 @@ export const validateCommand: CliCommand = {
       });
       return {
         exitCode: EXIT_CODES.VALIDATION_OR_BUILD_FAILURE,
-        message: "manifest parse error",
+        message: `manifest parse error: ${cause instanceof Error ? cause.message : String(cause)}`,
         reports,
       };
     }

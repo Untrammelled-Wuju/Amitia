@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/decision"
+	amitialog "log"
 )
 
 func (c *MultiAgentCoordinator) persistCoordinationSnapshot(ctx context.Context, ac *activeCoordination) error {
@@ -63,7 +64,9 @@ func (c *MultiAgentCoordinator) persistCoordinationSnapshot(ctx context.Context,
 	observer := c.durableObserver
 	c.mu.Unlock()
 	if observer != nil {
-		_ = observer(ctx, parentID, *ref)
+		if err := observer(ctx, parentID, *ref); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return nil
 }

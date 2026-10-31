@@ -248,8 +248,9 @@ async function loadSettings() {
       settings.value = { ...settings.value, ...result };
       if (!uploadUrl.value) uploadUrl.value = result.uploadUrl || result.defaultUploadUrl;
     }
-  } catch {
-    // Keep the editable field usable even when the Core is unreachable.
+  } catch (error) {
+  console.error("[original-error]", error);
+// Keep the editable field usable even when the Core is unreachable.
   }
 }
 
@@ -257,8 +258,9 @@ async function loadVersion() {
   try {
     const result = await get<{ version?: string }>("/api/version");
     appVersion.value = String(result?.version || "");
-  } catch {
-    appVersion.value = "";
+  } catch (error) {
+  console.error("[original-error]", error);
+appVersion.value = "";
   }
 }
 
@@ -267,8 +269,9 @@ async function loadTickets() {
   try {
     const result = await get<{ tickets?: FeedbackTicket[] }>("/api/user-feedback/tickets", { limit: 20 });
     tickets.value = Array.isArray(result?.tickets) ? result.tickets : [];
-  } catch {
-    tickets.value = [];
+  } catch (error) {
+  console.error("[original-error]", error);
+tickets.value = [];
   } finally {
     loadingTickets.value = false;
   }
@@ -281,8 +284,9 @@ async function saveUploadUrl() {
     if (result) settings.value = { ...settings.value, ...result };
     uploadUrl.value = settings.value.uploadUrl;
     ElMessage.success("上报地址已保存");
-  } catch {
-    ElMessage.error("保存上报地址失败");
+  } catch (error) {
+  console.error("[original-error]", error);
+ElMessage.error(error instanceof Error ? error.message : String(error));
   } finally {
     savingTarget.value = false;
   }
@@ -325,7 +329,7 @@ function handleScreenshotInput(event: Event) {
   reader.onerror = () => {
     screenshot.value = null;
     input.value = "";
-    ElMessage.error("读取截图失败");
+    ElMessage.error(reader.error?.message || String(reader.error || "读取截图失败"));
   };
   reader.readAsDataURL(raw);
 }
@@ -343,8 +347,9 @@ async function openPreview() {
     previewUrl.value = String(result?.uploadUrl || payload.uploadUrl || "");
     previewRawOpen.value = [];
     previewVisible.value = true;
-  } catch {
-    ElMessage.error("生成上传预览失败");
+  } catch (error) {
+  console.error("[original-error]", error);
+ElMessage.error(error instanceof Error ? error.message : String(error));
   } finally {
     previewing.value = false;
   }
@@ -367,8 +372,9 @@ async function submit() {
     clearClientErrors();
     await loadTickets();
     window.setTimeout(() => { void loadTickets(); }, 1500);
-  } catch {
-    ElMessage.error("提交失败，请稍后重试");
+  } catch (error) {
+  console.error("[original-error]", error);
+ElMessage.error(error instanceof Error ? error.message : String(error));
   } finally {
     submitting.value = false;
   }
@@ -379,8 +385,9 @@ async function retry(row: FeedbackTicket) {
   try {
     await post(`/api/user-feedback/tickets/${encodeURIComponent(row.id)}/retry`);
     await loadTickets();
-  } catch {
-    ElMessage.error("重试上传失败");
+  } catch (error) {
+  console.error("[original-error]", error);
+ElMessage.error(error instanceof Error ? error.message : String(error));
   } finally {
     retrying.value = "";
   }

@@ -78,7 +78,9 @@ const emit = defineEmits<{
 
 const access = useCoreConfigurationAccess();
 let loadedContext = "";
-onMounted(async () => { try { loadedContext = await access.requireAccess(); } catch {} });
+onMounted(async () => { try { loadedContext = await access.requireAccess(); } catch (error) {
+  console.error("[original-error]", error);
+} });
 const cleanupLoading = ref(false);
 const rotateLoading = ref(false);
 const dbCheckLoading = ref(false);
@@ -101,8 +103,9 @@ async function runCleanup() {
       detail: `释放空间: ${fmtBytes(result.freedBytes)}`,
     };
     emit("actionCompleted");
-  } catch {
-    actionResult.value = { message: "清理失败", type: "error" };
+  } catch (error) {
+  console.error("[original-error]", error);
+actionResult.value = { message: "清理失败", type: "error" };
   } finally {
     cleanupLoading.value = false;
   }
@@ -127,8 +130,9 @@ async function runLogRotate() {
           : undefined,
     };
     emit("actionCompleted");
-  } catch {
-    actionResult.value = { message: "日志轮转失败", type: "error" };
+  } catch (error) {
+  console.error("[original-error]", error);
+actionResult.value = { message: "日志轮转失败", type: "error" };
   } finally {
     rotateLoading.value = false;
   }
@@ -150,8 +154,9 @@ async function runDbCheck() {
       detail: result.errors.length > 0 ? result.errors.join("; ") : undefined,
     };
     emit("actionCompleted");
-  } catch {
-    actionResult.value = { message: "数据库检查失败", type: "error" };
+  } catch (error) {
+  console.error("[original-error]", error);
+actionResult.value = { message: "数据库检查失败", type: "error" };
   } finally {
     dbCheckLoading.value = false;
   }

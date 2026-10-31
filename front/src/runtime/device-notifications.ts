@@ -79,7 +79,9 @@ export function legacyReplyPreferences(): Partial<DeviceNotificationPreferences>
       }
     }
     if (sound !== null) result.soundEnabled = sound === "true";
-  } catch {}
+  } catch (error) {
+  console.error("[original-error]", error);
+}
   return result;
 }
 
@@ -87,7 +89,9 @@ export function clearLegacyReplyPreferences() {
   try {
     localStorage.removeItem("amitia.reply-notifications.desktop.v1");
     localStorage.removeItem("amitia.reply-sound.desktop.v1");
-  } catch {}
+  } catch (error) {
+  console.error("[original-error]", error);
+}
 }
 
 export async function ensureNotificationDevice(deviceId: string): Promise<DeviceNotificationEndpoint> {

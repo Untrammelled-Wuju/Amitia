@@ -113,7 +113,9 @@ internal class AndroidProotComponent(
         if (closed.compareAndSet(false, true)) {
             synchronized(lock) {
                 mainSession.set(null)
-                for (session in activeSessions.values) { try { session.close() } catch (_: Throwable) {} }
+                for (session in activeSessions.values) { try { session.close() } catch (originalError116: Throwable) {
+                  originalError116.printStackTrace()
+                } }
                 activeSessions.clear()
             }
         }

@@ -6,17 +6,17 @@ type Validator interface {
 }
 
 type Case struct {
-	Name        string
-	Description string
-	Input       []byte
+	Name          string
+	Description   string
+	Input         []byte
 	ExpectedValid bool
-	Validator   Validator
+	Validator     Validator
 }
 
 func NewCase(name, description string, input []byte, expectedValid bool, validator Validator) Case {
 	return Case{
 		Name:          name,
-		Description:     description,
+		Description:   description,
 		Input:         input,
 		ExpectedValid: expectedValid,
 		Validator:     validator,

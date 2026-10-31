@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	amitialog "log"
 )
 
 type PackageSecurityService struct {
@@ -201,7 +202,9 @@ func (s *PackageSecurityService) Commit(ctx context.Context, staging *StagingAre
 		TargetPath: targetPath,
 	})
 	if err == nil {
-		_ = s.snapshot.Retain(ctx, snapshot.SnapshotID)
+		if err := s.snapshot.Retain(ctx, snapshot.SnapshotID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 
 	result, err := s.committer.Commit(ctx, staging, CommitRequest{

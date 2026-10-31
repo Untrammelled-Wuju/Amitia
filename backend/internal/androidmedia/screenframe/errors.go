@@ -13,27 +13,27 @@ func (e *Error) Error() string {
 }
 
 const (
-	ErrUnsupported              = "SCREEN_FRAME_UNSUPPORTED"
-	ErrPermissionRequired       = "SCREEN_FRAME_PERMISSION_REQUIRED"
-	ErrSessionAlreadyActive     = "SCREEN_FRAME_SESSION_ALREADY_ACTIVE"
-	ErrSessionNotFound          = "SCREEN_FRAME_SESSION_NOT_FOUND"
-	ErrSessionStale             = "SCREEN_FRAME_SESSION_STALE"
-	ErrSessionNotRunning        = "SCREEN_FRAME_SESSION_NOT_RUNNING"
-	ErrInvalidDisplay           = "SCREEN_FRAME_DISPLAY_UNAVAILABLE"
-	ErrInvalidFPS               = "SCREEN_FRAME_INVALID_FPS"
-	ErrInvalidSize              = "SCREEN_FRAME_INVALID_SIZE"
-	ErrProjectionStartFailed    = "SCREEN_FRAME_PROJECTION_START_FAILED"
-	ErrProjectionRevoked        = "SCREEN_FRAME_PROJECTION_REVOKED"
-	ErrImageReaderFailed        = "SCREEN_FRAME_IMAGE_READER_FAILED"
-	ErrFrameNotAvailable        = "SCREEN_FRAME_FRAME_NOT_AVAILABLE"
-	ErrResourceLimit            = "SCREEN_FRAME_RESOURCE_LIMIT"
-	ErrEncodeFailed             = "SCREEN_FRAME_ENCODE_FAILED"
-	ErrArtifactFailed           = "SCREEN_FRAME_ARTIFACT_FAILED"
-	ErrCancelled                = "SCREEN_FRAME_CANCELLED"
-	ErrTimeout                  = "SCREEN_FRAME_TIMEOUT"
-	ErrBlockedNativeHost        = "BLOCKED_ANDROID_NATIVE_HOST_SOURCE"
-	ErrFrozenContract           = "BLOCKED_BY_FROZEN_A_CONTRACT"
-	ErrBlockedByB34             = "BLOCKED_BY_B34_SCREENSHOT_PIPELINE"
+	ErrUnsupported           = "SCREEN_FRAME_UNSUPPORTED"
+	ErrPermissionRequired    = "SCREEN_FRAME_PERMISSION_REQUIRED"
+	ErrSessionAlreadyActive  = "SCREEN_FRAME_SESSION_ALREADY_ACTIVE"
+	ErrSessionNotFound       = "SCREEN_FRAME_SESSION_NOT_FOUND"
+	ErrSessionStale          = "SCREEN_FRAME_SESSION_STALE"
+	ErrSessionNotRunning     = "SCREEN_FRAME_SESSION_NOT_RUNNING"
+	ErrInvalidDisplay        = "SCREEN_FRAME_DISPLAY_UNAVAILABLE"
+	ErrInvalidFPS            = "SCREEN_FRAME_INVALID_FPS"
+	ErrInvalidSize           = "SCREEN_FRAME_INVALID_SIZE"
+	ErrProjectionStartFailed = "SCREEN_FRAME_PROJECTION_START_FAILED"
+	ErrProjectionRevoked     = "SCREEN_FRAME_PROJECTION_REVOKED"
+	ErrImageReaderFailed     = "SCREEN_FRAME_IMAGE_READER_FAILED"
+	ErrFrameNotAvailable     = "SCREEN_FRAME_FRAME_NOT_AVAILABLE"
+	ErrResourceLimit         = "SCREEN_FRAME_RESOURCE_LIMIT"
+	ErrEncodeFailed          = "SCREEN_FRAME_ENCODE_FAILED"
+	ErrArtifactFailed        = "SCREEN_FRAME_ARTIFACT_FAILED"
+	ErrCancelled             = "SCREEN_FRAME_CANCELLED"
+	ErrTimeout               = "SCREEN_FRAME_TIMEOUT"
+	ErrBlockedNativeHost     = "BLOCKED_ANDROID_NATIVE_HOST_SOURCE"
+	ErrFrozenContract        = "BLOCKED_BY_FROZEN_A_CONTRACT"
+	ErrBlockedByB34          = "BLOCKED_BY_B34_SCREENSHOT_PIPELINE"
 )
 
 const (
@@ -43,7 +43,7 @@ const (
 var kernelCodeMapping = map[string]string{
 	ErrUnsupported:           "not_available",
 	ErrPermissionRequired:    "user_action_required",
-	ErrSessionAlreadyActive:   "resource_limit_exceeded",
+	ErrSessionAlreadyActive:  "resource_limit_exceeded",
 	ErrSessionNotFound:       "not_available",
 	ErrSessionStale:          "conflict",
 	ErrSessionNotRunning:     "not_available",

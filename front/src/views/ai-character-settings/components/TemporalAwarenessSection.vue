@@ -143,8 +143,9 @@ async function load() {
           item.anchorType === "birthday",
       ) || null;
     birthday.value = birthdayAnchor.value?.localDate || "";
-  } catch {
-    ElMessage.error("加载角色时间设置失败");
+  } catch (error) {
+  console.error("[original-error]", error);
+ElMessage.error(error instanceof Error ? error.message : String(error));
   } finally {
     loading.value = false;
   }
@@ -203,8 +204,9 @@ async function save() {
         : await createTemporalAnchor(payload);
     }
     ElMessage.success("角色时间设置已保存");
-  } catch {
-    ElMessage.error("保存角色时间设置失败");
+  } catch (error) {
+  console.error("[original-error]", error);
+ElMessage.error(error instanceof Error ? error.message : String(error));
   } finally {
     saving.value = false;
   }

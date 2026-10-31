@@ -112,8 +112,9 @@ export class RpcConnection {
       this.pending.delete(id);
       try {
         pending.reject(error);
-      } catch (e) {
-      }
+      } catch (error) {
+  process.stderr.write("[original-error] " + String(error) + "\n");
+}
     }
   }
 
@@ -124,6 +125,7 @@ export class RpcConnection {
     try {
       process.stdout.write(JSON.stringify(message) + "\n");
     } catch (e) {
+  process.stderr.write("[original-error] " + String(e) + "\n");
       this.closed = true;
     }
   }
@@ -137,6 +139,7 @@ export class RpcConnection {
     try {
       message = JSON.parse(trimmed);
     } catch (e) {
+  process.stderr.write("[original-error] " + String(e) + "\n");
       return;
     }
     if (!message || message.jsonrpc !== "2.0") {

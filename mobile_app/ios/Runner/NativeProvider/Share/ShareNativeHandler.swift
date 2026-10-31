@@ -150,6 +150,8 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
                     removed += 1
                 }
             } catch {
+              print("[original-error] \(error)")
+
                 continue
             }
         }

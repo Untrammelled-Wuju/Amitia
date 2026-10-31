@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	amitialog "log"
 )
 
 type EditRequest struct {
@@ -236,7 +237,9 @@ func (e *Engine) Edit(ctx context.Context, authority Request, edit EditRequest) 
 	if edit.Kind == "conversation" {
 		if raw, changed := edit.Changes["projectId"]; changed {
 			var projectID string
-			_ = json.Unmarshal(raw, &projectID)
+			if err := json.Unmarshal(raw, &projectID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			projectID = strings.TrimSpace(projectID)
 			document["projectId"] = body(projectID)
 			if projectID != "" {

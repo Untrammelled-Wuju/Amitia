@@ -105,8 +105,9 @@ export class NamespacedSecretClient implements SecretReferenceClient {
     } finally {
       try {
         await lease.release();
-      } catch {
-        // ignore release errors
+      } catch (error) {
+  console.error("[original-error]", error);
+// ignore release errors
       }
     }
   }

@@ -3,6 +3,7 @@ package memorypolicy
 import (
 	"encoding/json"
 	"errors"
+	amitialog "log"
 	"math"
 	"strings"
 	"time"
@@ -142,12 +143,16 @@ func (state Lifecycle) Reinforce(now time.Time) Lifecycle {
 func ReadLifecycle(document map[string]json.RawMessage, now time.Time) Lifecycle {
 	var state Lifecycle
 	encoded, _ := json.Marshal(document)
-	_ = json.Unmarshal(encoded, &state)
+	if err := json.Unmarshal(encoded, &state); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	if state.RetentionLevel == 0 {
 		var content struct {
 			Importance int `json:"importance"`
 		}
-		_ = json.Unmarshal(document["content"], &content)
+		if err := json.Unmarshal(document["content"], &content); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		state = NewLifecycle(0, false, content.Importance, now)
 	}
 	return state
@@ -156,7 +161,9 @@ func ReadLifecycle(document map[string]json.RawMessage, now time.Time) Lifecycle
 func WriteLifecycle(document map[string]json.RawMessage, state Lifecycle) {
 	encoded, _ := json.Marshal(state)
 	var fields map[string]json.RawMessage
-	_ = json.Unmarshal(encoded, &fields)
+	if err := json.Unmarshal(encoded, &fields); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	for key, value := range fields {
 		document[key] = value
 	}

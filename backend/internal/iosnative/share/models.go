@@ -9,30 +9,30 @@ const (
 )
 
 type IOSShareStatus struct {
-	Supported             bool       `json:"supported"`
-	CanSend               bool       `json:"canSend"`
-	CanReceive            bool       `json:"canReceive"`
-	ShareExtensionInstalled bool    `json:"shareExtensionInstalled"`
-	NativeHostReady       bool       `json:"nativeHostReady"`
-	MaxResources          int        `json:"maxResources"`
-	MaxSingleResourceBytes int64    `json:"maxSingleResourceBytes"`
-	MaxTotalBytes         int64      `json:"maxTotalBytes"`
-	MaxTextBytes          int64      `json:"maxTextBytes"`
-	State                 ShareState `json:"state"`
+	Supported               bool       `json:"supported"`
+	CanSend                 bool       `json:"canSend"`
+	CanReceive              bool       `json:"canReceive"`
+	ShareExtensionInstalled bool       `json:"shareExtensionInstalled"`
+	NativeHostReady         bool       `json:"nativeHostReady"`
+	MaxResources            int        `json:"maxResources"`
+	MaxSingleResourceBytes  int64      `json:"maxSingleResourceBytes"`
+	MaxTotalBytes           int64      `json:"maxTotalBytes"`
+	MaxTextBytes            int64      `json:"maxTextBytes"`
+	State                   ShareState `json:"state"`
 }
 
 type IOSShareSendRequest struct {
-	Text        string           `json:"text,omitempty"`
-	Subject     string           `json:"subject,omitempty"`
-	URL         string           `json:"url,omitempty"`
-	Resources   []string         `json:"resources,omitempty"`
-	ShareTitle  string           `json:"shareTitle,omitempty"`
-	Preview     *IOSSharePreview `json:"preview,omitempty"`
+	Text       string           `json:"text,omitempty"`
+	Subject    string           `json:"subject,omitempty"`
+	URL        string           `json:"url,omitempty"`
+	Resources  []string         `json:"resources,omitempty"`
+	ShareTitle string           `json:"shareTitle,omitempty"`
+	Preview    *IOSSharePreview `json:"preview,omitempty"`
 }
 
 type IOSSharePreview struct {
-	Title           string `json:"title,omitempty"`
-	Subtitle        string `json:"subtitle,omitempty"`
+	Title            string `json:"title,omitempty"`
+	Subtitle         string `json:"subtitle,omitempty"`
 	ImageResourceURI string `json:"imageResourceUri,omitempty"`
 }
 
@@ -67,14 +67,14 @@ type IOSIncomingShareManifest struct {
 }
 
 type IOSPendingShare struct {
-	ShareID        string                 `json:"shareId"`
-	CreatedAt      string                 `json:"createdAt"`
-	Text           string                 `json:"text,omitempty"`
-	Subject        string                 `json:"subject,omitempty"`
-	ResourceCount  int                    `json:"resourceCount"`
-	TotalBytes     int64                  `json:"totalBytes"`
-	SourceHostHint string                 `json:"sourceHostHint,omitempty"`
-	Stale          bool                   `json:"stale"`
+	ShareID        string `json:"shareId"`
+	CreatedAt      string `json:"createdAt"`
+	Text           string `json:"text,omitempty"`
+	Subject        string `json:"subject,omitempty"`
+	ResourceCount  int    `json:"resourceCount"`
+	TotalBytes     int64  `json:"totalBytes"`
+	SourceHostHint string `json:"sourceHostHint,omitempty"`
+	Stale          bool   `json:"stale"`
 }
 
 type IOSPendingShares struct {
@@ -87,9 +87,9 @@ type IOSConsumeShareRequest struct {
 }
 
 type IOSConsumeShareResult struct {
-	Consumed      bool   `json:"consumed"`
-	ResourceCount int    `json:"resourceCount"`
-	TotalBytes    int64  `json:"totalBytes"`
+	Consumed      bool  `json:"consumed"`
+	ResourceCount int   `json:"resourceCount"`
+	TotalBytes    int64 `json:"totalBytes"`
 }
 
 type IOSPeekShareRequest struct {
@@ -97,8 +97,8 @@ type IOSPeekShareRequest struct {
 }
 
 type IOSPeekShareResult struct {
-	Found        bool   `json:"found"`
-	ResourceCount int   `json:"resourceCount"`
+	Found         bool `json:"found"`
+	ResourceCount int  `json:"resourceCount"`
 }
 
 type IOSDismissShareRequest struct {
@@ -106,13 +106,13 @@ type IOSDismissShareRequest struct {
 }
 
 type IOSStagingCleanupRequest struct {
-	RemoveStale      bool  `json:"removeStale"`
-	MaxStaleAgeHours int   `json:"maxStaleAgeHours"`
+	RemoveStale      bool `json:"removeStale"`
+	MaxStaleAgeHours int  `json:"maxStaleAgeHours"`
 }
 
 type IOSStagingCleanupResult struct {
-	Removed  int    `json:"removed"`
-	Scanned  int    `json:"scanned"`
+	Removed int `json:"removed"`
+	Scanned int `json:"scanned"`
 }
 
 type IOSLimitedDeleteConfirmRequest struct {

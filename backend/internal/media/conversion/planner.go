@@ -17,8 +17,8 @@ func NewPlanner(capabilities *ffmpeg.Capabilities) *Planner {
 
 func (p *Planner) Plan(source *metadata.MediaMetadata, request ConvertRequest) (*ConversionPlan, error) {
 	plan := &ConversionPlan{
-		Backend:   "ffmpeg",
-		Warnings:  []string{},
+		Backend:  "ffmpeg",
+		Warnings: []string{},
 	}
 
 	if request.Video != nil {
@@ -130,13 +130,13 @@ func (p *Planner) planVideo(source *metadata.MediaMetadata, request ConvertReque
 func (p *Planner) planAudio(source *metadata.MediaMetadata, request ConvertRequest) (AudioPlan, error) {
 	a := request.Audio
 	plan := AudioPlan{
-		Mode:             a.Mode,
-		Codec:            a.Codec,
-		BitRateKbps:      a.BitRateKbps,
-		SampleRate:       a.SampleRate,
-		Channels:         a.Channels,
-		ChannelLayout:    a.ChannelLayout,
-		StreamIndex:      a.StreamIndex,
+		Mode:              a.Mode,
+		Codec:             a.Codec,
+		BitRateKbps:       a.BitRateKbps,
+		SampleRate:        a.SampleRate,
+		Channels:          a.Channels,
+		ChannelLayout:     a.ChannelLayout,
+		StreamIndex:       a.StreamIndex,
 		NormalizeLoudness: a.NormalizeLoudness,
 	}
 

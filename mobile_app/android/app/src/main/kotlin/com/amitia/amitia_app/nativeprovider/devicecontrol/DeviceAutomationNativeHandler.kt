@@ -339,9 +339,13 @@ internal class DeviceAutomationNativeHandler(
             }
             latch.await(timeoutMs, TimeUnit.MILLISECONDS)
             result.get()
-        } catch (_: SecurityException) {
+        } catch (originalError342: SecurityException) {
+          originalError342.printStackTrace()
+
             null
-        } catch (_: Throwable) {
+        } catch (originalError344: Throwable) {
+          originalError344.printStackTrace()
+
             null
         }
     }
@@ -365,9 +369,13 @@ internal class DeviceAutomationNativeHandler(
             latch.await(timeoutMs, TimeUnit.MILLISECONDS)
             runCatching { manager.removeUpdates(listener) }
             result.get()
-        } catch (_: SecurityException) {
+        } catch (originalError368: SecurityException) {
+          originalError368.printStackTrace()
+
             null
-        } catch (_: Throwable) {
+        } catch (originalError370: Throwable) {
+          originalError370.printStackTrace()
+
             runCatching { manager.removeUpdates(listener) }
             null
         }
@@ -527,8 +535,10 @@ internal class DeviceAutomationNativeHandler(
                     "launchable" to (pm.getLaunchIntentForPackage(packageName) != null),
                 ),
             )
-        } catch (_: PackageManager.NameNotFoundException) {
-            error(request, "DEVICE_APP_NOT_FOUND", "application is not visible or not installed: $packageName")
+        } catch (originalError530: PackageManager.NameNotFoundException) {
+          originalError530.printStackTrace()
+
+            error(request, "DEVICE_APP_NOT_FOUND", "application is not visible or not installed: $packageName: ${originalError530.message ?: originalError530.javaClass.simpleName}")
         } catch (t: Throwable) {
             error(request, "DEVICE_APP_INFO_FAILED", t.message ?: "app info failed")
         }

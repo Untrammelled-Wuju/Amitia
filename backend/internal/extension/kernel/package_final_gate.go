@@ -16,6 +16,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
+	amitialog "log"
 )
 
 type PackageFinalGateResult struct {
@@ -368,7 +369,9 @@ func (r *Runtime) verifyPackageFinalGateWithGuard(ctx context.Context, operation
 			signerKeyID := artifactForTrust.SignerKeyID
 			blockVersion := func(reason string) {
 				if operation.TargetVersion != "" {
-					_ = r.container.PackageRepository.BlockPackageVersion(ctx, operation.ExtensionID, operation.TargetVersion, reason)
+					if err := r.container.PackageRepository.BlockPackageVersion(ctx, operation.ExtensionID, operation.TargetVersion, reason); err != nil {
+						amitialog.Printf("[original-error] %v", err)
+					}
 				}
 			}
 			if blocked := r.container.TrustService.Blocklist().Check(packageHash); blocked != nil {

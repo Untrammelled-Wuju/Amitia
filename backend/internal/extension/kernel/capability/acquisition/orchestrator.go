@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
+	amitialog "log"
 )
 
 // InstallOrchestrator selects the appropriate Installer for a candidate and
@@ -71,7 +72,9 @@ func (o *InstallOrchestrator) Install(
 	if err != nil {
 		// Best-effort rollback even on partial install (InstalledCapability
 		// may be zero-valued, in which case rollback is a no-op).
-		_ = installer.Rollback(ctx, installed)
+		if err := installer.Rollback(ctx, installed); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		result := &AcquisitionResult{
 			State:       StateRolledBack,
 			CandidateID: candidate.ID,

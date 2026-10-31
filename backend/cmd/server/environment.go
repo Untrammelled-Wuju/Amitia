@@ -56,12 +56,16 @@ func (e *Environment) StartAll() error {
 	for _, entry := range e.entries {
 		if err := e.supervisor.Register(entry.ProcessSpec); err != nil {
 			log.Printf("[Env] %s 注册失败: %v", entry.ID, err)
-			_ = e.stopStarted(ctx)
+			if err := e.stopStarted(ctx); err != nil {
+				log.Printf("[original-error] %v", err)
+			}
 			return fmt.Errorf("register %s: %w", entry.ID, err)
 		}
 		if err := e.supervisor.Start(ctx, entry.ID); err != nil {
 			log.Printf("[Env] %s 启动失败: %v", entry.ID, err)
-			_ = e.stopStarted(ctx)
+			if err := e.stopStarted(ctx); err != nil {
+				log.Printf("[original-error] %v", err)
+			}
 			return fmt.Errorf("start %s: %w", entry.ID, err)
 		}
 	}

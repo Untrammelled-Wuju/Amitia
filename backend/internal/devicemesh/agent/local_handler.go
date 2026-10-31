@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -115,7 +116,9 @@ func (h *LocalHandler) SetLocalCoreID(core string) {
 					return
 				case <-ticker.C:
 					call, cancel := context.WithTimeout(ctx, 45*time.Second)
-					_ = h.FollowSuccessor(call)
+					if err := h.FollowSuccessor(call); err != nil {
+						log.Printf("[original-error] %v", err)
+					}
 					cancel()
 				}
 			}
@@ -254,7 +257,7 @@ func (h *LocalHandler) handleSignClaim(c *gin.Context) {
 	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 32<<10)
 	if err := c.ShouldBindJSON(&request); err != nil {
-		c.JSON(400, gin.H{"message": "身份签名参数无效"})
+		c.JSON(400, gin.H{"message": err.Error()})
 		return
 	}
 	identity, err := h.identity.Load()
@@ -305,6 +308,9 @@ func (e *BindingError) Error() string { return e.Message }
 func bindingFailure(status int, payload gin.H) error {
 	code, _ := payload["code"].(string)
 	message, _ := payload["message"].(string)
+	if message == "" {
+		message = fmt.Sprint(payload)
+	}
 	return &BindingError{Status: status, Code: code, Message: message}
 }
 

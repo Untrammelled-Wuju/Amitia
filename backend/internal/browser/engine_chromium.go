@@ -8,6 +8,7 @@ import (
 
 	proc "github.com/u-ai/backend/internal/platform/process"
 	"github.com/u-ai/backend/internal/runtimehost"
+	amitialog "log"
 )
 
 type chromiumEngine struct {
@@ -140,8 +141,12 @@ func (e *chromiumEngine) Stop(ctx context.Context) error {
 	defer cancel()
 
 	if supervisor != nil && processID != "" {
-		_ = supervisor.Stop(stopCtx, processID)
-		_ = supervisor.Unregister(processID)
+		if err := supervisor.Stop(stopCtx, processID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := supervisor.Unregister(processID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	} else if proc != nil {
 		if err := proc.gracefulClose(stopCtx); err != nil {
 			proc.kill()
@@ -376,7 +381,9 @@ func (e *chromiumEngine) handleDisconnect() {
 	proc := e.process
 	e.process = nil
 	if e.supervisor != nil && e.processID != "" {
-		_ = e.supervisor.Unregister(e.processID)
+		if err := e.supervisor.Unregister(e.processID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	e.processID = ""
 	e.mu.Unlock()
@@ -944,9 +951,5 @@ func safeErrorMessage(err error) string {
 	if err == nil {
 		return ""
 	}
-	msg := err.Error()
-	if len(msg) > 256 {
-		return msg[:256] + "..."
-	}
-	return msg
+	return err.Error()
 }

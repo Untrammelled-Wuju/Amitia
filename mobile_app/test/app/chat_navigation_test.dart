@@ -342,6 +342,7 @@ void main() {
       characterId: 'c1',
       title: '小夏',
       messageCount: 1,
+      lastMessage: '最近一条消息内容',
       updatedAt: DateTime.now().toIso8601String(),
     );
 
@@ -354,7 +355,8 @@ void main() {
     expect(find.text('今天'), findsNothing);
     expect(find.text('昨天'), findsNothing);
     expect(find.text('更早'), findsNothing);
-    expect(find.text('1 条消息'), findsOneWidget);
+    expect(find.text('最近一条消息内容'), findsOneWidget);
+    expect(find.text('1 条消息'), findsNothing);
     expect(
       tester.getSize(
         find.byWidgetPredicate(

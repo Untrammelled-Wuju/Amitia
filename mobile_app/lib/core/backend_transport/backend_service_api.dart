@@ -5,6 +5,7 @@ import 'http/backend_http_method.dart';
 import 'http/backend_http_request.dart';
 import 'http/backend_http_response.dart';
 import 'http/backend_http_transport.dart';
+import '../errors/original_error.dart';
 
 class ServiceApiException implements Exception {
   final int code;
@@ -20,7 +21,7 @@ class ServiceApiException implements Exception {
   factory ServiceApiException.fromTransportError(BackendTransportError e) {
     return ServiceApiException(
       code: _mapErrorCodeToApiCode(e.code),
-      message: _mapErrorCodeToMessage(e.code),
+      message: originalErrorText(e),
       detail: e.path,
     );
   }
@@ -32,6 +33,9 @@ class ServiceApiException implements Exception {
   factory ServiceApiException.timeout() {
     return ServiceApiException(code: 10002, message: '请求超时');
   }
+
+  @override
+  String toString() => message;
 
   static int _mapErrorCodeToApiCode(BackendTransportErrorCode code) {
     switch (code) {
@@ -60,37 +64,6 @@ class ServiceApiException implements Exception {
     }
   }
 
-  static String _mapErrorCodeToMessage(BackendTransportErrorCode code) {
-    switch (code) {
-      case BackendTransportErrorCode.authenticationFailed:
-        return '认证失败';
-      case BackendTransportErrorCode.requestTimeout:
-        return '请求超时';
-      case BackendTransportErrorCode.connectionRefused:
-      case BackendTransportErrorCode.connectionReset:
-        return '核心服务连接中...';
-      case BackendTransportErrorCode.networkUnreachable:
-        return '网络不可达';
-      case BackendTransportErrorCode.badRequest:
-        return '请求错误';
-      case BackendTransportErrorCode.notFound:
-        return '资源不存在';
-      case BackendTransportErrorCode.conflict:
-        return '资源冲突';
-      case BackendTransportErrorCode.validationFailed:
-        return '数据验证失败';
-      case BackendTransportErrorCode.serverError:
-        return '服务器内部错误';
-      case BackendTransportErrorCode.serviceUnavailable:
-        return '服务暂不可用';
-      case BackendTransportErrorCode.transportClosed:
-        return '传输已关闭';
-      case BackendTransportErrorCode.requestCancelled:
-        return '请求已取消';
-      default:
-        return '网络错误';
-    }
-  }
 }
 
 class BackendServiceApi {
@@ -292,7 +265,7 @@ class BackendServiceApi {
     final data = response.data;
     if (data is Map<String, dynamic> && data.containsKey('code')) {
       final rawCode = data['code'];
-      final message = data['message'] as String? ?? data['msg'] as String? ?? '';
+      final message = originalErrorMapText(data);
       final detail = data['detail'] as String?;
       if (rawCode is num) {
         final code = rawCode.toInt();
@@ -331,7 +304,7 @@ class BackendServiceApi {
     final data = response.data;
     if (data is Map<String, dynamic> && data.containsKey('code')) {
       final code = data['code'] as int? ?? 0;
-      final message = data['message'] as String? ?? data['msg'] as String? ?? '';
+      final message = originalErrorMapText(data);
       final detail = data['detail'] as String?;
       if (code != 200) {
         throw ServiceApiException(code: code, message: message, detail: detail);
@@ -349,7 +322,7 @@ class BackendServiceApi {
     final data = response.data;
     if (data is Map<String, dynamic> && data.containsKey('code')) {
       final rawCode = data['code'];
-      final message = data['message'] as String? ?? data['msg'] as String? ?? '';
+      final message = originalErrorMapText(data);
       if (rawCode is num && rawCode.toInt() != 200) {
         throw ServiceApiException(code: rawCode.toInt(), message: message);
       }

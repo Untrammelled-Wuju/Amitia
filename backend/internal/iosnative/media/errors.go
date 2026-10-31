@@ -37,7 +37,7 @@ const (
 	ErrVideoRecordInterrupted        = "MEDIA_VIDEO_RECORD_INTERRUPTED"
 	ErrVideoRecordOutcomeUnknown     = "MEDIA_VIDEO_RECORD_OUTCOME_UNKNOWN"
 	ErrVideoRecordDurationExceeded   = "MEDIA_VIDEO_RECORD_DURATION_EXCEEDED"
-	ErrMicrophoneNotAuthorized        = "MEDIA_MICROPHONE_NOT_AUTHORIZED"
+	ErrMicrophoneNotAuthorized       = "MEDIA_MICROPHONE_NOT_AUTHORIZED"
 	ErrMicrophoneDenied              = "MEDIA_MICROPHONE_DENIED"
 	ErrMicrophoneRestricted          = "MEDIA_MICROPHONE_RESTRICTED"
 	ErrAudioRecordFailed             = "MEDIA_AUDIO_RECORD_FAILED"

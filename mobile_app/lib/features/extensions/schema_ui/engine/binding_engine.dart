@@ -130,8 +130,9 @@ bool evaluateCondition(dynamic value, String op, dynamic expected) {
       if (value is String && expected is String) {
         try {
           return RegExp(expected).hasMatch(value);
-        } catch (_) {
-          return false;
+        } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return false;
         }
       }
       return false;

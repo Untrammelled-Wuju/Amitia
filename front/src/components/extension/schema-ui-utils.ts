@@ -270,8 +270,9 @@ export function evaluateCondition(value: unknown, op: string, expected: unknown)
       if (typeof value !== "string" || typeof expected !== "string") return false;
       try {
         return new RegExp(expected).test(value);
-      } catch {
-        return false;
+      } catch (error) {
+  console.error("[original-error]", error);
+return false;
       }
     case "not_null":
       return value !== null && value !== undefined;
@@ -352,8 +353,9 @@ export function resolveBinding(
       try {
         const raw = window.localStorage.getItem(path);
         resolved = raw == null ? undefined : safeJsonParse(raw);
-      } catch {
-        resolved = undefined;
+      } catch (error) {
+  console.error("[original-error]", error);
+resolved = undefined;
       }
       break;
     }
@@ -381,8 +383,9 @@ export function resolveBinding(
 function safeJsonParse(raw: string): unknown {
   try {
     return JSON.parse(raw);
-  } catch {
-    return raw;
+  } catch (error) {
+  console.error("[original-error]", error);
+return raw;
   }
 }
 
@@ -627,8 +630,9 @@ export function toText(v: unknown): string {
   if (typeof v === "number" || typeof v === "boolean") return String(v);
   try {
     return JSON.stringify(v);
-  } catch {
-    return String(v);
+  } catch (error) {
+  console.error("[original-error]", error);
+return String(v);
   }
 }
 

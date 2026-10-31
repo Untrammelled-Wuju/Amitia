@@ -82,6 +82,32 @@ func TestRuntimeModulesHealthRoute(t *testing.T) {
 	}
 }
 
+func TestLegacyConfigMigrationRoutesRemoved(t *testing.T) {
+	router := newRuntimeModulesTestRouter(t)
+	registered := make(map[string]bool)
+	for _, route := range router.Routes() {
+		registered[route.Method+" "+route.Path] = true
+	}
+	for _, route := range []string{
+		http.MethodPost + " /config/export",
+		http.MethodPost + " /config/import/preview",
+		http.MethodPost + " /config/import/confirm",
+	} {
+		if registered[route] {
+			t.Fatalf("legacy route still registered: %s", route)
+		}
+	}
+	for _, route := range []string{
+		http.MethodPost + " /data-portability/exports/preview",
+		http.MethodPost + " /data-portability/exports",
+		http.MethodPost + " /data-portability/imports/inspect",
+	} {
+		if !registered[route] {
+			t.Fatalf("single data portability route missing: %s", route)
+		}
+	}
+}
+
 func TestRuntimeHealthRouteKeepsResponseShape(t *testing.T) {
 	router := newRuntimeModulesTestRouter(t)
 

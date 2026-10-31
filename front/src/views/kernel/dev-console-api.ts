@@ -348,22 +348,70 @@ export async function closeSession(id: string): Promise<void> {
 export async function exportDiagnostics(params?: ConsoleFilter): Promise<Blob> {
   const filter: ConsoleFilter = params || {};
   const [overview, invocations, events, hooks, tasks, uiSessions, storage, permissions, scopes, resources, lifecycle, logs, performance, migration, compatibility, hostApiAudits] = await Promise.all([
-    fetchOverview().catch(() => null),
-    fetchInvocations(filter).catch(() => []),
-    fetchEvents(filter).catch(() => []),
-    fetchHooks(filter).catch(() => []),
-    fetchTasks(filter).catch(() => []),
-    fetchUISessions(filter).catch(() => []),
-    fetchStorage(filter).catch(() => []),
-    fetchPermissions(filter).catch(() => []),
-    fetchScopes().catch(() => []),
-    fetchResources(filter).catch(() => []),
-    fetchLifecycle(filter).catch(() => []),
-    fetchLogs(filter).catch(() => []),
-    fetchPerformance(filter).catch(() => []),
-    fetchMigration().catch(() => []),
-    fetchCompatibility().catch(() => []),
-    fetchHostAPIAudits({ extension: filter.extension, limit: 1000 }).catch(() => ({ entries: [], total: 0, limit: 1000, offset: 0 })),
+    fetchOverview().catch((error) => {
+  console.error("[original-error]", error);
+  return null;
+}),
+    fetchInvocations(filter).catch((error) => {
+  console.error("[original-error]", error);
+  return [];
+}),
+    fetchEvents(filter).catch((error) => {
+  console.error("[original-error]", error);
+  return [];
+}),
+    fetchHooks(filter).catch((error) => {
+  console.error("[original-error]", error);
+  return [];
+}),
+    fetchTasks(filter).catch((error) => {
+  console.error("[original-error]", error);
+  return [];
+}),
+    fetchUISessions(filter).catch((error) => {
+  console.error("[original-error]", error);
+  return [];
+}),
+    fetchStorage(filter).catch((error) => {
+  console.error("[original-error]", error);
+  return [];
+}),
+    fetchPermissions(filter).catch((error) => {
+  console.error("[original-error]", error);
+  return [];
+}),
+    fetchScopes().catch((error) => {
+  console.error("[original-error]", error);
+  return [];
+}),
+    fetchResources(filter).catch((error) => {
+  console.error("[original-error]", error);
+  return [];
+}),
+    fetchLifecycle(filter).catch((error) => {
+  console.error("[original-error]", error);
+  return [];
+}),
+    fetchLogs(filter).catch((error) => {
+  console.error("[original-error]", error);
+  return [];
+}),
+    fetchPerformance(filter).catch((error) => {
+  console.error("[original-error]", error);
+  return [];
+}),
+    fetchMigration().catch((error) => {
+  console.error("[original-error]", error);
+  return [];
+}),
+    fetchCompatibility().catch((error) => {
+  console.error("[original-error]", error);
+  return [];
+}),
+    fetchHostAPIAudits({ extension: filter.extension, limit: 1000 }).catch((error) => {
+      console.error("[original-error]", error);
+      return { entries: [], total: 0, limit: 1000, offset: 0 };
+    }),
   ]);
   const payload = {
     exportedAt: new Date().toISOString(),

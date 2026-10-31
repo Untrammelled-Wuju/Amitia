@@ -637,8 +637,9 @@ async function loadStatus() {
     const s: KernelStatus = await getKernelStatus();
     statusReady.value = s.ready;
     statusCount.value = s.count;
-  } catch {
-    statusReady.value = false;
+  } catch (error) {
+  console.error("[original-error]", error);
+statusReady.value = false;
   }
 }
 
@@ -1028,7 +1029,10 @@ async function checkRowUpdate(row: KernelExtension) {
   } catch (e: any) {
     ElMessage.error("检查更新失败: " + (e?.message || e));
     if (activeDownloadId.value) {
-      await cancelExtensionUpdateDownload(activeDownloadId.value).catch(() => undefined);
+      await cancelExtensionUpdateDownload(activeDownloadId.value).catch((error) => {
+  console.error("[original-error]", error);
+  return undefined;
+});
       activeDownloadId.value = "";
     }
     installDialogVisible.value = false;
@@ -1059,7 +1063,10 @@ async function waitForExtensionUpdateDownload(downloadId: string) {
 
 async function cancelInstallFlow() {
   if (activeDownloadId.value) {
-    await cancelExtensionUpdateDownload(activeDownloadId.value).catch(() => undefined);
+    await cancelExtensionUpdateDownload(activeDownloadId.value).catch((error) => {
+  console.error("[original-error]", error);
+  return undefined;
+});
     activeDownloadId.value = "";
   }
   installDialogVisible.value = false;
@@ -1082,8 +1089,9 @@ function formatDate(s: string): string {
   if (!s) return "";
   try {
     return new Date(s).toLocaleString("zh-CN");
-  } catch {
-    return s;
+  } catch (error) {
+  console.error("[original-error]", error);
+return s;
   }
 }
 

@@ -87,8 +87,9 @@ export function resolveDockerBin(configured = "", home = os.homedir(), platform 
       try {
         fs.accessSync(candidate, fs.constants.F_OK)
         return candidate
-      } catch {
-        continue
+      } catch (error) {
+  console.error("[original-error]", error);
+continue
       }
     }
     return "docker.exe"
@@ -98,8 +99,9 @@ export function resolveDockerBin(configured = "", home = os.homedir(), platform 
     try {
       fs.accessSync(candidate, fs.constants.X_OK)
       return candidate
-    } catch {
-      continue
+    } catch (error) {
+  console.error("[original-error]", error);
+continue
     }
   }
   return "docker"
@@ -253,7 +255,10 @@ async function postJson(url: string, payload: Record<string, unknown>, timeoutMs
       body: JSON.stringify(payload),
       signal: controller.signal,
     })
-    const body = (await response.json().catch(() => ({}))) as Record<string, unknown>
+    const body = (await response.json().catch((error) => {
+      console.error("[original-error]", error)
+      return {}
+    })) as Record<string, unknown>
     return { ok: response.ok, status: response.status, body }
   } finally {
     clearTimeout(timer)

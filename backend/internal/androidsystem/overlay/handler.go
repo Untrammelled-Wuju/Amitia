@@ -141,9 +141,9 @@ func (h *OverlayHandler) handlePermissionRequest(ctx context.Context, request an
 		RequestID: request.RequestID,
 		Status:    "success",
 		Result: map[string]any{
-			"opened":            result.Opened,
+			"opened":             result.Opened,
 			"userActionRequired": result.UserActionRequired,
-			"permissionGranted": result.PermissionGranted,
+			"permissionGranted":  result.PermissionGranted,
 		},
 	}
 }

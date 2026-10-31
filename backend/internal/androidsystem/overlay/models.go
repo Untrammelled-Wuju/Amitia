@@ -1,14 +1,14 @@
 package overlay
 
 type CapabilityState struct {
-	Supported          bool   `json:"supported"`
-	PermissionRequired bool   `json:"permissionRequired"`
-	PermissionGranted  bool   `json:"permissionGranted"`
-	NativeHostReady    bool   `json:"nativeHostReady"`
+	Supported          bool `json:"supported"`
+	PermissionRequired bool `json:"permissionRequired"`
+	PermissionGranted  bool `json:"permissionGranted"`
+	NativeHostReady    bool `json:"nativeHostReady"`
 
-	CanCreate          bool   `json:"canCreate"`
-	CanUpdate          bool   `json:"canUpdate"`
-	CanInteract        bool   `json:"canInteract"`
+	CanCreate   bool `json:"canCreate"`
+	CanUpdate   bool `json:"canUpdate"`
+	CanInteract bool `json:"canInteract"`
 
 	ActiveCount        int    `json:"activeCount"`
 	UserActionRequired bool   `json:"userActionRequired"`
@@ -16,23 +16,23 @@ type CapabilityState struct {
 }
 
 type OverlayInstance struct {
-	ID        string `json:"overlayId"`
-	Kind      string `json:"kind"`
+	ID   string `json:"overlayId"`
+	Kind string `json:"kind"`
 
-	Visible   bool   `json:"visible"`
-	Focusable bool   `json:"focusable"`
-	Touchable bool   `json:"touchable"`
+	Visible   bool `json:"visible"`
+	Focusable bool `json:"focusable"`
+	Touchable bool `json:"touchable"`
 
-	X         int    `json:"x"`
-	Y         int    `json:"y"`
-	Width     int    `json:"width"`
-	Height    int    `json:"height"`
+	X      int `json:"x"`
+	Y      int `json:"y"`
+	Width  int `json:"width"`
+	Height int `json:"height"`
 
 	Gravity   string `json:"gravity"`
 	DisplayID int    `json:"displayId"`
 
-	CreatedAt int64  `json:"createdAt"`
-	UpdatedAt int64  `json:"updatedAt"`
+	CreatedAt int64 `json:"createdAt"`
+	UpdatedAt int64 `json:"updatedAt"`
 }
 
 type TextContent struct {
@@ -42,37 +42,37 @@ type TextContent struct {
 }
 
 type CardContent struct {
-	Title    string         `json:"title,omitempty"`
-	Body     string         `json:"body,omitempty"`
-	ImageURI string         `json:"imageUri,omitempty"`
+	Title    string          `json:"title,omitempty"`
+	Body     string          `json:"body,omitempty"`
+	ImageURI string          `json:"imageUri,omitempty"`
 	Actions  []OverlayAction `json:"actions,omitempty"`
 }
 
 type OverlayAction struct {
-	ID          string         `json:"id"`
-	Label       string         `json:"label"`
-	Action      string         `json:"action"`
-	ToolID      string         `json:"toolId,omitempty"`
-	ToolInput   map[string]any `json:"toolInput,omitempty"`
+	ID        string         `json:"id"`
+	Label     string         `json:"label"`
+	Action    string         `json:"action"`
+	ToolID    string         `json:"toolId,omitempty"`
+	ToolInput map[string]any `json:"toolInput,omitempty"`
 }
 
 type CreateRequest struct {
-	Kind      string         `json:"kind"`
-	Content   map[string]any `json:"content"`
+	Kind    string         `json:"kind"`
+	Content map[string]any `json:"content"`
 
-	X         *int            `json:"x,omitempty"`
-	Y         *int            `json:"y,omitempty"`
-	Width     *int            `json:"width,omitempty"`
-	Height    *int            `json:"height,omitempty"`
+	X      *int `json:"x,omitempty"`
+	Y      *int `json:"y,omitempty"`
+	Width  *int `json:"width,omitempty"`
+	Height *int `json:"height,omitempty"`
 
-	Gravity   string          `json:"gravity,omitempty"`
+	Gravity string `json:"gravity,omitempty"`
 
-	Focusable *bool           `json:"focusable,omitempty"`
-	Touchable *bool           `json:"touchable,omitempty"`
+	Focusable *bool `json:"focusable,omitempty"`
+	Touchable *bool `json:"touchable,omitempty"`
 
-	Draggable *bool           `json:"draggable,omitempty"`
+	Draggable *bool `json:"draggable,omitempty"`
 
-	TTLms     *int64          `json:"ttlMs,omitempty"`
+	TTLms *int64 `json:"ttlMs,omitempty"`
 }
 
 type CreateResult struct {
@@ -83,19 +83,19 @@ type UpdateRequest struct {
 	OverlayID string         `json:"overlayId"`
 	Content   map[string]any `json:"content,omitempty"`
 
-	X         *int            `json:"x,omitempty"`
-	Y         *int            `json:"y,omitempty"`
-	Width     *int            `json:"width,omitempty"`
-	Height    *int            `json:"height,omitempty"`
+	X      *int `json:"x,omitempty"`
+	Y      *int `json:"y,omitempty"`
+	Width  *int `json:"width,omitempty"`
+	Height *int `json:"height,omitempty"`
 
-	Gravity   string          `json:"gravity,omitempty"`
+	Gravity string `json:"gravity,omitempty"`
 
-	Focusable *bool           `json:"focusable,omitempty"`
-	Touchable *bool           `json:"touchable,omitempty"`
+	Focusable *bool `json:"focusable,omitempty"`
+	Touchable *bool `json:"touchable,omitempty"`
 
-	Draggable *bool           `json:"draggable,omitempty"`
+	Draggable *bool `json:"draggable,omitempty"`
 
-	TTLms     *int64          `json:"ttlMs,omitempty"`
+	TTLms *int64 `json:"ttlMs,omitempty"`
 }
 
 type UpdateResult struct {
@@ -136,30 +136,30 @@ type ListResult struct {
 }
 
 type PermissionResult struct {
-	Opened           bool `json:"opened"`
+	Opened             bool `json:"opened"`
 	UserActionRequired bool `json:"userActionRequired"`
-	PermissionGranted bool `json:"permissionGranted"`
+	PermissionGranted  bool `json:"permissionGranted"`
 }
 
 const (
-	OverlayKindText  = "text"
-	OverlayKindImage = "image"
-	OverlayKindCard  = "card"
+	OverlayKindText   = "text"
+	OverlayKindImage  = "image"
+	OverlayKindCard   = "card"
 	OverlayKindStatus = "status"
 	OverlayKindCustom = "custom"
 
-	StateAvailable       = "available"
-	StateUnsupported     = "unsupported"
-	StateHostUnavailable = "host_unavailable"
+	StateAvailable          = "available"
+	StateUnsupported        = "unsupported"
+	StateHostUnavailable    = "host_unavailable"
 	StatePermissionRequired = "permission_required"
-	StateReady           = "ready"
+	StateReady              = "ready"
 )
 
 const (
-	ActionDismiss   = "dismiss"
-	ActionEmitEvent = "emit_event"
+	ActionDismiss    = "dismiss"
+	ActionEmitEvent  = "emit_event"
 	ActionInvokeTool = "invoke_tool"
-	ActionOpenApp   = "open_app"
+	ActionOpenApp    = "open_app"
 )
 
 const (

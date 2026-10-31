@@ -329,7 +329,9 @@ internal class UITreeNativeHandler(
                 value.valueAt(index)?.let { result.addAll(it) }
             }
             if (result.isNotEmpty()) result else service.windows.orEmpty()
-        } catch (_: Throwable) {
+        } catch (originalError332: Throwable) {
+          originalError332.printStackTrace()
+
             service.windows.orEmpty()
         }
     }

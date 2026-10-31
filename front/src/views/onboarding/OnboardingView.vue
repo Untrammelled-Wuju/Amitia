@@ -152,8 +152,9 @@ async function onHealthCheckDone() {
       await router.replace("/chat");
       return;
     }
-  } catch {
-    // If status cannot be read, stay in the normal onboarding flow.
+  } catch (error) {
+  console.error("[original-error]", error);
+// If status cannot be read, stay in the normal onboarding flow.
   }
   await nextStage();
 }
@@ -185,8 +186,9 @@ function checkRemoteConnection() {
     .then((res) => {
       remoteStatusText.value = res.ok ? "连接成功" : `服务器返回 ${res.status}`;
     })
-    .catch(() => {
-      remoteStatusText.value = "无法连接，请检查地址";
+    .catch((error) => {
+  console.error("[original-error]", error);
+remoteStatusText.value = "无法连接，请检查地址";
     })
     .finally(() => {
       clearTimeout(timeout);

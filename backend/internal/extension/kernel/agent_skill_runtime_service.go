@@ -23,6 +23,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/enablement"
 	"github.com/u-ai/backend/internal/extension/kernel/observability"
 	"github.com/u-ai/backend/internal/extension/kernel/skill"
+	amitialog "log"
 )
 
 const (
@@ -263,7 +264,9 @@ func (s *AgentSkillRuntime) SetEnabled(ctx context.Context, spaceID, skillID str
 		}
 	}
 	if s.catalog != nil {
-		_ = s.catalog.SetEnabledForSpace(definition.OwnerSpaceID, definition.ExtensionID, definition.ContributionID, enabled)
+		if err := s.catalog.SetEnabledForSpace(definition.OwnerSpaceID, definition.ExtensionID, definition.ContributionID, enabled); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return nil
 }
@@ -724,7 +727,9 @@ func (s *AgentSkillRuntime) recordResourceRead(ctx context.Context, scope Invoca
 	record.ResourcePaths = append(record.ResourcePaths, resource.Path)
 	round.records[definition.StateID()] = record
 	s.mu.Unlock()
-	_ = s.saveActivation(ctx, record)
+	if err := s.saveActivation(ctx, record); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (s *AgentSkillRuntime) ensureRoundLocked(key string) *agentSkillRuntimeRound {

@@ -18,15 +18,15 @@ const (
 )
 
 type DisplayService struct {
-	store       *DisplayStore
-	classifier  *DisplayClassifier
-	listener    *Listener
-	resolver    *DefaultResolver
-	topology    *TopologyAdapter
-	policy      DisplaySelectionPolicy
-	startedAt   time.Time
-	eventLog    []DisplayEvent
-	nativecap   DisplayCapability
+	store      *DisplayStore
+	classifier *DisplayClassifier
+	listener   *Listener
+	resolver   *DefaultResolver
+	topology   *TopologyAdapter
+	policy     DisplaySelectionPolicy
+	startedAt  time.Time
+	eventLog   []DisplayEvent
+	nativecap  DisplayCapability
 }
 
 type DisplayCapability interface {
@@ -124,20 +124,20 @@ func (s *DisplayService) handleStatus(ctx context.Context, req capability.Androi
 	}
 
 	return successResponseDisplay(req, map[string]any{
-		"supported":                          status.Supported,
-		"displayCount":                       status.DisplayCount,
-		"defaultDisplayId":                   status.DefaultDisplayID,
-		"secondaryDisplaySupported":          status.SecondaryDisplaySupported,
-		"presentationDisplayCount":           status.PresentationDisplayCount,
-		"managedVirtualDisplayCount":         status.ManagedVirtualDisplayCount,
-		"uiTreeMultiDisplaySupported":        status.UITreeMultiDisplaySupported,
-		"gestureMultiDisplaySupported":       status.GestureMultiDisplaySupported,
-		"screenshotMultiDisplaySupported":    status.ScreenshotMultiDisplaySupported,
-		"screenFrameMultiDisplaySupported":   status.ScreenFrameMultiDisplaySupported,
-		"topologySupported":                  status.TopologySupported,
-		"generation":                         status.Generation,
-		"state":                              status.State,
-		"reason":                             status.Reason,
+		"supported":                        status.Supported,
+		"displayCount":                     status.DisplayCount,
+		"defaultDisplayId":                 status.DefaultDisplayID,
+		"secondaryDisplaySupported":        status.SecondaryDisplaySupported,
+		"presentationDisplayCount":         status.PresentationDisplayCount,
+		"managedVirtualDisplayCount":       status.ManagedVirtualDisplayCount,
+		"uiTreeMultiDisplaySupported":      status.UITreeMultiDisplaySupported,
+		"gestureMultiDisplaySupported":     status.GestureMultiDisplaySupported,
+		"screenshotMultiDisplaySupported":  status.ScreenshotMultiDisplaySupported,
+		"screenFrameMultiDisplaySupported": status.ScreenFrameMultiDisplaySupported,
+		"topologySupported":                status.TopologySupported,
+		"generation":                       status.Generation,
+		"state":                            status.State,
+		"reason":                           status.Reason,
 	})
 }
 

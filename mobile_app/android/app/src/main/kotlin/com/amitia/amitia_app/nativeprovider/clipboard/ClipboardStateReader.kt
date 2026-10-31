@@ -22,6 +22,8 @@ internal class ClipboardStateReader(context: Context) {
         val hasPrimaryClip = try {
             clipboardManager.hasPrimaryClip()
         } catch (e: Exception) {
+          e.printStackTrace()
+
             false
         }
 
@@ -54,6 +56,8 @@ internal class ClipboardStateReader(context: Context) {
         val hasPrimaryClip = try {
             clipboardManager.hasPrimaryClip()
         } catch (e: Exception) {
+          e.printStackTrace()
+
             false
         }
 

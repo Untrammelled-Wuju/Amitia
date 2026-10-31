@@ -305,7 +305,9 @@ async function fetchHealth() {
     if (res.data?.model) {
       health.value = { ...health.value, ...res.data };
     }
-  } catch {}
+  } catch (error) {
+  console.error("[original-error]", error);
+}
 }
 
 async function fetchActiveCharacter() {
@@ -314,7 +316,9 @@ async function fetchActiveCharacter() {
     try {
       const dc = JSON.parse(cached);
       if (dc.name) currentCharName.value = dc.name;
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
   try {
     const res = await apiClient.get("/api/characters");
@@ -337,7 +341,9 @@ async function fetchActiveCharacter() {
         );
       }
     }
-  } catch {}
+  } catch (error) {
+  console.error("[original-error]", error);
+}
 }
 
 async function fetchSpaceProfile() {
@@ -346,8 +352,9 @@ async function fetchSpaceProfile() {
     const profile = res.data?.data || res.data;
     authUsername.value = String(profile?.displayName || profile?.nickname || "本地用户");
     appStore.setAvatar(String(profile?.avatar || ""));
-  } catch {
-    authUsername.value = "本地用户";
+  } catch (error) {
+  console.error("[original-error]", error);
+authUsername.value = "本地用户";
   }
 }
 

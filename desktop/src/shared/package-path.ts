@@ -38,7 +38,9 @@ export function caseFoldPackagePath(raw: string): string {
 }
 
 export function tryNormalizePackagePath(raw: string): string | null {
-  try { return normalizePackagePath(raw); } catch { return null; }
+  try { return normalizePackagePath(raw); } catch (error) {
+  console.error("[original-error]", error);
+return null; }
 }
 
 export function encodePackagePathForUrl(raw: string): string {
@@ -50,7 +52,9 @@ export function decodePackagePathFromUrl(encodedPath: string): string {
   const decoded = encodedPath.split("/").map((segment) => {
     let value: string;
     try { value = decodeURIComponent(segment); }
-    catch { throw new Error(`PACKAGE_URL_PATH_ENCODING_INVALID: ${segment}`); }
+    catch (error) {
+  console.error("[original-error]", error);
+throw new Error(`PACKAGE_URL_PATH_ENCODING_INVALID: ${segment}: ${error instanceof Error ? error.message : String(error)}`); }
     if (value.includes("/") || value.includes("\\")) throw new Error(`PACKAGE_URL_PATH_ENCODED_SEPARATOR: ${segment}`);
     return value;
   });

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	amitialog "log"
 )
 
 type Policy struct {
@@ -122,7 +123,9 @@ func (s *Service) ensureSandboxRoot(channelID string) (root, workspaceID string)
 	}
 	safe := SanitizeChannel(channelID)
 	root = filepath.Join(base, "sandboxes", "channels", safe)
-	_ = os.MkdirAll(root, 0o700)
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	workspaceID = "sandbox-" + safe
 	return root, workspaceID
 }

@@ -33,7 +33,9 @@ function execute(name, program, args, cwd, timeout = 120000, requireGoTestEviden
         if (event.Action === 'pass' && typeof event.Test === 'string' && event.Test.length > 0) passingTests++;
         if (event.Action === 'pass' && !event.Test) passingPackages++;
         if (event.Action === 'fail') failingEvents++;
-      } catch {}
+      } catch (error) {
+  console.error("[original-error]", error);
+}
     }
     if (passingTests === 0 || passingPackages === 0 || failingEvents > 0) status = 'failed';
   }

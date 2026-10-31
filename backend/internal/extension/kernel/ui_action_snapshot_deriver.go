@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/scope"
+	amitialog "log"
 )
 
 func newUIActionSnapshotDeriver(scopeStore scope.ScopeStore, permissionStore permission.PermissionSnapshotStore, validator *permission.PermissionIDValidator) UIActionSnapshotDeriver {
@@ -64,7 +65,9 @@ func newUIActionSnapshotDeriver(scopeStore scope.ScopeStore, permissionStore per
 		if sourcePermission.ExpiresAt != nil {
 			lifetime = time.Until(*sourcePermission.ExpiresAt)
 			if lifetime <= 0 {
-				_ = scopeStore.DeleteSnapshot(context.Background(), derivedScope.SnapshotID)
+				if err := scopeStore.DeleteSnapshot(context.Background(), derivedScope.SnapshotID); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 				return "", "", nil, fmt.Errorf("permission snapshot expired")
 			}
 		}
@@ -92,16 +95,24 @@ func newUIActionSnapshotDeriver(scopeStore scope.ScopeStore, permissionStore per
 			},
 		})
 		if err := derivedPermission.ValidateGrantedPerms(validator); err != nil {
-			_ = scopeStore.DeleteSnapshot(context.Background(), derivedScope.SnapshotID)
+			if err := scopeStore.DeleteSnapshot(context.Background(), derivedScope.SnapshotID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return "", "", nil, err
 		}
 		if err := permissionStore.SaveSnapshot(ctx, derivedPermission); err != nil {
-			_ = scopeStore.DeleteSnapshot(context.Background(), derivedScope.SnapshotID)
+			if err := scopeStore.DeleteSnapshot(context.Background(), derivedScope.SnapshotID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return "", "", nil, err
 		}
 		cleanup := func() {
-			_ = scopeStore.DeleteSnapshot(context.Background(), derivedScope.SnapshotID)
-			_ = permissionStore.DeleteSnapshot(context.Background(), derivedPermission.SnapshotID)
+			if err := scopeStore.DeleteSnapshot(context.Background(), derivedScope.SnapshotID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
+			if err := permissionStore.DeleteSnapshot(context.Background(), derivedPermission.SnapshotID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		return derivedScope.SnapshotID, derivedPermission.SnapshotID, cleanup, nil
 	}

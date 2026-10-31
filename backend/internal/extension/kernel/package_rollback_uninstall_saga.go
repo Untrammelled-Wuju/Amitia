@@ -18,6 +18,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
+	amitialog "log"
 )
 
 type PackageUninstallPreviewResult struct {
@@ -138,14 +139,20 @@ func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, versi
 	}
 	lease, leaseErr := r.acquirePackageExtensionLease(ctx, extensionID, operationID)
 	if leaseErr != nil {
-		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "acquire_lease", "PACKAGE_OPERATION_LEASE_CONFLICT", leaseErr.Error(), true, PackageWriteGuard{})
+		if err := r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "acquire_lease", "PACKAGE_OPERATION_LEASE_CONFLICT", leaseErr.Error(), true, PackageWriteGuard{}); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return KernelInstallResult{}, fmt.Errorf("kernel: extension %s has an active operation: %w", extensionID, leaseErr)
 	}
 	leaseGuard := r.newPackageLeaseGuard(extensionID, operationID)
 	sagaCtx, startErr := leaseGuard.Start(ctx)
 	if startErr != nil {
-		_ = r.releasePackageExtensionLease(context.Background(), extensionID, operationID)
-		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "start_lease_guard", "PACKAGE_OPERATION_LEASE_CONFLICT", startErr.Error(), true, PackageWriteGuard{})
+		if err := r.releasePackageExtensionLease(context.Background(), extensionID, operationID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "start_lease_guard", "PACKAGE_OPERATION_LEASE_CONFLICT", startErr.Error(), true, PackageWriteGuard{}); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return KernelInstallResult{}, fmt.Errorf("kernel: lease guard start failed: %w", startErr)
 	}
 	defer func() {
@@ -168,12 +175,16 @@ func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, versi
 	postLeasePreview, previewErr := r.PreviewPackageRollback(ctx, extensionID, version, spaceID, scopeType, scopeID)
 	if previewErr != nil {
 		failErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "failed", "post_lease_preview", "PACKAGE_CONFIRMATION_STALE", fmt.Sprintf("post-lease preview failed: %v", previewErr), true, guard)
-		_ = r.releasePackageExtensionLease(context.Background(), extensionID, operationID)
+		if err := r.releasePackageExtensionLease(context.Background(), extensionID, operationID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return KernelInstallResult{}, errors.Join(NewPackageError(PackageErrCodeConfirmationStale, 409, fmt.Errorf("post-lease preview unavailable: %w", previewErr)), failErr)
 	}
 	if driftErr := samePackageRollbackPreview(rollbackClaims, postLeasePreview); driftErr != nil {
 		failErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "failed", "post_lease_preview_drift", "PACKAGE_CONFIRMATION_STALE", fmt.Sprintf("post-lease drift detected: %v", driftErr), true, guard)
-		_ = r.releasePackageExtensionLease(context.Background(), extensionID, operationID)
+		if err := r.releasePackageExtensionLease(context.Background(), extensionID, operationID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return KernelInstallResult{}, errors.Join(NewPackageError(PackageErrCodeConfirmationStale, 409, fmt.Errorf("post-lease drift: %w", driftErr)), failErr)
 	}
 	postLeaseCurrent, err := r.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(extensionID))
@@ -198,7 +209,9 @@ func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, versi
 	authorityInput, err := buildRollbackAuthorityInput(postLeasePreview)
 	if err != nil {
 		failErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "failed", "recompute_confirmation_authority", PackageErrCodeConfirmationStale, err.Error(), true, guard)
-		_ = r.releasePackageExtensionLease(context.Background(), extensionID, operationID)
+		if err := r.releasePackageExtensionLease(context.Background(), extensionID, operationID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return KernelInstallResult{}, errors.Join(err, failErr)
 	}
 
@@ -207,7 +220,9 @@ func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, versi
 	rollbackEvidence, err := buildPackageConfirmationAuthorityEvidence(op.OperationID, standardClaims, authorityInput)
 	if err != nil {
 		failErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "failed", "validate_confirmation_authority", PackageErrCodeConfirmationStale, err.Error(), true, guard)
-		_ = r.releasePackageExtensionLease(context.Background(), extensionID, operationID)
+		if err := r.releasePackageExtensionLease(context.Background(), extensionID, operationID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return KernelInstallResult{}, errors.Join(err, failErr)
 	}
 
@@ -227,7 +242,9 @@ func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, versi
 			true,
 			guard,
 		)
-		_ = r.releasePackageExtensionLease(context.Background(), extensionID, operationID)
+		if err := r.releasePackageExtensionLease(context.Background(), extensionID, operationID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return KernelInstallResult{},
 			errors.Join(
 				NewPackageError(PackageErrCodeConfirmationStale, 409, err),
@@ -237,7 +254,9 @@ func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, versi
 
 	if evidenceErr := r.persistPackageConfirmationAuthorityEvidence(ctx, rollbackEvidence, guard); evidenceErr != nil {
 		failErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "failed", "persist_authority_evidence", "PACKAGE_EVIDENCE_PERSIST_FAILED", fmt.Sprintf("authority evidence persistence failed: %v", evidenceErr), true, guard)
-		_ = r.releasePackageExtensionLease(context.Background(), extensionID, operationID)
+		if err := r.releasePackageExtensionLease(context.Background(), extensionID, operationID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return KernelInstallResult{}, errors.Join(fmt.Errorf("kernel: persist rollback authority evidence: %w", evidenceErr), failErr)
 	}
 	revalidatedArtifact, revalArtErr := r.container.PackageRepository.GetArtifact(ctx, point.ArtifactID)

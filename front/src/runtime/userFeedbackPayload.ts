@@ -33,14 +33,16 @@ export async function buildUserFeedbackPayload(
   let runtimeMode = "local";
   try {
     runtimeMode = (await getDeploymentConfig()).mode;
-  } catch {
-    runtimeMode = "local";
+  } catch (error) {
+  console.error("[original-error]", error);
+runtimeMode = "local";
   }
   let deviceId = "";
   try {
     deviceId = await resolveUIHostDeviceId();
-  } catch {
-    deviceId = "";
+  } catch (error) {
+  console.error("[original-error]", error);
+deviceId = "";
   }
   const clientErrors = await collectAllClientErrors();
   return {

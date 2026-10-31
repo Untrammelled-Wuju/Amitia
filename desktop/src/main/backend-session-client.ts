@@ -38,8 +38,9 @@ function readLocalRootToken(): string {
   let token = "";
   try {
     token = readTextFile(tokenFile);
-  } catch {
-    token = "";
+  } catch (error) {
+  console.error("[original-error]", error);
+token = "";
   }
   if (token.length < 32) {
     throw new Error("local root token is missing or too short");
@@ -161,8 +162,9 @@ export async function requestJSON<T>(
       invalidateCoreEndpoint();
       try {
         await waitForCoreEndpoint(8000);
-      } catch {
-        throw error;
+      } catch (error) {
+  console.error("[original-error]", error);
+throw error;
       }
     }
   }

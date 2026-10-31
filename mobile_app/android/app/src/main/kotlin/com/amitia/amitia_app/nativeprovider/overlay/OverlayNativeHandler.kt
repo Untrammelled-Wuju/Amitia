@@ -415,7 +415,9 @@ internal class OverlayNativeHandler(
                     BitmapFactory.decodeFile(runtimeDataFile.canonicalPath)
                 }
             }
-        } catch (_: Exception) {
+        } catch (originalError418: Exception) {
+          originalError418.printStackTrace()
+
             null
         }
     }
@@ -456,7 +458,9 @@ internal class OverlayNativeHandler(
                                 y = pxToDp(record.params.y),
                                 updatedAt = System.currentTimeMillis(),
                             )
-                        } catch (_: Exception) {
+                        } catch (originalError459: Exception) {
+                          originalError459.printStackTrace()
+
                             return false
                         }
                         return true
@@ -523,7 +527,9 @@ internal class OverlayNativeHandler(
         record.ttlRunnable = null
         try {
             windowManager.removeViewImmediate(record.root)
-        } catch (_: Exception) {
+        } catch (originalError526: Exception) {
+          originalError526.printStackTrace()
+
             // Already detached or process teardown; the logical record is still removed.
         }
     }
@@ -627,7 +633,9 @@ internal class OverlayNativeHandler(
 
     private fun parseColor(raw: String, fallback: Int): Int = try {
         Color.parseColor(raw)
-    } catch (_: Exception) {
+    } catch (originalError630: Exception) {
+      originalError630.printStackTrace()
+
         fallback
     }
 

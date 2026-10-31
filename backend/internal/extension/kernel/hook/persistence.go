@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	amitialog "log"
 	"time"
 )
 
@@ -572,7 +573,9 @@ func (r *HookTraceRecorder) RecordInvocation(ctx context.Context, exec HookExecu
 		ErrorCode:        exec.ErrorCode,
 		ErrorMessage:     exec.Error,
 	}
-	_ = r.invocations.Record(ctx, rec)
+	if err := r.invocations.Record(ctx, rec); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (r *HookTraceRecorder) RecordMutation(ctx context.Context, invocationID string, op MutationOperation, beforeHash, afterHash string, applied bool, conflict bool) {
@@ -585,7 +588,9 @@ func (r *HookTraceRecorder) RecordMutation(ctx context.Context, invocationID str
 		Applied:          applied,
 		Conflict:         conflict,
 	}
-	_ = r.mutations.Record(ctx, rec)
+	if err := r.mutations.Record(ctx, rec); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (r *HookTraceRecorder) RecordPipeline(ctx context.Context, result PipelineResult) {
@@ -609,12 +614,16 @@ func (r *HookTraceRecorder) RecordPipeline(ctx context.Context, result PipelineR
 			ErrorCode:        exec.ErrorCode,
 			ErrorMessage:     exec.Error,
 		}
-		_ = r.invocations.Record(ctx, rec)
+		if err := r.invocations.Record(ctx, rec); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 }
 
 func (r *HookTraceRecorder) RecordCircuit(ctx context.Context, contributionID string, stats CircuitStats) {
-	_ = r.circuits.Save(ctx, contributionID, stats)
+	if err := r.circuits.Save(ctx, contributionID, stats); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 var _ TraceRecorder = (*HookTraceRecorder)(nil)

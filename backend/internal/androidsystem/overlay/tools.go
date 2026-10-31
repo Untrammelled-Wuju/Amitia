@@ -50,12 +50,12 @@ func buildStatusTool(rt capability.RuntimeBinding) capability.ToolDefinition {
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          ToolIDStatus,
-		ModelName:   "android.overlay.status",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Overlay Status",
-		Description: "查询Android Overlay capability状态，包含SYSTEM_ALERT_WINDOW权限状态和活跃Overlay数量。不触发授权页面。",
-		InputSchema: inputSchema,
+		ID:           ToolIDStatus,
+		ModelName:    "android.overlay.status",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Overlay Status",
+		Description:  "查询Android Overlay capability状态，包含SYSTEM_ALERT_WINDOW权限状态和活跃Overlay数量。不触发授权页面。",
+		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
 			{Capability: PermissionInspect, Risk: "low"},
@@ -110,12 +110,12 @@ func buildPermissionRequestTool(rt capability.RuntimeBinding) capability.ToolDef
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          ToolIDPermissionRequest,
-		ModelName:   "android.overlay.permission_request",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Request Overlay Permission",
-		Description: "打开Android Overlay授权设置页面（SYSTEM_ALERT_WINDOW）。用户离开系统设置后必须重新查询状态确认授权结果。",
-		InputSchema: inputSchema,
+		ID:           ToolIDPermissionRequest,
+		ModelName:    "android.overlay.permission_request",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Request Overlay Permission",
+		Description:  "打开Android Overlay授权设置页面（SYSTEM_ALERT_WINDOW）。用户离开系统设置后必须重新查询状态确认授权结果。",
+		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
 			{Capability: PermissionCreate, Risk: "high"},
@@ -181,12 +181,12 @@ func buildCreateTool(rt capability.RuntimeBinding) capability.ToolDefinition {
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          ToolIDCreate,
-		ModelName:   "android.overlay.create",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Create Overlay",
-		Description: "创建Android系统悬浮层（TYPE_APPLICATION_OVERLAY）。需要SYSTEM_ALERT_WINDOW权限。默认非焦点、可触摸、不可拖动。",
-		InputSchema: inputSchema,
+		ID:           ToolIDCreate,
+		ModelName:    "android.overlay.create",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Create Overlay",
+		Description:  "创建Android系统悬浮层（TYPE_APPLICATION_OVERLAY）。需要SYSTEM_ALERT_WINDOW权限。默认非焦点、可触摸、不可拖动。",
+		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
 			{Capability: PermissionCreate, Risk: "high"},
@@ -252,12 +252,12 @@ func buildUpdateTool(rt capability.RuntimeBinding) capability.ToolDefinition {
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          ToolIDUpdate,
-		ModelName:   "android.overlay.update",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Update Overlay",
-		Description: "更新已存在的Overlay内容、位置、尺寸等属性。不会创建新Overlay。",
-		InputSchema: inputSchema,
+		ID:           ToolIDUpdate,
+		ModelName:    "android.overlay.update",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Update Overlay",
+		Description:  "更新已存在的Overlay内容、位置、尺寸等属性。不会创建新Overlay。",
+		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
 			{Capability: PermissionCreate, Risk: "medium"},
@@ -313,12 +313,12 @@ func buildShowTool(rt capability.RuntimeBinding) capability.ToolDefinition {
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          ToolIDShow,
-		ModelName:   "android.overlay.show",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Show Overlay",
-		Description: "显示已隐藏的Overlay。重复show不会重复addView。",
-		InputSchema: inputSchema,
+		ID:           ToolIDShow,
+		ModelName:    "android.overlay.show",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Show Overlay",
+		Description:  "显示已隐藏的Overlay。重复show不会重复addView。",
+		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
 			{Capability: PermissionCreate, Risk: "medium"},
@@ -374,12 +374,12 @@ func buildHideTool(rt capability.RuntimeBinding) capability.ToolDefinition {
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          ToolIDHide,
-		ModelName:   "android.overlay.hide",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Hide Overlay",
-		Description: "隐藏Overlay但保留instance。hide不会删除metadata，show可以恢复。",
-		InputSchema: inputSchema,
+		ID:           ToolIDHide,
+		ModelName:    "android.overlay.hide",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Hide Overlay",
+		Description:  "隐藏Overlay但保留instance。hide不会删除metadata，show可以恢复。",
+		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
 			{Capability: PermissionCreate, Risk: "medium"},
@@ -435,12 +435,12 @@ func buildCloseTool(rt capability.RuntimeBinding) capability.ToolDefinition {
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          ToolIDClose,
-		ModelName:   "android.overlay.close",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Close Overlay",
-		Description: "关闭并释放Overlay资源。幂等操作，已关闭的Overlay返回alreadyClosed。",
-		InputSchema: inputSchema,
+		ID:           ToolIDClose,
+		ModelName:    "android.overlay.close",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Close Overlay",
+		Description:  "关闭并释放Overlay资源。幂等操作，已关闭的Overlay返回alreadyClosed。",
+		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
 			{Capability: PermissionCreate, Risk: "medium"},
@@ -494,12 +494,12 @@ func buildListTool(rt capability.RuntimeBinding) capability.ToolDefinition {
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          ToolIDList,
-		ModelName:   "android.overlay.list",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "List Overlays",
-		Description: "列出Amitia当前持有的所有Overlay instance。不扫描其他App窗口。",
-		InputSchema: inputSchema,
+		ID:           ToolIDList,
+		ModelName:    "android.overlay.list",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "List Overlays",
+		Description:  "列出Amitia当前持有的所有Overlay instance。不扫描其他App窗口。",
+		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
 			{Capability: PermissionInspect, Risk: "low"},
@@ -552,12 +552,12 @@ func buildCloseAllTool(rt capability.RuntimeBinding) capability.ToolDefinition {
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          ToolIDCloseAll,
-		ModelName:   "android.overlay.close_all",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Close All Overlays",
-		Description: "关闭Amitia创建的所有Overlay。不影响其他App的悬浮窗。",
-		InputSchema: inputSchema,
+		ID:           ToolIDCloseAll,
+		ModelName:    "android.overlay.close_all",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Close All Overlays",
+		Description:  "关闭Amitia创建的所有Overlay。不影响其他App的悬浮窗。",
+		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
 			{Capability: PermissionCreate, Risk: "medium"},

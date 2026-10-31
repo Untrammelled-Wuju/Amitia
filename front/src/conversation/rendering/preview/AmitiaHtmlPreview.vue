@@ -78,7 +78,9 @@ const previewUrl = ref("");
 const retryVersion = ref(0);
 let previewId = "";
 function releasePreview(id: string) {
-  if (id) void apiClient.delete(`/api/artifacts/v1/previews/${encodeURIComponent(id)}`).catch(() => {});
+  if (id) void apiClient.delete(`/api/artifacts/v1/previews/${encodeURIComponent(id)}`).catch((error) => {
+  console.error("[original-error]", error);
+});
 }
 let generation = 0;
 onBeforeUnmount(() => { generation++; releasePreview(previewId); });

@@ -3,13 +3,13 @@ package interaction
 import "time"
 
 const (
-	DefaultMaxGestureDuration    = 3 * time.Second
+	DefaultMaxGestureDuration      = 3 * time.Second
 	DefaultMaxVisualLocateDuration = 10 * time.Second
-	DefaultMaxVisualCandidates   = 10
-	DefaultMaxScreenshotAge      = 1 * time.Second
+	DefaultMaxVisualCandidates     = 10
+	DefaultMaxScreenshotAge        = 1 * time.Second
 
-	DefaultMinOCRConfidence      = 0.7
-	DefaultMinVisionConfidence   = 0.85
+	DefaultMinOCRConfidence    = 0.7
+	DefaultMinVisionConfidence = 0.85
 
 	DefaultAllowCoordinateFallback = true
 	DefaultAllowShizukuFallback    = true
@@ -36,7 +36,7 @@ type Policy struct {
 
 	MaxScreenshotAge time.Duration
 
-	MinOCRConfidence float64
+	MinOCRConfidence    float64
 	MinVisionConfidence float64
 
 	AllowCoordinateFallback bool
@@ -48,10 +48,10 @@ type Policy struct {
 
 func DefaultPolicy() Policy {
 	return Policy{
-		MaxGestureDuration:    DefaultMaxGestureDuration,
+		MaxGestureDuration:      DefaultMaxGestureDuration,
 		MaxVisualLocateDuration: DefaultMaxVisualLocateDuration,
-		MaxVisualCandidates:   DefaultMaxVisualCandidates,
-		MaxScreenshotAge:      DefaultMaxScreenshotAge,
+		MaxVisualCandidates:     DefaultMaxVisualCandidates,
+		MaxScreenshotAge:        DefaultMaxScreenshotAge,
 
 		MinOCRConfidence:    DefaultMinOCRConfidence,
 		MinVisionConfidence: DefaultMinVisionConfidence,

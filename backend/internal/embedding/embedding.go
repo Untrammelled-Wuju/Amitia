@@ -20,6 +20,7 @@ import (
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/log"
 	"gorm.io/gorm"
+	amitialog "log"
 )
 
 type Service struct {
@@ -381,7 +382,9 @@ func (s *Service) getLocalEmbeddingProvider(modelName, configJSON string) (local
 	}
 
 	if s.localProvider != nil {
-		_ = s.localProvider.Close()
+		if err := s.localProvider.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		s.localProvider = nil
 	}
 

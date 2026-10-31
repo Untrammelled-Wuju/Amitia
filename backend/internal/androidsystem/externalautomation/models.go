@@ -1,17 +1,17 @@
 package externalautomation
 
 type CapabilityState struct {
-	Supported          bool   `json:"supported"`
-	CanResolveApps     bool   `json:"canResolveApps"`
-	CanLaunchApps      bool   `json:"canLaunchApps"`
-	CanResolveURI      bool   `json:"canResolveUri"`
-	CanOpenURI         bool   `json:"canOpenUri"`
-	CanOpenSettings    bool   `json:"canOpenSettings"`
-	CanInvokeIntent    bool   `json:"canInvokeIntent"`
-	CanInspectForeground bool `json:"canInspectForeground"`
-	CanWaitForeground  bool   `json:"canWaitForeground"`
-	State              string `json:"state"`
-	Reason             string `json:"reason,omitempty"`
+	Supported            bool   `json:"supported"`
+	CanResolveApps       bool   `json:"canResolveApps"`
+	CanLaunchApps        bool   `json:"canLaunchApps"`
+	CanResolveURI        bool   `json:"canResolveUri"`
+	CanOpenURI           bool   `json:"canOpenUri"`
+	CanOpenSettings      bool   `json:"canOpenSettings"`
+	CanInvokeIntent      bool   `json:"canInvokeIntent"`
+	CanInspectForeground bool   `json:"canInspectForeground"`
+	CanWaitForeground    bool   `json:"canWaitForeground"`
+	State                string `json:"state"`
+	Reason               string `json:"reason,omitempty"`
 }
 
 type AppTarget struct {
@@ -90,14 +90,14 @@ type WaitForegroundRequest struct {
 }
 
 type ActionResult struct {
-	Success          bool   `json:"success"`
-	Operation        string `json:"operation"`
-	TargetPackage    string `json:"targetPackage,omitempty"`
-	TargetComponent  string `json:"targetComponent,omitempty"`
-	Resolved         bool   `json:"resolved,omitempty"`
-	Started          bool   `json:"started,omitempty"`
-	UserActionRequired bool `json:"userActionRequired,omitempty"`
-	Timestamp        int64  `json:"timestamp"`
+	Success            bool   `json:"success"`
+	Operation          string `json:"operation"`
+	TargetPackage      string `json:"targetPackage,omitempty"`
+	TargetComponent    string `json:"targetComponent,omitempty"`
+	Resolved           bool   `json:"resolved,omitempty"`
+	Started            bool   `json:"started,omitempty"`
+	UserActionRequired bool   `json:"userActionRequired,omitempty"`
+	Timestamp          int64  `json:"timestamp"`
 }
 
 const (
@@ -125,8 +125,8 @@ const (
 )
 
 const (
-	SourceAccessibility = "accessibility"
-	SourceUsageStats    = "usage_stats"
+	SourceAccessibility     = "accessibility"
+	SourceUsageStats        = "usage_stats"
 	SourceActivityLifecycle = "activity_lifecycle"
 )
 

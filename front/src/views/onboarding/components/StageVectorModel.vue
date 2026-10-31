@@ -309,8 +309,9 @@ const emit = defineEmits<{
 onMounted(async () => {
   try {
     providers.value = (await get<any[]>("/api/embedding/providers")) || [];
-  } catch {
-    providers.value = [];
+  } catch (error) {
+  console.error("[original-error]", error);
+providers.value = [];
   }
 });
 

@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	amitialog "log"
 	"os"
 	"sort"
 )
@@ -108,6 +109,8 @@ func printData(data any, indent int) {
 	default:
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent(prefix, "  ")
-		_ = enc.Encode(v)
+		if err := enc.Encode(v); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 }

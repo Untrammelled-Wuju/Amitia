@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/u-ai/backend/internal/chat"
+	"github.com/u-ai/backend/internal/system"
 	"github.com/u-ai/backend/internal/system/dataportability"
 	"github.com/u-ai/backend/internal/tts"
 	"gorm.io/gorm"
@@ -174,5 +175,31 @@ func TestConfigurationBackupSuccessPreservesActiveAndCloneBinding(t *testing.T) 
 	}
 	if err := db.Table("tts_cloned_voices").Where("speaker_id='imported-clone'").First(&binding).Error; err != nil || binding.TtsConfigID != 3 || binding.SpaceID != "space" {
 		t.Fatalf("clone binding: %+v %v", binding, err)
+	}
+}
+
+func TestLegacyBackupSecretsRequireEncryptedArchive(t *testing.T) {
+	db, svc := configurationDB(t)
+	ctx, finish := configurationScope(t, svc)
+	defer finish()
+
+	settings := configurationBackupReader{components: map[string]string{
+		system.ComponentIDSettings: `{"key":"api_key","value":"legacy-secret"}`,
+	}}
+	if err := system.NewSettingsBackupContributor(db).RestoreSettings(ctx, settings, dataportability.RestoreOptions{}); err == nil {
+		t.Fatal("legacy unencrypted sensitive setting was accepted")
+	}
+	if err := system.NewSettingsBackupContributor(db).RestoreSettings(ctx, settings, dataportability.RestoreOptions{AllowLegacySecrets: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	models := configurationBackupReader{components: map[string]string{
+		chat.ComponentIDModelConfigs: `{"id":20,"name":"legacy-secret-model","api_type":"openai","model_name":"legacy","provider_config_json":"{\"accessToken\":\"legacy-provider-secret\"}"}`,
+	}}
+	if err := chat.NewModelConfigBackupContributor(db).RestoreModelConfigs(ctx, models, dataportability.RestoreOptions{}); err == nil {
+		t.Fatal("legacy unencrypted model provider secret was accepted")
+	}
+	if err := chat.NewModelConfigBackupContributor(db).RestoreModelConfigs(ctx, models, dataportability.RestoreOptions{AllowLegacySecrets: true}); err != nil {
+		t.Fatal(err)
 	}
 }

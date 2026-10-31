@@ -9,7 +9,7 @@ import (
 )
 
 type EmergencyConnectionAdapter struct {
-	registry  *ipc.ConnectionRegistry
+	registry     *ipc.ConnectionRegistry
 	controlPlane ipc.ControlPlane
 }
 

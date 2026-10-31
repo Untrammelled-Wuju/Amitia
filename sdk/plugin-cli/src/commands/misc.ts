@@ -132,8 +132,9 @@ export const signCommand: CliCommand = {
     let data: unknown = null;
     try {
       data = JSON.parse(result.stdout);
-    } catch {
-      data = { raw: result.stdout };
+    } catch (error) {
+  console.error("[original-error]", error);
+data = { raw: result.stdout };
     }
 
     return {
@@ -419,8 +420,9 @@ function formatDiagnosticsText(body: string): string {
       lines.push(`[${sev}] ${ext}: ${msg}`);
     }
     return lines.length > 0 ? lines.join("\n") : "no diagnostics found";
-  } catch {
-    return body;
+  } catch (error) {
+  console.error("[original-error]", error);
+return body;
   }
 }
 
@@ -471,7 +473,8 @@ async function ensureHexKeyFile(keyPath: string): Promise<string | null> {
     const tmpPath = path.join(os.tmpdir(), `amitiax-key-${Date.now()}.hex`);
     fs.writeFileSync(tmpPath, hexKey, { mode: 0o600 });
     return tmpPath;
-  } catch {
-    return null;
+  } catch (error) {
+  console.error("[original-error]", error);
+return null;
   }
 }

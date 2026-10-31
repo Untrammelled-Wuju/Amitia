@@ -8,6 +8,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/u-ai/backend/internal/deviceruntime/protocol"
 	"github.com/u-ai/backend/internal/runtimeidentity"
+	amitialog "log"
 )
 
 type MeshConnection struct {
@@ -62,6 +63,8 @@ func (c *MeshConnection) Close(code int, reason string) error {
 	}
 	c.writeCloseSent = true
 	msg := websocket.FormatCloseMessage(code, reason)
-	_ = c.Conn.WriteControl(websocket.CloseMessage, msg, time.Now().Add(2*time.Second))
+	if err := c.Conn.WriteControl(websocket.CloseMessage, msg, time.Now().Add(2*time.Second)); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	return c.Conn.Close()
 }

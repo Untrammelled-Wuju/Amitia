@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	amitialog "log"
 	"strings"
 	"time"
 )
@@ -382,7 +383,9 @@ func (r *PackageRepository) InvalidateTrustPreviews(ctx context.Context, publish
 	for rows.Next() {
 		var item target
 		if err := rows.Scan(&item.sessionID, &item.artifactID, &item.extensionID); err != nil {
-			_ = rows.Close()
+			if err := rows.Close(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return nil, err
 		}
 		targets = append(targets, item)

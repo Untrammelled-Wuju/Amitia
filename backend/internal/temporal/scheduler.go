@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	amitialog "log"
 )
 
 type ProactiveCandidate struct {
@@ -165,7 +166,9 @@ func (s *Scheduler) Start(parent context.Context) {
 	s.cancel = cancel
 	s.done = done
 	s.captureLocalDates()
-	_, _ = s.service.ProcessDueAnchors(ctx, true)
+	if _, err := s.service.ProcessDueAnchors(ctx, true); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	go s.run(ctx, done)
 }
 
@@ -190,7 +193,9 @@ func (s *Scheduler) run(ctx context.Context, done chan struct{}) {
 	for {
 		select {
 		case <-ticker.C:
-			_, _ = s.service.ProcessDueAnchors(ctx, false)
+			if _, err := s.service.ProcessDueAnchors(ctx, false); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			s.detectLocalDayChanges(ctx)
 		case <-ctx.Done():
 			return
@@ -235,7 +240,9 @@ func (s *Scheduler) detectLocalDayChanges(ctx context.Context) {
 			spaceID = defaultSpaceOwnerID()
 			characterID = profile.OwnerID
 		}
-		_, _ = s.service.repo.CreateEvent(&Event{ID: uuid.NewString(), EventType: "day_changed", SpaceID: spaceID, CharacterID: characterID, OccurredAtUTC: now, EffectiveLocalDate: date, Timezone: profile.Timezone, Source: "temporal-scheduler", IdempotencyKey: "temporal:day_changed:" + key + ":" + date, CreatedAtUTC: now})
+		if _, err := s.service.repo.CreateEvent(&Event{ID: uuid.NewString(), EventType: "day_changed", SpaceID: spaceID, CharacterID: characterID, OccurredAtUTC: now, EffectiveLocalDate: date, Timezone: profile.Timezone, Source: "temporal-scheduler", IdempotencyKey: "temporal:day_changed:" + key + ":" + date, CreatedAtUTC: now}); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		if ctx.Err() != nil {
 			return
 		}

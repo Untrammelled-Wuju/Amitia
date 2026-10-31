@@ -22,21 +22,21 @@ type SinkAdvertisement struct {
 }
 
 type HelloRequest struct {
-	SupportedProtocols []string              `json:"supportedProtocols"`
-	Capabilities       []string              `json:"capabilities,omitempty"`
-	RPCNamespaces      []string              `json:"rpcNamespaces,omitempty"`
-	Channels           []ChannelAdvertisement `json:"channels,omitempty"`
-	Sinks              []SinkAdvertisement   `json:"sinks,omitempty"`
-	SDK                *SDKInfo              `json:"sdk,omitempty"`
+	SupportedProtocols []string                   `json:"supportedProtocols"`
+	Capabilities       []string                   `json:"capabilities,omitempty"`
+	RPCNamespaces      []string                   `json:"rpcNamespaces,omitempty"`
+	Channels           []ChannelAdvertisement     `json:"channels,omitempty"`
+	Sinks              []SinkAdvertisement        `json:"sinks,omitempty"`
+	SDK                *SDKInfo                   `json:"sdk,omitempty"`
 	Metadata           map[string]json.RawMessage `json:"metadata,omitempty"`
 }
 
 type HelloResponse struct {
-	Protocol     string                      `json:"protocol"`
-	Capabilities []string                    `json:"capabilities"`
+	Protocol      string                     `json:"protocol"`
+	Capabilities  []string                   `json:"capabilities"`
 	RPCNamespaces []string                   `json:"rpcNamespaces,omitempty"`
-	Channels     []string                    `json:"channels,omitempty"`
-	Metadata     map[string]json.RawMessage  `json:"metadata,omitempty"`
+	Channels      []string                   `json:"channels,omitempty"`
+	Metadata      map[string]json.RawMessage `json:"metadata,omitempty"`
 }
 
 const HelloMethod = "control.handshake.hello"

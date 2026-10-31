@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	amitialog "log"
 )
 
 type ScheduleExecutor struct {
@@ -123,7 +124,12 @@ func (e *ScheduleExecutor) executionLoop() {
 			return
 		case <-ticker.C:
 			e.wg.Add(1)
-			go func() { defer e.wg.Done(); _ = e.retry.ProcessDueRetries(e.ctx, e) }()
+			go func() {
+				defer e.wg.Done()
+				if err := e.retry.ProcessDueRetries(e.ctx, e); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
+			}()
 			e.processDueTriggers()
 		}
 	}
@@ -142,7 +148,9 @@ func (e *ScheduleExecutor) processDueTriggers() {
 		e.wg.Add(1)
 		go func(trigger *ScheduleTriggerRecord) {
 			defer e.wg.Done()
-			_, _ = e.Execute(e.ctx, trigger)
+			if _, err := e.Execute(e.ctx, trigger); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}(trigger)
 	}
 }
@@ -210,9 +218,13 @@ func (e *ScheduleExecutor) Execute(ctx context.Context, trigger *ScheduleTrigger
 		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
 		if strong, ok := e.store.(TriggerLeaseHeartbeatStore); ok {
-			_ = strong.ReleaseOwnedTriggerLease(cleanup, trigger.TriggerID, leaseOwner)
+			if err := strong.ReleaseOwnedTriggerLease(cleanup, trigger.TriggerID, leaseOwner); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		} else {
-			_ = e.leaseManager.ReleaseLease(cleanup, trigger.TriggerID)
+			if err := e.leaseManager.ReleaseLease(cleanup, trigger.TriggerID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}()
 
@@ -304,7 +316,9 @@ func (e *ScheduleExecutor) Execute(ctx context.Context, trigger *ScheduleTrigger
 		finish := e.clock.Now().UTC()
 		run.FinishedAt = &finish
 		run.UpdatedAt = finish
-		_ = e.store.PutRun(ctx, run)
+		if err := e.store.PutRun(ctx, run); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return e.blockTrigger(ctx, trigger, ErrCodeGenerationMismatch, "schedule changed before target execution")
 	}
 	targetResult, err := adapter.Execute(executionCtx, def, trigger)
@@ -320,8 +334,12 @@ func (e *ScheduleExecutor) Execute(ctx context.Context, trigger *ScheduleTrigger
 		run.Status = RunStatusFailed
 		run.ErrorCode = strPtr(ErrCodeTargetExecutionFailed)
 		run.ErrorMessage = strPtr(err.Error())
-		_ = e.store.PutRun(ctx, run)
-		_ = e.circuit.HandleExecutionResult(ctx, def.ScheduleID, false, ErrCodeTargetExecutionFailed)
+		if err := e.store.PutRun(ctx, run); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := e.circuit.HandleExecutionResult(ctx, def.ScheduleID, false, ErrCodeTargetExecutionFailed); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		e.handleFailure(ctx, def, trigger, ErrCodeTargetExecutionFailed, err.Error())
 		return &ExecuteResult{
 			TriggerID:    trigger.TriggerID,
@@ -380,8 +398,12 @@ func (e *ScheduleExecutor) Execute(ctx context.Context, trigger *ScheduleTrigger
 	run.Status = RunStatusFailed
 	run.ErrorCode = strPtr(targetResult.ErrorCode)
 	run.ErrorMessage = strPtr(targetResult.ErrorMessage)
-	_ = e.store.PutRun(ctx, run)
-	_ = e.circuit.HandleExecutionResult(ctx, def.ScheduleID, false, targetResult.ErrorCode)
+	if err := e.store.PutRun(ctx, run); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := e.circuit.HandleExecutionResult(ctx, def.ScheduleID, false, targetResult.ErrorCode); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	e.handleFailure(ctx, def, trigger, targetResult.ErrorCode, targetResult.ErrorMessage)
 
 	return &ExecuteResult{
@@ -410,10 +432,12 @@ func (e *ScheduleExecutor) markManualIntervention(ctx context.Context, trigger *
 	trigger.ErrorCode = strPtr(errorCode)
 	trigger.ErrorMessage = strPtr(errorMessage)
 	trigger.UpdatedAt = now.UTC()
-	_ = e.store.UpdateTriggerStatus(ctx, trigger.TriggerID, RunStatusQuarantined, map[string]any{
+	if err := e.store.UpdateTriggerStatus(ctx, trigger.TriggerID, RunStatusQuarantined, map[string]any{
 		"error_code":    errorCode,
 		"error_message": errorMessage,
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	return &ExecuteResult{
 		TriggerID:    trigger.TriggerID,
 		Status:       RunStatusQuarantined,
@@ -428,16 +452,20 @@ func (e *ScheduleExecutor) quarantineTrigger(ctx context.Context, trigger *Sched
 	trigger.ErrorCode = strPtr(ErrCodeDualScheduler)
 	trigger.ErrorMessage = strPtr(detail)
 	trigger.UpdatedAt = now.UTC()
-	_ = e.store.UpdateTriggerStatus(ctx, trigger.TriggerID, RunStatusQuarantined, map[string]any{
+	if err := e.store.UpdateTriggerStatus(ctx, trigger.TriggerID, RunStatusQuarantined, map[string]any{
 		"error_code":    ErrCodeDualScheduler,
 		"error_message": detail,
-	})
-	_ = e.store.PutQuarantine(ctx, &ScheduleQuarantineRecord{
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := e.store.PutQuarantine(ctx, &ScheduleQuarantineRecord{
 		ScheduleID:    def.ScheduleID,
 		Reason:        reason,
 		Detail:        detail,
 		QuarantinedAt: now.UTC(),
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	return &ExecuteResult{
 		TriggerID:    trigger.TriggerID,
 		Status:       RunStatusQuarantined,
@@ -452,10 +480,12 @@ func (e *ScheduleExecutor) markFailed(ctx context.Context, trigger *ScheduleTrig
 	trigger.ErrorCode = strPtr(errorCode)
 	trigger.ErrorMessage = strPtr(errorMessage)
 	trigger.UpdatedAt = now.UTC()
-	_ = e.store.UpdateTriggerStatus(ctx, trigger.TriggerID, RunStatusFailed, map[string]any{
+	if err := e.store.UpdateTriggerStatus(ctx, trigger.TriggerID, RunStatusFailed, map[string]any{
 		"error_code":    errorCode,
 		"error_message": errorMessage,
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	return &ExecuteResult{
 		TriggerID:    trigger.TriggerID,
 		Status:       RunStatusFailed,
@@ -474,10 +504,12 @@ func (e *ScheduleExecutor) blockTrigger(ctx context.Context, trigger *ScheduleTr
 	trigger.ErrorCode = strPtr(errorCode)
 	trigger.ErrorMessage = strPtr(errorMessage)
 	trigger.UpdatedAt = now.UTC()
-	_ = e.store.UpdateTriggerStatus(ctx, trigger.TriggerID, RunStatusBlocked, map[string]any{
+	if err := e.store.UpdateTriggerStatus(ctx, trigger.TriggerID, RunStatusBlocked, map[string]any{
 		"error_code":    errorCode,
 		"error_message": errorMessage,
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	return &ExecuteResult{
 		TriggerID:    trigger.TriggerID,
 		Status:       RunStatusBlocked,
@@ -550,7 +582,9 @@ func (e *ScheduleExecutor) cancelActiveRuns(ctx context.Context, scheduleID stri
 			}); err != nil {
 				return err
 			}
-			_ = e.store.PutRun(ctx, run)
+			if err := e.store.PutRun(ctx, run); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}
 	return nil

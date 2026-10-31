@@ -14,16 +14,16 @@ import (
 
 // InspectionResult 描述一个 source target 的检查结果
 type InspectionResult struct {
-	WorkspaceID   string              `json:"workspaceId"`
-	TotalFiles    int                 `json:"totalFiles"`
-	HasEntrypoint bool                `json:"hasEntrypoint"`
-	UIFilePaths   []string            `json:"uiFilePaths"`
-	RouteHints    []string            `json:"routeHints,omitempty"`
-	UILibraries   []string            `json:"uiLibraries,omitempty"`
-	Editable      bool                `json:"editable"`
-	Framework     string              `json:"framework,omitempty"`
-	Symbols       []SymbolInfo        `json:"symbols,omitempty"`
-	FileHashes    map[string]string   `json:"fileHashes,omitempty"`
+	WorkspaceID   string            `json:"workspaceId"`
+	TotalFiles    int               `json:"totalFiles"`
+	HasEntrypoint bool              `json:"hasEntrypoint"`
+	UIFilePaths   []string          `json:"uiFilePaths"`
+	RouteHints    []string          `json:"routeHints,omitempty"`
+	UILibraries   []string          `json:"uiLibraries,omitempty"`
+	Editable      bool              `json:"editable"`
+	Framework     string            `json:"framework,omitempty"`
+	Symbols       []SymbolInfo      `json:"symbols,omitempty"`
+	FileHashes    map[string]string `json:"fileHashes,omitempty"`
 }
 
 // SymbolInfo describes a symbol/component found in the source code.
@@ -138,11 +138,11 @@ func extractSymbols(filePath, content string) []SymbolInfo {
 }
 
 var (
-	vueComponentRe   = regexp.MustCompile(`export\s+default\s+(?:class\s+)?(\w+)`)
-	reactCompRe      = regexp.MustCompile(`(?:function|const|class)\s+([A-Z]\w*)\s*(?:\(|=|extends|{)`)
-	reactExportRe    = regexp.MustCompile(`export\s+(?:default\s+)?(?:function|const)\s+([A-Z]\w*)`)
-	flutterClassRe   = regexp.MustCompile(`class\s+(\w+)\s+extends\s+(?:StatefulWidget|StatelessWidget)`)
-	svelteCompRe     = regexp.MustCompile(`export\s+(?:let|const|function)\s+(\w+)`)
+	vueComponentRe = regexp.MustCompile(`export\s+default\s+(?:class\s+)?(\w+)`)
+	reactCompRe    = regexp.MustCompile(`(?:function|const|class)\s+([A-Z]\w*)\s*(?:\(|=|extends|{)`)
+	reactExportRe  = regexp.MustCompile(`export\s+(?:default\s+)?(?:function|const)\s+([A-Z]\w*)`)
+	flutterClassRe = regexp.MustCompile(`class\s+(\w+)\s+extends\s+(?:StatefulWidget|StatelessWidget)`)
+	svelteCompRe   = regexp.MustCompile(`export\s+(?:let|const|function)\s+(\w+)`)
 )
 
 func extractVueSymbols(filePath string, lines []string) []SymbolInfo {

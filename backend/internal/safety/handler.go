@@ -22,7 +22,7 @@ func (h *Handler) GetBdiConfig(c *gin.Context) {
 	}
 	policy, err := NewRepository(h.db).Policy(c.Request.Context(), scope)
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "读取配置失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	policy.BDI = NormalizeBdiConfig(policy.BDI)
@@ -37,7 +37,7 @@ func (h *Handler) GetBdiOptions(c *gin.Context) {
 func (h *Handler) PutBdiConfig(c *gin.Context) {
 	var body BdiConfig
 	if err := c.ShouldBindJSON(&body); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	scope, err := ScopeFromContextWithCoordinator(c.Request.Context(), h.coordination)
@@ -51,11 +51,11 @@ func (h *Handler) PutBdiConfig(c *gin.Context) {
 		return
 	}
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		c.JSON(409, gin.H{"code": 409, "msg": "BDI 安全策略已被其他操作更新，请重新加载"})
+		c.JSON(409, gin.H{"code": 409, "msg": err.Error()})
 		return
 	}
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "保存配置失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	policy.BDI.Revision = policy.Revision
@@ -85,7 +85,7 @@ func (h *Handler) GetAuditLogs(c *gin.Context) {
 		return nil
 	})
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "读取审计记录失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, logs)
@@ -115,7 +115,7 @@ func (h *Handler) GetConfig(c *gin.Context) {
 	}
 	policy, err := NewRepository(h.db).Policy(c.Request.Context(), scope)
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "读取配置失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	policy.Config.Revision = policy.Revision
@@ -125,7 +125,7 @@ func (h *Handler) GetConfig(c *gin.Context) {
 func (h *Handler) PutConfig(c *gin.Context) {
 	var body SafetyConfig
 	if err := c.ShouldBindJSON(&body); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	scope, err := ScopeFromContextWithCoordinator(c.Request.Context(), h.coordination)
@@ -135,11 +135,11 @@ func (h *Handler) PutConfig(c *gin.Context) {
 	}
 	policy, err := NewRepository(h.db).SaveConfig(c.Request.Context(), scope, body)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		c.JSON(409, gin.H{"code": 409, "msg": "安全配置已被其他操作更新，请重新加载"})
+		c.JSON(409, gin.H{"code": 409, "msg": err.Error()})
 		return
 	}
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "保存配置失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	policy.Config.Revision = policy.Revision

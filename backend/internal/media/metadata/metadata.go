@@ -3,21 +3,21 @@ package metadata
 type MediaKind string
 
 const (
-	MediaKindAudio  MediaKind = "audio"
-	MediaKindVideo  MediaKind = "video"
-	MediaKindImage  MediaKind = "image"
-	MediaKindMixed  MediaKind = "mixed"
+	MediaKindAudio   MediaKind = "audio"
+	MediaKindVideo   MediaKind = "video"
+	MediaKindImage   MediaKind = "image"
+	MediaKindMixed   MediaKind = "mixed"
 	MediaKindUnknown MediaKind = "unknown"
 )
 
 type MetadataRequest struct {
 	SourceURI string `json:"sourceUri"`
 
-	IncludeStreams     bool `json:"includeStreams"`
-	IncludeChapters    bool `json:"includeChapters"`
+	IncludeStreams  bool `json:"includeStreams"`
+	IncludeChapters bool `json:"includeChapters"`
 
-	IncludeTags        bool `json:"includeTags"`
-	IncludeTechnical   bool `json:"includeTechnical"`
+	IncludeTags      bool `json:"includeTags"`
+	IncludeTechnical bool `json:"includeTechnical"`
 
 	IncludeSensitiveTags bool `json:"includeSensitiveTags"`
 

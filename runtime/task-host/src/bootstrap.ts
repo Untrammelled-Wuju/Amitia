@@ -70,8 +70,9 @@ export function readRuntimeConfig(): RuntimeConfig {
   let taskInput: TaskInput;
   try {
     taskInput = JSON.parse(taskInputRaw) as TaskInput;
-  } catch {
-    taskInput = {} as TaskInput;
+  } catch (error) {
+  console.error("[original-error]", error);
+taskInput = {} as TaskInput;
   }
 
   const taskDeadline = parseInt(taskDeadlineStr, 10) || 0;
@@ -82,8 +83,9 @@ export function readRuntimeConfig(): RuntimeConfig {
   if (taskCheckpointRaw) {
     try {
       taskCheckpoint = JSON.parse(taskCheckpointRaw) as TaskCheckpoint;
-    } catch {
-      taskCheckpoint = null;
+    } catch (error) {
+  console.error("[original-error]", error);
+taskCheckpoint = null;
     }
   }
 
@@ -319,8 +321,9 @@ async function handlePause(
     });
 
     await initiateShutdown("paused");
-  } catch {
-    clearTimeout(timer);
+  } catch (error) {
+  console.error("[original-error]", error);
+clearTimeout(timer);
     if (expired) return;
     rpc.notify("task.pause_ack", {
       task_run_id: taskRunId,

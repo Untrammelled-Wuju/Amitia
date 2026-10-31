@@ -125,7 +125,9 @@ internal class DisplayNativeHandler(
                     state = if (display.state != Display.STATE_OFF) "on" else "off",
                 )
             } ?: emptyList()
-        } catch (_: Exception) {
+        } catch (originalError128: Exception) {
+          originalError128.printStackTrace()
+
             emptyList()
         }
     }

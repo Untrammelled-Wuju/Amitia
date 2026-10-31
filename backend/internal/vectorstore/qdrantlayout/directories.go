@@ -4,6 +4,7 @@ package qdrantlayout
 
 import (
 	"context"
+	amitialog "log"
 	"os"
 	"runtime"
 )
@@ -66,7 +67,9 @@ func (m *directoryManager) ensureOne(path string) error {
 		return err
 	}
 	if runtime.GOOS != "windows" {
-		_ = os.Chmod(path, 0750)
+		if err := os.Chmod(path, 0750); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return nil
 }
@@ -75,7 +78,9 @@ func (m *directoryManager) rollback(created []string) {
 	for i := len(created) - 1; i >= 0; i-- {
 		path := created[i]
 		if isEmpty, err := isEmptyDir(path); err == nil && isEmpty {
-			_ = os.Remove(path)
+			if err := os.Remove(path); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}
 }

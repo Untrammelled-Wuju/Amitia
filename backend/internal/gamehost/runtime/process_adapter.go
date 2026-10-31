@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
+	amitialog "log"
 )
 
 type ProcessSupervisorAdapter interface {
@@ -86,7 +87,9 @@ func (a *processSupervisorAdapter) StartProcess(ctx context.Context, def *truste
 
 	result, err := a.supervisor.Start(ctx, startReq)
 	if err != nil {
-		_ = a.supervisor.Unregister(supervisorKey)
+		if err := a.supervisor.Unregister(supervisorKey); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, nil, &ExecutionError{
 			Code:         ErrServiceLaunchFailed,
 			RuntimeID:    string(execCtx.RuntimeID),
@@ -136,7 +139,9 @@ func (a *processSupervisorAdapter) StopProcess(ctx context.Context, handle Servi
 			Cause:     err,
 		}
 	}
-	_ = a.supervisor.Unregister(handle.InstanceID)
+	if err := a.supervisor.Unregister(handle.InstanceID); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	return nil
 }
 

@@ -201,8 +201,9 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         _envResults = checked;
         _envChecked = checked.every((value) => value);
       });
-    } catch (_) {
-      if (!mounted) return;
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+if (!mounted) return;
       setState(() {
         _envResults = [false, false, false];
         _envChecked = false;
@@ -277,15 +278,18 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
           _embeddingConfigId = null;
         });
       }
-    } catch (_) {
-      await deploymentNotifier.update(previousConfig);
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+await deploymentNotifier.update(previousConfig);
       ref.invalidate(backendConnectionProvider);
       ref.invalidate(backendTransportProvider);
       try {
         await ref
             .read(mobileBackendLifecycleProvider)
             .reconcile(previousConfig);
-      } catch (_) {}
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
       rethrow;
     } finally {
       if (deploymentChanged) {

@@ -96,15 +96,21 @@ internal class AudioPlaybackNativeHandler : AndroidNativeOperationHandler {
         if (current != null) {
             try {
                 if (current.isPlaying) current.stop()
-            } catch (_: Exception) {
+            } catch (originalError99: Exception) {
+              originalError99.printStackTrace()
+
             }
             try {
                 current.reset()
-            } catch (_: Exception) {
+            } catch (originalError103: Exception) {
+              originalError103.printStackTrace()
+
             }
             try {
                 current.release()
-            } catch (_: Exception) {
+            } catch (originalError107: Exception) {
+              originalError107.printStackTrace()
+
             }
         }
     }

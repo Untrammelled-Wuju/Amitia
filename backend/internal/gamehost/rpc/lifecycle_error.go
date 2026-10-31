@@ -12,9 +12,9 @@ import (
 type LifecycleErrorCode string
 
 const (
-	LifecycleErrorTimeout     LifecycleErrorCode = "timeout"
-	LifecycleErrorCancelled   LifecycleErrorCode = "cancelled"
-	LifecycleErrorInternal    LifecycleErrorCode = "internal"
+	LifecycleErrorTimeout   LifecycleErrorCode = "timeout"
+	LifecycleErrorCancelled LifecycleErrorCode = "cancelled"
+	LifecycleErrorInternal  LifecycleErrorCode = "internal"
 )
 
 type LifecycleError struct {
@@ -106,4 +106,3 @@ func MapLifecycleError(err error) *protocol.ProtocolError {
 
 	return InternalError(err.Error())
 }
-

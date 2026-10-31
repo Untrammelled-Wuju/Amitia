@@ -76,8 +76,9 @@ class _McpListPageState extends ConsumerState<McpListPage> {
                 .where((name) => name.isNotEmpty)
                 .toSet();
             return MapEntry(id, enabled);
-          } catch (_) {
-            return MapEntry(id, <String>{});
+          } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return MapEntry(id, <String>{});
           }
         }),
       );

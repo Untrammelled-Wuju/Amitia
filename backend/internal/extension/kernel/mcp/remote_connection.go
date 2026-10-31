@@ -12,6 +12,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/mcpruntime/discovery"
 	"github.com/u-ai/backend/internal/extension/mcpruntime/protocol"
 	"github.com/u-ai/backend/internal/extension/mcpruntime/transport"
+	amitialog "log"
 )
 
 type CanonicalRemoteConnection struct {
@@ -86,7 +87,9 @@ func (c *CanonicalRemoteConnection) Start(ctx context.Context) error {
 	c.mu.Unlock()
 
 	if err := c.performHandshake(ctx); err != nil {
-		_ = c.Close(ctx)
+		if err := c.Close(ctx); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return err
 	}
 
@@ -143,7 +146,9 @@ func (c *CanonicalRemoteConnection) Close(ctx context.Context) error {
 		closeErr = conn.Close(ctx)
 	}
 	if transport != nil {
-		_ = transport.Close(ctx)
+		if err := transport.Close(ctx); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 
 	c.mu.Lock()

@@ -110,11 +110,11 @@ func (r *RollbackResult) HasErrors() bool {
 }
 
 type ShutdownResult struct {
-	RuntimeID       string
-	Stopped         []string
-	FailedToStop    map[string]error
-	SkippedCount    int
-	CleanupErrors   []error
+	RuntimeID     string
+	Stopped       []string
+	FailedToStop  map[string]error
+	SkippedCount  int
+	CleanupErrors []error
 }
 
 func NewShutdownResult(runtimeID string) *ShutdownResult {

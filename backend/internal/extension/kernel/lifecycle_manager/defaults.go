@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
+	amitialog "log"
 )
 
 type DefaultStateLoader struct {
@@ -166,7 +167,9 @@ func (e *DefaultExecutor) executeStep(ctx context.Context, cmd LifecycleCommand,
 			if err == nil {
 				inst.EnablementState = domain.EnablementEnabled
 				inst.UpdatedAt = time.Now().UTC()
-				_ = e.instRepo.PutInstallation(ctx, inst)
+				if err := e.instRepo.PutInstallation(ctx, inst); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 		}
 	case "stop":
@@ -177,13 +180,17 @@ func (e *DefaultExecutor) executeStep(ctx context.Context, cmd LifecycleCommand,
 					inst.EnablementState = domain.EnablementDisabled
 				}
 				inst.UpdatedAt = time.Now().UTC()
-				_ = e.instRepo.PutInstallation(ctx, inst)
+				if err := e.instRepo.PutInstallation(ctx, inst); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 		}
 	case "activate", "deactivate", "pause", "drain":
 	case "release", "remove", "delete", "unregister":
 		if cmd.Kind == CmdUninstall {
-			_ = e.instRepo.DeleteInstallation(ctx, cmd.ExtensionID)
+			if err := e.instRepo.DeleteInstallation(ctx, cmd.ExtensionID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	case "reconcile", "load", "restore":
 	case "audit":

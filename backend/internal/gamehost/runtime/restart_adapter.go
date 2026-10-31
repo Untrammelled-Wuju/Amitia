@@ -16,8 +16,8 @@ type RestartAdapter interface {
 }
 
 type restartAdapter struct {
-	mu      sync.RWMutex
-	states  map[domain.RuntimeInstanceID]map[domain.ServiceID]RestartSnapshot
+	mu     sync.RWMutex
+	states map[domain.RuntimeInstanceID]map[domain.ServiceID]RestartSnapshot
 }
 
 func NewRestartAdapter() RestartAdapter {
@@ -51,7 +51,7 @@ func (a *restartAdapter) HandleRestartEvent(ctx context.Context, event Superviso
 	case RestartScheduled, RestartStarted:
 		existing.Restarting = true
 		existing.Exhausted = false
-		existing.Reason = truncateReason(event.Reason)
+		existing.Reason = event.Reason
 		if event.Event == RestartStarted {
 			existing.RestartCount++
 			existing.Generation = event.Generation
@@ -62,14 +62,14 @@ func (a *restartAdapter) HandleRestartEvent(ctx context.Context, event Superviso
 		existing.Restarting = false
 		existing.Exhausted = false
 		existing.Generation = event.Generation
-		existing.Reason = truncateReason(event.Reason)
+		existing.Reason = event.Reason
 	case RestartFailed:
 		existing.Restarting = false
-		existing.Reason = truncateReason(event.Reason)
+		existing.Reason = event.Reason
 	case RestartExhausted:
 		existing.Restarting = false
 		existing.Exhausted = true
-		existing.Reason = truncateReason(event.Reason)
+		existing.Reason = event.Reason
 	}
 
 	services[event.ServiceID] = existing

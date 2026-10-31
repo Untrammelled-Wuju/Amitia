@@ -36,7 +36,9 @@ internal class ExecutorRuntimeRecoveryScheduler : RuntimeRecoveryScheduler {
         val thread = Thread {
             try {
                 Thread.sleep(delayMillis)
-            } catch (_: InterruptedException) {
+            } catch (originalError39: InterruptedException) {
+              originalError39.printStackTrace()
+
                 return@Thread
             }
             if (!cancelled.get()) action()

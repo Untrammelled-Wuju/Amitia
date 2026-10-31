@@ -79,8 +79,9 @@ class WorkspaceService {
         if (refreshed != null) {
           mounts[i] = WorkspaceMountDto.fromJson(refreshed);
         }
-      } catch (_) {
-        // The native relay can still be connecting during app startup. The
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+// The native relay can still be connecting during app startup. The
         // next dropdown refresh will retry without losing the persisted mount.
       }
     }

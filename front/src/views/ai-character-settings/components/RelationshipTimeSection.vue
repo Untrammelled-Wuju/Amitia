@@ -214,8 +214,9 @@ async function load() {
     Object.assign(settings, await getRelationshipTimeSettings(props.characterId));
     settings.characterId = props.characterId;
     availability.value = "available";
-  } catch {
-    availability.value = "error";
+  } catch (error) {
+  console.error("[original-error]", error);
+availability.value = "error";
     loadError.value = "无法读取当前所有者的关系时间设置";
   }
   loading.value = false;
@@ -228,8 +229,9 @@ async function loadState() {
   stateError.value = "";
   try {
     state.value = await getRelationshipTimeState(props.characterId);
-  } catch {
-    state.value = null;
+  } catch (error) {
+  console.error("[original-error]", error);
+state.value = null;
     stateError.value = "关系状态加载失败，请重试";
   } finally {
     stateLoading.value = false;
@@ -247,8 +249,9 @@ async function save() {
     );
     ElMessage.success("关系时间设置已保存");
     await loadState();
-  } catch {
-    ElMessage.error("关系时间设置保存失败");
+  } catch (error) {
+  console.error("[original-error]", error);
+ElMessage.error(error instanceof Error ? error.message : String(error));
   } finally {
     saving.value = false;
   }

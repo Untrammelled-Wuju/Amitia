@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/u-ai/backend/internal/workspace"
+	amitialog "log"
 )
 
 type EditMode string
@@ -98,13 +99,17 @@ func (e *defaultSourceEditor) ApplyEdits(ctx context.Context, req SourceEditRequ
 		}
 		for _, op := range req.Operations {
 			if err := e.applyOperationTx(ctx, tx, op); err != nil {
-				_ = e.precise.Rollback(ctx, tx)
+				if err := e.precise.Rollback(ctx, tx); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 				return nil, err
 			}
 		}
 		if req.AutoCommit {
 			if err := e.precise.Commit(ctx, tx); err != nil {
-				_ = e.precise.Rollback(ctx, tx)
+				if err := e.precise.Rollback(ctx, tx); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 				return nil, fmt.Errorf("%w: %v", ErrTransactionFailed, err)
 			}
 		} else {
@@ -156,7 +161,9 @@ func (e *defaultSourceEditor) ApplyPatchesTx(ctx context.Context, tx *workspace.
 	result := &SourceEditResult{}
 	for _, op := range req.Operations {
 		if err := e.applyOperationTx(ctx, tx, op); err != nil {
-			_ = e.precise.Rollback(ctx, tx)
+			if err := e.precise.Rollback(ctx, tx); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			delete(e.activeTxs, tx.ID)
 			return nil, err
 		}
@@ -188,7 +195,9 @@ func (e *defaultSourceEditor) CommitTx(ctx context.Context, tx *workspace.EditTr
 		return ErrPreciseUnavailable
 	}
 	if err := e.precise.Commit(ctx, tx); err != nil {
-		_ = e.precise.Rollback(ctx, tx)
+		if err := e.precise.Rollback(ctx, tx); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		delete(e.activeTxs, tx.ID)
 		return fmt.Errorf("%w: %v", ErrTransactionFailed, err)
 	}
@@ -213,7 +222,9 @@ func (e *defaultSourceEditor) FinalizePreviewTx(ctx context.Context, tx *workspa
 		return fmt.Errorf("%w: precise service does not support preview transactions", ErrPreciseUnavailable)
 	}
 	if err := previewSvc.FinalizePreviewCommit(ctx, tx); err != nil {
-		_ = e.precise.Rollback(ctx, tx)
+		if err := e.precise.Rollback(ctx, tx); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		delete(e.activeTxs, tx.ID)
 		return fmt.Errorf("%w: %v", ErrTransactionFailed, err)
 	}

@@ -88,8 +88,9 @@ class _ConversationMediaImageState
             cacheWidth: widget.cacheWidth,
             errorBuilder: (_, _, _) => _failure(),
           );
-        } catch (_) {
-          return _failure();
+        } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return _failure();
         }
       },
     );

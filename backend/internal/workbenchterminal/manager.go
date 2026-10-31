@@ -3,6 +3,7 @@ package workbenchterminal
 import (
 	"crypto/rand"
 	"encoding/hex"
+	amitialog "log"
 	"sync"
 	"time"
 )
@@ -60,7 +61,9 @@ func (m *Manager) prune() {
 	for _, s := range expired {
 		s.stopAcceptingCommands()
 		m.recordClose(s, "closed")
-		_ = s.proc.Close()
+		if err := s.proc.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 }
 func (m *Manager) Open(owner, cwd string, rows, cols uint16) (Snapshot, error) {
@@ -123,14 +126,18 @@ func (m *Manager) OpenTask(owner, cwd, workspaceURI, taskID string, rows, cols u
 	if m.closed {
 		m.mu.Unlock()
 		if p != nil {
-			_ = p.Close()
+			if err := p.Close(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		return Snapshot{}, ErrClosed
 	}
 	if err != nil {
 		m.mu.Unlock()
 		if p != nil {
-			_ = p.Close()
+			if err := p.Close(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		return Snapshot{}, err
 	}
@@ -218,6 +225,8 @@ func (m *Manager) Close() {
 	m.mu.Unlock()
 	for _, s := range sessions {
 		m.recordClose(s, "closed")
-		_ = s.proc.Close()
+		if err := s.proc.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 }

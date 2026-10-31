@@ -24,6 +24,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/schedule"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
 	"github.com/u-ai/backend/internal/middleware/security"
+	amitialog "log"
 )
 
 const (
@@ -161,7 +162,7 @@ func (api *WorkflowAPI) updateWakeRuntimeDeviceStatus(c *gin.Context) {
 	decoder := json.NewDecoder(http.MaxBytesReader(c.Writer, c.Request.Body, 4096))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid wake device status"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	if err := api.runtime.updateWorkflowWakeDeviceStatus(request.State, request.Reason); err != nil {
@@ -189,7 +190,7 @@ func (api *WorkflowAPI) ingestWakeRuntimeAudio(c *gin.Context) {
 		defer clear(pcm)
 	}
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid wake audio payload"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	if len(pcm) == 0 || len(pcm)%2 != 0 {
@@ -200,7 +201,7 @@ func (api *WorkflowAPI) ingestWakeRuntimeAudio(c *gin.Context) {
 	if raw := strings.TrimSpace(c.GetHeader("X-Amitia-Audio-Sequence")); raw != "" {
 		parsed, parseErr := strconv.ParseUint(raw, 10, 64)
 		if parseErr != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid wake audio sequence"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": parseErr.Error()})
 			return
 		}
 		sequence = parsed
@@ -209,7 +210,7 @@ func (api *WorkflowAPI) ingestWakeRuntimeAudio(c *gin.Context) {
 	if raw := strings.TrimSpace(c.GetHeader("X-Amitia-Captured-At-Ms")); raw != "" {
 		millis, parseErr := strconv.ParseInt(raw, 10, 64)
 		if parseErr != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid wake audio timestamp"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": parseErr.Error()})
 			return
 		}
 		candidate := time.UnixMilli(millis).UTC()
@@ -304,7 +305,7 @@ func (api *WorkflowAPI) updateTriggerAppCatalog(c *gin.Context) {
 	decoder := json.NewDecoder(http.MaxBytesReader(c.Writer, c.Request.Body, 512*1024))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid trigger app catalog"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	if len(request.Items) > 2000 {
@@ -395,7 +396,7 @@ func (api *WorkflowAPI) updateTriggerCapabilityStatus(c *gin.Context) {
 	decoder := json.NewDecoder(http.MaxBytesReader(c.Writer, c.Request.Body, 32*1024))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid trigger capability status"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	allowed := map[string]struct{}{
@@ -444,7 +445,7 @@ func (api *WorkflowAPI) workflowSyncConflicts(c *gin.Context) {
 	if raw := strings.TrimSpace(c.Query("limit")); raw != "" {
 		parsed, err := strconv.Atoi(raw)
 		if err != nil || parsed <= 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "limit must be a positive integer"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 		if parsed > 500 {
@@ -492,14 +493,14 @@ func (api *WorkflowAPI) workflowSyncEvents(c *gin.Context) {
 	}
 	afterCursor, err := strconv.ParseInt(afterRaw, 10, 64)
 	if err != nil || afterCursor < 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "afterCursor must be a non-negative integer"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	limit := 200
 	if raw := strings.TrimSpace(c.Query("limit")); raw != "" {
 		parsed, parseErr := strconv.Atoi(raw)
 		if parseErr != nil || parsed <= 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "limit must be a positive integer"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": parseErr.Error()})
 			return
 		}
 		if parsed > 1000 {
@@ -875,7 +876,7 @@ func (api *WorkflowAPI) owned(c *gin.Context) (workflow.WorkflowDefinition, bool
 	inst, err := api.installationFor(c.Request.Context(), def, spaceID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "workflow installation not found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		} else {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
@@ -953,8 +954,12 @@ func (api *WorkflowAPI) update(c *gin.Context) {
 		return
 	}
 	rollback := func() {
-		_ = api.syncTriggers(c.Request.Context(), def, old, spaceID)
-		_ = registry.UpsertContext(api.workflowDefinitionMutationContext(c.Request.Context()), old)
+		if err := api.syncTriggers(c.Request.Context(), def, old, spaceID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := registry.UpsertContext(api.workflowDefinitionMutationContext(c.Request.Context()), old); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	if err := api.syncTriggers(c.Request.Context(), old, def, spaceID); err != nil {
 		rollback()
@@ -1053,8 +1058,12 @@ func (api *WorkflowAPI) patch(c *gin.Context) {
 		return
 	}
 	rollback := func() {
-		_ = api.syncTriggers(c.Request.Context(), def, old, spaceID)
-		_ = registry.UpsertContext(api.workflowDefinitionMutationContext(c.Request.Context()), old)
+		if err := api.syncTriggers(c.Request.Context(), def, old, spaceID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := registry.UpsertContext(api.workflowDefinitionMutationContext(c.Request.Context()), old); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	if err := api.syncTriggers(c.Request.Context(), old, def, spaceID); err != nil {
 		rollback()
@@ -1159,8 +1168,12 @@ func (api *WorkflowAPI) registerNewUserWorkflow(ctx context.Context, registry *w
 		return err
 	}
 	rollback := func() {
-		_ = api.syncTriggers(ctx, def, workflow.WorkflowDefinition{}, spaceID)
-		_ = registry.UnregisterContext(api.workflowDefinitionMutationContext(ctx), def.ID)
+		if err := api.syncTriggers(ctx, def, workflow.WorkflowDefinition{}, spaceID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := registry.UnregisterContext(api.workflowDefinitionMutationContext(ctx), def.ID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	if err := api.syncTriggers(ctx, workflow.WorkflowDefinition{}, def, spaceID); err != nil {
 		rollback()
@@ -1231,14 +1244,16 @@ func (api *WorkflowAPI) importWorkflow(c *gin.Context) {
 	}
 	raw, err := c.GetRawData()
 	if err != nil || len(raw) == 0 || !json.Valid(raw) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "workflow import must be valid JSON"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	var header struct {
 		Format        string `json:"format"`
 		FormatVersion int    `json:"formatVersion"`
 	}
-	_ = json.Unmarshal(raw, &header)
+	if err := json.Unmarshal(raw, &header); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	var def workflow.WorkflowDefinition
 	if strings.TrimSpace(header.Format) != "" {
 		if header.Format != "amitia-workflow" || header.FormatVersion != 1 {
@@ -1295,7 +1310,9 @@ func (api *WorkflowAPI) saveTemplate(c *gin.Context) {
 		Name        string `json:"name"`
 		Description string `json:"description"`
 	}
-	_ = c.ShouldBindJSON(&body)
+	if err := c.ShouldBindJSON(&body); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	name := strings.TrimSpace(body.Name)
 	if name == "" {
 		name = def.Name
@@ -1338,13 +1355,15 @@ func (api *WorkflowAPI) instantiateTemplate(c *gin.Context) {
 	}
 	item, err := api.runtime.Kernel.Container().WorkflowDefRepo.GetTemplate(c.Request.Context(), workflowSpaceID(c), c.Param("templateId"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "workflow template not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
 	var body struct {
 		Name string `json:"name"`
 	}
-	_ = c.ShouldBindJSON(&body)
+	if err := c.ShouldBindJSON(&body); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	def, err := workflow.CloneDefinition(item.Definition)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -1385,7 +1404,7 @@ func (api *WorkflowAPI) deleteTemplate(c *gin.Context) {
 		return
 	}
 	if err := api.runtime.Kernel.Container().WorkflowDefRepo.DeleteTemplate(c.Request.Context(), workflowSpaceID(c), c.Param("templateId")); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "workflow template not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"deleted": true})
@@ -1440,7 +1459,9 @@ func (api *WorkflowAPI) createRevision(c *gin.Context) {
 	var body struct {
 		Note string `json:"note"`
 	}
-	_ = c.ShouldBindJSON(&body)
+	if err := c.ShouldBindJSON(&body); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	item, err := api.runtime.Kernel.Container().WorkflowDefRepo.SaveDraftRevision(c.Request.Context(), workflowSpaceID(c), def, body.Note)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -1481,7 +1502,7 @@ func (api *WorkflowAPI) publishRevision(c *gin.Context) {
 
 	revision, err := api.runtime.Kernel.Container().WorkflowDefRepo.GetRevision(c.Request.Context(), spaceID, workflowID, c.Param("revisionId"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "workflow revision not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
 	previousState := revision.State
@@ -1496,10 +1517,12 @@ func (api *WorkflowAPI) publishRevision(c *gin.Context) {
 		if previousState == published.State && previousPublishedAt == published.PublishedAt && previousArchivedAt == published.ArchivedAt {
 			return
 		}
-		_, _ = api.runtime.Kernel.Container().WorkflowDefRepo.RestoreRevisionLifecycle(
+		if _, err := api.runtime.Kernel.Container().WorkflowDefRepo.RestoreRevisionLifecycle(
 			context.Background(), spaceID, workflowID, revision.RevisionID,
 			previousState, previousPublishedAt, previousArchivedAt,
-		)
+		); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	target, err := workflow.CloneDefinition(revision.Definition)
 	if err != nil {
@@ -1532,8 +1555,12 @@ func (api *WorkflowAPI) publishRevision(c *gin.Context) {
 			return
 		}
 		rollback := func() {
-			_ = api.syncTriggers(c.Request.Context(), target, current, spaceID)
-			_ = registry.UpsertContext(api.workflowDefinitionMutationContext(c.Request.Context()), current)
+			if err := api.syncTriggers(c.Request.Context(), target, current, spaceID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
+			if err := registry.UpsertContext(api.workflowDefinitionMutationContext(c.Request.Context()), current); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			restoreLifecycle()
 		}
 		if err := api.syncTriggers(c.Request.Context(), current, target, spaceID); err != nil {
@@ -1570,7 +1597,7 @@ func (api *WorkflowAPI) archiveRevision(c *gin.Context) {
 	repo := api.runtime.Kernel.Container().WorkflowDefRepo
 	revision, err := repo.GetRevision(c.Request.Context(), spaceID, workflowID, c.Param("revisionId"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "workflow revision not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
 	if revision.DefinitionHash == current.DefinitionHash {
@@ -1614,7 +1641,7 @@ func (api *WorkflowAPI) rollbackRevision(c *gin.Context) {
 	}
 	revision, err := api.runtime.Kernel.Container().WorkflowDefRepo.GetRevision(c.Request.Context(), spaceID, current.ID, c.Param("revisionId"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "workflow revision not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
 	target, err := workflow.CloneDefinition(revision.Definition)
@@ -1644,8 +1671,12 @@ func (api *WorkflowAPI) rollbackRevision(c *gin.Context) {
 		return
 	}
 	rollback := func() {
-		_ = api.syncTriggers(c.Request.Context(), target, current, spaceID)
-		_ = registry.UpsertContext(api.workflowDefinitionMutationContext(c.Request.Context()), current)
+		if err := api.syncTriggers(c.Request.Context(), target, current, spaceID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := registry.UpsertContext(api.workflowDefinitionMutationContext(c.Request.Context()), current); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	if err := api.syncTriggers(c.Request.Context(), current, target, spaceID); err != nil {
 		rollback()
@@ -1688,7 +1719,9 @@ func (api *WorkflowAPI) delete(c *gin.Context) {
 		return
 	}
 	if err := registry.UnregisterContext(api.workflowDefinitionMutationContext(c.Request.Context()), old.ID); err != nil {
-		_ = api.syncTriggers(c.Request.Context(), workflow.WorkflowDefinition{}, old, spaceID)
+		if err := api.syncTriggers(c.Request.Context(), workflow.WorkflowDefinition{}, old, spaceID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -1730,15 +1763,23 @@ func (api *WorkflowAPI) setEnabled(c *gin.Context, enabled bool) {
 		return
 	}
 	if err := api.syncTriggers(c.Request.Context(), old, def, spaceID); err != nil {
-		_ = api.syncTriggers(c.Request.Context(), def, old, spaceID)
-		_ = registry.UpsertContext(api.workflowDefinitionMutationContext(c.Request.Context()), old)
+		if err := api.syncTriggers(c.Request.Context(), def, old, spaceID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := registry.UpsertContext(api.workflowDefinitionMutationContext(c.Request.Context()), old); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	updatedInst, err := api.updateInstallationCAS(c.Request.Context(), def, spaceID, currentInst, expectedRevision)
 	if err != nil {
-		_ = api.syncTriggers(c.Request.Context(), def, old, spaceID)
-		_ = registry.UpsertContext(api.workflowDefinitionMutationContext(c.Request.Context()), old)
+		if err := api.syncTriggers(c.Request.Context(), def, old, spaceID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := registry.UpsertContext(api.workflowDefinitionMutationContext(c.Request.Context()), old); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		if isWorkflowRevisionConflict(err) {
 			writeWorkflowRevisionConflict(c)
 			return
@@ -1793,7 +1834,7 @@ func (api *WorkflowAPI) run(c *gin.Context) {
 	}
 	report := api.preflightDefinition(c.Request.Context(), def, workflowSpaceID(c))
 	if err := workflowPreflightBlockedError(report); err != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "WORKFLOW_PREFLIGHT_BLOCKED", "code": "WORKFLOW_PREFLIGHT_BLOCKED", "detail": err.Error(), "preflight": report})
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "WORKFLOW_PREFLIGHT_BLOCKED", "detail": err.Error(), "preflight": report})
 		return
 	}
 	inst, err := api.installationFor(c.Request.Context(), def, workflowSpaceID(c))
@@ -1822,7 +1863,11 @@ func (api *WorkflowAPI) run(c *gin.Context) {
 		c.JSON(status, result)
 		return
 	}
-	go func() { _, _ = executor.Execute(context.Background(), req) }()
+	go func() {
+		if _, err := executor.Execute(context.Background(), req); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+	}()
 	c.JSON(http.StatusAccepted, gin.H{"accepted": true, "executionId": executionID, "workflowId": def.ID, "status": workflow.RunStatusRunning, "executionMode": opts.Mode})
 }
 
@@ -1912,7 +1957,9 @@ func (api *WorkflowAPI) getRun(c *gin.Context) {
 		}
 		def, ok := kc.WorkflowRegistry.Get(run.WorkflowID)
 		if !ok && len(run.Context.DefinitionSnapshot) > 0 {
-			_ = json.Unmarshal(run.Context.DefinitionSnapshot, &def)
+			if err := json.Unmarshal(run.Context.DefinitionSnapshot, &def); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		c.JSON(http.StatusOK, gin.H{
 			"run":                   run,
@@ -1933,7 +1980,7 @@ func (api *WorkflowAPI) getRun(c *gin.Context) {
 
 	result, _, remoteErr := api.resolveRemoteWorkflowRun(ctx, spaceID, runID, WorkflowMeshRunGet, nil)
 	if remoteErr != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "workflow run not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": remoteErr.Error()})
 		return
 	}
 	c.Header("Cache-Control", "no-store")
@@ -1970,7 +2017,7 @@ func (api *WorkflowAPI) getRunLogs(c *gin.Context) {
 	}
 	result, _, remoteErr := api.resolveRemoteWorkflowRun(ctx, spaceID, runID, WorkflowMeshRunLogs, nil)
 	if remoteErr != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "workflow run not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": remoteErr.Error()})
 		return
 	}
 	c.Header("Cache-Control", "no-store")
@@ -2007,7 +2054,7 @@ func (api *WorkflowAPI) localRunOwned(ctx context.Context, spaceID, runID string
 func (api *WorkflowAPI) runOwned(c *gin.Context) (*workflow.WorkflowRun, *workflow.WorkflowExecutor, bool) {
 	run, executor, err := api.localRunOwned(c.Request.Context(), workflowSpaceID(c), c.Param("runId"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "workflow run not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return nil, nil, false
 	}
 	return run, executor, true
@@ -2028,7 +2075,7 @@ func (api *WorkflowAPI) cancelRun(c *gin.Context) {
 	}
 	result, _, err := api.resolveRemoteWorkflowRun(ctx, spaceID, runID, WorkflowMeshRunCancel, nil)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "workflow run not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
 	c.Data(http.StatusOK, "application/json", result)
@@ -2038,7 +2085,9 @@ func (api *WorkflowAPI) pauseRun(c *gin.Context) {
 	var body struct {
 		Reason string `json:"reason"`
 	}
-	_ = c.ShouldBindJSON(&body)
+	if err := c.ShouldBindJSON(&body); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	ctx := c.Request.Context()
 	spaceID := workflowSpaceID(c)
 	runID := c.Param("runId")
@@ -2053,7 +2102,7 @@ func (api *WorkflowAPI) pauseRun(c *gin.Context) {
 	}
 	result, _, err := api.resolveRemoteWorkflowRun(ctx, spaceID, runID, WorkflowMeshRunPause, map[string]any{"reason": body.Reason})
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "workflow run not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
 	c.Data(http.StatusOK, "application/json", result)
@@ -2074,7 +2123,7 @@ func (api *WorkflowAPI) resumeRun(c *gin.Context) {
 	}
 	result, _, err := api.resolveRemoteWorkflowRun(ctx, spaceID, runID, WorkflowMeshRunResume, nil)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "workflow run not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
 	c.Data(http.StatusOK, "application/json", result)
@@ -2108,7 +2157,7 @@ func (api *WorkflowAPI) confirmRun(c *gin.Context) {
 	}
 	result, _, err := api.resolveRemoteWorkflowRun(ctx, spaceID, runID, WorkflowMeshRunConfirm, map[string]any{"nodeIds": body.NodeIDs})
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "workflow run not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
 	c.Data(http.StatusAccepted, "application/json", result)
@@ -2122,7 +2171,7 @@ func (api *WorkflowAPI) recoverRun(c *gin.Context) {
 	if localErr != nil {
 		result, _, remoteErr := api.resolveRemoteWorkflowRun(ctx, spaceID, runID, WorkflowMeshRunRecover, nil)
 		if remoteErr != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "workflow run not found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": localErr.Error()})
 			return
 		}
 		c.Data(http.StatusAccepted, "application/json", result)
@@ -2139,7 +2188,7 @@ func (api *WorkflowAPI) recoverRun(c *gin.Context) {
 	if len(run.Context.DefinitionSnapshot) > 0 {
 		var snapshot workflow.WorkflowDefinition
 		if err := json.Unmarshal(run.Context.DefinitionSnapshot, &snapshot); err != nil {
-			c.JSON(http.StatusConflict, gin.H{"error": "run definition snapshot is invalid; checkpoint recovery is unsafe"})
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 			return
 		}
 		if snapshot.ID != run.WorkflowID || workflow.ComputeDefinitionHash(snapshot) != run.Context.DefinitionHash {
@@ -2185,7 +2234,11 @@ func (api *WorkflowAPI) recoverRun(c *gin.Context) {
 	execution.OperationID = "wf-recover-" + uuid.NewString()
 	execution.TraceID = "trace-" + uuid.NewString()
 	req := workflow.ExecuteRequest{WorkflowID: run.WorkflowID, Input: run.Input, Context: execution}
-	go func() { _, _ = executor.Execute(context.Background(), req) }()
+	go func() {
+		if _, err := executor.Execute(context.Background(), req); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+	}()
 	c.JSON(http.StatusAccepted, gin.H{"accepted": true, "executionId": run.ExecutionID, "workflowId": run.WorkflowID, "status": workflow.RunStatusRunning, "generation": execution.Generation, "checkpointCount": len(checkpoints)})
 }
 
@@ -2269,7 +2322,11 @@ func (api *WorkflowAPI) rerunRun(c *gin.Context) {
 		})
 		return
 	}
-	go func() { _, _ = executor.Execute(context.Background(), req) }()
+	go func() {
+		if _, err := executor.Execute(context.Background(), req); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+	}()
 	c.JSON(http.StatusAccepted, gin.H{
 		"accepted":          true,
 		"executionId":       executionID,
@@ -2678,7 +2735,9 @@ func (api *WorkflowAPI) syncTriggers(ctx context.Context, oldDef, newDef workflo
 		newDef.Triggers = nil
 	}
 	if oldDef.ID != "" {
-		_ = kc.WorkflowDefRepo.DeleteTriggersByWorkflow(ctx, oldDef.ID)
+		if err := kc.WorkflowDefRepo.DeleteTriggersByWorkflow(ctx, oldDef.ID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	for _, trigger := range newDef.Triggers {
 		if !trigger.Enabled || trigger.Type != "event" {
@@ -2702,7 +2761,9 @@ func (api *WorkflowAPI) syncTriggers(ctx context.Context, oldDef, newDef workflo
 	if kc.ScheduleService != nil {
 		for _, trigger := range oldDef.Triggers {
 			if isScheduleTrigger(trigger.Type) {
-				_ = kc.ScheduleService.Uninstall(ctx, scheduleIDFor(oldDef.ID, trigger.ID))
+				if err := kc.ScheduleService.Uninstall(ctx, scheduleIDFor(oldDef.ID, trigger.ID)); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 		}
 		for _, trigger := range newDef.Triggers {

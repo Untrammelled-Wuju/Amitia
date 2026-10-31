@@ -4,8 +4,9 @@ const path = require('node:path');
 const vm = require('node:vm');
 const ts = (() => {
   try { return require('typescript'); }
-  catch {
-    return require(path.resolve(path.dirname(process.execPath), '../lib/node_modules/typescript'));
+  catch (error) {
+  console.error("[original-error]", error);
+return require(path.resolve(path.dirname(process.execPath), '../lib/node_modules/typescript'));
   }
 })();
 

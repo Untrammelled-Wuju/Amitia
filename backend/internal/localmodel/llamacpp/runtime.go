@@ -24,6 +24,7 @@ import (
 	"github.com/u-ai/backend/internal/localmodel/gguf"
 	"github.com/u-ai/backend/internal/media"
 	"github.com/u-ai/backend/internal/runtimehost"
+	amitialog "log"
 )
 
 type llamaRuntime struct {
@@ -80,7 +81,7 @@ func newLlamaRuntime(config LlamaCppProviderConfig) *llamaRuntime {
 		config:       config,
 		state:        "unloaded",
 		port:         0,
-		processID:    runtimehost.ProcessID("llama-cpp-" + config.LocalModelID + "-" + llamaConfigFingerprint(config)),
+		processID:    runtimehost.ProcessID(localmodel.RuntimeProcessID("llama-cpp", config.LocalModelID, llamaConfigFingerprint(config))),
 		materializer: localmodel.GetGlobalMediaMaterializer(),
 	}
 }
@@ -216,10 +217,7 @@ func (r *llamaRuntime) startServer(ctx context.Context) error {
 		Environment: runtimehost.EnvironmentSpec{
 			Policy: runtimehost.EnvPolicyMinimal,
 		},
-		HealthProbe: &runtimehost.HTTPHealthProbe{
-			URL:     r.baseURL + "/health",
-			Timeout: 2 * time.Second,
-		},
+		HealthProbe:     runtimehost.NewHTTPHealthProbe(r.baseURL+"/health", 2*time.Second),
 		StartupTimeout:  60 * time.Second,
 		StopGracePeriod: 10 * time.Second,
 		RestartPolicy: runtimehost.RestartPolicy{
@@ -252,12 +250,16 @@ func (r *llamaRuntime) startServer(ctx context.Context) error {
 
 func (r *llamaRuntime) cleanupModel() {
 	if r.modelCleanup != nil {
-		_ = r.modelCleanup()
+		if err := r.modelCleanup(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		r.modelCleanup = nil
 		r.modelPath = ""
 	}
 	if r.mmprojCleanup != nil {
-		_ = r.mmprojCleanup()
+		if err := r.mmprojCleanup(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		r.mmprojCleanup = nil
 		r.mmprojPath = ""
 	}
@@ -269,8 +271,12 @@ func (r *llamaRuntime) stopServer() {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	_ = r.supervisor.Stop(ctx, r.processID)
-	_ = r.supervisor.Unregister(r.processID)
+	if err := r.supervisor.Stop(ctx, r.processID); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := r.supervisor.Unregister(r.processID); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	if r.port > 0 {
 		releasePort(r.port)
 		r.port = 0
@@ -280,10 +286,25 @@ func (r *llamaRuntime) stopServer() {
 }
 
 func (r *llamaRuntime) findLlamaServerExecutable() string {
+	return llamaServerExecutable(r.config.Backend)
+}
+
+func llamaServerExecutable(configured string) string {
 	candidates := []string{
-		r.config.Backend,
+		configured,
 		filepath.Join("resources", "llama", "llama-server.exe"),
 		filepath.Join("resources", "llama", "llama-server"),
+	}
+	if host := localmodel.GetGlobalRuntimeHost(); host != nil {
+		paths := host.Paths()
+		candidates = append(candidates,
+			filepath.Join(paths.Root, "resources", "llama", "llama-server.exe"),
+			filepath.Join(paths.Root, "resources", "llama", "llama-server"),
+			filepath.Join(paths.Root, "llama", "llama-server.exe"),
+			filepath.Join(paths.Root, "llama", "llama-server"),
+			filepath.Join(paths.DataDir, "runtime", "local-model", "llama", "llama-server.exe"),
+			filepath.Join(paths.DataDir, "runtime", "local-model", "llama", "llama-server"),
+		)
 	}
 	for _, c := range candidates {
 		if c == "" {
@@ -404,7 +425,7 @@ func (r *llamaRuntime) chatNonStream(ctx context.Context, request localmodel.Loc
 	}
 
 	if resp.StatusCode != 200 {
-		return localmodel.LocalModelResult{}, fmt.Errorf("llama-server returned %d: %s", resp.StatusCode, truncateBytes(body, 512))
+		return localmodel.LocalModelResult{}, fmt.Errorf("llama-server returned %d: %s", resp.StatusCode, string(body))
 	}
 
 	return parseChatCompletionResponse(body)
@@ -429,6 +450,10 @@ func (r *llamaRuntime) chatStream(ctx context.Context, request localmodel.LocalM
 		return localmodel.LocalModelResult{}, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+		return localmodel.LocalModelResult{}, fmt.Errorf("llama-server returned %d: %s", resp.StatusCode, string(body))
+	}
 
 	return parseChatCompletionStream(resp.Body, sink)
 }
@@ -548,7 +573,7 @@ func (r *llamaRuntime) embeddingRequest(ctx context.Context, inputs []string) ([
 	}
 
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("embedding returned %d: %s", resp.StatusCode, truncateBytes(body, 512))
+		return nil, fmt.Errorf("embedding returned %d: %s", resp.StatusCode, string(body))
 	}
 
 	return parseEmbeddingResponse(body)

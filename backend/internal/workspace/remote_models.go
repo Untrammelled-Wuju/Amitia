@@ -16,24 +16,24 @@ const (
 type RemoteTLSMode string
 
 const (
-	RemoteTLSModeSystem         RemoteTLSMode = "system"
-	RemoteTLSModePinned         RemoteTLSMode = "pinned"
-	RemoteTLSModeInsecure       RemoteTLSMode = "insecure"
+	RemoteTLSModeSystem   RemoteTLSMode = "system"
+	RemoteTLSModePinned   RemoteTLSMode = "pinned"
+	RemoteTLSModeInsecure RemoteTLSMode = "insecure"
 )
 
 type RemoteHostKeyMode string
 
 const (
-	RemoteHostKeyModePinned       RemoteHostKeyMode = "pinned"
-	RemoteHostKeyModeTOFU         RemoteHostKeyMode = "tofu"
+	RemoteHostKeyModePinned RemoteHostKeyMode = "pinned"
+	RemoteHostKeyModeTOFU   RemoteHostKeyMode = "tofu"
 )
 
 type RemoteAuthType string
 
 const (
-	RemoteAuthTypePassword  RemoteAuthType = "password"
+	RemoteAuthTypePassword   RemoteAuthType = "password"
 	RemoteAuthTypePrivateKey RemoteAuthType = "private_key"
-	RemoteAuthTypeBearer    RemoteAuthType = "bearer"
+	RemoteAuthTypeBearer     RemoteAuthType = "bearer"
 )
 
 type RemoteTLSConfig struct {
@@ -67,11 +67,11 @@ type RemoteMountConfig struct {
 }
 
 type RemoteCredential struct {
-	Type       RemoteAuthType
-	Username   string
-	Password   []byte
-	PrivateKey []byte
-	Passphrase []byte
+	Type        RemoteAuthType
+	Username    string
+	Password    []byte
+	PrivateKey  []byte
+	Passphrase  []byte
 	BearerToken []byte
 }
 

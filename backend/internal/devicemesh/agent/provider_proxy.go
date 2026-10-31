@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/devicemesh/lan"
+	amitialog "log"
 )
 
 func (h *LocalHandler) pauseProvider() {
@@ -51,7 +52,7 @@ func (h *LocalHandler) handleProviderProxy(c *gin.Context) {
 	host, _, err := net.SplitHostPort(c.Request.RemoteAddr)
 	ip := net.ParseIP(host)
 	if err != nil || ip == nil || !ip.IsLoopback() {
-		c.JSON(403, gin.H{"message": "仅允许本机访问云端连接通道"})
+		c.JSON(403, gin.H{"message": err.Error()})
 		return
 	}
 	h.providerMu.Lock()
@@ -75,7 +76,7 @@ func (h *LocalHandler) handleProviderProxy(c *gin.Context) {
 	c.Request = c.Request.WithContext(requestContext)
 	credential, err := h.credStore.LoadCredential()
 	if err != nil || credential == nil || !time.Now().Before(credential.ExpiresAt) {
-		c.JSON(401, gin.H{"message": "云端绑定凭证不可用，请重新配对"})
+		c.JSON(401, gin.H{"message": err.Error()})
 		return
 	}
 	path := c.Param("path")
@@ -96,14 +97,14 @@ func (h *LocalHandler) handleProviderProxy(c *gin.Context) {
 	}
 	target, err := url.Parse(credential.CloudBaseUrl)
 	if err != nil || target.Host == "" || target.User != nil || (target.Scheme != "https" && target.Scheme != "http") {
-		c.JSON(503, gin.H{"message": "云端服务地址无效"})
+		c.JSON(503, gin.H{"message": err.Error()})
 		return
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	if credential.Fingerprint != "" {
 		configuration, err := lan.PinnedTLS(lan.Endpoint{URL: credential.CloudBaseUrl, Fingerprint: credential.Fingerprint, CoreID: credential.SpaceID.String()})
 		if err != nil {
-			c.JSON(403, gin.H{"message": "云端服务身份无效"})
+			c.JSON(403, gin.H{"message": err.Error()})
 			return
 		}
 		transport.TLSClientConfig = configuration
@@ -155,7 +156,9 @@ func (h *LocalHandler) handleProviderProxy(c *gin.Context) {
 		ErrorHandler: func(writer http.ResponseWriter, _ *http.Request, _ error) {
 			writer.Header().Set("Content-Type", "application/json")
 			writer.WriteHeader(502)
-			_, _ = writer.Write([]byte(`{"message":"云端服务连接失败，当前操作未自动重试"}`))
+			if _, err := writer.Write([]byte(`{"message":"云端服务连接失败，当前操作未自动重试"}`)); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		},
 	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 64<<20)

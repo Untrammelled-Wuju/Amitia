@@ -35,8 +35,12 @@ async function picked(event: Event) {
 }
 function toggle(value: boolean | string | number) { void run(() => update({ enabled: Boolean(value) })); }
 function blurChanged(value: boolean | string | number) { void run(() => update({ blurEnabled: Boolean(value) })); }
-function opacityChanged(value: number | number[]) { if (typeof value === "number") void update({ opacity: value / 100 }).catch(() => { message.value = "保存背景失败，请重试"; }); }
-function radiusChanged(value: number | number[]) { if (typeof value === "number") void update({ blurRadius: value }).catch(() => { message.value = "保存背景失败，请重试"; }); }
+function opacityChanged(value: number | number[]) { if (typeof value === "number") void update({ opacity: value / 100 }).catch((error) => {
+  console.error("[original-error]", error);
+message.value = "保存背景失败，请重试"; }); }
+function radiusChanged(value: number | number[]) { if (typeof value === "number") void update({ blurRadius: value }).catch((error) => {
+  console.error("[original-error]", error);
+message.value = "保存背景失败，请重试"; }); }
 onMounted(() => { void init(); });
 </script>
 <style scoped>

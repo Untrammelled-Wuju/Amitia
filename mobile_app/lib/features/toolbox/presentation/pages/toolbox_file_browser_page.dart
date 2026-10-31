@@ -15,11 +15,7 @@ class _WorkspaceMount {
   final String rootUri;
   final bool available;
 
-  const _WorkspaceMount({
-    required this.name,
-    required this.rootUri,
-    required this.available,
-  });
+  const _WorkspaceMount({required this.name, required this.rootUri, required this.available});
 }
 
 class _FileItem {
@@ -42,8 +38,9 @@ class _FileItem {
 
 class ToolboxFileBrowserPage extends ConsumerStatefulWidget {
   final bool embedded;
+  final String initialRootUri;
   final void Function(String resourceUri, String workspaceUri, String title)? onOpenFile;
-  const ToolboxFileBrowserPage({super.key, this.embedded = false, this.onOpenFile});
+  const ToolboxFileBrowserPage({super.key, this.embedded = false, this.initialRootUri = '', this.onOpenFile});
 
   @override
   ConsumerState<ToolboxFileBrowserPage> createState() => _ToolboxFileBrowserPageState();
@@ -69,7 +66,9 @@ class _ToolboxFileBrowserPageState extends ConsumerState<ToolboxFileBrowserPage>
     if (folder) return Icons.folder_outlined;
     final n = name.toLowerCase();
     if (n.endsWith('.pdf')) return Icons.picture_as_pdf_outlined;
-    if (n.endsWith('.doc') || n.endsWith('.docx')) return Icons.description_outlined;
+    if (n.endsWith('.doc') || n.endsWith('.docx')) {
+      return Icons.description_outlined;
+    }
     if (n.endsWith('.png') || n.endsWith('.jpg') || n.endsWith('.jpeg') || n.endsWith('.gif') || n.endsWith('.webp')) {
       return Icons.image_outlined;
     }
@@ -89,32 +88,55 @@ class _ToolboxFileBrowserPageState extends ConsumerState<ToolboxFileBrowserPage>
     if (value == null) return '—';
     if (value < 1024) return '$value B';
     if (value < 1024 * 1024) return '${(value / 1024).toStringAsFixed(1)} KB';
-    if (value < 1024 * 1024 * 1024) return '${(value / 1024 / 1024).toStringAsFixed(1)} MB';
+    if (value < 1024 * 1024 * 1024) {
+      return '${(value / 1024 / 1024).toStringAsFixed(1)} MB';
+    }
     return '${(value / 1024 / 1024 / 1024).toStringAsFixed(1)} GB';
   }
 
   Future<void> _loadMounts() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final api = ref.read(backendServiceProvider);
       final raw = await api.get<List<dynamic>>('/api/workspaces') ?? const [];
-      final mounts = raw.whereType<Map>().map((entry) {
-        final m = Map<String, dynamic>.from(entry);
-        return _WorkspaceMount(
-          name: (m['name'] ?? m['id'] ?? 'Workspace').toString(),
-          rootUri: (m['rootUri'] ?? '').toString(),
-          available: m['available'] == true,
-        );
-      }).where((m) => m.available && m.rootUri.isNotEmpty).toList();
+      final mounts = raw
+          .whereType<Map>()
+          .map((entry) {
+            final m = Map<String, dynamic>.from(entry);
+            return _WorkspaceMount(
+              name: (m['name'] ?? m['id'] ?? 'Workspace').toString(),
+              rootUri: (m['rootUri'] ?? '').toString(),
+              available: m['available'] == true,
+            );
+          })
+          .where((m) => m.available && m.rootUri.isNotEmpty)
+          .toList();
       if (!mounted) return;
-      setState(() { _mounts = mounts; });
+      setState(() {
+        _mounts = mounts;
+      });
       if (mounts.isEmpty) {
-        setState(() { _files = const []; _loading = false; });
+        setState(() {
+          _files = const [];
+          _loading = false;
+        });
         return;
       }
-      await _openMount(mounts.first);
+      final initialRootUri = widget.initialRootUri.trim();
+      final initial = initialRootUri.isEmpty
+          ? null
+          : mounts.where((mount) => mount.rootUri == initialRootUri).firstOrNull;
+      await _openMount(initial ?? mounts.first);
     } catch (e) {
-      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -128,7 +150,10 @@ class _ToolboxFileBrowserPageState extends ConsumerState<ToolboxFileBrowserPage>
   Future<void> _openUri(String uri, {bool pushHistory = true}) async {
     if (uri.isEmpty) return;
     final previous = _currentUri;
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final api = ref.read(backendServiceProvider);
       final resp = await api.get<Map<String, dynamic>>(
@@ -137,31 +162,38 @@ class _ToolboxFileBrowserPageState extends ConsumerState<ToolboxFileBrowserPage>
         fromJson: (e) => Map<String, dynamic>.from(e as Map),
       );
       final entries = (resp?['Entries'] ?? resp?['entries']) as List<dynamic>? ?? const [];
-      final files = entries.whereType<Map>().map((entry) {
-        final m = Map<String, dynamic>.from(entry);
-        final rawSize = m['sizeBytes'];
-        return _FileItem(
-          uri: (m['uri'] ?? '').toString(),
-          name: (m['name'] ?? '').toString(),
-          sizeBytes: rawSize is num ? rawSize.toInt() : null,
-          modifiedAt: (m['modifiedAt'] ?? '').toString(),
-          isFolder: (m['type'] ?? '').toString() == 'directory',
-          readable: m['readable'] != false,
-        );
-      }).toList()
-        ..sort((a, b) {
-          if (a.isFolder != b.isFolder) return a.isFolder ? -1 : 1;
-          return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-        });
+      final files =
+          entries.whereType<Map>().map((entry) {
+            final m = Map<String, dynamic>.from(entry);
+            final rawSize = m['sizeBytes'];
+            return _FileItem(
+              uri: (m['uri'] ?? '').toString(),
+              name: (m['name'] ?? '').toString(),
+              sizeBytes: rawSize is num ? rawSize.toInt() : null,
+              modifiedAt: (m['modifiedAt'] ?? '').toString(),
+              isFolder: (m['type'] ?? '').toString() == 'directory',
+              readable: m['readable'] != false,
+            );
+          }).toList()..sort((a, b) {
+            if (a.isFolder != b.isFolder) return a.isFolder ? -1 : 1;
+            return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+          });
       if (!mounted) return;
       setState(() {
-        if (pushHistory && previous != null && previous != uri) _history.add(previous);
+        if (pushHistory && previous != null && previous != uri) {
+          _history.add(previous);
+        }
         _currentUri = uri;
         _files = files;
         _loading = false;
       });
     } catch (e) {
-      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -200,9 +232,7 @@ class _ToolboxFileBrowserPageState extends ConsumerState<ToolboxFileBrowserPage>
                   )
                 : const Text('当前文件不是可直接预览的文本文件。'),
           ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('关闭')),
-          ],
+          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('关闭'))],
         ),
       );
     } catch (e) {
@@ -228,113 +258,94 @@ class _ToolboxFileBrowserPageState extends ConsumerState<ToolboxFileBrowserPage>
         body: _loading
             ? const AmitiaLoadingState(message: '正在加载文件列表...')
             : _error != null
-                ? AmitiaErrorState(message: _error!, onRetry: _loadMounts)
-                : Column(
-                    children: [
-                      Padding(
-                        padding: EdgeInsets.fromLTRB(
-                          AppSpacing.pagePadding,
-                          AppSpacing.md,
-                          AppSpacing.pagePadding,
-                          AppSpacing.sm,
+            ? AmitiaErrorState(message: _error!, onRetry: _loadMounts)
+            : Column(
+                children: [
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      AppSpacing.pagePadding,
+                      AppSpacing.md,
+                      AppSpacing.pagePadding,
+                      AppSpacing.sm,
+                    ),
+                    child: Row(
+                      children: [
+                        if (_history.isNotEmpty)
+                          IconButton(onPressed: _backDirectory, icon: const Icon(Icons.arrow_upward), tooltip: '上一级'),
+                        Expanded(
+                          child: Text(
+                            _currentUri ?? '没有可用 Workspace',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.caption(context),
+                          ),
                         ),
-                        child: Row(
-                          children: [
-                            if (_history.isNotEmpty)
-                              IconButton(
-                                onPressed: _backDirectory,
-                                icon: const Icon(Icons.arrow_upward),
-                                tooltip: '上一级',
-                              ),
-                            Expanded(
-                              child: Text(
-                                _currentUri ?? '没有可用 Workspace',
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: AppTypography.caption(context),
+                        if (_mounts.length > 1)
+                          AmitiaPopupMenuButton<_WorkspaceMount>(
+                            tooltip: '切换 Workspace',
+                            onSelected: _openMount,
+                            itemBuilder: (_) =>
+                                _mounts.map((m) => PopupMenuItem(value: m, child: Text(m.name))).toList(),
+                            child: Padding(
+                              padding: const EdgeInsets.all(8),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [Text(_currentMountName ?? 'Workspace'), const Icon(Icons.arrow_drop_down)],
                               ),
                             ),
-                            if (_mounts.length > 1)
-                              AmitiaPopupMenuButton<_WorkspaceMount>(
-                                tooltip: '切换 Workspace',
-                                onSelected: _openMount,
-                                itemBuilder: (_) => _mounts
-                                    .map((m) => PopupMenuItem(value: m, child: Text(m.name)))
-                                    .toList(),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(8),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(_currentMountName ?? 'Workspace'),
-                                      const Icon(Icons.arrow_drop_down),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                      Expanded(
-                        child: RefreshIndicator(
-                          onRefresh: () => _currentUri == null
-                              ? _loadMounts()
-                              : _openUri(_currentUri!, pushHistory: false),
-                          child: _files.isEmpty
-                              ? ListView(
-                                  children: [
-                                    AmitiaEmptyState(
-                                      icon: Icons.folder_open,
-                                      title: _mounts.isEmpty ? '没有可用 Workspace' : '目录为空',
-                                      subtitle: _mounts.isEmpty
-                                          ? '请先创建或授权一个 Workspace'
-                                          : '当前目录没有文件',
-                                    ),
-                                  ],
-                                )
-                              : ListView.separated(
-                                  padding: EdgeInsets.fromLTRB(
-                                    AppSpacing.pagePadding,
-                                    0,
-                                    AppSpacing.pagePadding,
-                                    AppSpacing.xl,
-                                  ),
-                                  itemCount: _files.length,
-                                  separatorBuilder: (_, _) => Divider(
-                                    height: 1,
-                                    thickness: 0.5,
-                                    color: context.borderSecondary,
-                                  ),
-                                  itemBuilder: (context, index) {
-                                    final item = _files[index];
-                                    return ListTile(
-                                      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                                      leading: Icon(
-                                        _iconForName(item.name, item.isFolder),
-                                        color: item.isFolder
-                                            ? context.accentPrimary
-                                            : context.textSecondary,
-                                      ),
-                                      title: Text(item.name, style: AppTypography.body(context)),
-                                      subtitle: Text(
-                                        '${_formatSize(item.sizeBytes)} · ${item.modifiedAt}',
-                                        style: AppTypography.caption(context),
-                                      ),
-                                      trailing: Icon(
-                                        item.isFolder ? Icons.chevron_right : Icons.open_in_new,
-                                        size: 18,
-                                        color: context.textTertiary,
-                                      ),
-                                      onTap: item.isFolder
-                                          ? () => _openUri(item.uri)
-                                          : () => _showFile(item),
-                                    );
-                                  },
-                                ),
-                        ),
-                      ),
-                    ],
+                          ),
+                      ],
+                    ),
                   ),
+                  Expanded(
+                    child: RefreshIndicator(
+                      onRefresh: () => _currentUri == null ? _loadMounts() : _openUri(_currentUri!, pushHistory: false),
+                      child: _files.isEmpty
+                          ? ListView(
+                              children: [
+                                AmitiaEmptyState(
+                                  icon: Icons.folder_open,
+                                  title: _mounts.isEmpty ? '没有可用 Workspace' : '目录为空',
+                                  subtitle: _mounts.isEmpty ? '请先创建或授权一个 Workspace' : '当前目录没有文件',
+                                ),
+                              ],
+                            )
+                          : ListView.separated(
+                              padding: EdgeInsets.fromLTRB(
+                                AppSpacing.pagePadding,
+                                0,
+                                AppSpacing.pagePadding,
+                                AppSpacing.xl,
+                              ),
+                              itemCount: _files.length,
+                              separatorBuilder: (_, _) =>
+                                  Divider(height: 1, thickness: 0.5, color: context.borderSecondary),
+                              itemBuilder: (context, index) {
+                                final item = _files[index];
+                                return ListTile(
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                                  leading: Icon(
+                                    _iconForName(item.name, item.isFolder),
+                                    color: item.isFolder ? context.accentPrimary : context.textSecondary,
+                                  ),
+                                  title: Text(item.name, style: AppTypography.body(context)),
+                                  subtitle: Text(
+                                    '${_formatSize(item.sizeBytes)} · ${item.modifiedAt}',
+                                    style: AppTypography.caption(context),
+                                  ),
+                                  trailing: Icon(
+                                    item.isFolder ? Icons.chevron_right : Icons.open_in_new,
+                                    size: 18,
+                                    color: context.textTertiary,
+                                  ),
+                                  onTap: item.isFolder ? () => _openUri(item.uri) : () => _showFile(item),
+                                );
+                              },
+                            ),
+                    ),
+                  ),
+                ],
+              ),
       ),
     );
   }

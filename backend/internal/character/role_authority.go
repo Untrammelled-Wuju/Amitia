@@ -16,6 +16,7 @@ import (
 	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/pkg/util"
+	amitialog "log"
 )
 
 const RoleAuthorityHeader = "X-Amitia-Role-Authority"
@@ -77,7 +78,9 @@ func (h *Handler) guardRoleAuthority() gin.HandlerFunc {
 			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, limit)
 			if err := c.Request.ParseMultipartForm(1024 * 1024); err != nil {
 				if c.Request.MultipartForm != nil {
-					_ = c.Request.MultipartForm.RemoveAll()
+					if err := c.Request.MultipartForm.RemoveAll(); err != nil {
+						amitialog.Printf("[original-error] %v", err)
+					}
 				}
 				c.AbortWithStatusJSON(http.StatusRequestEntityTooLarge, gin.H{"code": 413, "msg": "角色文件过大或上传格式无效"})
 				return

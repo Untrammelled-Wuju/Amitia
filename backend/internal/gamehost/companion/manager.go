@@ -18,6 +18,7 @@ import (
 
 	"github.com/u-ai/backend/internal/gamehost/integration"
 	gameprotocol "github.com/u-ai/backend/pkg/gameplugin/protocol"
+	amitialog "log"
 )
 
 const (
@@ -156,7 +157,9 @@ func replaceStateFile(tmp, target string) error {
 	}
 
 	backup := target + ".bak"
-	_ = os.Remove(backup)
+	if err := os.Remove(backup); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	hadTarget := false
 	if _, err := os.Stat(target); err == nil {
 		hadTarget = true
@@ -169,12 +172,16 @@ func replaceStateFile(tmp, target string) error {
 
 	if err := os.Rename(tmp, target); err != nil {
 		if hadTarget {
-			_ = os.Rename(backup, target)
+			if err := os.Rename(backup, target); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		return fmt.Errorf("artifact: replace state: %w", err)
 	}
 	if hadTarget {
-		_ = os.Remove(backup)
+		if err := os.Remove(backup); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return nil
 }
@@ -404,7 +411,9 @@ func (m *ArtifactManager) Remove(ctx context.Context, extensionID, artifactID, t
 	quarantine := ""
 	if err == nil {
 		quarantine = r.TargetPath + fmt.Sprintf(".amitia-remove-%d", time.Now().UnixNano())
-		_ = os.RemoveAll(quarantine)
+		if err := os.RemoveAll(quarantine); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		if err := os.Rename(r.TargetPath, quarantine); err != nil {
 			return fmt.Errorf("artifact: quarantine deployment before removal: %w", err)
 		}
@@ -412,7 +421,9 @@ func (m *ArtifactManager) Remove(ctx context.Context, extensionID, artifactID, t
 	delete(m.records, key)
 	if err := m.saveLocked(); err != nil {
 		m.records[key] = r
-		_ = os.Remove(m.statePath + ".tmp")
+		if err := os.Remove(m.statePath + ".tmp"); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		if quarantine != "" {
 			if restoreErr := os.Rename(quarantine, r.TargetPath); restoreErr != nil {
 				return errors.Join(err, fmt.Errorf("artifact: restore deployment after state failure: %w", restoreErr))
@@ -477,7 +488,9 @@ func (m *ArtifactManager) deployLocked(extensionID, targetRoot, generationRoot s
 	}
 
 	stage := target + fmt.Sprintf(".amitia-stage-%d", time.Now().UnixNano())
-	_ = os.RemoveAll(stage)
+	if err := os.RemoveAll(stage); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	if err := deployArtifact(source, stage, artifact.Type); err != nil {
 		return DeploymentRecord{}, artifactReplacement{}, err
 	}
@@ -515,7 +528,9 @@ func commitArtifactReplacement(stage, target string, existing DeploymentRecord, 
 		tx.previousPath = old
 		if _, err := os.Lstat(old); err == nil {
 			tx.backup = old + fmt.Sprintf(".amitia-backup-%d", time.Now().UnixNano())
-			_ = os.RemoveAll(tx.backup)
+			if err := os.RemoveAll(tx.backup); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			if err := os.Rename(old, tx.backup); err != nil {
 				return artifactReplacement{}, fmt.Errorf("artifact: backup previous deployment: %w", err)
 			}
@@ -526,7 +541,9 @@ func commitArtifactReplacement(stage, target string, existing DeploymentRecord, 
 
 	if err := os.Rename(stage, target); err != nil {
 		if tx.backup != "" {
-			_ = os.Rename(tx.backup, tx.previousPath)
+			if err := os.Rename(tx.backup, tx.previousPath); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		return artifactReplacement{}, fmt.Errorf("artifact: commit deployment: %w", err)
 	}
@@ -582,7 +599,9 @@ func (m *ArtifactManager) rollbackDeploymentBatch(txs []artifactReplacement, ori
 
 func (m *ArtifactManager) persistDeploymentBatch(txs []artifactReplacement, original map[string]DeploymentRecord) error {
 	if err := m.saveLocked(); err != nil {
-		_ = os.Remove(m.statePath + ".tmp")
+		if err := os.Remove(m.statePath + ".tmp"); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return m.rollbackDeploymentBatch(txs, original, err)
 	}
 	var errs []error
@@ -900,7 +919,9 @@ func copyFileAtomic(source, target string, mode os.FileMode) error {
 		return fmt.Errorf("artifact: file exceeds %d bytes", maxArtifactSingleFileBytes)
 	}
 	tmp := target + ".amitia-tmp"
-	_ = os.RemoveAll(tmp)
+	if err := os.RemoveAll(tmp); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	in, err := os.Open(source)
 	if err != nil {
 		return err
@@ -916,11 +937,15 @@ func copyFileAtomic(source, target string, mode os.FileMode) error {
 		copyErr = fmt.Errorf("artifact: file exceeded %d bytes during copy", maxArtifactSingleFileBytes)
 	}
 	if copyErr != nil {
-		_ = os.Remove(tmp)
+		if err := os.Remove(tmp); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return copyErr
 	}
 	if closeErr != nil {
-		_ = os.Remove(tmp)
+		if err := os.Remove(tmp); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return closeErr
 	}
 	return os.Rename(tmp, target)
@@ -974,7 +999,9 @@ func copyTreeAtomic(source, target string) error {
 		return err
 	}
 	tmp := target + ".amitia-tmp"
-	_ = os.RemoveAll(tmp)
+	if err := os.RemoveAll(tmp); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	if err := os.MkdirAll(tmp, 0o755); err != nil {
 		return err
 	}
@@ -996,7 +1023,9 @@ func copyTreeAtomic(source, target string) error {
 		return copyFileAtomic(path, dst, info.Mode().Perm())
 	})
 	if err != nil {
-		_ = os.RemoveAll(tmp)
+		if err := os.RemoveAll(tmp); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return err
 	}
 	return os.Rename(tmp, target)
@@ -1054,7 +1083,9 @@ func extractZipAtomic(source, target string) error {
 	}
 	defer r.Close()
 	tmp := target + ".amitia-tmp"
-	_ = os.RemoveAll(tmp)
+	if err := os.RemoveAll(tmp); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	if err := os.MkdirAll(tmp, 0o755); err != nil {
 		return err
 	}
@@ -1063,29 +1094,39 @@ func extractZipAtomic(source, target string) error {
 		clean := filepath.Clean(f.Name)
 		dst := filepath.Join(tmp, clean)
 		if !isWithin(tmp, dst) {
-			_ = os.RemoveAll(tmp)
+			if err := os.RemoveAll(tmp); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return fmt.Errorf("artifact: zip entry escaped target")
 		}
 		if f.FileInfo().IsDir() {
 			if err := os.MkdirAll(dst, f.Mode().Perm()); err != nil {
-				_ = os.RemoveAll(tmp)
+				if err := os.RemoveAll(tmp); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 				return err
 			}
 			continue
 		}
 		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-			_ = os.RemoveAll(tmp)
+			if err := os.RemoveAll(tmp); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return err
 		}
 		src, err := f.Open()
 		if err != nil {
-			_ = os.RemoveAll(tmp)
+			if err := os.RemoveAll(tmp); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return err
 		}
 		out, err := os.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY, f.Mode().Perm())
 		if err != nil {
 			src.Close()
-			_ = os.RemoveAll(tmp)
+			if err := os.RemoveAll(tmp); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return err
 		}
 		limit := int64(f.UncompressedSize64) + 1
@@ -1102,20 +1143,28 @@ func extractZipAtomic(source, target string) error {
 			copyErr = fmt.Errorf("artifact: zip entry %q exceeds per-file limit", f.Name)
 		}
 		if copyErr != nil {
-			_ = os.RemoveAll(tmp)
+			if err := os.RemoveAll(tmp); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return copyErr
 		}
 		if srcErr != nil {
-			_ = os.RemoveAll(tmp)
+			if err := os.RemoveAll(tmp); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return srcErr
 		}
 		if outErr != nil {
-			_ = os.RemoveAll(tmp)
+			if err := os.RemoveAll(tmp); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return outErr
 		}
 		extracted += written
 		if extracted > maxArtifactTotalBytes {
-			_ = os.RemoveAll(tmp)
+			if err := os.RemoveAll(tmp); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return fmt.Errorf("artifact: zip extraction exceeds %d bytes", maxArtifactTotalBytes)
 		}
 	}

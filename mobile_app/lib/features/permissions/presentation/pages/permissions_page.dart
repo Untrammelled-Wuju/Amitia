@@ -119,7 +119,9 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage>
           response['result'] as Map? ?? {},
         );
       });
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
   }
 
   Future<Map<String, dynamic>> _executeShizuku(
@@ -332,7 +334,9 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage>
           response['result'] as Map? ?? {},
         );
       });
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
   }
 
   Future<void> _providerAction(String operation) async {
@@ -414,8 +418,9 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage>
               : '允许 Amitia 读取和操作屏幕',
         );
       });
-    } catch (_) {
-      if (!mounted) return;
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+if (!mounted) return;
       setState(() {
         _permissions[0] = PermissionItem(
           name: '无障碍服务',
@@ -443,7 +448,9 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage>
           (response['result'] as Map?)?['opened'] == true) {
         return;
       }
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
     if (mounted) {
       ScaffoldMessenger.of(
         context,

@@ -1,5 +1,6 @@
 import '../backend_transport/backend_service_api.dart';
 import '../models/model_config.dart';
+import 'package:dio/dio.dart';
 
 class ModelConfigService {
   final BackendServiceApi _api;
@@ -9,23 +10,33 @@ class ModelConfigService {
   Future<List<ModelConfigDto>> available() async {
     final resp = await _api.get<List<dynamic>>('/api/model/available');
     if (resp == null) return [];
-    return resp.map((e) => ModelConfigDto.fromJson(e as Map<String, dynamic>)).toList();
+    return resp
+        .map((e) => ModelConfigDto.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   Future<List<ModelConfigDto>> list() async {
     final resp = await _api.get<List<dynamic>>('/api/model/configs');
     if (resp == null) return [];
-    return resp.map((e) => ModelConfigDto.fromJson(e as Map<String, dynamic>)).toList();
+    return resp
+        .map((e) => ModelConfigDto.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   Future<ModelConfigDto?> create(Map<String, dynamic> data) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/model/configs', data: data);
+    final resp = await _api.post<Map<String, dynamic>>(
+      '/api/model/configs',
+      data: data,
+    );
     if (resp == null) return null;
     return ModelConfigDto.fromJson(resp);
   }
 
   Future<ModelConfigDto?> update(String id, Map<String, dynamic> data) async {
-    final resp = await _api.put<Map<String, dynamic>>('/api/model/configs/$id', data: data);
+    final resp = await _api.put<Map<String, dynamic>>(
+      '/api/model/configs/$id',
+      data: data,
+    );
     if (resp == null) return null;
     return ModelConfigDto.fromJson(resp);
   }
@@ -41,23 +52,36 @@ class ModelConfigService {
   }
 
   Future<Map<String, dynamic>?> test(String id) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/model/configs/$id/test');
+    final resp = await _api.post<Map<String, dynamic>>(
+      '/api/model/configs/$id/test',
+    );
     return resp;
   }
 
-  Future<Map<String, dynamic>?> testStandalone(Map<String, dynamic> data) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/model/test', data: data);
+  Future<Map<String, dynamic>?> testStandalone(
+    Map<String, dynamic> data,
+  ) async {
+    final resp = await _api.post<Map<String, dynamic>>(
+      '/api/model/test',
+      data: data,
+    );
     return resp;
   }
 
   Future<List<Map<String, dynamic>>> routes() async {
     final resp = await _api.get<List<dynamic>>('/api/model/routes');
     if (resp == null) return const <Map<String, dynamic>>[];
-    return resp.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList(growable: false);
+    return resp
+        .whereType<Map>()
+        .map((e) => e.cast<String, dynamic>())
+        .toList(growable: false);
   }
 
   Future<bool> updateRoutes(List<Map<String, dynamic>> routes) async {
-    await _api.put('/api/model/routes', data: <String, dynamic>{'routes': routes});
+    await _api.put(
+      '/api/model/routes',
+      data: <String, dynamic>{'routes': routes},
+    );
     return true;
   }
 
@@ -82,6 +106,39 @@ class ModelConfigService {
     );
     final models = resp?['models'];
     if (models is! List) return const <Map<String, dynamic>>[];
-    return models.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList(growable: false);
+    return models
+        .whereType<Map>()
+        .map((e) => e.cast<String, dynamic>())
+        .toList(growable: false);
+  }
+
+  Future<List<Map<String, dynamic>>> localModels() async {
+    final resp = await _api.get<List<dynamic>>('/api/model/local-models');
+    if (resp == null) return const [];
+    return resp
+        .whereType<Map>()
+        .map((e) => e.cast<String, dynamic>())
+        .toList(growable: false);
+  }
+
+  Future<Map<String, dynamic>> uploadLocalModel(
+    String path,
+    String filename, {
+    String name = '',
+  }) async {
+    final form = FormData.fromMap(<String, dynamic>{
+      'name': name,
+      'file': await MultipartFile.fromFile(path, filename: filename),
+    });
+    final resp = await _api.post<Map<String, dynamic>>(
+      '/api/model/local-models',
+      data: form,
+    );
+    if (resp == null) throw StateError('模型导入响应为空');
+    return resp;
+  }
+
+  Future<void> deleteLocalModel(String id) async {
+    await _api.delete('/api/model/local-models/${Uri.encodeComponent(id)}');
   }
 }

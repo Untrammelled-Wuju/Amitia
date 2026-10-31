@@ -46,8 +46,9 @@ export class DeliveryIdempotencyStore {
                 }
             }
         }
-        catch {
-            this.backupCorrupt();
+        catch (error) {
+  console.error("[original-error]", error);
+this.backupCorrupt();
         }
     }
     private backupCorrupt(): void {
@@ -58,8 +59,9 @@ export class DeliveryIdempotencyStore {
                 fs.renameSync(this.filePath, corruptPath);
             }
         }
-        catch {
-        }
+        catch (error) {
+  console.error("[original-error]", error);
+}
         this.ledger = new Map();
     }
     private persist(): void {
@@ -133,8 +135,9 @@ export class DeliveryIdempotencyStore {
             }
             return { duplicate: false, clientId };
         }
-        catch {
-            return { duplicate: false, clientId };
+        catch (error) {
+  console.error("[original-error]", error);
+return { duplicate: false, clientId };
         }
     }
 }

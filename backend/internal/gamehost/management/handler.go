@@ -48,7 +48,7 @@ func (h *Handler) ListPlugins(c *gin.Context) {
 
 	var filter PluginFilter
 	if err := c.ShouldBindQuery(&filter); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "invalid filter parameters"})
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
 		return
 	}
 	filter = filter.Normalize()
@@ -104,7 +104,7 @@ func (h *Handler) ListRuntimes(c *gin.Context) {
 
 	var filter RuntimeFilter
 	if err := c.ShouldBindQuery(&filter); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "invalid filter parameters"})
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
 		return
 	}
 	filter = filter.Normalize()
@@ -275,7 +275,7 @@ func (h *Handler) BindAgentContext(c *gin.Context) {
 	}
 	var req AgentContextBindRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "invalid Agent context payload"})
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
 		return
 	}
 	// Ownership is always taken from the authenticated request context. Never

@@ -166,8 +166,9 @@ export class DesktopPetAnimationEngine {
     for (const listener of this.listeners) {
       try {
         listener(event);
-      } catch {
-        void 0;
+      } catch (error) {
+  console.error("[original-error]", error);
+void 0;
       }
     }
   }
@@ -1386,8 +1387,9 @@ export class DesktopPetAnimationEngine {
     if (frame.bitmap && typeof (frame.bitmap as ImageBitmap).close === "function") {
       try {
         (frame.bitmap as ImageBitmap).close();
-      } catch {
-        void 0;
+      } catch (error) {
+  console.error("[original-error]", error);
+void 0;
       }
     }
   }
@@ -1540,8 +1542,9 @@ export class DesktopPetAnimationEngine {
       if (frame.bitmap && typeof (frame.bitmap as ImageBitmap).close === "function") {
         try {
           (frame.bitmap as ImageBitmap).close();
-        } catch {
-          void 0;
+        } catch (error) {
+  console.error("[original-error]", error);
+void 0;
         }
       }
     }

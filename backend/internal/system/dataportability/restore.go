@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	amitialog "log"
 )
 
 func (c *Coordinator) RestorePreview(ctx context.Context, archivePath string) (*BackupManifest, error) {
@@ -76,7 +77,9 @@ func (c *Coordinator) CreateRestoreTicket(ctx context.Context, archivePath, back
 	}
 	hash, err := fileSHA256(stagedPath)
 	if err != nil {
-		_ = os.Remove(stagedPath)
+		if err := os.Remove(stagedPath); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, err
 	}
 	ticket := &DataRestoreTicket{
@@ -90,7 +93,9 @@ func (c *Coordinator) CreateRestoreTicket(ctx context.Context, archivePath, back
 		CreatedAt:                  time.Now().UTC().Format(time.RFC3339),
 	}
 	if err := c.Staging.WriteRestoreTicket(ticket); err != nil {
-		_ = os.Remove(stagedPath)
+		if err := os.Remove(stagedPath); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, err
 	}
 	return ticket, nil
@@ -119,9 +124,10 @@ func (c *Coordinator) ExecuteRestore(ctx context.Context, ticket *DataRestoreTic
 	c.restoreOps[op.ID] = op
 	c.mu.Unlock()
 	snapshot, err := c.CreateBackup(ctx, BackupRequest{
-		Scope:   ScopeAll,
-		Profile: ProfileFull,
-		Purpose: PurposePreRestore,
+		Scope:          ScopeAll,
+		Profile:        ProfileFull,
+		Purpose:        PurposePreRestore,
+		IncludeSecrets: true,
 	}, "", nil)
 	if err != nil {
 		op.Status = "failed"
@@ -171,8 +177,12 @@ func (c *Coordinator) ExecuteRestore(ctx context.Context, ticket *DataRestoreTic
 	}
 	op.Status = "completed"
 	op.UpdatedAt = nowRFC3339()
-	_ = c.Staging.ClearRestoreTicket()
-	_ = os.Remove(ticket.ArchivePath)
+	if err := c.Staging.ClearRestoreTicket(); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := os.Remove(ticket.ArchivePath); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	return op, nil
 }
 
@@ -187,7 +197,9 @@ func (c *Coordinator) ConsumeRestoreTicket() (*DataRestoreTicket, error) {
 func (c *Coordinator) CancelRestore() error {
 	ticket, err := c.Staging.ReadRestoreTicket()
 	if err == nil && ticket.ArchivePath != "" && strings.HasPrefix(filepath.Clean(ticket.ArchivePath), filepath.Join(c.DataDir, "imports", ".restore")) {
-		_ = os.Remove(ticket.ArchivePath)
+		if err := os.Remove(ticket.ArchivePath); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return c.Staging.ClearRestoreTicket()
 }

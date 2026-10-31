@@ -485,8 +485,7 @@ class DeviceOwnedChatService {
   Map<String, dynamic>? policy;
   List<Map<String, dynamic>> roles = [];
   int revision = 0;
-  CancelToken? _active;
-  String _requestId = '';
+  final Map<String, CancelToken> _activeRequests = <String, CancelToken>{};
   String _binding = '';
   String _selectedRole = '';
   bool _refreshing = false;
@@ -512,7 +511,9 @@ class DeviceOwnedChatService {
         notice = (state['notice'] ?? '').toString();
         _providerChangeId = (state['changeId'] ?? '').toString();
       }
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
   }
 
   Future<void> _saveProviderState() async {
@@ -526,7 +527,9 @@ class DeviceOwnedChatService {
           'changeId': _providerChangeId,
         }),
       );
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
   }
 
   String? previousSummary(String previousCore, String conversationId) =>
@@ -558,7 +561,8 @@ class DeviceOwnedChatService {
     }
     final binding = _providerKey();
     if (binding.isEmpty) {
-      if (enabled || _active != null) stopLocal('云端服务连接已停止，当前回复已中断。');
+      if (enabled || _activeRequests.isNotEmpty)
+        stopLocal('云端服务连接已停止，当前回复已中断。');
       enabled = false;
       return false;
     }
@@ -1752,12 +1756,15 @@ class DeviceOwnedChatService {
   Future<OwnedGroupState> createGroupConversation({
     required String characterId,
     required List<Map<String, dynamic>> members,
+    String projectId = '',
   }) async {
+    final normalizedProjectId = projectId.trim();
     final response = await _api.post<Map<String, dynamic>>(
       '/api/device-mesh/v1/business/conversations/group',
       data: {
         'requestId': _localRequestId(),
         'characterId': characterId,
+        if (normalizedProjectId.isNotEmpty) 'projectId': normalizedProjectId,
         'members': members,
       },
     );
@@ -1888,7 +1895,8 @@ class DeviceOwnedChatService {
     List<Map<String, dynamic>>? attachments,
     bool discussionMode = false,
   }) async* {
-    if (_active != null || !enabled) throw StateError('当前回复尚未结束或设备服务尚未就绪');
+    if (!enabled) throw StateError('设备服务尚未就绪');
+    if (_activeRequests.containsKey(requestId)) throw StateError('当前请求正在执行');
     final origin = parseConversationReference(conversationId);
     final role = selectRole(characterId);
     final view = await query(conversationId, characterId: role);
@@ -1901,8 +1909,7 @@ class DeviceOwnedChatService {
     }
     final token = CancelToken();
     final captured = revision;
-    _active = token;
-    _requestId = requestId;
+    _activeRequests[requestId] = token;
     try {
       final stream = await _api.postStream(
         '/api/device-mesh/v1/business/messages',
@@ -1986,10 +1993,8 @@ class DeviceOwnedChatService {
         yield event;
       }
     } finally {
-      if (identical(_active, token)) {
-        _active = null;
-        _requestId = '';
-      }
+      if (identical(_activeRequests[requestId], token))
+        _activeRequests.remove(requestId);
     }
   }
 
@@ -2008,12 +2013,12 @@ class DeviceOwnedChatService {
     List<Map<String, dynamic>>? attachments,
     Map<String, dynamic>? quote,
   }) async* {
-    if (_active != null || !enabled) throw StateError('当前回复尚未结束或设备服务尚未就绪');
+    if (!enabled) throw StateError('设备服务尚未就绪');
+    if (_activeRequests.containsKey(requestId)) throw StateError('当前请求正在执行');
     final origin = parseConversationReference(conversationId ?? '');
     final token = CancelToken();
     final captured = revision;
-    _active = token;
-    _requestId = requestId;
+    _activeRequests[requestId] = token;
     try {
       final role = selectRole(characterId);
       final view = await data('memory', characterId: role);
@@ -2094,18 +2099,41 @@ class DeviceOwnedChatService {
         }
       }
     } finally {
-      if (identical(_active, token)) {
-        _active = null;
-        _requestId = '';
-      }
+      if (identical(_activeRequests[requestId], token))
+        _activeRequests.remove(requestId);
     }
   }
 
-  Future<void> interrupt() async {
-    if (_requestId.isEmpty) return;
+  Future<void> interrupt([String requestId = '']) async {
+    final target = requestId.trim().isNotEmpty
+        ? requestId.trim()
+        : (_activeRequests.length == 1 ? _activeRequests.keys.first : '');
+    if (target.isEmpty) return;
     await _api.post(
-      '/api/device-mesh/v1/business/messages/${Uri.encodeComponent(_requestId)}/interrupt',
+      '/api/device-mesh/v1/business/messages/${Uri.encodeComponent(target)}/interrupt',
     );
+  }
+
+  void stopRequest(String requestId, String message) {
+    final token = _activeRequests.remove(requestId);
+    if (token != null) {
+      try {
+        unawaited(
+          _api
+              .post(
+                '/api/device-mesh/v1/business/messages/${Uri.encodeComponent(requestId)}/interrupt',
+              )
+              .catchError((Object error, StackTrace stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+  return null;
+}),
+        );
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
+    }
+    token?.cancel(message);
+    notice = message;
   }
 
   void stopLocal(String message) {
@@ -2116,9 +2144,25 @@ class DeviceOwnedChatService {
     _historyScopes.clear();
     _historyRequests.clear();
     _conversationLoads.clear();
-    _active?.cancel(message);
-    _active = null;
-    _requestId = '';
+    for (final entry in _activeRequests.entries) {
+      try {
+        unawaited(
+          _api
+              .post(
+                '/api/device-mesh/v1/business/messages/${Uri.encodeComponent(entry.key)}/interrupt',
+              )
+              .catchError((Object error, StackTrace stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+  return null;
+}),
+        );
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
+      final token = entry.value;
+      token.cancel(message);
+    }
+    _activeRequests.clear();
     notice = message;
     unawaited(_saveProviderState());
   }

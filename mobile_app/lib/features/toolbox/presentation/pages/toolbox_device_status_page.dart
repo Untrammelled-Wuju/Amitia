@@ -74,6 +74,7 @@ class _ToolboxDeviceStatusPageState extends ConsumerState<ToolboxDeviceStatusPag
         setState(() { _items = allItems; _loading = false; });
       }
     } catch (e) {
+  print("[original-error] $e");
       if (mounted) {
         setState(() {
           _items = [..._staticItems];

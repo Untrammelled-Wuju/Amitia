@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	amitialog "log"
 	"sync"
 	"sync/atomic"
 )
@@ -216,7 +217,11 @@ func (c *cdpClient) handleDisconnect(err error) {
 
 	if onDisconnect != nil {
 		func() {
-			defer func() { _ = recover() }()
+			defer func() {
+				if err := recover(); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
+			}()
 			onDisconnect(err)
 		}()
 	}

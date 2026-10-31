@@ -24,13 +24,13 @@ const (
 )
 
 const (
-	PredicateTypeEqual     = "equal"
-	PredicateTypeNotEqual  = "notEqual"
-	PredicateTypeContains  = "contains"
-	PredicateTypePrefix    = "prefix"
-	PredicateTypeAnd       = "and"
-	PredicateTypeOr        = "or"
-	PredicateTypeNot       = "not"
+	PredicateTypeEqual    = "equal"
+	PredicateTypeNotEqual = "notEqual"
+	PredicateTypeContains = "contains"
+	PredicateTypePrefix   = "prefix"
+	PredicateTypeAnd      = "and"
+	PredicateTypeOr       = "or"
+	PredicateTypeNot      = "not"
 )
 
 var DefaultSortOrder = []SortOrder{

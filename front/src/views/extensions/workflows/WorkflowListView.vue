@@ -200,8 +200,9 @@ async function loadDevices() {
   try {
     devices.value = await listWorkflowDevices();
     if (!devices.value.some((item) => item.deviceId === deviceId.value)) deviceId.value = devices.value[0]?.deviceId || "";
-  } catch {
-    devices.value = [];
+  } catch (error) {
+  console.error("[original-error]", error);
+devices.value = [];
   }
 }
 async function load() {
@@ -225,8 +226,9 @@ async function primeSyncCursor(target = snapshotTarget()) {
     if (syncKey(snapshotTarget()) !== key) return;
     syncCursor = page.cursor;
     syncTargetKey = key;
-  } catch {
-    if (syncKey(snapshotTarget()) === key) { syncCursor = null; syncTargetKey = ""; }
+  } catch (error) {
+  console.error("[original-error]", error);
+if (syncKey(snapshotTarget()) === key) { syncCursor = null; syncTargetKey = ""; }
   }
 }
 async function pollSyncEvents() {
@@ -249,8 +251,9 @@ async function pollSyncEvents() {
     // Keep a low-frequency catalog reconciliation only as a recovery path for
     // missed/outbox-corruption scenarios; normal synchronization is durable push/pull.
     if (target.location === "device" && deviceRefreshTicks % 8 === 0 && page.items.length === 0) await load();
-  } catch {
-    // Keep the current list usable during transient sync failures. The cursor is
+  } catch (error) {
+  console.error("[original-error]", error);
+// Keep the current list usable during transient sync failures. The cursor is
     // preserved so durable events are retried on the next poll.
   } finally {
     syncPolling = false;

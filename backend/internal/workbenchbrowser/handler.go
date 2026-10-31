@@ -16,6 +16,7 @@ import (
 	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/browser"
 	"github.com/u-ai/backend/internal/workbenchhttp"
+	amitialog "log"
 )
 
 type page struct {
@@ -246,7 +247,9 @@ func (h *Handler) open(c *gin.Context) {
 	}
 	if exists {
 		if _, checkErr := h.provider.Tabs().GetTab(ctx, record.session, record.tab); checkErr != nil {
-			_ = h.provider.Sessions().CloseSession(ctx, record.session)
+			if err := h.provider.Sessions().CloseSession(ctx, record.session); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			h.mu.Lock()
 			delete(h.pages, key)
 			h.mu.Unlock()
@@ -282,7 +285,9 @@ func (h *Handler) open(c *gin.Context) {
 		}
 		tab, err := h.provider.Tabs().CreateTab(ctx, session.SessionID)
 		if err != nil {
-			_ = h.provider.Sessions().CloseSession(ctx, session.SessionID)
+			if err := h.provider.Sessions().CloseSession(ctx, session.SessionID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			responseError(c, http.StatusServiceUnavailable, err.Message)
 			return
 		}
@@ -645,7 +650,9 @@ func (h *Handler) pruneIdle(ctx context.Context) {
 	h.mu.Unlock()
 	for _, record := range stale {
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
-		_ = h.provider.Sessions().CloseSession(cleanupCtx, record.session)
+		if err := h.provider.Sessions().CloseSession(cleanupCtx, record.session); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		cancel()
 	}
 }

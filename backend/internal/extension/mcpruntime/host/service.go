@@ -13,6 +13,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/mcpruntime"
 	"github.com/u-ai/backend/internal/extension/mcpruntime/client"
 	"github.com/u-ai/backend/internal/extension/mcpruntime/protocol"
+	amitialog "log"
 )
 
 type ConnectionProvider interface {
@@ -94,7 +95,9 @@ func (s *Service) serverLog(serverID string) client.NotificationHandler {
 			encoded, _ := json.Marshal(map[string]any{"message": redacted})
 			redacted = string(encoded)
 		}
-		_ = s.repository.AddAuditLog(ctx, mcp.AuditLog{ServerID: serverID, Operation: "server_log", Status: "received", SummaryJSON: redacted})
+		if err := s.repository.AddAuditLog(ctx, mcp.AuditLog{ServerID: serverID, Operation: "server_log", Status: "received", SummaryJSON: redacted}); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 }
 
@@ -107,7 +110,9 @@ func (s *Service) resourceUpdated(serverID string) client.NotificationHandler {
 			return
 		}
 		summary, _ := json.Marshal(map[string]any{"uri": update.URI})
-		_ = s.repository.AddAuditLog(ctx, mcp.AuditLog{ServerID: serverID, Operation: "resources/updated", Status: "received", SummaryJSON: string(summary)})
+		if err := s.repository.AddAuditLog(ctx, mcp.AuditLog{ServerID: serverID, Operation: "resources/updated", Status: "received", SummaryJSON: string(summary)}); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 }
 
@@ -278,7 +283,9 @@ func (s *Service) taskStatus(serverID string) client.NotificationHandler {
 			result = json.RawMessage(`{"truncated":true}`)
 		}
 		config := taskConfiguration(rawConfig)
-		_ = s.repository.DeleteExpiredTasks(ctx, serverID, time.Now())
+		if err := s.repository.DeleteExpiredTasks(ctx, serverID, time.Now()); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		if update.Status == "working" {
 			tasks, listErr := s.repository.ListTasks(ctx, serverID, 500)
 			if listErr != nil {
@@ -303,7 +310,9 @@ func (s *Service) taskStatus(serverID string) client.NotificationHandler {
 			expires = requested
 		}
 		update.ExpiresAt = expires.UTC().Format(time.RFC3339Nano)
-		_ = s.repository.UpsertTask(ctx, mcp.Task{ServerID: serverID, RemoteTaskID: update.TaskID, Status: update.Status, StatusMessage: update.StatusMessage, ResultJSON: string(result), ExpiresAt: update.ExpiresAt})
+		if err := s.repository.UpsertTask(ctx, mcp.Task{ServerID: serverID, RemoteTaskID: update.TaskID, Status: update.Status, StatusMessage: update.StatusMessage, ResultJSON: string(result), ExpiresAt: update.ExpiresAt}); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 }
 
@@ -454,7 +463,9 @@ func (s *Service) release(serverID string) {
 
 func taskPayload(task mcp.Task) map[string]any {
 	var result any
-	_ = json.Unmarshal([]byte(task.ResultJSON), &result)
+	if err := json.Unmarshal([]byte(task.ResultJSON), &result); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	return map[string]any{"taskId": task.RemoteTaskID, "status": task.Status, "statusMessage": task.StatusMessage, "result": result, "expiresAt": task.ExpiresAt}
 }
 func validStatus(status string) bool {

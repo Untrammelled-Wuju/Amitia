@@ -42,16 +42,16 @@ type Capabilities struct {
 	AudioEncodeCodecs []string
 	SubtitleCodecs    []string
 
-	Containers      []string
+	Containers        []string
 	VideoDecodeCodecs []string
 	AudioDecodeCodecs []string
 
-	SupportsScale       bool
-	SupportsFPS         bool
-	SupportsLoudnorm    bool
-	SupportsGIF         bool
-	SupportsThumbnail   bool
-	SupportsHDR         bool
+	SupportsScale     bool
+	SupportsFPS       bool
+	SupportsLoudnorm  bool
+	SupportsGIF       bool
+	SupportsThumbnail bool
+	SupportsHDR       bool
 
 	HardwareAcceleration []string
 
@@ -93,20 +93,20 @@ func (ci *CapabilityIntrospector) Introspect(ctx context.Context) (*Capabilities
 	}
 
 	cap := &Capabilities{
-		Available:           true,
-		Probe:               state.FFprobeAvailable,
-		StreamCopy:          true,
-		Transcode:           true,
-		VideoEncodeCodecs:   []string{},
-		AudioEncodeCodecs:   []string{},
-		Containers:          []string{},
-		SupportsScale:       true,
-		SupportsFPS:         true,
-		SupportsLoudnorm:    false,
-		SupportsGIF:         true,
-		SupportsThumbnail:   true,
+		Available:            true,
+		Probe:                state.FFprobeAvailable,
+		StreamCopy:           true,
+		Transcode:            true,
+		VideoEncodeCodecs:    []string{},
+		AudioEncodeCodecs:    []string{},
+		Containers:           []string{},
+		SupportsScale:        true,
+		SupportsFPS:          true,
+		SupportsLoudnorm:     false,
+		SupportsGIF:          true,
+		SupportsThumbnail:    true,
 		HardwareAcceleration: []string{},
-		Fingerprint:         generateFingerprint(state.FFmpegVersion, state.RuntimeID),
+		Fingerprint:          generateFingerprint(state.FFmpegVersion, state.RuntimeID),
 	}
 
 	ci.cached = cap

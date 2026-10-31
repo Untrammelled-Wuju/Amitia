@@ -333,11 +333,14 @@ const selectedProvider = ref("");
 onMounted(async () => {
   try {
     voicePresets.value = await get("/api/tts/voices");
-  } catch {}
+  } catch (error) {
+  console.error("[original-error]", error);
+}
   try {
     providers.value = (await get<any[]>("/api/tts/providers")) || [];
-  } catch {
-    providers.value = [];
+  } catch (error) {
+  console.error("[original-error]", error);
+providers.value = [];
   }
 });
 

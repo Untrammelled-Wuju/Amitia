@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	amitialog "log"
 )
 
 const (
@@ -85,7 +86,9 @@ func NewRelayConnection(platform string, conn *websocket.Conn, connectionID uint
 func (c *RelayConnection) Close() {
 	c.closeOnce.Do(func() {
 		close(c.done)
-		_ = c.Transport.close()
+		if err := c.Transport.close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	})
 }
 

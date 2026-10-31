@@ -61,7 +61,10 @@ class DefaultRuntimeBootstrap implements RuntimeBootstrap {
   Future<void> _performInitialization() async {
     _bridgeSubscription = _bridge.snapshots.listen(
       _handleRuntimeSnapshot,
-      onError: (_) => _handleBridgeError(),
+      onError: (Object error, StackTrace stackTrace) {
+        print("[original-error] $error\n$stackTrace");
+        _handleBridgeError();
+      },
     );
 
     final current = await _bridge.snapshot();

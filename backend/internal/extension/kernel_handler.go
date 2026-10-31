@@ -84,7 +84,7 @@ func createPackageArtifactPreview(c *gin.Context, runtime *Runtime) {
 		file, header, err = c.Request.FormFile("package")
 	}
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "package file required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	defer file.Close()
@@ -122,7 +122,7 @@ func confirmPackagePreview(c *gin.Context, runtime *Runtime) {
 		Confirmations map[string]bool `json:"confirmations"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "confirmation request invalid"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	if body.ScopeType == "" {
@@ -144,7 +144,7 @@ func executePackageInstallOperation(c *gin.Context, runtime *Runtime) {
 	}
 	var request kernelruntime.PackageInstallRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "install operation request invalid"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	request.SpaceID = kernelAPIUser(c)
@@ -171,7 +171,7 @@ func executePackageUpdateOperation(c *gin.Context, runtime *Runtime) {
 	}
 	var request kernelruntime.PackageInstallRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "update operation request invalid"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	request.SpaceID = kernelAPIUser(c)

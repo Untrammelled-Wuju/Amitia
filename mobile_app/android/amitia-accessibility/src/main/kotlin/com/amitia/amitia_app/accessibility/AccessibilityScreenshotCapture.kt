@@ -94,7 +94,9 @@ object AccessibilityScreenshotCapture {
             } else {
                 Result(false, message = "screenshot timed out")
             }
-        } catch (_: InterruptedException) {
+        } catch (originalError97: InterruptedException) {
+          originalError97.printStackTrace()
+
             Thread.currentThread().interrupt()
             Result(false, message = "screenshot interrupted")
         }

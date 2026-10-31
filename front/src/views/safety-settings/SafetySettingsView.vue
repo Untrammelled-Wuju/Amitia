@@ -673,7 +673,9 @@ async function fetchConfig() {
         revision: Number(data.revision || 0),
       });
     }
-  } catch {}
+  } catch (error) {
+  console.error("[original-error]", error);
+}
 }
 
 async function saveConfig() {
@@ -696,8 +698,9 @@ async function fetchAuditLogs() {
   try {
     const data = await get<any[]>("/api/safety/audit-logs");
     auditLogs.value = data || [];
-  } catch {
-    auditLogs.value = [];
+  } catch (error) {
+  console.error("[original-error]", error);
+auditLogs.value = [];
   }
 }
 
@@ -722,7 +725,9 @@ async function fetchBdiConfig() {
       emotionOverrideReason.value = r.emotionExpression.overrideReason || "";
     }
     bdiRevision.value = Number(r?.revision || 0);
-  } catch {}
+  } catch (error) {
+  console.error("[original-error]", error);
+}
 }
 
 async function fetchBdiOptions() {
@@ -737,7 +742,9 @@ async function fetchBdiOptions() {
         displayModes: data.displayModes || [],
       };
     }
-  } catch {}
+  } catch (error) {
+  console.error("[original-error]", error);
+}
 }
 
 async function saveBdiConfig() {
@@ -800,7 +807,9 @@ async function fetchEvents() {
     });
     events.value = r?.items || [];
     evTotal.value = r?.total || 0;
-  } catch {}
+  } catch (error) {
+  console.error("[original-error]", error);
+}
 }
 
 async function handleEvent(event: any) {
@@ -824,15 +833,18 @@ async function clearEvents() {
     await del("/api/safety/events");
     ElMessage.success("已清除");
     fetchEvents();
-  } catch {}
+  } catch (error) {
+  console.error("[original-error]", error);
+}
 }
 
 function fmtDate(d: string) {
   if (!d) return "";
   try {
     return new Date(d).toLocaleString("zh-CN");
-  } catch {
-    return d;
+  } catch (error) {
+  console.error("[original-error]", error);
+return d;
   }
 }
 

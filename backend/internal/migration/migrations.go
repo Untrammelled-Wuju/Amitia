@@ -259,6 +259,7 @@ func DefaultMigrations() []Migration {
 		ModelBudgetRatesMigration(),
 		RuntimeModelBudgetMigration(),
 		RemoveGlobalMemoryStorageMigration(),
+		ModelLocalRuntimeMigration(),
 		ChannelSandboxPoliciesMigration(),
 		RetireWebSearchMigration(),
 	}

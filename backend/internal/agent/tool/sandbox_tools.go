@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/u-ai/backend/internal/timeoutpolicy"
+	amitialog "log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -359,7 +360,9 @@ func (b *limitedBuffer) Write(p []byte) (int, error) {
 		return len(p), nil
 	}
 	if len(p) > remaining {
-		_, _ = b.Buffer.Write(p[:remaining])
+		if _, err := b.Buffer.Write(p[:remaining]); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		b.exceeded = true
 		return len(p), nil
 	}

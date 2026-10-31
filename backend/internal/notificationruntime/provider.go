@@ -17,6 +17,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/u-ai/backend/pkg/sse"
+	amitialog "log"
 )
 
 type PushProvider interface {
@@ -121,7 +122,9 @@ func (g *PushGateway) Send(ctx context.Context, endpoint DeviceEndpoint, envelop
 				break
 			}
 			if result.InvalidToken && g.repo != nil {
-				_ = g.repo.DisableToken(ctx, &endpoint, result.Provider)
+				if err := g.repo.DisableToken(ctx, &endpoint, result.Provider); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 				endpoint.VoIPToken = ""
 			}
 			if !strings.EqualFold(envelope.Type, "call.incoming") ||
@@ -141,7 +144,9 @@ func (g *PushGateway) Send(ctx context.Context, endpoint DeviceEndpoint, envelop
 		return ProviderResult{ErrorCode: "platform_unsupported", ErrorMessage: "unsupported push platform"}
 	}
 	if result.InvalidToken && g.repo != nil {
-		_ = g.repo.DisableToken(ctx, &endpoint, result.Provider)
+		if err := g.repo.DisableToken(ctx, &endpoint, result.Provider); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return result
 }
@@ -251,7 +256,9 @@ func (g *PushGateway) sendAndroid(
 		}
 		if result.InvalidToken {
 			if g.repo != nil {
-				_ = g.repo.DisableToken(ctx, &endpoint, result.Provider)
+				if err := g.repo.DisableToken(ctx, &endpoint, result.Provider); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 			continue
 		}
@@ -305,7 +312,9 @@ func NewFCMProviderFromEnvironment() *FCMProvider {
 		}
 	}
 	var account fcmServiceAccount
-	_ = json.Unmarshal([]byte(raw), &account)
+	if err := json.Unmarshal([]byte(raw), &account); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	if account.TokenURI == "" {
 		account.TokenURI = "https://oauth2.googleapis.com/token"
 	}
@@ -451,7 +460,9 @@ func (p *FCMProvider) Send(ctx context.Context, endpoint DeviceEndpoint, envelop
 	var response struct {
 		Name string `json:"name"`
 	}
-	_ = json.Unmarshal(responseBody, &response)
+	if err := json.Unmarshal(responseBody, &response); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	result.Accepted = true
 	result.ProviderMessageID = response.Name
 	return result

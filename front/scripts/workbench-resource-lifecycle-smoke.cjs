@@ -2,7 +2,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const ts = (() => { try { return require('typescript'); } catch { return require(path.resolve(path.dirname(process.execPath), '../lib/node_modules/typescript')); } })();
+const ts = (() => { try { return require('typescript'); } catch (error) {
+  console.error("[original-error]", error);
+return require(path.resolve(path.dirname(process.execPath), '../lib/node_modules/typescript')); } })();
 const root = path.resolve(__dirname, '..');
 const componentPath = path.join(root, 'src/components/workbench/WorkbenchResourceView.vue');
 const historyPath = path.join(root, 'src/components/workbench/WorkbenchTasksView.vue');

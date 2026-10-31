@@ -115,7 +115,9 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
           character.id,
           roleAuthority: character.roleAuthority,
         );
-      } catch (_) {}
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
       String? avatarError;
       final avatarFile = _avatarFile;
       if (avatarFile != null) {
@@ -129,6 +131,7 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
             throw StateError('服务未返回头像地址');
           }
         } catch (error) {
+  print("[original-error] $error");
           avatarError = '头像上传失败，可在角色详情中重新上传';
         }
       }
@@ -137,7 +140,9 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
         ref.invalidate(characterListProvider);
         try {
           await ref.read(chatServiceProvider).owned.refresh();
-        } catch (_) {}
+        } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
         ref.invalidate(conversationListProvider);
         ref.invalidate(conversationSidebarProvider);
         if (!mounted) return;

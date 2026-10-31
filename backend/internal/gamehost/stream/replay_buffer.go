@@ -5,16 +5,16 @@ import (
 )
 
 type ReplayBuffer struct {
-	mu          sync.RWMutex
-	capacity    int
-	maxBytes    int64
-	bytes       int64
-	head        int
-	tail        int
-	count       int
-	entries     []replayEntry
-	firstSeq    Sequence
-	latestSeq   Sequence
+	mu        sync.RWMutex
+	capacity  int
+	maxBytes  int64
+	bytes     int64
+	head      int
+	tail      int
+	count     int
+	entries   []replayEntry
+	firstSeq  Sequence
+	latestSeq Sequence
 }
 
 type replayEntry struct {

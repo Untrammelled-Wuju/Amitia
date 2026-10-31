@@ -25,8 +25,9 @@ class UISnapshotCache {
       final snapshot = decoded['snapshot'];
       if (snapshot is Map<String, dynamic>) return snapshot;
       if (snapshot is Map) return snapshot.cast<String, dynamic>();
-    } catch (_) {
-      return null;
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return null;
     }
     return null;
   }

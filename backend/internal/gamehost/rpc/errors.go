@@ -9,9 +9,9 @@ import (
 type RPCErrorCode string
 
 const (
-	RPCErrorReservedNamespace RPCErrorCode = "namespace_reserved"
-	RPCErrorNamespaceConflict RPCErrorCode = "namespace_conflict"
-	RPCErrorMethodNotFound    RPCErrorCode = "method_not_found"
+	RPCErrorReservedNamespace  RPCErrorCode = "namespace_reserved"
+	RPCErrorNamespaceConflict  RPCErrorCode = "namespace_conflict"
+	RPCErrorMethodNotFound     RPCErrorCode = "method_not_found"
 	RPCErrorServiceUnavailable RPCErrorCode = "service_unavailable"
 )
 

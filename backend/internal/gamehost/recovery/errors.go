@@ -15,18 +15,18 @@ type RecoveryError struct {
 type RecoveryErrorCode string
 
 const (
-	ErrCodeRuntimeRecovering    RecoveryErrorCode = "runtime_already_recovering"
-	ErrCodeRecoveryExhausted    RecoveryErrorCode = "recovery_exhausted"
-	ErrCodeQuarantined          RecoveryErrorCode = "quarantined"
-	ErrCodeRollbackUnavailable  RecoveryErrorCode = "rollback_unavailable"
-	ErrCodeRollbackFailed       RecoveryErrorCode = "rollback_failed"
-	ErrCodeCheckpointCorrupt    RecoveryErrorCode = "checkpoint_corrupt"
+	ErrCodeRuntimeRecovering      RecoveryErrorCode = "runtime_already_recovering"
+	ErrCodeRecoveryExhausted      RecoveryErrorCode = "recovery_exhausted"
+	ErrCodeQuarantined            RecoveryErrorCode = "quarantined"
+	ErrCodeRollbackUnavailable    RecoveryErrorCode = "rollback_unavailable"
+	ErrCodeRollbackFailed         RecoveryErrorCode = "rollback_failed"
+	ErrCodeCheckpointCorrupt      RecoveryErrorCode = "checkpoint_corrupt"
 	ErrCodeCheckPointIncompatible RecoveryErrorCode = "checkpoint_incompatible"
-	ErrCodeMigrationIncompatible RecoveryErrorCode = "migration_incompatible"
-	ErrCodeRuntimeRebuildFailed  RecoveryErrorCode = "runtime_rebuild_failed"
-	ErrCodeRuntimeRestartFailed  RecoveryErrorCode = "runtime_restart_failed"
-	ErrCodeRecoverySuppressed    RecoveryErrorCode = "recovery_suppressed"
-	ErrCodeInternal              RecoveryErrorCode = "internal"
+	ErrCodeMigrationIncompatible  RecoveryErrorCode = "migration_incompatible"
+	ErrCodeRuntimeRebuildFailed   RecoveryErrorCode = "runtime_rebuild_failed"
+	ErrCodeRuntimeRestartFailed   RecoveryErrorCode = "runtime_restart_failed"
+	ErrCodeRecoverySuppressed     RecoveryErrorCode = "recovery_suppressed"
+	ErrCodeInternal               RecoveryErrorCode = "internal"
 )
 
 func (e *RecoveryError) Error() string {

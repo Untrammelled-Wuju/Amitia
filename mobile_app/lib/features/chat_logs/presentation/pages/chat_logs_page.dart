@@ -57,7 +57,9 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
       final sidebar = await ref.read(chatServiceProvider).conversationSidebar();
       if (!mounted) return;
       setState(() => _projects = sidebar.projects);
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
   }
 
   void _scheduleSearch() {

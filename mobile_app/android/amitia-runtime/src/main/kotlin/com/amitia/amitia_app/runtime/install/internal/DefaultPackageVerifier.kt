@@ -275,7 +275,9 @@ internal class DefaultPackageVerifier : PackageVerifier {
         } finally {
             try {
                 zip.close()
-            } catch (_: Exception) {
+            } catch (originalError278: Exception) {
+              originalError278.printStackTrace()
+
             }
         }
     }
@@ -309,7 +311,9 @@ internal class DefaultPackageVerifier : PackageVerifier {
         val entry = zip.getEntry(entryPath) ?: return null
         return try {
             zip.getInputStream(entry).bufferedReader(Charsets.UTF_8).use { it.readText() }
-        } catch (_: Exception) {
+        } catch (originalError312: Exception) {
+          originalError312.printStackTrace()
+
             null
         }
     }
@@ -325,7 +329,9 @@ internal class DefaultPackageVerifier : PackageVerifier {
                 }
             }
             targetFile
-        } catch (_: Exception) {
+        } catch (originalError328: Exception) {
+          originalError328.printStackTrace()
+
             null
         }
     }
@@ -537,7 +543,9 @@ internal class DefaultPackageVerifier : PackageVerifier {
                 }
             }
             digest.digest().toLowerHex()
-        } catch (_: Exception) {
+        } catch (originalError540: Exception) {
+          originalError540.printStackTrace()
+
             return false
         }
         return actualHash.equals(expectedHash, ignoreCase = true)
@@ -673,7 +681,9 @@ internal class DefaultPackageVerifier : PackageVerifier {
                 }
             }
             GuestLayout(root = root, directories = directories)
-        } catch (_: Exception) {
+        } catch (originalError676: Exception) {
+          originalError676.printStackTrace()
+
             null
         }
     }
@@ -682,7 +692,9 @@ internal class DefaultPackageVerifier : PackageVerifier {
         val text = readZipEntryText(zip, entryPath) ?: return null
         return try {
             MountContract(binds = emptyList())
-        } catch (_: Exception) {
+        } catch (originalError685: Exception) {
+          originalError685.printStackTrace()
+
             null
         }
     }

@@ -29,6 +29,7 @@ import (
 	secretpkg "github.com/u-ai/backend/internal/extension/kernel/secret"
 	"github.com/u-ai/backend/internal/platform/process"
 	"github.com/u-ai/backend/internal/runtimeidentity"
+	amitialog "log"
 )
 
 type HostState string
@@ -507,9 +508,13 @@ func (h *PluginHost) terminateProcess(reason string) {
 	}
 	if proc != nil && proc.Process != nil {
 		if tree != 0 {
-			_ = process.TerminateProcessTree(proc.Process.Pid, tree)
+			if err := process.TerminateProcessTree(proc.Process.Pid, tree); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		} else {
-			_ = proc.Process.Kill()
+			if err := proc.Process.Kill(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}
 	if cancel != nil {
@@ -686,7 +691,9 @@ func (h *PluginHost) handleRequest(req *jsonrpc.Request) {
 		h.handleHostCall(req)
 	default:
 		resp := jsonrpc.EncodeErrorResponse(req.ID, jsonrpc.MethodNotFoundError(req.Method))
-		_ = h.writeMessage(resp)
+		if err := h.writeMessage(resp); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 }
 
@@ -710,7 +717,9 @@ func (h *PluginHost) handleHostCall(req *jsonrpc.Request) {
 
 	if gateway == nil {
 		resp := jsonrpc.EncodeErrorResponse(req.ID, jsonrpc.InternalError("host_api: gateway not configured"))
-		_ = h.writeMessage(resp)
+		if err := h.writeMessage(resp); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return
 	}
 
@@ -721,7 +730,9 @@ func (h *PluginHost) handleHostCall(req *jsonrpc.Request) {
 	var p hostCallParams
 	if err := json.Unmarshal(req.Params, &p); err != nil {
 		resp := jsonrpc.EncodeErrorResponse(req.ID, jsonrpc.InternalError(fmt.Sprintf("host.call: decode params: %v", err)))
-		_ = h.writeMessage(resp)
+		if err := h.writeMessage(resp); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return
 	}
 	h.invocationsMu.Lock()
@@ -803,17 +814,23 @@ func (h *PluginHost) handleHostCall(req *jsonrpc.Request) {
 	if result.Error != nil {
 		fmt.Fprintf(os.Stderr, "[host-api] method=%s invocation=%s error=%s: %s\n", p.Method, p.InvocationID, result.Error.Code, result.Error.Message)
 		resp := jsonrpc.EncodeErrorResponse(req.ID, jsonrpc.InternalError(fmt.Sprintf("host.call: %s: %s", result.Error.Code, result.Error.Message)))
-		_ = h.writeMessage(resp)
+		if err := h.writeMessage(resp); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return
 	}
 
 	resp, err := jsonrpc.EncodeResponse(req.ID, result.Output)
 	if err != nil {
 		errResp := jsonrpc.EncodeErrorResponse(req.ID, jsonrpc.InternalError(fmt.Sprintf("host.call: encode response: %v", err)))
-		_ = h.writeMessage(errResp)
+		if err := h.writeMessage(errResp); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return
 	}
-	_ = h.writeMessage(resp)
+	if err := h.writeMessage(resp); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func withHostInvocationActor(ctx context.Context, invocation capability.ToolInvocationContext) context.Context {
@@ -975,11 +992,13 @@ func (h *PluginHost) sendRequestWithInvocation(ctx context.Context, method strin
 		h.pendingMu.Lock()
 		delete(h.pending, reqID.String())
 		h.pendingMu.Unlock()
-		_ = h.sendNotification("runtime.cancel", map[string]interface{}{
+		if err := h.sendNotification("runtime.cancel", map[string]interface{}{
 			"invocationId": reqID.String(),
 			"requestId":    reqID.String(),
 			"reason":       ctx.Err().Error(),
-		})
+		}); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, ctx.Err()
 	case <-h.done:
 		h.pendingMu.Lock()
@@ -1084,7 +1103,9 @@ func (h *PluginHost) Stop(ctx context.Context, reason string) error {
 		h.shutdownCoordinator.MarkForceStopped()
 	}
 
-	_ = h.sendNotification("runtime.shutdown", map[string]interface{}{"reason": reason})
+	if err := h.sendNotification("runtime.shutdown", map[string]interface{}{"reason": reason}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 
 	h.shutdownCoordinator.MarkDeactivateCalled()
 
@@ -1128,7 +1149,9 @@ func (h *PluginHost) waitForExit(timeout time.Duration) {
 func (h *PluginHost) cleanupProcess() {
 	h.writeMu.Lock()
 	if h.stdin != nil {
-		_ = h.stdin.Close()
+		if err := h.stdin.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		h.stdin = nil
 	}
 	h.writeMu.Unlock()

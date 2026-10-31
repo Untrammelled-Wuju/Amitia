@@ -120,8 +120,9 @@ export function useCharacterVoice() {
       const r = await apiClient.get("/api/tts/voices");
       const data = r.data?.data || r.data;
       if (Array.isArray(data)) voicePresets.value = data;
-    } catch {
-      voicePresets.value = [];
+    } catch (error) {
+  console.error("[original-error]", error);
+voicePresets.value = [];
     }
   }
 
@@ -130,8 +131,9 @@ export function useCharacterVoice() {
       const r = await apiClient.get("/api/tts/config-summaries");
       const data = r.data?.data || r.data;
       voiceConfigs.value = Array.isArray(data) ? data : [];
-    } catch {
-      voiceConfigs.value = [];
+    } catch (error) {
+  console.error("[original-error]", error);
+voiceConfigs.value = [];
     }
   }
 

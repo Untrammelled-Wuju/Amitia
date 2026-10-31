@@ -136,7 +136,7 @@ func FromRawProbeResult(resourceURI string, data rawProbeData, req MetadataReque
 		for i := 0; i < chapCount; i++ {
 			c := data.Chapters[i]
 			chapter := MediaChapterInfo{
-				ID:     int(c.ID),
+				ID:      int(c.ID),
 				StartMs: c.StartMs,
 				EndMs:   c.EndMs,
 				Title:   c.Title,

@@ -586,7 +586,10 @@ export class BrowserSlotRuntime {
         childEpochs.push({ slotId: child.slotId, epoch });
         this.bumpRevision();
         const activation = this.activate(child.slotId, definition);
-        childActivations.push(activation.catch(() => undefined));
+        childActivations.push(activation.catch((error) => {
+  console.error("[original-error]", error);
+  return undefined;
+}));
         activation.catch(async () => {
           await this.collapseLocalSlot(child.slotId, epoch, false);
         });
@@ -610,7 +613,10 @@ export class BrowserSlotRuntime {
       if (claim?.ownerEntryId === contribution.contributionId) this.childClaims.delete(childSlotId);
     }
     contribution.claimedStaticChildren.length = 0;
-    await Promise.allSettled(contribution.childActivations);
+    const settled = await Promise.allSettled(contribution.childActivations);
+    for (const result of settled) {
+      if (result.status === "rejected") console.error("[original-error]", result.reason);
+    }
     for (let index = contribution.ownedChildEpochs.length - 1; index >= 0; index--) {
       const child = contribution.ownedChildEpochs[index]!;
       await this.collapseLocalSlot(child.slotId, child.epoch, true);
@@ -941,7 +947,9 @@ export class BrowserSlotRuntime {
       abdicated: canAbdicate,
     };
     for (const listener of Array.from(this.entryErrorListeners)) {
-      try { listener(event); } catch { /* diagnostics must not block failover */ }
+      try { listener(event); } catch (error) {
+  console.error("[original-error]", error);
+/* diagnostics must not block failover */ }
     }
     return canAbdicate;
   }
@@ -1059,7 +1067,9 @@ function isClientSlotStoreHandle(value: unknown): value is ClientSlotStoreHandle
 function cloneSessionStoreIfNeeded(value: unknown, scope: ClientSlotContribution["scope"], sessionId?: string): unknown {
   if (value == null || scope === "root" || !sessionId) return value;
   if (typeof structuredClone === "function") {
-    try { return structuredClone(value); } catch { /* fall through */ }
+    try { return structuredClone(value); } catch (error) {
+  console.error("[original-error]", error);
+/* fall through */ }
   }
   if (Array.isArray(value)) return [...value];
   if (typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype) return { ...(value as Record<string, unknown>) };
@@ -1083,7 +1093,9 @@ async function normalizeSlotEffect(effect: ClientSlotEffect): Promise<ClientDisp
     }
   } catch (error) {
     for (let index = disposers.length - 1; index >= 0; index--) {
-      try { await disposers[index]?.(); } catch { /* preserve original setup failure */ }
+      try { await disposers[index]?.(); } catch (error) {
+  console.error("[original-error]", error);
+/* preserve original setup failure */ }
     }
     throw error;
   }
@@ -1336,7 +1348,9 @@ export class BrowserClientPluginRuntime {
 
     const previous = this.sessionSyncQueues.get(scope) ?? Promise.resolve();
     let applied = false;
-    const next = previous.catch(() => {}).then(async () => {
+    const next = previous.catch((error) => {
+  console.error("[original-error]", error);
+}).then(async () => {
       applied = await this.applySessionSnapshot(state, scope, scopeGeneration);
     });
     this.sessionSyncQueues.set(scope, next);
@@ -1516,8 +1530,9 @@ export class BrowserClientPluginRuntime {
       this.activePackageVersion.set(id, selected);
       try {
         await previousFiber.dispose();
-      } catch {
-      }
+      } catch (error) {
+  console.error("[original-error]", error);
+}
       return;
     }
 

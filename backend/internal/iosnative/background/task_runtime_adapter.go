@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
+	amitialog "log"
 )
 
 type taskRuntimeServiceAdapter struct {
@@ -99,7 +100,9 @@ func (a *taskRuntimeServiceAdapter) GetCheckpoint(ctx context.Context, taskRunID
 	}
 	var data map[string]any
 	if len(cp.Payload) > 0 {
-		_ = json.Unmarshal(cp.Payload, &data)
+		if err := json.Unmarshal(cp.Payload, &data); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return &CheckpointData{
 		Data: data,

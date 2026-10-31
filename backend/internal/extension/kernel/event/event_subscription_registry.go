@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	amitialog "log"
 	"sort"
 	"sync"
 )
@@ -104,7 +105,9 @@ func (r *EventSubscriptionRegistry) RegisterBatch(ctx context.Context, defs []Ev
 		resolved, err := r.resolveLocked(ctx, def)
 		if err != nil {
 			if r.repository != nil {
-				_ = r.repository.Delete(ctx, def.ContributionID)
+				if err := r.repository.Delete(ctx, def.ContributionID); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 			return err
 		}
@@ -132,7 +135,9 @@ func (r *EventSubscriptionRegistry) Register(ctx context.Context, def EventSubsc
 	resolved, err := r.resolveLocked(ctx, def)
 	if err != nil {
 		if r.repository != nil {
-			_ = r.repository.Delete(ctx, def.ContributionID)
+			if err := r.repository.Delete(ctx, def.ContributionID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		return err
 	}
@@ -208,7 +213,9 @@ func (r *EventSubscriptionRegistry) Unregister(ctx context.Context, contribution
 		delete(r.byExtension, sub.Definition.ExtensionID)
 	}
 	if r.repository != nil {
-		_ = r.repository.Delete(ctx, contributionID)
+		if err := r.repository.Delete(ctx, contributionID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return nil
 }
@@ -232,7 +239,9 @@ func (r *EventSubscriptionRegistry) Activate(ctx context.Context, contributionID
 	sub.Effective.Enabled = true
 	sub.Definition.Enabled = true
 	if r.repository != nil {
-		_ = r.repository.SetEnabled(ctx, contributionID, true)
+		if err := r.repository.SetEnabled(ctx, contributionID, true); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return nil
 }
@@ -247,7 +256,9 @@ func (r *EventSubscriptionRegistry) Deactivate(ctx context.Context, contribution
 	sub.Effective.Enabled = false
 	sub.Definition.Enabled = false
 	if r.repository != nil {
-		_ = r.repository.SetEnabled(ctx, contributionID, false)
+		if err := r.repository.SetEnabled(ctx, contributionID, false); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return nil
 }
@@ -304,7 +315,9 @@ func (r *EventSubscriptionRegistry) DeactivateByExtension(ctx context.Context, e
 			sub.Effective.Enabled = false
 			sub.Definition.Enabled = false
 			if r.repository != nil {
-				_ = r.repository.SetEnabled(ctx, id, false)
+				if err := r.repository.SetEnabled(ctx, id, false); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 		}
 	}
@@ -327,7 +340,9 @@ func (r *EventSubscriptionRegistry) RemoveByExtension(ctx context.Context, exten
 	}
 	delete(r.byExtension, extensionID)
 	if r.repository != nil {
-		_, _ = r.repository.DeleteByExtension(ctx, extensionID)
+		if _, err := r.repository.DeleteByExtension(ctx, extensionID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return nil
 }

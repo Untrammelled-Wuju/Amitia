@@ -66,7 +66,7 @@ func (e *QuarantineError) Unwrap() error {
 
 type CrashHandlerError struct {
 	RuntimeID    string
-	ServiceID   string
+	ServiceID    string
 	ExitExpected bool
 	Cause        error
 }

@@ -13,7 +13,7 @@ type IdempotencyIndex struct {
 }
 
 type RequestIdFingerprintKey struct {
-	RequestKey RequestKey
+	RequestKey  RequestKey
 	Fingerprint RequestFingerprint
 }
 

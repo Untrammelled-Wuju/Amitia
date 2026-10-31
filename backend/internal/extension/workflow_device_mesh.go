@@ -14,6 +14,7 @@ import (
 	protocol "github.com/u-ai/backend/internal/deviceruntime/protocol"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
+	amitialog "log"
 )
 
 const (
@@ -292,7 +293,11 @@ func (api *WorkflowAPI) meshRunRerun(ctx context.Context, invoke protocol.Runtim
 		})
 	}
 	runCtx := context.WithoutCancel(ctx)
-	go func() { _, _ = executor.Execute(runCtx, req) }()
+	go func() {
+		if _, err := executor.Execute(runCtx, req); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+	}()
 	return meshResult(invoke, map[string]any{
 		"accepted": true, "executionId": executionID, "workflowId": def.ID,
 		"status": workflow.RunStatusRunning, "executionMode": opts.Mode, "sourceExecutionId": previous.ExecutionID,
@@ -306,7 +311,9 @@ func (api *WorkflowAPI) meshSyncOutbox(ctx context.Context, invoke protocol.Runt
 	var request struct {
 		Limit int `json:"limit"`
 	}
-	_ = json.Unmarshal(invoke.Input, &request)
+	if err := json.Unmarshal(invoke.Input, &request); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	items, err := api.runtime.Kernel.Container().WorkflowDefRepo.ListWorkflowSyncOutbox(ctx, invoke.SpaceID.String(), request.Limit)
 	if err != nil {
 		return nil, err
@@ -495,8 +502,12 @@ func (api *WorkflowAPI) meshUpsert(ctx context.Context, invoke protocol.RuntimeI
 		return nil, err
 	}
 	rollback := func() {
-		_ = api.syncTriggers(ctx, def, old, spaceID)
-		_ = registry.UpsertContext(mutationCtx, old)
+		if err := api.syncTriggers(ctx, def, old, spaceID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := registry.UpsertContext(mutationCtx, old); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	if err := api.syncTriggers(ctx, old, def, spaceID); err != nil {
 		rollback()
@@ -552,7 +563,9 @@ func (api *WorkflowAPI) meshDelete(ctx context.Context, invoke protocol.RuntimeI
 		mutationCtx = sqlite.SuppressWorkflowSync(ctx)
 	}
 	if err := registry.UnregisterContext(mutationCtx, def.ID); err != nil {
-		_ = api.syncTriggers(ctx, workflow.WorkflowDefinition{}, def, spaceID)
+		if err := api.syncTriggers(ctx, workflow.WorkflowDefinition{}, def, spaceID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, err
 	}
 	if request.SyncRevision > 0 {
@@ -598,13 +611,19 @@ func (api *WorkflowAPI) meshSetEnabled(ctx context.Context, invoke protocol.Runt
 		return nil, err
 	}
 	if err := api.syncTriggers(ctx, old, def, spaceID); err != nil {
-		_ = registry.Upsert(old)
+		if err := registry.Upsert(old); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, err
 	}
 	updated, err := api.updateInstallationCAS(ctx, def, spaceID, inst, expected)
 	if err != nil {
-		_ = api.syncTriggers(ctx, def, old, spaceID)
-		_ = registry.Upsert(old)
+		if err := api.syncTriggers(ctx, def, old, spaceID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := registry.Upsert(old); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, err
 	}
 	eventType := "workflow.installation.disabled"
@@ -753,7 +772,9 @@ func (api *WorkflowAPI) meshRunStart(ctx context.Context, invoke protocol.Runtim
 		return meshResult(invoke, result)
 	}
 	go func() {
-		_, _ = executor.Execute(runCtx, workflow.ExecuteRequest{WorkflowID: def.ID, Input: request.Input, Context: execution, Options: opts})
+		if _, err := executor.Execute(runCtx, workflow.ExecuteRequest{WorkflowID: def.ID, Input: request.Input, Context: execution, Options: opts}); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}()
 	return meshResult(invoke, map[string]any{
 		"accepted":      true,
@@ -842,7 +863,9 @@ func (api *WorkflowAPI) meshRunEnvelope(ctx context.Context, spaceID, runID stri
 	}
 	def, ok := kc.WorkflowRegistry.Get(run.WorkflowID)
 	if !ok && len(run.Context.DefinitionSnapshot) > 0 {
-		_ = json.Unmarshal(run.Context.DefinitionSnapshot, &def)
+		if err := json.Unmarshal(run.Context.DefinitionSnapshot, &def); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return map[string]any{
 		"run":                   run,
@@ -1104,7 +1127,9 @@ func (api *WorkflowAPI) meshRunRecover(ctx context.Context, invoke protocol.Runt
 	execution.TraceID = "trace-" + uuid.NewString()
 	runCtx := context.WithoutCancel(ctx)
 	go func() {
-		_, _ = executor.Execute(runCtx, workflow.ExecuteRequest{WorkflowID: run.WorkflowID, Input: run.Input, Context: execution})
+		if _, err := executor.Execute(runCtx, workflow.ExecuteRequest{WorkflowID: run.WorkflowID, Input: run.Input, Context: execution}); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}()
 	return meshResult(invoke, map[string]any{
 		"accepted":        true,

@@ -124,6 +124,7 @@ function assertWritable(dir: string): void {
     fs.writeFileSync(testFile, "ok", "utf-8");
     fs.unlinkSync(testFile);
   } catch (error) {
+  console.error("[original-error]", error);
     const msg = `AmitiaData目录不可写: ${dir}。请将Amitia安装到用户可写目录，例如 D:\\Software\\amitia`;
     throw new Error(msg);
   }

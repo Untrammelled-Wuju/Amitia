@@ -156,8 +156,9 @@ async function handleSave() {
     if (!formRef.value) return;
     try {
       await formRef.value.validate();
-    } catch {
-      return;
+    } catch (error) {
+  console.error("[original-error]", error);
+return;
     }
   }
 
@@ -188,7 +189,7 @@ async function handleSave() {
     ElMessage.success("本地模式已保存，业务连接会重新建立");
   } catch (err: any) {
     saveError.value = err?.message || "保存失败";
-    ElMessage.error("保存失败: " + saveError.value);
+    ElMessage.error(String(err?.message || err));
   } finally {
     saving.value = false;
   }
@@ -212,8 +213,9 @@ async function rollbackCloudSetup(_baseURL: string, error: unknown) {
     await saveDeploymentConfig(previous);
     await initializeRuntimeCapabilities(true);
     formMode.value = previous.mode;
-  } catch {
-    saveError.value += "；恢复原运行模式失败，请重新打开设置页";
+  } catch (error) {
+  console.error("[original-error]", error);
+saveError.value = `${saveError.value}；${error instanceof Error ? error.message : String(error)}`;
   }
   cloudPreviousConfig.value = null;
 }
@@ -234,7 +236,7 @@ async function completeCloudSetup() {
     deviceManagementGeneration.value++;
   } catch (err: any) {
     saveError.value = err?.message || "保存云端统筹设置失败";
-    ElMessage.error(saveError.value);
+    ElMessage.error(String(err?.message || err));
   } finally {
     cloudSetupSaving.value = false;
   }

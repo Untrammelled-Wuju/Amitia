@@ -16,10 +16,10 @@ type PythonDetector struct {
 }
 
 type PythonVersionInfo struct {
-	Major   string
-	Minor   string
-	Patch   string
-	Raw     string
+	Major string
+	Minor string
+	Patch string
+	Raw   string
 }
 
 func NewPythonDetector(executor shell.ShellExecutor) *PythonDetector {

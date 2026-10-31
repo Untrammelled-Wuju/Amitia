@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	amitialog "log"
 	"sync"
 )
 
@@ -40,9 +41,17 @@ func Token(extensionID, moduleID string) (string, error) {
 		return "", err
 	}
 	mac := hmac.New(sha256.New, key)
-	_, _ = mac.Write([]byte("amitia-service-auth-v1\x00"))
-	_, _ = mac.Write([]byte(extensionID))
-	_, _ = mac.Write([]byte{0})
-	_, _ = mac.Write([]byte(moduleID))
+	if _, err := mac.Write([]byte("amitia-service-auth-v1\x00")); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if _, err := mac.Write([]byte(extensionID)); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if _, err := mac.Write([]byte{0}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if _, err := mac.Write([]byte(moduleID)); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil)), nil
 }

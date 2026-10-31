@@ -14,8 +14,8 @@ type SupervisorHealthEvent struct {
 	InstanceID   string
 	Generation   int64
 
-	Health  domain.HealthStatus
-	Reason  string
+	Health   domain.HealthStatus
+	Reason   string
 	Occurred time.Time
 }
 
@@ -50,7 +50,7 @@ type SupervisorQuarantineEvent struct {
 
 	Quarantined bool
 	Reason      string
-	Occurred     time.Time
+	Occurred    time.Time
 }
 
 type ProcessExitEvent struct {

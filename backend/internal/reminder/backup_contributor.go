@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/u-ai/backend/internal/system/dataportability"
+	amitialog "log"
 )
 
 const TaskBackupComponent = "reminder.owned.v1"
@@ -99,7 +100,9 @@ func (c *TaskBackupContributor) Export(ctx context.Context, req dataportability.
 		return err
 	}
 	if err := json.NewEncoder(w).Encode(signedTaskArchive{Archive: archive, Signature: base64.RawURLEncoding.EncodeToString(signature)}); err != nil {
-		_ = w.Close()
+		if err := w.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return err
 	}
 	return w.Close()

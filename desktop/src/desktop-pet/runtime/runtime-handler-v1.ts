@@ -351,7 +351,10 @@ export class DesktopRuntimeHandlerV1 {
     // was already admitted by the old handler.
     while (this.inFlightCommands.size > 0) {
       const pending = Array.from(this.inFlightCommands.values());
-      await Promise.allSettled(pending);
+      const settled = await Promise.allSettled(pending);
+      for (const result of settled) {
+        if (result.status === "rejected") console.error("[original-error]", result.reason);
+      }
     }
   }
 
@@ -407,7 +410,9 @@ export class DesktopRuntimeHandlerV1 {
           if (this.state !== "handshaking" || this.ws !== ws) return;
           const err = new Error("runtime hello_ack timeout");
           this.rejectPendingConnect(err);
-          try { ws.close(4000, "hello_ack_timeout"); } catch { void 0; }
+          try { ws.close(4000, "hello_ack_timeout"); } catch (error) {
+  console.error("[original-error]", error);
+void 0; }
         }, this.config.connectTimeoutMs);
 
         ws.onopen = () => {
@@ -1538,14 +1543,20 @@ export class DesktopRuntimeHandlerV1 {
       // Some implementations reject close() while CONNECTING. Fence the old
       // socket and close it immediately if it eventually opens.
       ws.onopen = () => {
-        try { ws.close(1000, "cleanup"); } catch { void 0; }
+        try { ws.close(1000, "cleanup"); } catch (error) {
+  console.error("[original-error]", error);
+void 0; }
       };
-      try { ws.close(1000, "cleanup"); } catch { void 0; }
+      try { ws.close(1000, "cleanup"); } catch (error) {
+  console.error("[original-error]", error);
+void 0; }
       return;
     }
     ws.onopen = null;
     if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CLOSING) {
-      try { ws.close(1000, "cleanup"); } catch { void 0; }
+      try { ws.close(1000, "cleanup"); } catch (error) {
+  console.error("[original-error]", error);
+void 0; }
     }
   }
 }

@@ -1,10 +1,10 @@
 package homekit
 
 const (
-	SetupStatusSuccess    = "success"
-	SetupStatusFailed     = "failed"
-	SetupStatusCancelled  = "cancelled"
-	SetupStatusPending    = "pending"
+	SetupStatusSuccess   = "success"
+	SetupStatusFailed    = "failed"
+	SetupStatusCancelled = "cancelled"
+	SetupStatusPending   = "pending"
 )
 
 type SetupSession struct {

@@ -108,7 +108,7 @@ func (h *ControlHandler) Takeover(c *gin.Context) {
 	result, err := h.takeoverFn(c.Request.Context(), runtimeID)
 	if err != nil {
 		if errors.Is(err, ErrStaleEpoch) {
-			c.JSON(http.StatusConflict, gin.H{"code": 409, "msg": "stale epoch, please refresh"})
+			c.JSON(http.StatusConflict, gin.H{"code": 409, "msg": err.Error()})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": err.Error()})
@@ -149,7 +149,7 @@ func (h *ControlHandler) Release(c *gin.Context) {
 	result, err := h.releaseFn(c.Request.Context(), runtimeID, targetMode, req.ExpectedEpoch)
 	if err != nil {
 		if errors.Is(err, ErrStaleEpoch) {
-			c.JSON(http.StatusConflict, gin.H{"code": 409, "msg": "stale epoch, please refresh"})
+			c.JSON(http.StatusConflict, gin.H{"code": 409, "msg": err.Error()})
 			return
 		}
 		if errors.Is(err, ErrPermissionDenied) {

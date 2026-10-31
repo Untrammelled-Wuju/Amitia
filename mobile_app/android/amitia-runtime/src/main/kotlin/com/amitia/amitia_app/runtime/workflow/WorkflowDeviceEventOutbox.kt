@@ -56,7 +56,9 @@ internal class WorkflowDeviceEventOutbox(context: Context) {
                     array.optJSONObject(i)?.let(::add)
                 }
             }
-        } catch (_: Throwable) {
+        } catch (originalError59: Throwable) {
+          originalError59.printStackTrace()
+
             prefs.edit().remove(KEY_EVENTS).apply()
             emptyList()
         }

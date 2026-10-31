@@ -76,7 +76,9 @@ internal class CameraNativeHandler(
     private fun detectCameraState(): CameraCapabilityState {
         val hasCameraFeature = try {
             context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
-        } catch (_: Exception) {
+        } catch (originalError79: Exception) {
+          originalError79.printStackTrace()
+
             false
         }
 
@@ -122,11 +124,15 @@ internal class CameraNativeHandler(
                         facing = facingStr,
                         supportedSizes = emptyList(),
                     )
-                } catch (_: Exception) {
+                } catch (originalError125: Exception) {
+                  originalError125.printStackTrace()
+
                     null
                 }
             }
-        } catch (_: Exception) {
+        } catch (originalError129: Exception) {
+          originalError129.printStackTrace()
+
             emptyList()
         }
     }

@@ -120,7 +120,9 @@ async function refreshAll() {
 async function handleStart(serviceId: string) {
   try {
     await ElMessageBox.confirm("确认启动该可信服务?", "启动确认", { type: "warning" });
-  } catch { return; }
+  } catch (error) {
+  console.error("[original-error]", error);
+return; }
   try {
     const result = await startService(serviceId, {});
     ElMessage.success(`服务已启动 (PID: ${result.pid})`);
@@ -133,7 +135,9 @@ async function handleStart(serviceId: string) {
 async function handleStop(serviceId: string) {
   try {
     await ElMessageBox.confirm("确认停止该可信服务?", "停止确认", { type: "warning" });
-  } catch { return; }
+  } catch (error) {
+  console.error("[original-error]", error);
+return; }
   try {
     await stopService(serviceId, { reason: "manual", force: false });
     ElMessage.success("服务已停止");
@@ -156,7 +160,9 @@ async function handleHealthCheck(serviceId: string) {
 async function handleUnregister(serviceId: string) {
   try {
     await ElMessageBox.confirm("确认注销该服务定义? 此操作不可恢复.", "注销确认", { type: "error" });
-  } catch { return; }
+  } catch (error) {
+  console.error("[original-error]", error);
+return; }
   try {
     await unregisterService(serviceId);
     ElMessage.success("服务已注销");
@@ -183,8 +189,9 @@ async function executeInvoke() {
   let parsedInput: unknown = null;
   try {
     parsedInput = JSON.parse(invokeInput.value);
-  } catch {
-    ElMessage.warning("输入 JSON 格式无效");
+  } catch (error) {
+  console.error("[original-error]", error);
+ElMessage.warning(error instanceof Error ? error.message : String(error));
     return;
   }
   try {
@@ -197,14 +204,16 @@ async function executeInvoke() {
     ElMessage.success("调用成功");
   } catch (e: any) {
     invokeResult.value = "Error: " + (e.message || String(e));
-    ElMessage.error("调用失败");
+    ElMessage.error(String(e?.message || e));
   }
 }
 
 async function handleReleaseQuarantine(serviceId: string) {
   try {
     await ElMessageBox.confirm("确认解除该服务的隔离状态?", "解除隔离", { type: "warning" });
-  } catch { return; }
+  } catch (error) {
+  console.error("[original-error]", error);
+return; }
   try {
     await releaseQuarantine(serviceId);
     ElMessage.success("隔离已解除");

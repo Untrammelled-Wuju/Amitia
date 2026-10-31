@@ -1,13 +1,14 @@
 package dataportability
 
 const (
-	FormatVersion       = 1
-	FormatName          = "amitia-backup"
-	MaxPackageSizeBytes = 1024 * 1024 * 1024 * 64
-	MaxSingleResource   = 1024 * 1024 * 1024
-	MaxTotalResources   = 1024 * 1024 * 1024 * 16
-	MaxArchiveEntries   = 100000
-	MaxCompressionRatio = 100
+	FormatVersion        = 1
+	FormatName           = "amitia-backup"
+	CurrentSecretsPolicy = 1
+	MaxPackageSizeBytes  = 1024 * 1024 * 1024 * 64
+	MaxSingleResource    = 1024 * 1024 * 1024
+	MaxTotalResources    = 1024 * 1024 * 1024 * 16
+	MaxArchiveEntries    = 100000
+	MaxCompressionRatio  = 100
 )
 
 type BackupProfile string
@@ -48,6 +49,8 @@ type BackupManifest struct {
 	Scope             string                    `json:"scope"`
 	CharacterID       string                    `json:"characterId,omitempty"`
 	Encrypted         bool                      `json:"encrypted"`
+	IncludesSecrets   bool                      `json:"includesSecrets"`
+	SecretsPolicy     int                       `json:"secretsPolicy"`
 	SourcePlatform    string                    `json:"sourcePlatform"`
 	Components        []BackupComponentManifest `json:"components"`
 	RequiresReindex   bool                      `json:"requiresReindex"`

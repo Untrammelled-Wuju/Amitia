@@ -41,7 +41,10 @@ function accept(raw: string) {
     accepted = true;
     close();
     emit('scanned', raw);
-  } catch { error.value = '请扫描 Amitia 设备配对二维码'; }
+  } catch (caughtError) {
+    console.error("[original-error]", caughtError);
+    error.value = '请扫描 Amitia 设备配对二维码';
+  }
 }
 
 watch(() => props.modelValue, async (visible) => {
@@ -58,7 +61,10 @@ watch(() => props.modelValue, async (visible) => {
     });
     if (generation !== current || !props.modelValue) started.stop();
     else controls = started;
-  } catch { if (generation === current) error.value = '摄像头暂不可用，请检查相机权限或选择二维码图片'; }
+  } catch (caughtError) {
+    console.error("[original-error]", caughtError);
+    if (generation === current) error.value = '摄像头暂不可用，请检查相机权限或选择二维码图片';
+  }
 });
 
 async function readImage(event: Event) {
@@ -69,7 +75,10 @@ async function readImage(event: Event) {
   try {
     const result = await new BrowserQRCodeReader().decodeFromImageUrl(url);
     if (generation === current) accept(result.getText());
-  } catch { if (generation === current) error.value = '没有识别到配对二维码，请选择清晰完整的图片'; }
+  } catch (caughtError) {
+    console.error("[original-error]", caughtError);
+    if (generation === current) error.value = '没有识别到配对二维码，请选择清晰完整的图片';
+  }
   finally { URL.revokeObjectURL(url); }
 }
 

@@ -24,6 +24,7 @@ import (
 	"github.com/u-ai/backend/internal/chat/modelprotocol"
 	"github.com/u-ai/backend/internal/media"
 	"github.com/u-ai/backend/internal/runtimehost"
+	amitialog "log"
 )
 
 type mnnRuntime struct {
@@ -77,7 +78,7 @@ func newMNNRuntime(config MNNProviderConfig) *mnnRuntime {
 		config:       config,
 		state:        "unloaded",
 		port:         0,
-		processID:    runtimehost.ProcessID("mnn-" + config.LocalModelID + "-" + configFingerprint(config)),
+		processID:    runtimehost.ProcessID(localmodel.RuntimeProcessID("mnn", config.LocalModelID, configFingerprint(config))),
 		materializer: localmodel.GetGlobalMediaMaterializer(),
 	}
 }
@@ -170,15 +171,12 @@ func (r *mnnRuntime) startServer(ctx context.Context) error {
 	workDir := filepath.Dir(executable)
 
 	spec := runtimehost.ProcessSpec{
-		ID:          r.processID,
-		Executable:  executable,
-		Args:        args,
-		WorkingDir:  workDir,
-		Environment: runtimehost.EnvironmentSpec{Policy: runtimehost.EnvPolicyMinimal},
-		HealthProbe: &runtimehost.HTTPHealthProbe{
-			URL:     r.baseURL + "/health",
-			Timeout: 2 * time.Second,
-		},
+		ID:              r.processID,
+		Executable:      executable,
+		Args:            args,
+		WorkingDir:      workDir,
+		Environment:     runtimehost.EnvironmentSpec{Policy: runtimehost.EnvPolicyMinimal},
+		HealthProbe:     runtimehost.NewHTTPHealthProbe(r.baseURL+"/health", 2*time.Second),
 		StartupTimeout:  60 * time.Second,
 		StopGracePeriod: 10 * time.Second,
 		RestartPolicy:   runtimehost.RestartPolicy{Mode: runtimehost.RestartNever},
@@ -209,7 +207,9 @@ func (r *mnnRuntime) startServer(ctx context.Context) error {
 
 func (r *mnnRuntime) cleanupModel() {
 	if r.modelCleanup != nil {
-		_ = r.modelCleanup()
+		if err := r.modelCleanup(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		r.modelCleanup = nil
 		r.modelPath = ""
 	}
@@ -221,8 +221,12 @@ func (r *mnnRuntime) stopServer() {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	_ = r.supervisor.Stop(ctx, r.processID)
-	_ = r.supervisor.Unregister(r.processID)
+	if err := r.supervisor.Stop(ctx, r.processID); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := r.supervisor.Unregister(r.processID); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	if r.port > 0 {
 		releaseMNNPort(r.port)
 		r.port = 0
@@ -232,10 +236,25 @@ func (r *mnnRuntime) stopServer() {
 }
 
 func (r *mnnRuntime) findMNNServerExecutable() string {
+	return mnnServerExecutable()
+}
+
+func mnnServerExecutable() string {
 	candidates := []string{
 		filepath.Join("resources", "mnn", "mnn-server.exe"),
 		filepath.Join("resources", "mnn", "mnn-server"),
 		"mnn-server",
+	}
+	if host := localmodel.GetGlobalRuntimeHost(); host != nil {
+		paths := host.Paths()
+		candidates = append(candidates,
+			filepath.Join(paths.Root, "resources", "mnn", "mnn-server.exe"),
+			filepath.Join(paths.Root, "resources", "mnn", "mnn-server"),
+			filepath.Join(paths.Root, "mnn", "mnn-server.exe"),
+			filepath.Join(paths.Root, "mnn", "mnn-server"),
+			filepath.Join(paths.DataDir, "runtime", "local-model", "mnn", "mnn-server.exe"),
+			filepath.Join(paths.DataDir, "runtime", "local-model", "mnn", "mnn-server"),
+		)
 	}
 	for _, c := range candidates {
 		if c == "" {
@@ -353,6 +372,10 @@ func (r *mnnRuntime) chatStream(ctx context.Context, request localmodel.LocalMod
 		return localmodel.LocalModelResult{}, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+		return localmodel.LocalModelResult{}, fmt.Errorf("MNN server returned %d: %s", resp.StatusCode, truncateBytes(body, 512))
+	}
 
 	return parseMNNChatStream(resp.Body, sink)
 }

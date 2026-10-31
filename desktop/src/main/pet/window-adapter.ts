@@ -205,8 +205,9 @@ export class DesktopPetWindowAdapter {
           try {
             await win.loadURL(petDevUrl);
             return;
-          } catch {
-            // Development server may be unavailable during Electron startup.
+          } catch (error) {
+  console.error("[original-error]", error);
+// Development server may be unavailable during Electron startup.
             // Fall back to the packaged renderer; do not let the failed dev
             // navigation consume the whole startup attempt.
             await loadPackagedRenderer();

@@ -7,10 +7,10 @@ import (
 )
 
 var (
-	ErrSourceTargetImmutable    = errors.New("ui agent: source target is immutable in production")
-	ErrSourceTargetNotEditable  = errors.New("ui agent: workspace is not an editable development workspace")
-	ErrPathOutOfBounds          = errors.New("ui agent: path out of allowed boundaries")
-	ErrCircularDependency       = errors.New("ui agent: operation dependency cycle detected")
+	ErrSourceTargetImmutable   = errors.New("ui agent: source target is immutable in production")
+	ErrSourceTargetNotEditable = errors.New("ui agent: workspace is not an editable development workspace")
+	ErrPathOutOfBounds         = errors.New("ui agent: path out of allowed boundaries")
+	ErrCircularDependency      = errors.New("ui agent: operation dependency cycle detected")
 )
 
 type ModeResolver interface {

@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/creack/pty"
+	amitialog "log"
 )
 
 type unixProcess struct {
@@ -37,10 +38,16 @@ func (p *unixProcess) Resize(rows, cols uint16) error {
 func (p *unixProcess) Close() error {
 	p.closeOnce.Do(func() {
 		if p.command.Process != nil {
-			_ = syscall.Kill(-p.command.Process.Pid, syscall.SIGKILL)
-			_ = p.command.Process.Kill()
+			if err := syscall.Kill(-p.command.Process.Pid, syscall.SIGKILL); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
+			if err := p.command.Process.Kill(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
-		_ = p.master.Close()
+		if err := p.master.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	})
 	return nil
 }

@@ -25,6 +25,7 @@ class BackendTransportError implements Exception {
     if (path != null) buffer.write(', path: $path');
     if (statusCode != null) buffer.write(', statusCode: $statusCode');
     if (generation != null) buffer.write(', generation: $generation');
+    if (cause != null) buffer.write(', cause: $cause');
     buffer.write(')');
     return buffer.toString();
   }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
+	amitialog "log"
 )
 
 type CandidateRepository struct {
@@ -284,13 +285,19 @@ func scanCandidateRecord(rows *sql.Rows) (*CandidateRecord, error) {
 		}
 	}
 	if instanceIDsStr != "" {
-		_ = json.Unmarshal([]byte(instanceIDsStr), &record.InstanceIDs)
+		if err := json.Unmarshal([]byte(instanceIDsStr), &record.InstanceIDs); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	if contribsStr != "" {
-		_ = json.Unmarshal([]byte(contribsStr), &record.Contribs)
+		if err := json.Unmarshal([]byte(contribsStr), &record.Contribs); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	if scheduleIDsStr != "" {
-		_ = json.Unmarshal([]byte(scheduleIDsStr), &record.ScheduleIDs)
+		if err := json.Unmarshal([]byte(scheduleIDsStr), &record.ScheduleIDs); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return &record, nil
 }
@@ -368,13 +375,19 @@ func scanCandidateRow(row *sql.Row) (*CandidateRecord, error) {
 		}
 	}
 	if instanceIDsStr != "" {
-		_ = json.Unmarshal([]byte(instanceIDsStr), &record.InstanceIDs)
+		if err := json.Unmarshal([]byte(instanceIDsStr), &record.InstanceIDs); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	if contribsStr != "" {
-		_ = json.Unmarshal([]byte(contribsStr), &record.Contribs)
+		if err := json.Unmarshal([]byte(contribsStr), &record.Contribs); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	if scheduleIDsStr != "" {
-		_ = json.Unmarshal([]byte(scheduleIDsStr), &record.ScheduleIDs)
+		if err := json.Unmarshal([]byte(scheduleIDsStr), &record.ScheduleIDs); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return &record, nil
 }

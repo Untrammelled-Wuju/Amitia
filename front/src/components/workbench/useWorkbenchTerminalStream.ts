@@ -91,7 +91,9 @@ export async function connectTerminalStream(
           Number.isSafeInteger(frame.snapshot.cursor) && frame.snapshot.cursor >= 0) {
           onSnapshot(frame.snapshot);
         }
-      } catch { socket.close(); }
+      } catch (error) {
+  console.error("[original-error]", error);
+socket.close(); }
     };
     abortListener = () => {
       close();

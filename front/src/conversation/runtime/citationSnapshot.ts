@@ -38,8 +38,9 @@ export function normalizeCitationURL(raw: unknown): string | undefined {
       if (sensitiveCitationQueryKeys.some((part) => key.toLowerCase().includes(part))) parsed.searchParams.delete(key);
     }
     return parsed.toString();
-  } catch {
-    return undefined;
+  } catch (error) {
+  console.error("[original-error]", error);
+return undefined;
   }
 }
 

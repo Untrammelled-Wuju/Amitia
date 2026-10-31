@@ -35,8 +35,9 @@ export function parseWorldBookImport(text: string): WorldBookImportRow[] {
   let data: unknown;
   try {
     data = JSON.parse(text);
-  } catch {
-    throw new Error("JSON 格式错误，请检查括号、逗号和字符串引号");
+  } catch (error) {
+  console.error("[original-error]", error);
+throw new Error(error instanceof Error ? error.message : String(error));
   }
   if (!Array.isArray(data)) {
     throw new Error("JSON 顶层必须是数组");
@@ -98,8 +99,9 @@ function validateWorldBookImportItem(raw: unknown, index: number): WorldBookImpo
   if (matchType === "regex") {
     try {
       new RegExp(matchPattern);
-    } catch {
-      return invalid("matchPattern 不是有效的正则表达式");
+    } catch (error) {
+  console.error("[original-error]", error);
+return invalid(error instanceof Error ? error.message : String(error));
     }
   }
   return {

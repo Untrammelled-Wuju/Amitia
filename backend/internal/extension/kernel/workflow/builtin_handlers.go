@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	amitialog "log"
 	"math"
 	"reflect"
 	"regexp"
@@ -1107,7 +1108,9 @@ func (WaitHandler) Execute(ctx context.Context, node WorkflowNode, input json.Ra
 		var payload struct {
 			DurationMS int64 `json:"durationMs"`
 		}
-		_ = json.Unmarshal(input, &payload)
+		if err := json.Unmarshal(input, &payload); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		durationMS = payload.DurationMS
 	}
 	if durationMS < 0 {

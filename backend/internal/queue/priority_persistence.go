@@ -2,6 +2,7 @@ package queue
 
 import (
 	"context"
+	amitialog "log"
 	"time"
 )
 
@@ -48,7 +49,9 @@ func (pq *PriorityQueue) persistLocked() {
 					pq.recordPersistenceErrorLocked(err)
 				}
 			} else {
-				_ = pq.store.Delete(ctx, task.ID)
+				if err := pq.store.Delete(ctx, task.ID); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 		}
 	}

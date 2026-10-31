@@ -2,10 +2,10 @@ package execution
 
 const (
 	MaxCapabilityAcquisitions = 5
-	MaxUIRefinements         = 3
-	MaxToolRetries           = 3
-	MaxRemoteWaits           = 2
-	MaxNestedExecutions      = 10
+	MaxUIRefinements          = 3
+	MaxToolRetries            = 3
+	MaxRemoteWaits            = 2
+	MaxNestedExecutions       = 10
 )
 
 type ExecutionBudget struct {

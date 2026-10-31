@@ -2,6 +2,7 @@ package hook
 
 import (
 	"context"
+	amitialog "log"
 )
 
 type HookLifecycleManager struct {
@@ -154,11 +155,15 @@ func (lm *HookLifecycleManager) UpdateContribution(ctx context.Context, oldID st
 	}
 	if wasEnabled {
 		if err := lm.activateContribution(ctx, newContrib); err != nil {
-			_ = lm.ContribStore.Unregister(ctx, newContrib.ContributionID)
+			if err := lm.ContribStore.Unregister(ctx, newContrib.ContributionID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return err
 		}
 	}
-	_ = lm.ContribStore.SetEnabled(ctx, oldID, false)
+	if err := lm.ContribStore.SetEnabled(ctx, oldID, false); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	if err := lm.ContribStore.Unregister(ctx, oldID); err != nil {
 		return WrapHookError(ErrCodeHookRuntimeError, "unregister old generation", err)
 	}
@@ -177,7 +182,9 @@ func (lm *HookLifecycleManager) UninstallContribution(ctx context.Context, contr
 	if err != nil {
 		return WrapHookError(ErrCodeHookNotFound, "get contribution", err)
 	}
-	_ = lm.ContribStore.SetEnabled(ctx, contributionID, false)
+	if err := lm.ContribStore.SetEnabled(ctx, contributionID, false); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	if err := lm.ContribStore.Unregister(ctx, contributionID); err != nil {
 		return WrapHookError(ErrCodeHookRuntimeError, "unregister contribution", err)
 	}

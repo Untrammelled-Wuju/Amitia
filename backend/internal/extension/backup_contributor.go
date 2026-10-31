@@ -15,6 +15,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/system/dataportability"
+	amitialog "log"
 )
 
 type ExtensionBackupContributor struct {
@@ -124,7 +125,9 @@ func (c *ExtensionBackupContributor) Export(ctx context.Context, req dataportabi
 			Version     string `json:"version"`
 			ExtensionID string `json:"extensionId"`
 		}
-		_ = json.Unmarshal([]byte(definitionJSON), &definition)
+		if err := json.Unmarshal([]byte(definitionJSON), &definition); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		var installation domain.ExtensionInstallation
 		if err := json.Unmarshal([]byte(installationJSON), &installation); err != nil {
 			return err
@@ -191,7 +194,9 @@ func (c *ExtensionBackupContributor) PreviewImport(ctx context.Context, req data
 			if json.Unmarshal(bytes.TrimSpace(line), &record) == nil {
 				preview.ItemCount++
 				var existing string
-				_ = c.KernelDB.QueryRowContext(ctx, `SELECT extension_id FROM extension_installations WHERE extension_id = ?`, record.ExtensionID).Scan(&existing)
+				if err := c.KernelDB.QueryRowContext(ctx, `SELECT extension_id FROM extension_installations WHERE extension_id = ?`, record.ExtensionID).Scan(&existing); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 				if existing != "" {
 					preview.Collisions = append(preview.Collisions, dataportability.ComponentCollision{
 						SourceID: record.ExtensionID, TargetID: existing, EntityType: "agent_skill", Policy: dataportability.CollisionDuplicate,

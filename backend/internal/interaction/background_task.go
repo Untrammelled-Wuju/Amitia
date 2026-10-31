@@ -9,6 +9,7 @@ import (
 
 	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
+	amitialog "log"
 )
 
 type BackgroundTaskReader interface {
@@ -91,7 +92,9 @@ func (c *BackgroundTaskCoordinator) ReconcilePending(ctx context.Context) error 
 		if !run.Status.IsTerminal() {
 			return true
 		}
-		_ = c.HandleTerminalTask(ctx, run.TaskRunID)
+		if err := c.HandleTerminalTask(ctx, run.TaskRunID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return true
 	})
 }
@@ -150,7 +153,7 @@ func (c *BackgroundTaskCoordinator) HandleTerminalTask(ctx context.Context, task
 func (c *BackgroundTaskCoordinator) findOwningDescriptor(ctx context.Context, taskRunID string) (*RecoveryDescriptor, *InteractionRecord, bool) {
 	var found *RecoveryDescriptor
 	var interaction *InteractionRecord
-	_ = c.tracker.Range(ctx, func(record *InteractionRecord) bool {
+	if err := c.tracker.Range(ctx, func(record *InteractionRecord) bool {
 		if record.RecoveryDescriptor == nil {
 			return true
 		}
@@ -161,7 +164,9 @@ func (c *BackgroundTaskCoordinator) findOwningDescriptor(ctx context.Context, ta
 			return false
 		}
 		return true
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	return found, interaction, found != nil
 }
 

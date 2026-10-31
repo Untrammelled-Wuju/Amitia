@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
+	amitialog "log"
 )
 
 type workflowSyncContextKey struct{}
@@ -318,7 +319,11 @@ func (r *WorkflowDefinitionRepository) ApplyWorkflowSyncEvent(ctx context.Contex
 	if err != nil {
 		return result, err
 	}
-	defer func() { _ = tx.Rollback() }()
+	defer func() {
+		if err := tx.Rollback(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+	}()
 
 	var existingStatus string
 	var existingAccepted int

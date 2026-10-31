@@ -185,9 +185,13 @@ func (pmr *packageMigrationRuntime) executeSQLMigration(ctx context.Context, ste
 	committed := false
 	defer func() {
 		if !committed {
-			_, _ = conn.ExecContext(context.Background(), "ROLLBACK")
+			if _, err := conn.ExecContext(context.Background(), "ROLLBACK"); err != nil {
+				log.Printf("[original-error] %v", err)
+			}
 		}
-		_ = conn.Close()
+		if err := conn.Close(); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 	}()
 	beforeHash, hashErr := pmr.computeExtSchemaHash(ctx, conn)
 	if hashErr != nil {
@@ -295,7 +299,9 @@ func (pmr *packageMigrationRuntime) executeJavaScriptMigration(ctx context.Conte
 	}
 	startResult := host.Start(ctx)
 	if !startResult.Success {
-		_ = host.Stop(ctx, "migration_start_failed")
+		if err := host.Stop(ctx, "migration_start_failed"); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 		return nil, fmt.Errorf("kernel: migration javascript host start failed for %s: %s", def.MigrationID, startResult.Reason)
 	}
 	functionName := "up"
@@ -311,7 +317,9 @@ func (pmr *packageMigrationRuntime) executeJavaScriptMigration(ctx context.Conte
 		"toVersion":   step.ToVersion,
 	}
 	invokeResult, invokeErr := host.Invoke(ctx, functionName, invokeInput)
-	_ = host.Stop(ctx, "migration_complete")
+	if err := host.Stop(ctx, "migration_complete"); err != nil {
+		log.Printf("[original-error] %v", err)
+	}
 	if invokeErr != nil {
 		if strings.Contains(invokeErr.Error(), PackageErrCodeMigrationSandboxViolation) {
 			return nil, fmt.Errorf("kernel: migration javascript sandbox violation in %s: %w", def.MigrationID, invokeErr)
@@ -423,7 +431,9 @@ func (e *migrationExecutorBase) executeScriptSQL(ctx context.Context) (int, erro
 	committed := false
 	defer func() {
 		if !committed {
-			_ = tx.Rollback()
+			if err := tx.Rollback(); err != nil {
+				log.Printf("[original-error] %v", err)
+			}
 		}
 	}()
 	var executed int
@@ -629,7 +639,9 @@ func (e *UserDataMigrationExecutor) Prepare(ctx context.Context) error {
 			continue
 		}
 		export, exportErr := exportRowsAsJSONL(rows)
-		_ = rows.Close()
+		if err := rows.Close(); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 		if exportErr != nil {
 			continue
 		}
@@ -695,7 +707,9 @@ func (e *UserDataMigrationExecutor) Compensate(ctx context.Context) error {
 		if len(records) == 0 {
 			continue
 		}
-		_, _ = db.ExecContext(ctx, fmt.Sprintf("DELETE FROM %s", table))
+		if _, err := db.ExecContext(ctx, fmt.Sprintf("DELETE FROM %s", table)); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 		columns := extractColumnsFromRecords(records[0])
 		if len(columns) == 0 {
 			continue
@@ -710,7 +724,9 @@ func (e *UserDataMigrationExecutor) Compensate(ctx context.Context) error {
 			for i, col := range columns {
 				values[i] = record[col]
 			}
-			_, _ = db.ExecContext(ctx, query, values...)
+			if _, err := db.ExecContext(ctx, query, values...); err != nil {
+				log.Printf("[original-error] %v", err)
+			}
 		}
 	}
 	return nil
@@ -733,11 +749,15 @@ func (pmr *packageMigrationRuntime) executeConfigMigration(ctx context.Context, 
 		return nil, fmt.Errorf("kernel: migration config prepare %s: %w", def.MigrationID, err)
 	}
 	if err := executor.Execute(ctx); err != nil {
-		_ = executor.Compensate(ctx)
+		if err := executor.Compensate(ctx); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 		return nil, fmt.Errorf("kernel: migration config execute %s: %w", def.MigrationID, err)
 	}
 	if err := executor.Verify(ctx); err != nil {
-		_ = executor.Compensate(ctx)
+		if err := executor.Compensate(ctx); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 		return nil, fmt.Errorf("kernel: migration config verify %s: %w", def.MigrationID, err)
 	}
 	baseEvidence["executionMode"] = "config_executed"
@@ -770,11 +790,15 @@ func (pmr *packageMigrationRuntime) executeResourceMigration(ctx context.Context
 		return nil, fmt.Errorf("kernel: migration resource prepare %s: %w", def.MigrationID, err)
 	}
 	if err := executor.Execute(ctx); err != nil {
-		_ = executor.Compensate(ctx)
+		if err := executor.Compensate(ctx); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 		return nil, fmt.Errorf("kernel: migration resource execute %s: %w", def.MigrationID, err)
 	}
 	if err := executor.Verify(ctx); err != nil {
-		_ = executor.Compensate(ctx)
+		if err := executor.Compensate(ctx); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 		return nil, fmt.Errorf("kernel: migration resource verify %s: %w", def.MigrationID, err)
 	}
 	baseEvidence["executionMode"] = "resource_executed"
@@ -805,11 +829,15 @@ func (pmr *packageMigrationRuntime) executeUserDataMigration(ctx context.Context
 		return nil, fmt.Errorf("kernel: migration userdata prepare %s: %w", def.MigrationID, err)
 	}
 	if err := executor.Execute(ctx); err != nil {
-		_ = executor.Compensate(ctx)
+		if err := executor.Compensate(ctx); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 		return nil, fmt.Errorf("kernel: migration userdata execute %s: %w", def.MigrationID, err)
 	}
 	if err := executor.Verify(ctx); err != nil {
-		_ = executor.Compensate(ctx)
+		if err := executor.Compensate(ctx); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 		return nil, fmt.Errorf("kernel: migration userdata verify %s: %w", def.MigrationID, err)
 	}
 	baseEvidence["executionMode"] = "userdata_executed"

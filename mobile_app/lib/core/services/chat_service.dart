@@ -441,7 +441,25 @@ class ChatService {
     String projectId, {
     ProjectDto? project,
   }) async {
-    throw StateError('现有对话不能手动移入或移出项目');
+    await _requireOwned();
+    final normalizedId = projectId.trim();
+    var target = project;
+    if (normalizedId.isNotEmpty) {
+      final projects = await owned.projects();
+      target ??= projects.where((item) => item.id == normalizedId).firstOrNull;
+      if (target == null ||
+          target.id != normalizedId ||
+          target.readOnly ||
+          target.hiddenAt.isNotEmpty) {
+        throw StateError('目标项目不存在或不可用');
+      }
+    }
+    await owned.edit(
+      'conversation',
+      conversationId,
+      characterId: target?.roleId,
+      changes: <String, dynamic>{'projectId': normalizedId},
+    );
   }
 
   Future<List<MessageDto>> getMessages(

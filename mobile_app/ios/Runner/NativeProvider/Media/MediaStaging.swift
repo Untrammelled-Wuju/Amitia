@@ -81,6 +81,8 @@ public class MediaStaging {
                 createdAt: createdAt
             )
         } catch {
+          print("[original-error] \(error)")
+
             return nil
         }
     }
@@ -102,6 +104,8 @@ public class MediaStaging {
             handle.closeFile()
             return data
         } catch {
+          print("[original-error] \(error)")
+
             return nil
         }
     }
@@ -117,6 +121,8 @@ public class MediaStaging {
             lock.unlock()
             return true
         } catch {
+          print("[original-error] \(error)")
+
             lock.lock()
             metadata.removeValue(forKey: nativeStagingId)
             lock.unlock()
@@ -234,6 +240,8 @@ public class MediaStaging {
                     removed += 1
                 }
             } catch {
+              print("[original-error] \(error)")
+
                 continue
             }
         }

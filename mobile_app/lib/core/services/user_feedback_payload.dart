@@ -17,7 +17,9 @@ Future<String> _resolveAppVersion(WidgetRef ref) async {
     if (installed.versionName.trim().isNotEmpty) {
       return installed.versionName.trim();
     }
-  } catch (_) {}
+  } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
   return currentUIClientInfo().appVersion;
 }
 
@@ -25,16 +27,18 @@ String _resolveRuntimeMode(WidgetRef ref) {
   try {
     final config = ref.read(mobileDeploymentConfigProvider);
     return config.mode == MobileDeploymentMode.cloud ? 'cloud' : 'local';
-  } catch (_) {
-    return 'local';
+  } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return 'local';
   }
 }
 
 Future<String> _resolveDeviceId() async {
   try {
     return await UIDeviceIdentity().getOrCreate();
-  } catch (_) {
-    return '';
+  } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return '';
   }
 }
 

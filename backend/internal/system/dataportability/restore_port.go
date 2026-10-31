@@ -13,6 +13,8 @@ type RestoreOptions struct {
 	CharacterPolicy    CollisionPolicy
 	DefaultCharacterID string
 	ActivateImported   bool
+	IncludeSecrets     bool
+	AllowLegacySecrets bool
 	IdentityMap        *ImportIdentityMap
 	SecretProvider     SecretProvider
 }

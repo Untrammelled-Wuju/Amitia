@@ -183,8 +183,9 @@ async function load(force = false) {
     let parsed;
     try {
       parsed = parseWorkbenchTaskList(response, id);
-    } catch {
-      throw new WorkbenchTaskReadError('任务响应证据无效，已丢弃缓存', true);
+    } catch (error) {
+  console.error("[original-error]", error);
+throw new WorkbenchTaskReadError('任务响应证据无效，已丢弃缓存', true);
     }
     tasks.value = parsed.tasks;
     summary.value = parsed.summary;

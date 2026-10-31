@@ -8,6 +8,7 @@ import (
 
 	"github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/ipc"
+	amitialog "log"
 )
 
 type HandshakeManager struct {
@@ -84,12 +85,14 @@ func (m *HandshakeManager) RemoveConnection(id string) {
 		state.transitionAlways(HandshakeStateClosed)
 	}
 	if hasOwner && m.namespaceAdapter != nil {
-		_ = m.namespaceAdapter.RemoveConnection(
+		if err := m.namespaceAdapter.RemoveConnection(
 			context.Background(),
 			string(owner.RuntimeID),
 			string(owner.ServiceID),
 			id,
-		)
+		); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 }
 
@@ -179,7 +182,9 @@ func (m *HandshakeManager) HandleHello(
 	snap := m.buildSnapshot(hello, response)
 	if !m.stage(connID, state, snap, peer) {
 		if m.namespaceAdapter != nil {
-			_ = m.namespaceAdapter.RemoveConnection(context.Background(), string(peer.RuntimeID), string(peer.ServiceID), connID)
+			if err := m.namespaceAdapter.RemoveConnection(context.Background(), string(peer.RuntimeID), string(peer.ServiceID), connID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		state.transitionAlways(HandshakeStateRejected)
 		return nil, NewHandshakeError(HandshakeErrorRequired, domain.ErrInvalidState, "handshake could not be staged")

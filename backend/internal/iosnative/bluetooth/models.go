@@ -12,12 +12,12 @@ const (
 type CentralState string
 
 const (
-	StateUnknown     CentralState = "unknown"
-	StateResetting   CentralState = "resetting"
-	StateUnsupported CentralState = "unsupported"
+	StateUnknown      CentralState = "unknown"
+	StateResetting    CentralState = "resetting"
+	StateUnsupported  CentralState = "unsupported"
 	StateUnauthorized CentralState = "unauthorized"
-	StatePoweredOff  CentralState = "powered_off"
-	StatePoweredOn   CentralState = "powered_on"
+	StatePoweredOff   CentralState = "powered_off"
+	StatePoweredOn    CentralState = "powered_on"
 )
 
 type ConnectionState string
@@ -32,19 +32,19 @@ const (
 )
 
 type BluetoothStatus struct {
-	Supported                    bool                `json:"supported"`
-	EnabledByUser                bool                `json:"enabledByUser"`
-	Authorization                AuthorizationStatus `json:"authorization"`
-	State                        CentralState        `json:"state"`
-	PoweredOn                    bool                `json:"poweredOn"`
-	IsScanning                   bool                `json:"isScanning"`
-	ConnectedCount               int                 `json:"connectedCount"`
-	CentralBackgroundEnabled     bool                `json:"centralBackgroundEnabled"`
-	PeripheralRoleEnabled        bool                `json:"peripheralRoleEnabled"`
-	PeripheralBackgroundEnabled  bool                `json:"peripheralBackgroundEnabled"`
-	StateRestorationEnabled      bool                `json:"stateRestorationEnabled"`
-	Generation                   uint64              `json:"generation"`
-	Reason                       string              `json:"reason,omitempty"`
+	Supported                   bool                `json:"supported"`
+	EnabledByUser               bool                `json:"enabledByUser"`
+	Authorization               AuthorizationStatus `json:"authorization"`
+	State                       CentralState        `json:"state"`
+	PoweredOn                   bool                `json:"poweredOn"`
+	IsScanning                  bool                `json:"isScanning"`
+	ConnectedCount              int                 `json:"connectedCount"`
+	CentralBackgroundEnabled    bool                `json:"centralBackgroundEnabled"`
+	PeripheralRoleEnabled       bool                `json:"peripheralRoleEnabled"`
+	PeripheralBackgroundEnabled bool                `json:"peripheralBackgroundEnabled"`
+	StateRestorationEnabled     bool                `json:"stateRestorationEnabled"`
+	Generation                  uint64              `json:"generation"`
+	Reason                      string              `json:"reason,omitempty"`
 }
 
 type BluetoothScanRequest struct {
@@ -64,19 +64,19 @@ type BluetoothBinarySummary struct {
 }
 
 type BluetoothScanResult struct {
-	ScanID                string                 `json:"scanId"`
-	PeripheralID          string                 `json:"peripheralId"`
-	Name                  string                 `json:"name,omitempty"`
-	RSSI                  int                    `json:"rssi"`
-	Connectable           *bool                  `json:"connectable,omitempty"`
-	ServiceUUIDs          []string               `json:"serviceUuids,omitempty"`
-	SolicitedServiceUUIDs []string               `json:"solicitedServiceUuids,omitempty"`
-	OverflowServiceUUIDs  []string               `json:"overflowServiceUuids,omitempty"`
-	ManufacturerData      *BluetoothBinarySummary `json:"manufacturerData,omitempty"`
+	ScanID                string                            `json:"scanId"`
+	PeripheralID          string                            `json:"peripheralId"`
+	Name                  string                            `json:"name,omitempty"`
+	RSSI                  int                               `json:"rssi"`
+	Connectable           *bool                             `json:"connectable,omitempty"`
+	ServiceUUIDs          []string                          `json:"serviceUuids,omitempty"`
+	SolicitedServiceUUIDs []string                          `json:"solicitedServiceUuids,omitempty"`
+	OverflowServiceUUIDs  []string                          `json:"overflowServiceUuids,omitempty"`
+	ManufacturerData      *BluetoothBinarySummary           `json:"manufacturerData,omitempty"`
 	ServiceData           map[string]BluetoothBinarySummary `json:"serviceData,omitempty"`
-	TxPower               *int                   `json:"txPower,omitempty"`
-	SeenAt                int64                  `json:"seenAt"`
-	Generation            uint64                 `json:"generation"`
+	TxPower               *int                              `json:"txPower,omitempty"`
+	SeenAt                int64                             `json:"seenAt"`
+	Generation            uint64                            `json:"generation"`
 }
 
 type BluetoothPeripheralSession struct {
@@ -93,7 +93,7 @@ type BluetoothPeripheralSession struct {
 type BluetoothConnectRequest struct {
 	PeripheralID         string   `json:"peripheralId"`
 	TimeoutMs            int      `json:"timeoutMs"`
-	AutoReconnect         bool     `json:"autoReconnect"`
+	AutoReconnect        bool     `json:"autoReconnect"`
 	ExpectedServiceUUIDs []string `json:"expectedServiceUuids,omitempty"`
 }
 
@@ -107,14 +107,14 @@ type BluetoothServiceInfo struct {
 }
 
 type BluetoothCharacteristicInfo struct {
-	CharacteristicRef string   `json:"characteristicRef"`
-	PeripheralID      string   `json:"peripheralId"`
-	ServiceRef        string   `json:"serviceRef"`
-	UUID              string   `json:"uuid"`
-	Properties        []string `json:"properties"`
-	IsNotifying       bool     `json:"isNotifying"`
+	CharacteristicRef string          `json:"characteristicRef"`
+	PeripheralID      string          `json:"peripheralId"`
+	ServiceRef        string          `json:"serviceRef"`
+	UUID              string          `json:"uuid"`
+	Properties        []string        `json:"properties"`
+	IsNotifying       bool            `json:"isNotifying"`
 	Value             *BluetoothValue `json:"value,omitempty"`
-	Generation        uint64   `json:"generation"`
+	Generation        uint64          `json:"generation"`
 }
 
 type BluetoothDescriptorInfo struct {
@@ -139,40 +139,40 @@ type BluetoothValueInput struct {
 }
 
 type BluetoothWriteRequest struct {
-	CharacteristicRef string             `json:"characteristicRef"`
+	CharacteristicRef string              `json:"characteristicRef"`
 	Value             BluetoothValueInput `json:"value"`
-	Mode              string             `json:"mode"`
-	TimeoutMs         int                `json:"timeoutMs"`
+	Mode              string              `json:"mode"`
+	TimeoutMs         int                 `json:"timeoutMs"`
 }
 
 type BluetoothCharacteristicEvent struct {
-	PeripheralID        string        `json:"peripheralId"`
-	CharacteristicRef   string        `json:"characteristicRef"`
-	ServiceUUID         string        `json:"serviceUuid"`
-	CharacteristicUUID  string        `json:"characteristicUuid"`
-	Value               BluetoothValue `json:"value"`
-	ObservedAt          int64         `json:"observedAt"`
-	Generation          uint64        `json:"generation"`
+	PeripheralID       string         `json:"peripheralId"`
+	CharacteristicRef  string         `json:"characteristicRef"`
+	ServiceUUID        string         `json:"serviceUuid"`
+	CharacteristicUUID string         `json:"characteristicUuid"`
+	Value              BluetoothValue `json:"value"`
+	ObservedAt         int64          `json:"observedAt"`
+	Generation         uint64         `json:"generation"`
 }
 
 type BluetoothPublishedService struct {
-	UUID            string                              `json:"uuid"`
-	Primary         bool                                `json:"primary"`
-	Characteristics []BluetoothPublishedCharacteristic   `json:"characteristics"`
+	UUID            string                             `json:"uuid"`
+	Primary         bool                               `json:"primary"`
+	Characteristics []BluetoothPublishedCharacteristic `json:"characteristics"`
 }
 
 type BluetoothPublishedCharacteristic struct {
-	UUID        string   `json:"uuid"`
-	Properties  []string `json:"properties"`
-	Permissions []string `json:"permissions"`
-	InitialValue []byte  `json:"initialValue,omitempty"`
-	MaxLength   int      `json:"maxLength"`
+	UUID         string   `json:"uuid"`
+	Properties   []string `json:"properties"`
+	Permissions  []string `json:"permissions"`
+	InitialValue []byte   `json:"initialValue,omitempty"`
+	MaxLength    int      `json:"maxLength"`
 }
 
 type BluetoothPeripheralRoleStatus struct {
-	Enabled    bool         `json:"enabled"`
-	State      CentralState `json:"state"`
-	Advertising bool        `json:"advertising"`
-	Services   int          `json:"services"`
-	Generation uint64       `json:"generation"`
+	Enabled     bool         `json:"enabled"`
+	State       CentralState `json:"state"`
+	Advertising bool         `json:"advertising"`
+	Services    int          `json:"services"`
+	Generation  uint64       `json:"generation"`
 }

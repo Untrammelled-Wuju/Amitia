@@ -70,8 +70,9 @@ export class ResourceCache {
       try {
         const canonicalPath = normalizePackagePath(entry.path);
         if (!lookup.has(canonicalPath)) lookup.set(canonicalPath, entry);
-      } catch {
-        // Strict Package V1 parsing rejects invalid entries before cache use.
+      } catch (error) {
+  console.error("[original-error]", error);
+// Strict Package V1 parsing rejects invalid entries before cache use.
       }
     }
     return lookup;
@@ -269,8 +270,9 @@ export class ResourceCache {
     try {
       relativePath = relativePackagePathFromRoot(installPath, framePath);
       entry = integrityLookup.get(relativePath);
-    } catch {
-      return null;
+    } catch (error) {
+  console.error("[original-error]", error);
+return null;
     }
     if (requireIntegrity && !entry) return null;
 
@@ -302,8 +304,9 @@ export class ResourceCache {
         alphaData,
         contentHash: entry?.sha256 ?? actualHash,
       };
-    } catch {
-      return null;
+    } catch (error) {
+  console.error("[original-error]", error);
+return null;
     }
   }
 

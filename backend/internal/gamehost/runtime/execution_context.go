@@ -42,12 +42,12 @@ type ServicePaths struct {
 }
 
 type ServiceExecutionContext struct {
-	RuntimeID    domain.RuntimeInstanceID
-	ExtensionID  string
-	PluginID     domain.PluginID
+	RuntimeID      domain.RuntimeInstanceID
+	ExtensionID    string
+	PluginID       domain.PluginID
 	ContributionID string
-	ServiceID    domain.ServiceID
-	DefinitionID string
+	ServiceID      domain.ServiceID
+	DefinitionID   string
 
 	ServiceKind domain.ServiceKind
 

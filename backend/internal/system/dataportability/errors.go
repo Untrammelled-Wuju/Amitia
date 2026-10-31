@@ -17,6 +17,7 @@ var (
 	ErrBackupEncryptionFailed   = errors.New("BACKUP_ENCRYPTION_FAILED")
 	ErrBackupPassphraseRequired = errors.New("BACKUP_PASSPHRASE_REQUIRED")
 	ErrBackupPassphraseWeak     = errors.New("BACKUP_PASSPHRASE_WEAK")
+	ErrBackupEncryptionRequired = errors.New("BACKUP_ENCRYPTION_REQUIRED")
 	ErrBackupVerifyFailed       = errors.New("BACKUP_VERIFY_FAILED")
 	ErrBackupNotFound           = errors.New("BACKUP_NOT_FOUND")
 	ErrBackupCompressionInvalid = errors.New("BACKUP_COMPRESSION_INVALID")

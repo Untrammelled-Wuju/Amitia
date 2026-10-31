@@ -915,8 +915,9 @@ async function refreshSelectedToolCatalog() {
     const items=await getWorkflowCatalog({location:"device",deviceId});
     const current=selectedNode.value;
     if(current?.type==="tool"&&current.executionTarget?.placement==="device"&&String(current.executionTarget?.deviceId||"").trim()===deviceId){deviceToolCatalog.value=items;deviceToolCatalogId.value=deviceId;}
-  }catch{
-    const current=selectedNode.value;
+  }catch (error) {
+  console.error("[original-error]", error);
+const current=selectedNode.value;
     if(current?.type==="tool"&&String(current.executionTarget?.deviceId||"").trim()===deviceId){deviceToolCatalog.value=[];deviceToolCatalogId.value=deviceId;}
   }
 }
@@ -925,7 +926,9 @@ async function refreshNestedCandidates() {
   let target: WorkflowTarget = workflowTarget;
   if (isCloudWorkflow && executionPlacement.value === "device" && executionDeviceId.value) target = { location: "device", deviceId: executionDeviceId.value };
   if (isCloudWorkflow && executionPlacement.value === "cloud") target = { location: "cloud" };
-  try { nestedWorkflowCandidates.value = (await listWorkflows(target)).filter(item => item.id !== workflowId); } catch { nestedWorkflowCandidates.value = []; }
+  try { nestedWorkflowCandidates.value = (await listWorkflows(target)).filter(item => item.id !== workflowId); } catch (error) {
+  console.error("[original-error]", error);
+nestedWorkflowCandidates.value = []; }
 }
 function needsTarget(type: string) { return ["tool","mcp","task","javascript","wasm","trusted_service","nested_workflow"].includes(type); }
 function needsRuntime(type: string) { return ["mcp","task","javascript","wasm","trusted_service"].includes(type); }
@@ -1060,10 +1063,14 @@ function selectNode(id: string) { selectedNodeId.value=id; selectedEdgeId.value=
 function selectEdge(id: string) { selectedEdgeId.value=id; selectedNodeId.value=""; inspectorTab.value="properties"; edgeConditionEditor.value = pretty(selectedEdge.value?.condition); }
 function onNodeTypeChanged() { const n=selectedNode.value; if(!n)return; const rt=defaultRuntimeType(n.type); if(rt) ensureRuntime(n).runtimeType=rt; ensureExecutionTarget(n); markDirty(); void refreshNestedCandidates(); void refreshSelectedToolCatalog(); }
 function newSimpleCondition(): SimpleCondition { return { id:`cond-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,6)}`, source:"input", nodeId:"", path:"", op:"eq", value:"true", not:false }; }
-function simpleValueText(value: unknown): string { if(typeof value === "string") return value; try{return JSON.stringify(value);}catch{return String(value ?? "");} }
+function simpleValueText(value: unknown): string { if(typeof value === "string") return value; try{return JSON.stringify(value);}catch (error) {
+  console.error("[original-error]", error);
+return String(value ?? "");} }
 function parseSimpleConditionExpression(raw:any): SimpleCondition | null { let expr=raw,not=false;if(expr&&expr.op==="not"&&expr.right){not=true;expr=expr.right;}if(!expr||typeof expr!=="object")return null;const op=String(expr.op||"");if(!["eq","ne","contains","gt","gte","lt","lte","exists","is_null"].includes(op))return null;const unary=["exists","is_null"].includes(op);const ref=unary?expr.ref:expr.left?.ref;if(!ref)return null;const source=String(ref.source||"");if(source!=="input"&&source!=="node_output")return null;const path=Array.isArray(ref.path)?ref.path.map((v:any)=>String(v)).join("."):"";if(!unary&&(!expr.right||!("value" in expr.right)))return null;return {id:`cond-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,6)}`,source:source as "input"|"node_output",nodeId:String(ref.nodeId||""),path,op,value:unary?"":simpleValueText(expr.right.value),not}; }
 function syncSimpleWhen(raw:unknown){simpleWhenEnabled.value=raw!=null;simpleWhenCompatible.value=true;simpleConditionJoin.value="and";simpleConditions.value=[];if(raw==null){simpleConditions.value=[newSimpleCondition()];return;}const root=raw as any;let rows:any[]=[root];if(root&&["and","or"].includes(String(root.op))&&Array.isArray(root.args)){simpleConditionJoin.value=root.op;rows=root.args;}const parsed=rows.map(parseSimpleConditionExpression);if(parsed.some(x=>!x)){simpleWhenCompatible.value=false;simpleConditions.value=[newSimpleCondition()];return;}simpleConditions.value=parsed as SimpleCondition[];if(!simpleConditions.value.length)simpleConditions.value=[newSimpleCondition()];}
-function decodeSimpleValue(value:string):unknown{const trimmed=value.trim();if(!trimmed)return "";try{return JSON.parse(trimmed);}catch{return value;}}
+function decodeSimpleValue(value:string):unknown{const trimmed=value.trim();if(!trimmed)return "";try{return JSON.parse(trimmed);}catch (error) {
+  console.error("[original-error]", error);
+return value;}}
 function buildSimpleConditionExpression(c:SimpleCondition):any{const ref:any={source:c.source,path:c.path.split(".").map(v=>v.trim()).filter(Boolean)};if(c.source==="node_output")ref.nodeId=c.nodeId;const unary=["exists","is_null"].includes(c.op);let expr:any=unary?{op:c.op,ref}:{op:c.op,left:{ref},right:{value:decodeSimpleValue(c.value)}};if(c.not)expr={op:"not",right:expr};return expr;}
 function applySimpleWhen(){const n=selectedNode.value;if(!n||!simpleWhenCompatible.value)return;n.step ||= {input:{},onError:{mode:"fail"}};if(!simpleWhenEnabled.value){n.step.when=undefined;nodeWhenEditor.value="";markDirty();return;}if(!simpleConditions.value.length)simpleConditions.value=[newSimpleCondition()];const args=simpleConditions.value.map(buildSimpleConditionExpression);const expr=args.length===1?args[0]:{op:simpleConditionJoin.value,args};n.step.when=expr;nodeWhenEditor.value=pretty(expr);markDirty();}
 function onSimpleWhenEnabledChanged(){if(simpleWhenEnabled.value&&!simpleConditions.value.length)simpleConditions.value=[newSimpleCondition()];if(simpleWhenCompatible.value)applySimpleWhen();}
@@ -1124,7 +1131,7 @@ async function createWakeConfig(trigger:WorkflowTrigger){
     const item=await createWorkflowWakeConfig(workflowTarget,{name:String(nameResult.value||"").trim(),phrases:[phrase],locale:"zh-CN",threshold:0.85,cooldownMs:2000,backend});
     triggerWakeConfigs.value=[...triggerWakeConfigs.value.filter(existing=>existing.id!==item.id),item];
     trigger.config.wakeConfigId=item.id;markDirty();
-    triggerCapabilities.value=await getWorkflowTriggerCapabilities(workflowTarget).catch(()=>triggerCapabilities.value);
+    triggerCapabilities.value=await getWorkflowTriggerCapabilities(workflowTarget).catch((error)=>{console.error("[original-error]",error);return triggerCapabilities.value;});
     ElMessage.success(`${backend==="local"?"本地":"云 ASR"} Wake Config 已创建并绑定`);
   }catch(e:any){if(e!=="cancel"&&e!=="close")ElMessage.error(e?.response?.data?.error||e?.message||"Wake Config 创建失败");}
 }
@@ -1139,7 +1146,9 @@ async function validateCurrent(showSuccess=true){if(!applyNodeEditors()||!applyE
 async function runPreflight(){if(workflowTarget.location==="device"){ElMessage.info("远程设备工作流由设备端保存/预检");return;}const ok=await validateCurrent(false);preflightDialogVisible.value=true;if(!preflightReport.value){ElMessage.error("未取得预检报告");return;}if(ok&&preflightReport.value.status==="PASS")ElMessage.success("预检通过");else if(preflightReport.value.runnable)ElMessage.warning("预检通过，但存在需要处理的警告");else ElMessage.error("预检存在阻断项");}
 function hasEnabledDeviceTrigger(){return workflow.enabled!==false&&workflow.triggers.some(trigger=>trigger.enabled!==false&&trigger.type==="event"&&deviceWorkflowEventTypes.has(String(trigger.eventType||"")));}
 function hasHighImpactWorkflowNodes(){return workflow.hasSideEffects===true||workflow.nodes.some(node=>["tool","task","mcp","javascript","wasm","trusted_service"].includes(String(node.type||"").toLowerCase()));}
-async function confirmDeviceTriggerRisk(){if(!hasEnabledDeviceTrigger()||!hasHighImpactWorkflowNodes())return true;try{await ElMessageBox.confirm("此工作流包含可产生副作用或调用外部能力的节点，并启用了设备自动触发器。触发条件满足时可能在无人交互情况下执行。请确认触发来源、权限、输入过滤与幂等策略均符合预期。","确认设备自动执行",{type:"warning",confirmButtonText:"确认并保存",cancelButtonText:"取消"});return true;}catch{return false;}}
+async function confirmDeviceTriggerRisk(){if(!hasEnabledDeviceTrigger()||!hasHighImpactWorkflowNodes())return true;try{await ElMessageBox.confirm("此工作流包含可产生副作用或调用外部能力的节点，并启用了设备自动触发器。触发条件满足时可能在无人交互情况下执行。请确认触发来源、权限、输入过滤与幂等策略均符合预期。","确认设备自动执行",{type:"warning",confirmButtonText:"确认并保存",cancelButtonText:"取消"});return true;}catch (error) {
+  console.error("[original-error]", error);
+return false;}}
 async function save(){if(saving.value)return;if(!(await validateCurrent(false)))return;if(!(await confirmDeviceTriggerRisk()))return;saving.value=true;try{const updated=await updateWorkflow(workflow.id,JSON.parse(JSON.stringify(workflow)),workflowTarget);Object.assign(workflow,updated);dirty.value=false;pushHistory();await refreshRevisions();ElMessage.success("工作流已保存");}finally{saving.value=false;}}
 function executionModeLabel(mode?: string){switch(mode){case "dry_run":return "Dry Run";case "mocked":return "Mocked";case "controlled_live":return "Controlled Live";default:return "Live";}}
 function executionModeDescription(mode: WorkflowExecutionMode){switch(mode){case "dry_run":return "执行路由、依赖、条件、权限和预检，不调用真实节点 Handler。";case "mocked":return "使用节点 Mock 输出；副作用节点必须显式 Mock，避免误执行真实操作。";case "controlled_live":return "按真实链路执行，但所有副作用节点必须在执行前获得确认。";default:return "按正式运行语义执行节点和副作用。";}}
@@ -1148,13 +1157,21 @@ function parseRunJSON<T>(text:string,label:string):T{try{return JSON.parse(text|
 async function startRun(){if(dirty.value){await save();if(dirty.value)return;}running.value=true;try{const input=parseRunJSON<unknown>(runInputEditor.value,"Input");let mocks:WorkflowMockBehavior[]|undefined;if(runMode.value==="mocked"){const parsed=parseRunJSON<unknown>(runMocksEditor.value,"Mocks");if(!Array.isArray(parsed))throw new Error("Mocks 必须是 JSON Array");mocks=parsed as WorkflowMockBehavior[];}const res=await runWorkflow(workflow.id,input,false,workflowTarget,{mode:runMode.value,mocks});currentRun.value={executionId:res.executionId,workflowId:workflow.id,status:res.status||"running",context:{executionOptions:{mode:res.executionMode||runMode.value,mocks}}};pendingConfirmations.value=res.requiredConfirmations||[];runDialogVisible.value=false;inspectorTab.value="runs";if(res.status==="waiting_confirmation"){ElMessage.warning(`等待确认 ${pendingConfirmations.value.length} 个副作用节点`);return;}ElMessage.success(runMode.value==="dry_run"?`Dry Run 已完成：${res.executionId}`:`已开始运行：${res.executionId}`);startPolling(res.executionId);}catch(e:any){ElMessage.error(e?.response?.data?.error||e?.message||"运行失败");}finally{running.value=false;}}
 function applyRunDetail(data: Awaited<ReturnType<typeof getWorkflowRun>>){currentRun.value=data.run;currentRunError.value=data.classifiedError||null;stepRuns.value=data.stepRuns||[];stepAttempts.value=data.attempts||[];checkpoints.value=data.checkpoints||[];pendingConfirmations.value=data.requiredConfirmations||[];}
 function runStopsPolling(status:string){return ["succeeded","failed","cancelled","compensated","compensation_failed","manual_intervention_required","cancel_timeout","cancel_failed","dropped","waiting_confirmation"].includes(status);}
-function startPolling(runId:string){if(pollTimer)clearInterval(pollTimer);const tick=async()=>{try{const data=await getWorkflowRun(runId,workflowTarget);applyRunDetail(data);if(runStopsPolling(data.run.status)){if(pollTimer)clearInterval(pollTimer);pollTimer=undefined;await refreshObservability();}}catch{/* run can take a moment to be persisted */}};void tick();pollTimer=window.setInterval(tick,800);}
-async function refreshRevisions(){if(workflowTarget.location==="device"){revisions.value=[];return;}try{revisions.value=await listWorkflowRevisions(workflowId,50,workflowTarget);}catch{revisions.value=[];}}
+function startPolling(runId:string){if(pollTimer)clearInterval(pollTimer);const tick=async()=>{try{const data=await getWorkflowRun(runId,workflowTarget);applyRunDetail(data);if(runStopsPolling(data.run.status)){if(pollTimer)clearInterval(pollTimer);pollTimer=undefined;await refreshObservability();}}catch (error) {
+  console.error("[original-error]", error);
+/* run can take a moment to be persisted */}};void tick();pollTimer=window.setInterval(tick,800);}
+async function refreshRevisions(){if(workflowTarget.location==="device"){revisions.value=[];return;}try{revisions.value=await listWorkflowRevisions(workflowId,50,workflowTarget);}catch (error) {
+  console.error("[original-error]", error);
+revisions.value=[];}}
 async function manualSnapshot(){if(dirty.value){ElMessage.warning("请先保存当前修改，再创建版本快照");return;}revisionBusy.value=true;try{const {value}=await ElMessageBox.prompt("可选：给这个快照加一个备注。","保存版本快照",{inputPlaceholder:"例如：调整天气分支前",confirmButtonText:"保存",cancelButtonText:"取消"});await createWorkflowRevision(workflowId,String(value||"").trim(),workflowTarget);await refreshRevisions();ElMessage.success("版本快照已保存");}catch(e:any){if(e!=="cancel"&&e!=="close")ElMessage.error(e?.response?.data?.error||e?.message||"保存快照失败");}finally{revisionBusy.value=false;}}
 async function rollbackRevision(item:WorkflowRevisionSummary){try{await ElMessageBox.confirm(`回滚到版本 #${item.revisionNo}？当前状态会先自动保存，回滚会恢复当时的 DAG、触发器和设置。`,"版本回滚",{type:"warning",confirmButtonText:"回滚",cancelButtonText:"取消"});revisionBusy.value=true;const restored=await rollbackWorkflowRevision(workflowId,item.revisionId,workflowTarget,workflow.installation?.revision);Object.assign(workflow,restored);normalizeLoadedDefinition();dirty.value=false;history.value=[modelSnapshot()];historyIndex.value=0;await Promise.all([refreshRevisions(),refreshRuns()]);ElMessage.success(`已回滚到版本 #${item.revisionNo}`);}catch(e:any){if(e!=="cancel"&&e!=="close")ElMessage.error(e?.response?.data?.error||e?.message||"回滚失败");}finally{revisionBusy.value=false;}}
-async function refreshRuns(){try{const data=await listWorkflowRuns(workflow.id,40,workflowTarget);runs.value=data.items||[];}catch{runs.value=[];}}
-async function refreshObservability(){if(workflowTarget.location==="device"){executionStats.value=null;await refreshRuns();return;}await Promise.all([refreshRuns(), getWorkflowStats(workflow.id,workflowTarget).then(v=>executionStats.value=v).catch(()=>executionStats.value=null)]);}
-async function refreshSafety(){if(workflowTarget.location==="device"){safetyAnalysis.value=null;return;}try{safetyAnalysis.value=await getWorkflowAnalysis(workflow.id,workflowTarget);}catch{safetyAnalysis.value=null;}}
+async function refreshRuns(){try{const data=await listWorkflowRuns(workflow.id,40,workflowTarget);runs.value=data.items||[];}catch (error) {
+  console.error("[original-error]", error);
+runs.value=[];}}
+async function refreshObservability(){if(workflowTarget.location==="device"){executionStats.value=null;await refreshRuns();return;}await Promise.all([refreshRuns(), getWorkflowStats(workflow.id,workflowTarget).then(v=>executionStats.value=v).catch((error)=>{console.error("[original-error]",error);executionStats.value=null;})]);}
+async function refreshSafety(){if(workflowTarget.location==="device"){safetyAnalysis.value=null;return;}try{safetyAnalysis.value=await getWorkflowAnalysis(workflow.id,workflowTarget);}catch (error) {
+  console.error("[original-error]", error);
+safetyAnalysis.value=null;}}
 async function openRun(runId:string){const data=await getWorkflowRun(runId,workflowTarget);applyRunDetail(data);if(!runStopsPolling(data.run.status))startPolling(runId);}
 async function confirmCurrent(){if(!currentRun.value||!canConfirm.value)return;const runId=currentRun.value.executionId;try{const result=await confirmWorkflowRun(runId,pendingConfirmations.value,workflowTarget);pendingConfirmations.value=result.missingConfirmations||[];if(result.run)currentRun.value=result.run;if(pendingConfirmations.value.length){ElMessage.warning(`仍有 ${pendingConfirmations.value.length} 个副作用节点未确认`);return;}ElMessage.success("已确认，继续原运行");startPolling(runId);}catch(e:any){ElMessage.error(e?.response?.data?.error||e?.message||"确认失败");}}
 async function pauseCurrent(){if(!currentRun.value)return;await pauseWorkflowRun(currentRun.value.executionId,"Paused from Creative Workshop",workflowTarget);startPolling(currentRun.value.executionId);}
@@ -1194,10 +1211,14 @@ async function refreshDefinitionFromSync(){
     if(latestRevision&&latestRevision===localRevision)return;
     Object.assign(workflow,latest);normalizeLoadedDefinition();dirty.value=false;history.value=[modelSnapshot()];historyIndex.value=0;conflictNoticeRevision=0;
     await Promise.all([refreshRevisions(),refreshObservability()]);
-  }catch{/* transient sync failures are retried */}
+  }catch (error) {
+  console.error("[original-error]", error);
+/* transient sync failures are retried */}
 }
 async function primeBuilderSync(){
-  try{const page=await listWorkflowSyncEvents(workflowTarget);syncCursor=page.cursor;}catch{syncCursor=null;}
+  try{const page=await listWorkflowSyncEvents(workflowTarget);syncCursor=page.cursor;}catch (error) {
+  console.error("[original-error]", error);
+syncCursor=null;}
 }
 async function pollBuilderSync(){
   if(document.visibilityState!=="visible"||syncBusy)return;
@@ -1208,7 +1229,9 @@ async function pollBuilderSync(){
     if(page.items.some(syncEventMatches))await refreshDefinitionFromSync();
     deviceSyncTicks++;
     if(workflowTarget.location==="device"&&deviceSyncTicks%8===0)await refreshDefinitionFromSync();
-  }catch{/* retain cursor for durable retry */}finally{syncBusy=false;}
+  }catch (error) {
+  console.error("[original-error]", error);
+/* retain cursor for durable retry */}finally{syncBusy=false;}
 }
 
 watch(()=>workflow.name,markDirty);watch(()=>workflow.description,markDirty);
@@ -1218,12 +1241,12 @@ watch(selectedEdgeId,()=>{edgeConditionEditor.value=pretty(selectedEdge.value?.c
 onMounted(async()=>{
   const [loaded,items,ownedWorkflows,devices,capabilities,appCatalog,wakeConfigs]=await Promise.all([
     getWorkflow(workflowId,workflowTarget),
-    getWorkflowCatalog(workflowTarget).catch(()=>[] as WorkflowCatalogItem[]),
-    listWorkflows(workflowTarget).catch(()=>[] as WorkflowDefinition[]),
-    isCloudWorkflow ? listWorkflowDevices().catch(()=>[] as WorkflowDeviceDescriptor[]) : Promise.resolve([] as WorkflowDeviceDescriptor[]),
-    isCloudWorkflow ? Promise.resolve([] as WorkflowTriggerCapabilityStatus[]) : getWorkflowTriggerCapabilities(workflowTarget).catch(()=>[] as WorkflowTriggerCapabilityStatus[]),
-    isCloudWorkflow ? Promise.resolve([] as WorkflowTriggerAppCatalogItem[]) : getWorkflowTriggerAppCatalog(workflowTarget).catch(()=>[] as WorkflowTriggerAppCatalogItem[]),
-    isCloudWorkflow ? Promise.resolve([] as WorkflowTriggerWakeConfigItem[]) : getWorkflowTriggerWakeConfigs(workflowTarget).catch(()=>[] as WorkflowTriggerWakeConfigItem[]),
+    getWorkflowCatalog(workflowTarget).catch((error)=>{console.error("[original-error]",error);ElMessage.error(error instanceof Error?error.message:String(error));return [] as WorkflowCatalogItem[];}),
+    listWorkflows(workflowTarget).catch((error)=>{console.error("[original-error]",error);ElMessage.error(error instanceof Error?error.message:String(error));return [] as WorkflowDefinition[];}),
+    isCloudWorkflow ? listWorkflowDevices().catch((error)=>{console.error("[original-error]",error);ElMessage.error(error instanceof Error?error.message:String(error));return [] as WorkflowDeviceDescriptor[];}) : Promise.resolve([] as WorkflowDeviceDescriptor[]),
+    isCloudWorkflow ? Promise.resolve([] as WorkflowTriggerCapabilityStatus[]) : getWorkflowTriggerCapabilities(workflowTarget).catch((error)=>{console.error("[original-error]",error);ElMessage.error(error instanceof Error?error.message:String(error));return [] as WorkflowTriggerCapabilityStatus[];}),
+    isCloudWorkflow ? Promise.resolve([] as WorkflowTriggerAppCatalogItem[]) : getWorkflowTriggerAppCatalog(workflowTarget).catch((error)=>{console.error("[original-error]",error);ElMessage.error(error instanceof Error?error.message:String(error));return [] as WorkflowTriggerAppCatalogItem[];}),
+    isCloudWorkflow ? Promise.resolve([] as WorkflowTriggerWakeConfigItem[]) : getWorkflowTriggerWakeConfigs(workflowTarget).catch((error)=>{console.error("[original-error]",error);ElMessage.error(error instanceof Error?error.message:String(error));return [] as WorkflowTriggerWakeConfigItem[];}),
   ]);
   Object.assign(workflow,loaded);catalog.value=items;workflowDevices.value=devices;triggerCapabilities.value=capabilities;triggerAppCatalog.value=appCatalog;triggerWakeConfigs.value=wakeConfigs;nestedWorkflowCandidates.value=ownedWorkflows.filter(item=>item.id!==workflowId);normalizeLoadedDefinition();dirty.value=false;history.value=[modelSnapshot()];historyIndex.value=0;await Promise.all([refreshObservability(),refreshRevisions(),primeBuilderSync()]);
   const requestedRunId=String(route.query.runId||"").trim();if(requestedRunId){inspectorTab.value="runs";try{await openRun(requestedRunId);}catch(e:any){ElMessage.error(e?.response?.data?.error||e?.message||"运行详情加载失败");}}

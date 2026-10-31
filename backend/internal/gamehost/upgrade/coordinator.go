@@ -569,7 +569,9 @@ func (c *UpgradeCoordinator) quiesceRuntimes(ctx context.Context, snapshots []Ru
 		for _, rid := range committed {
 			intent, err := c.lifecycleIntents.GetLifecycleIntent(rid)
 			if err == nil && intent == "upgrade" {
-				_ = c.lifecycleIntents.SetLifecycleIntent(rid, "")
+				if err := c.lifecycleIntents.SetLifecycleIntent(rid, ""); err != nil {
+					log.Printf("[original-error] %v", err)
+				}
 			}
 		}
 		return quiesceErr
@@ -684,7 +686,9 @@ func (c *UpgradeCoordinator) rediscoverCurrentRuntimes(ctx context.Context, exte
 			if (currentSnap.WasRunning || currentSnap.WasSuspended) && currentSnap.RuntimeID != best.RuntimeID {
 				currentIntent, err := c.lifecycleIntents.GetLifecycleIntent(currentSnap.RuntimeID)
 				if err != nil || (currentIntent == "" || currentIntent == "upgrade") {
-					_ = c.lifecycleIntents.SetLifecycleIntent(currentSnap.RuntimeID, "upgrade")
+					if err := c.lifecycleIntents.SetLifecycleIntent(currentSnap.RuntimeID, "upgrade"); err != nil {
+						log.Printf("[original-error] %v", err)
+					}
 				}
 			}
 		}
@@ -697,7 +701,9 @@ func (c *UpgradeCoordinator) clearUpgradeIntent(snapshots []RuntimeUpgradeSnapsh
 	for _, snap := range snapshots {
 		intent, err := c.lifecycleIntents.GetLifecycleIntent(snap.RuntimeID)
 		if err == nil && intent == "upgrade" {
-			_ = c.lifecycleIntents.SetLifecycleIntent(snap.RuntimeID, "")
+			if err := c.lifecycleIntents.SetLifecycleIntent(snap.RuntimeID, ""); err != nil {
+				log.Printf("[original-error] %v", err)
+			}
 		}
 	}
 }

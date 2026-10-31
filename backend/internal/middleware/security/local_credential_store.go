@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	amitialog "log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -113,9 +114,13 @@ func atomicWriteCredential(tokenFile string, token string) error {
 	tempPath := file.Name()
 	cleanup := true
 	defer func() {
-		_ = file.Close()
+		if err := file.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		if cleanup {
-			_ = os.Remove(tempPath)
+			if err := os.Remove(tempPath); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}()
 

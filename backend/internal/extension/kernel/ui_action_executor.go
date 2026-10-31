@@ -513,7 +513,9 @@ func (e *UIActionExecutor) executeDialog(ctx context.Context, execCtx UIActionEx
 		Buttons []string `json:"buttons"`
 	}
 	if len(input) > 0 {
-		_ = json.Unmarshal(input, &in)
+		if err := json.Unmarshal(input, &in); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 	}
 	if in.Message == "" {
 		in.Message = action.Title.Resolve("")
@@ -545,7 +547,9 @@ func (e *UIActionExecutor) executeClipboardWrite(ctx context.Context, execCtx UI
 		Text string `json:"text"`
 	}
 	if len(input) > 0 {
-		_ = json.Unmarshal(input, &p)
+		if err := json.Unmarshal(input, &p); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 	}
 	if p.Text == "" {
 		p.Text = action.Title.Resolve("")
@@ -599,7 +603,9 @@ func (e *UIActionExecutor) executeHostCommand(ctx context.Context, execCtx UIAct
 			Status:        "running",
 			StartedAt:     now,
 		}
-		_ = e.operationRepo.PutOperation(ctx, op)
+		if err := e.operationRepo.PutOperation(ctx, op); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 	}
 
 	result, err := e.hostCommandRegistry.Execute(ctx, command, hostCmdExecCtx, input)
@@ -635,8 +641,12 @@ func (e *UIActionExecutor) executeHostCommand(ctx context.Context, execCtx UIAct
 			op.Status = "succeeded"
 			inv.Status = "succeeded"
 		}
-		_ = e.operationRepo.PutOperation(ctx, op)
-		_ = e.operationRepo.PutInvocation(ctx, inv)
+		if err := e.operationRepo.PutOperation(ctx, op); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
+		if err := e.operationRepo.PutInvocation(ctx, inv); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 	}
 
 	if err != nil {

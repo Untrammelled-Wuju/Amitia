@@ -245,7 +245,7 @@ func makeApprovalListHandler(deps *RouterDeps) gin.HandlerFunc {
 		}
 		requests, err := deps.PairingSvc.PendingApprovals(c.Request.Context())
 		if err != nil {
-			c.JSON(503, gin.H{"message": "无法读取配对请求"})
+			c.JSON(503, gin.H{"message": err.Error()})
 			return
 		}
 		c.Header("Cache-Control", "no-store")
@@ -269,7 +269,7 @@ func makeApprovalDecisionHandler(deps *RouterDeps) gin.HandlerFunc {
 		}
 		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4096)
 		if err := c.ShouldBindJSON(&request); err != nil {
-			c.JSON(400, gin.H{"message": "配对审批参数无效"})
+			c.JSON(400, gin.H{"message": err.Error()})
 			return
 		}
 		if err := deps.PairingSvc.DecideApproval(c.Request.Context(), c.Param("requestId"), request.ExpectedRevision, request.Allow); err != nil {
@@ -291,7 +291,7 @@ func makePairingStatusHandler(deps *RouterDeps) gin.HandlerFunc {
 		if deps.ProviderPath != nil {
 			path, err = deps.ProviderPath()
 			if err != nil {
-				c.JSON(503, gin.H{"message": "服务提供者拓扑暂不可用"})
+				c.JSON(503, gin.H{"message": err.Error()})
 				return
 			}
 		}
@@ -311,7 +311,7 @@ func makePairingOfferHandler(deps *RouterDeps) gin.HandlerFunc {
 			Endpoint   string `json:"endpoint"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
-			c.JSON(400, gin.H{"code": "mesh.pairing_invalid", "message": "配对参数无效"})
+			c.JSON(400, gin.H{"code": "mesh.pairing_invalid", "message": err.Error()})
 			return
 		}
 		endpoint := strings.TrimSpace(req.Endpoint)
@@ -324,7 +324,7 @@ func makePairingOfferHandler(deps *RouterDeps) gin.HandlerFunc {
 		}
 		parsedEndpoint, endpointErr := url.Parse(endpoint)
 		if endpointErr != nil || parsedEndpoint.Host == "" || parsedEndpoint.User != nil || (parsedEndpoint.Scheme != "http" && parsedEndpoint.Scheme != "https") || parsedEndpoint.RawQuery != "" || parsedEndpoint.Fragment != "" || (parsedEndpoint.Path != "" && parsedEndpoint.Path != "/") {
-			c.JSON(400, gin.H{"code": "mesh.pairing_invalid", "message": "服务提供者地址无效"})
+			c.JSON(400, gin.H{"code": "mesh.pairing_invalid", "message": endpointErr.Error()})
 			return
 		}
 		endpoint = parsedEndpoint.Scheme + "://" + parsedEndpoint.Host
@@ -352,7 +352,7 @@ func makePairingOfferHandler(deps *RouterDeps) gin.HandlerFunc {
 		}
 		png, err := qrcode.Encode(payload, qrcode.Medium, 320)
 		if err != nil {
-			c.JSON(500, gin.H{"code": "mesh.qr_failed", "message": "二维码生成失败"})
+			c.JSON(500, gin.H{"code": "mesh.qr_failed", "message": err.Error()})
 			return
 		}
 		c.Header("Cache-Control", "no-store")
@@ -404,7 +404,7 @@ func makePairingClaimHandler(deps *RouterDeps) gin.HandlerFunc {
 		}
 		platform, err := runtimeidentity.ParsePlatform(req.Platform)
 		if err != nil || platform == runtimeidentity.PlatformUnknown {
-			c.JSON(400, gin.H{"code": "mesh.pairing_invalid", "message": "invalid platform"})
+			c.JSON(400, gin.H{"code": "mesh.pairing_invalid", "message": err.Error()})
 			return
 		}
 		result, err := deps.PairingSvc.Claim(c.Request.Context(), pairing.ClaimRequest{
@@ -613,11 +613,11 @@ func makeRevokeDeviceHandler(deps *RouterDeps) gin.HandlerFunc {
 
 		if err := deps.DeviceReg.RequireDeviceOwnedBy(c.Request.Context(), spaceID, deviceID); err != nil {
 			if err == host_registry.ErrDeviceNotFound {
-				c.JSON(404, gin.H{"code": "mesh.device_not_found", "message": "device not found"})
+				c.JSON(404, gin.H{"code": "mesh.device_not_found", "message": err.Error()})
 				return
 			}
 			if err == host_registry.ErrDeviceOwnedByOther {
-				c.JSON(403, gin.H{"code": "mesh.device_owned_by_other", "message": "forbidden"})
+				c.JSON(403, gin.H{"code": "mesh.device_owned_by_other", "message": err.Error()})
 				return
 			}
 			c.JSON(500, gin.H{"code": "mesh.error", "message": err.Error()})

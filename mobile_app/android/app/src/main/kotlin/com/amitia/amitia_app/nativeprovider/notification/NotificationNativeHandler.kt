@@ -500,6 +500,8 @@ internal class NotificationNativeHandler(context: Context) {
             val appInfo = pm.getApplicationInfo(packageName, 0)
             pm.getApplicationLabel(appInfo).toString()
         } catch (e: PackageManager.NameNotFoundException) {
+          e.printStackTrace()
+
             packageName
         }
     }

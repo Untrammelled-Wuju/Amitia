@@ -22,6 +22,7 @@ import (
 	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
+	amitialog "log"
 )
 
 type AuthConfig struct {
@@ -146,7 +147,7 @@ func LocalAdminAuthenticationMiddleware(cfg AuthConfig) gin.HandlerFunc {
 			return
 		}
 		if err := validateLocalOrigin(c, cfg.AllowedOrigins); err != nil {
-			util.ErrorResponse(c, response.Unauthorized, "来源不允许", nil)
+			util.ErrorResponse(c, response.Unauthorized, err.Error(), nil)
 			c.Abort()
 			return
 		}
@@ -192,7 +193,7 @@ func handleNetworkAuth(c *gin.Context, cfg AuthConfig) {
 	raw := strings.TrimSpace(strings.TrimPrefix(header, "AmitiaDevice "))
 	cred, err := cfg.DeviceCredentials.Validate(c.Request.Context(), raw)
 	if err != nil {
-		util.ErrorResponse(c, response.InvalidToken, "设备凭证无效", gin.H{"reason": err.Error()})
+		util.ErrorResponse(c, response.InvalidToken, err.Error(), gin.H{"reason": err.Error()})
 		c.Abort()
 		return
 	}
@@ -211,7 +212,7 @@ func handleNetworkAuth(c *gin.Context, cfg AuthConfig) {
 		return
 	}
 	if err := cfg.DeviceRegistry.RequireTrustedDevice(c.Request.Context(), cred.SpaceID, cred.DeviceID); err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "设备未处于可信状态", gin.H{"reason": err.Error()})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"reason": err.Error()})
 		c.Abort()
 		return
 	}
@@ -281,7 +282,7 @@ func handleLocalAuth(c *gin.Context, cfg AuthConfig) {
 		return
 	}
 	if err := validateLocalOrigin(c, cfg.AllowedOrigins); err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "来源不允许", nil)
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), nil)
 		c.Abort()
 		return
 	}
@@ -289,8 +290,12 @@ func handleLocalAuth(c *gin.Context, cfg AuthConfig) {
 	if sessionToken != "" && cfg.SessionService != nil {
 		instanceID := strings.TrimSpace(c.GetHeader("X-Amitia-Desktop-Instance"))
 		if session, err := cfg.SessionService.ValidateSessionWithInstance(c.Request.Context(), sessionToken, instanceID); err == nil {
-			_ = cfg.SessionService.TouchSessionWithContext(c.Request.Context(), session)
-			_ = cfg.SessionService.RenewSessionWithContext(c.Request.Context(), session)
+			if err := cfg.SessionService.TouchSessionWithContext(c.Request.Context(), session); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
+			if err := cfg.SessionService.RenewSessionWithContext(c.Request.Context(), session); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			actor := buildDesktopSessionActor(session, cfg)
 			actor.CorrelationID = sanitizeCorrelationID(c.GetHeader("X-Request-ID"))
 			applyActorToContext(c, actor)

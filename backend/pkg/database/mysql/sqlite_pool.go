@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	amitialog "log"
 )
 
 const (
@@ -264,7 +265,9 @@ func openSQLiteConnections(writerDSN, readerDSN string) (*sql.DB, *sql.DB, error
 	}
 	reader, err := sql.Open("sqlite", readerDSN)
 	if err != nil {
-		_ = writer.Close()
+		if err := writer.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, nil, err
 	}
 	writer.SetMaxIdleConns(1)
@@ -274,13 +277,21 @@ func openSQLiteConnections(writerDSN, readerDSN string) (*sql.DB, *sql.DB, error
 	reader.SetMaxOpenConns(10)
 	reader.SetConnMaxLifetime(time.Hour)
 	if err := writer.Ping(); err != nil {
-		_ = writer.Close()
-		_ = reader.Close()
+		if err := writer.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := reader.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, nil, err
 	}
 	if err := reader.Ping(); err != nil {
-		_ = writer.Close()
-		_ = reader.Close()
+		if err := writer.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := reader.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, nil, err
 	}
 	return writer, reader, nil

@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/workspace"
+	amitialog "log"
 )
 
 type GitController struct {
@@ -406,7 +407,9 @@ func (c *GitController) CreateIsolated(ctx context.Context, req IsolatedCreateRe
 	if err := os.MkdirAll(filepath.Dir(stagingRoot), 0o755); err != nil {
 		return nil, fmt.Errorf("%w: cannot create staging parent: %v", ErrIsolatedCreateFailed, err)
 	}
-	_ = os.RemoveAll(stagingRoot)
+	if err := os.RemoveAll(stagingRoot); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 
 	var source *GitSourceSpec
 	branch := ""
@@ -423,11 +426,15 @@ func (c *GitController) CreateIsolated(ctx context.Context, req IsolatedCreateRe
 		}
 		cloneResult, err := c.engine.Clone(ctx, stagingRoot, CloneOptions{URL: req.GitRemote.URL, Ref: req.Ref, Depth: req.Depth})
 		if err != nil {
-			_ = os.RemoveAll(stagingRoot)
+			if err := os.RemoveAll(stagingRoot); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return nil, fmt.Errorf("%w: clone failed: %v", ErrIsolatedCreateFailed, err)
 		}
 		if hasSym, _ := c.engine.HasSymlinkEntries(ctx, stagingRoot); hasSym && c.policy.SymlinkPolicy == "reject_repository_with_symlink" {
-			_ = os.RemoveAll(stagingRoot)
+			if err := os.RemoveAll(stagingRoot); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return nil, fmt.Errorf("%w: repository contains symlink entries", ErrGitSymlinkUnsupported)
 		}
 		branch = cloneResult.Branch
@@ -441,7 +448,9 @@ func (c *GitController) CreateIsolated(ctx context.Context, req IsolatedCreateRe
 			return nil, fmt.Errorf("%w: snapshot source: %v", ErrIsolatedCreateFailed, err)
 		}
 		if err := copySnapshotTree(sourceRoot, stagingRoot, c.policy.SymlinkPolicy); err != nil {
-			_ = os.RemoveAll(stagingRoot)
+			if err := os.RemoveAll(stagingRoot); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return nil, err
 		}
 		source = &GitSourceSpec{Type: "workspace", URI: req.SourceWorkspaceURI, Ref: req.Ref}
@@ -454,11 +463,15 @@ func (c *GitController) CreateIsolated(ctx context.Context, req IsolatedCreateRe
 	rootKey := filepath.Join(IsolatedRootPrefix, rootID)
 	isolatedRoot := filepath.Join(dataRoot, "workspaces", rootKey)
 	if err := os.MkdirAll(filepath.Dir(isolatedRoot), 0o755); err != nil {
-		_ = os.RemoveAll(stagingRoot)
+		if err := os.RemoveAll(stagingRoot); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, fmt.Errorf("%w: create isolated parent: %v", ErrIsolatedCreateFailed, err)
 	}
 	if err := os.Rename(stagingRoot, isolatedRoot); err != nil {
-		_ = os.RemoveAll(stagingRoot)
+		if err := os.RemoveAll(stagingRoot); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, fmt.Errorf("%w: cannot move to isolated root: %v", ErrIsolatedCreateFailed, err)
 	}
 
@@ -466,7 +479,9 @@ func (c *GitController) CreateIsolated(ctx context.Context, req IsolatedCreateRe
 	configJSON, _ := json.Marshal(config)
 	mount, err := c.workspace.RegisterIsolatedMount(ctx, req.Name, string(configJSON), req.ReadOnly)
 	if err != nil {
-		_ = os.RemoveAll(isolatedRoot)
+		if err := os.RemoveAll(isolatedRoot); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, fmt.Errorf("%w: register failed: %v", ErrIsolatedCreateFailed, err)
 	}
 	if state, detectErr := c.engine.Detect(ctx, isolatedRoot); detectErr == nil && state != nil {
@@ -561,7 +576,9 @@ func copySnapshotTree(sourceRoot, targetRoot, symlinkPolicy string) error {
 		}
 		dstFile, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode().Perm())
 		if err != nil {
-			_ = src.Close()
+			if err := src.Close(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return err
 		}
 		_, copyErr := io.Copy(dstFile, src)

@@ -43,7 +43,9 @@ internal class HttpRuntimeHealthProbe(
 
             inputStream = try {
                 connection.inputStream
-            } catch (_: java.io.IOException) {
+            } catch (originalError46: java.io.IOException) {
+              originalError46.printStackTrace()
+
                 connection.errorStream
             }
 
@@ -56,16 +58,24 @@ internal class HttpRuntimeHealthProbe(
 
             return RuntimeHealthProbeResult.Success(statusCode, body)
         } catch (e: java.net.ConnectException) {
-            return RuntimeHealthProbeResult.Failure(RuntimeHealthProbeError.ConnectionRefused)
+          e.printStackTrace()
+
+            return RuntimeHealthProbeResult.Failure(RuntimeHealthProbeError.ConnectionRefused, e)
         } catch (e: java.net.SocketTimeoutException) {
-            return RuntimeHealthProbeResult.Failure(RuntimeHealthProbeError.ConnectionTimeout)
+          e.printStackTrace()
+
+            return RuntimeHealthProbeResult.Failure(RuntimeHealthProbeError.ConnectionTimeout, e)
         } catch (e: java.io.IOException) {
             return RuntimeHealthProbeResult.Failure(RuntimeHealthProbeError.IOError(e.message ?: "io error"))
         } catch (e: RuntimeException) {
             return RuntimeHealthProbeResult.Failure(RuntimeHealthProbeError.IOError(e.message ?: "runtime error"))
         } finally {
-            try { inputStream?.close() } catch (_: Throwable) {}
-            try { connection?.disconnect() } catch (_: Throwable) {}
+            try { inputStream?.close() } catch (originalError67: Throwable) {
+              originalError67.printStackTrace()
+            }
+            try { connection?.disconnect() } catch (originalError68: Throwable) {
+              originalError68.printStackTrace()
+            }
         }
     }
 
@@ -83,7 +93,9 @@ internal class HttpRuntimeHealthProbe(
                 read = inputStream.read(buffer, 0, minOf(buffer.size, remaining))
             }
             total.toString("UTF-8")
-        } catch (_: Throwable) {
+        } catch (originalError86: Throwable) {
+          originalError86.printStackTrace()
+
             ""
         }
     }
@@ -99,7 +111,9 @@ internal class HttpRuntimeHealthProbe(
                 val nestedStatus = dataValue?.let { extractJsonStringField(it, "status") }
                 val status = nestedStatus ?: extractJsonStringField(body, "status")
                 status?.takeIf { it.isNotBlank() }?.lowercase()
-            } catch (_: Throwable) {
+            } catch (originalError102: Throwable) {
+              originalError102.printStackTrace()
+
                 null
             }
         }
@@ -168,7 +182,9 @@ internal class HttpRuntimeHealthProbe(
             return try {
                 val addr = InetSocketAddress(host, 9).address
                 addr.isLoopbackAddress
-            } catch (_: Throwable) {
+            } catch (originalError171: Throwable) {
+              originalError171.printStackTrace()
+
                 false
             }
         }

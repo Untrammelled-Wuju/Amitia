@@ -13,8 +13,9 @@ function readNonEmptyText(
       .readFileSync(filePath, "utf8")
       .trim();
     return value || null;
-  } catch {
-    return null;
+  } catch (error) {
+  console.error("[original-error]", error);
+return null;
   }
 }
 

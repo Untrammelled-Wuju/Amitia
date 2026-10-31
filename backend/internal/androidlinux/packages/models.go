@@ -3,10 +3,10 @@
 package packages
 
 type RuntimePackagesStatus struct {
-	Supported bool       `json:"supported"`
-	Apt       AptStatus  `json:"apt"`
+	Supported bool         `json:"supported"`
+	Apt       AptStatus    `json:"apt"`
 	Python    PythonStatus `json:"python"`
-	Node      NodeStatus `json:"node"`
+	Node      NodeStatus   `json:"node"`
 }
 
 type AptStatus struct {
@@ -19,13 +19,13 @@ type AptStatus struct {
 }
 
 type PythonStatus struct {
-	Available                  bool   `json:"available"`
-	Version                    string `json:"version"`
-	Implementation             string `json:"implementation"`
-	PipAvailable               bool   `json:"pipAvailable"`
-	PipVersion                 string `json:"pipVersion"`
-	VenvAvailable              bool   `json:"venvAvailable"`
-	ManagedEnvironmentAvailable bool `json:"managedEnvironmentAvailable"`
+	Available                   bool   `json:"available"`
+	Version                     string `json:"version"`
+	Implementation              string `json:"implementation"`
+	PipAvailable                bool   `json:"pipAvailable"`
+	PipVersion                  string `json:"pipVersion"`
+	VenvAvailable               bool   `json:"venvAvailable"`
+	ManagedEnvironmentAvailable bool   `json:"managedEnvironmentAvailable"`
 }
 
 type NodeStatus struct {
@@ -72,11 +72,11 @@ type InstalledPackage struct {
 }
 
 type PackageInstallResult struct {
-	Manager    string            `json:"manager"`
-	Requested  []string          `json:"requested"`
+	Manager    string             `json:"manager"`
+	Requested  []string           `json:"requested"`
 	Installed  []InstalledPackage `json:"installed"`
-	ExitCode   int               `json:"exitCode"`
-	DurationMs int64             `json:"durationMs"`
+	ExitCode   int                `json:"exitCode"`
+	DurationMs int64              `json:"durationMs"`
 }
 
 type InvokeResult struct {

@@ -203,8 +203,9 @@ async function startStream() {
     streaming.value = true;
     reconnectAttempts = 0;
     pausePolling();
-  } catch {
-    if (disposed || !active || id !== terminalId.value || version !== transportVersion) return;
+  } catch (error) {
+  console.error("[original-error]", error);
+if (disposed || !active || id !== terminalId.value || version !== transportVersion) return;
     streaming.value = false;
     resumePolling();
     scheduleReconnect();
@@ -268,7 +269,9 @@ async function poll() {
 }
 async function refreshSessions() {
   try { sessions.value = await terminalApi.listSessions(conversation); }
-  catch { sessions.value = []; }
+  catch (error) {
+  console.error("[original-error]", error);
+sessions.value = []; }
 }
 async function resumeSession() {
   if (!resumeId.value || terminalId.value || busy.value) return;
@@ -300,7 +303,10 @@ function send(value: string) {
   if (!terminalId.value || !running.value || !value) return;
   if (stream?.input(value)) return;
   const id = terminalId.value;
-  inputQueue = inputQueue.catch(() => undefined).then(async () => {
+  inputQueue = inputQueue.catch((error) => {
+  console.error("[original-error]", error);
+  return undefined;
+}).then(async () => {
     if (id !== terminalId.value || disposed) return;
     try { await terminalApi.input(id, conversation, value); }
     catch (cause) { if (id === terminalId.value) error.value = failure(cause); }

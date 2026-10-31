@@ -12,6 +12,7 @@ import (
 	"github.com/u-ai/backend/internal/deviceruntime"
 	protocol "github.com/u-ai/backend/internal/deviceruntime/protocol"
 	"github.com/u-ai/backend/internal/runtimeidentity"
+	amitialog "log"
 )
 
 type MeshRuntimePorts struct {
@@ -159,7 +160,9 @@ func (p *MeshDeviceRuntimeInvocationPort) Execute(ctx context.Context, request D
 		// leaving the caller's wait path; notify the device as well so a local
 		// management handler cannot continue mutating GameHost state after the
 		// cloud request has timed out or been disconnected.
-		_ = p.Cancel(context.Background(), request, ToolCancellationReason{Code: reasonCode})
+		if err := p.Cancel(context.Background(), request, ToolCancellationReason{Code: reasonCode}); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return UnifiedToolResult{
 			InvocationID: request.Invocation.InvocationID,
 			Status:       ToolResultStatusFailed,

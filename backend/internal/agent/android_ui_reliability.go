@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	amitialog "log"
 	"math"
 	"strings"
 	"time"
@@ -77,7 +78,9 @@ type androidUINode struct {
 
 func analyzeAndroidUIObservation(raw json.RawMessage) (androidUIObservationQuality, androidUITreeEnvelope) {
 	var tree androidUITreeEnvelope
-	_ = json.Unmarshal(raw, &tree)
+	if err := json.Unmarshal(raw, &tree); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	q := androidUIObservationQuality{
 		WindowCount: len(tree.Windows),
 		NodeCount:   len(tree.Nodes),

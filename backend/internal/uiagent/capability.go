@@ -13,11 +13,11 @@ const (
 	CapUISchemaValidate  capability.CapabilityID = "ui.schema.validate"
 	CapUISchemaCompile   capability.CapabilityID = "ui.schema.compile"
 	CapUISchemaRender    capability.CapabilityID = "ui.schema.render"
-	CapUIContribRegister  capability.CapabilityID = "ui.contribution.register"
-	CapUIContribUpdate    capability.CapabilityID = "ui.contribution.update"
-	CapUIContribRemove    capability.CapabilityID = "ui.contribution.remove"
-	CapUIPreviewCapture   capability.CapabilityID = "ui.preview.capture"
-	CapUIPreviewObserve   capability.CapabilityID = "ui.preview.observe"
+	CapUIContribRegister capability.CapabilityID = "ui.contribution.register"
+	CapUIContribUpdate   capability.CapabilityID = "ui.contribution.update"
+	CapUIContribRemove   capability.CapabilityID = "ui.contribution.remove"
+	CapUIPreviewCapture  capability.CapabilityID = "ui.preview.capture"
+	CapUIPreviewObserve  capability.CapabilityID = "ui.preview.observe"
 )
 
 var RequiredCapabilitiesForMode = map[UITargetType][]capability.CapabilityID{

@@ -12,8 +12,9 @@ export function normalizeStylePageId(value: unknown): string {
       : new URL(text, "https://amitia.local");
     path = url.pathname;
     search = url.searchParams;
-  } catch {
-    path = text.split(/[?#]/, 1)[0] ?? text;
+  } catch (error) {
+  console.error("[original-error]", error);
+path = text.split(/[?#]/, 1)[0] ?? text;
   }
   path = path.replace(/\\/g, "/");
   const segments = path

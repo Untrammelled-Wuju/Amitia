@@ -272,7 +272,7 @@ func TestHealthAdapter_ListServiceHealth_Sorted(t *testing.T) {
 	}
 }
 
-func TestHealthAdapter_ReasonTruncated(t *testing.T) {
+func TestHealthAdapter_ReasonPreserved(t *testing.T) {
 	topo := &fakeTopologyStoreForHealth{
 		topology: RuntimeTopologySnapshot{
 			RuntimeID: "rt-1",
@@ -303,8 +303,8 @@ func TestHealthAdapter_ReasonTruncated(t *testing.T) {
 	}
 
 	snap, _ := adapter.GetServiceHealth("rt-1", "bridge")
-	if len(snap.Reason) > 256 {
-		t.Errorf("expected reason to be truncated to 256 chars, got %d", len(snap.Reason))
+	if snap.Reason != string(longReason) {
+		t.Errorf("expected original reason, got %d chars", len(snap.Reason))
 	}
 }
 

@@ -15,7 +15,7 @@ import (
 )
 
 type ImageNormalizer struct {
-	policy Policy
+	policy  Policy
 	decoder *ImageDecoder
 }
 

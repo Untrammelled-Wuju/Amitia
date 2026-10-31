@@ -334,6 +334,58 @@ func TestCreateEmptyGroupConversationWithoutModelMessage(t *testing.T) {
 	}
 }
 
+func TestCreateGroupConversationBindsProject(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	schemas := newThreeCoreSchemas(t)
+	fixture := newThreeCoreFixture(t, "core-group-project", schemas)
+	caller := newThreeCoreFixture(t, "device-group-project", schemas)
+	pairThreeCoreFixtures(t, caller, fixture)
+
+	listing := decodeThreeCoreMemoryResponse[projectListing](t, fixture.request(t, caller, http.MethodGet, "/api/device-mesh/v1/business/projects?characterId=one", nil, http.StatusOK))
+	project := decodeThreeCoreMemoryResponse[business.ProjectResponse](t, fixture.request(t, caller, http.MethodPost, "/api/device-mesh/v1/business/projects", map[string]any{
+		"requestId":              "group-project-source",
+		"title":                  "群聊项目",
+		"characterId":            "one",
+		"expectedExecutionScope": listing.Scope,
+		"workspaces": []business.ProjectWorkspace{{
+			ID:       "group-workspace",
+			DeviceID: listing.Scope.TargetDeviceID,
+			Name:     "群聊项目",
+			Kind:     "local",
+			RootURI:  "amitia://workspace/@group-workspace/",
+		}},
+		"primaryWorkspaceId": "group-workspace",
+	}, http.StatusOK))
+
+	created := decodeThreeCoreMemoryResponse[business.GroupMutationResponse](t, fixture.request(t, caller, http.MethodPost, "/api/device-mesh/v1/business/conversations/group", map[string]any{
+		"requestId":   "group-project-create",
+		"characterId": "one",
+		"projectId":   project.Project.ID,
+		"members": []map[string]any{{
+			"characterId":  "two",
+			"shareHistory": false,
+		}},
+	}, http.StatusOK))
+	resource := decodeThreeCoreMemoryResponse[struct {
+		Resource coordination.Resource `json:"resource"`
+	}](t, fixture.request(t, caller, http.MethodGet, "/api/device-mesh/v1/business/resources?characterId=one&kind=conversation&id="+created.Group.ConversationID, nil, http.StatusOK))
+	var document struct {
+		ProjectID string `json:"projectId"`
+	}
+	if json.Unmarshal(resource.Resource.Body, &document) != nil || document.ProjectID != project.Project.ID {
+		t.Fatalf("群聊未绑定项目: %s", resource.Resource.Body)
+	}
+
+	fixture.request(t, caller, http.MethodPost, "/api/device-mesh/v1/business/conversations/group", map[string]any{
+		"requestId":   "group-project-invalid",
+		"characterId": "one",
+		"projectId":   "project-missing",
+		"members": []map[string]any{{
+			"characterId": "two",
+		}},
+	}, http.StatusForbidden)
+}
+
 func TestGroupChatAutoGeneratesTitleAfterFirstRound(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	schemas := newThreeCoreSchemas(t)

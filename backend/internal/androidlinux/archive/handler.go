@@ -75,13 +75,13 @@ func (h *Handler) handleList(ctx context.Context, payload map[string]any) (map[s
 
 func (h *Handler) handleExtract(ctx context.Context, payload map[string]any) (map[string]any, error) {
 	req := ExtractRequest{
-		Path:           getStringKey(payload, "path"),
-		Target:         getStringKey(payload, "target"),
-		Overwrite:      getBoolKey(payload, "overwrite", false),
-		StripOptions:   getIntKey(payload, "stripComponents", 0),
-		Include:        getStringSliceKey(payload, "include"),
-		Exclude:        getStringSliceKey(payload, "exclude"),
-		AllowSymlinks:  getBoolKey(payload, "allowSymlinks", false),
+		Path:          getStringKey(payload, "path"),
+		Target:        getStringKey(payload, "target"),
+		Overwrite:     getBoolKey(payload, "overwrite", false),
+		StripOptions:  getIntKey(payload, "stripComponents", 0),
+		Include:       getStringSliceKey(payload, "include"),
+		Exclude:       getStringSliceKey(payload, "exclude"),
+		AllowSymlinks: getBoolKey(payload, "allowSymlinks", false),
 	}
 
 	if me, ok := payload["maxEntries"].(float64); ok {
@@ -108,13 +108,13 @@ func (h *Handler) handleExtract(ctx context.Context, payload map[string]any) (ma
 
 func (h *Handler) handleCreate(ctx context.Context, payload map[string]any) (map[string]any, error) {
 	req := CreateRequest{
-		Sources:         getStringSliceKey(payload, "sources"),
-		Target:          getStringKey(payload, "target"),
-		Format:          Format(getStringKey(payload, "format")),
-		BasePath:        getStringKey(payload, "basePath"),
-		IncludeHidden:   getBoolKey(payload, "includeHidden", false),
-		FollowSymlinks:  getBoolKey(payload, "followSymlinks", false),
-		Overwrite:       getBoolKey(payload, "overwrite", false),
+		Sources:        getStringSliceKey(payload, "sources"),
+		Target:         getStringKey(payload, "target"),
+		Format:         Format(getStringKey(payload, "format")),
+		BasePath:       getStringKey(payload, "basePath"),
+		IncludeHidden:  getBoolKey(payload, "includeHidden", false),
+		FollowSymlinks: getBoolKey(payload, "followSymlinks", false),
+		Overwrite:      getBoolKey(payload, "overwrite", false),
 	}
 
 	if cl, ok := payload["compressionLevel"].(float64); ok {
@@ -150,9 +150,9 @@ func (h *Handler) handleVerify(ctx context.Context, payload map[string]any) (map
 
 func detectResultToMap(r DetectResult) map[string]any {
 	m := map[string]any{
-		"path":    r.Path,
-		"format":  string(r.Format),
-		"archive": r.Archive,
+		"path":      r.Path,
+		"format":    string(r.Format),
+		"archive":   r.Archive,
 		"sizeBytes": r.SizeBytes,
 	}
 	if r.MIMEType != "" {
@@ -194,13 +194,13 @@ func entryToMap(e Entry) map[string]any {
 
 func verifyResultToMap(r *VerifyResult) map[string]any {
 	m := map[string]any{
-		"valid":                   r.Valid,
-		"format":                  string(r.Format),
-		"entryCount":              r.EntryCount,
-		"totalUncompressedBytes":  r.TotalUncompressedBytes,
-		"unsafeEntries":           r.UnsafeEntries,
-		"corruptEntries":          r.CorruptEntries,
-		"encryptedEntries":        r.EncryptedEntries,
+		"valid":                  r.Valid,
+		"format":                 string(r.Format),
+		"entryCount":             r.EntryCount,
+		"totalUncompressedBytes": r.TotalUncompressedBytes,
+		"unsafeEntries":          r.UnsafeEntries,
+		"corruptEntries":         r.CorruptEntries,
+		"encryptedEntries":       r.EncryptedEntries,
 	}
 	if len(r.Warnings) > 0 {
 		m["warnings"] = r.Warnings

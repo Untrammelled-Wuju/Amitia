@@ -3,17 +3,17 @@
 package fileops
 
 type Policy struct {
-	MaxReadBytes         int64
-	MaxWriteBytes        int64
-	MaxListEntries       int
-	MaxSearchResults     int
-	MaxSearchDepth       int
-	MaxCopyDepth         int
-	MaxCopyFiles         int
-	AllowAbsolutePaths   bool
-	AllowSymlinkCreate   bool
-	AllowChmod           bool
-	DeniedMutationRoots  []string
+	MaxReadBytes        int64
+	MaxWriteBytes       int64
+	MaxListEntries      int
+	MaxSearchResults    int
+	MaxSearchDepth      int
+	MaxCopyDepth        int
+	MaxCopyFiles        int
+	AllowAbsolutePaths  bool
+	AllowSymlinkCreate  bool
+	AllowChmod          bool
+	DeniedMutationRoots []string
 }
 
 func DefaultPolicy(workspaceDir, tempDir string) Policy {

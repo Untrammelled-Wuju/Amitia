@@ -25,6 +25,9 @@ func RegisterModelRouter(r *gin.RouterGroup, svc Service) {
 		modelGroup.GET("/routes", admin, handler.GetModelRoutes)
 		modelGroup.PUT("/routes", admin, handler.UpdateModelRoutes)
 		modelGroup.POST("/detect-models", admin, handler.DetectModels)
+		modelGroup.GET("/local-models", admin, handler.ListLocalModels)
+		modelGroup.POST("/local-models", admin, handler.UploadLocalModel)
+		modelGroup.DELETE("/local-models/:id", admin, handler.DeleteLocalModel)
 		modelGroup.GET("/providers", handler.ListProviders)
 		modelGroup.GET("/providers/:id/schema", handler.ProviderSchema)
 	}

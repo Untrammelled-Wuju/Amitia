@@ -54,7 +54,9 @@ func startMeshLAN(ctx context.Context, services *AppServices, handler http.Handl
 			services.DeviceMesh.LocalHandler.SetLANEndpoints(nil)
 			if server != nil {
 				shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				_ = server.Close(shutdown)
+				if err := server.Close(shutdown); err != nil {
+					log.Printf("[original-error] %v", err)
+				}
 				cancel()
 				server = nil
 			}

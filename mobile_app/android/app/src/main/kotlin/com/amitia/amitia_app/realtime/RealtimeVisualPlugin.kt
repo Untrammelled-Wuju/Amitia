@@ -351,7 +351,9 @@ class RealtimeVisualPlugin : FlutterPlugin,
                     set(CaptureRequest.JPEG_QUALITY, if (immediate) 82.toByte() else 72.toByte())
                 }.build()
                 session.capture(request, null, worker)
-            } catch (_: Throwable) {
+            } catch (originalError354: Throwable) {
+              originalError354.printStackTrace()
+
             }
         }
     }
@@ -360,9 +362,15 @@ class RealtimeVisualPlugin : FlutterPlugin,
         cameraActive.set(false)
         cameraCaptureRunnable?.let(worker::removeCallbacks)
         cameraCaptureRunnable = null
-        try { cameraSession?.close() } catch (_: Throwable) {}
-        try { cameraDevice?.close() } catch (_: Throwable) {}
-        try { cameraReader?.close() } catch (_: Throwable) {}
+        try { cameraSession?.close() } catch (originalError363: Throwable) {
+          originalError363.printStackTrace()
+        }
+        try { cameraDevice?.close() } catch (originalError364: Throwable) {
+          originalError364.printStackTrace()
+        }
+        try { cameraReader?.close() } catch (originalError365: Throwable) {
+          originalError365.printStackTrace()
+        }
         cameraSession = null
         cameraDevice = null
         cameraReader = null
@@ -508,14 +516,20 @@ class RealtimeVisualPlugin : FlutterPlugin,
 
     private fun releaseScreenResources(stopProjection: Boolean) {
         screenActive.set(false)
-        try { screenDisplay?.release() } catch (_: Throwable) {}
-        try { screenReader?.close() } catch (_: Throwable) {}
+        try { screenDisplay?.release() } catch (originalError511: Throwable) {
+          originalError511.printStackTrace()
+        }
+        try { screenReader?.close() } catch (originalError512: Throwable) {
+          originalError512.printStackTrace()
+        }
         val activeProjection = projection
         screenDisplay = null
         screenReader = null
         projection = null
         if (stopProjection) {
-            try { activeProjection?.stop() } catch (_: Throwable) {}
+            try { activeProjection?.stop() } catch (originalError518: Throwable) {
+              originalError518.printStackTrace()
+            }
         }
         stopProjectionService()
     }
@@ -523,10 +537,14 @@ class RealtimeVisualPlugin : FlutterPlugin,
     private fun stopProjectionService() {
         val context = applicationContext ?: return
         if (projectionServiceBound) {
-            try { context.unbindService(projectionServiceConnection) } catch (_: Throwable) {}
+            try { context.unbindService(projectionServiceConnection) } catch (originalError526: Throwable) {
+              originalError526.printStackTrace()
+            }
             projectionServiceBound = false
         }
-        try { context.stopService(Intent(context, RealtimeProjectionService::class.java)) } catch (_: Throwable) {}
+        try { context.stopService(Intent(context, RealtimeProjectionService::class.java)) } catch (originalError529: Throwable) {
+          originalError529.printStackTrace()
+        }
     }
 
     private fun scaleBitmap(bitmap: Bitmap, maxWidth: Int, maxHeight: Int): Bitmap {

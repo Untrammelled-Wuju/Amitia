@@ -15,6 +15,7 @@ import (
 	"github.com/u-ai/backend/internal/iosnative/shortcuts"
 	"github.com/u-ai/backend/internal/iosnative/staging"
 	"github.com/u-ai/backend/internal/nativebridge"
+	amitialog "log"
 	"os"
 	"path/filepath"
 )
@@ -28,7 +29,9 @@ func NewCanonicalProviderWithStaging(bridge nativebridge.Bridge, stagingImporter
 
 	if stagingImporter == nil {
 		baseDir := filepath.Join(os.TempDir(), "amitia", "media-staging")
-		_ = os.MkdirAll(baseDir, 0755)
+		if err := os.MkdirAll(baseDir, 0755); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		stagingImporter = staging.NewStagingImporter(baseDir)
 	}
 

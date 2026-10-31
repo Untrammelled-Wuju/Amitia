@@ -22,14 +22,14 @@ type UIChangePlan struct {
 
 	ExecContext *execution.ExecutionContext `json:"-"`
 
-	Intent              UIIntent               `json:"intent"`
-	Mode                UITargetType           `json:"mode"`
+	Intent               UIIntent                  `json:"intent"`
+	Mode                 UITargetType              `json:"mode"`
 	RequiredCapabilities []capability.CapabilityID `json:"requiredCapabilities,omitempty"`
-	TargetRuntime       *DeploymentTarget       `json:"targetRuntime,omitempty"`
-	Operations          []UIOperation          `json:"operations"`
-	Risk                UIRisk                 `json:"risk"`
-	PreviewStrategy     PreviewStrategy        `json:"previewStrategy"`
-	RollbackStrategy    RollbackStrategy       `json:"rollbackStrategy"`
+	TargetRuntime        *DeploymentTarget         `json:"targetRuntime,omitempty"`
+	Operations           []UIOperation             `json:"operations"`
+	Risk                 UIRisk                    `json:"risk"`
+	PreviewStrategy      PreviewStrategy           `json:"previewStrategy"`
+	RollbackStrategy     RollbackStrategy          `json:"rollbackStrategy"`
 }
 
 func (p UIChangePlan) NeedsCapability(capID capability.CapabilityID) bool {

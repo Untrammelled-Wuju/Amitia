@@ -14,7 +14,7 @@ const (
 
 	OperationServicesList = "homekit.services.list"
 
-	OperationCharacteristicsList = "homekit.characteristics.list"
+	OperationCharacteristicsList  = "homekit.characteristics.list"
 	OperationCharacteristicsRead  = "homekit.characteristics.read"
 	OperationCharacteristicsWrite = "homekit.characteristics.write"
 

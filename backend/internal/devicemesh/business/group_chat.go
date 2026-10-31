@@ -16,6 +16,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	amitialog "log"
 )
 
 const (
@@ -164,6 +165,7 @@ type CreateGroupConversationInput struct {
 	RequestID      string             `json:"requestId"`
 	CharacterID    string             `json:"characterId"`
 	TargetDeviceID string             `json:"targetDeviceId,omitempty"`
+	ProjectID      string             `json:"projectId,omitempty"`
 	Members        []GroupInviteInput `json:"members" binding:"required"`
 }
 
@@ -230,6 +232,31 @@ func (e *Engine) CreateGroupConversation(ctx context.Context, request Request, i
 	if err != nil {
 		return GroupMutationResponse{}, err
 	}
+	projectID := strings.TrimSpace(input.ProjectID)
+	if projectID != "" {
+		port, ok := e.data.(coordination.ResourcePort)
+		if !ok {
+			return GroupMutationResponse{}, errors.New("数据来源不支持项目管理")
+		}
+		resource, err := port.Resource(ctx, scope, "project", projectID)
+		if err != nil {
+			return GroupMutationResponse{}, err
+		}
+		if resource == nil || resource.Deleted || resource.OwnerID != scope.ResourceOwnerID || resource.RoleID != scope.RoleID {
+			return GroupMutationResponse{}, coordination.ErrWrongOwner
+		}
+		var project Project
+		if json.Unmarshal(resource.Body, &project) != nil || project.ID != projectID {
+			return GroupMutationResponse{}, errors.New("项目数据格式无效")
+		}
+		if project.HiddenAt != nil {
+			return GroupMutationResponse{}, errors.New("项目已隐藏，不能创建新群聊")
+		}
+		workspaces, _, err := normalizeProjectWorkspaces(project.Workspaces, project.PrimaryWorkspaceID)
+		if err != nil || !projectWorkspacesBelongToDevice(workspaces, scope.TargetDeviceID) {
+			return GroupMutationResponse{}, errors.New("项目工作区无效或不属于当前执行设备")
+		}
+	}
 	roleByID := make(map[string]coordination.Role, len(catalog))
 	for _, role := range catalog {
 		roleByID[role.ID] = role
@@ -258,11 +285,14 @@ func (e *Engine) CreateGroupConversation(ctx context.Context, request Request, i
 	conversationID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(scope.SpaceID+"\x00"+scope.InitiatorDeviceID+"\x00"+request.RequestID)).String()
 	state := coordination.GroupState{ConversationID: conversationID, ConversationRoleID: currentRole.ID, RoleOwnerID: scope.RoleOwnerID, Title: "新群聊", ConversationType: "group", MembershipRevision: 1, SettingsRevision: 1, Settings: coordination.GroupSettings{AllowCharacterMentions: false, MaxAutoReplies: coordination.GroupDefaultAutoReplies}, Members: members}
 	conversation := map[string]any{"id": conversationID, "conversationId": conversationID, "title": state.Title, "characterId": currentRole.ID, "roleOwnerId": scope.RoleOwnerID, "ownerId": scope.ResourceOwnerID, "coreId": scope.CoreID, "channel": "web", "source": "manual", "conversationType": "group", "membershipRevision": 1, "settingsRevision": 1, "members": groupMembersDocument(members), "groupSettings": state.Settings, "lastMessageSequence": 0, "createdAt": now, "updatedAt": now}
+	if projectID != "" {
+		conversation["projectId"] = projectID
+	}
 	encoded, err := json.Marshal(conversation)
 	if err != nil {
 		return GroupMutationResponse{}, err
 	}
-	fingerprintData := map[string]any{"conversationId": conversationID, "characterId": currentRole.ID, "members": input.Members, "operation": "create-group"}
+	fingerprintData := map[string]any{"conversationId": conversationID, "characterId": currentRole.ID, "projectId": projectID, "members": input.Members, "operation": "create-group"}
 	digest := sha256.Sum256(body(fingerprintData))
 	location, firstRequest, err := e.coordination.RegisterRequest(ctx, scope, hex.EncodeToString(digest[:]), conversationID)
 	if err != nil {
@@ -1027,6 +1057,9 @@ func (e *Engine) RunGroupEvents(ctx context.Context, request Request, emit func(
 	}
 	conversation["updatedAt"] = now
 	conversation["lastMessageSequence"] = userSequence
+	conversation["lastMessagePreview"] = ownedMessagePreview(request.Message)
+	conversation["lastMessageRole"] = "user"
+	conversation["lastMessageType"] = "text"
 	conversation["characterId"] = state.ConversationRoleID
 	round := GroupRound{RoundID: roundID, ConversationID: state.ConversationID, RootRequestID: request.RequestID, RequestFingerprint: fingerprint, TriggerMessageID: userMessageID, TriggerMessage: request.Message, TriggerSequence: userSequence, Status: GroupRoundQueued, MembershipRevision: state.MembershipRevision, SettingsRevision: state.SettingsRevision, Mode: mode, CreatedAt: now, UpdatedAt: now, Deliveries: deliveries}
 	roundBody, err := json.Marshal(round)
@@ -1327,7 +1360,9 @@ func (e *Engine) executeGroupRound(ctx context.Context, scope coordination.Execu
 					item.delivery.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
 					item.bookkeepingErr = e.updateGroupDelivery(ctx, scope, currentRound, item.delivery)
 					if status == GroupDeliveryFailed && err != nil && safeEmit != nil {
-						_ = safeEmit(Event{Type: "group.delivery.failed", ConversationID: currentRound.ConversationID, Scope: scope, GroupRoundID: currentRound.RoundID, DeliveryID: delivery.DeliveryID, DeliveryIndex: index, CharacterID: delivery.CharacterID, CharacterName: delivery.CharacterName, RoleOwnerID: delivery.RoleOwnerID, Text: DescribeRuntimeError(err).UserMessage})
+						if err := safeEmit(Event{Type: "group.delivery.failed", ConversationID: currentRound.ConversationID, Scope: scope, GroupRoundID: currentRound.RoundID, DeliveryID: delivery.DeliveryID, DeliveryIndex: index, CharacterID: delivery.CharacterID, CharacterName: delivery.CharacterName, RoleOwnerID: delivery.RoleOwnerID, Text: DescribeRuntimeError(err).UserMessage}); err != nil {
+							amitialog.Printf("[original-error] %v", err)
+						}
 					}
 				}
 				if cause := context.Cause(ctx); cause != nil {
@@ -1474,7 +1509,9 @@ func (e *Engine) executeGroupRound(ctx context.Context, scope coordination.Execu
 				item.response.GroupRoundID, item.response.DeliveryID, item.response.CharacterName, item.response.CharacterAvatar = currentRound.RoundID, delivery.DeliveryID, delivery.CharacterName, ""
 				finish(GroupDeliveryCompleted, nil)
 				if item.bookkeepingErr == nil && safeEmit != nil {
-					_ = safeEmit(Event{Type: "group.delivery.completed", ConversationID: currentRound.ConversationID, Scope: response.Scope, GroupRoundID: currentRound.RoundID, DeliveryID: delivery.DeliveryID, DeliveryIndex: index, CharacterID: delivery.CharacterID, CharacterName: delivery.CharacterName, RoleOwnerID: delivery.RoleOwnerID})
+					if err := safeEmit(Event{Type: "group.delivery.completed", ConversationID: currentRound.ConversationID, Scope: response.Scope, GroupRoundID: currentRound.RoundID, DeliveryID: delivery.DeliveryID, DeliveryIndex: index, CharacterID: delivery.CharacterID, CharacterName: delivery.CharacterName, RoleOwnerID: delivery.RoleOwnerID}); err != nil {
+						amitialog.Printf("[original-error] %v", err)
+					}
 				}
 			}(index, delivery)
 		}
@@ -1562,11 +1599,15 @@ func (e *Engine) executeGroupRound(ctx context.Context, scope coordination.Execu
 		return result, err
 	}
 	if round.Status != GroupRoundCancelled && len(result.Deliveries) > 0 {
-		_ = e.finishOwnedGroupTitle(ctx, scope, state, round.TriggerMessage, result.Deliveries)
+		if err := e.finishOwnedGroupTitle(ctx, scope, state, round.TriggerMessage, result.Deliveries); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	result.Status = round.Status
 	if emit != nil {
-		_ = emit(Event{Type: "group.round.completed", ConversationID: round.ConversationID, Scope: scope, GroupRoundID: round.RoundID})
+		if err := emit(Event{Type: "group.round.completed", ConversationID: round.ConversationID, Scope: scope, GroupRoundID: round.RoundID}); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	if cause := context.Cause(ctx); cause != nil {
 		return result, cause

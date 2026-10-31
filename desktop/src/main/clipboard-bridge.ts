@@ -63,8 +63,9 @@ export class ClipboardBridge {
     if (this.mainWindow.isDestroyed()) return null;
     try {
       return await getLocalAdminHeaders();
-    } catch {
-      return null;
+    } catch (error) {
+  console.error("[original-error]", error);
+return null;
     }
   }
 
@@ -126,8 +127,9 @@ export class ClipboardBridge {
         HOST_HEARTBEAT_PATH,
         headers,
         { hostClientId: CLIENT_ID, hostSessionId: this.hostSessionId },
-      ).catch(() => {
-        // The SSE reconnect path will register a fresh host session.
+      ).catch((error) => {
+  console.error("[original-error]", error);
+// The SSE reconnect path will register a fresh host session.
       });
     }, seconds * 1000);
   }
@@ -149,7 +151,9 @@ export class ClipboardBridge {
       HOST_DISCONNECT_PATH,
       headers,
       { hostClientId: CLIENT_ID, hostSessionId: sessionId },
-    ).catch(() => {});
+    ).catch((error) => {
+  console.error("[original-error]", error);
+});
   }
 
   private async connect(): Promise<void> {
@@ -243,8 +247,9 @@ export class ClipboardBridge {
     let payload: ClipboardRequestPayload;
     try {
       payload = JSON.parse(dataStr);
-    } catch {
-      console.warn("[ClipboardBridge] 无法解析 clipboard_request 数据");
+    } catch (error) {
+  console.error("[original-error]", error);
+console.warn("[ClipboardBridge] 无法解析 clipboard_request 数据");
       return;
     }
 

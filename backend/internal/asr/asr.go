@@ -312,7 +312,7 @@ func submitVolcengine(cfg *AsrConfig, audioURL string, language string) (string,
 	defer resp.Body.Close()
 	rawBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("ASR提交返回 %d: %s", resp.StatusCode, truncateStr(string(rawBody), 300))
+		return "", fmt.Errorf("ASR提交返回 %d: %s", resp.StatusCode, string(rawBody))
 	}
 	var result AsrSubmitResp
 	if err := json.Unmarshal(rawBody, &result); err != nil {
@@ -342,7 +342,7 @@ func queryVolcengine(cfg *AsrConfig, taskID string) (*AsrQueryResp, error) {
 	defer resp.Body.Close()
 	rawBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("ASR查询返回 %d: %s", resp.StatusCode, truncateStr(string(rawBody), 300))
+		return nil, fmt.Errorf("ASR查询返回 %d: %s", resp.StatusCode, string(rawBody))
 	}
 	var result AsrQueryResp
 	if err := json.Unmarshal(rawBody, &result); err != nil {
@@ -561,7 +561,7 @@ func submitAliyun(cfg *AsrConfig, audioURL string, language string) (string, err
 	defer resp.Body.Close()
 	rawBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("阿里云ASR 提交返回 %d: %s", resp.StatusCode, truncateStr(string(rawBody), 300))
+		return "", fmt.Errorf("阿里云ASR 提交返回 %d: %s", resp.StatusCode, string(rawBody))
 	}
 
 	var result struct {
@@ -601,7 +601,7 @@ func queryAliyun(cfg *AsrConfig, taskID string) (*AsrQueryResp, error) {
 	defer resp.Body.Close()
 	rawBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("阿里云ASR查询返回 %d: %s", resp.StatusCode, truncateStr(string(rawBody), 300))
+		return nil, fmt.Errorf("阿里云ASR查询返回 %d: %s", resp.StatusCode, string(rawBody))
 	}
 
 	var raw struct {
@@ -673,7 +673,7 @@ func handleSubmit(c *gin.Context) {
 		filename := filepath.Base(audioURL)
 		data, readErr := os.ReadFile(filepath.Join("data", "asr_uploads", filename))
 		if readErr != nil {
-			util.ErrorResponse(c, response.NotFound, "音频文件不存在", nil)
+			util.ErrorResponse(c, response.NotFound, readErr.Error(), nil)
 			return
 		}
 		token, tokenErr := RegisterPublicAudio(data, "")
@@ -695,7 +695,7 @@ func handleSubmit(c *gin.Context) {
 func handleUpload(c *gin.Context) {
 	file, header, err := c.Request.FormFile("audio")
 	if err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请上传音频文件", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	defer file.Close()
@@ -723,7 +723,7 @@ func handleServeUpload(c *gin.Context) {
 	filename := c.Param("file")
 	filePath := filepath.Join("data", "asr_uploads", filename)
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		util.ErrorResponse(c, response.NotFound, "文件不存在", nil)
+		util.ErrorResponse(c, response.NotFound, err.Error(), nil)
 		return
 	}
 	c.File(filePath)

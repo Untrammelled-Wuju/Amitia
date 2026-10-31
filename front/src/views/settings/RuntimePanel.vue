@@ -60,7 +60,9 @@ async function loadTimingOverview() {
         totalRuleCount: value.total ?? 0,
       };
     }
-  } catch {}
+  } catch (error) {
+  console.error("[original-error]", error);
+}
 }
 
 onMounted(() => {

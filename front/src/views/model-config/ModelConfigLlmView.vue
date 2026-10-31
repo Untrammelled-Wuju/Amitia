@@ -56,6 +56,8 @@ SPDX-License-Identifier: AGPL-3.0-only
       :show-detect="showDetect"
       :show-reasoning="true"
       :model-placeholder="modelPlaceholder"
+      :local-models="localModels"
+      :upload-local-model="uploadLocalModel"
       @save="saveConfig"
       @on-provider-change="onProviderChange"
       @detect-models="detectModels"
@@ -79,6 +81,7 @@ const modelConfig = useModelConfig({ extraFormFields: { protocol: "", supportsVi
 const {
   configs,
   providers,
+  localModels,
   currentProviderSchema,
   dialogVisible,
   detectingModels,
@@ -102,6 +105,7 @@ const {
   setActive,
   delConfig,
   onProviderChange,
+  uploadLocalModel,
   detectModels,
   assignRoute,
 } = modelConfig;

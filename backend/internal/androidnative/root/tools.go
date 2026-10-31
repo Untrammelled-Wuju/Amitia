@@ -78,11 +78,11 @@ func buildStatusTool(runtime capability.RuntimeBinding) capability.ToolDefinitio
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          "android.root.status",
-		ModelName:   "android.root.status",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Root Status",
-		Description: "查询Android Host Root可用性与授权状态。不会触发Root授权弹窗。",
+		ID:           "android.root.status",
+		ModelName:    "android.root.status",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Root Status",
+		Description:  "查询Android Host Root可用性与授权状态。不会触发Root授权弹窗。",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -139,11 +139,11 @@ func buildRequestTool(runtime capability.RuntimeBinding) capability.ToolDefiniti
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          "android.root.request",
-		ModelName:   "android.root.request",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Root Request",
-		Description: "显式触发Root Manager授权流程。可能弹出Magisk/KernelSU/APatch授权UI。",
+		ID:           "android.root.request",
+		ModelName:    "android.root.request",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Root Request",
+		Description:  "显式触发Root Manager授权流程。可能弹出Magisk/KernelSU/APatch授权UI。",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -236,11 +236,11 @@ func buildExecuteTool(runtime capability.RuntimeBinding) capability.ToolDefiniti
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          "android.root.execute",
-		ModelName:   "android.root.execute",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Root Execute",
-		Description: "在Android Host以root身份执行结构化命令。默认使用structured模式（安全），可选shell模式（高风险需额外权限）。",
+		ID:           "android.root.execute",
+		ModelName:    "android.root.execute",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Root Execute",
+		Description:  "在Android Host以root身份执行结构化命令。默认使用structured模式（安全），可选shell模式（高风险需额外权限）。",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{

@@ -464,7 +464,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	wasmHostGateway := wasm_runtime.NewHostGateway(nil)
 	wasmFactory.SetHostGateway(wasmHostGateway)
 	wasmDefRepo := sqlite.NewWASMDefinitionRepository(db)
-	_ = supervisor.RegisterFactory(wasmFactory)
+	if err := supervisor.RegisterFactory(wasmFactory); err != nil {
+		log.Printf("[original-error] %v", err)
+	}
 
 	trustedSvcRoot := filepath.Join(b.extRoot, "trusted-services")
 	trustedSupervisor := trusted_service.NewProcessSupervisorWithVerifier(
@@ -479,7 +481,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 	defProvider := newMemoryDefinitionProvider()
 	trustedFactory := trusted_service.NewTrustedServiceFactory(trustedSupervisor, defProvider, b.extRoot)
-	_ = supervisor.RegisterFactory(trustedFactory)
+	if err := supervisor.RegisterFactory(trustedFactory); err != nil {
+		log.Printf("[original-error] %v", err)
+	}
 
 	contribRegistry := contribution.NewContributionRegistry()
 
@@ -490,7 +494,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	workflowInstallationRepo := sqlite.NewWorkflowInstallationRepository(db)
 	workflowDeviceCatalogRepo := sqlite.NewWorkflowDeviceCatalogRepository(db)
 	workflowRegistry.SetDefinitionStore(workflowDefRepo)
-	_ = workflowRegistry.LoadFromStore(ctx)
+	if err := workflowRegistry.LoadFromStore(ctx); err != nil {
+		log.Printf("[original-error] %v", err)
+	}
 	legacyWorkflowLocation := workflow.WorkflowLocationLocal
 	if b.runtimeProfile == runtimeprofile.ProfileCloudCore {
 		legacyWorkflowLocation = workflow.WorkflowLocationCloud
@@ -638,19 +644,25 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		for _, p := range permits {
 			dims = append(dims, string(p.Key.Dimension))
 		}
-		_ = executionAuditHook.OnConcurrencyAcquired(context.Background(), dims)
+		if err := executionAuditHook.OnConcurrencyAcquired(context.Background(), dims); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 	}, func(permits []execution.ConcurrencyPermit, waitDuration time.Duration) {
 		dims := make([]string, 0, len(permits))
 		for _, p := range permits {
 			dims = append(dims, string(p.Key.Dimension))
 		}
-		_ = executionAuditHook.OnConcurrencyReleased(context.Background(), dims, waitDuration.Milliseconds())
+		if err := executionAuditHook.OnConcurrencyReleased(context.Background(), dims, waitDuration.Milliseconds()); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 	}, func(permits []execution.ConcurrencyPermit, waitDuration time.Duration) {
 		dims := make([]string, 0, len(permits))
 		for _, p := range permits {
 			dims = append(dims, string(p.Key.Dimension))
 		}
-		_ = executionAuditHook.OnConcurrencyWait(context.Background(), dims, waitDuration.Milliseconds())
+		if err := executionAuditHook.OnConcurrencyWait(context.Background(), dims, waitDuration.Milliseconds()); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 	})
 	rateLimitPolicy := execution.RateLimitPolicy{Enabled: false}
 	rateLimiter, err := execution.NewRateLimiter(rateLimitPolicy)
@@ -658,13 +670,21 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		return nil, fmt.Errorf("kernel: create rate limiter: %w", err)
 	}
 	execution.SetRateLimitObservabilityHooks(func(dimensions []string) {
-		_ = executionAuditHook.OnRateLimitAdmitted(context.Background(), dimensions)
+		if err := executionAuditHook.OnRateLimitAdmitted(context.Background(), dimensions); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 	}, func(dimensions []string, reason string, retryAfterMs int64) {
-		_ = executionAuditHook.OnRateLimitRejected(context.Background(), dimensions, reason, retryAfterMs)
+		if err := executionAuditHook.OnRateLimitRejected(context.Background(), dimensions, reason, retryAfterMs); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 	}, func(dimensions []string, reason string, retryAfterMs int64) {
-		_ = executionAuditHook.OnBackpressureRejected(context.Background(), dimensions, reason, retryAfterMs)
+		if err := executionAuditHook.OnBackpressureRejected(context.Background(), dimensions, reason, retryAfterMs); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 	}, func(dimensions []string, waitMs int64) {
-		_ = executionAuditHook.OnRateLimitWait(context.Background(), dimensions, waitMs)
+		if err := executionAuditHook.OnRateLimitWait(context.Background(), dimensions, waitMs); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 	})
 
 	capabilityProviderRegistry := capability.NewProviderRegistry()
@@ -772,7 +792,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 
 	executionKernel.CircuitBreaker.SetEventHook(func(snapshot execution.CircuitSnapshot, from, to execution.CircuitState, reason string) {
-		_ = executionAuditHook.OnCircuitStateChange(context.Background(), snapshot.Key, string(from), string(to), reason, snapshot.ConsecutiveFailures, string(snapshot.State))
+		if err := executionAuditHook.OnCircuitStateChange(context.Background(), snapshot.Key, string(from), string(to), reason, snapshot.ConsecutiveFailures, string(snapshot.State)); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 	})
 	executionKernel.ScopeGate.ScopeManager = scopeManager
 	executionKernel.PermissionGate.Broker = permBroker
@@ -931,7 +953,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 			if marshalErr != nil {
 				return
 			}
-			_, _ = eventSvc.Publish(eventCtx, typeID, 1, payload, event.PublishOptions{
+			if _, err := eventSvc.Publish(eventCtx, typeID, 1, payload, event.PublishOptions{
 				ProducerID:    "host",
 				ProducerType:  event.EventProducerTypeSystem,
 				Domain:        event.EventDomainSync,
@@ -939,7 +961,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 				AggregateID:   lifecycle.ExecutionID,
 				PartitionKey:  lifecycle.SpaceID,
 				OrderingKey:   lifecycle.SpaceID,
-			})
+			}); err != nil {
+				log.Printf("[original-error] %v", err)
+			}
 		})
 		eventResolver := BuildEventEffectiveResolver(permBroker, scopeManager, dependencyResolver, supervisor, eventSvc.GetDispatcher(), enablementResolver, instRepo)
 		if err := eventSvc.SetEffectiveResolver(eventResolver); err != nil {
@@ -994,13 +1018,15 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	host_api.RegisterPermissionDefinitions(permDefRegistry)
 	permIDValidator := permission.NewPermissionIDValidator(permDefRegistry)
 	if permSnapshotStore != nil {
-		_, _ = permSnapshotStore.RevokeInvalidSnapshots(ctx, permIDValidator, func(extensionID, moduleID string, generation int64) bool {
+		if _, err := permSnapshotStore.RevokeInvalidSnapshots(ctx, permIDValidator, func(extensionID, moduleID string, generation int64) bool {
 			installation, err := instRepo.GetInstallation(ctx, domain.ExtensionID(extensionID))
 			if err != nil {
 				return false
 			}
 			return installation.Generation == generation
-		})
+		}); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 	}
 	hostAPIGateway.SetPermissionChecker(host_api.NewBrokerPermissionChecker(permBroker))
 	hostAPIGateway.SetScopeChecker(host_api.NewManagerScopeChecker(scopeManager, host_api.NewSnapshotStoreAdapter(scopeStore)))
@@ -1081,7 +1107,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 			if runtimeID != "" && inst.RuntimeID != runtimeID {
 				continue
 			}
-			_ = providerLifecycle.UpdateInstanceAvailability(inst.ID, capability.ProviderAvailabilityUnavailable)
+			if err := providerLifecycle.UpdateInstanceAvailability(inst.ID, capability.ProviderAvailabilityUnavailable); err != nil {
+				log.Printf("[original-error] %v", err)
+			}
 		}
 	})
 	providerExecutionResolver.SetSessionResolver(capability.NewHostRegistryDeviceSessionResolver(deviceRegistry))
@@ -1363,7 +1391,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 
 	jsSupervisorFactory := javascript_main.NewSupervisorFactory(jsFactory, nodeResolver, artifactResolver)
 	jsSupervisorFactory.SetExtensionRoot(b.extRoot)
-	_ = supervisor.RegisterFactory(jsSupervisorFactory)
+	if err := supervisor.RegisterFactory(jsSupervisorFactory); err != nil {
+		log.Printf("[original-error] %v", err)
+	}
 
 	agentAdminTools := newAgentAdminToolService(b.agentAdminController, workflowRegistry, workflowExecutor, toolRegistry)
 	builtinUtilityTools := NewBuiltinUtilityService(BuiltinUtilityDeps{
@@ -1631,10 +1661,14 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	uiHost.Bridge().SetSnapshotReleaser(func(scopeSnapshotID, permissionSnapshotID string) error {
 		ctx := context.Background()
 		if scopeSnapshotID != "" {
-			_ = scopeStore.DeleteSnapshot(ctx, scopeSnapshotID)
+			if err := scopeStore.DeleteSnapshot(ctx, scopeSnapshotID); err != nil {
+				log.Printf("[original-error] %v", err)
+			}
 		}
 		if permissionSnapshotID != "" {
-			_ = permSnapshotStore.DeleteSnapshot(ctx, permissionSnapshotID)
+			if err := permSnapshotStore.DeleteSnapshot(ctx, permissionSnapshotID); err != nil {
+				log.Printf("[original-error] %v", err)
+			}
 		}
 		return nil
 	})
@@ -1643,7 +1677,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	activeContribs := savedContribs[:0]
 	for _, def := range savedContribs {
 		if string(def.ExtensionID) == builtin.LegacyProactiveExtensionID {
-			_ = uiContribRepo.DeleteContribution(ctx, string(def.ContributionID))
+			if err := uiContribRepo.DeleteContribution(ctx, string(def.ContributionID)); err != nil {
+				log.Printf("[original-error] %v", err)
+			}
 			continue
 		}
 		activeContribs = append(activeContribs, def)
@@ -1665,7 +1701,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 				continue
 			}
 		}
-		_ = uiHost.RegisterContribution(def)
+		if err := uiHost.RegisterContribution(def); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 	}
 	hostCmdRegistry := NewHostCommandRegistry()
 	if err := SetupDefaultHostCommands(hostCmdRegistry, hostAPIGateway); err != nil {
@@ -2224,9 +2262,13 @@ func (r *gameHostDefinitionReconcile) ReconcileExtension(extensionID string) *se
 		if err := r.installer.UninstallContributions(ctx, extID); err != nil {
 			report.Errors = append(report.Errors, fmt.Errorf("rollback uninstall partial contributions: %w", err))
 		}
-		_ = r.contribRepo.DeleteContributions(ctx, extID)
+		if err := r.contribRepo.DeleteContributions(ctx, extID); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 		for _, item := range current {
-			_ = r.contribRepo.PutContribution(ctx, item)
+			if err := r.contribRepo.PutContribution(ctx, item); err != nil {
+				log.Printf("[original-error] %v", err)
+			}
 		}
 		if err := r.installer.InstallContributions(ctx, current, inst.Generation); err != nil {
 			report.Errors = append(report.Errors, fmt.Errorf("rollback contribution registrations: %w", err))

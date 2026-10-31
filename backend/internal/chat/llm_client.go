@@ -16,6 +16,7 @@ import (
 	"github.com/u-ai/backend/internal/mindruntime"
 	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
+	amitialog "log"
 	"net/http"
 	"strings"
 	"time"
@@ -140,16 +141,22 @@ func (s *service) invokeProcessLLMWithToolsStream(ctx context.Context, cfg *Mode
 			if emitErr := sink.Emit(ctx, ModelEvent{Type: ModelEventReasoningSummaryDelta, TextDelta: reasoning}); emitErr != nil {
 				return "", "", nil, 0, emitErr
 			}
-			_ = sink.Emit(ctx, ModelEvent{Type: ModelEventReasoningSummaryDone})
+			if err := sink.Emit(ctx, ModelEvent{Type: ModelEventReasoningSummaryDone}); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		if text != "" {
 			if emitErr := sink.Emit(ctx, ModelEvent{Type: ModelEventTextDelta, TextDelta: text}); emitErr != nil {
 				return "", "", nil, 0, emitErr
 			}
-			_ = sink.Emit(ctx, ModelEvent{Type: ModelEventTextDone})
+			if err := sink.Emit(ctx, ModelEvent{Type: ModelEventTextDone}); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		if err == nil {
-			_ = sink.Emit(ctx, ModelEvent{Type: ModelEventCompleted})
+			if err := sink.Emit(ctx, ModelEvent{Type: ModelEventCompleted}); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		return text, reasoning, calls, tokens, err
 	}
@@ -159,8 +166,9 @@ func (s *service) invokeProcessLLMWithToolsStream(ctx context.Context, cfg *Mode
 		if err != nil {
 			return "", "", nil, 0, err
 		}
-		req := messagesToModelRequest(cfg, messages, tools, false)
-		localReq := toLocalModelRequest(req, messages)
+		boundedMessages := fitEmbeddedModelMessages(messages, embeddedModelInputLimit(cfg))
+		req := messagesToModelRequest(cfg, boundedMessages, tools, false)
+		localReq := toLocalModelRequest(req, boundedMessages)
 		localReq.Tools = toolsToLocalModelTools(tools)
 		finishUsage, usageErr := s.meterModel(ctx, cfg)
 		if usageErr != nil {
@@ -183,7 +191,9 @@ func (s *service) invokeProcessLLMWithToolsStream(ctx context.Context, cfg *Mode
 		for _, tc := range result.ToolCalls {
 			calls = append(calls, map[string]interface{}{"id": tc.ID, "type": "function", "function": map[string]interface{}{"name": tc.Name, "arguments": tc.Arguments}})
 		}
-		_ = sink.Emit(ctx, ModelEvent{Type: ModelEventCompleted})
+		if err := sink.Emit(ctx, ModelEvent{Type: ModelEventCompleted}); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return result.Text, "", calls, result.Usage.TotalTokens, nil
 	}
 	result, err := s.callLLMStreamAdapter(ctx, cfg, messages, tools, false, false, sink)
@@ -192,6 +202,131 @@ func (s *service) invokeProcessLLMWithToolsStream(ctx context.Context, cfg *Mode
 	}
 	text, reasoning, calls, tokens := modelResultToLegacy(result)
 	return text, reasoning, calls, tokens, nil
+}
+
+func embeddedModelInputLimit(cfg *ModelConfig) int {
+	contextWindow := 0
+	if cfg != nil {
+		var providerConfig map[string]any
+		if json.Unmarshal([]byte(cfg.ProviderConfigJSON), &providerConfig) == nil {
+			switch value := providerConfig["contextSize"].(type) {
+			case float64:
+				contextWindow = int(value)
+			case int:
+				contextWindow = value
+			}
+		}
+		if contextWindow <= 0 {
+			contextWindow = cfg.ContextWindow
+		}
+	}
+	if contextWindow <= 0 {
+		contextWindow = 4096
+	}
+	reserve := 4096
+	if cfg != nil && cfg.MaxOutputTokens > 0 {
+		reserve = cfg.MaxOutputTokens
+	} else if cfg != nil && cfg.MaxTokens > 0 {
+		reserve = cfg.MaxTokens
+	}
+	if reserve >= contextWindow {
+		reserve = contextWindow / 4
+	}
+	if reserve < 1 {
+		reserve = 1
+	}
+	usable := contextWindow - reserve
+	if usable < 1 {
+		return 1
+	}
+	return usable * 7 / 10
+}
+
+func fitEmbeddedModelMessages(messages []map[string]interface{}, limit int) []map[string]interface{} {
+	if len(messages) == 0 || limit <= 0 || estimateModelMessagesTokens(messages) <= limit {
+		return messages
+	}
+	lastIndex := len(messages) - 1
+	firstIndex := 0
+	if messages[0]["role"] != "system" {
+		firstIndex = -1
+	}
+	firstBudget := limit * 3 / 5
+	lastBudget := limit / 5
+	if firstIndex == lastIndex {
+		lastBudget = 0
+	}
+	result := make([]map[string]interface{}, 0, len(messages))
+	var first, last map[string]interface{}
+	if firstIndex >= 0 {
+		first = truncateModelMessage(messages[firstIndex], firstBudget)
+		result = append(result, first)
+	}
+	if lastIndex != firstIndex {
+		last = truncateModelMessage(messages[lastIndex], lastBudget)
+	}
+	used := estimateModelMessagesTokens(result)
+	if last != nil {
+		used += estimateModelMessagesTokens([]map[string]interface{}{last})
+	}
+	remaining := limit - used
+	selected := make([]map[string]interface{}, 0, len(messages))
+	for index := lastIndex - 1; index > firstIndex; index-- {
+		if remaining <= 32 {
+			break
+		}
+		candidate := truncateModelMessage(messages[index], remaining)
+		cost := estimateModelMessagesTokens([]map[string]interface{}{candidate})
+		if cost > remaining {
+			continue
+		}
+		selected = append(selected, candidate)
+		remaining -= cost
+	}
+	for index := len(selected) - 1; index >= 0; index-- {
+		result = append(result, selected[index])
+	}
+	if last != nil {
+		result = append(result, last)
+	}
+	return result
+}
+
+func truncateModelMessage(message map[string]interface{}, budget int) map[string]interface{} {
+	clone := make(map[string]interface{}, len(message))
+	for key, value := range message {
+		clone[key] = value
+	}
+	content, ok := clone["content"].(string)
+	if !ok || budget <= 0 || estimateModelMessagesTokens([]map[string]interface{}{clone}) <= budget {
+		return clone
+	}
+	runes := []rune(content)
+	low, high := 0, len(runes)
+	notice := "\n[内容因本地模型上下文限制已截断]\n"
+	for low < high {
+		mid := (low + high + 1) / 2
+		head := mid * 2 / 3
+		tail := mid - head
+		value := string(runes[:head]) + notice
+		if tail > 0 {
+			value += string(runes[len(runes)-tail:])
+		}
+		clone["content"] = value
+		if estimateModelMessagesTokens([]map[string]interface{}{clone}) <= budget {
+			low = mid
+		} else {
+			high = mid - 1
+		}
+	}
+	head := low * 2 / 3
+	tail := low - head
+	value := string(runes[:head]) + notice
+	if tail > 0 {
+		value += string(runes[len(runes)-tail:])
+	}
+	clone["content"] = value
+	return clone
 }
 
 func (s *service) callMNNMode(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, jsonOnly bool) (retText string, retTokens int, retErr error) {
@@ -270,14 +405,18 @@ func (s *service) getLocalModelBackend(ctx context.Context, cfg *ModelConfig) (L
 
 	if err := backend.Load(ctx); err != nil {
 		s.localModelMu.Unlock()
-		_ = backend.Unload(context.Background())
+		if err := backend.Unload(context.Background()); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, err
 	}
 
 	health := backend.Health(ctx)
 	if health.State != "ready" {
 		s.localModelMu.Unlock()
-		_ = backend.Unload(context.Background())
+		if err := backend.Unload(context.Background()); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, fmt.Errorf("local model not ready: %s", health.State)
 	}
 
@@ -559,7 +698,9 @@ func modelToolParameters(parameters tool.Parameters) map[string]any {
 	result := map[string]any{}
 	raw, err := json.Marshal(parameters)
 	if err == nil {
-		_ = json.Unmarshal(raw, &result)
+		if err := json.Unmarshal(raw, &result); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	if result["type"] != "object" {
 		return map[string]any{"type": "object", "properties": map[string]any{}}

@@ -61,7 +61,9 @@ class _ToolboxLogPageState extends ConsumerState<ToolboxLogPage> {
     try {
       final decoded = jsonDecode(line);
       if (decoded is Map<String, dynamic>) structured = decoded;
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
     return _LogEntry(
       time: (structured['@timestamp'] ?? raw['time'] ?? '').toString(),
       level: (structured['@level'] ?? structured['level'] ?? 'INFO')

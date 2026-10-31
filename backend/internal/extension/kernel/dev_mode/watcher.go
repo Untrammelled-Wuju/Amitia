@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	amitialog "log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -110,7 +111,7 @@ func (w *FileWatcher) loop(ctx context.Context, id WorkspaceID, root string, eve
 
 func (w *FileWatcher) scan(id WorkspaceID, root string, events chan<- FileChangeEvent) {
 	current := make(map[string]int64)
-	_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+	if err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
 		}
@@ -136,7 +137,9 @@ func (w *FileWatcher) scan(id WorkspaceID, root string, events chan<- FileChange
 		}
 		current[path] = info.ModTime().UnixNano()
 		return nil
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 
 	w.mu.Lock()
 	prev := w.snapshots[id]

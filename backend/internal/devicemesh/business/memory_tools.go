@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	amitialog "log"
 )
 
 type MemoryToolResponse struct {
@@ -227,7 +228,9 @@ func (e *Engine) saveMemoryTool(ctx context.Context, request Request, name strin
 				continue
 			}
 			var oldConfidence int
-			_ = json.Unmarshal(previous["confidence"], &oldConfidence)
+			if err := json.Unmarshal(previous["confidence"], &oldConfidence); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			confidence := oldConfidence
 			if MemoryText(previous, "value") != value {
 				confidence = max(5, oldConfidence/2)
@@ -239,9 +242,13 @@ func (e *Engine) saveMemoryTool(ctx context.Context, request Request, name strin
 	}
 	for _, row := range snapshot.Resources {
 		var document map[string]json.RawMessage
-		_ = json.Unmarshal(row.Body, &document)
+		if err := json.Unmarshal(row.Body, &document); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		var pinned bool
-		_ = json.Unmarshal(document["pinned"], &pinned)
+		if err := json.Unmarshal(document["pinned"], &pinned); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		if pinned && MemoryText(document, "key") == key && MemoryText(document, "kind") == kind {
 			return MemoryToolResponse{}, errors.New("固定记忆只能由用户在记忆管理中修改")
 		}
@@ -265,7 +272,9 @@ func (e *Engine) saveMemoryTool(ctx context.Context, request Request, name strin
 		for index := range mutations {
 			if mutations[index].Kind == "memory" {
 				var document map[string]json.RawMessage
-				_ = json.Unmarshal(mutations[index].Body, &document)
+				if err := json.Unmarshal(mutations[index].Body, &document); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 				document["expiresAt"] = body(parsed.UTC().Format(time.RFC3339Nano))
 				mutations[index].Body = body(document)
 			}

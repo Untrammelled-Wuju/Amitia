@@ -227,7 +227,9 @@ class RuntimeService : Service() {
                     Log.e(TAG, "runtime service task failed", error)
                 }
             }
-        } catch (_: java.util.concurrent.RejectedExecutionException) {
+        } catch (originalError230: java.util.concurrent.RejectedExecutionException) {
+          originalError230.printStackTrace()
+
         }
     }
 
@@ -974,11 +976,15 @@ class RuntimeService : Service() {
         context.teardownState = TeardownState.IN_PROGRESS
         try {
             stopForeground(STOP_FOREGROUND_REMOVE)
-        } catch (_: Exception) {
+        } catch (originalError977: Exception) {
+          originalError977.printStackTrace()
+
         }
         val stopResult = try {
             stopSelfResult(startId)
-        } catch (_: Exception) {
+        } catch (originalError981: Exception) {
+          originalError981.printStackTrace()
+
             false
         }
         return if (stopResult) {
@@ -1019,7 +1025,9 @@ class RuntimeService : Service() {
         cleanupContext.cleanupPhase = StartupFailureCleanupPhase.COMPLETE
         try {
             stopForeground(STOP_FOREGROUND_REMOVE)
-        } catch (_: Exception) {
+        } catch (originalError1022: Exception) {
+          originalError1022.printStackTrace()
+
         }
         tryStopSelf(cleanupContext.launchStartId)
         notifyHostEvent(
@@ -1086,7 +1094,9 @@ class RuntimeService : Service() {
     private fun tryStopSelf(startId: Int): Boolean {
         return try {
             stopSelfResult(startId)
-        } catch (_: Exception) {
+        } catch (originalError1089: Exception) {
+          originalError1089.printStackTrace()
+
             false
         }
     }
@@ -1163,7 +1173,9 @@ class RuntimeService : Service() {
                 serviceType,
             )
             true
-        } catch (_: Exception) {
+        } catch (originalError1166: Exception) {
+          originalError1166.printStackTrace()
+
             false
         }
     }
@@ -1171,14 +1183,18 @@ class RuntimeService : Service() {
     private fun stopForegroundSafely() {
         try {
             stopForeground(STOP_FOREGROUND_REMOVE)
-        } catch (_: Exception) {
+        } catch (originalError1174: Exception) {
+          originalError1174.printStackTrace()
+
         }
     }
 
     private fun stopSelfSafely() {
         try {
             stopSelf()
-        } catch (_: Exception) {
+        } catch (originalError1181: Exception) {
+          originalError1181.printStackTrace()
+
         }
     }
 
@@ -1220,7 +1236,9 @@ class RuntimeService : Service() {
                 }
                 try {
                     stopForeground(STOP_FOREGROUND_REMOVE)
-                } catch (_: Exception) {
+                } catch (originalError1223: Exception) {
+                  originalError1223.printStackTrace()
+
                 }
             } else {
                 updateLifecycleSnapshot()
@@ -1357,7 +1375,9 @@ class RuntimeService : Service() {
             for (listener in processListeners) {
                 try {
                     listener.onServiceHostEvent(event)
-                } catch (_: Throwable) {
+                } catch (originalError1360: Throwable) {
+                  originalError1360.printStackTrace()
+
                 }
             }
         }

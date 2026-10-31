@@ -480,7 +480,9 @@ func writeLocalFile(entryPath string, content []byte, exclusive bool) (workspace
 		return workspace.WorkspaceEntry{}, err
 	}
 	if _, err = file.Write(content); err != nil {
-		_ = file.Close()
+		if err := file.Close(); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 		return workspace.WorkspaceEntry{}, err
 	}
 	if err = file.Close(); err != nil {
@@ -1097,7 +1099,9 @@ func (s *BuiltinUtilityService) visitWeb(ctx context.Context, input json.RawMess
 	closeOnError := true
 	defer func() {
 		if closeOnError || boolValue(obj, false, "closeAfter") {
-			_ = s.browser.Sessions().CloseSession(context.Background(), session.SessionID)
+			if err := s.browser.Sessions().CloseSession(context.Background(), session.SessionID); err != nil {
+				log.Printf("[original-error] %v", err)
+			}
 		}
 	}()
 	tab, browserErr := s.browser.Tabs().CreateTab(ctx, session.SessionID)
@@ -1682,8 +1686,12 @@ func (s *BuiltinUtilityService) getTerminalSessionScreen(ctx context.Context, in
 	}
 	var read map[string]any
 	var status map[string]any
-	_ = json.Unmarshal(readResult, &read)
-	_ = json.Unmarshal(statusResult, &status)
+	if err := json.Unmarshal(readResult, &read); err != nil {
+		log.Printf("[original-error] %v", err)
+	}
+	if err := json.Unmarshal(statusResult, &status); err != nil {
+		log.Printf("[original-error] %v", err)
+	}
 	chunks, _ := read["chunks"].([]any)
 	rows := intValue(status, 24, "rows")
 	cols := intValue(status, 80, "cols")

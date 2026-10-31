@@ -16,6 +16,7 @@ import (
 	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
+	amitialog "log"
 )
 
 type readScopedCharacterService interface {
@@ -83,7 +84,7 @@ func (h *Handler) Get(c *gin.Context) {
 		char, err = h.service.GetByID(id)
 	}
 	if err != nil {
-		util.ErrorResponse(c, response.NotFound, "角色不存在", nil)
+		util.ErrorResponse(c, response.NotFound, err.Error(), nil)
 		return
 	}
 	h.stampRoleAuthority(c, char)
@@ -100,7 +101,7 @@ func (h *Handler) GetCardData(c *gin.Context) {
 		data, err = h.service.GetCardData(id)
 	}
 	if err != nil {
-		util.ErrorResponse(c, response.NotFound, "角色卡不存在", nil)
+		util.ErrorResponse(c, response.NotFound, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, data)
@@ -110,7 +111,7 @@ func (h *Handler) UpdateCardData(c *gin.Context) {
 	id := c.Param("id")
 	var data card.CharacterCardData
 	if err := c.ShouldBindJSON(&data); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "无效角色卡数据", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	var err error
@@ -151,7 +152,7 @@ func (h *Handler) Update(c *gin.Context) {
 	id := c.Param("id")
 	var req UpdateCharacterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	var char *Character
@@ -243,7 +244,7 @@ func (h *Handler) Test(c *gin.Context) {
 	id := c.Param("id")
 	if scoped, ok := h.service.(readScopedCharacterService); ok {
 		if _, err := scoped.GetByIDForSpace(id, requestidentity.ResolveGin(c)); err != nil {
-			util.ErrorResponse(c, response.NotFound, "角色不存在", nil)
+			util.ErrorResponse(c, response.NotFound, err.Error(), nil)
 			return
 		}
 	}
@@ -251,7 +252,7 @@ func (h *Handler) Test(c *gin.Context) {
 		Message string `json:"message"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil || req.Message == "" {
-		util.ErrorResponse(c, response.InvalidParams, "消息不能为空", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	if h.chatTester == nil {
@@ -297,7 +298,7 @@ func (h *Handler) ExportPack(c *gin.Context) {
 func (h *Handler) ImportPackPreview(c *gin.Context) {
 	file, header, err := c.Request.FormFile("card")
 	if err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "缺少卡片文件（字段名: card）", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	defer file.Close()
@@ -321,7 +322,7 @@ func (h *Handler) ImportPackPreview(c *gin.Context) {
 func (h *Handler) ImportPackConfirm(c *gin.Context) {
 	file, header, err := c.Request.FormFile("card")
 	if err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "缺少卡片文件（字段名: card）", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	defer file.Close()
@@ -369,7 +370,9 @@ func (h *Handler) CreateFromTemplate(c *gin.Context) {
 	var body struct {
 		Name string `json:"name"`
 	}
-	_ = c.ShouldBindJSON(&body)
+	if err := c.ShouldBindJSON(&body); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	created, err := h.service.CreateFromTemplate(
 		c.Param("id"),
 		body.Name,
@@ -469,7 +472,7 @@ func (h *Handler) UploadAvatar(c *gin.Context) {
 	id := c.Param("id")
 	file, header, err := c.Request.FormFile("avatar")
 	if err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "缺少头像文件", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	defer file.Close()

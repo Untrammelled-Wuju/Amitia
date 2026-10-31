@@ -66,8 +66,9 @@ function httpRequest(
 function getAuthHeaders(): Record<string, string> {
   try {
     return getLocalAdminHeaders();
-  } catch {
-    return {};
+  } catch (error) {
+  console.error("[original-error]", error);
+return {};
   }
 }
 
@@ -82,8 +83,9 @@ export async function getMeshIdentity(): Promise<DeviceMeshLocalIdentity | null>
     );
     if (res.status !== 200) return null;
     return JSON.parse(res.data) as DeviceMeshLocalIdentity;
-  } catch {
-    return null;
+  } catch (error) {
+  console.error("[original-error]", error);
+return null;
   }
 }
 
@@ -142,8 +144,9 @@ export async function getMeshCloudAuth(): Promise<DeviceMeshCloudAuth | null> {
     const parsed = JSON.parse(res.data) as DeviceMeshCloudAuth;
     if (!parsed.authorization?.startsWith("AmitiaDevice ")) return null;
     return parsed;
-  } catch {
-    return null;
+  } catch (error) {
+  console.error("[original-error]", error);
+return null;
   }
 }
 
@@ -158,8 +161,9 @@ export async function getMeshStatus(): Promise<DeviceMeshStatusResponse | null> 
     );
     if (res.status !== 200) return null;
     return JSON.parse(res.data) as DeviceMeshStatusResponse;
-  } catch {
-    return null;
+  } catch (error) {
+  console.error("[original-error]", error);
+return null;
   }
 }
 
@@ -176,7 +180,9 @@ export async function postMeshBootstrap(req: DeviceMeshBootstrapRequest): Promis
     try {
       const errBody = JSON.parse(res.data) as { message?: string };
       if (errBody.message) message = errBody.message;
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
     throw new Error(message);
   }
   return JSON.parse(res.data) as DeviceMeshBootstrapResponse;
@@ -191,8 +197,9 @@ export async function deleteMeshCredential(): Promise<void> {
       undefined,
       getAuthHeaders(),
     );
-  } catch {
-  }
+  } catch (error) {
+  console.error("[original-error]", error);
+}
 }
 
 
@@ -275,12 +282,15 @@ export async function publishLocalVoiceASRFinal(
     try {
       const parsed = JSON.parse(res.data) as { error?: string; message?: string };
       message = parsed.error || parsed.message || message;
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
     throw new Error(message);
   }
   try {
     return JSON.parse(res.data) as { accepted: boolean; eventId: string; eventType: string };
-  } catch {
-    return { accepted: true, eventId, eventType: "voice.asr.final" };
+  } catch (error) {
+  console.error("[original-error]", error);
+return { accepted: true, eventId, eventType: "voice.asr.final" };
   }
 }

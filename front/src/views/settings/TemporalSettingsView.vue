@@ -535,10 +535,13 @@ async function loadProfile() {
     Object.assign(profile, await getTemporalProfile());
     try {
       Object.assign(quietHours, JSON.parse(profile.quietHoursJson || "{}"));
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
     await detectDeviceTimezone(true);
-  } catch {
-    ElMessage.error("加载时间设置失败");
+  } catch (error) {
+  console.error("[original-error]", error);
+ElMessage.error(error instanceof Error ? error.message : String(error));
   } finally {
     loading.value = false;
   }
@@ -555,8 +558,9 @@ async function saveProfile() {
     Object.assign(profile, await updateTemporalProfile(profile));
     ElMessage.success("时间设置已保存");
     await loadSnapshot();
-  } catch {
-    ElMessage.error("保存失败，请检查时区格式");
+  } catch (error) {
+  console.error("[original-error]", error);
+ElMessage.error(error instanceof Error ? error.message : String(error));
   } finally {
     saving.value = false;
   }
@@ -576,8 +580,9 @@ async function detectDeviceTimezone(silent = false) {
   try {
     Object.assign(profile, await suggestTemporalTimezone(zone));
     if (!silent) ElMessage.info("已生成待确认时区建议");
-  } catch {
-    if (!silent) ElMessage.error("时区检测失败");
+  } catch (error) {
+  console.error("[original-error]", error);
+if (!silent) ElMessage.error(error instanceof Error ? error.message : String(error));
   }
 }
 async function resolveSuggestion(accept: boolean) {
@@ -593,16 +598,18 @@ async function resolveSuggestion(accept: boolean) {
       sessionStorage.setItem(`temporal-timezone-rejected:${zone}`, "1");
     ElMessage.success(accept ? "已更新时区" : "已保留当前时区");
     await loadSnapshot();
-  } catch {
-    ElMessage.error("处理时区建议失败");
+  } catch (error) {
+  console.error("[original-error]", error);
+ElMessage.error(error instanceof Error ? error.message : String(error));
   }
 }
 async function loadSnapshot() {
   snapshotLoading.value = true;
   try {
     snapshot.value = await getTemporalSnapshot();
-  } catch {
-    snapshot.value = null;
+  } catch (error) {
+  console.error("[original-error]", error);
+snapshot.value = null;
   } finally {
     snapshotLoading.value = false;
   }
@@ -611,8 +618,9 @@ async function loadAnchors() {
   anchorsLoading.value = true;
   try {
     anchors.value = await listTemporalAnchors();
-  } catch {
-    ElMessage.error("加载时间锚点失败");
+  } catch (error) {
+  console.error("[original-error]", error);
+ElMessage.error(error instanceof Error ? error.message : String(error));
   } finally {
     anchorsLoading.value = false;
   }
@@ -635,8 +643,9 @@ async function saveAnchor() {
     ElMessage.success("时间锚点已保存");
     anchorDialogVisible.value = false;
     await loadAnchors();
-  } catch {
-    ElMessage.error("保存时间锚点失败");
+  } catch (error) {
+  console.error("[original-error]", error);
+ElMessage.error(error instanceof Error ? error.message : String(error));
   } finally {
     anchorSaving.value = false;
   }
@@ -652,7 +661,7 @@ async function removeAnchor(anchor: TemporalAnchor) {
     ElMessage.success("已删除");
     await loadAnchors();
   } catch (error) {
-    if (error !== "cancel" && error !== "close") ElMessage.error("删除失败");
+    if (error !== "cancel" && error !== "close") ElMessage.error(error instanceof Error ? error.message : String(error));
   }
 }
 async function confirmAnchor(anchor: TemporalAnchor) {
@@ -660,8 +669,9 @@ async function confirmAnchor(anchor: TemporalAnchor) {
     await confirmTemporalAnchor(anchor.id, anchor.characterId);
     ElMessage.success("候选锚点已确认");
     await loadAnchors();
-  } catch {
-    ElMessage.error("确认失败");
+  } catch (error) {
+  console.error("[original-error]", error);
+ElMessage.error(error instanceof Error ? error.message : String(error));
   }
 }
 function formatCivil(value: TemporalSnapshot["userTime"]) {

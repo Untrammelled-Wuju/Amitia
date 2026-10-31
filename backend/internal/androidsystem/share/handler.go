@@ -27,12 +27,12 @@ type SharePolicy struct {
 
 func DefaultSharePolicy() SharePolicy {
 	return SharePolicy{
-		MaxTextBytes:         MaxShareTextBytes,
-		MaxSubjectBytes:      MaxSubjectBytes,
-		MaxChooserTitleBytes: ChooserTitleMaxBytes,
-		MaxResources:         MaxResourcesCount,
+		MaxTextBytes:           MaxShareTextBytes,
+		MaxSubjectBytes:        MaxSubjectBytes,
+		MaxChooserTitleBytes:   ChooserTitleMaxBytes,
+		MaxResources:           MaxResourcesCount,
 		MaxSingleResourceBytes: MaxSingleResourceBytes,
-		MaxTotalBytes:        MaxTotalBytes,
+		MaxTotalBytes:          MaxTotalBytes,
 		AllowedRoots: map[resourceuri.ResourceRoot]struct{}{
 			resourceuri.ResourceRootWorkspace:   {},
 			resourceuri.ResourceRootAttachments: {},
@@ -173,10 +173,10 @@ func (h *ShareHandler) handleSend(ctx context.Context, request androidsystem.Sys
 		RequestID: request.RequestID,
 		Status:    "success",
 		Result: map[string]any{
-			"status":              result.Status,
-			"resourceCount":       result.ResourceCount,
-			"mimeType":            result.MIMEType,
-			"userActionRequired":  result.UserActionRequired,
+			"status":             result.Status,
+			"resourceCount":      result.ResourceCount,
+			"mimeType":           result.MIMEType,
+			"userActionRequired": result.UserActionRequired,
 		},
 	}
 }

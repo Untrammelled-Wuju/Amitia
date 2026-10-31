@@ -27,7 +27,7 @@ func registerMeshChatManagementRouter(mesh *gin.RouterGroup, services *AppServic
 			}
 			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20)
 			if err := c.ShouldBindJSON(&payload); err != nil || payload.ExpectedScope == nil || strings.TrimSpace(payload.CharacterID) == "" {
-				c.JSON(400, gin.H{"message": "聊天管理参数或归属版本无效"})
+				c.JSON(400, gin.H{"message": err.Error()})
 				return
 			}
 			payload.Operation = operation

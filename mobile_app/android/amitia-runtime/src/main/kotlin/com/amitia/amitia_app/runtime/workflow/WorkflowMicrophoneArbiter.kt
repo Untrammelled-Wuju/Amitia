@@ -48,7 +48,9 @@ object WorkflowMicrophoneArbiter {
                 if (remaining <= 0L) return false
                 try {
                     lock.wait(remaining)
-                } catch (_: InterruptedException) {
+                } catch (originalError51: InterruptedException) {
+                  originalError51.printStackTrace()
+
                     Thread.currentThread().interrupt()
                     return false
                 }

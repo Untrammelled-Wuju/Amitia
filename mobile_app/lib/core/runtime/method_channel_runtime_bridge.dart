@@ -57,8 +57,9 @@ class MethodChannelRuntimeBridge implements RuntimeBridge {
               Map<String, dynamic>.from(event),
             );
             _emitSnapshot(snapshot);
-          } catch (_) {
-            // A malformed event must not permanently tear down runtime
+          } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+// A malformed event must not permanently tear down runtime
             // observation; the next native snapshot can still recover state.
           }
         }
@@ -84,16 +85,18 @@ class MethodChannelRuntimeBridge implements RuntimeBridge {
   ) async {
     try {
       await old.cancel();
-    } catch (_) {
-      // Reconciliation below is the authority even if cancellation itself
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+// Reconciliation below is the authority even if cancellation itself
       // reports an error. Waiting here prevents old native onCancel from
       // racing a replacement onListen and tearing down the new subscription.
     }
     if (_disposed) return;
     try {
       await _reconcileSnapshotAfterStreamLoss();
-    } catch (_) {
-      // Snapshot reconciliation is best-effort. A malformed/transient method
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+// Snapshot reconciliation is best-effort. A malformed/transient method
       // response must never disable EventChannel recovery permanently.
     } finally {
       _scheduleEventReconnect();
@@ -162,8 +165,9 @@ class MethodChannelRuntimeBridge implements RuntimeBridge {
       return null;
     } on MissingPluginException {
       return null;
-    } catch (_) {
-      // Treat malformed/forward-incompatible payloads as bridge unavailable
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+// Treat malformed/forward-incompatible payloads as bridge unavailable
       // rather than letting bootstrap fail with an uncaught TypeError.
       return null;
     }
@@ -558,8 +562,9 @@ class MethodChannelRuntimeBridge implements RuntimeBridge {
       return null;
     } on MissingPluginException {
       return null;
-    } catch (_) {
-      return null;
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return null;
     }
   }
 

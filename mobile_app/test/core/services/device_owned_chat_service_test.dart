@@ -33,6 +33,7 @@ class _OwnedApi implements BackendServiceApi {
   final pages = <Map<String, dynamic>>[];
   final queries = <Map<String, dynamic>>[];
   Map<String, dynamic>? streamRequest;
+  Stream<List<int>> Function(Map<String, dynamic> request)? streamHandler;
   String queryPath = '';
   List<Map<String, dynamic>> streamEvents = [];
 
@@ -146,6 +147,7 @@ class _OwnedApi implements BackendServiceApi {
     CancelToken? cancelToken,
   }) async {
     streamRequest = Map<String, dynamic>.from(data as Map);
+    if (streamHandler != null) return streamHandler!(streamRequest!);
     return bytes(streamEvents);
   }
 
@@ -1783,5 +1785,89 @@ void main() {
         throwsStateError,
       );
     }
+  });
+
+  test('创建群聊时将项目归属写入请求', () async {
+    final api = _OwnedApi();
+    api.editAck = {
+      'saved': true,
+      'group': {
+        'conversationId': 'conversation-project-group',
+        'conversationRoleId': 'role-a',
+        'roleOwnerId': 'a',
+        'title': '新群聊',
+        'membershipRevision': 1,
+        'settingsRevision': 1,
+        'groupSettings': {'allowCharacterMentions': false, 'maxAutoReplies': 6},
+        'members': <Map<String, dynamic>>[],
+      },
+      'acknowledgement': {'ownerId': 'a'},
+    };
+    final service = DeviceOwnedChatService(api);
+
+    final group = await service.createGroupConversation(
+      characterId: 'role-a',
+      projectId: 'project-a',
+      members: [
+        {'characterId': 'role-b', 'shareHistory': false},
+      ],
+    );
+
+    expect(api.postPath, '/api/device-mesh/v1/business/conversations/group');
+    expect(api.editRequest?['projectId'], 'project-a');
+    expect(group.conversationId, contains('conversation-project-group'));
+  });
+
+  test('不同会话的 Owned 消息流可以同时执行', () async {
+    final api = _OwnedApi();
+    api.streamHandler = (request) {
+      final requestId = request['requestId'].toString();
+      final conversationId = (request['conversationId'] ?? 'chat').toString();
+      final streamScope = {...scope(), 'requestId': requestId};
+      return bytes([
+        {
+          'type': 'started',
+          'conversationId': conversationId,
+          'executionScope': streamScope,
+        },
+        {
+          'type': 'completed',
+          'data': {
+            'saved': true,
+            'requestId': requestId,
+            'conversationId': conversationId,
+            'executionScope': streamScope,
+            'reply': request['message'],
+          },
+        },
+      ]);
+    };
+    final service = DeviceOwnedChatService(api);
+    await service.refresh();
+
+    final results = await Future.wait([
+      service
+          .send(
+            requestId: 'request-a',
+            message: 'A',
+            conversationId: 'conversation-a',
+            characterId: 'role-a',
+          )
+          .toList(),
+      service
+          .send(
+            requestId: 'request-b',
+            message: 'B',
+            conversationId: 'conversation-b',
+            characterId: 'role-a',
+          )
+          .toList(),
+    ]);
+
+    expect(results, hasLength(2));
+    expect(
+      results.every((events) => events.last['type'] == 'completed'),
+      isTrue,
+    );
   });
 }

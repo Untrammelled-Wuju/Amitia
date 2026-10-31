@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"fmt"
+	amitialog "log"
 	"sync"
 )
 
@@ -169,7 +170,9 @@ func (r *WorkflowRegistry) SetEnabled(id string, enabled bool) error {
 	r.items[id] = item
 	if r.store != nil {
 		ctx := context.Background()
-		_ = r.store.SetEnabled(ctx, id, enabled)
+		if err := r.store.SetEnabled(ctx, id, enabled); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return nil
 }

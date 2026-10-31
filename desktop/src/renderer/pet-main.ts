@@ -28,8 +28,9 @@ function resolveResourceUrl(relativePath: string, configUrl: string): string {
     }
     const resolved = new URL(relativePath, configUrl).href;
     return resolved;
-  } catch {
-    return relativePath;
+  } catch (error) {
+  console.error("[original-error]", error);
+return relativePath;
   }
 }
 
@@ -143,8 +144,9 @@ function sendSnapshotIfChanged(
   lastSnapshotSentAt = Date.now();
   try {
     api.reportSnapshot(snapshot);
-  } catch {
-    void 0;
+  } catch (error) {
+  console.error("[original-error]", error);
+void 0;
   }
 }
 
@@ -424,8 +426,9 @@ async function main(): Promise<void> {
     };
     try {
       api.reportHitMask(hitMaskPayload);
-    } catch {
-      void 0;
+    } catch (error) {
+  console.error("[original-error]", error);
+void 0;
     }
   };
 
@@ -570,7 +573,7 @@ async function main(): Promise<void> {
     const reason = error instanceof Error ? error.message : String(error);
     console.error("[PetAnimation] initialization failed:", error);
     api.sendRuntimeInitFailed({
-      reason: reason.slice(0, 2048),
+      reason,
       packageRevision: currentPackageRevision || undefined,
     });
   }
@@ -581,10 +584,11 @@ main().catch((error) => {
   console.error("[PetAnimation] uncaught error:", error);
   try {
     window.petAnimationApi?.sendRuntimeInitFailed({
-      reason: reason.slice(0, 2048),
+      reason,
       packageRevision: currentPackageRevision || undefined,
     });
-  } catch {
-    void 0;
+  } catch (error) {
+  console.error("[original-error]", error);
+void 0;
   }
 });

@@ -133,7 +133,7 @@ test("selects platform-safe Docker reverse WebSocket fallbacks", async () => {
   assert.match(linux.warning, /host/)
   const windows = await resolveReverseWebSocketTarget(target, "win32")
   assert.equal(windows.url, "ws://host.docker.internal:6199/ws")
-  assert.equal(windows.warning, "")
+  assert.match(windows.warning, /ENOENT|missing-docker/)
 })
 
 test("starts a managed native SnowLuma process and captures its bootstrap password", async () => {

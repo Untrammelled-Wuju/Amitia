@@ -7,6 +7,7 @@ import (
 
 	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/pkg/platform"
+	amitialog "log"
 )
 
 type RuntimeOrchestrator struct {
@@ -316,7 +317,9 @@ func (o *RuntimeOrchestrator) StopAll(ctx context.Context) (err error) {
 	o.mu.Unlock()
 
 	for _, sc := range shutdownAware {
-		_ = sc.PrepareShutdown(ctx)
+		if err := sc.PrepareShutdown(ctx); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 
 	o.stopOnce.Do(func() {
@@ -575,7 +578,9 @@ func (o *RuntimeOrchestrator) rollback(failedID ComponentID) {
 		}
 		st.status.State = StateStopping
 		o.mu.Unlock()
-		_ = comp.Stop(context.Background())
+		if err := comp.Stop(context.Background()); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		o.mu.Lock()
 		st.stopped = true
 		st.status.State = StateStopped

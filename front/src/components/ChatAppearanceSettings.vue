@@ -44,31 +44,45 @@ const { messageStyle, setMessageStyle, userMessageGlass, setUserMessageGlass, us
 const { aiAvatarShape, aiAvatarRoundness, aiAvatarRadius, setAiAvatarShape } = useChatAppearancePreference();
 function updateAvatarShape(value: string | number | boolean | undefined) {
   try { setAiAvatarShape(value as AiAvatarShape); }
-  catch { ElMessage.error("保存 AI 头像形状失败，请重试"); }
+  catch (error) {
+  console.error("[original-error]", error);
+ElMessage.error(error instanceof Error ? error.message : String(error)); }
 }
 function updateAvatarRoundness(value: number | number[]) {
   try { setAiAvatarShape("custom", Number(value)); }
-  catch { ElMessage.error("保存 AI 头像圆润度失败，请重试"); }
+  catch (error) {
+  console.error("[original-error]", error);
+ElMessage.error(error instanceof Error ? error.message : String(error)); }
 }
 function updateName(value: string | number | boolean) {
   try { setAiNameEnabled(Boolean(value)); }
-  catch { ElMessage.error("保存 AI 名称设置失败，请重试"); }
+  catch (error) {
+  console.error("[original-error]", error);
+ElMessage.error(error instanceof Error ? error.message : String(error)); }
 }
 function updateAvatar(value: string | number | boolean) {
   try { setAiAvatarEnabled(Boolean(value)); }
-  catch { ElMessage.error("保存 AI 头像设置失败，请重试"); }
+  catch (error) {
+  console.error("[original-error]", error);
+ElMessage.error(error instanceof Error ? error.message : String(error)); }
 }
 function updateWaterGlass(value: string | number | boolean) {
   try { setUserMessageWaterGlass(Boolean(value)); }
-  catch { ElMessage.error("保存用户消息水玻璃设置失败，请重试"); }
+  catch (error) {
+  console.error("[original-error]", error);
+ElMessage.error(error instanceof Error ? error.message : String(error)); }
 }
 function updateGlass(value: string | number | boolean) {
   try { setUserMessageGlass(Boolean(value)); }
-  catch { ElMessage.error("保存用户消息磨砂玻璃设置失败，请重试"); }
+  catch (error) {
+  console.error("[original-error]", error);
+ElMessage.error(error instanceof Error ? error.message : String(error)); }
 }
 function update(value: string | number | boolean | undefined) {
   try { setMessageStyle(value as ChatMessageStyle); }
-  catch { ElMessage.error("保存聊天界面风格失败，请重试"); }
+  catch (error) {
+  console.error("[original-error]", error);
+ElMessage.error(error instanceof Error ? error.message : String(error)); }
 }
 </script>
 

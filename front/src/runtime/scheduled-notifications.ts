@@ -39,16 +39,23 @@ export async function deliverScheduledBrowserNotification(envelope: ScheduledBro
   const payload = envelope.payload;
   try {
     const notification = new Notification(String(payload.title || 'Amitia'), { body: String(payload.body || ''), tag: envelope.requestId, silent: payload.sound === false });
-    notification.onshow = () => { void delivery.acknowledge('displayed').catch(() => {}); };
-    notification.onerror = () => { void delivery.acknowledge('display_failed').catch(() => {}); };
+    notification.onshow = () => { void delivery.acknowledge('displayed').catch((error) => {
+  console.error("[original-error]", error);
+}); };
+    notification.onerror = () => { void delivery.acknowledge('display_failed').catch((error) => {
+  console.error("[original-error]", error);
+}); };
     notification.onclick = () => {
-      void delivery.acknowledge('clicked').catch(() => {});
+      void delivery.acknowledge('clicked').catch((error) => {
+  console.error("[original-error]", error);
+});
       notification.close();
       window.focus();
       const conversation = String(payload.conversationId || '');
       if (conversation) delivery.navigate('/chat?conversationId=' + encodeURIComponent(conversation) + '&characterId=' + encodeURIComponent(String(payload.characterId || '')) + '&ownerId=' + encodeURIComponent(String(payload.ownerId || '')));
     };
-  } catch {
-    await delivery.acknowledge('display_failed');
+  } catch (error) {
+  console.error("[original-error]", error);
+await delivery.acknowledge('display_failed');
   }
 }

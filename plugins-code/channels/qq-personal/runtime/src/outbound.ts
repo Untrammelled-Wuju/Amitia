@@ -58,7 +58,10 @@ export async function synthesizeVoice(
     body: JSON.stringify({ text }),
     signal: AbortSignal.timeout(600000),
   })
-  const body = await response.json().catch(() => ({})) as {
+  const body = await response.json().catch((error) => {
+    console.error("[original-error]", error)
+    return {}
+  }) as {
     code?: number
     msg?: string
     data?: { audioUrl?: string }

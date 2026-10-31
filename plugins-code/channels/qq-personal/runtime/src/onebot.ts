@@ -130,15 +130,18 @@ export class OneBotBridge {
         const accountId = String((data as Record<string, unknown>)?.user_id || "")
         if (accountId && this.sockets.has(socket)) this.accountBySocket.set(socket, accountId)
       })
-      .catch(() => {})
+      .catch((error) => {
+  console.error("[original-error]", error);
+})
   }
 
   private handleMessage(socket: WebSocket, raw: string): void {
     let payload: OneBotEvent | OneBotResponse
     try {
       payload = JSON.parse(raw)
-    } catch {
-      return
+    } catch (error) {
+  console.error("[original-error]", error);
+return
     }
     this.lastSeenAt = new Date().toISOString()
     const echo = String((payload as OneBotResponse).echo || "")
@@ -163,7 +166,9 @@ export class OneBotBridge {
     const selfId = String(event.self_id || "")
     if (selfId) this.accountBySocket.set(socket, selfId)
     if (this.handler && event.post_type === "message") {
-      void this.handler(event).catch(() => {})
+      void this.handler(event).catch((error) => {
+  console.error("[original-error]", error);
+})
     }
   }
 

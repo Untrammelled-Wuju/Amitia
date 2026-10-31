@@ -77,9 +77,9 @@ func (in *inspector) Inspect(resourceURI string) (*GGUFModelManifest, error) {
 }
 
 type splitMetadata struct {
-	Count      int
-	Index      int
-	TotalSize  int64
+	Count       int
+	Index       int
+	TotalSize   int64
 	TensorCount uint64
 }
 

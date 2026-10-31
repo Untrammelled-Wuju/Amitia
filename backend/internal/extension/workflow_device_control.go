@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
+	amitialog "log"
 )
 
 type WorkflowDeviceDescriptor struct {
@@ -259,7 +260,9 @@ func (api *WorkflowAPI) cacheDeviceWorkflowCatalog(ctx context.Context, spaceID,
 			LastSeen:     now,
 		})
 	}
-	_ = repo.ReplaceDevice(ctx, spaceID, deviceID, items)
+	if err := repo.ReplaceDevice(ctx, spaceID, deviceID, items); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (api *WorkflowAPI) getDeviceWorkflow(c *gin.Context) {
@@ -288,7 +291,7 @@ func (api *WorkflowAPI) createDeviceWorkflow(c *gin.Context) {
 	var def json.RawMessage
 	raw, err := c.GetRawData()
 	if err != nil || len(raw) == 0 || !json.Valid(raw) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "valid workflow definition is required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	def = raw
@@ -303,7 +306,7 @@ func (api *WorkflowAPI) createDeviceWorkflow(c *gin.Context) {
 func (api *WorkflowAPI) updateDeviceWorkflow(c *gin.Context) {
 	raw, err := c.GetRawData()
 	if err != nil || len(raw) == 0 || !json.Valid(raw) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "valid workflow definition is required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	var object map[string]any
@@ -509,7 +512,9 @@ func (api *WorkflowAPI) pauseDeviceWorkflowRun(c *gin.Context) {
 	var body struct {
 		Reason string `json:"reason"`
 	}
-	_ = c.ShouldBindJSON(&body)
+	if err := c.ShouldBindJSON(&body); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	result, ok := api.invokeDeviceWorkflow(c, WorkflowMeshRunPause, map[string]any{"runId": c.Param("runId"), "reason": body.Reason})
 	if !ok {
 		return

@@ -21,6 +21,7 @@ import (
 	"github.com/u-ai/backend/internal/localmodel/gguf"
 	"github.com/u-ai/backend/internal/media"
 	"github.com/u-ai/backend/internal/runtimehost"
+	amitialog "log"
 )
 
 type llamaCppEmbeddingBackend struct {
@@ -207,7 +208,9 @@ func (r *llamaEmbeddingRuntime) startServer(ctx context.Context) error {
 
 func (r *llamaEmbeddingRuntime) cleanupModel() {
 	if r.modelCleanup != nil {
-		_ = r.modelCleanup()
+		if err := r.modelCleanup(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		r.modelCleanup = nil
 		r.modelPath = ""
 	}
@@ -219,8 +222,12 @@ func (r *llamaEmbeddingRuntime) stopServer() {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	_ = r.supervisor.Stop(ctx, r.processID)
-	_ = r.supervisor.Unregister(r.processID)
+	if err := r.supervisor.Stop(ctx, r.processID); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := r.supervisor.Unregister(r.processID); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	if r.port > 0 {
 		releasePort(r.port)
 		r.port = 0
@@ -492,7 +499,7 @@ func (r *llamaEmbeddingRuntime) embeddingRequest(ctx context.Context, inputs []s
 	}
 
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("embedding returned %d: %s", resp.StatusCode, truncateBytes(body, 512))
+		return nil, fmt.Errorf("embedding returned %d: %s", resp.StatusCode, string(body))
 	}
 
 	return parseEmbeddingResponse(body)

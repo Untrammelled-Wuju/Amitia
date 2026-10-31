@@ -14,16 +14,16 @@ func NewSubscriptionID() SubscriptionID {
 }
 
 type Subscription struct {
-	ID          SubscriptionID
-	RuntimeID   domain.RuntimeInstanceID
-	ServiceID   domain.ServiceID
-	ChannelID   domain.ChannelID
-	Cursor      Cursor
-	Generation  StreamGeneration
-	Queue       *BoundedQueue
-	mu          sync.Mutex
-	closed      bool
-	closedCh    chan struct{}
+	ID         SubscriptionID
+	RuntimeID  domain.RuntimeInstanceID
+	ServiceID  domain.ServiceID
+	ChannelID  domain.ChannelID
+	Cursor     Cursor
+	Generation StreamGeneration
+	Queue      *BoundedQueue
+	mu         sync.Mutex
+	closed     bool
+	closedCh   chan struct{}
 }
 
 func NewSubscription(id SubscriptionID, runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID, channelID domain.ChannelID, generation StreamGeneration, queueCap int) *Subscription {

@@ -65,7 +65,7 @@ func (h *Handler) ReconciliationScan(c *gin.Context) {
 		Cursor   string `json:"cursor"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		util.ErrorResponse(c, 400, "invalid request body", nil)
+		util.ErrorResponse(c, 400, err.Error(), nil)
 		return
 	}
 	target := mindruntime.ReconciliationTarget(body.Target)
@@ -113,7 +113,7 @@ func (h *Handler) ReconciliationRepair(c *gin.Context) {
 		AutoRepair bool   `json:"autoRepair"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		util.ErrorResponse(c, 400, "invalid request body", nil)
+		util.ErrorResponse(c, 400, err.Error(), nil)
 		return
 	}
 	scan := h.reconciliation.GetScan(body.ScanID)

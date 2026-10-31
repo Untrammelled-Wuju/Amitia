@@ -905,7 +905,7 @@ func (e *BehaviorEngine) processInboxBatch(ctx context.Context) {
 				// Finalize the inbox row and any still-selected decision in one DB
 				// transaction. This prevents an orphaned selected decision after the
 				// event has already become terminal. Lease fencing remains mandatory.
-				if err := e.repo.MarkInboxDeadLetter(ctx, record.EventID, leaseToken, errorCode, truncateBehaviorError(processErr.Error()), e.clock.Now()); err != nil {
+				if err := e.repo.MarkInboxDeadLetter(ctx, record.EventID, leaseToken, errorCode, processErr.Error(), e.clock.Now()); err != nil {
 					if err != context.Canceled {
 						log.Warn("behavior engine: failed to dead-letter inbox event", map[string]interface{}{"eventId": record.EventID, "error": err.Error()})
 					}
@@ -913,7 +913,7 @@ func (e *BehaviorEngine) processInboxBatch(ctx context.Context) {
 				continue
 			}
 			retryAt := time.Now().UTC().Add(inboxRetryBackoff(record.AttemptCount))
-			if err := e.repo.MarkInboxRetry(ctx, record.EventID, leaseToken, errorCode, truncateBehaviorError(processErr.Error()), retryAt); err != nil {
+			if err := e.repo.MarkInboxRetry(ctx, record.EventID, leaseToken, errorCode, processErr.Error(), retryAt); err != nil {
 				log.Warn("behavior engine: failed to requeue inbox event", map[string]interface{}{"eventId": record.EventID, "error": err.Error()})
 			}
 			continue
@@ -1015,14 +1015,6 @@ func behaviorProcessingErrorCode(err error) string {
 		return be.Code
 	}
 	return "behavior_processing_failed"
-}
-
-func truncateBehaviorError(message string) string {
-	const maxLen = 1024
-	if len(message) <= maxLen {
-		return message
-	}
-	return message[:maxLen]
 }
 
 func hashContext(ctx *BehaviorContextSnapshot) string {

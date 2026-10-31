@@ -39,8 +39,9 @@ function syncNavigationState() {
     currentURL.value = element.getURL() || currentURL.value;
     canGoBack.value = element.canGoBack();
     canGoForward.value = element.canGoForward();
-  } catch {
-  }
+  } catch (error) {
+  console.error("[original-error]", error);
+}
 }
 
 function externalOpen() {
@@ -156,7 +157,10 @@ function releaseGuest() {
   lease.value = "";
   webview.value = null;
   if (host.value) host.value.replaceChildren();
-  if (currentLease) void window.amitiaDesktop?.releaseExternalWebUI?.(currentLease).catch(() => undefined);
+  if (currentLease) void window.amitiaDesktop?.releaseExternalWebUI?.(currentLease).catch((error) => {
+  console.error("[original-error]", error);
+  return undefined;
+});
 }
 
 onMounted(() => {

@@ -13,6 +13,7 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/packageformat"
 	"github.com/u-ai/backend/internal/desktoppet/release"
 	runtimev1 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v1"
+	amitialog "log"
 )
 
 type coordinatorReleaseValidator struct {
@@ -188,7 +189,9 @@ func (p *coordinatorRuntimePublisher) PublishRecenter(ctx context.Context, devic
 	}
 	currentSessionID, currentGeneration := targetConn.SessionSnapshot()
 	if targetConn.GetState() != runtimev1.ConnStateConnected || currentSessionID != targetSessionID || currentGeneration != targetGeneration {
-		_ = p.facade.Commands().MarkSuperseded(cmd.ID, "runtime session changed during recenter creation", time.Now().UTC())
+		if err := p.facade.Commands().MarkSuperseded(cmd.ID, "runtime session changed during recenter creation", time.Now().UTC()); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return "", fmt.Errorf("%w: runtime session changed while scheduling recenter", coordinator.ErrRuntimeUnavailable)
 	}
 	if cmd.RuntimeSessionID != targetSessionID {
@@ -257,7 +260,9 @@ func (p *coordinatorRuntimePublisher) PublishPlayAction(ctx context.Context, dev
 	}
 	currentSessionID, currentGeneration := targetConn.SessionSnapshot()
 	if targetConn.GetState() != runtimev1.ConnStateConnected || currentSessionID != targetSessionID || currentGeneration != targetGeneration {
-		_ = p.facade.Commands().MarkSuperseded(created.ID, "runtime session changed during play action creation", time.Now().UTC())
+		if err := p.facade.Commands().MarkSuperseded(created.ID, "runtime session changed during play action creation", time.Now().UTC()); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return fmt.Errorf("%w: runtime session changed while scheduling play action", coordinator.ErrRuntimeUnavailable)
 	}
 	return nil

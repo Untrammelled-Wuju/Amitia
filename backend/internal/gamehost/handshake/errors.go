@@ -9,18 +9,18 @@ import (
 type HandshakeErrorType string
 
 const (
-	HandshakeErrorRequired          HandshakeErrorType = "handshake_required"
-	HandshakeErrorTimeout           HandshakeErrorType = "handshake_timeout"
-	HandshakeErrorAlreadyCompleted  HandshakeErrorType = "handshake_already_completed"
-	HandshakeErrorIdentityMismatch  HandshakeErrorType = "peer_identity_mismatch"
-	HandshakeErrorRuntimeNotFound   HandshakeErrorType = "runtime_not_found"
-	HandshakeErrorServiceNotFound   HandshakeErrorType = "service_not_found"
-	HandshakeErrorProtocolMismatch  HandshakeErrorType = "protocol_mismatch"
+	HandshakeErrorRequired           HandshakeErrorType = "handshake_required"
+	HandshakeErrorTimeout            HandshakeErrorType = "handshake_timeout"
+	HandshakeErrorAlreadyCompleted   HandshakeErrorType = "handshake_already_completed"
+	HandshakeErrorIdentityMismatch   HandshakeErrorType = "peer_identity_mismatch"
+	HandshakeErrorRuntimeNotFound    HandshakeErrorType = "runtime_not_found"
+	HandshakeErrorServiceNotFound    HandshakeErrorType = "service_not_found"
+	HandshakeErrorProtocolMismatch   HandshakeErrorType = "protocol_mismatch"
 	HandshakeErrorCapabilityMismatch HandshakeErrorType = "capability_mismatch"
-	HandshakeErrorNamespaceInvalid  HandshakeErrorType = "namespace_invalid"
-	HandshakeErrorNamespaceConflict HandshakeErrorType = "namespace_conflict"
-	HandshakeErrorChannelInvalid    HandshakeErrorType = "channel_advertisement_invalid"
-	HandshakeErrorConnectionClosed  HandshakeErrorType = "connection_closed"
+	HandshakeErrorNamespaceInvalid   HandshakeErrorType = "namespace_invalid"
+	HandshakeErrorNamespaceConflict  HandshakeErrorType = "namespace_conflict"
+	HandshakeErrorChannelInvalid     HandshakeErrorType = "channel_advertisement_invalid"
+	HandshakeErrorConnectionClosed   HandshakeErrorType = "connection_closed"
 )
 
 type HandshakeError struct {

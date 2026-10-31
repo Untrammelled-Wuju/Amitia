@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	amitialog "log"
 	"sync"
 	"time"
 )
@@ -123,7 +124,9 @@ func (j *SideEffectJournal) RecordAttempt(nodeID string, attempt int, idempotenc
 		if persistCtx == nil {
 			persistCtx = context.Background()
 		}
-		_ = j.store.SaveSideEffect(persistCtx, record)
+		if err := j.store.SaveSideEffect(persistCtx, record); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 }
 

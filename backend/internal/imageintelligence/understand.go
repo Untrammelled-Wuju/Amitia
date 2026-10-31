@@ -40,7 +40,10 @@ func NewUnderstandProvider(visionSvc vision.Service) *UnderstandProvider {
 
 func (p *UnderstandProvider) Understand(ctx context.Context, req ImageUnderstandRequest, imageData []byte, summary ImageInputSummary) (*ImageUnderstandResult, *Error) {
 	cfg, err := p.visionSvc.GetActive()
-	if err != nil || cfg == nil {
+	if err != nil {
+		return nil, &Error{Code: ErrUnAvailable, Message: err.Error(), HTTPStatus: http.StatusServiceUnavailable}
+	}
+	if cfg == nil {
 		return nil, &Error{Code: ErrUnAvailable, Message: "no active vision provider configured", HTTPStatus: http.StatusServiceUnavailable}
 	}
 	if cfg.ApiKey == "" && !cfg.IsLocal() {

@@ -2,6 +2,7 @@ package lifecycle
 
 import (
 	"context"
+	amitialog "log"
 	"sync"
 	"time"
 )
@@ -205,7 +206,9 @@ func (s *ShutdownCoordinator) Shutdown(ctx context.Context, reason ShutdownReaso
 		}
 		s.journal.RecordShutdown(entry)
 		if s.store != nil {
-			_ = s.store.PersistShutdown(ctx, entry)
+			if err := s.store.PersistShutdown(ctx, entry); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		if s.audit != nil {
 			s.audit.RecordShutdownEvent(ctx, ShutdownAuditEvent{

@@ -13,6 +13,7 @@ import (
 
 	"github.com/u-ai/backend/config"
 	securitymode "github.com/u-ai/backend/internal/security"
+	amitialog "log"
 )
 
 const localCredentialMinLength = 32
@@ -145,7 +146,9 @@ func ensureLocalCredential(tokenPath, configuredToken string) (string, error) {
 
 func atomicWriteCredentialIfDifferent(path, value string) error {
 	if existing, err := os.ReadFile(path); err == nil && strings.TrimSpace(string(existing)) == value {
-		_ = os.Chmod(path, 0o600)
+		if err := os.Chmod(path, 0o600); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil
 	}
 
@@ -164,9 +167,13 @@ func atomicWriteCredentialIfDifferent(path, value string) error {
 	tmpPath := file.Name()
 	cleanup := true
 	defer func() {
-		_ = file.Close()
+		if err := file.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		if cleanup {
-			_ = os.Remove(tmpPath)
+			if err := os.Remove(tmpPath); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}()
 

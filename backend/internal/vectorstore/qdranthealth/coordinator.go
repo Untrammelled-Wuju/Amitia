@@ -4,6 +4,7 @@ package qdranthealth
 
 import (
 	"context"
+	amitialog "log"
 	"sync"
 	"time"
 )
@@ -54,8 +55,12 @@ func (c *Coordinator) WaitReady(ctx context.Context) (Snapshot, error) {
 
 	if err != nil {
 		if c.controller != nil {
-			_ = c.controller.Stop(ctx)
-			_ = c.controller.ReleaseLease(ctx)
+			if err := c.controller.Stop(ctx); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
+			if err := c.controller.ReleaseLease(ctx); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		return snapshot, err
 	}

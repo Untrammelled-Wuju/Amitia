@@ -275,8 +275,9 @@ export function useImmersiveOnboarding() {
         modelStatusText.value = "未检测到可用模型";
         detectedModels.value = [];
       }
-    } catch {
-      modelReady.value = false;
+    } catch (error) {
+  console.error("[original-error]", error);
+modelReady.value = false;
       modelDetected.value = false;
       modelStatusText.value = "检测失败，请检查 Base URL 和 API Key";
       detectedModels.value = [];
@@ -310,8 +311,9 @@ const res = await post<any>("/api/model/detect-models", {
         visionDetected.value = false;
         visionStatusText.value = "未检测到可用视觉模型";
       }
-    } catch {
-      visionReady.value = false;
+    } catch (error) {
+  console.error("[original-error]", error);
+visionReady.value = false;
       visionDetected.value = false;
       visionStatusText.value = "检测失败，请检查接口地址和 API Key";
     } finally {
@@ -339,8 +341,9 @@ const res = await post<any>("/api/model/detect-models", {
       voiceReady.value = true;
       voiceDetected.value = true;
       voiceStatusText.value = "语音服务连接成功，可以继续";
-    } catch {
-      voiceReady.value = false;
+    } catch (error) {
+  console.error("[original-error]", error);
+voiceReady.value = false;
       voiceDetected.value = false;
       voiceStatusText.value = "语音服务测试失败，请检查配置";
     } finally {
@@ -373,8 +376,9 @@ const res = await post<any>("/api/model/detect-models", {
         vectorDetected.value = false;
         vectorStatusText.value = "未检测到可用向量模型";
       }
-    } catch {
-      vectorReady.value = false;
+    } catch (error) {
+  console.error("[original-error]", error);
+vectorReady.value = false;
       vectorDetected.value = false;
       vectorStatusText.value = "检测失败，请检查接口地址和 API Key";
     } finally {
@@ -422,7 +426,9 @@ const res = await post<any>("/api/model/detect-models", {
         identityAvatarUploaded.value = false;
         startIdentityTransition();
       })
-      .catch(() => {});
+      .catch((error) => {
+  console.error("[original-error]", error);
+});
   }
 
   function handleAvatarContinue() {
@@ -488,7 +494,9 @@ const res = await post<any>("/api/model/detect-models", {
         memoryAvatarUploaded.value = false;
         memoryComplete.value = true;
       })
-      .catch(() => {});
+      .catch((error) => {
+  console.error("[original-error]", error);
+});
   }
 
   function handleMemoryAvatarContinue() {

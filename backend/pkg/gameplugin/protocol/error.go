@@ -10,26 +10,26 @@ import (
 type ErrorCode string
 
 const (
-	ErrorInvalidRequest        ErrorCode = "invalid_request"
-	ErrorInvalidArgument       ErrorCode = "invalid_argument"
-	ErrorNotFound              ErrorCode = "not_found"
-	ErrorAlreadyExists         ErrorCode = "already_exists"
-	ErrorUnsupported           ErrorCode = "unsupported"
+	ErrorInvalidRequest  ErrorCode = "invalid_request"
+	ErrorInvalidArgument ErrorCode = "invalid_argument"
+	ErrorNotFound        ErrorCode = "not_found"
+	ErrorAlreadyExists   ErrorCode = "already_exists"
+	ErrorUnsupported     ErrorCode = "unsupported"
 
 	ErrorProtocolMismatch      ErrorCode = "protocol_mismatch"
 	ErrorCapabilityUnsupported ErrorCode = "capability_unsupported"
 
-	ErrorRuntimeUnavailable    ErrorCode = "runtime_unavailable"
-	ErrorServiceUnavailable    ErrorCode = "service_unavailable"
-	ErrorInvalidRuntimeState   ErrorCode = "invalid_runtime_state"
+	ErrorRuntimeUnavailable  ErrorCode = "runtime_unavailable"
+	ErrorServiceUnavailable  ErrorCode = "service_unavailable"
+	ErrorInvalidRuntimeState ErrorCode = "invalid_runtime_state"
 
-	ErrorPermissionDenied      ErrorCode = "permission_denied"
-	ErrorResourceExhausted     ErrorCode = "resource_exhausted"
+	ErrorPermissionDenied  ErrorCode = "permission_denied"
+	ErrorResourceExhausted ErrorCode = "resource_exhausted"
 
-	ErrorTimeout               ErrorCode = "timeout"
-	ErrorCancelled             ErrorCode = "cancelled"
+	ErrorTimeout   ErrorCode = "timeout"
+	ErrorCancelled ErrorCode = "cancelled"
 
-	ErrorInternal              ErrorCode = "internal"
+	ErrorInternal ErrorCode = "internal"
 )
 
 type ProtocolError struct {

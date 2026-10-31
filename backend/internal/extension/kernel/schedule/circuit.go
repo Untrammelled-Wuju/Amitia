@@ -2,6 +2,7 @@ package schedule
 
 import (
 	"context"
+	amitialog "log"
 )
 
 type CircuitService struct {
@@ -94,7 +95,9 @@ func (c *CircuitService) GetState(ctx context.Context, scheduleID string) (Circu
 		if c.clock.Now().Sub(*record.OpenedAt) >= c.config.CircuitRecoveryAfter {
 			record.State = CircuitStateHalfOpen
 			record.UpdatedAt = c.clock.Now().UTC()
-			_ = c.store.PutCircuit(ctx, record)
+			if err := c.store.PutCircuit(ctx, record); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}
 	return record.State, nil

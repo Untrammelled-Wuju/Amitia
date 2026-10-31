@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	amitialog "log"
 )
 
 type Repository struct {
@@ -2156,14 +2157,18 @@ func (r *Repository) DeleteBenchmarkRunsBefore(tenantID string, before time.Time
 func benchmarkRunSummaryFromRecord(record BenchmarkRunRecord) BenchmarkRunSummary {
 	scenarios := map[string]int{}
 	if strings.TrimSpace(record.ScenarioCountsJSON) != "" {
-		_ = json.Unmarshal([]byte(record.ScenarioCountsJSON), &scenarios)
+		if err := json.Unmarshal([]byte(record.ScenarioCountsJSON), &scenarios); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	if scenarios == nil {
 		scenarios = map[string]int{}
 	}
 	violations := []string{}
 	if strings.TrimSpace(record.ViolationsJSON) != "" {
-		_ = json.Unmarshal([]byte(record.ViolationsJSON), &violations)
+		if err := json.Unmarshal([]byte(record.ViolationsJSON), &violations); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	if violations == nil {
 		violations = []string{}

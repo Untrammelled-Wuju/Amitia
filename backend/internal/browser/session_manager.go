@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	amitialog "log"
 )
 
 type ResolvedBrowserSession struct {
@@ -283,7 +284,9 @@ func (m *productionSessionManager) closeAll(ctx context.Context, generation uint
 		if record.runtimeGeneration != generation {
 			continue
 		}
-		_ = m.backend.DisposeBrowserContext(ctx, record.contextID)
+		if err := m.backend.DisposeBrowserContext(ctx, record.contextID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		m.store.remove(record.info.SessionID)
 	}
 	return nil

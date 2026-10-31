@@ -22,13 +22,13 @@ type DecodeOptions struct {
 }
 
 type NormalizedImage struct {
-	ResourceURI  string `json:"resourceUri"`
-	MIMEType     string `json:"mimeType"`
-	Width        int    `json:"width"`
-	Height       int    `json:"height"`
-	SizeBytes    int64  `json:"sizeBytes"`
-	Normalized   bool   `json:"normalized"`
-	SourceURI    string `json:"sourceUri,omitempty"`
+	ResourceURI string `json:"resourceUri"`
+	MIMEType    string `json:"mimeType"`
+	Width       int    `json:"width"`
+	Height      int    `json:"height"`
+	SizeBytes   int64  `json:"sizeBytes"`
+	Normalized  bool   `json:"normalized"`
+	SourceURI   string `json:"sourceUri,omitempty"`
 }
 
 type ResolvedResource struct {

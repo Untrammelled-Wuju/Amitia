@@ -32,7 +32,7 @@ SPDX-License-Identifier: AGPL-3.0-only
             </el-select>
           </el-form-item>
           <el-form-item label="格式">
-            <el-select v-model="exportForm.profile">
+            <el-select v-model="exportForm.profile" @change="handleExportProfileChange">
               <el-option label="可迁移格式" value="portable" />
               <el-option label="完整格式" value="full" />
             </el-select>
@@ -43,7 +43,9 @@ SPDX-License-Identifier: AGPL-3.0-only
             </el-select>
           </el-form-item>
         </div>
-        <el-checkbox v-model="exportEncrypted">使用口令加密导出包</el-checkbox>
+        <el-checkbox v-model="exportIncludeModelAssets">包含已导入的本地模型文件</el-checkbox>
+        <el-checkbox v-model="exportIncludeSecrets" @change="handleIncludeSecretsChange">包含 API Key、令牌等敏感配置</el-checkbox>
+        <el-checkbox v-model="exportEncrypted" :disabled="exportIncludeSecrets">使用口令加密导出包</el-checkbox>
         <div v-if="exportEncrypted" class="passphrase-grid">
           <el-input v-model="exportPassphrase" type="password" show-password autocomplete="new-password" placeholder="设置导出口令" />
           <el-input v-model="exportPassphraseConfirm" type="password" show-password autocomplete="new-password" placeholder="再次输入口令" />
@@ -69,22 +71,12 @@ SPDX-License-Identifier: AGPL-3.0-only
       </div>
     </el-card>
 
-    <el-card shadow="never" class="section-card">
-      <template #header><span>配置迁移</span></template>
-      <p class="page-summary">配置迁移只同步应用设置，不包含角色、聊天和记忆。</p>
-      <div class="data-actions">
-        <el-button :loading="configBusy" @click="exportConfig"><el-icon><Download /></el-icon>导出配置</el-button>
-        <el-upload :auto-upload="false" :show-file-list="false" :on-change="handleConfigImport" accept=".json">
-          <el-button :loading="configBusy"><el-icon><Upload /></el-icon>导入配置</el-button>
-        </el-upload>
-      </div>
-    </el-card>
-
     <el-dialog v-model="exportPreviewVisible" title="确认导出内容" width="720px">
       <div v-if="exportPreview" class="preview-summary">
         <p>
           范围 {{ scopeLabel(exportPreview.scope) }}，格式 {{ exportPreview.profile }}，
-          预计 {{ formatBytes(exportPreview.estimatedSize) }}，{{ exportPreview.encrypted ? "已启用加密" : "未加密" }}。
+          预计 {{ formatBytes(exportPreview.estimatedSize) }}，{{ exportPreview.encrypted ? "已启用加密" : "未加密" }}，
+          {{ exportPreview.includeSecrets ? "包含敏感配置" : "不含敏感配置" }}。
         </p>
         <el-table :data="exportPreview.components" max-height="420">
           <el-table-column prop="logicalName" label="组件" min-width="220" />
@@ -129,7 +121,7 @@ SPDX-License-Identifier: AGPL-3.0-only
               <el-radio value="replace">覆盖同一标识数据</el-radio>
             </el-radio-group>
           </el-form-item>
-          <el-checkbox v-model="importActivate">导入后启用角色和配置</el-checkbox>
+          <el-checkbox v-model="importActivate">导入后启用角色和可用配置</el-checkbox>
         </el-form>
       </template>
       <template #footer>
@@ -144,8 +136,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { computed, onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { apiClient } from "@/composables/useApi";
-import { ElMessage, ElMessageBox } from "element-plus";
-import { Delete, Download, FolderOpened, Loading, Upload } from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
+import { Delete, FolderOpened, Loading, Upload } from "@element-plus/icons-vue";
 import {
   cancelDataPortabilityImport,
   commitDataPortabilityImport,
@@ -171,6 +163,8 @@ const exportForm = reactive<{ scope: DataPortabilityScope; profile: DataPortabil
   characterId: "",
 });
 const exportEncrypted = ref(false);
+const exportIncludeModelAssets = ref(true);
+const exportIncludeSecrets = ref(false);
 const exportPassphrase = ref("");
 const exportPassphraseConfirm = ref("");
 const exportPreviewing = ref(false);
@@ -185,10 +179,10 @@ const importDialogVisible = ref(false);
 const importPreview = ref<DataPortabilityImportPreview | null>(null);
 const importPolicy = ref<DataPortabilityCollisionPolicy>("duplicate");
 const importActivate = ref(false);
-const configBusy = ref(false);
 
 const exportReady = computed(() => {
   if (exportForm.scope === "character" && !exportForm.characterId) return false;
+  if (exportIncludeSecrets.value && !exportEncrypted.value) return false;
   if (!exportEncrypted.value) return true;
   return exportPassphrase.value.length >= 8 && exportPassphrase.value === exportPassphraseConfirm.value;
 });
@@ -209,6 +203,16 @@ function scopeLabel(scope: string) {
   return ({ all: "全部数据", character: "角色及关联数据", settings: "设置与集成", memory: "记忆" } as Record<string, string>)[scope] || scope;
 }
 
+function handleExportProfileChange(value: string) {
+  if (value !== "full") return;
+  exportIncludeSecrets.value = true;
+  exportEncrypted.value = true;
+}
+
+function handleIncludeSecretsChange(value: string | boolean | number) {
+  if (Boolean(value)) exportEncrypted.value = true;
+}
+
 async function loadStorageInfo() {
   storageLoading.value = true;
   try {
@@ -223,8 +227,9 @@ async function loadCharacters() {
   try {
     const { data } = await apiClient.get("/api/characters");
     characters.value = Array.isArray(data) ? data : [];
-  } catch {
-    characters.value = [];
+  } catch (error) {
+  console.error("[original-error]", error);
+characters.value = [];
   }
 }
 
@@ -234,6 +239,8 @@ function exportPayload() {
     profile: exportForm.profile,
     characterId: exportForm.scope === "character" ? exportForm.characterId : "",
     passphrase: exportEncrypted.value ? exportPassphrase.value : "",
+    includeModelAssets: exportIncludeModelAssets.value,
+    includeSecrets: exportIncludeSecrets.value,
   };
 }
 
@@ -309,50 +316,9 @@ async function discardImportTicket() {
   if (!ticketId) return;
   try {
     await cancelDataPortabilityImport(ticketId);
-  } catch {}
+  } catch (error) {
+  console.error("[original-error]", error);
 }
-
-async function exportConfig() {
-  configBusy.value = true;
-  try {
-    const { data } = await apiClient.post("/api/config/export");
-    if (!data?.exported) throw new Error(data?.error || "配置导出失败");
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = "amitia-config.json";
-    anchor.click();
-    URL.revokeObjectURL(url);
-    ElMessage.success("配置已导出");
-  } catch (error: any) {
-    ElMessage.error(error?.message || "配置导出失败");
-  } finally {
-    configBusy.value = false;
-  }
-}
-
-async function handleConfigImport(file: any) {
-  configBusy.value = true;
-  try {
-    const raw = await file.raw.text();
-    const previewResponse = await apiClient.post("/api/config/import/preview", { raw });
-    const preview = previewResponse.data;
-    if (!preview?.valid) throw new Error(preview?.error || "配置文件无效");
-    await ElMessageBox.confirm(
-      `共 ${preview.itemCount ?? 0} 项配置；新增 ${preview.newCount ?? 0} 项，修改 ${preview.changed ?? 0} 项，未变化 ${preview.unchanged ?? 0} 项。继续后会覆盖同名设置。`,
-      "确认导入配置",
-      { type: "warning", confirmButtonText: "导入", cancelButtonText: "取消" },
-    );
-    const result = await apiClient.post("/api/config/import/confirm", { raw });
-    if (!result.data?.imported) throw new Error(result.data?.error || "配置导入失败");
-    ElMessage.success(`已导入 ${result.data.importedCount ?? 0} 项配置`);
-  } catch (error: any) {
-    if (error === "cancel" || error === "close") return;
-    ElMessage.error(error?.message || "配置导入失败");
-  } finally {
-    configBusy.value = false;
-  }
 }
 
 onMounted(() => {

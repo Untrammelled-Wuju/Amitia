@@ -72,8 +72,9 @@ export async function highlightCode(
     });
     highlightCache.set(key, html);
     return html;
-  } catch {
-    return "";
+  } catch (error) {
+  console.error("[original-error]", error);
+return "";
   }
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha1"
 	"encoding/hex"
+	amitialog "log"
 )
 
 func retryTaskRunID(origin string) string {
@@ -12,8 +13,12 @@ func retryTaskRunID(origin string) string {
 	}
 	namespace := [16]byte{0x6b, 0xa7, 0xb8, 0x12, 0x9d, 0xad, 0x11, 0xd1, 0x80, 0xb4, 0x00, 0xc0, 0x4f, 0xd4, 0x30, 0xc8}
 	h := sha1.New()
-	_, _ = h.Write(namespace[:])
-	_, _ = h.Write([]byte("amitia/task-runtime/retry/v1\x00" + origin))
+	if _, err := h.Write(namespace[:]); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if _, err := h.Write([]byte("amitia/task-runtime/retry/v1\x00" + origin)); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	value := h.Sum(nil)
 	value[6] = value[6]&0x0f | 0x50
 	value[8] = value[8]&0x3f | 0x80

@@ -487,7 +487,9 @@ async function handleDelete(id: string) {
       type: "warning",
     });
     await deleteRule(id, context);
-  } catch {}
+  } catch (error) {
+  console.error("[original-error]", error);
+}
 }
 
 function changePage(p: number) {
@@ -547,7 +549,7 @@ async function loadImportFile(file: File) {
     importRows.value = parseWorldBookImport(text);
   } catch (error: any) {
     importParseError.value = error?.message || "JSON 解析失败";
-    ElMessage.error(importParseError.value);
+    ElMessage.error(String(error?.message || error));
   } finally {
     importParsing.value = false;
   }
@@ -564,7 +566,7 @@ async function confirmImport() {
     ElMessage.success(`导入完成：成功 ${items.length} 条`);
     importDialogVisible.value = false;
   } catch (error: any) {
-    ElMessage.error("导入失败: " + (error?.message || error));
+    ElMessage.error(String(error?.message || error));
   } finally {
     importLoading.value = false;
   }
@@ -574,8 +576,9 @@ async function copyImportExample() {
   try {
     await navigator.clipboard.writeText(importExampleJson);
     ElMessage.success("示例 JSON 已复制");
-  } catch {
-    ElMessage.error("复制失败，请手动选择示例内容");
+  } catch (error) {
+  console.error("[original-error]", error);
+ElMessage.error(error instanceof Error ? error.message : String(error));
   }
 }
 

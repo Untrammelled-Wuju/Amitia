@@ -16,7 +16,6 @@ export type PetLogEventType =
   | "runtime_crash";
 
 const AGGREGATE_WINDOW_MS = 1000;
-const MAX_MESSAGE_LENGTH = 1024;
 const MAX_META_KEYS = 12;
 const MAX_ARRAY_ITEMS = 8;
 
@@ -76,9 +75,6 @@ function sanitize(value: unknown): unknown {
 
 function sanitizeString(raw: string): string {
   let s = String(raw);
-  if (s.length > MAX_MESSAGE_LENGTH) {
-    s = s.slice(0, MAX_MESSAGE_LENGTH) + "...[truncated]";
-  }
   s = s.replace(BASE64_DATA_URL_PATTERN, "[BASE64_IMAGE]");
   s = s.replace(BEARER_TOKEN_PATTERN, "Bearer [REDACTED]");
   s = s.replace(SK_TOKEN_PATTERN, "sk-[REDACTED]");
@@ -248,8 +244,9 @@ export class PetLogger {
     if (this.stream) {
       try {
         this.stream.end();
-      } catch {
-        void 0;
+      } catch (error) {
+  console.error("[original-error]", error);
+void 0;
       }
       this.stream = null;
     }
@@ -308,14 +305,16 @@ export class PetLogger {
     if (this.stream) {
       try {
         this.stream.write(line);
-      } catch {
-        void 0;
+      } catch (error) {
+  console.error("[original-error]", error);
+void 0;
       }
     }
     try {
       console.log(`[Pet] ${line.trimEnd()}`);
-    } catch {
-      void 0;
+    } catch (error) {
+  console.error("[original-error]", error);
+void 0;
     }
   }
 }

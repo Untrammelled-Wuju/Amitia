@@ -125,7 +125,7 @@ func (h *InboundHandler) Handle(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 2<<20)
 	var request InboundRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "msg": "invalid channel inbound payload"})
+		c.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "msg": err.Error()})
 		return
 	}
 	normalized, err := normalizeInboundRequest(request)

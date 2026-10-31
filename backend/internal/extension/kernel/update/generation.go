@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	amitialog "log"
 	"sort"
 	"sync"
 	"time"
@@ -74,7 +75,9 @@ func (m *GenerationManager) Prepare(ctx context.Context, extensionID, version, d
 	}
 	m.generations[extensionID] = append(gens, gen)
 	if m.repo != nil {
-		_ = m.repo.SaveGeneration(ctx, &gen)
+		if err := m.repo.SaveGeneration(ctx, &gen); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return gen
 }
@@ -106,9 +109,13 @@ func (m *GenerationManager) Transition(ctx context.Context, extensionID, generat
 			m.generations[extensionID] = gens
 			if m.repo != nil {
 				if target == GenerationStateActive {
-					_ = m.repo.SetActiveGeneration(ctx, extensionID, generationID)
+					if err := m.repo.SetActiveGeneration(ctx, extensionID, generationID); err != nil {
+						amitialog.Printf("[original-error] %v", err)
+					}
 				} else {
-					_ = m.repo.UpdateGenerationState(ctx, generationID, string(target))
+					if err := m.repo.UpdateGenerationState(ctx, generationID, string(target)); err != nil {
+						amitialog.Printf("[original-error] %v", err)
+					}
 				}
 			}
 			return nil
@@ -218,7 +225,9 @@ func (m *GenerationManager) IncrementInvocation(ctx context.Context, extensionID
 			gens[i].Invocations++
 			m.generations[extensionID] = gens
 			if m.repo != nil {
-				_ = m.repo.UpdateInvocations(ctx, activeID, gens[i].Invocations)
+				if err := m.repo.UpdateInvocations(ctx, activeID, gens[i].Invocations); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 			return
 		}
@@ -275,7 +284,9 @@ func (m *GenerationManager) RemoveGeneration(ctx context.Context, extensionID, g
 				delete(m.active, extensionID)
 			}
 			if m.repo != nil {
-				_ = m.repo.DeleteGeneration(ctx, generationID)
+				if err := m.repo.DeleteGeneration(ctx, generationID); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 			return nil
 		}
@@ -323,7 +334,9 @@ func (m *GenerationManager) StopGeneration(ctx context.Context, extensionID, gen
 			}
 			m.generations[extensionID] = gens
 			if m.repo != nil {
-				_ = m.repo.UpdateGenerationState(ctx, generationID, string(GenerationStateStopped))
+				if err := m.repo.UpdateGenerationState(ctx, generationID, string(GenerationStateStopped)); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 			return nil
 		}
@@ -401,7 +414,9 @@ func (m *GenerationManager) CASActive(ctx context.Context, extensionID, generati
 			}
 			m.generations[extensionID] = gens
 			if m.repo != nil {
-				_ = m.repo.SetActiveGeneration(ctx, extensionID, generationID)
+				if err := m.repo.SetActiveGeneration(ctx, extensionID, generationID); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 			return nil
 		}

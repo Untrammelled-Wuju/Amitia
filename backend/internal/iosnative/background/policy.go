@@ -10,34 +10,34 @@ type ContinuedTaskStrategy string
 type TaskInitiator string
 
 const (
-	BackgroundClassContinued   BackgroundSystemClass = "continued"
-	BackgroundClassCleanup     BackgroundSystemClass = "cleanup"
+	BackgroundClassContinued BackgroundSystemClass = "continued"
+	BackgroundClassCleanup   BackgroundSystemClass = "cleanup"
 
-	ContinuedStrategyQueueIfNeeded    ContinuedTaskStrategy = "queue_if_needed"
+	ContinuedStrategyQueueIfNeeded      ContinuedTaskStrategy = "queue_if_needed"
 	ContinuedStrategyFailIfNotImmediate ContinuedTaskStrategy = "fail_if_not_immediate"
 
-	InitiatorUser                 TaskInitiator = "user"
-	InitiatorForegroundShortcut   TaskInitiator = "foreground_shortcut"
-	InitiatorExplicitAppIntent    TaskInitiator = "explicit_app_intent"
+	InitiatorUser               TaskInitiator = "user"
+	InitiatorForegroundShortcut TaskInitiator = "foreground_shortcut"
+	InitiatorExplicitAppIntent  TaskInitiator = "explicit_app_intent"
 
-	DefaultListLimit             = 50
-	MaxListLimit                 = 200
-	MaxMaxPendingPerClass        = 1
-	MaxIdentifierLength          = 128
-	MaxTaskRunIDLength           = 128
-	MaxReasonLength              = 256
-	MaxTitleLength               = 64
-	MaxSubtitleLength            = 128
-	MaxPathLength                = 1024
- MaxRelativePathLength        = 512
-	MaxContentBytes              = 100 * 1024 * 1024
-	MaxExportBytes               = 500 * 1024 * 1024
-	MaxCheckpointBytes           = 64 * 1024
-	DefaultBackgroundTimeoutSec  = 30
-	DefaultCheckpointTTLHours    = 24
-	MaxCheckpointTTLHours        = 168
-	MaxStaleBookmarkAgeHours     = 24
-	MaxMaterializeBytes          = 500 * 1024 * 1024
+	DefaultListLimit            = 50
+	MaxListLimit                = 200
+	MaxMaxPendingPerClass       = 1
+	MaxIdentifierLength         = 128
+	MaxTaskRunIDLength          = 128
+	MaxReasonLength             = 256
+	MaxTitleLength              = 64
+	MaxSubtitleLength           = 128
+	MaxPathLength               = 1024
+	MaxRelativePathLength       = 512
+	MaxContentBytes             = 100 * 1024 * 1024
+	MaxExportBytes              = 500 * 1024 * 1024
+	MaxCheckpointBytes          = 64 * 1024
+	DefaultBackgroundTimeoutSec = 30
+	DefaultCheckpointTTLHours   = 24
+	MaxCheckpointTTLHours       = 168
+	MaxStaleBookmarkAgeHours    = 24
+	MaxMaterializeBytes         = 500 * 1024 * 1024
 )
 
 var AllowedSystemClasses = []BackgroundSystemClass{

@@ -147,7 +147,9 @@ internal class DefaultSafeArchiveExtractor(
         } finally {
             try {
                 zip.close()
-            } catch (_: Exception) {
+            } catch (originalError150: Exception) {
+              originalError150.printStackTrace()
+
             }
         }
     }

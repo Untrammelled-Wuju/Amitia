@@ -27,7 +27,9 @@ internal object PathValidator {
             childCanonical == parentCanonical || childCanonical.startsWith(
                 parentCanonical + File.separator
             )
-        } catch (_: Exception) {
+        } catch (originalError30: Exception) {
+          originalError30.printStackTrace()
+
             val childAbsolute = child.absolutePath
             val parentAbsolute = parent.absolutePath
             childAbsolute == parentAbsolute || childAbsolute.startsWith(
@@ -40,7 +42,9 @@ internal object PathValidator {
         return try {
             val canonical = path.canonicalPath
             !canonical.contains("/data/") && !canonical.contains("\\data\\")
-        } catch (_: Exception) {
+        } catch (originalError43: Exception) {
+          originalError43.printStackTrace()
+
             false
         }
     }

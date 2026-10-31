@@ -13,6 +13,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/lifecycle_manager"
 	"github.com/u-ai/backend/internal/extension/kernel/mcp"
 	legacymcp "github.com/u-ai/backend/internal/extension/mcpruntime"
+	amitialog "log"
 )
 
 // MCPRuntimeConnectRequest describes the canonical runtime connection required
@@ -106,14 +107,22 @@ func (b *mcpInstallPortBridge) InstallMCP(ctx context.Context, serverName string
 			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 			defer cancel()
 			if b.runtime != nil {
-				_ = b.runtime.Disconnect(cleanupCtx, serverName)
+				if err := b.runtime.Disconnect(cleanupCtx, serverName); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
-			_ = b.lifecycle.Uninstall(serverName)
+			if err := b.lifecycle.Uninstall(serverName); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			if b.toolSync != nil {
-				_, _ = b.toolSync.SyncMCPTools(cleanupCtx, serverName, nil)
+				if _, err := b.toolSync.SyncMCPTools(cleanupCtx, serverName, nil); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 			if b.persistence != nil {
-				_ = b.persistence.RemoveMCPConfiguration(cleanupCtx, serverName)
+				if err := b.persistence.RemoveMCPConfiguration(cleanupCtx, serverName); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 		}
 	}()
@@ -221,7 +230,9 @@ func (b *mcpInstallPortBridge) RemoveMCP(ctx context.Context, serverName string)
 		return fmt.Errorf("MCP lifecycle not configured")
 	}
 	if b.runtime != nil {
-		_ = b.runtime.Disconnect(ctx, serverName)
+		if err := b.runtime.Disconnect(ctx, serverName); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	if err := b.lifecycle.Uninstall(serverName); err != nil {
 		return err
@@ -381,7 +392,9 @@ func (b *enableExistingPortBridge) EnableExtension(ctx context.Context, extID st
 				}
 			}
 			if !hasInstances {
-				_, _ = b.instanceReconciler.ActivateExtension(def, nil)
+				if _, err := b.instanceReconciler.ActivateExtension(def, nil); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 		}
 	}

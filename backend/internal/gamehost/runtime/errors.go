@@ -40,12 +40,12 @@ const (
 )
 
 type TopologyError struct {
-	Code       ErrorCode
-	Message    string
-	Retryable  bool
-	Cause      error
-	RuntimeID  string
-	ServiceID  string
+	Code      ErrorCode
+	Message   string
+	Retryable bool
+	Cause     error
+	RuntimeID string
+	ServiceID string
 }
 
 func (e *TopologyError) Error() string {
@@ -60,13 +60,13 @@ func (e *TopologyError) Unwrap() error {
 }
 
 type ExecutionError struct {
-	Code       ErrorCode
-	RuntimeID  string
-	PluginID   string
-	ServiceID  string
+	Code         ErrorCode
+	RuntimeID    string
+	PluginID     string
+	ServiceID    string
 	DefinitionID string
-	Message    string
-	Cause      error
+	Message      string
+	Cause        error
 }
 
 func (e *ExecutionError) Error() string {
@@ -101,8 +101,8 @@ func (e *RuntimeStartError) Unwrap() error {
 }
 
 type RuntimeStopError struct {
-	RuntimeID   string
-	StopErrors  []error
+	RuntimeID     string
+	StopErrors    []error
 	CleanupErrors []error
 }
 

@@ -85,8 +85,9 @@ function prepareDockerDesktopPlugin(dockerBin: string): void {
     try {
       fs.accessSync(candidate, fs.constants.X_OK)
       return true
-    } catch {
-      return false
+    } catch (error) {
+  console.error("[original-error]", error);
+return false
     }
   })
   if (!source) return
@@ -96,11 +97,13 @@ function prepareDockerDesktopPlugin(dockerBin: string): void {
   try {
     fs.lstatSync(target)
     return
-  } catch {
-    try {
+  } catch (error) {
+  console.error("[original-error]", error);
+try {
       fs.symlinkSync(source, target, "file")
-    } catch {
-      if (process.platform === "win32") fs.copyFileSync(source, target)
+    } catch (error) {
+  console.error("[original-error]", error);
+if (process.platform === "win32") fs.copyFileSync(source, target)
     }
   }
 }
@@ -123,8 +126,9 @@ function parseContainerState(raw: string): ContainerState {
       status: String(parsed.Status || ""),
       error: String(parsed.Error || ""),
     }
-  } catch {
-    return { exists: true, running: false, status: "", error: "容器状态无法解析" }
+  } catch (error) {
+  console.error("[original-error]", error);
+return { exists: true, running: false, status: "", error: "容器状态无法解析" }
   }
 }
 

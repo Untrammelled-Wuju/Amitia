@@ -7,6 +7,7 @@ import (
 	"unicode"
 
 	"github.com/google/uuid"
+	amitialog "log"
 )
 
 func estimateTokens(s string) int {
@@ -25,7 +26,9 @@ func marshalMap(v map[string]any) string {
 }
 func unmarshalMap(raw string) map[string]any {
 	out := map[string]any{}
-	_ = json.Unmarshal([]byte(raw), &out)
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	return out
 }
 

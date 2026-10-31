@@ -129,8 +129,9 @@ export class OpenClawWechatManager {
                 replyCount: this.state.replyCount,
             }), "utf-8");
         }
-        catch {
-        }
+        catch (error) {
+  console.error("[original-error]", error);
+}
     }
     private loadStats(): void {
         if (!this.state.accountId)
@@ -145,8 +146,9 @@ export class OpenClawWechatManager {
                     this.state.replyCount = data.replyCount;
             }
         }
-        catch {
-        }
+        catch (error) {
+  console.error("[original-error]", error);
+}
     }
     async startLogin(opts?: {
         force?: boolean;
@@ -576,7 +578,10 @@ export class OpenClawWechatManager {
             void notifyStop({
                 baseUrl,
                 token,
-            }).catch(() => undefined);
+            }).catch((error) => {
+  console.error("[original-error]", error);
+  return undefined;
+});
         }
     }
     async resetLogin(): Promise<void> {
@@ -620,8 +625,9 @@ export class OpenClawWechatManager {
                 data.getUpdatesBuf = this.getUpdatesBuf;
             saveWeixinAccount(this.state.accountId, data);
         }
-        catch {
-        }
+        catch (error) {
+  console.error("[original-error]", error);
+}
     }
     private resolveInboundMessageId(msg: WeixinMessage): string {
         if (msg.message_id) {

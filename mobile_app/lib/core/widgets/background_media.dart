@@ -97,8 +97,9 @@ class _BackgroundMediaState extends State<BackgroundMedia>
       if (!mounted || _video != controller) return;
       setState(() {});
       _syncPlayback();
-    } catch (_) {
-      if (mounted && _video == controller) setState(() => _failed = true);
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+if (mounted && _video == controller) setState(() => _failed = true);
     }
   }
 
@@ -110,8 +111,9 @@ class _BackgroundMediaState extends State<BackgroundMedia>
         _foreground &&
         !MediaQuery.disableAnimationsOf(context)) {
       unawaited(
-        video.play().catchError((Object _) {
-          if (mounted && _video == video) setState(() => _failed = true);
+        video.play().catchError((Object error, StackTrace stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+if (mounted && _video == video) setState(() => _failed = true);
         }),
       );
     } else {

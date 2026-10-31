@@ -77,8 +77,9 @@ function runGoTest(goBin, packages, options = {}) {
     let event;
     try {
       event = JSON.parse(line);
-    } catch {
-      continue;
+    } catch (error) {
+  console.error("[original-error]", error);
+continue;
     }
     if (event.Action === "fail") {
       const name = event.Test ? `${event.Package}/${event.Test}` : event.Package;
@@ -181,8 +182,9 @@ function frontTestCandidates() {
     let entries = [];
     try {
       entries = readdirSync(directory, { withFileTypes: true });
-    } catch {
-      return;
+    } catch (error) {
+  console.error("[original-error]", error);
+return;
     }
     for (const entry of entries) {
       const full = join(directory, entry.name);

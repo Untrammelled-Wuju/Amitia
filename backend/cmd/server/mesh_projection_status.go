@@ -6,6 +6,7 @@ import (
 
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	amitialog "log"
 )
 
 func (p *meshLocalDataPort) MemoryDeletionComplete(ctx context.Context, scope coordination.ExecutionScope, id string) (bool, error) {
@@ -45,7 +46,9 @@ func (p *meshLocalDataPort) CleanupMemoryDeletions(ctx context.Context, scope co
 			location, err = writer.graph(ctx, job, false)
 		}
 		if err != nil {
-			_ = p.store.FinishProjection(ctx, job, location, false)
+			if err := p.store.FinishProjection(ctx, job, location, false); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return count, fmt.Errorf("清理%s索引失败: %w", job.Resource.Kind, err)
 		}
 		if err := p.store.FinishProjection(ctx, job, location, true); err != nil {

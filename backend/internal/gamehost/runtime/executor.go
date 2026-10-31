@@ -7,6 +7,7 @@ import (
 
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	"github.com/u-ai/backend/internal/gamehost/domain"
+	amitialog "log"
 )
 
 type RuntimeExecutor interface {
@@ -189,7 +190,9 @@ func (e *runtimeExecutor) RestartRuntime(ctx context.Context, runtimeID domain.R
 	defer func() {
 		intent, intentErr := e.runtimeManager.GetLifecycleIntent(runtimeID)
 		if intentErr == nil && intent == "restart" {
-			_ = e.runtimeManager.SetLifecycleIntent(runtimeID, "")
+			if err := e.runtimeManager.SetLifecycleIntent(runtimeID, ""); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}()
 

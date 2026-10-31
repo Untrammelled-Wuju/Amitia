@@ -9,6 +9,7 @@ import (
 
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"gorm.io/gorm"
+	amitialog "log"
 )
 
 type Incident struct {
@@ -193,7 +194,9 @@ func (r *Repository) MigrateLegacyEvents(ctx context.Context, scope PolicyScope)
 				status, resolvedAt = "resolved", now
 			}
 			var roleID string
-			_ = tx.Table("messages").Select("character_id").Where("conversation_id=? AND character_id<>''", row.ConversationID).Limit(1).Scan(&roleID).Error
+			if err := tx.Table("messages").Select("character_id").Where("conversation_id=? AND character_id<>''", row.ConversationID).Limit(1).Scan(&roleID).Error; err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			if row.EventType == "" {
 				row.EventType = "legacy_safety_event"
 			}

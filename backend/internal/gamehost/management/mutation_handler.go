@@ -1,11 +1,11 @@
 package management
 
 import (
-"context"
-"errors"
-"net/http"
-"strings"
-"time"
+	"context"
+	"errors"
+	"net/http"
+	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -151,7 +151,7 @@ func (h *MutationHandler) StartRuntime(c *gin.Context) {
 			return
 		}
 		if isRuntimeExecutorError(err, "runtime not in startable state") {
-			c.JSON(http.StatusConflict, gin.H{"code": 409, "msg": "runtime not in startable state"})
+			c.JSON(http.StatusConflict, gin.H{"code": 409, "msg": err.Error()})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": err.Error()})
@@ -223,7 +223,7 @@ func (h *MutationHandler) RestartRuntime(c *gin.Context) {
 			return
 		}
 		if isRuntimeExecutorError(err, "runtime not in startable state") {
-			c.JSON(http.StatusConflict, gin.H{"code": 409, "msg": "runtime not in startable state"})
+			c.JSON(http.StatusConflict, gin.H{"code": 409, "msg": err.Error()})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": err.Error()})

@@ -56,7 +56,8 @@ async function send() {
     messages.value = [...history, { role: "assistant", content: result.reply }];
     input.value = "";
     pendingMessage.value = '';
-  } catch {
+  } catch (caughtError) {
+    console.error("[original-error]", caughtError);
     if (active) error.value = "生成失败，请检查默认文本模型后重试；现有编辑内容未修改。";
   } finally {
     if (active) busy.value = false;

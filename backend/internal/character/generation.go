@@ -112,7 +112,7 @@ func (h *Handler) GenerateCard(c *gin.Context) {
 	payload, _ := json.Marshal(map[string]interface{}{"messages": input.Messages, "draft": draft})
 	reply, _, _, err := generator.GenerateWorkshopJSON(c.Request.Context(), prompt, string(payload))
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "角色生成失败，请检查默认文本模型后重试", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	var output struct {
@@ -125,7 +125,7 @@ func (h *Handler) GenerateCard(c *gin.Context) {
 	}
 	clean, err := normalizeGeneratedDraft(output.Draft)
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "模型返回的角色参数无效，请重试", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, map[string]interface{}{"reply": output.Reply, "draft": clean})

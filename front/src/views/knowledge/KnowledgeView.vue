@@ -104,7 +104,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       <div class="search-row">
         <el-input v-model="query" placeholder="输入检索问题；允许返回 0 条证据" clearable @keyup.enter="runSearch" />
         <el-select v-model="retrievalLevel" class="temporal-select" aria-label="检索级别">
-          <el-option label="自动级别" value="auto" />
+            <el-option label="聊天自动路由" value="auto" />
           <el-option label="NONE" value="none" />
           <el-option label="FAST" value="fast" />
           <el-option label="DEEP" value="deep" />
@@ -130,13 +130,19 @@ SPDX-License-Identifier: AGPL-3.0-only
             {{ searchResult.answerState === "ambiguous" ? "证据冲突" : (searchResult.sufficient ? "证据充分" : "证据不足 / 无证据") }}
           </el-tag>
           <el-tag v-if="searchResult.degraded" size="small" type="warning">降级检索</el-tag>
+          <el-tag v-if="searchResult.routeDegraded" size="small" type="warning">路由降级</el-tag>
           <el-tag v-if="searchResult.ambiguous" size="small" type="danger">存在冲突证据</el-tag>
+          <el-tag size="small" type="info">{{ searchResult.routingMode === "chat" ? "聊天路由" : "诊断指定" }}</el-tag>
           <el-tag size="small" type="info">{{ (searchResult.retrievalLevel || "-").toUpperCase() }}</el-tag>
+          <el-tag size="small" type="info">POLICY {{ (searchResult.policyMode || "-").toUpperCase() }}</el-tag>
           <el-tag size="small" type="info">{{ searchResult.queryComplexity || "simple" }}</el-tag>
           <el-tag size="small" type="info">{{ temporalModeLabel(searchResult.temporalMode) }}</el-tag>
           <span v-if="searchResult.asOf">asOf {{ formatTime(searchResult.asOf) }}</span>
           <span>返回 {{ searchResult.evidence.length }} 条</span>
           <span v-if="searchResult.sufficiencyReason">gate={{ searchResult.sufficiencyReason }}</span>
+          <span v-if="searchResult.requestedRetrievalLevel !== searchResult.retrievalLevel">requested={{ searchResult.requestedRetrievalLevel }} → effective={{ searchResult.retrievalLevel }}</span>
+          <span v-if="searchResult.shadowLevel">shadow={{ searchResult.shadowLevel }}</span>
+          <span v-if="searchResult.routeDegradationReason">routeGate={{ searchResult.routeDegradationReason }}</span>
         </div>
         <el-alert
           v-for="warning in searchResult.warnings || []"
@@ -700,7 +706,10 @@ async function purge(row: KnowledgeSourceRevision) {
   }
 }
 
-async function refreshAll() { await Promise.all([fetchSources(), fetchJobs(), fetchIndexOutboxHealth().catch(() => null)]); }
+async function refreshAll() { await Promise.all([fetchSources(), fetchJobs(), fetchIndexOutboxHealth().catch((error) => {
+  console.error("[original-error]", error);
+  return null;
+})]); }
 async function handleVectorAudit() {
   try {
     await auditVectorSample(50);
@@ -800,7 +809,10 @@ async function handleReconcile() {
   } catch (error: any) {
     ElMessage.error(error?.message || "一致性检查失败");
   } finally {
-    await fetchIndexOutboxHealth().catch(() => null);
+    await fetchIndexOutboxHealth().catch((error) => {
+  console.error("[original-error]", error);
+  return null;
+});
   }
 }
 async function handleGarbageCollect() {
@@ -991,14 +1003,19 @@ function formatBytes(value: number) {
 function formatTime(value: string) { return value ? new Date(value).toLocaleString() : "-"; }
 function formatScore(value: number) { return Number(value || 0).toFixed(4); }
 function compactJson(value: unknown) {
-  try { return JSON.stringify(value ?? {}); } catch { return "{}"; }
+  try { return JSON.stringify(value ?? {}); } catch (error) {
+  console.error("[original-error]", error);
+return "{}"; }
 }
 
 let pollTimer: number | undefined;
 let indexHealthTimer: number | undefined;
 onMounted(async () => {
   await refreshAll();
-  indexHealthTimer = window.setInterval(() => { void fetchIndexOutboxHealth().catch(() => null); }, 30000);
+  indexHealthTimer = window.setInterval(() => { void fetchIndexOutboxHealth().catch((error) => {
+  console.error("[original-error]", error);
+  return null;
+}); }, 30000);
   pollTimer = window.setInterval(() => {
     if (jobs.value.some((job) => job.status === "queued" || job.status === "running")) {
       void refreshAll();

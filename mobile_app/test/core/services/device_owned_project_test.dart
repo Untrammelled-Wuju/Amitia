@@ -113,7 +113,20 @@ class _ProjectApi implements BackendServiceApi {
     if (path.endsWith('/data'))
       return {
             'executionScope': scope(),
-            'snapshot': {'resources': []},
+            'snapshot': {'ownerId': coordinated ? core : 'a', 'resources': []},
+          }
+          as T;
+    if (path.endsWith('/resources'))
+      return {
+            'executionScope': scope(),
+            'resource': {
+              'kind': 'conversation',
+              'id': 'chat',
+              'ownerId': coordinated ? core : 'a',
+              'roleId': 'role',
+              'revision': 1,
+              'body': {'id': 'chat', 'characterId': 'role'},
+            },
           }
           as T;
     if (path.contains('/business/conversations'))
@@ -401,5 +414,18 @@ void main() {
       expect(controller.lastError, isNull);
       controller.dispose();
     }
+  });
+  test('现有对话可以移动到当前角色项目或移出项目', () async {
+    final api = _ProjectApi();
+    final chat = ChatService(api, providerKey: () => 'cloud');
+    await chat.owned.refresh();
+    final project = (await chat.owned.projects()).single;
+    await chat.owned.conversations();
+
+    await chat.moveConversationToProject('chat', project.id, project: project);
+    expect(api.requests.last['changes'], {'projectId': project.id});
+
+    await chat.moveConversationToProject('chat', '', project: project);
+    expect(api.requests.last['changes'], {'projectId': ''});
   });
 }

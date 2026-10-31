@@ -221,8 +221,9 @@ class GameCenterController extends StateNotifier<GameCenterState> {
         // omitted. A missing explicit character is valid; the Agent event sink
         // will resolve the user's current/default character on first wake.
         await api.bindAgentContext(runtimeId);
-      } catch (_) {
-        // Runtime selection must remain usable during transient restart windows.
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+// Runtime selection must remain usable during transient restart windows.
         // A later selection or real tool invocation refreshes the binding.
       }
     } catch (e) {
@@ -296,8 +297,9 @@ class GameCenterController extends StateNotifier<GameCenterState> {
     state = state.copyWith(packageOperationByExtensionId: ops);
     try {
       return await op();
-    } catch (_) {
-      return false;
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return false;
     } finally {
       if (mounted) {
         final newOps = Set<String>.from(state.packageOperationByExtensionId)..remove(extensionId);
@@ -382,8 +384,9 @@ class GameCenterController extends StateNotifier<GameCenterState> {
     state = state.copyWith(runtimeOperationByRuntimeId: ops);
     try {
       return await op();
-    } catch (_) {
-      return false;
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return false;
     } finally {
       if (mounted) {
         final newOps = Set<String>.from(state.runtimeOperationByRuntimeId)..remove(runtimeId);

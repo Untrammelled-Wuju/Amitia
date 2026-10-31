@@ -4,78 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/conversationstream"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/knowledge"
+	amitialog "log"
 )
-
-var knowledgePageLocatorRE = regexp.MustCompile(`第\s*[0-9]{1,7}\s*页|(?i:page)\s*#?\s*[0-9]{1,7}`)
-var knowledgeRowLocatorRE = regexp.MustCompile(`第\s*[0-9]{1,9}\s*行|(?i:row)\s*#?\s*[0-9]{1,9}`)
-
-func knowledgeRoute(text string) string {
-	q := strings.ToLower(strings.TrimSpace(text))
-	if q == "" || utf8.RuneCountInString(q) > 4096 {
-		return ""
-	}
-	social := []string{"早安", "早上好", "晚安", "哈哈", "你好", "陪我", "想你", "我累了", "谢谢", "辛苦了", "good morning", "hello", "hey", "good night"}
-	for _, item := range social {
-		if q == item || strings.HasPrefix(q, item+"！") {
-			return ""
-		}
-	}
-	hints := []string{"知识库", "文档", "资料", "文件", "pdf", "excel", "xlsx", "docx", "原文", "出处", "检索", "搜索资料", "source document", "knowledge base"}
-	found := false
-	for _, item := range hints {
-		if strings.Contains(q, item) {
-			found = true
-			break
-		}
-	}
-	locator := knowledgePageLocatorRE.MatchString(q) || knowledgeRowLocatorRE.MatchString(q)
-	if !found && !locator {
-		return ""
-	}
-	if strings.Contains(q, "原文") || strings.Contains(q, "逐页") || strings.Contains(q, "逐段") || strings.Contains(q, "核对") || strings.Contains(q, "审计") || locator {
-		return knowledge.RetrievalLevelAgentic
-	}
-	complex := []string{"对比", "比较", "矛盾", "冲突", "多份", "逐项", "全文", "交叉验证", "compare", "verify", "investigate"}
-	for _, item := range complex {
-		if strings.Contains(q, item) {
-			return knowledge.RetrievalLevelDeep
-		}
-	}
-	return knowledge.RetrievalLevelFast
-}
-
-func chooseKnowledgeRoute(text string, features config.KnowledgeFeatureConfig) (string, string, string, string) {
-	active := knowledgeRoute(text)
-	if !features.RetrievalPolicyEnabled {
-		previous := ""
-		if utf8.RuneCountInString(strings.TrimSpace(text)) >= 2 && utf8.RuneCountInString(strings.TrimSpace(text)) <= 4096 {
-			previous = knowledge.RetrievalLevelFast
-		}
-		if features.RetrievalPolicyShadow {
-			return previous, "legacy_shadow", active, "new_policy_candidate"
-		}
-		return previous, "legacy", "", ""
-	}
-	if features.RetrievalPolicyShadow {
-		return active, "active_shadow", knowledge.RetrievalLevelFast, "legacy_candidate"
-	}
-	return active, "active", "", ""
-}
-
-func knowledgeNeedsCanonicalRead(text string) bool {
-	q := strings.ToLower(text)
-	return strings.Contains(q, "原文") || strings.Contains(q, "核对") || strings.Contains(q, "审计") || strings.Contains(q, "逐页") || strings.Contains(q, "逐段") || knowledgePageLocatorRE.MatchString(q) || knowledgeRowLocatorRE.MatchString(q)
-}
 
 type ownedKnowledgeTrace struct {
 	scope          coordination.ExecutionScope
@@ -187,20 +125,15 @@ func (s *service) fetchKnowledgeContext(ctx context.Context, tenantID, question 
 	if config.AppCfg != nil {
 		cfg = config.AppCfg.Knowledge
 	}
-	level, policyMode, shadowLevel, shadowReason := chooseKnowledgeRoute(question, cfg.Features)
-	if level == "" {
+	decision := knowledge.ResolveChatRoute(question, cfg.Features)
+	if decision.EffectiveLevel == knowledge.RetrievalLevelNone && decision.RouteReason == knowledge.RouteReasonChatNoIntent {
 		return "", nil
 	}
-	if level == knowledge.RetrievalLevelAgentic && (!cfg.Features.AgenticInvestigationEnabled || !cfg.Features.CanonicalReaderEnabled) {
-		level = knowledge.RetrievalLevelDeep
-	}
-	if level == knowledge.RetrievalLevelDeep && !cfg.Features.RetrievalPolicyEnabled {
-		level = knowledge.RetrievalLevelFast
-	}
+	level := decision.EffectiveLevel
 	retrievalTask, _ := trace.begin(ctx, "retrieval.started", "正在检索知识库", map[string]any{"retrievalLevel": level})
-	result, err := s.knowledgePort.Search(ctx, tenantID, knowledge.SearchRequest{Query: question, RetrievalLevel: level, Limit: 8, PolicyMode: policyMode, RouteReason: "document_intent", ShadowLevel: shadowLevel, ShadowReason: shadowReason})
+	result, err := s.knowledgePort.Search(ctx, tenantID, knowledge.SearchRequest{Query: question, RetrievalLevel: level, Limit: 8, PolicyMode: decision.PolicyMode, RouteReason: decision.RouteReason, ShadowLevel: decision.ShadowLevel, ShadowReason: decision.ShadowReason})
 	if err == nil {
-		if cfg.Features.CanonicalReaderEnabled && knowledgeNeedsCanonicalRead(question) {
+		if cfg.Features.CanonicalReaderEnabled && knowledge.NeedsCanonicalRead(question) {
 			result = s.expandCanonicalEvidence(ctx, tenantID, question, result, trace, citations)
 			markMissingCanonicalRead(question, &result)
 		}
@@ -220,7 +153,9 @@ func (s *service) fetchKnowledgeContext(ctx context.Context, tenantID, question 
 		status, event, state = "failed", "retrieval.failed", "failed"
 	}
 	if retrievalTask != nil {
-		_ = trace.complete(ctx, retrievalTask, event, status, "知识库检索", map[string]any{"retrievalLevel": level, "evidenceCount": len(result.Evidence), "sufficient": result.Sufficient, "answerState": result.AnswerState, "state": state})
+		if err := trace.complete(ctx, retrievalTask, event, status, "知识库检索", map[string]any{"retrievalLevel": level, "evidenceCount": len(result.Evidence), "sufficient": result.Sufficient, "answerState": result.AnswerState, "state": state}); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	if err != nil {
 		return "", err
@@ -297,7 +232,9 @@ func (s *service) expandCanonicalEvidence(ctx context.Context, tenantID, questio
 			if err != nil {
 				status, event = "failed", "knowledge.read.failed"
 			}
-			_ = trace.complete(ctx, readTask, event, status, "原文核对", map[string]any{"sourceId": parent.SourceID, "unitCount": len(read.Units), "truncated": read.Truncated})
+			if err := trace.complete(ctx, readTask, event, status, "原文核对", map[string]any{"sourceId": parent.SourceID, "unitCount": len(read.Units), "truncated": read.Truncated}); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		if err != nil {
 			result.Degraded = true
@@ -312,21 +249,7 @@ func (s *service) expandCanonicalEvidence(ctx context.Context, tenantID, questio
 }
 
 func explicitKnowledgeLocator(query string) map[string]any {
-	for _, match := range []struct {
-		re  *regexp.Regexp
-		key string
-	}{{knowledgePageLocatorRE, "page"}, {knowledgeRowLocatorRE, "row"}} {
-		value := match.re.FindString(query)
-		if value == "" {
-			continue
-		}
-		digits := regexp.MustCompile(`[0-9]+`).FindString(value)
-		var number int
-		if _, err := fmt.Sscanf(digits, "%d", &number); err == nil && number > 0 {
-			return map[string]any{match.key: number}
-		}
-	}
-	return nil
+	return knowledge.ExplicitLocator(query)
 }
 
 func prioritizeCanonicalEvidence(evidence []knowledge.Evidence) []knowledge.Evidence {
@@ -345,7 +268,7 @@ func prioritizeCanonicalEvidence(evidence []knowledge.Evidence) []knowledge.Evid
 }
 
 func markMissingCanonicalRead(question string, result *knowledge.SearchResponse) {
-	if result == nil || !knowledgeNeedsCanonicalRead(question) {
+	if result == nil || !knowledge.NeedsCanonicalRead(question) {
 		return
 	}
 	for _, ev := range result.Evidence {

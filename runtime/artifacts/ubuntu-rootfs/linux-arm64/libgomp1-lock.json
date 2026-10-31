@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "component": "libgomp1",
+  "distribution": "ubuntu",
+  "release": "24.04",
+  "architecture": "arm64",
+  "package": "libgomp1",
+  "version": "14-20240412-0ubuntu1",
+  "archiveFileName": "libgomp1_14-20240412-0ubuntu1_arm64.deb",
+  "sourceUrl": "https://launchpad.net/ubuntu/+archive/primary/+files/libgomp1_14-20240412-0ubuntu1_arm64.deb",
+  "sha256": "3f777eac64c87e2db843675b229efd16efe2ac1ae977318d687b39b812747863"
+}

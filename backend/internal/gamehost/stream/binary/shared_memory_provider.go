@@ -117,9 +117,9 @@ func (h *sharedMemoryWritingHandle) toPublicHandle() WritingHandle {
 		Writer:   &sharedMemoryWriter{handle: h},
 		Seal: func(actualSize int64, checksum *Checksum) (BinaryReference, error) {
 			return BinaryReference{
-				ID:       BinaryObjectID(h.name),
-				Kind:     BinaryStorageSharedMemory,
-				Size:     actualSize,
+				ID:        BinaryObjectID(h.name),
+				Kind:      BinaryStorageSharedMemory,
+				Size:      actualSize,
 				MediaType: "",
 				Checksum:  checksum,
 				Lifetime:  BinaryLifetimeMessage,

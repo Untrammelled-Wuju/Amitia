@@ -93,8 +93,9 @@ class MobileCloudDeviceCredentialStore {
       return MobileCloudDeviceCredential.fromJson(
         Map<String, dynamic>.from(decoded),
       );
-    } catch (_) {
-      return null;
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return null;
     }
   }
 

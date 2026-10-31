@@ -51,7 +51,7 @@ func checkPackageDistributionUpdate(c *gin.Context, runtime *Runtime) {
 		ExtensionID string `json:"extensionId"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil || strings.TrimSpace(body.ExtensionID) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "extensionId required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	currentVersion, err := installedExtensionVersion(c.Request.Context(), runtime, body.ExtensionID)
@@ -83,7 +83,7 @@ func startPackageDistributionDownload(c *gin.Context, runtime *Runtime) {
 	}
 	if c.Request.ContentLength > 0 {
 		if err := c.ShouldBindJSON(&body); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "download request invalid"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 	}
@@ -161,7 +161,7 @@ func previewPackageDistributionDownload(c *gin.Context, runtime *Runtime) {
 		DeveloperSessionID string `json:"developerSessionId"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "preview request invalid"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	if strings.TrimSpace(body.ExtensionID) == "" || strings.TrimSpace(body.DownloadID) == "" {
@@ -307,7 +307,7 @@ func previewPackageRollback(c *gin.Context, runtime *Runtime) {
 		ScopeID       string `json:"scopeId"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil || strings.TrimSpace(body.ExtensionID) == "" || strings.TrimSpace(body.TargetVersion) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "extensionId and targetVersion required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	scopeType := strings.TrimSpace(body.ScopeType)
@@ -337,7 +337,7 @@ func confirmPackageRollback(c *gin.Context, runtime *Runtime) {
 		Confirmations    map[string]bool `json:"confirmations"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "rollback confirmation request invalid"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	if strings.TrimSpace(body.ExtensionID) == "" || strings.TrimSpace(body.TargetVersion) == "" {
@@ -377,7 +377,7 @@ func executePackageRollback(c *gin.Context, runtime *Runtime) {
 		ConfirmationToken string `json:"confirmationToken"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "rollback request invalid"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	if strings.TrimSpace(body.ExtensionID) == "" || strings.TrimSpace(body.TargetVersion) == "" || strings.TrimSpace(body.ConfirmationToken) == "" {

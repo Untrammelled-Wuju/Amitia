@@ -120,7 +120,9 @@ async function resolveUrl(
       const result = await bridge.callAction(action, params) as Record<string, unknown>
       return httpUrl(result?.url) || httpUrl(result?.file)
     }
-  } catch {}
+  } catch (error) {
+  console.error("[original-error]", error);
+}
   return ""
 }
 
@@ -250,8 +252,9 @@ async function resolveReplyExcerpt(bridge: OneBotBridge, messageId: string): Pro
     const excerpt = plainText(result?.message).replace(/\s+/g, " ").trim().slice(0, 80)
     if (!excerpt) return name
     return name ? `${name}：${excerpt}` : excerpt
-  } catch {
-    return ""
+  } catch (error) {
+  console.error("[original-error]", error);
+return ""
   }
 }
 

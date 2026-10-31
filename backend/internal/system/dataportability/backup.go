@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	amitialog "log"
 )
 
 const batchSize = 1000
@@ -68,6 +69,8 @@ func (c *Coordinator) CreateBackup(ctx context.Context, req BackupRequest, dbPat
 		CharacterID:       req.CharacterID,
 		SourcePlatform:    c.Platform,
 		Encrypted:         req.Passphrase != "",
+		IncludesSecrets:   req.IncludeSecrets,
+		SecretsPolicy:     CurrentSecretsPolicy,
 	}
 
 	archivePath := filepath.Join(backupDir, opID+".amitia-backup")
@@ -105,7 +108,9 @@ func (c *Coordinator) CreateBackup(ctx context.Context, req BackupRequest, dbPat
 		adapter := &componentWriterAdapter{captures: captures}
 		if err := ct.Export(ctx, req, adapter); err != nil {
 			for _, capture := range ordered {
-				_ = capture.writer.Close()
+				if err := capture.writer.Close(); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 			return nil, c.failBackup(opID, err)
 		}
@@ -145,11 +150,15 @@ func (c *Coordinator) CreateBackup(ctx context.Context, req BackupRequest, dbPat
 	if req.Passphrase != "" {
 		encryptedPath := archivePath + ".enc"
 		if err := EncryptFile(archivePath, encryptedPath, req.Passphrase); err != nil {
-			_ = os.Remove(encryptedPath)
+			if err := os.Remove(encryptedPath); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return nil, c.failBackup(opID, fmt.Errorf("%w: %v", ErrBackupEncryptionFailed, err))
 		}
 		if err := os.Remove(archivePath); err != nil {
-			_ = os.Remove(encryptedPath)
+			if err := os.Remove(encryptedPath); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return nil, c.failBackup(opID, err)
 		}
 		pkgPath = encryptedPath
@@ -196,6 +205,9 @@ func ValidateBackupRequest(req BackupRequest) error {
 	}
 	if req.Passphrase != "" && len([]rune(req.Passphrase)) < 8 {
 		return ErrBackupPassphraseWeak
+	}
+	if req.IncludeSecrets && req.Passphrase == "" && req.Purpose != PurposePreImport && req.Purpose != PurposePreRestore {
+		return ErrBackupEncryptionRequired
 	}
 	return nil
 }

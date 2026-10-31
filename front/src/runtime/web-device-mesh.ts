@@ -64,8 +64,9 @@ function readJSON<T>(key: string): T | null {
   try {
     const raw = window.localStorage.getItem(key);
     return raw ? (JSON.parse(raw) as T) : null;
-  } catch {
-    return null;
+  } catch (error) {
+  console.error("[original-error]", error);
+return null;
   }
 }
 
@@ -85,8 +86,9 @@ async function readResponse<T>(response: Response): Promise<T> {
   let payload: any = null;
   try {
     payload = await response.json();
-  } catch {
-    payload = null;
+  } catch (error) {
+  console.error("[original-error]", error);
+payload = null;
   }
   if (!response.ok) {
     throw new Error(String(payload?.message || payload?.msg || `请求失败 (${response.status})`));
@@ -126,8 +128,9 @@ export function getWebDeviceCredential(baseURL: string): WebDeviceCredentialReco
 export function clearWebDeviceCredential(baseURL: string): void {
   try {
     window.localStorage.removeItem(credentialKey(baseURL));
-  } catch {
-    // Browser storage may be disabled. The caller will simply remain unpaired.
+  } catch (error) {
+  console.error("[original-error]", error);
+// Browser storage may be disabled. The caller will simply remain unpaired.
   }
 }
 

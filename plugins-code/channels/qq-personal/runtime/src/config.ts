@@ -131,8 +131,9 @@ export function loadConfig(): QQPersonalConfig {
     const config = normalizeConfig(parsed, fallback)
     saveConfig(config)
     return config
-  } catch {
-    saveConfig(fallback)
+  } catch (error) {
+  console.error("[original-error]", error);
+saveConfig(fallback)
     return fallback
   }
 }

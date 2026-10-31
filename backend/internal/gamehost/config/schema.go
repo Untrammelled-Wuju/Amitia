@@ -24,18 +24,18 @@ const (
 )
 
 type ConfigField struct {
-	Key          string           `json:"key"`
-	Type         ConfigFieldType  `json:"type"`
-	Required     bool             `json:"required"`
-	Secret       bool             `json:"secret"`
-	Default      json.RawMessage  `json:"default,omitempty"`
-	Description  string           `json:"description,omitempty"`
-	Enum         []json.RawMessage `json:"enum,omitempty"`
-	Minimum      *float64         `json:"minimum,omitempty"`
-	Maximum      *float64         `json:"maximum,omitempty"`
-	MinLength    *int             `json:"minLength,omitempty"`
-	MaxLength    *int             `json:"maxLength,omitempty"`
-	Metadata     map[string]json.RawMessage `json:"metadata,omitempty"`
+	Key         string                     `json:"key"`
+	Type        ConfigFieldType            `json:"type"`
+	Required    bool                       `json:"required"`
+	Secret      bool                       `json:"secret"`
+	Default     json.RawMessage            `json:"default,omitempty"`
+	Description string                     `json:"description,omitempty"`
+	Enum        []json.RawMessage          `json:"enum,omitempty"`
+	Minimum     *float64                   `json:"minimum,omitempty"`
+	Maximum     *float64                   `json:"maximum,omitempty"`
+	MinLength   *int                       `json:"minLength,omitempty"`
+	MaxLength   *int                       `json:"maxLength,omitempty"`
+	Metadata    map[string]json.RawMessage `json:"metadata,omitempty"`
 }
 
 type ConfigSchema struct {

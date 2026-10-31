@@ -505,7 +505,9 @@ internal class VirtualDisplayHostService(
         return try {
             clipboard.setPrimaryClip(ClipData.newPlainText("amitia_virtual", value))
             inputController?.key(displayId, KeyEvent.KEYCODE_PASTE, 0) == true
-        } catch (_: Throwable) {
+        } catch (originalError508: Throwable) {
+          originalError508.printStackTrace()
+
             false
         }
     }
@@ -653,7 +655,9 @@ internal class VirtualDisplayHostService(
                 .put("stableNodeReference", true)
                 .put("truncated", false)
                 .put("source", "ui_automation")
-        } catch (_: Throwable) {
+        } catch (originalError656: Throwable) {
+          originalError656.printStackTrace()
+
             null
         }
     }
@@ -1007,15 +1011,21 @@ internal class VirtualDisplayHostService(
     private fun closeSession(session: DisplaySession) {
         try {
             session.display.setSurface(null)
-        } catch (_: Throwable) {
+        } catch (originalError1010: Throwable) {
+          originalError1010.printStackTrace()
+
         }
         try {
             session.display.release()
-        } catch (_: Throwable) {
+        } catch (originalError1014: Throwable) {
+          originalError1014.printStackTrace()
+
         }
         try {
             session.reader.close()
-        } catch (_: Throwable) {
+        } catch (originalError1018: Throwable) {
+          originalError1018.printStackTrace()
+
         }
     }
 
@@ -1154,7 +1164,9 @@ internal class VirtualDisplayHostService(
                 BufferedReader(InputStreamReader(process.inputStream)).use { reader ->
                     reader.forEachLine { stdout.append(it).append('\n') }
                 }
-            } catch (_: Throwable) {
+            } catch (originalError1157: Throwable) {
+              originalError1157.printStackTrace()
+
             }
         }
         val stderrThread = Thread {
@@ -1162,7 +1174,9 @@ internal class VirtualDisplayHostService(
                 BufferedReader(InputStreamReader(process.errorStream)).use { reader ->
                     reader.forEachLine { stderr.append(it).append('\n') }
                 }
-            } catch (_: Throwable) {
+            } catch (originalError1165: Throwable) {
+              originalError1165.printStackTrace()
+
             }
         }
         stdoutThread.start()
@@ -1193,7 +1207,9 @@ internal class VirtualDisplayHostService(
                     VirtualDisplayHostBinderContainer(asBinder()),
                 )
             context.sendBroadcast(intent)
-        } catch (_: Throwable) {
+        } catch (originalError1196: Throwable) {
+          originalError1196.printStackTrace()
+
         }
     }
 

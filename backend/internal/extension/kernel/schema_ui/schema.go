@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	amitialog "log"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -471,7 +472,9 @@ func (v *Validator) validateNode(node *SchemaUINode, depth int, result *Validati
 		var props struct {
 			Columns int `json:"columns"`
 		}
-		_ = json.Unmarshal(node.Props, &props)
+		if err := json.Unmarshal(node.Props, &props); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		if props.Columns > v.limits.MaxGridColumns {
 			result.Errors = append(result.Errors, fmt.Sprintf("%v: %d > %d", ErrGridColumnsExceeded, props.Columns, v.limits.MaxGridColumns))
 		}
@@ -497,7 +500,9 @@ func (v *Validator) validateNode(node *SchemaUINode, depth int, result *Validati
 			Accept string `json:"accept"`
 		}
 		if len(node.Props) > 0 {
-			_ = json.Unmarshal(node.Props, &props)
+			if err := json.Unmarshal(node.Props, &props); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		if len(props.Accept) > 512 {
 			result.Errors = append(result.Errors, "node "+node.ID+": file_picker accept is too long")
@@ -507,7 +512,9 @@ func (v *Validator) validateNode(node *SchemaUINode, depth int, result *Validati
 		var props struct {
 			Rows int `json:"rows"`
 		}
-		_ = json.Unmarshal(node.Props, &props)
+		if err := json.Unmarshal(node.Props, &props); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		if props.Rows > v.limits.MaxTableRows {
 			result.Errors = append(result.Errors, fmt.Sprintf("table %s rows %d exceeds %d", node.ID, props.Rows, v.limits.MaxTableRows))
 		}
@@ -516,7 +523,9 @@ func (v *Validator) validateNode(node *SchemaUINode, depth int, result *Validati
 		var props struct {
 			Content string `json:"content"`
 		}
-		_ = json.Unmarshal(node.Props, &props)
+		if err := json.Unmarshal(node.Props, &props); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		if htmlPattern.MatchString(props.Content) {
 			result.Errors = append(result.Errors, "markdown "+node.ID+": contains forbidden HTML")
 		}
@@ -528,7 +537,9 @@ func (v *Validator) validateNode(node *SchemaUINode, depth int, result *Validati
 		var props struct {
 			Src string `json:"src"`
 		}
-		_ = json.Unmarshal(node.Props, &props)
+		if err := json.Unmarshal(node.Props, &props); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		if strings.HasPrefix(props.Src, "data:") {
 			result.Warnings = append(result.Warnings, "image "+node.ID+": data URL not recommended")
 		}
@@ -679,7 +690,9 @@ func (r *Renderer) renderNode(node *SchemaUINode, data map[string]any) RenderedN
 		Visible: r.evaluateVisibility(node.effectiveVisibility(), data),
 	}
 	if len(node.Props) > 0 {
-		_ = json.Unmarshal(node.Props, &rendered.Props)
+		if err := json.Unmarshal(node.Props, &rendered.Props); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	for _, binding := range node.Bindings {
 		val := r.resolveBinding(binding, data)

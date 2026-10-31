@@ -76,7 +76,9 @@ Map<String, dynamic>? ownedFileMetadata(dynamic attachments) {
         'uri': uri,
         'sizeBytes': base64Decode(verified['data'] as String).length,
       };
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
   }
   return null;
 }

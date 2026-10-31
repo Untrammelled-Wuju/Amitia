@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/u-ai/backend/internal/gamehost/domain"
+	amitialog "log"
 )
 
 type providerEntry struct {
@@ -113,9 +114,13 @@ func (r *Resolver) Create(
 
 	if err := r.registry.InsertWriting(ctx, record); err != nil {
 		if handle.Abort != nil {
-			_ = handle.Abort()
+			if err := handle.Abort(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		} else {
-			_ = provider.Release(ctx, owner, handle.ObjectID)
+			if err := provider.Release(ctx, owner, handle.ObjectID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		return WritingHandle{}, err
 	}
@@ -130,8 +135,12 @@ func (r *Resolver) Create(
 			// The provider has already sealed the object. If registry admission rejects
 			// the final size, release both sides so a failed seal cannot leave an
 			// unreachable provider object or a permanently-writing registry record.
-			_ = provider.Release(ctx, owner, ref.ID)
-			_ = r.registry.Release(ctx, ref.ID)
+			if err := provider.Release(ctx, owner, ref.ID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
+			if err := r.registry.Release(ctx, ref.ID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return BinaryReference{}, err
 		}
 		return ref, nil

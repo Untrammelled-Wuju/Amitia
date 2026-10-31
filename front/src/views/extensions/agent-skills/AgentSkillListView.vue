@@ -615,12 +615,14 @@ async function install() {
     await load();
   } catch (error: any) {
     if (installed) {
-      await removeAgentSkillMCPDependencies(installed.extensionId).catch(
-        () => undefined,
-      );
-      await removeAgentSkill(installed.id).catch(
-        () => undefined,
-      );
+      await removeAgentSkillMCPDependencies(installed.extensionId).catch((error) => {
+        console.error("[original-error]", error);
+        return undefined;
+      });
+      await removeAgentSkill(installed.id).catch((error) => {
+        console.error("[original-error]", error);
+        return undefined;
+      });
     }
     ElMessage.error(
       error?.response?.data?.detail || error?.message || "安装失败，已回滚",

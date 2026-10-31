@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	amitialog "log"
 	"time"
 )
 
@@ -75,7 +76,11 @@ func (r *GenerationStateRepository) SetActiveGeneration(ctx context.Context, ext
 	if err != nil {
 		return fmt.Errorf("generation-state-repo: begin tx: %w", err)
 	}
-	defer func() { _ = tx.Rollback() }()
+	defer func() {
+		if err := tx.Rollback(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+	}()
 
 	_, err = tx.ExecContext(ctx, `
 		UPDATE kernel_generation_states

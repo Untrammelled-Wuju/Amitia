@@ -44,12 +44,19 @@ internal class DefaultRuntimeEnvironmentBuilder(
         val secretKey = try {
             secretKeyProvider?.invoke()
         } catch (e: Exception) {
-            return RuntimeEnvironmentResult.Failure(RuntimeEnvironmentErrorCode.BUILD_FAILED, "device security storage unavailable")
+          e.printStackTrace()
+
+            return RuntimeEnvironmentResult.Failure(
+                RuntimeEnvironmentErrorCode.BUILD_FAILED,
+                "device security storage unavailable: ${e.message ?: e.javaClass.simpleName}",
+            )
         }
         val hostProcess = buildHostProcessEnvironment(request.hostLayout)
         val guestRuntime = buildGuestRuntimeEnvironment(request.endpoint).toMutableMap()
         if (!secretKey.isNullOrBlank()) guestRuntime["AMITIA_SECRET_KEY"] = secretKey
-        val lanAddresses = try { lanAddressesProvider?.invoke() } catch (_: Exception) { null }
+        val lanAddresses = try { lanAddressesProvider?.invoke() } catch (originalError52: Exception) {
+          originalError52.printStackTrace()
+         null }
         if (!lanAddresses.isNullOrBlank()) guestRuntime["AMITIA_LAN_ADDRESSES"] = lanAddresses
 
         return try {

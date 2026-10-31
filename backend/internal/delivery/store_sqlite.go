@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	amitialog "log"
 )
 
 type DeliveryIntentModel struct {
@@ -349,9 +350,11 @@ func (s *SQLiteDeliveryStore) updateMessageStatusForIntent(tx *gorm.DB, id, stat
 		"status":     status,
 		"updated_at": time.Now().UTC().Format("2006-01-02 15:04:05"),
 	}
-	_ = tx.Table("messages").
+	if err := tx.Table("messages").
 		Where("delivery_group_id = ? AND delivery_sequence = ?", intent.DeliveryGroupID, intent.DeliverySequence).
-		Updates(updates).Error
+		Updates(updates).Error; err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (s *SQLiteDeliveryStore) ReleaseExpiredClaims() (int64, error) {

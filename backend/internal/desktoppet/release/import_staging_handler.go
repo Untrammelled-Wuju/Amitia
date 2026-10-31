@@ -74,7 +74,7 @@ type consumeStagingPayload struct {
 func (h *ImportStagingHandler) Upload(c *gin.Context) {
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "缺少上传文件", gin.H{"errorCode": "INVALID_PARAMS"})
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), gin.H{"errorCode": "INVALID_PARAMS"})
 		return
 	}
 	defer file.Close()
@@ -90,13 +90,13 @@ func (h *ImportStagingHandler) Upload(c *gin.Context) {
 
 	actorID, err := middleware.ResolveActorID(c)
 	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 
 	safeFilename, err := security.SanitizeUploadName(header.Filename)
 	if err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "文件名非法", gin.H{"errorCode": "INVALID_FILENAME"})
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), gin.H{"errorCode": "INVALID_FILENAME"})
 		return
 	}
 	contentType := header.Header.Get("Content-Type")
@@ -106,20 +106,20 @@ func (h *ImportStagingHandler) Upload(c *gin.Context) {
 	uploadDir := stagingID + "/" + filepath.Base(safeFilename) + ".bin"
 	quarantinePath, err := h.registry.Resolve(security.RootImportQuarantine, uploadDir)
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "暂存路径解析失败", gin.H{"errorCode": "INTERNAL_ERROR"})
+		util.ErrorResponse(c, response.InternalError, err.Error(), gin.H{"errorCode": "INTERNAL_ERROR"})
 		return
 	}
 
 	storageKey, err := h.registry.StorageKeyFromPath(security.RootImportQuarantine, quarantinePath)
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "暂存存储键生成失败", gin.H{"errorCode": "INTERNAL_ERROR"})
+		util.ErrorResponse(c, response.InternalError, err.Error(), gin.H{"errorCode": "INTERNAL_ERROR"})
 		return
 	}
 
 	r := io.LimitReader(file, MaxImportUploadSize+1)
 	data, err := io.ReadAll(r)
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "读取失败", gin.H{"errorCode": "INTERNAL_ERROR"})
+		util.ErrorResponse(c, response.InternalError, err.Error(), gin.H{"errorCode": "INTERNAL_ERROR"})
 		return
 	}
 	if int64(len(data)) > MaxImportUploadSize {
@@ -131,11 +131,11 @@ func (h *ImportStagingHandler) Upload(c *gin.Context) {
 	contentHash := hex.EncodeToString(hashBuf[:])
 
 	if err := os.MkdirAll(filepath.Dir(quarantinePath), 0o700); err != nil {
-		util.ErrorResponse(c, response.InternalError, "写入暂存失败", gin.H{"errorCode": "INTERNAL_ERROR"})
+		util.ErrorResponse(c, response.InternalError, err.Error(), gin.H{"errorCode": "INTERNAL_ERROR"})
 		return
 	}
 	if err := os.WriteFile(quarantinePath, data, 0o600); err != nil {
-		util.ErrorResponse(c, response.InternalError, "写入暂存失败", gin.H{"errorCode": "INTERNAL_ERROR"})
+		util.ErrorResponse(c, response.InternalError, err.Error(), gin.H{"errorCode": "INTERNAL_ERROR"})
 		return
 	}
 
@@ -161,24 +161,24 @@ func (h *ImportStagingHandler) Upload(c *gin.Context) {
 			security.DeleteExpectation{EntityType: "import_staging", EntityID: staging.ID},
 		)
 		if cleanupErr != nil {
-			util.ErrorResponse(c, response.InternalError, "暂存记录失败且隔离文件清理失败", gin.H{
+			util.ErrorResponse(c, response.InternalError, err.Error(), gin.H{
 				"errorCode": "IMPORT_STAGING_PERSIST_AND_CLEANUP_FAILED",
 			})
 			return
 		}
-		util.ErrorResponse(c, response.InternalError, "暂存记录失败", gin.H{"errorCode": "INTERNAL_ERROR"})
+		util.ErrorResponse(c, response.InternalError, err.Error(), gin.H{"errorCode": "INTERNAL_ERROR"})
 		return
 	}
 
 	if err := h.inspector.InspectAndMarkReady(c.Request.Context(), staging); err != nil {
 		updated, rejectErr := h.repo.SetRejected(c.Request.Context(), staging.ID, actorID, err.Error())
 		if rejectErr != nil || !updated {
-			util.ErrorResponse(c, response.InternalError, "导入包检查失败且拒绝状态持久化失败", gin.H{
+			util.ErrorResponse(c, response.InternalError, err.Error(), gin.H{
 				"errorCode": "IMPORT_REJECTION_PERSIST_FAILED",
 			})
 			return
 		}
-		util.ErrorResponse(c, response.BusinessError, "导入包检查失败", gin.H{"errorCode": "IMPORT_INSPECTION_FAILED"})
+		util.ErrorResponse(c, response.BusinessError, err.Error(), gin.H{"errorCode": "IMPORT_INSPECTION_FAILED"})
 		return
 	}
 
@@ -192,13 +192,13 @@ func (h *ImportStagingHandler) Upload(c *gin.Context) {
 func (h *ImportStagingHandler) List(c *gin.Context) {
 	actorID, err := middleware.ResolveActorID(c)
 	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 
 	stagings, err := h.listForSpace(c.Request.Context(), actorID)
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "查询失败", gin.H{"errorCode": "INTERNAL_ERROR"})
+		util.ErrorResponse(c, response.InternalError, err.Error(), gin.H{"errorCode": "INTERNAL_ERROR"})
 		return
 	}
 	util.SuccessResponse(c, gin.H{"items": stagings})
@@ -212,13 +212,13 @@ func (h *ImportStagingHandler) Inspect(c *gin.Context) {
 	}
 	actorID, err := middleware.ResolveActorID(c)
 	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 
 	s, err := h.repo.GetForSpace(c.Request.Context(), stagingID, actorID)
 	if err != nil {
-		util.ErrorResponse(c, response.NotFound, "暂存不存在", gin.H{"errorCode": "NOT_FOUND"})
+		util.ErrorResponse(c, response.NotFound, err.Error(), gin.H{"errorCode": "NOT_FOUND"})
 		return
 	}
 	util.SuccessResponse(c, s)
@@ -227,18 +227,18 @@ func (h *ImportStagingHandler) Inspect(c *gin.Context) {
 func (h *ImportStagingHandler) Consume(c *gin.Context) {
 	var payload consumeStagingPayload
 	if err := c.ShouldBindJSON(&payload); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "stagingId 必填", gin.H{"errorCode": "INVALID_PARAMS"})
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), gin.H{"errorCode": "INVALID_PARAMS"})
 		return
 	}
 	actorID, err := middleware.ResolveActorID(c)
 	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 
 	s, err := h.repo.GetForSpace(c.Request.Context(), payload.StagingID, actorID)
 	if err != nil {
-		util.ErrorResponse(c, response.NotFound, "暂存不存在", gin.H{"errorCode": "NOT_FOUND"})
+		util.ErrorResponse(c, response.NotFound, err.Error(), gin.H{"errorCode": "NOT_FOUND"})
 		return
 	}
 	if s.Status != security.StagingStatusReady {
@@ -248,7 +248,7 @@ func (h *ImportStagingHandler) Consume(c *gin.Context) {
 
 	acquired, err := h.repo.BeginConsumptionCAS(c.Request.Context(), payload.StagingID, actorID, s.StateRevision)
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "消费加锁失败", gin.H{"errorCode": "INTERNAL_ERROR"})
+		util.ErrorResponse(c, response.InternalError, err.Error(), gin.H{"errorCode": "INTERNAL_ERROR"})
 		return
 	}
 	if !acquired {
@@ -258,7 +258,7 @@ func (h *ImportStagingHandler) Consume(c *gin.Context) {
 
 	locked, err := h.repo.GetForSpace(c.Request.Context(), payload.StagingID, actorID)
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "重新读取暂存失败", gin.H{"errorCode": "INTERNAL_ERROR"})
+		util.ErrorResponse(c, response.InternalError, err.Error(), gin.H{"errorCode": "INTERNAL_ERROR"})
 		return
 	}
 
@@ -271,7 +271,7 @@ func (h *ImportStagingHandler) Consume(c *gin.Context) {
 		if !failed {
 			log.Warn("path resolution failed but staging state had changed: ", locked.ID)
 		}
-		util.ErrorResponse(c, response.InternalError, "暂存路径解析失败", gin.H{"errorCode": "INTERNAL_ERROR"})
+		util.ErrorResponse(c, response.InternalError, err.Error(), gin.H{"errorCode": "INTERNAL_ERROR"})
 		return
 	}
 
@@ -290,7 +290,7 @@ func (h *ImportStagingHandler) Consume(c *gin.Context) {
 		if !failed {
 			log.Warn("import failed but staging state had changed: ", locked.ID)
 		}
-		util.ErrorResponse(c, response.BusinessError, "导入失败", gin.H{"errorCode": "IMPORT_FAILED"})
+		util.ErrorResponse(c, response.BusinessError, err.Error(), gin.H{"errorCode": "IMPORT_FAILED"})
 		return
 	}
 
@@ -310,13 +310,13 @@ func (h *ImportStagingHandler) Reject(c *gin.Context) {
 	}
 	actorID, err := middleware.ResolveActorID(c)
 	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 
 	ok, err := h.repo.SetRejected(c.Request.Context(), stagingID, actorID, "manual_reject")
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "操作失败", gin.H{"errorCode": "INTERNAL_ERROR"})
+		util.ErrorResponse(c, response.InternalError, err.Error(), gin.H{"errorCode": "INTERNAL_ERROR"})
 		return
 	}
 	if !ok {

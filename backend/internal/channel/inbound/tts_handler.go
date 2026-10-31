@@ -61,7 +61,7 @@ func (h *TTSHandler) Handle(c *gin.Context) {
 		Text string `json:"text"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "msg": "请求格式错误"})
+		c.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "msg": err.Error()})
 		return
 	}
 	text := strings.TrimSpace(body.Text)

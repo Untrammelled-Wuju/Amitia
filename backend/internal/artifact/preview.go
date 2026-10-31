@@ -23,7 +23,7 @@ type previewDocument struct {
 func (h *Handler) CreatePreview(c *gin.Context) {
 	actor, err := middleware.GetActorFromContext(c)
 	if err != nil || actor == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "artifact.unauthorized"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
 	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 5*1024*1024)
@@ -36,14 +36,14 @@ func (h *Handler) CreatePreview(c *gin.Context) {
 	}
 	var nonce [16]byte
 	if _, err := rand.Read(nonce[:]); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "artifact.preview_failed"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	id := hex.EncodeToString(nonce[:])
 	owner := string(actor.SpaceID)
 	ticket, expiresAt, err := h.ticketSigner.Issue(ID(id), owner)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "artifact.preview_failed"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	h.previewMu.Lock()
@@ -69,7 +69,7 @@ func (h *Handler) CreatePreview(c *gin.Context) {
 func (h *Handler) DeletePreview(c *gin.Context) {
 	actor, err := middleware.GetActorFromContext(c)
 	if err != nil || actor == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "artifact.unauthorized"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
 	}
 	id := c.Param("previewId")
@@ -85,7 +85,7 @@ func (h *Handler) GetPreview(c *gin.Context) {
 	id := c.Param("previewId")
 	owner, err := h.ticketSigner.Validate(c.Param("ticket"), ID(id))
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "artifact.unauthorized"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
 	}
 	h.previewMu.Lock()

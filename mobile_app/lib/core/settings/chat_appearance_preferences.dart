@@ -51,7 +51,9 @@ class AiAvatarShapeNotifier extends StateNotifier<AiAvatarShapePreference> {
             roundness: (saved['roundness'] as num).clamp(0, 100).toDouble(),
           );
       }
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
     if (mounted) state = loaded;
   }
 

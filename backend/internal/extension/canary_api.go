@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/canary"
+	amitialog "log"
 )
 
 type CanaryAPI struct {
@@ -283,7 +284,9 @@ func (api *CanaryAPI) abortCanary(c *gin.Context) {
 	var body struct {
 		Reason string `json:"reason"`
 	}
-	_ = c.ShouldBindJSON(&body)
+	if err := c.ShouldBindJSON(&body); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	if body.Reason == "" {
 		body.Reason = "manual_abort"
 	}
@@ -330,7 +333,7 @@ func (api *CanaryAPI) listMetrics(c *gin.Context) {
 	if generationStr != "" {
 		g, err := strconv.ParseInt(generationStr, 10, 64)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid generation"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 		generation = g
@@ -341,7 +344,7 @@ func (api *CanaryAPI) listMetrics(c *gin.Context) {
 	if startStr := c.Query("startTime"); startStr != "" {
 		t, err := time.Parse(time.RFC3339, startStr)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid startTime"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 		windowStart = t
@@ -349,7 +352,7 @@ func (api *CanaryAPI) listMetrics(c *gin.Context) {
 	if endStr := c.Query("endTime"); endStr != "" {
 		t, err := time.Parse(time.RFC3339, endStr)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid endTime"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 		windowEnd = t
@@ -404,7 +407,7 @@ func (api *CanaryAPI) getHealth(c *gin.Context) {
 	}
 	generation, err := strconv.ParseInt(generationStr, 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid generation"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	baselineWindowStr := c.Query("baselineWindow")
@@ -413,7 +416,7 @@ func (api *CanaryAPI) getHealth(c *gin.Context) {
 	}
 	baselineWindow, err := time.ParseDuration(baselineWindowStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid baselineWindow"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	ctx := c.Request.Context()

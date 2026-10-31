@@ -76,7 +76,9 @@ internal object WorkflowSystemEventRegistrar {
                 @Suppress("DEPRECATION") app.registerReceiver(localReceiver, filter)
             }
             receiver = localReceiver
-        } catch (_: Throwable) {
+        } catch (originalError79: Throwable) {
+          originalError79.printStackTrace()
+
             registered.set(false)
         }
     }
@@ -109,7 +111,9 @@ internal object WorkflowSystemEventRegistrar {
         try {
             manager.registerNetworkCallback(NetworkRequest.Builder().build(), callback)
             networkCallback = callback
-        } catch (_: Throwable) {
+        } catch (originalError112: Throwable) {
+          originalError112.printStackTrace()
+
             networkRegistered.set(false)
         }
     }

@@ -430,8 +430,9 @@ class _RuntimeDetailPageState extends ConsumerState<RuntimeDetailPage> {
                       try {
                         final raw = payloadController.text.trim();
                         payload = raw.isEmpty ? null : jsonDecode(raw);
-                      } catch (_) {
-                        setLocal(() => result = 'Payload 不是合法 JSON');
+                      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+setLocal(() => result = 'Payload 不是合法 JSON');
                         return;
                       }
                       setLocal(() => loading = true);

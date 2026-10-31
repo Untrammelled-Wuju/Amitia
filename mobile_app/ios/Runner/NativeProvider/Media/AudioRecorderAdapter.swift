@@ -189,6 +189,8 @@ public class AudioRecorderAdapter: NSObject, FlutterStreamHandler {
         do {
             try AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
         } catch {
+          print("[original-error] \(error)")
+
             // The OS can refuse deactivation while another media operation owns the session.
         }
     }
@@ -201,6 +203,8 @@ public class AudioRecorderAdapter: NSObject, FlutterStreamHandler {
             audioRecorder = try AVAudioRecorder(url: url, settings: settings)
             return audioRecorder?.record() ?? false
         } catch {
+          print("[original-error] \(error)")
+
             return false
         }
     }

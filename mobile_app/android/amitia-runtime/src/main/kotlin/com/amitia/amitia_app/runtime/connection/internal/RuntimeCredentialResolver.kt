@@ -10,8 +10,12 @@ internal class RuntimeCredentialResolver {
         val dataRoot = File(dataRootPath)
         val tokenFile = File(dataRoot, "security/local-token")
 
-        val resolvedTokenFile = try { tokenFile.canonicalFile } catch (_: Throwable) { return Result.failure(BackendConnectionError(BackendConnectionErrorCode.CREDENTIAL_INVALID, "failed to resolve token path")) }
-        val resolvedDataRoot = try { dataRoot.canonicalFile } catch (_: Throwable) { return Result.failure(BackendConnectionError(BackendConnectionErrorCode.CREDENTIAL_INVALID, "failed to resolve data root")) }
+        val resolvedTokenFile = try { tokenFile.canonicalFile } catch (originalError13: Throwable) {
+          originalError13.printStackTrace()
+         return Result.failure(BackendConnectionError(BackendConnectionErrorCode.CREDENTIAL_INVALID, "failed to resolve token path: ${originalError13.message ?: originalError13.javaClass.simpleName}")) }
+        val resolvedDataRoot = try { dataRoot.canonicalFile } catch (originalError14: Throwable) {
+          originalError14.printStackTrace()
+         return Result.failure(BackendConnectionError(BackendConnectionErrorCode.CREDENTIAL_INVALID, "failed to resolve data root: ${originalError14.message ?: originalError14.javaClass.simpleName}")) }
 
         if (!resolvedTokenFile.path.startsWith(resolvedDataRoot.path + File.separator)) {
             return Result.failure(

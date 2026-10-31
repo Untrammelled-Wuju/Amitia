@@ -89,4 +89,3 @@ func (p *Provider) Health(ctx context.Context) capability.HealthStatus {
 		}
 	}
 }
-

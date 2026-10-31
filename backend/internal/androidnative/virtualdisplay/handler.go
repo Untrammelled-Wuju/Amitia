@@ -12,6 +12,7 @@ import (
 	"github.com/u-ai/backend/internal/androidnative"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/pkg/util"
+	amitialog "log"
 )
 
 const (
@@ -483,7 +484,7 @@ func (s *Service) syncNativeDisplays(ctx context.Context) {
 			CreatedAt:       time.Now(),
 		}
 		if existing := s.store.GetByRef(ref); existing != nil {
-			_ = s.store.Update(ref, func(current *VirtualDisplayRecord) error {
+			if err := s.store.Update(ref, func(current *VirtualDisplayRecord) error {
 				current.DisplayID = record.DisplayID
 				current.Generation = record.Generation
 				current.Name = record.Name
@@ -493,14 +494,20 @@ func (s *Service) syncNativeDisplays(ctx context.Context) {
 				current.SurfaceAttached = record.SurfaceAttached
 				current.State = StateReady
 				return nil
-			})
+			}); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			continue
 		}
-		_ = s.store.Insert(record)
+		if err := s.store.Insert(record); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	for _, record := range s.store.List() {
 		if _, ok := liveRefs[record.Ref]; !ok {
-			_, _ = s.store.Remove(record.Ref)
+			if _, err := s.store.Remove(record.Ref); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}
 }

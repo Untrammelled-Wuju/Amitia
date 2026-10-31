@@ -26,7 +26,9 @@ function finish(error) {
 
 const timeout = setTimeout(() => finish("renderer did not mount within 20 seconds"), 20000);
 process.once("exit", () => {
-  try { rmSync(data, { recursive: true, force: true }); } catch {}
+  try { rmSync(data, { recursive: true, force: true }); } catch (error) {
+  console.error("[original-error]", error);
+}
 });
 
 app.whenReady().then(async () => {
@@ -56,8 +58,9 @@ app.whenReady().then(async () => {
       const content = await readFile(file);
       const type = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml" }[path.extname(file)] ?? "application/octet-stream";
       return new Response(content, { headers: { "Content-Type": type } });
-    } catch {
-      return new Response(null, { status: 404 });
+    } catch (error) {
+  console.error("[original-error]", error);
+return new Response(null, { status: 404 });
     }
   });
   win = new BrowserWindow({

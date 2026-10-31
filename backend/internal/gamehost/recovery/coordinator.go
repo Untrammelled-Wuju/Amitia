@@ -360,7 +360,9 @@ func (c *RecoveryCoordinator) executeRollbackRecovery(ctx context.Context, op *R
 	op.Stage = RecoveryStageQuiescing
 
 	if c.runtimeExecutor != nil {
-		_ = c.runtimeExecutor.StopRuntime(ctx, req.RuntimeID)
+		if err := c.runtimeExecutor.StopRuntime(ctx, req.RuntimeID); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 	}
 
 	if c.secretLease != nil {

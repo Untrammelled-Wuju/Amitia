@@ -193,8 +193,9 @@ const targetURL = computed(() => String(current.value?.request?.url || ""));
 const targetHost = computed(() => {
   try {
     return new URL(targetURL.value).hostname;
-  } catch {
-    return "无效地址";
+  } catch (error) {
+  console.error("[original-error]", error);
+return error instanceof Error ? error.message : String(error);
   }
 });
 const formFields = computed(() => {
@@ -291,8 +292,9 @@ function contentText(value: unknown) {
   if (typeof value === "string") return value.slice(0, 1000);
   try {
     return JSON.stringify(value).slice(0, 1000);
-  } catch {
-    return "无法显示";
+  } catch (error) {
+  console.error("[original-error]", error);
+return error instanceof Error ? error.message : String(error);
   }
 }
 function formatTime(value: string) {

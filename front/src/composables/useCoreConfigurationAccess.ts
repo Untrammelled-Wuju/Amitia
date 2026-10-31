@@ -5,7 +5,9 @@ import { useApi } from "./useApi";
 export function coreConfigurationRequestConfig(context: string) {
   if (context === "local") return {};
   let fields: unknown;
-  try { fields = JSON.parse(context); } catch { throw new Error("配置归属无法确认，请重新加载配置"); }
+  try { fields = JSON.parse(context); } catch (error) {
+  console.error("[original-error]", error);
+throw new Error(error instanceof Error ? error.message : String(error)); }
   if (!Array.isArray(fields) || fields.length !== 5 || typeof fields[1] !== "string" || !fields[1] || fields[1].length > 512 || fields[1] !== fields[1].trim()) throw new Error("配置归属无法确认，请重新加载配置");
   if (fields.slice(2).some((value) => !Number.isSafeInteger(value) || value < 1)) throw new Error("配置权限版本无法确认，请重新加载配置");
   return { headers: { "X-Amitia-Expected-Core-ID": fields[1], "X-Amitia-Expected-Configuration-Policy": fields.slice(2).join(":") } };
@@ -48,8 +50,9 @@ export function useCoreConfigurationAccess() {
       contextKey.value = key;
       canConfigure.value = true;
       return key;
-    } catch {
-      if (generation === currentGeneration && request === refreshNumber) {
+    } catch (error) {
+  console.error("[original-error]", error);
+if (generation === currentGeneration && request === refreshNumber) {
         canConfigure.value = false;
         contextKey.value = "";
       }

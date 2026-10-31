@@ -108,8 +108,9 @@ export function readInstallPointer(allowedRoot: string): SnowLumaInstallPointer 
     const parsed = JSON.parse(fs.readFileSync(file, "utf8")) as SnowLumaInstallPointer
     if (!parsed || parsed.schemaVersion !== 1 || !path.isAbsolute(parsed.installDir)) return null
     return parsed
-  } catch {
-    return null
+  } catch (error) {
+  console.error("[original-error]", error);
+return null
   }
 }
 
@@ -236,9 +237,15 @@ async function downloadAsset(asset: SnowLumaReleaseAsset, destination: string, f
     output.end()
     await finished
   } catch (error) {
-    await reader.cancel().catch(() => undefined)
+    await reader.cancel().catch((error) => {
+  console.error("[original-error]", error);
+  return undefined;
+})
     output.destroy()
-    await finished.catch(() => undefined)
+    await finished.catch((error) => {
+  console.error("[original-error]", error);
+  return undefined;
+})
     throw error
   }
   return hash.digest("hex")

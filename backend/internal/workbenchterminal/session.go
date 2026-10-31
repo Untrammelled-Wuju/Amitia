@@ -2,6 +2,7 @@ package workbenchterminal
 
 import (
 	"io"
+	amitialog "log"
 	"sync"
 	"time"
 )
@@ -88,7 +89,9 @@ func (s *session) watchExit() {
 	select {
 	case <-s.readDone:
 	case <-time.After(2 * time.Second):
-		_ = s.proc.Close()
+		if err := s.proc.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		select {
 		case <-s.readDone:
 		case <-time.After(time.Second):

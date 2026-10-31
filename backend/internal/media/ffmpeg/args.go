@@ -47,54 +47,54 @@ func BuildProgressFlags() []string {
 }
 
 type ConversionArgs struct {
-	InputPath    string
-	OutputPath   string
-	Container    string
-	VideoArgs    *VideoConversionArgs
-	AudioArgs    *AudioConversionArgs
-	TrimArgs     *TrimArgs
-	MetadataMode string
-	MetadataSet  map[string]string
+	InputPath      string
+	OutputPath     string
+	Container      string
+	VideoArgs      *VideoConversionArgs
+	AudioArgs      *AudioConversionArgs
+	TrimArgs       *TrimArgs
+	MetadataMode   string
+	MetadataSet    map[string]string
 	MetadataRemove []string
-	StreamMaps   []string
-	ExtraOutput  []string
-	Overwrite    bool
+	StreamMaps     []string
+	ExtraOutput    []string
+	Overwrite      bool
 }
 
 type VideoConversionArgs struct {
-	Mode             string
-	Codec            string
-	QualityMode      string
-	Quality          int
-	BitRateKbps      int
-	MaxBitRateKbps   int
-	Width            *int
-	Height           *int
-	Fit              string
-	FrameRateNum     int64
-	FrameRateDen     int64
-	PixelFormat      string
+	Mode                 string
+	Codec                string
+	QualityMode          string
+	Quality              int
+	BitRateKbps          int
+	MaxBitRateKbps       int
+	Width                *int
+	Height               *int
+	Fit                  string
+	FrameRateNum         int64
+	FrameRateDen         int64
+	PixelFormat          string
 	NormalizeOrientation bool
-	PreserveHDR      bool
-	StreamIndex      *int
+	PreserveHDR          bool
+	StreamIndex          *int
 }
 
 type AudioConversionArgs struct {
-	Mode             string
-	Codec            string
-	BitRateKbps      int
-	SampleRate       int
-	Channels         int
-	ChannelLayout    string
-	StreamIndex      *int
+	Mode              string
+	Codec             string
+	BitRateKbps       int
+	SampleRate        int
+	Channels          int
+	ChannelLayout     string
+	StreamIndex       *int
 	NormalizeLoudness bool
 }
 
 type TrimArgs struct {
-	StartMS   int64
-	EndMS     *int64
+	StartMS    int64
+	EndMS      *int64
 	DurationMS *int64
-	Precision string
+	Precision  string
 }
 
 func BuildConversionArgs(args ConversionArgs) []string {

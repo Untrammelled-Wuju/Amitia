@@ -17,8 +17,9 @@ export function getRuntimeId(): string {
     const newId = "rt_" + randomUUID();
     writeFileSync(idFile, newId, "utf8");
     return newId;
-  } catch {
-    return "rt_" + randomUUID();
+  } catch (error) {
+  console.error("[original-error]", error);
+return "rt_" + randomUUID();
   }
 }
 
@@ -36,7 +37,8 @@ export function getDeviceId(): string {
     const newId = "dev_" + randomUUID();
     writeFileSync(idFile, newId, "utf8");
     return newId;
-  } catch {
-    return "dev_" + randomUUID();
+  } catch (error) {
+  console.error("[original-error]", error);
+return "dev_" + randomUUID();
   }
 }

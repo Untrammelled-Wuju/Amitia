@@ -340,7 +340,9 @@ class _AmitiaMessageViewState extends ConsumerState<AmitiaMessageView> {
           identity == _feedbackIdentity(widget)) {
         setState(() => _feedback = feedback);
       }
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
   }
 
   Future<void> _submitFeedback(String feedbackType, {String? reason}) async {
@@ -1329,8 +1331,9 @@ dynamic _decodeTurnJSON(String value) {
   if (source.isEmpty) return null;
   try {
     return jsonDecode(source);
-  } catch (_) {
-    return source;
+  } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return source;
   }
 }
 
@@ -1339,8 +1342,9 @@ String _turnJSONText(dynamic value) {
   if (value is String) return value;
   try {
     return const JsonEncoder.withIndent('  ').convert(value);
-  } catch (_) {
-    return value.toString();
+  } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return value.toString();
   }
 }
 

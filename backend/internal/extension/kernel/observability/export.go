@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	amitialog "log"
 	"strings"
 	"time"
 )
@@ -133,7 +134,9 @@ func (e *AuditExporter) writeNodeCSV(writer *csv.Writer, node *InvocationNode, p
 		fmt.Sprintf("%d", inv.SideEffectCount),
 		inv.CreatedAt.Format(time.RFC3339),
 	}
-	_ = writer.Write(row)
+	if err := writer.Write(row); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 
 	for i := range node.Children {
 		e.writeNodeCSV(writer, &node.Children[i], inv.InvocationID)

@@ -32,7 +32,7 @@ type setModeRequest struct {
 func (h *Handler) GetBehaviorState(c *gin.Context) {
 	spaceID, err := middleware.ResolveActorID(c)
 	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 	characterID := c.Param("characterId")
@@ -51,7 +51,7 @@ func (h *Handler) GetBehaviorState(c *gin.Context) {
 func requireAdmin(c *gin.Context) (string, bool) {
 	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "AUTH_REQUIRED"})
 		return "", false
 	}
 	if !actor.HasPermission(auth.PermDesktopPetBehaviorAdmin) {
@@ -75,7 +75,7 @@ func (h *Handler) SimulateEvent(c *gin.Context) {
 	}
 	var event BehaviorEventEnvelope
 	if err := c.ShouldBindJSON(&event); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	decision, err := h.service.SimulateEvent(c.Request.Context(), event)
@@ -93,7 +93,7 @@ func (h *Handler) TriggerReconcile(c *gin.Context) {
 	}
 	var req reconcileRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	if req.CharacterID == "" {
@@ -116,7 +116,7 @@ func (h *Handler) SetShadowMode(c *gin.Context) {
 	}
 	var req setModeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	h.service.SetShadowMode(req.Enabled)
@@ -129,7 +129,7 @@ func (h *Handler) SetRuntimeCommand(c *gin.Context) {
 	}
 	var req setModeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	h.service.SetRuntimeCommandEnabled(req.Enabled)
@@ -139,7 +139,7 @@ func (h *Handler) SetRuntimeCommand(c *gin.Context) {
 func (h *Handler) ListBindings(c *gin.Context) {
 	spaceID, err := middleware.ResolveActorID(c)
 	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 	characterID := c.Query("characterId")
@@ -157,12 +157,12 @@ func (h *Handler) ListBindings(c *gin.Context) {
 func (h *Handler) CreateBinding(c *gin.Context) {
 	var binding bindings.BehaviorBinding
 	if err := c.ShouldBindJSON(&binding); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	actorID, err := middleware.ResolveActorID(c)
 	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 	binding.SpaceID = actorID
@@ -190,7 +190,7 @@ func (h *Handler) GetBinding(c *gin.Context) {
 	}
 	actorID, err := middleware.ResolveActorID(c)
 	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 	existing, err := h.service.GetBinding(c.Request.Context(), id)
@@ -213,13 +213,13 @@ func (h *Handler) UpdateBinding(c *gin.Context) {
 	}
 	actorID, err := middleware.ResolveActorID(c)
 	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 
 	var req bindings.BindingUpdateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	req.ID = id
@@ -228,7 +228,7 @@ func (h *Handler) UpdateBinding(c *gin.Context) {
 	updated, err := h.service.UpdateBindingTyped(c.Request.Context(), req)
 	if err != nil {
 		if errors.Is(err, ErrVersionConflict) {
-			util.ErrorResponse(c, response.InvalidParams, "版本冲突，请刷新后重试", gin.H{"errorCode": "VERSION_CONFLICT"})
+			util.ErrorResponse(c, response.InvalidParams, err.Error(), gin.H{"errorCode": "VERSION_CONFLICT"})
 			return
 		}
 		writeBehaviorError(c, err)
@@ -245,7 +245,7 @@ func (h *Handler) DeleteBinding(c *gin.Context) {
 	}
 	actorID, err := middleware.ResolveActorID(c)
 	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 	existing, err := h.service.GetBinding(c.Request.Context(), id)
@@ -272,10 +272,10 @@ func writeBehaviorError(c *gin.Context, err error) {
 		return
 	}
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		util.ErrorResponse(c, response.NotFound, "记录不存在", nil)
+		util.ErrorResponse(c, response.NotFound, err.Error(), nil)
 		return
 	}
-	util.ErrorResponse(c, response.InternalError, "服务器内部错误", nil)
+	util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 }
 
 func mapBehaviorErrorCode(code string) int {

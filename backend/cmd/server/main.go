@@ -37,6 +37,7 @@ import (
 	agenttool "github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/migration"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
+	amitialog "log"
 )
 
 func ensureSingleInstance(addr, dataDir string) {
@@ -224,7 +225,9 @@ func main() {
 	serverAddr = actualAddr
 	endpoint, errEndpoint := writeRuntimeEndpoint(paths, actualAddr)
 	if errEndpoint != nil {
-		_ = listener.Close()
+		if err := listener.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		log.Error("写运行端点失败:", errEndpoint)
 		fmt.Fprintf(os.Stderr, "写运行端点失败: %v\n", errEndpoint)
 		os.Exit(1)
@@ -273,17 +276,23 @@ func main() {
 	services, err := NewAppServices(ctx, graphSvc, bootstrap, profile, policy)
 	if err != nil {
 		log.Error("应用服务初始化失败:", err)
-		_ = bootstrap.StopAll(context.Background())
+		if err := bootstrap.StopAll(context.Background()); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		os.Exit(1)
 	}
 	if err := bootstrap.RegisterApplication(services); err != nil {
 		log.Error("应用组件注册失败:", err)
-		_ = bootstrap.StopAll(context.Background())
+		if err := bootstrap.StopAll(context.Background()); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		os.Exit(1)
 	}
 	if err := bootstrap.StartPhase(appCtx, runtimeorchestrator.PhaseApplication); err != nil {
 		log.Error("应用层启动失败:", err)
-		_ = bootstrap.StopAll(context.Background())
+		if err := bootstrap.StopAll(context.Background()); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		os.Exit(1)
 	}
 	services.RuntimeOrchestrator = bootstrap
@@ -291,7 +300,9 @@ func main() {
 
 	if err := runCanonicalRuntimeAssertions(services); err != nil {
 		log.Error("Canonical runtime startup assertions failed:", err)
-		_ = bootstrap.StopAll(context.Background())
+		if err := bootstrap.StopAll(context.Background()); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		os.Exit(1)
 	}
 
@@ -309,7 +320,9 @@ func main() {
 		checkResult, err := productionCutover.cutoverPlan.ComputeCutoverCheck(appCtx)
 		if err != nil {
 			log.Error("检查生产切换状态失败:", err)
-			_ = bootstrap.StopAll(context.Background())
+			if err := bootstrap.StopAll(context.Background()); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			os.Exit(1)
 		}
 
@@ -318,14 +331,18 @@ func main() {
 				log.Info("检测到旧版本桌面端遗留的切换失败记录，初始化兼容基线")
 				if err := initializeCommittedCutoverState(db, services); err != nil {
 					log.Error("恢复生产切换兼容基线失败:", err)
-					_ = bootstrap.StopAll(context.Background())
+					if err := bootstrap.StopAll(context.Background()); err != nil {
+						amitialog.Printf("[original-error] %v", err)
+					}
 					os.Exit(1)
 				}
 				checkResult.Failed = false
 				checkResult.Committed = true
 			} else {
 				log.Error("检测到生产切换失败状态，进入recovery模式")
-				_ = bootstrap.StopAll(context.Background())
+				if err := bootstrap.StopAll(context.Background()); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 				os.Exit(1)
 			}
 		}
@@ -335,14 +352,18 @@ func main() {
 				log.Info("数据库无cutover记录，初始化兼容基线")
 				if err := initializeCommittedCutoverState(db, services); err != nil {
 					log.Error("初始化生产切换兼容基线失败:", err)
-					_ = bootstrap.StopAll(context.Background())
+					if err := bootstrap.StopAll(context.Background()); err != nil {
+						amitialog.Printf("[original-error] %v", err)
+					}
 					os.Exit(1)
 				}
 			} else {
 				canRun, reasons := closureGate.CanRunCutover()
 				if !canRun {
 					log.Error(closureGate.FailureMessage(reasons))
-					_ = bootstrap.StopAll(context.Background())
+					if err := bootstrap.StopAll(context.Background()); err != nil {
+						amitialog.Printf("[original-error] %v", err)
+					}
 					os.Exit(1)
 				}
 				if checkResult.Incomplete {
@@ -352,7 +373,9 @@ func main() {
 				}
 				if err := productionCutover.RunCutover(appCtx); err != nil {
 					log.Error("生产切换执行失败:", err)
-					_ = bootstrap.StopAll(context.Background())
+					if err := bootstrap.StopAll(context.Background()); err != nil {
+						amitialog.Printf("[original-error] %v", err)
+					}
 					os.Exit(1)
 				}
 				log.Info("生产切换完成")
@@ -361,21 +384,29 @@ func main() {
 
 		if err := runCanonicalRuntimeAssertions(services); err != nil {
 			log.Error("Post-cutover canonical assertions failed:", err)
-			_ = bootstrap.StopAll(context.Background())
+			if err := bootstrap.StopAll(context.Background()); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			os.Exit(1)
 		}
 	}
 
 	cleanup := func() {
-		_ = bootstrap.StopAll(context.Background())
+		if err := bootstrap.StopAll(context.Background()); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	defer cleanup()
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = services.Extension.Close(shutdownCtx)
+		if err := services.Extension.Close(shutdownCtx); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		if services.DeviceMesh != nil {
-			_ = services.DeviceMesh.Stop()
+			if err := services.DeviceMesh.Stop(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}()
 	if policy.CoreBusinessServices {
@@ -432,7 +463,9 @@ func main() {
 	if policy.FullHTTPAPI {
 		r, errSetup := setupRouter(ctx, services, bootstrap)
 		if errSetup != nil {
-			_ = listener.Close()
+			if err := listener.Close(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			log.Error("路由和安全服务初始化失败:", errSetup)
 			cleanup()
 			os.Exit(1)
@@ -459,7 +492,9 @@ func main() {
 	}
 	r, errSetup := setupDeviceAgentRouter(ctx, services)
 	if errSetup != nil {
-		_ = listener.Close()
+		if err := listener.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		log.Error("Device Agent路由初始化失败:", errSetup)
 		cleanup()
 		os.Exit(1)

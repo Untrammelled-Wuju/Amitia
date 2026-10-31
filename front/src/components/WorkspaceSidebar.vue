@@ -48,6 +48,9 @@
             @toggle-pin="handleToggleConversationPin"
             @archive="handleArchiveConversation"
             @move="handleMoveConversation"
+            @open="handleSelectConversation"
+            @mark-read="handleMarkConversationRead"
+            @delete="handleDeleteConversation"
           />
           <SidebarProjectBlock
             v-for="project in pinnedProjects"
@@ -63,6 +66,9 @@
             @toggle-pin-conversation="handleToggleConversationPin"
             @archive-conversation="handleArchiveConversation"
             @move-conversation="handleMoveConversation"
+            @open-conversation="handleSelectConversation"
+            @mark-conversation-read="handleMarkConversationRead"
+            @delete-conversation="handleDeleteConversation"
           />
         </div>
 
@@ -84,6 +90,9 @@
             @toggle-pin="handleToggleConversationPin"
             @archive="handleArchiveConversation"
             @move="handleMoveConversation"
+            @open="handleSelectConversation"
+            @mark-read="handleMarkConversationRead"
+            @delete="handleDeleteConversation"
           />
           <button
             v-if="canToggleRecentConversations"
@@ -117,6 +126,9 @@
             @toggle-pin-conversation="handleToggleConversationPin"
             @archive-conversation="handleArchiveConversation"
             @move-conversation="handleMoveConversation"
+            @open-conversation="handleSelectConversation"
+            @mark-conversation-read="handleMarkConversationRead"
+            @delete-conversation="handleDeleteConversation"
           />
           <div v-if="chatStore.sidebar.projects.length === 0" class="thread-empty">暂无项目</div>
         </div>
@@ -203,7 +215,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ChatDotRound, FolderOpened, Plus, Search } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
@@ -258,33 +270,19 @@ const pinnedProjects = computed(() =>
 const regularProjects = computed(() =>
   chatStore.sidebar.projects.filter((project) => !project.pinnedAt),
 );
-const hasGeneratingConversations = computed(() => {
-  const rows = [
-    ...chatStore.sidebar.pinned,
-    ...chatStore.sidebar.recent,
-    ...chatStore.sidebar.projects.flatMap((project) => project.conversations),
-  ];
-  return rows.some((conversation) => Boolean(conversation.isGenerating));
-});
 let conversationActivityTimer: number | null = null;
 let conversationActivityRefreshing = false;
 
 function syncConversationActivityPolling() {
-  if (!hasGeneratingConversations.value) {
-    if (conversationActivityTimer !== null) {
-      window.clearInterval(conversationActivityTimer);
-      conversationActivityTimer = null;
-    }
-    return;
-  }
   if (conversationActivityTimer !== null) return;
   conversationActivityTimer = window.setInterval(async () => {
     if (conversationActivityRefreshing) return;
     conversationActivityRefreshing = true;
     try {
       await chatStore.fetchSidebar();
-    } catch {
-    } finally {
+    } catch (error) {
+  console.error("[original-error]", error);
+} finally {
       conversationActivityRefreshing = false;
     }
   }, 2000);
@@ -312,9 +310,16 @@ async function handleNewGroupChat() {
   }
 }
 
-async function handleGroupCreated(group: OwnedGroupState, baseRoleId: string) {
+async function handleGroupCreated(group: OwnedGroupState, baseRoleId: string, projectId = "") {
   chatStore.setConversationId(group.conversationId);
-  await chatStore.fetchSidebar().catch(() => undefined);
+  await chatStore.fetchSidebar().catch((error) => {
+  console.error("[original-error]", error);
+  return undefined;
+});
+  const project = projectId
+    ? chatStore.sidebar.projects.find((item) => item.resourceId === projectId)
+    : null;
+  chatStore.currentProjectId = project?.id || "";
   await router.push({ path: "/chat", query: { conversationId: group.conversationId, characterId: baseRoleId } });
 }
 
@@ -336,6 +341,31 @@ async function handleArchiveConversation(conversation: ConversationItem) {
   const wasActive = activeConversationId.value === conversation.id;
   await chatStore.archiveConversation(conversation.id);
   if (wasActive) await router.replace({ path: "/chat" });
+}
+
+async function handleMarkConversationRead(conversation: ConversationItem) {
+  await chatStore.markConversationRead(
+    conversation.id,
+    Number(conversation.lastTerminalTurnSequence || 0),
+  );
+}
+
+async function handleDeleteConversation(conversation: ConversationItem) {
+  const result = await ElMessageBox.confirm(
+    "删除后无法恢复，对话消息和工作区关联都会一并删除。",
+    "删除对话",
+    {
+      type: "warning",
+      confirmButtonText: "删除",
+      cancelButtonText: "取消",
+      confirmButtonClass: "el-button--danger",
+    },
+  ).catch(handleProjectDialogDismiss);
+  if (!result) return;
+  const wasActive = activeConversationId.value === conversation.id;
+  await chatStore.deleteConversation(conversation.id);
+  if (wasActive) await router.replace({ path: "/chat" });
+  ElMessage.success("对话已删除");
 }
 
 async function handleMoveConversation(conversation: ConversationItem, projectId: string) {
@@ -426,8 +456,9 @@ function projectFolderPathsFromDrop(event: DragEvent): string[] {
     try {
       const path = window.amitiaDesktop?.getPathForFile?.(file);
       return path ? [path] : [];
-    } catch {
-      return [];
+    } catch (error) {
+  console.error("[original-error]", error);
+return [];
     }
   });
   if (paths.length) return [...new Set(paths)];
@@ -564,7 +595,10 @@ async function handleOpenProject(project: ProjectItem) {
 }
 
 onMounted(() => {
-  void chatStore.fetchSidebar().catch(() => undefined);
+  void chatStore.fetchSidebar().catch((error) => {
+  console.error("[original-error]", error);
+  return undefined;
+});
   syncConversationActivityPolling();
 });
 
@@ -575,7 +609,6 @@ onUnmounted(() => {
   }
 });
 
-watch(hasGeneratingConversations, syncConversationActivityPolling, { immediate: true });
 </script>
 
 <style scoped>
@@ -637,11 +670,6 @@ watch(hasGeneratingConversations, syncConversationActivityPolling, { immediate: 
 .thread-main { display: flex; align-items: center; gap: 7px; min-width: 0; flex: 1; min-height: 30px; padding: 0 6px 0 8px; border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; font-size: var(--ac-font-size-sm); text-align: left; }
 .thread-main span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .thread-name-input { min-width: 0; width: 100%; min-height: 28px; padding: 3px 6px; border: 1px solid var(--ac-color-primary); border-radius: 5px; background: var(--surface-bg); color: var(--text-primary); font: inherit; outline: none; }
-.thread-delete { display: grid; place-items: center; width: 26px; height: 26px; margin-right: 2px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--text-muted); cursor: pointer; opacity: 0; }
-.thread-row:hover .thread-delete { opacity: 1; }
-.thread-actions { opacity: 0; }
-.thread-row:hover .thread-actions, .thread-row:focus-within .thread-actions { opacity: 1; }
-.thread-delete:hover { background: var(--control-hover-bg); color: var(--danger-color, #d9534f); }
 .thread-expand { align-self: flex-start; margin: 2px 0; padding: 3px 8px; border: 0; border-radius: 5px; background: transparent; color: var(--ac-color-primary); cursor: pointer; font: inherit; font-size: var(--ac-font-size-xs); }
 .thread-expand:hover { background: var(--workbench-sidebar-hover); }
 .thread-section { display: flex; flex-direction: column; gap: 1px; padding: 4px 0; }
@@ -738,5 +766,4 @@ watch(hasGeneratingConversations, syncConversationActivityPolling, { immediate: 
 .project-folder-picker:disabled, .project-folder-clear:disabled { cursor: not-allowed; opacity: 0.6; }
 .workspace-sidebar :deep(button), .thread-name-input, .section-caption { line-height: 1.45; }
 .workspace-sidebar :deep(button:not(:disabled):focus-visible) { outline: 2px solid var(--ac-color-primary); outline-offset: -2px; }
-.thread-row:focus-within .thread-delete { opacity: 1; }
 </style>

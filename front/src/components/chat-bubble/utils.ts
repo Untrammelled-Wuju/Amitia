@@ -8,8 +8,9 @@ export function fmtTime(dateStr: string): string {
       hour: "2-digit",
       minute: "2-digit",
     });
-  } catch {
-    return "";
+  } catch (error) {
+  console.error("[original-error]", error);
+return "";
   }
 }
 

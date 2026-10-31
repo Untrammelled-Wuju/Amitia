@@ -7,6 +7,7 @@ import (
 
 	"github.com/u-ai/backend/internal/extension/kernel/event"
 	"github.com/u-ai/backend/internal/gamehost/domain"
+	amitialog "log"
 )
 
 type EventTypeProvider func(eventTypeID string) (string, int)
@@ -131,7 +132,9 @@ func (c *compositeEventPublisher) PublishEvent(ctx context.Context, ev EventEnve
 		if sec == nil {
 			continue
 		}
-		_ = sec.PublishEvent(ctx, ev, opts...)
+		if err := sec.PublishEvent(ctx, ev, opts...); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return nil
 }

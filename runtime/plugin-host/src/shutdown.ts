@@ -31,8 +31,9 @@ export async function shutdown(reason: string): Promise<void> {
   for (const handler of shutdownHandlers) {
     try {
       await handler();
-    } catch (e) {
-    }
+    } catch (error) {
+  process.stderr.write("[original-error] " + String(error) + "\n");
+}
   }
   setState("stopped");
   process.exit(0);

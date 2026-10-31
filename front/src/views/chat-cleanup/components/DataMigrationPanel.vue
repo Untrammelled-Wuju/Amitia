@@ -99,8 +99,9 @@ async function loadMigrations() {
     const res = await apiClient.get("/api/storage/migrations");
     const d = res.data?.data || res.data;
     migrationStatus.value = d;
-  } catch {
-    migrationStatus.value = null;
+  } catch (error) {
+  console.error("[original-error]", error);
+migrationStatus.value = null;
   }
 }
 

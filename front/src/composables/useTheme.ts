@@ -94,8 +94,9 @@ function loadStoredAppearance(): StoredAppearance {
     if (!raw) return {};
     const parsed = JSON.parse(raw);
     return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
+  } catch (error) {
+  console.error("[original-error]", error);
+return {};
   }
 }
 

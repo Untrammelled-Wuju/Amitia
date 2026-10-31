@@ -17,22 +17,22 @@ func (e *Error) Error() string {
 }
 
 const (
-	ErrUnsupported              = "SCREENSHOT_UNSUPPORTED"
-	ErrAccessibilityDisabled    = "SCREENSHOT_ACCESSIBILITY_DISABLED"
+	ErrUnsupported               = "SCREENSHOT_UNSUPPORTED"
+	ErrAccessibilityDisabled     = "SCREENSHOT_ACCESSIBILITY_DISABLED"
 	ErrAccessibilityNotConnected = "SCREENSHOT_ACCESSIBILITY_NOT_CONNECTED"
-	ErrCapabilityNotDeclared    = "SCREENSHOT_CAPABILITY_NOT_DECLARED"
-	ErrInvalidDisplay          = "SCREENSHOT_INVALID_DISPLAY"
-	ErrIntervalTooShort        = "SCREENSHOT_INTERVAL_TOO_SHORT"
-	ErrSecureContent           = "SCREENSHOT_SECURE_CONTENT"
-	ErrCaptureFailed           = "SCREENSHOT_CAPTURE_FAILED"
-	ErrEncodeFailed            = "SCREENSHOT_ENCODE_FAILED"
-	ErrTooLarge                = "SCREENSHOT_TOO_LARGE"
-	ErrArtifactWriteFailed     = "SCREENSHOT_ARTIFACT_WRITE_FAILED"
-	ErrResourceInvalid         = "SCREENSHOT_RESOURCE_INVALID"
-	ErrCancelled               = "SCREENSHOT_CANCELLED"
-	ErrResourceExhausted       = "SCREENSHOT_RESOURCE_EXHAUSTED"
-	ErrBlockedNativeHost       = "BLOCKED_ANDROID_NATIVE_HOST_SOURCE"
-	ErrFrozenContract          = "BLOCKED_BY_FROZEN_A_CONTRACT"
+	ErrCapabilityNotDeclared     = "SCREENSHOT_CAPABILITY_NOT_DECLARED"
+	ErrInvalidDisplay            = "SCREENSHOT_INVALID_DISPLAY"
+	ErrIntervalTooShort          = "SCREENSHOT_INTERVAL_TOO_SHORT"
+	ErrSecureContent             = "SCREENSHOT_SECURE_CONTENT"
+	ErrCaptureFailed             = "SCREENSHOT_CAPTURE_FAILED"
+	ErrEncodeFailed              = "SCREENSHOT_ENCODE_FAILED"
+	ErrTooLarge                  = "SCREENSHOT_TOO_LARGE"
+	ErrArtifactWriteFailed       = "SCREENSHOT_ARTIFACT_WRITE_FAILED"
+	ErrResourceInvalid           = "SCREENSHOT_RESOURCE_INVALID"
+	ErrCancelled                 = "SCREENSHOT_CANCELLED"
+	ErrResourceExhausted         = "SCREENSHOT_RESOURCE_EXHAUSTED"
+	ErrBlockedNativeHost         = "BLOCKED_ANDROID_NATIVE_HOST_SOURCE"
+	ErrFrozenContract            = "BLOCKED_BY_FROZEN_A_CONTRACT"
 )
 
 var errorMapping = map[string]string{
@@ -49,7 +49,7 @@ var errorMapping = map[string]string{
 	ErrArtifactWriteFailed:       "execution_failed",
 	ErrResourceInvalid:           "invalid_result",
 	ErrCancelled:                 "cancelled",
-	ErrResourceExhausted:        "resource_limit_exceeded",
+	ErrResourceExhausted:         "resource_limit_exceeded",
 	ErrBlockedNativeHost:         "not_available",
 	ErrFrozenContract:            "not_available",
 }

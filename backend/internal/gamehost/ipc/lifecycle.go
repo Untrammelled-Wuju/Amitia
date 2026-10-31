@@ -91,7 +91,9 @@ func (h *defaultConnectionHandler) OnEnvelope(conn *Connection, envelope protoco
 		ConnectionID: conn.ID,
 		Peer:         conn.Peer,
 	}
-	_ = h.dispatcher.Dispatch(ctx, source, envelope)
+	if err := h.dispatcher.Dispatch(ctx, source, envelope); err != nil {
+		log.Printf("[original-error] %v", err)
+	}
 }
 
 func (h *defaultConnectionHandler) OnError(conn *Connection, err error) {
@@ -566,7 +568,9 @@ func (cp *controlPlane) sendHelloError(conn *Connection, envelope protocol.Envel
 		Error:     perr,
 	}
 	FillRouting(&resp, conn.Peer)
-	_ = conn.Transport().Send(context.Background(), resp)
+	if err := conn.Transport().Send(context.Background(), resp); err != nil {
+		log.Printf("[original-error] %v", err)
+	}
 }
 
 func (cp *controlPlane) closeConnection(conn *Connection) {
@@ -582,7 +586,9 @@ func (cp *controlPlane) closeConnection(conn *Connection) {
 
 	transport := conn.Transport()
 	if transport != nil {
-		_ = transport.Close()
+		if err := transport.Close(); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 	}
 
 	now := time.Now().UTC()

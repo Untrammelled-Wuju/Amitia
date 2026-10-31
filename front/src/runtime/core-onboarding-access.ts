@@ -9,5 +9,7 @@ export async function canSkipCoreOnboarding(): Promise<boolean> {
     const response = await apiClient.get("/api/device-mesh/v1/coordination/me");
     const status = response.data?.data || response.data;
     return status?.canAdminister === false && typeof status?.coreId === "string" && Boolean(status.coreId) && typeof status?.policy === "object";
-  } catch { return false; }
+  } catch (error) {
+  console.error("[original-error]", error);
+return false; }
 }

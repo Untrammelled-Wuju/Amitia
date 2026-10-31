@@ -45,8 +45,9 @@ export class ClickThroughController {
     if (win && !win.isDestroyed()) {
       try {
         win.setIgnoreMouseEvents(false);
-      } catch {
-        void 0;
+      } catch (error) {
+  console.error("[original-error]", error);
+void 0;
       }
     }
     this.win = null;
@@ -123,8 +124,9 @@ export class ClickThroughController {
       const [cw, ch] = win.getContentSize();
       contentWidth = cw;
       contentHeight = ch;
-    } catch {
-      void 0;
+    } catch (error) {
+  console.error("[original-error]", error);
+void 0;
     }
     const sizeChanged =
       this.lastContentSize === null ||

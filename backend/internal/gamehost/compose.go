@@ -841,7 +841,9 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 			evtOpts := event.PublishOptions{
 				Metadata: json.RawMessage(`"` + string(auditEvent.OperationID) + `"`),
 			}
-			_, _ = opts.EventService.Publish(nil, "gamehost.recovery.audit", 1, payloadJSON, evtOpts)
+			if _, err := opts.EventService.Publish(nil, "gamehost.recovery.audit", 1, payloadJSON, evtOpts); err != nil {
+				log.Printf("[original-error] %v", err)
+			}
 		})
 	} else {
 		productionAuditSink = recovery.NewAuditSinkAdapter(func(event recovery.RecoveryAuditEvent) {
@@ -1047,7 +1049,9 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 			evtOpts := event.PublishOptions{
 				Metadata: json.RawMessage(`"` + startupEvent.OperationID + `"`),
 			}
-			_, _ = evtSvc.Publish(nil, "gamehost.startup.audit", 1, payloadJSON, evtOpts)
+			if _, err := evtSvc.Publish(nil, "gamehost.startup.audit", 1, payloadJSON, evtOpts); err != nil {
+				log.Printf("[original-error] %v", err)
+			}
 		})
 	} else {
 		startupAuditSink = startup.NewAuditSinkLoggerAdapter()

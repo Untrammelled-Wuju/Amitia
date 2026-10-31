@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/runtimehost"
+	amitialog "log"
 )
 
 type ProcessResult struct {
@@ -119,7 +120,9 @@ func (r *Runner) RunProcessWithOptions(ctx context.Context, executable string, a
 	duration := time.Since(startTime)
 
 	if runCtx.Err() == context.DeadlineExceeded {
-		_ = supervisor.Stop(context.Background(), processID)
+		if err := supervisor.Stop(context.Background(), processID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return &ProcessResult{
 			ExitCode: -1,
 			Stdout:   stdoutBuf,

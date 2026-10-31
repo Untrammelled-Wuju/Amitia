@@ -119,12 +119,9 @@ func (b *llamaCppBackend) Load(ctx context.Context) error {
 	}
 
 	manifest, err := b.runtime.inspectModel()
-	if err != nil {
-		b.lastError = err.Error()
-		b.state = "failed"
-		return wrapError(localmodel.ErrLoadFailed, err)
+	if err == nil {
+		b.manifest.Store(manifest)
 	}
-	b.manifest.Store(manifest)
 
 	if b.host == nil {
 		b.lastError = localmodel.ErrNativeBridgeUnavailable.Error()
@@ -181,7 +178,35 @@ func (b *llamaCppBackend) shutdown() {
 }
 
 func init() {
-	if err := localmodel.Register("llama_cpp", NewLlamaCppBackend); err != nil {
+	if err := localmodel.RegisterWithDescriptor("llama_cpp", NewLlamaCppBackend, localmodel.ProviderDescriptor{
+		ID:                 "llama_cpp",
+		Name:               "llama.cpp (本地 GGUF)",
+		Protocol:           "llama_cpp",
+		DefaultProtocol:    "llama_cpp",
+		SupportedProtocols: []string{"llama_cpp"},
+		RuntimeKind:        "embedded",
+		ModelFormats:       []string{"gguf"},
+		DocsURL:            "https://github.com/ggerganov/llama.cpp",
+		ConfigFields: []localmodel.ProviderField{
+			{Key: "resourceUri", Label: "GGUF 模型", Type: "modelFile", Required: true},
+			{Key: "localModelId", Label: "模型标识", Type: "text", Placeholder: "留空使用配置名称"},
+			{Key: "contextSize", Label: "上下文长度", Type: "number", Default: 65536},
+			{Key: "threads", Label: "CPU 线程", Type: "number", Default: 4},
+			{Key: "gpuLayers", Label: "GPU 层数", Type: "number", Default: 0},
+			{Key: "batchSize", Label: "批大小", Type: "number", Default: 512},
+			{Key: "mmprojUri", Label: "多模态投影模型", Type: "modelFile", Required: false},
+			{Key: "temperature", Label: "温度", Type: "number", Default: 0.7},
+			{Key: "topP", Label: "Top P", Type: "number", Default: 1},
+			{Key: "topK", Label: "Top K", Type: "number", Default: 40},
+		},
+		Capabilities: map[string]bool{"chat": true, "stream": true, "tools": true, "json": true, "vision": true, "local": true},
+		Availability: func() (bool, string) {
+			if path := llamaServerExecutable(""); path == "" {
+				return false, "llama-server 运行器未安装"
+			}
+			return true, ""
+		},
+	}); err != nil {
 		panic(err)
 	}
 }

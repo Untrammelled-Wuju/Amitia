@@ -12,6 +12,7 @@ import (
 
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"gorm.io/gorm"
+	amitialog "log"
 )
 
 func migrateLegacyEmotionHistory(ctx context.Context, db *gorm.DB, engine *business.Engine, spaceID, deviceID, coreID string) error {
@@ -126,7 +127,9 @@ func migrateLegacyEmotionHistory(ctx context.Context, db *gorm.DB, engine *busin
 				Stress         float64 `json:"stress"`
 				Confidence     float64 `json:"confidence"`
 			}
-			_ = json.Unmarshal([]byte(row.UserAffectJSON), &affect)
+			if err := json.Unmarshal([]byte(row.UserAffectJSON), &affect); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			payload, _ := json.Marshal(map[string]json.RawMessage{
 				"userAffect":          json.RawMessage(defaultJSON(row.UserAffectJSON)),
 				"relationshipEmotion": json.RawMessage(defaultJSON(row.RelationshipEmotionJSON)),
@@ -184,7 +187,9 @@ func migrateLegacyEmotionHistory(ctx context.Context, db *gorm.DB, engine *busin
 				} `json:"mood"`
 				Stress float64 `json:"stress"`
 			}
-			_ = json.Unmarshal([]byte(row.StateJSON), &state)
+			if err := json.Unmarshal([]byte(row.StateJSON), &state); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			valence := clamp01Continuity((state.Emotion.Positive - state.Emotion.Negative + 1) / 2)
 			snapshot := business.EmotionSnapshot{
 				ID:            "emotion/legacy-affect/" + legacyEmotionKey("", roleID),

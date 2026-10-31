@@ -170,7 +170,9 @@ async function main() {
 
     console.log(`[archive] PASS: ${workspaceEntries.length} frozen files are identical and archive-local gates passed${cleanBuild ? "; clean build passed" : ""}`);
   } finally {
-    await fs.rm(extractDir, { recursive: true, force: true }).catch(() => {});
+    await fs.rm(extractDir, { recursive: true, force: true }).catch((error) => {
+  console.error("[original-error]", error);
+});
   }
 }
 

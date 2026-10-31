@@ -27,15 +27,15 @@ func generateRequestID() string {
 func handleAuthFailure(c *gin.Context, authErr error) {
 	errMsg := authErr.Error()
 	if strings.Contains(errMsg, "expired") {
-		util.ErrorResponse(c, response.TokenExpired, "令牌已过期，请重新登录", gin.H{"errorCode": "TOKEN_EXPIRED"})
+		util.ErrorResponse(c, response.TokenExpired, errMsg, gin.H{"errorCode": "TOKEN_EXPIRED"})
 	} else if strings.Contains(errMsg, "bearer token required") || strings.Contains(errMsg, "local token required") {
-		util.ErrorResponse(c, response.Unauthorized, "请先登录", gin.H{"errorCode": "TOKEN_REQUIRED"})
+		util.ErrorResponse(c, response.Unauthorized, errMsg, gin.H{"errorCode": "TOKEN_REQUIRED"})
 	} else if strings.Contains(errMsg, "invalid token") {
-		util.ErrorResponse(c, response.InvalidToken, "令牌无效", gin.H{"errorCode": "TOKEN_INVALID"})
+		util.ErrorResponse(c, response.InvalidToken, errMsg, gin.H{"errorCode": "TOKEN_INVALID"})
 	} else if strings.Contains(errMsg, "misconfigured") {
-		util.ErrorResponse(c, response.InternalError, "服务配置错误", gin.H{"errorCode": "SERVER_MISCONFIGURED"})
+		util.ErrorResponse(c, response.InternalError, errMsg, gin.H{"errorCode": "SERVER_MISCONFIGURED"})
 	} else {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_FAILED"})
+		util.ErrorResponse(c, response.Unauthorized, errMsg, gin.H{"errorCode": "AUTH_FAILED"})
 	}
 	c.Abort()
 }

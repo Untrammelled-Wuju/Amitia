@@ -151,7 +151,34 @@ func (b *mnnBackend) shutdown() {
 }
 
 func init() {
-	if err := localmodel.Register("mnn", NewMNNBackend); err != nil {
+	if err := localmodel.RegisterWithDescriptor("mnn", NewMNNBackend, localmodel.ProviderDescriptor{
+		ID:                 "mnn",
+		Name:               "MNN (本地)",
+		Protocol:           "mnn",
+		DefaultProtocol:    "mnn",
+		SupportedProtocols: []string{"mnn"},
+		RuntimeKind:        "embedded",
+		ModelFormats:       []string{"mnn"},
+		DocsURL:            "https://github.com/alibaba/MNN",
+		ConfigFields: []localmodel.ProviderField{
+			{Key: "modelResourceUri", Label: "MNN 模型", Type: "modelFile", Required: true},
+			{Key: "localModelId", Label: "模型标识", Type: "text", Placeholder: "留空使用配置名称"},
+			{Key: "threadNum", Label: "CPU 线程", Type: "number", Default: 4},
+			{Key: "contextSize", Label: "上下文长度", Type: "number", Default: 65536},
+			{Key: "precision", Label: "精度", Type: "select", Options: []localmodel.ProviderFieldOption{{Label: "低", Value: "low"}, {Label: "普通", Value: "normal"}, {Label: "高", Value: "high"}}},
+			{Key: "memory", Label: "内存模式", Type: "select", Options: []localmodel.ProviderFieldOption{{Label: "普通", Value: "normal"}, {Label: "低内存", Value: "low"}}},
+			{Key: "useMmap", Label: "内存映射", Type: "boolean", Default: true},
+			{Key: "kvCacheMmap", Label: "KV Cache 映射", Type: "boolean", Default: false},
+			{Key: "multimodal", Label: "多模态", Type: "boolean", Default: false},
+		},
+		Capabilities: map[string]bool{"chat": true, "stream": true, "tools": true, "json": true, "vision": true, "local": true},
+		Availability: func() (bool, string) {
+			if path := mnnServerExecutable(); path == "" {
+				return false, "mnn-server 运行器未安装"
+			}
+			return true, ""
+		},
+	}); err != nil {
 		panic(err)
 	}
 }

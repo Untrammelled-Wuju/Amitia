@@ -69,8 +69,9 @@ export class StdioRpcTransport implements RpcTransport {
         for (const handler of this.messageHandlers) {
           handler(message);
         }
-      } catch {
-      }
+      } catch (error) {
+  console.error("[original-error]", error);
+}
     }
   }
 

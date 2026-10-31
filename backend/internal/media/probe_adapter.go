@@ -51,10 +51,10 @@ func adaptProbeResult(resourceURI string, full *ffmpeg.FullProbeResult, req meta
 		}
 		for i := 0; i < chapCount; i++ {
 			c := full.Chapters[i]
-		chapter := metadata.MediaChapterInfo{
-			ID:     int(c.ID),
-			StartMs: c.StartMS,
-			EndMs:   c.EndMS,
+			chapter := metadata.MediaChapterInfo{
+				ID:      int(c.ID),
+				StartMs: c.StartMS,
+				EndMs:   c.EndMS,
 				Title:   c.Title,
 			}
 			result.Chapters = append(result.Chapters, chapter)
@@ -108,16 +108,16 @@ func adaptStream(s ffmpeg.FullStreamInfo) metadata.MediaStreamInfo {
 
 	if s.Video != nil {
 		info.Video = &metadata.MediaVideoStreamInfo{
-			Width:          s.Video.Width,
-			Height:         s.Video.Height,
-			PixelFormat:    s.Video.PixelFormat,
-			FrameRateNum:   s.Video.FrameRateNum,
-			FrameRateDen:   s.Video.FrameRateDen,
-			SAR:            s.Video.SAR,
-			DAR:            s.Video.DAR,
-			ColorSpace:     s.Video.ColorSpace,
-			ColorTransfer:  s.Video.ColorTransfer,
-			ColorPrimaries: s.Video.ColorPrimaries,
+			Width:           s.Video.Width,
+			Height:          s.Video.Height,
+			PixelFormat:     s.Video.PixelFormat,
+			FrameRateNum:    s.Video.FrameRateNum,
+			FrameRateDen:    s.Video.FrameRateDen,
+			SAR:             s.Video.SAR,
+			DAR:             s.Video.DAR,
+			ColorSpace:      s.Video.ColorSpace,
+			ColorTransfer:   s.Video.ColorTransfer,
+			ColorPrimaries:  s.Video.ColorPrimaries,
 			RotationDegrees: s.Video.Rotation,
 		}
 

@@ -299,8 +299,9 @@ const voicePresets = ref<any[]>([]);
 onMounted(async () => {
   try {
     voicePresets.value = (await get<any[]>("/api/tts/voices")) || [];
-  } catch {
-    voicePresets.value = [];
+  } catch (error) {
+  console.error("[original-error]", error);
+voicePresets.value = [];
   }
 });
 

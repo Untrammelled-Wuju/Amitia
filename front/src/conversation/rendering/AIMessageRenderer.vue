@@ -302,7 +302,9 @@ async function refreshFeedback() {
   try {
     const result = await loadMessageFeedback(String(props.message.id), props.characterId, props.message.executionScope);
     if (generation === feedbackGeneration && identity === feedbackIdentity.value) messageFeedback.value = result;
-  } catch {}
+  } catch (error) {
+  console.error("[original-error]", error);
+}
 }
 
 async function saveFeedback(feedbackType: string, reason = "") {

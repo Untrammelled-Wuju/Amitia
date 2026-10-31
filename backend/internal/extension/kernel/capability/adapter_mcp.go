@@ -115,7 +115,7 @@ func (a *MCPRuntimeAdapter) normalizeMCPResult(raw json.RawMessage, invocationID
 			Status:       ToolResultStatusFailed,
 			Error: &ToolError{
 				Code:    ErrorCodeInvalidResult,
-				Message: "MCP Tool output is invalid",
+					Message: "MCP Tool output is invalid: " + err.Error(),
 			},
 		}
 	}

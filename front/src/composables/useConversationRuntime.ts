@@ -475,8 +475,9 @@ export function useConversationRuntime(
       if (!currentConnection(epoch, id)) return;
       recoverySnapshotRequired = false;
       if (id) void connect(false);
-    } catch {
-      if (currentConnection(epoch, id)) scheduleReconnect();
+    } catch (error) {
+  console.error("[original-error]", error);
+if (currentConnection(epoch, id)) scheduleReconnect();
     }
   }
 
@@ -508,8 +509,9 @@ export function useConversationRuntime(
       let event: AgentUIEvent;
       try {
         event = JSON.parse(frame.data) as AgentUIEvent;
-      } catch {
-        await recoverFromSnapshot();
+      } catch (error) {
+  console.error("[original-error]", error);
+await recoverFromSnapshot();
         return false;
       }
       const eventScope = (event as AgentUIEvent & { executionScope?: OwnedExecutionScope })?.executionScope;
@@ -534,8 +536,9 @@ export function useConversationRuntime(
         }
         if (done) break;
       }
-    } catch {
-      if (!signal.aborted && currentConnection(epoch, id)) await recoverFromSnapshot();
+    } catch (error) {
+  console.error("[original-error]", error);
+if (!signal.aborted && currentConnection(epoch, id)) await recoverFromSnapshot();
     } finally {
       reader.releaseLock();
     }

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/runtimehost"
+	amitialog "log"
 )
 
 func NewSessionManager(host runtimehost.RuntimeHost, policy Policy) *SessionManager {
@@ -77,7 +78,9 @@ func (m *SessionManager) Open(ctx context.Context, params OpenParams) (SessionID
 	go sess.readLoop(sessionCtx)
 
 	go func() {
-		_ = cmd.Wait()
+		if err := cmd.Wait(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		sess.handleExit()
 		m.cleanupSession(sessID)
 	}()
@@ -152,7 +155,9 @@ func (m *SessionManager) Close(ctx context.Context, owner SessionOwner, id Sessi
 	close(sess.closeCh)
 
 	if sess.ptmx != nil {
-		_ = sess.ptmx.Close()
+		if err := sess.ptmx.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 
 	if m.policy.CloseGracePeriod > 0 {
@@ -162,7 +167,9 @@ func (m *SessionManager) Close(ctx context.Context, owner SessionOwner, id Sessi
 		done := make(chan struct{})
 		go func() {
 			if sess.cmd != nil && sess.cmd.Process != nil {
-				_ = sess.cmd.Process.Signal(syscall.SIGTERM)
+				if err := sess.cmd.Process.Signal(syscall.SIGTERM); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 			close(done)
 		}()
@@ -174,7 +181,9 @@ func (m *SessionManager) Close(ctx context.Context, owner SessionOwner, id Sessi
 	}
 
 	if sess.cmd != nil && sess.cmd.Process != nil {
-		_ = sess.cmd.Process.Kill()
+		if err := sess.cmd.Process.Kill(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 
 	m.cleanupSession(id)
@@ -203,12 +212,16 @@ func (m *SessionManager) ForceCancel(ctx context.Context, owner SessionOwner, id
 	close(sess.closeCh)
 
 	if sess.ptmx != nil {
-		_ = sess.ptmx.Close()
+		if err := sess.ptmx.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		sess.ptmx = nil
 	}
 
 	if sess.cmd != nil && sess.cmd.Process != nil {
-		_ = sess.cmd.Process.Kill()
+		if err := sess.cmd.Process.Kill(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 
 	m.cleanupSession(id)
@@ -258,12 +271,16 @@ func (m *SessionManager) forceCancelInternal(ctx context.Context, id SessionID) 
 	}
 
 	if sess.ptmx != nil {
-		_ = sess.ptmx.Close()
+		if err := sess.ptmx.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		sess.ptmx = nil
 	}
 
 	if sess.cmd != nil && sess.cmd.Process != nil {
-		_ = sess.cmd.Process.Kill()
+		if err := sess.cmd.Process.Kill(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 
 	m.cleanupSession(id)

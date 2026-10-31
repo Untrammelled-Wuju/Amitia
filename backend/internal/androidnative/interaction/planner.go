@@ -61,7 +61,7 @@ func (p *Planner) planNodeAction(
 	node, err := p.nodeResolver.ResolveNode(ctx, target.SnapshotID, target.NodeID)
 	if err != nil {
 		if treeErr, ok := err.(*uitree.Error); ok && treeErr.Code == uitree.UI_NODE_STALE {
-			return InteractionPlan{}, &Error{Code: INTERACTION_NODE_STALE, Message: "node is stale"}
+			return InteractionPlan{}, &Error{Code: INTERACTION_NODE_STALE, Message: "node is stale: " + err.Error()}
 		}
 		return InteractionPlan{}, &Error{Code: INTERACTION_NODE_NOT_FOUND, Message: "node not found: " + err.Error()}
 	}

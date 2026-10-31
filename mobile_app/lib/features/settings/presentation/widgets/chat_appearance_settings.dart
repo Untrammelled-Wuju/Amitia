@@ -32,8 +32,9 @@ class _ChatAppearanceSettingsState
       await ref.read(aiAvatarPreferencesProvider.notifier).init();
       await ref.read(aiAvatarShapeProvider.notifier).init();
       await ref.read(aiNamePreferencesProvider.notifier).init();
-    } catch (_) {
-      _failed = true;
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+_failed = true;
     }
     if (mounted) setState(() => _busy = false);
   }
@@ -44,11 +45,12 @@ class _ChatAppearanceSettingsState
       await ref
           .read(chatAppearancePreferencesProvider.notifier)
           .setMessageStyle(ChatMessageStyle.values[index]);
-    } catch (_) {
-      if (mounted) {
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('保存聊天界面风格失败，请重试')));
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -186,11 +188,12 @@ class _ChatAppearanceSettingsState
     setState(() => _busy = true);
     try {
       await ref.read(aiAvatarShapeProvider.notifier).setShape(shape, roundness);
-    } catch (_) {
-      if (mounted)
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+if (mounted)
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('保存 AI 头像形状失败，请重试')));
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
     } finally {
       if (mounted)
         setState(() {
@@ -204,11 +207,12 @@ class _ChatAppearanceSettingsState
     setState(() => _busy = true);
     try {
       await ref.read(userMessageMaterialProvider.notifier).setMaterial(value);
-    } catch (_) {
-      if (mounted) {
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('保存用户消息背景材质失败，请重试')));
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -219,11 +223,12 @@ class _ChatAppearanceSettingsState
     setState(() => _busy = true);
     try {
       await ref.read(aiAvatarPreferencesProvider.notifier).setEnabled(value);
-    } catch (_) {
-      if (mounted) {
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('保存 AI 头像设置失败，请重试')));
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -234,11 +239,12 @@ class _ChatAppearanceSettingsState
     setState(() => _busy = true);
     try {
       await ref.read(aiNamePreferencesProvider.notifier).setEnabled(value);
-    } catch (_) {
-      if (mounted) {
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('保存 AI 名称设置失败，请重试')));
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
       }
     } finally {
       if (mounted) setState(() => _busy = false);

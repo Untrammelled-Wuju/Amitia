@@ -211,15 +211,15 @@ func (s *Service) Extract(ctx context.Context, req ExtractRequest) (int, int64, 
 	}
 
 	es := &extractState{
-		service:        s,
-		targetRoot:     req.Target,
-		policy:         s.policy,
-		overwrite:      req.Overwrite,
+		service:         s,
+		targetRoot:      req.Target,
+		policy:          s.policy,
+		overwrite:       req.Overwrite,
 		stripComponents: req.StripOptions,
-		allowSymlinks:  req.AllowSymlinks,
-		maxEntries:     maxEntries,
-		maxBytes:       maxBytes,
-		maxSingleEntry: s.policy.MaxSingleEntryBytes,
+		allowSymlinks:   req.AllowSymlinks,
+		maxEntries:      maxEntries,
+		maxBytes:        maxBytes,
+		maxSingleEntry:  s.policy.MaxSingleEntryBytes,
 	}
 
 	err = sa.ForEachEntry(ctx, func(ctx context.Context, entry ArchiveEntry, content io.Reader) error {

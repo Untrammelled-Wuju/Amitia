@@ -8,6 +8,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	"github.com/u-ai/backend/internal/gamehost/contracts"
 	"github.com/u-ai/backend/internal/gamehost/domain"
+	amitialog "log"
 )
 
 type TopologyAccessor interface {
@@ -255,7 +256,9 @@ func (e *serviceExecutor) Start(ctx context.Context, entry ServicePlanEntry, res
 	startCompleted := false
 	defer func() {
 		if !startCompleted {
-			_ = topology.UpdateServiceState(serviceID, ServiceStateFailed, time.Now())
+			if err := topology.UpdateServiceState(serviceID, ServiceStateFailed, time.Now()); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}()
 

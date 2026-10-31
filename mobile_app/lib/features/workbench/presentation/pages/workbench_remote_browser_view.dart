@@ -501,7 +501,9 @@ class _WorkbenchRemoteBrowserViewState extends ConsumerState<WorkbenchRemoteBrow
     client.post<Map<String, dynamic>>(
       '$endpoint/control', data: {'action': 'release', 'leaseId': leaseId},
       fromJson: (value) => Map<String, dynamic>.from(value as Map),
-    ).then((_) {}, onError: (Object _) {});
+    ).then((_) {}, onError: (Object error) {
+      print("[original-error] $error");
+    });
   }
 
   void _reconnect() {

@@ -148,8 +148,9 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
         if (value is String) {
           try {
             loaded[key] = jsonDecode(value);
-          } catch (_) {
-            loaded[key] = value;
+          } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+loaded[key] = value;
           }
         } else if (value != null) {
           loaded[key] = value;
@@ -1737,7 +1738,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     required BoxFit fit,
     required String alt,
   }) {
-    Widget error() => Container(
+    Widget error([Object? failure]) => Container(
       width: width,
       height: height ?? 80,
       color: context.surfaceSecondary,
@@ -1746,10 +1747,10 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(Icons.broken_image_outlined, color: context.textTertiary),
-          if (alt.trim().isNotEmpty) ...[
+          if (failure != null || alt.trim().isNotEmpty) ...[
             const SizedBox(height: 4),
             Text(
-              alt,
+              failure?.toString() ?? alt,
               style: AppTypography.caption(context),
               textAlign: TextAlign.center,
             ),
@@ -1768,10 +1769,11 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
             width: width,
             height: height,
             fit: fit,
-            errorBuilder: (_, __, ___) => error(),
+            errorBuilder: (_, failure, __) => error(failure),
           );
-        } catch (_) {
-          return error();
+        } catch (caughtError, stackTrace) {
+          print("[original-error] $caughtError\n$stackTrace");
+          return error(caughtError);
         }
       }
     }
@@ -1780,7 +1782,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       width: width,
       height: height,
       fit: fit,
-      errorBuilder: (_, __, ___) => error(),
+      errorBuilder: (_, failure, __) => error(failure),
       loadingBuilder: (context, child, progress) => progress == null
           ? child
           : Container(

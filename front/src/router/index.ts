@@ -29,8 +29,9 @@ async function readOnboardingCompleted(force = false): Promise<boolean | null> {
     onboardingCompleted = Boolean(data?.completed);
     onboardingCheckedAt = Date.now();
     return onboardingCompleted;
-  } catch {
-    onboardingCompleted = null;
+  } catch (error) {
+  console.error("[original-error]", error);
+onboardingCompleted = null;
     onboardingCheckedAt = 0;
     return null;
   }
@@ -68,8 +69,9 @@ router.beforeEach(async (to, from) => {
         if (webAccess.authenticated || !webAccess.configured) {
           webDevicePaired = await isCurrentDevicePaired(baseURL);
         }
-      } catch {
-        if (to.path !== "/web-access") {
+      } catch (error) {
+  console.error("[original-error]", error);
+if (to.path !== "/web-access") {
           return { path: "/web-access", query: { redirect: to.fullPath } };
         }
         return true;

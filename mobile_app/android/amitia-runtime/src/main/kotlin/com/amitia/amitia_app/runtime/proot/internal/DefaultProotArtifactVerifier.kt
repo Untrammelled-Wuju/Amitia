@@ -30,7 +30,9 @@ internal class DefaultProotArtifactVerifier(private val locator: ProotBinaryLoca
         val digest = MessageDigest.getInstance("SHA-256")
         file.inputStream().use { fis -> val buf = ByteArray(8192); while (true) { val r = fis.read(buf); if (r == -1) break; digest.update(buf, 0, r) } }
         digest.digest().joinToString("") { "%02x".format(it) } == expected
-    } catch (e: Exception) { false }
+    } catch (e: Exception) {
+      e.printStackTrace()
+     false }
 }
 internal sealed class ProotMetadataResult {
     data class Success(val artifact: com.amitia.amitia_app.runtime.proot.ProotArtifact) : ProotMetadataResult()

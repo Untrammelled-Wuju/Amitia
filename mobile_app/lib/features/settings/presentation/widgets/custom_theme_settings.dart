@@ -20,11 +20,12 @@ class _CustomThemeSettingsState extends ConsumerState<CustomThemeSettings> {
       await ref
           .read(appearancePreferencesProvider.notifier)
           .setCustomPalette(value);
-    } catch (_) {
-      if (mounted) {
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('保存配色失败，请重试')));
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
       }
     } finally {
       if (mounted) setState(() => _saving = false);

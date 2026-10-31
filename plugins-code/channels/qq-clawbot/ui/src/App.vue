@@ -74,7 +74,9 @@ async function loadConfig() {
       token: String(config?.token || ""),
       sandbox: config?.sandbox === true,
     }
-  } catch {}
+  } catch (error) {
+  console.error("[original-error]", error);
+}
 }
 
 async function connect() {

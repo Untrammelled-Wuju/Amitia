@@ -5,6 +5,7 @@ package workbenchterminal
 import (
 	"errors"
 	"fmt"
+	amitialog "log"
 	"os"
 	"runtime"
 	"sync"
@@ -155,9 +156,15 @@ func (p *conptyProcess) Wait() error {
 func (p *conptyProcess) Close() error {
 	p.closeOnce.Do(func() {
 		terminateTerminalProcessTree(p.pid)
-		_ = syscall.TerminateProcess(p.handle, 1)
-		_ = p.stdin.Close()
-		_ = p.stdout.Close()
+		if err := syscall.TerminateProcess(p.handle, 1); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := p.stdin.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := p.stdout.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		procClosePseudoConsole.Call(p.pseudo)
 	})
 	return nil

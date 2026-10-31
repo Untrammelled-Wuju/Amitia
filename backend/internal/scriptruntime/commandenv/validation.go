@@ -74,16 +74,16 @@ func classifyCommand(cmd string) (Kind, bool) {
 }
 
 var shellCommands = map[string]bool{
-	"sh":            true,
-	"bash":          true,
-	"zsh":           true,
-	"fish":          true,
-	"cmd":           true,
-	"cmd.exe":       true,
-	"powershell":    true,
+	"sh":             true,
+	"bash":           true,
+	"zsh":            true,
+	"fish":           true,
+	"cmd":            true,
+	"cmd.exe":        true,
+	"powershell":     true,
 	"powershell.exe": true,
-	"pwsh":          true,
-	"pwsh.exe":      true,
+	"pwsh":           true,
+	"pwsh.exe":       true,
 }
 
 func isShellCommand(cmd string) bool {

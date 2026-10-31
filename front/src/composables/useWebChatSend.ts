@@ -10,6 +10,7 @@ import { useDeviceOwnedConversation } from "./useDeviceOwnedConversation";
 import { ownedImageAttachment, ownedAudioAttachment, ownedAudioURL, ownedFileAttachment, ownedAttachmentURL, type OwnedAttachment } from "@/runtime/device-owned-attachments";
 import { sameOwnedAuthority } from "@/runtime/owned-speech-result";
 import { parseConversationReference } from "@/runtime/device-owned-conversation-reference";
+import { parseOwnedProjectReference } from "@/runtime/owned-project-reference";
 import { ownedChatRuntimeRequest } from "@/runtime/owned-chat-management";
 import type { OwnedGroupChatResponse, OwnedGroupState } from "@/runtime/device-owned-chat";
 import { resolveGroupMentions } from "./groupMentions";
@@ -49,6 +50,18 @@ export function useWebChatSend(
   const isSubmitting = ref(false);
   const generating = sending;
   const pendingVideoFile = ref<File | null>(null);
+  const activeSendConversations = new Map<string, string>();
+
+  function currentSendKey() {
+    return convId.value || "__draft__";
+  }
+
+  function syncSendState() {
+    const key = currentSendKey();
+    const active = [...activeSendConversations.values()].includes(key);
+    sending.value = active;
+    isSubmitting.value = active;
+  }
 
 
   function onImageAttached(file: File, base64: string) {
@@ -121,11 +134,13 @@ export function useWebChatSend(
     const originalRole = characterId.value;
     const originalReply = replyTarget?.value ? JSON.parse(JSON.stringify(replyTarget.value)) : undefined;
     let activeConversation = originalConversation;
-    const draftProjectId = !convId.value ? String(currentWorkspace.value?.projectId || "").trim() : "";
+    const draftProjectReference = !convId.value ? String(currentWorkspace.value?.projectId || "").trim() : "";
+    let draftProjectId = "";
     const safeText = typeof text === "string" ? text : "";
-    if (isSubmitting.value || sending.value) return;
-    isSubmitting.value = true;
     const requestEnvelope = createRequestEnvelope();
+    if ([...activeSendConversations.values()].includes(currentSendKey())) return;
+    activeSendConversations.set(requestEnvelope.requestId, currentSendKey());
+    isSubmitting.value = true;
     const userMsgLocalId = `client:${requestEnvelope.requestId}`;
     const imgUrl = pendingImageBase64.value;
     const finalAudioUrl = audioUrl || pendingAudioUrl.value;
@@ -188,6 +203,11 @@ export function useWebChatSend(
         const prepared = await owned.data("working", originalRole);
         let expectedExecutionScope = prepared.executionScope;
         if (expectedExecutionScope.roleId !== originalRole || convId.value !== originalConversation || characterId.value !== originalRole) throw new Error("对话或角色已变化，原消息未发送");
+        if (draftProjectReference) {
+          const project = parseOwnedProjectReference(draftProjectReference);
+          if (project && project.ownerId !== expectedExecutionScope.resourceOwnerId) throw new Error("项目数据归属已变化，请重新选择项目");
+          draftProjectId = project?.id || draftProjectReference;
+        }
         if (finalAudioUrl) throw new Error("请重新录制语音，以便当前数据所有者保存原始音频");
 				let video: OwnedAttachment | undefined;
         if (finalVideoUrl) {
@@ -287,7 +307,15 @@ export function useWebChatSend(
             }
             scrollToBottom(true);
           });
-          if (convId.value !== activeConversation || characterId.value !== originalRole) throw new Error("对话或角色已变化，群聊回复已丢弃");
+          if (convId.value !== activeConversation || characterId.value !== originalRole) {
+            activeSendConversations.set(requestEnvelope.requestId, response.conversationId);
+            notifyDesktopPetChatState("assistant_finished", requestEnvelope.requestId);
+            void Promise.resolve().then(() => onConversationCreated?.(response.conversationId)).catch((error) => {
+  console.error("[original-error]", error);
+  return undefined;
+});
+            return;
+          }
           const userIndex = messages.value.findIndex((message) => message.id === userMsgLocalId || message.id === `${requestEnvelope.requestId}/user`);
           if (userIndex >= 0) messages.value[userIndex] = { ...messages.value[userIndex], id: response.userMessageId, ownerId: expectedExecutionScope.resourceOwnerId, sourceRevision: 1, status: "completed", executionScope: expectedExecutionScope, conversationId: response.conversationId, sourceConversationId: parseConversationReference(response.conversationId)?.id || response.conversationId };
           for (const delivery of response.deliveries) {
@@ -319,12 +347,14 @@ export function useWebChatSend(
             else messages.value.push(assistant);
           }
           convId.value = response.conversationId;
-          sending.value = false;
+          activeSendConversations.set(requestEnvelope.requestId, response.conversationId);
+          syncSendState();
           if (response.status === "completed_with_errors") modelError.value = "部分群成员回复失败，可在成员面板查看后重新点名";
           notifyDesktopPetChatState("assistant_finished", requestEnvelope.requestId);
           if (replyTarget) replyTarget.value = null;
-          void Promise.resolve().then(() => onConversationCreated?.(response.conversationId)).catch(() => {
-            if (convId.value === response.conversationId && characterId.value === originalRole) ElMessage.warning("群消息已保存，会话列表刷新失败，请稍后刷新");
+          void Promise.resolve().then(() => onConversationCreated?.(response.conversationId)).catch((error) => {
+  console.error("[original-error]", error);
+if (convId.value === response.conversationId && characterId.value === originalRole) ElMessage.warning(error instanceof Error ? error.message : String(error));
           });
           return;
         }
@@ -336,8 +366,10 @@ export function useWebChatSend(
             if (event.conversationId && !convId.value) {
               convId.value = event.conversationId;
               activeConversation = event.conversationId;
+              activeSendConversations.set(requestEnvelope.requestId, event.conversationId);
               localStorage.setItem("webchat-conv-id", event.conversationId);
               window.dispatchEvent(new CustomEvent("amitia:owned-runtime-refresh", { detail: { conversationId: event.conversationId } }));
+              syncSendState();
             }
             const assistantIndex = messages.value.findIndex((message) => message.role === "assistant" && message.requestId === requestEnvelope.requestId);
             const startedAssistant = { id: assistantId, uiKey: `request:${requestEnvelope.requestId}`, ownerId: event.executionScope?.resourceOwnerId, requestId: requestEnvelope.requestId, role: "assistant", status: "streaming", characterId: event.executionScope?.roleId || originalRole, conversationId: event.conversationId, executionScope: event.executionScope };
@@ -358,7 +390,15 @@ export function useWebChatSend(
           if (index >= 0 && (event.type === "interrupted" || event.type === "failed")) messages.value[index] = { ...messages.value[index], status: event.type === "failed" ? "failed" : "interrupted", errorCode: event.errorCode, saved: event.data?.saved === true };
           scrollToBottom(true);
         });
-        if (convId.value !== activeConversation || characterId.value !== originalRole) throw new Error("对话或角色已变化，原回复已丢弃");
+        if (convId.value !== activeConversation || characterId.value !== originalRole) {
+          activeSendConversations.set(requestEnvelope.requestId, response.conversationId);
+          notifyDesktopPetChatState("assistant_finished", requestEnvelope.requestId);
+          void Promise.resolve().then(() => onConversationCreated?.(response.conversationId)).catch((error) => {
+  console.error("[original-error]", error);
+  return undefined;
+});
+          return;
+        }
         const index = messages.value.findIndex((message) => message.id === assistantId);
 				const userIndex = messages.value.findIndex((message) => message.id === `${requestEnvelope.requestId}/user` && message.ownerId === response.executionScope.resourceOwnerId);
 				if (userIndex >= 0) messages.value[userIndex] = { ...messages.value[userIndex], content: response.transcription || messages.value[userIndex].content, sourceRevision: response.userRevision || 1, sourceConversationId: response.resourceConversationId || parseConversationReference(response.conversationId)?.id || response.conversationId, characterId: response.executionScope.roleId };
@@ -366,13 +406,15 @@ export function useWebChatSend(
         if (index >= 0) messages.value[index] = { ...messages.value[index], ...assistant };
         else messages.value.push(assistant);
         convId.value = response.conversationId;
-        sending.value = false;
+        activeSendConversations.set(requestEnvelope.requestId, response.conversationId);
+        syncSendState();
         notifyDesktopPetChatState("assistant_finished", requestEnvelope.requestId);
         if (replyTarget) replyTarget.value = null;
         try {
           await onConversationCreated?.(response.conversationId);
-        } catch {
-          if (convId.value === response.conversationId && characterId.value === originalRole) ElMessage.warning("回复已保存，会话列表刷新失败，请稍后刷新");
+        } catch (error) {
+  console.error("[original-error]", error);
+if (convId.value === response.conversationId && characterId.value === originalRole) ElMessage.warning(error instanceof Error ? error.message : String(error));
         }
         return;
       }
@@ -380,16 +422,18 @@ export function useWebChatSend(
     } catch (err: any) {
       const errMsg = err?.message || "发送失败";
       failPendingAssistant?.(requestEnvelope.requestId);
-      modelError.value = errMsg;
-      const index = messages.value.findIndex((message) => message.id === userMsgLocalId);
-      if (index >= 0) messages.value[index] = { ...messages.value[index], status: "failed" };
-      const assistantIndex = messages.value.findIndex((message) => message.id === `${requestEnvelope.requestId}/assistant`);
-      if (assistantIndex >= 0) messages.value[assistantIndex] = { ...messages.value[assistantIndex], status: "interrupted" };
-      sending.value = false;
+      if (convId.value === activeConversation && characterId.value === originalRole) {
+        modelError.value = errMsg;
+        const index = messages.value.findIndex((message) => message.id === userMsgLocalId);
+        if (index >= 0) messages.value[index] = { ...messages.value[index], status: "failed" };
+        const assistantIndex = messages.value.findIndex((message) => message.id === `${requestEnvelope.requestId}/assistant`);
+        if (assistantIndex >= 0) messages.value[assistantIndex] = { ...messages.value[assistantIndex], status: "interrupted" };
+      }
       notifyDesktopPetChatState("assistant_error", requestEnvelope.requestId, errMsg);
     } finally {
       if (groupSending) groupSending.value = false;
-      isSubmitting.value = false;
+      activeSendConversations.delete(requestEnvelope.requestId);
+      syncSendState();
       fetchWebMsgCount?.();
     }
   }
@@ -398,9 +442,10 @@ export function useWebChatSend(
 
   async function handleStop() {
     try {
-      if (groupSending?.value) await owned.interrupt();
+      const requestId = [...activeSendConversations.entries()].find(([, conversation]) => conversation === currentSendKey())?.[0] || "";
+      if (groupSending?.value) await owned.interrupt(requestId);
       else if (activeTurnId?.value && convId.value) await ownedChatRuntimeRequest("interrupt", { conversationId: convId.value, turnId: activeTurnId.value }, characterId.value);
-      else await owned.interrupt();
+      else await owned.interrupt(requestId);
     } catch (error: any) { ElMessage.error(error?.message || "停止失败"); }
   }
 
@@ -435,7 +480,9 @@ export function useWebChatSend(
       messages.value = [];
       sending.value = false;
       ElMessage.success("已清空");
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
 
   return {

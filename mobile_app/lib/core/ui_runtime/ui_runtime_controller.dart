@@ -132,8 +132,9 @@ class UIRuntimeController
       final saved = UIProfile.fromJson(json);
       await ensureLoaded(force: true);
       return saved;
-    } catch (_) {
-      // Force a fresh cloud revision before the caller offers retry.
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+// Force a fresh cloud revision before the caller offers retry.
       await ensureLoaded(force: true);
       rethrow;
     }
@@ -222,8 +223,9 @@ final uiRuntimeProvider =
             );
             final id = (status?['deviceId'] ?? '').toString().trim();
             return id.isEmpty ? null : id;
-          } catch (_) {
-            return null;
+          } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return null;
           } finally {
             if (http != null) await http.close();
           }

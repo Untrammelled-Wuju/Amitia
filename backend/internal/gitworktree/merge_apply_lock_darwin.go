@@ -2,6 +2,7 @@ package gitworktree
 
 import (
 	"context"
+	amitialog "log"
 	"os"
 	"syscall"
 	"time"
@@ -19,13 +20,17 @@ func acquireMergeFileLock(ctx context.Context, path string, timeout time.Duratio
 	}
 	info, err := f.Stat()
 	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
-		_ = f.Close()
+		if err := f.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, ErrInvalidArgument
 	}
 	deadline := time.Now().Add(timeout)
 	for {
 		if err = ctx.Err(); err != nil {
-			_ = f.Close()
+			if err := f.Close(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return nil, err
 		}
 		err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
@@ -33,14 +38,25 @@ func acquireMergeFileLock(ctx context.Context, path string, timeout time.Duratio
 			break
 		}
 		if err != syscall.EWOULDBLOCK && err != syscall.EAGAIN && err != syscall.EINTR {
-			_ = f.Close()
+			if err := f.Close(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return nil, err
 		}
 		if !time.Now().Before(deadline) {
-			_ = f.Close()
+			if err := f.Close(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return nil, mergeLockExpiry(ctx)
 		}
 		time.Sleep(12 * time.Millisecond)
 	}
-	return func() { _ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN); _ = f.Close() }, nil
+	return func() {
+		if err := syscall.Flock(int(f.Fd()), syscall.LOCK_UN); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := f.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+	}, nil
 }

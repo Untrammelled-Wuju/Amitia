@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	amitialog "log"
 	"sync"
 )
 
@@ -65,10 +66,14 @@ func (f *Framer) Close() {
 	f.closed = true
 	f.closeMu.Unlock()
 	if c, ok := f.w.(io.Closer); ok {
-		_ = c.Close()
+		if err := c.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	if c, ok := f.r.(io.Closer); ok {
-		_ = c.Close()
+		if err := c.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 }
 
@@ -108,7 +113,9 @@ func (f *Framer) ReadFrame() (Frame, error) {
 	limit := f.maxFrameBytes
 	f.mu.Unlock()
 	if size > uint64(limit) {
-		_ = drainReader(f.r, size)
+		if err := drainReader(f.r, size); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return Frame{}, fmt.Errorf("%w: size=%d limit=%d", ErrFrameTooLarge, size, limit)
 	}
 	if size > uint64(MaxFrameAbsolute) {

@@ -55,7 +55,9 @@ class UIStylePatchNotifier extends StateNotifier<UIStylePatchState> {
     try {
       final decoded = jsonDecode(prefs.getString(_patchKey) ?? '{}');
       if (decoded is Map) patch = decoded.cast<String, dynamic>();
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
     var rules = const <AmitiaStyleRule>[];
     try {
       final decoded = jsonDecode(prefs.getString(_rulesKey) ?? '[]');
@@ -67,7 +69,9 @@ class UIStylePatchNotifier extends StateNotifier<UIStylePatchState> {
             )
             .toList(growable: false);
       }
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
     var transactions = const <AmitiaStyleTransaction>[];
     try {
       final decoded = jsonDecode(prefs.getString(_transactionsKey) ?? '[]');
@@ -80,7 +84,9 @@ class UIStylePatchNotifier extends StateNotifier<UIStylePatchState> {
             )
             .toList(growable: false);
       }
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
     state = UIStylePatchState(
       revision: (prefs.getInt(_revisionKey) ?? 0).clamp(0, 1 << 31).toInt(),
       patch: patch,
@@ -157,8 +163,9 @@ class UIStylePatchNotifier extends StateNotifier<UIStylePatchState> {
           .whereType<Map>()
           .map((item) => item.cast<String, dynamic>())
           .toList(growable: true);
-    } catch (_) {
-      return <Map<String, dynamic>>[];
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return <Map<String, dynamic>>[];
     }
   }
 

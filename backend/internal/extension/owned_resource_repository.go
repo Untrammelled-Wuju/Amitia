@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	amitialog "log"
 )
 
 type ownedResourceRecord struct {
@@ -76,7 +77,9 @@ func (r *Repository) CleanupOwnedResources(ctx context.Context, extensionID, sco
 		})
 		if err != nil {
 			failures = append(failures, record.ResourceType+":"+record.ResourceID)
-			_ = r.db.WithContext(ctx).Model(&ownedResourceRecord{}).Where("id = ?", record.ID).Updates(map[string]interface{}{"status": "cleanup_failed", "cleanup_attempts": gorm.Expr("cleanup_attempts + 1"), "last_error": err.Error(), "updated_at": now}).Error
+			if err := r.db.WithContext(ctx).Model(&ownedResourceRecord{}).Where("id = ?", record.ID).Updates(map[string]interface{}{"status": "cleanup_failed", "cleanup_attempts": gorm.Expr("cleanup_attempts + 1"), "last_error": err.Error(), "updated_at": now}).Error; err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}
 	if len(failures) > 0 {
@@ -100,6 +103,8 @@ func (r *Repository) RetryOwnedResourceCleanup(ctx context.Context) {
 			continue
 		}
 		seen[key] = true
-		_ = r.CleanupOwnedResources(ctx, record.ExtensionID, record.OwnerScopeType, record.OwnerScopeID)
+		if err := r.CleanupOwnedResources(ctx, record.ExtensionID, record.OwnerScopeType, record.OwnerScopeID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 }

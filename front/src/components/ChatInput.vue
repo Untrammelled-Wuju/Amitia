@@ -1077,8 +1077,9 @@ async function loadAgentSkills(more = false, query = "") {
         if (request === skillsRequest) void loadAgentSkills(true);
       }, 0);
     }
-  } catch {
-  } finally {
+  } catch (error) {
+  console.error("[original-error]", error);
+} finally {
     if (request === skillsRequest) {
       skillsLoading.value = false;
       skillsLoadingMore.value = false;
@@ -1099,8 +1100,9 @@ async function handleChooseWorkspaceDirectory() {
   try {
     await chooseWorkspaceDirectory();
     workspaceMenuOpen.value = false;
-  } catch {
-    // chooseWorkspaceDirectory already reports a user-facing error.
+  } catch (error) {
+  console.error("[original-error]", error);
+// chooseWorkspaceDirectory already reports a user-facing error.
   }
 }
 

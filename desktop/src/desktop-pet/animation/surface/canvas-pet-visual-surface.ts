@@ -175,8 +175,9 @@ export class CanvasPetVisualSurface implements PetVisualSurface {
             data[y * sampleWidth + x] = pixels[pixelIndex + 3];
           }
         }
-      } catch {
-        data.fill(0);
+      } catch (error) {
+  console.error("[original-error]", error);
+data.fill(0);
       }
     }
     return {

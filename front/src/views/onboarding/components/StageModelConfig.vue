@@ -316,7 +316,7 @@ const providers = ref<any[]>([]);
 const selectedProvider = computed(() => props.provider === "openai"
   ? `openai:${props.protocol || "openai_responses"}`
   : props.provider);
-const providerChoices = computed(() => providers.value.flatMap((provider: any) => provider.id === "openai"
+const providerChoices = computed(() => providers.value.filter((provider: any) => provider.runtimeKind !== "embedded").flatMap((provider: any) => provider.id === "openai"
   ? [
       { ...provider, value: "openai:openai_chat", name: "OpenAI · Chat Completions" },
       { ...provider, value: "openai:openai_responses", name: "OpenAI · Responses" },
@@ -326,8 +326,9 @@ const providerChoices = computed(() => providers.value.flatMap((provider: any) =
 onMounted(async () => {
   try {
     providers.value = (await get<any[]>("/api/model/providers")) || [];
-  } catch {
-    providers.value = [];
+  } catch (error) {
+  console.error("[original-error]", error);
+providers.value = [];
   }
 });
 
@@ -375,7 +376,7 @@ const emit = defineEmits<{
 
 const modelTypes = [
   { label: "在线模型", value: "online" },
-  { label: "本地模型", value: "local" },
+  { label: "Ollama 外部本地服务", value: "local" },
   { label: "兼容服务", value: "compatible" },
 ];
 

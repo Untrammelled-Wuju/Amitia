@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/interaction"
+	amitialog "log"
 )
 
 const ownedWorkerCancellationPollInterval = 200 * time.Millisecond
@@ -130,5 +131,7 @@ func (r *ownedMultiAgentWorkerRunner) settleUnverifiedWorker(childID string) {
 	if err != nil || !found || record == nil || record.IsTerminal() {
 		return
 	}
-	_, _ = r.tracker.TransitionCAS(ctx, childID, record.StatusVersion, interaction.InteractionStatusInterrupted)
+	if _, err := r.tracker.TransitionCAS(ctx, childID, record.StatusVersion, interaction.InteractionStatusInterrupted); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }

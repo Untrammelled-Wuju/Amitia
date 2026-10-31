@@ -25,14 +25,14 @@ type DetectRequest struct {
 }
 
 type DetectResult struct {
-	Path        string `json:"path"`
-	Format      Format `json:"format"`
-	MIMEType    string `json:"mimeType,omitempty"`
-	Archive     bool   `json:"archive"`
-	Compressed  bool   `json:"compressed"`
-	SizeBytes   int64  `json:"sizeBytes"`
-	EntryCount  *int   `json:"entryCount,omitempty"`
-	Encrypted   bool   `json:"encrypted,omitempty"`
+	Path       string `json:"path"`
+	Format     Format `json:"format"`
+	MIMEType   string `json:"mimeType,omitempty"`
+	Archive    bool   `json:"archive"`
+	Compressed bool   `json:"compressed"`
+	SizeBytes  int64  `json:"sizeBytes"`
+	EntryCount *int   `json:"entryCount,omitempty"`
+	Encrypted  bool   `json:"encrypted,omitempty"`
 }
 
 type Entry struct {
@@ -47,22 +47,22 @@ type Entry struct {
 }
 
 type ListRequest struct {
-	Path              string `json:"path"`
-	Limit             int    `json:"limit,omitempty"`
-	Offset            int    `json:"offset,omitempty"`
-	IncludeDirectories bool  `json:"includeDirectories,omitempty"`
+	Path               string `json:"path"`
+	Limit              int    `json:"limit,omitempty"`
+	Offset             int    `json:"offset,omitempty"`
+	IncludeDirectories bool   `json:"includeDirectories,omitempty"`
 }
 
 type ExtractRequest struct {
-	Path           string   `json:"path"`
-	Target         string   `json:"target"`
-	Overwrite      bool     `json:"overwrite,omitempty"`
-	StripOptions   int      `json:"stripComponents,omitempty"`
-	Include        []string `json:"include,omitempty"`
-	Exclude        []string `json:"exclude,omitempty"`
-	AllowSymlinks  bool     `json:"allowSymlinks,omitempty"`
-	MaxEntries     *int     `json:"maxEntries,omitempty"`
-	MaxBytes       *int64   `json:"maxBytes,omitempty"`
+	Path          string   `json:"path"`
+	Target        string   `json:"target"`
+	Overwrite     bool     `json:"overwrite,omitempty"`
+	StripOptions  int      `json:"stripComponents,omitempty"`
+	Include       []string `json:"include,omitempty"`
+	Exclude       []string `json:"exclude,omitempty"`
+	AllowSymlinks bool     `json:"allowSymlinks,omitempty"`
+	MaxEntries    *int     `json:"maxEntries,omitempty"`
+	MaxBytes      *int64   `json:"maxBytes,omitempty"`
 }
 
 type CreateRequest struct {
@@ -77,12 +77,12 @@ type CreateRequest struct {
 }
 
 type VerifyResult struct {
-	Valid                 bool     `json:"valid"`
-	Format                Format   `json:"format"`
-	EntryCount            int      `json:"entryCount"`
-	TotalUncompressedBytes int64   `json:"totalUncompressedBytes"`
-	UnsafeEntries         int      `json:"unsafeEntries"`
-	CorruptEntries        int      `json:"corruptEntries"`
-	EncryptedEntries      int      `json:"encryptedEntries"`
-	Warnings              []string `json:"warnings,omitempty"`
+	Valid                  bool     `json:"valid"`
+	Format                 Format   `json:"format"`
+	EntryCount             int      `json:"entryCount"`
+	TotalUncompressedBytes int64    `json:"totalUncompressedBytes"`
+	UnsafeEntries          int      `json:"unsafeEntries"`
+	CorruptEntries         int      `json:"corruptEntries"`
+	EncryptedEntries       int      `json:"encryptedEntries"`
+	Warnings               []string `json:"warnings,omitempty"`
 }

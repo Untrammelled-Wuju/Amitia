@@ -15,8 +15,8 @@ type NativeEventSinkRouter interface {
 }
 
 type nativeEventSinkAdapter struct {
-	service  *event.Service
-	router   NativeEventSinkRouter
+	service *event.Service
+	router  NativeEventSinkRouter
 }
 
 func NewNativeEventSinkAdapter(service *event.Service) NativeEventSink {

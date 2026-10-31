@@ -7,6 +7,7 @@ import (
 	"go/parser"
 	"go/token"
 	"io/fs"
+	amitialog "log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -247,7 +248,9 @@ func DefaultRegistry() *DeprecationRegistry {
 		},
 	}
 	for _, f := range step68Files {
-		_ = r.Mark(f)
+		if err := r.Mark(f); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 
 	step70Files := []LegacyFile{
@@ -277,7 +280,9 @@ func DefaultRegistry() *DeprecationRegistry {
 		},
 	}
 	for _, f := range step70Files {
-		_ = r.Mark(f)
+		if err := r.Mark(f); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 
 	return r

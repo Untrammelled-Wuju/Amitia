@@ -84,7 +84,7 @@ func registerCloudWorkbenchBrowserGateway(group *gin.RouterGroup, services *AppS
 		}
 		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4096)
 		if err := c.ShouldBindJSON(&request); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "请求格式无效"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 		target := runtimeidentity.ParseDeviceID(strings.TrimSpace(request.TargetDeviceID))
@@ -94,11 +94,11 @@ func registerCloudWorkbenchBrowserGateway(group *gin.RouterGroup, services *AppS
 		}
 		space := runtimeidentity.SpaceID(actor.SpaceID)
 		if err := services.DeviceMesh.DeviceReg.RequireTrustedDevice(c.Request.Context(), space, actor.DeviceID); err != nil {
-			c.JSON(http.StatusForbidden, gin.H{"error": "当前设备未获信任", "errorCode": "access_denied", "retryable": false})
+			c.JSON(http.StatusForbidden, gin.H{"error": err.Error(), "errorCode": "access_denied", "retryable": false})
 			return
 		}
 		if err := services.DeviceMesh.DeviceReg.RequireTrustedDevice(c.Request.Context(), space, target); err != nil {
-			c.JSON(http.StatusForbidden, gin.H{"error": "目标设备未配对或已撤销信任", "errorCode": "access_denied", "retryable": false})
+			c.JSON(http.StatusForbidden, gin.H{"error": err.Error(), "errorCode": "access_denied", "retryable": false})
 			return
 		}
 		if services.DeviceMesh.Hub == nil {
@@ -112,7 +112,7 @@ func registerCloudWorkbenchBrowserGateway(group *gin.RouterGroup, services *AppS
 		}
 		input, err := json.Marshal(request.RemoteReadRequest)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "请求编码失败"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 		deadline := 15 * time.Second
@@ -120,15 +120,15 @@ func registerCloudWorkbenchBrowserGateway(group *gin.RouterGroup, services *AppS
 		defer cancel()
 		result, err := services.DeviceMesh.InvokeDeviceHandlerWithRuntimeType(requestContext, space, target, capability.RuntimeTypeBrowser, devicemeshagent.RemoteBrowserReadHandler, input, deadline)
 		if err != nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "设备浏览器观察暂时不可用", "errorCode": "device_unavailable", "retryable": true})
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error(), "errorCode": "device_unavailable", "retryable": true})
 			return
 		}
 		if err := services.DeviceMesh.DeviceReg.RequireTrustedDevice(c.Request.Context(), space, actor.DeviceID); err != nil {
-			c.JSON(http.StatusForbidden, gin.H{"error": "当前设备的信任授权已撤销", "errorCode": "access_denied", "retryable": false})
+			c.JSON(http.StatusForbidden, gin.H{"error": err.Error(), "errorCode": "access_denied", "retryable": false})
 			return
 		}
 		if err := services.DeviceMesh.DeviceReg.RequireTrustedDevice(c.Request.Context(), space, target); err != nil {
-			c.JSON(http.StatusForbidden, gin.H{"error": "目标设备的信任授权已撤销", "errorCode": "access_denied", "retryable": false})
+			c.JSON(http.StatusForbidden, gin.H{"error": err.Error(), "errorCode": "access_denied", "retryable": false})
 			return
 		}
 		currentConnection, connected := services.DeviceMesh.Hub.GetByDevice(space, target)
@@ -142,7 +142,7 @@ func registerCloudWorkbenchBrowserGateway(group *gin.RouterGroup, services *AppS
 		}
 		var reply workbenchbrowser.RemoteReadResult
 		if err := json.Unmarshal(result.Structured, &reply); err != nil {
-			c.JSON(http.StatusBadGateway, gin.H{"error": "浏览器观察数据解码失败", "errorCode": "invalid_device_response", "retryable": true})
+			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error(), "errorCode": "invalid_device_response", "retryable": true})
 			return
 		}
 		if reply.ErrorCode != "" {

@@ -5,11 +5,11 @@ package qdranthealth
 import "time"
 
 type Backoff struct {
-	initial  time.Duration
-	max      time.Duration
+	initial    time.Duration
+	max        time.Duration
 	multiplier float64
-	current  time.Duration
-	count    int
+	current    time.Duration
+	count      int
 }
 
 func NewBackoff(initial, max time.Duration, multiplier float64) *Backoff {

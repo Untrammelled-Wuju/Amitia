@@ -133,8 +133,9 @@ export function useCharacterImportExport() {
     try {
       packHistory.value =
         (await get<any[]>("/api/characters/packs/history")) || [];
-    } catch {
-      packHistory.value = [];
+    } catch (error) {
+  console.error("[original-error]", error);
+packHistory.value = [];
     }
   }
 

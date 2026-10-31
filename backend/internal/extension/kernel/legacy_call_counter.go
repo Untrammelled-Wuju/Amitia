@@ -3,6 +3,7 @@ package kernel
 import (
 	"context"
 	"fmt"
+	amitialog "log"
 	"sync/atomic"
 	"time"
 )
@@ -49,14 +50,18 @@ func (c *LegacyCallCounter) syncToStore(metricName string) {
 	if c.store == nil {
 		return
 	}
-	_, _ = c.store.Increment(context.Background(), metricName)
+	if _, err := c.store.Increment(context.Background(), metricName); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (c *LegacyCallCounter) setStoreValue(metricName string, value int64) {
 	if c.store == nil {
 		return
 	}
-	_ = c.store.Set(context.Background(), metricName, value)
+	if err := c.store.Set(context.Background(), metricName, value); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (c *LegacyCallCounter) storeGet(metricName string) int64 {

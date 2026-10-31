@@ -70,18 +70,6 @@ func (s *service) UpdateAppConfigContext(ctx context.Context, body map[string]in
 	return map[string]interface{}{"theme": theme, "language": language, "timezone": timezone, "settings": current}, nil
 }
 
-func (s *service) ConfigImportConfirmContext(ctx context.Context, body map[string]interface{}) (map[string]interface{}, error) {
-	settings, err := parseConfigImportPayload(body)
-	if err != nil {
-		return nil, err
-	}
-	current, err := s.applyAppSettings(ctx, settings)
-	if err != nil {
-		return nil, err
-	}
-	return map[string]interface{}{"imported": true, "importedCount": len(settings), "settings": current}, nil
-}
-
 func (s *service) UpdateMoodDetectionConfigContext(ctx context.Context, body map[string]interface{}) (map[string]interface{}, error) {
 	settings := map[string]string{}
 	if enabled, ok := body["enabled"].(bool); ok {

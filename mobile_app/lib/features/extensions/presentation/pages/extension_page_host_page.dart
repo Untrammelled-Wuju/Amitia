@@ -159,7 +159,9 @@ class _ExtensionPageHostPageState extends ConsumerState<ExtensionPageHostPage> {
       await ref
           .read(extensionServiceProvider)
           .closeExtensionPageSession(sessionId);
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
   }
 
   @override

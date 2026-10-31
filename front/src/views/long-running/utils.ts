@@ -20,7 +20,8 @@ export function fmtTime(iso: string): string {
       minute: "2-digit",
       second: "2-digit",
     });
-  } catch {
-    return iso;
+  } catch (error) {
+  console.error("[original-error]", error);
+return iso;
   }
 }

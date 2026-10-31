@@ -31,8 +31,8 @@ type sharedBackend struct {
 	runner   *Runner
 	config   Config
 
-	mu       sync.RWMutex
-	env      *Environment
+	mu  sync.RWMutex
+	env *Environment
 }
 
 func NewBackend(host runtimehost.RuntimeHost, config Config) Backend {

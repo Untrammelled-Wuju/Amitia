@@ -13,18 +13,18 @@ const (
 )
 
 type OutputPermit struct {
-	PermitID      string
-	OutputID      string
-	RuntimeID     domain.RuntimeInstanceID
-	ServiceID     domain.ServiceID
-	PluginID      domain.PluginID
-	SinkID        string
-	OutputEpoch   uint64
-	Generation    uint64
-	OutputKind    ControlOutputKind
-	IssuedAt      time.Time
-	ExpiresAt     time.Time
-	ControlMode   domain.ControlMode
+	PermitID    string
+	OutputID    string
+	RuntimeID   domain.RuntimeInstanceID
+	ServiceID   domain.ServiceID
+	PluginID    domain.PluginID
+	SinkID      string
+	OutputEpoch uint64
+	Generation  uint64
+	OutputKind  ControlOutputKind
+	IssuedAt    time.Time
+	ExpiresAt   time.Time
+	ControlMode domain.ControlMode
 }
 
 func NewOutputPermit(outputID string, runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID, pluginID domain.PluginID, epoch uint64, generation uint64, kind ControlOutputKind, mode domain.ControlMode, ttl time.Duration, now time.Time) OutputPermit {

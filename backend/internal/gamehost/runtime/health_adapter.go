@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/gamehost/domain"
+	amitialog "log"
 )
 
 type HealthAdapter interface {
@@ -88,7 +89,7 @@ func (a *healthAdapter) HandleSupervisorHealth(ctx context.Context, event Superv
 		Health:         event.Health,
 		LastChangedAt:  now,
 		LastObservedAt: now,
-		Reason:         truncateReason(event.Reason),
+		Reason:         event.Reason,
 	}
 	services[event.ServiceID] = snapshot
 
@@ -159,11 +160,13 @@ func (a *healthAdapter) ReconcileServiceHealth(runtimeID domain.RuntimeInstanceI
 		Health:         current,
 		LastChangedAt:  now,
 		LastObservedAt: now,
-		Reason:         truncateReason(reason),
+		Reason:         reason,
 	}
 	services[serviceID] = snapshot
 
-	_ = a.aggregateLocked(runtimeID, now)
+	if err := a.aggregateLocked(runtimeID, now); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (a *healthAdapter) aggregateLocked(runtimeID domain.RuntimeInstanceID, now time.Time) error {
@@ -194,13 +197,4 @@ func sortServiceHealthByID(services []ServiceHealthSnapshot) {
 	sort.Slice(services, func(i, j int) bool {
 		return services[i].ServiceID < services[j].ServiceID
 	})
-}
-
-const maxReasonLength = 256
-
-func truncateReason(reason string) string {
-	if len(reason) <= maxReasonLength {
-		return reason
-	}
-	return reason[:maxReasonLength]
 }

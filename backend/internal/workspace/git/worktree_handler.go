@@ -44,7 +44,7 @@ func (h *GitHandler) handleWorktreeList(c *gin.Context) {
 func (h *GitHandler) handleWorktreeCreate(c *gin.Context) {
 	var req WorktreeCreateRequest
 	if err := c.ShouldBindJSON(&req); err != nil || req.WorkspaceURI == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "workspaceUri is required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	ctx, cancel := contextWithGitTimeout(c, 60*time.Second)
@@ -60,7 +60,7 @@ func (h *GitHandler) handleWorktreeCreate(c *gin.Context) {
 func (h *GitHandler) handleWorktreeRemove(c *gin.Context) {
 	var req WorktreeRemoveRequest
 	if err := c.ShouldBindJSON(&req); err != nil || req.WorkspaceURI == "" || req.ID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "workspaceUri and id are required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	ctx, cancel := contextWithGitTimeout(c, 45*time.Second)
@@ -79,7 +79,7 @@ func contextWithGitTimeout(c *gin.Context, timeout time.Duration) (context.Conte
 func (h *GitHandler) handleWorktreeRelease(c *gin.Context) {
 	var req WorktreeReleaseRequest
 	if err := c.ShouldBindJSON(&req); err != nil || req.WorkspaceURI == "" || req.ID == "" || req.TaskID == "" || req.ConversationID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "workspaceUri, id, taskId and conversationId are required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	ctx, cancel := contextWithGitTimeout(c, 20*time.Second)
@@ -94,7 +94,7 @@ func (h *GitHandler) handleWorktreeRelease(c *gin.Context) {
 func (h *GitHandler) handleWorktreeReview(c *gin.Context) {
 	var req WorktreeReviewRequest
 	if err := c.ShouldBindJSON(&req); err != nil || req.WorkspaceURI == "" || req.ID == "" || req.TaskID == "" || req.ConversationID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "workspaceUri, id, taskId and conversationId are required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	ctx, cancel := contextWithGitTimeout(c, 30*time.Second)

@@ -216,7 +216,7 @@ func ToolErrorFromCause(err error, fallbackCode, safeMessage string) *ToolError 
 	return &ToolError{
 		Code:        fallbackCode,
 		Category:    ErrorCategoryForCode(fallbackCode),
-		Message:     safeMessage,
+		Message:     err.Error(),
 		Cause:       err,
 		UserVisible: false,
 	}

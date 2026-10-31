@@ -8,8 +8,9 @@ export function useAssetUrl() {
     .then((connection) => {
       baseURL.value = connection.apiBaseURL.replace(/\/$/, "");
     })
-    .catch(() => {
-      baseURL.value = "";
+    .catch((error) => {
+  console.error("[original-error]", error);
+baseURL.value = "";
     });
 
   function assetUrl(path?: string): string {

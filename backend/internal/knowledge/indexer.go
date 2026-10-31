@@ -11,6 +11,7 @@ import (
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/embedding"
 	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
+	amitialog "log"
 )
 
 type IndexPayload struct {
@@ -320,15 +321,19 @@ func (x *Indexer) ProcessSource(ctx context.Context, tenantID, sourceID string, 
 		}
 		if err := x.processClaimedOutbox(ctx, *ob, lease); err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				_, _ = x.repo.FinishOutboxLease(tenantID, ob.ID, ob.LeaseToken, map[string]any{
+				if _, err := x.repo.FinishOutboxLease(tenantID, ob.ID, ob.LeaseToken, map[string]any{
 					"status": "pending", "last_error": err.Error(), "next_attempt_at": time.Now().UTC(),
-				})
+				}); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 				return indexed, true, dedupeStrings(append(warnings, err.Error()))
 			}
 			next := time.Now().UTC().Add(x.settings.outboxRetryDelay(ob.RetryCount))
-			_, _ = x.repo.FinishOutboxLease(tenantID, ob.ID, ob.LeaseToken, map[string]any{
+			if _, err := x.repo.FinishOutboxLease(tenantID, ob.ID, ob.LeaseToken, map[string]any{
 				"status": "failed", "retry_count": ob.RetryCount + 1, "last_error": err.Error(), "next_attempt_at": next,
-			})
+			}); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			degraded = true
 			warnings = append(warnings, err.Error())
 			continue

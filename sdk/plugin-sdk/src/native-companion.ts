@@ -32,8 +32,9 @@ export function parseNativeCompanionsEnv(
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
-  } catch {
-    throw new Error(`${NATIVE_COMPANIONS_ENV} is not valid JSON`);
+  } catch (error) {
+  console.error("[original-error]", error);
+throw new Error(`${NATIVE_COMPANIONS_ENV} is not valid JSON`);
   }
   if (!Array.isArray(parsed)) {
     throw new Error(`${NATIVE_COMPANIONS_ENV} must contain a JSON array`);

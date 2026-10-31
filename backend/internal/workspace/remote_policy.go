@@ -7,44 +7,44 @@ import (
 )
 
 const (
-	DefaultSFTPPort                    = 22
-	DefaultWebDAVPort                  = 443
-	MaxRemoteListEntries               = 1000
-	MaxRemoteRecursiveDepth            = 32
-	MaxRemoteRecursiveFiles            = 10000
-	MaxRemoteReadBytes                 = 64 * 1024 * 1024
-	MaxRemoteWebDAVResponseBodyBytes   = 64 * 1024
-	MaxRemoteConnectionsPerMount       = 4
-	MaxRemoteGlobalConnections         = 16
-	MaxRemoteConnectTimeout            = 10 * time.Second
-	MaxRemoteOperationTimeout          = 60 * time.Second
-	MaxRemoteIdleTTL                   = 5 * time.Minute
-	RemoteTempSuffix                   = ".amitia-"
-	RemoteTempSuffixPattern            = ".amitia-*.tmp"
+	DefaultSFTPPort                  = 22
+	DefaultWebDAVPort                = 443
+	MaxRemoteListEntries             = 1000
+	MaxRemoteRecursiveDepth          = 32
+	MaxRemoteRecursiveFiles          = 10000
+	MaxRemoteReadBytes               = 64 * 1024 * 1024
+	MaxRemoteWebDAVResponseBodyBytes = 64 * 1024
+	MaxRemoteConnectionsPerMount     = 4
+	MaxRemoteGlobalConnections       = 16
+	MaxRemoteConnectTimeout          = 10 * time.Second
+	MaxRemoteOperationTimeout        = 60 * time.Second
+	MaxRemoteIdleTTL                 = 5 * time.Minute
+	RemoteTempSuffix                 = ".amitia-"
+	RemoteTempSuffixPattern          = ".amitia-*.tmp"
 )
 
 type RemotePolicy struct {
-	MaxListEntries       int
-	MaxRecursiveDepth    int
-	MaxRecursiveFiles    int
-	MaxReadBytes         int64
+	MaxListEntries         int
+	MaxRecursiveDepth      int
+	MaxRecursiveFiles      int
+	MaxReadBytes           int64
 	MaxConnectionsPerMount int
-	MaxGlobalConnections int
-	ConnectTimeout       time.Duration
-	OperationTimeout     time.Duration
-	IdleTTL              time.Duration
+	MaxGlobalConnections   int
+	ConnectTimeout         time.Duration
+	OperationTimeout       time.Duration
+	IdleTTL                time.Duration
 }
 
 var DefaultRemotePolicy = RemotePolicy{
-	MaxListEntries:       MaxRemoteListEntries,
-	MaxRecursiveDepth:    MaxRemoteRecursiveDepth,
-	MaxRecursiveFiles:    MaxRemoteRecursiveFiles,
-	MaxReadBytes:         MaxRemoteReadBytes,
+	MaxListEntries:         MaxRemoteListEntries,
+	MaxRecursiveDepth:      MaxRemoteRecursiveDepth,
+	MaxRecursiveFiles:      MaxRemoteRecursiveFiles,
+	MaxReadBytes:           MaxRemoteReadBytes,
 	MaxConnectionsPerMount: MaxRemoteConnectionsPerMount,
-	MaxGlobalConnections: MaxRemoteGlobalConnections,
-	ConnectTimeout:       MaxRemoteConnectTimeout,
-	OperationTimeout:     MaxRemoteOperationTimeout,
-	IdleTTL:              MaxRemoteIdleTTL,
+	MaxGlobalConnections:   MaxRemoteGlobalConnections,
+	ConnectTimeout:         MaxRemoteConnectTimeout,
+	OperationTimeout:       MaxRemoteOperationTimeout,
+	IdleTTL:                MaxRemoteIdleTTL,
 }
 
 func ResolveRemotePathSFTP(basePath string, relativePath string) string {

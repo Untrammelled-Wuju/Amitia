@@ -25,17 +25,17 @@ type PreviewTarget struct {
 }
 
 type PreviewSession struct {
-	ID             string                    `json:"id"`
-	WorkspaceID    string                    `json:"workspaceId,omitempty"`
-	Schema         *schema.SchemaUIDocument  `json:"schema,omitempty"`
-	State          SessionState              `json:"state"`
-	Target         *PreviewTarget            `json:"target,omitempty"`
-	Revision       string                    `json:"revision,omitempty"`
-	TransactionID  string                    `json:"transactionId,omitempty"`
-	RootExecution  string                    `json:"rootExecution,omitempty"`
-	LastActivity   time.Time                 `json:"lastActivity"`
-	SchemaWarnings []string                  `json:"schemaWarnings,omitempty"`
-	SchemaErrors   []string                  `json:"schemaErrors,omitempty"`
+	ID             string                   `json:"id"`
+	WorkspaceID    string                   `json:"workspaceId,omitempty"`
+	Schema         *schema.SchemaUIDocument `json:"schema,omitempty"`
+	State          SessionState             `json:"state"`
+	Target         *PreviewTarget           `json:"target,omitempty"`
+	Revision       string                   `json:"revision,omitempty"`
+	TransactionID  string                   `json:"transactionId,omitempty"`
+	RootExecution  string                   `json:"rootExecution,omitempty"`
+	LastActivity   time.Time                `json:"lastActivity"`
+	SchemaWarnings []string                 `json:"schemaWarnings,omitempty"`
+	SchemaErrors   []string                 `json:"schemaErrors,omitempty"`
 	mu             sync.Mutex
 }
 

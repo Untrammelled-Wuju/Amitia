@@ -325,7 +325,7 @@ func (api *KernelAPI) getExtension(c *gin.Context) {
 
 	inst, err := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(extID))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "extension not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
 	name := ""

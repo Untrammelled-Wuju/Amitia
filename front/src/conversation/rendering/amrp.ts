@@ -56,8 +56,9 @@ function parseJsonValue(value: unknown): unknown {
   if (!trimmed || (!trimmed.startsWith("{") && !trimmed.startsWith("["))) return value;
   try {
     return JSON.parse(trimmed);
-  } catch {
-    return value;
+  } catch (error) {
+  console.error("[original-error]", error);
+return value;
   }
 }
 
@@ -404,8 +405,9 @@ export function formatUnknown(value: unknown): string {
   if (typeof value === "string") return value;
   try {
     return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
+  } catch (error) {
+  console.error("[original-error]", error);
+return String(value);
   }
 }
 

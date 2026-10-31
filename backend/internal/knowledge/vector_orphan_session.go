@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
 	"gorm.io/gorm"
+	amitialog "log"
 )
 
 const orphanAuditHistoryLifetime = 7 * 24 * time.Hour
@@ -223,22 +224,34 @@ func (r *Repository) auditOrphanPageWithStore(ctx context.Context, tenantID stri
 		return empty, commitErr
 	}
 	if cursor == "" {
-		_ = r.db.WithContext(ctx).Exec(`DELETE FROM knowledge_vector_recovery_review_events
+		if err := r.db.WithContext(ctx).Exec(`DELETE FROM knowledge_vector_recovery_review_events
 WHERE tenant_id = ? AND review_id IN (SELECT id FROM knowledge_vector_recovery_reviews WHERE tenant_id = ? AND audit_id IN
-(SELECT id FROM knowledge_vector_audit_sessions WHERE tenant_id = ? AND updated_at < ?))`, tenantID, tenantID, tenantID, now.Add(-orphanAuditHistoryLifetime)).Error
-		_ = r.db.WithContext(ctx).Table("knowledge_vector_recovery_reviews").
+(SELECT id FROM knowledge_vector_audit_sessions WHERE tenant_id = ? AND updated_at < ?))`, tenantID, tenantID, tenantID, now.Add(-orphanAuditHistoryLifetime)).Error; err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := r.db.WithContext(ctx).Table("knowledge_vector_recovery_reviews").
 			Where("tenant_id = ? AND audit_id IN (SELECT id FROM knowledge_vector_audit_sessions WHERE tenant_id = ? AND updated_at < ?)", tenantID, tenantID, now.Add(-orphanAuditHistoryLifetime)).
-			Delete(&RecoveryReviewRequest{}).Error
-		_ = r.db.WithContext(ctx).Table("knowledge_vector_audit_recheck_results").
+			Delete(&RecoveryReviewRequest{}).Error; err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := r.db.WithContext(ctx).Table("knowledge_vector_audit_recheck_results").
 			Where("tenant_id = ? AND audit_id IN (SELECT id FROM knowledge_vector_audit_sessions WHERE tenant_id = ? AND updated_at < ?)", tenantID, tenantID, now.Add(-orphanAuditHistoryLifetime)).
-			Delete(&OrphanAuditRecheckRecord{}).Error
-		_ = r.db.WithContext(ctx).Exec(`DELETE FROM knowledge_vector_audit_recheck_leases
-WHERE tenant_id = ? AND audit_id IN (SELECT id FROM knowledge_vector_audit_sessions WHERE tenant_id = ? AND updated_at < ?)`, tenantID, tenantID, now.Add(-orphanAuditHistoryLifetime)).Error
-		_ = r.db.WithContext(ctx).Table("knowledge_vector_audit_pages").
+			Delete(&OrphanAuditRecheckRecord{}).Error; err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := r.db.WithContext(ctx).Exec(`DELETE FROM knowledge_vector_audit_recheck_leases
+WHERE tenant_id = ? AND audit_id IN (SELECT id FROM knowledge_vector_audit_sessions WHERE tenant_id = ? AND updated_at < ?)`, tenantID, tenantID, now.Add(-orphanAuditHistoryLifetime)).Error; err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := r.db.WithContext(ctx).Table("knowledge_vector_audit_pages").
 			Where("tenant_id = ? AND audit_id IN (SELECT id FROM knowledge_vector_audit_sessions WHERE tenant_id = ? AND updated_at < ?)", tenantID, tenantID, now.Add(-orphanAuditHistoryLifetime)).
-			Delete(&orphanAuditPageReceiptRow{}).Error
-		_ = r.db.WithContext(ctx).Table("knowledge_vector_audit_sessions").
-			Where("tenant_id = ? AND updated_at < ?", tenantID, now.Add(-orphanAuditHistoryLifetime)).Delete(&orphanAuditSessionRow{}).Error
+			Delete(&orphanAuditPageReceiptRow{}).Error; err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := r.db.WithContext(ctx).Table("knowledge_vector_audit_sessions").
+			Where("tenant_id = ? AND updated_at < ?", tenantID, now.Add(-orphanAuditHistoryLifetime)).Delete(&orphanAuditSessionRow{}).Error; err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return result, nil
 }

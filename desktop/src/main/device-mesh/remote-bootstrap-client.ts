@@ -11,7 +11,9 @@ import {
 } from "./protocol";
 
 function sameOrigin(a: string, b: string): boolean {
-  try { return new URL(a).origin === new URL(b).origin; } catch { return false; }
+  try { return new URL(a).origin === new URL(b).origin; } catch (error) {
+  console.error("[original-error]", error);
+return false; }
 }
 
 async function deviceAuthHeaders(cloudBaseURL: string): Promise<Record<string, string>> {
@@ -48,8 +50,9 @@ async function responseError(res: Response, fallback: string): Promise<Error> {
   try {
     const body = (await res.json()) as { message?: string; msg?: string };
     return new Error(body.message || body.msg || `${fallback} (status=${res.status})`);
-  } catch {
-    return new Error(`${fallback} (status=${res.status})`);
+  } catch (error) {
+  console.error("[original-error]", error);
+return new Error(`${fallback} (status=${res.status}): ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 

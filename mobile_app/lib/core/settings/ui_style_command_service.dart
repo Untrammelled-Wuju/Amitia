@@ -138,8 +138,9 @@ class UIStyleCommandService {
         'warnings': _warningsForRules(rules),
         'effective': _inspect(changes),
       };
-    } catch (_) {
-      await _restoreSnapshot(snapshot);
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+await _restoreSnapshot(snapshot);
       rethrow;
     }
   }
@@ -175,8 +176,9 @@ class UIStyleCommandService {
         'changed': result.changedRuleIds,
         'effective': _inspect(changes),
       };
-    } catch (_) {
-      await _restoreSnapshot(snapshot);
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+await _restoreSnapshot(snapshot);
       rethrow;
     }
   }
@@ -225,8 +227,9 @@ class UIStyleCommandService {
         'reset': true,
         'effective': _inspect(changes),
       };
-    } catch (_) {
-      await _restoreSnapshot(snapshot);
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+await _restoreSnapshot(snapshot);
       rethrow;
     }
   }
@@ -252,8 +255,9 @@ class UIStyleCommandService {
         'undo': true,
         'effective': _inspect(),
       };
-    } catch (_) {
-      await _patch.pushHistory(snapshot);
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+await _patch.pushHistory(snapshot);
       rethrow;
     }
   }

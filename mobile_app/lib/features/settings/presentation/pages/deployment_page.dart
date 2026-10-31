@@ -347,12 +347,15 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
       await ref.read(mobileDeploymentConfigProvider.notifier).update(newConfig);
       ref.invalidate(backendConnectionProvider);
       await ref.read(mobileBackendLifecycleProvider).reconcile(newConfig);
-    } catch (_) {
-      await ref.read(mobileDeploymentConfigProvider.notifier).update(config);
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+await ref.read(mobileDeploymentConfigProvider.notifier).update(config);
       ref.invalidate(backendConnectionProvider);
       try {
         await ref.read(mobileBackendLifecycleProvider).reconcile(config);
-      } catch (_) {}
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
       rethrow;
     } finally {
       notificationCoordinator.resumeRegistrationAfterDeploymentTransition();

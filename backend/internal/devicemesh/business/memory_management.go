@@ -15,6 +15,7 @@ import (
 
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/memorypolicy"
+	amitialog "log"
 )
 
 type MemoryManagementInput struct {
@@ -151,7 +152,9 @@ func memoryManagementText(raw json.RawMessage) (string, string, string, string, 
 	}
 	if json.Unmarshal(outer.Content, &content) != nil {
 		var text string
-		_ = json.Unmarshal(outer.Content, &text)
+		if err := json.Unmarshal(outer.Content, &text); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return outer.Key, text, "", "", 0
 	}
 	if content.Value == "" {
@@ -250,12 +253,16 @@ func (e *Engine) SearchOwnedMemories(ctx context.Context, request Request, input
 	for _, resource := range snapshot.Resources {
 		key, value, kind, source, importance := memoryManagementText(resource.Body)
 		var document map[string]json.RawMessage
-		_ = json.Unmarshal(resource.Body, &document)
+		if err := json.Unmarshal(resource.Body, &document); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		if input.ContextUsable && !coordination.ResourceUsable(resource.Body, now) {
 			continue
 		}
 		var content map[string]json.RawMessage
-		_ = json.Unmarshal(document["content"], &content)
+		if err := json.Unmarshal(document["content"], &content); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		layer := MemoryText(document, "kind")
 		if layer == "" {
 			layer = "fact"
@@ -301,9 +308,13 @@ func (e *Engine) SearchOwnedMemories(ctx context.Context, request Request, input
 			metadata := map[string]MemoryTemporalMetadata{}
 			for _, resource := range result.Resources {
 				var document map[string]json.RawMessage
-				_ = json.Unmarshal(resource.Body, &document)
+				if err := json.Unmarshal(resource.Body, &document); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 				var item MemoryTemporalMetadata
-				_ = json.Unmarshal(document["content"], &item)
+				if err := json.Unmarshal(document["content"], &item); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 				_, _, kind, _, _ := memoryManagementText(resource.Body)
 				metadata[resource.ID] = item
 				candidates = append(candidates, MemoryScoreCandidate{MemoryID: resource.ID, BaseScore: result.Scores[resource.ID], MemoryType: kind})

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	amitialog "log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -65,7 +66,9 @@ func (l *InstanceLock) Acquire(ctx context.Context, dataDir, host string) (strin
 		return "", err
 	}
 	if err := os.Rename(tmp, l.path); err != nil {
-		_ = os.Remove(tmp)
+		if err := os.Remove(tmp); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return "", err
 	}
 	l.released = false
@@ -78,7 +81,9 @@ func (l *InstanceLock) Release() error {
 	if l.released {
 		return nil
 	}
-	_ = os.Remove(l.path)
+	if err := os.Remove(l.path); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	l.released = true
 	return nil
 }

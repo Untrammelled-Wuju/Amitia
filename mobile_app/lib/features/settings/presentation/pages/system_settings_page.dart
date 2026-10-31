@@ -98,7 +98,9 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
           identical(api, ref.read(rawBackendServiceApiProvider)) &&
           deployment == ref.read(mobileDeploymentConfigProvider))
         setState(() => _healthData = health ?? const {});
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
   }
 
   Future<void> _setLanguage(

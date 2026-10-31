@@ -78,7 +78,9 @@ internal class ExternalAutomationNativeHandler(
                             "installed" to true,
                         ),
                     )
-                } catch (_: PackageManager.NameNotFoundException) {
+                } catch (originalError81: PackageManager.NameNotFoundException) {
+                  originalError81.printStackTrace()
+
                     if (byLabel) searchByLabel(pm, query) else emptyList()
                 }
             } else if (byLabel) {
@@ -126,7 +128,9 @@ internal class ExternalAutomationNativeHandler(
                     "installed" to true,
                 )
             }
-        } catch (_: Exception) {
+        } catch (originalError129: Exception) {
+          originalError129.printStackTrace()
+
             emptyList()
         }
     }

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	amitialog "log"
 )
 
 type BootstrapTicket struct {
@@ -117,7 +118,9 @@ func (r *BootstrapTicketRepository) ConsumeWithValidation(ctx context.Context, r
 	}
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			_ = tx.Rollback().Error
+			if err := tx.Rollback().Error; err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			panic(recovered)
 		}
 	}()
@@ -150,7 +153,9 @@ func (r *BootstrapTicketRepository) ConsumeWithValidation(ctx context.Context, r
 	expires, err := time.Parse(time.RFC3339, ticket.ExpiresAt)
 	if err != nil {
 		if markErr := markTicketExpiredTx(tx, ticket.ID, "expires_at_corrupted"); markErr != nil {
-			_ = tx.Rollback().Error
+			if err := tx.Rollback().Error; err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return nil, markErr
 		}
 		if commitErr := tx.Commit().Error; commitErr != nil {
@@ -160,7 +165,9 @@ func (r *BootstrapTicketRepository) ConsumeWithValidation(ctx context.Context, r
 	}
 	if time.Now().After(expires) {
 		if markErr := markTicketExpiredTx(tx, ticket.ID, "expired"); markErr != nil {
-			_ = tx.Rollback().Error
+			if err := tx.Rollback().Error; err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return nil, markErr
 		}
 		if commitErr := tx.Commit().Error; commitErr != nil {
@@ -243,7 +250,9 @@ func (r *BootstrapTicketRepository) Consume(ctx context.Context, rawTicket, runt
 	}
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			_ = tx.Rollback().Error
+			if err := tx.Rollback().Error; err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			panic(recovered)
 		}
 	}()
@@ -276,7 +285,9 @@ func (r *BootstrapTicketRepository) Consume(ctx context.Context, rawTicket, runt
 	expires, err := time.Parse(time.RFC3339, ticket.ExpiresAt)
 	if err != nil {
 		if markErr := markTicketExpiredTx(tx, ticket.ID, "expires_at_corrupted"); markErr != nil {
-			_ = tx.Rollback().Error
+			if err := tx.Rollback().Error; err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return nil, markErr
 		}
 		if commitErr := tx.Commit().Error; commitErr != nil {
@@ -286,7 +297,9 @@ func (r *BootstrapTicketRepository) Consume(ctx context.Context, rawTicket, runt
 	}
 	if time.Now().After(expires) {
 		if markErr := markTicketExpiredTx(tx, ticket.ID, "expired"); markErr != nil {
-			_ = tx.Rollback().Error
+			if err := tx.Rollback().Error; err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return nil, markErr
 		}
 		if commitErr := tx.Commit().Error; commitErr != nil {

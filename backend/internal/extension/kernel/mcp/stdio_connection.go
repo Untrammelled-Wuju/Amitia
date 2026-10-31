@@ -13,6 +13,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/mcpruntime/protocol"
 	"github.com/u-ai/backend/internal/extension/mcpruntime/transport"
 	"github.com/u-ai/backend/internal/scriptruntime/commandenv"
+	amitialog "log"
 )
 
 // CanonicalStdioConnection is the Extension Kernel owned MCP stdio connection.
@@ -113,7 +114,9 @@ func (c *CanonicalStdioConnection) Start(ctx context.Context) error {
 	c.mu.Unlock()
 
 	if err := c.performHandshake(startCtx); err != nil {
-		_ = c.Close(ctx)
+		if err := c.Close(ctx); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return err
 	}
 
@@ -194,7 +197,9 @@ func (c *CanonicalStdioConnection) Close(ctx context.Context) error {
 		closeErr = conn.Close(closeCtx)
 	}
 	if tr != nil {
-		_ = tr.Close(closeCtx)
+		if err := tr.Close(closeCtx); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 
 	c.mu.Lock()

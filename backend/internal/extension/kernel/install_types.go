@@ -16,6 +16,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
 	"github.com/u-ai/backend/internal/extension/kernel/migration"
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
+	amitialog "log"
 )
 
 type PreviewCategory string
@@ -253,7 +254,9 @@ func signPackageConfirmation(claims packageConfirmationClaims) (string, error) {
 	}
 	encoded := base64.RawURLEncoding.EncodeToString(payload)
 	mac := hmac.New(sha256.New, packageConfirmationKey)
-	_, _ = mac.Write([]byte(encoded))
+	if _, err := mac.Write([]byte(encoded)); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	signature := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 	return encoded + "." + signature, nil
 }
@@ -272,7 +275,9 @@ func verifyPackageConfirmation(token string) (packageConfirmationClaims, error) 
 		verifyParts = parts[:2]
 	}
 	mac := hmac.New(sha256.New, packageConfirmationKey)
-	_, _ = mac.Write([]byte(verifyParts[0]))
+	if _, err := mac.Write([]byte(verifyParts[0])); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	provided, err := base64.RawURLEncoding.DecodeString(verifyParts[1])
 	if err != nil || !hmac.Equal(mac.Sum(nil), provided) {
 		return claims, fmt.Errorf("kernel: confirmation token invalid")
@@ -550,7 +555,9 @@ func signPackageRollbackConfirmation(claims PackageRollbackConfirmationClaims) (
 	}
 	encoded := base64.RawURLEncoding.EncodeToString(payload)
 	mac := hmac.New(sha256.New, packageConfirmationKey)
-	_, _ = mac.Write([]byte(encoded))
+	if _, err := mac.Write([]byte(encoded)); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	signature := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 	return encoded + "." + signature, nil
 }
@@ -562,7 +569,9 @@ func verifyPackageRollbackConfirmation(token string) (PackageRollbackConfirmatio
 		return claims, fmt.Errorf("kernel: rollback confirmation token invalid")
 	}
 	mac := hmac.New(sha256.New, packageConfirmationKey)
-	_, _ = mac.Write([]byte(parts[0]))
+	if _, err := mac.Write([]byte(parts[0])); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	provided, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil || !hmac.Equal(mac.Sum(nil), provided) {
 		return claims, fmt.Errorf("kernel: rollback confirmation token invalid")

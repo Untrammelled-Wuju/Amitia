@@ -9,12 +9,12 @@ import (
 )
 
 type HealthCheck struct {
-	mu         sync.RWMutex
-	target     Target
-	policy     Policy
-	prober     Prober
-	snapshot   Snapshot
-	listeners  []func(Snapshot)
+	mu        sync.RWMutex
+	target    Target
+	policy    Policy
+	prober    Prober
+	snapshot  Snapshot
+	listeners []func(Snapshot)
 }
 
 func NewHealthCheck(target Target, policy Policy) *HealthCheck {

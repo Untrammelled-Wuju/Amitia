@@ -108,7 +108,9 @@ async function reset() {
   if (preview.value) {
     try {
       await cancelDataPortabilityRestore();
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
   preview.value = null;
   passphrase.value = "";

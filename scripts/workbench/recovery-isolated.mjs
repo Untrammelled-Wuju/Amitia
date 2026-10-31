@@ -26,7 +26,9 @@ try {
   for (const name of files) {
     const original = path.join(source, name);
     const link = path.join(pkg, name);
-    try { fs.symlinkSync(original, link); } catch { fs.copyFileSync(original, link); }
+    try { fs.symlinkSync(original, link); } catch (error) {
+  console.error("[original-error]", error);
+fs.copyFileSync(original, link); }
   }
   fs.writeFileSync(path.join(pkg, 'smoke_types_test.go'), `package interaction
 
@@ -62,10 +64,14 @@ const(AssignmentRunning AgentAssignmentStatus = "running"; AssignmentFailed Agen
       if (event.Action === 'pass' && event.Test) tests++;
       if (event.Action === 'pass' && !event.Test) packages++;
       if (event.Action === 'fail') failures++;
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
   const passed = run.status === 0 && tests > 0 && packages > 0 && failures === 0;
-  const failLines = (run.stdout || '').split('\n').filter(line => { try { const e = JSON.parse(line); return e.Action === 'fail' || (e.Action === 'output' && /FAIL|Error|unexpected|invalid|mismatch|gate:/i.test(e.Output || '')); } catch { return false; } });
+  const failLines = (run.stdout || '').split('\n').filter(line => { try { const e = JSON.parse(line); return e.Action === 'fail' || (e.Action === 'output' && /FAIL|Error|unexpected|invalid|mismatch|gate:/i.test(e.Output || '')); } catch (error) {
+  console.error("[original-error]", error);
+return false; } });
   console.log(JSON.stringify({ name: 'go.interaction.worker-recovery-isolated', passed, tests, packages, failures, error: run.error?.message || '', detail: passed ? '' : (run.stderr + '\n' + failLines.join('\n')).slice(-12000) }));
   if (!passed) process.exitCode = 1;
 } finally {

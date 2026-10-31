@@ -60,12 +60,12 @@ func (h *Handler) handleStatus(ctx context.Context, request capability.AndroidBr
 		RequestID:       request.RequestID,
 		Status:          "success",
 		Result: map[string]any{
-			"available":          status.Available,
-			"preferredSource":    status.PreferredSource,
-			"availableSources":   status.AvailableSources,
+			"available":              status.Available,
+			"preferredSource":        status.PreferredSource,
+			"availableSources":       status.AvailableSources,
 			"accessibilityConnected": status.AccessibilityReady,
-			"rootAvailable":      status.RootAvailable,
-			"adbAvailable":       status.ADBAvailable,
+			"rootAvailable":          status.RootAvailable,
+			"adbAvailable":           status.ADBAvailable,
 		},
 	}
 }
@@ -151,9 +151,9 @@ func (h *Handler) handleFind(ctx context.Context, request capability.AndroidBrid
 		RequestID:       request.RequestID,
 		Status:          "success",
 		Result: map[string]any{
-			"snapshotId":  result.SnapshotID,
-			"nodeIds":     result.NodeIDs,
-			"count":       result.Count,
+			"snapshotId": result.SnapshotID,
+			"nodeIds":    result.NodeIDs,
+			"count":      result.Count,
 		},
 	}
 }
@@ -203,10 +203,10 @@ func (h *Handler) handleGet(ctx context.Context, request capability.AndroidBridg
 		RequestID:       request.RequestID,
 		Status:          "success",
 		Result: map[string]any{
-			"snapshotId":  result.SnapshotID,
-			"generation":  result.Generation,
-			"source":      result.Source,
-			"node":        nodeToMap(result.Node),
+			"snapshotId": result.SnapshotID,
+			"generation": result.Generation,
+			"source":     result.Source,
+			"node":       nodeToMap(result.Node),
 		},
 	}
 }

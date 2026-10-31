@@ -253,7 +253,7 @@ type CreateAutomationInput struct {
 }
 
 type UpdateAutomationInput struct {
-	AutomationID string `json:"automationId"`
+	AutomationID string  `json:"automationId"`
 	Name         *string `json:"name,omitempty"`
 	Enabled      *bool   `json:"enabled,omitempty"`
 }

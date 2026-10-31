@@ -72,8 +72,9 @@ async function resolveImages() {
     props.images.map(async (image) => {
       try {
         return await resolveConversationMediaUrl(image.url);
-      } catch {
-        if (current === generation) image.status = "failed";
+      } catch (error) {
+  console.error("[original-error]", error);
+if (current === generation) image.status = "failed";
         return "";
       }
     }),

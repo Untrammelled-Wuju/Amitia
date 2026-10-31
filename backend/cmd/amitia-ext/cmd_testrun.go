@@ -118,14 +118,14 @@ func runTest(args []string, output *Output) int {
 	summary.Duration = time.Since(overallStart).String()
 
 	data := map[string]any{
-		"total":    summary.Total,
-		"passed":   summary.Passed,
-		"failed":   summary.Failed,
-		"skipped":  summary.Skipped,
-		"duration": summary.Duration,
-		"nodePath": nodePath,
+		"total":      summary.Total,
+		"passed":     summary.Passed,
+		"failed":     summary.Failed,
+		"skipped":    summary.Skipped,
+		"duration":   summary.Duration,
+		"nodePath":   nodePath,
 		"nodeSource": string(env.Source),
-		"cases":    summary.Cases,
+		"cases":      summary.Cases,
 	}
 	if *hostVersion != "" || *platform != "" || *runtimeVersion != "" {
 		data["env"] = map[string]any{

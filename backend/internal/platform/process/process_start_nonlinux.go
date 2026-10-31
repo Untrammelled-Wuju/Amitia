@@ -4,6 +4,7 @@ package process
 
 import (
 	"fmt"
+	amitialog "log"
 	"os/exec"
 )
 
@@ -16,8 +17,12 @@ func startProcessTreeWithLimits(cmd *exec.Cmd, limits ResourceLimits) (ProcessTr
 	}
 	handle, err := attachProcessTreeWithLimits(cmd, limits)
 	if err != nil {
-		_ = cmd.Process.Kill()
-		_ = cmd.Wait()
+		if err := cmd.Process.Kill(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := cmd.Wait(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return 0, fmt.Errorf("process: attach process tree: %w", err)
 	}
 	return handle, nil

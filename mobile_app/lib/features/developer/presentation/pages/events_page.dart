@@ -308,8 +308,9 @@ class _EventsPageState extends ConsumerState<EventsPage> {
         if (_items(data).isEmpty) {
           data = await api.get<Map<String, dynamic>>('/api/extensions/events/subscriptions', queryParameters: {'eventTypeId': filter}, fromJson: _map);
         }
-      } catch (_) {
-        data = await api.get<Map<String, dynamic>>('/api/extensions/events/subscriptions', queryParameters: {'eventTypeId': filter}, fromJson: _map);
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+data = await api.get<Map<String, dynamic>>('/api/extensions/events/subscriptions', queryParameters: {'eventTypeId': filter}, fromJson: _map);
       }
       if (mounted) setState(() => _subscriptions = _items(data));
     } catch (e) {

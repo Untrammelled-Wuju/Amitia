@@ -24,7 +24,7 @@ func (h *Handler) GetUserProfile(c *gin.Context) {
 func (h *Handler) UpdateUserProfile(c *gin.Context) {
 	var input ProfilePatch
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "时间设置格式无效"})
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
 		return
 	}
 	profile, err := h.service.PatchProfile(c.Request.Context(), OwnerSpace, apiSpaceID(c), input)
@@ -43,7 +43,7 @@ func (h *Handler) GetCharacterProfile(c *gin.Context) {
 func (h *Handler) UpdateCharacterProfile(c *gin.Context) {
 	var input ProfilePatch
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "角色时间设置格式无效"})
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
 		return
 	}
 	characterID := strings.TrimSpace(c.Param("characterId"))
@@ -92,7 +92,7 @@ func (h *Handler) ListAnchors(c *gin.Context) {
 func (h *Handler) CreateAnchor(c *gin.Context) {
 	var input Anchor
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "时间锚点格式无效"})
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
 		return
 	}
 	characterID := strings.TrimSpace(input.CharacterID)
@@ -106,7 +106,7 @@ func (h *Handler) CreateAnchor(c *gin.Context) {
 func (h *Handler) UpdateAnchor(c *gin.Context) {
 	var input Anchor
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "时间锚点格式无效"})
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
 		return
 	}
 	input.ID = c.Param("id")
@@ -175,7 +175,7 @@ func (h *Handler) SuggestTimezone(c *gin.Context) {
 		Timezone string `json:"timezone"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "时区建议格式无效"})
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
 		return
 	}
 	profile, err := h.service.SuggestTimezone(c.Request.Context(), apiSpaceID(c), input.Timezone)
@@ -205,19 +205,15 @@ func (h *Handler) respond(c *gin.Context, data interface{}, err error) {
 		return
 	}
 	status := http.StatusInternalServerError
-	message := "时间服务操作失败"
 	switch {
 	case errors.Is(err, ErrInvalidTimezone):
 		status = http.StatusBadRequest
-		message = "IANA 时区无效"
 	case errors.Is(err, ErrInvalidOwner), errors.Is(err, ErrScopeMismatch):
 		status = http.StatusBadRequest
-		message = "时间配置作用域无效"
 	case errors.Is(err, ErrAnchorNotFound):
 		status = http.StatusNotFound
-		message = "时间锚点不存在"
 	}
-	c.JSON(status, gin.H{"code": status, "msg": message})
+	c.JSON(status, gin.H{"code": status, "msg": err.Error()})
 }
 
 func apiSpaceID(c *gin.Context) string {

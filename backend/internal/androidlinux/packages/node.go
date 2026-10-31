@@ -15,11 +15,11 @@ import (
 )
 
 type NodeManager struct {
-	executor    shell.ShellExecutor
-	resolver    nodeenv.Resolver
-	policy      PackagesPolicy
-	paths       util.RuntimePaths
-	nodeEnv     nodeenv.Environment
+	executor shell.ShellExecutor
+	resolver nodeenv.Resolver
+	policy   PackagesPolicy
+	paths    util.RuntimePaths
+	nodeEnv  nodeenv.Environment
 }
 
 func NewNodeManager(executor shell.ShellExecutor, resolver nodeenv.Resolver, policy PackagesPolicy, paths util.RuntimePaths) *NodeManager {

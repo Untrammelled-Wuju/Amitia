@@ -66,7 +66,9 @@ class _AndroidAutomationPageState extends ConsumerState<AndroidAutomationPage>
                 '/api/android-automation/status',
               ) ??
               const <String, dynamic>{};
-        } catch (_) {}
+        } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
       }
 
       final accessibility = await _nativeStatus('accessibility.status');

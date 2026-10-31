@@ -5,18 +5,18 @@ import "fmt"
 type ServiceDefinitionErrorCode string
 
 const (
-	ErrDefinitionNotFound          ServiceDefinitionErrorCode = "definition_not_found"
-	ErrDefinitionInvalid           ServiceDefinitionErrorCode = "definition_invalid"
-	ErrDefinitionConflict          ServiceDefinitionErrorCode = "definition_conflict"
-	ErrDefinitionMappingFailed     ServiceDefinitionErrorCode = "definition_mapping_failed"
-	ErrDefinitionRegisterFailed    ServiceDefinitionErrorCode = "definition_register_failed"
-	ErrDefinitionReplaceFailed     ServiceDefinitionErrorCode = "definition_replace_failed"
-	ErrDefinitionRemoveFailed      ServiceDefinitionErrorCode = "definition_remove_failed"
-	ErrDefinitionSourceMismatch    ServiceDefinitionErrorCode = "definition_source_mismatch"
-	ErrDefinitionValidationFailed  ServiceDefinitionErrorCode = "definition_validation_failed"
+	ErrDefinitionNotFound            ServiceDefinitionErrorCode = "definition_not_found"
+	ErrDefinitionInvalid             ServiceDefinitionErrorCode = "definition_invalid"
+	ErrDefinitionConflict            ServiceDefinitionErrorCode = "definition_conflict"
+	ErrDefinitionMappingFailed       ServiceDefinitionErrorCode = "definition_mapping_failed"
+	ErrDefinitionRegisterFailed      ServiceDefinitionErrorCode = "definition_register_failed"
+	ErrDefinitionReplaceFailed       ServiceDefinitionErrorCode = "definition_replace_failed"
+	ErrDefinitionRemoveFailed        ServiceDefinitionErrorCode = "definition_remove_failed"
+	ErrDefinitionSourceMismatch      ServiceDefinitionErrorCode = "definition_source_mismatch"
+	ErrDefinitionValidationFailed    ServiceDefinitionErrorCode = "definition_validation_failed"
 	ErrDefinitionProviderUnavailable ServiceDefinitionErrorCode = "definition_provider_unavailable"
-	ErrUnsupportedServiceKind      ServiceDefinitionErrorCode = "unsupported_service_kind"
-	ErrServiceDefinitionNotFound   ServiceDefinitionErrorCode = "service_definition_not_found"
+	ErrUnsupportedServiceKind        ServiceDefinitionErrorCode = "unsupported_service_kind"
+	ErrServiceDefinitionNotFound     ServiceDefinitionErrorCode = "service_definition_not_found"
 )
 
 type ServiceDefinitionError struct {

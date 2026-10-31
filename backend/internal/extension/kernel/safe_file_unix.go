@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	"golang.org/x/sys/unix"
+	amitialog "log"
 )
 
 type platformPathIdentity struct {
@@ -58,7 +59,9 @@ func openPlatformRestoreRoot(absolutePath string) (*platformRestoreDirectory, er
 	file := os.NewFile(uintptr(fd), absolutePath)
 	identity, err := captureUnixHandleIdentity(file, true)
 	if err != nil {
-		_ = file.Close()
+		if err := file.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, err
 	}
 	return &platformRestoreDirectory{file: file, pathIdentity: identity}, nil
@@ -81,7 +84,9 @@ func (directory *platformRestoreDirectory) openExistingChildDirectory(name strin
 	file := os.NewFile(uintptr(fd), name)
 	identity, err := captureUnixHandleIdentity(file, true)
 	if err != nil {
-		_ = file.Close()
+		if err := file.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, err
 	}
 	return &platformRestoreDirectory{file: file, pathIdentity: identity}, nil
@@ -107,7 +112,9 @@ func (directory *platformRestoreDirectory) createChildDirectoryExclusive(name st
 	}
 	child, err := directory.openExistingChildDirectory(name)
 	if err != nil {
-		_ = unix.Unlinkat(int(directory.file.Fd()), name, unix.AT_REMOVEDIR)
+		if err := unix.Unlinkat(int(directory.file.Fd()), name, unix.AT_REMOVEDIR); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, err
 	}
 	return child, nil
@@ -127,7 +134,9 @@ func (directory *platformRestoreDirectory) openRegularFile(name string) (*os.Fil
 	file := os.NewFile(uintptr(fd), name)
 	identity, err := captureUnixHandleIdentity(file, false)
 	if err != nil {
-		_ = file.Close()
+		if err := file.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, platformPathIdentity{}, err
 	}
 	return file, identity, nil
@@ -153,8 +162,12 @@ func (directory *platformRestoreDirectory) createTempFile(prefix string) (*prepa
 		file := os.NewFile(uintptr(fd), name)
 		identity, err := captureUnixHandleIdentity(file, false)
 		if err != nil {
-			_ = file.Close()
-			_ = unix.Unlinkat(int(directory.file.Fd()), name, 0)
+			if err := file.Close(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
+			if err := unix.Unlinkat(int(directory.file.Fd()), name, 0); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return nil, err
 		}
 		return &preparedRestoreTemp{Name: name, File: file, Identity: identity}, nil
@@ -218,7 +231,9 @@ func openPlatformFileParent(absoluteRoot string, absoluteFilePath string) (*plat
 	}
 	relativeParent, err := filepath.Rel(absoluteRoot, filepath.Dir(absoluteFilePath))
 	if err != nil {
-		_ = current.close()
+		if err := current.close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, "", err
 	}
 	if relativeParent == "." {
@@ -227,10 +242,14 @@ func openPlatformFileParent(absoluteRoot string, absoluteFilePath string) (*plat
 	for _, component := range strings.Split(filepath.Clean(relativeParent), string(filepath.Separator)) {
 		child, err := current.openExistingChildDirectory(component)
 		if err != nil {
-			_ = current.close()
+			if err := current.close(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return nil, "", err
 		}
-		_ = current.close()
+		if err := current.close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		current = child
 	}
 	return current, name, nil

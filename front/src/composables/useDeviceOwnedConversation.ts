@@ -39,7 +39,9 @@ function readProviderState(): StoredProviderState | null {
     const state = JSON.parse(localStorage.getItem(providerStateKey) || "null");
     if (state?.version !== providerStateVersion || !["local", "cloud"].includes(state?.mode) || typeof state?.binding !== "string" || !state.binding) return null;
     return { version: providerStateVersion, mode: state.mode, binding: state.binding, changeId: typeof state.changeId === "string" ? state.changeId : undefined };
-  } catch { return null; }
+  } catch (error) {
+  console.error("[original-error]", error);
+return null; }
 }
 const coreId = ref("");
 const roleOwnerId = ref("");
@@ -49,8 +51,7 @@ let transientNotice = "";
 let providerChangeId = "";
 let providerMode: DeviceServiceMode = "local";
 let providerBinding = "";
-let activeController: AbortController | null = null;
-let activeRequest = "";
+const activeRequests = new Map<string, AbortController>();
 let revision = 0;
 let refreshInFlight: Promise<boolean> | undefined;
 const resourceCache = new Map<string, MeshResource>();
@@ -71,7 +72,9 @@ function saveProviderState() {
   try {
     const state: StoredProviderState = { version: providerStateVersion, mode: providerMode, binding: providerBinding, changeId: providerChangeId || undefined };
     localStorage.setItem(providerStateKey, JSON.stringify(state));
-  } catch {}
+  } catch (error) {
+  console.error("[original-error]", error);
+}
 }
 
 function unwrap<T>(response: any): T {
@@ -106,9 +109,14 @@ function stopLocal(message: string, _temporary = false) {
   revision++;
   refreshInFlight = undefined;
   clearOwnedCaches();
-  activeController?.abort();
-  activeController = null;
-  activeRequest = "";
+  for (const requestId of activeRequests.keys()) {
+    void apiClient.post(`/api/device-mesh/v1/business/messages/${encodeURIComponent(requestId)}/interrupt`).catch((error) => {
+  console.error("[original-error]", error);
+  return undefined;
+});
+  }
+  for (const controller of activeRequests.values()) controller.abort();
+  activeRequests.clear();
   notice.value = message;
   transientNotice = message;
   window.dispatchEvent(new CustomEvent("amitia:execution-scope-changed", { detail: { reason: message } }));
@@ -121,12 +129,12 @@ function noteWithoutInterrupt(message: string) {
 
 function markUnavailable() {
   const message = deviceUnavailableNotice(providerMode);
-  if (notice.value === message && !activeController) return;
+  if (notice.value === message && activeRequests.size === 0) return;
   stopLocal(message, true);
 }
 
 window.addEventListener("amitia:runtime-connection-changed", () => {
-  const interrupted = activeController !== null;
+  const interrupted = activeRequests.size > 0;
   coreId.value = "";
   providerBinding = "";
   providerChangeId = "";
@@ -173,7 +181,7 @@ export function useDeviceOwnedConversation() {
     const stored = readProviderState();
     providerChangeId = stored?.mode === mode && stored.binding === binding ? String(stored.changeId || "") : "";
     if (bindingChanged) {
-      const interrupted = activeController !== null;
+      const interrupted = activeRequests.size > 0;
       notice.value = "";
       transientNotice = "";
       coreId.value = "";
@@ -205,8 +213,8 @@ export function useDeviceOwnedConversation() {
     const authorityChanged = Boolean(enabled.value && policy.value && previous !== next);
     if (coreChanged || authorityChanged) {
       const message = coreChanged
-        ? deviceProviderChangedNotice(mode, coreId.value, String(current.coreId || ""), activeController ? "当前回复已中断。" : "旧数据已失效。")
-        : activeController
+        ? deviceProviderChangedNotice(mode, coreId.value, String(current.coreId || ""), activeRequests.size > 0 ? "当前回复已中断。" : "旧数据已失效。")
+        : activeRequests.size > 0
           ? "数据归属或调用权限已变化，当前回复已中断；继续发送时将使用当前 Core。"
           : "数据归属或调用权限已更新，旧数据已失效。";
       stopLocal(message);
@@ -497,7 +505,7 @@ export function useDeviceOwnedConversation() {
   }
 
   async function send(request: OwnedChatRequest, onEvent: (event: OwnedChatEvent) => void) {
-    if (activeController) throw new Error("当前回复尚未结束");
+    if (activeRequests.has(request.requestId)) throw new Error("当前请求正在执行");
     if (!enabled.value) throw new Error("设备对话服务尚未就绪");
     if (transientNotice && notice.value === transientNotice) {
       notice.value = "";
@@ -505,8 +513,7 @@ export function useDeviceOwnedConversation() {
     }
     const origin = parseConversationReference(request.conversationId || "");
     const controller = new AbortController();
-    activeController = controller;
-    activeRequest = request.requestId;
+    activeRequests.set(request.requestId, controller);
     const captured = revision;
     const wireRequest = origin ? { ...request, conversationId: origin.id, conversationOrigin: origin, ...(request.context ? { context: { ...request.context, conversationId: origin.id } } : {}) } : request;
     const publicEvent = (event: OwnedChatEvent): OwnedChatEvent => {
@@ -529,10 +536,7 @@ export function useDeviceOwnedConversation() {
       if (captured !== revision) throw new Error("服务状态已变化，迟到回复已拦截");
       return { ...response, resourceConversationId: response.conversationId, conversationId: conversationReference(response.conversationOrigin || origin || { ownerId: response.executionScope.resourceOwnerId, id: response.conversationId }) };
     } finally {
-      if (activeController === controller) {
-        activeController = null;
-        activeRequest = "";
-      }
+      if (activeRequests.get(request.requestId) === controller) activeRequests.delete(request.requestId);
     }
   }
 
@@ -561,12 +565,11 @@ export function useDeviceOwnedConversation() {
   }
 
   async function sendGroup(request: OwnedGroupChatRequest, onEvent: (event: OwnedChatEvent) => void): Promise<OwnedGroupChatResponse> {
-    if (activeController) throw new Error("当前回复尚未结束");
+    if (activeRequests.has(request.requestId)) throw new Error("当前请求正在执行");
     if (!enabled.value) throw new Error("设备对话服务尚未就绪");
     const origin = parseConversationReference(request.conversationId || "");
     const controller = new AbortController();
-    activeController = controller;
-    activeRequest = request.requestId;
+    activeRequests.set(request.requestId, controller);
     const captured = revision;
     const wireRequest = origin ? { ...request, conversationId: origin.id, conversationOrigin: origin } : request;
     try {
@@ -578,10 +581,7 @@ export function useDeviceOwnedConversation() {
       const reference = conversationReference(origin || { ownerId: response.deliveries[0]?.executionScope.resourceOwnerId || roleOwnerId.value, id: response.conversationId });
       return { ...response, conversationId: reference };
     } finally {
-      if (activeController === controller) {
-        activeController = null;
-        activeRequest = "";
-      }
+      if (activeRequests.get(request.requestId) === controller) activeRequests.delete(request.requestId);
     }
   }
 
@@ -594,11 +594,12 @@ export function useDeviceOwnedConversation() {
     return normalizeOwnedGroupMutation(result.group, result.acknowledgement?.ownerId || origin?.ownerId);
   }
 
-  async function createGroupConversation(characterId: string, members: Array<{ characterId: string; shareHistory: boolean }>) {
+  async function createGroupConversation(characterId: string, members: Array<{ characterId: string; shareHistory: boolean }>, projectId = "") {
     if (!enabled.value) throw new Error("设备对话服务尚未就绪");
     if (!characterId || members.length === 0) throw new Error("请选择当前发言角色和至少一个邀请角色");
     const requestId = crypto.randomUUID();
-    const result = unwrap<{ group: OwnedGroupState; acknowledgement: { ownerId: string }; saved: boolean }>(await apiClient.post("/api/device-mesh/v1/business/conversations/group", { requestId, characterId, members }));
+    const normalizedProjectId = String(projectId || "").trim();
+    const result = unwrap<{ group: OwnedGroupState; acknowledgement: { ownerId: string }; saved: boolean }>(await apiClient.post("/api/device-mesh/v1/business/conversations/group", { requestId, characterId, members, ...(normalizedProjectId ? { projectId: normalizedProjectId } : {}) }));
     if (!result.saved || !result.group?.conversationId || !result.acknowledgement?.ownerId) throw new Error("群聊尚未获得数据所有者确认");
     invalidateWithoutInterrupt();
     return normalizeOwnedGroupMutation(result.group, result.acknowledgement.ownerId);
@@ -655,9 +656,10 @@ export function useDeviceOwnedConversation() {
       .sort((left, right) => String(right.updatedAt || "").localeCompare(String(left.updatedAt || "")));
   }
 
-  async function interrupt() {
-    if (!activeRequest) return;
-    await apiClient.post(`/api/device-mesh/v1/business/messages/${encodeURIComponent(activeRequest)}/interrupt`);
+  async function interrupt(requestId = "") {
+    const target = requestId.trim() || (activeRequests.size === 1 ? activeRequests.keys().next().value || "" : "");
+    if (!target) return;
+    await apiClient.post(`/api/device-mesh/v1/business/messages/${encodeURIComponent(target)}/interrupt`);
   }
 
   const previousSummary = (previousCoreId: string, conversationId: string) => summaries.get(`${previousCoreId}/${conversationId}`);

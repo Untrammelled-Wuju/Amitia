@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	amitialog "log"
 	"time"
 )
 
@@ -72,7 +73,9 @@ func (h *HostFunctionSet) handleLog(ctx context.Context, hctx HostCallContext, p
 		Message string `json:"message"`
 	}
 	if len(params) > 0 {
-		_ = json.Unmarshal(params, &p)
+		if err := json.Unmarshal(params, &p); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	if p.Level == "" {
 		p.Level = "info"
@@ -99,7 +102,9 @@ func (h *HostFunctionSet) handleRandom(ctx context.Context, hctx HostCallContext
 		Max int `json:"max"`
 	}
 	if len(params) > 0 {
-		_ = json.Unmarshal(params, &p)
+		if err := json.Unmarshal(params, &p); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	if p.Max == 0 {
 		p.Max = 1000000
@@ -243,7 +248,9 @@ func (h *HostFunctionSet) handleSetError(ctx context.Context, hctx HostCallConte
 		Message string `json:"message"`
 	}
 	if len(params) > 0 {
-		_ = json.Unmarshal(params, &p)
+		if err := json.Unmarshal(params, &p); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	h.logger("error", fmt.Sprintf("wasm error[%s]: %s", p.Code, p.Message), map[string]any{
 		"extension":  hctx.ExtensionID,

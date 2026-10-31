@@ -60,8 +60,9 @@ export function parseCoreEndpoint(payload: unknown): CoreEndpoint | null {
           ? record.compatibilityBaseURL.trim().replace(/\/+$/, "")
           : undefined,
     };
-  } catch {
-    return null;
+  } catch (error) {
+  console.error("[original-error]", error);
+return null;
   }
 }
 
@@ -69,8 +70,9 @@ export function readCoreEndpoint(dataDir: string): CoreEndpoint | null {
   try {
     const raw = fs.readFileSync(coreEndpointPath(dataDir), "utf8");
     return parseCoreEndpoint(JSON.parse(raw));
-  } catch {
-    return null;
+  } catch (error) {
+  console.error("[original-error]", error);
+return null;
   }
 }
 
@@ -85,8 +87,9 @@ export function removeCoreEndpoint(dataDir: string, pid?: number): boolean {
   try {
     fs.rmSync(filePath, { force: true });
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+  console.error("[original-error]", error);
+return false;
   }
 }
 

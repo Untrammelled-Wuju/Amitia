@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	amitialog "log"
 )
 
 const importTicketTTL = 30 * time.Minute
@@ -67,7 +68,9 @@ func (c *Coordinator) StageImport(ctx context.Context, archivePath string) (*Imp
 		Preview:       preview,
 	}
 	if err := c.writeImportTicket(ticket); err != nil {
-		_ = os.Remove(stagedPath)
+		if err := os.Remove(stagedPath); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, err
 	}
 	return ticket, nil
@@ -93,9 +96,10 @@ func (c *Coordinator) CommitStagedImport(ctx context.Context, id string, policy 
 		return nil, ErrImportPackageInvalid
 	}
 	snapshot, err := c.CreateBackup(ctx, BackupRequest{
-		Scope:   ScopeAll,
-		Profile: ProfileFull,
-		Purpose: PurposePreImport,
+		Scope:          ScopeAll,
+		Profile:        ProfileFull,
+		Purpose:        PurposePreImport,
+		IncludeSecrets: true,
 	}, "", nil)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrImportTransactionFailed, err)
@@ -131,7 +135,9 @@ func (c *Coordinator) CommitStagedImport(ctx context.Context, id string, policy 
 	if operation != nil {
 		operation.Stats = stats
 	}
-	_ = c.removeImportTicket(id)
+	if err := c.removeImportTicket(id); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	return &StagedImportResult{
 		Operation:       operation,
 		PreImportBackup: snapshot.BackupID,
@@ -182,7 +188,9 @@ func (c *Coordinator) removeImportTicket(id string) error {
 	if err != nil {
 		return err
 	}
-	_ = os.Remove(ticket.ArchivePath)
+	if err := os.Remove(ticket.ArchivePath); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	return os.Remove(filepath.Join(c.DataDir, "imports", ".tickets", id+".json"))
 }
 
@@ -208,11 +216,15 @@ func copyArchiveFile(source, destination string) error {
 	}
 	if _, err := io.Copy(out, in); err != nil {
 		out.Close()
-		_ = os.Remove(destination)
+		if err := os.Remove(destination); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return err
 	}
 	if err := out.Close(); err != nil {
-		_ = os.Remove(destination)
+		if err := os.Remove(destination); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return err
 	}
 	return nil

@@ -22,6 +22,7 @@ import (
 	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/internal/scriptruntime/commandenv"
 	"gorm.io/gorm"
+	amitialog "log"
 )
 
 type Runtime struct {
@@ -122,14 +123,18 @@ func (r *Runtime) ActivateContributionBinding(ctx context.Context, binding kerne
 		return "", err
 	}
 	if !active {
-		_ = r.Repository.SetScopeEnabled(ctx, serverID, false)
+		if err := r.Repository.SetScopeEnabled(ctx, serverID, false); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return serverID, nil
 	}
 	if err := r.Repository.SetScopeEnabled(ctx, serverID, true); err != nil {
 		return "", err
 	}
 	if err := r.Connections.Connect(ctx, serverID); err != nil {
-		_ = r.Repository.SetScopeEnabled(context.WithoutCancel(ctx), serverID, false)
+		if err := r.Repository.SetScopeEnabled(context.WithoutCancel(ctx), serverID, false); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return "", err
 	}
 	return serverID, nil
@@ -236,15 +241,21 @@ func (r *Runtime) putContributionBinding(ctx context.Context, binding kernel.MCP
 		return "", err
 	}
 	if err := r.writeStdioEnvironment(ctx, server.ID, binding.Env); err != nil {
-		_ = r.Repository.DeleteServer(context.WithoutCancel(ctx), server.ID)
+		if err := r.Repository.DeleteServer(context.WithoutCancel(ctx), server.ID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return "", err
 	}
 	if err := r.writeCredential(ctx, server.ID, binding); err != nil {
-		_ = r.Repository.DeleteServer(context.WithoutCancel(ctx), server.ID)
+		if err := r.Repository.DeleteServer(context.WithoutCancel(ctx), server.ID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return "", err
 	}
 	if err := r.syncBindingCapabilities(ctx, server.ID, binding); err != nil {
-		_ = r.Repository.DeleteServer(context.WithoutCancel(ctx), server.ID)
+		if err := r.Repository.DeleteServer(context.WithoutCancel(ctx), server.ID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return "", err
 	}
 	return server.ID, nil
@@ -275,7 +286,9 @@ func (r *Runtime) writeStdioEnvironment(ctx context.Context, serverID string, en
 		return err
 	}
 	if _, err := r.Repository.PutCredentialReference(ctx, serverID, "stdio_env", reference, "", nil); err != nil {
-		_ = r.Secrets.Delete(context.WithoutCancel(ctx), reference)
+		if err := r.Secrets.Delete(context.WithoutCancel(ctx), reference); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return err
 	}
 	if oldReference != "" && oldReference != reference {
@@ -317,7 +330,9 @@ func (r *Runtime) writeCredential(ctx context.Context, serverID string, binding 
 		return err
 	}
 	if _, err := r.Repository.PutCredentialReference(ctx, serverID, credentialType, reference, "", nil); err != nil {
-		_ = r.Secrets.Delete(context.WithoutCancel(ctx), reference)
+		if err := r.Secrets.Delete(context.WithoutCancel(ctx), reference); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return err
 	}
 	if oldReference != "" && oldReference != reference {
@@ -344,8 +359,12 @@ func (r *Runtime) syncBindingCapabilities(ctx context.Context, serverID string, 
 }
 
 func (r *Runtime) removeServer(ctx context.Context, serverID string) error {
-	_ = r.Connections.Disconnect(ctx, serverID)
-	_ = r.Tools.UnregisterServer(ctx, serverID)
+	if err := r.Connections.Disconnect(ctx, serverID); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := r.Tools.UnregisterServer(ctx, serverID); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	references, err := r.Repository.CredentialReferences(ctx, serverID)
 	if err != nil {
 		return err

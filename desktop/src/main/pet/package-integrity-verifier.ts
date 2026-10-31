@@ -105,8 +105,9 @@ export class PackageIntegrityVerifier {
     let canonical: string;
     try {
       canonical = canonicalManifestJSON(manifestRawText);
-    } catch {
-      errors.push(this.makeError("PACKAGE_MANIFEST_INVALID", "manifest is not valid JSON", "error"));
+    } catch (error) {
+  console.error("[original-error]", error);
+errors.push(this.makeError("PACKAGE_MANIFEST_INVALID", "manifest is not valid JSON", "error"));
       return;
     }
     const computed = sha256Hex(canonical);
@@ -133,8 +134,9 @@ export class PackageIntegrityVerifier {
     let canonicalManifest: string;
     try {
       canonicalManifest = canonicalManifestJSON(manifestRawText);
-    } catch {
-      errors.push(this.makeError("PACKAGE_MANIFEST_INVALID", "manifest is not valid JSON", "error"));
+    } catch (error) {
+  console.error("[original-error]", error);
+errors.push(this.makeError("PACKAGE_MANIFEST_INVALID", "manifest is not valid JSON", "error"));
       return;
     }
     const manifestBytes = Buffer.byteLength(canonicalManifest, "utf8");

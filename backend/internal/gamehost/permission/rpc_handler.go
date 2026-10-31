@@ -11,6 +11,7 @@ import (
 
 	"github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/rpc"
+	amitialog "log"
 )
 
 const (
@@ -208,12 +209,18 @@ func routedPermissionError(requestID, code, message string) rpc.RPCResponse {
 
 func permissionViewSnapshotID(request rpc.RPCRequest, revision string, perms, scopes []string) string {
 	h := sha256.New()
-	_, _ = fmt.Fprintf(h, "%s\x00%s\x00%s\x00%d\x00%s", request.PluginID, request.RuntimeID, request.ServiceID, request.Generation, revision)
+	if _, err := fmt.Fprintf(h, "%s\x00%s\x00%s\x00%d\x00%s", request.PluginID, request.RuntimeID, request.ServiceID, request.Generation, revision); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	for _, permissionID := range perms {
-		_, _ = fmt.Fprintf(h, "\x00p:%s", permissionID)
+		if _, err := fmt.Fprintf(h, "\x00p:%s", permissionID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	for _, scope := range scopes {
-		_, _ = fmt.Fprintf(h, "\x00s:%s", scope)
+		if _, err := fmt.Fprintf(h, "\x00s:%s", scope); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	sum := h.Sum(nil)
 	return "ghps-" + hex.EncodeToString(sum[:16])

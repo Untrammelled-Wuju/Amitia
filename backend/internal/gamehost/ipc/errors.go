@@ -9,13 +9,13 @@ import (
 type IPCErrorType string
 
 const (
-	IPCErrorTransport   IPCErrorType = "transport"
-	IPCErrorProtocol    IPCErrorType = "protocol"
-	IPCErrorPeerRoute   IPCErrorType = "peer_route"
-	IPCErrorLimit       IPCErrorType = "limit"
-	IPCErrorDuplicate   IPCErrorType = "duplicate"
-	IPCErrorTimeout     IPCErrorType = "timeout"
-	IPCErrorCancelled   IPCErrorType = "cancelled"
+	IPCErrorTransport IPCErrorType = "transport"
+	IPCErrorProtocol  IPCErrorType = "protocol"
+	IPCErrorPeerRoute IPCErrorType = "peer_route"
+	IPCErrorLimit     IPCErrorType = "limit"
+	IPCErrorDuplicate IPCErrorType = "duplicate"
+	IPCErrorTimeout   IPCErrorType = "timeout"
+	IPCErrorCancelled IPCErrorType = "cancelled"
 )
 
 type IPCError struct {

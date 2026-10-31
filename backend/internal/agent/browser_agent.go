@@ -17,6 +17,7 @@ import (
 	extensionkernel "github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/workbenchbrowser"
+	amitialog "log"
 )
 
 type plannedBrowserAction struct {
@@ -76,7 +77,9 @@ func (s *service) RunBrowserAgent(ctx context.Context, execCtx tool.ToolExecutio
 			cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cleanupCancel()
 			input, _ := json.Marshal(map[string]any{"sessionId": sessionID})
-			_, _ = s.browserAgentExecute(cleanupCtx, scope, runKey, req.MaxSteps+100, "browser_session_close", input)
+			if _, err := s.browserAgentExecute(cleanupCtx, scope, runKey, req.MaxSteps+100, "browser_session_close", input); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}()
 	}
 
@@ -101,7 +104,9 @@ func (s *service) RunBrowserAgent(ctx context.Context, execCtx tool.ToolExecutio
 			cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cleanupCancel()
 			input, _ := json.Marshal(map[string]any{"sessionId": sessionID, "tabId": tabID})
-			_, _ = s.browserAgentExecute(cleanupCtx, scope, runKey, req.MaxSteps+101, "browser_tab_close", input)
+			if _, err := s.browserAgentExecute(cleanupCtx, scope, runKey, req.MaxSteps+101, "browser_tab_close", input); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}()
 	}
 
@@ -122,7 +127,7 @@ func (s *service) RunBrowserAgent(ctx context.Context, execCtx tool.ToolExecutio
 			if browserRef != "" && !req.KeepSession {
 				defer workbenchbrowser.RevokeAgentTab(browserRef)
 			}
-			_, _ = conversationstream.DefaultManager().Publish(ctx, conversationstream.AgentUIEvent{
+			if _, err := conversationstream.DefaultManager().Publish(ctx, conversationstream.AgentUIEvent{
 				ConversationID: execCtx.ConversationID,
 				RequestID:      execCtx.RequestID,
 				CallID:         execCtx.ToolCallID,
@@ -138,7 +143,9 @@ func (s *service) RunBrowserAgent(ctx context.Context, execCtx tool.ToolExecutio
 					"readOnly":       browserRef != "",
 					"originDeviceId": originDeviceID,
 				},
-			}, true)
+			}, true); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}
 

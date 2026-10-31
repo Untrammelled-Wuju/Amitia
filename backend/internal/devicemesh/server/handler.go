@@ -233,11 +233,15 @@ func (h *Handler) handleConnection(ctx context.Context, conn *websocket.Conn, pr
 
 	stored, attached := h.hub.Attach(session.ID, meshConn)
 	if !attached {
-		_ = meshConn.Close(4001, "session_superseded")
+		if err := meshConn.Close(4001, "session_superseded"); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 		return fmt.Errorf("session superseded by newer connection")
 	}
 	if stored != nil {
-		_ = stored.Close(4001, "session_superseded")
+		if err := stored.Close(4001, "session_superseded"); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 	}
 
 	defer h.hub.Detach(session.ID, session.ConnectionGeneration)
@@ -407,7 +411,9 @@ func (h *Handler) messageLoop(ctx context.Context, conn *MeshConnection, session
 			if err := json.Unmarshal(env.Payload, &ping); err == nil {
 				conn.LastPongAt = time.Now().UTC()
 				pong := protocol.PongPayload{Time: ping.Time}
-				_ = h.sendEnvelope(conn, protocol.MessageTypePong, pong)
+				if err := h.sendEnvelope(conn, protocol.MessageTypePong, pong); err != nil {
+					log.Printf("[original-error] %v", err)
+				}
 				h.sessions.Heartbeat(ctx, sessionID, generation, time.Now().UTC())
 			}
 
@@ -454,11 +460,15 @@ func (h *Handler) messageLoop(ctx context.Context, conn *MeshConnection, session
 						FencingToken:         invoke.FencingToken,
 						FailedAt:             now,
 					}
-					_ = h.sendEnvelope(conn, protocol.MessageTypeRuntimeError, errPayload)
+					if err := h.sendEnvelope(conn, protocol.MessageTypeRuntimeError, errPayload); err != nil {
+						log.Printf("[original-error] %v", err)
+					}
 				} else if result != nil {
 					result.IdempotencyKey = invoke.IdempotencyKey
 					result.FencingToken = invoke.FencingToken
-					_ = h.sendEnvelope(conn, protocol.MessageTypeRuntimeResult, *result)
+					if err := h.sendEnvelope(conn, protocol.MessageTypeRuntimeResult, *result); err != nil {
+						log.Printf("[original-error] %v", err)
+					}
 				}
 			} else {
 				h.sendErrorConn(conn, "mesh.unsupported_command", "runtime.invoke not accepted on this connection", false)
@@ -518,7 +528,9 @@ func (h *Handler) handleTaskCallback(conn *MeshConnection, env protocol.Envelope
 			} else if valid && h.onTaskClaim != nil {
 				accepted = h.onTaskClaim(claim.TaskRunID, claim.AttemptID, claim.WorkerID, time.Duration(claim.LeaseDurationMs)*time.Millisecond)
 			}
-			_ = h.sendEnvelope(conn, protocol.MessageTypeTaskLeaseAck, protocol.TaskLeaseAckPayload{TaskRunID: claim.TaskRunID, AttemptID: claim.AttemptID, LeaseID: claim.LeaseID, Accepted: accepted, LeaseDurationMs: claim.LeaseDurationMs, RuntimeSessionID: conn.SessionID, ConnectionGeneration: conn.Generation})
+			if err := h.sendEnvelope(conn, protocol.MessageTypeTaskLeaseAck, protocol.TaskLeaseAckPayload{TaskRunID: claim.TaskRunID, AttemptID: claim.AttemptID, LeaseID: claim.LeaseID, Accepted: accepted, LeaseDurationMs: claim.LeaseDurationMs, RuntimeSessionID: conn.SessionID, ConnectionGeneration: conn.Generation}); err != nil {
+				log.Printf("[original-error] %v", err)
+			}
 		}
 
 	case protocol.MessageTypeTaskComplete:
@@ -568,7 +580,9 @@ func (h *Handler) handleTaskCallback(conn *MeshConnection, env protocol.Envelope
 			if valid && h.onTaskHeartbeatPayload != nil {
 				accepted = h.onTaskHeartbeatPayload(heartbeat)
 			}
-			_ = h.sendEnvelope(conn, protocol.MessageTypeTaskLeaseAck, protocol.TaskLeaseAckPayload{TaskRunID: heartbeat.TaskRunID, AttemptID: heartbeat.AttemptID, LeaseID: heartbeat.LeaseID, Sequence: heartbeat.Sequence, Accepted: accepted, LeaseDurationMs: 300000, RuntimeSessionID: conn.SessionID, ConnectionGeneration: conn.Generation})
+			if err := h.sendEnvelope(conn, protocol.MessageTypeTaskLeaseAck, protocol.TaskLeaseAckPayload{TaskRunID: heartbeat.TaskRunID, AttemptID: heartbeat.AttemptID, LeaseID: heartbeat.LeaseID, Sequence: heartbeat.Sequence, Accepted: accepted, LeaseDurationMs: 300000, RuntimeSessionID: conn.SessionID, ConnectionGeneration: conn.Generation}); err != nil {
+				log.Printf("[original-error] %v", err)
+			}
 		}
 
 	}
@@ -627,18 +641,26 @@ func (h *Handler) sendError(conn *websocket.Conn, code, message string, fatal bo
 		return
 	}
 
-	_ = conn.WriteMessage(websocket.TextMessage, data)
+	if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
+		log.Printf("[original-error] %v", err)
+	}
 	if fatal {
-		_ = conn.WriteControl(websocket.CloseMessage,
+		if err := conn.WriteControl(websocket.CloseMessage,
 			websocket.FormatCloseMessage(4000, code),
-			time.Now().Add(2*time.Second))
+			time.Now().Add(2*time.Second)); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 	}
 }
 
 func (h *Handler) sendErrorConn(conn *MeshConnection, code, message string, fatal bool) {
-	_ = h.sendEnvelope(conn, protocol.MessageTypeError, protocol.ErrorPayload{Code: code, Message: message})
+	if err := h.sendEnvelope(conn, protocol.MessageTypeError, protocol.ErrorPayload{Code: code, Message: message}); err != nil {
+		log.Printf("[original-error] %v", err)
+	}
 	if fatal {
-		_ = conn.Close(4000, code)
+		if err := conn.Close(4000, code); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
 	}
 }
 

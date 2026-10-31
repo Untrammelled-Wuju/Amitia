@@ -135,8 +135,9 @@ function extensionFromUrl(value: string): string {
     const pathname = new URL(value).pathname;
     const match = /\.([A-Za-z0-9]{1,10})$/.exec(pathname);
     return match ? `.${match[1].toLowerCase()}` : "";
-  } catch {
-    return "";
+  } catch (error) {
+  console.error("[original-error]", error);
+return "";
   }
 }
 

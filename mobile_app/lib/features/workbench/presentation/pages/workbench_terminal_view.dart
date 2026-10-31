@@ -140,8 +140,9 @@ class _WorkbenchTerminalViewState extends ConsumerState<WorkbenchTerminalView> w
         _sessions..clear()..addAll(rows);
         if (!_sessions.any((row) => row['id'] == _resumeId && (row['taskId'] ?? '') == widget.taskId)) _resumeId = '';
       });
-    } catch (_) {
-      if (mounted && !_closed) setState(() => _sessions.clear());
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+if (mounted && !_closed) setState(() => _sessions.clear());
     }
   }
 

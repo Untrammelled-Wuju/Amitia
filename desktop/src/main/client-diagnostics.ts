@@ -15,8 +15,9 @@ function text(value: unknown): string {
   if (value == null) return "";
   try {
     return JSON.stringify(value);
-  } catch {
-    return String(value);
+  } catch (error) {
+  console.error("[original-error]", error);
+return String(value);
   }
 }
 

@@ -16,7 +16,8 @@ export function notifyDesktopPetChatState(
       roundId: roundId || undefined,
       error: error || undefined,
     });
-  } catch {
-    // Web-only hosts intentionally have no local desktop-pet body.
+  } catch (error) {
+  console.error("[original-error]", error);
+// Web-only hosts intentionally have no local desktop-pet body.
   }
 }

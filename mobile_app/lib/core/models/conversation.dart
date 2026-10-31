@@ -18,6 +18,12 @@ class ConversationDto {
   final int lastTerminalTurnSequence;
   final bool isGenerating;
   final bool hasUnread;
+  final int unreadCompletedCount;
+  final String activityLabel;
+  final String activeToolName;
+  final String activeTaskTitle;
+  final String lastMessageType;
+  final String lastMessageRole;
   final int modelConfigId;
   final String reasoningEffort;
   final int reasoningEnabled;
@@ -43,6 +49,12 @@ class ConversationDto {
     this.lastTerminalTurnSequence = 0,
     this.isGenerating = false,
     this.hasUnread = false,
+    this.unreadCompletedCount = 0,
+    this.activityLabel = '',
+    this.activeToolName = '',
+    this.activeTaskTitle = '',
+    this.lastMessageType = '',
+    this.lastMessageRole = '',
     this.modelConfigId = 0,
     this.reasoningEffort = '',
     this.reasoningEnabled = -1,
@@ -85,6 +97,15 @@ class ConversationDto {
           (json['lastTerminalTurnSequence'] as num?)?.toInt() ?? 0,
       isGenerating: json['isGenerating'] == true,
       hasUnread: json['hasUnread'] == true,
+      unreadCompletedCount:
+          (json['unreadCompletedCount'] as num?)?.toInt() ??
+          (json['hasUnread'] == true ? 1 : 0),
+      activityLabel: (json['activityLabel'] ?? '').toString(),
+      activeToolName: (json['activeToolName'] ?? '').toString(),
+      activeTaskTitle: (json['activeTaskTitle'] ?? '').toString(),
+      lastMessageType: (json['lastMessageType'] ?? json['msgType'] ?? '')
+          .toString(),
+      lastMessageRole: (json['lastMessageRole'] ?? '').toString(),
       modelConfigId: (json['modelConfigId'] as num?)?.toInt() ?? 0,
       reasoningEffort: (json['reasoningEffort'] ?? '').toString(),
       reasoningEnabled: switch (json['reasoningEnabled']) {

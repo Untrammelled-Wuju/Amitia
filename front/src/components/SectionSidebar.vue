@@ -123,8 +123,9 @@ async function loadGamePlugins() {
   try {
     const result = await api.get<{ items?: GamePlugin[] }>("/api/game-center/plugins", { page: 1, pageSize: 100 });
     gamePlugins.value = result?.items ?? [];
-  } catch {
-    gamePlugins.value = [];
+  } catch (error) {
+  console.error("[original-error]", error);
+gamePlugins.value = [];
   } finally {
     gameLoading.value = false;
   }

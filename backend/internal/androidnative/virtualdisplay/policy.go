@@ -1,42 +1,42 @@
 package virtualdisplay
 
 const (
-	MinWidth         = 320
-	MinHeight        = 320
-	MaxWidth         = 2560
-	MaxHeight        = 2560
-	MaxPixels        = 7372800
-	MinDensityDPI    = 72
-	MaxDensityDPI    = 640
-	DefaultWidth     = 1080
-	DefaultHeight    = 1920
+	MinWidth          = 320
+	MinHeight         = 320
+	MaxWidth          = 2560
+	MaxHeight         = 2560
+	MaxPixels         = 7372800
+	MinDensityDPI     = 72
+	MaxDensityDPI     = 640
+	DefaultWidth      = 1080
+	DefaultHeight     = 1920
 	DefaultDensityDPI = 420
 )
 
 type Policy struct {
-	MinWidth       int
-	MinHeight      int
-	MaxWidth       int
-	MaxHeight      int
-	MaxPixels      int
-	MinDensityDPI  int
-	MaxDensityDPI  int
-	DefaultWidth   int
-	DefaultHeight  int
+	MinWidth          int
+	MinHeight         int
+	MaxWidth          int
+	MaxHeight         int
+	MaxPixels         int
+	MinDensityDPI     int
+	MaxDensityDPI     int
+	DefaultWidth      int
+	DefaultHeight     int
 	DefaultDensityDPI int
 }
 
 func DefaultPolicy() Policy {
 	return Policy{
-		MinWidth:       MinWidth,
-		MinHeight:      MinHeight,
-		MaxWidth:       MaxWidth,
-		MaxHeight:      MaxHeight,
-		MaxPixels:      MaxPixels,
-		MinDensityDPI:  MinDensityDPI,
-		MaxDensityDPI:  MaxDensityDPI,
-		DefaultWidth:   DefaultWidth,
-		DefaultHeight:  DefaultHeight,
+		MinWidth:          MinWidth,
+		MinHeight:         MinHeight,
+		MaxWidth:          MaxWidth,
+		MaxHeight:         MaxHeight,
+		MaxPixels:         MaxPixels,
+		MinDensityDPI:     MinDensityDPI,
+		MaxDensityDPI:     MaxDensityDPI,
+		DefaultWidth:      DefaultWidth,
+		DefaultHeight:     DefaultHeight,
 		DefaultDensityDPI: DefaultDensityDPI,
 	}
 }

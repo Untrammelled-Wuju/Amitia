@@ -10,14 +10,14 @@ import (
 type RollbackCompletionCallback func(extensionID string, success bool, generation int64)
 
 type RollbackExecutorV2 struct {
-	mu                sync.Mutex
-	points            *RollbackPointStore
-	migrations        *MigrationExecutor
-	generations       *GenerationManager
-	journal           *JournalManager
-	repo              *RollbackRepository
-	planner           *RollbackPlanner
-	inProgress        map[string]*RollbackPlan
+	mu                 sync.Mutex
+	points             *RollbackPointStore
+	migrations         *MigrationExecutor
+	generations        *GenerationManager
+	journal            *JournalManager
+	repo               *RollbackRepository
+	planner            *RollbackPlanner
+	inProgress         map[string]*RollbackPlan
 	completionCallback RollbackCompletionCallback
 }
 

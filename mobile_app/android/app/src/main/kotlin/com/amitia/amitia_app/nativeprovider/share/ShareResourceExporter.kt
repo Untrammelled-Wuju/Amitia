@@ -55,6 +55,8 @@ internal class ShareResourceExporter(
                 displayName = safeName,
             )
         } catch (e: Exception) {
+          e.printStackTrace()
+
             null
         }
     }
@@ -65,7 +67,9 @@ internal class ShareResourceExporter(
             if (stagingDir.exists()) stagingDir.deleteRecursively()
             val commitDir = File(exportRoot, requestId)
             if (commitDir.exists()) commitDir.deleteRecursively()
-        } catch (_: Exception) {
+        } catch (originalError68: Exception) {
+          originalError68.printStackTrace()
+
         }
     }
 
@@ -79,7 +83,9 @@ internal class ShareResourceExporter(
                     dir.deleteRecursively()
                 }
             }
-        } catch (_: Exception) {
+        } catch (originalError82: Exception) {
+          originalError82.printStackTrace()
+
         }
     }
 

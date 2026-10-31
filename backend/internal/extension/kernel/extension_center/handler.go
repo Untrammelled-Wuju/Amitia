@@ -2,6 +2,7 @@ package extension_center
 
 import (
 	"encoding/json"
+	amitialog "log"
 	"net/http"
 	"strings"
 	"time"
@@ -121,7 +122,9 @@ func parseSort(r *http.Request) CenterSortKey {
 func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func writeError(w http.ResponseWriter, status int, err error) {
@@ -131,7 +134,9 @@ func writeError(w http.ResponseWriter, status int, err error) {
 	if err != nil {
 		msg = err.Error()
 	}
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
+	if err := json.NewEncoder(w).Encode(map[string]string{"error": msg}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 var _ = time.Now

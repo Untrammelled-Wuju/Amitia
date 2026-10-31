@@ -9,6 +9,7 @@ import (
 	"github.com/u-ai/backend/internal/uiagent/schema"
 	"github.com/u-ai/backend/internal/uiagent/source"
 	"github.com/u-ai/backend/internal/workspace"
+	amitialog "log"
 )
 
 // SourceEditOperation describes a single file edit.
@@ -191,13 +192,13 @@ func (e *UIExecutor) ApplySourceEdits(ctx context.Context, plan UIChangePlan) (*
 		}
 		if len(op.Payload) > 0 {
 			var payload struct {
-				Patch      string `json:"patch"`
-				OldText    string `json:"oldText"`
-				NewText    string `json:"newText"`
-				BaseSHA256 string `json:"baseSha256"`
-				SearchMode string `json:"searchMode"`
-				ReplaceAll bool   `json:"replaceAll"`
-				ExpectCount int   `json:"expectCount"`
+				Patch       string `json:"patch"`
+				OldText     string `json:"oldText"`
+				NewText     string `json:"newText"`
+				BaseSHA256  string `json:"baseSha256"`
+				SearchMode  string `json:"searchMode"`
+				ReplaceAll  bool   `json:"replaceAll"`
+				ExpectCount int    `json:"expectCount"`
 			}
 			if err := json.Unmarshal(op.Payload, &payload); err == nil {
 				srcOp.Patch = payload.Patch
@@ -243,13 +244,13 @@ func (e *UIExecutor) ApplySourceEditsWithPreview(ctx context.Context, plan UICha
 		}
 		if len(op.Payload) > 0 {
 			var payload struct {
-				Patch      string `json:"patch"`
-				OldText    string `json:"oldText"`
-				NewText    string `json:"newText"`
-				BaseSHA256 string `json:"baseSha256"`
-				SearchMode string `json:"searchMode"`
-				ReplaceAll bool   `json:"replaceAll"`
-				ExpectCount int   `json:"expectCount"`
+				Patch       string `json:"patch"`
+				OldText     string `json:"oldText"`
+				NewText     string `json:"newText"`
+				BaseSHA256  string `json:"baseSha256"`
+				SearchMode  string `json:"searchMode"`
+				ReplaceAll  bool   `json:"replaceAll"`
+				ExpectCount int    `json:"expectCount"`
 			}
 			if err := json.Unmarshal(op.Payload, &payload); err == nil {
 				srcOp.Patch = payload.Patch
@@ -275,13 +276,17 @@ func (e *UIExecutor) ApplySourceEditsWithPreview(ctx context.Context, plan UICha
 
 	applyResult, err := e.sourceEditor.applyPatchesTx(ctx, tx, srcReq)
 	if err != nil {
-		_ = e.sourceEditor.rollbackTx(ctx, tx)
+		if err := e.sourceEditor.rollbackTx(ctx, tx); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, "", fmt.Errorf("apply patches: %w", err)
 	}
 
 	diffResult, err := e.sourceEditor.previewDiff(ctx, tx)
 	if err != nil {
-		_ = e.sourceEditor.rollbackTx(ctx, tx)
+		if err := e.sourceEditor.rollbackTx(ctx, tx); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, "", fmt.Errorf("preview diff: %w", err)
 	}
 	applyResult.DiffPreview = diffResult.UnifiedDiff
@@ -305,17 +310,23 @@ func (e *UIExecutor) ApplySourceEditsWithPreview(ctx context.Context, plan UICha
 			}
 			refineResult, refineErr := e.autoRefiner.Refine(ctx, refineReq)
 			if refineErr != nil {
-				_ = e.sourceEditor.rollbackTx(ctx, tx)
+				if err := e.sourceEditor.rollbackTx(ctx, tx); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 				return applyResult, "", fmt.Errorf("auto refine failed: %w", refineErr)
 			}
 			if refineResult.State == "needs_manual" || refineResult.State == "no_progress" {
-				_ = e.sourceEditor.rollbackTx(ctx, tx)
+				if err := e.sourceEditor.rollbackTx(ctx, tx); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 				return applyResult, refineResult.State, nil
 			}
 			if refineResult.TransactionID != "" {
 				refineApplyResult, err := e.sourceEditor.applyPatchesTx(ctx, tx, srcReq)
 				if err != nil {
-					_ = e.sourceEditor.rollbackTx(ctx, tx)
+					if err := e.sourceEditor.rollbackTx(ctx, tx); err != nil {
+						amitialog.Printf("[original-error] %v", err)
+					}
 					return nil, "", fmt.Errorf("apply refine patches: %w", err)
 				}
 				applyResult = refineApplyResult

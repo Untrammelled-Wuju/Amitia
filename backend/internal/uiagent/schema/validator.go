@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
+	amitialog "log"
 )
 
 // ValidationResult contains the outcome of a schema validation.
@@ -89,7 +90,9 @@ func validateSchemaNode(result *ValidationResult, catalog *ComponentCatalog, nod
 
 	var props map[string]any
 	if len(node.Props) > 0 {
-		_ = json.Unmarshal(node.Props, &props)
+		if err := json.Unmarshal(node.Props, &props); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 
 	for _, reqProp := range schema.RequiredProps {

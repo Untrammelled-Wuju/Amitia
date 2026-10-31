@@ -129,8 +129,9 @@ function scanDirectory(dirPath, violations) {
   let entries;
   try {
     entries = readdirSync(dirPath, { withFileTypes: true });
-  } catch {
-    return;
+  } catch (error) {
+  console.error("[original-error]", error);
+return;
   }
 
   for (const entry of entries) {
@@ -171,8 +172,9 @@ const violations = [];
 let rootEntries;
 try {
   rootEntries = readdirSync(repoRoot, { withFileTypes: true });
-} catch {
-  rootEntries = [];
+} catch (error) {
+  console.error("[original-error]", error);
+rootEntries = [];
 }
 
 for (const entry of rootEntries) {

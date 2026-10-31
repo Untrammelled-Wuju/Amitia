@@ -73,8 +73,9 @@ class _SimpleConditionDraft {
     if (trimmed.isEmpty) return '';
     try {
       return jsonDecode(trimmed);
-    } catch (_) {
-      return value;
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return value;
     }
   }
 
@@ -228,21 +229,24 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
       _normalize(workflow);
       try {
         _catalog = await service.workflowCatalog(target: _target);
-      } catch (_) {
-        _catalog = <Map<String, dynamic>>[];
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+_catalog = <Map<String, dynamic>>[];
       }
       try {
         _ownedWorkflows = (await service.workflows(limit: 200, target: _target))
             .where((item) => (item['id'] ?? '').toString() != widget.workflowId)
             .toList(growable: false);
-      } catch (_) {
-        _ownedWorkflows = <Map<String, dynamic>>[];
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+_ownedWorkflows = <Map<String, dynamic>>[];
       }
       if (_isCloud) {
         try {
           _devices = await service.workflowDevices();
-        } catch (_) {
-          _devices = <Map<String, dynamic>>[];
+        } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+_devices = <Map<String, dynamic>>[];
         }
         _triggerCapabilities = <Map<String, dynamic>>[];
         _triggerAppCatalog = <Map<String, dynamic>>[];
@@ -250,18 +254,21 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
       } else {
         try {
           _triggerCapabilities = await service.workflowTriggerCapabilities(target: _target);
-        } catch (_) {
-          _triggerCapabilities = <Map<String, dynamic>>[];
+        } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+_triggerCapabilities = <Map<String, dynamic>>[];
         }
         try {
           _triggerAppCatalog = await service.workflowTriggerAppCatalog(target: _target);
-        } catch (_) {
-          _triggerAppCatalog = <Map<String, dynamic>>[];
+        } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+_triggerAppCatalog = <Map<String, dynamic>>[];
         }
         try {
           _triggerWakeConfigs = await service.workflowTriggerWakeConfigs(target: _target);
-        } catch (_) {
-          _triggerWakeConfigs = <Map<String, dynamic>>[];
+        } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+_triggerWakeConfigs = <Map<String, dynamic>>[];
         }
       }
       if (_isDevice) {
@@ -390,8 +397,9 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
       if (_disposed) return;
       final raw = page['cursor'];
       _syncCursor = raw is int ? raw : int.tryParse(raw?.toString() ?? '') ?? 0;
-    } catch (_) {
-      _syncCursor = null;
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+_syncCursor = null;
     }
   }
 
@@ -418,8 +426,9 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
       } else {
         await Future.wait(<Future<void>>[_loadRuns(), _loadRevisions(), _loadStats()]);
       }
-    } catch (_) {
-      // A transient sync failure must not make the editor unusable.
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+// A transient sync failure must not make the editor unusable.
     }
   }
 
@@ -442,8 +451,9 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
       if (events.any(_syncEventMatches)) await _refreshDefinitionFromSync();
       _deviceSyncTicks++;
       if (_isDevice && _deviceSyncTicks % 8 == 0) await _refreshDefinitionFromSync();
-    } catch (_) {
-      // Keep the durable cursor and retry on the next tick.
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+// Keep the durable cursor and retry on the next tick.
     } finally {
       _syncBusy = false;
     }
@@ -815,8 +825,9 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
         _pollTimer?.cancel();
         await Future.wait(<Future<void>>[_loadRuns(), _loadStats()]);
       }
-    } catch (_) {
-      // Keep the editor usable if one polling request is interrupted.
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+// Keep the editor usable if one polling request is interrupted.
     }
   }
 
@@ -828,7 +839,9 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
       final result = await ref.read(extensionServiceProvider).workflowRuns(widget.workflowId, limit: 30, target: _target);
       final items = _asMapList(result['items']);
       if (mounted) setState(() => _runHistory = items);
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
   }
 
   Future<void> _loadStats() async {
@@ -836,7 +849,9 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
     try {
       final stats = await ref.read(extensionServiceProvider).workflowStats(widget.workflowId, target: _target);
       if (mounted) setState(() => _workflowStats = stats);
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
   }
 
   Future<void> _pauseRun() async {
@@ -1098,7 +1113,9 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
     try {
       final decoded = jsonDecode(controller.text.trim().isEmpty ? '{}' : controller.text);
       if (decoded is Map) current = decoded.map((key, value) => MapEntry(key.toString(), value));
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
     controller.text = _pretty(<String, dynamic>{...template, ...current});
   }
 
@@ -1106,7 +1123,9 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
     try {
       final decoded = jsonDecode(controller.text.trim().isEmpty ? '{}' : controller.text);
       if (decoded is Map) return decoded.map((key, value) => MapEntry(key.toString(), value));
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
     return <String, dynamic>{};
   }
 
@@ -1269,7 +1288,9 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
           onChanged: (value) {
             try {
               _setSchemaPathValue(controller, fieldPath, jsonDecode(value));
-            } catch (_) {}
+            } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
           },
         );
       } else {
@@ -1683,8 +1704,9 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
     try {
       final items = await ref.read(extensionServiceProvider).workflowRevisions(widget.workflowId, limit: 50, target: _target);
       if (mounted) setState(() => _revisions = items);
-    } catch (_) {
-      if (mounted) setState(() => _revisions = <Map<String, dynamic>>[]);
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+if (mounted) setState(() => _revisions = <Map<String, dynamic>>[]);
     }
   }
 
@@ -1937,16 +1959,18 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
               limit: 200,
               target: WorkflowApiTarget.device(executionDeviceId),
             );
-      } catch (_) {
-        nestedWorkflows = <Map<String, dynamic>>[];
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+nestedWorkflows = <Map<String, dynamic>>[];
       }
     }
     var toolCatalog = List<Map<String, dynamic>>.from(_catalog);
     if (_isCloud && nodeType == 'tool' && executionPlacement == 'device' && executionDeviceId.isNotEmpty) {
       try {
         toolCatalog = await ref.read(extensionServiceProvider).workflowCatalog(target: WorkflowApiTarget.device(executionDeviceId));
-      } catch (_) {
-        toolCatalog = <Map<String, dynamic>>[];
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+toolCatalog = <Map<String, dynamic>>[];
       }
     }
     Map<String, dynamic>? findToolCatalogItem(String targetId) {
@@ -2044,8 +2068,9 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
                                           target: WorkflowApiTarget.device(next),
                                         );
                                     if (context.mounted) setSheetState(() => nestedWorkflows = items);
-                                  } catch (_) {
-                                    if (context.mounted) setSheetState(() => nestedWorkflows = <Map<String, dynamic>>[]);
+                                  } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+if (context.mounted) setSheetState(() => nestedWorkflows = <Map<String, dynamic>>[]);
                                   }
                                 }
                                 if (nodeType == 'tool') {
@@ -2061,8 +2086,9 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
                                         toolCatalog = items;
                                         selectedCatalogItem = findToolCatalogItem(target.text);
                                       });
-                                    } catch (_) {
-                                      if (context.mounted) setSheetState(() {
+                                    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+if (context.mounted) setSheetState(() {
                                         toolCatalog = <Map<String, dynamic>>[];
                                         selectedCatalogItem = null;
                                       });
@@ -2511,8 +2537,9 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
   String _pretty(dynamic value) {
     try {
       return const JsonEncoder.withIndent('  ').convert(value);
-    } catch (_) {
-      return '$value';
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return '$value';
     }
   }
 
@@ -2853,7 +2880,9 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
         if (mounted) {
           setState(() => _triggerCapabilities = capabilities);
         }
-      } catch (_) {}
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
       _show('${backend == 'local' ? '本地' : '云 ASR'} Wake Config 已创建并绑定');
     } catch (error) {
       _show('Wake Config 创建失败：${_message(error)}');

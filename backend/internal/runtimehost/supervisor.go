@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/platform/process"
+	amitialog "log"
 )
 
 type ProcessSupervisor interface {
@@ -228,7 +229,9 @@ func (s *defaultProcessSupervisor) Start(ctx context.Context, id ProcessID) erro
 	mp.mu.Lock()
 	if mp.generation != generation || mp.stopRequested {
 		mp.mu.Unlock()
-		_ = s.stopManagedProcess(spec, managed.PID, managed.Handle)
+		if err := s.stopManagedProcess(spec, managed.PID, managed.Handle); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return fmt.Errorf("%w: process %s start superseded", ErrProcessNotRunning, id)
 	}
 	mp.pid = managed.PID
@@ -604,7 +607,9 @@ func (s *defaultProcessSupervisor) scheduleRestart(id ProcessID, generation uint
 		}
 		if err := s.WaitReady(context.Background(), id); err != nil {
 			s.setLastError(id, err.Error())
-			_ = s.stopForHealthRestart(id, err.Error())
+			if err := s.stopForHealthRestart(id, err.Error()); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return
 		}
 		snap, _ := s.Snapshot(id)
@@ -710,7 +715,9 @@ func (s *defaultProcessSupervisor) startHealthMonitor(id ProcessID, generation u
 			mp.mu.Unlock()
 			s.emit(EventUnhealthy, id, pid, restartCount, err.Error())
 			if failures >= healthFailureThreshold {
-				_ = s.stopForHealthRestart(id, err.Error())
+				if err := s.stopForHealthRestart(id, err.Error()); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 				return
 			}
 		}
@@ -809,7 +816,9 @@ func (s *defaultProcessSupervisor) StopAll(ctx context.Context) error {
 		s.mu.Unlock()
 
 		for i := len(ids) - 1; i >= 0; i-- {
-			_ = s.Stop(ctx, ids[i])
+			if err := s.Stop(ctx, ids[i]); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	})
 	return nil
@@ -912,7 +921,9 @@ func (s *defaultProcessSupervisor) emit(eventType ProcessEventType, id ProcessID
 	for _, fn := range subs {
 		func() {
 			defer func() {
-				_ = recover()
+				if err := recover(); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}()
 			fn(evt)
 		}()

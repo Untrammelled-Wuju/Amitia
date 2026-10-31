@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/models/character.dart';
+import '../../../../core/models/project.dart';
 import '../../../../core/settings/current_character_provider.dart';
 import '../../../../core/services/device_owned_chat_service.dart';
 import '../../../../core/services/providers.dart';
@@ -14,10 +16,12 @@ class GroupChatSelection {
   const GroupChatSelection({
     required this.baseRoleId,
     required this.memberRoleIds,
+    this.projectId = '',
   });
 
   final String baseRoleId;
   final List<String> memberRoleIds;
+  final String projectId;
 }
 
 class CreatedGroupChat {
@@ -31,10 +35,22 @@ Future<GroupChatSelection?> showGroupChatInviteSheet(
   BuildContext context, {
   required List<CharacterDto> characters,
   required String preferredRoleId,
+  List<ProjectDto> projects = const <ProjectDto>[],
+  bool showProjectSelector = false,
 }) {
   var baseRoleId = characters.any((role) => role.id == preferredRoleId)
       ? preferredRoleId
       : characters.first.id;
+  final availableProjects = projects
+      .where(
+        (project) =>
+            !project.readOnly &&
+            project.available &&
+            project.hiddenAt.isEmpty &&
+            project.workspaces.isNotEmpty,
+      )
+      .toList(growable: false);
+  var selectedProjectId = availableProjects.firstOrNull?.id ?? '';
   final selected = <String>{};
   return showModalBottomSheet<GroupChatSelection>(
     context: context,
@@ -61,6 +77,41 @@ Future<GroupChatSelection?> showGroupChatInviteSheet(
                 Text('新建群聊', style: AppTypography.pageTitle(context)),
                 SizedBox(height: AppSpacing.xs),
                 Text('选择默认发言角色和要邀请的群成员', style: AppTypography.caption(context)),
+                if (showProjectSelector) ...[
+                  SizedBox(height: AppSpacing.lg),
+                  Text('选择工作区', style: AppTypography.sectionTitle(context)),
+                  SizedBox(height: AppSpacing.sm),
+                  if (availableProjects.isEmpty)
+                    Text(
+                      '暂无可用项目，请先在项目模式中创建项目',
+                      style: AppTypography.bodySmall(
+                        context,
+                      ).copyWith(color: context.warning),
+                    )
+                  else
+                    for (final project in availableProjects)
+                      ListTile(
+                        key: ValueKey('group-project-${project.id}'),
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(
+                          selectedProjectId == project.id
+                              ? Icons.radio_button_checked
+                              : Icons.radio_button_off,
+                        ),
+                        title: Text(
+                          project.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(
+                          _primaryWorkspaceLabel(project),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        onTap: () =>
+                            setSheetState(() => selectedProjectId = project.id),
+                      ),
+                ],
                 SizedBox(height: AppSpacing.lg),
                 Text('默认发言角色', style: AppTypography.sectionTitle(context)),
                 SizedBox(height: AppSpacing.sm),
@@ -109,12 +160,17 @@ Future<GroupChatSelection?> showGroupChatInviteSheet(
                   ),
                 SizedBox(height: AppSpacing.md),
                 FilledButton(
-                  onPressed: selected.isEmpty
+                  onPressed:
+                      selected.isEmpty ||
+                          (showProjectSelector && selectedProjectId.isEmpty)
                       ? null
                       : () => Navigator.of(sheetContext).pop(
                           GroupChatSelection(
                             baseRoleId: baseRoleId,
                             memberRoleIds: selected.toList(growable: false),
+                            projectId: showProjectSelector
+                                ? selectedProjectId
+                                : '',
                           ),
                         ),
                   child: const Text('创建群聊'),
@@ -132,6 +188,8 @@ Future<CreatedGroupChat?> createGroupChatWithInvites(
   BuildContext context,
   WidgetRef ref, {
   required List<CharacterDto> characters,
+  List<ProjectDto> projects = const <ProjectDto>[],
+  bool showProjectSelector = false,
 }) async {
   if (characters.length < 2) {
     amitiaSnackBar(context, '至少需要两个可用角色才能创建群聊，请先创建角色');
@@ -142,12 +200,18 @@ Future<CreatedGroupChat?> createGroupChatWithInvites(
     context,
     characters: characters,
     preferredRoleId: preferredRoleId,
+    projects: projects,
+    showProjectSelector: showProjectSelector,
   );
   if (selection == null || !context.mounted) return null;
   try {
     final group = await ref
         .read(conversationRuntimeControllerProvider)
-        .createGroupConversation(selection.baseRoleId, selection.memberRoleIds);
+        .createGroupConversation(
+          selection.baseRoleId,
+          selection.memberRoleIds,
+          projectId: selection.projectId,
+        );
     if (!context.mounted) return null;
     ref.read(currentCharacterIdProvider.notifier).state = selection.baseRoleId;
     ref.read(activeConversationIdProvider.notifier).state =
@@ -159,6 +223,17 @@ Future<CreatedGroupChat?> createGroupChatWithInvites(
     }
     return null;
   }
+}
+
+String _primaryWorkspaceLabel(ProjectDto project) {
+  for (final workspace in project.workspaces) {
+    if (workspace.id == project.primaryWorkspaceId) {
+      return '主工作区：${workspace.name}';
+    }
+  }
+  return project.workspaces.isEmpty
+      ? '未设置工作区'
+      : '${project.workspaces.length} 个工作区';
 }
 
 class _RoleAvatar extends StatelessWidget {

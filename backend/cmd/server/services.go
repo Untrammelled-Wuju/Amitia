@@ -22,6 +22,7 @@ import (
 	"github.com/u-ai/backend/internal/browser"
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/chat"
+	chatlocalmodel "github.com/u-ai/backend/internal/chat/localmodel"
 	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/delivery"
 	"github.com/u-ai/backend/internal/desktoppet"
@@ -104,6 +105,7 @@ import (
 	"github.com/u-ai/backend/pkg/app"
 	"github.com/u-ai/backend/pkg/resourceuri"
 	"gorm.io/gorm"
+	amitialog "log"
 )
 
 type AppServices struct {
@@ -347,6 +349,10 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	var mediaService *media.Service
 	if bootstrap != nil {
 		mediaService = buildMediaService(bootstrap.RuntimeHost(), config.AppCfg.Storage.DataDir, resourceResolver, workspaceService)
+		chatlocalmodel.SetGlobalRuntimeHost(bootstrap.RuntimeHost())
+		if mediaService != nil {
+			chatlocalmodel.SetGlobalMediaMaterializer(mediaService.Materializer())
+		}
 	}
 
 	var browserProvider browser.BrowserProvider
@@ -1297,7 +1303,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		}
 		if deviceMeshRuntime.Handler != nil && services.ContinuityOwner != nil {
 			deviceMeshRuntime.Handler.AddOnReady(func(spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID) {
-				_ = services.ContinuityOwner.ApplyDeviceReady(context.Background(), spaceID.String(), deviceID.String())
+				if err := services.ContinuityOwner.ApplyDeviceReady(context.Background(), spaceID.String(), deviceID.String()); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			})
 		}
 		if behaviorMeshPublisher != nil {

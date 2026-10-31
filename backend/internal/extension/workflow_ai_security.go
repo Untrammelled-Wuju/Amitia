@@ -32,9 +32,5 @@ func sanitizeGenerationError(err error) string {
 	if err == nil {
 		return ""
 	}
-	text := strings.TrimSpace(err.Error())
-	if len(text) > 500 {
-		text = text[:500]
-	}
-	return text
+	return strings.TrimSpace(err.Error())
 }

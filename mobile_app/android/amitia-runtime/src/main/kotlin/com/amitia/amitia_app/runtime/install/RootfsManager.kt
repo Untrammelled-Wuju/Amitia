@@ -152,7 +152,9 @@ internal class DefaultRootfsManager(
             val payloadSha = extractJsonString(json, "payloadSha256")
             val path = extractJsonString(json, "installedPath")
             RootfsInfo(rootfsId, payloadSha, path)
-        } catch (_: Exception) {
+        } catch (originalError155: Exception) {
+          originalError155.printStackTrace()
+
             null
         }
     }

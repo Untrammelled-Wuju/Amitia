@@ -14,10 +14,10 @@ type ShellExecutor interface {
 }
 
 type ShellExecutorImpl struct {
-	policy          ShellPolicy
-	envBuilder      *EnvironmentBuilder
-	dirResolver     *WorkingDirResolver
-	processManager  *ProcessManager
+	policy         ShellPolicy
+	envBuilder     *EnvironmentBuilder
+	dirResolver    *WorkingDirResolver
+	processManager *ProcessManager
 }
 
 func NewShellExecutor(policy ShellPolicy, workspaceRoot, tempRoot string) *ShellExecutorImpl {
@@ -154,15 +154,15 @@ func (e *ShellExecutorImpl) readOutput(cmd *exec.Cmd, state *processState, buf *
 		go func() {
 			defer close(stdoutDone)
 			tempBuf := make([]byte, 4096)
-				for {
-					n, err := cmd.Stdout.(io.Reader).Read(tempBuf)
-					if n > 0 {
-						if _, stop := buf.WriteStdout(tempBuf[:n]); stop {
-							return
-						}
-					}
-					if err != nil {
+			for {
+				n, err := cmd.Stdout.(io.Reader).Read(tempBuf)
+				if n > 0 {
+					if _, stop := buf.WriteStdout(tempBuf[:n]); stop {
 						return
+					}
+				}
+				if err != nil {
+					return
 				}
 			}
 		}()

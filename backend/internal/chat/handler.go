@@ -14,9 +14,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/auth"
+	"github.com/u-ai/backend/internal/chat/localmodel"
 	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
+	amitialog "log"
 )
 
 type Handler struct {
@@ -34,7 +36,9 @@ func redactModelConfigForResponse(cfg *ModelConfig) {
 	cfg.HasAPIKey = cfg.APIKey != ""
 	cfg.APIKey = ""
 	var capabilities ModelCapabilities
-	_ = json.Unmarshal([]byte(cfg.CapabilitiesJSON), &capabilities)
+	if err := json.Unmarshal([]byte(cfg.CapabilitiesJSON), &capabilities); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	cfg.SupportsVision = capabilities.SupportsImage
 	applyReasoningCapabilities(cfg)
 }
@@ -78,7 +82,9 @@ func applyReasoningCapabilities(cfg *ModelConfig) {
 func mergeReasoningCapabilities(raw map[string]interface{}, existingJSON string) string {
 	current := map[string]interface{}{}
 	if strings.TrimSpace(existingJSON) != "" {
-		_ = json.Unmarshal([]byte(existingJSON), &current)
+		if err := json.Unmarshal([]byte(existingJSON), &current); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	if value, ok := raw["supportsReasoning"]; ok {
 		current["supportsReasoning"] = value == true || fmt.Sprint(value) == "1"
@@ -240,6 +246,12 @@ func (h *Handler) CreateModel(c *gin.Context) {
 		cfg.ProviderConfigJSON = v
 	} else if v, ok := raw["providerConfigJSON"].(string); ok {
 		cfg.ProviderConfigJSON = v
+	} else if v, ok := raw["providerConfig"].(map[string]interface{}); ok {
+		encoded, _ := json.Marshal(v)
+		cfg.ProviderConfigJSON = string(encoded)
+	} else if v, ok := raw["providerConfigJSON"].(map[string]interface{}); ok {
+		encoded, _ := json.Marshal(v)
+		cfg.ProviderConfigJSON = string(encoded)
 	}
 	if v, ok := raw["capabilitiesJson"].(string); ok {
 		cfg.CapabilitiesJSON = v
@@ -291,7 +303,7 @@ func (h *Handler) UpdateModel(c *gin.Context) {
 	if hasReasoning || hasVision {
 		existing, err := h.configurationService(c.Request.Context()).GetModel(id)
 		if err != nil {
-			util.ErrorResponse(c, response.NotFound, "模型配置不存在", nil)
+			util.ErrorResponse(c, response.NotFound, err.Error(), nil)
 			return
 		}
 		updates["capabilitiesJson"] = mergeReasoningCapabilities(updates, existing.CapabilitiesJSON)
@@ -359,7 +371,26 @@ func (h *Handler) DetectModels(c *gin.Context) {
 		APIKey  string `json:"apiKey"`
 		APIType string `json:"apiType"`
 	}
-	if err := c.ShouldBindJSON(&body); err != nil || body.BaseURL == "" {
+	if err := c.ShouldBindJSON(&body); err != nil {
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
+		return
+	}
+	if localmodel.IsEmbedded(body.APIType) {
+		manager, ok := h.service.(LocalModelManager)
+		actor := security.GetActor(c)
+		if !ok || actor == nil {
+			util.ErrorResponse(c, response.OperationFailed, "本地模型库不可用", nil)
+			return
+		}
+		models, err := manager.DetectLocalModels(c.Request.Context(), actor.SpaceID.String(), body.APIType)
+		if err != nil {
+			util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
+			return
+		}
+		util.SuccessResponse(c, gin.H{"models": models})
+		return
+	}
+	if body.BaseURL == "" {
 		util.ErrorResponse(c, response.InvalidParams, "baseUrl 不能为空", nil)
 		return
 	}
@@ -400,10 +431,21 @@ func (h *Handler) TestModel(c *gin.Context) {
 		util.SuccessResponse(c, gin.H{"success": false, "latencyMs": 0, "status": "error", "message": "配置不存在"})
 		return
 	}
+	if localmodel.IsEmbedded(cfg.APIType) {
+		h.testLocalModel(c, cfg)
+		return
+	}
 	h.doTestConnection(c, cfg.BaseURL, cfg.APIKey, cfg.ModelName, cfg.APIType)
 }
 func (h *Handler) ProviderSchema(c *gin.Context) {
-	util.SuccessResponse(c, gin.H{"fields": []string{"baseUrl", "apiKey", "modelName"}})
+	providerID := strings.TrimSpace(c.Param("id"))
+	for _, provider := range h.service.ListProviders() {
+		if provider.ID == providerID {
+			util.SuccessResponse(c, provider)
+			return
+		}
+	}
+	util.ErrorResponse(c, response.NotFound, "模型提供商不存在", nil)
 }
 
 func (h *Handler) ListProviders(c *gin.Context) {
@@ -459,15 +501,96 @@ func (h *Handler) doTestConnection(c *gin.Context, baseURL, apiKey, modelName, a
 }
 func (h *Handler) TestModelStandalone(c *gin.Context) {
 	var body struct {
-		BaseURL   string `json:"baseUrl"`
-		APIKey    string `json:"apiKey"`
-		ModelName string `json:"modelName"`
-		APIType   string `json:"apiType"`
+		BaseURL        string `json:"baseUrl"`
+		APIKey         string `json:"apiKey"`
+		ModelName      string `json:"modelName"`
+		APIType        string `json:"apiType"`
+		ProviderConfig any    `json:"providerConfig"`
+		TimeoutSeconds int    `json:"timeoutSeconds"`
 	}
 	c.ShouldBindJSON(&body)
+	if localmodel.IsEmbedded(body.APIType) {
+		cfg := &ModelConfig{BaseURL: body.BaseURL, APIKey: body.APIKey, ModelName: body.ModelName, APIType: body.APIType, TimeoutSeconds: body.TimeoutSeconds}
+		if cfg.TimeoutSeconds <= 0 {
+			cfg.TimeoutSeconds = 120
+		}
+		switch value := body.ProviderConfig.(type) {
+		case string:
+			cfg.ProviderConfigJSON = value
+		case map[string]interface{}:
+			encoded, _ := json.Marshal(value)
+			cfg.ProviderConfigJSON = string(encoded)
+		}
+		h.testLocalModel(c, cfg)
+		return
+	}
 	if body.BaseURL == "" {
 		util.SuccessResponse(c, gin.H{"success": false, "latencyMs": 0, "status": "error", "message": "Base URL 不能为空"})
 		return
 	}
 	h.doTestConnection(c, body.BaseURL, body.APIKey, body.ModelName, body.APIType)
+}
+
+func (h *Handler) testLocalModel(c *gin.Context, cfg *ModelConfig) {
+	manager, ok := h.service.(LocalModelManager)
+	if !ok {
+		util.ErrorResponse(c, response.OperationFailed, "本地模型运行时不可用", nil)
+		return
+	}
+	result, err := manager.TestLocalModel(c.Request.Context(), cfg)
+	if err != nil {
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
+		return
+	}
+	util.SuccessResponse(c, result)
+}
+
+func (h *Handler) ListLocalModels(c *gin.Context) {
+	manager, ok := h.service.(LocalModelManager)
+	actor := security.GetActor(c)
+	if !ok || actor == nil {
+		util.ErrorResponse(c, response.OperationFailed, "本地模型库不可用", nil)
+		return
+	}
+	rows, err := manager.ListLocalModels(c.Request.Context(), actor.SpaceID.String())
+	if err != nil {
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
+		return
+	}
+	util.SuccessResponse(c, rows)
+}
+
+func (h *Handler) UploadLocalModel(c *gin.Context) {
+	manager, ok := h.service.(LocalModelManager)
+	actor := security.GetActor(c)
+	if !ok || actor == nil {
+		util.ErrorResponse(c, response.OperationFailed, "本地模型库不可用", nil)
+		return
+	}
+	file, header, err := c.Request.FormFile("file")
+	if err != nil {
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
+		return
+	}
+	defer file.Close()
+	row, err := manager.ImportLocalModel(c.Request.Context(), actor.SpaceID.String(), c.PostForm("name"), header.Filename, file)
+	if err != nil {
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
+		return
+	}
+	util.SuccessResponse(c, row)
+}
+
+func (h *Handler) DeleteLocalModel(c *gin.Context) {
+	manager, ok := h.service.(LocalModelManager)
+	actor := security.GetActor(c)
+	if !ok || actor == nil {
+		util.ErrorResponse(c, response.OperationFailed, "本地模型库不可用", nil)
+		return
+	}
+	if err := manager.DeleteLocalModel(c.Request.Context(), actor.SpaceID.String(), c.Param("id")); err != nil {
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
+		return
+	}
+	util.SuccessMsgResponse(c, "模型文件已删除", nil)
 }

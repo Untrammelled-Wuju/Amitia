@@ -36,6 +36,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/wasm_runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow_migration"
 	"github.com/u-ai/backend/internal/runtimeprofile"
+	amitialog "log"
 )
 
 type Stage string
@@ -1067,7 +1068,9 @@ func verifyStability(ctx context.Context) ([]string, error) {
 		}
 		facade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, kernel.DefaultToolFacadeConfig())
 		scope := kernel.InvocationScope{SpaceID: "stability", Channel: "test", SessionID: fmt.Sprintf("stab-%d", i)}
-		_, _ = facade.ModelTools(ctx, scope)
+		if _, err := facade.ModelTools(ctx, scope); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		container.Close()
 	}
 

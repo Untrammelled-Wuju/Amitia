@@ -108,7 +108,9 @@ internal class DefaultInstallTransaction(
         }
         try {
             journalFile.delete()
-        } catch (_: Exception) {
+        } catch (originalError111: Exception) {
+          originalError111.printStackTrace()
+
         }
     }
 
@@ -131,7 +133,9 @@ internal class DefaultInstallTransaction(
                 journalFile.delete()
                 tmpFile.renameTo(journalFile)
             }
-        } catch (_: Exception) {
+        } catch (originalError134: Exception) {
+          originalError134.printStackTrace()
+
         }
     }
 }

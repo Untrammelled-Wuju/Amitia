@@ -454,8 +454,9 @@ async function uninstallPlugin(plugin: PetPlugin) {
         type: "warning",
       },
     );
-  } catch {
-    return;
+  } catch (error) {
+  console.error("[original-error]", error);
+return;
   }
   busy.value = plugin.extensionId;
   try {

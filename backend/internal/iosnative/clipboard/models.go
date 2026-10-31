@@ -15,24 +15,24 @@ const (
 type ContentType string
 
 const (
-	ContentTypeTextPlain  ContentType = "text/plain"
-	ContentTypeTextHTML   ContentType = "text/html"
-	ContentTypeTextRTF    ContentType = "text/rtf"
-	ContentTypeTextURI    ContentType = "text/uri-list"
-	ContentTypeImagePNG   ContentType = "image/png"
-	ContentTypeImageJPEG  ContentType = "image/jpeg"
-	ContentTypeImageGIF   ContentType = "image/gif"
-	ContentTypeImageWEBP  ContentType = "image/webp"
-	ContentTypeImageHEIC  ContentType = "image/heic"
-	ContentTypeFileURL    ContentType = "public.file-url"
+	ContentTypeTextPlain ContentType = "text/plain"
+	ContentTypeTextHTML  ContentType = "text/html"
+	ContentTypeTextRTF   ContentType = "text/rtf"
+	ContentTypeTextURI   ContentType = "text/uri-list"
+	ContentTypeImagePNG  ContentType = "image/png"
+	ContentTypeImageJPEG ContentType = "image/jpeg"
+	ContentTypeImageGIF  ContentType = "image/gif"
+	ContentTypeImageWEBP ContentType = "image/webp"
+	ContentTypeImageHEIC ContentType = "image/heic"
+	ContentTypeFileURL   ContentType = "public.file-url"
 )
 
 type Sensitivity string
 
 const (
-	SensitivityNormal   Sensitivity = "normal"
+	SensitivityNormal    Sensitivity = "normal"
 	SensitivitySensitive Sensitivity = "sensitive"
-	SensitivitySecret   Sensitivity = "secret"
+	SensitivitySecret    Sensitivity = "secret"
 )
 
 type ClipboardStatus struct {
@@ -57,9 +57,9 @@ type ClipboardDetectionResult struct {
 }
 
 type ClipboardDetectedItem struct {
-	Index    int               `json:"index"`
-	Patterns []PatternMatch    `json:"patterns"`
-	Values   []DetectedValue   `json:"values,omitempty"`
+	Index    int             `json:"index"`
+	Patterns []PatternMatch  `json:"patterns"`
+	Values   []DetectedValue `json:"values,omitempty"`
 }
 
 type PatternMatch struct {
@@ -89,8 +89,8 @@ type ClipboardReadResult struct {
 }
 
 type ClipboardItem struct {
-	Index           int                        `json:"index"`
-	Representations []ClipboardRepresentation  `json:"representations"`
+	Index           int                       `json:"index"`
+	Representations []ClipboardRepresentation `json:"representations"`
 }
 
 type ClipboardRepresentation struct {
@@ -111,9 +111,9 @@ type ClipboardWriteItem struct {
 }
 
 type ClipboardWriteRequest struct {
-	Items               []ClipboardWriteItem `json:"items"`
-	LocalOnly           bool                 `json:"localOnly"`
-	ExpirationSeconds   *int                 `json:"expirationSeconds,omitempty"`
+	Items             []ClipboardWriteItem `json:"items"`
+	LocalOnly         bool                 `json:"localOnly"`
+	ExpirationSeconds *int                 `json:"expirationSeconds,omitempty"`
 }
 
 type ClipboardWriteResult struct {

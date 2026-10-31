@@ -19,6 +19,7 @@ import (
 	"github.com/u-ai/backend/internal/middleware"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/log"
+	amitialog "log"
 )
 
 const (
@@ -245,12 +246,16 @@ func (h *runtimeWSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	spaceID, err := h.consumeTicket(r.Context(), rawTicket, runtimeID, deviceID)
 	if err != nil || spaceID == "" {
-		_ = wsConn.WriteControl(
+		if err := wsConn.WriteControl(
 			websocket.CloseMessage,
 			websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "runtime bootstrap ticket rejected"),
 			time.Now().Add(time.Second),
-		)
-		_ = wsConn.Close()
+		); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := wsConn.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return
 	}
 
@@ -260,7 +265,9 @@ func (h *runtimeWSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if cfg.RegisterTimeout > 0 {
 		if err := wsConn.SetReadDeadline(time.Now().Add(cfg.RegisterTimeout)); err != nil {
-			_ = wsConn.Close()
+			if err := wsConn.Close(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return
 		}
 	}
@@ -287,7 +294,9 @@ func (h *runtimeWSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	conn.SetTransportCloser(func() {
 		ctx.closeDone()
-		_ = wsConn.Close()
+		if err := wsConn.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	})
 
 	go ctx.writeLoop()
@@ -420,11 +429,13 @@ func (ctx *wsConnContext) readLoop() {
 			// Malformed frames are a protocol violation. Close explicitly with the
 			// RFC 6455 protocol-error code instead of silently keeping the peer alive
 			// or making the disconnect look like an unexplained transport failure.
-			_ = ctx.wsConn.WriteControl(
+			if err := ctx.wsConn.WriteControl(
 				websocket.CloseMessage,
 				websocket.FormatCloseMessage(websocket.CloseProtocolError, "malformed runtime envelope"),
 				time.Now().Add(time.Second),
-			)
+			); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return
 		}
 

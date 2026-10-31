@@ -106,12 +106,12 @@ func buildStatusTool(runtime capability.RuntimeBinding) capability.ToolDefinitio
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          ToolIDStatus,
-		ModelName:   "android.notification.status",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Notification Status",
-		Description: "查询Android Notification Provider的授权与连接状态，包含Listener访问权限和发送权限。",
-		InputSchema: inputSchema,
+		ID:           ToolIDStatus,
+		ModelName:    "android.notification.status",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Notification Status",
+		Description:  "查询Android Notification Provider的授权与连接状态，包含Listener访问权限和发送权限。",
+		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
 			{Capability: androidsystem.PermissionNotificationRead, Risk: "medium"},
@@ -170,12 +170,12 @@ func buildListTool(runtime capability.RuntimeBinding) capability.ToolDefinition 
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          ToolIDList,
-		ModelName:   "android.notification.list",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "List Notifications",
-		Description: "读取当前活动系统通知列表。需要Notification Listener访问权限。返回安全投影，不含原始Android对象。",
-		InputSchema: inputSchema,
+		ID:           ToolIDList,
+		ModelName:    "android.notification.list",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "List Notifications",
+		Description:  "读取当前活动系统通知列表。需要Notification Listener访问权限。返回安全投影，不含原始Android对象。",
+		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
 			{Capability: androidsystem.PermissionNotificationRead, Risk: "high"},
@@ -231,12 +231,12 @@ func buildGetTool(runtime capability.RuntimeBinding) capability.ToolDefinition {
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          ToolIDGet,
-		ModelName:   "android.notification.get",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Get Notification",
-		Description: "根据opaque notificationRef读取单条通知的安全投影。需Listener权限。",
-		InputSchema: inputSchema,
+		ID:           ToolIDGet,
+		ModelName:    "android.notification.get",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Get Notification",
+		Description:  "根据opaque notificationRef读取单条通知的安全投影。需Listener权限。",
+		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
 			{Capability: androidsystem.PermissionNotificationRead, Risk: "high"},
@@ -295,12 +295,12 @@ func buildPostTool(runtime capability.RuntimeBinding) capability.ToolDefinition 
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          ToolIDPost,
-		ModelName:   "android.notification.post",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Post Notification",
-		Description: "以Amitia名义发送系统通知。使用独立Channel，不修改Runtime FGS通知。",
-		InputSchema: inputSchema,
+		ID:           ToolIDPost,
+		ModelName:    "android.notification.post",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Post Notification",
+		Description:  "以Amitia名义发送系统通知。使用独立Channel，不修改Runtime FGS通知。",
+		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
 			{Capability: androidsystem.PermissionNotificationPost, Risk: "medium"},
@@ -356,12 +356,12 @@ func buildCancelOwnTool(runtime capability.RuntimeBinding) capability.ToolDefini
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          ToolIDCancelOwn,
-		ModelName:   "android.notification.cancel_own",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Cancel Own Notification",
-		Description: "取消Amitia自己发送的通知。只能取消own_ namespace的opaque ref。",
-		InputSchema: inputSchema,
+		ID:           ToolIDCancelOwn,
+		ModelName:    "android.notification.cancel_own",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Cancel Own Notification",
+		Description:  "取消Amitia自己发送的通知。只能取消own_ namespace的opaque ref。",
+		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
 			{Capability: androidsystem.PermissionNotificationPost, Risk: "medium"},
@@ -418,12 +418,12 @@ func buildDismissTool(runtime capability.RuntimeBinding) capability.ToolDefiniti
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          ToolIDDismiss,
-		ModelName:   "android.notification.dismiss",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Dismiss Third-Party Notification",
-		Description: "通过NotificationListenerService取消单条第三方通知。需要Listener权限。只操作clearable通知。",
-		InputSchema: inputSchema,
+		ID:           ToolIDDismiss,
+		ModelName:    "android.notification.dismiss",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Dismiss Third-Party Notification",
+		Description:  "通过NotificationListenerService取消单条第三方通知。需要Listener权限。只操作clearable通知。",
+		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
 			{Capability: androidsystem.PermissionNotificationControl, Risk: "high"},
@@ -479,12 +479,12 @@ func buildOpenTool(runtime capability.RuntimeBinding) capability.ToolDefinition 
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          ToolIDOpen,
-		ModelName:   "android.notification.open",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Open Notification",
-		Description: "触发第三方通知的contentIntent。需要control权限和Approval。",
-		InputSchema: inputSchema,
+		ID:           ToolIDOpen,
+		ModelName:    "android.notification.open",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Open Notification",
+		Description:  "触发第三方通知的contentIntent。需要control权限和Approval。",
+		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
 			{Capability: androidsystem.PermissionNotificationControl, Risk: "high"},

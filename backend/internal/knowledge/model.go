@@ -289,6 +289,7 @@ type SearchRequest struct {
 	Query           string     `json:"query" binding:"required"`
 	ContextualQuery string     `json:"contextualQuery,omitempty"`
 	RetrievalLevel  string     `json:"retrievalLevel,omitempty"`
+	RoutingMode     string     `json:"routingMode,omitempty"`
 	Limit           int        `json:"limit"`
 	SourceIDs       []string   `json:"sourceIds"`
 	DenseWeight     float64    `json:"denseWeight"`
@@ -304,22 +305,30 @@ type SearchRequest struct {
 }
 
 type SearchResponse struct {
-	Evidence          []Evidence `json:"evidence"`
-	Sufficient        bool       `json:"sufficient"`
-	AnswerState       string     `json:"answerState"`
-	SufficiencyReason string     `json:"sufficiencyReason"`
-	Query             string     `json:"query"`
-	OriginalQuery     string     `json:"originalQuery"`
-	EffectiveQuery    string     `json:"effectiveQuery"`
-	QueryComplexity   string     `json:"queryComplexity"`
-	RetrievalLevel    string     `json:"retrievalLevel"`
-	QueryHistory      []string   `json:"queryHistory,omitempty"`
-	Degraded          bool       `json:"degraded"`
-	TemporalMode      string     `json:"temporalMode"`
-	AsOf              *time.Time `json:"asOf,omitempty"`
-	Ambiguous         bool       `json:"ambiguous"`
-	ConflictGroups    []string   `json:"conflictGroups,omitempty"`
-	Warnings          []string   `json:"warnings,omitempty"`
+	Evidence                []Evidence `json:"evidence"`
+	Sufficient              bool       `json:"sufficient"`
+	AnswerState             string     `json:"answerState"`
+	SufficiencyReason       string     `json:"sufficiencyReason"`
+	Query                   string     `json:"query"`
+	OriginalQuery           string     `json:"originalQuery"`
+	EffectiveQuery          string     `json:"effectiveQuery"`
+	QueryComplexity         string     `json:"queryComplexity"`
+	RequestedRetrievalLevel string     `json:"requestedRetrievalLevel"`
+	RetrievalLevel          string     `json:"retrievalLevel"`
+	RoutingMode             string     `json:"routingMode"`
+	PolicyMode              string     `json:"policyMode"`
+	RouteReason             string     `json:"routeReason"`
+	ShadowLevel             string     `json:"shadowLevel,omitempty"`
+	ShadowReason            string     `json:"shadowReason,omitempty"`
+	RouteDegraded           bool       `json:"routeDegraded"`
+	RouteDegradationReason  string     `json:"routeDegradationReason,omitempty"`
+	QueryHistory            []string   `json:"queryHistory,omitempty"`
+	Degraded                bool       `json:"degraded"`
+	TemporalMode            string     `json:"temporalMode"`
+	AsOf                    *time.Time `json:"asOf,omitempty"`
+	Ambiguous               bool       `json:"ambiguous"`
+	ConflictGroups          []string   `json:"conflictGroups,omitempty"`
+	Warnings                []string   `json:"warnings,omitempty"`
 
 	TraceConfigHash            string `json:"-"`
 	TraceBudgetMs              int64  `json:"-"`

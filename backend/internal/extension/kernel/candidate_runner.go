@@ -15,6 +15,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	"github.com/u-ai/backend/internal/extension/kernel/update"
+	amitialog "log"
 )
 
 type ProductionCandidateRunner struct {
@@ -224,15 +225,23 @@ func (r *ProductionCandidateRunner) stopInstanceLegacy(ctx context.Context, inst
 		genID := record.GenerationID
 		if gen, _ := r.generationMgr.Get(ctx, extID, genID); gen != nil {
 			if gen.State == update.GenerationStateActive {
-				_ = r.generationMgr.DrainGeneration(ctx, extID, genID)
+				if err := r.generationMgr.DrainGeneration(ctx, extID, genID); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 			if firstErr != nil {
-				_ = r.generationMgr.Transition(ctx, extID, genID, update.GenerationStateFailed)
+				if err := r.generationMgr.Transition(ctx, extID, genID, update.GenerationStateFailed); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			} else {
-				_ = r.generationMgr.StopGeneration(ctx, extID, genID)
+				if err := r.generationMgr.StopGeneration(ctx, extID, genID); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 		}
-		_ = r.generationMgr.RemoveGeneration(ctx, extID, genID)
+		if err := r.generationMgr.RemoveGeneration(ctx, extID, genID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		r.candidateMgr.RemovePromotedRecord(instanceID)
 		return firstErr
 	}
@@ -271,14 +280,16 @@ func (r *ProductionCandidateRunner) stopInstanceWithCleanupRepo(ctx context.Cont
 	if len(tasks) == 0 {
 		stopErr := r.stopAndVerify(ctx, candidateID)
 		if stopErr != nil {
-			_ = r.cleanupRepo.SaveTask(ctx, &RuntimeCleanupTask{
+			if err := r.cleanupRepo.SaveTask(ctx, &RuntimeCleanupTask{
 				CleanupID:         candidateID + ":" + candidateID,
 				RuntimeInstanceID: candidateID,
 				CleanupState:      CleanupStateStopFailed,
 				LastErrorCode:     "STOP_FAILED",
 				LastErrorMessage:  stopErr.Error(),
 				NextRetryAt:       time.Now().UTC().Add(30 * time.Second),
-			})
+			}); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return stopErr
 		}
 		return nil
@@ -293,12 +304,20 @@ func (r *ProductionCandidateRunner) stopInstanceWithCleanupRepo(ctx context.Cont
 			if firstErr == nil {
 				firstErr = stopErr
 			}
-			_ = r.cleanupRepo.UpdateState(ctx, task.CleanupID, CleanupStateStopFailed, "STOP_FAILED", stopErr.Error())
+			if err := r.cleanupRepo.UpdateState(ctx, task.CleanupID, CleanupStateStopFailed, "STOP_FAILED", stopErr.Error()); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			retryAt := time.Now().UTC().Add(30 * time.Second)
-			_ = r.cleanupRepo.UpdateRetry(ctx, task.CleanupID, task.AttemptCount+1, retryAt, CleanupStateStopFailed)
+			if err := r.cleanupRepo.UpdateRetry(ctx, task.CleanupID, task.AttemptCount+1, retryAt, CleanupStateStopFailed); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		} else {
-			_ = r.cleanupRepo.UpdateState(ctx, task.CleanupID, CleanupStateCompleted, "", "")
-			_ = r.cleanupRepo.DeleteTask(ctx, task.CleanupID)
+			if err := r.cleanupRepo.UpdateState(ctx, task.CleanupID, CleanupStateCompleted, "", ""); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
+			if err := r.cleanupRepo.DeleteTask(ctx, task.CleanupID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}
 	return firstErr
@@ -330,16 +349,24 @@ func (r *ProductionCandidateRunner) stopPromotedCandidateWithVerification(ctx co
 			cleanupID := candidateID + ":" + instID
 			if _, exists := existingMap[instID]; exists {
 				if firstErr != nil {
-					_ = r.cleanupRepo.UpdateState(ctx, cleanupID, CleanupStateStopFailed, "STOP_FAILED", firstErr.Error())
+					if err := r.cleanupRepo.UpdateState(ctx, cleanupID, CleanupStateStopFailed, "STOP_FAILED", firstErr.Error()); err != nil {
+						amitialog.Printf("[original-error] %v", err)
+					}
 					retryAt := time.Now().UTC().Add(30 * time.Second)
-					_ = r.cleanupRepo.UpdateRetry(ctx, cleanupID, existingMap[instID].AttemptCount+1, retryAt, CleanupStateStopFailed)
+					if err := r.cleanupRepo.UpdateRetry(ctx, cleanupID, existingMap[instID].AttemptCount+1, retryAt, CleanupStateStopFailed); err != nil {
+						amitialog.Printf("[original-error] %v", err)
+					}
 				} else {
-					_ = r.cleanupRepo.UpdateState(ctx, cleanupID, CleanupStateCompleted, "", "")
-					_ = r.cleanupRepo.DeleteTask(ctx, cleanupID)
+					if err := r.cleanupRepo.UpdateState(ctx, cleanupID, CleanupStateCompleted, "", ""); err != nil {
+						amitialog.Printf("[original-error] %v", err)
+					}
+					if err := r.cleanupRepo.DeleteTask(ctx, cleanupID); err != nil {
+						amitialog.Printf("[original-error] %v", err)
+					}
 				}
 			} else {
 				if firstErr != nil {
-					_ = r.cleanupRepo.SaveTask(ctx, &RuntimeCleanupTask{
+					if err := r.cleanupRepo.SaveTask(ctx, &RuntimeCleanupTask{
 						CleanupID:         cleanupID,
 						ExtensionID:       extID,
 						RuntimeInstanceID: instID,
@@ -347,7 +374,9 @@ func (r *ProductionCandidateRunner) stopPromotedCandidateWithVerification(ctx co
 						LastErrorCode:     "STOP_FAILED",
 						LastErrorMessage:  firstErr.Error(),
 						NextRetryAt:       time.Now().UTC().Add(30 * time.Second),
-					})
+					}); err != nil {
+						amitialog.Printf("[original-error] %v", err)
+					}
 				}
 			}
 		}
@@ -355,15 +384,23 @@ func (r *ProductionCandidateRunner) stopPromotedCandidateWithVerification(ctx co
 
 	if gen, _ := r.generationMgr.Get(ctx, extID, genID); gen != nil {
 		if gen.State == update.GenerationStateActive {
-			_ = r.generationMgr.DrainGeneration(ctx, extID, genID)
+			if err := r.generationMgr.DrainGeneration(ctx, extID, genID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		if firstErr != nil {
-			_ = r.generationMgr.Transition(ctx, extID, genID, update.GenerationStateFailed)
+			if err := r.generationMgr.Transition(ctx, extID, genID, update.GenerationStateFailed); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		} else {
-			_ = r.generationMgr.StopGeneration(ctx, extID, genID)
+			if err := r.generationMgr.StopGeneration(ctx, extID, genID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}
-	_ = r.generationMgr.RemoveGeneration(ctx, extID, genID)
+	if err := r.generationMgr.RemoveGeneration(ctx, extID, genID); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	r.candidateMgr.RemovePromotedRecord(candidateID)
 	return firstErr
 }
@@ -401,10 +438,16 @@ func (r *ProductionCandidateRunner) stopAndVerify(ctx context.Context, runtimeIn
 
 func (r *ProductionCandidateRunner) rollbackCandidate(ctx context.Context, extID domain.ExtensionID, instanceIDs []string, generationID string, _ string) {
 	for _, instID := range instanceIDs {
-		_ = r.supervisor.Stop(ctx, instID, runtime_supervisor.StopReasonRollback)
+		if err := r.supervisor.Stop(ctx, instID, runtime_supervisor.StopReasonRollback); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
-	_ = r.generationMgr.Transition(ctx, string(extID), generationID, update.GenerationStateFailed)
-	_ = r.generationMgr.RemoveGeneration(ctx, string(extID), generationID)
+	if err := r.generationMgr.Transition(ctx, string(extID), generationID, update.GenerationStateFailed); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := r.generationMgr.RemoveGeneration(ctx, string(extID), generationID); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (r *ProductionCandidateRunner) buildInstanceSpec(extID domain.ExtensionID, modID domain.ModuleID, mod manifest_v1.ModuleMeta, genNum int) runtime_supervisor.InstanceSpec {
@@ -444,8 +487,12 @@ func (r *ProductionCandidateRunner) CleanupDrainingGenerations(ctx context.Conte
 	cleaned := 0
 	for _, gen := range all {
 		if gen.State == update.GenerationStateDraining {
-			_ = r.generationMgr.Transition(ctx, gen.ExtensionID, gen.GenerationID, update.GenerationStateStopped)
-			_ = r.generationMgr.RemoveGeneration(ctx, gen.ExtensionID, gen.GenerationID)
+			if err := r.generationMgr.Transition(ctx, gen.ExtensionID, gen.GenerationID, update.GenerationStateStopped); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
+			if err := r.generationMgr.RemoveGeneration(ctx, gen.ExtensionID, gen.GenerationID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			cleaned++
 		}
 	}
@@ -530,24 +577,36 @@ func (r *ProductionCandidateRunner) RecoverCleanupTasks(ctx context.Context) int
 		}
 
 		if task.RuntimeInstanceID == "" {
-			_ = r.cleanupRepo.DeleteTask(ctx, task.CleanupID)
+			if err := r.cleanupRepo.DeleteTask(ctx, task.CleanupID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			cleaned++
 			continue
 		}
 
 		stopErr := r.stopAndVerify(ctx, task.RuntimeInstanceID)
 		if stopErr == nil {
-			_ = r.cleanupRepo.UpdateState(ctx, task.CleanupID, CleanupStateCompleted, "", "")
-			_ = r.cleanupRepo.DeleteTask(ctx, task.CleanupID)
+			if err := r.cleanupRepo.UpdateState(ctx, task.CleanupID, CleanupStateCompleted, "", ""); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
+			if err := r.cleanupRepo.DeleteTask(ctx, task.CleanupID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			cleaned++
 		} else {
 			newAttempt := task.AttemptCount + 1
 			if newAttempt >= 5 {
-				_ = r.cleanupRepo.UpdateState(ctx, task.CleanupID, CleanupStateRequiresManualRecovery, "MAX_RETRIES_EXCEEDED", stopErr.Error())
+				if err := r.cleanupRepo.UpdateState(ctx, task.CleanupID, CleanupStateRequiresManualRecovery, "MAX_RETRIES_EXCEEDED", stopErr.Error()); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			} else {
 				backoff := time.Duration(30*(newAttempt+1)) * time.Second
-				_ = r.cleanupRepo.UpdateRetry(ctx, task.CleanupID, newAttempt, time.Now().UTC().Add(backoff), CleanupStateStopFailed)
-				_ = r.cleanupRepo.UpdateState(ctx, task.CleanupID, CleanupStateStopFailed, "STOP_FAILED", stopErr.Error())
+				if err := r.cleanupRepo.UpdateRetry(ctx, task.CleanupID, newAttempt, time.Now().UTC().Add(backoff), CleanupStateStopFailed); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
+				if err := r.cleanupRepo.UpdateState(ctx, task.CleanupID, CleanupStateStopFailed, "STOP_FAILED", stopErr.Error()); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			}
 		}
 	}

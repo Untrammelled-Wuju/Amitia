@@ -77,7 +77,9 @@ function reconnect() {
   error.value = '';
   resume();
 }
-const previewURL = computed(() => { try { const url = new URL(address.value); return ['http:', 'https:'].includes(url.protocol) ? url.toString() : ''; } catch { return ''; } });
+const previewURL = computed(() => { try { const url = new URL(address.value); return ['http:', 'https:'].includes(url.protocol) ? url.toString() : ''; } catch (error) {
+  console.error("[original-error]", error);
+return ''; } });
 function togglePreview() { previewMode.value = !previewMode.value; if (!previewMode.value) void refreshFrame(); }
 function openSystemBrowser() { if (previewURL.value) window.open(previewURL.value, '_blank', 'noopener,noreferrer'); }
 let active = true;
@@ -229,7 +231,9 @@ async function control(mode: 'acquire' | 'renew' | 'release') {
   try {
     const response = await apiClient.post(`${baseURL()}/control`, { action: mode, ...(mode !== 'acquire' ? { leaseId: requestLeaseId } : {}) }, { signal: lifecycleAbort.signal });
     if (!active || current !== revision || (mode !== 'acquire' && leaseId.value !== requestLeaseId)) {
-      if (mode === 'acquire' && response.data?.leaseId) void apiClient.post(`${baseURL()}/control`, { action: 'release', leaseId: response.data.leaseId }).catch(() => {});
+      if (mode === 'acquire' && response.data?.leaseId) void apiClient.post(`${baseURL()}/control`, { action: 'release', leaseId: response.data.leaseId }).catch((error) => {
+  console.error("[original-error]", error);
+});
       return;
     }
     canControl.value = response.data?.canControl === true;
@@ -263,7 +267,9 @@ function pause() {
   const token = leaseId.value;
   canControl.value = false;
   leaseId.value = '';
-  if (token && !remote) void apiClient.post(`${baseURL()}/control`, { action: 'release', leaseId: token }).catch(() => {});
+  if (token && !remote) void apiClient.post(`${baseURL()}/control`, { action: 'release', leaseId: token }).catch((error) => {
+  console.error("[original-error]", error);
+});
   if (timer) { clearInterval(timer); timer = null; }
 }
 async function syncObservedState() {

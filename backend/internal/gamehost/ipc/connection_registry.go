@@ -8,9 +8,9 @@ import (
 )
 
 type ConnectionRegistry struct {
-	mu       sync.RWMutex
-	byID     map[ConnectionID]*Connection
-	byPeer   map[PeerKey]ConnectionID
+	mu     sync.RWMutex
+	byID   map[ConnectionID]*Connection
+	byPeer map[PeerKey]ConnectionID
 }
 
 func NewConnectionRegistry() *ConnectionRegistry {

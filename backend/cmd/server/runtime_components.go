@@ -15,6 +15,7 @@ import (
 	"github.com/u-ai/backend/internal/runtimehost"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
 	"github.com/u-ai/backend/internal/runtimeprofile"
+	amitialog "log"
 )
 
 var (
@@ -176,7 +177,9 @@ func (c *extensionKernelComponent) Stop(ctx context.Context) error {
 		}
 	}
 	if svc != nil && svc.Extension != nil {
-		_ = svc.Extension.Close(ctx)
+		if err := svc.Extension.Close(ctx); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	c.stopped = true
 	return nil
@@ -653,10 +656,14 @@ func (c *desktopPetComponent) stopAllLocked(ctx context.Context, svc *AppService
 		svc.RuntimeDomainEventConsumer.Stop()
 	}
 	if svc.DesktopPetRuntimeV1 != nil {
-		_ = svc.DesktopPetRuntimeV1.Close(ctx)
+		if err := svc.DesktopPetRuntimeV1.Close(ctx); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	if c.state.behaviorOk && svc.BehaviorService != nil {
-		_ = svc.BehaviorService.Stop()
+		if err := svc.BehaviorService.Stop(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	if c.state.releaseEventOutboxOK && svc.ReleaseEventOutboxDispatcher != nil {
 		svc.ReleaseEventOutboxDispatcher.Stop()

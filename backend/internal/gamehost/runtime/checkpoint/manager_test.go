@@ -242,7 +242,7 @@ func TestCheckpointManager_NilStore(t *testing.T) {
 	}
 }
 
-func TestCheckpointManager_ReasonTruncation(t *testing.T) {
+func TestCheckpointManager_ReasonPreserved(t *testing.T) {
 	store, _ := newTestStore(t)
 	resolver := &fakeResolver{}
 	mgr, err := NewCheckpointManager(store, resolver)
@@ -264,7 +264,7 @@ func TestCheckpointManager_ReasonTruncation(t *testing.T) {
 		t.Fatalf("failed: %v", err)
 	}
 
-	if len(cp.Reason) > MaxReasonLength {
-		t.Fatalf("reason length %d exceeds max %d", len(cp.Reason), MaxReasonLength)
+	if cp.Reason != longReason {
+		t.Fatalf("reason was changed: got %d chars", len(cp.Reason))
 	}
 }

@@ -78,8 +78,9 @@ export function validateDeploymentConfig(raw: unknown): DeploymentModeConfig {
     try {
       const normalized = normalizeServerURL(serverURL);
       return { mode: "cloud", serverURL: normalized };
-    } catch {
-      return { mode: "local" };
+    } catch (error) {
+  console.error("[original-error]", error);
+return { mode: "local" };
     }
   }
 

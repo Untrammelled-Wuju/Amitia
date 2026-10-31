@@ -69,8 +69,9 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
         : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}`;
       hostClientId = `ui-host-${suffix}`;
       window.sessionStorage.setItem(key, hostClientId);
-    } catch {
-      hostClientId = `ui-host-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}`;
+    } catch (error) {
+  console.error("[original-error]", error);
+hostClientId = `ui-host-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}`;
     }
     return hostClientId;
   }
@@ -113,7 +114,9 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
       void postHostSession("/api/extensions/ui/host-session/heartbeat", {
         hostClientId: clientId,
         hostSessionId,
-      }).catch(() => {});
+      }).catch((error) => {
+  console.error("[original-error]", error);
+});
     }, intervalSeconds * 1000);
     return clientId;
   }
@@ -132,8 +135,9 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
         hostClientId: clientId,
         hostSessionId: sessionId,
       });
-    } catch {
-      // Expiration/heartbeat cleanup remains authoritative if the client exits abruptly.
+    } catch (error) {
+  console.error("[original-error]", error);
+// Expiration/heartbeat cleanup remains authoritative if the client exits abruptly.
     }
   }
 
@@ -141,8 +145,9 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
     if (!expiresAt) return false;
     try {
       return new Date(expiresAt).getTime() < Date.now();
-    } catch {
-      return false;
+    } catch (error) {
+  console.error("[original-error]", error);
+return false;
     }
   }
 
@@ -175,8 +180,9 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
         }),
       });
       await fetch(url, init);
-    } catch {
-      // ignore
+    } catch (error) {
+  console.error("[original-error]", error);
+// ignore
     }
   }
 
@@ -195,8 +201,9 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
         body: JSON.stringify({ commandId, hostClientId, hostSessionId, result, error }),
       });
       await fetch(url, init);
-    } catch {
-      // The backend command has its own timeout. A disconnected response path must
+    } catch (error) {
+  console.error("[original-error]", error);
+// The backend command has its own timeout. A disconnected response path must
       // not crash the UI host or leave the runtime half-applied.
     }
   }
@@ -377,8 +384,9 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
   function parseEnvelope(event: MessageEvent): SSEEventEnvelope | null {
     try {
       return JSON.parse(event.data) as SSEEventEnvelope;
-    } catch {
-      return null;
+    } catch (error) {
+  console.error("[original-error]", error);
+return null;
     }
   }
 
@@ -408,8 +416,9 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
     if (!shouldProcess(envelope)) return;
     const target = envelope.payload.target as string;
     if (target && isNavigationAllowed(target)) {
-      router.push(target).catch(() => {
-        // ignore navigation errors
+      router.push(target).catch((error) => {
+  console.error("[original-error]", error);
+// ignore navigation errors
       });
     }
   }
@@ -472,7 +481,9 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
 		extensionRefreshTimer = setTimeout(() => {
 			extensionRefreshTimer = null;
 			const store = useExtensionUIStore();
-			store.refreshSnapshot(true).catch(() => {});
+			store.refreshSnapshot(true).catch((error) => {
+  console.error("[original-error]", error);
+});
 		}, 300);
 	}
 
@@ -510,14 +521,18 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
       const deviceId = await resolveUIHostDeviceId();
       const foreground = document.visibilityState === "visible" && document.hasFocus();
       await reportNotificationPresence(deviceId, foreground, foreground ? activeNotificationConversationId() : "");
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
 
   async function clearPresence(): Promise<void> {
     try {
       const deviceId = await resolveUIHostDeviceId();
       await reportNotificationPresence(deviceId, false, "");
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
 
   function dispatchEvent(eventName: string, data: string) {
@@ -534,7 +549,9 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
             if (!response.ok) throw new Error('通知回执未确认');
           },
           navigate: (target) => { if (isNavigationAllowed(target)) void router.push(target); },
-        }).catch(() => {});
+        }).catch((error) => {
+  console.error("[original-error]", error);
+});
         break;
       }
       case "ui_notify":
@@ -635,14 +652,17 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
       if (version !== connectionVersion || controller.signal.aborted) return;
       isConnected.value = true;
       reconnectAttempts = 0;
-      useExtensionUIStore().refreshSnapshot(true).catch(() => {});
+      useExtensionUIStore().refreshSnapshot(true).catch((error) => {
+  console.error("[original-error]", error);
+});
       await consumeStream(response, version);
       if (version === connectionVersion && !controller.signal.aborted) {
         isConnected.value = false;
         scheduleReconnect();
       }
-    } catch {
-      if (version === connectionVersion && !controller.signal.aborted) {
+    } catch (error) {
+  console.error("[original-error]", error);
+if (version === connectionVersion && !controller.signal.aborted) {
         isConnected.value = false;
         scheduleReconnect();
       }

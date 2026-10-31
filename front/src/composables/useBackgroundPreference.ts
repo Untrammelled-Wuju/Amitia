@@ -18,14 +18,17 @@ function init() {
     settings.value = result.media ? result.settings : { ...result.settings, enabled: false, name: "" };
     replaceSource(result.media);
     error.value = "";
-  }).catch(() => {
-    error.value = "无法读取背景设置，请重试";
+  }).catch((error) => {
+  console.error("[original-error]", error);
+error.value = "无法读取背景设置，请重试";
     initialization = undefined;
   }).finally(() => { loading.value = false; });
 }
 function serialize(action: () => Promise<void>) {
   const next = queue.then(action);
-  queue = next.catch(() => {});
+  queue = next.catch((error) => {
+  console.error("[original-error]", error);
+});
   return next;
 }
 export function useBackgroundPreference() {

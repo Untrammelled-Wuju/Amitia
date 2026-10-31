@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/knowledge"
+	amitialog "log"
 )
 
 const (
@@ -129,11 +130,13 @@ func (s *service) runKnowledgeInvestigation(ctx context.Context, tenantID, userG
 		}
 		state.Round = round
 		if investigationTask != nil {
-			_ = trace.progress(context.WithoutCancel(ctx), investigationTask, "investigation.round", map[string]any{
+			if err := trace.progress(context.WithoutCancel(ctx), investigationTask, "investigation.round", map[string]any{
 				"round": round, "maxRounds": budget.MaxRounds,
 				"sufficiencyReason": result.SufficiencyReason, "evidenceCount": len(result.Evidence),
 				"searchCalls": state.SearchCalls, "readCalls": state.ReadCalls, "readRunes": state.ReadRunes,
-			})
+			}); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 
 		action, err := s.nextKnowledgeInvestigationAction(investigationCtx, userGoal, result, state, budget)
@@ -275,12 +278,14 @@ func (s *service) runKnowledgeInvestigation(ctx context.Context, tenantID, userG
 			eventType = "investigation.failed"
 			payloadStatus = "failed"
 		}
-		_ = trace.complete(ctx, investigationTask, eventType, status, "知识证据调查完成", map[string]any{
+		if err := trace.complete(ctx, investigationTask, eventType, status, "知识证据调查完成", map[string]any{
 			"state": payloadStatus,
 			"round": state.Round, "termination": state.Termination, "sufficient": result.Sufficient,
 			"answerState": result.AnswerState, "sufficiencyReason": result.SufficiencyReason,
 			"evidenceCount": len(result.Evidence), "searchCalls": state.SearchCalls, "readCalls": state.ReadCalls, "readRunes": state.ReadRunes,
-		})
+		}); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return result
 }

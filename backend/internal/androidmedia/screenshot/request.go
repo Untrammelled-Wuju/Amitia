@@ -50,11 +50,11 @@ func (f ScreenshotFormat) IsValid() bool {
 }
 
 type CaptureRequest struct {
-	DisplayID *int             `json:"displayId,omitempty"`
+	DisplayID *int              `json:"displayId,omitempty"`
 	Format    *ScreenshotFormat `json:"format,omitempty"`
-	Quality   *int             `json:"quality,omitempty"`
-	MaxWidth  *int             `json:"maxWidth,omitempty"`
-	MaxHeight *int             `json:"maxHeight,omitempty"`
+	Quality   *int              `json:"quality,omitempty"`
+	MaxWidth  *int              `json:"maxWidth,omitempty"`
+	MaxHeight *int              `json:"maxHeight,omitempty"`
 }
 
 func (r CaptureRequest) Validate() error {

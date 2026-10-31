@@ -729,8 +729,9 @@ async function taskCommand(command: string, row: Reminder) {
         cancelButtonText: "保留任务",
         type: "warning",
       });
-    } catch {
-      return;
+    } catch (error) {
+  console.error("[original-error]", error);
+return;
     }
   }
   pendingActions.value.add(row.id);
@@ -1042,8 +1043,9 @@ async function fetchCleanupConfig() {
   try {
     const r = await request.get("/api/reminders/cleanup-config");
     cleanupDays.value = String((r as any).cleanupDays);
-  } catch {
-    cleanupDays.value = "0";
+  } catch (error) {
+  console.error("[original-error]", error);
+cleanupDays.value = "0";
   }
 }
 

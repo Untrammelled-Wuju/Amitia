@@ -5,7 +5,9 @@ export const chatMessageStyleStorageKey = "amitia.chat.message-style.desktop.v1"
 
 function load(): ChatMessageStyle {
   try { return localStorage.getItem(chatMessageStyleStorageKey) === "bubble" ? "bubble" : "flow"; }
-  catch { return "flow"; }
+  catch (error) {
+  console.error("[original-error]", error);
+return "flow"; }
 }
 
 const messageStyle = ref<ChatMessageStyle>(load());
@@ -23,18 +25,24 @@ function loadAvatarShape(): { shape: AiAvatarShape; roundness: number } {
     if (saved && ["rounded", "circle", "custom"].includes(saved.shape) && Number.isFinite(saved.roundness)) {
       return { shape: saved.shape, roundness: Math.min(100, Math.max(0, saved.roundness)) };
     }
-  } catch {}
+  } catch (error) {
+  console.error("[original-error]", error);
+}
   return { shape: "rounded", roundness: 64 };
 }
 export const aiNameStorageKey = "amitia.chat.ai-name.desktop.v1";
 const aiNameEnabled = ref(loadName());
 function loadName(): boolean {
   try { return localStorage.getItem(aiNameStorageKey) !== "false"; }
-  catch { return true; }
+  catch (error) {
+  console.error("[original-error]", error);
+return true; }
 }
 function loadAvatar(): boolean {
   try { return localStorage.getItem(aiAvatarStorageKey) !== "false"; }
-  catch { return true; }
+  catch (error) {
+  console.error("[original-error]", error);
+return true; }
 }
 export const userMessageGlassStorageKey = "amitia.chat.user-message-glass.desktop.v1";
 export type UserMessageMaterial = "solid" | "frosted" | "water";
@@ -49,7 +57,9 @@ function loadMaterial(): UserMessageMaterial {
     if (saved === "solid" || saved === "frosted" || saved === "water") return saved;
     return localStorage.getItem(userMessageGlassStorageKey) === "true" ? "frosted" : "solid";
   }
-  catch { return "solid"; }
+  catch (error) {
+  console.error("[original-error]", error);
+return "solid"; }
 }
 
 export function useChatAppearancePreference() {

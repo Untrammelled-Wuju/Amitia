@@ -166,7 +166,7 @@ func runTesseract(ctx context.Context, imagePath string, extra []string, setting
 	args = append(args, extra...)
 	out, err := exec.CommandContext(octx, "tesseract", args...).CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("tesseract: %w: %s", err, truncateDiagnostic(string(out), 2048))
+		return "", fmt.Errorf("tesseract: %w: %s", err, string(out))
 	}
 	return string(out), nil
 }

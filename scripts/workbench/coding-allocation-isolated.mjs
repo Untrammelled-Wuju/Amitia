@@ -35,7 +35,9 @@ type AgentWorkerRunner interface {
       if (event.Action === 'pass' && event.Test) tests++;
       if (event.Action === 'pass' && !event.Test) packages++;
       if (event.Action === 'fail') fails++;
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
   const passed = result.status === 0 && !result.error && tests > 0 && packages > 0 && fails === 0;
   console.log(JSON.stringify({ name: 'go.interaction.coding-allocation-isolated', passed, tests, packages, fails, exitCode: result.status, error: result.error?.message || '', detail: passed ? '' : (result.stdout + '\n' + result.stderr).slice(-4500) }, null, 2));

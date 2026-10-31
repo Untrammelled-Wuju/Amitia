@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	amitialog "log"
 )
 
 // defaultPreciseEditingService implements PreciseEditingService
@@ -378,7 +379,9 @@ func (s *defaultPreciseEditingService) MaterializePreview(ctx context.Context, t
 		if err := s.writeFile(ctx, tx.WorkspaceID, filePath, snap.Content); err != nil {
 			for _, restorePath := range written {
 				if base, ok := tx.BaseFiles[restorePath]; ok {
-					_ = s.writeFile(ctx, tx.WorkspaceID, restorePath, base.Content)
+					if err := s.writeFile(ctx, tx.WorkspaceID, restorePath, base.Content); err != nil {
+						amitialog.Printf("[original-error] %v", err)
+					}
 				}
 			}
 			tx.State = TxStateCommitFailed
@@ -462,7 +465,9 @@ func (s *defaultPreciseEditingService) Commit(ctx context.Context, tx *EditTrans
 			for i := len(writtenFiles) - 1; i >= 0; i-- {
 				writtenPath := writtenFiles[i]
 				if baseSnap, exists := tx.BaseFiles[writtenPath]; exists {
-					_ = s.writeFile(ctx, tx.WorkspaceID, writtenPath, baseSnap.Content)
+					if err := s.writeFile(ctx, tx.WorkspaceID, writtenPath, baseSnap.Content); err != nil {
+						amitialog.Printf("[original-error] %v", err)
+					}
 				}
 			}
 			tx.State = TxStateCommitFailed

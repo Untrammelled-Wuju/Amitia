@@ -12,6 +12,7 @@ import (
 
 	"github.com/u-ai/backend/internal/gamehost/control"
 	"github.com/u-ai/backend/internal/gamehost/domain"
+	amitialog "log"
 )
 
 type InMemoryEmergencyIntentStore struct {
@@ -261,7 +262,11 @@ func (s *FileEmergencyIntentStore) persistLocked() error {
 		return fmt.Errorf("emergency intent store: create temp: %w", err)
 	}
 	tmpPath := tmp.Name()
-	cleanup := func() { _ = os.Remove(tmpPath) }
+	cleanup := func() {
+		if err := os.Remove(tmpPath); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+	}
 	if err := tmp.Chmod(0o600); err != nil {
 		tmp.Close()
 		cleanup()

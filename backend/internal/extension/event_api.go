@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/extension/kernel/event"
+	amitialog "log"
 )
 
 type EventAPI struct {
@@ -82,7 +83,7 @@ func (api *EventAPI) getEventType(c *gin.Context) {
 	versionStr := c.Param("version")
 	version, err := strconv.Atoi(versionStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid version"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	def, err := svc.GetEventType(c.Request.Context(), typeID, version)
@@ -386,7 +387,9 @@ func (api *EventAPI) replayDeadLetter(c *gin.Context) {
 		RequestedBy       string `json:"requestedBy"`
 		Reason            string `json:"reason"`
 	}
-	_ = c.ShouldBindJSON(&body)
+	if err := c.ShouldBindJSON(&body); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	if body.Strategy == "" {
 		body.Strategy = "replay_same_subscription"
 	}

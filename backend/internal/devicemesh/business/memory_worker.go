@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	amitialog "log"
 )
 
 type forwardedMemoryContextKey struct{}
@@ -106,7 +107,9 @@ func (e *Engine) RunMemoryWorker(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			_ = e.ResumePendingQueuedChats(ctx)
+			if err := e.ResumePendingQueuedChats(ctx); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			jobs, err := e.coordination.PendingMemoryJobs(ctx)
 			if err != nil {
 				continue
@@ -120,7 +123,9 @@ func (e *Engine) RunMemoryWorker(ctx context.Context) {
 				}
 				if err != nil || response.MemoryStatus != "saved" {
 					paused := response.MemoryStatus == "paused" || errors.Is(err, coordination.ErrScopeExpired) || errors.Is(err, coordination.ErrRoleRequired) || errors.Is(err, coordination.ErrCapabilityGrant) || errors.Is(err, coordination.ErrResourceVersion)
-					_ = e.coordination.RetryMemoryJob(ctx, job, paused)
+					if err := e.coordination.RetryMemoryJob(ctx, job, paused); err != nil {
+						amitialog.Printf("[original-error] %v", err)
+					}
 				}
 			}
 		}

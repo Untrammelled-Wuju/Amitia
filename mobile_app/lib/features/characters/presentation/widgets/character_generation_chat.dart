@@ -86,8 +86,9 @@ class _CharacterGenerationChatState
         _input.clear();
         _pendingMessage = null;
       });
-    } catch (_) {
-      if (mounted) setState(() => _error = '生成失败，请检查默认文本模型后重试；现有编辑内容未修改。');
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+if (mounted) setState(() => _error = '生成失败，请检查默认文本模型后重试；现有编辑内容未修改。');
     } finally {
       if (mounted) setState(() => _busy = false);
       _scrollToLatest();

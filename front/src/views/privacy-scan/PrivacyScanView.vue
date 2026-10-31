@@ -104,8 +104,9 @@ function selectLegacyDeletion(id: string) {
 async function loadDeletionStats() {
   try {
     deletionStats.value = await getDeletionStats();
-  } catch {
-    deletionStats.value = {};
+  } catch (error) {
+  console.error("[original-error]", error);
+deletionStats.value = {};
   }
 }
 

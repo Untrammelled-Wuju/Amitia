@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	amitialog "log"
 )
 
 type MemoryConsumerEntry struct {
@@ -44,7 +45,9 @@ func MemoryContent(entry MemoryConsumerEntry) (map[string]json.RawMessage, map[s
 
 func MemoryText(document map[string]json.RawMessage, key string) string {
 	var value string
-	_ = json.Unmarshal(document[key], &value)
+	if err := json.Unmarshal(document[key], &value); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	return value
 }
 

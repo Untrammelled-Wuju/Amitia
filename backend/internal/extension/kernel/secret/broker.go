@@ -2,6 +2,7 @@ package secret
 
 import (
 	"context"
+	amitialog "log"
 	"sync"
 	"time"
 )
@@ -69,7 +70,9 @@ func (b *Broker) Store(ctx context.Context, namespace string, value []byte) (Sec
 	}
 	ref, err := ParseRef(raw)
 	if err != nil {
-		_ = b.store.Delete(ctx, raw)
+		if err := b.store.Delete(ctx, raw); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return "", err
 	}
 	b.redactor.Add(value)
@@ -217,7 +220,9 @@ func (b *Broker) RevokeByInvocation(invocationID string) int {
 	}
 	affected := b.leases.ListByInvocation(invocationID)
 	for _, l := range affected {
-		_ = b.RevokeLease(l.ID)
+		if err := b.RevokeLease(l.ID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return len(affected)
 }
@@ -228,7 +233,9 @@ func (b *Broker) RevokeByRuntimeInstance(instanceID string) int {
 	}
 	affected := b.leases.ListByRuntimeInstance(instanceID)
 	for _, l := range affected {
-		_ = b.RevokeLease(l.ID)
+		if err := b.RevokeLease(l.ID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return len(affected)
 }
@@ -239,7 +246,9 @@ func (b *Broker) RevokeByExtensionGeneration(extensionID string, generation int6
 	}
 	affected := b.leases.ListByExtensionGeneration(extensionID, generation)
 	for _, l := range affected {
-		_ = b.RevokeLease(l.ID)
+		if err := b.RevokeLease(l.ID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return len(affected)
 }
@@ -263,7 +272,9 @@ func (b *Broker) CleanupExpired() int {
 func (b *Broker) RevokeAll() int {
 	all := b.leases.List()
 	for _, l := range all {
-		_ = b.RevokeLease(l.ID)
+		if err := b.RevokeLease(l.ID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	return len(all)
 }

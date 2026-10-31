@@ -9,13 +9,13 @@ import (
 type ResumeType string
 
 const (
-	ResumeTypeAgent              ResumeType = "agent"
+	ResumeTypeAgent                 ResumeType = "agent"
 	ResumeTypeCapabilityAcquisition ResumeType = "capability_acquisition"
-	ResumeTypeApproval           ResumeType = "approval"
-	ResumeTypeTask               ResumeType = "task"
-	ResumeTypeUISource           ResumeType = "ui_source"
-	ResumeTypeUISchema           ResumeType = "ui_schema"
-	ResumeTypeRemoteRuntime      ResumeType = "remote_runtime"
+	ResumeTypeApproval              ResumeType = "approval"
+	ResumeTypeTask                  ResumeType = "task"
+	ResumeTypeUISource              ResumeType = "ui_source"
+	ResumeTypeUISchema              ResumeType = "ui_schema"
+	ResumeTypeRemoteRuntime         ResumeType = "remote_runtime"
 )
 
 type ResumeState string
@@ -42,7 +42,7 @@ type ResumeContext struct {
 	RequiredCapabilityID string `json:"requiredCapabilityId,omitempty"`
 
 	AcquisitionTransactionID string `json:"acquisitionTransactionId,omitempty"`
-	TaskID                  string `json:"taskId,omitempty"`
+	TaskID                   string `json:"taskId,omitempty"`
 
 	PayloadRef string `json:"payloadRef,omitempty"`
 

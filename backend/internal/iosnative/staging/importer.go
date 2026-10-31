@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/pkg/resourceuri"
+	amitialog "log"
 )
 
 const (
@@ -90,7 +91,9 @@ func (i *StagingImporter) ImportWithBridge(req StagingImportRequest, bridge Nati
 	released := false
 	defer func() {
 		if !released {
-			_ = bridge.Release(req.NativeStagingID)
+			if err := bridge.Release(req.NativeStagingID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}()
 	if size < 0 {
@@ -182,7 +185,9 @@ func (i *StagingImporter) ImportWithBridge(req StagingImportRequest, bridge Nati
 	}
 
 	if chunkErr != nil {
-		_ = os.Remove(tmpPath)
+		if err := os.Remove(tmpPath); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, fmt.Errorf("stream chunk: %w", chunkErr)
 	}
 
@@ -192,23 +197,31 @@ func (i *StagingImporter) ImportWithBridge(req StagingImportRequest, bridge Nati
 	}
 
 	if totalWritten != size {
-		_ = os.Remove(targetPath)
+		if err := os.Remove(targetPath); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, fmt.Errorf("native resource truncated: expected %d bytes, wrote %d", size, totalWritten)
 	}
 
 	if rerr := bridge.Release(req.NativeStagingID); rerr != nil {
-		_ = os.Remove(targetPath)
+		if err := os.Remove(targetPath); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, fmt.Errorf("release native staging: %w", rerr)
 	}
 	released = true
 
 	if i.resolver == nil {
-		_ = os.Remove(targetPath)
+		if err := os.Remove(targetPath); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, fmt.Errorf("canonical resource resolver unavailable")
 	}
 	canonicalURI, err := i.resolver.Reverse(targetPath)
 	if err != nil {
-		_ = os.Remove(targetPath)
+		if err := os.Remove(targetPath); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return nil, fmt.Errorf("resolve canonical resource uri: %w", err)
 	}
 

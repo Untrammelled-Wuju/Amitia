@@ -14,6 +14,7 @@ import (
 	"github.com/u-ai/backend/internal/need"
 	"github.com/u-ai/backend/internal/psyche"
 	"github.com/u-ai/backend/internal/relationship"
+	amitialog "log"
 )
 
 type ownedPsycheStateDocument struct {
@@ -131,7 +132,9 @@ func currentOwnedRelationshipState(resources []coordination.Resource, roleID str
 			break
 		}
 		if resource.ID == legacyID {
-			_ = json.Unmarshal(resource.Body, &value)
+			if err := json.Unmarshal(resource.Body, &value); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}
 	if value == (interaction.RelationshipState{}) {
@@ -156,7 +159,9 @@ func currentOwnedNeedState(resources []coordination.Resource, roleID string) (in
 			break
 		}
 		if resource.ID == legacyID {
-			_ = json.Unmarshal(resource.Body, &value)
+			if err := json.Unmarshal(resource.Body, &value); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}
 	if value.Count == 0 {

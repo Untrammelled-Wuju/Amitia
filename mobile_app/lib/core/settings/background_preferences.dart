@@ -250,8 +250,9 @@ class BackgroundPreferences {
         overlayColor: colorValue('overlayColor', const Color(0xFF000000)),
         overlayOpacity: number('overlayOpacity', 0, 1),
       );
-    } catch (_) {
-      return const BackgroundPreferences();
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return const BackgroundPreferences();
     }
   }
 }
@@ -311,7 +312,9 @@ class BackgroundPreferencesNotifier
 
   Future<void> _serialize(Future<void> Function() action) {
     final next = _queue.then((_) => action());
-    _queue = next.catchError((Object _) {});
+    _queue = next.catchError((Object error, StackTrace stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+});
     return next;
   }
 
@@ -366,8 +369,9 @@ class BackgroundPreferencesNotifier
             name: name,
           ),
         );
-      } catch (_) {
-        if (await target.exists()) await target.delete();
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+if (await target.exists()) await target.delete();
         rethrow;
       }
       await _removeOwnedFile(previous);
@@ -403,8 +407,9 @@ class BackgroundPreferencesNotifier
             name: name,
           ),
         );
-      } catch (_) {
-        if (await target.exists()) await target.delete();
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+if (await target.exists()) await target.delete();
         rethrow;
       }
     });
@@ -436,6 +441,8 @@ class BackgroundPreferencesNotifier
     try {
       final file = File(path);
       if (await file.exists()) await file.delete();
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
   }
 }

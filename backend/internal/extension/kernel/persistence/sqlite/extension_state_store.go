@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	amitialog "log"
 	"time"
 )
 
@@ -61,10 +62,12 @@ func (r *ExtensionStateStoreRepository) Set(ctx context.Context, extensionID str
 	rows, _ := result.RowsAffected()
 	if rows > 0 {
 		var v int64
-		_ = ex.QueryRowContext(ctx,
+		if err := ex.QueryRowContext(ctx,
 			`SELECT version FROM extension_kv_state WHERE extension_id = ? AND module_id = ? AND key = ?`,
 			extensionID, moduleID, key,
-		).Scan(&v)
+		).Scan(&v); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return v, nil
 	}
 	return 0, nil
@@ -112,10 +115,12 @@ func (r *ExtensionStateStoreRepository) CAS(ctx context.Context, extensionID str
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
 		var v int64
-		_ = ex.QueryRowContext(ctx,
+		if err := ex.QueryRowContext(ctx,
 			`SELECT version FROM extension_kv_state WHERE extension_id = ? AND module_id = ? AND key = ?`,
 			extensionID, moduleID, key,
-		).Scan(&v)
+		).Scan(&v); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return false, v, nil
 	}
 	return true, currentVersion + 1, nil

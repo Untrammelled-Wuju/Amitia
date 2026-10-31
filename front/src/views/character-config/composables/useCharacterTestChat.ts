@@ -24,8 +24,9 @@ export function useCharacterTestChat() {
         role: "assistant",
         content: result?.reply || "(无回复)",
       });
-    } catch {
-      testMessages.value.push({
+    } catch (error) {
+  console.error("[original-error]", error);
+testMessages.value.push({
         role: "assistant",
         content: "测试失败，请检查模型配置",
       });

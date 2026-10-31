@@ -105,8 +105,9 @@ class _WorkflowListPageState extends ConsumerState<WorkflowListPage> {
               ? ''
               : (items.first['deviceId'] ?? '').toString();
       });
-    } catch (_) {
-      if (mounted) setState(() => _devices = <Map<String, dynamic>>[]);
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+if (mounted) setState(() => _devices = <Map<String, dynamic>>[]);
     }
   }
 
@@ -121,8 +122,9 @@ class _WorkflowListPageState extends ConsumerState<WorkflowListPage> {
       final raw = page['cursor'];
       _syncCursor = raw is int ? raw : int.tryParse(raw?.toString() ?? '') ?? 0;
       _syncTargetKey = key;
-    } catch (_) {
-      if (mounted && _targetKey == key) {
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+if (mounted && _targetKey == key) {
         _syncCursor = null;
         _syncTargetKey = '';
       }
@@ -156,8 +158,9 @@ class _WorkflowListPageState extends ConsumerState<WorkflowListPage> {
       // Cloud Core's outbox, so reconcile that catalog at a lower frequency.
       if (_location == 'device' && !changed && _deviceRefreshTicks % 8 == 0)
         _refresh();
-    } catch (_) {
-      // Durable cursor is intentionally retained and retried on the next tick.
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+// Durable cursor is intentionally retained and retried on the next tick.
     } finally {
       _syncPolling = false;
     }

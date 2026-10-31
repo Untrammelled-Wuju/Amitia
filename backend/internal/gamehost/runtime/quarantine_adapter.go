@@ -43,11 +43,11 @@ func (a *quarantineAdapter) HandleQuarantineEvent(ctx context.Context, event Sup
 
 	t := event.Occurred
 	snapshot := QuarantineSnapshot{
-		RuntimeID:  event.RuntimeID,
-		ServiceID:  event.ServiceID,
+		RuntimeID:   event.RuntimeID,
+		ServiceID:   event.ServiceID,
 		Quarantined: true,
-		Reason:     truncateReason(event.Reason),
-		Since:      &t,
+		Reason:      event.Reason,
+		Since:       &t,
 	}
 	services[event.ServiceID] = snapshot
 	return nil

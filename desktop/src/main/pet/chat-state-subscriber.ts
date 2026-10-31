@@ -83,8 +83,9 @@ export class ChatStateSubscriber {
               if (parsed && typeof parsed.state === "string") {
                 this.onPayload?.(parsed);
               }
-            } catch {
-              // ignore parse error
+            } catch (error) {
+  console.error("[original-error]", error);
+// ignore parse error
             }
             resolve();
           });

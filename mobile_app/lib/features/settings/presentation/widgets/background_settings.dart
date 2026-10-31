@@ -57,8 +57,9 @@ class _BackgroundSettingsState extends ConsumerState<BackgroundSettings> {
   Future<void> _adjust(Future<void> Function() action) async {
     try {
       await action();
-    } catch (_) {
-      if (mounted) setState(() => _error = '保存背景设置失败，请重试');
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+if (mounted) setState(() => _error = '保存背景设置失败，请重试');
     }
   }
 

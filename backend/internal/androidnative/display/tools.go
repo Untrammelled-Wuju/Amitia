@@ -49,11 +49,11 @@ func buildStatusTool(runtime capability.RuntimeBinding) capability.ToolDefinitio
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          "android.display.status",
-		ModelName:   "android.display.status",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Display Status",
-		Description: "Get the current Android multi-display support status including display counts, capabilities, and topology support.",
+		ID:           "android.display.status",
+		ModelName:    "android.display.status",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Display Status",
+		Description:  "Get the current Android multi-display support status including display counts, capabilities, and topology support.",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -134,11 +134,11 @@ func buildListTool(runtime capability.RuntimeBinding) capability.ToolDefinition 
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          "android.display.list",
-		ModelName:   "android.display.list",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Display List",
-		Description: "List all current Android logical displays with their capabilities. Returns a consistent snapshot of all displays.",
+		ID:           "android.display.list",
+		ModelName:    "android.display.list",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Display List",
+		Description:  "List all current Android logical displays with their capabilities. Returns a consistent snapshot of all displays.",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -200,11 +200,11 @@ func buildGetTool(runtime capability.RuntimeBinding) capability.ToolDefinition {
 	}`)
 
 	return capability.ToolDefinition{
-		ID:          "android.display.get",
-		ModelName:   "android.display.get",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Display Get",
-		Description: "Get detailed information about a specific Android display by ID or ref.",
+		ID:           "android.display.get",
+		ModelName:    "android.display.get",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Display Get",
+		Description:  "Get detailed information about a specific Android display by ID or ref.",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{

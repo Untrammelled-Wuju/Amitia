@@ -7,21 +7,21 @@ import (
 )
 
 const (
-	DefaultMaxStatusEntries    = 500
-	DefaultMaxDiffBytes        = 1 << 20
-	DefaultMaxTrackedFileBytes = 100 << 20
+	DefaultMaxStatusEntries     = 500
+	DefaultMaxDiffBytes         = 1 << 20
+	DefaultMaxTrackedFileBytes  = 100 << 20
 	DefaultMaxCommitMessageSize = 64 << 10
-	DefaultMaxLogLimit         = 200
-	DefaultMaxPushDepth        = 1000
+	DefaultMaxLogLimit          = 200
+	DefaultMaxPushDepth         = 1000
 
-	StagingIndex      = "M"
-	StagingAdded      = "A"
-	StagingDeleted    = "D"
-	StagingRenamed    = "R"
-	StagingCopied     = "C"
-	StagingUnmerged   = "U"
-	StagingUntracked  = "?"
-	StagingIgnored    = "!"
+	StagingIndex     = "M"
+	StagingAdded     = "A"
+	StagingDeleted   = "D"
+	StagingRenamed   = "R"
+	StagingCopied    = "C"
+	StagingUnmerged  = "U"
+	StagingUntracked = "?"
+	StagingIgnored   = "!"
 )
 
 var refNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._\-/]*$`)
@@ -43,10 +43,10 @@ var allowedSchemes = map[string]bool{
 }
 
 var blockedSchemes = map[string]bool{
-	"git":   true,
-	"ftp":   true,
-	"ftps":  true,
-	"ext":   true,
+	"git":  true,
+	"ftp":  true,
+	"ftps": true,
+	"ext":  true,
 }
 
 type GitPolicy struct {

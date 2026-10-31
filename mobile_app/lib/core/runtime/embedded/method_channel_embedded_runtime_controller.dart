@@ -136,8 +136,9 @@ class MethodChannelEmbeddedRuntimeController
         return EmbeddedRuntimeStatus.starting;
       }
       return EmbeddedRuntimeStatus.failed;
-    } catch (_) {
-      return EmbeddedRuntimeStatus.failed;
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return EmbeddedRuntimeStatus.failed;
     }
   }
 
@@ -188,8 +189,9 @@ class MethodChannelEmbeddedRuntimeController
         return EmbeddedRuntimeStatus.unsupported;
       }
       return EmbeddedRuntimeStatus.failed;
-    } catch (_) {
-      return EmbeddedRuntimeStatus.failed;
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return EmbeddedRuntimeStatus.failed;
     }
   }
 
@@ -228,8 +230,9 @@ class MethodChannelEmbeddedRuntimeController
           return endpointValue;
         }
       }
-    } catch (_) {
-    }
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
     final endpoint = BackendEndpoint(
       role: BackendEndpointRole.localRuntime,
       httpBaseUri: Uri(scheme: 'http', host: '127.0.0.1', port: 18899),

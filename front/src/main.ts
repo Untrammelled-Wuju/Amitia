@@ -38,7 +38,10 @@ async function bootstrap() {
   const initialRoute = router.resolve(window.location.href);
   const bootstrapPublicRoute = ["/web-access", "/onboarding", "/privacy", "/usage-boundary"].includes(initialRoute.path);
   if (!bootstrapPublicRoute) {
-    await extensionUI.refreshSnapshot().catch(() => undefined);
+    await extensionUI.refreshSnapshot().catch((error) => {
+  console.error("[original-error]", error);
+  return undefined;
+});
     syncProviderRoutes(router, extensionUI);
   }
   let extensionRouteRecoveryPending = false;
@@ -46,7 +49,10 @@ async function bootstrap() {
     if (to.name !== "catchAll" || extensionRouteRecoveryPending) return true;
     extensionRouteRecoveryPending = true;
     try {
-      await extensionUI.refreshSnapshot(true).catch(() => undefined);
+      await extensionUI.refreshSnapshot(true).catch((error) => {
+  console.error("[original-error]", error);
+  return undefined;
+});
       syncProviderRoutes(router, extensionUI);
       const recovered = router.resolve(to.fullPath);
       if (!recovered.matched.some((record) => record.name === "catchAll")) {

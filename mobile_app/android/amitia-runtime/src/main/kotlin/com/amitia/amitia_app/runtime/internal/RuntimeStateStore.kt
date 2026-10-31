@@ -70,7 +70,9 @@ class RuntimeStateStore(
                     if (!entry.cancelled.get()) {
                         entry.listener.onRuntimeSnapshotChanged(snap)
                     }
-                } catch (_: Throwable) {
+                } catch (originalError73: Throwable) {
+                  originalError73.printStackTrace()
+
                 }
             }
         }
@@ -98,7 +100,9 @@ class RuntimeStateStore(
             )
             try {
                 listener.onRuntimeSnapshotChanged(snapshotCopy)
-            } catch (_: Throwable) {
+            } catch (originalError101: Throwable) {
+              originalError101.printStackTrace()
+
             }
         }
         return RuntimeSubscriptionImpl(entry, this)
@@ -144,7 +148,9 @@ class RuntimeStateStore(
                     if (!entry.cancelled.get()) {
                         entry.listener.onRuntimeSnapshotChanged(snap)
                     }
-                } catch (_: Throwable) {
+                } catch (originalError147: Throwable) {
+                  originalError147.printStackTrace()
+
                 }
             }
         }
@@ -200,7 +206,9 @@ class RuntimeStateStore(
                     if (!entry.cancelled.get()) {
                         entry.listener.onRuntimeSnapshotChanged(snap)
                     }
-                } catch (_: Throwable) {
+                } catch (originalError203: Throwable) {
+                  originalError203.printStackTrace()
+
                 }
             }
         }

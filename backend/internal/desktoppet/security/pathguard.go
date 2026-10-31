@@ -18,6 +18,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/auth"
+	amitialog "log"
 )
 
 type StorageRootKind string
@@ -512,19 +513,27 @@ func copyFileNoSymlinks(src, dst string, perm fs.FileMode) error {
 	_, err = io.Copy(tmp, in)
 	closeErr := tmp.Close()
 	if err != nil {
-		_ = os.Remove(tmpName)
+		if err := os.Remove(tmpName); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return err
 	}
 	if closeErr != nil {
-		_ = os.Remove(tmpName)
+		if err := os.Remove(tmpName); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return closeErr
 	}
 	if err := os.Chmod(tmpName, perm); err != nil {
-		_ = os.Remove(tmpName)
+		if err := os.Remove(tmpName); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return err
 	}
 	if err := os.Rename(tmpName, dst); err != nil {
-		_ = os.Remove(tmpName)
+		if err := os.Remove(tmpName); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return err
 	}
 	return nil

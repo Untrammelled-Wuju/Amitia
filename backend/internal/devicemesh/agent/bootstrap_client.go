@@ -8,6 +8,7 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/lan"
 	meshprotocol "github.com/u-ai/backend/internal/devicemesh/protocol"
 	"io"
+	amitialog "log"
 	"net/http"
 	"strings"
 	"time"
@@ -74,7 +75,9 @@ func (c *BootstrapClient) Exchange(ctx context.Context, cloudBaseURL, rawTicket,
 				SpaceID string `json:"spaceId"`
 			}
 			err = json.NewDecoder(io.LimitReader(statusResponse.Body, 1<<20)).Decode(&status)
-			_ = statusResponse.Body.Close()
+			if err := statusResponse.Body.Close(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			if err != nil || statusResponse.StatusCode != http.StatusOK || status.SpaceID == "" {
 				return nil, fmt.Errorf("无法验证服务提供者身份")
 			}

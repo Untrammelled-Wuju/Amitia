@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
+	amitialog "log"
 	"net/http"
 	"sort"
 	"strings"
@@ -133,7 +134,9 @@ func (a *OpenAIChatAdapter) Stream(ctx context.Context, cfg ProviderConfig, req 
 		if firstByte != ' ' && firstByte != '\n' && firstByte != '\r' && firstByte != '\t' {
 			break
 		}
-		_, _ = reader.ReadByte()
+		if _, err := reader.ReadByte(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	if firstByte == '{' || firstByte == '[' {
 		responseBytes, readErr := io.ReadAll(io.LimitReader(reader, 16*1024*1024+1))

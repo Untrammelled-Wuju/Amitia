@@ -69,12 +69,10 @@ class WorkbenchTaskService {
     } on StateError catch (error) {
       throw WorkbenchTaskReadFailure(error.message.toString(), invalidatesSnapshot: true);
     } on ServiceApiException catch (error) {
-      throw WorkbenchTaskReadFailure(switch (error.code) {
-        401 || 403 => '没有当前会话任务的访问权限，请检查设备授权',
-        404 => '当前执行 Core 下没有此会话或任务，请确认原执行 Core',
-        409 => '会话归属或执行 Core 已变化，请重新加载',
-        _ => '任务所属执行服务或数据所有者暂不可用，请检查连接',
-      }, invalidatesSnapshot: const {401, 403, 404, 409}.contains(error.code));
+      throw WorkbenchTaskReadFailure(
+        error.message,
+        invalidatesSnapshot: const {401, 403, 404, 409}.contains(error.code),
+      );
     }
   }
 
@@ -88,8 +86,9 @@ class WorkbenchTaskService {
     Map<String, String>? origin;
     try {
       origin = parseConversationReference(conversationId);
-    } catch (_) {
-      throw StateError('无法确认任务所属会话和角色，请重新打开对话');
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+throw StateError(error.toString());
     }
     if (origin == null || characterId.isEmpty) {
       throw StateError('无法确认任务所属会话和角色，请重新打开对话');

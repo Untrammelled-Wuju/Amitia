@@ -9,6 +9,7 @@ import (
 
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/system/dataportability"
+	amitialog "log"
 )
 
 func (e *Engine) RestoreMemoryArchive(ctx context.Context, request Request, input dataportability.ImportRequest, archive MemoryArchive) error {
@@ -162,7 +163,9 @@ func (e *Engine) RestoreMemoryArchive(ctx context.Context, request Request, inpu
 						candidate.ConversationOrigin, candidate.HistoricalRoleID = nil, ""
 					}
 					document = nil
-					_ = json.Unmarshal(body(candidate), &document)
+					if err := json.Unmarshal(body(candidate), &document); err != nil {
+						amitialog.Printf("[original-error] %v", err)
+					}
 				}
 				source := entry.SourceID
 				if source != "" {

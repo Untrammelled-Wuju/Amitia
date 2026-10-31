@@ -330,7 +330,10 @@ export const useExtensionUIStore = defineStore("extensionUI", () => {
     const task = (async () => {
       const platform = resolveHostEnvironment().platform;
       const deviceId = await resolveUIHostDeviceId();
-      const backendNamespace = await getRuntimeConnection().then((connection) => connection.apiBaseURL).catch(() => window.location.origin);
+      const backendNamespace = await getRuntimeConnection().then((connection) => connection.apiBaseURL).catch((error) => {
+        console.error("[original-error]", error);
+        return window.location.origin;
+      });
       const cacheNamespace = `${backendNamespace}|device=${deviceId || "browser"}`;
       try {
         const next = await fetchUISnapshot(platform, deviceId);
@@ -418,7 +421,9 @@ export const useExtensionUIStore = defineStore("extensionUI", () => {
       scopeExists.value = true;
     } catch (error) {
       // Refresh the optimistic revision before surfacing a conflict to the user.
-      await loadProfileScope(scope).catch(() => {});
+      await loadProfileScope(scope).catch((error) => {
+  console.error("[original-error]", error);
+});
       throw error;
     }
     await refreshSnapshot(true);

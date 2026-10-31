@@ -122,7 +122,7 @@ func classifyBrowserObservationError(err *browser.BrowserError) *RemoteReadFailu
 	if err != nil {
 		switch err.Code {
 		case browser.ErrCodeTabNotFound, browser.ErrCodeSessionNotFound, browser.ErrCodeTabStale, browser.ErrCodeSessionStale, browser.ErrCodeTabCrashed:
-			return &RemoteReadFailure{Code: RemoteReadCapabilityRevoked, Message: "Agent 浏览器页面已结束，需要重新取得观察引用"}
+			return &RemoteReadFailure{Code: RemoteReadCapabilityRevoked, Message: "Agent 浏览器页面已结束，需要重新取得观察引用: " + err.Error()}
 		}
 	}
 	return &RemoteReadFailure{Code: RemoteReadRuntimeUnavailable, Message: "Agent 浏览器暂时无法读取", Retryable: true}

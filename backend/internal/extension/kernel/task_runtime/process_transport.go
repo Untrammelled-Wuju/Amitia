@@ -21,6 +21,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	"github.com/u-ai/backend/internal/platform/process"
 	"github.com/u-ai/backend/internal/runtimeprofile"
+	amitialog "log"
 )
 
 type taskProcessMessage struct {
@@ -188,7 +189,9 @@ func (h *TaskProcessHost) runProcess(ctx context.Context, input, checkpoint json
 		if cmd.ProcessState != nil {
 			code = cmd.ProcessState.ExitCode()
 		}
-		_ = stdoutWriter.Close()
+		if err := stdoutWriter.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		exited <- processExit{code: code, err: waitErr}
 	}()
 	var writeMu sync.Mutex
@@ -214,24 +217,36 @@ func (h *TaskProcessHost) runProcess(ctx context.Context, input, checkpoint json
 			case <-guardTicker.C:
 				if err := coordination.ValidateCurrent(ctx); err != nil {
 					stop()
-					_ = process.TerminateProcessTree(cmd.Process.Pid, tree)
+					if err := process.TerminateProcessTree(cmd.Process.Pid, tree); err != nil {
+						amitialog.Printf("[original-error] %v", err)
+					}
 					return
 				}
 			case <-h.pauseCh:
-				_ = write(map[string]any{"jsonrpc": "2.0", "method": "task.pause", "params": map[string]any{"task_run_id": h.config.TaskRunID, "timeout_ms": 10000}})
+				if err := write(map[string]any{"jsonrpc": "2.0", "method": "task.pause", "params": map[string]any{"task_run_id": h.config.TaskRunID, "timeout_ms": 10000}}); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 			case <-processCtx.Done():
-				_ = process.TerminateProcessTree(cmd.Process.Pid, tree)
+				if err := process.TerminateProcessTree(cmd.Process.Pid, tree); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 				return
 			case <-h.cancelCh:
-				_ = write(map[string]any{"jsonrpc": "2.0", "method": "task.cancel", "params": map[string]string{"task_run_id": h.config.TaskRunID, "reason": "cancelled"}})
+				if err := write(map[string]any{"jsonrpc": "2.0", "method": "task.cancel", "params": map[string]string{"task_run_id": h.config.TaskRunID, "reason": "cancelled"}}); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 				timer := time.NewTimer(2 * time.Second)
 				defer timer.Stop()
 				select {
 				case <-timer.C:
 					stop()
-					_ = process.TerminateProcessTree(cmd.Process.Pid, tree)
+					if err := process.TerminateProcessTree(cmd.Process.Pid, tree); err != nil {
+						amitialog.Printf("[original-error] %v", err)
+					}
 				case <-processCtx.Done():
-					_ = process.TerminateProcessTree(cmd.Process.Pid, tree)
+					if err := process.TerminateProcessTree(cmd.Process.Pid, tree); err != nil {
+						amitialog.Printf("[original-error] %v", err)
+					}
 				case <-watchDone:
 				}
 				return
@@ -455,7 +470,9 @@ func (h *TaskProcessHost) runProcess(ctx context.Context, input, checkpoint json
 	}
 	if protocolErr != nil {
 		stop()
-		_ = process.TerminateProcessTree(cmd.Process.Pid, tree)
+		if err := process.TerminateProcessTree(cmd.Process.Pid, tree); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	wait := <-exited
 	err = wait.err

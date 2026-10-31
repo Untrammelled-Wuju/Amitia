@@ -61,7 +61,9 @@ class WorkflowIntentReceiver : BroadcastReceiver() {
                 .put("extras", sanitized)
             val eventID = "intent:${UUID.randomUUID()}"
             ingress.emit("device.android.intent", payload, "android.broadcast", eventID) { finishOnce() }
-        } catch (_: Exception) {
+        } catch (originalError64: Exception) {
+          originalError64.printStackTrace()
+
             finishOnce()
         }
     }

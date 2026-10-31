@@ -1,27 +1,27 @@
 package clipboard
 
 type ClipboardCapabilityState struct {
-	Supported          bool     `json:"supported"`
-	CanWrite           bool     `json:"canWrite"`
-	CanRead            bool     `json:"canRead"`
-	AppForeground      bool     `json:"appForeground"`
-	AppHasInputFocus   bool     `json:"appHasInputFocus"`
-	ReadRequiresForeground bool  `json:"readRequiresForeground"`
-	HasPrimaryClip     bool     `json:"hasPrimaryClip"`
-	SupportedMimeTypes []string `json:"supportedMimeTypes"`
-	MaxTextBytes       int      `json:"maxTextBytes"`
-	State              string   `json:"state"`
-	Reason             string   `json:"reason"`
+	Supported              bool     `json:"supported"`
+	CanWrite               bool     `json:"canWrite"`
+	CanRead                bool     `json:"canRead"`
+	AppForeground          bool     `json:"appForeground"`
+	AppHasInputFocus       bool     `json:"appHasInputFocus"`
+	ReadRequiresForeground bool     `json:"readRequiresForeground"`
+	HasPrimaryClip         bool     `json:"hasPrimaryClip"`
+	SupportedMimeTypes     []string `json:"supportedMimeTypes"`
+	MaxTextBytes           int      `json:"maxTextBytes"`
+	State                  string   `json:"state"`
+	Reason                 string   `json:"reason"`
 }
 
 type ClipboardReadResult struct {
-	HasContent  bool   `json:"hasContent"`
-	Text        string `json:"text,omitempty"`
-	MIMEType    string `json:"mimeType"`
-	ItemCount   int    `json:"itemCount"`
-	Truncated   bool   `json:"truncated"`
-	Sensitive   bool   `json:"sensitive"`
-	Generation  uint64 `json:"generation"`
+	HasContent bool   `json:"hasContent"`
+	Text       string `json:"text,omitempty"`
+	MIMEType   string `json:"mimeType"`
+	ItemCount  int    `json:"itemCount"`
+	Truncated  bool   `json:"truncated"`
+	Sensitive  bool   `json:"sensitive"`
+	Generation uint64 `json:"generation"`
 }
 
 type ClipboardWriteRequest struct {
@@ -30,17 +30,17 @@ type ClipboardWriteRequest struct {
 }
 
 type StatusResult struct {
-	Supported          bool     `json:"supported"`
-	CanWrite           bool     `json:"canWrite"`
-	CanRead            bool     `json:"canRead"`
-	AppForeground      bool     `json:"appForeground"`
-	AppHasInputFocus   bool     `json:"appHasInputFocus"`
-	ReadRequiresForeground bool  `json:"readRequiresForeground"`
-	HasPrimaryClip     bool     `json:"hasPrimaryClip"`
-	SupportedMimeTypes []string `json:"supportedMimeTypes"`
-	MaxTextBytes       int      `json:"maxTextBytes"`
-	State              string   `json:"state"`
-	Reason             string   `json:"reason"`
+	Supported              bool     `json:"supported"`
+	CanWrite               bool     `json:"canWrite"`
+	CanRead                bool     `json:"canRead"`
+	AppForeground          bool     `json:"appForeground"`
+	AppHasInputFocus       bool     `json:"appHasInputFocus"`
+	ReadRequiresForeground bool     `json:"readRequiresForeground"`
+	HasPrimaryClip         bool     `json:"hasPrimaryClip"`
+	SupportedMimeTypes     []string `json:"supportedMimeTypes"`
+	MaxTextBytes           int      `json:"maxTextBytes"`
+	State                  string   `json:"state"`
+	Reason                 string   `json:"reason"`
 }
 
 type ReadResult struct {
@@ -54,9 +54,9 @@ type ReadResult struct {
 }
 
 type WriteResult struct {
-	Written   bool   `json:"written"`
-	Bytes     int    `json:"bytes"`
-	Sensitive bool   `json:"sensitive"`
+	Written    bool   `json:"written"`
+	Bytes      int    `json:"bytes"`
+	Sensitive  bool   `json:"sensitive"`
 	Generation uint64 `json:"generation"`
 }
 

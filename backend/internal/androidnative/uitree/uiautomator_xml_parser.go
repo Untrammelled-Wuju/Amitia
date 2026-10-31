@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/xml"
 	"fmt"
+	amitialog "log"
 	"strconv"
 	"strings"
 )
@@ -150,13 +151,17 @@ func parseUIBool(v string) bool {
 
 func parseUiAutomatorBounds(v string) Rect {
 	var r Rect
-	_, _ = fmt.Sscanf(v, "[%d,%d][%d,%d]", &r.Left, &r.Top, &r.Right, &r.Bottom)
+	if _, err := fmt.Sscanf(v, "[%d,%d][%d,%d]", &r.Left, &r.Top, &r.Right, &r.Bottom); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	return r
 }
 
 func uiAutomatorStableID(source SourceType, path, resourceID, className string, bounds Rect) string {
 	h := sha1.New()
-	_, _ = fmt.Fprintf(h, "%s|%s|%s|%s|%d,%d,%d,%d", source, path, resourceID, className, bounds.Left, bounds.Top, bounds.Right, bounds.Bottom)
+	if _, err := fmt.Fprintf(h, "%s|%s|%s|%s|%d,%d,%d,%d", source, path, resourceID, className, bounds.Left, bounds.Top, bounds.Right, bounds.Bottom); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	sum := h.Sum(nil)
 	return "uia_" + hex.EncodeToString(sum[:8])
 }

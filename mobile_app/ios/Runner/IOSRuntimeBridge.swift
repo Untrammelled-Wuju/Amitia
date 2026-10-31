@@ -189,7 +189,9 @@ final class IOSRuntimeBridge: NSObject, FlutterStreamHandler {
                     completion(["accepted": self.state == "INSTALLED", "snapshot": self.snapshot(), "error": self.error as Any? ?? NSNull()])
                 }
             }
-        } catch { fail("SOURCE_UNAVAILABLE", "当前安装包缺少有效的 iOS Runtime，请使用包含 Runtime 的安装包"); completion(["accepted": false, "snapshot": snapshot()]) }
+        } catch {
+          print("[original-error] \(error)")
+         fail("SOURCE_UNAVAILABLE", "当前安装包缺少有效的 iOS Runtime，请使用包含 Runtime 的安装包: \(error.localizedDescription)"); completion(["accepted": false, "snapshot": snapshot()]) }
     }
 
     private func start(_ requested: String) {

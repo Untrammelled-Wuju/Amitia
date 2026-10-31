@@ -1238,8 +1238,9 @@ class _KernelTaskRuntimeSheetState extends State<_KernelTaskRuntimeSheet> {
   String _pretty(dynamic value) {
     try {
       return const JsonEncoder.withIndent('  ').convert(value);
-    } catch (_) {
-      return value?.toString() ?? '';
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return value?.toString() ?? '';
     }
   }
 

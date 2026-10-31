@@ -22,7 +22,9 @@ let schemeRegistered = false;
 try {
   protocol.registerSchemesAsPrivileged([{ scheme: PET_PROTOCOL_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }]);
   schemeRegistered = true;
-} catch { schemeRegistered = false; }
+} catch (error) {
+  console.error("[original-error]", error);
+schemeRegistered = false; }
 
 export function getMimeFromPath(filePath: string): string { return MIME_MAP[extname(filePath).toLowerCase()] ?? "application/octet-stream"; }
 
@@ -89,8 +91,9 @@ export class PetResourceProtocolRegistry {
       let stats;
       try {
         stats = await lstat(fullPath);
-      } catch {
-        return new Response(JSON.stringify({ error: "resource_not_found" }), { status: 404, headers: JSON_HEADERS });
+      } catch (error) {
+  console.error("[original-error]", error);
+return new Response(JSON.stringify({ error: "resource_not_found" }), { status: 404, headers: JSON_HEADERS });
       }
       if (!stats.isFile()) return new Response(JSON.stringify({ error: "resource_not_found" }), { status: 404, headers: JSON_HEADERS });
       if (typeof indexEntry.bytes === "number" && stats.size !== indexEntry.bytes) {
@@ -103,7 +106,9 @@ export class PetResourceProtocolRegistry {
         if (actualHash !== indexEntry.sha256) return new Response(JSON.stringify({ error: "integrity_check_failed", declared: indexEntry.sha256, actual: actualHash }), { status: 403, headers: JSON_HEADERS });
         const headers = { "Content-Type": indexEntry.mediaType || getMimeFromPath(parsed.relativePath), ...SECURITY_HEADERS };
         return new Response(request.method === "HEAD" ? null : new Uint8Array(content), { status: 200, headers });
-      } catch { return new Response(JSON.stringify({ error: "read_failed" }), { status: 500, headers: JSON_HEADERS }); }
+      } catch (error) {
+  console.error("[original-error]", error);
+return new Response(JSON.stringify({ error: "read_failed" }), { status: 500, headers: JSON_HEADERS }); }
     });
   }
 }
@@ -122,10 +127,14 @@ function parsePetUrl(rawUrl: string): ParsedPetUrl | null {
   const slashIdx = rest.indexOf("/");
   if (slashIdx <= 0 || slashIdx === rest.length - 1) return null;
   let installationId: string;
-  try { installationId = decodeURIComponent(rest.slice(0, slashIdx)); } catch { return null; }
+  try { installationId = decodeURIComponent(rest.slice(0, slashIdx)); } catch (error) {
+  console.error("[original-error]", error);
+return null; }
   if (!installationId || /[\u0000-\u001f\u007f]/.test(installationId)) return null;
   try { return { installationId, relativePath: decodePackagePathFromUrl(rest.slice(slashIdx + 1)) }; }
-  catch { return null; }
+  catch (error) {
+  console.error("[original-error]", error);
+return null; }
 }
 
 export { schemeRegistered };

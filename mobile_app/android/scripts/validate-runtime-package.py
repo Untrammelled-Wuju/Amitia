@@ -21,6 +21,13 @@ REQUIRED_RUNTIME_FILES = {
     "qdrant/bin/qdrant",
     "plugin-host/dist/index.js",
     "task-host/dist/index.js",
+    "llama/llama-server",
+    "llama/libllama-server-impl.so",
+    "llama/libllama-common.so.0",
+    "llama/libllama.so.0",
+    "llama/libmtmd.so.0",
+    "llama/libggml.so.0",
+    "llama/libggml-base.so.0",
     "scripts/node/amitia-node-prepare.sh",
     "scripts/node/amitia-node-probe.sh",
 }
@@ -29,9 +36,20 @@ ELF_BINARIES = {
     "backend/amitia-server",
     "node/bin/node",
     "qdrant/bin/qdrant",
+    "llama/llama-server",
+    "llama/libllama-server-impl.so",
+    "llama/libllama-common.so.0",
+    "llama/libllama.so.0",
+    "llama/libmtmd.so.0",
+    "llama/libggml.so.0",
+    "llama/libggml-base.so.0",
 }
 
-EXECUTABLE_FILES = ELF_BINARIES | {
+EXECUTABLE_FILES = {
+    "backend/amitia-server",
+    "node/bin/node",
+    "qdrant/bin/qdrant",
+    "llama/llama-server",
     "scripts/node/amitia-node-prepare.sh",
     "scripts/node/amitia-node-probe.sh",
 }
@@ -41,7 +59,9 @@ REQUIRED_COMPONENTS = {
     "runtime.node",
     "runtime.plugin-host",
     "runtime.qdrant",
+    "runtime.surrealdb",
     "runtime.task-host",
+    "runtime.llama",
 }
 
 REQUIRED_METADATA = {
@@ -60,6 +80,16 @@ REQUIRED_ROOTFS_EXECUTABLES = {"usr/bin/true"}
 REQUIRED_ROOTFS_FILES = {
     "usr/lib/aarch64-linux-gnu/libatomic.so.1",
     "usr/lib/aarch64-linux-gnu/libatomic.so.1.2.0",
+    "usr/lib/aarch64-linux-gnu/libgomp.so.1",
+    "usr/lib/aarch64-linux-gnu/libgomp.so.1.0.0",
+}
+ROOTFS_LIBRARY_LINKS = {
+    "usr/lib/aarch64-linux-gnu/libatomic.so.1": "libatomic.so.1.2.0",
+    "usr/lib/aarch64-linux-gnu/libgomp.so.1": "libgomp.so.1.0.0",
+}
+ROOTFS_LIBRARY_FILES = {
+    "usr/lib/aarch64-linux-gnu/libatomic.so.1.2.0",
+    "usr/lib/aarch64-linux-gnu/libgomp.so.1.0.0",
 }
 
 
@@ -190,9 +220,13 @@ def validate(package_path: str) -> dict[str, object]:
                 name = normalize_member_name(member.name)
                 if name in REQUIRED_ROOTFS_FILES:
                     rootfs_files_seen.add(name)
-                    if name.endswith(".so.1") and not member.issym():
-                        rootfs_errors.append("rootfs library link is not a symlink: " + name)
-                    if name.endswith(".1.2.0") and not member.isfile():
+                    expected_link = ROOTFS_LIBRARY_LINKS.get(name)
+                    if expected_link:
+                        if not member.issym():
+                            rootfs_errors.append("rootfs library link is not a symlink: " + name)
+                        elif member.linkname != expected_link:
+                            rootfs_errors.append(f"rootfs library link target mismatch: {name} -> {member.linkname}")
+                    if name in ROOTFS_LIBRARY_FILES and not member.isfile():
                         rootfs_errors.append("rootfs library is not a regular file: " + name)
                 if name in REQUIRED_ROOTFS_EXECUTABLES:
                     rootfs_seen.add(name)
@@ -214,12 +248,12 @@ def validate(package_path: str) -> dict[str, object]:
             for member in runtime:
                 name = normalize_member_name(member.name)
                 runtime_names.add(name)
+                if member.isfile() and name in ELF_BINARIES:
+                    source = runtime.extractfile(member)
+                    header = source.read(4) if source else b""
+                    if header != b"\x7fELF":
+                        errors.append("invalid ELF binary: " + name)
                 if member.isfile() and name in EXECUTABLE_FILES:
-                    if name in ELF_BINARIES:
-                        source = runtime.extractfile(member)
-                        header = source.read(4) if source else b""
-                        if header != b"\x7fELF":
-                            errors.append("invalid ELF binary: " + name)
                     if not member.mode & 0o111:
                         errors.append("required file is not executable: " + name)
                 elif member.isdir() and "/" not in name.rstrip("/") and name in FORBIDDEN_RUNTIME_DIRS:

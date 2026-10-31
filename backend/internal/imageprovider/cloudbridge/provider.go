@@ -14,6 +14,7 @@ import (
 
 	"github.com/u-ai/backend/internal/devicemesh/agent"
 	"github.com/u-ai/backend/internal/imageprovider"
+	amitialog "log"
 )
 
 const (
@@ -150,7 +151,9 @@ func (p *Provider) call(ctx context.Context, payload Request) (*Response, error)
 			Message string `json:"message"`
 			Msg     string `json:"msg"`
 		}
-		_ = json.Unmarshal(responseBody, &apiErr)
+		if err := json.Unmarshal(responseBody, &apiErr); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		message := strings.TrimSpace(apiErr.Message)
 		if message == "" {
 			message = strings.TrimSpace(apiErr.Msg)

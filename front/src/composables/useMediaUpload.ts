@@ -65,8 +65,9 @@ export function convertImageToPng(file: File): Promise<File> {
             }),
           );
         }, "image/png");
-      } catch {
-        fail(new Error("图片转换为 PNG 失败"));
+      } catch (error) {
+  console.error("[original-error]", error);
+fail(new Error("图片转换为 PNG 失败"));
       }
     };
 
@@ -171,7 +172,10 @@ export function useMediaUpload(
       const [url, init] = await Promise.all([resolveApiUrl("/api/video/upload"), createAuthenticatedFetchInit("/api/video/upload", { method: "POST", body: formData })]); return fetch(url, init);
     })
       .then(async (res) => {
-        const data = await res.json().catch(() => null);
+        const data = await res.json().catch((error) => {
+  console.error("[original-error]", error);
+  return null;
+});
         if (!res.ok) {
           throw new Error(data?.message || data?.error || `视频上传失败 (${res.status})`);
         }

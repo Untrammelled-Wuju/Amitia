@@ -33,6 +33,15 @@ export interface ConversationItem {
   lastTerminalTurnSequence?: number;
   isGenerating?: boolean;
   hasUnread?: boolean;
+  unreadCompletedCount?: number;
+  characterId?: string;
+  lastMessage?: string;
+  lastMessagePreview?: string;
+  lastMessageType?: string;
+  lastMessageRole?: string;
+  activityLabel?: string;
+  activeToolName?: string;
+  activeTaskTitle?: string;
   createdAt: string;
   updatedAt: string;
 }

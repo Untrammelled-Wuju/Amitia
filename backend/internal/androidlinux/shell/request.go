@@ -34,7 +34,7 @@ type ShellPolicy struct {
 	MaxStderrBytes         int64         `json:"maxStderrBytes"`
 	MaxEnvironmentEntries  int           `json:"maxEnvironmentEntries"`
 	MaxEnvironmentBytes    int64         `json:"maxEnvironmentBytes"`
-	AllowedEnvironmentKeys  []string      `json:"allowedEnvironmentKeys"`
+	AllowedEnvironmentKeys []string      `json:"allowedEnvironmentKeys"`
 }
 
 func DefaultShellPolicy() ShellPolicy {
@@ -47,6 +47,6 @@ func DefaultShellPolicy() ShellPolicy {
 		MaxStderrBytes:         512 * 1024,
 		MaxEnvironmentEntries:  64,
 		MaxEnvironmentBytes:    64 * 1024,
-		AllowedEnvironmentKeys:  []string{"PATH", "HOME", "TMPDIR", "LANG", "LC_ALL", "TERM"},
+		AllowedEnvironmentKeys: []string{"PATH", "HOME", "TMPDIR", "LANG", "LC_ALL", "TERM"},
 	}
 }

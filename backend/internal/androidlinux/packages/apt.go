@@ -12,10 +12,10 @@ import (
 )
 
 type AptManager struct {
-	executor    shell.ShellExecutor
-	policy      PackagesPolicy
-	paths       util.RuntimePaths
-	dpkgLock    chan struct{}
+	executor shell.ShellExecutor
+	policy   PackagesPolicy
+	paths    util.RuntimePaths
+	dpkgLock chan struct{}
 }
 
 func NewAptManager(executor shell.ShellExecutor, policy PackagesPolicy, paths util.RuntimePaths) *AptManager {

@@ -37,7 +37,9 @@ export class BusinessCoreArtifactClient {
     if (cloudAuth?.authorization) {
       try {
         useCloudCredential = new URL(cloudAuth.cloudBaseUrl).origin === new URL(this.baseURL).origin;
-      } catch {}
+      } catch (error) {
+  console.error("[original-error]", error);
+}
     }
     if (useCloudCredential && cloudAuth) {
       headers["Authorization"] = cloudAuth.authorization;
@@ -48,8 +50,9 @@ export class BusinessCoreArtifactClient {
     }
     try {
       return { ...getDesktopAuthHeaders(), ...headers };
-    } catch {
-      return headers;
+    } catch (error) {
+  console.error("[original-error]", error);
+return headers;
     }
   }
 
@@ -130,8 +133,9 @@ export class BusinessCoreArtifactClient {
             try {
               const data = JSON.parse(xhr.responseText);
               resolve(data.artifact as ArtifactMetadata);
-            } catch {
-              reject(new Error("invalid_artifact_response"));
+            } catch (error) {
+  console.error("[original-error]", error);
+reject(new Error("invalid_artifact_response"));
             }
           } else {
             reject(new Error(`artifact_upload_failed: ${xhr.status}`));

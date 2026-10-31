@@ -59,8 +59,9 @@ try {
     },
   ]);
   schemeRegistered = true;
-} catch {
-  schemeRegistered = false;
+} catch (error) {
+  console.error("[original-error]", error);
+schemeRegistered = false;
 }
 
 export function registerAppProtocol(rendererRoot: string): void {
@@ -76,8 +77,9 @@ export function registerAppProtocol(rendererRoot: string): void {
     let parsed: URL;
     try {
       parsed = new URL(request.url);
-    } catch {
-      return textResponse(400, "invalid app URL");
+    } catch (error) {
+  console.error("[original-error]", error);
+return textResponse(400, error instanceof Error ? error.message : String(error));
     }
 
     if (parsed.hostname !== APP_PROTOCOL_HOST) {
@@ -106,8 +108,9 @@ export function registerAppProtocol(rendererRoot: string): void {
       if (info.isDirectory()) {
         fullPath = path.join(fullPath, "index.html");
       }
-    } catch {
-      // Hash routing never reaches the protocol handler. For an accidental
+    } catch (error) {
+  console.error("[original-error]", error);
+// Hash routing never reaches the protocol handler. For an accidental
       // history-mode route, fall back to the SPA entry only when the request
       // does not look like a static asset.
       if (path.extname(relativePath) === "") {
@@ -136,8 +139,9 @@ export function registerAppProtocol(rendererRoot: string): void {
           },
         },
       );
-    } catch {
-      return textResponse(404, "resource not found");
+    } catch (error) {
+  console.error("[original-error]", error);
+return textResponse(404, "resource not found");
     }
   });
 }
@@ -153,8 +157,9 @@ async function proxyCoreResource(parsed: URL, method: string): Promise<Response>
       method,
       redirect: "error",
     });
-  } catch {
-    return textResponse(502, "core resource unavailable");
+  } catch (error) {
+  console.error("[original-error]", error);
+return textResponse(502, error instanceof Error ? error.message : String(error));
   }
   const headers = new Headers();
   for (const name of CORE_RESOURCE_RESPONSE_HEADERS) {
@@ -171,8 +176,9 @@ function normalizeRequestPath(pathname: string): string | null {
   let decoded: string;
   try {
     decoded = decodeURIComponent(pathname);
-  } catch {
-    return null;
+  } catch (error) {
+  console.error("[original-error]", error);
+return null;
   }
   const normalized = decoded.replace(/^\/+/, "").replace(/\\/g, "/");
   const segments = normalized.split("/");

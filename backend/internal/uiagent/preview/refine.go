@@ -47,9 +47,9 @@ type Applier interface {
 
 // Patch represents a schema delta or fix to be applied.
 type Patch struct {
-	SessionID    string   `json:"sessionId"`
-	Fixes        []Fix    `json:"fixes"`
-	TargetPaths  []string `json:"targetPaths"`
+	SessionID   string   `json:"sessionId"`
+	Fixes       []Fix    `json:"fixes"`
+	TargetPaths []string `json:"targetPaths"`
 }
 
 type Fix struct {
@@ -59,10 +59,10 @@ type Fix struct {
 }
 
 type defaultAutoRefiner struct {
-	sessionManager  SessionManager
-	observer        Observer
-	patchGenerator  PatchGenerator
-	applier         Applier
+	sessionManager SessionManager
+	observer       Observer
+	patchGenerator PatchGenerator
+	applier        Applier
 }
 
 func NewAutoRefiner(mgr SessionManager, obs Observer) AutoRefiner {

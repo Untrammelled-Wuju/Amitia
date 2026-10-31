@@ -39,6 +39,7 @@ class _AdvancedSystemPageState extends ConsumerState<AdvancedSystemPage> {
   Map<String, dynamic> _usageSources = const {};
   Map<String, dynamic> _accessConfig = const {};
   Map<String, dynamic> _accessStatus = const {};
+  Map<String, dynamic> _identityCheck = const {};
   Map<String, dynamic> _shadowStatus = const {};
   Map<String, dynamic> _shadowThresholds = const {};
   Map<String, dynamic> _shadowRollbacks = const {};
@@ -52,8 +53,9 @@ class _AdvancedSystemPageState extends ConsumerState<AdvancedSystemPage> {
   Future<T> _safe<T>(Future<T> Function() action, T fallback) async {
     try {
       return await action();
-    } catch (_) {
-      return fallback;
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return fallback;
     }
   }
 
@@ -180,6 +182,14 @@ class _AdvancedSystemPageState extends ConsumerState<AdvancedSystemPage> {
               <String, dynamic>{},
           <String, dynamic>{},
         ),
+        _safe(
+          () async =>
+              await api.get<Map<String, dynamic>>(
+                '/api/security/identity-check',
+              ) ??
+              <String, dynamic>{},
+          <String, dynamic>{},
+        ),
       ]);
       if (!mounted) return;
       setState(() {
@@ -202,6 +212,7 @@ class _AdvancedSystemPageState extends ConsumerState<AdvancedSystemPage> {
         _shadowStatus = values[16] as Map<String, dynamic>;
         _shadowThresholds = values[17] as Map<String, dynamic>;
         _shadowRollbacks = values[18] as Map<String, dynamic>;
+        _identityCheck = values[19] as Map<String, dynamic>;
         _loading = false;
       });
     } catch (e) {
@@ -440,6 +451,7 @@ class _AdvancedSystemPageState extends ConsumerState<AdvancedSystemPage> {
                           children: [
                             _jsonCard('个人空间', _space),
                             _jsonCard('可信设备', _devices),
+                            _jsonCard('设备身份校验', _identityCheck),
                           ],
                         ),
                         ListView(
@@ -483,9 +495,7 @@ class _AdvancedSystemPageState extends ConsumerState<AdvancedSystemPage> {
                                   children: [
                                     Row(
                                       children: [
-                                        const Expanded(
-                                          child: Text('情绪历史记录'),
-                                        ),
+                                        const Expanded(child: Text('情绪历史记录')),
                                         Switch(
                                           value: _mood['enabled'] == true,
                                           onChanged: _busy
@@ -495,7 +505,9 @@ class _AdvancedSystemPageState extends ConsumerState<AdvancedSystemPage> {
                                                       .read(
                                                         backendServiceProvider,
                                                       )
-                                                      .put<Map<String, dynamic>>(
+                                                      .put<
+                                                        Map<String, dynamic>
+                                                      >(
                                                         '/api/config/mood-detection',
                                                         data: {
                                                           'enabled': value,
@@ -524,9 +536,7 @@ class _AdvancedSystemPageState extends ConsumerState<AdvancedSystemPage> {
                                           ? null
                                           : (value) => _run(() async {
                                               await ref
-                                                  .read(
-                                                    backendServiceProvider,
-                                                  )
+                                                  .read(backendServiceProvider)
                                                   .put<Map<String, dynamic>>(
                                                     '/api/config/mood-detection',
                                                     data: {

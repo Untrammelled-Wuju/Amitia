@@ -88,8 +88,9 @@ export function useWebChatConversation(
           type: "warning",
         },
       );
-    } catch {
-      return;
+    } catch (error) {
+  console.error("[original-error]", error);
+return;
     }
     selectCharacter(c);
     if (owned.enabled.value) { owned.stopLocal("调用角色已切换，原回复已中断，将使用新角色开始对话"); disconnectSSE(); convId.value = ""; messages.value = []; convTitle.value = ""; }
@@ -97,7 +98,10 @@ export function useWebChatConversation(
     showCharPicker.value = false;
     ElMessage.success("已切换角色: " + c.name);
     await fetchConversations();
-    if (owned.enabled.value) await chatStore.fetchSidebar().catch(() => undefined);
+    if (owned.enabled.value) await chatStore.fetchSidebar().catch((error) => {
+  console.error("[original-error]", error);
+  return undefined;
+});
   }
 
   async function loadCharacterConversation(options: { preserve?: boolean; retryOnFailure?: boolean } = {}) {
@@ -143,7 +147,10 @@ export function useWebChatConversation(
         applySnapshotWorkspace(null, grouped?.projectId && owner ? ownedProjectReference(owner, grouped.projectId) : "");
         convTitle.value = conversation?.title || "历史对话";
         hasMoreHistory.value = owned.hasMore(conversationID, characterId.value);
-        await chatStore.markConversationRead(conversationID, Number(grouped?.lastTerminalTurnSequence || 0)).catch(() => undefined);
+        await chatStore.markConversationRead(conversationID, Number(grouped?.lastTerminalTurnSequence || 0)).catch((error) => {
+  console.error("[original-error]", error);
+  return undefined;
+});
         if (loadSnapshot) {
           const snapshotLoaded = await loadSnapshot();
           if (generation !== conversationLoadGeneration || convId.value !== conversationID || characterId.value !== selectedRole) return;
@@ -172,8 +179,9 @@ export function useWebChatConversation(
         return;
       }
       throw new Error(owned.notice.value || "设备对话服务尚未就绪");
-    } catch {
-      conversations.value = [];
+    } catch (error) {
+  console.error("[original-error]", error);
+conversations.value = [];
     }
   }
 
@@ -194,7 +202,9 @@ export function useWebChatConversation(
         return;
       }
       throw new Error(owned.notice.value || "设备对话服务尚未就绪");
-    } catch {}
+    } catch (error) {
+  console.error("[original-error]", error);
+}
   }
 
   async function fetchConvSummary(conversationID = convId.value): Promise<string> {
@@ -206,8 +216,9 @@ export function useWebChatConversation(
         return String(result?.summaryText || (result as any)?.summary_text || "").trim();
       }
       throw new Error(owned.notice.value || "设备对话服务尚未就绪");
-    } catch {
-      return "";
+    } catch (error) {
+  console.error("[original-error]", error);
+return "";
     }
   }
 

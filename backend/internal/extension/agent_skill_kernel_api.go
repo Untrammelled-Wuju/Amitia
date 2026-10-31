@@ -90,7 +90,7 @@ func (api *KernelAPI) previewAgentSkillImport(c *gin.Context) {
 	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 55<<20)
 	if err := c.Request.ParseMultipartForm(55 << 20); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "agent skill import request is invalid"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	files, rootName, err := readAgentSkillUpload(c)
@@ -131,7 +131,7 @@ func (api *KernelAPI) installAgentSkillImport(c *gin.Context) {
 		ScopeID       string          `json:"scopeId"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil || strings.TrimSpace(body.PreviewID) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "previewId is required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	if body.ScopeType == "" {
@@ -140,12 +140,12 @@ func (api *KernelAPI) installAgentSkillImport(c *gin.Context) {
 	spaceID := kernelAPIUser(c)
 	session, err := api.runtime.Kernel.Container().PackageRepository.GetPreview(c.Request.Context(), body.PreviewID, spaceID, body.ScopeType, body.ScopeID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "agent skill preview is unavailable"})
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
 	var required []string
 	if err := json.Unmarshal([]byte(session.RequiredConfirmationsJSON), &required); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "agent skill preview is corrupt"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	confirmations := map[string]bool{}

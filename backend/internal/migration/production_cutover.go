@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	amitialog "log"
 )
 
 type textTime struct {
@@ -407,7 +408,9 @@ func (p *CutoverPlan) Run(ctx context.Context) error {
 
 	if state.Status == "running" && state.Phase != "" && state.Phase != CutoverPhasePreflight {
 		if maint := p.getMaintenance(); maint != nil {
-			_ = maint.BeginQuiesce(ctx)
+			if err := maint.BeginQuiesce(ctx); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}
 

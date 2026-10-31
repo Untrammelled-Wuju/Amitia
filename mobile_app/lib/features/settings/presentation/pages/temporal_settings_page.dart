@@ -245,8 +245,9 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
   Future<void> _initializeTemporalContext() async {
     try {
       await ref.read(deviceTimezoneBootstrapProvider.future);
-    } catch (_) {
-      // Native timezone bootstrap is best-effort. The persisted profile remains
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+// Native timezone bootstrap is best-effort. The persisted profile remains
       // a valid fallback when the platform provider is unavailable.
     }
     if (!mounted) return;
@@ -292,8 +293,9 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
       final profile = await ref.read(temporalServiceProvider).suggestTimezone(candidate);
       if (!mounted || profile == null) return;
       setState(() => _applyConfig(profile));
-    } catch (_) {
-      // Device timezone detection is advisory. Keep the user's persisted timezone
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+// Device timezone detection is advisory. Keep the user's persisted timezone
       // unchanged when native detection or backend validation is unavailable.
     }
   }
@@ -620,7 +622,9 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
           'end': (decoded['end'] ?? '07:00').toString(),
         };
       }
-    } catch (_) {}
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+}
     return defaults;
   }
 

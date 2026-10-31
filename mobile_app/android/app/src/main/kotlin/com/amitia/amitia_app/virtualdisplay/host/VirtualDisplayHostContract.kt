@@ -57,7 +57,9 @@ internal object VirtualDisplayHostBinderRegistry {
         val current = service ?: return null
         return try {
             if (current.asBinder().isBinderAlive) current else null
-        } catch (_: Throwable) {
+        } catch (originalError60: Throwable) {
+          originalError60.printStackTrace()
+
             null
         }
     }

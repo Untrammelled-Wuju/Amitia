@@ -2,6 +2,7 @@ package queue
 
 import (
 	"context"
+	amitialog "log"
 	"sort"
 	"sync"
 	"time"
@@ -144,7 +145,9 @@ func (pq *PriorityQueue) Enqueue(task *Task) (bool, DropReason) {
 	if pq.totalLocked() >= pq.maxSize {
 		isP0P1 := task.Priority == PriorityP0 || task.Priority == PriorityP1
 		if !isP0P1 {
-			_ = pq.evictLowestPriorityLocked()
+			if reason := pq.evictLowestPriorityLocked(); reason != "" {
+				amitialog.Printf("[original-error] %v", reason)
+			}
 			if pq.totalLocked() >= pq.maxSize {
 				task.Status = TaskDropped
 				task.DropReason = DropReasonQueueFull
@@ -227,7 +230,9 @@ func (pq *PriorityQueue) Complete(task *Task) {
 	pq.metrics.RecordComplete()
 	pq.metrics.RecordQueueDepth(int64(pq.totalLocked()))
 	if pq.store != nil {
-		_ = pq.store.Delete(context.Background(), task.ID)
+		if err := pq.store.Delete(context.Background(), task.ID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	pq.persistLocked()
 }
@@ -252,7 +257,9 @@ func (pq *PriorityQueue) Cancel(task *Task) {
 	pq.metrics.RecordCancel()
 	pq.metrics.RecordQueueDepth(int64(pq.totalLocked()))
 	if pq.store != nil {
-		_ = pq.store.Delete(context.Background(), task.ID)
+		if err := pq.store.Delete(context.Background(), task.ID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	pq.persistLocked()
 }

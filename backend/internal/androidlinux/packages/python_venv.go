@@ -12,9 +12,9 @@ import (
 )
 
 type PythonVenvManager struct {
-	executor    shell.ShellExecutor
-	venvPath    string
-	policy      PackagesPolicy
+	executor shell.ShellExecutor
+	venvPath string
+	policy   PackagesPolicy
 }
 
 func NewPythonVenvManager(executor shell.ShellExecutor, venvPath string, policy PackagesPolicy) *PythonVenvManager {

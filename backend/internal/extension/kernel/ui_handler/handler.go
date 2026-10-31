@@ -24,6 +24,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/ui_contribution"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_provider"
 	"github.com/u-ai/backend/internal/runtimeidentity"
+	amitialog "log"
 )
 
 type DialogResolver interface {
@@ -202,7 +203,9 @@ func (h *HTTPHandler) handleResourceLink(w http.ResponseWriter, r *http.Request)
 		var header [512]byte
 		n, _ := file.Read(header[:])
 		contentType = http.DetectContentType(header[:n])
-		_, _ = file.Seek(0, 0)
+		if _, err := file.Seek(0, 0); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	if contentType == "" {
 		contentType = "application/octet-stream"
@@ -447,7 +450,9 @@ func (h *HTTPHandler) handleProviderModuleResource(w http.ResponseWriter, r *htt
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(content)
+	if _, err := w.Write(content); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (h *HTTPHandler) handleProfile(w http.ResponseWriter, r *http.Request) {
@@ -580,7 +585,9 @@ func (h *HTTPHandler) handleSessionsCollection(w http.ResponseWriter, r *http.Re
 		return
 	}
 	if actor, ok := auth.FromContext(r.Context()); ok && actor != nil {
-		_ = h.uiHost.Bridge().SetSessionExecutionIdentity(sess.SessionID, actor.SpaceID.String(), strings.TrimSpace(r.Header.Get("X-Amitia-Device-ID")))
+		if err := h.uiHost.Bridge().SetSessionExecutionIdentity(sess.SessionID, actor.SpaceID.String(), strings.TrimSpace(r.Header.Get("X-Amitia-Device-ID"))); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	writeJSON(w, http.StatusOK, bridgeSessionResponse{
 		SessionID:       sess.SessionID,
@@ -742,7 +749,9 @@ func (h *HTTPHandler) openExtensionPage(w http.ResponseWriter, r *http.Request, 
 		ScopeSnapshot  string         `json:"scopeSnapshot"`
 		DeepLinkOrigin string         `json:"deepLinkOrigin"`
 	}
-	_ = decodeJSON(r, &body)
+	if err := decodeJSON(r, &body); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	params := map[string]string{}
 	for k, v := range body.Params {
 		if s, ok := v.(string); ok {
@@ -883,7 +892,9 @@ func (h *HTTPHandler) handleAction(w http.ResponseWriter, r *http.Request) {
 		Context map[string]any  `json:"context"`
 		Input   json.RawMessage `json:"input"`
 	}
-	_ = decodeJSON(r, &req)
+	if err := decodeJSON(r, &req); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	resp := h.invokeAction(r, contributionID, actionID, req.Context, req.Input)
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -903,7 +914,9 @@ func (h *HTTPHandler) handleComposerAction(w http.ResponseWriter, r *http.Reques
 		Context map[string]any  `json:"context"`
 		Input   json.RawMessage `json:"input"`
 	}
-	_ = decodeJSON(r, &req)
+	if err := decodeJSON(r, &req); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	var contributionID string
 	for _, def := range h.uiHost.ListAll() {
 		if def.Kind == ui_contribution.UIContributionComposerAction {
@@ -1334,7 +1347,9 @@ func (h *HTTPHandler) invokeHostGuardedAction(r *http.Request, contributionID, a
 	}
 	defer h.uiHost.Bridge().RevokeSession(sess.SessionID)
 	if actor, ok := auth.FromContext(r.Context()); ok && actor != nil {
-		_ = h.uiHost.Bridge().SetSessionExecutionIdentity(sess.SessionID, actor.SpaceID.String(), strings.TrimSpace(actor.DeviceID.String()))
+		if err := h.uiHost.Bridge().SetSessionExecutionIdentity(sess.SessionID, actor.SpaceID.String(), strings.TrimSpace(actor.DeviceID.String())); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	payload, _ := json.Marshal(map[string]any{
 		"action_id": actionID,
@@ -1376,13 +1391,17 @@ type bridgeSessionResponse struct {
 func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func writeError(w http.ResponseWriter, status int, code string, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg, "code": code})
+	if err := json.NewEncoder(w).Encode(map[string]string{"error": msg, "code": code}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func decodeJSON(r *http.Request, v interface{}) error {

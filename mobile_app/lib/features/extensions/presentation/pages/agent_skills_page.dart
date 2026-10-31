@@ -697,18 +697,25 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
             );
           }
         }
-      } catch (_) {
-        if (installedExtensionId.isNotEmpty) {
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+if (installedExtensionId.isNotEmpty) {
           await ref
               .read(mcpServiceProvider)
               .removeAgentSkillDependencies(installedExtensionId)
-              .catchError((_) => null);
+              .catchError((Object error, StackTrace stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+  return null;
+});
         }
         if (installedSkillId.isNotEmpty) {
           await ref
               .read(extensionServiceProvider)
               .removeAgentSkill(installedSkillId)
-              .catchError((_) => false);
+              .catchError((Object error, StackTrace stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+  return false;
+});
         }
         rethrow;
       }

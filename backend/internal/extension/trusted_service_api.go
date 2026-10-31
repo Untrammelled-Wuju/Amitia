@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
+	amitialog "log"
 )
 
 type TrustedServiceAPI struct {
@@ -176,7 +177,9 @@ func (api *TrustedServiceAPI) startService(c *gin.Context) {
 		Args         map[string]string `json:"args"`
 		TrustLevel   string            `json:"trust_level"`
 	}
-	_ = c.ShouldBindJSON(&body)
+	if err := c.ShouldBindJSON(&body); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	if body.Generation <= 0 {
 		body.Generation = 1
 	}
@@ -222,7 +225,9 @@ func (api *TrustedServiceAPI) stopService(c *gin.Context) {
 		Reason string `json:"reason"`
 		Force  bool   `json:"force"`
 	}
-	_ = c.ShouldBindJSON(&body)
+	if err := c.ShouldBindJSON(&body); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	if body.Reason == "" {
 		body.Reason = "manual"
 	}
@@ -369,7 +374,9 @@ func (api *TrustedServiceAPI) releaseQuarantine(c *gin.Context) {
 	var body struct {
 		Reason string `json:"reason"`
 	}
-	_ = c.ShouldBindJSON(&body)
+	if err := c.ShouldBindJSON(&body); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	if body.Reason == "" {
 		body.Reason = "manual_release"
 	}

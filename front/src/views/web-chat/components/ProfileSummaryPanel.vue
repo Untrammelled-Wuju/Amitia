@@ -12,7 +12,9 @@ import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversa
 const props = defineProps<{ visible: boolean; characterId?: string;  }>();
 defineEmits<{ close: [] }>();
 const owned = useDeviceOwnedConversation();
-async function refresh() { try { await owned.refresh(); } catch {} }
+async function refresh() { try { await owned.refresh(); } catch (error) {
+  console.error("[original-error]", error);
+} }
 watch(() => props.visible, visible => { if (visible) void refresh(); }, { immediate: true });
 </script>
 <style scoped>

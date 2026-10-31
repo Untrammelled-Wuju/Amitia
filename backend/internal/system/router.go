@@ -73,9 +73,6 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, svc Service, 
 	r.GET("/config/mood-detection", sharedCoreAdminOnly(), handler.MoodDetectionConfig)
 	r.PUT("/config/mood-detection", sharedCoreAdminOnly(), handler.MoodDetectionConfig)
 	r.GET("/config/settings", sharedCoreAdminOnly(), handler.ConfigSettings)
-	r.POST("/config/export", sharedCoreAdminOnly(), handler.ConfigExport)
-	r.POST("/config/import/preview", sharedCoreAdminOnly(), handler.ConfigImportPreview)
-	r.POST("/config/import/confirm", sharedCoreAdminOnly(), handler.ConfigImportConfirm)
 
 	r.GET("/theme", sharedCoreAdminOnly(), handler.GetTheme)
 	r.PUT("/theme", sharedCoreAdminOnly(), handler.UpdateTheme)

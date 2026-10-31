@@ -29,7 +29,9 @@ internal class VirtualDisplayHostInputController {
         setDisplayIdMethod = try {
             InputEvent::class.java.getDeclaredMethod("setDisplayId", Int::class.javaPrimitiveType)
                 .also { it.isAccessible = true }
-        } catch (_: Throwable) {
+        } catch (originalError32: Throwable) {
+          originalError32.printStackTrace()
+
             null
         }
     }
@@ -141,14 +143,20 @@ internal class VirtualDisplayHostInputController {
                 setDisplayIdMethod.invoke(event, displayId)
             }
             injectInputEventMethod.invoke(inputManager, event, 0) as? Boolean ?: false
-        } catch (_: InvocationTargetException) {
+        } catch (originalError144: InvocationTargetException) {
+          originalError144.printStackTrace()
+
             false
-        } catch (_: Throwable) {
+        } catch (originalError146: Throwable) {
+          originalError146.printStackTrace()
+
             false
         } finally {
             try {
                 (event as? MotionEvent)?.recycle()
-            } catch (_: Throwable) {
+            } catch (originalError151: Throwable) {
+              originalError151.printStackTrace()
+
             }
         }
     }

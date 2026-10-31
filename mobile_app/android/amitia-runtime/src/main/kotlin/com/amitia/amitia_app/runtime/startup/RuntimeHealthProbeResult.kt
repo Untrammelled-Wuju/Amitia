@@ -7,7 +7,8 @@ internal sealed interface RuntimeHealthProbeResult {
     ) : RuntimeHealthProbeResult
 
     data class Failure(
-        val error: RuntimeHealthProbeError
+        val error: RuntimeHealthProbeError,
+        val cause: Throwable? = null,
     ) : RuntimeHealthProbeResult
 }
 

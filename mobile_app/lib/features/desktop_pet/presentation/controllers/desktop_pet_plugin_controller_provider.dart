@@ -138,8 +138,9 @@ class DesktopPetPluginController extends StateNotifier<DesktopPetPluginState> {
   Future<DesktopPetPluginDetail?> detail(String pluginId) async {
     try {
       return await api.detail(pluginId);
-    } catch (_) {
-      return null;
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return null;
     }
   }
 

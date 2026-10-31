@@ -147,6 +147,9 @@ func (s *service) GetModel(id int) (*ModelConfig, error) {
 }
 
 func (s *service) CreateModel(cfg *ModelConfig) (*ModelConfig, error) {
+	if err := s.validateModelConfiguration(context.Background(), cfg, cfg.IsActive == 1); err != nil {
+		return nil, err
+	}
 	count, err := s.repo.CountModels()
 	if err != nil {
 		return nil, fmt.Errorf("查询失败: %w", err)
@@ -161,7 +164,22 @@ func (s *service) CreateModel(cfg *ModelConfig) (*ModelConfig, error) {
 }
 
 func (s *service) UpdateModel(id int, updates map[string]interface{}) (*ModelConfig, error) {
-	if err := s.repo.UpdateModel(id, normalizeConfigUpdates(updates)); err != nil {
+	current, err := s.repo.GetModelByID(id)
+	if err != nil {
+		return nil, fmt.Errorf("模型配置不存在: %w", err)
+	}
+	projected := projectModelConfigUpdate(*current, updates)
+	if err := s.validateModelConfiguration(context.Background(), projected, projected.IsActive == 1 || current.IsActive == 1); err != nil {
+		return nil, err
+	}
+	normalized := normalizeConfigUpdates(updates)
+	if _, ok := normalized["context_window"]; !ok && projected.ContextWindow > 0 {
+		normalized["context_window"] = projected.ContextWindow
+	}
+	if _, ok := normalized["max_output_tokens"]; !ok && projected.MaxOutputTokens > 0 {
+		normalized["max_output_tokens"] = projected.MaxOutputTokens
+	}
+	if err := s.repo.UpdateModel(id, normalized); err != nil {
 		return nil, fmt.Errorf("更新失败: %w", err)
 	}
 	s.invalidateLocalModels(context.Background())
@@ -177,6 +195,13 @@ func (s *service) DeleteModel(id int) error {
 }
 
 func (s *service) ActivateModel(id int) (*ModelConfig, error) {
+	current, err := s.repo.GetModelByID(id)
+	if err != nil {
+		return nil, fmt.Errorf("模型配置不存在: %w", err)
+	}
+	if err := s.validateModelConfiguration(context.Background(), current, true); err != nil {
+		return nil, err
+	}
 	if err := s.repo.ActivateModel(id); err != nil {
 		return nil, fmt.Errorf("激活失败: %w", err)
 	}
@@ -370,7 +395,7 @@ func (s *service) detectAnthropicModels(baseURL, apiKey string) ([]ModelDetectIt
 }
 
 func (s *service) ListProviders() []ProviderInfo {
-	return s.repo.ListProviders()
+	return s.providerCatalog()
 }
 
 func resolveProtocol(cfg *ModelConfig) ModelProtocol {
@@ -447,6 +472,12 @@ func normalizeConfigUpdates(updates map[string]interface{}) map[string]interface
 	normalized := make(map[string]interface{}, len(updates))
 	for key, value := range updates {
 		if column, ok := aliases[key]; ok {
+			if column == "provider_config_json" {
+				if object, ok := value.(map[string]interface{}); ok {
+					encoded, _ := json.Marshal(object)
+					value = string(encoded)
+				}
+			}
 			normalized[column] = value
 		} else {
 			normalized[key] = value

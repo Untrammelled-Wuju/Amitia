@@ -9,6 +9,7 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/runtimeidentity"
+	amitialog "log"
 )
 
 func (rt *Runtime) CommitDeviceData(ctx context.Context, commit coordination.Commit) (coordination.Acknowledgement, error) {
@@ -126,11 +127,15 @@ func (rt *Runtime) runDeviceDataDelivery(ctx context.Context, done chan struct{}
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			_ = rt.ResumeChannelDeliveries(ctx)
+			if err := rt.ResumeChannelDeliveries(ctx); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			if sources, err := rt.Coordination.PendingRemoteSources(ctx); err == nil {
 				for _, source := range sources {
 					if _, connected := rt.Hub.GetByDevice(runtimeidentity.SpaceID(source.SpaceID), runtimeidentity.DeviceID(source.DeviceID)); connected {
-						_ = rt.ReconcileRemoteDevice(ctx, source.SpaceID, source.DeviceID)
+						if err := rt.ReconcileRemoteDevice(ctx, source.SpaceID, source.DeviceID); err != nil {
+							amitialog.Printf("[original-error] %v", err)
+						}
 					}
 					if ctx.Err() != nil {
 						return
@@ -147,7 +152,9 @@ func (rt *Runtime) runDeviceDataDelivery(ctx context.Context, done chan struct{}
 					continue
 				}
 				if _, connected := rt.Hub.GetByDevice(runtimeidentity.SpaceID(pending[0].Commit.Scope.SpaceID), runtimeidentity.DeviceID(owner)); connected {
-					_ = rt.ResumeDeviceData(ctx, owner)
+					if err := rt.ResumeDeviceData(ctx, owner); err != nil {
+						amitialog.Printf("[original-error] %v", err)
+					}
 				}
 				if ctx.Err() != nil {
 					return

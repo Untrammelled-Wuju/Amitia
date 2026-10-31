@@ -401,14 +401,16 @@ class AgentTaskDetailPage extends ConsumerWidget {
     if (value is String) {
       try {
         return const JsonEncoder.withIndent('  ').convert(jsonDecode(value));
-      } catch (_) {
-        return value;
+      } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return value;
       }
     }
     try {
       return const JsonEncoder.withIndent('  ').convert(value);
-    } catch (_) {
-      return value.toString();
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+return value.toString();
     }
   }
 

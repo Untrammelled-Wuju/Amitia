@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	amitialog "log"
 	"os"
 	"os/exec"
 	"sync"
@@ -50,8 +51,12 @@ func (m *DefaultProcessManager) Start(ctx context.Context, config ProcessConfig)
 
 	handle, attachErr := attachProcessTree(cmd)
 	if attachErr != nil {
-		_ = cmd.Process.Kill()
-		_ = cmd.Wait()
+		if err := cmd.Process.Kill(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
+		if err := cmd.Wait(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		cancel()
 		return nil, fmt.Errorf("process: attach process tree: %w", attachErr)
 	}

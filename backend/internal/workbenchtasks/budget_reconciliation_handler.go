@@ -41,7 +41,7 @@ func (h *Handler) budgetReconciliation(c *gin.Context) {
 	if c.Query("limit") != "" {
 		parsed, err := strconv.Atoi(c.Query("limit"))
 		if err != nil || parsed < 1 || parsed > 200 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "预算核对分页范围无效", "errorCode": "invalid_page"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "errorCode": "invalid_page"})
 			return
 		}
 		limit = parsed
@@ -58,7 +58,7 @@ func (h *Handler) budgetReconciliation(c *gin.Context) {
 			var err error
 			sequence, err = strconv.ParseInt(raw, 10, 64)
 			if err != nil || sequence < 0 {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "模型核对游标无效", "errorCode": "invalid_page"})
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "errorCode": "invalid_page"})
 				return
 			}
 		}
@@ -72,7 +72,7 @@ func (h *Handler) budgetReconciliation(c *gin.Context) {
 			var err error
 			createdAt, err = time.Parse(time.RFC3339Nano, raw)
 			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "工具核对游标无效", "errorCode": "invalid_page"})
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "errorCode": "invalid_page"})
 				return
 			}
 		}

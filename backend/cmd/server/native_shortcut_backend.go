@@ -13,6 +13,7 @@ import (
 	"github.com/u-ai/backend/internal/iosnative/media"
 	"github.com/u-ai/backend/internal/iosnative/reminders"
 	"github.com/u-ai/backend/internal/requestidentity"
+	amitialog "log"
 )
 
 type nativeShortcutActionRequest struct {
@@ -110,7 +111,9 @@ func newNativeShortcutBackendActionHandler(services *AppServices) func(context.C
 
 		var output any = map[string]any{}
 		if len(result.Output) > 0 {
-			_ = json.Unmarshal(result.Output, &output)
+			if err := json.Unmarshal(result.Output, &output); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		return json.Marshal(map[string]any{
 			"status":   "ok",

@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
+	amitialog "log"
 )
 
 var (
@@ -287,7 +288,9 @@ func (s *DefaultSupervisor) restartInstance(ctx context.Context, instanceID stri
 	runtime := entry.runtime
 	s.mu.Unlock()
 	if runtime != nil {
-		_ = runtime.Stop(ctx, StopReasonCrash)
+		if err := runtime.Stop(ctx, StopReasonCrash); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	if err := runtime.Start(ctx); err != nil {
 		s.mu.Lock()

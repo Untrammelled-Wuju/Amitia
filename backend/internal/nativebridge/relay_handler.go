@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	amitialog "log"
 )
 
 var upgrader = websocket.Upgrader{
@@ -198,7 +199,9 @@ func (h *RelayHandler) handleBackendActionRequest(conn *RelayConnection, env Rel
 		}
 		encoded, err := json.Marshal(response)
 		if err == nil {
-			_ = conn.Transport.Send(encoded)
+			if err := conn.Transport.Send(encoded); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}()
 }

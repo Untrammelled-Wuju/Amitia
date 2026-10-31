@@ -111,8 +111,9 @@ class SpaceProfileService {
         }
       }
       return profile;
-    } catch (_) {
-      final cachedAvatar = await _avatarCache.read();
+    } catch (error, stackTrace) {
+  print("[original-error] $error\n$stackTrace");
+final cachedAvatar = await _avatarCache.read();
       if (cachedAvatar.isNotEmpty) {
         return SpaceProfile(
           spaceId: '',

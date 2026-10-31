@@ -9,14 +9,14 @@ import (
 )
 
 var (
-	ErrCommandRequired          = errors.New("commandenv: command is required")
-	ErrCommandInvalid           = errors.New("commandenv: command contains invalid characters")
-	ErrCommandNotFound          = errors.New("commandenv: command not found")
-	ErrShellCommandForbidden    = errors.New("commandenv: shell command is forbidden")
+	ErrCommandRequired            = errors.New("commandenv: command is required")
+	ErrCommandInvalid             = errors.New("commandenv: command contains invalid characters")
+	ErrCommandNotFound            = errors.New("commandenv: command not found")
+	ErrShellCommandForbidden      = errors.New("commandenv: shell command is forbidden")
 	ErrNodeEnvironmentUnavailable = errors.New("commandenv: managed node environment unavailable")
-	ErrNodeCLIUnavailable       = errors.New("commandenv: node cli unavailable")
-	ErrUnmanagedNodeCommand     = errors.New("commandenv: unmanaged node command rejected")
-	ErrExecutableInvalid        = errors.New("commandenv: executable path invalid")
+	ErrNodeCLIUnavailable         = errors.New("commandenv: node cli unavailable")
+	ErrUnmanagedNodeCommand       = errors.New("commandenv: unmanaged node command rejected")
+	ErrExecutableInvalid          = errors.New("commandenv: executable path invalid")
 )
 
 type commandError struct {
@@ -67,8 +67,8 @@ func newCommandError(reason error, kind Kind, command string) error {
 }
 
 type wrappedCommandError struct {
-	inner  error
-	kind   Kind
+	inner   error
+	kind    Kind
 	command string
 }
 

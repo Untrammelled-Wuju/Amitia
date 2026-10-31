@@ -19,6 +19,7 @@ import (
 
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/pkg/util"
+	amitialog "log"
 )
 
 var (
@@ -53,9 +54,6 @@ func redactText(value string, limit int) (string, int) {
 	apply(unixUserPattern, `${1}<user>`)
 	apply(emailPattern, `***@***`)
 	apply(phonePattern, `***`)
-	if limit > 0 && len(line) > limit {
-		line = line[:limit] + "...[truncated]"
-	}
 	return line, count
 }
 
@@ -154,7 +152,7 @@ func appendLogFiles(files *[]discoveredLogFile, seen map[string]bool, root logRo
 		return
 	}
 	baseDepth := strings.Count(filepath.Clean(root.Path), string(os.PathSeparator))
-	_ = filepath.WalkDir(root.Path, func(path string, entry fs.DirEntry, walkErr error) error {
+	if err := filepath.WalkDir(root.Path, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return nil
 		}
@@ -200,7 +198,9 @@ func appendLogFiles(files *[]discoveredLogFile, seen map[string]bool, root logRo
 		}
 		*files = append(*files, discoveredLogFile{Path: absolute, Label: label, ModTime: fileInfo.ModTime()})
 		return nil
-	})
+	}); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func readLogTail(path string, maxBytes int64) (string, error) {

@@ -100,7 +100,9 @@ internal class DefaultBackendConnectionProvider(
                     if (host == "127.0.0.1" && port in 1..65535) {
                         return BackendEndpointPolicy(host, port, "http", "ws")
                     }
-                } catch (_: Exception) {
+                } catch (originalError103: Exception) {
+                  originalError103.printStackTrace()
+
                 }
             }
         }

@@ -3,11 +3,11 @@ package contacts
 type AuthorizationLevel string
 
 const (
-	AuthorizationNotDetermined     AuthorizationLevel = "not_determined"
-	AuthorizationRestricted        AuthorizationLevel = "restricted"
-	AuthorizationDenied            AuthorizationLevel = "denied"
-	AuthorizationAuthorized        AuthorizationLevel = "authorized"
-	AuthorizationLimited           AuthorizationLevel = "limited"
+	AuthorizationNotDetermined AuthorizationLevel = "not_determined"
+	AuthorizationRestricted    AuthorizationLevel = "restricted"
+	AuthorizationDenied        AuthorizationLevel = "denied"
+	AuthorizationAuthorized    AuthorizationLevel = "authorized"
+	AuthorizationLimited       AuthorizationLevel = "limited"
 )
 
 type CapabilityState struct {
@@ -59,11 +59,11 @@ type ContactPostalAddress struct {
 	City   string `json:"city,omitempty"`
 	State  string `json:"state,omitempty"`
 
-	PostalCode      string `json:"postalCode,omitempty"`
-	Country         string `json:"country,omitempty"`
-	ISOCountryCode  string `json:"isoCountryCode,omitempty"`
+	PostalCode     string `json:"postalCode,omitempty"`
+	Country        string `json:"country,omitempty"`
+	ISOCountryCode string `json:"isoCountryCode,omitempty"`
 
-	SubLocality          string `json:"subLocality,omitempty"`
+	SubLocality           string `json:"subLocality,omitempty"`
 	SubAdministrativeArea string `json:"subAdministrativeArea,omitempty"`
 }
 
@@ -75,16 +75,16 @@ type ContactDate struct {
 }
 
 type ContactSocialProfile struct {
-	Label   string `json:"label,omitempty"`
-	URL     string `json:"url,omitempty"`
-	Service string `json:"service,omitempty"`
-	Username string `json:"username,omitempty"`
+	Label          string `json:"label,omitempty"`
+	URL            string `json:"url,omitempty"`
+	Service        string `json:"service,omitempty"`
+	Username       string `json:"username,omitempty"`
 	UserIdentifier string `json:"userIdentifier,omitempty"`
 }
 
 type ContactInstantMessage struct {
-	Label   string `json:"label,omitempty"`
-	Service string `json:"service,omitempty"`
+	Label    string `json:"label,omitempty"`
+	Service  string `json:"service,omitempty"`
 	Username string `json:"username,omitempty"`
 }
 
@@ -97,15 +97,15 @@ type ContactInfo struct {
 	Department   string `json:"department,omitempty"`
 	JobTitle     string `json:"jobTitle,omitempty"`
 
-	PhoneNumbers      []LabeledString        `json:"phoneNumbers,omitempty"`
-	EmailAddresses     []LabeledString        `json:"emailAddresses,omitempty"`
-	PostalAddresses    []ContactPostalAddress `json:"postalAddresses,omitempty"`
-	URLs               []LabeledString        `json:"urls,omitempty"`
+	PhoneNumbers    []LabeledString        `json:"phoneNumbers,omitempty"`
+	EmailAddresses  []LabeledString        `json:"emailAddresses,omitempty"`
+	PostalAddresses []ContactPostalAddress `json:"postalAddresses,omitempty"`
+	URLs            []LabeledString        `json:"urls,omitempty"`
 
 	Birthday *ContactDate `json:"birthday,omitempty"`
 
-	Dates          []ContactDate          `json:"dates,omitempty"`
-	SocialProfiles []ContactSocialProfile `json:"socialProfiles,omitempty"`
+	Dates           []ContactDate           `json:"dates,omitempty"`
+	SocialProfiles  []ContactSocialProfile  `json:"socialProfiles,omitempty"`
 	InstantMessages []ContactInstantMessage `json:"instantMessages,omitempty"`
 
 	HasImage bool `json:"hasImage"`
@@ -136,9 +136,9 @@ type ContactGroupInfo struct {
 type PhotoResourceInfo struct {
 	ResourceURI string `json:"resourceUri"`
 	MimeType    string `json:"mimeType"`
-	Width       int     `json:"width,omitempty"`
-	Height      int     `json:"height,omitempty"`
-	ContentHash string  `json:"contentHash,omitempty"`
+	Width       int    `json:"width,omitempty"`
+	Height      int    `json:"height,omitempty"`
+	ContentHash string `json:"contentHash,omitempty"`
 }
 
 type ContactNameInput struct {
@@ -173,7 +173,7 @@ type SearchContactsRequest struct {
 }
 
 type ListContactsRequest struct {
-	Limit int `json:"limit,omitempty"`
+	Limit  int    `json:"limit,omitempty"`
 	Cursor string `json:"cursor,omitempty"`
 
 	IncludeOrganization bool `json:"includeOrganization,omitempty"`
@@ -184,12 +184,12 @@ type ListContactsRequest struct {
 type GetContactRequest struct {
 	ContactID string `json:"contactId"`
 
-	IncludePhones      bool `json:"includePhones,omitempty"`
-	IncludeEmails      bool `json:"includeEmails,omitempty"`
-	IncludeAddresses   bool `json:"includeAddresses,omitempty"`
-	IncludeDates       bool `json:"includeDates,omitempty"`
-	IncludeSocial      bool `json:"includeSocial,omitempty"`
-	IncludePhoto       bool `json:"includePhoto,omitempty"`
+	IncludePhones    bool `json:"includePhones,omitempty"`
+	IncludeEmails    bool `json:"includeEmails,omitempty"`
+	IncludeAddresses bool `json:"includeAddresses,omitempty"`
+	IncludeDates     bool `json:"includeDates,omitempty"`
+	IncludeSocial    bool `json:"includeSocial,omitempty"`
+	IncludePhoto     bool `json:"includePhoto,omitempty"`
 }
 
 type CreateContactRequest struct {
@@ -201,15 +201,15 @@ type CreateContactRequest struct {
 	Department   string `json:"department,omitempty"`
 	JobTitle     string `json:"jobTitle,omitempty"`
 
-	PhoneNumbers      []LabeledString        `json:"phoneNumbers,omitempty"`
-	EmailAddresses     []LabeledString        `json:"emailAddresses,omitempty"`
-	PostalAddresses    []ContactPostalAddress `json:"postalAddresses,omitempty"`
-	URLs               []LabeledString        `json:"urls,omitempty"`
-	Birthday           *ContactDate           `json:"birthday,omitempty"`
-	Dates              []ContactDate          `json:"dates,omitempty"`
-	SocialProfiles     []ContactSocialProfile `json:"socialProfiles,omitempty"`
-	InstantMessages    []ContactInstantMessage `json:"instantMessages,omitempty"`
-	PhotoResourceURI   string                 `json:"photoResourceUri,omitempty"`
+	PhoneNumbers     []LabeledString         `json:"phoneNumbers,omitempty"`
+	EmailAddresses   []LabeledString         `json:"emailAddresses,omitempty"`
+	PostalAddresses  []ContactPostalAddress  `json:"postalAddresses,omitempty"`
+	URLs             []LabeledString         `json:"urls,omitempty"`
+	Birthday         *ContactDate            `json:"birthday,omitempty"`
+	Dates            []ContactDate           `json:"dates,omitempty"`
+	SocialProfiles   []ContactSocialProfile  `json:"socialProfiles,omitempty"`
+	InstantMessages  []ContactInstantMessage `json:"instantMessages,omitempty"`
+	PhotoResourceURI string                  `json:"photoResourceUri,omitempty"`
 }
 
 type UpdateContactRequest struct {
@@ -223,15 +223,15 @@ type UpdateContactRequest struct {
 	Department   *string `json:"department,omitempty"`
 	JobTitle     *string `json:"jobTitle,omitempty"`
 
-	PhoneNumbers      *[]LabeledString        `json:"phoneNumbers,omitempty"`
-	EmailAddresses     *[]LabeledString        `json:"emailAddresses,omitempty"`
-	PostalAddresses    *[]ContactPostalAddress `json:"postalAddresses,omitempty"`
-	URLs               *[]LabeledString        `json:"urls,omitempty"`
-	Birthday           *ContactDate            `json:"birthday,omitempty"`
-	Dates              *[]ContactDate          `json:"dates,omitempty"`
-	SocialProfiles     *[]ContactSocialProfile `json:"socialProfiles,omitempty"`
-	InstantMessages    *[]ContactInstantMessage `json:"instantMessages,omitempty"`
-	PhotoResourceURI   *string                 `json:"photoResourceUri,omitempty"`
+	PhoneNumbers     *[]LabeledString         `json:"phoneNumbers,omitempty"`
+	EmailAddresses   *[]LabeledString         `json:"emailAddresses,omitempty"`
+	PostalAddresses  *[]ContactPostalAddress  `json:"postalAddresses,omitempty"`
+	URLs             *[]LabeledString         `json:"urls,omitempty"`
+	Birthday         *ContactDate             `json:"birthday,omitempty"`
+	Dates            *[]ContactDate           `json:"dates,omitempty"`
+	SocialProfiles   *[]ContactSocialProfile  `json:"socialProfiles,omitempty"`
+	InstantMessages  *[]ContactInstantMessage `json:"instantMessages,omitempty"`
+	PhotoResourceURI *string                  `json:"photoResourceUri,omitempty"`
 }
 
 type DeleteContactRequest struct {
@@ -243,8 +243,8 @@ type GetPhotoRequest struct {
 }
 
 type SetPhotoRequest struct {
-	ContactID    string `json:"contactId"`
-	ResourceURI  string `json:"resourceUri"`
+	ContactID   string `json:"contactId"`
+	ResourceURI string `json:"resourceUri"`
 }
 
 type RemovePhotoRequest struct {
@@ -290,8 +290,8 @@ type GroupsListResult struct {
 }
 
 type GetPhotoResult struct {
-	HasImage     bool             `json:"hasImage"`
-	Photo        *PhotoResourceInfo `json:"photo,omitempty"`
+	HasImage bool               `json:"hasImage"`
+	Photo    *PhotoResourceInfo `json:"photo,omitempty"`
 }
 
 type SetPhotoResult struct {
@@ -305,15 +305,15 @@ type RemovePhotoResult struct {
 }
 
 type AuthorizationStatusResult struct {
-	Level                 string `json:"level"`
-	EffectiveLevel        string `json:"effectiveLevel"`
-	Limited               bool   `json:"limited"`
-	CanRead               bool   `json:"canRead"`
-	CanCreate             bool   `json:"canCreate"`
-	CanUpdate             bool   `json:"canUpdate"`
-	CanDelete             bool   `json:"canDelete"`
-	CanManageLimitedAccess bool  `json:"canManageLimitedAccess"`
-	CanReadNotes          bool   `json:"canReadNotes"`
+	Level                  string `json:"level"`
+	EffectiveLevel         string `json:"effectiveLevel"`
+	Limited                bool   `json:"limited"`
+	CanRead                bool   `json:"canRead"`
+	CanCreate              bool   `json:"canCreate"`
+	CanUpdate              bool   `json:"canUpdate"`
+	CanDelete              bool   `json:"canDelete"`
+	CanManageLimitedAccess bool   `json:"canManageLimitedAccess"`
+	CanReadNotes           bool   `json:"canReadNotes"`
 }
 
 type AuthorizationRequestResult struct {
@@ -344,4 +344,3 @@ func PatchFieldSet[T any](value T) PatchField[T] {
 func PatchFieldUnmodified[T any]() PatchField[T] {
 	return PatchField[T]{Set: false}
 }
-

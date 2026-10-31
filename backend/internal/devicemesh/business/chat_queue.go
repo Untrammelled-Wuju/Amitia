@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	amitialog "log"
 )
 
 type QueuedChatResponse struct {
@@ -162,7 +163,9 @@ func (e *Engine) dispatchQueuedChat(actor *auth.ActorContext, document queuedCha
 			return err
 		})
 		if err == nil {
-			_ = e.coordination.FinishQueuedRequest(ctx, document.Scope)
+			if err := e.coordination.FinishQueuedRequest(ctx, document.Scope); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}()
 }
@@ -200,7 +203,9 @@ func (e *Engine) ResumePendingQueuedChats(ctx context.Context) error {
 				continue
 			}
 			if document.Status != "queued" {
-				_ = e.coordination.FinishQueuedRequest(ctx, location.Scope)
+				if err := e.coordination.FinishQueuedRequest(ctx, location.Scope); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 				continue
 			}
 			if document.Actor == nil || document.Actor.SpaceID.String() != location.Scope.SpaceID || document.Actor.DeviceID.String() != location.Scope.InitiatorDeviceID {

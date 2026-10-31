@@ -24,7 +24,9 @@ const palette = computed(() => state.value.customPalette);
 const fields = [{ key: "primary", label: "主色" }, { key: "secondary", label: "副色" }, { key: "text", label: "文字颜色" }] as const;
 const modes = [{ value: "auto", label: "自动" }, { value: "dark", label: "深色文字" }, { value: "light", label: "浅色文字" }, { value: "custom", label: "自选颜色" }];
 function save(value: Partial<CustomPalette>) {
-  try { setCustomPalette(value); } catch { ElMessage.error("保存配色失败，请重试"); }
+  try { setCustomPalette(value); } catch (error) {
+  console.error("[original-error]", error);
+ElMessage.error(error instanceof Error ? error.message : String(error)); }
 }
 function togglePalette(value: boolean | string | number) { save({ enabled: Boolean(value) }); }
 function changeTextMode(value: CustomPalette["textMode"]) { save({ textMode: value }); }

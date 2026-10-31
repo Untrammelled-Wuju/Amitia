@@ -39,8 +39,9 @@ export class PeerStore {
     try {
       const parsed = JSON.parse(fs.readFileSync(this.filePath, "utf8"))
       return parsed && typeof parsed === "object" ? parsed : {}
-    } catch {
-      return {}
+    } catch (error) {
+  console.error("[original-error]", error);
+return {}
     }
   }
 

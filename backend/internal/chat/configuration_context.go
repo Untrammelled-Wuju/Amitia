@@ -33,6 +33,9 @@ func (s *contextualModelConfiguration) GetModel(id int) (*ModelConfig, error) {
 }
 
 func (s *contextualModelConfiguration) CreateModel(cfg *ModelConfig) (*ModelConfig, error) {
+	if err := s.parent.validateModelConfiguration(context.Background(), cfg, cfg.IsActive == 1); err != nil {
+		return nil, err
+	}
 	count, err := s.repo.CountModels()
 	if err != nil {
 		return nil, fmt.Errorf("查询失败: %w", err)
@@ -47,7 +50,22 @@ func (s *contextualModelConfiguration) CreateModel(cfg *ModelConfig) (*ModelConf
 }
 
 func (s *contextualModelConfiguration) UpdateModel(id int, updates map[string]interface{}) (*ModelConfig, error) {
-	if err := s.repo.UpdateModel(id, normalizeConfigUpdates(updates)); err != nil {
+	current, err := s.repo.GetModelByID(id)
+	if err != nil {
+		return nil, fmt.Errorf("模型配置不存在: %w", err)
+	}
+	projected := projectModelConfigUpdate(*current, updates)
+	if err := s.parent.validateModelConfiguration(context.Background(), projected, projected.IsActive == 1 || current.IsActive == 1); err != nil {
+		return nil, err
+	}
+	normalized := normalizeConfigUpdates(updates)
+	if _, ok := normalized["context_window"]; !ok && projected.ContextWindow > 0 {
+		normalized["context_window"] = projected.ContextWindow
+	}
+	if _, ok := normalized["max_output_tokens"]; !ok && projected.MaxOutputTokens > 0 {
+		normalized["max_output_tokens"] = projected.MaxOutputTokens
+	}
+	if err := s.repo.UpdateModel(id, normalized); err != nil {
 		return nil, fmt.Errorf("更新失败: %w", err)
 	}
 	s.parent.invalidateLocalModels(context.Background())
@@ -63,6 +81,13 @@ func (s *contextualModelConfiguration) DeleteModel(id int) error {
 }
 
 func (s *contextualModelConfiguration) ActivateModel(id int) (*ModelConfig, error) {
+	current, err := s.repo.GetModelByID(id)
+	if err != nil {
+		return nil, fmt.Errorf("模型配置不存在: %w", err)
+	}
+	if err := s.parent.validateModelConfiguration(context.Background(), current, true); err != nil {
+		return nil, err
+	}
 	if err := s.repo.ActivateModel(id); err != nil {
 		return nil, fmt.Errorf("激活失败: %w", err)
 	}

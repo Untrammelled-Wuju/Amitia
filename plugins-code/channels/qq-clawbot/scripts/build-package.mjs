@@ -22,8 +22,9 @@ const runtimeNodePaths = fs.readdirSync(path.join(runtimeRoot, "node_modules", "
 function dependency(name, fallback) {
   try {
     return uiRequire.resolve(name)
-  } catch {
-    return fallback.resolve(name)
+  } catch (error) {
+  console.error("[original-error]", error);
+return fallback.resolve(name)
   }
 }
 

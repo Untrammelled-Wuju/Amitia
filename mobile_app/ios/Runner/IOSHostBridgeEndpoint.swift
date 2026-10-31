@@ -79,7 +79,9 @@ final class IOSHostBridgeEndpoint {
                 var encoded = try JSONSerialization.data(withJSONObject: response)
                 encoded.append(10)
                 try output.write(contentsOf: encoded)
-            } catch { stop(); return }
+            } catch {
+              print("[original-error] \(error)")
+             stop(); return }
         }
     }
 

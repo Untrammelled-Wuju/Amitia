@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/u-ai/backend/internal/timeoutpolicy"
+	amitialog "log"
 	"sync"
 	"time"
 )
@@ -121,7 +122,9 @@ func (p *DeliveryPlanner) PlanDeliveries(ctx context.Context, record OutboxRecor
 			}
 			now := time.Now().UTC()
 			delivery.FinishedAt = &now
-			_ = p.deliveryStore.CreateDelivery(ctx, delivery)
+			if err := p.deliveryStore.CreateDelivery(ctx, delivery); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			continue
 		}
 		grantedPermissions := p.extractGrantedPermissions(sub)
@@ -296,7 +299,9 @@ func (d *Dispatcher) runOutboxDispatcher(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			_, _ = d.outboxStore.ReleaseExpiredLeases(ctx)
+			if _, err := d.outboxStore.ReleaseExpiredLeases(ctx); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			records, err := d.outboxStore.ClaimNext(ctx, "outbox-dispatcher", d.config.LeaseTTL, d.config.BatchSize)
 			if err != nil {
 				continue
@@ -304,7 +309,9 @@ func (d *Dispatcher) runOutboxDispatcher(ctx context.Context) {
 			for _, record := range records {
 				planner := NewDeliveryPlanner(d.subscriptionRegistry, d.schemaRegistry, d.deliveryStore, d.deadLetterStore, d.outboxStore, d.traceRecorder)
 				if err := planner.PlanDeliveries(ctx, record); err != nil {
-					_ = d.outboxStore.MarkFailed(ctx, record.OutboxID, "dispatch_error", err.Error())
+					if err := d.outboxStore.MarkFailed(ctx, record.OutboxID, "dispatch_error", err.Error()); err != nil {
+						amitialog.Printf("[original-error] %v", err)
+					}
 				}
 			}
 		}
@@ -322,7 +329,9 @@ func (d *Dispatcher) runDeliveryDispatcher(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			_, _ = d.deliveryStore.ReleaseExpiredDeliveryLeases(ctx)
+			if _, err := d.deliveryStore.ReleaseExpiredDeliveryLeases(ctx); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			deliveries, err := d.deliveryStore.ClaimNextDeliveries(ctx, "delivery-dispatcher", d.config.LeaseTTL, d.config.BatchSize)
 			if err != nil {
 				continue
@@ -344,22 +353,30 @@ func (d *Dispatcher) runDeliveryDispatcher(ctx context.Context) {
 func (d *Dispatcher) executeDelivery(ctx context.Context, delivery Delivery) {
 	sub, ok := d.subscriptionRegistry.Get(ctx, delivery.SubscriptionID)
 	if !ok {
-		_ = d.deliveryStore.UpdateDeliveryStatus(ctx, delivery.DeliveryID, DeliveryStatusSkipped, "handler_not_found", "subscription not found")
+		if err := d.deliveryStore.UpdateDeliveryStatus(ctx, delivery.DeliveryID, DeliveryStatusSkipped, "handler_not_found", "subscription not found"); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return
 	}
 	if sub.Definition.Generation != delivery.SubscriptionGeneration {
-		_ = d.deliveryStore.UpdateDeliveryStatus(ctx, delivery.DeliveryID, DeliveryStatusCancelled, "cancel_stale_subscription",
-			fmt.Sprintf("subscription generation %d != delivery generation %d", sub.Definition.Generation, delivery.SubscriptionGeneration))
+		if err := d.deliveryStore.UpdateDeliveryStatus(ctx, delivery.DeliveryID, DeliveryStatusCancelled, "cancel_stale_subscription",
+			fmt.Sprintf("subscription generation %d != delivery generation %d", sub.Definition.Generation, delivery.SubscriptionGeneration)); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return
 	}
 	if delivery.TargetGeneration != 0 && sub.Definition.Generation != delivery.TargetGeneration {
-		_ = d.deliveryStore.UpdateDeliveryStatus(ctx, delivery.DeliveryID, DeliveryStatusCancelled, "cancel_stale_target",
-			fmt.Sprintf("target generation %d != delivery target generation %d", sub.Definition.Generation, delivery.TargetGeneration))
+		if err := d.deliveryStore.UpdateDeliveryStatus(ctx, delivery.DeliveryID, DeliveryStatusCancelled, "cancel_stale_target",
+			fmt.Sprintf("target generation %d != delivery target generation %d", sub.Definition.Generation, delivery.TargetGeneration)); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return
 	}
 	outbox, err := d.outboxStore.GetByEventID(ctx, delivery.EventID)
 	if err != nil {
-		_ = d.deliveryStore.UpdateDeliveryStatus(ctx, delivery.DeliveryID, DeliveryStatusRetryWait, "outbox_not_found", err.Error())
+		if err := d.deliveryStore.UpdateDeliveryStatus(ctx, delivery.DeliveryID, DeliveryStatusRetryWait, "outbox_not_found", err.Error()); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return
 	}
 	envelope := outboxToEnvelope(outbox)
@@ -373,12 +390,16 @@ func (d *Dispatcher) executeDelivery(ctx context.Context, delivery Delivery) {
 			if genErr != nil {
 				inv := d.traceRecorder.StartInvocation(envelope.OperationID, delivery.EventID, delivery.DeliveryID, delivery.SubscriptionID, delivery.Attempt)
 				d.traceRecorder.FinishInvocation(inv.InvocationID, "failed", "generation_check_error", genErr.Error())
-				_ = d.deliveryStore.UpdateDeliveryStatus(ctx, delivery.DeliveryID, DeliveryStatusRetryWait, "generation_check_error", genErr.Error())
+				if err := d.deliveryStore.UpdateDeliveryStatus(ctx, delivery.DeliveryID, DeliveryStatusRetryWait, "generation_check_error", genErr.Error()); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 				return
 			}
 			if currentProducerGen > 0 && currentProducerGen != delivery.ProducerGeneration {
-				_ = d.deliveryStore.UpdateDeliveryStatus(ctx, delivery.DeliveryID, DeliveryStatusCancelled, "cancel_stale_producer",
-					fmt.Sprintf("producer generation %d != delivery producer generation %d", currentProducerGen, delivery.ProducerGeneration))
+				if err := d.deliveryStore.UpdateDeliveryStatus(ctx, delivery.DeliveryID, DeliveryStatusCancelled, "cancel_stale_producer",
+					fmt.Sprintf("producer generation %d != delivery producer generation %d", currentProducerGen, delivery.ProducerGeneration)); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
 				return
 			}
 		}
@@ -386,21 +407,29 @@ func (d *Dispatcher) executeDelivery(ctx context.Context, delivery Delivery) {
 	circuit := d.circuitRegistry.GetOrCreate(delivery.SubscriptionID)
 	allowed, state := circuit.Allow()
 	if !allowed {
-		_ = d.deliveryStore.UpdateDeliveryStatus(ctx, delivery.DeliveryID, DeliveryStatusSkipped, "circuit_open", fmt.Sprintf("circuit %s", state))
+		if err := d.deliveryStore.UpdateDeliveryStatus(ctx, delivery.DeliveryID, DeliveryStatusSkipped, "circuit_open", fmt.Sprintf("circuit %s", state)); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		d.subscriptionRegistry.MarkCircuitState(delivery.SubscriptionID, state)
 		return
 	}
 	if !sub.Effective.IsActive() {
-		_ = d.deliveryStore.UpdateDeliveryStatus(ctx, delivery.DeliveryID, DeliveryStatusSkipped, "subscription_inactive", sub.Effective.DenyReason())
+		if err := d.deliveryStore.UpdateDeliveryStatus(ctx, delivery.DeliveryID, DeliveryStatusSkipped, "subscription_inactive", sub.Effective.DenyReason()); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return
 	}
 	if envelope.ScopeSnapshotID == "" && !envelope.IsFromHost() {
-		_ = d.deliveryStore.UpdateDeliveryStatus(ctx, delivery.DeliveryID, DeliveryStatusSkipped, "scope_snapshot_missing", "envelope has no scope snapshot")
+		if err := d.deliveryStore.UpdateDeliveryStatus(ctx, delivery.DeliveryID, DeliveryStatusSkipped, "scope_snapshot_missing", "envelope has no scope snapshot"); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return
 	}
 	if delivery.PartitionKey != "" {
 		if !d.ordering.AcquireSlot(delivery.PartitionKey, delivery.DeliveryID) {
-			_ = d.deliveryStore.ReleaseDeliveryLease(ctx, delivery.DeliveryID)
+			if err := d.deliveryStore.ReleaseDeliveryLease(ctx, delivery.DeliveryID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return
 		}
 		defer d.ordering.ReleaseSlot(delivery.PartitionKey, delivery.DeliveryID)
@@ -418,7 +447,9 @@ func (d *Dispatcher) executeDelivery(ctx context.Context, delivery Delivery) {
 		delivery.Succeed()
 		circuit.RecordSuccess()
 		d.traceRecorder.FinishInvocation(inv.InvocationID, "succeeded", "", "")
-		_ = d.deliveryStore.UpdateDeliveryStatus(ctx, delivery.DeliveryID, DeliveryStatusSucceeded, "", "")
+		if err := d.deliveryStore.UpdateDeliveryStatus(ctx, delivery.DeliveryID, DeliveryStatusSucceeded, "", ""); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return
 	}
 	code := ErrorCode(err)
@@ -427,9 +458,13 @@ func (d *Dispatcher) executeDelivery(ctx context.Context, delivery Delivery) {
 	delivery.Fail(code, err.Error(), sub.Definition.RetryPolicy)
 	if delivery.Status == DeliveryStatusDeadLetter {
 		dlRecord := NewDeadLetterRecord(delivery, envelope, sub.Definition, DeadLetterMaxAttempts)
-		_ = d.deadLetterStore.CreateDeadLetter(ctx, dlRecord)
+		if err := d.deadLetterStore.CreateDeadLetter(ctx, dlRecord); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
-	_ = d.deliveryStore.UpdateDeliveryStatus(ctx, delivery.DeliveryID, delivery.Status, delivery.ErrorCode, delivery.ErrorMessage)
+	if err := d.deliveryStore.UpdateDeliveryStatus(ctx, delivery.DeliveryID, delivery.Status, delivery.ErrorCode, delivery.ErrorMessage); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (d *Dispatcher) ResetCircuit(subscriptionID string) {

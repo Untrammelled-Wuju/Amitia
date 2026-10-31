@@ -47,7 +47,7 @@ func RegisterRoutes(group *gin.RouterGroup, service *Service) {
 			AllowNetwork *bool  `json:"allowNetwork"`
 		}
 		if err := c.ShouldBindJSON(&body); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "请求格式错误"})
+			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
 			return
 		}
 		allowNetwork := true

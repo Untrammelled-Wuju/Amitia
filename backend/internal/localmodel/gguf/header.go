@@ -9,15 +9,15 @@ import (
 )
 
 const (
-	GGUFMagic    uint32 = 0x46554747
-	GGUFVersion  uint32 = 3
-	GGUFMaxDims  uint32 = 4
+	GGUFMagic   uint32 = 0x46554747
+	GGUFVersion uint32 = 3
+	GGUFMaxDims uint32 = 4
 )
 
 type GGUFHeader struct {
-	Magic      uint32
-	Version    uint32
-	TensorCount uint64
+	Magic         uint32
+	Version       uint32
+	TensorCount   uint64
 	MetadataCount uint64
 }
 

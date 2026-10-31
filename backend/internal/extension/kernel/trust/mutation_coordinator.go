@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	amitialog "log"
 	"time"
 )
 
@@ -131,7 +132,9 @@ func (c *MutationCoordinator) rollbackPermissive(mutation PolicyMutation, rollba
 	if mutation.Restrictive || rollback == nil {
 		return
 	}
-	_ = rollback()
+	if err := rollback(); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 type PolicyMutationApplierFunc func(context.Context, PolicyMutation) (func() error, error)

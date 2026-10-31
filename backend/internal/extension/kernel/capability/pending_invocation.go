@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/u-ai/backend/internal/timeoutpolicy"
+	amitialog "log"
 	"sync"
 	"time"
 )
@@ -168,7 +169,9 @@ func pendingReliabilityMatches(pi *PendingInvocation, result UnifiedToolResult) 
 		case float64:
 			received = int64(typed)
 		default:
-			_, _ = fmt.Sscan(fmt.Sprint(value), &received)
+			if _, err := fmt.Sscan(fmt.Sprint(value), &received); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		if received != pi.FencingToken {
 			return false

@@ -486,7 +486,9 @@ internal class RuntimeBridgeHandler(
         }
         try {
             RuntimeLogCallback.instance?.onLog(level, message)
-        } catch (_: Throwable) {
+        } catch (originalError489: Throwable) {
+          originalError489.printStackTrace()
+
         }
     }
 

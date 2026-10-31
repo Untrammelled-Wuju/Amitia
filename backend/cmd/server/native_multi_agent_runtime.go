@@ -15,6 +15,7 @@ import (
 	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/interaction"
+	amitialog "log"
 )
 
 const multiAgentDelegateTool = "harness_multi_agent_delegate"
@@ -66,7 +67,9 @@ func (m *chatMultiAgentRuntime) available(ctx context.Context, scope chat.SkillS
 
 func multiAgentToolParameters(schema string) tool.Parameters {
 	var value tool.Parameters
-	_ = json.Unmarshal([]byte(schema), &value)
+	if err := json.Unmarshal([]byte(schema), &value); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	return value
 }
 

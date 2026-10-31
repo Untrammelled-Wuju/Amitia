@@ -12,13 +12,16 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/system/dataportability"
+	amitialog "log"
 )
 
 type ExportRequest struct {
-	Scope       dataportability.BackupScope
-	Profile     dataportability.BackupProfile
-	CharacterID string
-	Passphrase  string
+	Scope              dataportability.BackupScope
+	Profile            dataportability.BackupProfile
+	CharacterID        string
+	Passphrase         string
+	IncludeModelAssets bool
+	IncludeSecrets     bool
 }
 
 func (s *service) PreviewDataPortabilityExport(ctx context.Context, request ExportRequest) (map[string]interface{}, error) {
@@ -29,11 +32,13 @@ func (s *service) PreviewDataPortabilityExport(ctx context.Context, request Expo
 		request.Profile = dataportability.ProfilePortable
 	}
 	backupRequest := dataportability.BackupRequest{
-		Scope:       request.Scope,
-		Profile:     request.Profile,
-		CharacterID: request.CharacterID,
-		Purpose:     dataportability.PurposeMigration,
-		Passphrase:  request.Passphrase,
+		Scope:              request.Scope,
+		Profile:            request.Profile,
+		CharacterID:        request.CharacterID,
+		Purpose:            dataportability.PurposeMigration,
+		Passphrase:         request.Passphrase,
+		IncludeModelAssets: request.IncludeModelAssets,
+		IncludeSecrets:     request.IncludeSecrets,
 	}
 	if err := dataportability.ValidateBackupRequest(backupRequest); err != nil {
 		return nil, err
@@ -63,12 +68,13 @@ func (s *service) PreviewDataPortabilityExport(ctx context.Context, request Expo
 		return fmt.Sprint(components[i]["id"]) < fmt.Sprint(components[j]["id"])
 	})
 	return map[string]interface{}{
-		"scope":         request.Scope,
-		"profile":       request.Profile,
-		"characterId":   request.CharacterID,
-		"encrypted":     request.Passphrase != "",
-		"components":    components,
-		"estimatedSize": estimated,
+		"scope":          request.Scope,
+		"profile":        request.Profile,
+		"characterId":    request.CharacterID,
+		"encrypted":      request.Passphrase != "",
+		"includeSecrets": request.IncludeSecrets,
+		"components":     components,
+		"estimatedSize":  estimated,
 	}, nil
 }
 
@@ -80,11 +86,13 @@ func (s *service) ExportDataPortability(ctx context.Context, request ExportReque
 		request.Profile = dataportability.ProfilePortable
 	}
 	backupRequest := dataportability.BackupRequest{
-		Scope:       request.Scope,
-		Profile:     request.Profile,
-		CharacterID: request.CharacterID,
-		Purpose:     dataportability.PurposeMigration,
-		Passphrase:  request.Passphrase,
+		Scope:              request.Scope,
+		Profile:            request.Profile,
+		CharacterID:        request.CharacterID,
+		Purpose:            dataportability.PurposeMigration,
+		Passphrase:         request.Passphrase,
+		IncludeModelAssets: request.IncludeModelAssets,
+		IncludeSecrets:     request.IncludeSecrets,
 	}
 	result, err := s.coordinator.CreateBackup(ctx, backupRequest, filepath.Join(s.dataDir, "app.db"), nil)
 	if err != nil {
@@ -97,11 +105,15 @@ func (s *service) ExportDataPortability(ctx context.Context, request ExportReque
 	fileName := filepath.Base(result.Path)
 	exportPath := filepath.Join(exportDir, fileName)
 	if err := os.Rename(result.Path, exportPath); err != nil {
-		_ = os.Remove(exportPath)
+		if err := os.Remove(exportPath); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		if copyErr := copyDataPortabilityFile(result.Path, exportPath); copyErr != nil {
 			return nil, copyErr
 		}
-		_ = os.Remove(result.Path)
+		if err := os.Remove(result.Path); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	components := make([]map[string]interface{}, 0, len(result.Manifest.Components))
 	for _, component := range result.Manifest.Components {
@@ -146,9 +158,13 @@ func (s *service) InspectDataPortabilityImport(ctx context.Context, uploadPath, 
 	}
 	ticket, err := s.coordinator.StageImport(ctx, archivePath)
 	if decryptedPath != "" {
-		_ = os.Remove(decryptedPath)
+		if err := os.Remove(decryptedPath); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
-	_ = os.Remove(uploadPath)
+	if err := os.Remove(uploadPath); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -194,10 +210,11 @@ func (s *service) CreateDataPortabilityBackup(ctx context.Context, passphrase st
 		return nil, dataportability.ErrBackupUnavailable
 	}
 	result, err := s.coordinator.CreateBackup(ctx, dataportability.BackupRequest{
-		Scope:      dataportability.ScopeAll,
-		Profile:    dataportability.ProfileFull,
-		Purpose:    dataportability.PurposeUser,
-		Passphrase: passphrase,
+		Scope:          dataportability.ScopeAll,
+		Profile:        dataportability.ProfileFull,
+		Purpose:        dataportability.PurposeUser,
+		Passphrase:     passphrase,
+		IncludeSecrets: true,
 	}, filepath.Join(s.dataDir, "app.db"), nil)
 	if err != nil {
 		return nil, err
@@ -237,13 +254,17 @@ func (s *service) PreviewDataPortabilityRestore(ctx context.Context, name, passp
 	manifest, err := s.coordinator.RestorePreview(ctx, archivePath)
 	if err != nil {
 		if decryptedPath != "" {
-			_ = os.Remove(decryptedPath)
+			if err := os.Remove(decryptedPath); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 		return nil, err
 	}
 	ticket, err := s.coordinator.CreateRestoreTicket(ctx, archivePath, manifest.BackupID, manifest)
 	if decryptedPath != "" {
-		_ = os.Remove(decryptedPath)
+		if err := os.Remove(decryptedPath); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	if err != nil {
 		return nil, err

@@ -39,14 +39,20 @@ export function collectClientErrors(): TrackedClientError[] {
 export function clearClientErrors(): void {
   tracked.length = 0;
   if (typeof window !== "undefined") {
-    void window.amitiaDesktop?.clearClientDiagnostics?.().catch(() => undefined);
+    void window.amitiaDesktop?.clearClientDiagnostics?.().catch((error) => {
+  console.error("[original-error]", error);
+  return undefined;
+});
   }
 }
 
 export async function collectAllClientErrors(): Promise<TrackedClientError[]> {
   const rendererErrors = collectClientErrors();
   const desktopErrors = typeof window !== "undefined"
-    ? await window.amitiaDesktop?.getClientDiagnostics?.().catch(() => []) ?? []
+    ? await window.amitiaDesktop?.getClientDiagnostics?.().catch((error) => {
+  console.error("[original-error]", error);
+  return [];
+}) ?? []
     : [];
   const merged = [...desktopErrors, ...rendererErrors];
   const seen = new Set<string>();

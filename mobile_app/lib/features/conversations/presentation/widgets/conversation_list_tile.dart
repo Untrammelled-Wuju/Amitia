@@ -8,6 +8,7 @@ import '../../../../core/models/conversation.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_icons.dart';
 import '../../../../core/widgets/character_avatar.dart';
+import '../../../chat/runtime/conversation_runtime_controller.dart';
 
 String formatConversationTime(String updatedAt) {
   final time = DateTime.tryParse(updatedAt);
@@ -50,6 +51,9 @@ class ConversationListTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final liveActivity = ref
+        .watch(conversationRuntimeRegistryProvider)
+        .activityFor(conversation.id);
     final role = character?.id == conversation.characterId
         ? character
         : ref
@@ -58,21 +62,25 @@ class ConversationListTile extends ConsumerWidget {
     final title = conversation.title.trim().isEmpty
         ? '未命名对话'
         : conversation.title.trim();
-    final preview = conversation.lastMessage.trim().replaceAll(
+    final isGenerating =
+        liveActivity?.isGenerating == true || conversation.isGenerating;
+    final unreadCount = [
+      conversation.unreadCompletedCount,
+      liveActivity?.unreadCompletedCount ?? 0,
+    ].reduce((left, right) => left > right ? left : right);
+    final livePreview = liveActivity?.preview.trim() ?? '';
+    final backendPreview = conversation.lastMessage.trim().replaceAll(
       RegExp(r'\s+'),
       ' ',
     );
-    final summary = preview.isNotEmpty
-        ? preview
-        : conversation.isGenerating
-        ? '正在生成回复…'
-        : conversation.hasUnread
-        ? '有新消息'
-        : conversation.pinnedAt.trim().isNotEmpty
-        ? '已置顶'
-        : conversation.messageCount > 0
-        ? '${conversation.messageCount} 条消息'
-        : '打开查看对话';
+    final summary = livePreview.isNotEmpty
+        ? livePreview
+        : isGenerating && conversation.activityLabel.trim().isNotEmpty
+        ? conversation.activityLabel.trim()
+        : backendPreview.isNotEmpty
+        ? backendPreview
+        : _messageTypePreview(conversation.lastMessageType) ??
+              (isGenerating ? '正在生成回复…' : '打开查看对话');
     final pinned = conversation.pinnedAt.trim().isNotEmpty;
 
     return Material(
@@ -108,19 +116,34 @@ class ConversationListTile extends ConsumerWidget {
                           size: 46,
                           color: context.accentPrimary,
                         ),
-                        if (conversation.hasUnread)
+                        if (unreadCount > 0)
                           Positioned(
                             right: -1,
                             top: -1,
                             child: Container(
-                              width: 10,
-                              height: 10,
+                              constraints: const BoxConstraints(
+                                minWidth: 18,
+                                minHeight: 18,
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                              ),
                               decoration: BoxDecoration(
                                 color: context.error,
-                                shape: BoxShape.circle,
+                                borderRadius: BorderRadius.circular(9),
                                 border: Border.all(
                                   color: context.backgroundPrimary,
                                   width: 2,
+                                ),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                unreadCount > 99 ? '99+' : '$unreadCount',
+                                style: AppTypography.label(context).copyWith(
+                                  color: Colors.white,
+                                  fontSize: unreadCount > 99 ? 8 : 9,
+                                  height: 1,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ),
@@ -155,11 +178,27 @@ class ConversationListTile extends ConsumerWidget {
                                 ),
                               ),
                               const SizedBox(width: 10),
-                              Text(
-                                timeText,
-                                style: AppTypography.label(
-                                  context,
-                                ).copyWith(fontSize: 11.5, height: 1.2),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    timeText,
+                                    style: AppTypography.label(
+                                      context,
+                                    ).copyWith(fontSize: 11.5, height: 1.2),
+                                  ),
+                                  if (isGenerating) ...[
+                                    const SizedBox(height: 3),
+                                    SizedBox(
+                                      width: 11,
+                                      height: 11,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 1.5,
+                                        color: context.accentPrimary,
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               ),
                             ],
                           ),
@@ -179,17 +218,6 @@ class ConversationListTile extends ConsumerWidget {
                                       ),
                                 ),
                               ),
-                              if (conversation.isGenerating) ...[
-                                const SizedBox(width: 8),
-                                SizedBox(
-                                  width: 12,
-                                  height: 12,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 1.5,
-                                    color: context.accentPrimary,
-                                  ),
-                                ),
-                              ],
                             ],
                           ),
                         ],
@@ -212,5 +240,16 @@ class ConversationListTile extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  String? _messageTypePreview(String type) {
+    return switch (type.trim().toLowerCase()) {
+      'image' => '[图片]',
+      'video' => '[视频]',
+      'audio' || 'voice' => '[语音]',
+      'file' => '[文件]',
+      'code' => '[代码]',
+      _ => null,
+    };
   }
 }

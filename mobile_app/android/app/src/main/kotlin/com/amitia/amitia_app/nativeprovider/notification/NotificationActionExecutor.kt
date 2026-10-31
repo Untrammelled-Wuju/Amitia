@@ -26,6 +26,8 @@ internal class NotificationActionExecutor {
             targetAction.actionIntent.send()
             true
         } catch (e: Exception) {
+          e.printStackTrace()
+
             false
         }
     }
@@ -36,6 +38,8 @@ internal class NotificationActionExecutor {
             pendingIntent.send()
             true
         } catch (e: Exception) {
+          e.printStackTrace()
+
             false
         }
     }

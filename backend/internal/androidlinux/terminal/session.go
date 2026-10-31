@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	amitialog "log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -162,7 +163,9 @@ func (s *Session) handleExit() {
 	}
 
 	if s.cmd.ProcessState == nil {
-		_ = s.cmd.Wait()
+		if err := s.cmd.Wait(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 
 	exitCode := 0
@@ -178,7 +181,9 @@ func (s *Session) handleExit() {
 	s.stateMu.Unlock()
 
 	if s.ptmx != nil {
-		_ = s.ptmx.Close()
+		if err := s.ptmx.Close(); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		s.ptmx = nil
 	}
 }

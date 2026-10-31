@@ -545,8 +545,8 @@ func characterSyncMeta(c *Character) map[string]interface{} {
 		"emotion": c.Emotion, "emotion_scale": c.EmotionScale, "silence_duration": c.SilenceDuration,
 		"personality_config": c.PersonalityConfig, "is_default": c.IsDefault,
 		"chat_style_config": c.ChatStyleConfig, "scene_rules": c.SceneRules,
-		"avatar": c.Avatar,
-		"gender_label":          c.GenderLabel, "user_addressing_style": c.UserAddressingStyle,
+		"avatar":       c.Avatar,
+		"gender_label": c.GenderLabel, "user_addressing_style": c.UserAddressingStyle,
 		"base_prompt": c.BasePrompt, "generated_prompt": c.GeneratedPrompt,
 		"personality_sliders": c.PersonalitySliders, "card_data_json": c.CardDataJSON,
 	}

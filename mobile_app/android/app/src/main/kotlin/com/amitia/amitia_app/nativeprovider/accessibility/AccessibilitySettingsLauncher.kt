@@ -17,7 +17,9 @@ internal class AccessibilitySettingsLauncher(private val context: Context) {
         return try {
             context.startActivity(intent)
             true
-        } catch (_: Exception) {
+        } catch (originalError20: Exception) {
+          originalError20.printStackTrace()
+
             false
         }
     }
@@ -33,7 +35,9 @@ internal class AccessibilitySettingsLauncher(private val context: Context) {
         return try {
             context.startActivity(intent)
             true
-        } catch (_: Exception) {
+        } catch (originalError36: Exception) {
+          originalError36.printStackTrace()
+
             false
         }
     }

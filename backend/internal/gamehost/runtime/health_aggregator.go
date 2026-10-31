@@ -62,7 +62,7 @@ func (a *healthAggregator) AggregateRuntimeHealth(topology RuntimeTopologySnapsh
 				RuntimeID:      topology.RuntimeID,
 				Health:         domain.HealthHealthy,
 				AggregatedAt:   now,
-				ServiceHealths:  copyServiceHealths(services),
+				ServiceHealths: copyServiceHealths(services),
 				Reason:         "zero_service_runtime",
 			}
 		}
@@ -81,7 +81,7 @@ func (a *healthAggregator) AggregateRuntimeHealth(topology RuntimeTopologySnapsh
 				RuntimeID:      topology.RuntimeID,
 				Health:         domain.HealthDegraded,
 				AggregatedAt:   now,
-				ServiceHealths:  copyServiceHealths(services),
+				ServiceHealths: copyServiceHealths(services),
 				Reason:         "only_optional_services_impaired",
 			}
 		}
@@ -90,7 +90,7 @@ func (a *healthAggregator) AggregateRuntimeHealth(topology RuntimeTopologySnapsh
 			RuntimeID:      topology.RuntimeID,
 			Health:         domain.HealthHealthy,
 			AggregatedAt:   now,
-			ServiceHealths:  copyServiceHealths(services),
+			ServiceHealths: copyServiceHealths(services),
 			Reason:         "only_optional_services_healthy",
 		}
 	}
@@ -100,7 +100,7 @@ func (a *healthAggregator) AggregateRuntimeHealth(topology RuntimeTopologySnapsh
 			RuntimeID:      topology.RuntimeID,
 			Health:         domain.HealthUnhealthy,
 			AggregatedAt:   now,
-			ServiceHealths:  copyServiceHealths(services),
+			ServiceHealths: copyServiceHealths(services),
 			Reason:         "required_service_unhealthy",
 		}
 	}
@@ -110,7 +110,7 @@ func (a *healthAggregator) AggregateRuntimeHealth(topology RuntimeTopologySnapsh
 			RuntimeID:      topology.RuntimeID,
 			Health:         domain.HealthDegraded,
 			AggregatedAt:   now,
-			ServiceHealths:  copyServiceHealths(services),
+			ServiceHealths: copyServiceHealths(services),
 			Reason:         "required_service_unknown_or_degraded",
 		}
 	}
@@ -120,7 +120,7 @@ func (a *healthAggregator) AggregateRuntimeHealth(topology RuntimeTopologySnapsh
 			RuntimeID:      topology.RuntimeID,
 			Health:         domain.HealthDegraded,
 			AggregatedAt:   now,
-			ServiceHealths:  copyServiceHealths(services),
+			ServiceHealths: copyServiceHealths(services),
 			Reason:         "required_service_degraded",
 		}
 	}
@@ -142,7 +142,7 @@ func (a *healthAggregator) AggregateRuntimeHealth(topology RuntimeTopologySnapsh
 			RuntimeID:      topology.RuntimeID,
 			Health:         domain.HealthDegraded,
 			AggregatedAt:   now,
-			ServiceHealths:  copyServiceHealths(services),
+			ServiceHealths: copyServiceHealths(services),
 			Reason:         "optional_service_impaired",
 		}
 	}
@@ -151,7 +151,7 @@ func (a *healthAggregator) AggregateRuntimeHealth(topology RuntimeTopologySnapsh
 		RuntimeID:      topology.RuntimeID,
 		Health:         domain.HealthHealthy,
 		AggregatedAt:   now,
-		ServiceHealths:  copyServiceHealths(services),
+		ServiceHealths: copyServiceHealths(services),
 		Reason:         "all_services_healthy",
 	}
 }
@@ -208,9 +208,9 @@ func QuarantineImpactOnRuntime(
 type QuarantineImpact string
 
 const (
-	QuarantineImpactRuntimeFailed  QuarantineImpact = "runtime_failed"
+	QuarantineImpactRuntimeFailed   QuarantineImpact = "runtime_failed"
 	QuarantineImpactRuntimeDegraded QuarantineImpact = "runtime_degraded"
-	QuarantineImpactNone           QuarantineImpact = "none"
+	QuarantineImpactNone            QuarantineImpact = "none"
 )
 
 func copyServiceHealths(services []ServiceHealthSnapshot) []ServiceHealthSnapshot {

@@ -5,10 +5,10 @@ package qdranthealth
 import "time"
 
 const (
-	StatusOK             ProbeStatus = "ok"
-	StatusUnreachable    ProbeStatus = "unreachable"
+	StatusOK               ProbeStatus = "ok"
+	StatusUnreachable      ProbeStatus = "unreachable"
 	StatusUnexpectedStatus ProbeStatus = "unexpected_status"
-	StatusProbeError     ProbeStatus = "probe_error"
+	StatusProbeError       ProbeStatus = "probe_error"
 )
 
 type ProbeStatus string

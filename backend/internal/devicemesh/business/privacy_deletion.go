@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	amitialog "log"
 )
 
 type PrivacyDeletionPort interface {
@@ -83,7 +84,9 @@ func (e *Engine) ManagePrivacyDeletion(ctx context.Context, request Request, ope
 		for _, key := range []string{"tombstones", "completed", "pending", "failed", "cleaned"} {
 			raw, _ := json.Marshal(response[key])
 			var number int
-			_ = json.Unmarshal(raw, &number)
+			if err := json.Unmarshal(raw, &number); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			result[key] = result[key].(int) + number
 		}
 	}

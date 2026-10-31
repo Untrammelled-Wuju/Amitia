@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
+	amitialog "log"
 )
 
 type DesktopHostProvider struct {
@@ -62,7 +63,9 @@ func (p *DesktopHostProvider) Execute(ctx context.Context, request capability.De
 
 	resultMap := map[string]any{}
 	if len(result) > 0 {
-		_ = json.Unmarshal(result, &resultMap)
+		if err := json.Unmarshal(result, &resultMap); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	resultMap["status"] = "success"
 

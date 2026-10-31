@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/pkg/gameplugin/protocol"
+	amitialog "log"
 )
 
 const (
@@ -223,7 +224,9 @@ func (c *Client) BinaryUpload(ctx context.Context, input BinaryCreateInput, data
 	committed := false
 	defer func() {
 		if !committed {
-			_ = c.BinaryAbort(context.Background(), created.ID)
+			if err := c.BinaryAbort(context.Background(), created.ID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 		}
 	}()
 

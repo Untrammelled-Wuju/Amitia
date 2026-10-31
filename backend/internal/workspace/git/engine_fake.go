@@ -9,21 +9,21 @@ import (
 )
 
 type fakeRepository struct {
-	path           string
-	branches       []string
-	currentBranch  string
-	head           string
-	detached       bool
-	clean          bool
-	shallow        bool
-	hasSubmodules  bool
-	remotes        map[string]string
-	index          map[string]string
-	worktree       map[string][]byte
-	commits        []GitCommitInfo
-	symlinks       map[string]string
-	hasExtFilter   bool
-	mu             sync.Mutex
+	path          string
+	branches      []string
+	currentBranch string
+	head          string
+	detached      bool
+	clean         bool
+	shallow       bool
+	hasSubmodules bool
+	remotes       map[string]string
+	index         map[string]string
+	worktree      map[string][]byte
+	commits       []GitCommitInfo
+	symlinks      map[string]string
+	hasExtFilter  bool
+	mu            sync.Mutex
 }
 
 type FakeGitEngine struct {

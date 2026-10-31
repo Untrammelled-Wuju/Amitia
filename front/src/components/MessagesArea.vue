@@ -292,16 +292,18 @@ function turnErrorDetail(turn: any): string {
     const parsed = JSON.parse(String(item.resultJson || "{}"));
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return item.content || item.errorCode || props.modelError?.trim() || "任务执行失败，未返回具体原因";
     payload = parsed as Record<string, unknown>;
-  } catch {
-    return String(item.content || item.errorCode || props.modelError?.trim() || "任务执行失败，未返回具体原因");
+  } catch (error) {
+  console.error("[original-error]", error);
+return String(item.content || String(error));
   }
   const toText = (value: unknown): string => {
     if (value === undefined || value === null) return "";
     if (typeof value === "string") return value.trim();
     try {
       return JSON.stringify(value);
-    } catch {
-      return String(value).trim();
+    } catch (error) {
+  console.error("[original-error]", error);
+return String(value).trim();
     }
   };
   const internalMessage = toText(payload.internalMessage);
@@ -516,8 +518,9 @@ async function loadDurableConversationEventWindow(id: string) {
       if (items.length < pageSize) break;
     }
     durableEvents.value = durableConversationEvents(records, id);
-  } catch {
-    if (generation !== durableRequestGeneration || id !== conversationId.value) return;
+  } catch (error) {
+  console.error("[original-error]", error);
+if (generation !== durableRequestGeneration || id !== conversationId.value) return;
     durableEvents.value = [];
   }
   rebuildConversationEventLog();
@@ -576,8 +579,9 @@ async function loadClientRuntimeSession(id: string) {
         expectedScopeGeneration: scopeGeneration,
       });
     }
-  } catch {
-  }
+  } catch (error) {
+  console.error("[original-error]", error);
+}
 }
 
 watch(() => [conversationId.value, historyMessages.value, projectionContributions.value] as const, rebuildConversationEventLog, { deep: true });
@@ -586,7 +590,10 @@ watch(conversationId, (id) => {
   void Promise.allSettled([
     loadDurableConversationEventWindow(id),
     loadClientRuntimeSession(id),
-  ]).then(() => {
+  ]).then((results) => {
+    for (const result of results) {
+      if (result.status === "rejected") console.error("[original-error]", result.reason);
+    }
     if (id === conversationId.value) emit("contentReady", id);
   });
 }, { immediate: true });

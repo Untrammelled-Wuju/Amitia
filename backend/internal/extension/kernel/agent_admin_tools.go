@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
+	amitialog "log"
 )
 
 // AgentAdminToolController bridges kernel-owned model tools to application
@@ -170,7 +171,9 @@ func (s *agentAdminToolService) dispatchWorkflow(ctx context.Context, name strin
 			return nil, err
 		}
 		if err := SyncUserWorkflowAgentTool(ctx, s.toolRegistry, normalized); err != nil {
-			_ = s.workflowRegistry.UnregisterContext(ctx, normalized.ID)
+			if err := s.workflowRegistry.UnregisterContext(ctx, normalized.ID); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
 			return nil, err
 		}
 		return marshalToolResult(normalized)

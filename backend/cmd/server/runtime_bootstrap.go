@@ -21,6 +21,7 @@ import (
 	surrealdbDB "github.com/u-ai/backend/pkg/database/surrealdb"
 	"github.com/u-ai/backend/pkg/platform"
 	"github.com/u-ai/backend/pkg/util"
+	amitialog "log"
 )
 
 type runtimeBootstrap struct {
@@ -282,7 +283,9 @@ func (a *vectorStoreProviderAdapter) Ready(ctx context.Context) error {
 }
 
 func (a *vectorStoreProviderAdapter) Stop(ctx context.Context) error {
-	_ = a.host.Processes().Stop(ctx, runtimehost.ProcessIDQdrant)
+	if err := a.host.Processes().Stop(ctx, runtimehost.ProcessIDQdrant); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 	return nil
 }
 
@@ -332,7 +335,9 @@ func (a *graphStoreProviderAdapter) Start(ctx context.Context) (err error) {
 		return fmt.Errorf("start surrealdb: %w", err)
 	}
 	if err := supervisor.WaitReady(ctx, spec.ID); err != nil {
-		_ = supervisor.Stop(ctx, spec.ID)
+		if err := supervisor.Stop(ctx, spec.ID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return fmt.Errorf("wait for surrealdb ready: %w", err)
 	}
 
@@ -348,7 +353,9 @@ func (a *graphStoreProviderAdapter) Start(ctx context.Context) (err error) {
 	if err := a.reconnectGraphService(); err != nil {
 		a.unsubscribe()
 		a.unsubscribe = nil
-		_ = supervisor.Stop(ctx, spec.ID)
+		if err := supervisor.Stop(ctx, spec.ID); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 		return fmt.Errorf("initialize graph client after surrealdb readiness: %w", err)
 	}
 	return nil
