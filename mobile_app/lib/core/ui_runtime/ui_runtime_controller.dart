@@ -29,10 +29,7 @@ class UIRuntimeController
        _onLastKnownGood = onLastKnownGood,
        super(const AsyncValue.data(null)) {
     _invalidationSubscription = UIRuntimeInvalidationBus.changes.listen((_) {
-      _invalidationDebounce?.cancel();
-      _invalidationDebounce = Timer(const Duration(milliseconds: 300), () {
-        if (!_loading) unawaited(ensureLoaded(force: true));
-      });
+      _scheduleInvalidationReload(++_invalidationRevision);
     });
     // Global UI Host SSE is the primary cross-device invalidation path. Keep a
     // low-frequency reconciliation only as a recovery net after stream loss.
@@ -53,6 +50,21 @@ class UIRuntimeController
   late final StreamSubscription<void> _invalidationSubscription;
   Timer? _invalidationDebounce;
   bool _loading = false;
+  bool _disposed = false;
+  int _invalidationRevision = 0;
+  int _appliedInvalidationRevision = 0;
+
+  void _scheduleInvalidationReload(int revision) {
+    _invalidationDebounce?.cancel();
+    _invalidationDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (_disposed || _appliedInvalidationRevision >= revision) return;
+      if (_loading) {
+        _scheduleInvalidationReload(revision);
+        return;
+      }
+      unawaited(ensureLoaded(force: true));
+    });
+  }
 
   Future<String> get deviceId async {
     final meshId = (await _meshDeviceId())?.trim() ?? '';
@@ -63,6 +75,7 @@ class UIRuntimeController
   Future<void> ensureLoaded({bool force = false}) async {
     if (_loading) return;
     if (!force && state.valueOrNull != null) return;
+    final observedInvalidationRevision = _invalidationRevision;
     _loading = true;
     if (state.valueOrNull == null) state = const AsyncValue.loading();
     final platform = currentUIPlatform();
@@ -75,6 +88,9 @@ class UIRuntimeController
       );
       state = AsyncValue.data(UIProviderSnapshot.fromJson(json));
       _onLastKnownGood(false);
+      if (observedInvalidationRevision > _appliedInvalidationRevision) {
+        _appliedInvalidationRevision = observedInvalidationRevision;
+      }
       await _cache.save(cacheNamespace, platform, currentDeviceId, json);
     } catch (error, stack) {
       final cached = await _cache.load(
@@ -184,6 +200,7 @@ class UIRuntimeController
 
   @override
   void dispose() {
+    _disposed = true;
     _invalidationDebounce?.cancel();
     _invalidationSubscription.cancel();
     _syncTimer.cancel();

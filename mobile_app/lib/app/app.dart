@@ -84,6 +84,7 @@ class _AmitiaAppRootState extends ConsumerState<AmitiaAppRoot> {
     if (!localBootstrapBlocked) {
       await lifecycle.reconcile(config);
     }
+    await ref.read(uiRuntimeProvider.notifier).ensureLoaded();
 
     if (mounted) {
       setState(() => _bootstrapInitialized = true);
