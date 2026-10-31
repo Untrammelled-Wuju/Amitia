@@ -162,7 +162,10 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
     try {
       await ref
           .read(chatServiceProvider)
-          .restoreArchivedConversation(conversation.id);
+          .restoreArchivedConversation(
+            conversation.id,
+            characterId: conversation.characterId,
+          );
       if (!mounted) return;
       ref.read(conversationCollectionRevisionProvider.notifier).state++;
       ref.invalidate(conversationListProvider);

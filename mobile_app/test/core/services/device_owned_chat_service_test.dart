@@ -1410,6 +1410,41 @@ void main() {
     expect(api.editRequest, isNull);
   });
 
+  test('归档与恢复会话携带对应角色', () async {
+    final api = _OwnedApi();
+    api.resource = {
+      'kind': 'conversation',
+      'id': 'chat',
+      'ownerId': 'device-a',
+      'roleId': 'role-a',
+      'revision': 7,
+      'deleted': false,
+      'body': {'id': 'chat', 'title': '对话'},
+    };
+    api.editAck = {
+      'ownerId': 'device-a',
+      'versions': {'conversation/chat': 8},
+    };
+    final owned = DeviceOwnedChatService(
+      api,
+      providerKey: () => 'https://provider',
+    );
+    final service = ChatService(api, owned: owned);
+    await service.archiveConversation(
+      'meshconv1:device-a:chat',
+      characterId: 'role-a',
+    );
+    expect(api.editRequest?['characterId'], 'role-a');
+    expect(api.editRequest?['changes'], {'archived': true});
+
+    await service.restoreArchivedConversation(
+      'meshconv1:device-a:chat',
+      characterId: 'role-a',
+    );
+    expect(api.editRequest?['characterId'], 'role-a');
+    expect(api.editRequest?['changes'], {'archived': false});
+  });
+
   test('Core 与历史设备分别分页，已结束的数据源不会重新开启', () async {
     final api = _OwnedApi();
     final service = DeviceOwnedChatService(

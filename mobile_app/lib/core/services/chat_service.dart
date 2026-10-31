@@ -599,9 +599,14 @@ class ChatService {
     return;
   }
 
-  Future<void> archiveConversation(String id) async {
+  Future<void> archiveConversation(String id, {String? characterId}) async {
     await _requireOwned();
-    await owned.edit('conversation', id, changes: {'archived': true});
+    await owned.edit(
+      'conversation',
+      id,
+      changes: {'archived': true},
+      characterId: characterId,
+    );
     return;
   }
 

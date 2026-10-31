@@ -138,7 +138,7 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
     for (final row in _selected.values.toList()) {
       try {
         switch (action) {
-          case 'archive': await service.archiveConversation(row.id);
+          case 'archive': await service.archiveConversation(row.id, characterId: row.characterId);
           case 'read': await service.markConversationRead(row.id, lastTerminalTurnSequence: row.lastTerminalTurnSequence, characterId: row.characterId);
           case 'pin': await service.setConversationPinned(row.id, true);
           case 'move': await service.moveConversationToProject(row.id, target);
@@ -1000,7 +1000,12 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
 
   Future<void> _archiveConversation(ConversationDto conversation) async {
     await _runConversationAction(
-      () => ref.read(chatServiceProvider).archiveConversation(conversation.id),
+      () => ref
+          .read(chatServiceProvider)
+          .archiveConversation(
+            conversation.id,
+            characterId: conversation.characterId,
+          ),
       success: '对话已归档',
     );
   }
