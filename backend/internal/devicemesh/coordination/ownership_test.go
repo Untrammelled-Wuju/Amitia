@@ -296,6 +296,28 @@ func TestPendingSaveRequiresMatchingAcknowledgementAndIsPurged(t *testing.T) {
 	}
 }
 
+func TestCommittedAcknowledgementIsReadByExactRequestWithoutRequeueing(t *testing.T) {
+	db, svc := setup(t)
+	commit := ownedCommit("committed-request")
+	ack, err := coordination.NewOwnershipStore(db, "a").Apply(t.Context(), commit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	committed, err := svc.CommittedAcknowledgement(t.Context(), "a", commit.Scope.RequestID)
+	if err != nil || committed == nil || committed.RequestID != ack.RequestID || committed.OwnerID != ack.OwnerID {
+		t.Fatalf("committed acknowledgement=%+v error=%v", committed, err)
+	}
+	if missing, err := svc.CommittedAcknowledgement(t.Context(), "a", "other-request"); err != nil || missing != nil {
+		t.Fatalf("foreign request acknowledgement=%+v error=%v", missing, err)
+	}
+	if err := svc.Enqueue(t.Context(), commit); err != nil {
+		t.Fatal(err)
+	}
+	if pending, err := svc.PendingRequest(t.Context(), "a", commit.Scope.RequestID); err != nil || pending != nil {
+		t.Fatalf("committed request requeued: %+v %v", pending, err)
+	}
+}
+
 func TestResourceCannotBeTakenOverByAnotherRole(t *testing.T) {
 	db, _ := setup(t)
 	store := coordination.NewOwnershipStore(db, "a")

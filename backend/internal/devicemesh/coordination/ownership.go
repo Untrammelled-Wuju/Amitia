@@ -706,6 +706,31 @@ func (s *Service) PendingRequest(ctx context.Context, owner, request string) (*P
 	return &pending, nil
 }
 
+func (s *Service) CommittedAcknowledgement(ctx context.Context, owner, request string) (*Acknowledgement, error) {
+	if owner == "" || request == "" {
+		return nil, ErrWrongOwner
+	}
+	var encoded []byte
+	err := s.db.QueryRowContext(ctx, `SELECT ack FROM kernel_device_owned_inbox WHERE owner_id=? AND request_id=?`, owner, request).Scan(&encoded)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if len(encoded) == 0 {
+		return nil, nil
+	}
+	var ack Acknowledgement
+	if err := json.Unmarshal(encoded, &ack); err != nil {
+		return nil, err
+	}
+	if ack.RequestID != request || ack.OwnerID != owner {
+		return nil, ErrRequestConflict
+	}
+	return &ack, nil
+}
+
 func (s *Service) Enqueue(ctx context.Context, commit Commit) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -744,6 +769,19 @@ func (s *Service) Enqueue(ctx context.Context, commit Commit) error {
 	}
 	if !errors.Is(rejectedErr, sql.ErrNoRows) {
 		return rejectedErr
+	}
+	var committedHash string
+	var committedAck []byte
+	committedErr := tx.QueryRowContext(ctx, `SELECT payload_hash,ack FROM kernel_device_owned_inbox WHERE owner_id=? AND request_id=?`, commit.Scope.ResourceOwnerID, commit.Scope.RequestID).Scan(&committedHash, &committedAck)
+	if committedErr == nil {
+		if committedHash != payloadHash(payload) {
+			return ErrRequestConflict
+		}
+		if len(committedAck) != 0 {
+			return nil
+		}
+	} else if !errors.Is(committedErr, sql.ErrNoRows) {
+		return committedErr
 	}
 	var previous string
 	err = tx.QueryRowContext(ctx, `SELECT payload_hash FROM kernel_device_owned_outbox WHERE owner_id=? AND request_id=?`, commit.Scope.ResourceOwnerID, commit.Scope.RequestID).Scan(&previous)

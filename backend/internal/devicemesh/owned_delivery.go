@@ -19,23 +19,40 @@ func (rt *Runtime) CommitDeviceData(ctx context.Context, commit coordination.Com
 	if err := rt.Coordination.Enqueue(ctx, commit); err != nil {
 		return coordination.Acknowledgement{}, err
 	}
-	pending, err := rt.Coordination.Pending(ctx, commit.Scope.ResourceOwnerID)
-	if err != nil {
-		return coordination.Acknowledgement{}, err
-	}
-	for _, item := range pending {
-		if item.Commit.Scope.RequestID == commit.Scope.RequestID {
-			ack, deliveryErr := rt.deliverDeviceData(ctx, item)
+	wait := time.NewTimer(2 * time.Second)
+	defer wait.Stop()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		pending, err := rt.Coordination.PendingRequest(ctx, commit.Scope.ResourceOwnerID, commit.Scope.RequestID)
+		if err != nil {
+			return coordination.Acknowledgement{}, err
+		}
+		if pending != nil {
+			ack, deliveryErr := rt.deliverDeviceData(ctx, *pending)
 			if errors.Is(deliveryErr, coordination.ErrResourceVersion) || errors.Is(deliveryErr, coordination.ErrRequestConflict) {
-				if rejected := rt.Coordination.RejectPending(ctx, item, deliveryErr); rejected != nil {
+				if rejected := rt.Coordination.RejectPending(ctx, *pending, deliveryErr); rejected != nil {
 					return ack, errors.Join(deliveryErr, rejected)
 				}
 				return ack, errors.Join(deliveryErr, coordination.ErrDeliveryRejected)
 			}
 			return ack, deliveryErr
 		}
+		ack, err := rt.Coordination.CommittedAcknowledgement(ctx, commit.Scope.ResourceOwnerID, commit.Scope.RequestID)
+		if err != nil {
+			return coordination.Acknowledgement{}, err
+		}
+		if ack != nil {
+			return *ack, nil
+		}
+		select {
+		case <-ctx.Done():
+			return coordination.Acknowledgement{}, ctx.Err()
+		case <-wait.C:
+			return coordination.Acknowledgement{}, errors.New("设备数据正在等待投递")
+		case <-ticker.C:
+		}
 	}
-	return coordination.Acknowledgement{}, errors.New("设备数据正在等待投递")
 }
 
 func (rt *Runtime) deliverDeviceData(ctx context.Context, pending coordination.PendingCommit) (coordination.Acknowledgement, error) {
