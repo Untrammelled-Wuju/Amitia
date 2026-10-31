@@ -368,6 +368,21 @@ final conversationSidebarProvider =
 final activeConversationIdProvider = StateProvider<String>((ref) => '');
 class ConversationBackHandler {
   bool Function()? onBack;
+  DateTime? _lastExitBackAt;
+
+  bool shouldExit(DateTime now, Duration window) {
+    final last = _lastExitBackAt;
+    if (last != null && now.difference(last) < window) {
+      _lastExitBackAt = null;
+      return true;
+    }
+    _lastExitBackAt = now;
+    return false;
+  }
+
+  void resetExitWindow() {
+    _lastExitBackAt = null;
+  }
 }
 
 final conversationBackHandlerProvider = Provider<ConversationBackHandler>(

@@ -6,6 +6,7 @@ import 'package:amitia_app/core/widgets/amitia_popup_menu.dart';
 import 'package:amitia_app/core/widgets/main_tab_scaffold.dart';
 import 'package:amitia_app/features/conversations/presentation/pages/conversation_list_page.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -13,6 +14,20 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   testWidgets('主导航中返回优先退出多选', (tester) async {
+    var exitCalls = 0;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'SystemNavigator.pop') exitCalls++;
+        return null;
+      },
+    );
+    addTearDown(() {
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      );
+    });
     SharedPreferences.setMockInitialValues({});
     final router = GoRouter(initialLocation: '/conversations', routes: [
       StatefulShellRoute.indexedStack(
@@ -36,6 +51,16 @@ void main() {
     expect(find.text('选择对话'), findsNothing);
     expect(find.text('消息'), findsWidgets);
     expect(find.text('再按一次退出应用'), findsNothing);
+    expect(exitCalls, 0);
+
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    expect(find.text('再按一次退出应用'), findsOneWidget);
+    expect(exitCalls, 0);
+
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    expect(exitCalls, 1);
   });
 
   testWidgets('长按菜单跟随不同消息位置', (tester) async {

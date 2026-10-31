@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../app/app_routes.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_typography.dart';
 import '../services/providers.dart';
@@ -18,8 +19,6 @@ class MainTabScaffold extends ConsumerStatefulWidget {
 }
 
 class _MainTabScaffoldState extends ConsumerState<MainTabScaffold> {
-  DateTime? _lastBackPress;
-
   static const _destinations = <_MainTabDestination>[
     _MainTabDestination(label: '消息', icon: AmitiaIconGlyph.messages),
     _MainTabDestination(label: '任务', icon: AmitiaIconGlyph.tasks),
@@ -35,40 +34,53 @@ class _MainTabScaffoldState extends ConsumerState<MainTabScaffold> {
     );
   }
 
+  Future<bool> _handleBackButton() async {
+    final router = GoRouter.of(context);
+    final location = router.routerDelegate.currentConfiguration.fullPath;
+    final path = Uri.tryParse(location)?.path ?? location;
+    final mainTabPaths = <String>{
+      AppRoutes.conversations,
+      AppRoutes.tasks,
+      AppRoutes.memoryHub,
+      AppRoutes.extensions,
+      AppRoutes.me,
+    };
+    if (!mainTabPaths.contains(path) || router.canPop()) return false;
+
+    final backHandler = ref.read(conversationBackHandlerProvider);
+    if (widget.navigationShell.currentIndex == 0 &&
+        backHandler.onBack?.call() == true) {
+      backHandler.resetExitWindow();
+      return true;
+    }
+    if (widget.navigationShell.currentIndex != 0) {
+      backHandler.resetExitWindow();
+      _switchToTab(0);
+      return true;
+    }
+    if (backHandler.shouldExit(
+      DateTime.now(),
+      const Duration(seconds: 2),
+    )) {
+      await SystemNavigator.pop();
+      return true;
+    }
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text('再按一次退出应用'),
+          duration: Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    return true;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, result) {
-        if (didPop) return;
-        if (widget.navigationShell.currentIndex == 0 &&
-            ref.read(conversationBackHandlerProvider).onBack?.call() == true) {
-          _lastBackPress = null;
-          return;
-        }
-        if (widget.navigationShell.currentIndex != 0) {
-          _lastBackPress = null;
-          _switchToTab(0);
-          return;
-        }
-        final now = DateTime.now();
-        if (_lastBackPress != null &&
-            now.difference(_lastBackPress!) < const Duration(seconds: 2)) {
-          _lastBackPress = null;
-          SystemNavigator.pop();
-          return;
-        }
-        _lastBackPress = now;
-        ScaffoldMessenger.of(context)
-          ..clearSnackBars()
-          ..showSnackBar(
-            const SnackBar(
-              content: Text('再按一次退出应用'),
-              duration: Duration(seconds: 2),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-      },
+    return BackButtonListener(
+      onBackButtonPressed: _handleBackButton,
       child: Scaffold(
         body: widget.navigationShell,
         bottomNavigationBar: DecoratedBox(
