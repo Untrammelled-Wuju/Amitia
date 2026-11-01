@@ -161,7 +161,7 @@
         <el-descriptions title="规划结果" :column="1" border>
           <el-descriptions-item label="迁移路径">
             <div class="path-tags">
-              <el-tag v-for="(p, i) in planResult.path" :key="i" size="small" class="path-tag">{{ p }}</el-tag>
+              <el-tag v-for="p in planResult.path.steps" :key="p.step_id" size="small" class="path-tag">{{ p.migration_id }}: {{ p.from_version }} → {{ p.to_version }}</el-tag>
             </div>
           </el-descriptions-item>
           <el-descriptions-item label="风险等级">
@@ -176,7 +176,7 @@
           <el-descriptions-item label="需要用户确认">{{ planResult.requires_user_confirm ? '是' : '否' }}</el-descriptions-item>
         </el-descriptions>
         <div class="dialog-footer">
-          <el-button type="danger" @click="doExecuteMigration">执行迁移</el-button>
+          <el-button type="primary" @click="router.push('/extensions/packages')">前往扩展包更新并确认迁移</el-button>
         </div>
       </div>
     </el-dialog>
@@ -274,8 +274,7 @@
         </el-descriptions>
 
         <div class="detail-actions">
-          <el-button type="danger" @click="doExecuteRollback">执行回滚</el-button>
-          <el-button type="warning" @click="doRecoverRollback">恢复回滚</el-button>
+          <el-button type="primary" @click="router.push('/extensions/packages')">前往扩展包版本回滚</el-button>
           <el-button @click="loadJournal(rollbackDetail.operation_id)">查看日志</el-button>
           <el-button size="small" @click="loadRollbackSteps(rollbackDetail.rollback_id)">刷新步骤</el-button>
         </div>
@@ -331,7 +330,7 @@
         <el-table-column prop="detail" label="详情" min-width="220" show-overflow-tooltip />
         <el-table-column label="操作" width="100" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" type="primary" @click="doExecuteRecovery(row)">执行</el-button>
+            <span>历史记录需人工核验</span>
           </template>
         </el-table-column>
       </el-table>
@@ -342,12 +341,12 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
+import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Refresh, Search } from "@element-plus/icons-vue";
 import {
   listMigrations,
   planMigration,
-  executeMigration,
   listCanaryStates,
   createCanaryState,
   advanceCanary,
@@ -357,10 +356,7 @@ import {
   commitCanary,
   listRollbacks,
   listRollbackSteps,
-  executeRollback,
-  recoverRollback,
   scanRecovery,
-  executeRecovery,
   getJournalEntries,
 } from "./migration-api";
 import type {
@@ -376,6 +372,7 @@ import type {
 } from "./migration-types";
 
 const loading = ref(false);
+const router = useRouter();
 const subLoading = ref(false);
 const activeTab = ref("migration");
 
@@ -513,29 +510,6 @@ async function doPlanMigration() {
     planResult.value = await planMigration(input);
   } catch (e: any) {
     ElMessage.error("规划迁移失败: " + (e?.message || e));
-  } finally {
-    subLoading.value = false;
-  }
-}
-
-async function doExecuteMigration() {
-  if (!planForm.value.extension_id || !planForm.value.from_version || !planForm.value.to_version) {
-    ElMessage.warning("请先完成迁移规划");
-    return;
-  }
-  subLoading.value = true;
-  try {
-    const input: MigrationPlanInput = {
-      extension_id: planForm.value.extension_id,
-      from_version: planForm.value.from_version,
-      to_version: planForm.value.to_version,
-    };
-    const op = await executeMigration(input);
-    ElMessage.success(`迁移已启动: ${op.operation_id} (状态: ${op.status})`);
-    planVisible.value = false;
-    await loadMigrations();
-  } catch (e: any) {
-    ElMessage.error("执行迁移失败: " + (e?.message || e));
   } finally {
     subLoading.value = false;
   }
@@ -685,39 +659,6 @@ async function loadRollbackSteps(rollbackId: string) {
   }
 }
 
-async function doExecuteRollback() {
-  if (!rollbackDetail.value) return;
-  try {
-    await ElMessageBox.confirm("确定执行回滚吗？此操作可能影响数据。", "执行确认", { type: "warning" });
-    subLoading.value = true;
-    rollbackDetail.value = await executeRollback(rollbackDetail.value.rollback_id);
-    ElMessage.success("回滚已执行");
-    await loadRollbackSteps(rollbackDetail.value.rollback_id);
-    await loadRollbacks();
-  } catch (e: any) {
-    if (e !== "cancel" && e?.message !== "cancel") {
-      ElMessage.error("执行回滚失败: " + (e?.message || e));
-    }
-  } finally {
-    subLoading.value = false;
-  }
-}
-
-async function doRecoverRollback() {
-  if (!rollbackDetail.value) return;
-  subLoading.value = true;
-  try {
-    rollbackDetail.value = await recoverRollback(rollbackDetail.value.rollback_id);
-    ElMessage.success("回滚已恢复");
-    await loadRollbackSteps(rollbackDetail.value.rollback_id);
-    await loadRollbacks();
-  } catch (e: any) {
-    ElMessage.error("恢复回滚失败: " + (e?.message || e));
-  } finally {
-    subLoading.value = false;
-  }
-}
-
 async function doScanRecovery() {
   subLoading.value = true;
   try {
@@ -726,20 +667,6 @@ async function doScanRecovery() {
     recoveryVisible.value = true;
   } catch (e: any) {
     ElMessage.error("扫描恢复失败: " + (e?.message || e));
-  } finally {
-    subLoading.value = false;
-  }
-}
-
-async function doExecuteRecovery(action: RecoveryAction) {
-  subLoading.value = true;
-  try {
-    const result = await executeRecovery(action);
-    ElMessage.success(`恢复已执行: ${result.operation_id} (状态: ${result.status})`);
-    const data = await scanRecovery();
-    recoveryActions.value = data.items || [];
-  } catch (e: any) {
-    ElMessage.error("执行恢复失败: " + (e?.message || e));
   } finally {
     subLoading.value = false;
   }

@@ -221,6 +221,15 @@ export interface PackageImportPreview {
   currentVersion?: string;
   rollbackVersion?: string;
   upgradeDiff?: Record<string, unknown>;
+  migrationPreview?: {
+    fromVersion: string;
+    toVersion: string;
+    forwardPlan: Array<{ migrationId: string; runtimeType?: string; reversibility: string }>;
+    userDataSnapshotRequired: boolean;
+    manualRequired: boolean;
+    manualReasons: string[];
+  };
+  migrationPlanHash?: string;
   expiresAt: string;
 }
 export interface PackageDryRunReport {

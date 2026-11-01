@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
@@ -9,7 +10,6 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
-import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 
@@ -97,7 +97,7 @@ class _MigrationsPageState extends ConsumerState<MigrationsPage> with SingleTick
         actions: [
           AmitiaIconButton(icon: Icons.refresh, onPressed: _load, tooltip: '刷新'),
           AmitiaIconButton(icon: Icons.article_outlined, onPressed: _showOperationJournal, tooltip: '查询迁移操作与 Journal'),
-          AmitiaIconButton(icon: Icons.playlist_add, onPressed: _showMigrationDialog, tooltip: '执行迁移'),
+          AmitiaIconButton(icon: Icons.system_update_alt, onPressed: () => context.push(AppRoutes.extensionsPackages), tooltip: '通过扩展包更新执行迁移'),
         ],
         bottom: TabBar(
           controller: _tabController,
@@ -158,13 +158,13 @@ class _MigrationsPageState extends ConsumerState<MigrationsPage> with SingleTick
           label: '预览计划',
           isSecondary: true,
           icon: Icons.route_outlined,
-          onPressed: () => _showMigrationDialog(seed: item, planOnly: true),
+          onPressed: () => _showMigrationDialog(seed: item),
         ),
         AmitiaButton(
-          label: '按此定义迁移',
+          label: '前往扩展包更新',
           isSecondary: true,
           icon: Icons.play_arrow,
-          onPressed: () => _showMigrationDialog(seed: item),
+          onPressed: () => context.push(AppRoutes.extensionsPackages),
         ),
       ],
     );
@@ -189,16 +189,10 @@ class _MigrationsPageState extends ConsumerState<MigrationsPage> with SingleTick
           onPressed: id.isEmpty ? null : () => _showRollbackSteps(id),
         ),
         AmitiaButton(
-          label: '执行回滚',
-          isDestructive: true,
-          icon: Icons.undo,
-          onPressed: id.isEmpty ? null : () => _post('/api/extensions/rollbacks/$id/execute', success: '回滚执行完成'),
-        ),
-        AmitiaButton(
-          label: '恢复回滚',
+          label: '前往扩展包版本回滚',
           isSecondary: true,
-          icon: Icons.restore,
-          onPressed: id.isEmpty ? null : () => _post('/api/extensions/rollbacks/$id/recover', success: '回滚恢复完成'),
+          icon: Icons.undo,
+          onPressed: () => context.push(AppRoutes.extensionsPackages),
         ),
       ],
     );
@@ -215,19 +209,7 @@ class _MigrationsPageState extends ConsumerState<MigrationsPage> with SingleTick
       subtitle: detail,
       chips: [if (strategy.isNotEmpty) strategy],
       raw: item,
-      actions: [
-        AmitiaButton(
-          label: '执行恢复',
-          icon: Icons.play_arrow,
-          onPressed: operationId.isEmpty || strategy.isEmpty
-              ? null
-              : () => _post(
-                    '/api/extensions/recovery/execute',
-                    data: {'operationId': operationId, 'strategy': strategy, 'detail': detail},
-                    success: '恢复操作已执行',
-                  ),
-        ),
-      ],
+      actions: [const Text('历史记录需人工核验')],
     );
   }
 
@@ -543,22 +525,6 @@ class _MigrationsPageState extends ConsumerState<MigrationsPage> with SingleTick
     );
   }
 
-  Future<void> _post(String path, {Object? data, required String success}) async {
-    try {
-      await ref.read(backendServiceProvider).post<Map<String, dynamic>>(
-        path,
-        data: data ?? const <String, dynamic>{},
-        fromJson: (value) => Map<String, dynamic>.from(value as Map),
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(success)));
-      await _load();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
-    }
-  }
-
   Future<void> _showRollbackSteps(String rollbackId) async {
     try {
       final data = await ref.read(backendServiceProvider).get<Map<String, dynamic>>(
@@ -602,7 +568,7 @@ class _MigrationsPageState extends ConsumerState<MigrationsPage> with SingleTick
     }
   }
 
-  Future<void> _showMigrationDialog({Map<String, dynamic>? seed, bool planOnly = false}) async {
+  Future<void> _showMigrationDialog({Map<String, dynamic>? seed}) async {
     final extensionController = TextEditingController(text: (seed?['extension_id'] ?? '').toString());
     final fromController = TextEditingController(text: (seed?['from_version_range'] ?? '').toString());
     final toController = TextEditingController(text: (seed?['to_version'] ?? '').toString());
@@ -611,7 +577,7 @@ class _MigrationsPageState extends ConsumerState<MigrationsPage> with SingleTick
     final result = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(planOnly ? '预览迁移计划' : '执行迁移'),
+        title: const Text('预览迁移计划'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -626,7 +592,7 @@ class _MigrationsPageState extends ConsumerState<MigrationsPage> with SingleTick
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(planOnly ? '生成计划' : '执行')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('生成计划')),
         ],
       ),
     );
@@ -646,20 +612,16 @@ class _MigrationsPageState extends ConsumerState<MigrationsPage> with SingleTick
       'fromDefinitionHash': fromHashController.text.trim(),
       'toDefinitionHash': toHashController.text.trim(),
     };
-    if (planOnly) {
-      try {
-        final result = await ref.read(backendServiceProvider).post<Map<String, dynamic>>(
-          '/api/extensions/migrations/plan',
-          data: payload,
-          fromJson: (value) => Map<String, dynamic>.from(value as Map),
-        );
-        if (result != null && mounted) _showJson('迁移计划', result);
-      } catch (e) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('生成计划失败：$e')));
-      }
-      return;
+    try {
+      final result = await ref.read(backendServiceProvider).post<Map<String, dynamic>>(
+        '/api/extensions/migrations/plan',
+        data: payload,
+        fromJson: (value) => Map<String, dynamic>.from(value as Map),
+      );
+      if (result != null && mounted) _showJson('迁移计划', result);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('生成计划失败：$e')));
     }
-    await _post('/api/extensions/migrations/execute', data: payload, success: '迁移操作已创建');
   }
 
   void _showJson(String title, Map<String, dynamic> data) {

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -919,8 +921,8 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
       await _waitForPackageOperation(operationId);
       await _loadPackages();
       _toast('扩展已更新到 v${preview['version'] ?? version}');
-    } catch (e) {
-      _toast('下载或更新失败: ${safeErrorMessage(e)}', error: true);
+    } catch (e, stack) {
+      await _showPackageError('下载或更新失败', e, stack);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -935,7 +937,7 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
       final status = (operation['status'] ?? '').toString();
       if (status == 'completed') return operation;
       if (status == 'failed' || status == 'requires_recovery') {
-        throw StateError((operation['errorCode'] ?? '扩展包操作失败').toString());
+        throw StateError('扩展包操作失败: ${jsonEncode(operation)}');
       }
       await Future<void>.delayed(const Duration(milliseconds: 500));
     }
@@ -1070,15 +1072,27 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
       final operationId = operation is Map
           ? (operation['operationId'] ?? '').toString()
           : '';
+      if (operationId.isEmpty) throw StateError('后端未返回扩展包操作 ID');
+      await _waitForPackageOperation(operationId);
       UIRuntimeInvalidationBus.notifyChanged();
       await _loadPackages();
-      _toast(operationId.isEmpty ? '扩展包操作已提交' : '扩展包操作已提交 · $operationId');
-    } catch (e) {
-      _toast('安装失败: ${safeErrorMessage(e)}', error: true);
+      _toast(isUpdate ? '扩展包已更新' : '扩展包已安装');
+    } catch (e, stack) {
+      await _showPackageError('安装或更新失败', e, stack);
     } finally {
       dio?.close(force: true);
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _showPackageError(String title, Object error, StackTrace stack) async {
+    if (!mounted) return;
+    final response = error is DioException ? error.response?.data : null;
+    await showDialog<void>(context: context, builder: (context) => AlertDialog(
+      title: Text(title),
+      content: SingleChildScrollView(child: SelectableText('$error\n${response ?? ''}\n$stack')),
+      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('关闭'))],
+    ));
   }
 
   Map<String, bool> _buildInstallConfirmations(Map<String, dynamic> preview) {
@@ -1314,6 +1328,12 @@ class _PackagePreviewSheet extends StatelessWidget {
             ),
             if (currentVersion.isNotEmpty)
               _DetailRow(label: '当前版本', value: currentVersion),
+            if (preview['migrationPreview'] is Map) ...[
+              const SizedBox(height: 10),
+              Text('数据迁移', style: AppTypography.sectionTitle(context)),
+              SelectableText(const JsonEncoder.withIndent('  ').convert(preview['migrationPreview'])),
+              _DetailRow(label: '计划校验值', value: (preview['migrationPlanHash'] ?? '').toString()),
+            ],
             _DetailRow(
               label: '签名',
               value: preview['signature'] is Map

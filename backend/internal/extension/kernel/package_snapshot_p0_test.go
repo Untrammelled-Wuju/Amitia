@@ -73,6 +73,22 @@ func TestPackageSnapshotMarksIrreversibleMigrationForManualRecovery(t *testing.T
 	}
 }
 
+func TestPackageSnapshotMarksPartiallyAppliedMigrationForManualRecovery(t *testing.T) {
+	state := packageMigrationStateSnapshot{Mode: "repository", Operations: []packageMigrationOperationSnapshot{{
+		Operation: migration.MigrationOperation{OperationID: "partial-1", Status: migration.OperationStatusFailed},
+		Steps:     []migration.MigrationStepRecord{{MigrationID: "step-1", Status: "succeeded"}},
+	}}}
+	raw, err := json.Marshal(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	forward := PackageRollbackPoint{MigrationStateSnapshotJSON: string(raw)}
+	target := PackageRollbackPoint{MigrationStateSnapshotJSON: `{"mode":"none"}`}
+	if reason := packageSnapshotManualRecoveryReason(forward, target); !strings.Contains(reason, "partial-1/step-1") {
+		t.Fatalf("expected partial migration to require manual recovery, got %q", reason)
+	}
+}
+
 func TestPackageForwardRecoveryRestoresRepositoryState(t *testing.T) {
 	ctx := context.Background()
 	runtime, container := newPackagePipelineRuntime(t)

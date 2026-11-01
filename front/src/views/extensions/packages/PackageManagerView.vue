@@ -275,6 +275,15 @@
           </el-checkbox>
         </div>
 
+        <div v-if="installPreview.migrationPreview" class="preview-block">
+          <span class="preview-label">数据迁移</span>
+          <p>{{ installPreview.migrationPreview.fromVersion }} → {{ installPreview.migrationPreview.toVersion }}</p>
+          <p>需要数据快照：{{ installPreview.migrationPreview.userDataSnapshotRequired ? "是" : "否" }}</p>
+          <p v-for="step in installPreview.migrationPreview.forwardPlan" :key="step.migrationId">{{ step.migrationId }} · {{ step.reversibility }}</p>
+          <p v-for="reason in installPreview.migrationPreview.manualReasons" :key="reason">{{ reason }}</p>
+          <p>计划校验值：{{ installPreview.migrationPlanHash }}</p>
+        </div>
+
         <div v-if="installPreview.dependencies?.length" class="preview-block">
           <span class="preview-label">依赖</span>
           <div class="dependency-list">
@@ -751,22 +760,22 @@ async function commitPackageInstall() {
     await refreshList();
     tab.value = "installed";
   } catch (e: any) {
-    ElMessage.error("安装失败: " + (e?.message || e));
+    await ElMessageBox.alert(`${String(e?.stack || e)}\n${JSON.stringify(e?.response?.data ?? null)}`, "安装或更新失败", { confirmButtonText: "关闭" });
   } finally {
     installLoading.value = false;
   }
 }
 
 async function waitForPackageOperation(operationId?: string) {
-  if (!operationId) return;
+  if (!operationId) throw new Error("后端未返回扩展包操作 ID");
   for (let attempt = 0; attempt < 120; attempt += 1) {
-    const response = await apiClient.get<{ status?: string; errorCode?: string }>(
+    const response = await apiClient.get<{ status?: string; errorCode?: string; errorMessage?: string }>(
       `/api/extensions/packages/operations/${encodeURIComponent(operationId)}`,
     );
     const status = String(response.data?.status || "").toLowerCase();
     if (status === "completed") return;
     if (status === "failed" || status === "requires_recovery") {
-      throw new Error(response.data?.errorCode || "扩展包操作失败");
+      throw new Error(`扩展包操作失败: ${JSON.stringify(response.data)}`);
     }
     await new Promise((resolve) => window.setTimeout(resolve, 500));
   }

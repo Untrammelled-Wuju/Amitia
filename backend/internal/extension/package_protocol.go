@@ -309,6 +309,7 @@ type PackageOperationView struct {
 	ScopeID           string                     `json:"scopeId"`
 	Status            string                     `json:"status"`
 	ErrorCode         string                     `json:"errorCode,omitempty"`
+	ErrorDetail       string                     `json:"errorDetail,omitempty"`
 	TraceID           string                     `json:"traceId"`
 	CreatedAt         string                     `json:"createdAt"`
 	CompletedAt       string                     `json:"completedAt,omitempty"`
@@ -323,6 +324,7 @@ type PackageOperationStepView struct {
 	AttemptCount int    `json:"attemptCount"`
 	ResultJSON   string `json:"resultJson,omitempty"`
 	ErrorCode    string `json:"errorCode,omitempty"`
+	ErrorDetail  string `json:"errorDetail,omitempty"`
 	StartedAt    string `json:"startedAt,omitempty"`
 	CompletedAt  string `json:"completedAt,omitempty"`
 }

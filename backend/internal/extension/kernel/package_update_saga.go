@@ -289,6 +289,15 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	if err := r.completePackageGenerationStep(ctx, op.OperationID, StepCommitTargetGeneration, 3, stableGeneration, targetGeneration.Current, packageJSON(commitGenResult), guard); err != nil {
 		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, StepCommitTargetGeneration, err, compensation, guard)
 	}
+	wasEnabled := current.EnablementState == domain.EnablementEnabled
+	compensation.quiesced = true
+	compensation.wasEnabled = wasEnabled
+	if err := r.quiesceExtensionForPackageSwap(ctx, current.ExtensionID, runtime_supervisor.StopReasonUpdate); err != nil {
+		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, StepQuiescePreviousGeneration, err, compensation, guard)
+	}
+	if err := r.completePackageUpdateStep(ctx, op.OperationID, 35, StepQuiescePreviousGeneration, packageJSON(map[string]any{"extensionId": string(current.ExtensionID), "wasEnabled": wasEnabled, "generation": current.Generation}), guard); err != nil {
+		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, StepQuiescePreviousGeneration, err, compensation, guard)
+	}
 	migrationExecution, err := r.executePackageUpdateMigrations(ctx, op.OperationID, migrationPreflight, rollbackPoint, confirmed.pkg, staging.Path)
 	compensation.migration = migrationExecution
 	if err != nil {
@@ -300,13 +309,6 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	}
 	if err := r.completePackageUpdateStep(ctx, op.OperationID, 4, StepExecuteMigrations, packageJSON(map[string]string{"migrationOperationId": migrationOperation, "migrationPlanHash": confirmed.preview.MigrationPlanHash}), guard); err != nil {
 		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, StepExecuteMigrations, err, compensation, guard)
-	}
-	wasEnabled := current.EnablementState == domain.EnablementEnabled
-	if err := r.quiesceExtensionForPackageSwap(ctx, current.ExtensionID, runtime_supervisor.StopReasonUpdate); err != nil {
-		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, StepQuiescePreviousGeneration, err, compensation, guard)
-	}
-	if err := r.completePackageUpdateStep(ctx, op.OperationID, 45, StepQuiescePreviousGeneration, packageJSON(map[string]any{"extensionId": string(current.ExtensionID), "wasEnabled": wasEnabled, "generation": current.Generation}), guard); err != nil {
-		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, StepQuiescePreviousGeneration, err, compensation, guard)
 	}
 	if err := r.switchPackageGeneration(ctx, stableGeneration, targetGeneration); err != nil {
 		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, StepUpdateSwitchCurrentPointer, err, compensation, guard)
@@ -429,17 +431,14 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 		return KernelInstallResult{}, failErr
 	}
 	if err := r.restoreExtensionAfterPackageSwap(ctx, current.ExtensionID, wasEnabled); err != nil {
-		persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "failed", StepActivateTargetGeneration, PackageErrCodeUpdateActivationFailed, err.Error(), true, guard)
-		return KernelInstallResult{}, errors.Join(err, persistErr)
+		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, StepActivateTargetGeneration, err, compensation, guard)
 	}
 	if err := r.completePackageUpdateStep(ctx, op.OperationID, 65, StepActivateTargetGeneration, packageJSON(map[string]any{"extensionId": confirmed.session.ExtensionID, "version": confirmed.session.Version, "enabled": wasEnabled}), guard); err != nil {
 		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, StepActivateTargetGeneration, err, compensation, guard)
 	}
 	if err := r.FinalizePackageOperation(ctx, op.OperationID, confirmed.session.ExtensionID, leaseGuard, guard); err != nil {
 		if compensation != nil {
-			if err := compensation.run(); err != nil {
-				amitialog.Printf("[original-error] %v", err)
-			}
+			return KernelInstallResult{}, errors.Join(err, compensation.run())
 		}
 		return KernelInstallResult{}, err
 	}
@@ -546,10 +545,17 @@ type packageUpdateCompensation struct {
 	switched              bool
 	repositoriesCommitted bool
 	migration             *packageMigrationExecution
+	quiesced              bool
+	wasEnabled            bool
 }
 
 func (c *packageUpdateCompensation) run() error {
 	var failures []error
+	if c.quiesced {
+		if err := c.runtime.quiesceExtensionForPackageSwap(context.Background(), domain.ExtensionID(c.rollbackPoint.ExtensionID), runtime_supervisor.StopReasonUpdate); err != nil {
+			return fmt.Errorf("kernel: quiesce extension before update compensation: %w", err)
+		}
+	}
 	if c.migration != nil {
 		if err := c.migration.guard.CompensateReverse(context.Background(), c.migration.request, c.migration.handler); err != nil {
 			failures = append(failures, err)
@@ -573,6 +579,11 @@ func (c *packageUpdateCompensation) run() error {
 	if c.repositoriesCommitted || c.switched {
 		if err := c.runtime.prepareGameHostExtensionAfterPackageGenerationChange(context.Background(), c.rollbackPoint.ExtensionID); err != nil {
 			failures = append(failures, fmt.Errorf("restore game host generation state: %w", err))
+		}
+	}
+	if c.quiesced && len(failures) == 0 {
+		if err := c.runtime.restoreExtensionAfterPackageSwap(context.Background(), domain.ExtensionID(c.rollbackPoint.ExtensionID), c.wasEnabled); err != nil {
+			failures = append(failures, err)
 		}
 	}
 	return errors.Join(failures...)

@@ -140,12 +140,12 @@ func kernelPackageOperationView(record kernelruntime.PackageOperationRecord, ste
 	view := PackageOperationView{ID: record.OperationID, Operation: PackageOperation(record.OperationType),
 		ExtensionID: record.ExtensionID, TargetVersion: record.TargetVersion, Source: "kernel",
 		ScopeType: record.ScopeType, ScopeID: record.ScopeID, Status: record.Status,
-		ErrorCode: record.ErrorCode, TraceID: record.TraceID, CreatedAt: record.StartedAt,
+		ErrorCode: record.ErrorCode, ErrorDetail: record.ErrorDetail, TraceID: record.TraceID, CreatedAt: record.StartedAt,
 		CompletedAt: record.CompletedAt, CurrentStep: record.CurrentStep}
 	for _, step := range steps {
 		view.Steps = append(view.Steps, PackageOperationStepView{Name: step.StepName, Order: step.StepOrder,
 			Status: step.Status, AttemptCount: step.AttemptCount, ResultJSON: step.ResultJSON,
-			ErrorCode: step.ErrorCode, StartedAt: step.StartedAt, CompletedAt: step.CompletedAt})
+			ErrorCode: step.ErrorCode, ErrorDetail: step.ErrorDetail, StartedAt: step.StartedAt, CompletedAt: step.CompletedAt})
 	}
 	return view
 }

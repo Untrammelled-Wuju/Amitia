@@ -23,7 +23,7 @@ export interface MigrationPlanInput {
 }
 
 export interface MigrationPlanOutput {
-  path: string[];
+  path: { steps: Array<{ step_id: number; migration_id: string; from_version: string; to_version: string }> };
   estimated_risk: string;
   has_irreversible: boolean;
   requires_user_confirm: boolean;

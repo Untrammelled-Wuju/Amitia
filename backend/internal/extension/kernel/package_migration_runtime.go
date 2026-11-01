@@ -111,8 +111,10 @@ func (pmr *packageMigrationRuntime) executeScript(ctx context.Context, step migr
 	if def.RuntimeType == "config" || def.RuntimeType == "resource" || def.RuntimeType == "userdata" {
 		var scriptContent []byte
 		if def.Entry != "" {
-			if content, err := pmr.readMigrationScript(def); err == nil {
-				scriptContent = content
+			var err error
+			scriptContent, err = pmr.readMigrationScript(def)
+			if err != nil {
+				return nil, err
 			}
 		}
 		baseEvidence := pmr.buildBaseEvidence(step, def, scriptContent)
@@ -299,10 +301,7 @@ func (pmr *packageMigrationRuntime) executeJavaScriptMigration(ctx context.Conte
 	}
 	startResult := host.Start(ctx)
 	if !startResult.Success {
-		if err := host.Stop(ctx, "migration_start_failed"); err != nil {
-			log.Printf("[original-error] %v", err)
-		}
-		return nil, fmt.Errorf("kernel: migration javascript host start failed for %s: %s", def.MigrationID, startResult.Reason)
+		return nil, errors.Join(fmt.Errorf("kernel: migration javascript host start failed for %s: %s", def.MigrationID, startResult.Reason), host.Stop(ctx, "migration_start_failed"))
 	}
 	functionName := "up"
 	if step.Direction == migration.DirectionReverse {
@@ -317,14 +316,15 @@ func (pmr *packageMigrationRuntime) executeJavaScriptMigration(ctx context.Conte
 		"toVersion":   step.ToVersion,
 	}
 	invokeResult, invokeErr := host.Invoke(ctx, functionName, invokeInput)
-	if err := host.Stop(ctx, "migration_complete"); err != nil {
-		log.Printf("[original-error] %v", err)
-	}
+	stopErr := host.Stop(ctx, "migration_complete")
 	if invokeErr != nil {
 		if strings.Contains(invokeErr.Error(), PackageErrCodeMigrationSandboxViolation) {
-			return nil, fmt.Errorf("kernel: migration javascript sandbox violation in %s: %w", def.MigrationID, invokeErr)
+			return nil, errors.Join(fmt.Errorf("kernel: migration javascript sandbox violation in %s: %w", def.MigrationID, invokeErr), stopErr)
 		}
-		return nil, fmt.Errorf("kernel: migration javascript %s invoke failed for %s: %w", functionName, def.MigrationID, invokeErr)
+		return nil, errors.Join(fmt.Errorf("kernel: migration javascript %s invoke failed for %s: %w", functionName, def.MigrationID, invokeErr), stopErr)
+	}
+	if stopErr != nil {
+		return nil, fmt.Errorf("kernel: migration javascript host stop failed for %s: %w", def.MigrationID, stopErr)
 	}
 	if len(def.Postcondition) > 0 {
 		var db *sql.DB
@@ -749,16 +749,10 @@ func (pmr *packageMigrationRuntime) executeConfigMigration(ctx context.Context, 
 		return nil, fmt.Errorf("kernel: migration config prepare %s: %w", def.MigrationID, err)
 	}
 	if err := executor.Execute(ctx); err != nil {
-		if err := executor.Compensate(ctx); err != nil {
-			log.Printf("[original-error] %v", err)
-		}
-		return nil, fmt.Errorf("kernel: migration config execute %s: %w", def.MigrationID, err)
+		return nil, errors.Join(fmt.Errorf("kernel: migration config execute %s: %w", def.MigrationID, err), executor.Compensate(ctx))
 	}
 	if err := executor.Verify(ctx); err != nil {
-		if err := executor.Compensate(ctx); err != nil {
-			log.Printf("[original-error] %v", err)
-		}
-		return nil, fmt.Errorf("kernel: migration config verify %s: %w", def.MigrationID, err)
+		return nil, errors.Join(fmt.Errorf("kernel: migration config verify %s: %w", def.MigrationID, err), executor.Compensate(ctx))
 	}
 	baseEvidence["executionMode"] = "config_executed"
 	baseEvidence["executor_type"] = "config"
@@ -790,16 +784,10 @@ func (pmr *packageMigrationRuntime) executeResourceMigration(ctx context.Context
 		return nil, fmt.Errorf("kernel: migration resource prepare %s: %w", def.MigrationID, err)
 	}
 	if err := executor.Execute(ctx); err != nil {
-		if err := executor.Compensate(ctx); err != nil {
-			log.Printf("[original-error] %v", err)
-		}
-		return nil, fmt.Errorf("kernel: migration resource execute %s: %w", def.MigrationID, err)
+		return nil, errors.Join(fmt.Errorf("kernel: migration resource execute %s: %w", def.MigrationID, err), executor.Compensate(ctx))
 	}
 	if err := executor.Verify(ctx); err != nil {
-		if err := executor.Compensate(ctx); err != nil {
-			log.Printf("[original-error] %v", err)
-		}
-		return nil, fmt.Errorf("kernel: migration resource verify %s: %w", def.MigrationID, err)
+		return nil, errors.Join(fmt.Errorf("kernel: migration resource verify %s: %w", def.MigrationID, err), executor.Compensate(ctx))
 	}
 	baseEvidence["executionMode"] = "resource_executed"
 	baseEvidence["executor_type"] = "resource"
@@ -829,16 +817,10 @@ func (pmr *packageMigrationRuntime) executeUserDataMigration(ctx context.Context
 		return nil, fmt.Errorf("kernel: migration userdata prepare %s: %w", def.MigrationID, err)
 	}
 	if err := executor.Execute(ctx); err != nil {
-		if err := executor.Compensate(ctx); err != nil {
-			log.Printf("[original-error] %v", err)
-		}
-		return nil, fmt.Errorf("kernel: migration userdata execute %s: %w", def.MigrationID, err)
+		return nil, errors.Join(fmt.Errorf("kernel: migration userdata execute %s: %w", def.MigrationID, err), executor.Compensate(ctx))
 	}
 	if err := executor.Verify(ctx); err != nil {
-		if err := executor.Compensate(ctx); err != nil {
-			log.Printf("[original-error] %v", err)
-		}
-		return nil, fmt.Errorf("kernel: migration userdata verify %s: %w", def.MigrationID, err)
+		return nil, errors.Join(fmt.Errorf("kernel: migration userdata verify %s: %w", def.MigrationID, err), executor.Compensate(ctx))
 	}
 	baseEvidence["executionMode"] = "userdata_executed"
 	baseEvidence["executor_type"] = "userdata"
@@ -1316,6 +1298,16 @@ func (pmr *packageMigrationRuntime) handler() migration.ReversibleStepHandler {
 	return func(ctx context.Context, step migration.ReversiblePlanStep, def migration.MigrationDefinition) (migration.ReversibleStepResult, error) {
 		if err := ctx.Err(); err != nil {
 			return migration.ReversibleStepResult{}, err
+		}
+		if len(def.Precondition) > 0 {
+			if pmr.runtime == nil || pmr.runtime.container == nil || pmr.runtime.container.Store == nil || pmr.runtime.container.Store.DB() == nil {
+				return migration.ReversibleStepResult{}, fmt.Errorf("kernel: migration %s precondition database unavailable", def.MigrationID)
+			}
+			for _, condition := range def.Precondition {
+				if err := pmr.verifyPostconditionFromDB(ctx, pmr.runtime.container.Store.DB(), condition); err != nil {
+					return migration.ReversibleStepResult{}, fmt.Errorf("kernel: migration %s precondition failed: %w", def.MigrationID, err)
+				}
+			}
 		}
 		if err := pmr.persistDefinition(ctx, def); err != nil {
 			return migration.ReversibleStepResult{}, err

@@ -832,12 +832,21 @@ func packageSnapshotManualRecoveryReason(forward, target PackageRollbackPoint) s
 	}
 	for _, entry := range forwardState.Operations {
 		operation := entry.Operation
-		if _, exists := targetOperations[operation.OperationID]; exists || operation.Status != migration.OperationStatusCompleted {
+		if _, exists := targetOperations[operation.OperationID]; exists {
+			continue
+		}
+		for _, step := range entry.Steps {
+			if step.Status == "succeeded" || step.Status == "reversing" || step.Status == "reverse_failed" {
+				return "migration step requires verified data reversal " + operation.OperationID + "/" + step.MigrationID
+			}
+		}
+		if operation.Status != migration.OperationStatusCompleted {
 			continue
 		}
 		if operation.Reversibility == migration.ReversibilityIrreversible {
 			return "completed irreversible migration " + operation.OperationID
 		}
+		return "completed migration requires verified data reversal " + operation.OperationID
 	}
 	return ""
 }

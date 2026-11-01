@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -44,12 +45,18 @@ func TestPackageDistributionProductionFlowAcrossRuntimeProfiles(t *testing.T) {
 		runtimeprofile.ProfileDeviceAgent,
 	} {
 		t.Run(profile.String(), func(t *testing.T) {
-			runPackageDistributionProductionFlow(t, profile)
+			runPackageDistributionProductionFlow(t, profile, false, true)
+		})
+		t.Run(profile.String()+"-sql", func(t *testing.T) {
+			runPackageDistributionProductionFlow(t, profile, true, true)
+		})
+		t.Run(profile.String()+"-without-migration", func(t *testing.T) {
+			runPackageDistributionProductionFlow(t, profile, false, false)
 		})
 	}
 }
 
-func runPackageDistributionProductionFlow(t *testing.T, profile runtimeprofile.Profile) {
+func runPackageDistributionProductionFlow(t *testing.T, profile runtimeprofile.Profile, sqlMigration, withMigration bool) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	originalConfig := config.AppCfg
@@ -60,7 +67,17 @@ func runPackageDistributionProductionFlow(t *testing.T, profile runtimeprofile.P
 
 	extensionID := "com.example/update-flow"
 	v1Path := createDistributionTestArchive(t, extensionID, "1.0.0", nil)
-	v2Path := createDistributionTestArchive(t, extensionID, "2.0.0", distributionMigrationDefinitions(extensionID))
+	definitions := distributionMigrationDefinitions(extensionID)
+	if !withMigration {
+		definitions = nil
+	}
+	if sqlMigration {
+		for i := range definitions {
+			definitions[i].RuntimeType = "sql"
+			definitions[i].Entry = fmt.Sprintf("migrations/distribution-%d.sql", i)
+		}
+	}
+	v2Path := createDistributionTestArchive(t, extensionID, "2.0.0", definitions)
 	registry, publicKey := startDistributionRegistry(t, extensionID, v2Path)
 	t.Setenv("AMITIA_EXTENSION_UPDATE_REGISTRY_URL", registry.URL)
 	t.Setenv("AMITIA_REGISTRY_PUBLIC_KEY", base64.StdEncoding.EncodeToString(publicKey))
@@ -168,6 +185,13 @@ func runPackageDistributionProductionFlow(t *testing.T, profile runtimeprofile.P
 	}
 	assertDistributionVersion(t, container, extensionID, "2.0.0")
 	assertDistributionMigrationStep(t, operation)
+	if sqlMigration {
+		var count int
+		table := migration.ExtensionNamespacePrefix(extensionID) + "distribution"
+		if err := container.Store.DB().QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?", table).Scan(&count); err != nil || count != 1 {
+			t.Fatalf("migration did not create %s: count=%d error=%v", table, count, err)
+		}
+	}
 	_ = container.Close()
 	container, server = startServer()
 	assertDistributionVersion(t, container, extensionID, "2.0.0")
@@ -181,33 +205,30 @@ func runPackageDistributionProductionFlow(t *testing.T, profile runtimeprofile.P
 	rollbackPreview := distributionJSON(t, server.URL, http.MethodPost, "/api/extensions/versions/rollback/preview", map[string]any{
 		"extensionId": extensionID, "targetVersion": "1.0.0", "scopeType": "global", "scopeId": "",
 	})
-	if rollbackPreview["installable"] != true {
-		t.Fatalf("rollback preview not installable: %v", rollbackPreview)
+	if withMigration {
+		if rollbackPreview["manualRequired"] != true || !strings.Contains(fmt.Sprint(rollbackPreview["manualReason"]), "verified data reversal") {
+			t.Fatalf("rollback without verified reversal must require manual recovery: %v", rollbackPreview)
+		}
+	} else {
+		if rollbackPreview["installable"] != true {
+			t.Fatalf("rollback preview not installable: %v", rollbackPreview)
+		}
+		rollbackConfirmation := distributionJSON(t, server.URL, http.MethodPost, "/api/extensions/versions/rollback/confirm", map[string]any{
+			"extensionId": extensionID, "targetVersion": "1.0.0", "scopeType": "global", "scopeId": "",
+			"previewSessionId": rollbackPreview["previewSessionId"], "confirmations": stringSetMap(rollbackPreview["requiredConfirmations"]),
+		})
+		rollbackToken, _ := rollbackConfirmation["confirmationToken"].(string)
+		if rollbackToken == "" {
+			t.Fatalf("missing rollback token: %v", rollbackConfirmation)
+		}
+		rollbackResult := distributionJSON(t, server.URL, http.MethodPost, "/api/extensions/versions/rollback", map[string]any{
+			"extensionId": extensionID, "targetVersion": "1.0.0", "scopeType": "global", "scopeId": "", "confirmationToken": rollbackToken,
+		})
+		if rollbackResult["version"] != "1.0.0" {
+			t.Fatalf("unexpected rollback result: %v", rollbackResult)
+		}
+		assertDistributionVersion(t, container, extensionID, "1.0.0")
 	}
-	rollbackConfirmations := stringSetMap(rollbackPreview["requiredConfirmations"])
-	rollbackConfirmation := distributionJSON(t, server.URL, http.MethodPost, "/api/extensions/versions/rollback/confirm", map[string]any{
-		"extensionId":      extensionID,
-		"targetVersion":    "1.0.0",
-		"scopeType":        "global",
-		"scopeId":          "",
-		"previewSessionId": rollbackPreview["previewSessionId"],
-		"confirmations":    rollbackConfirmations,
-	})
-	rollbackToken, _ := rollbackConfirmation["confirmationToken"].(string)
-	if rollbackToken == "" {
-		t.Fatalf("missing rollback token: %v", rollbackConfirmation)
-	}
-	rollbackResult := distributionJSON(t, server.URL, http.MethodPost, "/api/extensions/versions/rollback", map[string]any{
-		"extensionId":       extensionID,
-		"targetVersion":     "1.0.0",
-		"scopeType":         "global",
-		"scopeId":           "",
-		"confirmationToken": rollbackToken,
-	})
-	if rollbackResult["version"] != "1.0.0" {
-		t.Fatalf("unexpected rollback result: %v", rollbackResult)
-	}
-	assertDistributionVersion(t, container, extensionID, "1.0.0")
 
 	retired := distributionJSONWithStatus(t, server.URL, http.MethodPost, "/api/extensions/retired/updates/install", map[string]any{}, http.StatusGone)
 	if retired["error_code"] != "LEGACY_PACKAGE_ENDPOINT_RETIRED" {
@@ -557,6 +578,15 @@ func createDistributionTestArchive(t *testing.T, extensionID, version string, de
 		"modules/main/index.js": []byte("export const version = " + fmt.Sprintf("%q", version)),
 	}
 	for _, definition := range definitions {
+		if definition.RuntimeType == "sql" {
+			table := migration.ExtensionNamespacePrefix(extensionID) + "distribution"
+			if definition.Direction == migration.DirectionForward {
+				files[definition.Entry] = []byte(fmt.Sprintf("CREATE TABLE %s (id INTEGER PRIMARY KEY, value TEXT)", table))
+			} else {
+				files[definition.Entry] = []byte(fmt.Sprintf("DROP TABLE %s", table))
+			}
+			continue
+		}
 		files[definition.Entry] = []byte(`module.exports = {
   activate(context) {
     context.handlers.bindTool("up", async (input) => ({ ok: true, input }));

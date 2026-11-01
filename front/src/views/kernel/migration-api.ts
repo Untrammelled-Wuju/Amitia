@@ -44,13 +44,14 @@ export async function getMigration(migrationId: string): Promise<MigrationDefini
 }
 
 export async function planMigration(input: MigrationPlanInput): Promise<MigrationPlanOutput> {
-  const res = await apiClient.post(`${MIGRATIONS_BASE}/plan`, input);
-  return res.data;
-}
-
-export async function executeMigration(input: MigrationPlanInput): Promise<MigrationOperation> {
-  const res = await apiClient.post(`${MIGRATIONS_BASE}/execute`, input);
-  return res.data;
+  const res = await apiClient.post(`${MIGRATIONS_BASE}/plan`, {
+    extensionId: input.extension_id,
+    fromVersion: input.from_version,
+    toVersion: input.to_version,
+    fromDefinitionHash: input.from_definition_hash,
+    toDefinitionHash: input.to_definition_hash,
+  });
+  return res.data.item;
 }
 
 export async function getMigrationOperation(operationId: string): Promise<MigrationOperation> {
@@ -74,23 +75,8 @@ export async function listRollbackSteps(rollbackId: string): Promise<{ items: Ro
   return res.data;
 }
 
-export async function executeRollback(rollbackId: string): Promise<RollbackPlan> {
-  const res = await apiClient.post(`${ROLLBACKS_BASE}/${encodeURIComponent(rollbackId)}/execute`);
-  return res.data;
-}
-
-export async function recoverRollback(rollbackId: string): Promise<RollbackPlan> {
-  const res = await apiClient.post(`${ROLLBACKS_BASE}/${encodeURIComponent(rollbackId)}/recover`);
-  return res.data;
-}
-
 export async function scanRecovery(): Promise<{ items: RecoveryAction[]; total: number }> {
   const res = await apiClient.get(`${RECOVERY_BASE}/scan`);
-  return res.data;
-}
-
-export async function executeRecovery(action: RecoveryAction): Promise<{ operation_id: string; status: string }> {
-  const res = await apiClient.post(`${RECOVERY_BASE}/execute`, action);
   return res.data;
 }
 

@@ -544,19 +544,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			panic("failed to start gamehost")
 		}
 	}
-	if kernelContainer.UpdateRecoveryManager != nil {
-		recoveryActions, err := kernelContainer.UpdateRecoveryManager.ScanOnStartup(context.Background())
-		if err != nil {
-			log.Warn("update recovery scan warning: ", err)
-		}
-		for _, action := range recoveryActions {
-			if err := kernelContainer.UpdateRecoveryManager.ExecuteRecovery(context.Background(), action); err != nil {
-				log.Warn(fmt.Sprintf("update recovery execute failed for %s: %v", action.OperationID, err))
-			} else {
-				log.Info(fmt.Sprintf("update recovery completed for %s (strategy: %s)", action.OperationID, action.Strategy))
-			}
-		}
-	}
 	if err := extensionRuntime.AttachKernelFacade(extensionRuntime.Kernel); err != nil {
 		log.Error("extension kernel facade attach failed: ", err)
 		panic("failed to attach extension kernel facade")
