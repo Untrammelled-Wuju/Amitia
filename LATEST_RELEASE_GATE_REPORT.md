@@ -1,33 +1,33 @@
 # AMITIA Release Gate Report
 
-Generated: 2026-10-31T17:52:53.546Z
+Generated: 2026-11-02T03:45:40.953Z
 
 Status: **PASS**
 
 | Gate | Result |
 |---|---|
-| Canonical freeze verification | PASS (11151 files) |
-| Source Gate SHA256 | `ce1ea449fbf3f8ea1128bb4ebe7ebd03c914f65373bc92e6cdf7f4253515b75b` |
+| Canonical freeze verification | PASS (11182 files) |
+| Source Gate SHA256 | `bdf30ca81210b4f42e3e0913eb9998e33d463bd57017d26f7f0d79898fc033c8` |
 | AmitiaCore provenance | PASS |
-| Runtime asset provenance | PASS (693 files) |
+| Runtime asset provenance | PASS (41 files) |
 | Packaged artifact integrity | PASS |
 
 ## Core provenance
 
-- Core SHA256: `e17160f5ac9c2eda68d5eb9b665a21e3c84866ac6531f189948ce273215b5718`
-- Core SourceGate SHA256: `ce1ea449fbf3f8ea1128bb4ebe7ebd03c914f65373bc92e6cdf7f4253515b75b`
+- Core SHA256: `d58c42bb42f8089312b5d1ad3908e15a172aed1638655b32a91c92f3971527c6`
+- Core SourceGate SHA256: `bdf30ca81210b4f42e3e0913eb9998e33d463bd57017d26f7f0d79898fc033c8`
 - Go: go version go1.26.1 darwin/arm64
-- Commit: 7fb42386
+- Commit: 1a6e5cdc
 
 ## Runtime assets
 
-- Runtime asset SourceGate SHA256: `ce1ea449fbf3f8ea1128bb4ebe7ebd03c914f65373bc92e6cdf7f4253515b75b`
-- Verified packaged runtime files: 693
+- Runtime asset SourceGate SHA256: `bdf30ca81210b4f42e3e0913eb9998e33d463bd57017d26f7f0d79898fc033c8`
+- Verified packaged runtime files: 41
 
 ## Release artifacts
 
 | Artifact | Bytes | SHA256 |
 |---|---:|---|
-| AmitiaSetup-26.2.0-beta.20-x64.exe | 378555507 | `9fd13c14fcf0bb04e9764a02c2a74952ae163831fe5f25bd37a581f193a5ba03` |
-| AmitiaSetup-26.2.0-beta.20-x64.exe.blockmap | 394496 | `2dbe6d050d992fba2c1f0fe6e5e870aa898760547b8b82f566b883e5327e7168` |
-| latest.yml | 11578 | `881115b4a747d0c6ec3408219f49b31b8987075a462dc475810d2f1f57d1697c` |
+| Amitia-26.2.0-beta.21-arm64-mac.zip | 307901773 | `43d207f78fe8c48e39a1dd59cfc4d6bb5c179bc7a70bfb96a7c4fc31e630d1b8` |
+| Amitia-26.2.0-beta.21-arm64-mac.zip.blockmap | 306888 | `b909f45ab2535c1fd67482dd9bf7a5f3b5ecdcc3cae73cc71cb4b2b457c10d4c` |
+| latest-mac.yml | 15490 | `0ba6762abd806c6414511760c9b54ad25344491400d9080a830fa2753b7b99b4` |
