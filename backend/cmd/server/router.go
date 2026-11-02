@@ -44,7 +44,6 @@ import (
 	"github.com/u-ai/backend/internal/extension"
 	extensionkernel "github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
-	"github.com/u-ai/backend/internal/extension/kernel/extension_center"
 	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
 	"github.com/u-ai/backend/internal/extension/kernel/wasm_runtime"
 	"github.com/u-ai/backend/internal/extension/mcpruntime/api"
@@ -675,19 +674,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		if services.WorkspaceGitHandler != nil {
 			services.WorkspaceGitHandler.RegisterRoutes(apiGroup)
 		}
-		if services.KernelContainer != nil {
-			cardProvider := extension_center.NewKernelCardProvider(services.KernelContainer.DefinitionRepository, services.KernelContainer.InstallationRepository)
-			centerSvc := extension_center.NewCenterService(cardProvider)
-			centerHandler := extension_center.NewHTTPHandler(centerSvc)
-			centerMux := http.NewServeMux()
-			centerHandler.Register(centerMux)
-			apiGroup.Any("/extension-center/*centerPath", func(c *gin.Context) {
-				originalPath := c.Request.URL.Path
-				c.Request.URL.Path = "/api/extension-center" + c.Param("centerPath")
-				centerMux.ServeHTTP(c.Writer, c.Request)
-				c.Request.URL.Path = originalPath
-			})
-		}
+		extension.RegisterExtensionCenterRoutes(apiGroup, services.Extension)
 		if services.KernelContainer != nil && services.KernelContainer.WASMRuntimeFactory != nil {
 			wasmService := wasm_runtime.NewAPIService(services.KernelContainer.WASMRuntimeFactory, services.KernelContainer.WASMDefinitionRepo)
 			wasmHandler := wasm_runtime.NewHTTPHandler(wasmService)

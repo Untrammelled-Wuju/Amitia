@@ -91,6 +91,24 @@
         </el-table-column>
         <el-table-column prop="extensionId" label="扩展ID" min-width="200" show-overflow-tooltip />
         <el-table-column prop="version" label="版本" width="100" />
+        <el-table-column label="更新" width="130">
+          <template #default="{ row }">
+            <el-tag v-if="row.updateAvailable" type="primary" size="small">
+              v{{ row.latestVersion }}
+            </el-tag>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="信任与风险" width="150">
+          <template #default="{ row }">
+            <div class="operation-cell">
+              <el-tag size="small" type="info">{{ row.trust || 'untrusted' }}</el-tag>
+              <el-tag v-if="row.permissionRisk" size="small" :type="row.permissionRisk === 'high' || row.permissionRisk === 'critical' ? 'danger' : 'warning'">
+                {{ row.permissionRisk }}
+              </el-tag>
+            </div>
+          </template>
+        </el-table-column>
         <el-table-column label="状态" width="120">
           <template #default="{ row }">
             <el-tag :type="row.state === 'installed' ? 'success' : 'warning'" size="small">
@@ -329,13 +347,13 @@
     <el-dialog v-model="detailVisible" title="扩展详情" width="820px">
       <div v-if="detail">
         <el-descriptions :column="2" border>
-          <el-descriptions-item label="名称">{{ detail.name || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="名称">{{ detail.displayName || '-' }}</el-descriptions-item>
           <el-descriptions-item label="扩展ID">{{ detail.extensionId }}</el-descriptions-item>
           <el-descriptions-item label="版本">{{ detail.version }}</el-descriptions-item>
-          <el-descriptions-item label="安装ID">{{ detail.installationId }}</el-descriptions-item>
-          <el-descriptions-item label="状态">{{ detail.state }}</el-descriptions-item>
-          <el-descriptions-item label="启用">{{ detail.enablement }}</el-descriptions-item>
-          <el-descriptions-item label="Generation">{{ detail.generation }}</el-descriptions-item>
+          <el-descriptions-item label="运行状态">{{ detail.effectiveState || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="启用">{{ detail.enabled ? '已启用' : '已停用' }}</el-descriptions-item>
+          <el-descriptions-item label="来源">{{ detail.source || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="权限风险">{{ detail.permissionRisk || '-' }}</el-descriptions-item>
           <el-descriptions-item label="发布者">{{ detail.publisher || '-' }}</el-descriptions-item>
           <el-descriptions-item label="签名状态">
             <el-tag v-if="detail.signatureStatus" :type="detail.signatureStatus === 'verified' ? 'success' : 'warning'" size="small">
@@ -344,35 +362,20 @@
             <span v-else>-</span>
           </el-descriptions-item>
           <el-descriptions-item label="Trust 级别">
-            <el-tag v-if="detail.trustLevel" :type="detail.trustLevel === 'trusted' ? 'success' : 'info'" size="small">
-              {{ detail.trustLevel }}
+            <el-tag v-if="detail.trust" :type="['official', 'trusted', 'user_trusted'].includes(detail.trust) ? 'success' : 'info'" size="small">
+              {{ detail.trust }}
             </el-tag>
             <span v-else>-</span>
           </el-descriptions-item>
-          <el-descriptions-item label="运行时状态">
-            <el-tag v-if="detail.runtimeStatus" :type="detail.runtimeStatus === 'running' ? 'success' : 'info'" size="small">
-              {{ detail.runtimeStatus }}
-            </el-tag>
-            <span v-else>-</span>
-          </el-descriptions-item>
-          <el-descriptions-item label="Circuit 状态">
-            <el-tag v-if="detail.circuitState" :type="detail.circuitState === 'closed' ? 'success' : 'danger'" size="small">
-              {{ detail.circuitState }}
-            </el-tag>
-            <span v-else>-</span>
-          </el-descriptions-item>
-          <el-descriptions-item label="Quarantine 状态">
-            <el-tag v-if="detail.quarantineState" :type="detail.quarantineState === 'none' ? 'success' : 'warning'" size="small">
-              {{ detail.quarantineState }}
-            </el-tag>
-            <span v-else>-</span>
-          </el-descriptions-item>
+          <el-descriptions-item label="最新版本">{{ detail.latestVersion || detail.version }}</el-descriptions-item>
+          <el-descriptions-item label="更新错误" :span="2">{{ detail.updateError || '-' }}</el-descriptions-item>
         </el-descriptions>
 
         <div v-if="detail.permissions && detail.permissions.length > 0" class="detail-section">
           <h4>权限列表</h4>
           <el-table :data="detail.permissions" size="small" border>
-            <el-table-column prop="name" label="名称" width="180" />
+            <el-table-column prop="permission" label="名称" width="180" />
+            <el-table-column prop="risk" label="风险" width="90" />
             <el-table-column prop="scope" label="Scope" width="120" />
             <el-table-column prop="reason" label="原因" show-overflow-tooltip />
             <el-table-column label="必需" width="60">
@@ -392,68 +395,31 @@
           </el-table>
         </div>
 
-        <div v-if="detail.scopes && detail.scopes.length > 0" class="detail-section">
-          <h4>Scope 列表</h4>
-          <el-table :data="detail.scopes" size="small" border>
-            <el-table-column prop="name" label="名称" />
-            <el-table-column label="已授予" width="80">
-              <template #default="{ row }">
-                <el-tag :type="row.granted ? 'success' : 'warning'" size="small">
-                  {{ row.granted ? '是' : '否' }}
-                </el-tag>
-              </template>
-            </el-table-column>
-          </el-table>
-        </div>
-
-        <div v-if="detail.dependencies && detail.dependencies.length > 0" class="detail-section">
-          <h4>依赖列表</h4>
-          <el-table :data="detail.dependencies" size="small" border>
-            <el-table-column prop="type" label="类型" width="100" />
-            <el-table-column prop="id" label="ID" width="200" />
-            <el-table-column prop="version" label="版本" width="100" />
-            <el-table-column label="可选" width="60">
-              <template #default="{ row }">
-                <el-tag :type="row.optional ? 'info' : 'warning'" size="small">
-                  {{ row.optional ? '是' : '否' }}
-                </el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column label="已满足" width="80">
-              <template #default="{ row }">
-                <el-tag :type="row.satisfied ? 'success' : 'danger'" size="small">
-                  {{ row.satisfied ? '是' : '否' }}
-                </el-tag>
-              </template>
-            </el-table-column>
-          </el-table>
-        </div>
-
         <div v-if="detail.modules && detail.modules.length > 0" class="detail-section">
           <h4>模块</h4>
           <el-table :data="detail.modules" size="small" border>
-            <el-table-column prop="id" label="ID" width="140" />
-            <el-table-column prop="type" label="类型" width="100" />
+            <el-table-column prop="moduleId" label="ID" width="140" />
+            <el-table-column prop="kind" label="类型" width="100" />
             <el-table-column prop="runtime" label="运行时" width="100" />
-            <el-table-column prop="entryPoint" label="入口" show-overflow-tooltip />
-            <el-table-column prop="contributionCount" label="贡献数" width="80" />
+            <el-table-column prop="entry" label="入口" show-overflow-tooltip />
+            <el-table-column prop="status" label="状态" width="100" />
           </el-table>
         </div>
 
         <div v-if="detail.contributions && detail.contributions.length > 0" class="detail-section">
           <h4>贡献点</h4>
           <el-table :data="detail.contributions" size="small" border>
-            <el-table-column prop="id" label="ID" width="180" />
+            <el-table-column prop="contributionId" label="ID" width="180" />
             <el-table-column prop="kind" label="类型" width="120" />
             <el-table-column prop="moduleId" label="模块ID" width="140" />
-            <el-table-column prop="name" label="名称" />
+            <el-table-column prop="title" label="名称" />
             <el-table-column label="操作" width="100">
               <template #default="{ row }">
                 <el-button
                   v-if="row.kind === 'ui_page'"
                   size="small"
                   type="primary"
-                  @click="openExtPage(row.id)"
+                  @click="openExtPage(row.contributionId)"
                 >打开页面</el-button>
               </template>
             </el-table-column>
@@ -478,7 +444,7 @@
           border
           empty-text="该插件没有声明权限"
         >
-          <el-table-column prop="name" label="权限" min-width="210" show-overflow-tooltip />
+          <el-table-column prop="permission" label="权限" min-width="210" show-overflow-tooltip />
           <el-table-column prop="scope" label="Scope" width="100" />
           <el-table-column prop="reason" label="用途" show-overflow-tooltip />
           <el-table-column label="必需" width="70">
@@ -493,9 +459,9 @@
               <el-switch
                 class="permission-pill-switch"
                 :model-value="row.granted"
-                :loading="permissionUpdating[row.name]"
+                :loading="permissionUpdating[row.permission]"
                 :disabled="permissionLoading"
-                :aria-label="`${row.granted ? '关闭' : '开启'}权限 ${row.name}`"
+                :aria-label="`${row.granted ? '关闭' : '开启'}权限 ${row.permission}`"
                 @change="(value: string | number | boolean) => togglePermission(row, Boolean(value))"
               />
             </template>
@@ -509,15 +475,13 @@
 
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onMounted, ref, shallowRef, watch } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { UploadFilled, Loading, MoreFilled } from "@element-plus/icons-vue";
 import { apiClient } from "@/composables/useApi";
 import ExtensionPageHeader from "../components/ExtensionPageHeader.vue";
 import {
   getKernelStatus,
-  listExtensions,
-  getExtension,
   enableExtension,
   disableExtension,
   uninstallExtension,
@@ -525,14 +489,14 @@ import {
   setExtensionPermission,
   type KernelStatus,
   type KernelExtension,
-  type KernelExtensionDetail,
-  type KernelPermission,
 } from "@/views/kernel/api";
 import {
   cancelExtensionUpdateDownload,
   checkExtensionUpdate,
   confirmPackageRollback,
   fetchPackageVersions,
+  fetchExtensionCenterDetail,
+  fetchExtensionCenterView,
   getExtensionUpdateDownload,
   installExtensionPackage,
   previewExtensionPackage,
@@ -541,10 +505,15 @@ import {
   rollbackExtensionPackage,
   startExtensionUpdateDownload,
 } from "@/views/extensions/api";
-import type { PackageImportPreview } from "@/views/extensions/types";
+import type {
+  ExtensionCenterDetail,
+  ExtensionCenterPermission,
+  PackageImportPreview,
+} from "@/views/extensions/types";
 import { useExtensionUIStore } from "@/stores/extensionUI";
 
 const router = useRouter();
+const route = useRoute();
 const extensionUIStore = useExtensionUIStore();
 
 const tab = ref("install");
@@ -595,10 +564,10 @@ const canInstallPreview = computed(() => {
 });
 
 const detailVisible = ref(false);
-const detail = ref<KernelExtensionDetail | null>(null);
+const detail = ref<ExtensionCenterDetail | null>(null);
 const permissionDialogVisible = ref(false);
 const permissionTarget = ref<KernelExtension | null>(null);
-const permissionRows = ref<KernelPermission[]>([]);
+const permissionRows = ref<ExtensionCenterPermission[]>([]);
 const permissionLoading = ref(false);
 const permissionUpdating = ref<Record<string, boolean>>({});
 const toggleUpdating = ref<Record<string, boolean>>({});
@@ -657,9 +626,33 @@ async function refreshList() {
   loadError.value = "";
   try {
     await loadStatus();
-    const data = await listExtensions();
-    extensions.value = data.extensions || [];
-    statusCount.value = data.total;
+    const center = await fetchExtensionCenterView();
+    const cards = [
+      ...center.installed,
+      ...center.updates,
+      ...center.needsAction,
+      ...center.localImports,
+      ...center.dev,
+    ];
+    const unique = new Map(cards.map((card) => [card.extensionId, card]));
+    extensions.value = [...unique.values()].map((card) => ({
+      name: card.displayName,
+      extensionId: card.extensionId,
+      version: card.version,
+      installationId: card.installationId || card.extensionId,
+      state: card.status,
+      enablement: card.enabled ? "enabled" : "disabled",
+      systemManaged: card.systemManaged,
+      installedAt: card.installedAt || "",
+      updatedAt: card.updatedAt || "",
+      generation: card.generation || 0,
+      updateAvailable: card.updateAvailable,
+      latestVersion: card.latestVersion,
+      trust: card.trust,
+      permissionRisk: card.permissionRisk,
+      devMode: card.devMode,
+    }));
+    statusCount.value = extensions.value.length;
   } catch (e: any) {
     loadError.value = "扩展包服务加载失败: " + (e?.message || e);
     statusReady.value = false;
@@ -953,7 +946,7 @@ async function doRollback(row: KernelExtension) {
 
 async function openDetail(row: KernelExtension) {
   try {
-    const data = await getExtension(row.extensionId);
+    const data = await fetchExtensionCenterDetail(row.extensionId);
     detail.value = data;
     detailVisible.value = true;
   } catch (e: any) {
@@ -967,7 +960,7 @@ async function openPermissionManager(row: KernelExtension) {
   permissionDialogVisible.value = true;
   permissionLoading.value = true;
   try {
-    const data = await getExtension(row.extensionId);
+    const data = await fetchExtensionCenterDetail(row.extensionId);
     permissionRows.value = data.permissions ?? [];
   } catch (e: any) {
     ElMessage.error("加载权限失败: " + (e?.message || e));
@@ -976,21 +969,21 @@ async function openPermissionManager(row: KernelExtension) {
   }
 }
 
-async function togglePermission(row: KernelPermission, granted: boolean) {
-  if (!permissionTarget.value || permissionUpdating.value[row.name]) return;
-  permissionUpdating.value[row.name] = true;
+async function togglePermission(row: ExtensionCenterPermission, granted: boolean) {
+  if (!permissionTarget.value || permissionUpdating.value[row.permission]) return;
+  permissionUpdating.value[row.permission] = true;
   try {
     const updated = await setExtensionPermission(
       permissionTarget.value.extensionId,
-      row.name,
+      row.permission,
       granted,
     );
-    row.granted = updated.granted;
+    row.granted = Boolean(updated.granted);
     ElMessage.success(granted ? "权限已开启" : "权限已关闭");
   } catch (e: any) {
     ElMessage.error("权限更新失败: " + (e?.message || e));
   } finally {
-    permissionUpdating.value[row.name] = false;
+    permissionUpdating.value[row.permission] = false;
   }
 }
 
@@ -1112,6 +1105,13 @@ function switchTab(name: string) {
 onMounted(async () => {
   await loadStatus();
   await refreshList();
+  const extensionId = String(route.query.extensionId || "");
+  const action = String(route.query.action || "");
+  if (extensionId && action) {
+    tab.value = "installed";
+    const row = extensions.value.find((item) => item.extensionId === extensionId);
+    if (row) await handleRowCommand(row, action);
+  }
 });
 </script>
 

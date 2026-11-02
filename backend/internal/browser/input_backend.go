@@ -38,15 +38,15 @@ func (b *chromiumInputBackend) getSession(targetID TargetID) string {
 	return b.engine.Pages().(*chromiumPageController).getSession(targetID)
 }
 
-func (b *chromiumInputBackend) ensureSession(ctx context.Context, targetID TargetID) string {
+func (b *chromiumInputBackend) ensureSession(ctx context.Context, targetID TargetID) (string, error) {
 	if b.engine == nil {
-		return ""
+		return "", fmt.Errorf("browser engine is unavailable")
 	}
 	client := b.getClient()
 	if client == nil {
-		return ""
+		return "", fmt.Errorf("CDP client not available")
 	}
-	return b.engine.Pages().(*chromiumPageController).ensureSession(ctx, client, targetID)
+	return b.engine.Pages().(*chromiumPageController).ensureSessionWithError(ctx, client, targetID)
 }
 
 func (b *chromiumInputBackend) DispatchMouseMove(ctx context.Context, targetID TargetID, x, y float64) error {
@@ -54,7 +54,10 @@ func (b *chromiumInputBackend) DispatchMouseMove(ctx context.Context, targetID T
 	if client == nil {
 		return fmt.Errorf("CDP client not available")
 	}
-	sessionID := b.ensureSession(ctx, targetID)
+	sessionID, sessionErr := b.ensureSession(ctx, targetID)
+	if sessionErr != nil {
+		return fmt.Errorf("failed to ensure session for target %s: %w", targetID, sessionErr)
+	}
 	params := map[string]interface{}{
 		"type":       "mouseMoved",
 		"x":          x,

@@ -160,6 +160,22 @@ func (s *tabStore) updateTabInfo(tabID BrowserTabID, url, title string, active b
 	record.updatedAt = time.Now()
 }
 
+func (s *tabStore) updateTabResource(tabID BrowserTabID, url, title string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	record, ok := s.tabs[tabID]
+	if !ok {
+		return
+	}
+	if url != "" {
+		record.info.URL = url
+	}
+	if title != "" {
+		record.info.Title = title
+	}
+	record.updatedAt = time.Now()
+}
+
 func (s *tabStore) clearActive(sessionID BrowserSessionID) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

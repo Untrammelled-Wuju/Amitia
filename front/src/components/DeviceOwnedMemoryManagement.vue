@@ -4,21 +4,28 @@
       <el-input v-if="props.search === undefined" v-model="query" clearable placeholder="检索当前查看范围的记忆" @keyup.enter="search()" />
       <el-select v-model="mode" aria-label="记忆检索方式"><el-option label="关键词" value="keyword" /><el-option label="混合检索" value="hybrid" /><el-option label="向量检索" value="vector" /></el-select>
       <el-select v-model="memoryType" clearable placeholder="全部记忆类型"><el-option label="全部类型" value="" /><el-option v-for="type in types" :key="type.value" :label="type.label" :value="type.value" /></el-select>
-      <el-select v-model="sourceFilter" clearable placeholder="全部来源"><el-option label="全部来源" value="" /><el-option label="手动新增" value="manual" /><el-option label="审核保存" value="reviewed" /></el-select>
+      <el-select v-model="sourceFilter" clearable placeholder="全部来源"><el-option label="全部来源" value="" /><el-option label="手动新增" value="manual" /><el-option label="审核保存" value="reviewed" /><el-option label="自动提取" value="extraction" /><el-option label="用户更正" value="user_correction" /></el-select>
       <el-select v-model="sort" aria-label="记忆排序"><el-option label="默认排序" value="" /><el-option label="重要程度优先" value="importance_desc" /></el-select>
       <el-select v-model="retentionLevel" aria-label="保留等级"><el-option label="全部等级" :value="0" /><el-option v-for="level in 5" :key="level" :label="`L${level}`" :value="level" /></el-select>
       <el-checkbox v-model="pinnedOnly">仅看固定记忆</el-checkbox>
-      <el-select v-model="decayState" aria-label="记忆状态"><el-option label="全部状态" value="" /><el-option label="活跃" value="active" /><el-option label="淡化" value="fading" /><el-option label="自动归档" value="archived" /></el-select>
+      <el-select v-model="decayState" aria-label="记忆状态"><el-option label="全部状态" value="" /><el-option label="活跃" value="active" /><el-option label="淡化" value="fading" /><el-option label="休眠" value="dormant" /><el-option label="自动归档" value="archived" /></el-select>
       <el-button :loading="loading" @click="search()">检索</el-button>
     </div>
     <div class="management-actions">
       <el-button :disabled="loading" @click="openCreate">新增记忆</el-button>
       <el-button :disabled="loading" @click="openGenerate">从对话生成候选</el-button>
       <el-button :disabled="loading" @click="loadCandidates">待审核候选</el-button>
+      <el-button :disabled="loading" @click="checkConsolidation">巩固检查</el-button>
       <el-button :disabled="loading" @click="emit('refresh')">刷新</el-button>
     </div>
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
-    <article v-for="row in results" :key="`${row.ownerId}/${row.id}`" class="management-row"><strong>{{ row.body.key }}</strong><p>{{ text(row) }}</p><small>{{ row.ownerId }} · 版本 {{ row.revision }}</small></article>
+    <el-alert v-if="consolidationText" :title="consolidationText" type="info" :closable="false" />
+    <article v-for="row in results" :key="`${row.ownerId}/${row.id}`" class="management-row">
+      <strong>{{ row.body.key }}</strong>
+      <p>{{ text(row) }}</p>
+      <small>{{ row.ownerId }} · 版本 {{ row.revision }} · {{ ownedMemoryVerificationLabel(row.body) }}</small>
+      <details v-if="scoreSummary(row)"><summary>召回解释</summary><small>{{ scoreSummary(row) }}</small></details>
+    </article>
     <el-button v-if="nextCursor" :loading="loading" @click="search(true)">加载更多检索结果</el-button>
     <article v-for="row in candidates" :key="`${row.ownerId}/${row.id}`" class="management-row">
       <strong>{{ row.body.key }}</strong><p>{{ row.body.value }}</p><small>待审核 · {{ row.ownerId }} · 版本 {{ row.revision }}</small>
@@ -48,6 +55,7 @@ import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversa
 import { useOwnedMemoryManagement, ownedMemoryAuthority, type OwnedMemoryManagementResource } from "@/composables/useOwnedMemoryManagement";
 import type { OwnedExecutionScope } from "@/runtime/device-owned-chat";
 import { parseConversationReference } from "@/runtime/device-owned-conversation-reference";
+import { ownedMemoryVerificationLabel, ownedMemoryScoreSummary } from "@/runtime/owned-memory-format";
 
 const props = defineProps<{ executionScope: OwnedExecutionScope; search?: string }>();
 const emit = defineEmits<{ saved: []; refresh: [] }>();
@@ -64,7 +72,9 @@ const pinnedOnly = ref(false);
 const decayState = ref("");
 const loading = ref(false);
 const error = ref("");
+const consolidationText = ref("");
 const results = ref<OwnedMemoryManagementResource[]>([]);
+const scoreDetails = ref<Record<string, Record<string, any>>>({});
 const candidates = ref<OwnedMemoryManagementResource[]>([]);
 const nextCursor = ref("");
 const editorOpen = ref(false);
@@ -87,9 +97,9 @@ let attemptFingerprint = "";
 let conflictIntent: { scope: OwnedExecutionScope; input: Record<string, unknown>; candidates: boolean } | undefined;
 const snapshot = () => JSON.parse(JSON.stringify(props.executionScope)) as OwnedExecutionScope;
 const text = (row: OwnedMemoryManagementResource) => typeof row.body.content === "string" ? row.body.content : String(row.body.content?.value || row.body.content?.text || "");
-function invalidate() { generation++; editorScope = undefined; generateScope = undefined; conflictIntent = undefined; results.value = []; candidates.value = []; nextCursor.value = ""; editorOpen.value = false; generateOpen.value = false; conflictOpen.value = false; loading.value = false; attempt = ""; attemptFingerprint = ""; }
+function invalidate() { generation++; editorScope = undefined; generateScope = undefined; conflictIntent = undefined; results.value = []; scoreDetails.value = {}; consolidationText.value = ""; candidates.value = []; nextCursor.value = ""; editorOpen.value = false; generateOpen.value = false; conflictOpen.value = false; loading.value = false; attempt = ""; attemptFingerprint = ""; }
 watch(() => ownedMemoryAuthority(props.executionScope), invalidate, { flush: "sync" });
-watch([query, mode, memoryType, sourceFilter, sort, retentionLevel, pinnedOnly, decayState], () => { results.value = []; nextCursor.value = ""; });
+watch([query, mode, memoryType, sourceFilter, sort, retentionLevel, pinnedOnly, decayState], () => { results.value = []; scoreDetails.value = {}; nextCursor.value = ""; });
 onUnmounted(invalidate);
 async function search(older = false) {
   const scope = snapshot(); const ticket = generation;
@@ -97,8 +107,19 @@ async function search(older = false) {
   const filters = () => ({ query: query.value, mode: mode.value, memoryType: memoryType.value, source: sourceFilter.value, sort: sort.value, ...(retentionLevel.value ? { retentionLevel: retentionLevel.value } : {}), ...(pinnedOnly.value ? { pinned: true } : {}), ...(decayState.value ? { decayState: decayState.value } : {}) });
   const filter = filters();
   const filterKey = JSON.stringify(filter);
-  try { const page = await api.read(scope, { ...filter, cursor: older ? nextCursor.value : "", limit: 32 }); if (ticket !== generation || filterKey !== JSON.stringify(filters())) return; results.value = older ? [...results.value, ...page.resources] : page.resources; nextCursor.value = page.nextCursor; }
+  try { const page = await api.read(scope, { ...filter, cursor: older ? nextCursor.value : "", limit: 32 }); if (ticket !== generation || filterKey !== JSON.stringify(filters())) return; const details = page.scoreDetails || {}; results.value = older ? [...results.value, ...page.resources] : page.resources; scoreDetails.value = older ? { ...scoreDetails.value, ...details } : details; nextCursor.value = page.nextCursor; }
   catch (cause) { if (ticket === generation) error.value = cause instanceof Error ? cause.message : "记忆检索失败"; }
+  finally { if (ticket === generation) loading.value = false; }
+}
+function scoreSummary(row: OwnedMemoryManagementResource) { return ownedMemoryScoreSummary(scoreDetails.value[row.id]); }
+async function checkConsolidation() {
+  const scope = snapshot(); const ticket = generation;
+  loading.value = true; error.value = ""; consolidationText.value = "";
+  try {
+    const report = await api.consolidation(scope);
+    if (ticket !== generation) return;
+    consolidationText.value = `巩固检查完成：共 ${report.total || 0} 条记忆，发现 ${report.suggestions || 0} 组待处理；重复内容 ${(report.duplicateGroups || []).length} 组，同键冲突 ${(report.keyConflicts || []).length} 组，聚类/摘要建议 ${(report.clusterGroups || []).length} 组，复习建议 ${report.reviewSuggestions || 0} 条，争议 ${report.disputedCount || 0} 条，失效 ${report.expiredCount || 0} 条，后台安全归并 ${report.autoMergedCount || 0} 条。`;
+  } catch (cause) { if (ticket === generation) error.value = cause instanceof Error ? cause.message : String(cause || "记忆巩固检查失败"); }
   finally { if (ticket === generation) loading.value = false; }
 }
 async function loadCandidates() {

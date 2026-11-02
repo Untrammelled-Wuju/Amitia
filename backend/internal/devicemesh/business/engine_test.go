@@ -71,7 +71,7 @@ func (m *testModel) ExtractOwnedMemory(ctx context.Context, inference Inference,
 	return []DerivedMemory{{Kind: "fact", Key: "favorite-drink", Body: json.RawMessage(`{"value":"tea"}`)}, {Kind: "vector", Key: "favorite-drink", Body: json.RawMessage(`{"values":[0.1,0.2]}`)}, {Kind: "graph", Key: "favorite-drink", Body: json.RawMessage(`{"relation":"likes","target":"tea"}`)}, {Kind: "working", Key: "current", Body: json.RawMessage(`{"summary":"talked about tea"}`)}}, nil
 }
 
-func engineHarness(t *testing.T) (*Engine, *sql.DB, *coordination.Service, *testModel) {
+func engineHarness(t testing.TB) (*Engine, *sql.DB, *coordination.Service, *testModel) {
 	t.Helper()
 	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "kernel.db"))
 	if err != nil {

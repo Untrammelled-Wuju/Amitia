@@ -50,6 +50,22 @@ func (r *Runtime) AttachKernelFacade(kernel *kernelruntime.Runtime) error {
 	return nil
 }
 
+func (r *Runtime) InvalidateExtensionReadModels() {
+	if r == nil || r.Kernel == nil {
+		return
+	}
+	container := r.Kernel.Container()
+	if container == nil {
+		return
+	}
+	if container.ExtensionCenterService != nil {
+		container.ExtensionCenterService.InvalidateCache()
+	}
+	if container.ExtensionDetailService != nil {
+		container.ExtensionDetailService.InvalidateAll()
+	}
+}
+
 func NewRuntime(ctx context.Context, db *gorm.DB, engineVersion string) (*Runtime, error) {
 	return newRuntime(ctx, db, engineVersion)
 }

@@ -61,7 +61,7 @@ func MemoryValue(content map[string]json.RawMessage) string {
 	for key, value := range content {
 		facts[key] = value
 	}
-	for _, key := range []string{"metadata", "executionScope", "conversationId", "source", "createdAt", "updatedAt", "createdAtUtc", "updatedAtUtc", "importance", "confidence", "memoryType", "memorySubtype", "category", "attributeName", "retentionLevel", "memoryStrength", "pinned", "reinforceCount", "strengthUpdatedAt", "lastReinforcedAt", "decayState", "occurredAtUtc", "endedAtUtc", "validFromUtc", "validToUtc", "localDate", "timezone", "temporalPrecision", "allowContextUse"} {
+	for _, key := range []string{"metadata", "executionScope", "conversationId", "source", "createdAt", "updatedAt", "createdAtUtc", "updatedAtUtc", "importance", "confidence", "verifiedStatus", "lastVerifiedAt", "correctionReason", "previousContentHash", "correctedAt", "disputedAt", "helpfulRetrievalCount", "unhelpfulRetrievalCount", "retrievalUtility", "lastRetrievalFeedbackAt", "lastRetrievalFeatures", "memoryType", "memorySubtype", "category", "attributeName", "retentionLevel", "memoryStrength", "pinned", "reinforceCount", "strengthUpdatedAt", "lastReinforcedAt", "decayState", "occurredAtUtc", "endedAtUtc", "validFromUtc", "validToUtc", "localDate", "timezone", "temporalPrecision", "allowContextUse"} {
 		delete(facts, key)
 	}
 	if len(facts) > 0 {

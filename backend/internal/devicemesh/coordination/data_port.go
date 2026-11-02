@@ -74,6 +74,7 @@ type DataSnapshot struct {
 	GroupRoles     map[string]string          `json:"groupRoles,omitempty"`
 	OwnerID        string                     `json:"ownerId"`
 	Role           Role                       `json:"role"`
+	RecallEvidence []ResourceVersion          `json:"recallEvidence,omitempty"`
 	Resources      []Resource                 `json:"resources"`
 }
 
@@ -139,6 +140,20 @@ func ValidateSnapshot(scope ExecutionScope, snapshot DataSnapshot) error {
 	}
 	if len(snapshot.Resources) > 4096 {
 		return ErrPendingLimit
+	}
+	if len(snapshot.RecallEvidence) > 128 {
+		return ErrPendingLimit
+	}
+	recallEvidence := map[string]bool{}
+	for _, evidence := range snapshot.RecallEvidence {
+		if evidence.Kind != "memory" || evidence.ID == "" || evidence.Revision < 1 {
+			return ErrWrongOwner
+		}
+		key := evidence.Kind + "/" + evidence.ID
+		if recallEvidence[key] {
+			return ErrWrongOwner
+		}
+		recallEvidence[key] = true
 	}
 	if len(snapshot.RuntimeContext) > 10 {
 		return ErrPendingLimit

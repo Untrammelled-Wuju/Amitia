@@ -21,7 +21,7 @@ config:
 
 app:
   name: "U-Ai"
-  version: "26.2.0-beta.20"
+  version: "26.2.0-beta.22"
   deployMode: "desktop-local"
 
 chat:
@@ -64,6 +64,22 @@ providers:
       username: "root"
       password: ""
       dataPath: "data/graph.db"
+  browser:
+    enabled: true
+    executablePath: ""
+    headless: true
+    userDataRoot: ""
+    startupTimeoutSec: 30
+    shutdownTimeoutSec: 5
+    maxBrowserMemoryBytes: 0
+    allowedSchemes:
+      - "http"
+      - "https"
+    maxSessions: 8
+    maxTabsPerSession: 8
+    maxTabsTotal: 32
+    navigationTimeoutSec: 30
+    maxNavigationTimeoutSec: 120
 components:
   taskHost:
     enabled: true

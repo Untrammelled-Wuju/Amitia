@@ -5,7 +5,6 @@ import (
 	amitialog "log"
 	"net/http"
 	"strings"
-	"time"
 )
 
 type HTTPHandler struct {
@@ -18,10 +17,6 @@ func NewHTTPHandler(service *CenterService) *HTTPHandler {
 
 func (h *HTTPHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/extension-center/view", h.handleView)
-	mux.HandleFunc("/api/extension-center/installed", h.handleInstalled)
-	mux.HandleFunc("/api/extension-center/discover", h.handleDiscover)
-	mux.HandleFunc("/api/extension-center/updates", h.handleUpdates)
-	mux.HandleFunc("/api/extension-center/needs-action", h.handleNeedsAction)
 }
 
 func (h *HTTPHandler) handleView(w http.ResponseWriter, r *http.Request) {
@@ -29,46 +24,10 @@ func (h *HTTPHandler) handleView(w http.ResponseWriter, r *http.Request) {
 	sortKey := parseSort(r)
 	view, err := h.service.GetView(r.Context(), filter, sortKey)
 	if err != nil {
-		writeJSON(w, http.StatusOK, &CenterView{GeneratedAt: time.Now().UTC()})
+		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, view)
-}
-
-func (h *HTTPHandler) handleInstalled(w http.ResponseWriter, r *http.Request) {
-	cards, err := h.service.ListInstalled(r.Context())
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, cards)
-}
-
-func (h *HTTPHandler) handleDiscover(w http.ResponseWriter, r *http.Request) {
-	cards, err := h.service.ListDiscoverable(r.Context())
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, cards)
-}
-
-func (h *HTTPHandler) handleUpdates(w http.ResponseWriter, r *http.Request) {
-	cards, err := h.service.ListUpdates(r.Context())
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, cards)
-}
-
-func (h *HTTPHandler) handleNeedsAction(w http.ResponseWriter, r *http.Request) {
-	cards, err := h.service.ListNeedsAction(r.Context())
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, cards)
 }
 
 func parseFilter(r *http.Request) CenterFilter {
@@ -138,5 +97,3 @@ func writeError(w http.ResponseWriter, status int, err error) {
 		amitialog.Printf("[original-error] %v", err)
 	}
 }
-
-var _ = time.Now

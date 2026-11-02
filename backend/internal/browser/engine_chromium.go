@@ -2,13 +2,14 @@ package browser
 
 import (
 	"context"
-	"github.com/u-ai/backend/internal/timeoutpolicy"
+	"fmt"
+	amitialog "log"
 	"sync"
 	"time"
 
 	proc "github.com/u-ai/backend/internal/platform/process"
 	"github.com/u-ai/backend/internal/runtimehost"
-	amitialog "log"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 )
 
 type chromiumEngine struct {
@@ -86,12 +87,13 @@ func (e *chromiumEngine) Start(ctx context.Context) (*BrowserRuntimeInfo, error)
 	}
 
 	if err := e.connectCDP(ctx, proc); err != nil {
+		e.releaseManagedProcess()
 		proc.kill()
 		e.cleanupProfile()
 		e.state.setFailed()
 		return nil, &BrowserError{
 			Code:    ErrCodeBrowserConnFailed,
-			Message: "failed to connect to browser CDP",
+			Message: "failed to connect to browser CDP: " + safeErrorMessage(err),
 			Cause:   err,
 		}
 	}
@@ -221,7 +223,7 @@ func (e *chromiumEngine) launchProcess(ctx context.Context, execInfo BrowserExec
 		if err := e.supervisor.Register(spec); err != nil {
 			return nil, &BrowserError{
 				Code:    ErrCodeBrowserStartFailed,
-				Message: "failed to register browser with runtime host",
+				Message: "failed to register browser with runtime host: " + safeErrorMessage(err),
 				Cause:   err,
 			}
 		}
@@ -241,6 +243,25 @@ func (e *chromiumEngine) launchProcess(ctx context.Context, execInfo BrowserExec
 	}
 
 	return proc, nil
+}
+
+func (e *chromiumEngine) releaseManagedProcess() {
+	e.mu.Lock()
+	processID := e.processID
+	supervisor := e.supervisor
+	e.processID = ""
+	e.mu.Unlock()
+	if supervisor == nil || processID == "" {
+		return
+	}
+	stopCtx, cancel := context.WithTimeout(context.Background(), e.config.ShutdownTimeout)
+	defer cancel()
+	if err := supervisor.Stop(stopCtx, processID); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if err := supervisor.Unregister(processID); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
 }
 
 func (e *chromiumEngine) connectCDP(ctx context.Context, proc *browserProcess) error {
@@ -648,31 +669,34 @@ func (c *chromiumPageController) getSession(targetID TargetID) string {
 	return ""
 }
 
-func (c *chromiumPageController) ensureSession(ctx context.Context, client *cdpClient, targetID TargetID) string {
+func (c *chromiumPageController) ensureSessionWithError(ctx context.Context, client *cdpClient, targetID TargetID) (string, error) {
 	if sid := c.getSession(targetID); sid != "" {
-		return sid
+		return sid, nil
 	}
 
 	var result struct {
 		SessionID string `json:"sessionId"`
 	}
-	params := map[string]string{"targetId": string(targetID), "flatten": "true"}
+	params := map[string]any{"targetId": string(targetID), "flatten": true}
 	if err := client.Call(ctx, "Target.attachToTarget", "", params, &result); err != nil {
-		return ""
+		return "", fmt.Errorf("attach target %s: %w", targetID, err)
 	}
 
 	if result.SessionID != "" {
 		if err := client.Call(ctx, "Page.enable", result.SessionID, nil, nil); err != nil {
-			return ""
+			return "", fmt.Errorf("enable page for target %s: %w", targetID, err)
 		}
 		if err := client.Call(ctx, "Runtime.enable", result.SessionID, nil, nil); err != nil {
-			return ""
+			return "", fmt.Errorf("enable runtime for target %s: %w", targetID, err)
 		}
 		ps := &pageSession{targetID: targetID, sessionID: result.SessionID}
 		pageSessions.Store(targetID, ps)
 	}
 
-	return result.SessionID
+	if result.SessionID == "" {
+		return "", fmt.Errorf("attach target %s returned an empty session ID", targetID)
+	}
+	return result.SessionID, nil
 }
 
 func (c *chromiumPageController) Navigate(ctx context.Context, targetID TargetID, url string, waitUntil string, timeout time.Duration) (*pageNavigateResult, error) {
@@ -691,11 +715,12 @@ func (c *chromiumPageController) Navigate(ctx context.Context, targetID TargetID
 		}
 	}
 
-	sessionID := c.ensureSession(ctx, client, targetID)
-	if sessionID == "" {
+	sessionID, attachErr := c.ensureSessionWithError(ctx, client, targetID)
+	if attachErr != nil {
 		return nil, &BrowserError{
 			Code:    ErrCodeBrowserRuntimeNotReady,
-			Message: "failed to attach to target",
+			Message: "failed to attach to target: " + safeErrorMessage(attachErr),
+			Cause:   attachErr,
 		}
 	}
 
@@ -793,11 +818,12 @@ func (c *chromiumPageController) Reload(ctx context.Context, targetID TargetID, 
 		}
 	}
 
-	sessionID := c.ensureSession(ctx, client, targetID)
-	if sessionID == "" {
+	sessionID, attachErr := c.ensureSessionWithError(ctx, client, targetID)
+	if attachErr != nil {
 		return nil, &BrowserError{
 			Code:    ErrCodeBrowserRuntimeNotReady,
-			Message: "failed to attach to target",
+			Message: "failed to attach to target: " + safeErrorMessage(attachErr),
+			Cause:   attachErr,
 		}
 	}
 
@@ -871,11 +897,12 @@ func (c *chromiumPageController) navigateHistory(ctx context.Context, targetID T
 		}
 	}
 
-	sessionID := c.ensureSession(ctx, client, targetID)
-	if sessionID == "" {
+	sessionID, attachErr := c.ensureSessionWithError(ctx, client, targetID)
+	if attachErr != nil {
 		return nil, &BrowserError{
 			Code:    ErrCodeBrowserRuntimeNotReady,
-			Message: "failed to attach to target",
+			Message: "failed to attach to target: " + safeErrorMessage(attachErr),
+			Cause:   attachErr,
 		}
 	}
 
@@ -910,7 +937,58 @@ func (c *chromiumPageController) navigateHistory(ctx context.Context, targetID T
 		}
 	}
 
-	return &pageNavigateResult{Loaded: true}, nil
+	deadline := time.Now().Add(3 * time.Second)
+	var lastErr error
+	for {
+		finalURL, title, identifyErr := c.pageIdentity(ctx, client, targetID)
+		if identifyErr != nil {
+			lastErr = identifyErr
+		} else if finalURL != "" {
+			return &pageNavigateResult{FinalURL: finalURL, Title: title, Loaded: true}, nil
+		}
+		if time.Now().After(deadline) {
+			if lastErr != nil {
+				return nil, &BrowserError{
+					Code:    ErrCodeNavigationFailed,
+					Message: "history navigation result unavailable: " + lastErr.Error(),
+					Cause:   lastErr,
+				}
+			}
+			return &pageNavigateResult{Loaded: true}, nil
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+}
+
+func (c *chromiumPageController) pageIdentity(ctx context.Context, client *cdpClient, targetID TargetID) (string, string, error) {
+	sessionID, sessionErr := c.ensureSessionWithError(ctx, client, targetID)
+	if sessionErr != nil {
+		return "", "", sessionErr
+	}
+	var result struct {
+		Result struct {
+			Value struct {
+				URL   string `json:"url"`
+				Title string `json:"title"`
+			} `json:"value"`
+		} `json:"result"`
+	}
+	expression := `({url: window.location.href, title: document.title})`
+	if err := client.Call(ctx, "Runtime.evaluate", sessionID, map[string]any{"expression": expression, "returnByValue": true}, &result); err != nil {
+		pageSessions.Delete(targetID)
+		sessionID, sessionErr = c.ensureSessionWithError(ctx, client, targetID)
+		if sessionErr != nil {
+			return "", "", fmt.Errorf("evaluate page identity failed: %v; reattach failed: %w", err, sessionErr)
+		}
+		if retryErr := client.Call(ctx, "Runtime.evaluate", sessionID, map[string]any{"expression": expression, "returnByValue": true}, &result); retryErr != nil {
+			return "", "", fmt.Errorf("evaluate page identity failed: %v; retry failed: %w", err, retryErr)
+		}
+	}
+	return result.Result.Value.URL, result.Result.Value.Title, nil
 }
 
 func (c *chromiumPageController) Stop(ctx context.Context, targetID TargetID) error {
@@ -929,11 +1007,12 @@ func (c *chromiumPageController) Stop(ctx context.Context, targetID TargetID) er
 		}
 	}
 
-	sessionID := c.ensureSession(ctx, client, targetID)
-	if sessionID == "" {
+	sessionID, attachErr := c.ensureSessionWithError(ctx, client, targetID)
+	if attachErr != nil {
 		return &BrowserError{
 			Code:    ErrCodeBrowserRuntimeNotReady,
-			Message: "failed to attach to target",
+			Message: "failed to attach to target: " + safeErrorMessage(attachErr),
+			Cause:   attachErr,
 		}
 	}
 

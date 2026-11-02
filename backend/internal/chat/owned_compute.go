@@ -17,6 +17,7 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/embedding"
 	"github.com/u-ai/backend/internal/interaction"
+	promptir "github.com/u-ai/backend/internal/prompt"
 	"github.com/u-ai/backend/internal/temporal"
 )
 
@@ -105,7 +106,7 @@ func ownedPromptContext(ctx context.Context, inference business.Inference, knowl
 			owned = append(owned, row)
 		}
 	}
-	contextData["ownedData"] = owned
+	contextData["ownedData"] = budgetOwnedContextResources(owned, 24, 6000)
 	if inference.Quote != nil {
 		contextData["reviewedQuotedMessage"] = inference.Quote
 	}
@@ -203,6 +204,23 @@ func ownedPromptContext(ctx context.Context, inference business.Inference, knowl
 		messages = append(messages, map[string]interface{}{"role": "user", "content": content})
 	}
 	return messages, nil
+}
+
+func budgetOwnedContextResources(resources []coordination.Resource, maxItems, maxTokens int) []coordination.Resource {
+	selected := make([]coordination.Resource, 0, min(len(resources), maxItems))
+	seen := map[string]bool{}
+	tokens := 0
+	for _, resource := range resources {
+		key := resource.Kind + "/" + resource.ID
+		resourceTokens := promptir.EstimateTokens(string(resource.Body))
+		if seen[key] || len(selected) >= maxItems || tokens+resourceTokens > maxTokens {
+			continue
+		}
+		seen[key] = true
+		tokens += resourceTokens
+		selected = append(selected, resource)
+	}
+	return selected
 }
 
 func ownedMessageContent(text string, attachments []business.Attachment) (any, error) {

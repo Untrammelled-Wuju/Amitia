@@ -1,5 +1,8 @@
 package com.amitia.amitia_app.runtime.bridge
 
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
 import com.amitia.amitia_app.runtime.api.RuntimeController
 import com.amitia.amitia_app.runtime.api.RuntimeListener
 import com.amitia.amitia_app.runtime.api.RuntimeSnapshot
@@ -20,6 +23,7 @@ internal class RuntimeBridgeStreamHandler(
     private val sinkRef = AtomicReference<EventChannel.EventSink?>(null)
     private val subscriptionRef = AtomicReference<RuntimeSubscription?>(null)
     private val active = AtomicBoolean(false)
+    private val mainHandler = Handler(Looper.getMainLooper())
     private val listener = RuntimeListener { snapshot ->
         emitSnapshot(snapshot)
     }
@@ -60,20 +64,28 @@ internal class RuntimeBridgeStreamHandler(
                 runtimeInstalled = runtimeInstalled,
                 runtimeAvailable = runtimeAvailable,
             )
-            sink.success(mapped)
-        } catch (originalError64: Exception) {
-          originalError64.printStackTrace()
-
-            try {
-                sink.error(
-                    "RUNTIME_EVENT_EMIT_FAILED",
-                    "runtime snapshot event mapping failed: ${originalError64.message ?: originalError64.javaClass.simpleName}",
-                    null,
-                )
-            } catch (originalError71: Exception) {
-              originalError71.printStackTrace()
-
+            mainHandler.post {
+                if (active.get() && sinkRef.get() === sink) {
+                    try {
+                        sink.success(mapped)
+                    } catch (error: Throwable) {
+                        emitError(sink, error)
+                    }
+                }
             }
+        } catch (error: Throwable) {
+            mainHandler.post {
+                if (active.get() && sinkRef.get() === sink) emitError(sink, error)
+            }
+        }
+    }
+
+    private fun emitError(sink: EventChannel.EventSink, error: Throwable) {
+        Log.e("AmitiaRuntimeBridge", "Runtime snapshot event failed", error)
+        try {
+            sink.error("RUNTIME_EVENT_EMIT_FAILED", error.toString(), Log.getStackTraceString(error))
+        } catch (deliveryError: Throwable) {
+            Log.e("AmitiaRuntimeBridge", "Runtime snapshot error delivery failed", deliveryError)
         }
     }
 

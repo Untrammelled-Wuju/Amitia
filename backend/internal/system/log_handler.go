@@ -3,11 +3,40 @@
 package system
 
 import (
+	"errors"
+	"strconv"
+
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/pkg/util"
 )
 
-func (h *Handler) LogsRecent(c *gin.Context) { util.SuccessResponse(c, h.service.GetLogsRecent(50)) }
+const recentLogLimit = 200
+
+func (h *Handler) LogsRecent(c *gin.Context) {
+	limit, err := parseLogLimit(c.Query("limit"), recentLogLimit)
+	if err != nil {
+		util.ErrorResponse(c, 400, err.Error(), nil)
+		return
+	}
+	util.SuccessResponse(c, h.service.GetLogsRecent(limit))
+}
+
+func parseLogLimit(raw string, maximum int) (int, error) {
+	if raw == "" {
+		return maximum, nil
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, err
+	}
+	if value <= 0 {
+		return 0, errors.New("limit must be greater than zero")
+	}
+	if value > maximum {
+		return maximum, nil
+	}
+	return value, nil
+}
 
 func (h *Handler) LogsRecentErrors(c *gin.Context) {
 	util.SuccessResponse(c, h.service.GetLogsRecentErrors(20))

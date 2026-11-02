@@ -13,6 +13,7 @@ import (
 	"github.com/u-ai/backend/internal/configwrite"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/securityaudit"
+	amitialog "github.com/u-ai/backend/log"
 	"gorm.io/gorm"
 )
 
@@ -84,6 +85,19 @@ func (s *service) AdministratorActionContext(ctx context.Context, operation, id 
 }
 
 func (s *service) administratorLogAction(ctx context.Context, operation string) (map[string]interface{}, error) {
+	if operation == "logs-rotate" {
+		if err := coordination.ValidateCurrent(ctx); err != nil {
+			return map[string]interface{}{"rotated": []string{}, "skipped": []string{}}, err
+		}
+		current, err := amitialog.RotateNow()
+		if err != nil {
+			return map[string]interface{}{"rotated": []string{}, "skipped": []string{}}, err
+		}
+		return map[string]interface{}{
+			"rotated": []string{current},
+			"skipped": []string{},
+		}, nil
+	}
 	entries, err := os.ReadDir("logs")
 	if err != nil && !os.IsNotExist(err) {
 		return nil, err
@@ -99,7 +113,8 @@ func (s *service) administratorLogAction(ctx context.Context, operation string) 
 		if entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
 			continue
 		}
-		if operation == "temp-clean" && !strings.HasSuffix(entry.Name(), ".old") || operation != "temp-clean" && !strings.HasSuffix(entry.Name(), ".log") {
+		if operation == "temp-clean" && !strings.HasSuffix(entry.Name(), ".old") ||
+			operation != "temp-clean" && !isLogFileName(entry.Name()) {
 			continue
 		}
 		if err := coordination.ValidateCurrent(ctx); err != nil {
@@ -116,10 +131,6 @@ func (s *service) administratorLogAction(ctx context.Context, operation string) 
 				return fail(err)
 			}
 			freed += info.Size()
-		case "logs-rotate":
-			if err := coordination.CommitCurrent(ctx, func() error { return os.Rename(path, path+".old") }); err != nil {
-				return fail(err)
-			}
 		case "model-errors-delete":
 			data, err := os.ReadFile(path)
 			if err != nil {
@@ -155,8 +166,6 @@ func (s *service) administratorLogAction(ctx context.Context, operation string) 
 		result["deleted"] = true
 	case "model-errors-delete":
 		result["deleted"], result["updatedFiles"] = true, processed
-	case "logs-rotate":
-		result["rotated"], result["count"] = true, processed
 	case "temp-clean":
 		result["cleaned"] = true
 	}

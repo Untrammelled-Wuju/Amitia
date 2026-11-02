@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	amitialog "github.com/u-ai/backend/log"
 )
 
 func (s *service) GetRuntimeStatus() map[string]interface{} {
@@ -75,18 +77,11 @@ func (s *service) CleanupTemp() map[string]interface{} {
 }
 
 func (s *service) RotateLogs() map[string]interface{} {
-	logDir := "logs"
-	entries, _ := os.ReadDir(logDir)
-	rotated := 0
-	for _, e := range entries {
-		if !e.IsDir() && strings.HasSuffix(e.Name(), ".log") {
-			oldPath := filepath.Join(logDir, e.Name())
-			newPath := filepath.Join(logDir, e.Name()+".old")
-			os.Rename(oldPath, newPath)
-			rotated++
-		}
+	current, err := amitialog.RotateNow()
+	if err != nil {
+		return map[string]interface{}{"rotated": []string{}, "skipped": []string{}, "error": err.Error()}
 	}
-	return map[string]interface{}{"rotated": true, "count": rotated}
+	return map[string]interface{}{"rotated": []string{current}, "skipped": []string{}}
 }
 
 func (s *service) RunNow() map[string]interface{} {

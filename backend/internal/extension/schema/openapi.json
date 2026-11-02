@@ -1763,9 +1763,9 @@
         ]
       }
     },
-    "/extensions/kernel/extension": {
+    "/extension-center/extension": {
       "get": {
-        "description": "Get kernel extension",
+        "description": "Get canonical extension center detail",
         "responses": {
           "200": {
             "description": "OK"
@@ -1774,15 +1774,15 @@
             "description": "Unauthorized"
           }
         },
-        "summary": "Get kernel extension",
+        "summary": "Get extension center detail",
         "tags": [
           "Kernel"
         ]
       }
     },
-    "/extensions/kernel/extensions": {
+    "/extension-center/view": {
       "get": {
-        "description": "List kernel extensions",
+        "description": "Get canonical extension center view",
         "responses": {
           "200": {
             "description": "OK"
@@ -1791,7 +1791,7 @@
             "description": "Unauthorized"
           }
         },
-        "summary": "List kernel extensions",
+        "summary": "Get extension center view",
         "tags": [
           "Kernel"
         ]

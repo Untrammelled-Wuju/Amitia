@@ -28,12 +28,59 @@ void main() {
         'abi': 'arm64-v8a',
       },
       'releaseNotes': 'test',
+      'updateTitle': 'Amitia 可以更新了！',
+      'highlights': <String>[
+        '亮点一',
+        '',
+        ' 亮点二 ',
+        '亮点三',
+        '亮点四',
+        '亮点五',
+        '亮点六',
+        '亮点七',
+        '亮点八',
+      ],
     });
 
     expect(manifest.versionCode, 12);
     expect(manifest.apk.abi, 'arm64-v8a');
+    expect(manifest.updateTitle, 'Amitia 可以更新了！');
+    expect(manifest.highlights, <String>[
+      '亮点一',
+      '亮点二',
+      '亮点三',
+      '亮点四',
+      '亮点五',
+      '亮点六',
+      '亮点七',
+      '亮点八',
+    ]);
     expect(manifest.requiresVersion(9), isTrue);
     expect(manifest.requiresVersion(10), isFalse);
+  });
+
+  test('keeps legacy manifests compatible without presentation fields', () {
+    final manifest = AppUpdateManifest.fromMap(<String, dynamic>{
+      'schemaVersion': 1,
+      'product': 'android',
+      'packageName': 'com.amitia.amitia_app',
+      'channel': 'stable',
+      'versionCode': 12,
+      'versionName': '1.0.3',
+      'minSupportedVersionCode': 0,
+      'mandatory': false,
+      'rolloutPercentage': 100,
+      'apk': <String, dynamic>{
+        'url': 'https://example.com/app.apk',
+        'size': 1234,
+        'sha256': 'a' * 64,
+        'abi': 'arm64-v8a',
+      },
+      'releaseNotes': '',
+    });
+
+    expect(manifest.updateTitle, isEmpty);
+    expect(manifest.highlights, isEmpty);
   });
 
   test('parses install result and download progress', () {

@@ -15,7 +15,11 @@ class _WorkspaceMount {
   final String rootUri;
   final bool available;
 
-  const _WorkspaceMount({required this.name, required this.rootUri, required this.available});
+  const _WorkspaceMount({
+    required this.name,
+    required this.rootUri,
+    required this.available,
+  });
 }
 
 class _FileItem {
@@ -39,14 +43,22 @@ class _FileItem {
 class ToolboxFileBrowserPage extends ConsumerStatefulWidget {
   final bool embedded;
   final String initialRootUri;
-  final void Function(String resourceUri, String workspaceUri, String title)? onOpenFile;
-  const ToolboxFileBrowserPage({super.key, this.embedded = false, this.initialRootUri = '', this.onOpenFile});
+  final void Function(String resourceUri, String workspaceUri, String title)?
+  onOpenFile;
+  const ToolboxFileBrowserPage({
+    super.key,
+    this.embedded = false,
+    this.initialRootUri = '',
+    this.onOpenFile,
+  });
 
   @override
-  ConsumerState<ToolboxFileBrowserPage> createState() => _ToolboxFileBrowserPageState();
+  ConsumerState<ToolboxFileBrowserPage> createState() =>
+      _ToolboxFileBrowserPageState();
 }
 
-class _ToolboxFileBrowserPageState extends ConsumerState<ToolboxFileBrowserPage> {
+class _ToolboxFileBrowserPageState
+    extends ConsumerState<ToolboxFileBrowserPage> {
   List<_WorkspaceMount> _mounts = const [];
   List<_FileItem> _files = const [];
   final List<String> _history = [];
@@ -69,16 +81,29 @@ class _ToolboxFileBrowserPageState extends ConsumerState<ToolboxFileBrowserPage>
     if (n.endsWith('.doc') || n.endsWith('.docx')) {
       return Icons.description_outlined;
     }
-    if (n.endsWith('.png') || n.endsWith('.jpg') || n.endsWith('.jpeg') || n.endsWith('.gif') || n.endsWith('.webp')) {
+    if (n.endsWith('.png') ||
+        n.endsWith('.jpg') ||
+        n.endsWith('.jpeg') ||
+        n.endsWith('.gif') ||
+        n.endsWith('.webp')) {
       return Icons.image_outlined;
     }
-    if (n.endsWith('.m4a') || n.endsWith('.mp3') || n.endsWith('.wav') || n.endsWith('.flac')) {
+    if (n.endsWith('.m4a') ||
+        n.endsWith('.mp3') ||
+        n.endsWith('.wav') ||
+        n.endsWith('.flac')) {
       return Icons.music_note_outlined;
     }
-    if (n.endsWith('.json') || n.endsWith('.yaml') || n.endsWith('.xml') || n.endsWith('.toml')) {
+    if (n.endsWith('.json') ||
+        n.endsWith('.yaml') ||
+        n.endsWith('.xml') ||
+        n.endsWith('.toml')) {
       return Icons.code;
     }
-    if (n.endsWith('.zip') || n.endsWith('.tar') || n.endsWith('.gz') || n.endsWith('.rar')) {
+    if (n.endsWith('.zip') ||
+        n.endsWith('.tar') ||
+        n.endsWith('.gz') ||
+        n.endsWith('.rar')) {
       return Icons.archive_outlined;
     }
     return Icons.insert_drive_file_outlined;
@@ -128,7 +153,9 @@ class _ToolboxFileBrowserPageState extends ConsumerState<ToolboxFileBrowserPage>
       final initialRootUri = widget.initialRootUri.trim();
       final initial = initialRootUri.isEmpty
           ? null
-          : mounts.where((mount) => mount.rootUri == initialRootUri).firstOrNull;
+          : mounts
+                .where((mount) => mount.rootUri == initialRootUri)
+                .firstOrNull;
       await _openMount(initial ?? mounts.first);
     } catch (e) {
       if (mounted) {
@@ -161,7 +188,8 @@ class _ToolboxFileBrowserPageState extends ConsumerState<ToolboxFileBrowserPage>
         queryParameters: {'uri': uri, 'limit': 500},
         fromJson: (e) => Map<String, dynamic>.from(e as Map),
       );
-      final entries = (resp?['Entries'] ?? resp?['entries']) as List<dynamic>? ?? const [];
+      final entries =
+          (resp?['Entries'] ?? resp?['entries']) as List<dynamic>? ?? const [];
       final files =
           entries.whereType<Map>().map((entry) {
             final m = Map<String, dynamic>.from(entry);
@@ -228,19 +256,161 @@ class _ToolboxFileBrowserPageState extends ConsumerState<ToolboxFileBrowserPage>
             width: 640,
             child: isText
                 ? SingleChildScrollView(
-                    child: SelectableText(content, style: const TextStyle(fontFamily: 'monospace')),
+                    child: SelectableText(
+                      content,
+                      style: const TextStyle(fontFamily: 'monospace'),
+                    ),
                   )
                 : const Text('当前文件不是可直接预览的文本文件。'),
           ),
-          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('关闭'))],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('关闭'),
+            ),
+          ],
         ),
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('读取失败：$e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('读取失败：$e')));
       }
     }
   }
+
+  Widget _body(BuildContext context) => _loading
+      ? const AmitiaLoadingState(message: '正在加载文件列表...')
+      : _error != null
+      ? AmitiaErrorState(message: _error!, onRetry: _loadMounts)
+      : Column(
+          children: [
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                AppSpacing.md,
+                AppSpacing.pagePadding,
+                AppSpacing.sm,
+              ),
+              child: Row(
+                children: [
+                  if (_history.isNotEmpty)
+                    IconButton(
+                      onPressed: _backDirectory,
+                      icon: const Icon(Icons.arrow_upward),
+                      tooltip: '上一级',
+                    ),
+                  Expanded(
+                    child: Text(
+                      _currentUri ?? '没有可用 Workspace',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.caption(context),
+                    ),
+                  ),
+                  if (_mounts.length > 1)
+                    AmitiaPopupMenuButton<_WorkspaceMount>(
+                      tooltip: '切换 Workspace',
+                      onSelected: _openMount,
+                      itemBuilder: (_) => _mounts
+                          .map(
+                            (m) => PopupMenuItem(value: m, child: Text(m.name)),
+                          )
+                          .toList(),
+                      child: Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(_currentMountName ?? 'Workspace'),
+                            const Icon(Icons.arrow_drop_down),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: () => _currentUri == null
+                    ? _loadMounts()
+                    : _openUri(_currentUri!, pushHistory: false),
+                child: _files.isEmpty
+                    ? ListView(
+                        children: [
+                          AmitiaEmptyState(
+                            icon: Icons.folder_open,
+                            title: _mounts.isEmpty ? '没有可用 Workspace' : '目录为空',
+                            subtitle: _mounts.isEmpty
+                                ? '请先创建或授权一个 Workspace'
+                                : '当前目录没有文件',
+                          ),
+                        ],
+                      )
+                    : ListView.separated(
+                        padding: EdgeInsets.fromLTRB(
+                          AppSpacing.pagePadding,
+                          0,
+                          AppSpacing.pagePadding,
+                          AppSpacing.xl,
+                        ),
+                        itemCount: _files.length,
+                        separatorBuilder: (_, _) => Divider(
+                          height: 1,
+                          thickness: 0.5,
+                          color: context.borderSecondary,
+                        ),
+                        itemBuilder: (context, index) {
+                          final item = _files[index];
+                          return ListTile(
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                            ),
+                            dense: true,
+                            minVerticalPadding: 7,
+                            visualDensity: VisualDensity.compact,
+                            leading: Icon(
+                              _iconForName(item.name, item.isFolder),
+                              size: 19,
+                              color: item.isFolder
+                                  ? context.accentPrimary
+                                  : context.textSecondary,
+                            ),
+                            title: Text(
+                              item.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTypography.bodySmall(context),
+                            ),
+                            subtitle: item.isFolder
+                                ? null
+                                : Text(
+                                    '${_formatSize(item.sizeBytes)} · ${item.modifiedAt}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppTypography.caption(
+                                      context,
+                                    ).copyWith(fontSize: 11),
+                                  ),
+                            trailing: Icon(
+                              item.isFolder
+                                  ? Icons.chevron_right
+                                  : Icons.open_in_new,
+                              size: 18,
+                              color: context.textTertiary,
+                            ),
+                            onTap: item.isFolder
+                                ? () => _openUri(item.uri)
+                                : () => _showFile(item),
+                          );
+                        },
+                      ),
+              ),
+            ),
+          ],
+        );
 
   @override
   Widget build(BuildContext context) {
@@ -249,104 +419,16 @@ class _ToolboxFileBrowserPageState extends ConsumerState<ToolboxFileBrowserPage>
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop && _history.isNotEmpty) _backDirectory();
       },
-      child: AmitiaScaffold(
-        appBar: AmitiaAppBar(
-          title: '文件浏览',
-          showBackButton: !widget.embedded,
-          fallbackRoute: AppRoutes.settingsMaintenanceCategory,
-        ),
-        body: _loading
-            ? const AmitiaLoadingState(message: '正在加载文件列表...')
-            : _error != null
-            ? AmitiaErrorState(message: _error!, onRetry: _loadMounts)
-            : Column(
-                children: [
-                  Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      AppSpacing.pagePadding,
-                      AppSpacing.md,
-                      AppSpacing.pagePadding,
-                      AppSpacing.sm,
-                    ),
-                    child: Row(
-                      children: [
-                        if (_history.isNotEmpty)
-                          IconButton(onPressed: _backDirectory, icon: const Icon(Icons.arrow_upward), tooltip: '上一级'),
-                        Expanded(
-                          child: Text(
-                            _currentUri ?? '没有可用 Workspace',
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTypography.caption(context),
-                          ),
-                        ),
-                        if (_mounts.length > 1)
-                          AmitiaPopupMenuButton<_WorkspaceMount>(
-                            tooltip: '切换 Workspace',
-                            onSelected: _openMount,
-                            itemBuilder: (_) =>
-                                _mounts.map((m) => PopupMenuItem(value: m, child: Text(m.name))).toList(),
-                            child: Padding(
-                              padding: const EdgeInsets.all(8),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [Text(_currentMountName ?? 'Workspace'), const Icon(Icons.arrow_drop_down)],
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    child: RefreshIndicator(
-                      onRefresh: () => _currentUri == null ? _loadMounts() : _openUri(_currentUri!, pushHistory: false),
-                      child: _files.isEmpty
-                          ? ListView(
-                              children: [
-                                AmitiaEmptyState(
-                                  icon: Icons.folder_open,
-                                  title: _mounts.isEmpty ? '没有可用 Workspace' : '目录为空',
-                                  subtitle: _mounts.isEmpty ? '请先创建或授权一个 Workspace' : '当前目录没有文件',
-                                ),
-                              ],
-                            )
-                          : ListView.separated(
-                              padding: EdgeInsets.fromLTRB(
-                                AppSpacing.pagePadding,
-                                0,
-                                AppSpacing.pagePadding,
-                                AppSpacing.xl,
-                              ),
-                              itemCount: _files.length,
-                              separatorBuilder: (_, _) =>
-                                  Divider(height: 1, thickness: 0.5, color: context.borderSecondary),
-                              itemBuilder: (context, index) {
-                                final item = _files[index];
-                                return ListTile(
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                                  leading: Icon(
-                                    _iconForName(item.name, item.isFolder),
-                                    color: item.isFolder ? context.accentPrimary : context.textSecondary,
-                                  ),
-                                  title: Text(item.name, style: AppTypography.body(context)),
-                                  subtitle: Text(
-                                    '${_formatSize(item.sizeBytes)} · ${item.modifiedAt}',
-                                    style: AppTypography.caption(context),
-                                  ),
-                                  trailing: Icon(
-                                    item.isFolder ? Icons.chevron_right : Icons.open_in_new,
-                                    size: 18,
-                                    color: context.textTertiary,
-                                  ),
-                                  onTap: item.isFolder ? () => _openUri(item.uri) : () => _showFile(item),
-                                );
-                              },
-                            ),
-                    ),
-                  ),
-                ],
+      child: widget.embedded
+          ? ColoredBox(color: context.backgroundPrimary, child: _body(context))
+          : AmitiaScaffold(
+              appBar: AmitiaAppBar(
+                title: '文件浏览',
+                showBackButton: true,
+                fallbackRoute: AppRoutes.settingsMaintenanceCategory,
               ),
-      ),
+              body: _body(context),
+            ),
     );
   }
 }

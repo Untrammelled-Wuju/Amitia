@@ -49,6 +49,15 @@ function healthCheck(url: string, timeoutMs = 3000): Promise<boolean> {
   });
 }
 
+function installMacDeveloperShortcut(win: BrowserWindow): void {
+  if (process.platform !== "darwin" || !app.isPackaged) return;
+  win.webContents.on("before-input-event", (event, input) => {
+    if (input.type !== "keyDown" || input.key !== "F12") return;
+    event.preventDefault();
+    win.webContents.toggleDevTools();
+  });
+}
+
 async function waitForDevServer(
   maxRetries = 40,
   intervalMs = 1500,
@@ -86,6 +95,7 @@ export function createMainWindow(): BrowserWindow {
       webviewTag: true,
     },
   });
+  installMacDeveloperShortcut(win);
   attachExternalWebUIHost(win);
 
   const sendWindowState = () => {

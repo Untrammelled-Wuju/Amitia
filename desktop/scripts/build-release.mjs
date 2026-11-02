@@ -84,8 +84,12 @@ function resolvePackagedContents(platform, arch) {
   return contents;
 }
 
-function ensureLatestUpdateMetadata() {
+function ensureUpdateMetadata(platform) {
   const names = readdirSync(releaseDir);
+  if (platform === "mac") {
+    if (names.includes("latest-mac.yml")) return;
+    throw new Error("electron-builder did not produce macOS update metadata");
+  }
   if (names.includes("latest.yml")) return;
   const channelMetadata = names.find((name) => /^(alpha|beta|rc)\.yml$/.test(name));
   if (!channelMetadata) {
@@ -139,7 +143,7 @@ async function main() {
     env: { ...process.env, ELECTRON_BUILDER_COMPRESSION_LEVEL: compressionLevel },
   });
 
-  if (!target.dirOnly) ensureLatestUpdateMetadata();
+  if (!target.dirOnly) ensureUpdateMetadata(target.platform);
 
   const unpacked = resolvePackagedContents(target.platform, target.arch);
   run(process.execPath, [verifyPackagedPath, unpacked]);
@@ -154,8 +158,8 @@ async function main() {
     return;
   }
 
-  const stamp = await writeReleaseGateStamp();
-  await verifyReleaseGateStamp();
+  const stamp = await writeReleaseGateStamp(target.platform);
+  await verifyReleaseGateStamp(target.platform);
   run(process.execPath, [generateReleaseReportPath]);
   console.log(
     `[build-release] PASS: ${stamp.packageVersion}, source=${stamp.sourceGateSha256.slice(0, 12)}..., core=${stamp.core.sha256.slice(0, 12)}...`,

@@ -182,6 +182,65 @@ return new Response(null, { status: 404 });
     observer.observe(document.body, { subtree: true, childList: true, attributes: true });
     check();
   })`);
+  const contextMenu = await win.webContents.executeJavaScript(`new Promise((resolve) => {
+    const wait = (ms) => new Promise((done) => setTimeout(done, ms));
+    const target = document.createElement("div");
+    target.textContent = "context menu smoke target";
+    document.body.appendChild(target);
+    const openMenu = () => target.dispatchEvent(new MouseEvent("contextmenu", {
+      bubbles: true,
+      cancelable: true,
+      clientX: 120,
+      clientY: 90,
+    }));
+    const press = (key) => {
+      const eventTarget = document.activeElement instanceof HTMLElement ? document.activeElement : document.body;
+      const event = new KeyboardEvent("keydown", {
+        key,
+        bubbles: true,
+        cancelable: true,
+      });
+      eventTarget.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    (async () => {
+      openMenu();
+      await wait(80);
+      const menu = document.querySelector("[data-amitia-context-menu]");
+      const activeLabel = document.activeElement?.textContent || "";
+      const keyHint = menu?.querySelector(".context-menu-access-key")?.textContent?.trim() || "";
+      const escapePrevented = press("Escape");
+      await wait(220);
+      const escapeClosed = !document.querySelector("[data-amitia-context-menu]");
+      openMenu();
+      await wait(80);
+      const reopenKey = document.querySelector(".context-menu-access-key")?.textContent?.trim() || "";
+      const keyPrevented = reopenKey ? press(reopenKey.toLowerCase()) : false;
+      await wait(220);
+      const directClosed = !document.querySelector("[data-amitia-context-menu]");
+      target.remove();
+      resolve({
+        opened: Boolean(menu),
+        activeLabel,
+        keyHint,
+        escapePrevented,
+        escapeClosed,
+        keyPrevented,
+        directClosed,
+      });
+    })().catch((error) => resolve({ error: String(error?.stack || error?.message || error) }));
+  })`);
+  if (
+    !contextMenu?.opened ||
+    !contextMenu?.activeLabel ||
+    !contextMenu?.keyHint ||
+    !contextMenu?.escapePrevented ||
+    !contextMenu?.escapeClosed ||
+    !contextMenu?.keyPrevented ||
+    !contextMenu?.directClosed
+  ) {
+    throw new Error(`context menu production smoke failed: ${JSON.stringify(contextMenu)}`);
+  }
   const rendererErrors = await win.webContents.executeJavaScript("window.__amitiaSmokeErrors || []");
   const allErrors = [...errors, ...rendererErrors];
   finish(mounted && allErrors.length === 0 ? null : allErrors.join("\n---\n") || "startup fallback displayed");

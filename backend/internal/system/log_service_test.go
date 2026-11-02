@@ -80,3 +80,44 @@ func TestLogFilePreviewReadsBoundedTailAndRejectsTraversal(t *testing.T) {
 		}
 	}
 }
+
+func TestLogServicesRecognizeSizeRotatedFiles(t *testing.T) {
+	directory := t.TempDir()
+	t.Setenv("AMITIA_LOG_DIR", directory)
+	if err := os.WriteFile(
+		filepath.Join(directory, "app.20261101.log.1"),
+		[]byte("rotated entry\n"),
+		0600,
+	); err != nil {
+		t.Fatal(err)
+	}
+	s := &service{}
+	logs := s.GetLogsRecent(10)["logs"].([]interface{})
+	if len(logs) != 1 ||
+		logs[0].(map[string]interface{})["file"] != "app.20261101.log.1" {
+		t.Fatalf("rotated log was not discovered: %v", logs)
+	}
+	if !isLogFileName("app.20261101.log.12") ||
+		isLogFileName("app.20261101.log.tmp") ||
+		isLogFileName("app.20261101.log.") {
+		t.Fatal("rotated log name validation is incorrect")
+	}
+}
+
+func TestParseLogLimitDefaultsAndCapsAtTwoHundred(t *testing.T) {
+	if limit, err := parseLogLimit("", recentLogLimit); err != nil || limit != 200 {
+		t.Fatalf("default limit mismatch: limit=%d err=%v", limit, err)
+	}
+	if limit, err := parseLogLimit("120", recentLogLimit); err != nil || limit != 120 {
+		t.Fatalf("explicit limit mismatch: limit=%d err=%v", limit, err)
+	}
+	if limit, err := parseLogLimit("500", recentLogLimit); err != nil || limit != 200 {
+		t.Fatalf("maximum limit mismatch: limit=%d err=%v", limit, err)
+	}
+	if _, err := parseLogLimit("invalid", recentLogLimit); err == nil {
+		t.Fatal("invalid limit must preserve parsing error")
+	}
+	if _, err := parseLogLimit("0", recentLogLimit); err == nil {
+		t.Fatal("zero limit must be rejected")
+	}
+}

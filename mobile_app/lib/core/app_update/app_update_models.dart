@@ -57,6 +57,8 @@ class AppUpdateManifest {
   final DateTime? publishedAt;
   final AppUpdateApk apk;
   final String releaseNotes;
+  final String updateTitle;
+  final List<String> highlights;
 
   const AppUpdateManifest({
     required this.schemaVersion,
@@ -71,6 +73,8 @@ class AppUpdateManifest {
     required this.publishedAt,
     required this.apk,
     required this.releaseNotes,
+    required this.updateTitle,
+    required this.highlights,
   });
 
   factory AppUpdateManifest.fromMap(Map<String, dynamic> value) {
@@ -91,12 +95,23 @@ class AppUpdateManifest {
         ),
       ),
       releaseNotes: (value['releaseNotes'] ?? '').toString(),
+      updateTitle: (value['updateTitle'] ?? '').toString().trim(),
+      highlights: _asStringList(value['highlights']),
     );
   }
 
   bool requiresVersion(int installedVersionCode) {
     return mandatory || installedVersionCode < minSupportedVersionCode;
   }
+}
+
+List<String> _asStringList(Object? value) {
+  if (value is! List) return const <String>[];
+  return value
+      .map((item) => item?.toString().trim() ?? '')
+      .where((item) => item.isNotEmpty)
+      .take(8)
+      .toList(growable: false);
 }
 
 class AppUpdateCheckResult {

@@ -788,7 +788,11 @@ class _HistoricalRecord {
   }
 
   bool get isImportant => importance >= 80;
-  String get status => body['allowContextUse'] == false
+  String get status => body['verifiedStatus'] == 'disputed'
+      ? '有争议'
+      : body['verifiedStatus'] == 'user_corrected'
+      ? '用户已更正'
+      : body['allowContextUse'] == false
       ? '已停用'
       : body['archivedAt'] != null
       ? '已归档'

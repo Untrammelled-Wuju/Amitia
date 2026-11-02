@@ -165,6 +165,7 @@ android {
         manifestPlaceholders["AMITIA_VIVO_NATIVE_DATA_ENABLED"] = vivoNativeDataEnabled.toString()
         buildConfigField("boolean", "AMITIA_OPPO_NATIVE_DATA_ENABLED", oppoNativeDataEnabled.toString())
         buildConfigField("boolean", "AMITIA_VIVO_NATIVE_DATA_ENABLED", vivoNativeDataEnabled.toString())
+        buildConfigField("boolean", "AMITIA_ALLOW_INSECURE_UPDATE", amitiaEnabled("AMITIA_ALLOW_INSECURE_UPDATE").toString())
     }
 
     val keystorePath: String? = amitiaSigningValue("AMITIA_KEYSTORE_PATH")

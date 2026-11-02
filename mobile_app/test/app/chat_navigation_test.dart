@@ -90,8 +90,12 @@ Widget _app(
         (ref) async => ExtensionCenterView(
           installed: const [],
           discover: const [],
+          localImports: const [],
+          dev: const [],
           updates: const [],
           needsAction: const [],
+          partial: false,
+          errors: const [],
         ),
       ),
     ],

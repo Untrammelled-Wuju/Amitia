@@ -5,6 +5,11 @@ import 'package:dio/dio.dart';
 import 'backend_service_api.dart';
 
 const List<String> _deviceLocalApiPrefixes = <String>[
+  '/api/extension-center',
+  '/api/extensions/packages',
+  '/api/extensions/updates',
+  '/api/extensions/versions',
+  '/api/extensions/kernel/extensions',
   '/api/desktop-pets',
   '/api/desktop-pet',
   '/api/local/workflows',

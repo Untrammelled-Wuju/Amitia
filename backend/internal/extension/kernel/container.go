@@ -25,6 +25,8 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/event"
 	"github.com/u-ai/backend/internal/extension/kernel/eventbridge"
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
+	"github.com/u-ai/backend/internal/extension/kernel/extension_center"
+	"github.com/u-ai/backend/internal/extension/kernel/extension_detail"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_page_host"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_slots"
 	"github.com/u-ai/backend/internal/extension/kernel/hook"
@@ -101,6 +103,8 @@ type Container struct {
 	ResourceRepository     sqlite.ResourceRepository
 
 	PackageSecurity           *package_security.PackageSecurityService
+	ExtensionCenterService    *extension_center.CenterService
+	ExtensionDetailService    *extension_detail.DetailService
 	PackageRepository         *PackageRepository
 	PackageArtifactStore      *PackageArtifactStore
 	PackageGenerationStore    *PackageGenerationStore

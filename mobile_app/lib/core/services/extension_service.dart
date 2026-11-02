@@ -4,11 +4,25 @@ import '../ui_runtime/ui_runtime_invalidation.dart';
 
 class ExtensionCenterCard {
   final String extensionId;
+  final String installationId;
+  final int generation;
   final String displayName;
   final String description;
   final String version;
   final String status;
   final bool enabled;
+  final bool updateAvailable;
+  final bool rollbackAvailable;
+  final String? latestVersion;
+  final String trust;
+  final String? permissionRisk;
+  final String source;
+  final bool systemManaged;
+  final bool devMode;
+  final List<String> permissions;
+  final List<String> missingPermissions;
+  final List<Map<String, dynamic>> actions;
+  final List<Map<String, dynamic>> diagnostics;
   final List<String> contributionTags;
   final List<String> platforms;
   final String? installedAt;
@@ -16,11 +30,25 @@ class ExtensionCenterCard {
 
   ExtensionCenterCard({
     required this.extensionId,
+    required this.installationId,
+    required this.generation,
     required this.displayName,
     required this.description,
     required this.version,
     required this.status,
     required this.enabled,
+    required this.updateAvailable,
+    required this.rollbackAvailable,
+    this.latestVersion,
+    required this.trust,
+    this.permissionRisk,
+    required this.source,
+    required this.systemManaged,
+    required this.devMode,
+    required this.permissions,
+    required this.missingPermissions,
+    required this.actions,
+    required this.diagnostics,
     required this.contributionTags,
     required this.platforms,
     this.installedAt,
@@ -30,11 +58,36 @@ class ExtensionCenterCard {
   factory ExtensionCenterCard.fromJson(Map<String, dynamic> json) {
     return ExtensionCenterCard(
       extensionId: (json['extensionId'] ?? '').toString(),
+      installationId: (json['installationId'] ?? '').toString(),
+      generation: (json['generation'] as num?)?.toInt() ?? 0,
       displayName: (json['displayName'] ?? '').toString(),
       description: (json['description'] ?? '').toString(),
       version: (json['version'] ?? '').toString(),
       status: (json['status'] ?? '').toString(),
       enabled: (json['enabled'] as bool?) ?? false,
+      updateAvailable: json['updateAvailable'] == true,
+      rollbackAvailable: json['rollbackAvailable'] == true,
+      latestVersion: json['latestVersion'] as String?,
+      trust: (json['trust'] ?? 'untrusted').toString(),
+      permissionRisk: json['permissionRisk'] as String?,
+      source: (json['source'] ?? '').toString(),
+      systemManaged: json['systemManaged'] == true,
+      devMode: json['devMode'] == true,
+      permissions: ((json['permissions'] as List?) ?? const [])
+          .map((e) => e.toString())
+          .toList(),
+      missingPermissions:
+          ((json['missingPermissions'] as List?) ?? const [])
+              .map((e) => e.toString())
+              .toList(),
+      actions: ((json['actions'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList(),
+      diagnostics: ((json['diagnostics'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList(),
       contributionTags: ((json['contributionTags'] as List?) ?? [])
           .map((e) => e.toString())
           .toList(),
@@ -50,14 +103,24 @@ class ExtensionCenterCard {
 class ExtensionCenterView {
   final List<ExtensionCenterCard> installed;
   final List<ExtensionCenterCard> discover;
+  final List<ExtensionCenterCard> localImports;
+  final List<ExtensionCenterCard> dev;
   final List<ExtensionCenterCard> updates;
   final List<ExtensionCenterCard> needsAction;
+  final DateTime? generatedAt;
+  final bool partial;
+  final List<Map<String, dynamic>> errors;
 
   ExtensionCenterView({
     required this.installed,
     required this.discover,
+    required this.localImports,
+    required this.dev,
     required this.updates,
     required this.needsAction,
+    this.generatedAt,
+    required this.partial,
+    required this.errors,
   });
 
   factory ExtensionCenterView.fromJson(Map<String, dynamic> json) {
@@ -68,8 +131,20 @@ class ExtensionCenterView {
       discover: ((json['discover'] as List?) ?? [])
           .map((e) => ExtensionCenterCard.fromJson(e as Map<String, dynamic>))
           .toList(),
+      localImports: ((json['localImports'] as List?) ?? [])
+          .map((e) => ExtensionCenterCard.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      dev: ((json['dev'] as List?) ?? [])
+          .map((e) => ExtensionCenterCard.fromJson(e as Map<String, dynamic>))
+          .toList(),
       updates: ((json['updates'] as List?) ?? [])
           .map((e) => ExtensionCenterCard.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      generatedAt: DateTime.tryParse((json['generatedAt'] ?? '').toString()),
+      partial: json['partial'] == true,
+      errors: ((json['errors'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
           .toList(),
       needsAction: ((json['needsAction'] as List?) ?? [])
           .map((e) => ExtensionCenterCard.fromJson(e as Map<String, dynamic>))
@@ -80,6 +155,8 @@ class ExtensionCenterView {
   List<ExtensionCenterCard> get all => [
     ...installed,
     ...discover,
+    ...localImports,
+    ...dev,
     ...updates,
     ...needsAction,
   ];
@@ -531,22 +608,44 @@ class ExtensionService {
       return ExtensionCenterView(
         installed: [],
         discover: [],
+        localImports: [],
+        dev: [],
         updates: [],
         needsAction: [],
+        partial: false,
+        errors: const [],
       );
     }
     return ExtensionCenterView.fromJson(resp);
   }
 
-  Future<List<Map<String, dynamic>>> kernelExtensions() async {
-    final resp = await _api.get<Map<String, dynamic>>(
-      '/api/extensions/kernel/extensions',
-    );
-    final items = resp?['extensions'];
-    if (items is! List) return const [];
+  Future<List<Map<String, dynamic>>> centerExtensions() async {
+    final view = await getExtensionCenterView();
+    final seen = <String>{};
+    final items = view.all.where((card) => seen.add(card.extensionId));
     return items
-        .whereType<Map>()
-        .map((e) => Map<String, dynamic>.from(e))
+        .map(
+          (card) => <String, dynamic>{
+            'name': card.displayName,
+            'extensionId': card.extensionId,
+            'version': card.version,
+            'installationId': card.installationId.isEmpty
+                ? card.extensionId
+                : card.installationId,
+            'state': card.status,
+            'enablement': card.enabled ? 'enabled' : 'disabled',
+            'systemManaged': card.systemManaged,
+            'installedAt': card.installedAt,
+            'updatedAt': card.updatedAt,
+            'generation': card.generation,
+            'updateAvailable': card.updateAvailable,
+            'rollbackAvailable': card.rollbackAvailable,
+            'latestVersion': card.latestVersion,
+            'trust': card.trust,
+            'permissionRisk': card.permissionRisk,
+            'devMode': card.devMode,
+          },
+        )
         .toList(growable: false);
   }
 
@@ -749,9 +848,9 @@ class ExtensionService {
     return result;
   }
 
-  Future<Map<String, dynamic>> kernelExtension(String id) async {
+  Future<Map<String, dynamic>> extensionCenterDetail(String id) async {
     return await _api.get<Map<String, dynamic>>(
-          '/api/extensions/kernel/extension',
+          '/api/extension-center/extension',
           queryParameters: {'id': id},
         ) ??
         <String, dynamic>{};

@@ -1,8 +1,8 @@
 package extension_detail
 
 import (
-	"context"
 	"encoding/json"
+	"fmt"
 	amitialog "log"
 	"net/http"
 	"strings"
@@ -17,8 +17,7 @@ func NewHTTPHandler(service *DetailService) *HTTPHandler {
 }
 
 func (h *HTTPHandler) Register(mux *http.ServeMux) {
-	mux.HandleFunc("/api/extensions/", h.handleDetail)
-	mux.HandleFunc("/api/extensions/", h.handleDetail)
+	mux.HandleFunc("/api/extension-center/extension", h.handleDetail)
 }
 
 func (h *HTTPHandler) handleDetail(w http.ResponseWriter, r *http.Request) {
@@ -26,12 +25,12 @@ func (h *HTTPHandler) handleDetail(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, nil)
 		return
 	}
-	extensionID := parseExtensionID(r.URL.Path)
+	extensionID := strings.TrimSpace(r.URL.Query().Get("id"))
 	if extensionID == "" {
-		writeError(w, http.StatusBadRequest, nil)
+		writeError(w, http.StatusBadRequest, fmt.Errorf("id query parameter required"))
 		return
 	}
-	sub := parseSubResource(r.URL.Path, extensionID)
+	sub := strings.TrimSpace(r.URL.Query().Get("resource"))
 	switch sub {
 	case "":
 		detail, err := h.service.GetDetail(r.Context(), extensionID)
@@ -50,23 +49,6 @@ func (h *HTTPHandler) handleDetail(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeError(w, http.StatusNotFound, nil)
 	}
-}
-
-func parseExtensionID(path string) string {
-	trimmed := strings.TrimPrefix(path, "/api/extensions/")
-	parts := strings.SplitN(trimmed, "/", 2)
-	if len(parts) == 0 {
-		return ""
-	}
-	return parts[0]
-}
-
-func parseSubResource(path, extensionID string) string {
-	prefix := "/api/extensions/" + extensionID + "/"
-	if !strings.HasPrefix(path, prefix) {
-		return ""
-	}
-	return strings.TrimSuffix(strings.TrimPrefix(path, prefix), "/")
 }
 
 func writeJSON(w http.ResponseWriter, status int, v interface{}) {
@@ -88,5 +70,3 @@ func writeError(w http.ResponseWriter, status int, err error) {
 		amitialog.Printf("[original-error] %v", err)
 	}
 }
-
-var _ = context.Background

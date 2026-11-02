@@ -20,20 +20,11 @@ export interface KernelExtension {
   installedAt: string;
   updatedAt: string;
   generation: number;
-}
-
-export interface KernelExtensionDetail extends KernelExtension {
-  publisher?: string;
-  signatureStatus?: string;
-  trustLevel?: string;
-  runtimeStatus?: string;
-  permissions?: KernelPermission[];
-  scopes?: KernelScope[];
-  dependencies?: KernelDependency[];
-  circuitState?: string;
-  quarantineState?: string;
-  modules: KernelModule[];
-  contributions: KernelContribution[];
+  updateAvailable?: boolean;
+  latestVersion?: string;
+  trust?: string;
+  permissionRisk?: string;
+  devMode?: boolean;
 }
 
 export interface KernelPermission {
@@ -42,34 +33,6 @@ export interface KernelPermission {
   reason?: string;
   required?: boolean;
   granted?: boolean;
-}
-
-export interface KernelScope {
-  name: string;
-  granted?: boolean;
-}
-
-export interface KernelDependency {
-  type: string;
-  id: string;
-  version?: string;
-  optional?: boolean;
-  satisfied?: boolean;
-}
-
-export interface KernelModule {
-  id: string;
-  type: string;
-  runtime: string;
-  entryPoint: string;
-  contributionCount: number;
-}
-
-export interface KernelContribution {
-  id: string;
-  kind: string;
-  moduleId: string;
-  name: string;
 }
 
 export interface InstallPreview {
@@ -133,16 +96,6 @@ export interface InstallResult {
 
 export async function getKernelStatus(): Promise<KernelStatus> {
   const res = await apiClient.get(`${BASE}/status`);
-  return res.data;
-}
-
-export async function listExtensions(): Promise<{ extensions: KernelExtension[]; total: number }> {
-  const res = await apiClient.get(`${BASE}/extensions`);
-  return res.data;
-}
-
-export async function getExtension(id: string): Promise<KernelExtensionDetail> {
-  const res = await apiClient.get(`${BASE}/extension`, { params: { id } });
   return res.data;
 }
 

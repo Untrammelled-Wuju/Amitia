@@ -204,7 +204,7 @@ export interface Memory {
   reinforceCount?: number;
   retrievedCount?: number;
   injectedCount?: number;
-  decayState?: "active" | "fading" | "archived" | string;
+  decayState?: "active" | "fading" | "dormant" | "archived" | string;
   pinned?: boolean;
   archivedAt?: string | null;
   supersededBy?: string;

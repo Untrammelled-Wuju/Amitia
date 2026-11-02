@@ -26,7 +26,7 @@ export const builtinBusinessRoutes: RouteRecordRaw[] = [
   { path: "/dashboard/data", redirect: "/settings/data" },
   { path: "/chat", name: "chat", component: () => import("@/views/web-chat/WebChatView.vue"), meta: { requiresAuth: true } },
   { path: "/call/:conversationId", name: "ownedIncomingCall", component: () => import("@/views/realtime/OwnedIncomingCallView.vue"), meta: { requiresAuth: true } },
-{ path: "/extensions", name: "extensionCenter", component: () => import("@/views/SectionPlaceholderView.vue"), props: { title: "扩展中心", description: "管理扩展包、工作流、MCP 服务与 Agent Skills。" }, meta: { requiresAuth: true } },
+{ path: "/extensions", name: "extensionCenter", component: () => import("@/views/extensions/ExtensionCenterView.vue"), meta: { requiresAuth: true } },
 { path: "/kernel", name: "kernelCenter", component: () => import("@/views/kernel/KernelCenterView.vue"), meta: { requiresAuth: true } },
 { path: "/kernel/wasm", name: "wasmRuntime", component: () => import("@/views/kernel/WasmRuntimeDetailView.vue"), meta: { requiresAuth: true } },
 { path: "/kernel/hooks", name: "hookCenter", component: () => import("@/views/kernel/HookCenterView.vue"), meta: { requiresAuth: true } },

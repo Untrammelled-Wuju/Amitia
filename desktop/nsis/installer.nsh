@@ -2,6 +2,25 @@
   Var AmitiaPendingInstallDir
 !endif
 
+!ifdef BUILD_UNINSTALLER
+  !include "nsDialogs.nsh"
+  Var AmitiaDeleteDataCheckbox
+  Var AmitiaDeleteUserData
+
+  Function un.AmitiaDeleteDataPageShow
+    ${If} $AmitiaDeleteUserData == ""
+      StrCpy $AmitiaDeleteUserData ${BST_UNCHECKED}
+    ${EndIf}
+    ${NSD_CreateCheckbox} 120u 162u 177u 24u "同时删除使用数据（AmitiaData，不可恢复）"
+    Pop $AmitiaDeleteDataCheckbox
+    ${NSD_SetState} $AmitiaDeleteDataCheckbox $AmitiaDeleteUserData
+  FunctionEnd
+
+  Function un.AmitiaDeleteDataPageLeave
+    ${NSD_GetState} $AmitiaDeleteDataCheckbox $AmitiaDeleteUserData
+  FunctionEnd
+!endif
+
 !macro AmitiaInstallerFunctions
 Function AmitiaRequestSystemDriveElevation
   StrCpy $R0 $INSTDIR 2
@@ -87,6 +106,30 @@ FunctionEnd
 !macroend
 
 !macro customUnInstallCheckCurrentUser
+!macroend
+
+!macro customUnWelcomePage
+  !define MUI_UNWELCOMEPAGE_TITLE "卸载 Amitia"
+  !define MUI_UNWELCOMEPAGE_TEXT "卸载程序将移除 Amitia 应用程序文件。$\r$\n$\r$\n默认保留 AmitiaData 使用数据；如需彻底清除，请勾选下方选项。"
+  !define MUI_PAGE_CUSTOMFUNCTION_SHOW un.AmitiaDeleteDataPageShow
+  !define MUI_PAGE_CUSTOMFUNCTION_LEAVE un.AmitiaDeleteDataPageLeave
+  !insertmacro MUI_UNPAGE_WELCOME
+  !undef MUI_UNWELCOMEPAGE_TEXT
+  !undef MUI_UNWELCOMEPAGE_TITLE
+!macroend
+
+!macro customUnInstall
+  ${If} $AmitiaDeleteUserData == ${BST_CHECKED}
+  ${AndIf} ${FileExists} "$INSTDIR\..\AmitiaData\*.*"
+    ClearErrors
+    RMDir /r /REBOOTOK "$INSTDIR\..\AmitiaData"
+    ${If} ${Errors}
+      System::Call "kernel32::GetLastError() i .R0"
+      DetailPrint "删除 AmitiaData 失败，路径：$INSTDIR\..\AmitiaData，Windows 错误代码：$R0"
+      MessageBox MB_ICONEXCLAMATION|MB_OK "AmitiaData 未能完全删除。$\r$\n路径：$INSTDIR\..\AmitiaData$\r$\nWindows 错误代码：$R0$\r$\n其余文件将在系统重启后继续删除。"
+      SetErrorLevel 1
+    ${EndIf}
+  ${EndIf}
 !macroend
 
 !macro customInstall

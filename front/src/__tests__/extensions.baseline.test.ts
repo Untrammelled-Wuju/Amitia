@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import builtinRoutesSource from "../router/builtinRoutes.ts?raw"
 
 describe("Extension Center Baseline", () => {
   describe("Router", () => {
@@ -6,6 +7,12 @@ describe("Extension Center Baseline", () => {
       const router = (await import("@/router")).default
       const route = router.resolve("/extensions")
       expect(route.name).toBe("extensionCenter")
+      expect(builtinRoutesSource).toContain(
+        'component: () => import("@/views/extensions/ExtensionCenterView.vue")',
+      )
+      expect(builtinRoutesSource).not.toContain(
+        'path: "/extensions", name: "extensionCenter", component: () => import("@/views/SectionPlaceholderView.vue")',
+      )
     })
 
     it("resolves MCP server route", async () => {

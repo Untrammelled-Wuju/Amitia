@@ -34,6 +34,7 @@ type MemoryManagementInput struct {
 
 type MemoryManagementQuery struct {
 	ContextUsable     bool              `json:"contextUsable,omitempty"`
+	IncludeDormant    bool              `json:"includeDormant,omitempty"`
 	Types             []string          `json:"types,omitempty"`
 	Layers            []string          `json:"layers,omitempty"`
 	MinimumImportance int               `json:"minimumImportance,omitempty"`
@@ -52,13 +53,30 @@ type MemoryManagementQuery struct {
 }
 
 type MemoryManagementResponse struct {
-	Total           int                          `json:"total"`
-	Resources       []coordination.Resource      `json:"resources"`
-	Scope           coordination.ExecutionScope  `json:"executionScope"`
-	Saved           bool                         `json:"saved"`
-	Acknowledgement coordination.Acknowledgement `json:"acknowledgement"`
-	NextCursor      string                       `json:"nextCursor,omitempty"`
-	Scores          map[string]float64           `json:"scores,omitempty"`
+	Total           int                           `json:"total"`
+	Resources       []coordination.Resource       `json:"resources"`
+	Scope           coordination.ExecutionScope   `json:"executionScope"`
+	Saved           bool                          `json:"saved"`
+	Acknowledgement coordination.Acknowledgement  `json:"acknowledgement"`
+	NextCursor      string                        `json:"nextCursor,omitempty"`
+	Scores          map[string]float64            `json:"scores,omitempty"`
+	ScoreDetails    map[string]MemoryScoreDetails `json:"scoreDetails,omitempty"`
+}
+
+type MemoryScoreDetails struct {
+	FinalScore      float64 `json:"finalScore"`
+	SemanticScore   float64 `json:"semanticScore"`
+	KeywordMatch    bool    `json:"keywordMatch"`
+	Importance      float64 `json:"importance"`
+	Confidence      float64 `json:"confidence"`
+	Strength        float64 `json:"strength"`
+	Recency         float64 `json:"recency"`
+	Verification    float64 `json:"verification"`
+	Reinforcement   float64 `json:"reinforcement"`
+	Utility         float64 `json:"utility"`
+	Validity        float64 `json:"validity"`
+	TemporalBoost   float64 `json:"temporalBoost"`
+	ValidityPenalty float64 `json:"validityPenalty"`
 }
 
 type MemoryManagementConflict struct {
@@ -176,7 +194,7 @@ func (e *Engine) SearchOwnedMemories(ctx context.Context, request Request, input
 		}
 	}
 	now := time.Now()
-	if input.RetentionLevel < 0 || input.RetentionLevel > 5 || input.DecayState != "" && input.DecayState != "active" && input.DecayState != "fading" && input.DecayState != "archived" {
+	if input.RetentionLevel < 0 || input.RetentionLevel > 5 || input.DecayState != "" && input.DecayState != "active" && input.DecayState != "fading" && input.DecayState != "dormant" && input.DecayState != "archived" {
 		return MemoryManagementResponse{}, errors.New("记忆生命周期筛选参数无效")
 	}
 	if len(input.Query) > 4096 || !utf8.ValidString(input.Query) || strings.ContainsRune(input.Query, 0) || input.Limit < 0 || input.Limit > 128 || len(input.Cursor) > 4096 || input.Mode != "" && input.Mode != "keyword" && input.Mode != "hybrid" && input.Mode != "vector" {
@@ -187,13 +205,20 @@ func (e *Engine) SearchOwnedMemories(ctx context.Context, request Request, input
 		return MemoryManagementResponse{}, err
 	}
 	defer finish()
+	rankingProfile, _, err := e.memoryRankingProfile(ctx, scope)
+	if err != nil {
+		return MemoryManagementResponse{}, err
+	}
 	snapshot, err := e.memoryManagementSnapshot(ctx, scope, "memory", "")
 	if err != nil {
 		return MemoryManagementResponse{}, err
 	}
-	result := MemoryManagementResponse{Scope: scope, Resources: []coordination.Resource{}, Scores: map[string]float64{}}
+	result := MemoryManagementResponse{Scope: scope, Resources: []coordination.Resource{}, Scores: map[string]float64{}, ScoreDetails: map[string]MemoryScoreDetails{}}
 	query := strings.ToLower(strings.TrimSpace(input.Query))
 	semantic := map[string]float64{}
+	availability := func(body json.RawMessage) bool {
+		return coordination.ResourceAvailable(body, time.Now(), input.IncludeDormant)
+	}
 	if input.Mode == "hybrid" || input.Mode == "vector" {
 		if query == "" {
 			return MemoryManagementResponse{}, errors.New("语义检索内容不能为空")
@@ -215,10 +240,10 @@ func (e *Engine) SearchOwnedMemories(ctx context.Context, request Request, input
 		}
 		usable := map[string]bool{}
 		for _, resource := range snapshot.Resources {
-			usable[resource.ID] = coordination.ResourceUsable(resource.Body, time.Now())
+			usable[resource.ID] = availability(resource.Body)
 		}
 		for _, resource := range vectors.Resources {
-			if !usable[resource.SourceID] || !coordination.ResourceUsable(resource.Body, time.Now()) {
+			if !usable[resource.SourceID] || !availability(resource.Body) {
 				continue
 			}
 			var vector struct {
@@ -256,7 +281,7 @@ func (e *Engine) SearchOwnedMemories(ctx context.Context, request Request, input
 		if err := json.Unmarshal(resource.Body, &document); err != nil {
 			amitialog.Printf("[original-error] %v", err)
 		}
-		if input.ContextUsable && !coordination.ResourceUsable(resource.Body, now) {
+		if input.ContextUsable && !availability(resource.Body) {
 			continue
 		}
 		var content map[string]json.RawMessage
@@ -283,13 +308,13 @@ func (e *Engine) SearchOwnedMemories(ctx context.Context, request Request, input
 			continue
 		}
 		result.Resources = append(result.Resources, resource)
-		if input.Mode == "hybrid" || input.Mode == "vector" {
-			result.Scores[resource.ID] = semantic[resource.ID] * (.85 + state.MemoryStrength*.2)
-			if input.Mode == "hybrid" && keyword {
-				result.Scores[resource.ID] += 1
-			}
-		} else {
+		if input.Sort == "importance_desc" {
 			result.Scores[resource.ID] = float64(importance)
+			result.ScoreDetails[resource.ID] = MemoryScoreDetails{FinalScore: float64(importance), SemanticScore: semantic[resource.ID], KeywordMatch: keyword, Importance: float64(importance), Strength: state.MemoryStrength, Validity: memoryValidityFactor(content, now), ValidityPenalty: 1}
+		} else {
+			details := memoryRetrievalScore(input.Mode, rankingProfile.Weights, semantic[resource.ID], keyword, state, content, document, now)
+			result.Scores[resource.ID] = details.FinalScore
+			result.ScoreDetails[resource.ID] = details
 		}
 	}
 	temporalRank := false
@@ -325,6 +350,11 @@ func (e *Engine) SearchOwnedMemories(ctx context.Context, request Request, input
 			}
 			for id, score := range reranked {
 				result.Scores[id] = score.FinalScore
+				details := result.ScoreDetails[id]
+				details.FinalScore = score.FinalScore
+				details.TemporalBoost = score.TemporalBoost
+				details.ValidityPenalty = score.ValidityPenalty
+				result.ScoreDetails[id] = details
 			}
 		}
 	}
@@ -334,6 +364,7 @@ func (e *Engine) SearchOwnedMemories(ctx context.Context, request Request, input
 		}
 		return result.Resources[i].ID < result.Resources[j].ID
 	})
+	result.Resources = dedupeMemorySearchResults(result.Resources)
 	catalog := []coordination.ResourceVersion{}
 	for _, resource := range result.Resources {
 		catalog = append(catalog, coordination.ResourceVersion{Kind: resource.Kind, ID: resource.ID, Revision: resource.Revision})
@@ -370,6 +401,175 @@ func (e *Engine) SearchOwnedMemories(ctx context.Context, request Request, input
 		result.Resources[index].Body = memorypolicy.ProjectLifecycle(resource.Body, time.Now())
 	}
 	return result, nil
+}
+
+func dedupeMemorySearchResults(resources []coordination.Resource) []coordination.Resource {
+	selected := make([]coordination.Resource, 0, len(resources))
+	seen := map[string]bool{}
+	for _, resource := range resources {
+		key := memoryTextFromBody(resource.Body, "kind") + "\x00" + strings.ToLower(memoryTextFromBody(resource.Body, "key"))
+		if key == "\x00" {
+			selected = append(selected, resource)
+			continue
+		}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		selected = append(selected, resource)
+	}
+	return selected
+}
+
+func memoryTextFromBody(body json.RawMessage, key string) string {
+	var document map[string]json.RawMessage
+	if err := json.Unmarshal(body, &document); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+		return ""
+	}
+	return MemoryText(document, key)
+}
+
+func memoryRetrievalScore(mode string, weights memoryRankingWeights, semantic float64, keyword bool, state memorypolicy.Lifecycle, content, document map[string]json.RawMessage, now time.Time) MemoryScoreDetails {
+	semantic = math.Max(0, math.Min(1, semantic))
+	keywordScore := 0.0
+	if keyword {
+		keywordScore = 1
+	}
+	importance := math.Max(0, math.Min(10, memoryNumber(content["importance"], 0))) / 10
+	confidence := math.Max(0, math.Min(100, memoryNumber(content["confidence"], 50))) / 100
+	strength := math.Max(0, math.Min(1, state.MemoryStrength))
+	recency := memoryRecency(document, content, now)
+	verification := 0.55
+	source := memoryOptionalText(content, "source")
+	if source == "" {
+		source = memoryOptionalText(document, "source")
+	}
+	switch strings.ToLower(source) {
+	case "manual", "reviewed", "verified", "confirmed", "user_correction":
+		verification = 1
+	}
+	status := memoryOptionalText(content, "verifiedStatus")
+	if status == "" {
+		status = memoryOptionalText(document, "verifiedStatus")
+	}
+	switch strings.ToLower(status) {
+	case "verified", "confirmed", "reviewed", "user_corrected":
+		verification = 1
+	case "rejected", "invalidated", "disputed":
+		verification = 0
+	}
+	reinforcement := math.Min(5, math.Max(0, memoryNumber(document["reinforceCount"], 0))) / 5
+	utility := math.Max(0, math.Min(1, memoryNumber(document["retrievalUtility"], .5)))
+	validity := memoryValidityFactor(content, now)
+	details := MemoryScoreDetails{SemanticScore: semantic, KeywordMatch: keyword, Importance: importance, Confidence: confidence, Strength: strength, Recency: recency, Verification: verification, Reinforcement: reinforcement, Utility: utility, Validity: validity, ValidityPenalty: 1}
+	if mode == "vector" {
+		weights.Semantic += .08
+		weights.Keyword -= .08
+	} else if mode == "keyword" {
+		weights.Keyword += .18
+		weights.Semantic -= .10
+		weights.Confidence -= .03
+		weights.Utility -= .02
+		weights.Validity -= .03
+	}
+	weights = weights.normalize()
+	details.FinalScore = semantic*weights.Semantic + keywordScore*weights.Keyword + importance*weights.Importance +
+		confidence*weights.Confidence + strength*weights.Strength + recency*weights.Recency + verification*weights.Verification +
+		reinforcement*weights.Reinforcement + utility*weights.Utility + validity*weights.Validity
+	details.FinalScore *= validity
+	return details
+}
+
+func memoryValidityFactor(content map[string]json.RawMessage, now time.Time) float64 {
+	start := memoryOptionalText(content, "validFromUtc")
+	if start == "" {
+		start = memoryOptionalText(content, "validFrom")
+	}
+	if start != "" {
+		from, err := parseMemoryPolicyTime(start)
+		if err != nil {
+			amitialog.Printf("[original-error] %v", err)
+			return 0
+		}
+		if now.Before(from) {
+			return .65
+		}
+	}
+	end := memoryOptionalText(content, "validToUtc")
+	if end == "" {
+		end = memoryOptionalText(content, "validTo")
+	}
+	if end == "" {
+		end = memoryOptionalText(content, "expiresAt")
+	}
+	if end != "" {
+		until, err := parseMemoryPolicyTime(end)
+		if err != nil {
+			amitialog.Printf("[original-error] %v", err)
+			return 0
+		}
+		if !now.Before(until) {
+			return .35
+		}
+	}
+	return 1
+}
+
+func parseMemoryPolicyTime(value string) (time.Time, error) {
+	for _, layout := range []string{time.RFC3339Nano, "2006-01-02"} {
+		parsed, err := time.Parse(layout, value)
+		if err == nil {
+			return parsed, nil
+		}
+		if layout == "2006-01-02" {
+			return time.Time{}, err
+		}
+	}
+	return time.Time{}, nil
+}
+
+func memoryRecency(document, content map[string]json.RawMessage, now time.Time) float64 {
+	raw := ""
+	for _, value := range []string{memoryOptionalText(content, "occurredAtUtc"), memoryOptionalText(content, "updatedAtUtc"), memoryOptionalText(content, "createdAtUtc"), memoryOptionalText(document, "updatedAt"), memoryOptionalText(document, "createdAt")} {
+		if value != "" {
+			raw = value
+			break
+		}
+	}
+	if raw == "" {
+		return .5
+	}
+	created, err := time.Parse(time.RFC3339Nano, raw)
+	if err != nil {
+		amitialog.Printf("[original-error] %v", err)
+		return .5
+	}
+	age := now.Sub(created).Hours() / 24
+	if age <= 0 {
+		return 1
+	}
+	return math.Exp(-age / 180)
+}
+
+func memoryOptionalText(document map[string]json.RawMessage, key string) string {
+	raw, exists := document[key]
+	if !exists || len(raw) == 0 {
+		return ""
+	}
+	return MemoryText(document, key)
+}
+
+func memoryNumber(raw json.RawMessage, fallback float64) float64 {
+	if len(raw) == 0 {
+		return fallback
+	}
+	var value float64
+	if err := json.Unmarshal(raw, &value); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+		return fallback
+	}
+	return value
 }
 
 func (e *Engine) ManageOwnedMemory(ctx context.Context, request Request, input MemoryManagementInput) (MemoryManagementResponse, error) {

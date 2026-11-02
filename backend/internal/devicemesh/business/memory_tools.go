@@ -311,13 +311,13 @@ func (e *Engine) queryMemoryTool(ctx context.Context, request Request, name stri
 	if exact {
 		mode = "keyword"
 	}
-	page, err := e.SearchOwnedMemories(ctx, request, MemoryManagementQuery{ContextUsable: true, Query: query, Mode: mode, ExactTitle: exact, Limit: memoryToolInt(args, "limit", 10, 1, 50), Types: memoryToolStrings(args, "types"), Layers: memoryToolStrings(args, "layers"), MinimumImportance: memoryToolInt(args, "min_importance", 0, 0, 10), Time: memoryTimeFilterArgs(args)})
+	page, err := e.SearchOwnedMemories(ctx, request, MemoryManagementQuery{ContextUsable: true, IncludeDormant: true, Query: query, Mode: mode, ExactTitle: exact, Limit: memoryToolInt(args, "limit", 10, 1, 50), Types: memoryToolStrings(args, "types"), Layers: memoryToolStrings(args, "layers"), MinimumImportance: memoryToolInt(args, "min_importance", 0, 0, 10), Time: memoryTimeFilterArgs(args)})
 	if err != nil {
 		return MemoryToolResponse{}, err
 	}
 	selected := []coordination.Resource{}
 	for _, row := range page.Resources {
-		if MemoryActive(MemoryConsumerEntry{Resource: row}) {
+		if !row.Deleted && coordination.ResourceRecallable(row.Body, time.Now()) {
 			selected = append(selected, row)
 		}
 	}
@@ -350,7 +350,7 @@ func (e *Engine) summarizeMemoryTool(ctx context.Context, request Request, args 
 	if topic == "" {
 		return MemoryToolResponse{}, errors.New("摘要主题不能为空")
 	}
-	page, err := e.SearchOwnedMemories(ctx, request, MemoryManagementQuery{ContextUsable: true, Query: topic, Mode: "keyword", Limit: memoryToolInt(args, "limit", 20, 1, 50), Sort: "importance_desc", MinimumImportance: memoryToolInt(args, "min_importance", 1, 1, 10)})
+	page, err := e.SearchOwnedMemories(ctx, request, MemoryManagementQuery{ContextUsable: true, IncludeDormant: true, Query: topic, Mode: "keyword", Limit: memoryToolInt(args, "limit", 20, 1, 50), Sort: "importance_desc", MinimumImportance: memoryToolInt(args, "min_importance", 1, 1, 10)})
 	if err != nil {
 		return MemoryToolResponse{}, err
 	}

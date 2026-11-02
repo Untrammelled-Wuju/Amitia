@@ -70,13 +70,33 @@ func readLogTail(path string, maxBytes int64) ([]byte, error) {
 	return data, nil
 }
 
+func isLogFileName(name string) bool {
+	if strings.HasSuffix(name, ".log") {
+		return true
+	}
+	index := strings.LastIndex(name, ".log.")
+	if index < 0 {
+		return false
+	}
+	suffix := name[index+len(".log."):]
+	if suffix == "" {
+		return false
+	}
+	for _, char := range suffix {
+		if char < '0' || char > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 func (s *service) GetLogsRecent(limit int) map[string]interface{} {
 	logDir := runtimeLogDirectory()
 	entries := recentLogFiles(logDir)
 	lines := make([]interface{}, 0)
 	count := 0
 	for i := 0; i < len(entries) && count < limit; i++ {
-		if !entries[i].IsDir() && strings.HasSuffix(entries[i].Name(), ".log") {
+		if !entries[i].IsDir() && isLogFileName(entries[i].Name()) {
 			data, err := readLogTail(filepath.Join(logDir, entries[i].Name()), 1024*1024)
 			if err == nil {
 				fileLines := strings.Split(string(data), "\n")
@@ -99,7 +119,7 @@ func (s *service) GetLogsRecentErrors(limit int) map[string]interface{} {
 	errs := make([]interface{}, 0)
 	count := 0
 	for i := 0; i < len(entries) && count < limit; i++ {
-		if !entries[i].IsDir() && strings.HasSuffix(entries[i].Name(), ".log") {
+		if !entries[i].IsDir() && isLogFileName(entries[i].Name()) {
 			data, err := readLogTail(filepath.Join(logDir, entries[i].Name()), 1024*1024)
 			if err == nil {
 				fileLines := strings.Split(string(data), "\n")
@@ -148,7 +168,7 @@ func (s *service) DeleteLogs() map[string]interface{} {
 	logDir := runtimeLogDirectory()
 	entries, _ := os.ReadDir(logDir)
 	for _, e := range entries {
-		if !e.IsDir() && strings.HasSuffix(e.Name(), ".log") {
+		if !e.IsDir() && isLogFileName(e.Name()) {
 			os.Remove(filepath.Join(logDir, e.Name()))
 		}
 	}
@@ -160,7 +180,7 @@ func (s *service) GetLogsModelErrors() map[string]interface{} {
 	entries := recentLogFiles(logDir)
 	errs := make([]interface{}, 0)
 	for _, e := range entries {
-		if !e.IsDir() && strings.HasSuffix(e.Name(), ".log") {
+		if !e.IsDir() && isLogFileName(e.Name()) {
 			data, err := readLogTail(filepath.Join(logDir, e.Name()), 1024*1024)
 			if err == nil {
 				for _, line := range strings.Split(string(data), "\n") {
@@ -183,7 +203,7 @@ func (s *service) DeleteLogsModelErrors() map[string]interface{} {
 	removed := 0
 	updatedFiles := 0
 	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".log") {
+		if entry.IsDir() || !isLogFileName(entry.Name()) {
 			continue
 		}
 		path := filepath.Join(logDir, entry.Name())
@@ -224,7 +244,7 @@ func (s *service) GetLogsPromptTraces(limit int) map[string]interface{} {
 	entries := recentLogFiles(logDir)
 	traces := make([]interface{}, 0)
 	for i := 0; i < len(entries) && len(traces) < limit; i++ {
-		if entries[i].IsDir() || !strings.HasSuffix(entries[i].Name(), ".log") {
+		if entries[i].IsDir() || !isLogFileName(entries[i].Name()) {
 			continue
 		}
 		data, err := readLogTail(filepath.Join(logDir, entries[i].Name()), 1024*1024)

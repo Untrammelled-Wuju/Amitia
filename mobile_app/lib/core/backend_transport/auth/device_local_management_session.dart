@@ -187,7 +187,6 @@ final class DeviceLocalSessionHttpTransport implements BackendHttpTransport {
         normalized.startsWith('/api/local/workflow-runs/') ||
         normalized == '/api/extensions/packages' ||
         normalized.startsWith('/api/extensions/packages/') ||
-        normalized == '/api/extensions/kernel/extensions' ||
         normalized.startsWith('/api/extensions/kernel/extensions/');
   }
 

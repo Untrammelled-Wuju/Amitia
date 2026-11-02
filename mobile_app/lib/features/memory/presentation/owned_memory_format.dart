@@ -7,6 +7,46 @@ class OwnedMemoryField {
   final String value;
 }
 
+String ownedMemoryDecayLabel(Map<String, dynamic> body) {
+  if (body['pinned'] == true) return '已固定';
+  final state = (body['effectiveDecayState'] ?? body['decayState'] ?? 'active')
+      .toString();
+  return switch (state) {
+    'dormant' => '休眠 · 可检索',
+    'archived' => '自动归档 · 可检索',
+    'fading' => '淡化',
+    _ => '活跃',
+  };
+}
+
+String ownedMemoryVerificationLabel(Map<String, dynamic> body) {
+  final status = (body['verifiedStatus'] ?? 'unverified').toString();
+  return switch (status) {
+    'user_corrected' => '用户已更正',
+    'verified' => '已确认',
+    'disputed' => '有争议',
+    'rejected' || 'invalidated' => '已失效',
+    _ => '待确认',
+  };
+}
+
+String ownedMemoryScoreSummary(Map<String, dynamic>? details) {
+  if (details == null || details['finalScore'] is! num) return '';
+  int percent(dynamic value) =>
+      ((value is num ? value.toDouble() : 0).clamp(0.0, 1.0) * 100).round();
+  return [
+    '总分 ${percent(details['finalScore'])}',
+    '语义 ${percent(details['semanticScore'])}',
+    '关键词 ${details['keywordMatch'] == true ? '命中' : '未命中'}',
+    '重要度 ${percent(details['importance'])}',
+    '置信度 ${percent(details['confidence'])}',
+    '强度 ${percent(details['strength'])}',
+    '召回反馈 ${percent(details['utility'])}',
+    '时效 ${percent(details['validity'])}',
+    '来源可信 ${percent(details['verification'])}',
+  ].join(' · ');
+}
+
 const Map<String, String> _fieldLabels = <String, String>{
   'name': '名字',
   'likes': '喜欢',
@@ -198,6 +238,26 @@ const Set<String> _metaKeys = <String>{
   'updatedAt',
   'updated_at',
   'verifiedAt',
+  'verifiedStatus',
+  'confidence',
+  'lastVerifiedAt',
+  'validFromUtc',
+  'validToUtc',
+  'correctionReason',
+  'previousContentHash',
+  'correctedAt',
+  'disputedAt',
+  'helpfulRetrievalCount',
+  'unhelpfulRetrievalCount',
+  'retrievalUtility',
+  'lastRetrievalFeedbackAt',
+  'lastRetrievalFeatures',
+  'stabilityDays',
+  'difficulty',
+  'recallProbability',
+  'effectiveStabilityDays',
+  'effectiveDifficulty',
+  'effectiveRecallProbability',
   'projectionStatus',
   'conversationId',
   'deleted',

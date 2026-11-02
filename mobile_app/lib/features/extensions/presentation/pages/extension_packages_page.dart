@@ -36,6 +36,7 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
   bool _searchVisible = false;
   String? _error;
   String _query = '';
+  bool _routeActionHandled = false;
   final _searchController = TextEditingController();
 
   @override
@@ -75,12 +76,13 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
       });
     }
     try {
-      final data = await ref.read(extensionServiceProvider).kernelExtensions();
+      final data = await ref.read(extensionServiceProvider).centerExtensions();
       if (mounted) {
         setState(() {
           _packages = data;
           _loading = false;
         });
+        await _handleRouteAction();
       }
     } catch (e) {
       if (mounted) {
@@ -88,6 +90,21 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
           _error = safeErrorMessage(e);
           _loading = false;
         });
+      }
+    }
+  }
+
+  Future<void> _handleRouteAction() async {
+    if (_routeActionHandled || !mounted) return;
+    final state = GoRouterState.of(context);
+    final extensionId = state.uri.queryParameters['extensionId'] ?? '';
+    final action = state.uri.queryParameters['action'] ?? '';
+    if (extensionId.isEmpty || action.isEmpty) return;
+    _routeActionHandled = true;
+    for (final package in _packages) {
+      if ((package['extensionId'] ?? '').toString() == extensionId) {
+        await _handlePackageAction(package, action);
+        return;
       }
     }
   }
@@ -322,6 +339,10 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
     final enablement = (pkg['enablement'] ?? '').toString();
     final enabled = enablement == 'enabled';
     final systemManaged = pkg['systemManaged'] == true;
+    final updateAvailable = pkg['updateAvailable'] == true;
+    final latestVersion = (pkg['latestVersion'] ?? '').toString();
+    final trust = (pkg['trust'] ?? 'untrusted').toString();
+    final permissionRisk = (pkg['permissionRisk'] ?? '').toString();
     final statusText = enabled ? '已启用' : (state == 'paused' ? '已暂停' : '已停用');
 
     return AmitiaCard(
@@ -357,7 +378,13 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      version.isEmpty ? '版本未知' : 'v$version',
+                      [
+                        version.isEmpty ? '版本未知' : 'v$version',
+                        if (updateAvailable && latestVersion.isNotEmpty)
+                          '可更新至 v$latestVersion',
+                        trust,
+                        if (permissionRisk.isNotEmpty) '风险 $permissionRisk',
+                      ].join(' · '),
                       style: AppTypography.caption(context),
                     ),
                   ],
@@ -496,7 +523,7 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
     try {
       final detail = await ref
           .read(extensionServiceProvider)
-          .kernelExtension(id);
+          .extensionCenterDetail(id);
       final permissions = ((detail['permissions'] as List?) ?? const [])
           .whereType<Map>()
           .map((item) => Map<String, dynamic>.from(item))
@@ -527,7 +554,7 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
                       Divider(height: 1, color: dialogContext.borderSecondary),
                   itemBuilder: (context, index) {
                     final permission = permissions[index];
-                    final permissionName = (permission['name'] ?? '')
+                    final permissionName = (permission['permission'] ?? '')
                         .toString();
                     final granted = permission['granted'] == true;
                     final reason = (permission['reason'] ?? '').toString();
@@ -968,7 +995,7 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
     try {
       final detail = await ref
           .read(extensionServiceProvider)
-          .kernelExtension(id);
+          .extensionCenterDetail(id);
       if (!mounted) return;
       showDialog(
         context: context,
@@ -1427,7 +1454,7 @@ class _ExtensionDetailDialog extends StatelessWidget {
     final contributions = ((detail['contributions'] as List?) ?? const [])
         .whereType<Map>()
         .toList(growable: false);
-    final name = (detail['name'] ?? '').toString();
+    final name = (detail['displayName'] ?? '').toString();
     return AlertDialog(
       backgroundColor: context.surfacePrimary,
       shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
@@ -1448,19 +1475,19 @@ class _ExtensionDetailDialog extends StatelessWidget {
               ),
               _DetailRow(
                 label: '状态',
-                value: (detail['state'] ?? '').toString(),
+                value: (detail['effectiveState'] ?? '').toString(),
               ),
               _DetailRow(
                 label: '启用状态',
-                value: (detail['enablement'] ?? '').toString(),
+                value: detail['enabled'] == true ? '已启用' : '已停用',
               ),
               _DetailRow(
-                label: '安装 ID',
-                value: (detail['installationId'] ?? '').toString(),
+                label: '发布者',
+                value: (detail['publisher'] ?? '').toString(),
               ),
               _DetailRow(
-                label: 'Generation',
-                value: (detail['generation'] ?? '').toString(),
+                label: '信任级别',
+                value: (detail['trust'] ?? '').toString(),
               ),
               _DetailRow(label: '模块数量', value: modules.length.toString()),
               _DetailRow(label: '贡献数量', value: contributions.length.toString()),
@@ -1473,7 +1500,7 @@ class _ExtensionDetailDialog extends StatelessWidget {
                       (module) => Padding(
                         padding: const EdgeInsets.only(top: 5),
                         child: Text(
-                          '${module['id'] ?? ''} · ${module['type'] ?? ''} · ${module['runtime'] ?? ''}',
+                          '${module['moduleId'] ?? ''} · ${module['kind'] ?? ''} · ${module['runtime'] ?? ''}',
                           style: AppTypography.label(context),
                         ),
                       ),

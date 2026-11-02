@@ -11,6 +11,7 @@ import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.StandardMethodCodec
+import java.io.File
 
 class RuntimeBridgePlugin : FlutterPlugin {
 
@@ -59,7 +60,7 @@ class RuntimeBridgePlugin : FlutterPlugin {
         this.eventChannel = eventChannel
         this.streamHandler = streamHandler
 
-        val logBridge = RuntimeLogBridge.getInstance()
+        val logBridge = RuntimeLogBridge.getInstance(File(context.filesDir, "amitia/logs"))
         RuntimeLogCallback.instance = logBridge
         val logEventChannel = EventChannel(binding.binaryMessenger, RuntimeLogBridge.EVENT_CHANNEL)
         logEventChannel.setStreamHandler(logBridge)

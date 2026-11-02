@@ -17,6 +17,7 @@ type ExtensionDetail struct {
 	Version           string                   `json:"version"`
 	Icon              string                   `json:"icon,omitempty"`
 	Trust             string                   `json:"trust"`
+	SignatureStatus   string                   `json:"signatureStatus,omitempty"`
 	Source            string                   `json:"source"`
 	License           string                   `json:"license,omitempty"`
 	Homepage          string                   `json:"homepage,omitempty"`
@@ -27,8 +28,11 @@ type ExtensionDetail struct {
 	EffectiveState    string                   `json:"effectiveState"`
 	FailureCount      int                      `json:"failureCount"`
 	UpdateAvailable   bool                     `json:"updateAvailable"`
+	LatestVersion     string                   `json:"latestVersion,omitempty"`
+	UpdateError       string                   `json:"updateError,omitempty"`
 	Platforms         []string                 `json:"platforms"`
 	PermissionRisk    string                   `json:"permissionRisk,omitempty"`
+	SystemManaged     bool                     `json:"systemManaged"`
 	DevMode           bool                     `json:"devMode"`
 	UserModified      bool                     `json:"userModified"`
 	Modules           []ModuleDetail           `json:"modules"`
@@ -76,6 +80,7 @@ type PermissionDetail struct {
 	Granted    bool   `json:"granted"`
 	Reason     string `json:"reason,omitempty"`
 	Scope      string `json:"scope,omitempty"`
+	Risk       string `json:"risk,omitempty"`
 }
 
 type ScopeDetail struct {
@@ -213,6 +218,13 @@ func (s *DetailService) Invalidate(extensionID string) {
 	defer s.mu.Unlock()
 	delete(s.cache, extensionID)
 	delete(s.cacheAt, extensionID)
+}
+
+func (s *DetailService) InvalidateAll() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.cache = make(map[string]*ExtensionDetail)
+	s.cacheAt = make(map[string]time.Time)
 }
 
 func (s *DetailService) ListActions(ctx context.Context, extensionID string) ([]ActionDescriptor, error) {

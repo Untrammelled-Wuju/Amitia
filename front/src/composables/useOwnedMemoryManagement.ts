@@ -22,7 +22,7 @@ export function useOwnedMemoryManagement() {
     const result = unwrap(await apiClient.get(`/api/device-mesh/v1/business/${candidates ? "memory-candidates" : "memories"}`, { params: { ...query, memoryView: memoryViewForScope(expected), characterId: expected.roleId, targetDeviceId: expected.targetDeviceId } }));
     const rows = resources(result, expected);
     if (rows.some((row) => candidates ? row.kind !== "checkpoint" || !row.id.startsWith("memory-candidate/") || row.body.type !== "owned-memory-candidate" || row.body.state !== "pending" : row.kind !== "memory")) throw new Error("记忆管理返回了其他资源种类");
-    return { resources: rows, nextCursor: result.nextCursor || "", scores: result.scores || {} };
+    return { resources: rows, nextCursor: result.nextCursor || "", scores: result.scores || {}, scoreDetails: result.scoreDetails || {} };
   }
   async function write(expected: OwnedExecutionScope, requestId: string, input: Record<string, unknown>, candidates = false) {
     const result = unwrap(await apiClient.post(`/api/device-mesh/v1/business/${candidates ? "memory-candidates" : "memories"}/manage`, { ...input, requestId, characterId: expected.roleId, targetDeviceId: expected.targetDeviceId, expectedExecutionScope: expected }));
@@ -34,11 +34,21 @@ export function useOwnedMemoryManagement() {
     if (candidates && input.action === "accept" && (!rows.some((row) => row.kind === "memory") || !rows.some((row) => ["fact", "profile", "episodic"].includes(row.kind)) || !rows.some((row) => row.kind === "checkpoint" && row.id === input.id && row.body.state === "accepted"))) throw new Error("候选记忆尚未确认写入正式记忆");
     return rows;
   }
+  async function consolidation(expected: OwnedExecutionScope) {
+    const result = unwrap(await apiClient.get("/api/device-mesh/v1/business/memories/consolidation", { params: { memoryView: memoryViewForScope(expected), characterId: expected.roleId, targetDeviceId: expected.targetDeviceId } }));
+    if (!result?.executionScope || ownedMemoryAuthority(result.executionScope) !== ownedMemoryAuthority(expected)) throw new Error("记忆巩固检查的数据归属已变化");
+    return result;
+  }
+  async function history(expected: OwnedExecutionScope, id: string) {
+    const result = unwrap(await apiClient.get("/api/device-mesh/v1/business/memories/history", { params: { id, memoryView: memoryViewForScope(expected), characterId: expected.roleId, targetDeviceId: expected.targetDeviceId } }));
+    if (!result?.executionScope || ownedMemoryAuthority(result.executionScope) !== ownedMemoryAuthority(expected) || result.history?.memoryId !== id || !Array.isArray(result.history.versions)) throw new Error("记忆历史数据归属或版本无效");
+    return result.history.versions;
+  }
   function conflicts(error: any, expected: OwnedExecutionScope) {
     const payload = error?.response?.data;
     const rows = payload?.conflicts || payload?.data?.conflicts;
     if (!Array.isArray(rows) || rows.length < 1 || rows.length > 32) return [];
     return resources({ executionScope: expected, resources: rows }, expected).filter((row) => row.kind === "memory" && !row.deleted);
   }
-  return { read, write, conflicts };
+  return { read, write, consolidation, history, conflicts };
 }

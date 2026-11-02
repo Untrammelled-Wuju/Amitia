@@ -1,4 +1,9 @@
-# 前端旧扩展系统功能冻结说明
+# 前端扩展系统迁移说明
+
+> 2026-11-01 更新：`ExtensionCenterView.vue` 已改为扩展中心唯一权威页面，统一消费
+> `/api/extension-center/view` 与 `/api/extension-center/extension`。扩展包、MCP、
+> Workflow 和 Agent Skill 页面保留为独立操作入口，但扩展列表、状态、更新、信任、
+> 权限风险和诊断不再通过旧 Kernel 读接口获取。
 
 > 冻结开始日期：2026-07-25
 > 本文件地位：Amitia 扩展系统重构第 1 步前端冻结标记
@@ -22,9 +27,9 @@
 
 ### 1. 扩展中心（`front/src/views/extensions/`）
 
-被冻结的入口文件与子模块：
+当前入口文件与子模块：
 
-- `ExtensionCenterView.vue`：扩展中心主入口；
+- `ExtensionCenterView.vue`：扩展中心权威聚合入口；
 - `packages/PackageManagerView.vue`：扩展包管理页；
 - `api.ts`：扩展中心 API Client；
 - `types.ts`：扩展中心类型定义；

@@ -11,15 +11,19 @@ import (
 type cdpPipeTransport struct {
 	reader  io.ReadCloser
 	writer  io.WriteCloser
+	input   *bufio.Reader
 	writeMu sync.Mutex
-	scanBuf []byte
 }
 
 func newCDPPipeTransport(reader io.ReadCloser, writer io.WriteCloser) *cdpPipeTransport {
-	return &cdpPipeTransport{
+	transport := &cdpPipeTransport{
 		reader: reader,
 		writer: writer,
 	}
+	if reader != nil {
+		transport.input = bufio.NewReader(reader)
+	}
+	return transport
 }
 
 func (t *cdpPipeTransport) Close() error {
@@ -37,18 +41,22 @@ func (t *cdpPipeTransport) Close() error {
 }
 
 func (t *cdpPipeTransport) ReadMessage() ([]byte, error) {
-	if t.reader == nil {
+	if t.input == nil {
 		return nil, fmt.Errorf("cdp pipe transport: reader closed")
 	}
-	line, err := t.readLine()
-	if err != nil {
-		return nil, err
+	for {
+		message, err := t.input.ReadBytes(0)
+		if len(message) > 0 && message[len(message)-1] == 0 {
+			message = message[:len(message)-1]
+		}
+		message = bytes.TrimSpace(message)
+		if len(message) > 0 {
+			return message, nil
+		}
+		if err != nil {
+			return nil, err
+		}
 	}
-	line = bytes.TrimSpace(line)
-	if len(line) == 0 {
-		return t.ReadMessage()
-	}
-	return line, nil
 }
 
 func (t *cdpPipeTransport) WriteMessage(data []byte) error {
@@ -57,44 +65,14 @@ func (t *cdpPipeTransport) WriteMessage(data []byte) error {
 	}
 	t.writeMu.Lock()
 	defer t.writeMu.Unlock()
-	if _, err := t.writer.Write(data); err != nil {
+	if _, err := t.writer.Write(bytes.TrimSpace(data)); err != nil {
 		return err
 	}
-	if len(data) == 0 || data[len(data)-1] != '\n' {
-		if _, err := t.writer.Write([]byte{'\n'}); err != nil {
-			return err
-		}
+	if _, err := t.writer.Write([]byte{0}); err != nil {
+		return err
 	}
 	if flusher, ok := t.writer.(interface{ Flush() error }); ok {
 		return flusher.Flush()
 	}
 	return nil
-}
-
-func (t *cdpPipeTransport) readLine() ([]byte, error) {
-	if t.scanBuf != nil {
-		idx := bytes.IndexByte(t.scanBuf, '\n')
-		if idx >= 0 {
-			line := make([]byte, idx)
-			copy(line, t.scanBuf[:idx])
-			t.scanBuf = append(t.scanBuf[:0], t.scanBuf[idx+1:]...)
-			return line, nil
-		}
-	}
-	scanner := bufio.NewReader(t.reader)
-	line, err := scanner.ReadBytes('\n')
-	if err != nil {
-		if len(t.scanBuf) > 0 {
-			result := make([]byte, len(t.scanBuf))
-			copy(result, t.scanBuf)
-			t.scanBuf = nil
-			return result, nil
-		}
-		return nil, err
-	}
-	if t.scanBuf != nil {
-		line = append(t.scanBuf, line...)
-		t.scanBuf = nil
-	}
-	return line, nil
 }

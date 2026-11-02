@@ -1,6 +1,6 @@
-import { createWriteStream, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { getAmitiaDataDir } from "../path-manager";
+import { DailySizeRotatingLog } from "../log-rotation";
 
 export type PetLogEventType =
   | "enable"
@@ -94,7 +94,7 @@ function formatMeta(meta: Record<string, unknown> | undefined): string {
 }
 
 export class PetLogger {
-  private stream: ReturnType<typeof createWriteStream> | null = null;
+  private writer: DailySizeRotatingLog | null = null;
   private readonly aggregates: Map<string, AggregateEntry> = new Map();
   private readonly aggregateTimers: Map<string, ReturnType<typeof setTimeout>> =
     new Map();
@@ -119,14 +119,10 @@ export class PetLogger {
   private ensureStream(logDir?: string): void {
     try {
       const dir = logDir ?? join(getAmitiaDataDir(), "logs");
-      if (!existsSync(dir)) {
-        mkdirSync(dir, { recursive: true });
-      }
-      const path = join(dir, "pet.log");
-      this.stream = createWriteStream(path, { flags: "a" });
+      this.writer = new DailySizeRotatingLog(dir, "pet");
     } catch (err) {
       console.warn("[PetLogger] 初始化失败, 回退到 console:", err);
-      this.stream = null;
+      this.writer = null;
     }
   }
 
@@ -241,14 +237,14 @@ export class PetLogger {
     }
     this.aggregateTimers.clear();
     this.aggregates.clear();
-    if (this.stream) {
+    if (this.writer) {
       try {
-        this.stream.end();
+        this.writer.close();
       } catch (error) {
   console.error("[original-error]", error);
 void 0;
       }
-      this.stream = null;
+      this.writer = null;
     }
   }
 
@@ -302,9 +298,9 @@ void 0;
     const ts = new Date().toISOString();
     const metaStr = formatMeta(meta);
     const line = `[${ts}] [${type}] ${message}${metaStr ? ` ${metaStr}` : ""}\n`;
-    if (this.stream) {
+    if (this.writer) {
       try {
-        this.stream.write(line);
+        this.writer.write(line);
       } catch (error) {
   console.error("[original-error]", error);
 void 0;

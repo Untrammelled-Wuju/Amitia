@@ -47,6 +47,11 @@ export async function getNativeProviderTransition() {
 // API historically uses /desktop-pets for package/installation resources and
 // /desktop-pet for Behavior control.
 export const DEVICE_LOCAL_ROUTE_PREFIXES = [
+  "/api/extension-center",
+  "/api/extensions/packages",
+  "/api/extensions/updates",
+  "/api/extensions/versions",
+  "/api/extensions/kernel/extensions",
   "/api/desktop-pets",
   "/api/desktop-pet",
   "/api/local/workflows",

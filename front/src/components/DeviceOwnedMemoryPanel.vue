@@ -24,6 +24,7 @@
       </div>
     </div>
     <el-alert v-if="source !== 'current'" title="原设备历史数据可供 Core 调用；请在原设备管理这些历史记录。" type="info" :closable="false" />
+    <el-alert v-if="source === 'current' && kind === 'memory'" title="事实、画像和关系长期保留；长期未使用时只降低召回权重并进入休眠。情节记忆可自动归档。休眠和自动归档仍可通过明确检索恢复，手动归档与停用不会自动恢复。" type="info" :closable="false" />
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
     <DeviceOwnedMemoryManagement v-if="source === 'current' && kind === 'memory' && loadedScope && !loading" :execution-scope="loadedScope" :search="search" @saved="load()" @refresh="load(false)" />
     <div v-if="source === 'current' && !loadedScope?.memoryViewAll && ['vector', 'graph'].includes(kind)" class="projection-status">
@@ -87,7 +88,8 @@
         <div class="record-state">
           <el-tag v-if="['memory', 'episodic', 'graph', 'fact', 'vector', 'profile'].includes(row.kind)" size="small">{{ row.roleId === GLOBAL_MEMORY_ROLE ? '全局记忆' : '角色记忆' }}</el-tag>
           <el-tag size="small">版本 {{ row.revision }}</el-tag>
-          <el-tag v-if="row.kind === 'memory'" size="small">L{{ (row.body.effectiveRetentionLevel ?? row.body.retentionLevel) || 3 }} · 强度 {{ Math.round(((row.body.effectiveStrength ?? row.body.memoryStrength) ?? 0.68) * 100) }}% · {{ row.body.pinned ? '已固定' : (row.body.effectiveDecayState ?? row.body.decayState) === 'archived' ? '自动归档' : (row.body.effectiveDecayState ?? row.body.decayState) === 'fading' ? '淡化' : '活跃' }} · 强化 {{ row.body.reinforceCount || 0 }} 次</el-tag>
+          <el-tag v-if="row.kind === 'memory'" size="small">L{{ (row.body.effectiveRetentionLevel ?? row.body.retentionLevel) || 3 }} · 强度 {{ Math.round(((row.body.effectiveStrength ?? row.body.memoryStrength) ?? 0.68) * 100) }}% · {{ ownedMemoryDecayLabel(row.body) }} · 强化 {{ row.body.reinforceCount || 0 }} 次</el-tag>
+          <el-tag v-if="row.kind === 'memory'" size="small" :type="row.body.verifiedStatus === 'disputed' ? 'danger' : row.body.verifiedStatus === 'verified' || row.body.verifiedStatus === 'user_corrected' ? 'success' : 'info'">{{ ownedMemoryVerificationLabel(row.body) }}</el-tag>
           <el-tag v-if="row.body.allowContextUse === false" size="small" type="warning">已停用</el-tag>
           <el-tag v-if="row.body.allowProactiveMention === false" size="small" type="info">不主动提及</el-tag>
           <el-tag v-if="row.body.expiresAt" size="small" type="info">到期 {{ row.body.expiresAt }}</el-tag>
@@ -99,6 +101,12 @@
           <el-button size="small" :disabled="loading" @click="editContent(row)">编辑</el-button>
           <template v-if="row.kind === 'memory'">
             <el-button size="small" :disabled="loading" @click="openLifecycle(row)">保留等级与固定</el-button>
+            <el-button size="small" :disabled="loading" @click="openHistory(row)">历史版本</el-button>
+            <el-button v-if="canRestoreLifecycle(row)" size="small" :disabled="loading" @click="restoreLifecycle(row)">恢复召回</el-button>
+            <el-button size="small" :disabled="loading" @click="confirmMemory(row)">确认正确</el-button>
+            <el-button size="small" type="danger" plain :disabled="loading" @click="markMemoryWrong(row)">标记有误</el-button>
+            <el-button size="small" :disabled="loading" @click="retrievalFeedback(row, 'helpful')">召回有用</el-button>
+            <el-button size="small" :disabled="loading" @click="retrievalFeedback(row, 'not_helpful')">召回无用</el-button>
             <el-button size="small" :disabled="loading" @click="setUse(row)">{{ row.body.allowContextUse === false ? '允许用于对话' : '停用' }}</el-button>
             <el-button size="small" :disabled="loading" @click="setProactiveMention(row)">{{ row.body.allowProactiveMention === false ? '允许主动提及' : '禁止主动提及' }}</el-button>
             <el-button size="small" :disabled="loading" @click="setExpiry(row)">到期时间</el-button>
@@ -150,6 +158,15 @@
       </el-form>
       <template #footer><el-button :disabled="lifecycleSaving" @click="lifecycleOpen = false">取消</el-button><el-button :loading="lifecycleSaving" @click="saveLifecycle">保存</el-button></template>
     </el-dialog>
+    <el-dialog v-model="historyOpen" title="记忆修改历史" width="min(680px, 96vw)">
+      <article v-for="version in historyRows" :key="version.revision" class="record-field">
+        <strong>版本 {{ version.revision }}</strong>
+        <small>{{ version.createdAt }}</small>
+        <p>{{ historyPreview(version.body) }}</p>
+        <el-button size="small" :disabled="loading" @click="restoreHistory(version.revision)">恢复此版本</el-button>
+      </article>
+      <el-empty v-if="historyRows.length === 0" description="暂无修改历史" />
+    </el-dialog>
   </component>
 </template>
 
@@ -163,13 +180,14 @@ import type { OwnedExecutionScope } from "@/runtime/device-owned-chat";
 import DeviceOwnedMemoryManagement from "./DeviceOwnedMemoryManagement.vue";
 import OwnedMemoryGraph from "./OwnedMemoryGraph.vue";
 import { GLOBAL_MEMORY_ROLE, memoryStorageRole, memoryRecordScope } from "@/runtime/owned-memory-scope";
-import { ownedMemoryTitle, ownedMemoryFields, ownedMemoryEditableText } from "@/runtime/owned-memory-format";
+import { ownedMemoryTitle, ownedMemoryFields, ownedMemoryEditableText, ownedMemoryDecayLabel, ownedMemoryVerificationLabel } from "@/runtime/owned-memory-format";
 import { transferMemoryScope } from "@/composables/useMemoryScopeTransfer";
 import { ownedMemoryViewOptions } from "@/runtime/owned-memory-view-options";
 
 const props = defineProps<{ visible: boolean; characterId: string; conversationId: string; embedded?: boolean; initialKind?: string; fixedKind?: boolean; requestedMemoryView?: string; mode?: string; kinds?: string[]; source?: string; search?: string }>();
 defineEmits<{ "update:visible": [value: boolean] }>();
 const owned = useDeviceOwnedConversation();
+const memoryManagement = useOwnedMemoryManagement();
 const controlId = useId();
 const layers = [
   { id: "memory", label: "原始记忆" }, { id: "working", label: "工作记忆" },
@@ -196,6 +214,9 @@ const createProfileForm = reactive({ key: "", value: "", memoryType: "personal_i
 const lifecycleOpen = ref(false);
 const lifecycleSaving = ref(false);
 const lifecycleForm = reactive({ retentionLevel: 3, strength: 68, pinned: false });
+const historyOpen = ref(false);
+const historyRows = ref<Array<{ revision: number; createdAt: string; body: Record<string, any> }>>([]);
+let historyRow: any;
 let lifecycleRow: any;
 function openLifecycle(row: any) {
   lifecycleRow = JSON.parse(JSON.stringify(row));
@@ -212,6 +233,26 @@ async function saveLifecycle() {
     await load();
   } catch (cause) { error.value = cause instanceof Error ? cause.message : "保留设置保存失败"; }
   finally { lifecycleSaving.value = false; }
+}
+async function openHistory(row: any) {
+  try {
+    historyRow = JSON.parse(JSON.stringify(row));
+    historyRows.value = await memoryManagement.history(row.executionScope, row.id);
+    historyOpen.value = true;
+  } catch (cause) { error.value = cause instanceof Error ? cause.message : String(cause || "记忆历史加载失败"); }
+}
+async function restoreHistory(revision: number) {
+  const row = historyRow;
+  if (!row || loading.value) return;
+  try {
+    await owned.edit("memory", row.id, { restoreHistoryRevision: revision }, { characterId: row.executionScope.roleId, expectedExecutionScope: row.executionScope, expectedOwnerId: row.ownerId, expectedRevision: row.revision });
+    historyOpen.value = false;
+    await load();
+  } catch (cause) { error.value = cause instanceof Error ? cause.message : String(cause || "记忆历史恢复失败"); }
+}
+function historyPreview(body: Record<string, any>) {
+  const content = body?.content;
+  return typeof content === "string" ? content : String(content?.value || content?.text || content?.summary || "无正文");
 }
 
 const viewOptions = computed(() => ownedMemoryViewOptions(source.value, owned.roles.value, historicalRoles.value, kind.value));
@@ -478,11 +519,11 @@ async function setProactiveMention(row: any) {
 async function editContent(row: any) {
   const original = JSON.parse(JSON.stringify(row));
   try {
-    const result = await ElMessageBox.prompt("修改当前数据所有者保存的内容；原设备历史记录需在原设备管理。", row.kind === "summary" ? "编辑摘要" : "编辑记忆", { inputType: "textarea", inputValue: content(original), inputValidator: (value) => Boolean(String(value || "").trim()) && new TextEncoder().encode(value).length <= 131072 || "内容不能为空或超出128 KiB", confirmButtonText: "保存", cancelButtonText: "取消" });
+    const result = await ElMessageBox.prompt("修改当前数据所有者保存的内容会记录为用户更正，并将该记忆标记为已验证；原设备历史记录需在原设备管理。", row.kind === "summary" ? "编辑摘要" : "更正记忆", { inputType: "textarea", inputValue: content(original), inputValidator: (value) => Boolean(String(value || "").trim()) && new TextEncoder().encode(value).length <= 131072 || "内容不能为空或超出128 KiB", confirmButtonText: "保存更正", cancelButtonText: "取消" });
     const text = result.value.trim();
     const current = original.body.content;
     const updated = typeof current === "object" && current !== null ? { ...current, [original.kind === "summary" ? Object.hasOwn(current, "text") && !Object.hasOwn(current, "summary") ? "text" : "summary" : Object.hasOwn(current, "text") && !Object.hasOwn(current, "value") ? "text" : "value"]: text } : text;
-    await owned.edit(original.kind, original.id, { content: updated }, { characterId: original.executionScope.roleId, expectedExecutionScope: original.executionScope, expectedOwnerId: original.ownerId, expectedRevision: original.revision });
+    await owned.edit(original.kind, original.id, original.kind === "memory" ? { content: updated, correctionReason: "用户在记忆管理中更正正文" } : { content: updated }, { characterId: original.executionScope.roleId, expectedExecutionScope: original.executionScope, expectedOwnerId: original.ownerId, expectedRevision: original.revision });
     await load();
   } catch (cause) { if (cause !== "cancel" && cause !== "close") error.value = cause instanceof Error ? cause.message : "内容保存失败"; }
 }
@@ -501,6 +542,40 @@ async function setArchive(row: any) {
     await owned.edit("memory", row.id, { archivedAt: row.body.archivedAt ? "" : new Date().toISOString() }, { characterId: row.executionScope.roleId, expectedExecutionScope: row.executionScope, expectedOwnerId: row.ownerId, expectedRevision: row.revision });
     await load();
   } catch (cause) { error.value = cause instanceof Error ? cause.message : "记忆归档失败"; }
+}
+
+function canRestoreLifecycle(row: any) {
+  const state = row.body?.effectiveDecayState ?? row.body?.decayState;
+  return !row.body?.archivedAt && (state === "dormant" || state === "archived");
+}
+
+async function restoreLifecycle(row: any) {
+  try {
+    await owned.edit("memory", row.id, { retentionLevel: 4, memoryStrength: .5, pinned: false }, { characterId: row.executionScope.roleId, expectedExecutionScope: row.executionScope, expectedOwnerId: row.ownerId, expectedRevision: row.revision });
+    await load();
+  } catch (cause) { error.value = cause instanceof Error ? cause.message : String(cause || "记忆恢复失败"); }
+}
+
+async function confirmMemory(row: any) {
+  try {
+    await owned.edit("memory", row.id, { verifiedStatus: "verified", confidence: 100, allowContextUse: true, lastVerifiedAt: new Date().toISOString() }, { characterId: row.executionScope.roleId, expectedExecutionScope: row.executionScope, expectedOwnerId: row.ownerId, expectedRevision: row.revision });
+    await load();
+  } catch (cause) { error.value = cause instanceof Error ? cause.message : String(cause || "记忆确认失败"); }
+}
+
+async function markMemoryWrong(row: any) {
+  try {
+    await ElMessageBox.confirm("标记有误后，该记忆会降低置信度并停止用于普通对话。你可以随后更正正文并重新确认。", "标记记忆有误", { type: "warning", confirmButtonText: "标记有误", cancelButtonText: "取消" });
+    await owned.edit("memory", row.id, { verifiedStatus: "disputed" }, { characterId: row.executionScope.roleId, expectedExecutionScope: row.executionScope, expectedOwnerId: row.ownerId, expectedRevision: row.revision });
+    await load();
+  } catch (cause) { if (cause !== "cancel" && cause !== "close") error.value = cause instanceof Error ? cause.message : String(cause || "记忆争议标记失败"); }
+}
+
+async function retrievalFeedback(row: any, feedback: "helpful" | "not_helpful") {
+  try {
+    await owned.edit("memory", row.id, { retrievalFeedback: feedback }, { characterId: row.executionScope.roleId, expectedExecutionScope: row.executionScope, expectedOwnerId: row.ownerId, expectedRevision: row.revision });
+    await load();
+  } catch (cause) { error.value = cause instanceof Error ? cause.message : String(cause || "召回反馈保存失败"); }
 }
 
 async function rebuild() {

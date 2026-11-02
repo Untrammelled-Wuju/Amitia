@@ -205,6 +205,10 @@ func estimateTokens(content string) int {
 	return int(math.Ceil(cost))
 }
 
+func EstimateTokens(content string) int {
+	return estimateTokens(content)
+}
+
 func splitByApproxTokenLimit(content string, tokenLimit int) (string, string) {
 	if tokenLimit <= 0 {
 		return "", content

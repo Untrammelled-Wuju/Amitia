@@ -1181,6 +1181,13 @@ func verifyCenterDetail(ctx context.Context) ([]string, error) {
 	if _, err := os.Stat(centerView); err != nil {
 		return nil, fmt.Errorf("ExtensionCenterView.vue must exist: %w", err)
 	}
+	routerSource, err := os.ReadFile(filepath.Join(backendRoot(), "..", "front", "src", "router", "builtinRoutes.ts"))
+	if err != nil {
+		return nil, fmt.Errorf("extension center route source must be readable: %w", err)
+	}
+	if !bytes.Contains(routerSource, []byte(`path: "/extensions", name: "extensionCenter", component: () => import("@/views/extensions/ExtensionCenterView.vue")`)) {
+		return nil, fmt.Errorf("extension center route must mount ExtensionCenterView.vue")
+	}
 
 	uiHost := ui_contribution.NewUIHost()
 	if uiHost == nil {
@@ -1192,7 +1199,7 @@ func verifyCenterDetail(ctx context.Context) ([]string, error) {
 	}
 
 	return []string{
-		"ExtensionCenterView.vue 存在",
+		"扩展中心路由真实挂载 ExtensionCenterView.vue",
 		"UIHost 和 PageHost 实例化成功 (扩展中心与详情页基础设施就绪)",
 	}, nil
 }

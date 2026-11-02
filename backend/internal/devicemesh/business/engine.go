@@ -569,6 +569,9 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 	if err := coordination.ValidateSnapshot(scope, snapshot); err != nil {
 		return Response{}, err
 	}
+	if len(snapshot.RecallEvidence) == 0 && len(request.RecallEvidence) > 0 {
+		snapshot.RecallEvidence = append([]coordination.ResourceVersion(nil), request.RecallEvidence...)
+	}
 	if request.PreparedReply != nil && request.PreparedReply.ContextSequence > 0 {
 		resources := snapshot.Resources[:0]
 		for _, resource := range snapshot.Resources {
@@ -1195,7 +1198,8 @@ func (e *Engine) completeMemory(ctx context.Context, inference Inference, finger
 		response.MemoryError = err.Error()
 		return e.recordMemoryStatus(ctx, scope, fingerprint, response, checkpointRevision)
 	}
-	mutations = reinforceMemoryMutations(mutations, inference.Snapshot, scope, time.Now())
+	recalled := snapshotForRecallEvidence(inference.Snapshot, inference.Snapshot.RecallEvidence)
+	mutations = reinforceMemoryMutations(mutations, recalled, scope, time.Now())
 	if len(mutations) > 0 {
 		dependencies := append([]coordination.ResourceVersion(nil), response.Evidence...)
 		for _, resource := range inference.Snapshot.Resources {
@@ -1307,7 +1311,7 @@ func memoryMutations(scope coordination.ExecutionScope, conversation string, der
 		}
 		state := memorypolicy.NewLifecycle(metadata.RetentionLevel, metadata.Pinned, metadata.Importance, time.Now())
 		if metadata.RetentionLevel == 0 {
-			state = memorypolicy.AssignLifecycle(metadata.MemoryType, metadata.MemorySubtype, metadata.Importance, metadata.Pinned, time.Now())
+			state = memorypolicy.AssignLifecycleForKind(item.Kind, metadata.MemoryType, metadata.MemorySubtype, metadata.Importance, metadata.Pinned, time.Now())
 		}
 		for _, previous := range snapshot.Resources {
 			if previous.Kind == "memory" && previous.ID == id {

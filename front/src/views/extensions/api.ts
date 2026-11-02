@@ -4,10 +4,11 @@ import type {
   AgentSkillDefinition,
   AgentSkillPage,
   AgentSkillPreview,
-  LocalExtensionPackage,
   ExtensionUpdateCheck,
   ExtensionUpdateDownload,
   ExtensionUpdateMetadata,
+  ExtensionCenterDetail,
+  ExtensionCenterView,
   PackageImportPreview,
   PackageOperation,
   PackageOperationResult,
@@ -25,6 +26,18 @@ import type {
 } from "./types";
 
 export type { PackageImportPreview, PackageOperationResult } from "./types";
+
+export async function fetchExtensionCenterView() {
+  const response = await apiClient.get("/api/extension-center/view");
+  return response.data as ExtensionCenterView;
+}
+
+export async function fetchExtensionCenterDetail(extensionId: string) {
+  const response = await apiClient.get("/api/extension-center/extension", {
+    params: { id: extensionId },
+  });
+  return response.data as ExtensionCenterDetail;
+}
 
 const agentSkillPath = (id = "") =>
   `/api/extensions/kernel/agent-skills${id ? `/${encodeURIComponent(id)}` : ""}`;
@@ -137,36 +150,6 @@ export async function previewExtensionPackage(
   return response.data.preview as PackageImportPreview;
 }
 
-export async function fetchLocalExtensionPackageStatus() {
-  const response = await apiClient.get("/api/extensions/packages/status");
-  return response.data as { ready: boolean; installed: number };
-}
-
-export async function fetchLocalExtensionPackages() {
-  const response = await apiClient.get("/api/extensions/packages");
-  return response.data as LocalExtensionPackage[];
-}
-
-export async function installLocalExtensionPackage(
-  file: File,
-  onProgress?: (percent: number) => void,
-) {
-  return previewExtensionPackage(file, "global", "", "", onProgress);
-}
-export async function previewExtensionDirectory(
-  rootName: string,
-  files: Array<{ path: string; base64: string }>,
-  scopeType: "global" | "character",
-  scopeId: string,
-  onProgress?: (percent: number) => void,
-) {
-  void rootName;
-  void files;
-  void scopeType;
-  void scopeId;
-  void onProgress;
-  throw new Error("扩展目录直装已退役，请先构建插件系统 v1 的 .amitiax 扩展包");
-}
 export async function installExtensionPackage(
   preview: PackageImportPreview,
   confirmations: {

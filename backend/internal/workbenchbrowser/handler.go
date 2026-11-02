@@ -274,13 +274,13 @@ func (h *Handler) open(c *gin.Context) {
 		status := h.provider.Runtime().Status(ctx)
 		if status.State == browser.BrowserRuntimeStopped || status.State == browser.BrowserRuntimeFailed {
 			if _, err := h.provider.Runtime().Start(ctx); err != nil {
-				responseError(c, http.StatusServiceUnavailable, err.Message)
+				responseError(c, http.StatusServiceUnavailable, err.Error())
 				return
 			}
 		}
 		session, err := h.provider.Sessions().CreateSession(ctx)
 		if err != nil {
-			responseError(c, http.StatusServiceUnavailable, err.Message)
+			responseError(c, http.StatusServiceUnavailable, err.Error())
 			return
 		}
 		tab, err := h.provider.Tabs().CreateTab(ctx, session.SessionID)
@@ -288,7 +288,7 @@ func (h *Handler) open(c *gin.Context) {
 			if err := h.provider.Sessions().CloseSession(ctx, session.SessionID); err != nil {
 				amitialog.Printf("[original-error] %v", err)
 			}
-			responseError(c, http.StatusServiceUnavailable, err.Message)
+			responseError(c, http.StatusServiceUnavailable, err.Error())
 			return
 		}
 		now := time.Now()
@@ -300,7 +300,7 @@ func (h *Handler) open(c *gin.Context) {
 	if req.URL != "" {
 		result, err := h.provider.Navigate().Navigate(ctx, record.session, record.tab, browser.NavigateRequest{URL: req.URL})
 		if err != nil {
-			responseError(c, http.StatusBadGateway, err.Message)
+			responseError(c, http.StatusBadGateway, err.Error())
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"ready": true, "url": result.FinalURL, "title": result.Title})
@@ -308,7 +308,7 @@ func (h *Handler) open(c *gin.Context) {
 	}
 	tab, err := h.provider.Tabs().GetTab(ctx, record.session, record.tab)
 	if err != nil {
-		responseError(c, http.StatusBadGateway, err.Message)
+		responseError(c, http.StatusBadGateway, err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ready": true, "url": tab.URL, "title": tab.Title})
@@ -323,7 +323,7 @@ func (h *Handler) state(c *gin.Context) {
 	defer cancel()
 	tab, err := h.provider.Tabs().GetTab(ctx, record.session, record.tab)
 	if err != nil {
-		responseError(c, http.StatusBadGateway, err.Message)
+		responseError(c, http.StatusBadGateway, err.Error())
 		return
 	}
 	key, _ := ownerKey(c, c.Param("conversationId"), c.Param("viewId"))
@@ -440,7 +440,7 @@ func (h *Handler) navigate(c *gin.Context) {
 	defer cancel()
 	result, err := h.provider.Navigate().Navigate(ctx, record.session, record.tab, browser.NavigateRequest{URL: req.URL})
 	if err != nil {
-		responseError(c, http.StatusBadGateway, err.Message)
+		responseError(c, http.StatusBadGateway, err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"url": result.FinalURL, "title": result.Title, "loaded": result.Loaded})
@@ -482,7 +482,7 @@ func (h *Handler) action(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		responseError(c, http.StatusBadGateway, err.Message)
+		responseError(c, http.StatusBadGateway, err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"url": result.FinalURL, "title": result.Title})
@@ -502,7 +502,7 @@ func (h *Handler) screenshot(c *gin.Context) {
 	defer cancel()
 	data, err := capture.ScreenshotBytes(ctx, browser.BrowserScreenshotRequest{SessionID: record.session, TabID: record.tab, Format: "jpeg", Quality: 70})
 	if err != nil {
-		responseError(c, http.StatusBadGateway, err.Message)
+		responseError(c, http.StatusBadGateway, err.Error())
 		return
 	}
 	if len(data) > maxBrowserScreenshotBytes {
@@ -523,7 +523,7 @@ func (h *Handler) dom(c *gin.Context) {
 	defer cancel()
 	snapshot, err := h.provider.Observe().GetDOMSnapshot(ctx, record.session, record.tab, 3)
 	if err != nil {
-		responseError(c, http.StatusBadGateway, err.Message)
+		responseError(c, http.StatusBadGateway, err.Error())
 		return
 	}
 	body, wasTrimmed := boundDOMContent(snapshot.Content)
@@ -556,7 +556,7 @@ func (h *Handler) close(c *gin.Context) {
 		return
 	}
 	if err := h.provider.Sessions().CloseSession(ctx, record.session); err != nil {
-		responseError(c, http.StatusBadGateway, err.Message)
+		responseError(c, http.StatusBadGateway, err.Error())
 		return
 	}
 	h.mu.Lock()
@@ -619,7 +619,7 @@ func (h *Handler) input(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		responseError(c, http.StatusBadGateway, err.Message)
+		responseError(c, http.StatusBadGateway, err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})

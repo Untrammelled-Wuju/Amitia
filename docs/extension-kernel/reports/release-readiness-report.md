@@ -6,10 +6,10 @@
 
 | 字段 | 值 |
 |------|----|
-| Report ID | final-acceptance-1793468818880265000 |
-| 生成时间 | 2026-10-31T17:47:10Z |
-| 开始时间 | 2026-10-31T17:46:58Z |
-| 结束时间 | 2026-10-31T17:47:10Z |
+| Report ID | final-acceptance-1793524252421327000 |
+| 生成时间 | 2026-11-01T09:11:00Z |
+| 开始时间 | 2026-11-01T09:10:52Z |
+| 结束时间 | 2026-11-01T09:11:00Z |
 | 总项 | 25 |
 | 通过 | 23 |
 | 失败 | 0 |
@@ -43,7 +43,7 @@
 | stage5.mcp_workflow | migration | MCP/Workflow 迁移 | true | passed | mcp_migration.Registry 注册并列表成功; workflow_migration.Registry 注册成功; MCP/Workflow 迁移注册表均可写入和读取 |
 | stage6.sdk_cli | dev_ecosystem | TypeScript SDK 与 Plugin CLI | true | passed | dev_mode SDK 工作流 (Registry/Pipeline/Reloader) 实例化成功; 前端扩展 API 客户端存在 (SDK 集成点); Plugin CLI 通过 dev_mode.RebuildPipeline 提供构建能力 |
 | stage6.dev_mode_console | dev_ecosystem | 开发模式与 Developer Console | true | passed | dev_mode.WorkspaceRegistry 实例化并注册成功; dev_mode.RebuildPipeline 实例化成功; dev_mode.RuntimeReloader 实例化成功; dev_mode.SessionManager 实例化成功; developer_console.DiagnosticRepository 实例化成功 |
-| stage6.center_detail | dev_ecosystem | 扩展中心与详情页 | true | passed | ExtensionCenterView.vue 存在; UIHost 和 PageHost 实例化成功 (扩展中心与详情页基础设施就绪) |
+| stage6.center_detail | dev_ecosystem | 扩展中心与详情页 | true | passed | 扩展中心路由真实挂载 ExtensionCenterView.vue; UIHost 和 PageHost 实例化成功 (扩展中心与详情页基础设施就绪) |
 | stage7.equivalence | validation | 新旧系统等价性 | true | passed | GlobalLegacyCallCounter.Total()=0 (旧系统不参与); Kernel ModelTools 返回 30 个工具,无错误; legacy_fallback_total=0 (等价性: Kernel 完全替代旧系统) |
 | stage7.stability | validation | 桌面端稳定性 | true | passed | 3 次构建/关闭循环完成,LegacyCallCounter 保持 0; 稳定性: 无 legacy 调用增长; 稳定性: Container 反复构建和关闭无异常 |
 | stage7.security | validation | 安全权限隔离 | true | passed | 权限检查器拒绝时正确返回 StatusRejected; 范围检查器拒绝时正确返回 StatusRejected; 检查器放行时调用不被拒绝; nil 权限检查器时 Fail Closed (P0-01 已修复) |

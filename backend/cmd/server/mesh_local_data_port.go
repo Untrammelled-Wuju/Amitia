@@ -573,13 +573,27 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 		for _, resource := range snapshot.Resources {
 			seen[resource.Kind+"/"+resource.ID] = true
 		}
+		prioritized := make([]coordination.Resource, 0, len(snapshot.Resources)+len(relevant))
+		added := map[string]bool{}
 		for _, resource := range relevant {
 			key := resource.Kind + "/" + resource.ID
-			if !seen[key] {
-				snapshot.Resources = append(snapshot.Resources, resource)
-				seen[key] = true
+			if resource.Kind == "memory" && !seen["recall/"+key] {
+				snapshot.RecallEvidence = append(snapshot.RecallEvidence, coordination.ResourceVersion{Kind: "memory", ID: resource.ID, Revision: resource.Revision})
+				seen["recall/"+key] = true
+			}
+			if !added[key] {
+				prioritized = append(prioritized, resource)
+				added[key] = true
 			}
 		}
+		for _, resource := range snapshot.Resources {
+			key := resource.Kind + "/" + resource.ID
+			if !added[key] {
+				prioritized = append(prioritized, resource)
+				added[key] = true
+			}
+		}
+		snapshot.Resources = prioritized
 	}
 	if query.Management || query.ResourceKind == "continuity" || (query.Cursor != "" && query.LegacyCursor == "") {
 		return snapshot, coordination.ValidateSnapshot(scope, snapshot)

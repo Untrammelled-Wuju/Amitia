@@ -5,6 +5,7 @@ export interface ContextMenuAction {
   label: string;
   icon?: Component;
   shortcut?: string;
+  accessKey?: string;
   disabled?: boolean;
   danger?: boolean;
   separatorBefore?: boolean;
@@ -34,9 +35,12 @@ function normalizeAction(action: ContextMenuAction): ContextMenuAction {
   return {
     ...action,
     icon: action.icon ? markRaw(action.icon) : undefined,
+    accessKey: action.accessKey?.trim().slice(0, 1).toUpperCase() || undefined,
     children: action.children?.map(normalizeAction),
   };
 }
+
+export const projectContextMenuAccessKeys = "ABCDEFGIJKLMNOPQRSTUVWXYZ";
 
 export function openContextMenu(request: {
   x: number;

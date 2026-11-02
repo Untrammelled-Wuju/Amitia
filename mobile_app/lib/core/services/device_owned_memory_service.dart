@@ -209,6 +209,45 @@ class DeviceOwnedMemoryService {
     return page;
   }
 
+  Future<Map<String, dynamic>> consolidation(
+    String characterId, {
+    String memoryView = '',
+  }) async {
+    final state = await _state();
+    final result = await api.get<Map<String, dynamic>>(
+      '/api/device-mesh/v1/business/memories/consolidation',
+      queryParameters: {
+        'characterId': characterId,
+        if (memoryView.isNotEmpty) 'memoryView': memoryView,
+      },
+    );
+    if (result == null || result['executionScope'] is! Map)
+      throw StateError('记忆巩固检查结果无效');
+    _validateScope(result['executionScope'], state);
+    return Map<String, dynamic>.unmodifiable(result);
+  }
+
+  Future<List<Map<String, dynamic>>> history(
+    String characterId,
+    String id, {
+    String memoryView = '',
+  }) async {
+    final state = await _state();
+    final result = await api.get<Map<String, dynamic>>(
+      '/api/device-mesh/v1/business/memories/history',
+      queryParameters: {
+        'id': id,
+        'characterId': characterId,
+        if (memoryView.isNotEmpty) 'memoryView': memoryView,
+      },
+    );
+    if (result == null || result['executionScope'] is! Map || result['history'] is! Map) throw StateError('记忆历史结果无效');
+    _validateScope(result['executionScope'], state);
+    final history = Map<String, dynamic>.from(result['history'] as Map);
+    if (history['memoryId'] != id || history['versions'] is! List) throw StateError('记忆历史归属无效');
+    return (history['versions'] as List).whereType<Map>().map((row) => Map<String, dynamic>.from(row)).toList(growable: false);
+  }
+
   Future<List<MemoryDto>> listMemories({
     String? characterId,
     String? keyword,

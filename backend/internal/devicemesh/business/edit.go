@@ -6,11 +6,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"math"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	"github.com/u-ai/backend/internal/memorypolicy"
 	amitialog "log"
 )
 
@@ -46,7 +48,7 @@ func (e *Engine) Edit(ctx context.Context, authority Request, edit EditRequest) 
 	case "message":
 		allowed = map[string]bool{"content": true}
 	case "memory":
-		allowed = map[string]bool{"content": true, "allowContextUse": true, "allowProactiveMention": true, "expiresAt": true, "archivedAt": true, "retentionLevel": true, "memoryStrength": true, "pinned": true}
+		allowed = map[string]bool{"content": true, "allowContextUse": true, "allowProactiveMention": true, "expiresAt": true, "archivedAt": true, "retentionLevel": true, "memoryStrength": true, "pinned": true, "verifiedStatus": true, "confidence": true, "lastVerifiedAt": true, "validFromUtc": true, "validToUtc": true, "correctionReason": true, "retrievalFeedback": true, "restoreHistoryRevision": true}
 	case "profile":
 		allowed = map[string]bool{"content": true}
 	case "episodic":
@@ -108,6 +110,57 @@ func (e *Engine) Edit(ctx context.Context, authority Request, edit EditRequest) 
 			if text != "" {
 				if _, err := time.Parse(time.RFC3339Nano, text); err != nil {
 					return coordination.Acknowledgement{}, errors.New("时间参数无效")
+				}
+			}
+			if key == "verifiedStatus" {
+				var status string
+				if json.Unmarshal(value, &status) != nil {
+					return coordination.Acknowledgement{}, errors.New("记忆确认状态参数无效")
+				}
+				switch status {
+				case "verified", "user_corrected", "disputed", "unverified":
+				default:
+					return coordination.Acknowledgement{}, errors.New("记忆确认状态必须为已验证、用户更正、有争议或未验证")
+				}
+			}
+			if key == "confidence" {
+				var confidence int
+				if json.Unmarshal(value, &confidence) != nil || confidence < 0 || confidence > 100 {
+					return coordination.Acknowledgement{}, errors.New("记忆置信度必须为0到100")
+				}
+			}
+			if key == "lastVerifiedAt" || key == "validFromUtc" || key == "validToUtc" {
+				var text string
+				if json.Unmarshal(value, &text) != nil {
+					return coordination.Acknowledgement{}, errors.New("记忆时效时间参数无效")
+				}
+				if text != "" {
+					if _, err := time.Parse(time.RFC3339Nano, text); err != nil {
+						return coordination.Acknowledgement{}, errors.New("记忆时效时间必须使用带时区的 RFC3339 格式")
+					}
+				}
+			}
+			if key == "correctionReason" {
+				var reason string
+				if json.Unmarshal(value, &reason) != nil || len(reason) > 4096 || !utf8.ValidString(reason) || strings.ContainsRune(reason, 0) {
+					return coordination.Acknowledgement{}, errors.New("记忆更正说明无效或超过上限")
+				}
+			}
+			if key == "retrievalFeedback" {
+				var feedback string
+				if json.Unmarshal(value, &feedback) != nil {
+					return coordination.Acknowledgement{}, errors.New("记忆召回反馈参数无效")
+				}
+				switch feedback {
+				case "helpful", "not_helpful":
+				default:
+					return coordination.Acknowledgement{}, errors.New("记忆召回反馈必须为有用或无用")
+				}
+			}
+			if key == "restoreHistoryRevision" {
+				var revision int64
+				if json.Unmarshal(value, &revision) != nil || revision < 1 {
+					return coordination.Acknowledgement{}, errors.New("记忆历史版本参数无效")
 				}
 			}
 		}
@@ -214,13 +267,37 @@ func (e *Engine) Edit(ctx context.Context, authority Request, edit EditRequest) 
 	if err := json.Unmarshal(resource.Body, &document); err != nil || document == nil {
 		return coordination.Acknowledgement{}, errors.New("数据格式不支持修改")
 	}
+	preMutations := []coordination.Mutation{}
 	if edit.Kind == "memory" {
+		historyMutation, err := memoryHistoryMutation(ctx, port, scope, *resource, time.Now())
+		if err != nil {
+			return coordination.Acknowledgement{}, err
+		}
+		preMutations = append(preMutations, historyMutation)
+	}
+	if raw, exists := edit.Changes["restoreHistoryRevision"]; exists && edit.Kind == "memory" {
+		var revision int64
+		if err := json.Unmarshal(raw, &revision); err != nil {
+			return coordination.Acknowledgement{}, err
+		}
+		document, err = memoryHistorySnapshot(ctx, port, scope, edit.ID, revision)
+		if err != nil {
+			return coordination.Acknowledgement{}, err
+		}
+		document["restoredFromRevision"], document["restoredAt"] = body(revision), body(time.Now().UTC().Format(time.RFC3339Nano))
+	}
+	var previousContent json.RawMessage
+	if edit.Kind == "memory" {
+		previousContent = append(json.RawMessage(nil), document["content"]...)
 		if err := editMemoryLifecycle(document, edit.Changes, time.Now()); err != nil {
 			return coordination.Acknowledgement{}, err
 		}
 	}
 	for key, value := range edit.Changes {
 		if edit.Kind == "memory" && (key == "retentionLevel" || key == "memoryStrength" || key == "pinned") {
+			continue
+		}
+		if edit.Kind == "memory" && (key == "retrievalFeedback" || key == "restoreHistoryRevision") {
 			continue
 		}
 		document[key] = value
@@ -233,6 +310,12 @@ func (e *Engine) Edit(ctx context.Context, authority Request, edit EditRequest) 
 			}
 			document[key+"At"] = body(timestamp)
 		}
+	}
+	if edit.Kind == "memory" {
+		if err := applyMemoryVerificationChanges(document, edit.Changes, previousContent, time.Now()); err != nil {
+			return coordination.Acknowledgement{}, err
+		}
+		applyMemoryRetrievalFeedback(document, edit.Changes, time.Now())
 	}
 	if edit.Kind == "conversation" {
 		if raw, changed := edit.Changes["projectId"]; changed {
@@ -281,7 +364,140 @@ func (e *Engine) Edit(ctx context.Context, authority Request, edit EditRequest) 
 	}
 	ack := coordination.Acknowledgement{RequestID: scope.RequestID, OwnerID: scope.ResourceOwnerID, Versions: map[string]int64{edit.Kind + "/" + edit.ID: resource.Revision + 1, "checkpoint/" + receiptID: 1}}
 	proof := body(map[string]any{"hash": fingerprint, "roleRevision": scope.RoleRevision, "acknowledgement": ack})
-	return e.commit(ctx, coordination.Commit{Scope: scope, Mutations: []coordination.Mutation{{Kind: edit.Kind, ID: edit.ID, RoleID: coordination.StorageRole(scope, edit.Kind), SourceID: resource.SourceID, ExpectedRevision: resource.Revision, Deleted: edit.Deleted, KeepConversationMemories: edit.Kind == "conversation" && edit.Deleted, Body: body(document)}, {Kind: "checkpoint", ID: receiptID, RoleID: scope.RoleID, Body: proof}}})
+	mutations := append(preMutations, coordination.Mutation{Kind: edit.Kind, ID: edit.ID, RoleID: coordination.StorageRole(scope, edit.Kind), SourceID: resource.SourceID, ExpectedRevision: resource.Revision, Deleted: edit.Deleted, KeepConversationMemories: edit.Kind == "conversation" && edit.Deleted, Body: body(document)})
+	if edit.Kind == "memory" {
+		if raw, exists := edit.Changes["retrievalFeedback"]; exists {
+			var feedback string
+			if err := json.Unmarshal(raw, &feedback); err != nil {
+				return coordination.Acknowledgement{}, err
+			}
+			profileMutation, err := e.memoryRankingProfileMutation(ctx, scope, document, feedback, time.Now())
+			if err != nil {
+				return coordination.Acknowledgement{}, err
+			}
+			mutations = append(mutations, *profileMutation)
+		}
+	}
+	mutations = append(mutations, coordination.Mutation{Kind: "checkpoint", ID: receiptID, RoleID: scope.RoleID, Body: proof})
+	return e.commit(ctx, coordination.Commit{Scope: scope, Mutations: mutations})
+}
+
+func applyMemoryVerificationChanges(document map[string]json.RawMessage, changes map[string]json.RawMessage, previousContent json.RawMessage, now time.Time) error {
+	nowText := now.UTC().Format(time.RFC3339Nano)
+	var content map[string]json.RawMessage
+	if raw, exists := document["content"]; exists && len(raw) > 0 && raw[0] == '{' {
+		if err := json.Unmarshal(raw, &content); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+			content = nil
+		}
+	}
+	status := ""
+	if raw, exists := changes["verifiedStatus"]; exists {
+		if err := json.Unmarshal(raw, &status); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+			return err
+		}
+	}
+	if _, corrected := changes["content"]; corrected {
+		status = "user_corrected"
+		document["previousContentHash"] = body(memoryManagementHash(previousContent))
+		document["correctedAt"] = body(nowText)
+		document["archivedAt"] = body(nil)
+		document["validFromUtc"] = body(nowText)
+		document["validToUtc"] = body(nil)
+		document["allowContextUse"] = body(true)
+		if content != nil {
+			content["source"] = body("user_correction")
+		}
+	}
+	if reason, exists := changes["correctionReason"]; exists {
+		document["correctionReason"] = reason
+	}
+	if status != "" {
+		document["verifiedStatus"] = body(status)
+		if content != nil {
+			content["verifiedStatus"] = body(status)
+		}
+	}
+	switch status {
+	case "disputed":
+		document["confidence"], document["allowContextUse"], document["disputedAt"] = body(0), body(false), body(nowText)
+		if content != nil {
+			content["confidence"] = body(0)
+		}
+	case "verified", "user_corrected":
+		document["lastVerifiedAt"], document["allowContextUse"] = body(nowText), body(true)
+		if _, exists := changes["confidence"]; !exists {
+			document["confidence"] = body(100)
+			if content != nil {
+				content["confidence"] = body(100)
+			}
+		}
+		if content != nil {
+			content["lastVerifiedAt"] = body(nowText)
+		}
+	}
+	if raw, exists := changes["confidence"]; exists {
+		document["confidence"] = raw
+		if content != nil {
+			content["confidence"] = raw
+		}
+	}
+	if raw, exists := changes["lastVerifiedAt"]; exists {
+		document["lastVerifiedAt"] = raw
+		if content != nil {
+			content["lastVerifiedAt"] = raw
+		}
+	}
+	if raw, exists := changes["validFromUtc"]; exists {
+		document["validFromUtc"] = raw
+		if content != nil {
+			content["validFromUtc"] = raw
+		}
+	}
+	if raw, exists := changes["validToUtc"]; exists {
+		document["validToUtc"] = raw
+		if content != nil {
+			content["validToUtc"] = raw
+		}
+	}
+	if content != nil {
+		document["content"] = body(content)
+	}
+	return nil
+}
+
+func applyMemoryRetrievalFeedback(document map[string]json.RawMessage, changes map[string]json.RawMessage, now time.Time) {
+	raw, exists := changes["retrievalFeedback"]
+	if !exists {
+		return
+	}
+	var feedback string
+	if err := json.Unmarshal(raw, &feedback); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+		return
+	}
+	switch feedback {
+	case "helpful":
+		document["helpfulRetrievalCount"] = body(memoryInt(document, "helpfulRetrievalCount") + 1)
+	case "not_helpful":
+		document["unhelpfulRetrievalCount"] = body(memoryInt(document, "unhelpfulRetrievalCount") + 1)
+	}
+	helpful, unhelpful := memoryInt(document, "helpfulRetrievalCount"), memoryInt(document, "unhelpfulRetrievalCount")
+	document["retrievalUtility"] = body(float64(helpful+1) / float64(helpful+unhelpful+2))
+	document["lastRetrievalFeedbackAt"] = body(now.UTC().Format(time.RFC3339Nano))
+	state := memorypolicy.ReadLifecycle(document, now)
+	if feedback == "helpful" {
+		state.StabilityDays = math.Min(1095, math.Max(1, state.StabilityDays*1.2))
+		state.Difficulty = math.Max(0, state.Difficulty-.05)
+		state.ReviewCount++
+	} else {
+		state.StabilityDays = math.Max(1, state.StabilityDays*.8)
+		state.Difficulty = math.Min(1, state.Difficulty+.05)
+		state.LapseCount++
+	}
+	state.NextReviewAt = now.Add(time.Duration(state.StabilityDays * float64(24*time.Hour))).UTC().Format(time.RFC3339Nano)
+	memorypolicy.WriteLifecycle(document, state)
 }
 
 func workspacesPrimaryCandidate(items []ProjectWorkspace) string {

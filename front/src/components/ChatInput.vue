@@ -1266,7 +1266,7 @@ function isEditableTarget(target: Element | null): boolean {
 }
 
 function isModalInteractionTarget(target: Element | null): boolean {
-  return Boolean(target?.closest('.el-overlay, [role="dialog"], [aria-modal="true"]'));
+  return Boolean(target?.closest('.el-overlay, [role="dialog"], [aria-modal="true"], [data-amitia-context-menu]'));
 }
 
 async function readClipboardText(): Promise<string> {

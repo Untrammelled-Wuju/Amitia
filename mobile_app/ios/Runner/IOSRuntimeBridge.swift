@@ -30,6 +30,7 @@ final class IOSRuntimeBridge: NSObject, FlutterStreamHandler {
     private var probeTask: URLSessionDataTask?
     private var hostRestartRequired = false
     private var persistentVolume: URL?
+    private var fileLog: RotatingFileLog?
 
     init(resolver: RootfsResolver, installer: RootfsInstaller, identity: IOSDeviceMeshIdentity) {
         self.resolver = resolver
@@ -210,6 +211,10 @@ final class IOSRuntimeBridge: NSObject, FlutterStreamHandler {
                 .appendingPathComponent("business-volume", isDirectory: true)
             try FileManager.default.createDirectory(at: volume, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700, .protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
             persistentVolume = volume
+            fileLog = try RotatingFileLog(
+                directory: volume.appendingPathComponent("log", isDirectory: true),
+                prefix: "mobile"
+            )
             var volumeAttributes = URLResourceValues()
             volumeAttributes.isExcludedFromBackup = true
             try volume.setResourceValues(volumeAttributes)
@@ -244,13 +249,27 @@ final class IOSRuntimeBridge: NSObject, FlutterStreamHandler {
             let child = IOSBusinessRuntimeProcess()
             guard child.spawn(["/opt/amitia/core/AmitiaCore"], environment: env, error: &nativeError) else { throw nativeError ?? unavailable() }
             process = child; profile = requested; token = localToken; state = "STARTING"; error = nil; startedAt = Date()
+            writeHostLog("INFO", "iOS Runtime start requested profile=\(requested)")
             expectedIdentity = ["deviceId": deviceId, "runtimeId": runtimeId, "publicKey": publicKey, "platform": "ios"]
             let lease = IOSHostBridgeLease()
             hostLease = lease
             host = IOSHostBridgeEndpoint(identity: identity, generation: bridgeGeneration, descriptor: Int32(child.hostBridgeDescriptor), isCurrent: lease.isValid)
             host?.start()
             readers = [child.stdoutDescriptor, child.stderrDescriptor].map { FileHandle(fileDescriptor: Int32($0), closeOnDealloc: false) }
-            for reader in readers { reader.readabilityHandler = { handle in if handle.availableData.isEmpty { handle.readabilityHandler = nil } } }
+            for (index, reader) in readers.enumerated() {
+                let source = index == 0 ? "stdout" : "stderr"
+                reader.readabilityHandler = { [weak self] handle in
+                    let data = handle.availableData
+                    if data.isEmpty {
+                        handle.readabilityHandler = nil
+                        return
+                    }
+                    guard let text = String(data: data, encoding: .utf8) else { return }
+                    self?.queue.async {
+                        self?.writeHostLog(index == 0 ? "INFO" : "ERROR", "[\(source)] \(text)")
+                    }
+                }
+            }
             let monitor = DispatchSource.makeTimerSource(queue: queue)
             monitor.schedule(deadline: .now(), repeating: .seconds(1))
             monitor.setEventHandler { [weak self] in self?.check(current, child: child) }
@@ -318,6 +337,7 @@ final class IOSRuntimeBridge: NSObject, FlutterStreamHandler {
 
     private func stop(reason: String?) {
         if state == "STOPPING" { return }
+        writeHostLog("INFO", "iOS Runtime stop requested reason=\(reason ?? "none")")
         stopReason = reason
         generation += 1; state = "STOPPING"; token = nil; emit()
         probeTask?.cancel(); probeTask = nil; probeInFlight = false; expectedIdentity = nil
@@ -329,6 +349,14 @@ final class IOSRuntimeBridge: NSObject, FlutterStreamHandler {
         }
         for reader in readers { reader.readabilityHandler = nil; try? reader.close() }
         readers.removeAll()
+        if let fileLog {
+            do {
+                try fileLog.close()
+            } catch {
+                NSLog("[IOSRuntimeBridge] log file close failed: %@", String(reflecting: error))
+            }
+        }
+        fileLog = nil
         if process == nil { finishStop() }
     }
 
@@ -349,7 +377,12 @@ final class IOSRuntimeBridge: NSObject, FlutterStreamHandler {
         queue.asyncAfter(deadline: .now() + .milliseconds(50)) { self.reapLater(child, attempts: attempts + 1) }
     }
 
-    private func fail(_ code: String, _ message: String, retryable: Bool = true) { state = "FAILED"; error = ["code": code, "message": message, "retryable": retryable]; emit() }
+    private func fail(_ code: String, _ message: String, retryable: Bool = true) {
+        writeHostLog("ERROR", "iOS Runtime failed code=\(code) message=\(message) retryable=\(retryable)")
+        state = "FAILED"
+        error = ["code": code, "message": message, "retryable": retryable]
+        emit()
+    }
     private func finishStop() {
         profile = nil
         if let completion = upgradeCompletion {
@@ -422,4 +455,151 @@ final class IOSRuntimeBridge: NSObject, FlutterStreamHandler {
         guard count == size, hash.finalize().map({ String(format: "%02x", $0) }).joined() == digest else { throw unavailable() }
     }
     private func unavailable() -> NSError { NSError(domain: "IOSRuntimeBridge", code: 1) }
+
+    private func writeHostLog(_ level: String, _ message: String) {
+        guard let fileLog else { return }
+        do {
+            try fileLog.write(level: level, message: message)
+        } catch {
+            NSLog("[IOSRuntimeBridge] log file write failed: %@", String(reflecting: error))
+        }
+    }
+}
+
+private final class RotatingFileLog {
+    private static let maxFileBytes: UInt64 = 50 * 1024 * 1024
+    private static let retention: TimeInterval = 30 * 24 * 60 * 60
+    private static let managedLog = try! NSRegularExpression(
+        pattern: "^(?:.+\\.log|.+\\.log\\.(?:old|\\d+))$",
+        options: [.caseInsensitive]
+    )
+
+    private let directory: URL
+    private let prefix: String
+    private let lock = NSLock()
+    private let dateFormatter: DateFormatter
+    private let timestampFormatter: ISO8601DateFormatter
+    private var handle: FileHandle?
+    private var currentDate: String = ""
+    private var currentSequence: Int = 0
+    private var currentSize: UInt64 = 0
+
+    init(directory: URL, prefix: String) throws {
+        self.directory = directory
+        self.prefix = prefix
+        self.dateFormatter = DateFormatter()
+        self.dateFormatter.locale = Locale(identifier: "en_US_POSIX")
+        self.dateFormatter.timeZone = TimeZone.current
+        self.dateFormatter.dateFormat = "yyyyMMdd"
+        self.timestampFormatter = ISO8601DateFormatter()
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true,
+            attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
+        )
+        try removeExpired()
+        try open(for: Date())
+    }
+
+    func write(level: String, message: String) throws {
+        lock.lock()
+        defer { lock.unlock() }
+        let timestamp = timestampFormatter.string(from: Date())
+        let normalized = message.replacingOccurrences(of: "\u{0000}", with: " ")
+        let line = "[\(timestamp)] [\(level)] \(normalized)"
+        let data = Data((line.hasSuffix("\n") ? line : line + "\n").utf8)
+        let now = Date()
+        if currentDate != dateFormatter.string(from: now) ||
+            currentSize > 0 && currentSize + UInt64(data.count) > Self.maxFileBytes {
+            try open(for: now)
+        }
+        guard let handle else {
+            throw NSError(domain: "RotatingFileLog", code: 1, userInfo: [NSLocalizedDescriptionKey: "log file is not open"])
+        }
+        try handle.write(contentsOf: data)
+        currentSize += UInt64(data.count)
+    }
+
+    func close() throws {
+        lock.lock()
+        defer { lock.unlock() }
+        let current = handle
+        handle = nil
+        currentDate = ""
+        currentSequence = 0
+        currentSize = 0
+        if let current {
+            try current.close()
+        }
+    }
+
+    private func open(for date: Date) throws {
+        if let current = handle {
+            try current.close()
+            handle = nil
+        }
+        let dateKey = dateFormatter.string(from: date)
+        var sequence = latestSequence(dateKey: dateKey)
+        var target = file(dateKey: dateKey, sequence: sequence)
+        while fileSize(target) >= Self.maxFileBytes {
+            sequence += 1
+            target = file(dateKey: dateKey, sequence: sequence)
+        }
+        if !FileManager.default.fileExists(atPath: target.path) {
+            FileManager.default.createFile(
+                atPath: target.path,
+                contents: nil,
+                attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
+            )
+        }
+        let opened = try FileHandle(forWritingTo: target)
+        try opened.seekToEnd()
+        handle = opened
+        currentDate = dateKey
+        currentSequence = sequence
+        currentSize = UInt64(try opened.offset())
+    }
+
+    private func latestSequence(dateKey: String) -> Int {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
+        let expression = try! NSRegularExpression(
+            pattern: "^\(NSRegularExpression.escapedPattern(for: prefix))\\.\(dateKey)\\.(\\d{3})\\.log$"
+        )
+        var maximum = 0
+        for name in names {
+            let range = NSRange(name.startIndex..<name.endIndex, in: name)
+            guard let match = expression.firstMatch(in: name, range: range),
+                  let sequenceRange = Range(match.range(at: 1), in: name),
+                  let sequence = Int(name[sequenceRange]) else { continue }
+            maximum = max(maximum, sequence)
+        }
+        return maximum == 0 ? 1 : maximum
+    }
+
+    private func removeExpired() throws {
+        let names = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+        let cutoff = Date().addingTimeInterval(-Self.retention)
+        for name in names {
+            let range = NSRange(name.startIndex..<name.endIndex, in: name)
+            guard Self.managedLog.firstMatch(in: name, range: range) != nil else { continue }
+            let target = directory.appendingPathComponent(name)
+            let values = try target.resourceValues(forKeys: [.contentModificationDateKey])
+            guard let modified = values.contentModificationDate, modified < cutoff else { continue }
+            try FileManager.default.removeItem(at: target)
+        }
+    }
+
+    private func file(dateKey: String, sequence: Int) -> URL {
+        directory.appendingPathComponent(
+            "\(prefix).\(dateKey).\(String(format: "%03d", sequence)).log"
+        )
+    }
+
+    private func fileSize(_ file: URL) -> UInt64 {
+        guard let values = try? file.resourceValues(forKeys: [.fileSizeKey]),
+              let size = values.fileSize else {
+            return 0
+        }
+        return UInt64(size)
+    }
 }

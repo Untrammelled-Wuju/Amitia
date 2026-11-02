@@ -24,8 +24,6 @@ func NewKernelAPI(runtime *Runtime) *KernelAPI {
 
 func (api *KernelAPI) RegisterRoutes(group *gin.RouterGroup) {
 	kernel := group.Group("/kernel")
-	kernel.GET("/extensions", api.listExtensions)
-	kernel.GET("/extension", api.getExtension)
 	kernel.POST("/extensions/preview", api.previewInstall)
 	kernel.POST("/extensions/install", api.install)
 	kernel.POST("/extensions/enable", api.enable)
@@ -233,194 +231,6 @@ func (api *KernelAPI) resolveCapability(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-func (api *KernelAPI) listExtensions(c *gin.Context) {
-	if api.runtime == nil || api.runtime.Kernel == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "kernel unavailable"})
-		return
-	}
-	container := api.runtime.Kernel.Container()
-	if container == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "container unavailable"})
-		return
-	}
-	ctx := c.Request.Context()
-	insts, err := container.InstallationRepository.ListInstallations(ctx)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	type extensionItem struct {
-		Name           string    `json:"name"`
-		ExtensionID    string    `json:"extensionId"`
-		Version        string    `json:"version"`
-		InstallationID string    `json:"installationId"`
-		State          string    `json:"state"`
-		Enablement     string    `json:"enablement"`
-		SystemManaged  bool      `json:"systemManaged"`
-		InstalledAt    time.Time `json:"installedAt"`
-		UpdatedAt      time.Time `json:"updatedAt"`
-		Generation     int64     `json:"generation"`
-	}
-	defsByExt := map[domain.ExtensionID][]domain.ExtensionDefinition{}
-	if defs, err := container.DefinitionRepository.ListExtensions(ctx); err == nil {
-		for _, def := range defs {
-			defsByExt[def.ID] = append(defsByExt[def.ID], def)
-		}
-	}
-	resolveName := func(inst domain.ExtensionInstallation) string {
-		defs := defsByExt[inst.ExtensionID]
-		fallback := ""
-		for _, def := range defs {
-			if fallback == "" {
-				fallback = def.Name.Default
-			}
-			if def.Version == inst.InstalledVersion {
-				return def.Name.Default
-			}
-		}
-		return fallback
-	}
-	resolveSystemManaged := func(inst domain.ExtensionInstallation) bool {
-		for _, def := range defsByExt[inst.ExtensionID] {
-			if value, ok := def.Metadata["system.managed"].(bool); ok && value {
-				return true
-			}
-		}
-		return strings.HasPrefix(string(inst.ExtensionID), "com.amitia.builtin.")
-	}
-	items := make([]extensionItem, 0, len(insts))
-	for _, inst := range insts {
-		items = append(items, extensionItem{
-			Name:           resolveName(inst),
-			ExtensionID:    string(inst.ExtensionID),
-			Version:        inst.InstalledVersion.String(),
-			InstallationID: inst.InstallationID,
-			State:          installationStateForView(inst),
-			Enablement:     string(inst.EnablementState),
-			SystemManaged:  resolveSystemManaged(inst),
-			InstalledAt:    inst.InstalledAt,
-			UpdatedAt:      inst.UpdatedAt,
-			Generation:     inst.Generation,
-		})
-	}
-	c.JSON(http.StatusOK, gin.H{"extensions": items, "total": len(items)})
-}
-
-func (api *KernelAPI) getExtension(c *gin.Context) {
-	if api.runtime == nil || api.runtime.Kernel == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "kernel unavailable"})
-		return
-	}
-	container := api.runtime.Kernel.Container()
-	if container == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "container unavailable"})
-		return
-	}
-	extID := c.Query("id")
-	if extID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "id query parameter required"})
-		return
-	}
-	ctx := c.Request.Context()
-
-	inst, err := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(extID))
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		return
-	}
-	name := ""
-	if def, err := container.DefinitionRepository.GetExtension(ctx, inst.ExtensionID, inst.InstalledVersion); err == nil {
-		name = def.Name.Default
-	}
-
-	modules, _ := container.ModuleRepository.ListModules(ctx, domain.ExtensionID(extID))
-	contribs, _ := container.ContributionRepository.ListContributions(ctx, domain.ExtensionID(extID))
-
-	type moduleInfo struct {
-		ID                string `json:"id"`
-		Type              string `json:"type"`
-		Runtime           string `json:"runtime"`
-		EntryPoint        string `json:"entryPoint"`
-		ContributionCount int    `json:"contributionCount"`
-	}
-	type contribInfo struct {
-		ID       string `json:"id"`
-		Kind     string `json:"kind"`
-		ModuleID string `json:"moduleId"`
-		Name     string `json:"name"`
-	}
-
-	moduleList := make([]moduleInfo, 0, len(modules))
-	for _, mod := range modules {
-		runtimeType := ""
-		entryPoint := ""
-		if mod.Runtime != nil {
-			runtimeType = string(mod.Runtime.Type)
-			entryPoint = mod.Runtime.EntryPoint
-		}
-		count := 0
-		for _, contrib := range contribs {
-			if contrib.ModuleID == mod.ID {
-				count++
-			}
-		}
-		moduleList = append(moduleList, moduleInfo{
-			ID:                string(mod.ID),
-			Type:              string(mod.Type),
-			Runtime:           runtimeType,
-			EntryPoint:        entryPoint,
-			ContributionCount: count,
-		})
-	}
-
-	contribList := make([]contribInfo, 0, len(contribs))
-	for _, contrib := range contribs {
-		contribList = append(contribList, contribInfo{
-			ID:       string(contrib.ID),
-			Kind:     string(contrib.Kind),
-			ModuleID: string(contrib.ModuleID),
-			Name:     contrib.Name.Default,
-		})
-	}
-
-	permissionList := make([]extensionPermissionView, 0)
-	if container.PermissionRepository != nil {
-		requirements, requirementsErr := container.PermissionRepository.ListRequirements(ctx, inst.ExtensionID)
-		grants, grantsErr := container.PermissionRepository.ListGrants(ctx, inst.ExtensionID)
-		if requirementsErr == nil && grantsErr == nil {
-			grantStates := make(map[string]string, len(grants))
-			for _, grant := range grants {
-				grantStates[grant.PermissionName] = grant.State
-			}
-			for _, requirement := range requirements {
-				permissionList = append(permissionList, extensionPermissionView{
-					Name:     requirement.PermissionName,
-					Scope:    requirement.Scope,
-					Reason:   requirement.Reason,
-					Required: requirement.Required,
-					Granted:  grantStates[requirement.PermissionName] == "granted",
-				})
-			}
-		}
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"name":           name,
-		"extensionId":    string(inst.ExtensionID),
-		"version":        inst.InstalledVersion.String(),
-		"installationId": inst.InstallationID,
-		"state":          installationStateForView(inst),
-		"enablement":     string(inst.EnablementState),
-		"systemManaged":  isSystemManagedExtension(ctx, container, string(inst.ExtensionID)),
-		"installedAt":    inst.InstalledAt,
-		"updatedAt":      inst.UpdatedAt,
-		"generation":     inst.Generation,
-		"modules":        moduleList,
-		"contributions":  contribList,
-		"permissions":    permissionList,
-	})
-}
-
 func (api *KernelAPI) updateExtensionPermission(c *gin.Context) {
 	if api.runtime == nil || api.runtime.Kernel == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "kernel unavailable"})
@@ -479,6 +289,7 @@ func (api *KernelAPI) updateExtensionPermission(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	api.runtime.InvalidateExtensionReadModels()
 	c.JSON(http.StatusOK, target)
 }
 
@@ -549,6 +360,7 @@ func (api *KernelAPI) enable(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	api.runtime.InvalidateExtensionReadModels()
 	c.JSON(http.StatusOK, gin.H{"extensionId": extID, "enablement": "enabled"})
 }
 
@@ -574,6 +386,7 @@ func (api *KernelAPI) disable(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	api.runtime.InvalidateExtensionReadModels()
 	c.JSON(http.StatusOK, gin.H{"extensionId": extID, "enablement": "disabled"})
 }
 

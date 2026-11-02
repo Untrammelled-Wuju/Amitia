@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	"github.com/u-ai/backend/internal/memorypolicy"
 )
 
 func TestOwnedMemoryManagementSemanticAndPaginationIntent(t *testing.T) {
@@ -164,5 +166,140 @@ func TestOwnedMemoryManagementSearchKeepsRoleOwnerAndContentFilters(t *testing.T
 	result, err = engine.SearchOwnedMemories(t.Context(), request, MemoryManagementQuery{Query: "咖啡", Mode: "keyword"})
 	if err != nil || len(result.Resources) != 0 {
 		t.Fatalf("no match=%+v err=%v", result, err)
+	}
+}
+
+func TestOwnedMemorySearchIncludesDormantOnlyForExplicitDeepRetrieval(t *testing.T) {
+	engine, db, _, _ := engineHarness(t)
+	request := Request{SpaceID: "core", DeviceID: "a", CoreID: "core", RoleID: "role", RequestID: "dormant-search"}
+	view, err := engine.Query(t.Context(), request, coordination.DataQuery{Management: true, ResourceKind: "memory"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	document := map[string]json.RawMessage{
+		"key":     json.RawMessage(`"宠物"`),
+		"kind":    json.RawMessage(`"fact"`),
+		"content": json.RawMessage(`{"value":"用户养了一只猫","memoryType":"fact","importance":2}`),
+	}
+	memorypolicy.WriteLifecycle(document, memorypolicy.NewLifecycleWithPolicy(memorypolicy.DecayPolicyDurable, 5, false, 2, time.Now().Add(-365*24*time.Hour)))
+	encoded, _ := json.Marshal(document)
+	if _, err := coordination.NewOwnershipStore(db, "a").Apply(t.Context(), coordination.Commit{Scope: view.Scope, Mutations: []coordination.Mutation{{Kind: "memory", ID: "dormant", RoleID: "role", Body: encoded}}}); err != nil {
+		t.Fatal(err)
+	}
+	passive, err := engine.SearchOwnedMemories(t.Context(), request, MemoryManagementQuery{ContextUsable: true, Query: "宠物", Mode: "keyword"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if passive.Total != 0 {
+		t.Fatalf("dormant memory leaked into passive recall: %+v", passive)
+	}
+	explicit, err := engine.SearchOwnedMemories(t.Context(), request, MemoryManagementQuery{ContextUsable: true, IncludeDormant: true, Query: "宠物", Mode: "keyword"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if explicit.Total != 1 || explicit.Resources[0].ID != "dormant" || explicit.Scores["dormant"] <= 0 {
+		t.Fatalf("explicit recall=%+v", explicit)
+	}
+}
+
+func TestOwnedMemoryHybridRankingUsesMultipleSignals(t *testing.T) {
+	engine, db, _, model := engineHarness(t)
+	engine.model = &semanticTestModel{testModel: model}
+	request := Request{SpaceID: "core", DeviceID: "a", CoreID: "core", RoleID: "role", RequestID: "ranked-search"}
+	view, err := engine.Query(t.Context(), request, coordination.DataQuery{Management: true, ResourceKind: "memory"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	documents := map[string]map[string]json.RawMessage{
+		"verified": {
+			"key":       json.RawMessage(`"饮品A"`),
+			"kind":      json.RawMessage(`"fact"`),
+			"content":   json.RawMessage(`{"value":"喜欢茶","memoryType":"preference","importance":9,"confidence":100,"source":"reviewed"}`),
+			"createdAt": json.RawMessage(`"` + now.Format(time.RFC3339Nano) + `"`),
+		},
+		"uncertain": {
+			"key":       json.RawMessage(`"饮品B"`),
+			"kind":      json.RawMessage(`"fact"`),
+			"content":   json.RawMessage(`{"value":"可能喜欢茶","memoryType":"preference","importance":2,"confidence":20,"source":"extraction"}`),
+			"createdAt": json.RawMessage(`"` + now.Add(-180*24*time.Hour).Format(time.RFC3339Nano) + `"`),
+		},
+	}
+	mutations := []coordination.Mutation{}
+	for id, document := range documents {
+		memorypolicy.WriteLifecycle(document, memorypolicy.NewLifecycleWithPolicy(memorypolicy.DecayPolicyDurable, 4, false, 5, now))
+		mutations = append(mutations, coordination.Mutation{Kind: "memory", ID: id, RoleID: "role", Body: body(document)})
+	}
+	if _, err := coordination.NewOwnershipStore(db, "a").Apply(t.Context(), coordination.Commit{Scope: view.Scope, Mutations: mutations}); err != nil {
+		t.Fatal(err)
+	}
+	result, err := engine.SearchOwnedMemories(t.Context(), request, MemoryManagementQuery{Query: "茶", Mode: "hybrid"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Resources) != 2 || result.Resources[0].ID != "verified" || result.Scores["verified"] <= result.Scores["uncertain"] {
+		t.Fatalf("ranking=%+v scores=%+v", result.Resources, result.Scores)
+	}
+	verifiedDetails, uncertainDetails := result.ScoreDetails["verified"], result.ScoreDetails["uncertain"]
+	if verifiedDetails.FinalScore <= 0 || verifiedDetails.Verification <= uncertainDetails.Verification || verifiedDetails.Importance <= uncertainDetails.Importance || verifiedDetails.SemanticScore != 0 {
+		t.Fatalf("score details verified=%+v uncertain=%+v", verifiedDetails, uncertainDetails)
+	}
+}
+
+func TestOwnedMemorySearchDeduplicatesSameLayerKey(t *testing.T) {
+	rows := []coordination.Resource{
+		{ID: "role", Kind: "memory", Body: json.RawMessage(`{"key":"city","kind":"fact","content":{"value":"杭州"}}`)},
+		{ID: "global", Kind: "memory", Body: json.RawMessage(`{"key":"city","kind":"fact","content":{"value":"上海"}}`)},
+	}
+	deduped := dedupeMemorySearchResults(rows)
+	if len(deduped) != 1 || deduped[0].ID != "role" {
+		t.Fatalf("dedupe=%+v", deduped)
+	}
+}
+
+func TestOfflineConsolidationAutoMergesSafeExactDuplicates(t *testing.T) {
+	engine, db, _, _ := engineHarness(t)
+	request := Request{SpaceID: "core", DeviceID: "a", CoreID: "core", RoleID: "role", RequestID: "auto-merge"}
+	view, err := engine.Query(t.Context(), request, coordination.DataQuery{Management: true, ResourceKind: "memory"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mutations := []coordination.Mutation{}
+	for _, id := range []string{"duplicate-a", "duplicate-b"} {
+		document := map[string]json.RawMessage{
+			"key":     json.RawMessage(`"` + id + `"`),
+			"kind":    json.RawMessage(`"fact"`),
+			"content": json.RawMessage(`{"value":"用户长期偏好喝无糖绿茶","memoryType":"preference","importance":6,"confidence":60,"source":"extraction"}`),
+		}
+		memorypolicy.WriteLifecycle(document, memorypolicy.NewLifecycleWithPolicy(memorypolicy.DecayPolicyDurable, 4, false, 6, time.Now()))
+		mutations = append(mutations, coordination.Mutation{Kind: "memory", ID: id, RoleID: "role", Body: body(document)})
+	}
+	if _, err := coordination.NewOwnershipStore(db, "a").Apply(t.Context(), coordination.Commit{Scope: view.Scope, Mutations: mutations}); err != nil {
+		t.Fatal(err)
+	}
+	report, err := engine.ConsolidateOwnedMemories(t.Context(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.AutoMergedCount != 1 {
+		t.Fatalf("report=%+v", report)
+	}
+	store := coordination.NewOwnershipStore(db, "a")
+	merged := 0
+	for _, id := range []string{"duplicate-a", "duplicate-b"} {
+		resource, err := store.Get(t.Context(), "memory", id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var document map[string]json.RawMessage
+		if err := json.Unmarshal(resource.Body, &document); err != nil {
+			t.Fatal(err)
+		}
+		if MemoryText(document, "consolidationReason") == "exact-duplicate-content" {
+			merged++
+		}
+	}
+	if merged != 1 {
+		t.Fatalf("merged=%d", merged)
 	}
 }

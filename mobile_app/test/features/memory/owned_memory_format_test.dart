@@ -25,4 +25,29 @@ void main() {
   test('普通记忆键保持原样', () {
     expect(ownedMemoryTitle(row('其他层')), '其他层');
   });
+
+  test('记忆生命周期明确区分休眠与自动归档', () {
+    expect(ownedMemoryDecayLabel({'effectiveDecayState': 'active'}), '活跃');
+    expect(ownedMemoryDecayLabel({'effectiveDecayState': 'fading'}), '淡化');
+    expect(ownedMemoryDecayLabel({'effectiveDecayState': 'dormant'}), '休眠 · 可检索');
+    expect(ownedMemoryDecayLabel({'effectiveDecayState': 'archived'}), '自动归档 · 可检索');
+    expect(ownedMemoryDecayLabel({'effectiveDecayState': 'dormant', 'pinned': true}), '已固定');
+  });
+
+  test('记忆确认状态和召回解释可供手机界面展示', () {
+    expect(ownedMemoryVerificationLabel({'verifiedStatus': 'user_corrected'}), '用户已更正');
+    expect(ownedMemoryVerificationLabel({'verifiedStatus': 'disputed'}), '有争议');
+    final summary = ownedMemoryScoreSummary({
+      'finalScore': .82,
+      'semanticScore': .73,
+      'keywordMatch': true,
+      'importance': .8,
+      'confidence': 1,
+      'strength': .68,
+      'validity': 1,
+      'verification': 1,
+    });
+    expect(summary, contains('关键词 命中'));
+    expect(summary, contains('时效 100'));
+  });
 }

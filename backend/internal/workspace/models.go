@@ -94,9 +94,9 @@ type ReadResult struct {
 }
 
 type ListResult struct {
-	Entries    []WorkspaceEntry
-	NextCursor string
-	HasMore    bool
+	Entries    []WorkspaceEntry `json:"entries"`
+	NextCursor string           `json:"nextCursor,omitempty"`
+	HasMore    bool             `json:"hasMore"`
 }
 
 type persistenceRecord struct {

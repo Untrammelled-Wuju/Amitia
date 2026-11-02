@@ -126,6 +126,9 @@ func (n *productionNavigator) Navigate(ctx context.Context, sessionID BrowserSes
 	}
 
 	n.bumpDocumentGeneration(tabID, resolved.RuntimeGeneration)
+	if n.tabMgr != nil && result != nil {
+		n.tabMgr.store.updateTabResource(tabID, result.FinalURL, result.Title)
+	}
 
 	return NavigationResult{
 		SessionID:    sessionID,
@@ -183,6 +186,9 @@ func (n *productionNavigator) Reload(ctx context.Context, sessionID BrowserSessi
 	}
 
 	n.bumpDocumentGeneration(tabID, resolved.RuntimeGeneration)
+	if n.tabMgr != nil && result != nil {
+		n.tabMgr.store.updateTabResource(tabID, result.FinalURL, result.Title)
+	}
 
 	return NavigationResult{
 		SessionID:  sessionID,
@@ -226,6 +232,10 @@ func (n *productionNavigator) GoBack(ctx context.Context, sessionID BrowserSessi
 				Cause:   navigateErr,
 			}
 	}
+	n.bumpDocumentGeneration(tabID, resolved.RuntimeGeneration)
+	if n.tabMgr != nil && result != nil {
+		n.tabMgr.store.updateTabResource(tabID, result.FinalURL, result.Title)
+	}
 
 	return NavigationResult{
 		SessionID:  sessionID,
@@ -268,6 +278,10 @@ func (n *productionNavigator) GoForward(ctx context.Context, sessionID BrowserSe
 				Message: "go forward failed: " + navigateErr.Error(),
 				Cause:   navigateErr,
 			}
+	}
+	n.bumpDocumentGeneration(tabID, resolved.RuntimeGeneration)
+	if n.tabMgr != nil && result != nil {
+		n.tabMgr.store.updateTabResource(tabID, result.FinalURL, result.Title)
 	}
 
 	return NavigationResult{

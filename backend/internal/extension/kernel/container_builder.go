@@ -44,6 +44,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/eventbridge"
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_center"
+	"github.com/u-ai/backend/internal/extension/kernel/extension_detail"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_page_host"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_slots"
 	"github.com/u-ai/backend/internal/extension/kernel/hook"
@@ -1247,7 +1248,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		acquisitionSourceRegistry.Register(b.acquisitionSkillSource)
 	}
 
-	extensionCenterService := extension_center.NewCenterService(extension_center.NewKernelCardProvider(defRepo, instRepo))
+	extensionCenterCardProvider := extension_center.NewKernelCardProvider(defRepo, instRepo)
+	extensionCenterService := extension_center.NewCenterService(extensionCenterCardProvider)
+	extensionCenterService.SetTargetMode(b.runtimeProfile.String())
 	acquisitionSourceRegistry.Register(acquisition.NewExtensionCatalogSource(extensionCenterService))
 
 	if b.mcpRepository != nil {
@@ -1762,6 +1765,23 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		Architecture:          goruntime.GOARCH,
 		AllowPrivateDownloads: allowPrivateDownloads,
 	})
+	extensionCenterCardProvider.SetDependencies(extension_center.CardProviderDependencies{
+		Updates:               packageDistribution,
+		Versions:              packageVersionDetailReader{repository: packageRepo},
+		Permissions:           permRepo,
+		PermissionDefinitions: permDefRegistry,
+	})
+	extensionDetailService := extension_detail.NewDetailService(&extension_detail.KernelDetailProvider{
+		Definitions:           defRepo,
+		Installations:         instRepo,
+		Modules:               moduleRepo,
+		Contributions:         contribRepo,
+		Permissions:           permRepo,
+		PermissionDefinitions: permDefRegistry,
+		Runtimes:              runtimeRepo,
+		Versions:              packageVersionDetailReader{repository: packageRepo},
+		Updates:               packageDistribution,
+	})
 	desktopActionBridge := NewDesktopActionBridge(permBroker, scopeManager, executionKernel)
 	desktopHost.SetPermissionChecker(desktopActionBridge)
 	desktopHost.SetScopeChecker(desktopActionBridge)
@@ -1949,6 +1969,8 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		DesktopActionBridge:      desktopActionBridge,
 		DesktopPetPluginBoundary: petPluginBoundary,
 		PackageDistribution:      packageDistribution,
+		ExtensionCenterService:   extensionCenterService,
+		ExtensionDetailService:   extensionDetailService,
 
 		ObservabilityStore: observabilityStore,
 

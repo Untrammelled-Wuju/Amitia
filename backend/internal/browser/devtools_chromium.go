@@ -106,9 +106,9 @@ func (d *chromiumDevTools) resolveCDPSession(ctx context.Context, sessionID Brow
 	if controller == nil {
 		return nil, "", 0, &BrowserError{Code: ErrCodeProviderUnavailable, Message: "Chromium page controller unavailable"}
 	}
-	cdpSession := controller.ensureSession(ctx, client, resolved.TargetID)
-	if cdpSession == "" {
-		return nil, "", 0, &BrowserError{Code: ErrCodeBrowserRuntimeNotReady, Message: "failed to attach DevTools session to tab"}
+	cdpSession, sessionErr := controller.ensureSessionWithError(ctx, client, resolved.TargetID)
+	if sessionErr != nil {
+		return nil, "", 0, &BrowserError{Code: ErrCodeBrowserRuntimeNotReady, Message: "failed to attach DevTools session to tab: " + sessionErr.Error(), Cause: sessionErr}
 	}
 	return client, cdpSession, resolved.RuntimeGeneration, nil
 }

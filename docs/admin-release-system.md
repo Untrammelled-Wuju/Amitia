@@ -64,7 +64,7 @@ AMITIA_ADMIN_COOKIE_SECURE=true
 
 ## 桌面端发布
 
-1. 创建桌面端发布草稿。
+1. 创建桌面端发布草稿，填写更新标题、最多 8 条本版亮点和 Markdown 完整更新内容。
 2. 上传 `AmitiaSetup-<version>-x64.exe`。
 3. 上传 `AmitiaSetup-<version>-x64.exe.blockmap`。
 4. 执行制品校验。
@@ -77,12 +77,20 @@ AMITIA_ADMIN_COOKIE_SECURE=true
 
 ## 手机端发布
 
-1. 创建手机端发布草稿，填写 `versionCode`、灰度比例和最低支持版本。
+1. 创建手机端发布草稿，填写 `versionCode`、灰度比例、最低支持版本、更新标题、最多 8 条本版亮点和 Markdown 完整更新内容。
 2. 上传正式签名的 arm64-v8a APK。
 3. 执行制品校验。
 4. 发布后服务端生成 `<channel>.json`，使用 RSA SHA-256 生成 `<channel>.json.sig`。
 
 上传顺序固定为 APK、签名文件、通道清单。手机端客户端不会接受低于已安装 `versionCode` 的清单。
+
+## 更新展示字段
+
+- `updateTitle`：弹窗“本次更新”标题下方的用户可见标题。
+- `highlights`：本版亮点数组，最多 8 条；桌面端两列展示，手机端单列展示。
+- `releaseNotes`：完整更新内容，按 Markdown 渲染。
+- 字段会同时写入桌面端 `latest.yml` / `beta.yml` 和 Android 签名通道清单。
+- 历史发布记录没有新增字段时，客户端继续使用兼容回退内容。
 
 ## 并发上传与下载
 

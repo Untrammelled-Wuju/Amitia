@@ -116,7 +116,10 @@ func main() {
 	}
 	config.AppCfg.Providers.GraphStore.SurrealDB.DataPath = util.ResolveRuntimePath(runtimeRoot, config.AppCfg.Providers.GraphStore.SurrealDB.DataPath)
 
-	log.InitLogger(util.RuntimeLogDir(runtimeRoot))
+	if err := log.InitLogger(util.RuntimeLogDir(runtimeRoot)); err != nil {
+		fmt.Fprintf(os.Stderr, "initialize log: %v\n", err)
+		os.Exit(1)
+	}
 
 	rootCtx, stop := context.WithCancel(context.Background())
 	defer stop()

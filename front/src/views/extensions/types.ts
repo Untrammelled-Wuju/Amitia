@@ -1,12 +1,138 @@
 import type { TaskAuthority } from "../kernel/tasks/authority";
 
-export interface LocalExtensionPackage {
-  id: string;
-  name: string;
-  version: string;
+export interface ExtensionCenterAction {
+  actionId: string;
+  available: boolean;
+  reason?: string;
+}
+
+export interface ExtensionCenterDiagnostic {
+  code: string;
+  message: string;
+  source?: string;
+}
+
+export interface ExtensionCenterCard {
+  extensionId: string;
+  installationId?: string;
+  generation?: number;
   publisher: string;
-  moduleCount: number;
-  installedAt: string;
+  displayName: string;
+  description: string;
+  version: string;
+  latestVersion?: string;
+  packageUri?: string;
+  hash?: string;
+  artifactId?: string;
+  icon?: string;
+  trust: string;
+  status: string;
+  enabled: boolean;
+  updateAvailable: boolean;
+  update?: ExtensionUpdateMetadata;
+  rollbackAvailable: boolean;
+  contributionTags: string[];
+  providedCapabilities?: string[];
+  platforms: string[];
+  failureCount: number;
+  permissionRisk?: string;
+  devMode: boolean;
+  userModified: boolean;
+  source: string;
+  placement?: string;
+  systemManaged: boolean;
+  permissions?: string[];
+  missingPermissions?: string[];
+  actions: ExtensionCenterAction[];
+  diagnostics?: ExtensionCenterDiagnostic[];
+  installedAt?: string;
+  updatedAt?: string;
+}
+
+export interface ExtensionCenterView {
+  schemaVersion: number;
+  targetMode: string;
+  installed: ExtensionCenterCard[];
+  discover: ExtensionCenterCard[];
+  localImports: ExtensionCenterCard[];
+  dev: ExtensionCenterCard[];
+  updates: ExtensionCenterCard[];
+  needsAction: ExtensionCenterCard[];
+  generatedAt: string;
+  partial: boolean;
+  errors?: ExtensionCenterDiagnostic[];
+}
+
+export interface ExtensionCenterDetail {
+  extensionId: string;
+  publisher: string;
+  displayName: string;
+  description: string;
+  version: string;
+  icon?: string;
+  trust: string;
+  signatureStatus?: string;
+  source: string;
+  enabled: boolean;
+  effectiveState: string;
+  failureCount: number;
+  updateAvailable: boolean;
+  latestVersion?: string;
+  updateError?: string;
+  platforms: string[];
+  permissionRisk?: string;
+  systemManaged: boolean;
+  devMode: boolean;
+  userModified: boolean;
+  modules: ExtensionCenterModule[];
+  contributions: ExtensionCenterContribution[];
+  permissions: ExtensionCenterPermission[];
+  versions: Array<{
+    version: string;
+    releasedAt?: string;
+    current: boolean;
+  }>;
+  runtimes: Array<Record<string, unknown>>;
+  actions: Array<{
+    actionId: string;
+    title: string;
+    kind: string;
+    available: boolean;
+    reason?: string;
+  }>;
+  installedAt?: string;
+  updatedAt?: string;
+}
+
+export interface ExtensionCenterModule {
+  moduleId: string;
+  kind: string;
+  entry: string;
+  runtime: string;
+  displayName: string;
+  description: string;
+  enabled: boolean;
+  status: string;
+}
+
+export interface ExtensionCenterContribution {
+  contributionId: string;
+  moduleId: string;
+  kind: string;
+  title: string;
+  description: string;
+  enabled: boolean;
+  exposure?: string;
+  deprecated: boolean;
+}
+
+export interface ExtensionCenterPermission {
+  permission: string;
+  required: boolean;
+  granted: boolean;
+  reason?: string;
+  scope?: string;
+  risk?: string;
 }
 
 export type SkillTrigger = string;

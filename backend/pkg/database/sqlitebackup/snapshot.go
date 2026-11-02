@@ -46,7 +46,10 @@ func CreateConsistentSnapshot(ctx context.Context, db *gorm.DB, destination stri
 }
 
 func VerifySnapshot(ctx context.Context, path string) error {
-	uri := (&url.URL{Scheme: "file", Path: filepath.ToSlash(path), RawQuery: "mode=ro&immutable=1"}).String()
+	uri, err := snapshotFileURI(path, "mode=ro&immutable=1")
+	if err != nil {
+		return err
+	}
 	db, err := sql.Open("sqlite", uri)
 	if err != nil {
 		return err
@@ -61,6 +64,22 @@ func VerifySnapshot(ctx context.Context, path string) error {
 		return fmt.Errorf("sqlite snapshot integrity check failed: %s", result)
 	}
 	return nil
+}
+
+func snapshotFileURI(path, rawQuery string) (string, error) {
+	absolutePath, err := filepath.Abs(path)
+	if err != nil {
+		return "", fmt.Errorf("resolve sqlite snapshot path: %w", err)
+	}
+	return snapshotFileURIFromPath(absolutePath, rawQuery), nil
+}
+
+func snapshotFileURIFromPath(path, rawQuery string) string {
+	uriPath := filepath.ToSlash(path)
+	if !strings.HasPrefix(uriPath, "/") {
+		uriPath = "/" + uriPath
+	}
+	return (&url.URL{Scheme: "file", Path: uriPath, RawQuery: rawQuery}).String()
 }
 
 func Inspect(path string) (int64, string, error) {

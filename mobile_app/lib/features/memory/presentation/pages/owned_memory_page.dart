@@ -77,6 +77,7 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
   _pendingMemory;
   Map<String, dynamic>? _projection;
   String _projectionNotice = '';
+  String _consolidationNotice = '';
   bool _rebuilding = false;
   bool _loading = false;
   int _generation = 0;
@@ -109,6 +110,7 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
         _managementPage = null;
         _projection = null;
         _projectionNotice = '';
+        _consolidationNotice = '';
         _rows.clear();
         _next = '';
         _nextLegacy = '';
@@ -375,6 +377,26 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
         setState(() => _projectionNotice = cause.toString());
     } finally {
       if (mounted) setState(() => _rebuilding = false);
+    }
+  }
+
+  Future<void> _checkConsolidation() async {
+    final ticket = _generation;
+    setState(() => _loading = true);
+    try {
+      final report = await ref
+          .read(deviceOwnedMemoryServiceProvider)
+          .consolidation(_role, memoryView: _memoryView);
+      if (!mounted || ticket != _generation) return;
+      setState(() {
+        _consolidationNotice =
+            '巩固检查完成：共 ${report['total'] ?? 0} 条记忆，发现 ${report['suggestions'] ?? 0} 组待处理；重复内容 ${(report['duplicateGroups'] as List? ?? []).length} 组，同键冲突 ${(report['keyConflicts'] as List? ?? []).length} 组，聚类/摘要建议 ${(report['clusterGroups'] as List? ?? []).length} 组，复习建议 ${report['reviewSuggestions'] ?? 0} 条，争议 ${report['disputedCount'] ?? 0} 条，失效 ${report['expiredCount'] ?? 0} 条，后台安全归并 ${report['autoMergedCount'] ?? 0} 条。';
+      });
+    } catch (cause) {
+      if (mounted && ticket == _generation)
+        setState(() => _consolidationNotice = cause.toString());
+    } finally {
+      if (mounted && ticket == _generation) setState(() => _loading = false);
     }
   }
 
@@ -735,6 +757,8 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
       original,
       changes: {
         'content': content is Map ? {...content, field: value} : value,
+        if (original['kind'] == 'memory')
+          'correctionReason': '用户在手机记忆管理中更正正文',
       },
     );
   }
@@ -820,6 +844,93 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
       ),
     );
     if (result != null && mounted) await _edit(original, changes: result);
+  }
+
+  bool _canRestoreLifecycle(Map row) {
+    final body = row['body'] is Map ? row['body'] as Map : const {};
+    final state = (body['effectiveDecayState'] ?? body['decayState']).toString();
+    return body['archivedAt'] == null &&
+        (state == 'dormant' || state == 'archived');
+  }
+
+  Future<void> _restoreLifecycle(Map row) async {
+    await _edit(
+      row,
+      changes: {
+        'retentionLevel': 4,
+        'memoryStrength': 0.5,
+        'pinned': false,
+      },
+    );
+  }
+
+  Future<void> _confirmMemory(Map row) async {
+    await _edit(
+      row,
+      changes: {
+        'verifiedStatus': 'verified',
+        'confidence': 100,
+        'allowContextUse': true,
+        'lastVerifiedAt': DateTime.now().toUtc().toIso8601String(),
+      },
+    );
+  }
+
+  Future<void> _markMemoryWrong(Map row) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('标记记忆有误'),
+        content: const Text('标记后该记忆会降低置信度并停止用于普通对话。你可以随后更正正文并重新确认。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('标记有误'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await _edit(row, changes: {'verifiedStatus': 'disputed'});
+  }
+
+  Future<void> _retrievalFeedback(Map row, String feedback) async {
+    await _edit(row, changes: {'retrievalFeedback': feedback});
+  }
+
+  Future<void> _memoryHistory(Map row) async {
+    final versions = await ref
+        .read(deviceOwnedMemoryServiceProvider)
+        .history(_role, row['id'].toString(), memoryView: _memoryView);
+    if (!mounted) return;
+    final revision = await showDialog<int>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('记忆修改历史'),
+        children: [
+          for (final version in versions)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, version['revision'] as int),
+              child: Text('版本 ${version['revision']} · ${version['createdAt']}'),
+            ),
+          SimpleDialogOption(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+        ],
+      ),
+    );
+    if (revision == null || !mounted) return;
+    await _edit(row, changes: {'restoreHistoryRevision': revision});
+  }
+
+  String _recallExplanation(Map row) {
+    final details = _managementPage?['scoreDetails'];
+    if (details is! Map || details[row['id']] is! Map) return '';
+    return ownedMemoryScoreSummary(
+      Map<String, dynamic>.from(details[row['id']] as Map),
+    );
   }
 
   Future<String?> _textInput(String title, String initial) async {
@@ -1275,6 +1386,7 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
         : switch (_decayFilter) {
             'active' => '活跃',
             'fading' => '淡化',
+            'dormant' => '休眠',
             'archived' => '自动归档',
             _ => '全部',
           };
@@ -1584,6 +1696,7 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                           DropdownMenuItem(value: '', child: Text('全部状态')),
                           DropdownMenuItem(value: 'active', child: Text('活跃')),
                           DropdownMenuItem(value: 'fading', child: Text('淡化')),
+                          DropdownMenuItem(value: 'dormant', child: Text('休眠')),
                           DropdownMenuItem(
                             value: 'archived',
                             child: Text('自动归档'),
@@ -1711,8 +1824,16 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                                 },
                           child: const Text('待审核候选'),
                         ),
+                        TextButton(
+                          onPressed: _loading || _managing
+                              ? null
+                              : _checkConsolidation,
+                          child: const Text('巩固检查'),
+                        ),
                       ],
                     ),
+                  if (_consolidationNotice.isNotEmpty)
+                    Text(_consolidationNotice),
                   if (_kind == 'candidate')
                     TextButton(
                       onPressed: _loading || _managing
@@ -1918,11 +2039,17 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                 ),
                 if (row['kind'] == 'memory')
                   Text(
-                    'L${(body['effectiveRetentionLevel'] ?? body['retentionLevel']) ?? 3} · 强度 ${((((body['effectiveStrength'] ?? body['memoryStrength']) as num?)?.toDouble() ?? .68) * 100).round()}% · ${(body['effectiveDecayState'] ?? body['decayState']) == 'archived'
-                        ? '自动归档'
-                        : (body['effectiveDecayState'] ?? body['decayState']) == 'fading'
-                        ? '淡化'
-                        : '活跃'}${body['pinned'] == true ? ' · 已固定' : ''} · 强化 ${body['reinforceCount'] ?? 0} 次',
+                    'L${(body['effectiveRetentionLevel'] ?? body['retentionLevel']) ?? 3} · 强度 ${((((body['effectiveStrength'] ?? body['memoryStrength']) as num?)?.toDouble() ?? .68) * 100).round()}% · ${ownedMemoryDecayLabel(body)} · 强化 ${body['reinforceCount'] ?? 0} 次',
+                    style: AppTypography.caption(context),
+                  ),
+                if (row['kind'] == 'memory')
+                  Text(
+                    '确认状态 ${ownedMemoryVerificationLabel(body)}${body['confidence'] is num ? ' · 置信度 ${(body['confidence'] as num).round()}%' : ''}',
+                    style: AppTypography.caption(context),
+                  ),
+                if (_recallExplanation(row).isNotEmpty)
+                  Text(
+                    _recallExplanation(row),
                     style: AppTypography.caption(context),
                   ),
                 SizedBox(height: AppSpacing.md),
@@ -2012,6 +2139,61 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                                       () => _editLifecycle(row),
                                     ),
                               child: const Text('保留等级与固定'),
+                            ),
+                            TextButton(
+                              onPressed: _loading
+                                  ? null
+                                  : () => _detailAction(
+                                      sheetContext,
+                                      () => _memoryHistory(row),
+                                    ),
+                              child: const Text('历史版本'),
+                            ),
+                            if (_canRestoreLifecycle(row))
+                              TextButton(
+                                onPressed: _loading
+                                    ? null
+                                    : () => _detailAction(
+                                        sheetContext,
+                                        () => _restoreLifecycle(row),
+                                      ),
+                                child: const Text('恢复召回'),
+                              ),
+                            TextButton(
+                              onPressed: _loading
+                                  ? null
+                                  : () => _detailAction(
+                                      sheetContext,
+                                      () => _confirmMemory(row),
+                                    ),
+                              child: const Text('确认正确'),
+                            ),
+                            TextButton(
+                              onPressed: _loading
+                                  ? null
+                                  : () => _detailAction(
+                                      sheetContext,
+                                      () => _markMemoryWrong(row),
+                                    ),
+                              child: const Text('标记有误'),
+                            ),
+                            TextButton(
+                              onPressed: _loading
+                                  ? null
+                                  : () => _detailAction(
+                                      sheetContext,
+                                      () => _retrievalFeedback(row, 'helpful'),
+                                    ),
+                              child: const Text('召回有用'),
+                            ),
+                            TextButton(
+                              onPressed: _loading
+                                  ? null
+                                  : () => _detailAction(
+                                      sheetContext,
+                                      () => _retrievalFeedback(row, 'not_helpful'),
+                                    ),
+                              child: const Text('召回无用'),
                             ),
                             TextButton(
                               onPressed: _loading

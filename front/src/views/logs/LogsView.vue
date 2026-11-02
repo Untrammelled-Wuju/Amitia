@@ -20,11 +20,13 @@ SPDX-License-Identifier: AGPL-3.0-only
             @click="clearAllLogs"
           >清除日志文件</el-button>
         </div>
-        <el-table :data="recentLogs" stripe size="small" max-height="560" v-loading="loading">
-          <el-table-column prop="file" label="文件" width="190" show-overflow-tooltip />
-          <el-table-column prop="line" label="内容" min-width="520" show-overflow-tooltip />
-          <el-table-column prop="time" label="读取时间" width="170" />
-        </el-table>
+        <div v-if="recentLogs.length > 0" class="recent-log-file" v-loading="loading">
+          <div class="recent-log-file-header">
+            <span>最近日志</span>
+            <span>{{ recentLineCount }} 行</span>
+          </div>
+          <pre class="recent-log-file-body" data-amitia-ui="logs.recent.viewer">{{ recentLogText }}</pre>
+        </div>
         <el-empty v-if="!loading && recentLogs.length === 0" description="暂无运行日志" :image-size="48" />
       </el-tab-pane>
 
@@ -74,24 +76,28 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useApi } from "@/composables/useApi";
+import { formatRecentLogText, type RecentLogLine } from "./log-format";
 
-type RecentLog = { file?: string; line?: string; time?: string };
 type LogFile = { name: string; size: number; modTime?: string };
 
 const { get, del } = useApi();
 const activeTab = ref("recent");
 const loading = ref(false);
-const recentLogs = ref<RecentLog[]>([]);
+const recentLogs = ref<RecentLogLine[]>([]);
 const logFiles = ref<LogFile[]>([]);
 const selectedFile = ref("");
 const fileContent = ref("");
 const fileLineCount = ref(0);
+const recentLogText = computed(() => formatRecentLogText(recentLogs.value));
+const recentLineCount = computed(() =>
+  recentLogs.value.filter((log) => String(log.line ?? "").length > 0).length,
+);
 
 async function fetchRecentLogs() {
-  const result = await get<{ logs?: RecentLog[] }>("/api/logs/recent", { limit: 100 });
+  const result = await get<{ logs?: RecentLogLine[] }>("/api/logs/recent", { limit: 200 });
   recentLogs.value = Array.isArray(result?.logs) ? result.logs : [];
 }
 
@@ -187,6 +193,33 @@ onMounted(refreshCurrent);
 .log-count {
   color: var(--ac-color-text-muted);
   font-size: var(--ac-font-size-xs);
+}
+.recent-log-file {
+  overflow: hidden;
+  border: 1px solid var(--ac-color-border-light);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-color-surface-secondary);
+}
+.recent-log-file-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--ac-color-border-light);
+  color: var(--ac-color-text-muted);
+  font-size: var(--ac-font-size-xs);
+}
+.recent-log-file-body {
+  height: 560px;
+  overflow: auto;
+  margin: 0;
+  padding: 12px 14px;
+  color: var(--ac-color-text);
+  font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  tab-size: 2;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
 }
 .files-layout {
   display: grid;

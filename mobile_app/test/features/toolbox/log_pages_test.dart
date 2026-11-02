@@ -14,6 +14,7 @@ import 'package:go_router/go_router.dart';
 
 class _LogApi implements BackendServiceApi {
   final requests = <String>[];
+  final recentQueries = <Map<String, dynamic>?>[];
   bool fail = false;
 
   @override
@@ -28,6 +29,7 @@ class _LogApi implements BackendServiceApi {
     final Object data;
     switch (path) {
       case '/api/logs/recent':
+        recentQueries.add(queryParameters);
         data = {
           'logs': [
             {
@@ -92,9 +94,16 @@ void main() {
     expect(tester.takeException(), isNull);
   });
   testWidgets('运行日志显示结构化与文本记录', (tester) async {
-    await _render(tester, _LogApi(), const ToolboxLogPage());
-    expect(find.text('真实运行错误'), findsOneWidget);
-    expect(find.text('原始运行日志'), findsOneWidget);
+    final api = _LogApi();
+    await _render(tester, api, const ToolboxLogPage());
+    expect(api.recentQueries, [
+      {'limit': 200},
+    ]);
+    expect(find.textContaining('真实运行错误'), findsOneWidget);
+    expect(find.textContaining('原始运行日志'), findsOneWidget);
+    expect(find.textContaining('==> app.log <=='), findsOneWidget);
+    expect(find.textContaining('==> server.log <=='), findsOneWidget);
+    expect(find.byType(Table), findsNothing);
     expect(find.byTooltip('打开文件夹'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -124,7 +133,7 @@ void main() {
     api.fail = false;
     await tester.tap(find.text('重试'));
     await tester.pumpAndSettle();
-    expect(find.text('真实运行错误'), findsOneWidget);
+    expect(find.textContaining('真实运行错误'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

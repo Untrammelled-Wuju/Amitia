@@ -172,6 +172,15 @@ async function loadMounts() {
     const response = await apiClient.get('/api/workspaces');
     if (request !== sequence) return;
     mounts.value = Array.isArray(response.data) ? response.data : [];
+    if (workspaceUri.value && !mounts.value.some(mount => mount.rootUri === workspaceUri.value)) {
+      workspaceUri.value = '';
+      directory.value = '';
+      files.value = [];
+      gitStatus.value = null;
+      changes.value = [];
+      commits.value = [];
+      worktrees.value = [];
+    }
     if (!workspaceUri.value && mounts.value.length === 1 && mounts.value[0].available) {
       workspaceUri.value = mounts.value[0].rootUri;
       directory.value = workspaceUri.value;
@@ -187,9 +196,11 @@ async function loadFiles(append: boolean) {
   try {
     const response = await apiClient.get('/api/workspaces/list', { params: { uri: directory.value, limit: 200, ...(append && nextCursor.value ? { cursor: nextCursor.value } : {}) } });
     if (request !== sequence) return;
-    const entries: FileEntry[] = Array.isArray(response.data?.entries) ? response.data.entries : [];
+    const payload = response.data ?? {};
+    const entries: FileEntry[] = Array.isArray(payload.entries) ? payload.entries : Array.isArray(payload.Entries) ? payload.Entries : [];
     files.value = append ? [...files.value, ...entries] : entries;
-    nextCursor.value = response.data?.hasMore ? String(response.data?.nextCursor || '') : '';
+    const hasMore = payload.hasMore === true || payload.HasMore === true;
+    nextCursor.value = hasMore ? String(payload.nextCursor ?? payload.NextCursor ?? '') : '';
   } catch (cause) { if (request === sequence) error.value = failure(cause); }
   finally { if (request === sequence) loading.value = false; }
 }
@@ -229,8 +240,9 @@ async function loadGit() {
   if (!workspaceUri.value) { gitStatus.value = null; changes.value = []; commits.value = []; return; }
   const request = ++sequence; loading.value = true; error.value = '';
   try {
-    const [status, log, treeList] = await Promise.all([
-      apiClient.post('/api/workspaces/git/status', { workspaceUri: workspaceUri.value, includeIgnored: false }),
+    const status = await apiClient.post('/api/workspaces/git/status', { workspaceUri: workspaceUri.value, includeIgnored: false });
+    if (request !== sequence) return;
+    const [log, treeList] = await Promise.all([
       apiClient.post('/api/workspaces/git/log', { workspaceUri: workspaceUri.value, limit: 50 }),
       apiClient.post('/api/workspaces/git/worktrees', { workspaceUri: workspaceUri.value }),
     ]);
@@ -396,7 +408,13 @@ async function removeWorktree(tree: GitWorktree) {
   finally { worktreeBusy.value = false; }
 }
 function openDiff(uri: string) { store.openTab({ kind: 'diff', title: uri.split('/').pop() || 'Diff', resourceUri: uri, workspaceUri: workspaceUri.value }); }
-function refresh() { if (props.tab.kind === 'files') void loadFiles(false); else if (props.tab.kind === 'file') void loadFile(false); else if (props.tab.kind === 'git' || props.tab.kind === 'diff') void loadGit(); }
+async function refresh() {
+  if (props.tab.kind === 'file') return loadFile(false);
+  if (props.tab.kind !== 'files' && props.tab.kind !== 'git' && props.tab.kind !== 'diff') return;
+  await loadMounts();
+  if (props.tab.kind === 'files') await loadFiles(false);
+  else await loadGit();
+}
 function clearResourceState() {
   sequence++;
   loading.value = false;

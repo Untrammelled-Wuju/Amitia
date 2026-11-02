@@ -173,7 +173,7 @@ func appendLogFiles(files *[]discoveredLogFile, seen map[string]bool, root logRo
 			}
 			return nil
 		}
-		if !strings.HasSuffix(strings.ToLower(entry.Name()), ".log") {
+		if !isLogFileName(entry.Name()) {
 			return nil
 		}
 		fileInfo, infoErr := entry.Info()
@@ -201,6 +201,27 @@ func appendLogFiles(files *[]discoveredLogFile, seen map[string]bool, root logRo
 	}); err != nil {
 		amitialog.Printf("[original-error] %v", err)
 	}
+}
+
+func isLogFileName(name string) bool {
+	lower := strings.ToLower(name)
+	if strings.HasSuffix(lower, ".log") {
+		return true
+	}
+	index := strings.LastIndex(lower, ".log.")
+	if index < 0 {
+		return false
+	}
+	suffix := lower[index+len(".log."):]
+	if suffix == "" {
+		return false
+	}
+	for _, char := range suffix {
+		if char < '0' || char > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func readLogTail(path string, maxBytes int64) (string, error) {

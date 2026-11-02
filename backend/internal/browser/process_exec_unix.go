@@ -35,24 +35,35 @@ func (p *browserProcess) Start() (pid int, handle proc.ProcessTreeHandle, err er
 	cmd.Env = safeEnv
 	cmd.Dir = p.profileDir
 
-	pr, pw, err := os.Pipe()
+	childRead, parentWrite, err := os.Pipe()
 	if err != nil {
 		cancel()
 		return 0, 0, err
 	}
-	cmd.ExtraFiles = []*os.File{pr, pw}
-
-	if err := cmd.Start(); err != nil {
-		pr.Close()
-		pw.Close()
+	parentRead, childWrite, err := os.Pipe()
+	if err != nil {
+		childRead.Close()
+		parentWrite.Close()
 		cancel()
 		return 0, 0, err
 	}
+	cmd.ExtraFiles = []*os.File{childRead, childWrite}
+
+	if err := cmd.Start(); err != nil {
+		childRead.Close()
+		parentWrite.Close()
+		parentRead.Close()
+		childWrite.Close()
+		cancel()
+		return 0, 0, err
+	}
+	childRead.Close()
+	childWrite.Close()
 
 	p.pid = cmd.Process.Pid
 	p.procHandle = proc.ProcessTreeHandle(0)
-	p.reader = pw
-	p.writer = pr
+	p.reader = parentRead
+	p.writer = parentWrite
 	p.alive = true
 	p.connected = false
 

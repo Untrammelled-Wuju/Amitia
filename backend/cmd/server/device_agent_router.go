@@ -332,6 +332,14 @@ func registerDeviceAgentDesktopPetRoutes(
 	// Game packages are device execution artifacts. In cloud mode the desktop
 	// uploads them directly to the loopback Device Agent using its Desktop
 	// Session; only lightweight runtime control traverses Cloud Core/Device Mesh.
+	deviceCenter := r.Group("/api")
+	deviceCenter.Use(security.AuthenticationMiddleware(authConfig))
+	deviceCenter.Use(security.RequireAuthMethod(
+		security.AuthMethodDesktopSession,
+		security.AuthMethodLocalToken,
+	))
+	extension.RegisterExtensionCenterRoutes(deviceCenter, services.Extension)
+
 	deviceExtensions := r.Group("/api/extensions")
 	deviceExtensions.Use(security.AuthenticationMiddleware(authConfig))
 	deviceExtensions.Use(security.RequireAuthMethod(security.AuthMethodDesktopSession))

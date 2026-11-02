@@ -215,6 +215,7 @@ import {
   cancelExtensionUpdateDownload,
   checkExtensionUpdate,
   confirmPackageRollback,
+  fetchExtensionCenterView,
   fetchPackageVersions,
   getExtensionUpdateDownload,
   getPackageOperation,
@@ -232,7 +233,7 @@ import type {
   PackageOperation,
   PackageVersion,
 } from "@/views/extensions/types";
-import { listExtensions, type KernelExtension } from "./api";
+import type { KernelExtension } from "./api";
 
 const extLoading = ref(false);
 const checkLoading = ref(false);
@@ -298,8 +299,32 @@ function resetUpdateState() {
 async function loadExtensions() {
   extLoading.value = true;
   try {
-    const data = await listExtensions();
-    extensions.value = data.extensions || [];
+    const center = await fetchExtensionCenterView();
+    const cards = [
+      ...center.installed,
+      ...center.updates,
+      ...center.needsAction,
+      ...center.localImports,
+      ...center.dev,
+    ];
+    const unique = new Map(cards.map((card) => [card.extensionId, card]));
+    extensions.value = [...unique.values()].map((card) => ({
+      name: card.displayName,
+      extensionId: card.extensionId,
+      version: card.version,
+      installationId: card.installationId || card.extensionId,
+      state: card.status,
+      enablement: card.enabled ? "enabled" : "disabled",
+      systemManaged: card.systemManaged,
+      installedAt: card.installedAt || "",
+      updatedAt: card.updatedAt || "",
+      generation: card.generation || 0,
+      updateAvailable: card.updateAvailable,
+      latestVersion: card.latestVersion,
+      trust: card.trust,
+      permissionRisk: card.permissionRisk,
+      devMode: card.devMode,
+    }));
     if (!selectedExtension.value && extensions.value.length) {
       selectedExtension.value = extensions.value[0]?.extensionId || "";
       await loadVersions();

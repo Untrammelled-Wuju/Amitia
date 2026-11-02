@@ -77,10 +77,12 @@ function reconnect() {
   error.value = '';
   resume();
 }
-const previewURL = computed(() => { try { const url = new URL(address.value); return ['http:', 'https:'].includes(url.protocol) ? url.toString() : ''; } catch (error) {
-  console.error("[original-error]", error);
-return ''; } });
-function togglePreview() { previewMode.value = !previewMode.value; if (!previewMode.value) void refreshFrame(); }
+const previewURL = computed(() => {
+  if (!URL.canParse(address.value)) return '';
+  const url = new URL(address.value);
+  return ['http:', 'https:'].includes(url.protocol) ? url.toString() : '';
+});
+function togglePreview() { previewMode.value = !previewMode.value; error.value = ''; if (!previewMode.value) void refreshFrame(); }
 function openSystemBrowser() { if (previewURL.value) window.open(previewURL.value, '_blank', 'noopener,noreferrer'); }
 let active = true;
 let timer: ReturnType<typeof setInterval> | null = null;
@@ -152,7 +154,15 @@ async function start() {
 async function navigate() {
   if (remote) return;
   if (observed.value && !canControl.value) { if (!running.value) await start(); return; }
-  if (previewMode.value) { if (!previewURL.value) error.value = '请输入有效的 HTTP(S) 网页地址'; else store.updateTab(props.tab.id, { resourceUri: previewURL.value, title: new URL(previewURL.value).hostname }); return; }
+  if (previewMode.value) {
+    if (!previewURL.value) {
+      error.value = '请输入有效的 HTTP(S) 网页地址';
+      return;
+    }
+    error.value = '';
+    store.updateTab(props.tab.id, { resourceUri: previewURL.value, title: new URL(previewURL.value).hostname });
+    return;
+  }
   if (!running.value) { await start(); return; }
   if (busy.value) return;
   busy.value = true; error.value = '';
@@ -300,6 +310,7 @@ function resume() {
     if (running.value && frameTick % 4 === 0) void syncObservedState();
     if (canControl.value && frameTick % 7 === 0) void control('renew');
   }, remote ? 4200 : 2600);
+  if (!running.value && !busy.value && !remote && !props.tab.browserRef) return;
   if (!running.value && !busy.value && Date.now() >= nextRetryAt) {
     const current = revision;
     void (remote ? remoteRead('state').then(data => ({ data })) : apiClient.get(baseURL(), { signal: lifecycleAbort.signal })).then(response => {

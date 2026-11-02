@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/app_update/app_update_providers.dart';
 import '../core/app_update/app_update_models.dart';
 import '../core/app_update/app_update_preferences.dart';
+import '../core/app_update/app_update_prompt_sheet.dart';
 import '../core/native_bridge/providers/native_bridge_relay_bootstrap_provider.dart';
 import '../core/native_bridge/providers/device_timezone_bootstrap_provider.dart';
 import '../core/runtime/runtime_bootstrap_provider.dart';
@@ -16,6 +17,7 @@ import '../core/runtime/backend/mobile_deployment_mode.dart';
 import '../core/debug/debug_log_overlay.dart';
 import '../core/debug/debug_runtime_bridge.dart';
 import '../core/widgets/amitia_system_bars.dart';
+import '../core/widgets/amitia_dialogs.dart';
 import '../core/ui_runtime/ui_provider.dart';
 import '../core/ui_runtime/ui_runtime_controller.dart';
 import '../core/ui_runtime/mobile_ui_host_event_client.dart';
@@ -36,7 +38,6 @@ import 'theme/app_text_scaler.dart';
 import 'theme/design_tokens.dart';
 import 'theme/appearance_colors.dart';
 import '../core/settings/custom_palette.dart';
-import 'app_routes.dart';
 import 'notification_runtime_bootstrap.dart';
 import 'router.dart';
 
@@ -62,8 +63,8 @@ class _AmitiaAppRootState extends ConsumerState<AmitiaAppRoot> {
     try {
       await ref.read(backgroundPreferencesProvider.notifier).init();
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+      print("[original-error] $error\n$stackTrace");
+    }
     await ref.read(chatPermissionPreferencesProvider.notifier).init();
     final deploymentNotifier = ref.read(
       mobileDeploymentConfigProvider.notifier,
@@ -88,8 +89,14 @@ class _AmitiaAppRootState extends ConsumerState<AmitiaAppRoot> {
 
     if (mounted) {
       setState(() => _bootstrapInitialized = true);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Future<void>.delayed(const Duration(seconds: 1), () {
+          if (mounted) {
+            unawaited(_checkUpdateOnStartup());
+          }
+        });
+      });
     }
-    unawaited(_checkUpdateOnStartup());
   }
 
   Future<void> _checkUpdateOnStartup() async {
@@ -111,52 +118,103 @@ class _AmitiaAppRootState extends ConsumerState<AmitiaAppRoot> {
       if (!mandatory && update.versionCode == skippedVersionCode) return;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        if (mandatory) {
-          ref.read(goRouterProvider).go(AppRoutes.settingsAppUpdate);
-          return;
-        }
-        unawaited(_showUpdatePrompt(update));
+        unawaited(_showUpdatePrompt(update, result.installed));
       });
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-return;
+      print("[original-error] $error\n$stackTrace");
+      return;
     }
   }
 
-  Future<void> _showUpdatePrompt(AppUpdateManifest update) async {
+  Future<void> _showUpdatePrompt(
+    AppUpdateManifest update,
+    InstalledAppInfo installed,
+  ) async {
     if (!mounted) return;
-    final action = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text('发现新版本 ${update.versionName}'),
-        content: Text(
-          update.releaseNotes.isEmpty ? '有新版本可以更新。' : update.releaseNotes,
-          maxLines: 8,
-          overflow: TextOverflow.ellipsis,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop('skip'),
-            child: const Text('跳过此版本'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop('later'),
-            child: const Text('稍后'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop('now'),
-            child: const Text('去更新'),
-          ),
-        ],
-      ),
-    );
-    if (!mounted) return;
-    if (action == 'skip') {
-      await AppUpdatePreferences.saveSkippedVersionCode(update.versionCode);
+    final hostContext = appNavigatorKey.currentState?.overlay?.context;
+    if (hostContext == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          unawaited(_showUpdatePrompt(update, installed));
+        }
+      });
       return;
     }
-    if (action == 'now') {
-      ref.read(goRouterProvider).go(AppRoutes.settingsAppUpdate);
+    final service = ref.read(appUpdateServiceProvider);
+    final controller = AppUpdateDownloadController(
+      service: service,
+      update: update,
+    );
+    final mandatory = update.requiresVersion(installed.versionCode);
+    final action = await showModalBottomSheet<String>(
+      context: hostContext,
+      isScrollControlled: true,
+      useSafeArea: true,
+      isDismissible: !mandatory,
+      enableDrag: !mandatory,
+      backgroundColor: Colors.transparent,
+      barrierColor: Theme.of(hostContext).colorScheme.scrim,
+      builder: (_) => AppUpdatePromptSheet(
+        update: update,
+        currentVersion: installed.versionName,
+        controller: controller,
+        mandatory: mandatory,
+      ),
+    );
+    if (!mounted || !hostContext.mounted) {
+      controller.dispose();
+      return;
+    }
+    if (action == 'skip') {
+      await AppUpdatePreferences.saveSkippedVersionCode(update.versionCode);
+      controller.dispose();
+      return;
+    }
+    if (action != 'downloaded' && !controller.downloading) {
+      final errorMessage = controller.errorMessage;
+      controller.dispose();
+      if (errorMessage != null && mounted && hostContext.mounted) {
+        await showAmitiaInfoDialog(
+          hostContext,
+          title: '更新失败',
+          message: errorMessage,
+          okLabel: '关闭',
+        );
+      }
+      return;
+    }
+    final completed = controller.completed ? true : await controller.terminal;
+    if (!mounted || !hostContext.mounted) {
+      controller.dispose();
+      return;
+    }
+    final downloadId = controller.downloadId;
+    final errorMessage = controller.errorMessage;
+    controller.dispose();
+    if (!completed || downloadId == null) {
+      if (!mounted || !hostContext.mounted) return;
+      await showAmitiaInfoDialog(
+        hostContext,
+        title: '更新失败',
+        message: errorMessage ?? '下载未完成，且未返回可用结果',
+        okLabel: '关闭',
+      );
+      return;
+    }
+    if (!hostContext.mounted) return;
+    final confirmed = await showAppUpdateReadyDialog(hostContext, update);
+    if (confirmed != true || !mounted || !hostContext.mounted) return;
+    try {
+      await service.install(downloadId, update);
+    } catch (error, stackTrace) {
+      print('[original-error] $error\n$stackTrace');
+      if (!mounted || !hostContext.mounted) return;
+      await showAmitiaInfoDialog(
+        hostContext,
+        title: '安装启动失败',
+        message: '$error',
+        okLabel: '关闭',
+      );
     }
   }
 

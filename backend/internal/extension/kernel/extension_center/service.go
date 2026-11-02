@@ -5,8 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/u-ai/backend/internal/extension/kernel/package_distribution"
 )
 
 type ExtensionStatus string
@@ -29,11 +32,15 @@ const (
 type TrustLevel string
 
 const (
-	TrustLevelPlatform  TrustLevel = "platform"
-	TrustLevelOfficial  TrustLevel = "official"
-	TrustLevelVerified  TrustLevel = "verified"
-	TrustLevelCommunity TrustLevel = "community"
-	TrustLevelUntrusted TrustLevel = "untrusted"
+	TrustLevelPlatform    TrustLevel = "platform"
+	TrustLevelOfficial    TrustLevel = "official"
+	TrustLevelVerified    TrustLevel = "verified"
+	TrustLevelCommunity   TrustLevel = "community"
+	TrustLevelUntrusted   TrustLevel = "untrusted"
+	TrustLevelUserTrusted TrustLevel = "user_trusted"
+	TrustLevelDevelopment TrustLevel = "development"
+	TrustLevelBlocked     TrustLevel = "blocked"
+	TrustLevelRevoked     TrustLevel = "revoked"
 )
 
 type ContributionTag string
@@ -52,29 +59,52 @@ const (
 )
 
 type ExtensionCard struct {
-	ExtensionID          string            `json:"extensionId"`
-	Publisher            string            `json:"publisher"`
-	DisplayName          string            `json:"displayName"`
-	Description          string            `json:"description"`
-	Version              string            `json:"version"`
-	PackageURI           string            `json:"packageUri,omitempty"`
-	Hash                 string            `json:"hash,omitempty"`
-	ArtifactID           string            `json:"artifactId,omitempty"`
-	Icon                 string            `json:"icon,omitempty"`
-	Trust                TrustLevel        `json:"trust"`
-	Status               ExtensionStatus   `json:"status"`
-	Enabled              bool              `json:"enabled"`
-	UpdateAvailable      bool              `json:"updateAvailable"`
-	ContributionTags     []ContributionTag `json:"contributionTags"`
-	ProvidedCapabilities []string          `json:"providedCapabilities,omitempty"`
-	Platforms            []string          `json:"platforms"`
-	FailureCount         int               `json:"failureCount"`
-	PermissionRisk       string            `json:"permissionRisk,omitempty"`
-	DevMode              bool              `json:"devMode"`
-	UserModified         bool              `json:"userModified"`
-	Source               string            `json:"source"`
-	InstalledAt          *time.Time        `json:"installedAt,omitempty"`
-	UpdatedAt            *time.Time        `json:"updatedAt,omitempty"`
+	ExtensionID          string                                        `json:"extensionId"`
+	InstallationID       string                                        `json:"installationId,omitempty"`
+	Generation           int64                                         `json:"generation,omitempty"`
+	Publisher            string                                        `json:"publisher"`
+	DisplayName          string                                        `json:"displayName"`
+	Description          string                                        `json:"description"`
+	Version              string                                        `json:"version"`
+	LatestVersion        string                                        `json:"latestVersion,omitempty"`
+	PackageURI           string                                        `json:"packageUri,omitempty"`
+	Hash                 string                                        `json:"hash,omitempty"`
+	ArtifactID           string                                        `json:"artifactId,omitempty"`
+	Icon                 string                                        `json:"icon,omitempty"`
+	Trust                TrustLevel                                    `json:"trust"`
+	Status               ExtensionStatus                               `json:"status"`
+	Enabled              bool                                          `json:"enabled"`
+	UpdateAvailable      bool                                          `json:"updateAvailable"`
+	Update               *package_distribution.ExtensionUpdateMetadata `json:"update,omitempty"`
+	RollbackAvailable    bool                                          `json:"rollbackAvailable"`
+	ContributionTags     []ContributionTag                             `json:"contributionTags"`
+	ProvidedCapabilities []string                                      `json:"providedCapabilities,omitempty"`
+	Platforms            []string                                      `json:"platforms"`
+	FailureCount         int                                           `json:"failureCount"`
+	PermissionRisk       string                                        `json:"permissionRisk,omitempty"`
+	DevMode              bool                                          `json:"devMode"`
+	UserModified         bool                                          `json:"userModified"`
+	Source               string                                        `json:"source"`
+	Placement            string                                        `json:"placement,omitempty"`
+	SystemManaged        bool                                          `json:"systemManaged"`
+	Permissions          []string                                      `json:"permissions,omitempty"`
+	MissingPermissions   []string                                      `json:"missingPermissions,omitempty"`
+	Actions              []CardAction                                  `json:"actions"`
+	Diagnostics          []CardDiagnostic                              `json:"diagnostics,omitempty"`
+	InstalledAt          *time.Time                                    `json:"installedAt,omitempty"`
+	UpdatedAt            *time.Time                                    `json:"updatedAt,omitempty"`
+}
+
+type CardAction struct {
+	ActionID  string `json:"actionId"`
+	Available bool   `json:"available"`
+	Reason    string `json:"reason,omitempty"`
+}
+
+type CardDiagnostic struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+	Source  string `json:"source,omitempty"`
 }
 
 type CenterFilter struct {
@@ -98,13 +128,17 @@ const (
 )
 
 type CenterView struct {
-	Installed    []ExtensionCard `json:"installed"`
-	Discover     []ExtensionCard `json:"discover"`
-	LocalImports []ExtensionCard `json:"localImports"`
-	Dev          []ExtensionCard `json:"dev"`
-	Updates      []ExtensionCard `json:"updates"`
-	NeedsAction  []ExtensionCard `json:"needsAction"`
-	GeneratedAt  time.Time       `json:"generatedAt"`
+	SchemaVersion int              `json:"schemaVersion"`
+	TargetMode    string           `json:"targetMode"`
+	Installed     []ExtensionCard  `json:"installed"`
+	Discover      []ExtensionCard  `json:"discover"`
+	LocalImports  []ExtensionCard  `json:"localImports"`
+	Dev           []ExtensionCard  `json:"dev"`
+	Updates       []ExtensionCard  `json:"updates"`
+	NeedsAction   []ExtensionCard  `json:"needsAction"`
+	GeneratedAt   time.Time        `json:"generatedAt"`
+	Partial       bool             `json:"partial"`
+	Errors        []CardDiagnostic `json:"errors,omitempty"`
 }
 
 type CardProvider interface {
@@ -112,18 +146,33 @@ type CardProvider interface {
 }
 
 type CenterService struct {
-	mu       sync.RWMutex
-	provider CardProvider
-	cache    []ExtensionCard
-	cacheAt  time.Time
-	cacheTTL time.Duration
+	mu         sync.RWMutex
+	provider   CardProvider
+	cache      []ExtensionCard
+	cacheAt    time.Time
+	cacheTTL   time.Duration
+	targetMode string
 }
 
 func NewCenterService(provider CardProvider) *CenterService {
 	return &CenterService{
-		provider: provider,
-		cacheTTL: 5 * time.Second,
+		provider:   provider,
+		cacheTTL:   5 * time.Second,
+		targetMode: "current",
 	}
+}
+
+func (s *CenterService) SetTargetMode(targetMode string) {
+	if s == nil {
+		return
+	}
+	targetMode = strings.TrimSpace(targetMode)
+	if targetMode == "" {
+		targetMode = "current"
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.targetMode = targetMode
 }
 
 var (
@@ -138,19 +187,45 @@ func (s *CenterService) GetView(ctx context.Context, filter CenterFilter, sortKe
 	filtered := applyFilter(cards, filter)
 	sorted := applySort(filtered, sortKey)
 
-	view := &CenterView{GeneratedAt: time.Now().UTC()}
+	s.mu.RLock()
+	targetMode := s.targetMode
+	s.mu.RUnlock()
+	view := &CenterView{
+		SchemaVersion: 1,
+		TargetMode:    targetMode,
+		Installed:     []ExtensionCard{},
+		Discover:      []ExtensionCard{},
+		LocalImports:  []ExtensionCard{},
+		Dev:           []ExtensionCard{},
+		Updates:       []ExtensionCard{},
+		NeedsAction:   []ExtensionCard{},
+		GeneratedAt:   time.Now().UTC(),
+		Errors:        []CardDiagnostic{},
+	}
+	seenDiagnostics := make(map[string]bool)
 	for _, card := range sorted {
+		if len(card.Diagnostics) > 0 {
+			view.Partial = true
+			for _, diagnostic := range card.Diagnostics {
+				key := diagnostic.Code + "\x00" + diagnostic.Source + "\x00" + diagnostic.Message
+				if seenDiagnostics[key] {
+					continue
+				}
+				seenDiagnostics[key] = true
+				view.Errors = append(view.Errors, diagnostic)
+			}
+		}
 		switch {
+		case card.Status == ExtensionStatusFailed || card.Status == ExtensionStatusNeedsPermission ||
+			card.Status == ExtensionStatusMissingDependency || card.Status == ExtensionStatusIncompatible ||
+			card.Status == ExtensionStatusQuarantined:
+			view.NeedsAction = append(view.NeedsAction, card)
 		case card.DevMode:
 			view.Dev = append(view.Dev, card)
 		case card.UpdateAvailable:
 			view.Updates = append(view.Updates, card)
 		case card.Status == ExtensionStatusNotInstalled:
 			view.Discover = append(view.Discover, card)
-		case card.Status == ExtensionStatusFailed || card.Status == ExtensionStatusNeedsPermission ||
-			card.Status == ExtensionStatusMissingDependency || card.Status == ExtensionStatusIncompatible ||
-			card.Status == ExtensionStatusQuarantined:
-			view.NeedsAction = append(view.NeedsAction, card)
 		case card.Status == ExtensionStatusInstalling || card.Status == ExtensionStatusUpdating:
 			view.LocalImports = append(view.LocalImports, card)
 		case card.Source == "local_import":
@@ -184,37 +259,6 @@ func (s *CenterService) ListDiscoverable(ctx context.Context) ([]ExtensionCard, 
 	out := make([]ExtensionCard, 0)
 	for _, card := range cards {
 		if card.Status == ExtensionStatusNotInstalled && card.Source != "dev" {
-			out = append(out, card)
-		}
-	}
-	return out, nil
-}
-
-func (s *CenterService) ListUpdates(ctx context.Context) ([]ExtensionCard, error) {
-	cards, err := s.getCards(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]ExtensionCard, 0)
-	for _, card := range cards {
-		if card.UpdateAvailable {
-			out = append(out, card)
-		}
-	}
-	return out, nil
-}
-
-func (s *CenterService) ListNeedsAction(ctx context.Context) ([]ExtensionCard, error) {
-	cards, err := s.getCards(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]ExtensionCard, 0)
-	for _, card := range cards {
-		switch card.Status {
-		case ExtensionStatusFailed, ExtensionStatusNeedsPermission,
-			ExtensionStatusMissingDependency, ExtensionStatusIncompatible,
-			ExtensionStatusQuarantined:
 			out = append(out, card)
 		}
 	}
@@ -320,8 +364,14 @@ func trustRank(t TrustLevel) int {
 		return 3
 	case TrustLevelCommunity:
 		return 2
+	case TrustLevelUserTrusted:
+		return 3
+	case TrustLevelDevelopment:
+		return 1
 	case TrustLevelUntrusted:
 		return 1
+	case TrustLevelBlocked, TrustLevelRevoked:
+		return 0
 	}
 	return 0
 }

@@ -108,27 +108,28 @@ const emit = defineEmits<{
 
 const expanded = ref(false);
 const workspaces = computed(() => props.project.workspaces || []);
+const dynamicProjectAccessKeys = "BCDEFGHIJKLMQSTUVWYZ0123456789";
 const projectCommands = computed(() => {
   const project = props.project;
-  const result: Array<{ command: string; label: string; disabled?: boolean; divided?: boolean }> = [
-    { command: "newChat", label: "新建对话", disabled: !project.available || project.readOnly },
+  const result: Array<{ command: string; label: string; accessKey?: string; disabled?: boolean; divided?: boolean }> = [
+    { command: "newChat", label: "新建对话", accessKey: "N", disabled: !project.available || project.readOnly },
   ];
   if (!project.readOnly) result.push(
-    { command: "rename", label: "重命名项目" },
-    { command: "addWorkspace", label: workspaces.value.length ? "添加子工作区" : "添加主工作区" },
+    { command: "rename", label: "重命名项目", accessKey: "R" },
+    { command: "addWorkspace", label: workspaces.value.length ? "添加子工作区" : "添加主工作区", accessKey: "A" },
   );
-  for (const workspace of workspaces.value) result.push({ command: `primary:${workspace.id}`, label: `${workspace.id === project.primaryWorkspaceId ? "主工作区" : "子工作区"}：${workspace.name}${workspace.id === project.primaryWorkspaceId ? "" : "（设为主工作区）"}`, disabled: workspace.id === project.primaryWorkspaceId });
-  for (const workspace of workspaces.value) result.push({ command: `removeWorkspace:${workspace.id}`, label: `移除工作区：${workspace.name}` });
-  if (!project.readOnly) result.push({ command: "pin", label: project.pinnedAt ? "取消置顶" : "置顶" });
-  result.push({ command: "open", label: "在资源管理器中打开主工作区", disabled: !project.available });
-  if (!project.readOnly) result.push({ command: "remove", label: "从侧边栏移除", divided: true });
+  for (const [index, workspace] of workspaces.value.entries()) result.push({ command: `primary:${workspace.id}`, label: `${workspace.id === project.primaryWorkspaceId ? "主工作区" : "子工作区"}：${workspace.name}${workspace.id === project.primaryWorkspaceId ? "" : "（设为主工作区）"}`, accessKey: dynamicProjectAccessKeys[index], disabled: workspace.id === project.primaryWorkspaceId });
+  for (const [index, workspace] of workspaces.value.entries()) result.push({ command: `removeWorkspace:${workspace.id}`, label: `移除工作区：${workspace.name}`, accessKey: dynamicProjectAccessKeys[workspaces.value.length + index] });
+  if (!project.readOnly) result.push({ command: "pin", label: project.pinnedAt ? "取消置顶" : "置顶", accessKey: "P" });
+  result.push({ command: "open", label: "在资源管理器中打开主工作区", accessKey: "O", disabled: !project.available });
+  if (!project.readOnly) result.push({ command: "remove", label: "从侧边栏移除", accessKey: "X", divided: true });
   return result;
 });
 function openProjectContextMenu(event: MouseEvent) {
   if (!isDesktopShell()) return;
   event.preventDefault();
   event.stopPropagation();
-  openContextMenu({ x: event.clientX, y: event.clientY, title: props.project.name, items: projectCommands.value.map((item) => ({ id: item.command, label: item.label, disabled: item.disabled, separatorBefore: item.divided, action: () => emit("command", props.project, item.command) })) });
+  openContextMenu({ x: event.clientX, y: event.clientY, title: props.project.name, items: projectCommands.value.map((item) => ({ id: item.command, label: item.label, accessKey: item.accessKey, disabled: item.disabled, separatorBefore: item.divided, action: () => emit("command", props.project, item.command) })) });
 }
 const {
   visible: visibleConversations,

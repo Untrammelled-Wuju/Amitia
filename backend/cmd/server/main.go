@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/u-ai/backend/internal/conversationstream"
+	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/mindruntime"
@@ -198,7 +199,10 @@ func main() {
 	}
 
 	logDir := util.RuntimeLogDir(runtimeRoot)
-	log.InitLogger(logDir)
+	if err := log.InitLogger(logDir); err != nil {
+		fmt.Fprintf(os.Stderr, "initialize log: %v\n", err)
+		os.Exit(1)
+	}
 
 	paths := util.DetectRuntimePaths(config.AppCfg.Storage.DataDir)
 	log.Info("Runtime Root: ", paths.Root)
@@ -517,6 +521,9 @@ func startCoreWorkers(appCtx context.Context, services *AppServices, r *http.Ser
 	if services.OwnedBusiness != nil {
 		go services.OwnedBusiness.RunMemoryWorker(appCtx)
 		go services.OwnedBusiness.RunContinuityWorker(appCtx)
+		if services.LocalSpaceID != "" && services.LocalDeviceID != "" {
+			go services.OwnedBusiness.RunMemoryConsolidationWorker(appCtx, business.Request{SpaceID: services.LocalSpaceID, DeviceID: services.LocalDeviceID, TargetDeviceID: services.LocalDeviceID, CoreID: services.LocalSpaceID})
+		}
 	}
 	if services.DeviceMesh != nil {
 		for _, source := range []coordination.DataPort{services.DeviceMesh.CoreDataPort, services.DeviceMesh.LocalDeviceDataPort} {

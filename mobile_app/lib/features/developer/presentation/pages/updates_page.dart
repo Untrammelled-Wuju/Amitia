@@ -357,7 +357,7 @@ class _UpdatesPageState extends ConsumerState<UpdatesPage> {
   Future<void> _loadExtensions() async {
     if (mounted) setState(() => _extensionsLoading = true);
     try {
-      final items = await ref.read(extensionServiceProvider).kernelExtensions();
+      final items = await ref.read(extensionServiceProvider).centerExtensions();
       if (!mounted) return;
       setState(() {
         _extensions = items;

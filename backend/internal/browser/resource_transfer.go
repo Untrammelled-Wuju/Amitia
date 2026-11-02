@@ -474,7 +474,15 @@ func (r *productionResourceTransfer) Screenshot(ctx context.Context, request Bro
 	if sessionID == "" {
 		if engine := r.tabMgr.engine(); engine != nil {
 			pc := engine.Pages().(*chromiumPageController)
-			sessionID = pc.ensureSession(ctx, client, resolved.TargetID)
+			var sessionErr error
+			sessionID, sessionErr = pc.ensureSessionWithError(ctx, client, resolved.TargetID)
+			if sessionErr != nil {
+				return nil, &BrowserError{
+					Code:    ErrCodeScreenshotFailed,
+					Message: "failed to attach screenshot session: " + sessionErr.Error(),
+					Cause:   sessionErr,
+				}
+			}
 		}
 	}
 	if sessionID == "" {
@@ -668,7 +676,11 @@ func (r *productionResourceTransfer) ScreenshotBytes(ctx context.Context, reques
 	if sessionID == "" {
 		if engine := r.tabMgr.engine(); engine != nil {
 			if controller, ok := engine.Pages().(*chromiumPageController); ok {
-				sessionID = controller.ensureSession(ctx, client, resolved.TargetID)
+				var sessionErr error
+				sessionID, sessionErr = controller.ensureSessionWithError(ctx, client, resolved.TargetID)
+				if sessionErr != nil {
+					return nil, &BrowserError{Code: ErrCodeScreenshotFailed, Message: "attach screenshot session failed: " + sessionErr.Error(), Cause: sessionErr}
+				}
 			}
 		}
 	}
@@ -714,7 +726,11 @@ func (r *productionResourceTransfer) inputTarget(ctx context.Context, session Br
 	if cdpSession == "" {
 		if engine := r.tabMgr.engine(); engine != nil {
 			if controller, ok := engine.Pages().(*chromiumPageController); ok {
-				cdpSession = controller.ensureSession(ctx, client, resolved.TargetID)
+				var sessionErr error
+				cdpSession, sessionErr = controller.ensureSessionWithError(ctx, client, resolved.TargetID)
+				if sessionErr != nil {
+					return nil, "", &BrowserError{Code: ErrCodeBrowserRuntimeNotReady, Message: "attach browser input session failed: " + sessionErr.Error(), Cause: sessionErr}
+				}
 			}
 		}
 	}

@@ -27,7 +27,11 @@ import {
 } from "./path-manager";
 import { ensureDesktopInstanceID } from "./desktop-identity";
 import { registerAppProtocol } from "./app-protocol";
-import { registerUpdateManager, waitForStartupCheck } from "./update-manager";
+import {
+  closeUpdateLogger,
+  registerUpdateManager,
+  waitForStartupCheck,
+} from "./update-manager";
 import { ipcMain } from "electron";
 import { IPC_CHANNELS } from "../shared/ipc";
 import { applyBrandTheme } from "./branding";
@@ -249,6 +253,7 @@ if (!lock) {
     void shutdownRuntime().finally(() => {
       coreStopped = true;
       closeLogger();
+      closeUpdateLogger();
       app.quit();
     });
   });
@@ -257,6 +262,7 @@ if (!lock) {
     clearStartupTimer();
     closeSplashWindow();
     closeLogger();
+    closeUpdateLogger();
   });
 
   app.on("activate", () => {
@@ -353,7 +359,6 @@ async function enterMainApp(): Promise<void> {
   const autoLaunch = await configStore.getAutoLaunch();
   app.setLoginItemSettings({ openAtLogin: autoLaunch });
   registerUpdateManager(mainWindow, { prepareForInstall: prepareForUpdateInstall });
-  void waitForStartupCheck();
 
   console.log(`[AmitiaDesktop] Deployment Mode: ${currentConfig.mode}`);
   if (currentConfig.mode === "cloud") {
@@ -397,6 +402,11 @@ async function enterMainApp(): Promise<void> {
   try {
     await revealMainWindow(mainWin);
     mainWindowReady = true;
+    setTimeout(() => {
+      if (!quitting && !startupFailureHandled && !mainWin.isDestroyed()) {
+        void waitForStartupCheck();
+      }
+    }, 1000);
   } finally {
     closeSplashWindow();
     clearStartupTimer();

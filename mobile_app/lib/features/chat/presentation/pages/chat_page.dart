@@ -132,50 +132,53 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         : 'draft:${DateTime.now().microsecondsSinceEpoch}';
     _runtime = _runtimeRegistry.session(_runtimeSessionKey);
     unawaited(
-      ref
-          .read(chatInputPreferencesProvider.notifier)
-          .init()
-          .catchError((Object error, StackTrace stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}),
+      ref.read(chatInputPreferencesProvider.notifier).init().catchError((
+        Object error,
+        StackTrace stackTrace,
+      ) {
+        print("[original-error] $error\n$stackTrace");
+      }),
     );
     unawaited(
-      ref
-          .read(chatAppearancePreferencesProvider.notifier)
-          .init()
-          .catchError((Object error, StackTrace stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}),
+      ref.read(chatAppearancePreferencesProvider.notifier).init().catchError((
+        Object error,
+        StackTrace stackTrace,
+      ) {
+        print("[original-error] $error\n$stackTrace");
+      }),
     );
     _lastDraftEpoch = _runtime.draftEpoch;
     unawaited(
-      ref
-          .read(aiNamePreferencesProvider.notifier)
-          .init()
-          .catchError((Object error, StackTrace stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}),
+      ref.read(aiNamePreferencesProvider.notifier).init().catchError((
+        Object error,
+        StackTrace stackTrace,
+      ) {
+        print("[original-error] $error\n$stackTrace");
+      }),
     );
     unawaited(
-      ref
-          .read(aiAvatarPreferencesProvider.notifier)
-          .init()
-          .catchError((Object error, StackTrace stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}),
+      ref.read(aiAvatarPreferencesProvider.notifier).init().catchError((
+        Object error,
+        StackTrace stackTrace,
+      ) {
+        print("[original-error] $error\n$stackTrace");
+      }),
     );
     unawaited(
-      ref.read(aiAvatarShapeProvider.notifier).init().catchError((Object error, StackTrace stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}),
+      ref.read(aiAvatarShapeProvider.notifier).init().catchError((
+        Object error,
+        StackTrace stackTrace,
+      ) {
+        print("[original-error] $error\n$stackTrace");
+      }),
     );
     unawaited(
-      ref
-          .read(userMessageMaterialProvider.notifier)
-          .init()
-          .catchError((Object error, StackTrace stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}),
+      ref.read(userMessageMaterialProvider.notifier).init().catchError((
+        Object error,
+        StackTrace stackTrace,
+      ) {
+        print("[original-error] $error\n$stackTrace");
+      }),
     );
     _lastConversationUpdateEpoch = _runtime.conversationUpdateEpoch;
     _lastSidebarConversationId = _runtime.conversationId?.trim() ?? '';
@@ -358,8 +361,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               ),
       );
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-if (mounted) _runtime.setWorkspace(null);
+      print("[original-error] $error\n$stackTrace");
+      if (mounted) _runtime.setWorkspace(null);
     }
   }
 
@@ -617,8 +620,8 @@ if (mounted) _runtime.setWorkspace(null);
         try {
           await ref.read(workspaceServiceProvider).listLocal();
         } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+          print("[original-error] $error\n$stackTrace");
+        }
       ref.invalidate(conversationSidebarProvider);
       final sidebar = await ref.read(conversationSidebarProvider.future);
       if (!mounted) return;
@@ -646,8 +649,8 @@ if (mounted) _runtime.setWorkspace(null);
             .toList(growable: false);
       });
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-if (!mounted) return;
+      print("[original-error] $error\n$stackTrace");
+      if (!mounted) return;
       _cachedProviderContext = null;
       setState(() => _recentWorkspaces = const <WorkspaceMountDto>[]);
     }
@@ -720,8 +723,8 @@ if (!mounted) return;
       try {
         await ref.read(workspaceServiceProvider).touchLocal(mount.id);
       } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+        print("[original-error] $error\n$stackTrace");
+      }
       await _refreshRecentWorkspaces();
     } catch (error) {
       if (mounted) amitiaSnackBar(context, '切换工作目录失败：$error');
@@ -2415,8 +2418,8 @@ if (!mounted) return;
               sort: 'recently_used',
             );
       } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-return const <MemoryDto>[];
+        print("[original-error] $error\n$stackTrace");
+        return const <MemoryDto>[];
       }
     }
 
@@ -2426,8 +2429,8 @@ return const <MemoryDto>[];
             .read(profileServiceProvider)
             .list(characterId: characterId, page: 1, pageSize: 5);
       } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-return const <ProfileDto>[];
+        print("[original-error] $error\n$stackTrace");
+        return const <ProfileDto>[];
       }
     }
 
@@ -2439,8 +2442,8 @@ return const <ProfileDto>[];
                 .chatCompressionStatus(conversationId) ??
             const <String, dynamic>{};
       } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-return const <String, dynamic>{};
+        print("[original-error] $error\n$stackTrace");
+        return const <String, dynamic>{};
       }
     }
 
@@ -2449,8 +2452,8 @@ return const <String, dynamic>{};
         return await ref.read(systemServiceProvider).pipelineStatus() ??
             const <String, dynamic>{};
       } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-return const <String, dynamic>{};
+        print("[original-error] $error\n$stackTrace");
+        return const <String, dynamic>{};
       }
     }
 
@@ -3014,13 +3017,16 @@ return const <String, dynamic>{};
                   _runtime
                       .updateModelSettings(modelId, effort, enabled)
                       .catchError((Object error, StackTrace stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-});
+                        print("[original-error] $error\n$stackTrace");
+                      });
                 },
                 onPermissionChanged: (mode) {
-                  _runtime.updatePermissionMode(mode).catchError((Object error, StackTrace stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-});
+                  _runtime.updatePermissionMode(mode).catchError((
+                    Object error,
+                    StackTrace stackTrace,
+                  ) {
+                    print("[original-error] $error\n$stackTrace");
+                  });
                 },
                 onSend: _onSend,
                 onStop: _runtime.stop,
@@ -3538,8 +3544,14 @@ return const <String, dynamic>{};
                   isScrollControlled: true,
                   useSafeArea: true,
                   showDragHandle: true,
+                  backgroundColor: Theme.of(context).colorScheme.surface,
+                  shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(16),
+                    ),
+                  ),
                   builder: (sheetContext) => SizedBox(
-                    height: MediaQuery.sizeOf(sheetContext).height * 0.8,
+                    height: MediaQuery.sizeOf(sheetContext).height * 0.92,
                     child: WorkbenchPage(
                       characterId: characterId,
                       conversationId: conversationId,
@@ -3550,6 +3562,7 @@ return const <String, dynamic>{};
                             builder: (_) => WorkbenchPage(
                               conversationId: conversationId,
                               characterId: characterId,
+                              fullscreen: true,
                             ),
                           ),
                         );
@@ -4466,8 +4479,8 @@ String _turnErrorDetail(AssistantTurnDto? turn) {
   try {
     decoded = jsonDecode(item.resultJson);
   } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-return error.toString();
+    print("[original-error] $error\n$stackTrace");
+    return error.toString();
   }
   if (decoded is! Map) {
     return item.errorCode.trim().isNotEmpty ? item.errorCode : '网络错误';
@@ -4478,8 +4491,8 @@ return error.toString();
     try {
       return jsonEncode(value);
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-return value.toString().trim();
+      print("[original-error] $error\n$stackTrace");
+      return value.toString().trim();
     }
   }
 

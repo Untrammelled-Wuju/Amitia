@@ -63,4 +63,43 @@ func TestLifecycleDecayProtectionAndReinforcement(t *testing.T) {
 	if strong.RetentionLevel != 1 || strong.ReinforceCount < 2 || strong.MemoryStrength <= .8 {
 		t.Fatalf("reinforcement=%+v", strong)
 	}
+	if strong.ReviewCount < 5 || strong.NextReviewAt == "" || strong.Difficulty >= .5 || strong.StabilityDays <= 90 {
+		t.Fatalf("review schedule=%+v", strong)
+	}
+}
+
+func TestDurableMemoryBecomesDormantWithoutArchiving(t *testing.T) {
+	now := time.Date(2026, 10, 13, 0, 0, 0, 0, time.UTC)
+	document := map[string]json.RawMessage{
+		"kind":    json.RawMessage(`"fact"`),
+		"content": json.RawMessage(`{"value":"稳定事实","memoryType":"fact","importance":5}`),
+	}
+	state := NewLifecycleWithPolicy(DecayPolicyDurable, 5, false, 1, now)
+	WriteLifecycle(document, state)
+	later := state.Effective(now.Add(365 * 24 * time.Hour))
+	if later.DecayState != "dormant" || later.DecayPolicy != DecayPolicyDurable {
+		t.Fatalf("durable state=%+v", later)
+	}
+	revived := later.Reinforce(now.Add(366 * 24 * time.Hour))
+	if revived.DecayState != "active" || revived.MemoryStrength <= later.MemoryStrength {
+		t.Fatalf("revived state=%+v", revived)
+	}
+}
+
+func TestLifecycleInfersPolicyFromStoredMemory(t *testing.T) {
+	now := time.Date(2026, 10, 13, 0, 0, 0, 0, time.UTC)
+	durable := map[string]json.RawMessage{
+		"kind":    json.RawMessage(`"profile"`),
+		"content": json.RawMessage(`{"value":"用户画像","memoryType":"preference","importance":5}`),
+	}
+	episodic := map[string]json.RawMessage{
+		"kind":    json.RawMessage(`"episodic"`),
+		"content": json.RawMessage(`{"value":"一次事件","memoryType":"episodic","importance":5}`),
+	}
+	if policy := ReadLifecycle(durable, now).DecayPolicy; policy != DecayPolicyDurable {
+		t.Fatalf("durable policy=%s", policy)
+	}
+	if policy := ReadLifecycle(episodic, now).DecayPolicy; policy != DecayPolicyEpisodic {
+		t.Fatalf("episodic policy=%s", policy)
+	}
 }

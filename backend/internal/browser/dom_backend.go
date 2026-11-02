@@ -36,6 +36,44 @@ type domNode struct {
 	DocumentURL    string
 }
 
+type cdpDOMNode struct {
+	NodeID         int64        `json:"nodeId"`
+	BackendNodeID  int64        `json:"backendNodeId"`
+	NodeType       int          `json:"nodeType"`
+	NodeName       string       `json:"nodeName"`
+	LocalName      string       `json:"localName"`
+	NodeValue      string       `json:"nodeValue"`
+	ChildNodeCount int          `json:"childNodeCount"`
+	FrameID        string       `json:"frameId"`
+	DocumentURL    string       `json:"documentURL"`
+	Attributes     []string     `json:"attributes"`
+	Children       []cdpDOMNode `json:"children"`
+}
+
+func convertCDPDOMNode(source cdpDOMNode) *domNode {
+	attrs := map[string]string{}
+	for i := 0; i < len(source.Attributes)-1; i += 2 {
+		attrs[source.Attributes[i]] = source.Attributes[i+1]
+	}
+	node := &domNode{
+		NodeID:         fmt.Sprintf("%d", source.NodeID),
+		BackendNodeID:  BackendNodeID(source.BackendNodeID),
+		NodeType:       source.NodeType,
+		NodeName:       source.NodeName,
+		LocalName:      source.LocalName,
+		NodeValue:      source.NodeValue,
+		ChildNodeCount: source.ChildNodeCount,
+		Attributes:     attrs,
+		FrameID:        source.FrameID,
+		DocumentURL:    source.DocumentURL,
+	}
+	node.Children = make([]*domNode, 0, len(source.Children))
+	for _, child := range source.Children {
+		node.Children = append(node.Children, convertCDPDOMNode(child))
+	}
+	return node
+}
+
 type chromiumDOMBackend struct {
 	engine *chromiumEngine
 }
@@ -85,15 +123,15 @@ func (b *chromiumDOMBackend) sessionFor(targetID TargetID) string {
 	return b.engine.Pages().(*chromiumPageController).getSession(targetID)
 }
 
-func (b *chromiumDOMBackend) ensureSession(ctx context.Context, targetID TargetID) string {
+func (b *chromiumDOMBackend) ensureSession(ctx context.Context, targetID TargetID) (string, error) {
 	if b.engine == nil {
-		return ""
+		return "", fmt.Errorf("browser engine is unavailable")
 	}
 	client := b.GetClient()
 	if client == nil {
-		return ""
+		return "", fmt.Errorf("CDP client not available")
 	}
-	return b.engine.Pages().(*chromiumPageController).ensureSession(ctx, client, targetID)
+	return b.engine.Pages().(*chromiumPageController).ensureSessionWithError(ctx, client, targetID)
 }
 
 func (b *chromiumDOMBackend) GetDocument(ctx context.Context, targetID TargetID, depth int) (*domNode, error) {
@@ -101,9 +139,9 @@ func (b *chromiumDOMBackend) GetDocument(ctx context.Context, targetID TargetID,
 	if client == nil {
 		return nil, fmt.Errorf("CDP client not available")
 	}
-	sessionID := b.ensureSession(ctx, targetID)
-	if sessionID == "" {
-		return nil, fmt.Errorf("failed to ensure session for target %s", targetID)
+	sessionID, sessionErr := b.ensureSession(ctx, targetID)
+	if sessionErr != nil {
+		return nil, fmt.Errorf("failed to ensure session for target %s: %w", targetID, sessionErr)
 	}
 
 	if err := client.Call(ctx, "DOM.enable", sessionID, nil, nil); err != nil {
@@ -115,71 +153,13 @@ func (b *chromiumDOMBackend) GetDocument(ctx context.Context, targetID TargetID,
 		"pierce": false,
 	}
 	var result struct {
-		Root struct {
-			NodeID         int64    `json:"nodeId"`
-			BackendNodeID  int64    `json:"backendNodeId"`
-			NodeType       int      `json:"nodeType"`
-			NodeName       string   `json:"nodeName"`
-			LocalName      string   `json:"localName"`
-			NodeValue      string   `json:"nodeValue"`
-			ChildNodeCount int      `json:"childNodeCount"`
-			FrameID        string   `json:"frameId"`
-			DocumentURL    string   `json:"documentURL"`
-			Attributes     []string `json:"attributes"`
-			Children       []struct {
-				NodeID         int64    `json:"nodeId"`
-				BackendNodeID  int64    `json:"backendNodeId"`
-				NodeType       int      `json:"nodeType"`
-				NodeName       string   `json:"nodeName"`
-				LocalName      string   `json:"localName"`
-				NodeValue      string   `json:"nodeValue"`
-				ChildNodeCount int      `json:"childNodeCount"`
-				FrameID        string   `json:"frameId"`
-				DocumentURL    string   `json:"documentURL"`
-				Attributes     []string `json:"attributes"`
-			} `json:"children"`
-		} `json:"root"`
+		Root cdpDOMNode `json:"root"`
 	}
 	if err := client.Call(ctx, "DOM.getDocument", sessionID, params, &result); err != nil {
 		return nil, fmt.Errorf("DOM.getDocument failed: %w", err)
 	}
 
-	root := result.Root
-	attrs := map[string]string{}
-	for i := 0; i < len(root.Attributes)-1; i += 2 {
-		attrs[root.Attributes[i]] = root.Attributes[i+1]
-	}
-	node := &domNode{
-		NodeID:         fmt.Sprintf("%d", root.NodeID),
-		BackendNodeID:  BackendNodeID(root.BackendNodeID),
-		NodeType:       root.NodeType,
-		NodeName:       root.NodeName,
-		LocalName:      root.LocalName,
-		NodeValue:      root.NodeValue,
-		ChildNodeCount: root.ChildNodeCount,
-		Attributes:     attrs,
-		FrameID:        root.FrameID,
-		DocumentURL:    root.DocumentURL,
-	}
-	for _, child := range root.Children {
-		childAttrs := map[string]string{}
-		for i := 0; i < len(child.Attributes)-1; i += 2 {
-			childAttrs[child.Attributes[i]] = child.Attributes[i+1]
-		}
-		node.Children = append(node.Children, &domNode{
-			NodeID:         fmt.Sprintf("%d", child.NodeID),
-			BackendNodeID:  BackendNodeID(child.BackendNodeID),
-			NodeType:       child.NodeType,
-			NodeName:       child.NodeName,
-			LocalName:      child.LocalName,
-			NodeValue:      child.NodeValue,
-			ChildNodeCount: child.ChildNodeCount,
-			Attributes:     childAttrs,
-			FrameID:        child.FrameID,
-			DocumentURL:    child.DocumentURL,
-		})
-	}
-	return node, nil
+	return convertCDPDOMNode(result.Root), nil
 }
 
 func (b *chromiumDOMBackend) QuerySelector(ctx context.Context, targetID TargetID, nodeID string, selector string) (string, error) {
@@ -228,39 +208,13 @@ func (b *chromiumDOMBackend) DescribeNode(ctx context.Context, targetID TargetID
 		"nodeId": nodeIDInt,
 	}
 	var result struct {
-		Node struct {
-			NodeID         int64    `json:"nodeId"`
-			BackendNodeID  int64    `json:"backendNodeId"`
-			NodeType       int      `json:"nodeType"`
-			NodeName       string   `json:"nodeName"`
-			LocalName      string   `json:"localName"`
-			NodeValue      string   `json:"nodeValue"`
-			ChildNodeCount int      `json:"childNodeCount"`
-			FrameID        string   `json:"frameId"`
-			DocumentURL    string   `json:"documentURL"`
-			Attributes     []string `json:"attributes"`
-		} `json:"node"`
+		Node cdpDOMNode `json:"node"`
 	}
 	if err := client.Call(ctx, "DOM.describeNode", sessionID, params, &result); err != nil {
 		return nil, fmt.Errorf("DOM.describeNode failed: %w", err)
 	}
 
-	attrs := map[string]string{}
-	for i := 0; i < len(result.Node.Attributes)-1; i += 2 {
-		attrs[result.Node.Attributes[i]] = result.Node.Attributes[i+1]
-	}
-	return &domNode{
-		NodeID:         fmt.Sprintf("%d", result.Node.NodeID),
-		BackendNodeID:  BackendNodeID(result.Node.BackendNodeID),
-		NodeType:       result.Node.NodeType,
-		NodeName:       result.Node.NodeName,
-		LocalName:      result.Node.LocalName,
-		NodeValue:      result.Node.NodeValue,
-		ChildNodeCount: result.Node.ChildNodeCount,
-		Attributes:     attrs,
-		FrameID:        result.Node.FrameID,
-		DocumentURL:    result.Node.DocumentURL,
-	}, nil
+	return convertCDPDOMNode(result.Node), nil
 }
 
 func (b *chromiumDOMBackend) ResolveNode(ctx context.Context, targetID TargetID, backendNodeID BackendNodeID) (string, error) {
@@ -395,9 +349,9 @@ func (b *chromiumDOMBackend) EnableDOM(ctx context.Context, targetID TargetID) e
 	if client == nil {
 		return fmt.Errorf("CDP client not available")
 	}
-	sessionID := b.ensureSession(ctx, targetID)
-	if sessionID == "" {
-		return fmt.Errorf("failed to ensure session for target %s", targetID)
+	sessionID, sessionErr := b.ensureSession(ctx, targetID)
+	if sessionErr != nil {
+		return fmt.Errorf("failed to ensure session for target %s: %w", targetID, sessionErr)
 	}
 	if err := client.Call(ctx, "DOM.enable", sessionID, nil, nil); err != nil {
 		return fmt.Errorf("DOM.enable failed: %w", err)

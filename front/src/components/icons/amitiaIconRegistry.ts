@@ -90,6 +90,26 @@ export const amitiaIconShapes = {
       { cx: 18, cy: 12, r: 1.25, fill: true },
     ],
   },
+  gitBranch: {
+    paths: [
+      "M7 8.2v7.6",
+      "M9.2 6.2h2.8c2.7 0 4.8.9 4.8 3.8",
+    ],
+    circles: [
+      { cx: 7, cy: 5.8, r: 2.1 },
+      { cx: 7, cy: 18.2, r: 2.1 },
+      { cx: 17.2, cy: 10, r: 2.1 },
+    ],
+  },
+  browser: {
+    paths: ["M3.5 8.8h17"],
+    circles: [{ cx: 12, cy: 14.7, r: 3.2 }],
+    rects: [{ x: 3.5, y: 4.7, width: 17, height: 14.8, rx: 2.4 }],
+  },
+  terminal: {
+    paths: ["M7.2 8.8 10.6 12l-3.4 3.2", "M12.4 15.2h4.6"],
+    rects: [{ x: 3.5, y: 4.5, width: 17, height: 15, rx: 2.5 }],
+  },
   newChat: {
     paths: [
       "M9.4 5.2H6.6c-1.6 0-2.4.8-2.4 2.4v9.8c0 1.6.8 2.4 2.4 2.4h9.8c1.6 0 2.4-.8 2.4-2.4v-2.7",

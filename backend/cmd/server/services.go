@@ -109,6 +109,8 @@ import (
 )
 
 type AppServices struct {
+	LocalSpaceID                 string
+	LocalDeviceID                string
 	ModelUsage                   *mindruntime.ModelUsageStore
 	RuntimeProfile               runtimeprofile.Profile
 	RuntimePolicy                runtimeprofile.Policy
@@ -1230,6 +1232,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			inferenceAuthority = deviceMeshRuntime.LocalHandler.LocalInferenceContext
 		}
 		memoryRuntime := &canonicalChatMemoryRuntime{engine: services.OwnedBusiness, spaceID: localSpace.SpaceID(), deviceID: deviceMeshRuntime.LocalDeviceID, begin: inferenceAuthority}
+		services.LocalSpaceID, services.LocalDeviceID = localSpace.SpaceID(), deviceMeshRuntime.LocalDeviceID
 		memoryConsumers.runtime, reflectionMemoryAdapter.runtime = memoryRuntime, memoryRuntime
 		if setter, ok := services.Chat.(interface{ SetOwnedToolRuntime(chat.OwnedToolRuntime) }); ok {
 			setter.SetOwnedToolRuntime(&meshOwnedToolRuntime{services: services, native: nativeMultiAgent})

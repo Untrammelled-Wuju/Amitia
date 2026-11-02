@@ -208,7 +208,18 @@ describe("网页六层记忆的数据归属入口", () => {
     await wrapper.findAll("button").find((button) => button.text() === "编辑")!.trigger("click");
     await wrapper.setProps({ characterId: "new-role" });
     finish({ value: "修改内容" }); await flushPromises();
-    expect(mocks.edit.mock.calls[0]).toEqual([kind, "same-id", { content: kind === "summary" ? { summary: "修改内容", title: "元数据" } : { value: "修改内容", category: "偏好" } }, { characterId: "role", expectedExecutionScope: scope, expectedOwnerId: "source", expectedRevision: 2 }]);
+    expect(mocks.edit.mock.calls[0]).toEqual([kind, "same-id", { content: kind === "summary" ? { summary: "修改内容", title: "元数据" } : { value: "修改内容", category: "偏好" }, ...(kind === "memory" ? { correctionReason: "用户在记忆管理中更正正文" } : {}) }, { characterId: "role", expectedExecutionScope: scope, expectedOwnerId: "source", expectedRevision: 2 }]);
+  });
+  it("记忆确认与争议标记保留原始 Owner、版本和动作语义", async () => {
+    const wrapper = open();
+    await flushPromises();
+    await wrapper.findAll("button").find((button) => button.text() === "确认正确")!.trigger("click");
+    await flushPromises();
+    expect(mocks.edit.mock.calls[0][2]).toMatchObject({ verifiedStatus: "verified", confidence: 100, allowContextUse: true });
+    await wrapper.findAll("button").find((button) => button.text() === "标记有误")!.trigger("click");
+    await flushPromises();
+    expect(mocks.edit.mock.calls[1][2]).toEqual({ verifiedStatus: "disputed" });
+    expect(mocks.edit.mock.calls[1][3]).toMatchObject({ expectedExecutionScope: scope, expectedOwnerId: "source", expectedRevision: 1 });
   });
   it("到期与归档写入原始记忆，并携带原权限及版本", async () => {
     mocks.prompt.mockResolvedValue({ value: "2026-10-08T18:00:00+08:00" });

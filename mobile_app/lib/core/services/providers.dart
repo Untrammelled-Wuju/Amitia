@@ -189,7 +189,7 @@ final kernelExtensionEnablementProvider = FutureProvider<Map<String, bool>>((
     (_) => ref.invalidateSelf(),
   );
   ref.onDispose(subscription.cancel);
-  final items = await ref.read(extensionServiceProvider).kernelExtensions();
+  final items = await ref.read(extensionServiceProvider).centerExtensions();
   return <String, bool>{
     for (final item in items)
       if ((item['extensionId'] ?? '').toString().trim().isNotEmpty)

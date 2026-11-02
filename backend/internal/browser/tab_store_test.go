@@ -178,6 +178,21 @@ func TestTabStoreUpdateTabInfo(t *testing.T) {
 	}
 }
 
+func TestTabStoreUpdateResourcePreservesActiveState(t *testing.T) {
+	store := newTabStore()
+	store.put(&tabRecord{
+		info: BrowserTabInfo{TabID: "bt_a", SessionID: "bs_s1", State: TabStateReady, Active: true},
+	})
+	store.updateTabResource("bt_a", "https://example.com", "Example")
+	record, ok := store.get("bt_a")
+	if !ok {
+		t.Fatal("tab not found")
+	}
+	if record.info.URL != "https://example.com" || record.info.Title != "Example" || !record.info.Active {
+		t.Fatalf("unexpected tab info: %#v", record.info)
+	}
+}
+
 func TestTabStoreClearActive(t *testing.T) {
 	store := newTabStore()
 

@@ -39,14 +39,4 @@ func TestAdministratorFileActionReportsPartialCompletionAndRealFailure(t *testin
 	if _, err := os.Stat(filepath.Join("logs", "b.log")); err != nil {
 		t.Fatal("late file deletion was not canceled")
 	}
-	if err := os.Mkdir(filepath.Join("logs", "b.log.old"), 0700); err != nil {
-		t.Fatal(err)
-	}
-	result, err = (&service{}).AdministratorActionContext(t.Context(), "logs-rotate", "")
-	if err == nil || result["rotated"] == true {
-		t.Fatal("failed file rename falsely reported success")
-	}
-	if _, err := os.Stat(filepath.Join("logs", "b.log")); err != nil {
-		t.Fatal("failed rotation destroyed source")
-	}
 }

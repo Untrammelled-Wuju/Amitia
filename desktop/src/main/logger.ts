@@ -1,9 +1,10 @@
 import path from "path";
-import fs from "fs";
+import { format } from "node:util";
 import { getAmitiaDataDir } from "./path-manager";
 import { recordDesktopClientError } from "./client-diagnostics";
+import { DailySizeRotatingLog } from "./log-rotation";
 
-let logStream: fs.WriteStream | null = null;
+let logWriter: DailySizeRotatingLog | null = null;
 
 function suppressPipeErrors() {
   const onError = (err: NodeJS.ErrnoException) => {
@@ -15,13 +16,10 @@ function suppressPipeErrors() {
 }
 
 export function initLogger(): void {
+  if (logWriter) return;
   suppressPipeErrors();
   const logDir = path.join(getAmitiaDataDir(), "logs");
-  if (!fs.existsSync(logDir)) {
-    fs.mkdirSync(logDir, { recursive: true });
-  }
-  const logPath = path.join(logDir, "electron.log");
-  logStream = fs.createWriteStream(logPath, { flags: "a" });
+  logWriter = new DailySizeRotatingLog(logDir, "electron");
 
   const origLog = console.log;
   const origError = console.error;
@@ -30,15 +28,15 @@ export function initLogger(): void {
     try {
       origLog(...args);
     } catch (error) {
-  console.error("[original-error]", error);
-}
-    if (logStream) {
-      const msg = `[${new Date().toISOString()}] [LOG] ${args.map(String).join(" ")}\n`;
+      reportLoggerFailure("写入标准输出失败", error);
+    }
+    if (logWriter) {
+      const msg = `[${new Date().toISOString()}] [LOG] ${format(...args)}\n`;
       try {
-        logStream.write(msg);
+        logWriter.write(msg);
       } catch (error) {
-  console.error("[original-error]", error);
-}
+        reportLoggerFailure("写入主日志失败", error);
+      }
     }
   };
 
@@ -46,17 +44,17 @@ export function initLogger(): void {
     try {
       origError(...args);
     } catch (error) {
-  console.error("[original-error]", error);
-}
-    if (logStream) {
-      const text = args.map(String).join(" ");
+      reportLoggerFailure("写入标准错误失败", error);
+    }
+    const text = format(...args);
+    if (logWriter) {
       const level = /deprecationwarning/i.test(text) ? "[WARN]" : "[ERROR]";
       const msg = `[${new Date().toISOString()}] ${level} ${text}\n`;
       try {
-        logStream.write(msg);
+        logWriter.write(msg);
       } catch (error) {
-  console.error("[original-error]", error);
-}
+        reportLoggerFailure("写入错误日志失败", error);
+      }
     }
     recordDesktopClientError({
       message: args.map((value) => value instanceof Error ? value.message : String(value)).join(" "),
@@ -67,8 +65,21 @@ export function initLogger(): void {
 }
 
 export function closeLogger(): void {
-  if (logStream) {
-    logStream.end();
-    logStream = null;
+  if (logWriter) {
+    const writer = logWriter;
+    logWriter = null;
+    writer.close();
   }
+}
+
+function reportLoggerFailure(context: string, error: unknown): void {
+  const detail = error instanceof Error
+    ? `${error.name}: ${error.message}\n${error.stack ?? ""}`
+    : String(error);
+  recordDesktopClientError({
+    message: `${context}: ${detail}`,
+    stack: error instanceof Error ? error.stack ?? "" : "",
+    source: "electron:main:logger",
+  });
+  process.stderr.write(`[${new Date().toISOString()}] [ERROR] ${context}: ${detail}\n`);
 }

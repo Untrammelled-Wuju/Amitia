@@ -1,14 +1,15 @@
 import { BrowserWindow, ipcMain, app, shell } from "electron";
 import { autoUpdater, UpdateInfo } from "electron-updater";
-import log from "electron-log";
 import path from "path";
 import fs from "fs";
+import { format } from "node:util";
 import { getAmitiaDataDir, getInstallDir, isDevMode } from "./path-manager";
 import {
   desktopUpdateChannel,
   resolveAllowBetaChannel,
 } from "./update-channel";
 import { installSegmentedFullDownload } from "./segmented-updater";
+import { DailySizeRotatingLog } from "./log-rotation";
 
 let mainWindow: BrowserWindow | null = null;
 let startupResolve: (() => void) | null = null;
@@ -16,27 +17,79 @@ let pendingUpdateInfo: UpdateInfo | null = null;
 let allowBetaChannel = false;
 let installInProgress = false;
 let downloadedUpdateReady = false;
+let updateLogWriter: DailySizeRotatingLog | null = null;
+
+type UpdateInfoWithPresentation = UpdateInfo & {
+  updateTitle?: unknown;
+  highlights?: unknown;
+};
 
 export interface UpdateManagerHooks {
   prepareForInstall?: () => Promise<void>;
 }
 
 const RELEASES_URL = "https://amitia.untrammelled.top/amitia";
-const AUTO_UPDATE_SUPPORTED = process.platform === "win32";
+const UPDATE_TEST_MODE = process.env.AMITIA_UPDATE_TEST_MODE === "1";
+const AUTO_UPDATE_SUPPORTED =
+  process.platform === "win32" || UPDATE_TEST_MODE;
+
+function normalizeHighlights(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => String(item ?? "").trim())
+    .filter(Boolean)
+    .slice(0, 8);
+}
+
+function updatePresentation(info: UpdateInfo) {
+  const extended = info as UpdateInfoWithPresentation;
+  const installerSize = Array.isArray(info.files)
+    ? Number(info.files.find((file) => file.url)?.size)
+    : 0;
+  return {
+    version: info.version,
+    releaseDate: info.releaseDate,
+    releaseNotes: info.releaseNotes,
+    updateTitle:
+      typeof extended.updateTitle === "string"
+        ? extended.updateTitle.trim()
+        : "",
+    highlights: normalizeHighlights(extended.highlights),
+    size: Number.isFinite(installerSize) && installerSize > 0 ? installerSize : 0,
+    channel: allowBetaChannel ? "beta" : "stable",
+    currentVersion: app.getVersion(),
+  };
+}
 
 function updatePreferencePath(): string {
   return path.join(getAmitiaDataDir(), "update-preferences.json");
 }
 
+interface UpdatePreferences {
+  allowBetaChannel?: boolean;
+  skippedVersion?: string;
+}
+
+function readUpdatePreferences(): UpdatePreferences {
+  const file = updatePreferencePath();
+  if (!fs.existsSync(file)) return {};
+  const parsed = JSON.parse(fs.readFileSync(file, "utf-8")) as UpdatePreferences;
+  return parsed && typeof parsed === "object" ? parsed : {};
+}
+
+function writeUpdatePreferences(patch: UpdatePreferences): void {
+  fs.mkdirSync(path.dirname(updatePreferencePath()), { recursive: true });
+  const current = readUpdatePreferences();
+  fs.writeFileSync(
+    updatePreferencePath(),
+    JSON.stringify({ ...current, ...patch }, null, 2),
+    "utf-8",
+  );
+}
+
 function loadAllowBetaChannel(): boolean {
   try {
-    const file = updatePreferencePath();
-    if (!fs.existsSync(file)) {
-      return resolveAllowBetaChannel(undefined, app.getVersion());
-    }
-    const parsed = JSON.parse(fs.readFileSync(file, "utf-8")) as {
-      allowBetaChannel?: boolean;
-    };
+    const parsed = readUpdatePreferences();
     return resolveAllowBetaChannel(parsed.allowBetaChannel, app.getVersion());
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
@@ -47,19 +100,42 @@ function loadAllowBetaChannel(): boolean {
 
 function persistAllowBetaChannel(value: boolean): void {
   try {
-    fs.mkdirSync(path.dirname(updatePreferencePath()), { recursive: true });
-    fs.writeFileSync(
-      updatePreferencePath(),
-      JSON.stringify({ allowBetaChannel: value }, null, 2),
-      "utf-8",
-    );
+    writeUpdatePreferences({ allowBetaChannel: value });
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error("[UpdateManager] 写入更新通道配置失败:", msg);
   }
 }
 
+function loadSkippedVersion(): string {
+  try {
+    const value = readUpdatePreferences().skippedVersion;
+    return typeof value === "string" ? value.trim() : "";
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error("[UpdateManager] 读取跳过版本配置失败:", msg);
+    return "";
+  }
+}
+
+function persistSkippedVersion(version: string): void {
+  try {
+    writeUpdatePreferences({ skippedVersion: version.trim() });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error("[UpdateManager] 写入跳过版本配置失败:", msg);
+  }
+}
+
 function applyChannelPreference(): void {
+  const testFeedUrl = process.env.AMITIA_UPDATE_TEST_FEED_URL?.trim();
+  if (UPDATE_TEST_MODE && testFeedUrl) {
+    autoUpdater.setFeedURL({
+      provider: "generic",
+      url: testFeedUrl,
+      channel: "latest",
+    });
+  }
   autoUpdater.channel = desktopUpdateChannel(allowBetaChannel);
   autoUpdater.allowPrerelease = allowBetaChannel;
   autoUpdater.allowDowngrade = false;
@@ -69,9 +145,13 @@ export function registerUpdateManager(win: BrowserWindow, hooks: UpdateManagerHo
   mainWindow = win;
 
   const logDir = path.join(getAmitiaDataDir(), "logs");
-  log.transports.file.resolvePathFn = () => path.join(logDir, "update.log");
-  log.transports.file.level = "info";
-  autoUpdater.logger = log;
+  updateLogWriter ??= new DailySizeRotatingLog(logDir, "update");
+  autoUpdater.logger = {
+    info: (message?: unknown) => writeUpdateLog("INFO", message),
+    warn: (message?: unknown) => writeUpdateLog("WARN", message),
+    error: (message?: unknown) => writeUpdateLog("ERROR", message),
+    debug: (message: string) => writeUpdateLog("DEBUG", message),
+  };
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = false;
   installSegmentedFullDownload(autoUpdater);
@@ -85,14 +165,18 @@ export function registerUpdateManager(win: BrowserWindow, hooks: UpdateManagerHo
 
   autoUpdater.on("update-available", (info: UpdateInfo) => {
     console.log("[UpdateManager] 发现新版本:", info.version);
+    if (loadSkippedVersion() === info.version) {
+      console.log("[UpdateManager] 已跳过该版本:", info.version);
+      pendingUpdateInfo = null;
+      downloadedUpdateReady = false;
+      mainWindow?.webContents.send("update:not-available");
+      startupResolve?.();
+      startupResolve = null;
+      return;
+    }
     pendingUpdateInfo = info;
     downloadedUpdateReady = false;
-    mainWindow?.webContents.send("update:available", {
-      version: info.version,
-      releaseDate: info.releaseDate,
-      releaseNotes: info.releaseNotes,
-      currentVersion: app.getVersion(),
-    });
+    mainWindow?.webContents.send("update:available", updatePresentation(info));
   });
 
   autoUpdater.on("update-not-available", () => {
@@ -146,6 +230,9 @@ export function registerUpdateManager(win: BrowserWindow, hooks: UpdateManagerHo
   });
 
   ipcMain.handle("update:skip-version", () => {
+    if (pendingUpdateInfo?.version) {
+      persistSkippedVersion(pendingUpdateInfo.version);
+    }
     pendingUpdateInfo = null;
     startupResolve?.();
     startupResolve = null;
@@ -217,12 +304,7 @@ export function registerUpdateManager(win: BrowserWindow, hooks: UpdateManagerHo
 
   ipcMain.handle("update:get-pending", () => {
     if (!pendingUpdateInfo) return null;
-    return {
-      version: pendingUpdateInfo.version,
-      releaseDate: pendingUpdateInfo.releaseDate,
-      releaseNotes: pendingUpdateInfo.releaseNotes,
-      currentVersion: app.getVersion(),
-    };
+    return updatePresentation(pendingUpdateInfo);
   });
 
   ipcMain.handle("update:get-channel", () => {
@@ -273,6 +355,24 @@ export function registerUpdateManager(win: BrowserWindow, hooks: UpdateManagerHo
       return "";
     }
   });
+}
+
+export function closeUpdateLogger(): void {
+  if (!updateLogWriter) return;
+  const writer = updateLogWriter;
+  updateLogWriter = null;
+  writer.close();
+}
+
+function writeUpdateLog(level: string, message?: unknown): void {
+  if (!updateLogWriter) return;
+  try {
+    updateLogWriter.write(
+      `[${new Date().toISOString()}] [${level}] ${format(message ?? "")}\n`,
+    );
+  } catch (error) {
+    console.error("[UpdateManager] 写入更新日志失败:", error);
+  }
 }
 
 export async function waitForStartupCheck(): Promise<void> {

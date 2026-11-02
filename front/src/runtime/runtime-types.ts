@@ -169,6 +169,10 @@ export interface AmitiaDesktopAPI {
     version: string;
     releaseDate?: string;
     releaseNotes?: unknown;
+    updateTitle?: unknown;
+    highlights?: unknown;
+    size?: number;
+    channel?: string;
     currentVersion: string;
   } | null>;
   getUpdateChannel(): Promise<{ allowBetaChannel: boolean }>;

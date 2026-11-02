@@ -15,20 +15,6 @@ import (
 const packageAPIReplacement = "/api/extensions/packages/artifacts"
 
 func registerExtensionPackageRoutes(group *gin.RouterGroup, runtime *Runtime) {
-	group.GET("/packages/status", func(c *gin.Context) {
-		if runtime == nil || runtime.Kernel == nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{"ready": false})
-			return
-		}
-		c.JSON(http.StatusOK, gin.H{"ready": true, "root": runtime.Kernel.Root(), "installed": len(runtime.Kernel.List())})
-	})
-	group.GET("/packages", func(c *gin.Context) {
-		if runtime == nil || runtime.Kernel == nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "extension package service unavailable"})
-			return
-		}
-		c.JSON(http.StatusOK, runtime.Kernel.List())
-	})
 	group.POST("/packages/artifacts", func(c *gin.Context) { createPackageArtifactPreview(c, runtime) })
 	group.POST("/packages/previews", func(c *gin.Context) { createPackageArtifactPreview(c, runtime) })
 	group.POST("/packages/previews/:sessionId/confirm", func(c *gin.Context) { confirmPackagePreview(c, runtime) })
@@ -43,6 +29,9 @@ func registerExtensionPackageRoutes(group *gin.RouterGroup, runtime *Runtime) {
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 			return
+		}
+		if operation.Status == "completed" || operation.Status == "failed" || operation.Status == "requires_recovery" {
+			runtime.InvalidateExtensionReadModels()
 		}
 		c.JSON(http.StatusOK, operation)
 	})
@@ -160,6 +149,7 @@ func executePackageInstallOperation(c *gin.Context, runtime *Runtime) {
 		c.JSON(status, gin.H{"error": msg, "code": code})
 		return
 	}
+	runtime.InvalidateExtensionReadModels()
 	c.Header("Location", fmt.Sprintf("/api/extensions/packages/operations/%s", result.OperationID))
 	c.JSON(http.StatusAccepted, result)
 }
@@ -187,6 +177,7 @@ func executePackageUpdateOperation(c *gin.Context, runtime *Runtime) {
 		c.JSON(status, gin.H{"error": msg, "code": code})
 		return
 	}
+	runtime.InvalidateExtensionReadModels()
 	c.Header("Location", fmt.Sprintf("/api/extensions/packages/operations/%s", result.OperationID))
 	c.JSON(http.StatusAccepted, result)
 }

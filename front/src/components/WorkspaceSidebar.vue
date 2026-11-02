@@ -229,7 +229,11 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ChatDotRound, FolderOpened, Plus, Search } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { openContextMenu, type ContextMenuAction } from "./context-menu/contextMenuStore";
+import {
+  openContextMenu,
+  projectContextMenuAccessKeys,
+  type ContextMenuAction,
+} from "./context-menu/contextMenuStore";
 import { useChatStore, type ConversationItem, type ProjectItem, type ProjectWorkspace } from "@/stores/chat";
 import { useApi } from "@/composables/useApi";
 import NewConversationIcon from "@/components/icons/NewConversationIcon.vue";
@@ -356,8 +360,8 @@ function openSectionContextMenu(event: MouseEvent, section: "chat" | "project") 
   event.preventDefault();
   event.stopPropagation();
   openContextMenu({ x: event.clientX, y: event.clientY, title: section === "chat" ? "聊天" : "项目", items: [
-    { id: "select", label: batchSelecting.value ? "取消多选" : "多选", action: toggleBatchSelection },
-    { id: "add", label: section === "chat" ? "新建对话" : "新增项目", action: section === "chat" ? handleNewChat : handleAddProject },
+    { id: "select", label: batchSelecting.value ? "取消多选" : "多选", accessKey: "S", action: toggleBatchSelection },
+    { id: "add", label: section === "chat" ? "新建对话" : "新增项目", accessKey: "N", action: section === "chat" ? handleNewChat : handleAddProject },
   ] });
 }
 async function batchOperation(action: string, projectId = "") {
@@ -389,11 +393,11 @@ function handleBatchContextMenu(event: MouseEvent) {
   const selectableIds = [...new Set(batchRows.value.map((row) => row.id))];
   const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.value.includes(id));
   const items: ContextMenuAction[] = [
-    { id: "all", label: allSelected ? "取消全选" : "全选", disabled: selectableIds.length === 0, action: () => { selectedIds.value = allSelected ? selectedIds.value.filter((id) => !selectableIds.includes(id)) : [...new Set([...selectedIds.value, ...selectableIds])]; } },
-    ...[["archive", "归档"], ["read", "标为已读"], ["pin", "置顶"]].map(([id, label]) => ({ id, label, disabled, action: () => batchOperation(id) })),
-    { id: "move", label: "移动到项目", disabled, children: [{ id: "ungrouped", label: "移出项目", action: () => batchOperation("move") }, ...chatStore.sidebar.projects.filter((project) => !project.readOnly).map((project) => ({ id: project.id, label: project.name, action: () => batchOperation("move", project.id) }))] },
-    { id: "delete", label: "删除", danger: true, disabled, action: () => batchOperation("delete") },
-    { id: "cancel", label: "取消多选", action: toggleBatchSelection },
+    { id: "all", label: allSelected ? "取消全选" : "全选", accessKey: "A", disabled: selectableIds.length === 0, action: () => { selectedIds.value = allSelected ? selectedIds.value.filter((id) => !selectableIds.includes(id)) : [...new Set([...selectedIds.value, ...selectableIds])]; } },
+    ...[["archive", "归档", "R"], ["read", "标为已读", "M"], ["pin", "置顶", "P"]].map(([id, label, accessKey]) => ({ id, label, accessKey, disabled, action: () => batchOperation(id) })),
+    { id: "move", label: "移动到项目", accessKey: "V", disabled, children: [{ id: "ungrouped", label: "移出项目", accessKey: "H", action: () => batchOperation("move") }, ...chatStore.sidebar.projects.filter((project) => !project.readOnly).map((project, index) => ({ id: project.id, label: project.name, accessKey: projectContextMenuAccessKeys[index], action: () => batchOperation("move", project.id) }))] },
+    { id: "delete", label: "删除", accessKey: "D", danger: true, disabled, action: () => batchOperation("delete") },
+    { id: "cancel", label: "取消多选", accessKey: "C", action: toggleBatchSelection },
   ];
   openContextMenu({ x: event.clientX, y: event.clientY, title: `已选择 ${selectedIds.value.length} 个对话`, items });
 }

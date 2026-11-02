@@ -60,6 +60,7 @@ import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversa
 import { isDesktopShell } from "@/runtime/runtime-capabilities";
 import {
   openContextMenu,
+  projectContextMenuAccessKeys,
   type ContextMenuAction,
 } from "./context-menu/contextMenuStore";
 
@@ -120,14 +121,16 @@ function moveTargets(): ContextMenuAction[] {
       id: "move-recent",
       label: "移回聊天",
       icon: ChatLineRound,
+      accessKey: "H",
       action: () => emit("move", props.conversation, ""),
     });
   }
-  for (const project of availableProjects.value) {
+  for (const [index, project] of availableProjects.value.entries()) {
     targets.push({
       id: `move-project-${project.id}`,
       label: `移入项目：${project.name}`,
       icon: FolderOpened,
+      accessKey: projectContextMenuAccessKeys[index],
       disabled: project.id === props.conversation.projectId,
       action: () => emit("move", props.conversation, project.id),
     });
@@ -158,24 +161,28 @@ function openConversationContextMenu(event: MouseEvent) {
         id: "open-conversation",
         label: "打开对话",
         icon: ChatLineRound,
+        accessKey: "O",
         action: () => emit("open", props.conversation),
       },
       {
         id: "rename-conversation",
         label: "重命名",
         icon: EditPen,
+        accessKey: "R",
         action: beginRename,
       },
       {
         id: "select-conversations",
         label: "多选",
         icon: CircleCheck,
+        accessKey: "S",
         action: () => emit("startBatch", props.conversation),
       },
       {
         id: "pin-conversation",
         label: isPinned.value ? "取消置顶" : "置顶",
         icon: CollectionTag,
+        accessKey: "P",
         separatorBefore: true,
         action: () => emit("togglePin", props.conversation),
       },
@@ -183,6 +190,7 @@ function openConversationContextMenu(event: MouseEvent) {
         id: "mark-conversation-read",
         label: "标为已读",
         icon: CircleCheck,
+        accessKey: "M",
         disabled: unreadCount.value <= 0,
         action: () => emit("markRead", props.conversation),
       },
@@ -190,18 +198,21 @@ function openConversationContextMenu(event: MouseEvent) {
         id: "archive-conversation",
         label: "归档",
         icon: Box,
+        accessKey: "A",
         action: () => emit("archive", props.conversation),
       },
       {
         id: "move-conversation",
         label: "移动到项目",
         icon: FolderOpened,
+        accessKey: "V",
         children: moveTargets(),
       },
       {
         id: "delete-conversation",
         label: "删除对话",
         icon: Delete,
+        accessKey: "D",
         danger: true,
         separatorBefore: true,
         action: () => emit("delete", props.conversation),

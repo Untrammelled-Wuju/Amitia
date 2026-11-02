@@ -10,6 +10,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.util.Base64
+import com.amitia.amitia_app.BuildConfig
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
@@ -127,7 +128,9 @@ class AppUpdatePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 return
             }
             val uri = Uri.parse(url)
-            if (uri.scheme != "https") {
+            val allowedScheme = uri.scheme == "https" ||
+                (BuildConfig.AMITIA_ALLOW_INSECURE_UPDATE && uri.scheme == "http")
+            if (!allowedScheme) {
                 result.error("DOWNLOAD_INSECURE_URL", "update downloads require https", null)
                 return
             }

@@ -34,20 +34,36 @@ export async function computeSourceGateHash() {
   return computeFreezeSourceGateHash(repositoryRoot);
 }
 
-export function findReleaseArtifacts(baseDir = releaseDir) {
+function normalizeReleasePlatform(value) {
+  const normalized = String(value || "win").trim().toLowerCase();
+  if (["win", "win32", "windows"].includes(normalized)) return "win";
+  if (["mac", "darwin", "macos"].includes(normalized)) return "mac";
+  throw new Error(`unsupported release platform: ${value}`);
+}
+
+export function findReleaseArtifacts(
+  baseDir = releaseDir,
+  platform = process.env.AMITIA_RELEASE_PLATFORM || "win",
+) {
   if (!existsSync(baseDir)) {
     throw new Error(`release directory missing: ${baseDir}`);
   }
+  const normalizedPlatform = normalizeReleasePlatform(platform);
   const names = readdirSync(baseDir);
-  const exe = names.filter((name) => /^AmitiaSetup-.*-x64\.exe$/.test(name));
-  const blockmap = names.filter((name) => /^AmitiaSetup-.*-x64\.exe\.blockmap$/.test(name));
-  const yml = names.filter((name) => name === "latest.yml");
-  if (exe.length !== 1 || blockmap.length !== 1 || yml.length !== 1) {
+  const packagePattern = normalizedPlatform === "win"
+    ? /^AmitiaSetup-.*-x64\.exe$/
+    : /^Amitia-.*-(?:arm64|x64|universal)-mac\.zip$/;
+  const packages = names.filter((name) => packagePattern.test(name));
+  const packageNames = new Set(packages);
+  const blockmaps = names.filter((name) => name.endsWith(".blockmap") && packageNames.has(name.slice(0, -".blockmap".length)));
+  const ymlName = normalizedPlatform === "win" ? "latest.yml" : "latest-mac.yml";
+  const yml = names.filter((name) => name === ymlName);
+  if (packages.length !== 1 || blockmaps.length !== 1 || yml.length !== 1) {
     throw new Error(
-      `release artifacts must be unique (exe=${exe.length}, blockmap=${blockmap.length}, latest.yml=${yml.length})`,
+      `${normalizedPlatform} release artifacts must be unique (package=${packages.length}, blockmap=${blockmaps.length}, ${ymlName}=${yml.length})`,
     );
   }
-  return [exe[0], blockmap[0], yml[0]].map((name) => {
+  return [packages[0], blockmaps[0], yml[0]].map((name) => {
     const filePath = resolve(baseDir, name);
     const stats = statSync(filePath);
     return {
@@ -94,10 +110,11 @@ function readRuntimeAssetsManifest() {
   return manifest;
 }
 
-export async function writeReleaseGateStamp() {
+export async function writeReleaseGateStamp(platform = process.env.AMITIA_RELEASE_PLATFORM || "win") {
+  const normalizedPlatform = normalizeReleasePlatform(platform);
   const packageJsonPath = resolve(desktopRoot, "package.json");
   const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
-  const artifacts = findReleaseArtifacts();
+  const artifacts = findReleaseArtifacts(releaseDir, normalizedPlatform);
   const preBuild = await verifyPreBuildGates();
   const coreBuild = readCoreBuildStamp();
   const runtimeAssets = readRuntimeAssetsManifest();
@@ -109,8 +126,9 @@ export async function writeReleaseGateStamp() {
   }
 
   const stamp = {
-    schemaVersion: 4,
+    schemaVersion: 5,
     createdAt: new Date().toISOString(),
+    platform: normalizedPlatform,
     packageVersion: packageJson.version,
     desktopPetRuntimeVersion: packageJson.desktopPetRuntimeVersion,
     desktopPetRuntimeContractVersion: packageJson.desktopPetRuntimeContractVersion,
@@ -136,13 +154,17 @@ export async function writeReleaseGateStamp() {
   return stamp;
 }
 
-export async function verifyReleaseGateStamp() {
+export async function verifyReleaseGateStamp(platform = process.env.AMITIA_RELEASE_PLATFORM || "win") {
   if (!existsSync(releaseGateStampPath)) {
     throw new Error("release gate stamp missing; rebuild with pnpm dist:win");
   }
   const stamp = JSON.parse(readFileSync(releaseGateStampPath, "utf8"));
-  if (stamp.schemaVersion !== 4) {
+  if (stamp.schemaVersion !== 5) {
     throw new Error(`unsupported release gate stamp schema: ${stamp.schemaVersion}`);
+  }
+  const requestedPlatform = normalizeReleasePlatform(platform);
+  if (stamp.platform !== requestedPlatform) {
+    throw new Error(`release gate platform mismatch: expected ${requestedPlatform}, found ${stamp.platform}`);
   }
 
   const packageJsonPath = resolve(desktopRoot, "package.json");
@@ -168,7 +190,7 @@ export async function verifyReleaseGateStamp() {
     throw new Error("runtime asset manifest changed after release gate; rebuild required");
   }
 
-  const currentArtifacts = findReleaseArtifacts();
+  const currentArtifacts = findReleaseArtifacts(releaseDir, stamp.platform);
   const expected = new Map((stamp.artifacts ?? []).map((item) => [item.name, item]));
   for (const artifact of currentArtifacts) {
     const recorded = expected.get(artifact.name);
@@ -186,6 +208,8 @@ export async function verifyReleaseGateStamp() {
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(__filename)) {
   const args = process.argv.slice(2);
+  const platformArgument = args.find((value) => value.startsWith("--platform="));
+  const platform = platformArgument ? platformArgument.slice("--platform=".length) : "win";
   try {
     if (args.includes("--pre-build")) {
       const result = await verifyPreBuildGates();
@@ -193,11 +217,11 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(__filename)) {
         `[release-integrity] PASS: ${result.freezeShaVerified} canonical freeze entries verified; source gate ${result.sourceGateHash.slice(0, 12)}...`,
       );
     } else if (args.includes("--verify")) {
-      const result = await verifyReleaseGateStamp();
-      console.log(`[release-integrity] PASS: release gate stamp verified for ${result.stamp.packageVersion}`);
+      const result = await verifyReleaseGateStamp(platform);
+      console.log(`[release-integrity] PASS: release gate stamp verified for ${result.stamp.packageVersion} ${result.stamp.platform}`);
     } else if (args.includes("--write-stamp")) {
-      const stamp = await writeReleaseGateStamp();
-      console.log(`[release-integrity] PASS: release gate stamp written for ${stamp.packageVersion}`);
+      const stamp = await writeReleaseGateStamp(platform);
+      console.log(`[release-integrity] PASS: release gate stamp written for ${stamp.packageVersion} ${stamp.platform}`);
     } else {
       console.log("Usage: node scripts/release-integrity.mjs [--pre-build|--verify|--write-stamp]");
       process.exitCode = 1;

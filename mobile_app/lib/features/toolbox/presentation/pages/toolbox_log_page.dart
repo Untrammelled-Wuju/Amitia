@@ -14,16 +14,18 @@ import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/log_folder_button.dart';
 
 class _LogEntry {
-  final String time;
+  final String file;
   final String level;
   final String module;
   final String content;
+  final String raw;
 
   const _LogEntry({
-    required this.time,
+    required this.file,
     required this.level,
     required this.module,
     required this.content,
+    required this.raw,
   });
 }
 
@@ -62,10 +64,10 @@ class _ToolboxLogPageState extends ConsumerState<ToolboxLogPage> {
       final decoded = jsonDecode(line);
       if (decoded is Map<String, dynamic>) structured = decoded;
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+      print("[original-error] $error\n$stackTrace");
+    }
     return _LogEntry(
-      time: (structured['@timestamp'] ?? raw['time'] ?? '').toString(),
+      file: (raw['file'] ?? 'runtime.log').toString(),
       level: (structured['@level'] ?? structured['level'] ?? 'INFO')
           .toString()
           .toUpperCase(),
@@ -78,6 +80,7 @@ class _ToolboxLogPageState extends ConsumerState<ToolboxLogPage> {
               .toString(),
       content: (structured['@message'] ?? structured['message'] ?? line)
           .toString(),
+      raw: line,
     );
   }
 
@@ -92,6 +95,7 @@ class _ToolboxLogPageState extends ConsumerState<ToolboxLogPage> {
       final results = await Future.wait([
         api.get<Map<String, dynamic>>(
           '/api/logs/recent',
+          queryParameters: const {'limit': 200},
           fromJson: (e) => Map<String, dynamic>.from(e as Map),
         ),
         api.get<Map<String, dynamic>>(
@@ -271,18 +275,21 @@ class _ToolboxLogPageState extends ConsumerState<ToolboxLogPage> {
     }).toList();
   }
 
-  Color _levelColor(String level) {
-    switch (level.toUpperCase()) {
-      case 'ERROR':
-        return Colors.red;
-      case 'WARN':
-      case 'WARNING':
-        return Colors.orange;
-      case 'DEBUG':
-        return Colors.blueGrey;
-      default:
-        return Colors.green;
+  String _formatLogFile(List<_LogEntry> logs) {
+    final groups = <String, List<_LogEntry>>{};
+    for (final log in logs) {
+      final file = log.file.trim().isEmpty ? 'runtime.log' : log.file.trim();
+      groups.putIfAbsent(file, () => []).add(log);
     }
+    final buffer = StringBuffer();
+    for (final entry in groups.entries) {
+      if (buffer.isNotEmpty) buffer.writeln();
+      buffer.writeln('==> ${entry.key} <==');
+      for (final log in entry.value) {
+        buffer.writeln(log.raw);
+      }
+    }
+    return buffer.toString().trimRight();
   }
 
   @override
@@ -417,85 +424,65 @@ class _ToolboxLogPageState extends ConsumerState<ToolboxLogPage> {
                               ),
                             ],
                           )
-                        : ListView.separated(
+                        : SingleChildScrollView(
+                            physics: const AlwaysScrollableScrollPhysics(),
                             padding: EdgeInsets.fromLTRB(
                               AppSpacing.pagePadding,
                               0,
                               AppSpacing.pagePadding,
                               AppSpacing.xl,
                             ),
-                            itemCount: _filtered.length,
-                            separatorBuilder: (_, _) => Divider(
-                              height: 1,
-                              thickness: 0.5,
-                              color: context.borderSecondary,
+                            child: Container(
+                              width: double.infinity,
+                              clipBehavior: Clip.antiAlias,
+                              decoration: BoxDecoration(
+                                color: context.surfaceSecondary,
+                                border: Border.all(
+                                  color: context.borderSecondary,
+                                ),
+                                borderRadius: AppRadius.brMedium,
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 9,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Text(
+                                          '最近日志',
+                                          style: AppTypography.label(context),
+                                        ),
+                                        const Spacer(),
+                                        Text(
+                                          '${_filtered.length} 行',
+                                          style: AppTypography.caption(context),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Divider(
+                                    height: 1,
+                                    color: context.borderSecondary,
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.all(12),
+                                    child: SelectableText(
+                                      _formatLogFile(_filtered),
+                                      style: TextStyle(
+                                        color: context.textPrimary,
+                                        fontFamily: 'monospace',
+                                        fontSize: 12,
+                                        height: 1.5,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                            itemBuilder: (context, i) {
-                              final l = _filtered[i];
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 10,
-                                ),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    SizedBox(
-                                      width: 120,
-                                      child: Text(
-                                        l.time,
-                                        style: AppTypography.label(context),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      width: 52,
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 4,
-                                        vertical: 2,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: _levelColor(
-                                          l.level,
-                                        ).withValues(alpha: 0.12),
-                                        borderRadius: AppRadius.brTag,
-                                      ),
-                                      child: Text(
-                                        l.level,
-                                        textAlign: TextAlign.center,
-                                        style: AppTypography.label(context)
-                                            .copyWith(
-                                              color: _levelColor(l.level),
-                                              fontSize: 10,
-                                            ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            l.module,
-                                            style: AppTypography.label(context)
-                                                .copyWith(
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            l.content,
-                                            style: AppTypography.bodySmall(
-                                              context,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
                           ),
                   ),
                 ),

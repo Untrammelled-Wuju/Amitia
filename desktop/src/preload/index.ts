@@ -241,6 +241,10 @@ const api = {
     version: string;
     releaseDate?: string;
     releaseNotes?: unknown;
+    updateTitle?: unknown;
+    highlights?: unknown;
+    size?: number;
+    channel?: string;
     currentVersion: string;
   } | null> {
     return ipcRenderer.invoke("update:get-pending");

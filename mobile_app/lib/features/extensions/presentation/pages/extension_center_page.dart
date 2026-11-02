@@ -72,6 +72,11 @@ class ExtensionCenterPage extends ConsumerWidget {
         )
         .toList(growable: false);
     final installed = _withoutChannelCards(view.installed, channelExtensionIds);
+    final localImports = _withoutChannelCards(
+      view.localImports,
+      channelExtensionIds,
+    );
+    final dev = _withoutChannelCards(view.dev, channelExtensionIds);
     final updates = _withoutChannelCards(view.updates, channelExtensionIds);
     final needsAction = _withoutChannelCards(
       view.needsAction,
@@ -80,6 +85,8 @@ class ExtensionCenterPage extends ConsumerWidget {
     final discover = _withoutChannelCards(view.discover, channelExtensionIds);
     final visibleCards = <ExtensionCenterCard>[
       ...installed,
+      ...localImports,
+      ...dev,
       ...discover,
       ...updates,
       ...needsAction,
@@ -127,6 +134,36 @@ class ExtensionCenterPage extends ConsumerWidget {
             ],
           ),
         ),
+        if (view.partial) ...[
+          SizedBox(height: AppSpacing.md),
+          Container(
+            padding: EdgeInsets.all(AppSpacing.md),
+            decoration: BoxDecoration(
+              color: context.warning.withValues(alpha: 0.08),
+              borderRadius: AppRadius.brMedium,
+              border: Border.all(color: context.warning),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '部分扩展状态未加载',
+                  style: AppTypography.label(
+                    context,
+                  ).copyWith(color: context.warning),
+                ),
+                for (final item in view.errors)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 5),
+                    child: Text(
+                      '${item['code'] ?? 'ERROR'}: ${item['message'] ?? ''}',
+                      style: AppTypography.caption(context),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
         if (navigationItems.isNotEmpty) ...[
           SizedBox(height: AppSpacing.lg),
           Text('扩展入口', style: AppTypography.sectionTitle(context)),
@@ -179,10 +216,17 @@ class ExtensionCenterPage extends ConsumerWidget {
               name: card.displayName,
               description: card.description,
               icon: Icons.system_update_alt,
-              typeLabel: card.status,
+              typeLabel: [
+                card.status,
+                card.trust,
+                if ((card.permissionRisk ?? '').isNotEmpty)
+                  '风险 ${card.permissionRisk}',
+              ].join(' · '),
               isInstalled: true,
               isEnabled: card.enabled,
-              onAction: () => context.push(AppRoutes.extensionsPackages),
+              onAction: () => context.push(
+                '${AppRoutes.extensionsPackages}?extensionId=${Uri.encodeComponent(card.extensionId)}&action=update',
+              ),
               onToggle: (enabled) async {
                 await ref
                     .read(extensionServiceProvider)
@@ -205,10 +249,17 @@ class ExtensionCenterPage extends ConsumerWidget {
               name: card.displayName,
               description: card.description,
               icon: Icons.warning_amber_outlined,
-              typeLabel: card.status,
+              typeLabel: [
+                card.status,
+                card.trust,
+                if ((card.permissionRisk ?? '').isNotEmpty)
+                  '风险 ${card.permissionRisk}',
+              ].join(' · '),
               isInstalled: true,
               isEnabled: card.enabled,
-              onAction: () => context.push(AppRoutes.extensionsPackages),
+              onAction: () => context.push(
+                '${AppRoutes.extensionsPackages}?extensionId=${Uri.encodeComponent(card.extensionId)}&action=permissions',
+              ),
               onToggle: (enabled) async {
                 await ref
                     .read(extensionServiceProvider)
@@ -227,13 +278,68 @@ class ExtensionCenterPage extends ConsumerWidget {
               name: card.displayName,
               description: card.description,
               icon: Icons.extension_outlined,
-              typeLabel: card.status,
+              typeLabel: [
+                card.status,
+                card.trust,
+                if ((card.permissionRisk ?? '').isNotEmpty)
+                  '风险 ${card.permissionRisk}',
+              ].join(' · '),
               isInstalled: true,
               isEnabled: card.enabled,
               isRecommended: false,
               onToggle: (enabled) async {
                 final svc = ref.read(extensionServiceProvider);
                 await svc.setKernelExtensionEnabled(card.extensionId, enabled);
+                ref.invalidate(installedExtensionViewProvider);
+              },
+            ),
+          ),
+        ],
+        if (localImports.isNotEmpty) ...[
+          SizedBox(height: AppSpacing.lg),
+          Text(
+            '本地导入 (${localImports.length})',
+            style: AppTypography.sectionTitle(context),
+          ),
+          SizedBox(height: AppSpacing.sm),
+          ...localImports.map(
+            (card) => AmitiaExtensionCard(
+              extensionId: card.extensionId,
+              name: card.displayName,
+              description: card.description,
+              icon: Icons.folder_open_outlined,
+              typeLabel: card.status,
+              isInstalled: true,
+              isEnabled: card.enabled,
+              onToggle: (enabled) async {
+                await ref
+                    .read(extensionServiceProvider)
+                    .setKernelExtensionEnabled(card.extensionId, enabled);
+                ref.invalidate(installedExtensionViewProvider);
+              },
+            ),
+          ),
+        ],
+        if (dev.isNotEmpty) ...[
+          SizedBox(height: AppSpacing.lg),
+          Text(
+            '开发模式 (${dev.length})',
+            style: AppTypography.sectionTitle(context),
+          ),
+          SizedBox(height: AppSpacing.sm),
+          ...dev.map(
+            (card) => AmitiaExtensionCard(
+              extensionId: card.extensionId,
+              name: card.displayName,
+              description: card.description,
+              icon: Icons.developer_mode_outlined,
+              typeLabel: card.status,
+              isInstalled: true,
+              isEnabled: card.enabled,
+              onToggle: (enabled) async {
+                await ref
+                    .read(extensionServiceProvider)
+                    .setKernelExtensionEnabled(card.extensionId, enabled);
                 ref.invalidate(installedExtensionViewProvider);
               },
             ),
