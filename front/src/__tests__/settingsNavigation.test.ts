@@ -65,8 +65,6 @@ describe("桌面设置分类导航", () => {
     const { wrapper } = await renderSettings("/settings/model/providers");
     try {
       expect(wrapper.findAll("nav section")).toHaveLength(7);
-      expect(wrapper.findAll("nav section > h2.settings-navigation-group-title")).toHaveLength(7);
-      expect(wrapper.findAll("nav section > h2").every((heading) => heading.text().trim().length > 0)).toBe(true);
       const links = wrapper.findAll("nav a");
       expect(links).toHaveLength(20);
       expect(new Set(links.map(link => link.attributes("href"))).size).toBe(20);

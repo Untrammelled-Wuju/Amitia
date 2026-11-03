@@ -10,7 +10,7 @@
         class="settings-navigation-group"
         :aria-labelledby="`settings-group-${index}`"
       >
-        <h2 :id="`settings-group-${index}`" class="settings-navigation-group-title">{{ group.title }}</h2>
+        <h2 :id="`settings-group-${index}`">{{ group.title }}</h2>
         <RouterLink
           v-for="item in group.items"
           :key="item.path"
@@ -48,11 +48,10 @@ const currentEntry = computed(() => resolveSettingsEntry(route.path));
 }
 .settings-sidebar-header { flex: 0 0 auto; padding: 18px 18px 12px; }
 .settings-sidebar-header h1 { margin: 0; color: var(--text-primary); font-size: var(--ac-font-size-xl); font-weight: 650; }
-.settings-navigation { min-height: 0; flex: 1; display: grid; align-content: start; gap: 14px; overflow-y: auto; padding: 0 12px 24px; }
-.settings-navigation-group { display: grid; gap: 3px; min-width: 0; }
-.settings-navigation-group + .settings-navigation-group { padding-top: 14px; border-top: 1px solid var(--surface-border); }
-.settings-navigation-group-title { margin: 0 6px 6px; padding: 5px 4px 4px; color: var(--text-primary); font-size: var(--ac-font-size-sm); font-weight: 750; letter-spacing: 0.09em; line-height: 1.35; text-transform: uppercase; }
-.settings-navigation-item { display: flex; align-items: center; min-height: 34px; margin-left: 3px; padding: 6px 10px; box-sizing: border-box; border-radius: var(--ac-radius-sm); color: var(--text-secondary); font-size: var(--ac-font-size-sm); font-weight: 400; line-height: 1.4; text-decoration: none; transition: background-color var(--ac-transition-fast), color var(--ac-transition-fast); }
+.settings-navigation { min-height: 0; flex: 1; display: grid; align-content: start; gap: 18px; overflow-y: auto; padding: 0 12px 24px; }
+.settings-navigation-group { display: grid; gap: 2px; }
+.settings-navigation-group h2 { margin: 0 8px 4px; color: var(--text-muted); font-size: 10px; font-weight: 500; line-height: 1.4; opacity: 0.7; }
+.settings-navigation-item { display: flex; align-items: center; min-height: 34px; padding: 6px 10px; box-sizing: border-box; border-radius: var(--ac-radius-sm); color: var(--text-secondary); font-size: var(--ac-font-size-sm); line-height: 1.4; text-decoration: none; transition: background-color var(--ac-transition-fast), color var(--ac-transition-fast); }
 .settings-navigation-item:hover { background: var(--control-hover-bg); color: var(--text-primary); }
 .settings-navigation-item[aria-current="page"] { background: var(--control-active-bg); color: var(--text-primary); }
 .settings-navigation-item:focus-visible { outline: 2px solid var(--ac-color-primary); outline-offset: -2px; }
