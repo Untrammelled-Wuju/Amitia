@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/u-ai/backend/internal/imagegen"
 	"github.com/u-ai/backend/internal/imageprovider"
 	"github.com/u-ai/backend/internal/vision"
 )
@@ -43,6 +44,7 @@ type ImageCapabilities struct {
 
 type CapabilityDetector struct {
 	visionSvc        vision.Service
+	imagegenSvc      imagegen.Service
 	providerRegistry *imageprovider.Registry
 	mu               sync.RWMutex
 	cached           *ImageCapabilities
@@ -50,9 +52,10 @@ type CapabilityDetector struct {
 	ttl              time.Duration
 }
 
-func NewCapabilityDetector(visionSvc vision.Service, providerRegistry *imageprovider.Registry) *CapabilityDetector {
+func NewCapabilityDetector(visionSvc vision.Service, imagegenSvc imagegen.Service, providerRegistry *imageprovider.Registry) *CapabilityDetector {
 	return &CapabilityDetector{
 		visionSvc:        visionSvc,
+		imagegenSvc:      imagegenSvc,
 		providerRegistry: providerRegistry,
 		ttl:              30 * time.Second,
 	}
@@ -95,15 +98,14 @@ func (d *CapabilityDetector) Detect(ctx context.Context) ImageCapabilities {
 		}
 	}
 
-	if d.providerRegistry != nil {
-		names := d.providerRegistry.Names()
-		for _, name := range names {
-			if name == "seedream" {
+	if d.providerRegistry != nil && d.imagegenSvc != nil {
+		active, err := d.imagegenSvc.GetActive()
+		if err == nil && active != nil {
+			providerName, _, ok := d.providerRegistry.Select(active.ApiType, active.ApiKey)
+			if ok {
 				cap.Generate = true
-				if cap.Provider == "" {
-					cap.Provider = "seedream"
-				}
-				break
+				cap.Provider = providerName
+				cap.Model = active.ModelName
 			}
 		}
 	}

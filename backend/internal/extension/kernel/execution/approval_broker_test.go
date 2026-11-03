@@ -8,6 +8,11 @@ import (
 
 func TestApprovalBrokerResolveAndList(t *testing.T) {
 	broker := NewApprovalBroker()
+	var resolved ApprovalRequest
+	broker.SetObservers(nil, func(request ApprovalRequest) error {
+		resolved = request
+		return nil
+	})
 	result := make(chan bool, 1)
 	go func() {
 		approved, err := broker.Await(context.Background(), ApprovalRequest{
@@ -33,8 +38,11 @@ func TestApprovalBrokerResolveAndList(t *testing.T) {
 	if len(pending) != 1 {
 		t.Fatalf("expected one pending approval, got %d", len(pending))
 	}
-	if err := broker.Resolve(pending[0].ID, true); err != nil {
+	if err := broker.ResolveWithActor(pending[0].ID, true, ApprovalActor{ID: "device-a", PrincipalType: "local_ui", AuthMethod: "desktop_session", SessionID: "session-a"}); err != nil {
 		t.Fatal(err)
+	}
+	if resolved.ResolvedBy != "device-a" || resolved.ResolvedByType != "local_ui" || resolved.AuthMethod != "desktop_session" || resolved.SessionID != "session-a" || resolved.ResolvedAt == "" {
+		t.Fatalf("unexpected resolver: %+v", resolved)
 	}
 	if approved := <-result; !approved {
 		t.Fatal("expected approval to continue")

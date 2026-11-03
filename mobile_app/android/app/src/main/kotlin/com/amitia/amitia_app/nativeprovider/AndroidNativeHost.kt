@@ -6,6 +6,7 @@ import com.amitia.amitia_app.nativeprovider.model.NativeBridgeHealth
 import com.amitia.amitia_app.nativeprovider.model.NativeBridgeProtocol
 import com.amitia.amitia_app.nativeprovider.model.NativeBridgeRequest
 import com.amitia.amitia_app.nativeprovider.model.NativeBridgeResponse
+import com.amitia.amitia_app.virtualdisplay.preview.VirtualDisplayPreviewService
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.atomic.AtomicLong
@@ -103,7 +104,10 @@ internal class AndroidNativeHost private constructor(
             )
 
         return try {
-            handler.execute(request)
+            VirtualDisplayPreviewService.observeHostRequest(context, request)
+            val response = handler.execute(request)
+            VirtualDisplayPreviewService.observeHostRequest(context, request, response)
+            response
         } catch (e: Exception) {
             NativeBridgeResponse(
                 protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,

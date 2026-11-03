@@ -155,6 +155,9 @@ func (r *repository) GetRuntimeProfile(id string) (*RoleRuntimeProfile, error) {
 		UserAddressingStyle: c.UserAddressingStyle,
 		GenderExpression:    c.GenderExpression,
 		LifeIdentity:        c.LifeIdentity,
+		ModelConfigID:       c.ModelConfigID,
+		ReasoningEffort:     c.ReasoningEffort,
+		ReasoningEnabled:    c.ReasoningEnabled,
 		Diagnostics:         diagnostics,
 	}, nil
 }
@@ -197,7 +200,8 @@ func runtimeProfileFromCharacter(c Character) *RoleRuntimeProfile {
 		GeneratedPrompt: c.GeneratedPrompt, PersonalityConfig: personalityConfig, ChatStyleConfig: chatStyleConfig,
 		SceneRules: sceneRules, Gender: c.Gender, GenderLabel: c.GenderLabel, Pronoun: c.Pronoun,
 		SelfReference: c.SelfReference, UserAddressingStyle: c.UserAddressingStyle, GenderExpression: c.GenderExpression,
-		LifeIdentity: c.LifeIdentity, Diagnostics: diagnostics,
+		LifeIdentity: c.LifeIdentity, ModelConfigID: c.ModelConfigID, ReasoningEffort: c.ReasoningEffort,
+		ReasoningEnabled: c.ReasoningEnabled, Diagnostics: diagnostics,
 	}
 }
 

@@ -65,7 +65,7 @@ export function desktopNotificationOptions(
     options.id = payload.requestId;
     if (payload.conversationId) options.groupId = payload.conversationId;
     if (platform === "win32" && payload.groupTitle) options.groupTitle = payload.groupTitle;
-    if (platform === "win32" && (payload.type?.startsWith("call.") || payload.type?.startsWith("run."))) {
+    if (platform === "win32" && (payload.type?.startsWith("call.") || payload.type?.startsWith("run.") || payload.type === "attention.required")) {
       options.timeoutType = "never";
     }
   }

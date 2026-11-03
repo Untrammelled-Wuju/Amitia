@@ -151,6 +151,7 @@ type WorkerRunRequest struct {
 	WorkspaceRootURI     string                       `json:"workspaceRootUri,omitempty"`
 	Objective            string                       `json:"objective"`
 	ExpectedOutcome      string                       `json:"expectedOutcome"`
+	Constraints          []string                     `json:"constraints,omitempty"`
 	CoordinationDepth    int                          `json:"coordinationDepth"`
 	InternalSourceMarker string                       `json:"-"`
 }
@@ -579,6 +580,7 @@ func (c *MultiAgentCoordinator) startAuthorizedAssignment(ctx context.Context, a
 		Source:              "multi_agent",
 		Objective:           a.Objective,
 		ExpectedOutcome:     a.ExpectedOutcome,
+		Constraints:         append([]string(nil), a.Constraints...),
 		CoordinationDepth:   ac.depth + 1,
 	}
 	c.mu.Lock()

@@ -260,8 +260,12 @@ func DefaultMigrations() []Migration {
 		RuntimeModelBudgetMigration(),
 		RemoveGlobalMemoryStorageMigration(),
 		ModelLocalRuntimeMigration(),
+		LocalModelLibrarySchemaRepairMigration(),
 		ChannelSandboxPoliciesMigration(),
 		RetireWebSearchMigration(),
+		AgentControlMigration(),
+		AgentPlatformMigration(),
+		CharacterModelSettingsMigration(),
 	}
 }
 

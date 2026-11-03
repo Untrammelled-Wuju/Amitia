@@ -236,7 +236,12 @@ func (p *meshLocalDataPort) roleCatalogLocked(ctx context.Context, scope coordin
 		if err != nil {
 			return nil, err
 		}
-		roles = append(roles, coordination.Role{ID: row.ID, Name: row.Name, Avatar: row.Avatar, Description: row.Description, Disabled: row.Status != "enabled", Revision: row.Revision, Profile: body})
+		roles = append(roles, coordination.Role{
+			ID: row.ID, Name: row.Name, Avatar: row.Avatar, Description: row.Description,
+			Disabled: row.Status != "enabled", Revision: row.Revision, Profile: body,
+			ModelConfigID: runtime.ModelConfigID, ReasoningEffort: runtime.ReasoningEffort,
+			ReasoningEnabled: runtime.ReasoningEnabled,
+		})
 	}
 	return roles, nil
 }

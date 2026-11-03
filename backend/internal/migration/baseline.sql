@@ -76,6 +76,9 @@ CREATE TABLE IF NOT EXISTS characters (
     silence_duration INTEGER DEFAULT 0,
     character_base TEXT DEFAULT '',
     card_data_json TEXT DEFAULT '{}',
+    model_config_id INTEGER NOT NULL DEFAULT 0,
+    reasoning_effort TEXT NOT NULL DEFAULT '',
+    reasoning_enabled INTEGER NOT NULL DEFAULT -1,
     revision INTEGER NOT NULL DEFAULT 1,
     deleted_at DATETIME
 );
@@ -405,6 +408,33 @@ CREATE TABLE IF NOT EXISTS model_configs (
     created_at TEXT DEFAULT '',
     updated_at TEXT DEFAULT ''
 );
+
+CREATE TABLE IF NOT EXISTS model_artifacts (
+    id TEXT PRIMARY KEY,
+    owner_space_id TEXT NOT NULL DEFAULT '',
+    name TEXT NOT NULL DEFAULT '',
+    filename TEXT NOT NULL DEFAULT '',
+    format TEXT NOT NULL DEFAULT '',
+    size_bytes INTEGER NOT NULL DEFAULT 0,
+    sha256 TEXT NOT NULL DEFAULT '',
+    resource_uri TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'ready',
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT ''
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_model_artifacts_owner_sha256
+    ON model_artifacts(owner_space_id, sha256);
+
+CREATE TABLE IF NOT EXISTS model_artifact_references (
+    artifact_id TEXT NOT NULL DEFAULT '',
+    model_config_id INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (artifact_id, model_config_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_model_artifact_refs_config
+    ON model_artifact_references(model_config_id);
 
 CREATE TABLE IF NOT EXISTS tts_configs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -6441,3 +6471,77 @@ CREATE TABLE IF NOT EXISTS channel_sandbox_policies (
     updated_at TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (space_id, channel_id)
 );
+
+CREATE TABLE IF NOT EXISTS agent_access_policies (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    scope_type TEXT NOT NULL,
+    channel_id TEXT NOT NULL DEFAULT '',
+    account_id TEXT NOT NULL DEFAULT '',
+    conversation_id TEXT NOT NULL DEFAULT '',
+    sender_id TEXT NOT NULL DEFAULT '',
+    explicit_mode TEXT NOT NULL DEFAULT 'allow',
+    inferred_mode TEXT NOT NULL DEFAULT 'observe',
+    trigger_mode TEXT NOT NULL DEFAULT 'direct_or_mention',
+    permission_ceiling TEXT NOT NULL DEFAULT 'request_approval',
+    enabled INTEGER NOT NULL DEFAULT 1,
+    expires_at DATETIME,
+    revision INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_agent_access_scope ON agent_access_policies(space_id, scope_type, channel_id, account_id, conversation_id, sender_id);
+
+CREATE TABLE IF NOT EXISTS agent_access_decisions (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    request_id TEXT NOT NULL DEFAULT '',
+    channel_id TEXT NOT NULL DEFAULT '',
+    account_id TEXT NOT NULL DEFAULT '',
+    conversation_id TEXT NOT NULL DEFAULT '',
+    sender_id TEXT NOT NULL DEFAULT '',
+    source TEXT NOT NULL DEFAULT '',
+    trigger_mode TEXT NOT NULL DEFAULT '',
+    strength TEXT NOT NULL DEFAULT '',
+    decision TEXT NOT NULL DEFAULT '',
+    allowed INTEGER NOT NULL DEFAULT 0,
+    observed INTEGER NOT NULL DEFAULT 0,
+    policy_id TEXT NOT NULL DEFAULT '',
+    policy_revision INTEGER NOT NULL DEFAULT 0,
+    permission_mode TEXT NOT NULL DEFAULT '',
+    reason TEXT NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_agent_access_decision_request ON agent_access_decisions(space_id, request_id);
+CREATE INDEX IF NOT EXISTS idx_agent_access_decision_created ON agent_access_decisions(created_at);
+
+CREATE TABLE IF NOT EXISTS agent_attention_policies (
+    space_id TEXT PRIMARY KEY,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    shadow_mode INTEGER NOT NULL DEFAULT 1,
+    max_interruptions_per_day INTEGER NOT NULL DEFAULT 24,
+    max_repeated_confirmations INTEGER NOT NULL DEFAULT 3,
+    max_consecutive_followups INTEGER NOT NULL DEFAULT 2,
+    max_unchanged_notifications INTEGER NOT NULL DEFAULT 1,
+    dedupe_window_minutes INTEGER NOT NULL DEFAULT 30,
+    revision INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS agent_attention_events (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    role_id TEXT NOT NULL DEFAULT '',
+    conversation_id TEXT NOT NULL DEFAULT '',
+    source_kind TEXT NOT NULL DEFAULT '',
+    source_id TEXT NOT NULL DEFAULT '',
+    event_kind TEXT NOT NULL DEFAULT '',
+    delivery_state TEXT NOT NULL DEFAULT '',
+    reason TEXT NOT NULL DEFAULT '',
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    idempotency_key TEXT NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_agent_attention_event_scope ON agent_attention_events(space_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_agent_attention_event_key ON agent_attention_events(space_id, idempotency_key, created_at);

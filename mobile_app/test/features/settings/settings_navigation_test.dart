@@ -85,6 +85,20 @@ void main() {
     }
   });
 
+  test('iOS exposes the virtual display capability boundary', () {
+    for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
+      debugDefaultTargetPlatformOverride = platform;
+      final items = buildSettingsCategories(
+        modelSummary: '',
+        appearanceSummary: '',
+      ).expand((category) => category.group.items);
+      expect(
+        items.any((item) => item.route == AppRoutes.settingsVirtualDisplay),
+        platform == TargetPlatform.iOS,
+      );
+    }
+  });
+
   test('developer options retain their visibility switch', () {
     for (final enabled in [false, true]) {
       final items = buildSettingsCategories(

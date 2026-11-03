@@ -20,12 +20,17 @@ String originalErrorMapText(Map<dynamic, dynamic> value) {
   for (final key in const [
     'message',
     'msg',
+    'userMessage',
     'error',
+    'errorCode',
     'detail',
     'internalMessage',
     'title',
     'reason',
     'cause',
+    'rawError',
+    'stage',
+    'code',
   ]) {
     append(value[key]);
   }

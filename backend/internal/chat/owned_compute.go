@@ -452,6 +452,7 @@ func (s *service) applyOwnedSafety(ctx context.Context, generation business.Gene
 
 type ownedReplySink struct {
 	inference        business.Inference
+	round            int
 	text             strings.Builder
 	reasoning        strings.Builder
 	reasoningStarted time.Time
@@ -478,7 +479,7 @@ func (s *ownedReplySink) Emit(ctx context.Context, event ModelEvent) error {
 	case ModelEventTextDelta:
 		if !s.reasoningStarted.IsZero() {
 			if s.inference.Emit != nil {
-				if err := s.inference.Emit(business.Event{Type: "reasoning-completed"}); err != nil {
+				if err := s.inference.Emit(business.Event{Type: "reasoning-completed", Round: s.round}); err != nil {
 					return err
 				}
 			}
@@ -491,7 +492,7 @@ func (s *ownedReplySink) Emit(ctx context.Context, event ModelEvent) error {
 			s.safetyBlocked = result.Replacement
 		}
 		if s.inference.Emit != nil && !s.safetyBlocked {
-			return s.inference.Emit(business.Event{Type: "delta", Text: event.TextDelta})
+			return s.inference.Emit(business.Event{Type: "delta", Text: event.TextDelta, Round: s.round})
 		}
 	case ModelEventReasoningSummaryDelta:
 		if s.reasoningStarted.IsZero() {
@@ -499,7 +500,7 @@ func (s *ownedReplySink) Emit(ctx context.Context, event ModelEvent) error {
 		}
 		s.reasoning.WriteString(event.TextDelta)
 		if s.inference.Emit != nil {
-			return s.inference.Emit(business.Event{Type: "delta", Text: event.TextDelta, Reasoning: true})
+			return s.inference.Emit(business.Event{Type: "delta", Text: event.TextDelta, Reasoning: true, Round: s.round})
 		}
 	}
 	return nil

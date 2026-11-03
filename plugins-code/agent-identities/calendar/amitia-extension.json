@@ -1,0 +1,76 @@
+{
+  "manifestVersion": 1,
+  "placement": "device",
+  "extension": {
+    "id": "com.amitia/agent-identity-calendar",
+    "name": { "default": "Agent 日历身份" },
+    "description": { "default": "为 Agent 提供独立日历、日程查询和事件管理能力。" },
+    "version": "1.0.0",
+    "license": "AGPL-3.0-only",
+    "homepage": "https://amitia.untrammelled.top",
+    "categories": ["agent-identities", "productivity"],
+    "keywords": ["calendar", "google-calendar", "microsoft-graph", "schedule", "agent-identity"]
+  },
+  "publisher": { "id": "com.amitia", "displayName": "Amitia", "trustLevel": "official" },
+  "compatibility": { "minHostVersion": "0.1.0", "platforms": ["windows", "linux", "macos", "android", "ios"] },
+  "modules": [
+    {
+      "id": "calendar-identity-runtime",
+      "name": { "default": "Agent 日历运行时" },
+      "description": { "default": "读取和管理 Agent 日历事件。" },
+      "type": "javascript",
+      "placement": "device",
+      "runtime": {
+        "type": "javascript",
+        "entryPoint": "dist/index.js",
+        "timeout": "120s",
+        "memory": 268435456,
+        "maxSubprocesses": 0,
+        "capabilities": { "network": true, "filesystem": false },
+        "hostAccess": {
+          "filesystem": { "mode": "none" },
+          "network": { "mode": "host" },
+          "process": { "mode": "none" }
+        }
+      },
+      "providedCapabilities": [{ "id": "agent.identity.calendar", "version": "1.0.0" }],
+      "contributions": [
+        {
+          "id": "calendar-command",
+          "kind": "tool",
+          "name": { "default": "Agent 日历命令" },
+          "description": { "default": "配置、查询和管理 Agent 日历事件。" },
+          "requiredPermissions": ["storage.state.read", "storage.state.write", "secret.read", "service.network.request"],
+          "spec": {
+            "toolId": "com.amitia/agent-identity-calendar/command",
+            "modelName": "agent_calendar_command",
+            "handlerName": "command",
+            "inputSchema": {
+              "type": "object",
+              "required": ["action"],
+              "properties": {
+                "action": { "type": "string", "enum": ["status", "config", "configure", "enable", "disable", "execute"] },
+                "config": { "type": "object" },
+                "credentialRef": { "type": "string" },
+                "input": { "type": "object" }
+              },
+              "additionalProperties": false
+            },
+            "outputSchema": { "type": "object", "additionalProperties": true },
+            "riskLevel": "medium",
+            "sideEffect": "external",
+            "runtime": { "runtimeType": "javascript", "handlerName": "command" }
+          }
+        }
+      ]
+    }
+  ],
+  "permissions": [
+    { "name": "storage.state.read", "reason": "读取日历身份配置。", "required": true, "scope": "extension" },
+    { "name": "storage.state.write", "reason": "保存日历身份配置。", "required": true, "scope": "extension" },
+    { "name": "secret.read", "reason": "读取用户授权的日历凭据。", "required": true, "scope": "extension" },
+    { "name": "service.network.request", "reason": "连接日历 Provider。", "required": true, "scope": "extension" }
+  ],
+  "lifecycle": { "backgroundTasks": true, "networkAccess": true, "sandbox": true },
+  "integrity": { "algorithm": "sha256", "contentTreeHash": "" }
+}

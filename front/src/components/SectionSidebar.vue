@@ -18,22 +18,6 @@
         </RouterLink>
       </nav>
 
-      <div v-else-if="sectionId === 'tasks'" class="section-action-list">
-        <button type="button" class="section-action primary" @click="openTaskCreate">
-          <el-icon><Plus /></el-icon>
-          <span>新建任务</span>
-        </button>
-        <div class="subsection-heading"><span>已有任务</span></div>
-      </div>
-
-      <div v-else-if="sectionId === 'continuity'" class="section-action-list">
-        <button type="button" class="section-action primary" @click="openContinuityCreate">
-          <el-icon><Plus /></el-icon>
-          <span>新建事项</span>
-        </button>
-        <div class="subsection-heading"><span>已有事项</span></div>
-      </div>
-
       <div v-else-if="sectionId === 'game'" class="game-sidebar">
         <button type="button" class="section-action primary" @click="openGameInstall">
           <el-icon><Plus /></el-icon>
@@ -89,22 +73,12 @@ const gamePlugins = ref<GamePlugin[]>([]);
 const gameLoading = ref(false);
 
 function sectionTitle(id: AppSectionId) {
-  if (id === "tasks") return "主动任务";
-  if (id === "continuity") return "持续事项";
   if (id === "game") return "游戏模式";
   return "";
 }
 
 function isEntryActive(path: string) {
   return route.path === path || route.path.startsWith(`${path}/`);
-}
-
-function openTaskCreate() {
-  void router.push({ path: "/reminders", query: { create: "1" } });
-}
-
-function openContinuityCreate() {
-  void router.push({ path: "/continuity", query: { create: "1" } });
 }
 
 function openGameInstall() {
@@ -154,7 +128,7 @@ watch(
 .section-sidebar-header { flex: 0 0 auto; padding: 18px 18px 12px; }
 .section-sidebar-header h1 { margin: 0; color: var(--text-primary); font-size: var(--ac-font-size-xl); font-weight: 650; }
 .section-sidebar-scroll { min-height: 0; flex: 1; overflow-y: auto; padding: 0 8px 18px; }
-.section-entry-list, .section-action-list, .game-sidebar { display: grid; align-content: start; gap: 4px; }
+.section-entry-list, .game-sidebar { display: grid; align-content: start; gap: 4px; }
 .section-entry, .section-action, .game-plugin-row {
   border: 0;
   border-radius: 9px;

@@ -1318,6 +1318,47 @@ func (r *WorkflowExecutionRepository) ListRuns(ctx context.Context, workflowID s
 	return items, total, rows.Err()
 }
 
+func (r *WorkflowExecutionRepository) ListAttentionRuns(ctx context.Context, spaceID string, updatedAfter time.Time, limit int) ([]workflow.WorkflowRun, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT execution_id, workflow_id, status, input_json, output_json, error_message,
+			context_json, steps_json, compensation_json, attempt, generation,
+			pause_reason, pause_requested_at, paused_at,
+			started_at, finished_at, updated_at
+		FROM extension_workflow_executions
+		WHERE status IN (?, ?, ?, ?, ?, ?)
+		  AND json_extract(COALESCE(context_json, '{}'), '$.spaceId') = ?
+		  AND updated_at >= ?
+		ORDER BY updated_at DESC
+		LIMIT ?
+	`,
+		string(workflow.RunStatusFailed),
+		string(workflow.RunStatusManualInterventionRequired),
+		string(workflow.RunStatusCancelFailed),
+		string(workflow.RunStatusCancelTimeout),
+		string(workflow.RunStatusCompensationFailed),
+		string(workflow.RunStatusWaitingConfirmation),
+		strings.TrimSpace(spaceID),
+		updatedAfter.UTC(),
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list attention workflow executions: %w", err)
+	}
+	defer rows.Close()
+	items := make([]workflow.WorkflowRun, 0)
+	for rows.Next() {
+		run, err := r.scanRun(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, *run)
+	}
+	return items, rows.Err()
+}
+
 func (r *WorkflowExecutionRepository) SaveAttempt(ctx context.Context, attempt workflow.StepAttemptRun) error {
 	now := time.Now().UTC()
 	_, err := r.db.ExecContext(ctx, `

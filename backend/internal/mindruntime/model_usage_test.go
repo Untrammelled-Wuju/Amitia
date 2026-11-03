@@ -1,6 +1,7 @@
 package mindruntime
 
 import (
+	"context"
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 	"path/filepath"
@@ -91,5 +92,28 @@ func TestModelUsageUnknownZeroFailuresAndRestart(t *testing.T) {
 	rows, _, err := reopened.Aggregate(t.Context(), UsageFilter{SpaceID: "core"}, "overview")
 	if err != nil || rows[0].Unknown != 2 || rows[0].Interrupted != 1 || rows[0].Running != 0 || rows[0].Calls != 3 {
 		t.Fatalf("unknown or interrupted calls misreported: %+v %v", rows, err)
+	}
+}
+
+func TestModelUsageFinishObserverReceivesSettledRecordOnce(t *testing.T) {
+	store, _ := usageTestStore(t)
+	var observed []ModelUsageRecord
+	store.SetFinishObserver(func(_ context.Context, usage ModelUsageRecord) error {
+		observed = append(observed, usage)
+		return nil
+	})
+	id, err := store.Begin(t.Context(), ModelUsageRecord{Model: "observer", Provider: "test", Source: "web"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Finish(t.Context(), id, ModelUsageRecord{Status: "succeeded", UsageReported: true, InputTokens: 10, OutputTokens: 5, TotalTokens: 15}); err != nil {
+		t.Fatal(err)
+	}
+	if len(observed) != 1 || observed[0].ID != id || observed[0].TotalTokens != 15 || observed[0].Status != "succeeded" {
+		t.Fatalf("unexpected finish observation: %+v", observed)
+	}
+	_ = store.Finish(t.Context(), id, ModelUsageRecord{Status: "succeeded", TotalTokens: 15})
+	if len(observed) != 1 {
+		t.Fatalf("observer ran more than once: %d", len(observed))
 	}
 }

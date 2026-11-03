@@ -60,6 +60,8 @@ import '../../../conversation/rendering/role_switch_divider.dart';
 import '../../../../shared/models/models.dart';
 import '../chat_route_state.dart';
 import '../widgets/agent_approval_guard.dart';
+import '../widgets/chat_error_notice.dart';
+import '../../runtime/runtime_error_detail.dart';
 import '../widgets/automation_status_indicator.dart';
 import '../widgets/floating_chat_composer_layout.dart';
 import 'realtime_call_page.dart';
@@ -1857,7 +1859,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
     try {
       final bytes = base64Decode(payload);
-      return service.uploadBytes(
+      return await service.uploadBytes(
         bytes: bytes,
         kind: kind,
         fileName: fallbackFileName,
@@ -2871,8 +2873,17 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final lastVisibleMessage = visibleMessages.isEmpty
         ? null
         : visibleMessages.last;
-    if (lastVisibleMessage?.role == MessageRole.assistant &&
-        lastVisibleMessage?.status == MessageStatus.error) {
+    final lastAssistantHasError =
+        lastVisibleMessage?.role == MessageRole.assistant &&
+        (lastVisibleMessage?.status == MessageStatus.error ||
+            lastVisibleMessage!.runtimeErrorDetail.trim().isNotEmpty ||
+            lastVisibleMessage.assistantTurn?.items.any(
+                  (item) =>
+                      item.type == 'error' &&
+                      item.status.toLowerCase() != 'interrupted',
+                ) ==
+                true);
+    if (lastAssistantHasError) {
       final messageIndex = flowItems.indexWhere(
         (item) => item.message?.id == lastVisibleMessage!.id,
       );
@@ -2882,7 +2893,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           _MobileChatFlowItem.error(
             key:
                 'error:${lastVisibleMessage!.assistantTurn?.id ?? lastVisibleMessage.id}',
-            detail: _turnErrorDetail(lastVisibleMessage.assistantTurn),
+            detail: _messageErrorDetail(lastVisibleMessage),
             timestamp: lastVisibleMessage.time,
             sequence: lastVisibleMessage.sequence,
           ),
@@ -2926,6 +2937,35 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         : characterName.isNotEmpty
         ? characterName
         : '新对话';
+    final memberRoles =
+        _runtime.group?.activeMembers ?? const <OwnedGroupMember>[];
+    final roleIDs = memberRoles.isEmpty
+        ? <String>[if (characterId.isNotEmpty) characterId]
+        : <String>[
+            if (characterId.isNotEmpty) characterId,
+            ...memberRoles
+                .map((member) => member.characterId)
+                .where((id) => id != characterId),
+          ];
+    final roleModelConfigs = roleIDs
+        .map((roleId) {
+          final member = memberRoles
+              .where((item) => item.characterId == roleId)
+              .firstOrNull;
+          final character = characters
+              .where((item) => item.id == roleId)
+              .firstOrNull;
+          return <String, dynamic>{
+            'roleId': roleId,
+            'memberId': member?.memberId ?? '',
+            'name': member?.characterName ?? character?.name ?? roleId,
+            'avatar': member?.characterAvatar ?? character?.avatar ?? '',
+            'modelConfigId': character?.modelConfigId ?? 0,
+            'reasoningEffort': character?.reasoningEffort ?? '',
+            'reasoningEnabled': character?.reasoningEnabled ?? -1,
+          };
+        })
+        .toList(growable: false);
 
     final conversationComposer = Column(
       mainAxisSize: MainAxisSize.min,
@@ -3004,6 +3044,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                       },
                     )
                     .toList(growable: false),
+                roleModelConfigs: roleModelConfigs,
                 selectedModelId: selectedModelConfigId,
                 reasoningEffort: _runtime.reasoningEffort,
                 reasoningEnabled: _runtime.reasoningEnabled,
@@ -3019,6 +3060,37 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                       .catchError((Object error, StackTrace stackTrace) {
                         print("[original-error] $error\n$stackTrace");
                       });
+                },
+                onRoleModelPreviewChanged: (roleId, modelId, effort, enabled) {
+                  if (roleId == characterId) {
+                    _runtime.previewModelSettings(modelId, effort, enabled);
+                  }
+                },
+                onRoleModelChanged: (roleId, modelId, effort, enabled) async {
+                  try {
+                    final character = characters
+                        .where((item) => item.id == roleId)
+                        .firstOrNull;
+                    if (character == null) {
+                      throw StateError('角色已变化，请重新选择');
+                    }
+                    await ref
+                        .read(characterDetailServiceProvider)
+                        .updateCharacter(roleId, {
+                          'modelConfigId': modelId,
+                          'reasoningEffort': effort,
+                          'reasoningEnabled': enabled ? 1 : 0,
+                        }, roleAuthority: character.roleAuthority);
+                    ref.invalidate(characterListProvider);
+                    if (roleId == characterId) {
+                      _runtime.previewModelSettings(modelId, effort, enabled);
+                    }
+                  } catch (error, stackTrace) {
+                    print('[original-error] $error\n$stackTrace');
+                    if (mounted) {
+                      amitiaSnackBar(this.context, '角色模型设置保存失败：$error');
+                    }
+                  }
                 },
                 onPermissionChanged: (mode) {
                   _runtime.updatePermissionMode(mode).catchError((
@@ -3212,11 +3284,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                           if (item.errorDetail != null) {
                                             return KeyedSubtree(
                                               key: ValueKey(item.key),
-                                              child: _ChatErrorNotice(
+                                              child: ChatErrorNotice(
                                                 detail: item.errorDetail!,
-                                                title: item.messageIndex == null
-                                                    ? '生成失败'
-                                                    : '发送失败',
                                                 onRetry:
                                                     item.messageIndex != null &&
                                                         item.messageIndex! >=
@@ -4469,108 +4538,37 @@ class _MobileChatFlowItem {
   bool get isMessage => message != null;
 }
 
+String _messageErrorDetail(ChatMessage message) {
+  final turnDetail = _turnErrorDetail(message.assistantTurn);
+  if (turnDetail.isNotEmpty) return turnDetail;
+  if (message.runtimeErrorDetail.trim().isNotEmpty) {
+    return message.runtimeErrorDetail;
+  }
+  return '';
+}
+
 String _turnErrorDetail(AssistantTurnDto? turn) {
   final items =
       turn?.items.where((candidate) => candidate.type == 'error').toList() ??
       const <AssistantTurnItemDto>[];
-  if (items.isEmpty) return '网络错误';
+  if (items.isEmpty) return '';
   final item = items.last;
   dynamic decoded;
   try {
     decoded = jsonDecode(item.resultJson);
   } catch (error, stackTrace) {
-    print("[original-error] $error\n$stackTrace");
-    return error.toString();
+    return '${item.content}\n\nresultJson:\n${item.resultJson}\n\n$error\n$stackTrace';
   }
   if (decoded is! Map) {
-    return item.errorCode.trim().isNotEmpty ? item.errorCode : '网络错误';
+    return <String>[
+      if (item.errorCode.trim().isNotEmpty) 'errorCode: ${item.errorCode}',
+      if (item.content.trim().isNotEmpty) item.content,
+      if (item.resultJson.trim().isNotEmpty) 'resultJson:\n${item.resultJson}',
+    ].join('\n\n');
   }
-  String errorValueText(dynamic value) {
-    if (value == null) return '';
-    if (value is String) return value.trim();
-    try {
-      return jsonEncode(value);
-    } catch (error, stackTrace) {
-      print("[original-error] $error\n$stackTrace");
-      return value.toString().trim();
-    }
+  final payload = Map<String, dynamic>.from(decoded);
+  if (item.errorCode.trim().isNotEmpty && !payload.containsKey('errorCode')) {
+    payload['errorCode'] = item.errorCode;
   }
-
-  final internalMessage = errorValueText(decoded['internalMessage']);
-  final userMessage = errorValueText(decoded['userMessage']);
-  final errorCode = errorValueText(decoded['errorCode'] ?? item.errorCode);
-  final provider = errorValueText(decoded['provider']);
-  final message = internalMessage.isNotEmpty
-      ? internalMessage
-      : userMessage.isNotEmpty
-      ? userMessage
-      : errorCode.isNotEmpty
-      ? errorCode
-      : '网络错误';
-  return <String>[
-    provider,
-    errorCode,
-    message,
-  ].where((value) => value.isNotEmpty).join(' · ');
-}
-
-class _ChatErrorNotice extends StatelessWidget {
-  final String detail;
-  final String title;
-  final VoidCallback? onRetry;
-
-  const _ChatErrorNotice({
-    required this.detail,
-    required this.title,
-    this.onRetry,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 38),
-      child: LayoutBuilder(
-        builder: (context, constraints) => Row(
-          children: [
-            Expanded(child: Divider(color: context.borderPrimary, height: 1)),
-            const SizedBox(width: 10),
-            ConstrainedBox(
-              constraints: BoxConstraints(
-                maxWidth: constraints.maxWidth * 4 / 6,
-              ),
-              child: Text.rich(
-                TextSpan(
-                  children: [
-                    TextSpan(
-                      text: title,
-                      style: TextStyle(
-                        color: context.error,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const TextSpan(text: '  '),
-                    TextSpan(
-                      text: detail,
-                      style: TextStyle(
-                        color: context.textTertiary,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ),
-            if (onRetry != null) ...[
-              const SizedBox(width: 8),
-              TextButton(onPressed: onRetry, child: const Text('重试')),
-            ],
-            const SizedBox(width: 10),
-            Expanded(child: Divider(color: context.borderPrimary, height: 1)),
-          ],
-        ),
-      ),
-    );
-  }
+  return formatRuntimeErrorDetail(payload, fallback: item.content);
 }

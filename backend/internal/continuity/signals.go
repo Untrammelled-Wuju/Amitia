@@ -40,5 +40,6 @@ type ApprovalLifecycleSignal struct {
 	RequestID      string
 	ToolCallID     string
 	Reason         string
+	ResolvedBy     string
 	Timestamp      time.Time
 }

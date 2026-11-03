@@ -298,7 +298,13 @@ return false;
       win.show();
       win.focus();
       const conversation = String(payload.conversationId || '');
-      if (conversation) win.webContents.send(IPC_CHANNELS.uiNavigate, '/chat?conversationId=' + encodeURIComponent(conversation) + '&characterId=' + encodeURIComponent(String(payload.characterId || '')) + '&ownerId=' + encodeURIComponent(String(payload.ownerId || '')));
+      const attentionId = String(payload.attentionId || '');
+      const target = conversation
+        ? '/chat?conversationId=' + encodeURIComponent(conversation) + '&characterId=' + encodeURIComponent(String(payload.characterId || '')) + '&ownerId=' + encodeURIComponent(String(payload.ownerId || '')) + (attentionId ? '&attentionId=' + encodeURIComponent(attentionId) : '')
+        : attentionId
+          ? '/reminders?attentionId=' + encodeURIComponent(attentionId)
+          : '';
+      if (target) win.webContents.send(IPC_CHANNELS.uiNavigate, target);
     });
     notification.show();
   }

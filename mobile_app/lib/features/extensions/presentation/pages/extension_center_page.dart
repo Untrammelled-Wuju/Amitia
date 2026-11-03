@@ -109,6 +109,12 @@ class ExtensionCenterPage extends ConsumerWidget {
           child: Column(
             children: [
               _CenterEntry(
+                label: '插件市场',
+                icon: Icons.storefront_outlined,
+                onTap: () => context.push(AppRoutes.extensionsMarket),
+                showDivider: true,
+              ),
+              _CenterEntry(
                 label: '扩展包',
                 icon: Icons.inventory_2_outlined,
                 onTap: () => context.push(AppRoutes.extensionsPackages),

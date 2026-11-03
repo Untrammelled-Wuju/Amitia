@@ -18,6 +18,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/agent"
+	"github.com/u-ai/backend/internal/agentplatform"
 	"github.com/u-ai/backend/internal/asr"
 	channelinbound "github.com/u-ai/backend/internal/channel/inbound"
 	channelsandbox "github.com/u-ai/backend/internal/channel/sandbox"
@@ -51,6 +52,7 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/management"
 	"github.com/u-ai/backend/internal/imagegen"
+	"github.com/u-ai/backend/internal/imageintelligence"
 	iosnativebackground "github.com/u-ai/backend/internal/iosnative/background"
 	"github.com/u-ai/backend/internal/knowledge"
 	"github.com/u-ai/backend/internal/middleware"
@@ -195,6 +197,25 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		}
 	}
 	spaceID := spaceStore.SpaceID()
+	agentPlatformOwnerID := ""
+	if services.AgentPlatform != nil {
+		if err := services.AgentPlatform.SeedAgentTemplates(context.Background()); err != nil {
+			return nil, fmt.Errorf("initialize agent templates: %w", err)
+		}
+		if err := services.AgentPlatform.SeedMarketplace(context.Background()); err != nil {
+			return nil, fmt.Errorf("initialize plugin marketplace: %w", err)
+		}
+		if pluginDir := localAgentIdentityPluginDir(); pluginDir != "" {
+			if err := services.AgentPlatform.SeedLocalPluginMarketplace(context.Background(), pluginDir); err != nil {
+				return nil, fmt.Errorf("initialize local plugin marketplace: %w", err)
+			}
+		}
+		owner, ownerErr := services.AgentPlatform.EnsureLocalOwner(context.Background(), spaceID, "本地用户")
+		if ownerErr != nil {
+			return nil, fmt.Errorf("initialize agent platform owner: %w", ownerErr)
+		}
+		agentPlatformOwnerID = owner.ID
+	}
 
 	var webAccessSvc *security.WebAccessService
 	if services.RuntimeProfile == runtimeprofile.ProfileCloudCore {
@@ -208,6 +229,9 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 	if webAccessSvc != nil {
 		public.Use(security.RequireWebAccessForDeclaredBrowser(webAccessSvc))
 		security.RegisterWebAccessPublicRoutes(public, webAccessSvc)
+	}
+	if services.AgentPlatform != nil {
+		agentplatform.RegisterPublicRoutes(public, services.AgentPlatform, spaceID)
 	}
 	public.GET("/core/info", func(c *gin.Context) {
 		identity := spaceStore.Identity()
@@ -609,6 +633,11 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		if services.NotificationRuntime != nil {
 			notificationruntime.RegisterRoutes(apiGroup, services.NotificationRuntime)
 		}
+		if services.AccessPolicy != nil && services.KernelContainer != nil && services.KernelContainer.ChannelResolver != nil {
+			if err := services.AccessPolicy.EnsureCompatiblePolicies(context.Background(), spaceID, services.KernelContainer.ChannelResolver.Channels()); err != nil {
+				return nil, fmt.Errorf("initialize source access policies: %w", err)
+			}
+		}
 		var agentToolFacade *extensionkernel.ToolFacade
 		if services.KernelContainer != nil {
 			agentToolFacade = services.KernelContainer.ToolFacade
@@ -620,6 +649,10 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			reminderDeviceID = services.DeviceMesh.LocalDeviceID
 		}
 		reminder.RegisterRouter(apiGroup, services.Reminders, reminderDeviceID)
+		registerAttentionControlRoutes(apiGroup, services, spaceID)
+		if services.AgentPlatform != nil {
+			agentplatform.RegisterRoutes(apiGroup, services.AgentPlatform, spaceID, agentPlatformOwnerID)
+		}
 		agent.RegisterAgentRuntimeRunners(ctx, agentToolFacade)
 		channelAccess := system.ChannelAvailabilityFunc(func(channelID string) bool {
 			if services.KernelContainer == nil || services.KernelContainer.ChannelResolver == nil {
@@ -642,7 +675,8 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		registerMeshRealtimePublicRoutes(r, services)
 		vision.RegisterVisionRouter(apiGroup, ctx)
 		embedding_config.RegisterEmbeddingConfigRouter(apiGroup, ctx)
-		imagegen.RegisterImageGenRouter(apiGroup, ctx)
+		imagegen.RegisterImageGenRouter(apiGroup, services.ImageGen)
+		imageintelligence.RegisterRouter(apiGroup, services.ImageIntelligence)
 		doctor.RegisterRouter(apiGroup, ctx.DB, services.Extension)
 		readiness.RegisterRouter(apiGroup, services.Readiness)
 		system.RegisterHealthRouter(apiGroup, services.CircuitBreakers, services.DataLifecycle, services.Reconciliation)
@@ -684,6 +718,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		}
 		registerCloudGameCenterGateway(apiGroup, services)
 		registerCloudWorkbenchBrowserGateway(apiGroup, services)
+		registerCloudImageGenerationGateway(apiGroup, services)
 		if services.KernelContainer != nil && services.KernelContainer.GameHost != nil {
 			log.Info("[GameCenter] GameHost detected, registering game-center routes")
 			kernelReader := management.NewKernelReaderWithContributions(services.KernelContainer.DefinitionRepository, services.KernelContainer.InstallationRepository, services.KernelContainer.ContributionRepository)

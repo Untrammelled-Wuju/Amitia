@@ -69,7 +69,17 @@ func (r *ownedChatIngress) ExecuteEntry(ctx context.Context, req *interaction.Un
 		return nil, err
 	}
 	if r.services.ContinuityOwner != nil && req.ThreadID == "" && !req.IsInternal && !req.SuppressReplyPersistence {
-		req.ThreadID, err = r.services.ContinuityOwner.Resolve(ctx, owner, req.CharacterID, req.ConversationID, req.WorkspaceID, req.Message, continuityOwnerRequestID(req.RequestID+"|continuity-resolve"))
+		replyToMessageID := ""
+		if req.ReplyToMessageID != nil {
+			replyToMessageID = strings.TrimSpace(*req.ReplyToMessageID)
+		}
+		hints := []continuity.BindingLookup{
+			{Type: "approval", ID: req.ApprovalID},
+			{Type: "task_run", ID: req.TaskRunID},
+			{Type: "workflow_run", ID: req.WorkflowRunID},
+			{Type: "execution", ID: req.ExecutionID},
+		}
+		req.ThreadID, err = r.services.ContinuityOwner.Resolve(ctx, owner, req.CharacterID, req.ConversationID, req.WorkspaceID, req.Message, replyToMessageID, req.RequestID, continuityOwnerRequestID(req.RequestID+"|continuity-resolve"), hints...)
 		if err != nil {
 			return nil, err
 		}
@@ -84,6 +94,17 @@ func (r *ownedChatIngress) ExecuteEntry(ctx context.Context, req *interaction.Un
 	}
 	ctx = business.WithIngress(ctx, business.Ingress{Source: req.Source, Channel: req.Channel, PeerID: req.PeerID, PeerKind: req.PeerKind, ConversationTitle: req.ConversationTitle, SenderName: req.SenderName, SenderID: req.SenderID, MentionNames: req.MentionNames, ReplyExcerpt: req.ReplyExcerpt, SandboxWorkspaceID: req.SandboxWorkspaceID, SandboxRoot: req.SandboxRoot, SandboxAllowNetwork: req.SandboxAllowNetwork, ThreadID: req.ThreadID, SessionID: req.SessionID, DeviceTimezone: req.DeviceTimezone, ProactiveTaskInstruction: req.ProactiveTaskInstruction, ProactiveTimeContext: req.ProactiveTimeContext, ProactiveRecentContext: req.ProactiveRecentContext, ProactiveRelationship: req.ProactiveRelationship, ProactiveEmotion: req.ProactiveEmotion, ProactiveMemory: req.ProactiveMemory, MessageStyle: req.MessageStyle, ExpressionPlan: expression, IsInternal: req.IsInternal, SuppressReplyPersistence: req.SuppressReplyPersistence})
 	request := business.Request{SpaceID: owner.SpaceID, DeviceID: owner.DeviceID, TargetDeviceID: owner.TargetDeviceID, CoreID: owner.CoreID, RoleID: req.CharacterID, ConversationID: req.ConversationID, RequestID: req.RequestID, Message: req.Message, PermissionMode: req.PermissionMode, Attachments: attachments, ModelConfigID: req.ModelConfigID, ReasoningEffort: req.ReasoningEffort, ReasoningEnabled: req.ReasoningEnabled, SenderName: req.SenderName, SenderID: req.SenderID, MentionNames: req.MentionNames, ReplyExcerpt: req.ReplyExcerpt, FileURL: req.FileUrl, FileName: req.FileName}
+	if req.WorkspaceID != "" {
+		workspaceDeviceID := req.WorkspaceDeviceID
+		if workspaceDeviceID == "" {
+			workspaceDeviceID = owner.TargetDeviceID
+		}
+		request.PrimaryWorkspaceID = req.WorkspaceID
+		request.ProjectWorkspaces = []business.ProjectWorkspace{{
+			ID: req.WorkspaceID, DeviceID: workspaceDeviceID, Name: req.WorkspaceName,
+			Kind: req.WorkspaceKind, RootURI: req.WorkspaceRootURI,
+		}}
+	}
 	if reference := strings.TrimSpace(req.ReplyExcerpt); reference != "" && (req.ReplyToMessageID == nil || strings.TrimSpace(*req.ReplyToMessageID) == "") {
 		request.ExternalQuote = &business.ExternalQuote{SenderName: req.SenderName, Content: reference}
 	} else if req.ReplyToMessageID != nil && strings.TrimSpace(*req.ReplyToMessageID) != "" {
@@ -129,6 +150,9 @@ func (r *ownedChatIngress) ExecuteEntry(ctx context.Context, req *interaction.Un
 	if r.services.ContinuityOwner != nil && req.ThreadID != "" {
 		if err := r.services.ContinuityOwner.Observe(ctx, owner, response.Scope.RoleID, req.ThreadID, continuity.ObservePayload{Version: "v1", ThreadID: req.ThreadID, SpaceID: owner.SpaceID, CharacterID: response.Scope.RoleID, ConversationID: response.ConversationID, RequestID: response.RequestID, ExecutionID: response.ExecutionID, UserMessage: req.Message, AssistantReply: response.Text, Source: req.Source}); err != nil {
 			return result, fmt.Errorf("回复已保存，持续事项同步失败: %w", err)
+		}
+		if err := r.services.ContinuityOwner.BindMessages(ctx, owner, response.Scope.RoleID, req.ThreadID, result.Response.MessageIDs); err != nil {
+			return result, fmt.Errorf("回复已保存，消息事项绑定失败: %w", err)
 		}
 	}
 	if err := ownedIngressResponseOutputs(result.Response, response.Outputs); err != nil {

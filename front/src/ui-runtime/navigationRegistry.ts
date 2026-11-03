@@ -96,10 +96,10 @@ export function resolveNavigationIcon(name?: string): Component {
 
 const builtinItems: UINavigationItem[] = [
   { id: "home", route: "/chat", label: "主页", description: "开始新对话，或继续最近的聊天。", icon: HomeIcon, group: "home", order: 0, mobile: true, match: ["/chat", "/logs"] },
-  { id: "tasks.proactive", route: "/reminders", label: "主动任务", description: "安排定时消息和角色主动执行的任务。", icon: AlarmClock, group: "tasks", order: 70 },
+  { id: "agents", route: "/agents", label: "Agent", description: "管理 Agent、团队、电脑和审批。", icon: Odometer, group: "agents", order: 10, mobile: true, match: ["/agents"] },
+  { id: "tasks", route: "/reminders", label: "任务", description: "管理主动任务和持续事项。", icon: AlarmClock, group: "tasks", order: 70, mobile: true, match: ["/continuity"] },
   { id: "character.hub", route: "/characters", label: "角色", description: "管理角色和世界书。", icon: CharacterIcon, group: "character", order: 20, mobile: true, match: ["/character", "/world-book"] },
   { id: "memory.hub", route: "/memory", label: "记忆", description: "查看知识库、用户画像、记忆图谱、情景和时间线。", icon: BrainIcon, group: "memory", order: 50, mobile: true, match: ["/memory-manager", "/memory-timeline", "/knowledge", "/episodic", "/graph", "/profiles"] },
-  { id: "continuity.threads", route: "/continuity", label: "持续事项", description: "跟踪跨对话的长期目标、承诺和进展。", icon: ContinuityIcon, group: "continuity", order: 75, mobile: true },
   { id: "workshop.game-center", route: "/game-center", label: "游戏模式", description: "安装、运行并查看游戏插件。", icon: GamepadIcon, group: "workshop", order: 80, runtimeCapability: "gameMode" },
   { id: "workshop", route: "/creative-workshop", label: "创意工坊", description: "创建角色卡、桌宠和其他创作内容。", icon: MagicStick, group: "workshop", order: 85, match: ["/creative-workshop"] },
   { id: "extensions", route: "/extensions", label: "扩展中心", description: "管理扩展包、工作流、MCP 和 Agent Skills。", icon: Extensions, group: "extensions", order: 90, match: ["/extensions", "/kernel"] },
@@ -126,6 +126,7 @@ const pageTitleOverrides: Record<string, string> = {
   "/storage": "存储清理",
   "/runtime-debug": "运行时调试",
   "/chat": "新对话",
+  "/agents": "Agent OS",
   "/character": "角色管理",
   "/profiles": "用户画像",
   "/world-book": "世界书",
@@ -148,6 +149,7 @@ const pageTitleOverrides: Record<string, string> = {
   "/creative-workshop/pet": "桌宠",
   "/emotes": "表情包管理",
   "/extensions/mcp": "MCP 服务",
+  "/extensions/market": "插件市场",
   "/extensions/packages": "扩展包",
   "/extensions/workflows": "工作流",
   "/kernel": "扩展包",

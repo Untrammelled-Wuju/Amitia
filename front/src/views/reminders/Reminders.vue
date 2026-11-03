@@ -34,6 +34,12 @@ SPDX-License-Identifier: AGPL-3.0-only
           }}
         </span>
         <el-button
+          type="primary"
+          :icon="Plus"
+          :loading="openingEditor"
+          @click="openCreate"
+        >新建任务</el-button>
+        <el-button
           text
           circle
           :icon="Refresh"
@@ -46,6 +52,9 @@ SPDX-License-Identifier: AGPL-3.0-only
     </header>
     <section class="workspace-content">
       <el-tabs v-model="activeView" class="workspace-tabs">
+        <el-tab-pane label="现在需要我处理" name="attention">
+          <PendingActionPanel />
+        </el-tab-pane>
         <el-tab-pane label="任务" name="tasks">
           <div class="list-toolbar">
             <el-input
@@ -175,7 +184,7 @@ SPDX-License-Identifier: AGPL-3.0-only
                   {{
                     searchText || filterCharacterId || activeGroup
                       ? "尝试调整搜索内容或筛选条件。"
-                      : "从左侧新建任务，安排角色在指定时间发送消息。"
+                      : "点击顶部“新建任务”，安排角色在指定时间发送消息。"
                   }}
                 </p>
                 <el-button
@@ -186,7 +195,6 @@ SPDX-License-Identifier: AGPL-3.0-only
                     activeGroup = '';
                   "
                   >清除筛选</el-button>
-                <el-button v-else type="primary" @click="openCreate">新建任务</el-button>
               </div></template
             >
           </el-table>
@@ -593,6 +601,7 @@ import type { ReminderGroup } from "../../types";
 import { randomUUID } from "../../runtime/secure-random";
 import ProspectivePanel from "./components/ProspectivePanel.vue";
 import TriggerHistoryPanel from "./components/TriggerHistoryPanel.vue";
+import PendingActionPanel from "./components/PendingActionPanel.vue";
 import { requireSavedTask, currentOwnerConversations, validateChannelTargets } from "./contract";
 
 const route = useRoute();
@@ -663,7 +672,7 @@ const reminders = ref<Reminder[]>([]);
 const taskKind = ref<TaskKind>("user_reminder");
 const isProactiveTask = computed(() => taskKind.value === "proactive_task");
 const loading = ref(false);
-const activeView = ref("tasks");
+const activeView = ref("attention");
 const searchText = ref("");
 const listError = ref("");
 const statusLoaded = ref(false);

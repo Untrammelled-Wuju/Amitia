@@ -91,8 +91,8 @@ class NotificationCoordinator with WidgetsBindingObserver {
       await _drainPendingReplies();
       await _drainPendingCallActions();
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-_scheduleRetry();
+      print("[original-error] $error\n$stackTrace");
+      _scheduleRetry();
     }
   }
 
@@ -195,8 +195,8 @@ _scheduleRetry();
       unawaited(_drainPendingReplies());
       unawaited(_drainPendingCallActions());
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-_scheduleRetry();
+      print("[original-error] $error\n$stackTrace");
+      _scheduleRetry();
     } finally {
       _refreshing = false;
       final idle = _refreshIdleCompleter;
@@ -241,29 +241,29 @@ _scheduleRetry();
       try {
         await _platform.clearMessageNotifications();
       } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+        print("[original-error] $error\n$stackTrace");
+      }
     }
     if (pushEnabled == false || executionActivityEnabled == false) {
       try {
         await _platform.clearExecutionNotifications();
       } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+        print("[original-error] $error\n$stackTrace");
+      }
     }
     if (pushEnabled == false || callPushEnabled == false) {
       try {
         await _platform.clearCallNotifications();
       } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+        print("[original-error] $error\n$stackTrace");
+      }
     }
     if (pushEnabled == false || reminderPushEnabled == false) {
       try {
         await _platform.clearReminderNotifications();
       } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+        print("[original-error] $error\n$stackTrace");
+      }
     }
   }
 
@@ -318,8 +318,8 @@ _scheduleRetry();
         },
       );
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+      print("[original-error] $error\n$stackTrace");
+    }
   }
 
   Future<String?> _effectiveDeviceId() async {
@@ -347,8 +347,8 @@ _scheduleRetry();
         },
       );
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-_scheduleRetry();
+      print("[original-error] $error\n$stackTrace");
+      _scheduleRetry();
     }
   }
 
@@ -402,8 +402,8 @@ _scheduleRetry();
     try {
       await _platform.endCall(normalizedCallId, reason: reason);
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+      print("[original-error] $error\n$stackTrace");
+    }
     final pending = PendingNotificationCallAction(
       operation: 'end',
       callId: normalizedCallId,
@@ -428,13 +428,13 @@ _scheduleRetry();
     try {
       await _platform.clearExecutionNotifications();
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+      print("[original-error] $error\n$stackTrace");
+    }
     try {
       await _platform.clearCallNotifications();
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+      print("[original-error] $error\n$stackTrace");
+    }
 
     try {
       final inFlight = _refreshIdleCompleter;
@@ -442,8 +442,8 @@ _scheduleRetry();
         try {
           await inFlight.future.timeout(const Duration(seconds: 5));
         } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+          print("[original-error] $error\n$stackTrace");
+        }
       }
       final deviceId = _registeredDeviceId?.trim();
       if (deviceId == null || deviceId.isEmpty) return;
@@ -452,8 +452,8 @@ _scheduleRetry();
       );
       _registeredDeviceId = null;
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-// Deployment switching must remain possible when the old Core is
+      print("[original-error] $error\n$stackTrace");
+      // Deployment switching must remain possible when the old Core is
       // unreachable. Keep registration suppressed until the caller has either
       // reconciled the new Core or rolled back the previous deployment.
       _registeredDeviceId = null;
@@ -566,8 +566,8 @@ _scheduleRetry();
       await _callActionOutbox.remove(pending.callId);
       return true;
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-return false;
+      print("[original-error] $error\n$stackTrace");
+      return false;
     }
   }
 
@@ -598,8 +598,8 @@ return false;
       await _replyOutbox.remove(pending.id);
       return true;
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-return false;
+      print("[original-error] $error\n$stackTrace");
+      return false;
     }
   }
 
@@ -641,6 +641,7 @@ return false;
               'conversationId': conversationId,
               'messageId': ?uri.queryParameters['message'],
               'runId': ?uri.queryParameters['run'],
+              'attentionId': ?uri.queryParameters['attentionId'],
             },
           ).toString(),
         );
@@ -651,7 +652,15 @@ return false;
           _router.go('/settings');
         }
       case 'reminder':
-        _router.go('/reminders');
+      case 'reminders':
+        _router.go(
+          Uri(
+            path: '/reminders',
+            queryParameters: <String, String>{
+              'attentionId': ?uri.queryParameters['attentionId'],
+            },
+          ).toString(),
+        );
       case 'call':
         if (uri.pathSegments.isNotEmpty) {
           _router.go(

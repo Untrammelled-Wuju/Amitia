@@ -80,9 +80,7 @@ func (e *Engine) persistOwnedRuntime(ctx context.Context, scope coordination.Exe
 			saved.Runtime = &conversationstream.ActiveTurnState{TurnID: scope.TurnID, RequestID: scope.RequestID, ExecutionID: scope.ExecutionID}
 		}
 		saved.Runtime.Status = saved.Status
-		if saved.Status == "failed" {
-			appendRuntimeError(saved.Runtime, turnErr)
-		}
+		appendRuntimeError(saved.Runtime, turnErr, saved.Status)
 	} else {
 		saved.Runtime = runtime
 		if turnErr != nil && saved.Status != "interrupted" {
@@ -94,6 +92,9 @@ func (e *Engine) persistOwnedRuntime(ctx context.Context, scope coordination.Exe
 		if runtime.Status == "failed" || runtime.Status == "interrupted" {
 			saved.Status = runtime.Status
 		}
+		if turnErr != nil {
+			appendRuntimeError(saved.Runtime, turnErr, saved.Status)
+		}
 	}
 	commitScope := scope
 	commitScope.RequestID = fmt.Sprintf("runtime/%s/%d", scope.RequestID, row.Revision)
@@ -101,21 +102,71 @@ func (e *Engine) persistOwnedRuntime(ctx context.Context, scope coordination.Exe
 	return err
 }
 
-func appendRuntimeError(runtime *conversationstream.ActiveTurnState, turnErr error) {
+func appendRuntimeError(runtime *conversationstream.ActiveTurnState, turnErr error, status string) {
 	if runtime == nil || turnErr == nil {
+		return
+	}
+	if errors.Is(turnErr, ErrInterrupted) {
 		return
 	}
 	message := strings.TrimSpace(turnErr.Error())
 	if message == "" {
 		return
 	}
-	for _, block := range runtime.Blocks {
-		if block.Type == "error" {
+	runtimeError := DescribeRuntimeError(turnErr)
+	result, err := json.Marshal(runtimeError)
+	if err != nil {
+		result, _ = json.Marshal(map[string]string{
+			"errorCode":       runtimeError.ErrorCode,
+			"userMessage":     runtimeError.UserMessage,
+			"internalMessage": runtimeError.InternalMessage,
+			"message":         runtimeError.Message,
+			"error":           runtimeError.Error,
+			"detail":          runtimeError.Detail,
+			"cause":           runtimeError.Cause,
+			"rawError":        runtimeError.RawError,
+		})
+	}
+	blockStatus := strings.TrimSpace(status)
+	if blockStatus == "" {
+		blockStatus = "failed"
+	}
+	for index := range runtime.Blocks {
+		if runtime.Blocks[index].Type == "error" {
+			runtime.Blocks[index].Status = blockStatus
+			runtime.Blocks[index].Revision++
+			runtime.Blocks[index].Content = runtimeError.UserMessage
+			runtime.Blocks[index].Payload = map[string]any{
+				"result":          string(result),
+				"errorCode":       runtimeError.ErrorCode,
+				"message":         runtimeError.UserMessage,
+				"error":           runtimeError.Error,
+				"detail":          runtimeError.Detail,
+				"cause":           runtimeError.Cause,
+				"rawError":        runtimeError.RawError,
+				"internalMessage": runtimeError.InternalMessage,
+			}
 			return
 		}
 	}
-	result, _ := json.Marshal(map[string]string{"userMessage": message})
-	runtime.Blocks = append(runtime.Blocks, conversationstream.BlockState{BlockID: "error/" + runtime.TurnID, BlockSequence: int64(len(runtime.Blocks) + 1), Type: "error", Status: "failed", Revision: 1, Content: message, Payload: map[string]any{"result": string(result)}})
+	runtime.Blocks = append(runtime.Blocks, conversationstream.BlockState{
+		BlockID:       "error/" + runtime.TurnID,
+		BlockSequence: int64(len(runtime.Blocks) + 1),
+		Type:          "error",
+		Status:        blockStatus,
+		Revision:      1,
+		Content:       runtimeError.UserMessage,
+		Payload: map[string]any{
+			"result":          string(result),
+			"errorCode":       runtimeError.ErrorCode,
+			"message":         runtimeError.UserMessage,
+			"error":           runtimeError.Error,
+			"detail":          runtimeError.Detail,
+			"cause":           runtimeError.Cause,
+			"rawError":        runtimeError.RawError,
+			"internalMessage": runtimeError.InternalMessage,
+		},
+	})
 }
 
 func (e *Engine) loadOwnedRetryRuntime(ctx context.Context, scope coordination.ExecutionScope, request Request) (*conversationstream.ActiveTurnState, error) {
@@ -250,6 +301,9 @@ func publishRuntime(ctx context.Context, inference Inference, event Event) error
 	}
 	blockID := ""
 	if block != "" {
+		if event.Round > 0 && (block == "reasoning" || block == "text") {
+			block = fmt.Sprintf("%s/%d", block, event.Round)
+		}
 		blockID = inference.Scope.TurnID + "/" + block
 	}
 	payload["spaceId"] = inference.Scope.SpaceID

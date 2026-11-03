@@ -261,4 +261,106 @@ void main() {
     );
     expect(reducer.turn('turn-1')!.items.single.content, 'new');
   });
+
+  test('工具失败事件在没有 result 字段时保留原始错误', () {
+    final reducer = AgentEventReducer();
+    reducer.reset(turns: const [], lastEventSequence: 0);
+    reducer.apply(
+      _event(sequence: 1, id: 'evt-1', type: 'turn.started', status: 'running'),
+    );
+    reducer.apply(
+      _event(
+        sequence: 2,
+        id: 'evt-2',
+        type: 'tool.failed',
+        blockId: 'tool-1',
+        blockSequence: 1,
+        revision: 2,
+        status: 'failed',
+        callId: 'call-1',
+        payload: const <String, dynamic>{
+          'toolName': 'android_accessibility_status',
+          'error': 'accessibility provider bind failed: Not allowed to bind',
+          'errorCode': 'TOOL_EXECUTION_FAILED',
+          'errorDetail':
+              'accessibility provider bind failed: Not allowed to bind',
+        },
+      ),
+    );
+
+    final item = reducer.turn('turn-1')!.items.single;
+    expect(item.status, 'failed');
+    expect(item.errorCode, 'TOOL_EXECUTION_FAILED');
+    expect(item.resultJson, contains('Not allowed to bind'));
+  });
+
+  test('意外中断终态生成完整错误块', () {
+    final reducer = AgentEventReducer();
+    reducer.reset(turns: const [], lastEventSequence: 0);
+    reducer.apply(
+      _event(sequence: 1, id: 'evt-1', type: 'turn.started', status: 'running'),
+    );
+    reducer.apply(
+      _event(
+        sequence: 2,
+        id: 'evt-2',
+        type: 'turn.failed',
+        status: 'failed',
+        payload: const <String, dynamic>{
+          'errorCode': 'task_execution_failed',
+          'userMessage': 'tool execution cancelled: device_authority_expired',
+          'internalMessage':
+              'tool execution cancelled: device_authority_expired',
+          'error': 'tool execution cancelled: device_authority_expired',
+          'detail': 'tool execution cancelled: device_authority_expired',
+          'cause': 'device_authority_expired',
+          'rawError': 'tool execution cancelled: device_authority_expired',
+        },
+      ),
+    );
+
+    final turn = reducer.turn('turn-1')!;
+    final error = turn.items.singleWhere((item) => item.type == 'error');
+    expect(turn.status, 'failed');
+    expect(error.errorCode, 'task_execution_failed');
+    expect(error.resultJson, contains('device_authority_expired'));
+    expect(error.resultJson, contains('rawError'));
+  });
+
+  test('相同块序号的工具与最终文本保持事件顺序', () {
+    final reducer = AgentEventReducer();
+    reducer.reset(turns: const [], lastEventSequence: 0);
+    reducer.apply(
+      _event(sequence: 1, id: 'evt-1', type: 'turn.started', status: 'running'),
+    );
+    reducer.apply(
+      _event(
+        sequence: 2,
+        id: 'evt-2',
+        type: 'tool.started',
+        blockId: 'tool-1',
+        callId: 'call-1',
+        payload: const <String, dynamic>{
+          'blockType': 'tool_call',
+          'toolName': 'android.display.status',
+        },
+      ),
+    );
+    reducer.apply(
+      _event(
+        sequence: 3,
+        id: 'evt-3',
+        type: 'text.started',
+        blockId: 'text-1',
+        payload: const <String, dynamic>{
+          'blockType': 'text',
+          'content': '最终回复',
+        },
+      ),
+    );
+
+    final items = reducer.turn('turn-1')!.items;
+    expect(items.map((item) => item.id), <String>['tool-1', 'text-1']);
+    expect(items[0].sequence, lessThan(items[1].sequence));
+  });
 }

@@ -21,6 +21,7 @@ import 'citation_snapshot.dart';
 import '../../workbench/runtime/workbench_mobile_events.dart';
 import 'automation_status.dart';
 import 'conversation_message_ledger.dart';
+import 'runtime_error_detail.dart';
 
 Set<String> groupMentionIds(String text, List<OwnedGroupMember> members) {
   if (text.contains('@所有成员'))
@@ -174,7 +175,9 @@ class ConversationRuntimeController extends ChangeNotifier {
       return '正在生成回复';
     }
     for (final message in _messages.messages.reversed) {
-      if (message.role != MessageRole.assistant || message.status != MessageStatus.streaming) continue;
+      if (message.role != MessageRole.assistant ||
+          message.status != MessageStatus.streaming)
+        continue;
       final content = message.content.trim();
       if (content.isNotEmpty) return content;
     }
@@ -636,8 +639,8 @@ class ConversationRuntimeController extends ChangeNotifier {
     try {
       await _chatService.owned.poll();
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-if (_chatService.owned.enabled && _ownedRequestId.isNotEmpty)
+      print("[original-error] $error\n$stackTrace");
+      if (_chatService.owned.enabled && _ownedRequestId.isNotEmpty)
         _chatService.owned.stopRequest(
           _ownedRequestId,
           '云端连接中断，当前回复已暂停；恢复连接后不会自动重新发送。',
@@ -772,12 +775,87 @@ if (_chatService.owned.enabled && _ownedRequestId.isNotEmpty)
     var citationSnapshot = const <Map<String, dynamic>>[];
     var accepted = false;
     var completed = false;
+    var deliveryDetached = false;
+    var terminalErrorSeen = false;
+    var terminalErrorDetail = '';
     final draftProjectId = wasDraft ? (_workspace?.projectId ?? '') : '';
     Map<String, dynamic> acceptedScope = {};
     String sourceConversationId = '';
+    String acceptedTurnId = '';
     int? savedRevision;
     final time = DateTime.now();
     final sequence = _nextLocalSequence();
+    final toolRevisions = <String, int>{};
+
+    void applyOwnedStreamEvent(
+      String type, {
+      Map<String, dynamic> payload = const <String, dynamic>{},
+      String status = '',
+      String blockId = '',
+      String callId = '',
+      int revision = 0,
+      String messageId = '',
+    }) {
+      if (acceptedTurnId.isEmpty) return;
+      _agentReducer.apply(
+        AgentUIEvent(
+          version: 1,
+          eventId: _localId('owned-stream-'),
+          eventSequence: 0,
+          conversationId: _conversationId ?? sourceConversationId,
+          requestId: requestId,
+          executionId: (acceptedScope['executionId'] ?? '').toString(),
+          turnId: acceptedTurnId,
+          turnSequence: 0,
+          blockId: blockId,
+          blockSequence: 0,
+          messageId: messageId,
+          messageSequence: 0,
+          callId: callId,
+          revision: revision,
+          type: type,
+          status: status,
+          payload: payload,
+          createdAt: DateTime.now().toUtc().toIso8601String(),
+        ),
+      );
+    }
+
+    void ensureOwnedReasoning() {
+      if (acceptedTurnId.isEmpty || reasoning.trim().isEmpty) return;
+      final turn = _agentReducer.turn(acceptedTurnId);
+      if (turn?.items.any((item) => item.type == 'reasoning') == true) return;
+      applyOwnedStreamEvent(
+        'block.completed',
+        payload: <String, dynamic>{
+          'blockType': 'reasoning',
+          'content': reasoning,
+        },
+        status: 'completed',
+        blockId: 'reasoning',
+        revision: 1,
+      );
+    }
+
+    void ensureOwnedFinalText() {
+      if (acceptedTurnId.isEmpty || text.trim().isEmpty) return;
+      final turn = _agentReducer.turn(acceptedTurnId);
+      if (turn?.items.any(
+            (item) => item.type == 'text' && item.content.trim().isNotEmpty,
+          ) ==
+          true) {
+        return;
+      }
+      applyOwnedStreamEvent(
+        'block.completed',
+        payload: <String, dynamic>{'blockType': 'text', 'content': text},
+        status: 'completed',
+        blockId: 'text-final',
+        revision: 1,
+        messageId: '$requestId/assistant',
+      );
+    }
+
     void project(MessageStatus status) {
       if (_disposed) return;
       final local = _messages.findByRenderId(
@@ -805,6 +883,10 @@ if (_chatService.owned.enabled && _ownedRequestId.isNotEmpty)
           time: time,
           sequence: sequence,
           status: status,
+          runtimeErrorDetail: terminalErrorDetail,
+          assistantTurn: acceptedTurnId.isEmpty
+              ? null
+              : _agentReducer.turn(acceptedTurnId),
         ),
       );
       notifyListeners();
@@ -840,6 +922,7 @@ if (_chatService.owned.enabled && _ownedRequestId.isNotEmpty)
           _conversationId = (event['conversationId'] ?? '').toString();
           final scope = event['executionScope'] as Map;
           acceptedScope = Map<String, dynamic>.from(scope);
+          acceptedTurnId = (scope['turnId'] ?? '').toString();
           _realtimeScope = Map.unmodifiable(acceptedScope);
           _connectEventStream(_conversationId!);
           _characterId = scope['roleId'].toString();
@@ -857,6 +940,7 @@ if (_chatService.owned.enabled && _ownedRequestId.isNotEmpty)
             ),
           );
           if (wasDraft) _conversationUpdateEpoch++;
+          applyOwnedStreamEvent('turn.started', status: 'running');
           project(MessageStatus.streaming);
         } else if (type == 'task') {
           if (accepted)
@@ -889,6 +973,30 @@ if (_chatService.owned.enabled && _ownedRequestId.isNotEmpty)
             text += (event['text'] ?? '').toString();
           }
           project(MessageStatus.streaming);
+        } else if (type == 'tool-started' ||
+            type == 'tool-progress' ||
+            type == 'tool-completed') {
+          final progress = event['progress'] is Map
+              ? Map<String, dynamic>.from(event['progress'] as Map)
+              : <String, dynamic>{};
+          final callId = (progress['toolCallId'] ?? '').toString().trim();
+          if (callId.isEmpty) continue;
+          final revision = (toolRevisions[callId] ?? 0) + 1;
+          toolRevisions[callId] = revision;
+          applyOwnedStreamEvent(
+            switch (type) {
+              'tool-started' => 'tool.started',
+              'tool-completed' => 'tool.completed',
+              _ => 'tool.progress',
+            },
+            payload: progress,
+            status: type == 'tool-completed' ? 'completed' : 'running',
+            blockId: 'tool/$callId',
+            callId: callId,
+            revision: revision,
+          );
+          _streamScheduler.schedule(_flushStreamingProjection);
+          _streamScheduler.flush();
         } else if (type == 'reasoning-completed') {
           reasoningComplete = true;
           project(MessageStatus.streaming);
@@ -923,22 +1031,58 @@ if (_chatService.owned.enabled && _ownedRequestId.isNotEmpty)
                     : 2,
               ),
             );
+          ensureOwnedReasoning();
+          ensureOwnedFinalText();
+          applyOwnedStreamEvent(
+            'turn.completed',
+            payload: <String, dynamic>{
+              ...Map<String, dynamic>.from(event),
+              ...result,
+            },
+            status: 'completed',
+            messageId: result['saved'] == true ? '$requestId/assistant' : '',
+          );
           project(MessageStatus.delivered);
           _recordConversationTerminal(_conversationId ?? '', requestId);
-        } else if (type == 'interrupted' && event['data'] is Map) {
-          final result = event['data'] as Map;
+        } else if (type == 'failed' || type == 'interrupted') {
+          final result = event['data'] is Map
+              ? Map<String, dynamic>.from(event['data'] as Map)
+              : <String, dynamic>{};
+          terminalErrorSeen = true;
+          terminalErrorDetail = formatRuntimeErrorDetail(<String, dynamic>{
+            ...Map<String, dynamic>.from(event),
+            ...result,
+          }, fallback: (event['message'] ?? '').toString());
           if (result['saved'] == true) {
             text = (result['reply'] ?? text).toString();
             reasoning = (result['reasoning'] ?? reasoning).toString();
           }
-          project(MessageStatus.interrupted);
+          ensureOwnedReasoning();
+          ensureOwnedFinalText();
+          applyOwnedStreamEvent(
+            type == 'failed' ? 'turn.failed' : 'turn.interrupted',
+            payload: <String, dynamic>{
+              ...Map<String, dynamic>.from(event),
+              ...result,
+            },
+            status: type == 'failed' ? 'failed' : 'interrupted',
+            messageId: result['saved'] == true ? '$requestId/assistant' : '',
+          );
+          project(
+            type == 'failed' ? MessageStatus.error : MessageStatus.interrupted,
+          );
           _recordConversationTerminal(_conversationId ?? '', requestId);
         }
       }
     } catch (error) {
-      if (!_disposed && !completed) {
+      if (!_disposed && !completed && !terminalErrorSeen) {
         _lastError = error;
-        if (!accepted) {
+        if (accepted) {
+          deliveryDetached = true;
+          _automationStateUncertain = true;
+          project(MessageStatus.streaming);
+          unawaited(_refreshSnapshot(_conversationId ?? ''));
+        } else {
           _messages.upsert(_cloneMessage(pending, status: MessageStatus.error));
           final placeholder = _messages.findByRenderId(
             _assistantRenderId(requestId),
@@ -946,23 +1090,30 @@ if (_chatService.owned.enabled && _ownedRequestId.isNotEmpty)
           );
           if (placeholder != null) _messages.remove(placeholder);
         }
-        if (accepted || text.isNotEmpty || reasoning.isNotEmpty)
-          project(MessageStatus.interrupted);
       }
     } finally {
       if (_ownedRequestId == requestId) {
-        _ownedRequestId = '';
-        if (!_disposed) {
-          _sending = false;
-          if (completed) {
-            _conversationUpdateEpoch++;
-            final id = _conversationId?.trim() ?? '';
-            if (id.isNotEmpty) {
-              _recordConversationTerminal(id, requestId);
-            }
-          }
+        if (deliveryDetached && !_disposed) {
+          _sending = true;
           notifyListeners();
+        } else {
+          _ownedRequestId = '';
+          if (!_disposed) {
+            _sending = false;
+            if (completed) {
+              _conversationUpdateEpoch++;
+              final id = _conversationId?.trim() ?? '';
+              if (id.isNotEmpty) {
+                _recordConversationTerminal(id, requestId);
+              }
+            }
+            notifyListeners();
+          }
         }
+      }
+      if (accepted && !_disposed) {
+        final id = _conversationId?.trim() ?? '';
+        if (id.isNotEmpty) unawaited(_refreshSnapshot(id));
       }
     }
   }
@@ -1384,10 +1535,30 @@ if (_chatService.owned.enabled && _ownedRequestId.isNotEmpty)
           !(_groupSending && message.deliveryId.isNotEmpty) &&
           message.status != MessageStatus.sending,
     );
+    final completedTurns = _agentReducer.turns
+        .where((turn) => _isTerminalTurn(turn.status))
+        .toList(growable: false);
+    final savedRequestIds = snapshot.messages
+        .where((message) => message.role == 'assistant')
+        .map((message) => message.requestId.trim())
+        .where((requestId) => requestId.isNotEmpty)
+        .toSet();
+    final snapshotRequestIds = snapshot.turns
+        .map((turn) => turn.requestId.trim())
+        .where((requestId) => requestId.isNotEmpty)
+        .toSet();
     _agentReducer.reset(
       turns: snapshot.turns,
       lastEventSequence: snapshot.lastEventSequence,
       activeTurn: snapshot.activeTurn,
+    );
+    _agentReducer.mergeTurns(
+      completedTurns.where(
+        (turn) =>
+            turn.requestId.isNotEmpty &&
+            savedRequestIds.contains(turn.requestId) &&
+            !snapshotRequestIds.contains(turn.requestId),
+      ),
     );
     _pendingApprovals.clear();
     for (final approval in snapshot.approvals) {
@@ -1423,6 +1594,7 @@ if (_chatService.owned.enabled && _ownedRequestId.isNotEmpty)
         _conversationId == conversationId) {
       final cancellation = _chatService.createStreamCancellation();
       _eventCancellation = cancellation;
+      var recoverNeeded = false;
       try {
         await for (final streamEvent in _chatService.conversationEvents(
           conversationId: conversationId,
@@ -1440,7 +1612,10 @@ if (_chatService.owned.enabled && _ownedRequestId.isNotEmpty)
             cancellation.cancel('snapshot refreshed');
             break;
           }
-          if (streamEvent.type != 'agent_ui_event') continue;
+          if (streamEvent.type != 'agent_ui_event' &&
+              streamEvent.type != 'agent_event') {
+            continue;
+          }
           final event = AgentUIEvent.fromJson(streamEvent.data);
           final result = _agentReducer.apply(event);
           if (result == AgentEventApplyResult.gap) {
@@ -1451,6 +1626,12 @@ if (_chatService.owned.enabled && _ownedRequestId.isNotEmpty)
           if (result != AgentEventApplyResult.applied) continue;
           _handleAppliedEvent(event);
         }
+        if (!_disposed &&
+            epoch == _runtimeEpoch &&
+            !cancellation.isCancelled &&
+            _conversationId == conversationId) {
+          recoverNeeded = true;
+        }
       } catch (error) {
         if (_disposed ||
             epoch != _runtimeEpoch ||
@@ -1458,6 +1639,8 @@ if (_chatService.owned.enabled && _ownedRequestId.isNotEmpty)
             _conversationId != conversationId) {
           return;
         }
+        _lastError = error;
+        recoverNeeded = true;
         debugPrint('Conversation event stream reconnect: $error');
       } finally {
         if (identical(_eventCancellation, cancellation)) {
@@ -1469,6 +1652,12 @@ if (_chatService.owned.enabled && _ownedRequestId.isNotEmpty)
           _automationStateUncertain = true;
           notifyListeners();
         }
+      }
+      if (recoverNeeded &&
+          !_disposed &&
+          epoch == _runtimeEpoch &&
+          _conversationId == conversationId) {
+        await _refreshSnapshot(conversationId);
       }
       if (_disposed ||
           epoch != _runtimeEpoch ||
@@ -1521,6 +1710,9 @@ if (_chatService.owned.enabled && _ownedRequestId.isNotEmpty)
         type == 'turn.interrupted';
     if (terminal) {
       if (!_groupSending && !groupTurn) _sending = false;
+      if (_ownedRequestId == event.requestId) {
+        _ownedRequestId = '';
+      }
       _conversationUpdateEpoch++;
       _streamScheduler.schedule(_flushStreamingProjection);
       _streamScheduler.flush();
@@ -1651,6 +1843,7 @@ if (_chatService.owned.enabled && _ownedRequestId.isNotEmpty)
               DateTime.now(),
           status: status,
           assistantTurn: turn,
+          runtimeErrorDetail: existing?.runtimeErrorDetail ?? '',
           citationSnapshot: projectCitationSnapshot(
             existing?.citationSnapshot ?? const <Map<String, dynamic>>[],
             finalItem,
@@ -2048,8 +2241,8 @@ if (_chatService.owned.enabled && _ownedRequestId.isNotEmpty)
         await _chatService
             .markConversationRead(id, characterId: _characterId)
             .catchError((Object error, StackTrace stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-});
+              print("[original-error] $error\n$stackTrace");
+            });
         await _refreshSnapshot(id);
         _connectEventStream(id);
         notifyListeners();
@@ -2179,8 +2372,8 @@ if (_chatService.owned.enabled && _ownedRequestId.isNotEmpty)
         _chatService
             .markConversationRead(id, characterId: _characterId)
             .catchError((Object error, StackTrace stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}),
+              print("[original-error] $error\n$stackTrace");
+            }),
       );
       return;
     }
@@ -2214,6 +2407,7 @@ if (_chatService.owned.enabled && _ownedRequestId.isNotEmpty)
     int? sequence,
     MessageStatus? status,
     AssistantTurnDto? assistantTurn,
+    String? runtimeErrorDetail,
     List<Map<String, dynamic>>? citationSnapshot,
   }) {
     return ChatMessage(
@@ -2253,6 +2447,7 @@ if (_chatService.owned.enabled && _ownedRequestId.isNotEmpty)
       durationMs: message.durationMs,
       toolName: message.toolName,
       toolResult: message.toolResult,
+      runtimeErrorDetail: runtimeErrorDetail ?? message.runtimeErrorDetail,
       replyToMessageId: message.replyToMessageId,
       replyToExcerpt: message.replyToExcerpt,
       assistantTurn: assistantTurn ?? message.assistantTurn,
@@ -2272,8 +2467,8 @@ if (_chatService.owned.enabled && _ownedRequestId.isNotEmpty)
         return Map<String, dynamic>.from(decoded.first as Map);
       }
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+      print("[original-error] $error\n$stackTrace");
+    }
     return const <String, dynamic>{};
   }
 
@@ -2608,9 +2803,14 @@ class ConversationRuntimeRegistry extends ChangeNotifier {
       _backgroundCompletions.remove(next);
       final controller = _findController(next);
       if (controller != null) {
-        unawaited(controller.markConversationRead().catchError((Object error, StackTrace stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}));
+        unawaited(
+          controller.markConversationRead().catchError((
+            Object error,
+            StackTrace stackTrace,
+          ) {
+            print("[original-error] $error\n$stackTrace");
+          }),
+        );
       }
     }
     _scheduleNotify();

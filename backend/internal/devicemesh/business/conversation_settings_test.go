@@ -53,6 +53,45 @@ func TestOwnedConversationSettingsRejectInvalidValues(t *testing.T) {
 	}
 }
 
+func TestRoleModelSettingsOverrideConversationDefaults(t *testing.T) {
+	disabled := false
+	request := Request{
+		ConversationID: "group-conversation",
+		ModelConfigID:  0, ReasoningEffort: "", ReasoningEnabled: nil,
+	}
+	role := coordination.Role{
+		ModelConfigID: 11, ReasoningEffort: "xhigh", ReasoningEnabled: 0,
+	}
+	snapshot := coordination.DataSnapshot{Resources: []coordination.Resource{{
+		Kind: "conversation", ID: "group-conversation",
+		Body: json.RawMessage(`{"modelConfigId":7,"reasoningEffort":"low","reasoningEnabled":true}`),
+	}}}
+	if err := resolveConversationSettings(&request, snapshot, role); err != nil {
+		t.Fatal(err)
+	}
+	if request.ModelConfigID != 11 || request.ReasoningEffort != "xhigh" || request.ReasoningEnabled == nil || *request.ReasoningEnabled {
+		t.Fatalf("role settings did not override conversation defaults: %+v", request)
+	}
+	request = Request{
+		ConversationID: "group-conversation", ModelConfigID: 9,
+		ReasoningEffort: "medium", ReasoningEnabled: &disabled,
+	}
+	if err := resolveConversationSettings(&request, snapshot, role); err != nil {
+		t.Fatal(err)
+	}
+	if request.ModelConfigID != 9 || request.ReasoningEffort != "medium" || request.ReasoningEnabled == nil || *request.ReasoningEnabled {
+		t.Fatalf("explicit request settings did not retain priority: %+v", request)
+	}
+	request = Request{ConversationID: "group-conversation"}
+	role = coordination.Role{ModelConfigID: 12, ReasoningEffort: "", ReasoningEnabled: -1}
+	if err := resolveConversationSettings(&request, snapshot, role); err != nil {
+		t.Fatal(err)
+	}
+	if request.ModelConfigID != 12 || request.ReasoningEffort != "" || request.ReasoningEnabled != nil {
+		t.Fatalf("role model without parameter overrides should use model defaults: %+v", request)
+	}
+}
+
 type committedTestModel struct {
 	*testModel
 	onCommit func(context.Context, Inference, Generation, string) error

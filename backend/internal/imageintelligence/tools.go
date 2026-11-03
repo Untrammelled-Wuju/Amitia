@@ -44,56 +44,56 @@ func (h *ToolHandler) Dispatch(ctx context.Context, handlerName string, input js
 
 func (h *ToolHandler) handleStatus(ctx context.Context, input json.RawMessage) (json.RawMessage, error) {
 	status := h.facade.Status(ctx)
-	return marshalResult(status), nil
+	return marshalResult(status)
 }
 
 func (h *ToolHandler) handleUnderstand(ctx context.Context, input json.RawMessage) (json.RawMessage, error) {
 	var req ImageUnderstandRequest
 	if err := json.Unmarshal(input, &req); err != nil {
-		return marshalErrorResponse(&Error{Code: ErrInvalid, Message: fmt.Sprintf("invalid input: %v", err), HTTPStatus: 400}), nil
+		return marshalErrorResponse(&Error{Code: ErrInvalid, Message: fmt.Sprintf("invalid input: %v", err), HTTPStatus: 400})
 	}
 
 	result, err := h.facade.Understand(ctx, req)
 	if err != nil {
 		if ie, ok := err.(*Error); ok {
-			return marshalErrorResponse(ie), nil
+			return marshalErrorResponse(ie)
 		}
-		return marshalErrorResponse(&Error{Code: ErrUnderstandFailed, Message: err.Error(), HTTPStatus: 500}), nil
+		return marshalErrorResponse(&Error{Code: ErrUnderstandFailed, Message: err.Error(), HTTPStatus: 500})
 	}
 
-	return marshalResult(result), nil
+	return marshalResult(result)
 }
 
 func (h *ToolHandler) handleOCR(ctx context.Context, input json.RawMessage) (json.RawMessage, error) {
 	var req ImageOCRRequest
 	if err := json.Unmarshal(input, &req); err != nil {
-		return marshalErrorResponse(&Error{Code: ErrInvalid, Message: fmt.Sprintf("invalid input: %v", err), HTTPStatus: 400}), nil
+		return marshalErrorResponse(&Error{Code: ErrInvalid, Message: fmt.Sprintf("invalid input: %v", err), HTTPStatus: 400})
 	}
 
 	result, err := h.facade.OCR(ctx, req)
 	if err != nil {
 		if ie, ok := err.(*Error); ok {
-			return marshalErrorResponse(ie), nil
+			return marshalErrorResponse(ie)
 		}
-		return marshalErrorResponse(&Error{Code: ErrOCRFailed, Message: err.Error(), HTTPStatus: 500}), nil
+		return marshalErrorResponse(&Error{Code: ErrOCRFailed, Message: err.Error(), HTTPStatus: 500})
 	}
 
-	return marshalResult(result), nil
+	return marshalResult(result)
 }
 
 func (h *ToolHandler) handleGenerate(ctx context.Context, input json.RawMessage, scope ToolScope) (json.RawMessage, error) {
 	var req ImageGenerateRequest
 	if err := json.Unmarshal(input, &req); err != nil {
-		return marshalErrorResponse(&Error{Code: ErrInvalid, Message: fmt.Sprintf("invalid input: %v", err), HTTPStatus: 400}), nil
+		return marshalErrorResponse(&Error{Code: ErrInvalid, Message: fmt.Sprintf("invalid input: %v", err), HTTPStatus: 400})
 	}
 	req.OwnerSpaceID = scope.OwnerSpaceID
 
 	result, err := h.facade.Generate(ctx, req)
 	if err != nil {
 		if ie, ok := err.(*Error); ok {
-			return marshalErrorResponse(ie), nil
+			return marshalErrorResponse(ie)
 		}
-		return marshalErrorResponse(&Error{Code: ErrGenFailed, Message: err.Error(), HTTPStatus: 500}), nil
+		return marshalErrorResponse(&Error{Code: ErrGenFailed, Message: err.Error(), HTTPStatus: 500})
 	}
 
 	outputs := make([]map[string]any, 0, len(result.Images))
@@ -116,7 +116,7 @@ func (h *ToolHandler) handleGenerate(ctx context.Context, input json.RawMessage,
 		"images":         result.Images,
 		"provider":       result.Provider,
 		"messageOutputs": outputs,
-	}), nil
+	})
 }
 
 func BuildToolDefinitions(handler *ToolHandler) []capability.ToolDefinition {
@@ -151,7 +151,11 @@ func BuildToolDefinitions(handler *ToolHandler) []capability.ToolDefinition {
 			"count": {"type": "integer", "minimum": 1, "maximum": 4},
 			"width": {"type": "integer", "minimum": 256, "maximum": 4096},
 			"height": {"type": "integer", "minimum": 256, "maximum": 4096},
-			"quality": {"enum": ["standard", "hd"]}
+			"quality": {"enum": ["standard", "hd"]},
+			"mode": {"enum": ["single_frame", "keyframe", "sprite_sheet", "legacy_frame"]},
+			"negativePrompt": {"type": "string", "maxLength": 4096},
+			"seed": {"type": "integer"},
+			"referenceResourceUris": {"type": "array", "maxItems": 4, "items": {"type": "string", "maxLength": 4096}}
 		}
 	}`)
 

@@ -114,6 +114,7 @@ const (
 	OutcomeCancelled       Outcome = "cancelled"
 	OutcomeSuperseded      Outcome = "superseded"
 	OutcomeDeliveryUnknown Outcome = "delivery_unknown"
+	OutcomeObserved        Outcome = "observed"
 )
 
 type OrchestrationResult struct {

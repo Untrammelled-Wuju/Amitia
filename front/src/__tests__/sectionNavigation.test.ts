@@ -10,7 +10,7 @@ describe("两级导航映射", () => {
     expect(resolveAppSection("/memory-manager")).toBe("memory");
     expect(resolveAppSection("/reminders")).toBe("tasks");
     expect(resolveAppSection("/characters/role-1/active-task")).toBe("tasks");
-    expect(resolveAppSection("/continuity")).toBe("continuity");
+    expect(resolveAppSection("/continuity")).toBe("tasks");
     expect(resolveAppSection("/game-center/plugin")).toBe("game");
     expect(resolveAppSection("/creative-workshop/pet")).toBe("workshop");
     expect(resolveAppSection("/extensions/packages")).toBe("extensions");
@@ -21,7 +21,11 @@ describe("两级导航映射", () => {
     expect(resolveAppSection("/plugin-only-route")).toBeNull();
   });
 
-  it("提供角色、记忆、创意工坊和扩展中心的二级入口", () => {
+  it("提供任务、角色、记忆、创意工坊和扩展中心的二级入口", () => {
+    expect(appSection("tasks")?.entries.map(entry => entry.label)).toEqual([
+      "主动任务",
+      "持续事项",
+    ]);
     expect(appSection("character")?.entries.map(entry => entry.label)).toEqual([
       "角色管理",
       "世界书",
@@ -39,6 +43,7 @@ describe("两级导航映射", () => {
       "桌宠",
     ]);
     expect(appSection("extensions")?.entries.map(entry => entry.label)).toEqual([
+      "插件市场",
       "扩展包",
       "工作流",
       "MCP 服务",

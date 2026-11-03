@@ -69,6 +69,7 @@ class ChatMessage {
   final int? durationMs;
   final String? toolName;
   final String? toolResult;
+  final String runtimeErrorDetail;
   final String? replyToMessageId;
   final String? replyToExcerpt;
   final AssistantTurnDto? assistantTurn;
@@ -110,6 +111,7 @@ class ChatMessage {
     this.durationMs,
     this.toolName,
     this.toolResult,
+    this.runtimeErrorDetail = '',
     this.replyToMessageId,
     this.replyToExcerpt,
     this.assistantTurn,

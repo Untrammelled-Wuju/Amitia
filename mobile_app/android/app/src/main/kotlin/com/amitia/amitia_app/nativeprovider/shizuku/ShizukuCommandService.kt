@@ -2,6 +2,7 @@ package com.amitia.amitia_app.nativeprovider.shizuku
 
 import android.content.ComponentName
 import android.os.IBinder
+import com.amitia.amitia_app.BuildConfig
 import android.os.Parcel
 import android.os.RemoteException
 import org.json.JSONArray
@@ -235,7 +236,7 @@ class ShizukuCommandService : IPrivilegedCommandService.Stub() {
         fun createArgs(): Shizuku.UserServiceArgs {
             return Shizuku.UserServiceArgs(
                 ComponentName(
-                    "com.amitia.amitia_app",
+                    BuildConfig.APPLICATION_ID,
                     ShizukuCommandService::class.java.name,
                 )
             )

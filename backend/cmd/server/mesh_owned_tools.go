@@ -135,7 +135,8 @@ func (r *meshOwnedToolRuntime) Tools(ctx context.Context, inference business.Inf
 	}
 	allowed := make([]tool.Tool, 0, len(available))
 	for _, definition := range available {
-		if _, err := r.definition(ctx, inference, definition.Function.Name); err == nil {
+		authorized, err := r.definition(ctx, inference, definition.Function.Name)
+		if err == nil && workerToolAllowed(inference.WorkerRole, authorized) {
 			allowed = append(allowed, definition)
 		}
 	}
@@ -184,7 +185,7 @@ func (r *meshOwnedToolRuntime) Execute(ctx context.Context, inference business.I
 		if result.Error == nil && inference.Emit != nil {
 			var task business.TaskEvent
 			if json.Unmarshal(result.Output, &task) == nil && task.CoordinationID != "" {
-				if err := inference.Emit(business.Event{Type: "task", Task: &task}); err != nil {
+				if err := inference.Emit(business.Event{Type: "task", Task: &task, Round: inference.Round}); err != nil {
 					return result, err
 				}
 			}
@@ -290,13 +291,28 @@ func emitOwnedToolEvent(inference business.Inference, eventType, call, name stri
 		payload["error"] = "工具未成功完成"
 	}
 	if executionErr != nil {
-		payload["error"] = executionErr.Error()
+		originalError := executionErr.Error()
+		payload["error"] = originalError
+		payload["errorDetail"] = originalError
+		if result.Error == nil {
+			payload["errorCode"] = "TOOL_EXECUTION_FAILED"
+		} else if _, ok := payload["errorCode"]; !ok {
+			payload["errorCode"] = result.Error.Code
+		}
+		if strings.TrimSpace(content) == "" {
+			content = originalError
+			payload["result"] = content
+		}
 	}
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
-	return inference.Emit(business.Event{Type: eventType, Progress: encoded})
+	return inference.Emit(business.Event{
+		Type:     eventType,
+		Progress: encoded,
+		Round:    inference.Round,
+	})
 }
 
 func (r *meshOwnedToolRuntime) executeDefinition(ctx context.Context, inference business.Inference, call string, input json.RawMessage, definition capability.ToolDefinition) (chat.ToolResult, error) {

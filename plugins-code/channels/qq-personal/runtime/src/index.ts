@@ -102,7 +102,18 @@ bridge.onEvent(async (event) => {
     const accepted = shouldHandleMessage(parsed, event, config)
     const normalized = accepted ? applyPrefix(parsed, config) : parsed
     peers.set(normalized.messageType === "group" ? normalized.groupId : normalized.senderId, normalized.messageType)
-    const payload = buildInboundPayload(normalized, await resolveConversationTitle(normalized))
+    const triggerMode = normalized.messageType === "group"
+      ? config.groupTrigger === "all"
+        ? "all"
+        : config.groupTrigger === "prefix"
+          ? "prefix"
+          : normalized.replyToMessageId
+            ? "reply"
+            : "mention"
+      : normalized.replyToMessageId
+        ? "reply"
+        : "direct"
+    const payload = buildInboundPayload(normalized, await resolveConversationTitle(normalized), triggerMode)
     eventStore.recordInbound(payload)
     eventStore.log("info", "message.inbound", `${payload.conversationTitle || payload.peerId}: ${payload.text.slice(0, 160)}`)
     if (accepted) await forwardInbound(inboundConfig, payload)

@@ -127,8 +127,41 @@ object NotificationRenderer {
             "run.start", "run.started", "run.update", "run.updated" -> showExecution(context, data, false)
             "run.end", "run.completed", "run.failed", "run.cancelled", "run.interrupted" -> showExecution(context, data, true)
             "run.dismiss" -> dismissExecution(context, data)
+            "attention.required" -> showAttention(context, data)
             "system.test" -> showSystem(context, data)
         }
+    }
+
+    private fun showAttention(context: Context, data: Map<String, String>) {
+        val attentionId = data["attentionId"].orEmpty().ifBlank { data["notificationId"].orEmpty() }
+        if (attentionId.isBlank()) return
+        val conversationId = data["conversationId"].orEmpty()
+        val title = data["title"].orEmpty().ifBlank { "Amitia 需要你的处理" }
+        val body = data["body"].orEmpty().ifBlank { "有事项正在等待你的确认" }
+        val deepLink = data["deepLink"].orEmpty().ifBlank {
+            if (conversationId.isNotBlank()) {
+                "amitia://chat/$conversationId?attentionId=${Uri.encode(attentionId)}"
+            } else {
+                "amitia://reminder"
+            }
+        }
+        val builder = NotificationCompat.Builder(context, CHANNEL_TASKS)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setGroup("amitia:attention")
+            .setContentIntent(contentIntent(context, deepLink, "attention:$attentionId"))
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(publicNotification(context, CHANNEL_TASKS, "Amitia", "有事项等待你的处理"))
+        if (data["sound"] == "false") {
+            builder.setSilent(true)
+        }
+        NotificationManagerCompat.from(context)
+            .notify(stableId("attention:$attentionId"), builder.build())
     }
 
     private fun showIncomingCall(context: Context, data: Map<String, String>) {

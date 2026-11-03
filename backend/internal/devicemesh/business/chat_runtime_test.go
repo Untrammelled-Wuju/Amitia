@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/u-ai/backend/internal/conversationstream"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 )
 
@@ -56,6 +57,51 @@ func TestRuntimeToolFailureStatusDoesNotPublishAsCompleted(t *testing.T) {
 	block := runtime.ActiveTurn.Blocks[0]
 	if block.Status != "failed" || block.Payload["errorCode"] != "browser_agent_failed" {
 		t.Fatalf("tool failure was projected as success: %#v", block)
+	}
+}
+
+func TestRuntimeSegmentsThinkingAndTextPerModelRound(t *testing.T) {
+	inference := Inference{ConversationID: t.Name(), Scope: coordination.ExecutionScope{TurnID: "turn", RequestID: "request"}}
+	for _, event := range []Event{
+		{Type: "delta", Text: "first-thought", Reasoning: true, Round: 1},
+		{Type: "reasoning-completed", Round: 1},
+		{Type: "tool-started", Round: 1, Progress: json.RawMessage(`{"toolCallId":"call-1","toolName":"read","arguments":"{}"}`)},
+		{Type: "delta", Text: "first-message", Round: 1},
+		{Type: "output-completed", Round: 1},
+		{Type: "delta", Text: "second-thought", Reasoning: true, Round: 2},
+		{Type: "reasoning-completed", Round: 2},
+		{Type: "delta", Text: "second-message", Round: 2},
+		{Type: "output-completed", Round: 2},
+	} {
+		if err := publishRuntime(context.Background(), inference, event); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runtime := RuntimeManager().RuntimeSnapshot(RuntimeKey(inference.Scope, inference.ConversationID))
+	if runtime.ActiveTurn == nil {
+		t.Fatal("missing active turn")
+	}
+	blocks := map[string]conversationstream.BlockState{}
+	for _, block := range runtime.ActiveTurn.Blocks {
+		blocks[block.BlockID] = block
+	}
+	expected := map[string]string{
+		"turn/reasoning/1": "first-thought",
+		"turn/text/1":      "first-message",
+		"turn/reasoning/2": "second-thought",
+		"turn/text/2":      "second-message",
+	}
+	for id, content := range expected {
+		block, ok := blocks[id]
+		if !ok || block.Content != content || block.Status != "completed" {
+			t.Fatalf("segmented block %s = %#v", id, block)
+		}
+	}
+	if _, exists := blocks["turn/reasoning"]; exists {
+		t.Fatal("legacy shared reasoning block was created")
+	}
+	if _, exists := blocks["turn/text"]; exists {
+		t.Fatal("legacy shared text block was created")
 	}
 }
 

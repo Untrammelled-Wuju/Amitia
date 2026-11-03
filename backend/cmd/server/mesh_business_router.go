@@ -430,7 +430,11 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 		}
 		visibleRoles := make([]gin.H, 0, len(roles))
 		for _, role := range roles {
-			visibleRoles = append(visibleRoles, gin.H{"id": role.ID, "name": role.Name, "avatar": role.Avatar, "revision": role.Revision})
+			visibleRoles = append(visibleRoles, gin.H{
+				"id": role.ID, "name": role.Name, "avatar": role.Avatar, "revision": role.Revision,
+				"modelConfigId": role.ModelConfigID, "reasoningEffort": role.ReasoningEffort,
+				"reasoningEnabled": role.ReasoningEnabled,
+			})
 		}
 		c.JSON(200, gin.H{"roles": visibleRoles, "roleOwnerId": scope.RoleOwnerID, "providerEpoch": scope.ProviderEpoch, "modeRevision": scope.ModeRevision, "executionScope": scope})
 	})
@@ -464,7 +468,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 		threadID := ""
 		if services.ContinuityOwner != nil {
 			var resolveErr error
-			threadID, resolveErr = services.ContinuityOwner.Resolve(c.Request.Context(), owner, request.RoleID, request.ConversationID, request.PrimaryWorkspaceID, request.Message, continuityOwnerRequestID(request.RequestID+"|continuity-resolve"))
+			threadID, resolveErr = services.ContinuityOwner.Resolve(c.Request.Context(), owner, request.RoleID, request.ConversationID, request.PrimaryWorkspaceID, request.Message, "", request.RequestID, continuityOwnerRequestID(request.RequestID+"|continuity-resolve"))
 			if resolveErr != nil {
 				c.JSON(409, gin.H{"code": "mesh.continuity_unavailable", "message": resolveErr.Error()})
 				return
@@ -498,13 +502,16 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 			}
 			groupResponse, groupErr := services.OwnedBusiness.RunGroupEvents(messageContext, request, emit)
 			if groupErr != nil {
+				groupErr = contextualizeOwnedRuntimeError(groupErr, request)
 				runtimeError := business.DescribeRuntimeError(groupErr)
 				if streaming && c.Writer.Written() {
 					eventType := "failed"
-					if errors.Is(groupErr, business.ErrInterrupted) || errors.Is(groupErr, context.Canceled) {
+					if errors.Is(groupErr, business.ErrInterrupted) {
 						eventType = "interrupted"
 					}
-					c.SSEvent("message", gin.H{"type": eventType, "message": runtimeError.UserMessage, "errorCode": runtimeError.ErrorCode, "internalMessage": runtimeError.InternalMessage, "retryable": runtimeError.Retryable, "data": groupResponse})
+					payload := meshRuntimeErrorPayload("mesh.group_failed", runtimeError, groupResponse)
+					payload["type"] = eventType
+					c.SSEvent("message", payload)
 					c.Writer.Flush()
 					return
 				}
@@ -512,7 +519,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 				if errors.Is(groupErr, coordination.ErrCapabilityGrant) {
 					status = http.StatusForbidden
 				}
-				c.JSON(status, gin.H{"code": "mesh.group_failed", "errorCode": runtimeError.ErrorCode, "message": runtimeError.UserMessage, "internalMessage": runtimeError.InternalMessage, "retryable": runtimeError.Retryable})
+				c.JSON(status, meshRuntimeErrorPayload("mesh.group_failed", runtimeError, groupResponse))
 				return
 			}
 			if streaming {
@@ -531,20 +538,16 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 			}
 		}
 		if err != nil {
+			err = contextualizeOwnedRuntimeError(err, request)
 			runtimeError := business.DescribeRuntimeError(err)
 			if streaming && c.Writer.Written() {
 				eventType := "failed"
-				if response.Interrupted {
+				if errors.Is(err, business.ErrInterrupted) {
 					eventType = "interrupted"
 				}
-				c.SSEvent("message", gin.H{
-					"type":            eventType,
-					"message":         runtimeError.UserMessage,
-					"errorCode":       runtimeError.ErrorCode,
-					"internalMessage": runtimeError.InternalMessage,
-					"retryable":       runtimeError.Retryable,
-					"data":            response,
-				})
+				payload := meshRuntimeErrorPayload(codeForOwnedRuntimeError(err), runtimeError, response)
+				payload["type"] = eventType
+				c.SSEvent("message", payload)
 				c.Writer.Flush()
 				return
 			}
@@ -573,7 +576,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 				status = 409
 				code = "mesh.request_conflict"
 			}
-			c.JSON(status, gin.H{"code": code, "errorCode": runtimeError.ErrorCode, "message": runtimeError.UserMessage, "internalMessage": runtimeError.InternalMessage, "retryable": runtimeError.Retryable, "data": response})
+			c.JSON(status, meshRuntimeErrorPayload(code, runtimeError, response))
 			return
 		}
 		if streaming {
@@ -584,6 +587,59 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 		}
 		c.JSON(200, gin.H{"code": 200, "data": response, "msg": "操作成功"})
 	})
+}
+
+func contextualizeOwnedRuntimeError(err error, request business.Request) error {
+	if err == nil || !errors.Is(err, coordination.ErrWrongOwner) {
+		return err
+	}
+	return fmt.Errorf(
+		"设备专属数据归属校验失败: request=%q role=%q conversation=%q initiatorDevice=%q targetDevice=%q core=%q: %w",
+		request.RequestID, request.RoleID, request.ConversationID, request.DeviceID, request.TargetDeviceID, request.CoreID, err,
+	)
+}
+
+func codeForOwnedRuntimeError(err error) string {
+	switch {
+	case errors.Is(err, coordination.ErrCapabilityGrant):
+		return "mesh.target_grant_required"
+	case errors.Is(err, coordination.ErrRoleRequired), errors.Is(err, coordination.ErrRoleSelection):
+		return "mesh.role_required"
+	case errors.Is(err, coordination.ErrScopeExpired):
+		return "mesh.scope_expired"
+	case errors.Is(err, coordination.ErrResourceVersion):
+		return "mesh.owned_resource_version"
+	case errors.Is(err, coordination.ErrWrongOwner):
+		return "mesh.wrong_owner"
+	case errors.Is(err, business.ErrUncertainExecution):
+		return "mesh.execution_uncertain"
+	case errors.Is(err, coordination.ErrRequestConflict):
+		return "mesh.request_conflict"
+	default:
+		return "mesh.business_unavailable"
+	}
+}
+
+func meshRuntimeErrorPayload(code string, runtimeError business.RuntimeError, data any) gin.H {
+	payload := gin.H{
+		"code":            code,
+		"errorCode":       runtimeError.ErrorCode,
+		"message":         runtimeError.Message,
+		"userMessage":     runtimeError.UserMessage,
+		"internalMessage": runtimeError.InternalMessage,
+		"error":           runtimeError.Error,
+		"detail":          runtimeError.Detail,
+		"cause":           runtimeError.Cause,
+		"rawError":        runtimeError.RawError,
+		"stage":           runtimeError.Stage,
+		"toolName":        runtimeError.ToolName,
+		"provider":        runtimeError.Provider,
+		"retryable":       runtimeError.Retryable,
+	}
+	if data != nil {
+		payload["data"] = data
+	}
+	return payload
 }
 
 func ownedMessageContext(ctx context.Context, threadID string) context.Context {

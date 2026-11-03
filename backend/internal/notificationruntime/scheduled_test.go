@@ -134,3 +134,51 @@ func TestTestDevicePushPersistsDisplayReceipt(t *testing.T) {
 		t.Fatalf("test notification receipt was not persisted: %+v %v", state, err)
 	}
 }
+
+func TestAttentionNotificationIsIdempotentAndSuppressedInForeground(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := NewRepository(db)
+	if err := repo.InitSchema(); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	endpoint := &DeviceEndpoint{
+		SpaceID: "space", DeviceID: "desktop", Platform: "desktop",
+		PushEnabled: true, SystemNotificationsEnabled: true, PreviewMode: "full", SoundEnabled: true,
+		Foreground: false, PresenceUpdatedAt: now,
+	}
+	if err := repo.UpsertDevice(t.Context(), endpoint); err != nil {
+		t.Fatal(err)
+	}
+	runtime := &Runtime{db: db, repo: repo, gateway: &PushGateway{}, deliveryQueue: make(chan deliveryJob, 8)}
+	notification := AttentionNotification{SpaceID: "space", AttentionID: "agent-approval:one", Kind: "agent_approval", Title: "Amitia 需要你的处理", Body: "工具审批", ConversationID: "conversation", RequestID: "request"}
+	first, err := runtime.QueueAttention(t.Context(), notification)
+	if err != nil || len(first) != 1 || first[0].State != "queued" {
+		t.Fatalf("first=%+v err=%v", first, err)
+	}
+	second, err := runtime.QueueAttention(t.Context(), notification)
+	if err != nil || len(second) != 1 || second[0].ID != first[0].ID {
+		t.Fatalf("second=%+v err=%v", second, err)
+	}
+	var count int64
+	if err := db.Model(&NotificationOutbox{}).Where("type = ?", "attention.required").Count(&count).Error; err != nil || count != 1 {
+		t.Fatalf("count=%d err=%v", count, err)
+	}
+	if err := repo.UpdatePresence(t.Context(), "space", "desktop", true, "conversation"); err != nil {
+		t.Fatal(err)
+	}
+	suppressed, err := runtime.QueueAttention(t.Context(), AttentionNotification{SpaceID: "space", AttentionID: "task-approval:two", Kind: "task_approval", Body: "设备审批", ConversationID: "conversation"})
+	if err != nil || len(suppressed) != 1 || suppressed[0].State != "suppressed" {
+		t.Fatalf("suppressed=%+v err=%v", suppressed, err)
+	}
+	if err := repo.UpdatePresence(t.Context(), "space", "desktop", false, ""); err != nil {
+		t.Fatal(err)
+	}
+	changed, err := runtime.QueueAttention(t.Context(), AttentionNotification{SpaceID: "space", AttentionID: "agent-approval:one", Kind: "agent_approval", State: "failed", Body: "工具审批状态已变化", ConversationID: "conversation"})
+	if err != nil || len(changed) != 1 || changed[0].ID == first[0].ID || changed[0].State != "queued" {
+		t.Fatalf("changed=%+v first=%+v err=%v", changed, first, err)
+	}
+}

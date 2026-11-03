@@ -20,6 +20,7 @@ import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/settings/current_character_provider.dart';
 import '../../../../core/models/character.dart';
 import '../../../../core/models/memory.dart';
+import '../../../../core/models/model_config.dart';
 import '../../../../core/ui_runtime/mobile_extension_slot.dart';
 import '../../../../core/ui_runtime/ui_runtime_controller.dart';
 import '../../../memory/presentation/pages/owned_memory_page.dart';
@@ -895,9 +896,14 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
         .where((item) => item.isActive == 1)
         .toList(growable: false);
     final activeModel = activeModels.isEmpty ? null : activeModels.first;
-    final modelLabel = activeModel == null
+    final roleModel = configs
+        .where((item) => _intValue(item.id) == character.modelConfigId)
+        .firstOrNull;
+    final effectiveModel = roleModel ?? activeModel;
+    final modelLabel = effectiveModel == null
         ? (configsAsync.isLoading ? '加载中...' : '未配置激活模型')
-        : '${activeModel.name.isEmpty ? activeModel.provider : activeModel.name}${activeModel.model.isEmpty ? '' : ' · ${activeModel.model}'}';
+        : '${roleModel == null ? '默认模型 · ' : '角色模型 · '}${effectiveModel.name.isEmpty ? effectiveModel.provider : effectiveModel.name}${effectiveModel.model.isEmpty ? '' : ' · ${effectiveModel.model}'}'
+              '${character.reasoningEffort.isEmpty ? '' : ' · 思考 ${character.reasoningEffort}'}';
     return ListView(
       padding: EdgeInsets.all(AppSpacing.pagePadding),
       children: [
@@ -906,6 +912,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
           '模型',
           modelLabel,
           Icons.psychology_outlined,
+          onTap: () => _showCharacterModelSettings(character, configs),
         ),
         SizedBox(height: AppSpacing.sm),
         _buildAbilitySection(
@@ -1007,9 +1014,10 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     BuildContext context,
     String title,
     String content,
-    IconData icon,
-  ) {
-    return AmitiaCard(
+    IconData icon, {
+    VoidCallback? onTap,
+  }) {
+    final card = AmitiaCard(
       child: Row(
         children: [
           Container(
@@ -1032,9 +1040,145 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
               ],
             ),
           ),
+          if (onTap != null) const Icon(Icons.chevron_right_rounded, size: 20),
         ],
       ),
     );
+    if (onTap == null) return card;
+    return InkWell(borderRadius: AppRadius.brMedium, onTap: onTap, child: card);
+  }
+
+  Future<void> _showCharacterModelSettings(
+    CharacterDto character,
+    List<ModelConfigDto> configs,
+  ) async {
+    var modelConfigId = character.modelConfigId;
+    var reasoningEnabled = character.reasoningEnabled;
+    var reasoningValue = switch (character.reasoningEffort) {
+      'low' => 0,
+      'medium' => 1,
+      'high' => 2,
+      'xhigh' => 3,
+      _ => 2,
+    };
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: context.surfacePrimary,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) => Padding(
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.pagePadding,
+            AppSpacing.lg,
+            AppSpacing.pagePadding,
+            MediaQuery.of(sheetContext).viewInsets.bottom + AppSpacing.lg,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  '${character.name} · 模型设置',
+                  style: AppTypography.sectionTitle(sheetContext),
+                ),
+                SizedBox(height: AppSpacing.md),
+                DropdownButtonFormField<int>(
+                  initialValue: modelConfigId,
+                  decoration: const InputDecoration(labelText: '角色模型'),
+                  items: [
+                    const DropdownMenuItem(value: 0, child: Text('默认模型（跟随全局）')),
+                    ...configs.map(
+                      (model) => DropdownMenuItem(
+                        value: _intValue(model.id),
+                        child: Text(
+                          '${model.name.isEmpty ? model.model : model.name} · ${model.model}',
+                        ),
+                      ),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setSheetState(() => modelConfigId = value);
+                    }
+                  },
+                ),
+                SizedBox(height: AppSpacing.sm),
+                DropdownButtonFormField<int>(
+                  initialValue: reasoningEnabled,
+                  decoration: const InputDecoration(labelText: '思考模式'),
+                  items: const [
+                    DropdownMenuItem(value: -1, child: Text('跟随默认')),
+                    DropdownMenuItem(value: 1, child: Text('开启')),
+                    DropdownMenuItem(value: 0, child: Text('关闭')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setSheetState(() => reasoningEnabled = value);
+                    }
+                  },
+                ),
+                SizedBox(height: AppSpacing.md),
+                Text('思考强度', style: AppTypography.caption(sheetContext)),
+                Slider(
+                  value: reasoningValue.toDouble(),
+                  min: 0,
+                  max: 3,
+                  divisions: 3,
+                  label: const ['低', '中', '高', '极高'][reasoningValue],
+                  onChanged: reasoningEnabled == 0
+                      ? null
+                      : (value) {
+                          setSheetState(() {
+                            reasoningValue = value.round();
+                            if (reasoningEnabled < 0) reasoningEnabled = 1;
+                          });
+                        },
+                ),
+                Text(
+                  '仅覆盖当前角色，不修改模型本身的全局配置。',
+                  style: AppTypography.caption(sheetContext),
+                ),
+                SizedBox(height: AppSpacing.md),
+                FilledButton(
+                  onPressed: () async {
+                    try {
+                      await ref
+                          .read(characterDetailServiceProvider)
+                          .updateCharacter(character.id, {
+                            'modelConfigId': modelConfigId,
+                            'reasoningEffort': reasoningEnabled == -1
+                                ? ''
+                                : const [
+                                    'low',
+                                    'medium',
+                                    'high',
+                                    'xhigh',
+                                  ][reasoningValue],
+                            'reasoningEnabled': reasoningEnabled,
+                          }, roleAuthority: character.roleAuthority);
+                      ref.invalidate(characterListProvider);
+                      if (sheetContext.mounted) {
+                        Navigator.pop(sheetContext, true);
+                      }
+                    } catch (error, stackTrace) {
+                      print('[original-error] $error\n$stackTrace');
+                      if (sheetContext.mounted) {
+                        amitiaSnackBar(sheetContext, '保存失败：$error');
+                      }
+                    }
+                  },
+                  child: const Text('保存角色模型设置'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (saved == true && mounted) {
+      amitiaSnackBar(context, '角色模型设置已保存');
+    }
   }
 
   String _displayTime(dynamic value) {

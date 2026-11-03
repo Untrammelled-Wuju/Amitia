@@ -10,6 +10,7 @@ import com.amitia.amitia_app.nativeprovider.model.NativeBridgeResponse
 import com.amitia.amitia_app.virtualdisplay.host.VirtualDisplayHostError
 import com.amitia.amitia_app.virtualdisplay.host.VirtualDisplayHostManager
 import com.amitia.amitia_app.virtualdisplay.host.VirtualDisplayPermissionStore
+import com.amitia.amitia_app.virtualdisplay.preview.VirtualDisplayPreviewService
 import org.json.JSONObject
 
 internal class VirtualDisplayNativeHandler(
@@ -35,6 +36,10 @@ internal class VirtualDisplayNativeHandler(
         OP_SWIPE,
         OP_KEY,
         OP_TEXT,
+        OP_PREVIEW_STATUS,
+        OP_PREVIEW_SET,
+        OP_PREVIEW_PERMISSION_REQUEST,
+        OP_PREVIEW_RESET_POSITION,
     )
 
     override suspend fun execute(request: NativeBridgeRequest): NativeBridgeResponse {
@@ -43,6 +48,10 @@ internal class VirtualDisplayNativeHandler(
             OP_PERMISSION_SET -> permissionSet(request)
             OP_HOST_ENSURE -> hostEnsure(request)
             OP_STATUS -> status(request)
+            OP_PREVIEW_STATUS -> previewStatus(request)
+            OP_PREVIEW_SET -> previewSet(request)
+            OP_PREVIEW_PERMISSION_REQUEST -> previewPermissionRequest(request)
+            OP_PREVIEW_RESET_POSITION -> previewResetPosition(request)
             else -> executeHost(request)
         }
     }
@@ -50,6 +59,10 @@ internal class VirtualDisplayNativeHandler(
     private suspend fun permissionStatus(request: NativeBridgeRequest): NativeBridgeResponse {
         val enabled = VirtualDisplayPermissionStore.isEnabled(appContext)
         val running = enabled && manager.hostRunning()
+        if (VirtualDisplayPreviewService.isEnabled(appContext)) {
+            VirtualDisplayPreviewService.ensureRunning(appContext)
+        }
+        val preview = VirtualDisplayPreviewService.status(appContext)
         return success(
             request,
             mapOf(
@@ -64,6 +77,13 @@ internal class VirtualDisplayNativeHandler(
                     running -> "ready"
                     else -> "stopped"
                 },
+                "preview" to preview,
+                "previewEnabled" to preview["enabled"],
+                "previewState" to preview["state"],
+                "previewVisible" to preview["visible"],
+                "previewSuppressed" to preview["suppressed"],
+                "overlayPermissionGranted" to preview["overlayPermissionGranted"],
+                "previewLastError" to preview["lastError"],
             ),
         )
     }
@@ -74,6 +94,10 @@ internal class VirtualDisplayNativeHandler(
         if (!enabled) {
             VirtualDisplayPermissionStore.setEnabled(appContext, false)
             manager.stop()
+            VirtualDisplayPreviewService.onVirtualDisplayPermissionChanged(
+                appContext,
+                false,
+            )
             return success(
                 request,
                 mapOf(
@@ -86,6 +110,10 @@ internal class VirtualDisplayNativeHandler(
         return try {
             val status = manager.ensureStarted()
             VirtualDisplayPermissionStore.setEnabled(appContext, true)
+            VirtualDisplayPreviewService.onVirtualDisplayPermissionChanged(
+                appContext,
+                true,
+            )
             success(
                 request,
                 mapOf(
@@ -187,6 +215,34 @@ internal class VirtualDisplayNativeHandler(
         }
     }
 
+    private fun previewStatus(request: NativeBridgeRequest): NativeBridgeResponse {
+        return success(request, VirtualDisplayPreviewService.status(appContext))
+    }
+
+    private fun previewSet(request: NativeBridgeRequest): NativeBridgeResponse {
+        val enabled = request.payload["enabled"] as? Boolean
+            ?: return failure(
+                request,
+                "VIRTUAL_DISPLAY_PREVIEW_INVALID_REQUEST",
+                "enabled must be a boolean",
+            )
+        return success(request, VirtualDisplayPreviewService.setEnabled(appContext, enabled))
+    }
+
+    private fun previewPermissionRequest(request: NativeBridgeRequest): NativeBridgeResponse {
+        return success(
+            request,
+            VirtualDisplayPreviewService.requestOverlayPermission(appContext),
+        )
+    }
+
+    private fun previewResetPosition(request: NativeBridgeRequest): NativeBridgeResponse {
+        return success(
+            request,
+            VirtualDisplayPreviewService.resetWindowPosition(appContext),
+        )
+    }
+
     private suspend fun executeHost(request: NativeBridgeRequest): NativeBridgeResponse {
         if (!VirtualDisplayPermissionStore.isEnabled(appContext)) {
             return failure(request, "VIRTUAL_DISPLAY_PERMISSION_REQUIRED", "virtual display access is disabled")
@@ -267,5 +323,9 @@ internal class VirtualDisplayNativeHandler(
         const val OP_SWIPE = "virtual_display.swipe"
         const val OP_KEY = "virtual_display.key"
         const val OP_TEXT = "virtual_display.text"
+        const val OP_PREVIEW_STATUS = "virtual_display.preview.status"
+        const val OP_PREVIEW_SET = "virtual_display.preview.set"
+        const val OP_PREVIEW_PERMISSION_REQUEST = "virtual_display.preview.permission.request"
+        const val OP_PREVIEW_RESET_POSITION = "virtual_display.preview.position.reset"
     }
 }

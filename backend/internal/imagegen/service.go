@@ -3,31 +3,35 @@
 package imagegen
 
 import (
-	"bytes"
-	"encoding/json"
+	"context"
 	"fmt"
-	"github.com/u-ai/backend/internal/timeoutpolicy"
-	"io"
-	"net/http"
-	"strings"
+	"sort"
 	"time"
+
+	"github.com/u-ai/backend/internal/imageprovider"
 )
 
 type Service interface {
 	List() ([]ImageGenConfig, error)
 	GetByID(id int) (*ImageGenConfig, error)
+	GetRuntimeByID(id int) (*ImageGenConfig, error)
 	Create(req *CreateImageGenConfigRequest) (*ImageGenConfig, error)
 	Update(id int, updates map[string]interface{}) (*ImageGenConfig, error)
 	Delete(id int) error
 	Activate(id int) (*ImageGenConfig, error)
 	GetActive() (*ImageGenConfig, error)
-	TestConnection(id int) (map[string]interface{}, error)
+	TestConnection(ctx context.Context, id int) (map[string]interface{}, error)
 	ListProviders() []ProviderInfo
 }
 
-type service struct{ repo Repository }
+type service struct {
+	repo     Repository
+	registry *imageprovider.Registry
+}
 
-func NewService(repo Repository) Service { return &service{repo: repo} }
+func NewService(repo Repository, registry *imageprovider.Registry) Service {
+	return &service{repo: repo, registry: registry}
+}
 
 func redactConfigForResponse(cfg *ImageGenConfig) {
 	if cfg == nil {
@@ -50,9 +54,18 @@ func (s *service) List() ([]ImageGenConfig, error) {
 func (s *service) GetByID(id int) (*ImageGenConfig, error) {
 	cfg, err := s.repo.GetByID(id)
 	if err != nil {
-		return nil, fmt.Errorf("生图模型配置不存在")
+		return nil, fmt.Errorf("生图模型配置不存在: %w", err)
 	}
 	redactConfigForResponse(cfg)
+	return cfg, nil
+}
+
+func (s *service) GetRuntimeByID(id int) (*ImageGenConfig, error) {
+	cfg, err := s.repo.GetByID(id)
+	if err != nil {
+		return nil, fmt.Errorf("生图模型配置不存在: %w", err)
+	}
+	cfg.HasApiKey = cfg.ApiKey != ""
 	return cfg, nil
 }
 
@@ -69,6 +82,9 @@ func (s *service) Create(req *CreateImageGenConfigRequest) (*ImageGenConfig, err
 	if req.BaseUrl == "" {
 		req.BaseUrl = "https://ark.cn-beijing.volces.com/api/v3"
 	}
+	if err := s.requireProvider(req.ApiType); err != nil {
+		return nil, err
+	}
 	now := time.Now().Format("2006-01-02 15:04:05")
 	cfg := &ImageGenConfig{
 		Name: req.Name, ApiType: req.ApiType, ApiKey: req.ApiKey, ModelName: req.ModelName,
@@ -83,7 +99,13 @@ func (s *service) Create(req *CreateImageGenConfigRequest) (*ImageGenConfig, err
 }
 
 func (s *service) Update(id int, updates map[string]interface{}) (*ImageGenConfig, error) {
-	if err := s.repo.Update(id, normalizeConfigUpdates(updates)); err != nil {
+	normalized := normalizeConfigUpdates(updates)
+	if apiType, ok := normalized["api_type"].(string); ok {
+		if err := s.requireProvider(apiType); err != nil {
+			return nil, err
+		}
+	}
+	if err := s.repo.Update(id, normalized); err != nil {
 		return nil, fmt.Errorf("更新失败: %w", err)
 	}
 	cfg, err := s.repo.GetByID(id)
@@ -99,10 +121,17 @@ func (s *service) Update(id int, updates map[string]interface{}) (*ImageGenConfi
 func (s *service) Delete(id int) error { return s.repo.Delete(id) }
 
 func (s *service) Activate(id int) (*ImageGenConfig, error) {
+	cfg, err := s.repo.GetByID(id)
+	if err != nil {
+		return nil, fmt.Errorf("生图模型配置不存在: %w", err)
+	}
+	if err := s.requireProvider(cfg.ApiType); err != nil {
+		return nil, err
+	}
 	if err := s.repo.Activate(id); err != nil {
 		return nil, fmt.Errorf("激活失败: %w", err)
 	}
-	cfg, err := s.repo.GetByID(id)
+	cfg, err = s.repo.GetByID(id)
 	if err != nil {
 		return nil, err
 	}
@@ -110,6 +139,20 @@ func (s *service) Activate(id int) (*ImageGenConfig, error) {
 		redactConfigForResponse(cfg)
 	}
 	return cfg, nil
+}
+
+func (s *service) requireProvider(apiType string) error {
+	name := imageprovider.NormalizeProviderName(apiType)
+	if name == "" {
+		return fmt.Errorf("生图 Provider 不能为空")
+	}
+	if s.registry == nil {
+		return fmt.Errorf("生图 Provider Registry 不可用")
+	}
+	if _, ok := s.registry.Resolve(name); !ok {
+		return fmt.Errorf("生图 Provider %s 未注册", name)
+	}
+	return nil
 }
 
 func (s *service) GetActive() (*ImageGenConfig, error) {
@@ -121,104 +164,79 @@ func (s *service) GetActive() (*ImageGenConfig, error) {
 	return cfg, nil
 }
 
-func (s *service) TestConnection(id int) (map[string]interface{}, error) {
-	cfg, err := s.repo.GetByID(id)
+func (s *service) TestConnection(ctx context.Context, id int) (map[string]interface{}, error) {
+	cfg, err := s.GetRuntimeByID(id)
 	if err != nil {
-		return nil, fmt.Errorf("生图模型配置不存在")
+		return nil, err
 	}
-	if cfg.ApiKey == "" {
+	if s.registry == nil {
+		return nil, fmt.Errorf("生图 Provider Registry 不可用")
+	}
+	providerName, provider, ok := s.registry.Select(cfg.ApiType, cfg.ApiKey)
+	if !ok {
+		return nil, fmt.Errorf("生图 Provider %s 未注册", cfg.ApiType)
+	}
+	if cfg.ApiKey == "" && providerName != "cloud_core" {
 		return nil, fmt.Errorf("API Key未配置")
 	}
-	switch cfg.ApiType {
-	case "stability":
-		return s.testStabilityConnection(cfg)
-	case "tongyi":
-		return s.testTongyiConnection(cfg)
-	default:
-		return s.testOpenAICompatibleConnection(cfg)
+	providerConfig := imageprovider.ImageModelConfig{
+		ConfigID:  cfg.ID,
+		Name:      cfg.Name,
+		ApiType:   cfg.ApiType,
+		ApiKey:    cfg.ApiKey,
+		ModelName: cfg.ModelName,
+		BaseUrl:   cfg.BaseUrl,
 	}
-}
-
-func (s *service) testOpenAICompatibleConnection(cfg *ImageGenConfig) (map[string]interface{}, error) {
-	baseUrl := strings.TrimRight(cfg.BaseUrl, "/")
-	reqBody := map[string]interface{}{
-		"model":  cfg.ModelName,
-		"prompt": "test connection",
-		"size":   "1024x1024",
+	if providerName == "cloud_core" {
+		providerConfig.ConfigID = 0
 	}
-	jsonBody, _ := json.Marshal(reqBody)
-	req, _ := http.NewRequest("POST", baseUrl+"/images/generations", bytes.NewReader(jsonBody))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+cfg.ApiKey)
 	start := time.Now()
-	resp, err := (timeoutpolicy.Client(&http.Client{Timeout: 30 * time.Second})).Do(req)
+	if probe, supported := provider.(imageprovider.ConnectionProbe); supported {
+		submission, probeErr := probe.Probe(ctx, providerConfig)
+		err = probeErr
+		if probeErr == nil && (submission == nil || submission.Result == nil || len(submission.Result.Images) == 0) {
+			err = fmt.Errorf("生图 Provider %s 测试未返回图片", cfg.ApiType)
+		}
+	} else {
+		err = provider.ValidateConfig(ctx, providerConfig)
+	}
 	latency := time.Since(start).Milliseconds()
 	if err != nil {
 		return map[string]interface{}{"success": false, "message": err.Error(), "latency": latency}, nil
 	}
-	defer resp.Body.Close()
-	rb, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != 200 {
-		return map[string]interface{}{"success": false, "message": fmt.Sprintf("API返回 %d: %s", resp.StatusCode, truncate(string(rb), 300)), "latency": latency}, nil
-	}
-	return map[string]interface{}{"success": true, "message": "连接成功", "latency": latency}, nil
-}
-
-func (s *service) testStabilityConnection(cfg *ImageGenConfig) (map[string]interface{}, error) {
-	baseUrl := strings.TrimRight(cfg.BaseUrl, "/")
-	url := fmt.Sprintf("%s/stable-image/generate/core", baseUrl)
-	req, _ := http.NewRequest("POST", url, nil)
-	req.Header.Set("Authorization", "Bearer "+cfg.ApiKey)
-	req.Header.Set("Accept", "application/json")
-	start := time.Now()
-	resp, err := (timeoutpolicy.Client(&http.Client{Timeout: 30 * time.Second})).Do(req)
-	latency := time.Since(start).Milliseconds()
-	if err != nil {
-		return map[string]interface{}{"success": false, "message": err.Error(), "latency": latency}, nil
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 && resp.StatusCode != 400 {
-		rb, _ := io.ReadAll(resp.Body)
-		return map[string]interface{}{"success": false, "message": fmt.Sprintf("API返回 %d: %s", resp.StatusCode, truncate(string(rb), 300)), "latency": latency}, nil
-	}
-	return map[string]interface{}{"success": true, "message": "连接成功", "latency": latency}, nil
-}
-
-func (s *service) testTongyiConnection(cfg *ImageGenConfig) (map[string]interface{}, error) {
-	baseUrl := strings.TrimRight(cfg.BaseUrl, "/")
-	reqBody := map[string]interface{}{
-		"model": cfg.ModelName,
-		"input": map[string]interface{}{"prompt": "test"},
-	}
-	jsonBody, _ := json.Marshal(reqBody)
-	req, _ := http.NewRequest("POST", baseUrl+"/services/aigc/text2image/image-synthesis", bytes.NewReader(jsonBody))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+cfg.ApiKey)
-	req.Header.Set("X-DashScope-Async", "enable")
-	start := time.Now()
-	resp, err := (timeoutpolicy.Client(&http.Client{Timeout: 30 * time.Second})).Do(req)
-	latency := time.Since(start).Milliseconds()
-	if err != nil {
-		return map[string]interface{}{"success": false, "message": err.Error(), "latency": latency}, nil
-	}
-	defer resp.Body.Close()
-	rb, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != 200 {
-		return map[string]interface{}{"success": false, "message": fmt.Sprintf("API返回 %d: %s", resp.StatusCode, truncate(string(rb), 300)), "latency": latency}, nil
-	}
-	return map[string]interface{}{"success": true, "message": "连接成功", "latency": latency}, nil
+	return map[string]interface{}{"success": true, "message": "连接成功", "provider": cfg.ApiType, "latency": latency}, nil
 }
 
 func (s *service) ListProviders() []ProviderInfo {
-	return s.repo.ListProviders()
-}
-
-func truncate(s string, n int) string {
-	runes := []rune(s)
-	if len(runes) <= n {
-		return s
+	if s.registry == nil {
+		return nil
 	}
-	return string(runes[:n]) + "..."
+	descriptors := s.registry.Descriptors()
+	sort.SliceStable(descriptors, func(i, j int) bool {
+		order := map[string]int{"seedream": 0, "openai": 1, "stability": 2, "tongyi": 3, "cogview": 4, "siliconflow": 5}
+		left, leftOK := order[descriptors[i].Name]
+		right, rightOK := order[descriptors[j].Name]
+		if leftOK != rightOK {
+			return leftOK
+		}
+		if leftOK && left != right {
+			return left < right
+		}
+		return descriptors[i].Name < descriptors[j].Name
+	})
+	providers := make([]ProviderInfo, 0, len(descriptors))
+	for _, descriptor := range descriptors {
+		if descriptor.DeviceOnly {
+			continue
+		}
+		providers = append(providers, ProviderInfo{
+			ID:             descriptor.Name,
+			Name:           descriptor.DisplayName,
+			DefaultBaseURL: descriptor.DefaultBaseURL,
+			DefaultModel:   descriptor.DefaultModel,
+		})
+	}
+	return providers
 }
 
 func normalizeConfigUpdates(updates map[string]interface{}) map[string]interface{} {

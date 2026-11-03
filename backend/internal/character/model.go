@@ -47,6 +47,9 @@ type Character struct {
 	EmotionScale        int     `gorm:"column:emotion_scale;default:0" json:"emotionScale"`
 	SilenceDuration     int     `gorm:"column:silence_duration;default:0" json:"silenceDuration"`
 	CardDataJSON        string  `gorm:"column:card_data_json;default:{}" json:"cardData,omitempty"`
+	ModelConfigID       int     `gorm:"column:model_config_id;not null;default:0" json:"modelConfigId"`
+	ReasoningEffort     string  `gorm:"column:reasoning_effort;not null;default:''" json:"reasoningEffort"`
+	ReasoningEnabled    int     `gorm:"column:reasoning_enabled;not null;default:-1" json:"reasoningEnabled"`
 	Revision            int64   `gorm:"column:revision;not null;default:0" json:"revision"`
 	DeletedAt           *string `gorm:"column:deleted_at" json:"-"`
 }
@@ -96,6 +99,9 @@ type CreateCharacterRequest struct {
 	PersonalityConfig json.RawMessage `json:"personalityConfig"`
 	ChatStyleConfig   string          `json:"chatStyleConfig"`
 	SceneRules        string          `json:"sceneRules"`
+	ModelConfigID     int             `json:"modelConfigId"`
+	ReasoningEffort   string          `json:"reasoningEffort"`
+	ReasoningEnabled  *int            `json:"reasoningEnabled"`
 }
 
 type UpdateCharacterRequest struct {
@@ -131,6 +137,9 @@ type UpdateCharacterRequest struct {
 	ChatStyleConfig   *string          `json:"chatStyleConfig"`
 	SceneRules        *string          `json:"sceneRules"`
 	Avatar            *string          `json:"avatar"`
+	ModelConfigID     *int             `json:"modelConfigId"`
+	ReasoningEffort   *string          `json:"reasoningEffort"`
+	ReasoningEnabled  *int             `json:"reasoningEnabled"`
 }
 
 type RoleProfileResponse struct {
@@ -169,6 +178,9 @@ type RoleRuntimeProfile struct {
 	UserAddressingStyle *string                `json:"userAddressingStyle"`
 	GenderExpression    int                    `json:"genderExpression"`
 	LifeIdentity        string                 `json:"lifeIdentity"`
+	ModelConfigID       int                    `json:"modelConfigId"`
+	ReasoningEffort     string                 `json:"reasoningEffort"`
+	ReasoningEnabled    int                    `json:"reasoningEnabled"`
 	Diagnostics         []string               `json:"diagnostics"`
 }
 

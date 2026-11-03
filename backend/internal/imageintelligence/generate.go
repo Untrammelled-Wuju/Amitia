@@ -3,6 +3,7 @@ package imageintelligence
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"image"
 	_ "image/jpeg"
@@ -19,12 +20,18 @@ import (
 )
 
 type ImageGenerateRequest struct {
-	Prompt       string `json:"prompt"`
-	Count        int    `json:"count,omitempty"`
-	Width        int    `json:"width,omitempty"`
-	Height       int    `json:"height,omitempty"`
-	Quality      string `json:"quality,omitempty"`
-	OwnerSpaceID string `json:"-"`
+	RequestID             string                       `json:"requestId,omitempty"`
+	Prompt                string                       `json:"prompt"`
+	Count                 int                          `json:"count,omitempty"`
+	Width                 int                          `json:"width,omitempty"`
+	Height                int                          `json:"height,omitempty"`
+	Quality               string                       `json:"quality,omitempty"`
+	Mode                  imageprovider.GenerationMode `json:"mode,omitempty"`
+	NegativePrompt        string                       `json:"negativePrompt,omitempty"`
+	Seed                  *int64                       `json:"seed,omitempty"`
+	ReferenceResourceURIs []string                     `json:"referenceResourceUris,omitempty"`
+	ReferenceImages       []imageprovider.ImageInput   `json:"-"`
+	OwnerSpaceID          string                       `json:"-"`
 }
 
 type GeneratedImage struct {
@@ -43,6 +50,7 @@ type ImageGenerateResult struct {
 type GenerateProvider struct {
 	imagegenSvc imagegen.Service
 	registry    *imageprovider.Registry
+	resolver    *ImageResourceResolver
 	artifacts   ArtifactCreator
 	maxCount    int
 }
@@ -51,10 +59,11 @@ type ArtifactCreator interface {
 	Create(ctx context.Context, req artifact.CreateRequest) (artifact.Artifact, error)
 }
 
-func NewGenerateProvider(imagegenSvc imagegen.Service, registry *imageprovider.Registry, artifacts ArtifactCreator) *GenerateProvider {
+func NewGenerateProvider(imagegenSvc imagegen.Service, registry *imageprovider.Registry, resolver *ImageResourceResolver, artifacts ArtifactCreator) *GenerateProvider {
 	return &GenerateProvider{
 		imagegenSvc: imagegenSvc,
 		registry:    registry,
+		resolver:    resolver,
 		artifacts:   artifacts,
 		maxCount:    4,
 	}
@@ -97,50 +106,73 @@ func (p *GenerateProvider) Generate(ctx context.Context, req ImageGenerateReques
 	if activeConfig == nil {
 		return nil, &Error{Code: ErrGenUnavailable, Message: "no active image generation config", HTTPStatus: http.StatusServiceUnavailable}
 	}
-	if activeConfig.ApiKey == "" {
-		return nil, &Error{Code: ErrProviderAuth, Message: "image generation API key not configured", HTTPStatus: http.StatusUnauthorized}
-	}
-
-	providerName := ""
-	names := p.registry.Names()
-	for _, name := range names {
-		if name == "seedream" {
-			providerName = name
-			break
-		}
-	}
-	if providerName == "" && len(names) > 0 {
-		providerName = names[0]
-	}
-	if providerName == "" {
-		return nil, &Error{Code: ErrGenUnavailable, Message: "no image generation providers registered", HTTPStatus: http.StatusServiceUnavailable}
-	}
-
-	adapter, ok := p.registry.Get(providerName)
+	providerName, adapter, ok := p.registry.Select(activeConfig.ApiType, activeConfig.ApiKey)
 	if !ok {
-		return nil, &Error{Code: ErrGenUnavailable, Message: fmt.Sprintf("provider %s not found", providerName), HTTPStatus: http.StatusServiceUnavailable}
+		return nil, &Error{Code: ErrGenUnavailable, Message: fmt.Sprintf("provider %s is not registered", providerName), Provider: providerName, HTTPStatus: http.StatusServiceUnavailable}
+	}
+	if activeConfig.ApiKey == "" && providerName != "cloud_core" {
+		return nil, &Error{Code: ErrProviderAuth, Message: "image generation API key not configured", Provider: providerName, HTTPStatus: http.StatusUnauthorized}
 	}
 
 	providerConfig := imageprovider.ImageModelConfig{
+		ConfigID:  activeConfig.ID,
 		Name:      providerName,
 		ApiType:   activeConfig.ApiType,
 		ApiKey:    activeConfig.ApiKey,
 		ModelName: activeConfig.ModelName,
 		BaseUrl:   activeConfig.BaseUrl,
 	}
+	if providerName == "cloud_core" {
+		providerConfig.ConfigID = 0
+	}
+	referenceImages, referenceErr := p.referenceImages(ctx, req)
+	if referenceErr != nil {
+		return nil, referenceErr
+	}
+	providerCaps, capsErr := adapter.Capabilities(ctx, providerConfig)
+	if capsErr != nil {
+		return nil, p.mapProviderError(providerName, capsErr)
+	}
+	if len(referenceImages) > 0 && !providerCaps.SupportsReferenceImage {
+		return nil, &Error{Code: ErrGenUnavailable, Message: fmt.Sprintf("provider %s does not support reference images", providerName), Provider: providerName, HTTPStatus: http.StatusBadRequest}
+	}
+	if providerCaps.MaxReferenceImages > 0 && len(referenceImages) > providerCaps.MaxReferenceImages {
+		return nil, &Error{Code: ErrInvalid, Message: fmt.Sprintf("reference image count %d exceeds provider limit %d", len(referenceImages), providerCaps.MaxReferenceImages), Provider: providerName, HTTPStatus: http.StatusBadRequest}
+	}
+	if providerCaps.MaxOutputImages > 0 && count > providerCaps.MaxOutputImages {
+		return nil, &Error{Code: ErrInvalid, Message: fmt.Sprintf("output count %d exceeds provider limit %d", count, providerCaps.MaxOutputImages), Provider: providerName, HTTPStatus: http.StatusBadRequest}
+	}
+	if req.Mode != "" {
+		extended, ok := adapter.(imageprovider.ExtendedProvider)
+		if !ok {
+			return nil, &Error{Code: ErrGenUnavailable, Message: fmt.Sprintf("provider %s does not expose generation modes", providerName), Provider: providerName, HTTPStatus: http.StatusBadRequest}
+		}
+		extendedCaps, extendedErr := extended.ExtendedCapabilities(ctx, providerConfig)
+		if extendedErr != nil {
+			return nil, p.mapProviderError(providerName, extendedErr)
+		}
+		if !extendedCaps.SupportsMode(req.Mode) {
+			return nil, &Error{Code: ErrInvalid, Message: fmt.Sprintf("provider %s does not support mode %s", providerName, req.Mode), Provider: providerName, HTTPStatus: http.StatusBadRequest}
+		}
+	}
 
 	var images []GeneratedImage
 	for i := 0; i < count; i++ {
 		submitReq := imageprovider.ImageGenerationRequest{
-			Prompt:      req.Prompt,
-			Width:       width,
-			Height:      height,
-			OutputCount: 1,
+			RequestID:       reqRequestID(req),
+			Mode:            req.Mode,
+			Prompt:          req.Prompt,
+			NegativePrompt:  req.NegativePrompt,
+			ReferenceImages: referenceImages,
+			Width:           width,
+			Height:          height,
+			Seed:            req.Seed,
+			OutputCount:     1,
 		}
 
 		submission, submitErr := adapter.Submit(ctx, providerConfig, submitReq)
 		if submitErr != nil {
-			mapped := p.mapProviderError(submitErr)
+			mapped := p.mapProviderError(providerName, submitErr)
 			return nil, mapped
 		}
 
@@ -267,18 +299,74 @@ func (p *GenerateProvider) resourceifyImage(ctx context.Context, ownerSpaceID st
 	}, nil
 }
 
-func (p *GenerateProvider) mapProviderError(err error) *Error {
-	if pe, ok := err.(*imageprovider.ProviderError); ok {
+func (p *GenerateProvider) referenceImages(ctx context.Context, req ImageGenerateRequest) ([]imageprovider.ImageInput, *Error) {
+	if len(req.ReferenceResourceURIs) == 0 {
+		return append([]imageprovider.ImageInput(nil), req.ReferenceImages...), nil
+	}
+	if p.resolver == nil {
+		return nil, &Error{Code: ErrGenUnavailable, Message: "image resource resolver is unavailable", HTTPStatus: http.StatusServiceUnavailable}
+	}
+	caps := ImageCapabilities{
+		SupportedInputMIMEs: []string{"image/png", "image/jpeg", "image/webp"},
+		MaxInputBytes:       20 * 1024 * 1024,
+		MaxWidth:            10000,
+		MaxHeight:           10000,
+		MaxPixels:           40000000,
+	}
+	images := make([]imageprovider.ImageInput, 0, len(req.ReferenceResourceURIs))
+	for _, uri := range req.ReferenceResourceURIs {
+		data, summary, resolveErr := p.resolver.ResolveAndValidate(ctx, ImageInput{ResourceURI: uri}, caps)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		images = append(images, imageprovider.ImageInput{Bytes: data, MimeType: summary.MIME})
+	}
+	return images, nil
+}
+
+func reqRequestID(req ImageGenerateRequest) string {
+	if requestID := strings.TrimSpace(req.RequestID); requestID != "" {
+		return requestID
+	}
+	return fmt.Sprintf("image-%d", time.Now().UnixNano())
+}
+
+func (p *GenerateProvider) mapProviderError(provider string, err error) *Error {
+	var coded interface{ ErrorCode() string }
+	if errors.As(err, &coded) {
+		switch coded.ErrorCode() {
+		case imageprovider.ErrCodeAuthFailed:
+			return &Error{Code: ErrProviderAuth, Message: err.Error(), Provider: provider, Retryable: false, HTTPStatus: http.StatusUnauthorized}
+		case imageprovider.ErrCodeInsufficientBalance:
+			return &Error{Code: ErrProviderAuth, Message: err.Error(), Provider: provider, Retryable: false, HTTPStatus: http.StatusPaymentRequired}
+		case imageprovider.ErrCodeRateLimited:
+			return &Error{Code: ErrProviderRateLimited, Message: err.Error(), Provider: provider, Retryable: true, HTTPStatus: http.StatusTooManyRequests}
+		case imageprovider.ErrCodeRequestInvalid, "IMAGE_GENERATION_PROVIDER_REJECTED":
+			return &Error{Code: ErrInvalid, Message: err.Error(), Provider: provider, Retryable: false, HTTPStatus: http.StatusBadRequest}
+		case imageprovider.ErrCodeNetworkTimeout, "IMAGE_GENERATION_TIMEOUT":
+			return &Error{Code: ErrProviderUnavailable, Message: err.Error(), Provider: provider, Retryable: true, HTTPStatus: http.StatusGatewayTimeout}
+		case imageprovider.ErrCodeInvalidFormat, imageprovider.ErrCodeEmptyResult, imageprovider.ErrCodeDownloadFailed:
+			return &Error{Code: ErrProviderInvalidResponse, Message: err.Error(), Provider: provider, Retryable: true, HTTPStatus: http.StatusBadGateway}
+		}
+	}
+	var pe *imageprovider.ProviderError
+	if errors.As(err, &pe) {
 		retryClass := string(pe.RetryClass)
 		switch pe.Code {
 		case imageprovider.ErrCodeAuthFailed:
-			return &Error{Code: ErrProviderAuth, Message: pe.Message, Provider: "seedream", Retryable: false, HTTPStatus: http.StatusUnauthorized}
+			return &Error{Code: ErrProviderAuth, Message: err.Error(), Provider: provider, Retryable: false, HTTPStatus: http.StatusUnauthorized}
+		case imageprovider.ErrCodeInsufficientBalance:
+			return &Error{Code: ErrProviderAuth, Message: err.Error(), Provider: provider, Retryable: false, HTTPStatus: http.StatusPaymentRequired}
 		case imageprovider.ErrCodeRateLimited:
-			return &Error{Code: ErrProviderRateLimited, Message: pe.Message, Provider: "seedream", Retryable: false, HTTPStatus: http.StatusTooManyRequests}
+			return &Error{Code: ErrProviderRateLimited, Message: err.Error(), Provider: provider, Retryable: true, HTTPStatus: http.StatusTooManyRequests}
 		case imageprovider.ErrCodeRequestInvalid:
-			return &Error{Code: ErrInvalid, Message: pe.Message, Provider: "seedream", Retryable: false, HTTPStatus: http.StatusBadRequest}
+			return &Error{Code: ErrInvalid, Message: err.Error(), Provider: provider, Retryable: false, HTTPStatus: http.StatusBadRequest}
+		case imageprovider.ErrCodeNetworkTimeout:
+			return &Error{Code: ErrProviderUnavailable, Message: err.Error(), Provider: provider, Retryable: true, HTTPStatus: http.StatusGatewayTimeout}
+		case imageprovider.ErrCodeInvalidFormat, imageprovider.ErrCodeEmptyResult, imageprovider.ErrCodeDownloadFailed:
+			return &Error{Code: ErrProviderInvalidResponse, Message: err.Error(), Provider: provider, Retryable: true, HTTPStatus: http.StatusBadGateway}
 		}
-		return mapProviderErrorToDomain("seedream", retryClass, pe.Message)
+		return mapProviderErrorToDomain(provider, retryClass, err.Error())
 	}
-	return &Error{Code: ErrGenFailed, Message: err.Error(), Provider: "seedream", Retryable: false, HTTPStatus: http.StatusBadGateway}
+	return &Error{Code: ErrGenFailed, Message: err.Error(), Provider: provider, Retryable: false, HTTPStatus: http.StatusBadGateway}
 }

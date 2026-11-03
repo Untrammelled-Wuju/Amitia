@@ -100,9 +100,13 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 	lastFailureKey := ""
 	lastFailureCount := 0
 	partial := func(err error) (business.Generation, error) {
-		return business.Generation{Text: sink.text.String(), Reasoning: sink.reasoning.String(), ReasoningDurationMS: sink.reasoningDurationMS(), Tokens: totalTokens, Partial: true}, err
+		return business.Generation{Text: sink.text.String(), Reasoning: sink.reasoning.String(), ReasoningDurationMS: sink.reasoningDurationMS(), Tokens: totalTokens, Partial: true, Round: sink.round}, err
 	}
 	for round := 0; ; round++ {
+		roundNumber := round + 1
+		roundInference := inference
+		roundInference.Round = roundNumber
+		sink.round = roundNumber
 		if err := coordination.ValidateCurrent(ctx); err != nil {
 			return partial(err)
 		}
@@ -119,6 +123,9 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 			staged := inference
 			staged.Emit = nil
 			modelSink = &ownedReplySink{inference: staged}
+		}
+		if modelSink != sink {
+			modelSink.round = roundNumber
 		}
 		providerCtx, providerCancel := context.WithCancel(ctx)
 		runtime.RegisterProviderCancel(runtimeKey, inference.Scope.TurnID, providerCancel)
@@ -191,7 +198,7 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 			if len(audit.Available)+len(audit.Unknown)+len(audit.MissingCitation) > 0 {
 				applog.TraceInfo(newProcessTrace(inference.Scope.RequestID, inference.ConversationID, inference.Scope.RoleID, "owned").WithStage("citation_audit_completed"), applog.Fields{"available_citations": len(audit.Available), "unknown_citations": len(audit.Unknown), "missing_citation_claims": len(audit.MissingCitation)}, "owned reply citation audit completed")
 			}
-			generation := business.Generation{Text: sink.text.String(), Reasoning: sink.reasoning.String(), ReasoningDurationMS: sink.reasoningDurationMS(), Tokens: totalTokens, ForceVoice: forceVoice}
+			generation := business.Generation{Text: sink.text.String(), Reasoning: sink.reasoning.String(), ReasoningDurationMS: sink.reasoningDurationMS(), Tokens: totalTokens, ForceVoice: forceVoice, Round: sink.round}
 			snapshot, err := json.Marshal(citations.BuildCitationSnapshot(generation.Text))
 			if err != nil {
 				return partial(err)
@@ -203,7 +210,7 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 			return partial(errors.New("设备能力调用超出授权范围或数量上限"))
 		}
 		if bufferNativeOutput && strings.TrimSpace(text) != "" {
-			if err := emitOwnedProgressText(ctx, inference, text); err != nil {
+			if err := emitOwnedProgressText(ctx, roundInference, text); err != nil {
 				return partial(err)
 			}
 		}
@@ -255,7 +262,7 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 					return partial(err)
 				}
 			}
-			result, err := s.ownedToolRuntime.Execute(ctx, inference, call.ID, modelName, json.RawMessage(call.Function.Arguments))
+			result, err := s.ownedToolRuntime.Execute(ctx, roundInference, call.ID, modelName, json.RawMessage(call.Function.Arguments))
 			if err != nil {
 				if ctx.Err() != nil {
 					return partial(err)
@@ -327,7 +334,10 @@ func emitOwnedProgressText(ctx context.Context, inference business.Inference, te
 	if !strings.HasSuffix(text, "\n\n") {
 		text += "\n\n"
 	}
-	progressSink := &ownedReplySink{inference: inference}
+	progressSink := &ownedReplySink{
+		inference: inference,
+		round:     inference.Round,
+	}
 	return progressSink.Emit(ctx, ModelEvent{Type: ModelEventTextDelta, TextDelta: text})
 }
 

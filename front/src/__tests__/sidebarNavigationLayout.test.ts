@@ -32,10 +32,10 @@ describe("图标导航栏布局", () => {
       expect(wrapper.get(".side-nav").classes()).not.toContain("is-collapsed");
       expect(wrapper.findAll(".el-menu-item").map(item => item.text())).toEqual([
         "主页",
+        "Agent",
         "角色",
         "记忆",
-        "主动任务",
-        "持续事项",
+        "任务",
         "游戏模式",
         "创意工坊",
         "扩展中心",

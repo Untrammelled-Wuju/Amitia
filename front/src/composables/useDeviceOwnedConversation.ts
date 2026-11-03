@@ -15,7 +15,16 @@ import {
   type DeviceServiceMode,
 } from "@/runtime/device-service-label";
 
-interface MeshRole { id: string; name: string; avatar?: string; revision: number }
+interface MeshRole {
+  id: string;
+  name: string;
+  avatar?: string;
+  revision: number;
+  roleAuthority?: string;
+  modelConfigId?: number;
+  reasoningEffort?: string;
+  reasoningEnabled?: number;
+}
 export interface OwnedProjectWorkspace { id: string; deviceId: string; name: string; kind: string; rootUri: string; readOnly?: boolean }
 export interface OwnedProject { id: string; title: string; workspaces: OwnedProjectWorkspace[]; primaryWorkspaceId: string; hiddenAt?: string | null; revision: number; ownerId: string; roleId: string; readOnly: boolean; createdAt: string; updatedAt: string; pinnedAt?: string | null; executionScope: OwnedExecutionScope }
 interface MeshPolicy { coordinated: boolean; modeRevision: number; providerEpoch: number; permissionRevision: number; selectedRole: string }

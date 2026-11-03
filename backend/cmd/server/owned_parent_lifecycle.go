@@ -28,7 +28,7 @@ func (r *meshOwnedToolRuntime) nativeScope(ctx context.Context, inference busine
 	if wire.Source == "" || wire.Source == "device-mesh" {
 		wire.Source = source
 	}
-	return chat.SkillScope{SpaceID: inference.Scope.SpaceID, CharacterID: inference.Scope.RoleID, ConversationID: inference.ConversationID, RequestID: requestID, Channel: wire.Channel, Source: wire.Source, SessionID: wire.SessionID, PermissionMode: wire.PermissionMode, ExecContext: wire.ExecContext, IsInternal: inference.InternalWorker || wire.IsInternal}
+	return chat.SkillScope{SpaceID: inference.Scope.SpaceID, CharacterID: inference.Scope.RoleID, ConversationID: inference.ConversationID, RequestID: requestID, Channel: wire.Channel, Source: wire.Source, SessionID: wire.SessionID, PermissionMode: wire.PermissionMode, WorkerRole: inference.WorkerRole, ExecContext: wire.ExecContext, IsInternal: inference.InternalWorker || wire.IsInternal}
 }
 
 func (r *meshOwnedToolRuntime) BeginOwnedTurn(ctx context.Context, inference business.Inference) (context.Context, func(context.Context, business.Generation, error) error, error) {

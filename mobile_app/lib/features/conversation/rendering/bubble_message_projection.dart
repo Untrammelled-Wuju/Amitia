@@ -48,18 +48,20 @@ List<String> splitBubbleText(String content, {required bool complete}) {
     }
     i++;
   }
-  if (complete) {
-    var tail = content.substring(start).trim();
-    if (code.isEmpty) {
-      for (var size = bubbleSeparator.length - 1; size >= 4; size--) {
-        if (tail.endsWith(bubbleSeparator.substring(0, size))) {
-          tail = tail.substring(0, tail.length - size).trim();
-          break;
-        }
+  var tail = content.substring(start).trim();
+  if (code.isEmpty) {
+    for (
+      var size = bubbleSeparator.length - 1;
+      size >= (complete ? 4 : 1);
+      size--
+    ) {
+      if (tail.endsWith(bubbleSeparator.substring(0, size))) {
+        tail = tail.substring(0, tail.length - size).trim();
+        break;
       }
     }
-    if (tail.isNotEmpty) result.add(tail);
   }
+  if (tail.isNotEmpty) result.add(tail);
   return result;
 }
 

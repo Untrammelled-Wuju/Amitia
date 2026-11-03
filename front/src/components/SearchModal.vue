@@ -89,6 +89,7 @@ const characters = ref<any[]>([]);
 
 const pageItems = [
   { label: "聊天", desc: "AI 对话", to: "/chat", icon: ChatDotRound },
+  { label: "Agent OS", desc: "Agent、团队、电脑、审批与活动", to: "/agents", icon: Odometer },
   { label: "运行概览", desc: "服务运行状态", to: "/settings/overview", icon: Odometer },
   {
     label: "运行数据",

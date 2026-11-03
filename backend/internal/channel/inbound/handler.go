@@ -55,6 +55,7 @@ type InboundRequest struct {
 	FileName            string   `json:"fileName,omitempty"`
 	ConversationTitle   string   `json:"conversationTitle,omitempty"`
 	PeerKind            string   `json:"peerKind,omitempty"`
+	TriggerMode         string   `json:"triggerMode,omitempty"`
 	SpaceID             string   `json:"spaceId,omitempty"`
 	CharacterID         string   `json:"characterId,omitempty"`
 	Source              string   `json:"source,omitempty"`
@@ -213,6 +214,7 @@ func normalizeInboundRequest(request InboundRequest) (InboundRequest, error) {
 	request.SpaceID = strings.TrimSpace(request.SpaceID)
 	request.CharacterID = strings.TrimSpace(request.CharacterID)
 	request.Source = strings.ToLower(strings.TrimSpace(request.Source))
+	request.TriggerMode = strings.ToLower(strings.TrimSpace(request.TriggerMode))
 	if request.ChannelID == "" {
 		return request, errors.New("channelId is required")
 	}
@@ -265,6 +267,8 @@ func buildUnifiedEntryRequest(extensionID, moduleID string, request InboundReque
 		PeerID:              request.PeerID,
 		SpaceID:             request.SpaceID,
 		Source:              source,
+		AdmissionTrigger:    strings.TrimSpace(request.TriggerMode),
+		AdmissionExplicit:   strings.TrimSpace(request.TriggerMode) == "direct" || strings.TrimSpace(request.TriggerMode) == "mention" || strings.TrimSpace(request.TriggerMode) == "prefix" || strings.TrimSpace(request.TriggerMode) == "reply",
 		CharacterID:         request.CharacterID,
 		ConversationID:      conversationID,
 		RequestID:           requestID,

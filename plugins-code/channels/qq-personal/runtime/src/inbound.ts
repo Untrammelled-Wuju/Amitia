@@ -20,6 +20,7 @@ export interface InboundPayload {
   videoUrl?: string
   audioUrl?: string
   replyToMessageId?: string
+  triggerMode?: "direct" | "mention" | "prefix" | "all" | "reply"
   source: "qq_personal"
 }
 
@@ -32,7 +33,7 @@ export interface InboundClientConfig {
   localToken: string
 }
 
-export function buildInboundPayload(message: ParsedQQMessage, conversationTitle = ""): InboundPayload {
+export function buildInboundPayload(message: ParsedQQMessage, conversationTitle = "", triggerMode?: InboundPayload["triggerMode"]): InboundPayload {
   const peerId = message.messageType === "group" ? message.groupId : message.senderId
   if (!peerId) throw new Error("QQ 消息缺少群号或发送者")
   const contentType = message.audioUrl
@@ -65,6 +66,7 @@ export function buildInboundPayload(message: ParsedQQMessage, conversationTitle 
     text: message.content || fallback,
     source: "qq_personal",
   }
+  if (triggerMode) payload.triggerMode = triggerMode
   if (message.imageUrl) payload.imageUrl = message.imageUrl
   if (message.videoUrl) payload.videoUrl = message.videoUrl
   if (message.audioUrl) payload.audioUrl = message.audioUrl

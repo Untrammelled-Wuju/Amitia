@@ -229,6 +229,7 @@ function applyFontScale(html: HTMLElement, scale: number) {
   html.style.setProperty("--ac-font-size-xs", px(12));
   html.style.setProperty("--ac-font-size-sm", px(13));
   html.style.setProperty("--ac-font-size-base", px(14));
+  html.style.setProperty("--ac-font-size-content", px(15));
   html.style.setProperty("--ac-font-size-lg", px(16));
   html.style.setProperty("--ac-font-size-xl", px(18));
 }

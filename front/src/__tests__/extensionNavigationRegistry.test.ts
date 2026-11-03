@@ -82,11 +82,11 @@ describe("extension navigation registry", () => {
       route: item.route,
       label: item.label,
     }))).toEqual([{ route: "/memory", label: "记忆" }]);
-    expect(items.filter((item) => item.group === "continuity").map((item) => ({
+    expect(items.filter((item) => item.group === "tasks").map((item) => ({
       route: item.route,
       label: item.label,
-      order: item.order,
-    }))).toEqual([{ route: "/continuity", label: "持续事项", order: 75 }]);
+      match: item.match,
+    }))).toEqual([{ route: "/reminders", label: "任务", match: ["/continuity"] }]);
   });
 
   it("shows one fixed channel center after a plugin is available and lists plugins separately", () => {

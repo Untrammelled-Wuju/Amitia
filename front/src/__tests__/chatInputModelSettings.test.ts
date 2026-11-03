@@ -239,6 +239,50 @@ describe("ChatInput model settings", () => {
     expect(viewport?.style.height || "auto").not.toBe("0px");
   });
 
+  it("switches role model settings without changing the shared model defaults", async () => {
+    const overlayRoot = document.createElement("div");
+    overlayRoot.id = "amitia-overlay-root";
+    document.body.appendChild(overlayRoot);
+    const roleCommit = vi.fn();
+    const conversationCommit = vi.fn();
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const wrapper = mount(ChatInput, {
+      props: {
+        isGroup: true,
+        characterId: "role-a",
+        models: [
+          { id: 1, name: "A", modelName: "model-a", apiType: "openai", supportsReasoning: true },
+          { id: 2, name: "B", modelName: "model-b", apiType: "openai", supportsReasoning: true, defaultReasoningEffort: "high" },
+        ],
+        selectedModelId: 1,
+        reasoningEffort: "medium",
+        reasoningEnabled: true,
+        roleModelConfigs: [
+          { roleId: "role-a", name: "角色 A", modelConfigId: 1, reasoningEffort: "low", reasoningEnabled: 1 },
+          { roleId: "role-b", name: "角色 B", modelConfigId: 2, reasoningEffort: "high", reasoningEnabled: 0 },
+        ],
+        roleModelCommitChange: roleCommit,
+        modelCommitChange: conversationCommit,
+      },
+      global: { plugins: [pinia, ElementPlus] },
+    });
+    const state = (wrapper.vm as any).$.setupState;
+    expect(state.selectedModelLabel).toBe("model-a");
+    state.selectModelRole("role-b");
+    await wrapper.vm.$nextTick();
+    expect(state.selectedModelLabel).toBe("model-b");
+    expect(state.draftReasoningEnabled).toBe(false);
+    state.selectReasoningEnabled(true);
+    expect(roleCommit).toHaveBeenLastCalledWith("role-b", 2, "high", true);
+    expect(conversationCommit).not.toHaveBeenCalled();
+    await wrapper.find(".model-effort-trigger").trigger("click");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(overlayRoot.textContent).toContain("选择角色");
+    expect(overlayRoot.textContent).toContain("角色 A");
+    expect(overlayRoot.textContent).toContain("角色 B");
+  });
+
   it("emits the selected permission mode", async () => {
     const overlayRoot = document.createElement("div");
     overlayRoot.id = "amitia-overlay-root";

@@ -104,6 +104,17 @@ import (
 	"github.com/u-ai/backend/pkg/util"
 )
 
+func approvalAuditActorType(principalType string) observability.ActorType {
+	switch strings.TrimSpace(principalType) {
+	case "local_ui", "trusted_device":
+		return observability.ActorUser
+	case "extension":
+		return observability.ActorExtension
+	default:
+		return observability.ActorSystem
+	}
+}
+
 type ContainerBuilder struct {
 	dbPath                       string
 	extRoot                      string
@@ -593,6 +604,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	if err := packageTrustRepo.Restore(ctx, trustService); err != nil {
 		return nil, fmt.Errorf("kernel: restore package trust: %w", err)
 	}
+	if err := ensureOfficialPublisherTrust(ctx, trustService); err != nil {
+		return nil, fmt.Errorf("kernel: initialize official publisher trust: %w", err)
+	}
 
 	adapterRegistry := capability.NewRuntimeAdapterRegistry()
 	toolRegistry := capability.NewToolRegistry()
@@ -725,7 +739,29 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 			}
 		}
 		_, err := manager.Publish(context.Background(), event, request.RuntimeKey == "")
-		return err
+		if err != nil {
+			return err
+		}
+		return observabilityStore.SaveAuditEvent(context.Background(), observability.AuditEvent{
+			AuditID:     observability.NewAuditID(),
+			ActorType:   approvalAuditActorType(request.ResolvedByType),
+			ActorID:     request.ResolvedBy,
+			SubjectType: observability.SubjectTool,
+			SubjectID:   request.ToolName,
+			Action:      "approval.decide",
+			Decision:    string(request.Status),
+			RiskLevel:   request.RiskLevel,
+			Result:      "resolved",
+			ApprovalID:  request.ID,
+			TargetType:  "approval",
+			TargetID:    request.ID,
+			CreatedAt:   time.Now().UTC(),
+			Metadata: map[string]any{
+				"requestId": request.RequestID, "turnId": request.TurnID, "toolCallId": request.ToolCallID,
+				"principalType": request.ResolvedByType, "authMethod": request.AuthMethod, "sessionId": request.SessionID,
+				"resolvedAt": request.ResolvedAt, "spaceId": request.SpaceID, "conversationId": request.ConversationID,
+			},
+		})
 	})
 	approvalGate := execution.NewApprovalGate()
 	approvalGate.OnEvaluate = func(ctx context.Context, tool capability.ToolDefinition, inv capability.ToolInvocationContext, decision execution.PermissionDecision, input json.RawMessage) (bool, error) {
@@ -759,6 +795,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		return approvalBroker.Await(ctx, execution.ApprovalRequest{
 			RuntimeKey:     runtimeKey,
 			SpaceID:        inv.SpaceID,
+			CharacterID:    inv.CharacterID,
 			ConversationID: inv.ConversationID,
 			TurnID:         turnID,
 			RequestID:      inv.OperationID,
@@ -1498,7 +1535,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	if err := registerIOSToolsIfPresent(toolRegistry, b.iosNativeProvider); err != nil {
 		return nil, fmt.Errorf("kernel: register ios native tools: %w", err)
 	}
-	if err := registerAndroidNativeToolsIfPresent(ctx, toolRegistry, b.androidNativeProvider); err != nil {
+	if err := registerAndroidNativeToolsIfPresent(ctx, toolRegistry, capabilityProviderRegistry, b.androidNativeProvider); err != nil {
 		return nil, fmt.Errorf("kernel: register android native tools: %w", err)
 	}
 	if taskRuntimeService != nil && b.taskOwnershipBinding != nil {

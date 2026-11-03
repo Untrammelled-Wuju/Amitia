@@ -103,13 +103,23 @@ func TestOwnedContinuityRuntimeCreatesBindsAndObservesChat(t *testing.T) {
 	engine := business.NewEngine(coordination.NewService(db), p, continuityTestModel{})
 	runtime := newOwnedContinuityRuntime(engine, nil, nil, "core", "device-a", "core")
 	owner := interaction.EntryOwner{SpaceID: "core", DeviceID: "device-a", TargetDeviceID: "device-a", CoreID: "core"}
-	threadID, err := runtime.Resolve(t.Context(), owner, "one", "chat-1", "workspace-1", "帮我部署生产环境并持续跟进直到完成", "request-1")
+	threadID, err := runtime.Resolve(t.Context(), owner, "one", "chat-1", "workspace-1", "帮我部署生产环境并持续跟进直到完成", "", "request-1", "request-1")
 	if err != nil || threadID == "" {
 		t.Fatalf("threadId=%q err=%v", threadID, err)
 	}
-	reused, err := runtime.Resolve(t.Context(), owner, "one", "chat-1", "workspace-1", "继续", "request-2")
+	reused, err := runtime.Resolve(t.Context(), owner, "one", "chat-1", "workspace-1", "继续", "", "request-2", "request-2")
 	if err != nil || reused != threadID {
 		t.Fatalf("reused=%q want=%q err=%v", reused, threadID, err)
+	}
+	if err := runtime.BindMessages(t.Context(), owner, "one", threadID, []string{"request-1/assistant"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := runtime.BindMessages(t.Context(), owner, "one", threadID, []string{"request-1/assistant"}); err != nil {
+		t.Fatal(err)
+	}
+	replied, err := runtime.Resolve(t.Context(), owner, "one", "chat-2", "workspace-2", "补充一个新的要求", "request-1/assistant", "request-3", "request-3")
+	if err != nil || replied != threadID {
+		t.Fatalf("reply binding=%q want=%q err=%v", replied, threadID, err)
 	}
 	if err := runtime.Observe(t.Context(), owner, "one", threadID, continuity.ObservePayload{Version: "v1", SpaceID: "core", CharacterID: "one", ConversationID: "chat-1", RequestID: "request-1", ExecutionID: "execution-1", UserMessage: "帮我部署生产环境并持续跟进直到完成", AssistantReply: "部署正在进行。请确认是否继续迁移。", Source: "chat"}); err != nil {
 		t.Fatal(err)
@@ -150,6 +160,34 @@ func TestOwnedContinuityRuntimeCreatesBindsAndObservesChat(t *testing.T) {
 	for _, wait := range documents[0].Waits {
 		if wait.WaitType == continuity.WaitTypeApproval && wait.Status != continuity.WaitStatusResolved {
 			t.Fatalf("approval wait not resolved: %+v", wait)
+		}
+	}
+}
+
+func TestContinuityBindingLookupPriority(t *testing.T) {
+	lookups := continuityBindingLookups(
+		"message-1",
+		"request-1",
+		"conversation-1",
+		"workspace-1",
+		continuity.BindingLookup{Type: "approval", ID: "approval-1"},
+		continuity.BindingLookup{Type: "task_run", ID: "task-1"},
+	)
+	want := []continuity.BindingLookup{
+		{Type: "reply", ID: "message-1"},
+		{Type: "message", ID: "message-1"},
+		{Type: "approval", ID: "approval-1"},
+		{Type: "task_run", ID: "task-1"},
+		{Type: "request", ID: "request-1"},
+		{Type: "conversation", ID: "conversation-1"},
+		{Type: "workspace", ID: "workspace-1"},
+	}
+	if len(lookups) != len(want) {
+		t.Fatalf("lookups=%+v", lookups)
+	}
+	for index := range want {
+		if lookups[index] != want[index] {
+			t.Fatalf("lookup[%d]=%+v want=%+v", index, lookups[index], want[index])
 		}
 	}
 }

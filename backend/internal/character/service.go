@@ -151,6 +151,13 @@ func (s *service) Create(req *CreateCharacterRequest) (*Character, error) {
 func (s *service) CreateForSpace(req *CreateCharacterRequest, spaceID string) (*Character, error) {
 	unlock := LockRoleSource(s.db)
 	defer unlock()
+	reasoningEnabled := -1
+	if req.ReasoningEnabled != nil {
+		reasoningEnabled = *req.ReasoningEnabled
+	}
+	if err := s.validateCharacterModelSettings(req.ModelConfigID, req.ReasoningEffort, reasoningEnabled); err != nil {
+		return nil, err
+	}
 	c := &Character{
 		ID: uuid.New().String(), SpaceID: normalizeCharacterOwner(spaceID), Name: req.Name, Identity: req.Identity,
 		Personality: req.Personality, SpeakingStyle: req.SpeakingStyle,
@@ -163,6 +170,9 @@ func (s *service) CreateForSpace(req *CreateCharacterRequest, spaceID string) (*
 		PersonalityConfig: string(req.PersonalityConfig),
 		ChatStyleConfig:   req.ChatStyleConfig,
 		SceneRules:        req.SceneRules,
+		ModelConfigID:     req.ModelConfigID,
+		ReasoningEffort:   strings.TrimSpace(req.ReasoningEffort),
+		ReasoningEnabled:  reasoningEnabled,
 		VoiceConfigID:     req.VoiceConfigID,
 		VoiceType:         req.VoiceType, VoiceSpeed: req.VoiceSpeed, VoicePitch: req.VoicePitch,
 		VoiceVolume: req.VoiceVolume, CustomVoiceID: req.CustomVoiceID, VoiceMode: req.VoiceMode,
@@ -280,6 +290,24 @@ func (s *service) UpdateForSpace(id string, req *UpdateCharacterRequest, spaceID
 		return nil, fmt.Errorf("角色不存在")
 	}
 	updates := make(map[string]interface{})
+	if req.ModelConfigID != nil {
+		if err := s.validateCharacterModelSettings(*req.ModelConfigID, "", -1); err != nil {
+			return nil, err
+		}
+		updates["model_config_id"] = *req.ModelConfigID
+	}
+	if req.ReasoningEffort != nil {
+		if err := s.validateCharacterModelSettings(0, *req.ReasoningEffort, -1); err != nil {
+			return nil, err
+		}
+		updates["reasoning_effort"] = strings.TrimSpace(*req.ReasoningEffort)
+	}
+	if req.ReasoningEnabled != nil {
+		if err := s.validateCharacterModelSettings(0, "", *req.ReasoningEnabled); err != nil {
+			return nil, err
+		}
+		updates["reasoning_enabled"] = *req.ReasoningEnabled
+	}
 	if req.Name != nil {
 		updates["name"] = *req.Name
 	}
@@ -443,6 +471,30 @@ func (s *service) UpdateForSpace(id string, req *UpdateCharacterRequest, spaceID
 		return nil, err
 	}
 	return &result, nil
+}
+
+func (s *service) validateCharacterModelSettings(modelConfigID int, reasoningEffort string, reasoningEnabled int) error {
+	if modelConfigID < 0 {
+		return errors.New("角色模型配置编号无效")
+	}
+	if modelConfigID > 0 {
+		var count int64
+		if err := s.db.Table("model_configs").Where("id = ?", modelConfigID).Count(&count).Error; err != nil {
+			return fmt.Errorf("读取角色模型配置: %w", err)
+		}
+		if count != 1 {
+			return errors.New("角色模型配置不存在")
+		}
+	}
+	switch strings.TrimSpace(reasoningEffort) {
+	case "", "low", "medium", "high", "xhigh":
+	default:
+		return errors.New("角色思考强度无效")
+	}
+	if reasoningEnabled < -1 || reasoningEnabled > 1 {
+		return errors.New("角色思考模式无效")
+	}
+	return nil
 }
 
 func (s *service) Delete(id string) error {

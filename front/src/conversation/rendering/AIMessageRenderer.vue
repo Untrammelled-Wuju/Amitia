@@ -514,7 +514,7 @@ async function handleCopy(mode: "plain" | "markdown") {
   background: var(--tp-logo-bg);
   color: white;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .amrp-avatar.user {
@@ -573,7 +573,7 @@ async function handleCopy(mode: "plain" | "markdown") {
 
 .amrp-name {
   color: var(--amrp-text);
-  font-weight: 720;
+  font-weight: var(--ac-font-weight-semibold);
 }
 
 .amrp-time {

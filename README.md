@@ -7,7 +7,7 @@
 </p>
 
 <h1 align="center">Amitia · 阿米提亚</h1>
-<p align="center"><em>你的私人 AI 陪伴 · Your Private AI Companion</em></p>
+<p align="center"><em>本地优先的个人 Agent 操作系统 · Local-first Personal Agent OS</em></p>
 
 ---
 
@@ -19,18 +19,21 @@
 
 ### 简介
 
-**阿米提亚（Amitia）** 是一款运行在你本地的 AI 陪伴应用。所有数据存储在你自己的设备上，安全、私密、完全可控。
+**阿米提亚（Amitia）** 是本地优先、跨设备协同的个人 Agent 操作系统。每个 Agent 可以拥有独立的模型、人格、长期记忆、技能、应用授权、团队职责和隔离电脑；数据、凭据和运行记录默认由你控制。
 
 ### 核心特性
 
-- **智能对话** — 接入 OpenAI 兼容 API，支持 DeepSeek / Ollama 等多种模型
-- **长期记忆** — 基于 Qdrant 向量数据库，AI 能记住你们之间的重要对话
-- **多角色系统** — 创建和管理多个 AI 角色，每个角色有独立的性格和记忆
-- **知识图谱** — SurrealDB 驱动的语义关联，让 AI 真正理解人物关系
-- **桌面本地** — 数据完全本地化，无需云端，隐私无忧
-- **微信/QQ 桥接** — 支持通过微信和 QQ 与 AI 对话
-- **语音交互** — TTS 语音合成 + ASR 语音识别
-- **主动关怀** — AI 可定时主动发起问候和提醒
+- **Agent Profile** — 草稿、测试、发布、版本差异、回滚、停用、迁移和可携带包
+- **Agent 电脑** — 本机工作区、OCI 容器、远程电脑和 Android 自动化，支持终端、快照与人工接管
+- **Agent 团队** — 负责人、成员路由、共享上下文、文件、决策记录和任务交接
+- **可信执行** — 持久审批、副作用对账、能力令牌、网络白名单、数据外传审计和资源租约
+- **长期记忆** — Qdrant 向量检索、SurrealDB 知识图谱和团队共享记忆
+- **应用与插件** — MCP、Skills、Native Bridge、渠道插件和带分类的插件市场
+- **数字身份插件** — 邮箱、日历、手机号和钱包均以独立插件包发布，不进入核心
+- **模型与预算** — 每 Agent/团队模型路由、Token、费用、工具次数和并发治理
+- **角色模型** — 每个角色可独立覆盖模型与思考参数，未配置时回退默认模型
+- **语音与主动任务** — TTS、ASR、实时通话、提醒和长期持续事项
+- **跨端协同** — Web、Electron、Android 和 iOS 使用同一 Core、市场、审批与活动主链
 
 ### 技术栈
 
@@ -97,18 +100,20 @@ U-Ai/
 
 ### Overview
 
-**Amitia** is a local-first AI companion app. All data stays on your device — private, secure, and fully under your control.
+**Amitia** is a local-first, cross-device Personal Agent OS. Each agent can own its model, personality, long-term memory, skills, app grants, team role, and isolated computer while keeping data and credentials under your control.
 
 ### Features
 
-- **Smart Chat** — OpenAI-compatible API, supports DeepSeek, Ollama, and more
-- **Long-term Memory** — Qdrant-powered vector memory that remembers what matters
-- **Multi-character** — Create and manage multiple AI personalities, each with independent memory
-- **Knowledge Graph** — SurrealDB semantic relationships for deeper understanding
-- **Local-first** — Zero cloud dependency, your data never leaves your device
-- **WeChat/QQ Bridge** — Chat with your AI companion through WeChat or QQ
-- **Voice I/O** — TTS synthesis + ASR speech recognition
-- **Proactive Check-ins** — Scheduled greetings and reminders from your AI
+- **Agent Profiles** — drafts, testing, releases, diffs, rollback, retirement, migration, and portable packages
+- **Agent Computers** — local process, OCI container, remote desktop, and Android automation with snapshots and takeover
+- **Agent Teams** — leads, routing, shared context, files, decisions, and task handoff
+- **Trusted Execution** — durable approvals, side-effect reconciliation, capability leases, egress policy, and resource locks
+- **Long-term Memory** — Qdrant retrieval, SurrealDB knowledge graph, and team context
+- **Apps and Plugins** — MCP, Skills, Native Bridge, channel plugins, and a categorized plugin marketplace
+- **Identity Plugins** — email, calendar, phone, browser profiles, and wallets ship as independent extensions
+- **Models and Budgets** — per-agent routing plus token, cost, tool-call, and concurrency limits
+- **Voice and Autonomy** — TTS, ASR, realtime calls, reminders, routines, and configurable autonomy levels
+- **Cross-device** — Web, Electron, Android, and iOS share the same Core, marketplace, approvals, and activity APIs
 
 ### Tech Stack
 

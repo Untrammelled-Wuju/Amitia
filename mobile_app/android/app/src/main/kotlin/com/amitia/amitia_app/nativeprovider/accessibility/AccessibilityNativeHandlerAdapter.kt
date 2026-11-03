@@ -16,6 +16,7 @@ internal class AccessibilityNativeHandlerAdapter(
         AccessibilityNativeHandler.OP_PROVIDER_STATUS,
         AccessibilityNativeHandler.OP_PROVIDER_INSTALL,
         AccessibilityNativeHandler.OP_PROVIDER_OPEN_SETTINGS,
+        AccessibilityNativeHandler.OP_PROVIDER_UNINSTALL,
     )
 
     override suspend fun execute(request: NativeBridgeRequest): NativeBridgeResponse {

@@ -93,6 +93,9 @@ backend/testdata/extensions/**/dist-candidate-*/
 /_do_push.ps1
 /_push_test.ps1
 /artifacts/
+
+# Graduation thesis and school-provided templates
+/论文/
 /backend/cell7-diagnose.png
 /backend/qdrant/
 /backend/runtime/

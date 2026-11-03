@@ -1,6 +1,7 @@
 package com.amitia.amitia_app.virtualdisplay.host
 
 import android.content.Context
+import android.view.Surface
 import com.amitia.amitia_app.nativeprovider.shizuku.IPrivilegedCommandService
 import com.amitia.amitia_app.nativeprovider.shizuku.ShizukuCommandServiceHolder
 import kotlinx.coroutines.Dispatchers
@@ -110,6 +111,20 @@ internal class VirtualDisplayHostManager(
         return executeWithService(current, operation, payload)
     }
 
+    suspend fun bindSurface(displayId: Int, surface: Surface): Map<String, Any?> {
+        return withContext(Dispatchers.IO) {
+            val current = currentService()
+            parseDirectResponse(current.bindSurface(displayId, surface))
+        }
+    }
+
+    suspend fun detachSurface(displayId: Int): Map<String, Any?> {
+        return withContext(Dispatchers.IO) {
+            val current = currentService()
+            parseDirectResponse(current.detachSurface(displayId))
+        }
+    }
+
     suspend fun stop() {
         val current = VirtualDisplayHostBinderRegistry.current()
         if (current != null) {
@@ -141,6 +156,31 @@ internal class VirtualDisplayHostManager(
             "VIRTUAL_DISPLAY_SHIZUKU_UNAVAILABLE",
             "Shizuku user service is unavailable",
         )
+    }
+
+    private suspend fun currentService(): IVirtualDisplayHost {
+        val current = VirtualDisplayHostBinderRegistry.current()
+            ?: run {
+                ensureStarted()
+                VirtualDisplayHostBinderRegistry.current()
+            }
+        return current ?: throw VirtualDisplayHostError(
+            "VIRTUAL_DISPLAY_HOST_UNAVAILABLE",
+            "virtual display host is unavailable",
+        )
+    }
+
+    private fun parseDirectResponse(raw: String): Map<String, Any?> {
+        val response = JSONObject(raw)
+        val error = response.optJSONObject("error")
+        if (response.optString("status") != "success" || error != null) {
+            throw VirtualDisplayHostError(
+                error?.optString("code").orEmpty().ifBlank { "VIRTUAL_DISPLAY_HOST_ERROR" },
+                error?.optString("message").orEmpty().ifBlank { "virtual display host error" },
+            )
+        }
+        val result = response.optJSONObject("result") ?: JSONObject()
+        return jsonObjectToMap(result)
     }
 
     private fun startRequest(token: String): JSONObject {

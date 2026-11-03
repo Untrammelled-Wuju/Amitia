@@ -232,7 +232,12 @@ func (r *ownedMultiAgentWorkerRunner) run(ctx context.Context, cancel context.Ca
 	if strings.TrimSpace(req.ExpectedOutcome) != "" {
 		message += "\n\n预期结果：" + req.ExpectedOutcome
 	}
-	response, runErr := r.engine.RunWorker(ctx, owned, business.Request{SpaceID: owned.SpaceID, DeviceID: owned.InitiatorDeviceID, TargetDeviceID: owned.TargetDeviceID, CoreID: owned.CoreID, RoleID: owned.RoleID, ConversationID: conversationID, RequestID: "ma-" + req.AssignmentID, Message: message, PermissionMode: req.PermissionMode}, workspaces, req.WorkspaceID)
+	if len(req.Constraints) > 0 {
+		message += "\n\n执行约束：\n- " + strings.Join(req.Constraints, "\n- ")
+	}
+	roleLabel := firstNonEmptyText(req.WorkerRole, "coding_worker")
+	message = "当前 Worker 角色：" + roleLabel + "。只使用本次任务所需上下文，不读取无关角色私有记忆。\n\n" + message
+	response, runErr := r.engine.RunWorker(ctx, owned, business.Request{SpaceID: owned.SpaceID, DeviceID: owned.InitiatorDeviceID, TargetDeviceID: owned.TargetDeviceID, CoreID: owned.CoreID, RoleID: owned.RoleID, ConversationID: conversationID, RequestID: "ma-" + req.AssignmentID, Message: message, PermissionMode: req.PermissionMode, WorkerRole: roleLabel}, workspaces, req.WorkspaceID)
 	r.settleWorker(ctx, childID, req, response, runErr)
 }
 

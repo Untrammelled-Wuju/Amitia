@@ -87,6 +87,15 @@ func (p *Provider) Submit(ctx context.Context, config imageprovider.ImageModelCo
 	return resp.Submission, nil
 }
 
+func (p *Provider) Probe(ctx context.Context, config imageprovider.ImageModelConfig) (*imageprovider.ImageGenerationSubmission, error) {
+	return p.Submit(ctx, config, imageprovider.ImageGenerationRequest{
+		Prompt:      "connection test",
+		Width:       1024,
+		Height:      1024,
+		OutputCount: 1,
+	})
+}
+
 func (p *Provider) Query(ctx context.Context, config imageprovider.ImageModelConfig, operationID string) (*imageprovider.ImageGenerationResult, error) {
 	resp, err := p.call(ctx, Request{Operation: OperationQuery, ConfigID: config.ConfigID, OperationID: operationID})
 	if err != nil {
@@ -104,8 +113,8 @@ func (p *Provider) Cancel(ctx context.Context, config imageprovider.ImageModelCo
 }
 
 func (p *Provider) call(ctx context.Context, payload Request) (*Response, error) {
-	if payload.ConfigID <= 0 {
-		return nil, fmt.Errorf("cloud image generation config id is required")
+	if payload.ConfigID < 0 {
+		return nil, fmt.Errorf("cloud image generation config id is invalid")
 	}
 	if p == nil || p.credentialStore == nil {
 		return nil, fmt.Errorf("cloud image generation bridge is not configured")
@@ -195,3 +204,4 @@ func materializeReferenceImages(request imageprovider.ImageGenerationRequest) (i
 }
 
 var _ imageprovider.ExtendedProvider = (*Provider)(nil)
+var _ imageprovider.ConnectionProbe = (*Provider)(nil)

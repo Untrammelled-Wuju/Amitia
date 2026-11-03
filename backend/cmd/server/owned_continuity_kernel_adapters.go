@@ -68,6 +68,6 @@ func ownedContinuityApprovalSignal(request execution.ApprovalRequest) continuity
 	return continuity.ApprovalLifecycleSignal{
 		Resolved: request.Status != execution.ApprovalStatusPending, Approved: request.Status == execution.ApprovalStatusApproved,
 		ApprovalID: request.ID, SpaceID: request.SpaceID, ConversationID: request.ConversationID,
-		RequestID: request.RequestID, ToolCallID: request.ToolCallID, Reason: string(request.Status),
+		RequestID: request.RequestID, ToolCallID: request.ToolCallID, Reason: string(request.Status), ResolvedBy: request.ResolvedBy,
 	}
 }

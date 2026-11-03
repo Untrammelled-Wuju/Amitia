@@ -2,7 +2,7 @@ import { clearLegacyReplyPreferences, legacyReplyPreferences, notificationRegist
 
 export interface ScheduledBrowserEnvelope {
   requestId: string;
-  payload: { title?: unknown; body?: unknown; conversationId?: unknown; characterId?: unknown; ownerId?: unknown; sound?: unknown };
+  payload: { title?: unknown; body?: unknown; conversationId?: unknown; characterId?: unknown; ownerId?: unknown; sound?: unknown; attentionId?: unknown };
 }
 
 export interface ScheduledBrowserDelivery {
@@ -52,7 +52,9 @@ export async function deliverScheduledBrowserNotification(envelope: ScheduledBro
       notification.close();
       window.focus();
       const conversation = String(payload.conversationId || '');
-      if (conversation) delivery.navigate('/chat?conversationId=' + encodeURIComponent(conversation) + '&characterId=' + encodeURIComponent(String(payload.characterId || '')) + '&ownerId=' + encodeURIComponent(String(payload.ownerId || '')));
+      const attentionId = String(payload.attentionId || '');
+      if (conversation) delivery.navigate('/chat?conversationId=' + encodeURIComponent(conversation) + '&characterId=' + encodeURIComponent(String(payload.characterId || '')) + '&ownerId=' + encodeURIComponent(String(payload.ownerId || '')) + (attentionId ? '&attentionId=' + encodeURIComponent(attentionId) : ''));
+      else if (attentionId) delivery.navigate('/reminders?attentionId=' + encodeURIComponent(attentionId));
     };
   } catch (error) {
   console.error("[original-error]", error);

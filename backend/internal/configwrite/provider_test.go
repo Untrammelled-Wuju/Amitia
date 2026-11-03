@@ -12,6 +12,8 @@ import (
 	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/embedding_config"
 	"github.com/u-ai/backend/internal/imagegen"
+	"github.com/u-ai/backend/internal/imageprovider"
+	"github.com/u-ai/backend/internal/imageprovider/seedream"
 	"github.com/u-ai/backend/internal/system"
 	"github.com/u-ai/backend/internal/vision"
 	"github.com/u-ai/backend/pkg/app"
@@ -22,7 +24,7 @@ func configurationProviderRouter(db *gorm.DB) *gin.Engine {
 	router := gin.New()
 	embedding := embedding_config.NewHandler(embedding_config.NewService(embedding_config.NewRepository(db)))
 	visual := vision.NewHandler(vision.NewService(vision.NewRepository(db)))
-	image := imagegen.NewHandler(imagegen.NewService(imagegen.NewRepository(db)))
+	image := imagegen.NewHandler(imagegen.NewService(imagegen.NewRepository(db), imageProviderRegistry()))
 	for _, provider := range []struct {
 		name                             string
 		create, update, remove, activate gin.HandlerFunc
@@ -201,7 +203,7 @@ func TestConfigurationProviderRoutesRequireAdministrator(t *testing.T) {
 	ctx := &app.AppContext{}
 	embedding_config.RegisterEmbeddingConfigRouter(group, ctx)
 	vision.RegisterVisionRouter(group, ctx)
-	imagegen.RegisterImageGenRouter(group, ctx)
+	imagegen.RegisterImageGenRouter(group, imagegen.NewService(imagegen.NewRepository(ctx.DB), imageProviderRegistry()))
 	for _, name := range []string{"embedding", "vision", "imagegen"} {
 		for _, request := range []struct{ method, path string }{{http.MethodPost, "/configs"}, {http.MethodPut, "/configs/1"}, {http.MethodDelete, "/configs/1"}, {http.MethodPost, "/configs/1/activate"}} {
 			response := httptest.NewRecorder()
@@ -211,6 +213,14 @@ func TestConfigurationProviderRoutesRequireAdministrator(t *testing.T) {
 			}
 		}
 	}
+}
+
+func imageProviderRegistry() *imageprovider.Registry {
+	registry := imageprovider.NewRegistry()
+	if err := seedream.Register(registry); err != nil {
+		panic(err)
+	}
+	return registry
 }
 
 func TestConfigurationVisionRepositoryRechecksMainModelInsideWriteTransaction(t *testing.T) {

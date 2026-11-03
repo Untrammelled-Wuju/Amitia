@@ -84,7 +84,7 @@ func (h *Handler) Activate(c *gin.Context) {
 
 func (h *Handler) TestConnection(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
-	result, err := h.service.TestConnection(id)
+	result, err := h.service.TestConnection(c.Request.Context(), id)
 	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return

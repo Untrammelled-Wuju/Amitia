@@ -409,6 +409,91 @@ void main() {
     expect(drawer, findsNothing);
   });
 
+  testWidgets('group composer switches role model settings independently', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(375, 800);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final roleCommits = <String>[];
+    final legacyCommits = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.bottomCenter,
+            child: AmitiaChatInput(
+              onSend: (_) {},
+              isGroup: true,
+              models: const <Map<String, dynamic>>[
+                <String, dynamic>{
+                  'id': 1,
+                  'name': '模型 A',
+                  'modelName': 'model-a',
+                  'apiType': 'openai',
+                  'supportsReasoning': true,
+                },
+                <String, dynamic>{
+                  'id': 2,
+                  'name': '模型 B',
+                  'modelName': 'model-b',
+                  'apiType': 'openai',
+                  'supportsReasoning': true,
+                },
+              ],
+              selectedModelId: 1,
+              reasoningEffort: 'medium',
+              reasoningEnabled: true,
+              roleModelConfigs: const <Map<String, dynamic>>[
+                <String, dynamic>{
+                  'roleId': 'role-a',
+                  'name': '角色 A',
+                  'modelConfigId': 1,
+                  'reasoningEffort': 'low',
+                  'reasoningEnabled': 1,
+                },
+                <String, dynamic>{
+                  'roleId': 'role-b',
+                  'name': '角色 B',
+                  'modelConfigId': 2,
+                  'reasoningEffort': 'high',
+                  'reasoningEnabled': 1,
+                },
+              ],
+              onRoleModelChanged: (roleId, _, effort, _) {
+                roleCommits.add('$roleId:$effort');
+              },
+              onModelChanged: (_, effort, _) {
+                legacyCommits.add(effort);
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('composer-reasoning-label')));
+    await tester.pumpAndSettle();
+    expect(find.text('选择角色'), findsOneWidget);
+    expect(find.text('角色 A'), findsOneWidget);
+    expect(find.text('角色 B'), findsOneWidget);
+
+    await tester.tap(find.text('角色 B'));
+    await tester.pumpAndSettle();
+    expect(find.text('model-b'), findsOneWidget);
+
+    final slider = tester.getRect(
+      find.byKey(const ValueKey('composer-reasoning-slider')),
+    );
+    await tester.tapAt(Offset(slider.right - 8, slider.center.dy));
+    await tester.pumpAndSettle();
+
+    expect(roleCommits, isNotEmpty);
+    expect(roleCommits.last, 'role-b:xhigh');
+    expect(legacyCommits, isEmpty);
+  });
+
   testWidgets('reasoning slider keeps desktop geometry and low-track fade', (
     tester,
   ) async {
@@ -719,19 +804,35 @@ void main() {
   testWidgets('群聊点名面板悬浮并插入选择的成员', (tester) async {
     final controller = TextEditingController();
     final mentions = <String?>[];
-    await tester.pumpWidget(MaterialApp(home: Scaffold(body: Align(alignment: Alignment.bottomCenter, child: AmitiaChatInput(
-      controller: controller,
-      onSend: (_) {},
-      isGroup: true,
-      groupMembers: const [{'memberId': 'a', 'characterName': '小鱼'}, {'memberId': 'b', 'characterName': '小鱼副本'}],
-      onGroupMention: mentions.add,
-    )))));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.bottomCenter,
+            child: AmitiaChatInput(
+              controller: controller,
+              onSend: (_) {},
+              isGroup: true,
+              groupMembers: const [
+                {'memberId': 'a', 'characterName': '小鱼'},
+                {'memberId': 'b', 'characterName': '小鱼副本'},
+              ],
+              onGroupMention: mentions.add,
+            ),
+          ),
+        ),
+      ),
+    );
     await tester.enterText(find.byType(TextField), '@');
     await tester.pumpAndSettle();
     expect(find.text('@所有成员'), findsOneWidget);
     expect(find.text('@小鱼副本'), findsOneWidget);
-    final composerTop = tester.getTopLeft(find.byKey(const ValueKey('chat-composer-surface'))).dy;
-    final menuBottom = tester.getBottomLeft(find.byKey(const ValueKey('composer-slash-skill-menu'))).dy;
+    final composerTop = tester
+        .getTopLeft(find.byKey(const ValueKey('chat-composer-surface')))
+        .dy;
+    final menuBottom = tester
+        .getBottomLeft(find.byKey(const ValueKey('composer-slash-skill-menu')))
+        .dy;
     expect(menuBottom, lessThanOrEqualTo(composerTop));
     await tester.tap(find.text('@小鱼副本'));
     await tester.pumpAndSettle();
@@ -742,9 +843,16 @@ void main() {
   });
 
   testWidgets('单聊输入 @ 不打开群成员面板', (tester) async {
-    await tester.pumpWidget(MaterialApp(home: Scaffold(body: AmitiaChatInput(onSend: (_) {}))));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: AmitiaChatInput(onSend: (_) {})),
+      ),
+    );
     await tester.enterText(find.byType(TextField), '@');
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('composer-slash-skill-menu')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('composer-slash-skill-menu')),
+      findsNothing,
+    );
   });
 }

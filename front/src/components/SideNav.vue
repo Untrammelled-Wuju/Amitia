@@ -174,6 +174,7 @@ const tooltip = ref<{ title: string; description: string; left: number; top: num
 let tooltipTimer: number | null = null;
 const groupDescriptions: Record<string, string> = {
   home: "对话、最近会话和日常入口。",
+  agents: "Agent、团队、独立电脑和审批。",
   character: "角色、用户画像和世界书。",
   memory: "知识库、记忆总览、图谱和时间线。",
   tasks: "定时消息和角色主动任务。",

@@ -119,10 +119,10 @@ SPDX-License-Identifier: AGPL-3.0-only
         v-else
         class="conversation-flow-item conversation-flow-item--error"
       >
-        <ConversationDividerLine class="conversation-error-divider">
-          <b class="conversation-error-title">生成失败</b>
-          <span>{{ item.detail }}</span>
-        </ConversationDividerLine>
+        <ConversationDividerLine
+          class="conversation-error-divider"
+          :text="errorNoticeText(item.detail)"
+        />
       </div>
     </template>
 
@@ -177,6 +177,10 @@ import { acknowledgeClientRuntimeSessionState, fetchClientRuntimeSessionState, f
 import { createConversationUIEventStream } from "@/composables/useConversationUIEventStream";
 import { resolveMessageRenderer } from "@/ui-runtime/messageRendererRegistry";
 import { normalizeMessageState } from "@/conversation/rendering/amrp";
+import {
+  errorNoticeText,
+  formatTurnErrorDetail,
+} from "@/conversation/rendering/errorNoticeProjection";
 import {
   getMessageCharacterId,
   getMessageUIKey,
@@ -284,36 +288,6 @@ type FlowItem =
   | { kind: "node"; key: string; node: ConversationNode; sequence?: number; timestamp: string }
   | { kind: "error"; key: string; detail: string; sequence?: number; timestamp: string };
 
-function turnErrorDetail(turn: any): string {
-  const item = [...(turn?.items || [])].reverse().find((candidate) => candidate?.type === "error");
-  if (!item) return props.modelError?.trim() || "任务执行失败，未返回具体原因";
-  let payload: Record<string, unknown>;
-  try {
-    const parsed = JSON.parse(String(item.resultJson || "{}"));
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return item.content || item.errorCode || props.modelError?.trim() || "任务执行失败，未返回具体原因";
-    payload = parsed as Record<string, unknown>;
-  } catch (error) {
-  console.error("[original-error]", error);
-return String(item.content || String(error));
-  }
-  const toText = (value: unknown): string => {
-    if (value === undefined || value === null) return "";
-    if (typeof value === "string") return value.trim();
-    try {
-      return JSON.stringify(value);
-    } catch (error) {
-  console.error("[original-error]", error);
-return String(value).trim();
-    }
-  };
-  const internalMessage = toText(payload.internalMessage);
-  const userMessage = toText(payload.userMessage);
-  const errorCode = toText(payload.errorCode) || String(item.errorCode || "").trim();
-  const provider = toText(payload.provider);
-  const message = userMessage || internalMessage || toText(payload.message) || toText(payload.error) || toText(item.content) || errorCode || props.modelError?.trim() || "任务执行失败，未返回具体原因";
-  return [provider, errorCode, message].filter(Boolean).join(" · ");
-}
-
 const flowItems = computed<FlowItem[]>(() => {
   const items: FlowItem[] = visibleMessages.value.map((message, index) => ({
       kind: "message",
@@ -380,7 +354,7 @@ const flowItems = computed<FlowItem[]>(() => {
       ordered.splice(messageIndex + 1, 0, {
         kind: "error",
         key: `error:${lastMessage.assistantTurn?.id || lastMessage.id}`,
-        detail: turnErrorDetail(lastMessage.assistantTurn),
+        detail: formatTurnErrorDetail(lastMessage.assistantTurn, props.modelError),
         sequence: finiteNumber(lastMessage?.seq ?? lastMessage?.sequence),
         timestamp: String(lastMessage?.createdAt ?? lastMessage?.timestamp ?? ""),
       });
@@ -783,11 +757,11 @@ defineExpose({ rootEl });
   margin-bottom: 7px;
   color: var(--text-primary);
   font-size: 18px;
-  font-weight: 520;
+  font-weight: var(--ac-font-weight-medium);
   letter-spacing: -0.2px;
 }
 .empty-text--project {
-  font-weight: 650;
+  font-weight: var(--ac-font-weight-semibold);
 }
 
 .empty-hint {
@@ -810,9 +784,11 @@ defineExpose({ rootEl });
   margin-bottom: 38px;
 }
 
-.conversation-error-title {
-  margin-right: 6px;
+.conversation-error-divider :deep(.conversation-divider-text) {
+  max-width: 100%;
   color: var(--ac-color-danger, #e5484d);
+  text-align: left;
+  white-space: pre-wrap;
 }
 
 .conversation-role-switch {

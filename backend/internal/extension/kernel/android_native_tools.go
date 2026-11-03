@@ -3,6 +3,7 @@ package kernel
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/u-ai/backend/internal/androidmedia/camera"
 	"github.com/u-ai/backend/internal/androidmedia/screenshot"
@@ -21,11 +22,13 @@ import (
 	"github.com/u-ai/backend/internal/androidsystem/overlay"
 	"github.com/u-ai/backend/internal/androidsystem/share"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
 func registerAndroidNativeToolsIfPresent(
 	ctx context.Context,
 	registry *capability.ToolRegistry,
+	providerRegistry *capability.ProviderRegistry,
 	provider capability.AndroidProvider,
 ) error {
 	if provider == nil {
@@ -35,8 +38,50 @@ func registerAndroidNativeToolsIfPresent(
 	tools := collectAndroidNativeToolDefinitions()
 
 	for _, def := range tools {
+		capabilityID := def.CapabilityID
+		if capabilityID == "" {
+			capabilityID = capability.CapabilityID(def.ID)
+		}
+		def.CapabilityID = capabilityID
+		providerID := capability.ProviderID("builtin.android_native/" + strings.ReplaceAll(string(capabilityID), "/", "."))
+		def.ProviderID = string(providerID)
+		def.RoutingMode = capability.RoutingModeProviderRequired
 		if err := registry.Register(ctx, def); err != nil {
 			return fmt.Errorf("register android native tool %s: %w", def.ID, err)
+		}
+		if providerRegistry == nil {
+			continue
+		}
+		providerDefinition := capability.CapabilityProviderDefinition{
+			ID:           providerID,
+			CapabilityID: capabilityID,
+			Kind:         capability.ProviderKindBuiltin,
+			Placement:    capability.ProviderPlacementCore,
+			Runtime:      def.Runtime,
+			Priority:     100,
+			Platforms:    []runtimeidentity.Platform{runtimeidentity.PlatformAndroid},
+			Metadata: map[string]any{
+				"androidNative": true,
+				"toolId":        def.ID,
+				"modelName":     def.ModelName,
+			},
+		}
+		if err := providerRegistry.RegisterDefinition(providerDefinition); err != nil {
+			return fmt.Errorf("register android native provider %s: %w", providerID, err)
+		}
+		instance := capability.CapabilityProviderInstance{
+			ID:           capability.ProviderInstanceID("builtin.android_native/" + strings.ReplaceAll(string(capabilityID), "/", ".") + "/instance"),
+			ProviderID:   providerID,
+			CapabilityID: capabilityID,
+			Placement:    capability.ProviderPlacementCore,
+			Health:       capability.HealthReady,
+			Availability: capability.ProviderAvailabilityAvailable,
+			Metadata: map[string]any{
+				"androidNative": true,
+			},
+		}
+		if err := providerRegistry.RegisterInstance(instance); err != nil {
+			return fmt.Errorf("register android native provider instance %s: %w", instance.ID, err)
 		}
 	}
 

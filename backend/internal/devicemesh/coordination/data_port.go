@@ -10,13 +10,16 @@ import (
 )
 
 type Role struct {
-	Avatar      string          `json:"avatar,omitempty"`
-	Description string          `json:"description,omitempty"`
-	Disabled    bool            `json:"disabled,omitempty"`
-	ID          string          `json:"id"`
-	Name        string          `json:"name"`
-	Revision    int64           `json:"revision"`
-	Profile     json.RawMessage `json:"profile"`
+	Avatar           string          `json:"avatar,omitempty"`
+	Description      string          `json:"description,omitempty"`
+	Disabled         bool            `json:"disabled,omitempty"`
+	ID               string          `json:"id"`
+	Name             string          `json:"name"`
+	Revision         int64           `json:"revision"`
+	Profile          json.RawMessage `json:"profile"`
+	ModelConfigID    int             `json:"modelConfigId"`
+	ReasoningEffort  string          `json:"reasoningEffort"`
+	ReasoningEnabled int             `json:"reasoningEnabled"`
 }
 
 type DataQuery struct {

@@ -55,6 +55,7 @@ import UIKit
     self.iosNativeHost?.registerHandler(IOSLocalNotificationNativeHandler())
     self.iosNativeHost?.registerHandler(IOSDeviceTimeNativeHandler())
     self.iosNativeHost?.registerHandler(IOSScreenAwakeNativeHandler())
+    self.iosNativeHost?.registerHandler(IOSVirtualDisplayPreviewNativeHandler())
 
     if let host = self.iosNativeHost {
       self.nativeTransport = IOSNativeTransport(host: host, delegate: self)

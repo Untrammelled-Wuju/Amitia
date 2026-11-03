@@ -1417,14 +1417,14 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                   onChanged: (value) => setState(() => _query = value.trim()),
                 ),
               ),
-              const SizedBox(width: AppSpacing.sm),
+              SizedBox(width: AppSpacing.sm),
               TextButton(
                 onPressed: _loading ? null : () => _load(),
                 child: const Text('检索'),
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
@@ -1445,7 +1445,7 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
               ],
             ),
           ),
-          const SizedBox(height: AppSpacing.xs),
+          SizedBox(height: AppSpacing.xs),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(

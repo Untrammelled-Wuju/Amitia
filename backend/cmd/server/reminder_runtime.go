@@ -9,6 +9,7 @@ import (
 	"time"
 
 	agenttool "github.com/u-ai/backend/internal/agent/tool"
+	"github.com/u-ai/backend/internal/attention"
 	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/conversationstream"
 	"github.com/u-ai/backend/internal/delivery"
@@ -407,7 +408,8 @@ func checkProactivePolicy(ctx context.Context, services *AppServices, item *remi
 		return "今日调用上限", nil
 	}
 	gap := proactiveMinimumInterval(policy)
-	if policy.UnrepliedSlowdownEnabled && policy.UnrepliedSlowdownAfter > 0 {
+	followup := false
+	if services.OwnedBusiness != nil && (services.Attention != nil || policy.UnrepliedSlowdownEnabled && policy.UnrepliedSlowdownAfter > 0) {
 		activity, err := services.OwnedBusiness.ScheduledConversationActivity(ctx, business.Request{SpaceID: item.Caller.SpaceID, DeviceID: item.Caller.DeviceID, CoreID: item.OwnerID, TargetDeviceID: item.TargetDeviceID, RoleID: item.CharacterID, ConversationID: item.ConversationID, RequestID: item.ID + "/activity"}, item.Binding)
 		if err != nil {
 			return "", err
@@ -416,16 +418,44 @@ func checkProactivePolicy(ctx context.Context, services *AppServices, item *remi
 		if !policy.UnrepliedRecoveryOnReply {
 			unreplied = globalSent
 		}
-		if unreplied >= policy.UnrepliedSlowdownAfter && policy.UnrepliedCooldownMultiplier > 1 {
+		followup = unreplied > 0
+		if policy.UnrepliedSlowdownEnabled && unreplied >= policy.UnrepliedSlowdownAfter && policy.UnrepliedCooldownMultiplier > 1 {
 			gap = reminder.ScaleCooldown(gap, policy.UnrepliedCooldownMultiplier)
 		}
 	}
 	if !lastSent.IsZero() && time.Since(lastSent) < gap {
 		return "尚在主动任务冷却时段", nil
 	}
+	if services.Attention != nil {
+		eventKind := "proactive"
+		if followup {
+			eventKind = "followup"
+		}
+		payload, _ := json.Marshal(map[string]any{"reminderId": item.ID, "title": item.Title, "channel": item.Channel, "conversationId": item.ConversationID})
+		result, err := services.Attention.Check(ctx, attention.CheckInput{
+			SpaceID: item.Caller.SpaceID, RoleID: item.CharacterID, ConversationID: item.ConversationID,
+			SourceKind: "proactive", SourceID: item.ID, EventKind: eventKind,
+			IdempotencyKey: item.ID + ":" + now.UTC().Format("2006-01-02T15:04"), PayloadJSON: string(payload),
+		})
+		if err != nil {
+			return "", err
+		}
+		if !result.Allowed {
+			return firstNonEmptyAttentionReason(result.Reason, "注意力预算暂缓主动任务"), nil
+		}
+	}
 	return "", nil
 }
 
 func proactiveMinimumInterval(policy *reminder.ProactivePolicy) time.Duration {
 	return reminder.ProactiveMinimumInterval(policy)
+}
+
+func firstNonEmptyAttentionReason(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }

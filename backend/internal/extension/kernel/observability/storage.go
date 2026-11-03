@@ -115,6 +115,7 @@ type EventFilter struct {
 type AuditFilter struct {
 	TraceID     string
 	OperationID string
+	ApprovalID  string
 	ActorType   ActorType
 	ActorID     string
 	Action      string
@@ -519,6 +520,9 @@ func matchAudit(evt AuditEvent, f AuditFilter) bool {
 		return false
 	}
 	if f.OperationID != "" && evt.OperationID != f.OperationID {
+		return false
+	}
+	if f.ApprovalID != "" && evt.ApprovalID != f.ApprovalID {
 		return false
 	}
 	if f.ActorType != "" && evt.ActorType != f.ActorType {

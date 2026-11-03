@@ -6,6 +6,10 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/u-ai/backend/internal/agentpermission"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 type canonicalTestExecutor struct {
@@ -67,6 +71,75 @@ func TestUnifiedEntryHasNoLegacyProcessorFallback(t *testing.T) {
 	entry := NewUnifiedEntry(NewRuntimeContextService(NewInMemoryTracker(), 16), NewScopeResolver(nil), temporal.SystemClock{})
 	if _, err := entry.Handle(t.Context(), &UnifiedEntryRequest{Channel: "web", Message: "hello"}); err != ErrOrchestratorNotReady {
 		t.Fatalf("unexpected fallback: %v", err)
+	}
+}
+
+func TestUnifiedEntryObservesInferredGroupRequestWithoutExecuting(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&agentpermission.SourcePolicy{}, &agentpermission.DecisionRecord{}); err != nil {
+		t.Fatal(err)
+	}
+	access := agentpermission.NewService(db)
+	now := time.Now().UTC()
+	if err := db.Create(&agentpermission.SourcePolicy{
+		ID: "group-policy", SpaceID: "space", ScopeType: "conversation", ChannelID: "qq", ConversationID: "group-1",
+		ExplicitMode: agentpermission.ModeAllow, InferredMode: agentpermission.ModeObserve,
+		TriggerMode: "all", PermissionCeiling: agentpermission.RequestApproval,
+		Enabled: true, Revision: 1, CreatedAt: now, UpdatedAt: now,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	entry := NewUnifiedEntry(NewRuntimeContextService(NewInMemoryTracker(), 16), NewScopeResolver(nil), temporal.SystemClock{})
+	entry.SetAccessService(access)
+	executor := &canonicalTestExecutor{entry: entry}
+	entry.SetEntryExecutor(executor)
+	result, err := entry.Handle(t.Context(), &UnifiedEntryRequest{
+		SpaceID: "space", CharacterID: "role", ConversationID: "group-1", Channel: "qq", Source: "channel",
+		PeerID: "peer-1", PeerKind: "group", AdmissionTrigger: "all", RequestID: "request-observed", Message: "ambient group message",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Outcome != OutcomeObserved || executor.request != nil {
+		t.Fatalf("observed request executed: result=%+v request=%+v", result, executor.request)
+	}
+}
+
+func TestUnifiedEntryAllowsExplicitRequestAndAppliesPermissionCeiling(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&agentpermission.SourcePolicy{}, &agentpermission.DecisionRecord{}); err != nil {
+		t.Fatal(err)
+	}
+	access := agentpermission.NewService(db)
+	now := time.Now().UTC()
+	if err := db.Create(&agentpermission.SourcePolicy{
+		ID: "direct-policy", SpaceID: "space", ScopeType: "conversation", ChannelID: "qq", ConversationID: "group-1",
+		ExplicitMode: agentpermission.ModeAllow, InferredMode: agentpermission.ModeObserve,
+		TriggerMode: "direct_or_mention", PermissionCeiling: agentpermission.RequestApproval,
+		Enabled: true, Revision: 1, CreatedAt: now, UpdatedAt: now,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	entry := NewUnifiedEntry(NewRuntimeContextService(NewInMemoryTracker(), 16), NewScopeResolver(nil), temporal.SystemClock{})
+	entry.SetAccessService(access)
+	executor := &canonicalTestExecutor{entry: entry}
+	entry.SetEntryExecutor(executor)
+	result, err := entry.Handle(t.Context(), &UnifiedEntryRequest{
+		SpaceID: "space", CharacterID: "role", ConversationID: "group-1", Channel: "qq", Source: "channel",
+		PeerID: "peer-1", PeerKind: "group", AdmissionTrigger: "mention", AdmissionExplicit: true,
+		PermissionMode: agentpermission.FullAccess, RequestID: "request-explicit", Message: "please inspect this",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Outcome != OutcomeCompleted || executor.request == nil || executor.request.PermissionMode != agentpermission.RequestApproval {
+		t.Fatalf("permission ceiling was not applied: result=%+v request=%+v", result, executor.request)
 	}
 }
 func TestUnifiedEntryBackpressureConfigNormalizesExtremeValues(t *testing.T) {

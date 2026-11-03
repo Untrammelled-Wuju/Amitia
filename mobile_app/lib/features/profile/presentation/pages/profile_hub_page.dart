@@ -23,6 +23,11 @@ class ProfileHubPage extends ConsumerWidget {
     icon: AmitiaIconGlyph.characters,
     route: AppRoutes.meCharacters,
   );
+  static const _agentOSEntry = _ProfileEntry(
+    title: 'Agent OS',
+    icon: AmitiaIconGlyph.workspace,
+    route: AppRoutes.agentOS,
+  );
   static const _workshopEntry = _ProfileEntry(
     title: '创意工坊',
     icon: AmitiaIconGlyph.workshop,
@@ -50,6 +55,7 @@ class ProfileHubPage extends ConsumerWidget {
       snapshot,
     ).any((item) => item.id == UINavigationRegistry.channelMessagesItem.id);
     return <_ProfileEntry>[
+      _agentOSEntry,
       _charactersEntry,
       _workshopEntry,
       _gameEntry,

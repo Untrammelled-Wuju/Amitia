@@ -415,7 +415,70 @@ func (s *SQLiteStorage) SaveAuditEvent(ctx context.Context, evt AuditEvent) erro
 }
 
 func (s *SQLiteStorage) ListAuditEvents(ctx context.Context, filter AuditFilter) ([]AuditEvent, string, error) {
-	return nil, "", nil
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	query := `
+		SELECT audit_id, trace_id, operation_id, invocation_id, actor_type, actor_id,
+			subject_type, subject_id, action, decision, risk_level, scope_summary,
+			permission_ids_json, target_type, target_id, result, error_code, grant_id,
+			approval_id, snapshot_id, created_at, metadata_json
+		FROM kernel_observability_audit_events WHERE 1=1`
+	args := make([]any, 0)
+	add := func(column, value string) {
+		if value == "" {
+			return
+		}
+		query += " AND " + column + " = ?"
+		args = append(args, value)
+	}
+	add("trace_id", filter.TraceID)
+	add("operation_id", filter.OperationID)
+	add("approval_id", filter.ApprovalID)
+	add("actor_type", string(filter.ActorType))
+	add("actor_id", filter.ActorID)
+	add("action", filter.Action)
+	add("decision", filter.Decision)
+	add("result", filter.Result)
+	if filter.Since != nil {
+		query += " AND created_at >= ?"
+		args = append(args, *filter.Since)
+	}
+	if filter.Until != nil {
+		query += " AND created_at <= ?"
+		args = append(args, *filter.Until)
+	}
+	if filter.Cursor != "" {
+		query += " AND audit_id < ?"
+		args = append(args, filter.Cursor)
+	}
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	query += " ORDER BY created_at DESC, audit_id DESC LIMIT ?"
+	args = append(args, limit+1)
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, "", err
+	}
+	defer rows.Close()
+	items := make([]AuditEvent, 0)
+	for rows.Next() {
+		evt, scanErr := scanAuditEvent(rows)
+		if scanErr != nil {
+			return nil, "", scanErr
+		}
+		items = append(items, evt)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, "", err
+	}
+	next := ""
+	if len(items) > limit {
+		items = items[:limit]
+		next = items[len(items)-1].AuditID
+	}
+	return items, next, nil
 }
 
 func (s *SQLiteStorage) GetAuditEvent(ctx context.Context, auditID string) (*AuditEvent, error) {
@@ -428,21 +491,34 @@ func (s *SQLiteStorage) GetAuditEvent(ctx context.Context, auditID string) (*Aud
 			approval_id, snapshot_id, created_at, metadata_json
 		FROM kernel_observability_audit_events WHERE audit_id = ?
 	`, auditID)
-	var evt AuditEvent
-	var metadataJSON string
-	if err := row.Scan(&evt.AuditID, &evt.TraceID, &evt.OperationID, &evt.InvocationID,
-		&evt.ActorType, &evt.ActorID, &evt.SubjectType, &evt.SubjectID,
-		&evt.Action, &evt.Decision, &evt.RiskLevel, &evt.ScopeSummary,
-		&evt.PermissionIDs, &evt.TargetType, &evt.TargetID,
-		&evt.Result, &evt.ErrorCode, &evt.GrantID, &evt.ApprovalID, &evt.SnapshotID,
-		&evt.CreatedAt, &metadataJSON); err != nil {
+	evt, err := scanAuditEvent(row)
+	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrAuditWriteRequired
 		}
 		return nil, err
 	}
-	evt.Metadata = fromJSONMap(metadataJSON)
 	return &evt, nil
+}
+
+type rowScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanAuditEvent(row rowScanner) (AuditEvent, error) {
+	var evt AuditEvent
+	var permissionsJSON, metadataJSON string
+	if err := row.Scan(&evt.AuditID, &evt.TraceID, &evt.OperationID, &evt.InvocationID,
+		&evt.ActorType, &evt.ActorID, &evt.SubjectType, &evt.SubjectID,
+		&evt.Action, &evt.Decision, &evt.RiskLevel, &evt.ScopeSummary,
+		&permissionsJSON, &evt.TargetType, &evt.TargetID,
+		&evt.Result, &evt.ErrorCode, &evt.GrantID, &evt.ApprovalID, &evt.SnapshotID,
+		&evt.CreatedAt, &metadataJSON); err != nil {
+		return AuditEvent{}, err
+	}
+	evt.PermissionIDs = fromJSONStringSlice(permissionsJSON)
+	evt.Metadata = fromJSONMap(metadataJSON)
+	return evt, nil
 }
 
 func (s *SQLiteStorage) SaveErrorRecord(ctx context.Context, rec ErrorRecord) error {
@@ -503,4 +579,15 @@ func fromJSONMap(s string) map[string]any {
 		return nil
 	}
 	return m
+}
+
+func fromJSONStringSlice(s string) []string {
+	if s == "" || s == "null" || s == "[]" {
+		return nil
+	}
+	var values []string
+	if err := json.Unmarshal([]byte(s), &values); err != nil {
+		return nil
+	}
+	return values
 }

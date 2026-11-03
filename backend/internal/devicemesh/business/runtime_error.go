@@ -3,14 +3,19 @@ package business
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
-	"unicode/utf8"
 )
 
 type RuntimeError struct {
 	ErrorCode       string `json:"errorCode"`
 	UserMessage     string `json:"userMessage"`
 	InternalMessage string `json:"internalMessage,omitempty"`
+	Message         string `json:"message,omitempty"`
+	Error           string `json:"error,omitempty"`
+	Detail          string `json:"detail,omitempty"`
+	Cause           string `json:"cause,omitempty"`
+	RawError        string `json:"rawError,omitempty"`
 	Stage           string `json:"stage,omitempty"`
 	ToolName        string `json:"toolName,omitempty"`
 	Provider        string `json:"provider,omitempty"`
@@ -21,32 +26,72 @@ func DescribeRuntimeError(err error) RuntimeError {
 	if err == nil {
 		return RuntimeError{ErrorCode: "task_failed", UserMessage: "nil error", Stage: "execution"}
 	}
-	raw := boundedRuntimeMessage(err.Error())
+	raw := err.Error()
+	detail := fmt.Sprintf("%+v", err)
+	result := RuntimeError{
+		ErrorCode:       "task_execution_failed",
+		UserMessage:     raw,
+		InternalMessage: raw,
+		Message:         raw,
+		Error:           raw,
+		Detail:          detail,
+		Cause:           errorCauses(err),
+		RawError:        raw,
+		Stage:           "execution",
+		Retryable:       true,
+	}
 	lower := strings.ToLower(raw)
 	switch {
 	case errors.Is(err, context.DeadlineExceeded) || strings.Contains(lower, "timeout") || strings.Contains(lower, "timed out"):
-		return RuntimeError{ErrorCode: "task_timeout", UserMessage: raw, InternalMessage: raw, Stage: "execution", Retryable: true}
+		result.ErrorCode = "task_timeout"
 	case errors.Is(err, ErrInterrupted) || errors.Is(err, context.Canceled):
-		return RuntimeError{ErrorCode: "task_interrupted", UserMessage: raw, InternalMessage: raw, Stage: "execution", Retryable: true}
+		result.ErrorCode = "task_interrupted"
 	case strings.Contains(lower, "typed browser tool is unavailable") || strings.Contains(lower, "browser runtime is disabled") || strings.Contains(lower, "browser agent runner is not configured") || strings.Contains(lower, "browser_agent_unavailable"):
-		return RuntimeError{ErrorCode: "browser_runtime_unavailable", UserMessage: raw, InternalMessage: raw, Stage: "tool", ToolName: "browser.agent.run", Provider: "browser", Retryable: true}
+		result.ErrorCode = "browser_runtime_unavailable"
+		result.Stage = "tool"
+		result.ToolName = "browser.agent.run"
+		result.Provider = "browser"
 	case strings.Contains(lower, "context exceeds") || strings.Contains(lower, "context window") || strings.Contains(lower, "too many tokens"):
-		return RuntimeError{ErrorCode: "task_context_exceeded", UserMessage: raw, InternalMessage: raw, Stage: "model", Provider: "model", Retryable: true}
+		result.ErrorCode = "task_context_exceeded"
+		result.Stage = "model"
+		result.Provider = "model"
 	case strings.Contains(lower, "tool loop") || strings.Contains(lower, "repeated tool failure"):
-		return RuntimeError{ErrorCode: "task_tool_loop_limit", UserMessage: raw, InternalMessage: raw, Stage: "tool", Retryable: true}
+		result.ErrorCode = "task_tool_loop_limit"
+		result.Stage = "tool"
 	case strings.Contains(lower, "network") || strings.Contains(lower, "connection reset") || strings.Contains(lower, "connection refused") || strings.Contains(lower, "no such host") || strings.Contains(lower, "tls") || strings.Contains(lower, "fetch failed") || strings.Contains(lower, "unexpected eof") || strings.Contains(lower, "broken pipe"):
-		return RuntimeError{ErrorCode: "model_network_error", UserMessage: raw, InternalMessage: raw, Stage: "model", Provider: "model", Retryable: true}
+		result.ErrorCode = "model_network_error"
+		result.Stage = "model"
+		result.Provider = "model"
 	case strings.Contains(lower, "workspace changes were applied but no successful") || strings.Contains(lower, "verification"):
-		return RuntimeError{ErrorCode: "task_verification_failed", UserMessage: raw, InternalMessage: raw, Stage: "verification", Retryable: true}
+		result.ErrorCode = "task_verification_failed"
+		result.Stage = "verification"
 	}
-	return RuntimeError{ErrorCode: "task_execution_failed", UserMessage: raw, InternalMessage: raw, Stage: "execution", Retryable: true}
+	return result
 }
 
-func boundedRuntimeMessage(value string) string {
-	value = strings.TrimSpace(value)
-	if utf8.RuneCountInString(value) <= 500 {
-		return value
+func errorCauses(err error) string {
+	if err == nil {
+		return ""
 	}
-	runes := []rune(value)
-	return strings.TrimSpace(string(runes[:500])) + "…"
+	causes := make([]string, 0, 4)
+	var collect func(error)
+	collect = func(current error) {
+		if current == nil {
+			return
+		}
+		message := strings.TrimSpace(current.Error())
+		if message != "" && (len(causes) == 0 || causes[len(causes)-1] != message) {
+			causes = append(causes, message)
+		}
+		switch wrapped := current.(type) {
+		case interface{ Unwrap() []error }:
+			for _, child := range wrapped.Unwrap() {
+				collect(child)
+			}
+		case interface{ Unwrap() error }:
+			collect(wrapped.Unwrap())
+		}
+	}
+	collect(err)
+	return strings.Join(causes, "\n")
 }

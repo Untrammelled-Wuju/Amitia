@@ -52,7 +52,7 @@ func (r *ownedContinuityRuntime) request(owner interaction.EntryOwner, roleID, r
 	}
 }
 
-func (r *ownedContinuityRuntime) Resolve(ctx context.Context, owner interaction.EntryOwner, roleID, conversationID, workspaceID, message, requestID string) (string, error) {
+func (r *ownedContinuityRuntime) Resolve(ctx context.Context, owner interaction.EntryOwner, roleID, conversationID, workspaceID, message, replyToMessageID, sourceRequestID, requestID string, hints ...continuity.BindingLookup) (string, error) {
 	if r == nil || r.engine == nil || strings.TrimSpace(roleID) == "" {
 		return "", errors.New("持续事项解析服务未就绪")
 	}
@@ -65,11 +65,17 @@ func (r *ownedContinuityRuntime) Resolve(ctx context.Context, owner interaction.
 	if err != nil {
 		return "", err
 	}
-	if bound := matchContinuityBinding(documents, conversationID, workspaceID); bound != nil {
-		if err := r.bind(ctx, owner, scope, *bound, conversationID, workspaceID, continuityOwnerRequestID(requestID+"|continuity-bind")); err != nil {
-			return "", err
+	lookups := continuityBindingLookups(replyToMessageID, sourceRequestID, conversationID, workspaceID, hints...)
+	for _, lookup := range lookups {
+		if strings.TrimSpace(lookup.ID) == "" {
+			continue
 		}
-		return bound.Thread.ID, nil
+		if bound := matchContinuityBinding(documents, lookup); bound != nil {
+			if err := r.bind(ctx, owner, scope, *bound, conversationID, workspaceID, replyToMessageID, sourceRequestID, continuityOwnerRequestID(requestID+"|continuity-bind")); err != nil {
+				return "", err
+			}
+			return bound.Thread.ID, nil
+		}
 	}
 	threads := make([]continuity.Thread, 0, len(documents))
 	byID := make(map[string]business.OwnedContinuity, len(documents))
@@ -89,7 +95,7 @@ func (r *ownedContinuityRuntime) Resolve(ctx context.Context, owner interaction.
 	ranked := continuity.RankThreads(message, threads, semantic)
 	if len(ranked) > 0 && ranked[0].Score >= 0.88 {
 		document := byID[ranked[0].Thread.ID]
-		if err := r.bind(ctx, owner, scope, document, conversationID, workspaceID, continuityOwnerRequestID(requestID+"|continuity-bind")); err != nil {
+		if err := r.bind(ctx, owner, scope, document, conversationID, workspaceID, replyToMessageID, sourceRequestID, continuityOwnerRequestID(requestID+"|continuity-bind")); err != nil {
 			return "", err
 		}
 		return document.Thread.ID, nil
@@ -102,7 +108,7 @@ func (r *ownedContinuityRuntime) Resolve(ctx context.Context, owner interaction.
 		threadID, confidence, chooseErr := r.disambiguator.ChooseThread(ctx, message, candidates)
 		if chooseErr == nil && confidence >= 0.72 && threadID != "" {
 			document := byID[threadID]
-			if err := r.bind(ctx, owner, scope, document, conversationID, workspaceID, continuityOwnerRequestID(requestID+"|continuity-bind")); err != nil {
+			if err := r.bind(ctx, owner, scope, document, conversationID, workspaceID, replyToMessageID, sourceRequestID, continuityOwnerRequestID(requestID+"|continuity-bind")); err != nil {
 				return "", err
 			}
 			return threadID, nil
@@ -117,16 +123,32 @@ func (r *ownedContinuityRuntime) Resolve(ctx context.Context, owner interaction.
 	if err != nil {
 		return "", err
 	}
-	if err := r.bind(ctx, owner, scope, created, conversationID, workspaceID, continuityOwnerRequestID(requestID+"|continuity-bind")); err != nil {
+	if err := r.bind(ctx, owner, scope, created, conversationID, workspaceID, replyToMessageID, sourceRequestID, continuityOwnerRequestID(requestID+"|continuity-bind")); err != nil {
 		return "", err
 	}
 	return created.Thread.ID, nil
 }
 
-func (r *ownedContinuityRuntime) bind(ctx context.Context, owner interaction.EntryOwner, scope coordination.ExecutionScope, document business.OwnedContinuity, conversationID, workspaceID, requestID string) error {
+func continuityBindingLookups(replyToMessageID, sourceRequestID, conversationID, workspaceID string, hints ...continuity.BindingLookup) []continuity.BindingLookup {
+	lookups := []continuity.BindingLookup{
+		{Type: "reply", ID: replyToMessageID},
+		{Type: "message", ID: replyToMessageID},
+	}
+	lookups = append(lookups, hints...)
+	lookups = append(lookups,
+		continuity.BindingLookup{Type: "request", ID: sourceRequestID},
+		continuity.BindingLookup{Type: "conversation", ID: conversationID},
+		continuity.BindingLookup{Type: "workspace", ID: workspaceID},
+	)
+	return lookups
+}
+
+func (r *ownedContinuityRuntime) bind(ctx context.Context, owner interaction.EntryOwner, scope coordination.ExecutionScope, document business.OwnedContinuity, conversationID, workspaceID, replyToMessageID, sourceRequestID, requestID string) error {
 	for _, binding := range []continuity.ThreadBinding{
 		continuity.NewThreadBinding(document.Thread.ID, "conversation", conversationID, "context", "resolver", 1),
 		continuity.NewThreadBinding(document.Thread.ID, "workspace", workspaceID, "context", "resolver", 1),
+		continuity.NewThreadBinding(document.Thread.ID, "reply", replyToMessageID, "context", "resolver", 1),
+		continuity.NewThreadBinding(document.Thread.ID, "request", sourceRequestID, "binding", "resolver", 1),
 	} {
 		if binding.BindingID == "" {
 			continue
@@ -145,14 +167,19 @@ func (r *ownedContinuityRuntime) bind(ctx context.Context, owner interaction.Ent
 	return nil
 }
 
-func matchContinuityBinding(documents []business.OwnedContinuity, conversationID, workspaceID string) *business.OwnedContinuity {
-	for index := range documents {
-		document := &documents[index]
-		if document.ReadOnly || document.Thread.Status.IsTerminal() {
+func matchContinuityBinding(documents []business.OwnedContinuity, lookups ...continuity.BindingLookup) *business.OwnedContinuity {
+	for _, lookup := range lookups {
+		if strings.TrimSpace(lookup.Type) == "" || strings.TrimSpace(lookup.ID) == "" {
 			continue
 		}
-		if continuity.BindingLookupMatches(document.Bindings, continuity.BindingLookup{Type: "conversation", ID: conversationID}, continuity.BindingLookup{Type: "workspace", ID: workspaceID}) {
-			return document
+		for index := range documents {
+			document := &documents[index]
+			if document.ReadOnly || document.Thread.Status.IsTerminal() {
+				continue
+			}
+			if continuity.BindingLookupMatches(document.Bindings, lookup) {
+				return document
+			}
 		}
 	}
 	return nil
@@ -192,6 +219,48 @@ func (r *ownedContinuityRuntime) Observe(ctx context.Context, owner interaction.
 	request.ExpectedScope = &scope
 	_, _, err = r.engine.Continuity(ctx, request, business.ContinuityMutation{ID: threadID, ExpectedRevision: document.Thread.Revision, Action: "observe", Observation: &payload, ThreadPatch: &patch})
 	return err
+}
+
+func (r *ownedContinuityRuntime) BindMessages(ctx context.Context, owner interaction.EntryOwner, roleID, threadID string, messageIDs []string) error {
+	if r == nil || r.engine == nil || strings.TrimSpace(threadID) == "" || len(messageIDs) == 0 {
+		return nil
+	}
+	request := r.request(owner, roleID, continuityOwnerRequestID(threadID+"|bind-messages"))
+	documents, scope, err := r.engine.ListContinuity(ctx, request, true)
+	if err != nil {
+		return err
+	}
+	var document *business.OwnedContinuity
+	for index := range documents {
+		if documents[index].Thread.ID == threadID {
+			document = &documents[index]
+			break
+		}
+	}
+	if document == nil {
+		return errors.New("持续事项不存在")
+	}
+	for _, messageID := range messageIDs {
+		messageID = strings.TrimSpace(messageID)
+		if messageID == "" {
+			continue
+		}
+		if continuity.BindingLookupMatches(document.Bindings, continuity.BindingLookup{Type: "message", ID: messageID}) {
+			continue
+		}
+		binding := continuity.NewThreadBinding(threadID, "message", messageID, "context", "observer", 1)
+		request := r.request(owner, document.Thread.CharacterID, continuityOwnerRequestID(threadID+"|bind-message|"+messageID))
+		request.ExpectedScope = &scope
+		current, _, err := r.engine.Continuity(ctx, request, business.ContinuityMutation{ID: threadID, ExpectedRevision: document.Thread.Revision, Action: "bind", Binding: &binding})
+		if errors.Is(err, coordination.ErrResourceVersion) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		document = &current
+	}
+	return nil
 }
 
 func (r *ownedContinuityRuntime) waitForReady(ctx context.Context, max time.Duration) error {
@@ -318,8 +387,8 @@ func (r *ownedContinuityRuntime) ApplyApprovalResolved(ctx context.Context, sign
 		ConversationID: signal.ConversationID,
 		CurrentState:   "审批结果已返回",
 		NextAction:     "根据审批结果继续或停止原计划",
-		PayloadJSON:    continuityRuntimePayload(map[string]any{"approvalId": signal.ApprovalID, "requestId": signal.RequestID, "toolCallId": signal.ToolCallID, "approved": signal.Approved, "reason": signal.Reason}),
-		Signal:         &continuity.Signal{WaitType: continuity.WaitTypeApproval, Source: "approval", SourceID: signal.ApprovalID, Attributes: map[string]any{"approvalId": signal.ApprovalID, "requestId": signal.RequestID, "toolCallId": signal.ToolCallID, "approved": signal.Approved}, OccurredAt: signal.Timestamp},
+		PayloadJSON:    continuityRuntimePayload(map[string]any{"approvalId": signal.ApprovalID, "requestId": signal.RequestID, "toolCallId": signal.ToolCallID, "approved": signal.Approved, "reason": signal.Reason, "resolvedBy": signal.ResolvedBy}),
+		Signal:         &continuity.Signal{WaitType: continuity.WaitTypeApproval, Source: "approval", SourceID: signal.ApprovalID, Attributes: map[string]any{"approvalId": signal.ApprovalID, "requestId": signal.RequestID, "toolCallId": signal.ToolCallID, "approved": signal.Approved, "resolvedBy": signal.ResolvedBy}, OccurredAt: signal.Timestamp},
 	}
 	return r.applyRuntimeEvent(ctx, signal.SpaceID, "", "", "approval", signal.ApprovalID, event)
 }

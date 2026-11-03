@@ -31,6 +31,9 @@ class CharacterDto {
   final Map<String, dynamic> personalityConfig;
   final Map<String, dynamic> chatStyleConfig;
   final Map<String, dynamic> sceneRules;
+  final int modelConfigId;
+  final String reasoningEffort;
+  final int reasoningEnabled;
 
   CharacterDto({
     this.roleAuthority = '',
@@ -63,6 +66,9 @@ class CharacterDto {
     this.personalityConfig = const <String, dynamic>{},
     this.chatStyleConfig = const <String, dynamic>{},
     this.sceneRules = const <String, dynamic>{},
+    this.modelConfigId = 0,
+    this.reasoningEffort = '',
+    this.reasoningEnabled = -1,
   });
 
   factory CharacterDto.fromJson(Map<String, dynamic> json) {
@@ -97,6 +103,9 @@ class CharacterDto {
       personalityConfig: _mapValue(json['personalityConfig']),
       chatStyleConfig: _mapValue(json['chatStyleConfig']),
       sceneRules: _mapValue(json['sceneRules']),
+      modelConfigId: (json['modelConfigId'] as num?)?.toInt() ?? 0,
+      reasoningEffort: (json['reasoningEffort'] ?? '').toString(),
+      reasoningEnabled: (json['reasoningEnabled'] as num?)?.toInt() ?? -1,
     );
   }
 
@@ -112,8 +121,8 @@ class CharacterDto {
           return decoded.map((key, item) => MapEntry(key.toString(), item));
         }
       } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+        print("[original-error] $error\n$stackTrace");
+      }
     }
     return const <String, dynamic>{};
   }

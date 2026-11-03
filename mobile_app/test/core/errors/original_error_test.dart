@@ -32,9 +32,10 @@ void main() {
       originalErrorText({
         'error': {
           'internalMessage': 'upstream returned 502',
+          'rawError': 'upstream returned 502: bad gateway',
         },
       }),
-      'upstream returned 502',
+      'upstream returned 502\nupstream returned 502: bad gateway',
     );
   });
 }

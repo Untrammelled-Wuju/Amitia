@@ -1,6 +1,9 @@
 package imageprovider
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 type RetryClass string
 
@@ -89,21 +92,24 @@ func ClassifyHTTPError(status int, body string) *ProviderError {
 }
 
 func IsRetriable(err error) bool {
-	if pe, ok := err.(*ProviderError); ok {
+	var pe *ProviderError
+	if errors.As(err, &pe) {
 		return pe.RetryClass == RetrySameCall || pe.RetryClass == RetryAfterDelay
 	}
 	return false
 }
 
 func IsNeverRetry(err error) bool {
-	if pe, ok := err.(*ProviderError); ok {
+	var pe *ProviderError
+	if errors.As(err, &pe) {
 		return pe.RetryClass == RetryNever
 	}
 	return false
 }
 
 func ErrorCodeOf(err error) string {
-	if pe, ok := err.(*ProviderError); ok {
+	var pe *ProviderError
+	if errors.As(err, &pe) {
 		return pe.Code
 	}
 	return ErrCodeServiceError

@@ -8,13 +8,15 @@ import (
 )
 
 type multiAgentDelegateArguments struct {
-	Objectives      []string `json:"objectives"`
-	Strategy        string   `json:"strategy"`
-	Dependencies    [][]int  `json:"dependencies,omitempty"`
-	DeadlineMinutes *int     `json:"deadline_minutes,omitempty"`
-	MaxToolCalls    *int     `json:"max_tool_calls,omitempty"`
-	MaxTotalTokens  *int64   `json:"max_total_tokens,omitempty"`
-	MaxCostMicroUSD *int64   `json:"max_cost_microusd,omitempty"`
+	Objectives      []string   `json:"objectives"`
+	Strategy        string     `json:"strategy"`
+	Dependencies    [][]int    `json:"dependencies,omitempty"`
+	WorkerRoles     []string   `json:"worker_roles,omitempty"`
+	Constraints     [][]string `json:"constraints,omitempty"`
+	DeadlineMinutes *int       `json:"deadline_minutes,omitempty"`
+	MaxToolCalls    *int       `json:"max_tool_calls,omitempty"`
+	MaxTotalTokens  *int64     `json:"max_total_tokens,omitempty"`
+	MaxCostMicroUSD *int64     `json:"max_cost_microusd,omitempty"`
 }
 
 func parseMultiAgentDelegateArguments(input json.RawMessage) (multiAgentDelegateArguments, error) {

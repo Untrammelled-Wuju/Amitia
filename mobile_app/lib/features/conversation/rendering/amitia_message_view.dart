@@ -341,8 +341,8 @@ class _AmitiaMessageViewState extends ConsumerState<AmitiaMessageView> {
         setState(() => _feedback = feedback);
       }
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+      print("[original-error] $error\n$stackTrace");
+    }
   }
 
   Future<void> _submitFeedback(String feedbackType, {String? reason}) async {
@@ -660,8 +660,16 @@ class _AmitiaMessageViewState extends ConsumerState<AmitiaMessageView> {
     AssistantTurnDto turn,
     Set<String> citationIds,
   ) {
-    final items = [...turn.items]
-      ..sort((left, right) => left.sequence.compareTo(right.sequence));
+    final items = [...turn.items];
+    final positions = Map<AssistantTurnItemDto, int>.identity();
+    for (var index = 0; index < items.length; index += 1) {
+      positions[items[index]] = index;
+    }
+    items.sort((left, right) {
+      final bySequence = left.sequence.compareTo(right.sequence);
+      if (bySequence != 0) return bySequence;
+      return positions[left]!.compareTo(positions[right]!);
+    });
     final entries = <_TurnTimelineEntry>[];
     _TurnTimelineEntry? toolGroup;
     for (final item in items) {
@@ -675,6 +683,15 @@ class _AmitiaMessageViewState extends ConsumerState<AmitiaMessageView> {
       }
       toolGroup = null;
       entries.add(_TurnTimelineEntry.item(item));
+    }
+    final finalTextIndex = entries.lastIndexWhere(
+      (entry) =>
+          entry.item?.type == 'text' &&
+          (entry.item?.content.trim().isNotEmpty ?? false),
+    );
+    if (finalTextIndex >= 0 && finalTextIndex < entries.length - 1) {
+      final finalText = entries.removeAt(finalTextIndex);
+      entries.add(finalText);
     }
     return [
       for (final entry in entries)
@@ -1332,8 +1349,8 @@ dynamic _decodeTurnJSON(String value) {
   try {
     return jsonDecode(source);
   } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-return source;
+    print("[original-error] $error\n$stackTrace");
+    return source;
   }
 }
 
@@ -1343,8 +1360,8 @@ String _turnJSONText(dynamic value) {
   try {
     return const JsonEncoder.withIndent('  ').convert(value);
   } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-return value.toString();
+    print("[original-error] $error\n$stackTrace");
+    return value.toString();
   }
 }
 
@@ -1785,10 +1802,14 @@ class _TurnToolCallRowState extends State<_TurnToolCallRow> {
     final subject = _turnToolSubject(widget.item);
     final duration = _turnToolDurationText(widget.item, result: widget.result);
     final durationSuffix = duration.isEmpty ? '' : ' · $duration';
+    final stateSource =
+        _isTurnStreaming(widget.item.status) && widget.result != null
+        ? widget.result!.status
+        : widget.item.status;
     final arguments = _turnJSONText(
       _decodeTurnJSON(widget.item.argumentsJson),
     ).trim();
-    final result = widget.result == null ? '' : _turnResultText(widget.result!);
+    final result = _turnResultText(widget.result ?? widget.item);
     return Container(
       constraints: const BoxConstraints(maxWidth: 700),
       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -1841,7 +1862,7 @@ class _TurnToolCallRowState extends State<_TurnToolCallRow> {
                 ],
                 const SizedBox(width: 8),
                 Text(
-                  '${_turnStatusLabel(widget.item.status)}$durationSuffix',
+                  '${_turnStatusLabel(stateSource)}$durationSuffix',
                   style: TextStyle(
                     color: widget.item.status.toLowerCase().contains('fail')
                         ? tokens.danger

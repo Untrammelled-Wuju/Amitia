@@ -144,7 +144,7 @@ func newDeviceOwnedDataHandler(services *AppServices, dataDir string) (agent.Can
 				result = map[string]any{"requestId": req.ChannelDelivery.RequestID}
 			case "chat-management":
 				if req.ChatManagement.ConversationOwnerID != identity.DeviceID.String() || scope.Coordinated && (scope.ResourceOwnerID != scope.CoreID || scope.RoleOwnerID != scope.CoreID) {
-					return coordination.ErrWrongOwner
+					return deviceOwnedWrongOwner(req.Operation, identity.DeviceID.String(), scope, "conversationOwner="+req.ChatManagement.ConversationOwnerID)
 				}
 				managedContext := coordination.WithAdditionalGuard(coordination.WithSourceManagementAuthority(coordination.WithScope(ctx, scope), scope, invocation.InvocationID), func(current context.Context) error {
 					if err := coordination.ValidateSourceCall(current, services.KernelContainer.DeviceRegistry.Database(), scope.SpaceID, invocation.InvocationID); err != nil {
@@ -159,7 +159,7 @@ func newDeviceOwnedDataHandler(services *AppServices, dataDir string) (agent.Can
 					owner = scope.CoreID
 				}
 				if scope.ResourceOwnerID != owner || scope.RoleOwnerID != owner || services.KernelContainer.TaskRuntimeService == nil {
-					return coordination.ErrWrongOwner
+					return deviceOwnedWrongOwner(req.Operation, owner, scope, "task catalog owner mismatch")
 				}
 				list := func() error {
 					result, err = services.KernelContainer.TaskRuntimeService.DescribeInstalledTaskCatalog(ctx, identity.DeviceID.String(), req.TaskCatalog)
@@ -182,7 +182,7 @@ func newDeviceOwnedDataHandler(services *AppServices, dataDir string) (agent.Can
 					owner = scope.CoreID
 				}
 				if scope.ResourceOwnerID != owner || scope.RoleOwnerID != owner || req.TaskPermission.Scope != scope || services.KernelContainer.TaskRuntimeService == nil {
-					return coordination.ErrWrongOwner
+					return deviceOwnedWrongOwner(req.Operation, owner, scope, "task permission scope mismatch")
 				}
 				permissionTarget := req.TaskPermission.Run.ExecutionTarget
 				if permissionTarget.RuntimeID != invocation.RuntimeID || permissionTarget.RuntimeSessionID != invocation.RuntimeSessionID || permissionTarget.ConnectionGeneration != invocation.ConnectionGeneration {
@@ -209,7 +209,7 @@ func newDeviceOwnedDataHandler(services *AppServices, dataDir string) (agent.Can
 					owner = scope.CoreID
 				}
 				if scope.ResourceOwnerID != owner || scope.RoleOwnerID != owner || services.KernelContainer.TaskRuntimeService == nil {
-					return coordination.ErrWrongOwner
+					return deviceOwnedWrongOwner(req.Operation, owner, scope, "task definition owner mismatch")
 				}
 				describe := func() error {
 					if req.Operation == "task-catalog-entry" {
@@ -232,13 +232,13 @@ func newDeviceOwnedDataHandler(services *AppServices, dataDir string) (agent.Can
 				}
 			case "interrupted":
 				if scope.Coordinated {
-					return coordination.ErrWrongOwner
+					return deviceOwnedWrongOwner(req.Operation, identity.DeviceID.String(), scope, "interrupted state requires a non-coordinated local owner")
 				}
 				err = port.SaveInterrupted(ctx, req.Interrupted)
 				result = map[string]bool{"saved": err == nil}
 			case "apply":
 				if scope.Coordinated {
-					return coordination.ErrWrongOwner
+					return deviceOwnedWrongOwner(req.Operation, identity.DeviceID.String(), scope, "commit requires a non-coordinated local owner")
 				}
 				result, err = port.Commit(coordination.WithSourceCommitAuthority(ctx, scope, invocation.InvocationID), req.Commit)
 			case "roles":
@@ -267,7 +267,7 @@ func newDeviceOwnedDataHandler(services *AppServices, dataDir string) (agent.Can
 				result, err = port.Snapshot(ctx, scope, req.Query)
 			case "group-state":
 				if req.Query.ConversationID == "" {
-					return coordination.ErrWrongOwner
+					return deviceOwnedWrongOwner(req.Operation, identity.DeviceID.String(), scope, "conversation id is empty")
 				}
 				result, err = port.GroupState(ctx, scope, req.Query.ConversationID)
 			case "resource":
@@ -282,12 +282,12 @@ func newDeviceOwnedDataHandler(services *AppServices, dataDir string) (agent.Can
 				}
 			case "history":
 				if !scope.Coordinated || scope.ResourceOwnerID != scope.CoreID || scope.RoleOwnerID != scope.CoreID {
-					return coordination.ErrWrongOwner
+					return deviceOwnedWrongOwner(req.Operation, scope.CoreID, scope, "history requires a coordinated Core-owned scope")
 				}
 				result, err = port.HistoricalSnapshot(ctx, scope, req.Query)
 			case "history-list":
 				if !scope.Coordinated || scope.ResourceOwnerID != scope.CoreID || scope.RoleOwnerID != scope.CoreID {
-					return coordination.ErrWrongOwner
+					return deviceOwnedWrongOwner(req.Operation, scope.CoreID, scope, "history list requires a coordinated Core-owned scope")
 				}
 				result, err = port.HistoricalConversations(ctx, scope)
 			case "history-list-page":
@@ -296,7 +296,7 @@ func newDeviceOwnedDataHandler(services *AppServices, dataDir string) (agent.Can
 				result, err = port.HistoricalRoles(ctx, scope)
 			case "list":
 				if req.RoleID != scope.RoleID {
-					return coordination.ErrWrongOwner
+					return deviceOwnedWrongOwner(req.Operation, identity.DeviceID.String(), scope, "request role="+req.RoleID)
 				}
 				if err := coordination.ValidateRoleRevision(ctx, port, scope); err != nil {
 					return err
@@ -324,4 +324,11 @@ func newDeviceOwnedDataHandler(services *AppServices, dataDir string) (agent.Can
 		}
 		return &protocol.RuntimeResultPayload{InvocationID: invocation.InvocationID, Result: encoded}, nil
 	}, nil
+}
+
+func deviceOwnedWrongOwner(operation, expectedOwner string, scope coordination.ExecutionScope, detail string) error {
+	return fmt.Errorf(
+		"设备专属数据归属校验失败: operation=%q expectedOwner=%q resourceOwner=%q roleOwner=%q role=%q request=%q detail=%q: %w",
+		operation, expectedOwner, scope.ResourceOwnerID, scope.RoleOwnerID, scope.RoleID, scope.RequestID, detail, coordination.ErrWrongOwner,
+	)
 }

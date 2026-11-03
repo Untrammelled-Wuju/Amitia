@@ -67,7 +67,7 @@ func TestBindAppearanceChangesToHostPlatform(t *testing.T) {
 		"scope": map[string]interface{}{"page": "chat"},
 		"targets": []interface{}{
 			map[string]interface{}{
-				"scope": map[string]interface{}{"platform": "desktop", "page": "chat"},
+				"scope":  map[string]interface{}{"platform": "desktop", "page": "chat"},
 				"target": "chat.composer.input",
 			},
 			map[string]interface{}{

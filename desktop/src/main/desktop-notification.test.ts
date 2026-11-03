@@ -53,6 +53,9 @@ it("maps macOS and Windows notification identity and grouping", () => {
     groupId: "conversation-1",
     groupTitle: "林澈",
   });
+  expect(desktopNotificationOptions({ ...payload, type: "attention.required" }, "win32")).toMatchObject({
+    timeoutType: "never",
+  });
 });
 
 it("maps Linux notification urgency without unsupported platform fields", () => {

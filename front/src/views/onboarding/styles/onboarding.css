@@ -28,15 +28,7 @@
   position: relative;
   width: 100%;
   height: 100%;
-  font-family:
-    Inter,
-    ui-sans-serif,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    "PingFang SC",
-    "Microsoft YaHei",
-    sans-serif;
+  font-family: var(--ac-font-family);
   background: #070708;
   color: var(--ob-text);
   display: grid;

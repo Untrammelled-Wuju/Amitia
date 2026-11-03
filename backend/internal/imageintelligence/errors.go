@@ -55,12 +55,16 @@ func mapRetryClass(class string) bool {
 
 func mapProviderErrorToDomain(provider string, retryClass string, msg string) *Error {
 	switch retryClass {
-	case "auth":
+	case "auth", "never":
 		return &Error{Code: ErrProviderAuth, Message: msg, Provider: provider, Retryable: false, HTTPStatus: http.StatusUnauthorized}
-	case "rate_limit":
+	case "rate_limit", "after_delay":
 		return &Error{Code: ErrProviderRateLimited, Message: msg, Provider: provider, Retryable: false, HTTPStatus: http.StatusTooManyRequests}
-	case "invalid_response":
+	case "invalid_response", "query_first":
 		return &Error{Code: ErrProviderInvalidResponse, Message: msg, Provider: provider, Retryable: false, HTTPStatus: http.StatusBadGateway}
+	case "same_call":
+		return &Error{Code: ErrProviderUnavailable, Message: msg, Provider: provider, Retryable: true, HTTPStatus: http.StatusServiceUnavailable}
+	case "user_action":
+		return &Error{Code: ErrGenFailed, Message: msg, Provider: provider, Retryable: false, HTTPStatus: http.StatusBadGateway}
 	}
 	return &Error{Code: ErrProviderUnavailable, Message: msg, Provider: provider, Retryable: mapRetryClass(retryClass), HTTPStatus: http.StatusServiceUnavailable}
 }
@@ -69,8 +73,8 @@ func mapImageErrorToDomain(msg string, retryable bool) *Error {
 	return &Error{Code: ErrUnderstandFailed, Message: msg, Retryable: retryable, HTTPStatus: http.StatusInternalServerError}
 }
 
-func marshalErrorResponse(err *Error) json.RawMessage {
-	data, _ := json.Marshal(map[string]interface{}{
+func marshalErrorResponse(err *Error) (json.RawMessage, error) {
+	data, marshalErr := json.Marshal(map[string]interface{}{
 		"error": map[string]interface{}{
 			"code":      err.Code,
 			"message":   err.Message,
@@ -78,5 +82,8 @@ func marshalErrorResponse(err *Error) json.RawMessage {
 			"retryable": err.Retryable,
 		},
 	})
-	return data
+	if marshalErr != nil {
+		return nil, fmt.Errorf("marshal image intelligence error: %w", marshalErr)
+	}
+	return data, nil
 }

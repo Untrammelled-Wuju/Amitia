@@ -31,7 +31,7 @@ function fixture() {
   const send = vi.fn();
   const win = { isDestroyed: () => false, show: vi.fn(), focus: vi.fn(), webContents: { send } };
   const host = new UIHostSSE({ businessCore: { fetch } as unknown as BusinessCoreClient, mainWindow: () => win as unknown as BrowserWindow });
-  const dispatch = (id: string, expiresAt?: string) => (host as unknown as { parseAndDispatch(raw: string): void }).parseAndDispatch('event: scheduled_notification\ndata: ' + JSON.stringify({ requestId: id, expiresAt, payload: { title: '喝水', body: '休息一下', conversationId: 'conversation', characterId: 'role', ownerId: 'core', sound: false } }));
+  const dispatch = (id: string, expiresAt?: string, payload: Record<string, unknown> = {}) => (host as unknown as { parseAndDispatch(raw: string): void }).parseAndDispatch('event: scheduled_notification\ndata: ' + JSON.stringify({ requestId: id, expiresAt, payload: { title: '喝水', body: '休息一下', conversationId: 'conversation', characterId: 'role', ownerId: 'core', sound: false, ...payload } }));
   return { fetch, send, win, dispatch };
 }
 
@@ -88,6 +88,20 @@ it('acknowledges the OS display event and opens the bound owner and role on clic
   expect(f.send).toHaveBeenCalledWith('amitia:ui:navigate', '/chat?conversationId=conversation&characterId=role&ownerId=core');
   expect(f.win.focus).toHaveBeenCalledOnce();
   expect(f.fetch).toHaveBeenLastCalledWith('/api/notifications/scheduled/notification/ack', expect.objectContaining({ body: JSON.stringify({ state: 'clicked' }) }));
+});
+
+it('opens the exact attention item in its conversation when the notification is clicked', () => {
+  const f = fixture();
+  f.dispatch('attention', undefined, { type: 'attention.required', attentionId: 'attention:linked' });
+  notifications.entries[0]!.handlers.click!();
+  expect(f.send).toHaveBeenCalledWith('amitia:ui:navigate', '/chat?conversationId=conversation&characterId=role&ownerId=core&attentionId=attention%3Alinked');
+});
+
+it('opens the attention center when the item has no conversation', () => {
+  const f = fixture();
+  f.dispatch('attention', undefined, { type: 'attention.required', conversationId: '', characterId: '', attentionId: 'attention:linked' });
+  notifications.entries[0]!.handlers.click!();
+  expect(f.send).toHaveBeenCalledWith('amitia:ui:navigate', '/reminders?attentionId=attention%3Alinked');
 });
 
 it('deduplicates retries and ignores expired notification envelopes', () => {

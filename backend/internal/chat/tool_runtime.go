@@ -24,6 +24,7 @@ type SkillScope struct {
 	CorrelationID  string
 	CausationID    string
 	PermissionMode string
+	WorkerRole     string
 	ExecContext    *coreexec.ExecutionContext
 }
 

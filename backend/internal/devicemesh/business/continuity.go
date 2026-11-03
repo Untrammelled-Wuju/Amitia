@@ -611,6 +611,12 @@ func applyContinuityRuntimeEvent(document *OwnedContinuity, event ContinuityRunt
 	if document == nil {
 		return
 	}
+	for _, lookup := range event.Bindings {
+		if strings.TrimSpace(lookup.Type) == "" || strings.TrimSpace(lookup.ID) == "" {
+			continue
+		}
+		document.Bindings = continuity.MergeThreadBinding(document.Bindings, continuity.NewThreadBinding(document.Thread.ID, lookup.Type, lookup.ID, "context", event.SourceType, 1))
+	}
 	if event.Wait != nil && continuity.ValidWaitType(event.Wait.WaitType) && len(document.Waits) < 256 {
 		wait := *event.Wait
 		wait.ThreadID = document.Thread.ID

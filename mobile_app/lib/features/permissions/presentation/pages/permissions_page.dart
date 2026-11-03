@@ -120,8 +120,8 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage>
         );
       });
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+      print("[original-error] $error\n$stackTrace");
+    }
   }
 
   Future<Map<String, dynamic>> _executeShizuku(
@@ -335,8 +335,8 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage>
         );
       });
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+      print("[original-error] $error\n$stackTrace");
+    }
   }
 
   Future<void> _providerAction(String operation) async {
@@ -419,8 +419,8 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage>
         );
       });
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-if (!mounted) return;
+      print("[original-error] $error\n$stackTrace");
+      if (!mounted) return;
       setState(() {
         _permissions[0] = PermissionItem(
           name: '无障碍服务',
@@ -449,8 +449,8 @@ if (!mounted) return;
         return;
       }
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+      print("[original-error] $error\n$stackTrace");
+    }
     if (mounted) {
       ScaffoldMessenger.of(
         context,
@@ -544,8 +544,12 @@ if (!mounted) return;
             return _AccessibilityProviderCard(
               status: _providerStatus,
               busy: _providerBusy,
-              onInstall: () =>
-                  _providerAction('accessibility.provider.install'),
+              onInstall: () => _providerAction(
+                _providerStatus['installed'] == true &&
+                        _providerStatus['signatureMatch'] == false
+                    ? 'accessibility.provider.uninstall'
+                    : 'accessibility.provider.install',
+              ),
               onSettings: () =>
                   _providerAction('accessibility.provider.open_settings'),
             );
@@ -673,17 +677,32 @@ class _AccessibilityProviderCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final installed = status['installed'] == true;
     final connected = status['connected'] == true;
+    final signatureMatch = status['signatureMatch'] != false;
     final version = status['versionName']?.toString().trim() ?? '';
-    final stateText = connected
+    final reason = status['reason']?.toString().trim() ?? '';
+    final stateText = !installed
+        ? '未安装'
+        : !signatureMatch
+        ? '签名不匹配'
+        : connected
         ? '已连接'
-        : installed
-        ? '已安装未开启'
-        : '未安装';
+        : '已安装未开启';
     final badgeType = connected
         ? BadgeType.success
+        : installed && !signatureMatch
+        ? BadgeType.error
         : installed
         ? BadgeType.warning
         : BadgeType.neutral;
+    final description = !installed
+        ? '安装独立辅助包，避免主应用风险策略影响无障碍服务'
+        : !signatureMatch
+        ? '旧 Provider 与新 Amitia 版本签名不一致，请卸载后重新安装'
+        : connected
+        ? '独立低权限辅助包${version.isEmpty ? '' : ' $version'}'
+        : reason.isNotEmpty
+        ? reason
+        : '辅助包已安装，等待系统连接无障碍服务';
     return Container(
       padding: EdgeInsets.all(AppSpacing.cardPadding),
       decoration: BoxDecoration(
@@ -708,12 +727,7 @@ class _AccessibilityProviderCard extends StatelessWidget {
             ],
           ),
           SizedBox(height: AppSpacing.sm),
-          Text(
-            installed
-                ? '独立低权限辅助包${version.isEmpty ? '' : ' $version'}'
-                : '安装独立辅助包，避免主应用风险策略影响无障碍服务',
-            style: AppTypography.label(context),
-          ),
+          Text(description, style: AppTypography.label(context)),
           SizedBox(height: AppSpacing.md),
           Row(
             children: [
@@ -721,7 +735,11 @@ class _AccessibilityProviderCard extends StatelessWidget {
                 child: FilledButton.icon(
                   onPressed: busy ? null : onInstall,
                   icon: const Icon(Icons.download_outlined),
-                  label: Text(installed ? '更新 Provider' : '安装 Provider'),
+                  label: Text(
+                    !installed || !signatureMatch
+                        ? (installed ? '卸载旧 Provider' : '安装 Provider')
+                        : '更新 Provider',
+                  ),
                 ),
               ),
               SizedBox(width: AppSpacing.sm),

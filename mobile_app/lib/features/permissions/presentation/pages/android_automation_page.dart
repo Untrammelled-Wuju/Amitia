@@ -67,8 +67,8 @@ class _AndroidAutomationPageState extends ConsumerState<AndroidAutomationPage>
               ) ??
               const <String, dynamic>{};
         } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+          print("[original-error] $error\n$stackTrace");
+        }
       }
 
       final accessibility = await _nativeStatus('accessibility.status');
@@ -186,6 +186,75 @@ class _AndroidAutomationPageState extends ConsumerState<AndroidAutomationPage>
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Shizuku 授权失败：$error')));
+    } finally {
+      if (mounted) setState(() => _virtualDisplayBusy = false);
+    }
+  }
+
+  Future<void> _setVirtualDisplayPreviewEnabled(bool enabled) async {
+    if (_virtualDisplayBusy) return;
+    setState(() => _virtualDisplayBusy = true);
+    try {
+      final response = await _nativeExecute(
+        'virtual_display.preview.set',
+        <String, dynamic>{'enabled': enabled},
+      );
+      if (response['status']?.toString() != 'success') {
+        final error = _asMap(response['error']);
+        throw StateError(error['message']?.toString() ?? '虚拟屏实时画面设置失败');
+      }
+      await _refresh();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('虚拟屏实时画面设置失败：$error')));
+    } finally {
+      if (mounted) setState(() => _virtualDisplayBusy = false);
+    }
+  }
+
+  Future<void> _requestVirtualDisplayPreviewPermission() async {
+    if (_virtualDisplayBusy) return;
+    setState(() => _virtualDisplayBusy = true);
+    try {
+      final response = await _nativeExecute(
+        'virtual_display.preview.permission.request',
+        const <String, dynamic>{},
+      );
+      if (response['status']?.toString() != 'success') {
+        final error = _asMap(response['error']);
+        throw StateError(error['message']?.toString() ?? '悬浮窗权限申请失败');
+      }
+      await _refresh();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('悬浮窗权限申请失败：$error')));
+    } finally {
+      if (mounted) setState(() => _virtualDisplayBusy = false);
+    }
+  }
+
+  Future<void> _resetVirtualDisplayPreviewPosition() async {
+    if (_virtualDisplayBusy) return;
+    setState(() => _virtualDisplayBusy = true);
+    try {
+      final response = await _nativeExecute(
+        'virtual_display.preview.position.reset',
+        const <String, dynamic>{},
+      );
+      if (response['status']?.toString() != 'success') {
+        final error = _asMap(response['error']);
+        throw StateError(error['message']?.toString() ?? '悬浮窗位置重置失败');
+      }
+      await _refresh();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('悬浮窗位置重置失败：$error')));
     } finally {
       if (mounted) setState(() => _virtualDisplayBusy = false);
     }
@@ -607,6 +676,10 @@ class _AndroidAutomationPageState extends ConsumerState<AndroidAutomationPage>
               busy: _virtualDisplayBusy,
               onChanged: _setVirtualDisplayEnabled,
               onRequestShizuku: _requestVirtualDisplayShizuku,
+              onPreviewChanged: _setVirtualDisplayPreviewEnabled,
+              onRequestOverlayPermission:
+                  _requestVirtualDisplayPreviewPermission,
+              onResetPreviewPosition: _resetVirtualDisplayPreviewPosition,
             ),
             SizedBox(height: AppSpacing.md),
             if (_error != null)
@@ -745,12 +818,18 @@ class _VirtualDisplayControlCard extends StatelessWidget {
   final bool busy;
   final ValueChanged<bool> onChanged;
   final Future<void> Function() onRequestShizuku;
+  final ValueChanged<bool> onPreviewChanged;
+  final Future<void> Function() onRequestOverlayPermission;
+  final Future<void> Function() onResetPreviewPosition;
 
   const _VirtualDisplayControlCard({
     required this.status,
     required this.busy,
     required this.onChanged,
     required this.onRequestShizuku,
+    required this.onPreviewChanged,
+    required this.onRequestOverlayPermission,
+    required this.onResetPreviewPosition,
   });
 
   @override
@@ -758,6 +837,10 @@ class _VirtualDisplayControlCard extends StatelessWidget {
     final enabled = status['enabled'] == true;
     final hostRunning = status['hostRunning'] == true;
     final state = status['state']?.toString() ?? 'disabled';
+    final previewEnabled = status['previewEnabled'] == true;
+    final previewState = status['previewState']?.toString() ?? 'disabled';
+    final overlayPermissionGranted = status['overlayPermissionGranted'] == true;
+    final previewLastError = status['previewLastError']?.toString() ?? '';
     final stateLabel = switch (state) {
       'ready' => '运行中',
       'stopped' => '待启动',
@@ -822,9 +905,92 @@ class _VirtualDisplayControlCard extends StatelessWidget {
               ),
             ),
           ],
+          SizedBox(height: AppSpacing.md),
+          Divider(
+            height: 1,
+            color: context.borderPrimary.withValues(alpha: 0.6),
+          ),
+          SizedBox(height: AppSpacing.md),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('显示虚拟屏实时画面', style: AppTypography.bodySmall(context)),
+                    const SizedBox(height: 3),
+                    Text(
+                      _previewStateText(
+                        previewEnabled: previewEnabled,
+                        previewState: previewState,
+                        overlayPermissionGranted: overlayPermissionGranted,
+                      ),
+                      style: AppTypography.caption(context),
+                    ),
+                  ],
+                ),
+              ),
+              Switch.adaptive(
+                value: previewEnabled,
+                onChanged: busy ? null : onPreviewChanged,
+              ),
+            ],
+          ),
+          if (previewEnabled && !overlayPermissionGranted) ...[
+            SizedBox(height: AppSpacing.sm),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: busy ? null : onRequestOverlayPermission,
+                icon: const Icon(Icons.picture_in_picture_alt_outlined),
+                label: const Text('授权系统悬浮窗'),
+              ),
+            ),
+          ],
+          if (previewEnabled && overlayPermissionGranted) ...[
+            SizedBox(height: AppSpacing.xs),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: busy ? null : onResetPreviewPosition,
+                icon: const Icon(Icons.restart_alt, size: 18),
+                label: const Text('重置悬浮窗位置'),
+              ),
+            ),
+          ],
+          if (previewEnabled && previewLastError.isNotEmpty) ...[
+            SizedBox(height: AppSpacing.xs),
+            Text(
+              previewLastError,
+              style: AppTypography.caption(
+                context,
+              ).copyWith(color: context.error),
+            ),
+          ],
         ],
       ),
     );
+  }
+
+  String _previewStateText({
+    required bool previewEnabled,
+    required String previewState,
+    required bool overlayPermissionGranted,
+  }) {
+    if (!previewEnabled) {
+      return 'AI 操作虚拟屏时显示可拖动、可缩放的实时画面';
+    }
+    if (!overlayPermissionGranted) {
+      return '需要允许显示在其他应用上层';
+    }
+    return switch (previewState) {
+      'visible' => '实时画面正在显示，可拖动、长按角落缩放或轻点关闭',
+      'suppressed' => '已临时关闭，将在下一次虚拟屏操作时显示',
+      'connecting' => '正在连接虚拟屏实时画面',
+      'waiting' => '已启用，等待 AI 操作虚拟屏',
+      'failed' => '实时画面连接失败',
+      _ => '已启用',
+    };
   }
 }
 

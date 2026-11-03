@@ -220,8 +220,8 @@ class AgentEventReducer {
           items[item.id] = item;
         }
       }
-      final mergedItems = items.values.toList()
-        ..sort((left, right) => left.sequence.compareTo(right.sequence));
+      final mergedItems = items.values.toList();
+      _sortTurnItems(mergedItems);
       final status = reconciled
           ? 'completed'
           : _isTerminal(current.status)
@@ -359,25 +359,63 @@ class AgentEventReducer {
         }
         return item;
       }).toList();
-      if (terminalStatus == 'failed' &&
-          (event.payload['userMessage'] ?? '').toString().trim().isNotEmpty &&
-          !items.any((item) => item.type == 'error')) {
-        items.add(
-          AssistantTurnItemDto(
-            id: 'turn-error:$turnId',
-            turnId: turnId,
-            conversationId: turn.conversationId,
-            sequence: 1 << 30,
-            type: 'error',
-            status: 'failed',
-            revision: 1,
-            content: (event.payload['userMessage'] ?? '').toString(),
-            resultJson: jsonEncode(event.payload),
-            errorCode: (event.payload['errorCode'] ?? '').toString(),
-            createdAt: event.createdAt,
+      final payload = event.payload;
+      final errorCode = (payload['errorCode'] ?? '').toString().trim();
+      final cause = (payload['cause'] ?? '').toString().trim();
+      final explicitStop =
+          terminalStatus == 'interrupted' &&
+          (errorCode == 'interrupted' || errorCode == 'task_interrupted') &&
+          (cause.isEmpty || cause == '当前回复已主动停止');
+      final hasTerminalError =
+          terminalStatus != 'completed' &&
+          !explicitStop &&
+          const <String>[
+            'userMessage',
+            'internalMessage',
+            'message',
+            'error',
+            'detail',
+            'cause',
+            'rawError',
+            'errorCode',
+          ].any((key) => (payload[key] ?? '').toString().trim().isNotEmpty);
+      if (hasTerminalError) {
+        final content =
+            (payload['userMessage'] ??
+                    payload['message'] ??
+                    payload['error'] ??
+                    '')
+                .toString();
+        final errorIndex = items.indexWhere((item) => item.type == 'error');
+        if (errorIndex >= 0) {
+          final current = items[errorIndex];
+          items[errorIndex] = _copyItem(
+            current,
+            status: terminalStatus,
+            revision: current.revision + 1,
+            content: content,
+            resultJson: jsonEncode(payload),
+            errorCode: errorCode,
             updatedAt: event.createdAt,
-          ),
-        );
+          );
+        } else {
+          items.add(
+            AssistantTurnItemDto(
+              id: 'turn-error:$turnId',
+              turnId: turnId,
+              conversationId: turn.conversationId,
+              sequence: 1 << 30,
+              type: 'error',
+              status: terminalStatus,
+              revision: 1,
+              content: content,
+              resultJson: jsonEncode(payload),
+              errorCode: errorCode,
+              createdAt: event.createdAt,
+              updatedAt: event.createdAt,
+            ),
+          );
+        }
       }
       final messageId = event.messageId.trim();
       if (messageId.isNotEmpty) {
@@ -454,7 +492,22 @@ class AgentEventReducer {
     }
     if (payload.containsKey('result')) {
       final raw = payload['result'];
-      result = raw is String ? raw : raw?.toString() ?? '';
+      result = raw is String
+          ? raw
+          : raw == null
+          ? ''
+          : jsonEncode(raw);
+    } else if (payload['error'] != null) {
+      final error = payload['error'].toString().trim();
+      if (error.isNotEmpty) {
+        result = jsonEncode(<String, dynamic>{
+          'errorCode': (payload['errorCode'] ?? 'TOOL_EXECUTION_FAILED')
+              .toString(),
+          'message': error,
+          if (payload['errorDetail'] != null)
+            'detail': payload['errorDetail'].toString(),
+        });
+      }
     }
     final blockStatus = _blockStatus(type, event.status, item.status);
     item = _copyItem(
@@ -472,6 +525,8 @@ class AgentEventReducer {
       resultJson: result,
       errorCode: payload.containsKey('errorCode')
           ? (payload['errorCode'] ?? '').toString()
+          : payload['error'] != null
+          ? 'TOOL_EXECUTION_FAILED'
           : null,
       durationMs: payload['durationMs'] is num
           ? (payload['durationMs'] as num).toInt()
@@ -488,7 +543,7 @@ class AgentEventReducer {
       items[index] = item;
     } else {
       items.add(item);
-      items.sort((left, right) => left.sequence.compareTo(right.sequence));
+      _sortTurnItems(items);
     }
     var nextTurnStatus = turn.status;
     if (!_isTerminal(nextTurnStatus) &&
@@ -560,7 +615,9 @@ class AgentEventReducer {
       id: event.blockId,
       turnId: turn.id,
       conversationId: turn.conversationId,
-      sequence: event.blockSequence,
+      sequence: event.blockSequence > 0
+          ? event.blockSequence
+          : _nextTurnItemSequence(turn.items),
       type: _itemType(event),
       status: event.status.isEmpty ? 'running' : event.status,
       revision: event.revision,
@@ -598,7 +655,9 @@ class AgentEventReducer {
           turnId: id,
           conversationId: old?.conversationId ?? existing?.conversationId ?? '',
           sequence:
-              (block['blockSequence'] as num?)?.toInt() ?? old?.sequence ?? 0,
+              (block['blockSequence'] as num?)?.toInt() ??
+              old?.sequence ??
+              _nextTurnItemSequence(items),
           type: (block['type'] ?? old?.type ?? 'text').toString(),
           status: (block['status'] ?? old?.status ?? 'running').toString(),
           revision: revision > 0 ? revision : old?.revision ?? 0,
@@ -638,7 +697,7 @@ class AgentEventReducer {
         }
       }
     }
-    items.sort((left, right) => left.sequence.compareTo(right.sequence));
+    _sortTurnItems(items);
     return AssistantTurnDto(
       id: id,
       conversationId: existing?.conversationId ?? '',
@@ -768,6 +827,26 @@ class AgentEventReducer {
       value += item.revision;
     }
     return value;
+  }
+
+  int _nextTurnItemSequence(List<AssistantTurnItemDto> items) {
+    var sequence = 0;
+    for (final item in items) {
+      if (item.sequence > sequence) sequence = item.sequence;
+    }
+    return sequence + 1;
+  }
+
+  void _sortTurnItems(List<AssistantTurnItemDto> items) {
+    final positions = Map<AssistantTurnItemDto, int>.identity();
+    for (var index = 0; index < items.length; index += 1) {
+      positions[items[index]] = index;
+    }
+    items.sort((left, right) {
+      final bySequence = left.sequence.compareTo(right.sequence);
+      if (bySequence != 0) return bySequence;
+      return positions[left]!.compareTo(positions[right]!);
+    });
   }
 
   void _remember(String id) {

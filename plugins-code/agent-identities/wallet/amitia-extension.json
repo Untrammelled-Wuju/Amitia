@@ -1,0 +1,76 @@
+{
+  "manifestVersion": 1,
+  "placement": "device",
+  "extension": {
+    "id": "com.amitia/agent-identity-wallet",
+    "name": { "default": "Agent 钱包" },
+    "description": { "default": "通过外部钱包 Provider 查询账户和执行经过审批的资产操作。" },
+    "version": "1.0.0",
+    "license": "AGPL-3.0-only",
+    "homepage": "https://amitia.untrammelled.top",
+    "categories": ["agent-identities", "finance"],
+    "keywords": ["wallet", "finance", "payment", "asset", "agent-identity"]
+  },
+  "publisher": { "id": "com.amitia", "displayName": "Amitia", "trustLevel": "official" },
+  "compatibility": { "minHostVersion": "0.1.0", "platforms": ["windows", "linux", "macos", "android", "ios"] },
+  "modules": [
+    {
+      "id": "wallet-runtime",
+      "name": { "default": "Agent 钱包运行时" },
+      "description": { "default": "连接外部钱包 Provider，不在 Agent 电脑保存私钥。" },
+      "type": "javascript",
+      "placement": "device",
+      "runtime": {
+        "type": "javascript",
+        "entryPoint": "dist/index.js",
+        "timeout": "120s",
+        "memory": 268435456,
+        "maxSubprocesses": 0,
+        "capabilities": { "network": true, "filesystem": false },
+        "hostAccess": {
+          "filesystem": { "mode": "none" },
+          "network": { "mode": "host" },
+          "process": { "mode": "none" }
+        }
+      },
+      "providedCapabilities": [{ "id": "agent.identity.wallet", "version": "1.0.0" }],
+      "contributions": [
+        {
+          "id": "wallet-command",
+          "kind": "tool",
+          "name": { "default": "Agent 钱包命令" },
+          "description": { "default": "查询余额、交易，并在明确审批后调用外部钱包 Provider。" },
+          "requiredPermissions": ["storage.state.read", "storage.state.write", "secret.read", "service.network.request"],
+          "spec": {
+            "toolId": "com.amitia/agent-identity-wallet/command",
+            "modelName": "agent_wallet_command",
+            "handlerName": "command",
+            "inputSchema": {
+              "type": "object",
+              "required": ["action"],
+              "properties": {
+                "action": { "type": "string", "enum": ["status", "config", "configure", "enable", "disable", "execute"] },
+                "config": { "type": "object" },
+                "credentialRef": { "type": "string" },
+                "input": { "type": "object" }
+              },
+              "additionalProperties": false
+            },
+            "outputSchema": { "type": "object", "additionalProperties": true },
+            "riskLevel": "critical",
+            "sideEffect": "financial",
+            "runtime": { "runtimeType": "javascript", "handlerName": "command" }
+          }
+        }
+      ]
+    }
+  ],
+  "permissions": [
+    { "name": "storage.state.read", "reason": "读取钱包 Provider 配置。", "required": true, "scope": "extension" },
+    { "name": "storage.state.write", "reason": "保存钱包 Provider 配置。", "required": true, "scope": "extension" },
+    { "name": "secret.read", "reason": "读取用户授权的钱包 Provider 凭据。", "required": true, "scope": "extension" },
+    { "name": "service.network.request", "reason": "连接外部钱包 Provider。", "required": true, "scope": "extension" }
+  ],
+  "lifecycle": { "backgroundTasks": false, "networkAccess": true, "sandbox": true },
+  "integrity": { "algorithm": "sha256", "contentTreeHash": "" }
+}

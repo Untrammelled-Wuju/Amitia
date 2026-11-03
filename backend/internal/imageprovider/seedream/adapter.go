@@ -44,17 +44,37 @@ const (
 
 type Adapter struct {
 	httpClient *http.Client
+	provider   string
+	modes      []imageprovider.GenerationMode
 }
 
 func New() *Adapter {
-	return &Adapter{httpClient: timeoutpolicy.Client(&http.Client{Timeout: DefaultTimeout})}
+	return NewNamed(ProviderName, []imageprovider.GenerationMode{
+		imageprovider.ModeSpriteSheet,
+		imageprovider.ModeKeyframe,
+		imageprovider.ModeSingleFrame,
+		imageprovider.ModeLegacyFrame,
+	})
+}
+
+func NewNamed(provider string, modes []imageprovider.GenerationMode) *Adapter {
+	provider = strings.TrimSpace(provider)
+	if provider == "" {
+		provider = ProviderName
+	}
+	return &Adapter{httpClient: timeoutpolicy.Client(&http.Client{Timeout: DefaultTimeout}), provider: provider, modes: append([]imageprovider.GenerationMode(nil), modes...)}
 }
 
 func NewWithClient(client *http.Client) *Adapter {
 	if client == nil {
 		client = timeoutpolicy.Client(&http.Client{Timeout: DefaultTimeout})
 	}
-	return &Adapter{httpClient: client}
+	return &Adapter{httpClient: client, provider: ProviderName, modes: []imageprovider.GenerationMode{
+		imageprovider.ModeSpriteSheet,
+		imageprovider.ModeKeyframe,
+		imageprovider.ModeSingleFrame,
+		imageprovider.ModeLegacyFrame,
+	}}
 }
 
 func (a *Adapter) ValidateConfig(ctx context.Context, config imageprovider.ImageModelConfig) error {
@@ -103,9 +123,9 @@ func (a *Adapter) ExtendedCapabilities(ctx context.Context, config imageprovider
 	}
 	return imageprovider.ProviderCapabilities{
 		SchemaVersion:           1,
-		Provider:                ProviderName,
+		Provider:                a.provider,
 		Model:                   config.ModelName,
-		SupportedModes:          []imageprovider.GenerationMode{imageprovider.ModeSpriteSheet, imageprovider.ModeKeyframe, imageprovider.ModeSingleFrame, imageprovider.ModeLegacyFrame},
+		SupportedModes:          append([]imageprovider.GenerationMode(nil), a.modes...),
 		SupportsReferenceImage:  true,
 		SupportsMultipleImages:  false,
 		SupportsNegativePrompt:  true,
@@ -168,11 +188,20 @@ func (a *Adapter) Submit(ctx context.Context, config imageprovider.ImageModelCon
 }
 
 func (a *Adapter) Query(ctx context.Context, config imageprovider.ImageModelConfig, operationID string) (*imageprovider.ImageGenerationResult, error) {
-	return nil, errors.New("Seedream 适配器为同步模式, 不支持异步查询")
+	return nil, fmt.Errorf("%s 适配器为同步模式, 不支持异步查询", a.provider)
 }
 
 func (a *Adapter) Cancel(ctx context.Context, config imageprovider.ImageModelConfig, operationID string) error {
-	return errors.New("Seedream 适配器为同步模式, 不支持取消操作")
+	return fmt.Errorf("%s 适配器为同步模式, 不支持取消操作", a.provider)
+}
+
+func (a *Adapter) Probe(ctx context.Context, config imageprovider.ImageModelConfig) (*imageprovider.ImageGenerationSubmission, error) {
+	return a.Submit(ctx, config, imageprovider.ImageGenerationRequest{
+		Prompt:      "connection test",
+		Width:       256,
+		Height:      256,
+		OutputCount: 1,
+	})
 }
 
 func (a *Adapter) submitGeneration(ctx context.Context, config imageprovider.ImageModelConfig, request imageprovider.ImageGenerationRequest, outputCount int) (*imageprovider.ImageGenerationResult, error) {
@@ -271,7 +300,7 @@ func (a *Adapter) doRequest(ctx context.Context, config imageprovider.ImageModel
 
 func (a *Adapter) parseResponse(ctx context.Context, body map[string]any, requestID string, config imageprovider.ImageModelConfig) (*imageprovider.ImageGenerationResult, error) {
 	result := &imageprovider.ImageGenerationResult{
-		Provider:    ProviderName,
+		Provider:    a.provider,
 		Model:       config.ModelName,
 		RequestID:   requestID,
 		RawMetadata: body,
@@ -477,18 +506,23 @@ func (e *ProviderError) Unwrap() error { return e.Cause }
 func (e *ProviderError) ErrorCode() string { return e.Code }
 
 func Register(registry *imageprovider.Registry) error {
+	return RegisterNamed(registry, ProviderName, ProviderName, "火山引擎 Seedream", DefaultModel, DefaultBaseURL, []imageprovider.GenerationMode{
+		imageprovider.ModeSpriteSheet,
+		imageprovider.ModeKeyframe,
+		imageprovider.ModeSingleFrame,
+		imageprovider.ModeLegacyFrame,
+	})
+}
+
+func RegisterNamed(registry *imageprovider.Registry, name, adapterName, displayName, defaultModel, defaultBaseURL string, supportedModes []imageprovider.GenerationMode) error {
 	if registry == nil {
 		return fmt.Errorf("registry is nil")
 	}
-	return registry.RegisterWithDescriptor(ProviderName, New(), imageprovider.ProviderDescriptor{
-		Name:           ProviderName,
-		DefaultModel:   DefaultModel,
-		DefaultBaseURL: DefaultBaseURL,
-		SupportedModes: []imageprovider.GenerationMode{
-			imageprovider.ModeSpriteSheet,
-			imageprovider.ModeKeyframe,
-			imageprovider.ModeSingleFrame,
-			imageprovider.ModeLegacyFrame,
-		},
+	return registry.RegisterWithDescriptor(name, NewNamed(adapterName, supportedModes), imageprovider.ProviderDescriptor{
+		Name:           name,
+		DisplayName:    displayName,
+		DefaultModel:   defaultModel,
+		DefaultBaseURL: defaultBaseURL,
+		SupportedModes: supportedModes,
 	})
 }

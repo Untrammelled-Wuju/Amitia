@@ -167,9 +167,9 @@ function goBoundary() {
 }
 
 .csi-desc {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--el-text-color-secondary);
-  line-height: 1.5;
+  line-height: 1.6;
 }
 
 .consent-links {
@@ -177,7 +177,7 @@ function goBoundary() {
   align-items: center;
   justify-content: center;
   gap: 4px;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .consent-footer {

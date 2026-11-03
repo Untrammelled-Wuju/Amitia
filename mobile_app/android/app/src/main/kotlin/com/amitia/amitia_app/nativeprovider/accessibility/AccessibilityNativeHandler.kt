@@ -16,6 +16,7 @@ internal class AccessibilityNativeHandler(context: Context) {
             OP_PROVIDER_STATUS -> handleProviderStatus(request)
             OP_PROVIDER_INSTALL -> handleProviderInstall(request)
             OP_PROVIDER_OPEN_SETTINGS -> handleProviderOpenSettings(request)
+            OP_PROVIDER_UNINSTALL -> handleProviderUninstall(request)
             else -> NativeAccessibilityResponse(
                 requestId = request.requestId,
                 status = "error",
@@ -29,20 +30,31 @@ internal class AccessibilityNativeHandler(context: Context) {
 
     private suspend fun handleProviderStatus(request: NativeAccessibilityRequest): NativeAccessibilityResponse {
         val installed = AccessibilityProviderInstaller.isInstalled(appContext)
-        val connected = installed && AccessibilityProviderClient.isConnected(appContext)
+        val signatureMatch =
+            installed && AccessibilityProviderInstaller.signaturesMatch(appContext)
+        val connected =
+            installed && signatureMatch && AccessibilityProviderClient.isConnected(appContext)
         return NativeAccessibilityResponse(
             requestId = request.requestId,
             status = "success",
             result = mapOf(
                 "installed" to installed,
+                "signatureMatch" to signatureMatch,
                 "connected" to connected,
                 "ready" to connected,
                 "versionName" to (AccessibilityProviderInstaller.installedVersion(appContext) ?: ""),
                 "packageName" to AccessibilityProviderInstaller.PROVIDER_PACKAGE,
                 "state" to when {
                     !installed -> "not_installed"
+                    !signatureMatch -> "signature_mismatch"
                     !connected -> "disabled"
                     else -> "connected"
+                },
+                "reason" to when {
+                    !installed -> "accessibility provider is not installed"
+                    !signatureMatch -> "installed accessibility provider signature does not match this app"
+                    !connected -> "accessibility provider is installed but not connected"
+                    else -> ""
                 },
             ),
         )
@@ -70,6 +82,19 @@ internal class AccessibilityNativeHandler(context: Context) {
             error = if (opened) null else NativeAccessibilityError(
                 code = "ACCESSIBILITY_PROVIDER_SETTINGS_UNAVAILABLE",
                 message = "accessibility provider settings could not be opened",
+            ),
+        )
+    }
+
+    private fun handleProviderUninstall(request: NativeAccessibilityRequest): NativeAccessibilityResponse {
+        val opened = AccessibilityProviderInstaller.launchUninstall(appContext)
+        return NativeAccessibilityResponse(
+            requestId = request.requestId,
+            status = if (opened) "success" else "error",
+            result = mapOf("opened" to opened, "userActionRequired" to true),
+            error = if (opened) null else NativeAccessibilityError(
+                code = "ACCESSIBILITY_PROVIDER_UNINSTALL_UNAVAILABLE",
+                message = "accessibility provider uninstall screen could not be opened",
             ),
         )
     }
@@ -167,5 +192,6 @@ internal class AccessibilityNativeHandler(context: Context) {
         const val OP_PROVIDER_STATUS = "accessibility.provider.status"
         const val OP_PROVIDER_INSTALL = "accessibility.provider.install"
         const val OP_PROVIDER_OPEN_SETTINGS = "accessibility.provider.open_settings"
+        const val OP_PROVIDER_UNINSTALL = "accessibility.provider.uninstall"
     }
 }

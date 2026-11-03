@@ -1499,6 +1499,7 @@ class AmitiaChatInput extends StatefulWidget {
   onLoadAgentSkillsPage;
   final bool isGroup;
   final List<Map<String, dynamic>> groupMembers;
+  final List<Map<String, dynamic>> roleModelConfigs;
   final ValueChanged<String?>? onGroupMention;
   final FutureOr<void> Function()? onStartVoiceRecording;
   final FutureOr<void> Function({required bool transcribe})?
@@ -1525,6 +1526,20 @@ class AmitiaChatInput extends StatefulWidget {
     bool reasoningEnabled,
   )?
   onModelChanged;
+  final void Function(
+    String roleId,
+    int modelId,
+    String reasoningEffort,
+    bool reasoningEnabled,
+  )?
+  onRoleModelPreviewChanged;
+  final void Function(
+    String roleId,
+    int modelId,
+    String reasoningEffort,
+    bool reasoningEnabled,
+  )?
+  onRoleModelChanged;
 
   const AmitiaChatInput({
     super.key,
@@ -1545,6 +1560,7 @@ class AmitiaChatInput extends StatefulWidget {
     this.onLoadAgentSkillsPage,
     this.isGroup = false,
     this.groupMembers = const [],
+    this.roleModelConfigs = const [],
     this.onGroupMention,
     this.onStartVoiceRecording,
     this.onFinishVoiceRecording,
@@ -1560,6 +1576,8 @@ class AmitiaChatInput extends StatefulWidget {
     this.onPermissionChanged,
     this.onModelPreviewChanged,
     this.onModelChanged,
+    this.onRoleModelPreviewChanged,
+    this.onRoleModelChanged,
   });
 
   @override
@@ -1600,6 +1618,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
   bool _modelMenuTriggerHovered = false;
   _ComposerModelMenuPage _modelMenuPage = _ComposerModelMenuPage.effort;
   StateSetter? _modelMenuStateSetter;
+  String _activeModelRoleId = '';
   double _draftReasoningValue = 1;
   bool _reasoningDragging = false;
 
@@ -1609,8 +1628,10 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
     _ownsController = widget.controller == null;
     _controller = widget.controller ?? TextEditingController();
     _hasText = _controller.text.trim().isNotEmpty;
+    _activeModelRoleId =
+        widget.roleModelConfigs.firstOrNull?['roleId']?.toString() ?? '';
     _draftReasoningValue = _reasoningIndexFor(
-      widget.reasoningEffort,
+      _effectiveReasoningEffort,
     ).toDouble();
     _controller.addListener(_syncControllerText);
     _slashMenuScrollController.addListener(_loadMoreSkillsOnScroll);
@@ -1664,10 +1685,18 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
   @override
   void didUpdateWidget(covariant AmitiaChatInput oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!widget.roleModelConfigs.any(
+      (role) => role['roleId']?.toString() == _activeModelRoleId,
+    )) {
+      _activeModelRoleId =
+          widget.roleModelConfigs.firstOrNull?['roleId']?.toString() ?? '';
+    }
     if (!_reasoningDragging &&
-        oldWidget.reasoningEffort != widget.reasoningEffort) {
+        (oldWidget.reasoningEffort != widget.reasoningEffort ||
+            _roleConfigSignature(oldWidget.roleModelConfigs) !=
+                _roleConfigSignature(widget.roleModelConfigs))) {
       _draftReasoningValue = _reasoningIndexFor(
-        widget.reasoningEffort,
+        _effectiveReasoningEffort,
       ).toDouble();
     }
     if (oldWidget.onLoadAgentSkills != widget.onLoadAgentSkills) {
@@ -1681,6 +1710,15 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
     _hasText = _controller.text.trim().isNotEmpty;
     _controller.addListener(_syncControllerText);
     _syncControllerText();
+  }
+
+  String _roleConfigSignature(List<Map<String, dynamic>> roles) {
+    return roles
+        .map(
+          (role) =>
+              '${role['roleId'] ?? ''}:${role['modelConfigId'] ?? 0}:${role['reasoningEffort'] ?? ''}:${role['reasoningEnabled'] ?? -1}',
+        )
+        .join('|');
   }
 
   void _syncControllerText() {
@@ -1802,7 +1840,8 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
       });
       if (_agentSkills.isEmpty && _skillsHasMore) {
         scheduleMicrotask(() {
-          if (mounted && request == _skillsRequest) unawaited(_loadAgentSkills(more: true));
+          if (mounted && request == _skillsRequest)
+            unawaited(_loadAgentSkills(more: true));
         });
       }
     } catch (error) {
@@ -2249,96 +2288,114 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
             child: Material(
               color: Colors.transparent,
               child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (_pickerMode == 'add') ...[
-                  ListTile(dense: true, leading: const Icon(Icons.attach_file_outlined), title: const Text('上传文件'), onTap: () { _closeSlashMenu(); widget.onPickFile?.call(); }),
-                  ListTile(dense: true, leading: const Icon(Icons.code), title: const Text('插入代码'), onTap: () { _closeSlashMenu(); _showCodeDialog(); }),
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_pickerMode == 'add') ...[
+                    ListTile(
+                      dense: true,
+                      leading: const Icon(Icons.attach_file_outlined),
+                      title: const Text('上传文件'),
+                      onTap: () {
+                        _closeSlashMenu();
+                        widget.onPickFile?.call();
+                      },
+                    ),
+                    ListTile(
+                      dense: true,
+                      leading: const Icon(Icons.code),
+                      title: const Text('插入代码'),
+                      onTap: () {
+                        _closeSlashMenu();
+                        _showCodeDialog();
+                      },
+                    ),
+                  ],
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _pickerMode == 'mention' ? '群成员' : '使用技能',
+                            style: AppTypography.label(context),
+                          ),
+                        ),
+                        Text(
+                          '${_pickerMode == 'mention' ? '@' : '/'}$_slashQuery',
+                          style: AppTypography.caption(context),
+                        ),
+                      ],
+                    ),
+                  ),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 280),
+                    child: _pickerMode == 'mention'
+                        ? ListView(
+                            shrinkWrap: true,
+                            children: [
+                              if (_slashQuery.isEmpty ||
+                                  '所有成员'.contains(_slashQuery))
+                                ListTile(
+                                  dense: true,
+                                  leading: const Icon(Icons.groups_outlined),
+                                  title: const Text('@所有成员'),
+                                  onTap: () => _selectGroupMention(null),
+                                ),
+                              for (final member in members)
+                                ListTile(
+                                  dense: true,
+                                  leading: const Icon(Icons.person_outline),
+                                  title: Text('@${member['characterName']}'),
+                                  onTap: () => _selectGroupMention(member),
+                                ),
+                            ],
+                          )
+                        : ListView.builder(
+                            controller: _slashMenuScrollController,
+                            shrinkWrap: true,
+                            itemCount: skills.length,
+                            itemBuilder: (context, index) {
+                              final skill = skills[index];
+                              final name = (skill['name'] ?? '').toString();
+                              return ListTile(
+                                key: ValueKey('composer-slash-skill-$index'),
+                                dense: true,
+                                leading: const Icon(
+                                  Icons.auto_awesome_outlined,
+                                ),
+                                selected: index == _slashActiveIndex,
+                                title: Text(
+                                  (skill['displayName'] ?? name).toString(),
+                                ),
+                                subtitle: Text(
+                                  (skill['shortDescription'] ??
+                                          skill['description'] ??
+                                          '')
+                                      .toString(),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                onTap: () {
+                                  if (_pickerMode == 'add') {
+                                    setState(() {
+                                      if (!_selectedSkillNames.contains(name))
+                                        _selectedSkillNames.add(name);
+                                    });
+                                    _closeSlashMenu();
+                                  } else {
+                                    _selectSlashSkill(name);
+                                  }
+                                },
+                              );
+                            },
+                          ),
+                  ),
+                  if (_skillsLoading && _pickerMode != 'mention')
+                    const LinearProgressIndicator(),
                 ],
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 8,
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          _pickerMode == 'mention' ? '群成员' : '使用技能',
-                          style: AppTypography.label(context),
-                        ),
-                      ),
-                      Text(
-                        '${_pickerMode == 'mention' ? '@' : '/'}$_slashQuery',
-                        style: AppTypography.caption(context),
-                      ),
-                    ],
-                  ),
-                ),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 280),
-                  child: _pickerMode == 'mention'
-                      ? ListView(
-                          shrinkWrap: true,
-                          children: [
-                            if (_slashQuery.isEmpty ||
-                                '所有成员'.contains(_slashQuery))
-                              ListTile(
-                                dense: true,
-                                leading: const Icon(Icons.groups_outlined),
-                                title: const Text('@所有成员'),
-                                onTap: () => _selectGroupMention(null),
-                              ),
-                            for (final member in members)
-                              ListTile(
-                                dense: true,
-                                leading: const Icon(Icons.person_outline),
-                                title: Text('@${member['characterName']}'),
-                                onTap: () => _selectGroupMention(member),
-                              ),
-                          ],
-                        )
-                      : ListView.builder(
-                          controller: _slashMenuScrollController,
-                          shrinkWrap: true,
-                          itemCount: skills.length,
-                          itemBuilder: (context, index) {
-                            final skill = skills[index];
-                            final name = (skill['name'] ?? '').toString();
-                            return ListTile(
-                              key: ValueKey('composer-slash-skill-$index'),
-                              dense: true,
-                              leading: const Icon(Icons.auto_awesome_outlined),
-                              selected: index == _slashActiveIndex,
-                              title: Text(
-                                (skill['displayName'] ?? name).toString(),
-                              ),
-                              subtitle: Text(
-                                (skill['shortDescription'] ??
-                                        skill['description'] ??
-                                        '')
-                                    .toString(),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              onTap: () {
-                                if (_pickerMode == 'add') {
-                                  setState(() {
-                                    if (!_selectedSkillNames.contains(name))
-                                      _selectedSkillNames.add(name);
-                                  });
-                                  _closeSlashMenu();
-                                } else {
-                                  _selectSlashSkill(name);
-                                }
-                              },
-                            );
-                          },
-                        ),
-                ),
-                if (_skillsLoading && _pickerMode != 'mention')
-                  const LinearProgressIndicator(),
-              ],
               ),
             ),
           ),
@@ -2786,7 +2843,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
       _modelMenuOpen = true;
       _modelMenuPage = _ComposerModelMenuPage.effort;
       _draftReasoningValue = _reasoningIndexFor(
-        widget.reasoningEffort,
+        _effectiveReasoningEffort,
       ).toDouble();
     });
     await showModalBottomSheet<void>(
@@ -2830,9 +2887,39 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
       })
       .toList(growable: false);
 
+  List<Map<String, dynamic>> get _modelRoles => widget.roleModelConfigs
+      .where((role) => (role['roleId'] ?? '').toString().trim().isNotEmpty)
+      .toList(growable: false);
+
+  Map<String, dynamic>? get _activeModelRole {
+    for (final role in _modelRoles) {
+      if (role['roleId']?.toString() == _activeModelRoleId) return role;
+    }
+    return _modelRoles.firstOrNull;
+  }
+
+  int get _effectiveSelectedModelId {
+    final roleModelId = _intValue(_activeModelRole?['modelConfigId']);
+    return roleModelId > 0 ? roleModelId : widget.selectedModelId;
+  }
+
+  String get _effectiveReasoningEffort {
+    final roleEffort = (_activeModelRole?['reasoningEffort'] ?? '')
+        .toString()
+        .trim();
+    return roleEffort.isNotEmpty ? roleEffort : widget.reasoningEffort;
+  }
+
+  bool get _effectiveReasoningEnabled {
+    final roleValue = _intValue(_activeModelRole?['reasoningEnabled'] ?? -1);
+    if (roleValue == 0) return false;
+    if (roleValue == 1) return true;
+    return widget.reasoningEnabled;
+  }
+
   String _selectedModelLabel() {
     final selected = _llmModels
-        .where((model) => _intValue(model['id']) == widget.selectedModelId)
+        .where((model) => _intValue(model['id']) == _effectiveSelectedModelId)
         .firstOrNull;
     if (selected == null) return '选择模型';
     return _modelDisplayName(selected);
@@ -2844,7 +2931,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
   }
 
   String _reasoningLabel() {
-    return switch (widget.reasoningEffort) {
+    return switch (_effectiveReasoningEffort) {
       'low' => '低',
       'medium' => '中',
       'high' => '高',
@@ -2975,6 +3062,58 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (_modelRoles.length > 1)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 2, 8, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '选择角色',
+                  style: TextStyle(fontSize: 11, color: context.textTertiary),
+                ),
+                const SizedBox(height: 6),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      for (final role in _modelRoles)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: ChoiceChip(
+                            selected:
+                                role['roleId']?.toString() ==
+                                _activeModelRoleId,
+                            avatar: CircleAvatar(
+                              radius: 10,
+                              backgroundImage:
+                                  (role['avatar'] ?? '').toString().isEmpty
+                                  ? null
+                                  : NetworkImage(role['avatar'].toString()),
+                              child: (role['avatar'] ?? '').toString().isEmpty
+                                  ? Text(
+                                      (role['name'] ?? '?')
+                                              .toString()
+                                              .characters
+                                              .firstOrNull ??
+                                          '?',
+                                      style: const TextStyle(fontSize: 9),
+                                    )
+                                  : null,
+                            ),
+                            label: Text(
+                              (role['name'] ?? role['roleId']).toString(),
+                            ),
+                            onSelected: (_) =>
+                                _selectModelRole(role['roleId'].toString()),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
         _buildModelMenuRow(
           context: context,
           label: '强度',
@@ -2993,7 +3132,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
           onTap: () => _openModelMenuPage(_ComposerModelMenuPage.reasoning),
           trailing: _buildModelMenuValue(
             context: context,
-            label: widget.reasoningEnabled ? '支持' : '不支持',
+            label: _effectiveReasoningEnabled ? '支持' : '不支持',
           ),
         ),
         _buildModelMenuRow(
@@ -3022,7 +3161,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
                   ],
                 ),
               ),
-              if (!widget.reasoningEnabled)
+              if (!_effectiveReasoningEnabled)
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
                   child: Align(
@@ -3043,7 +3182,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
   Widget _buildReasoningSlider(BuildContext context) {
     return _ComposerReasoningSlider(
       value: _draftReasoningValue,
-      enabled: widget.reasoningEnabled,
+      enabled: _effectiveReasoningEnabled,
       onChanged: _previewReasoningIndex,
       onChangeEnd: _applyReasoningIndex,
     );
@@ -3061,7 +3200,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
         for (final model in _llmModels)
           _buildModelSelectionItem(
             context: context,
-            selected: _intValue(model['id']) == widget.selectedModelId,
+            selected: _intValue(model['id']) == _effectiveSelectedModelId,
             title: Text(
               (model['name'] ?? model['modelName'] ?? '').toString(),
               maxLines: 1,
@@ -3077,7 +3216,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
             onTap: () {
               final effort = (model['defaultReasoningEffort'] ?? 'high')
                   .toString();
-              widget.onModelChanged?.call(
+              _commitModelSettings(
                 _intValue(model['id']),
                 effort,
                 model['supportsReasoning'] == true,
@@ -3103,7 +3242,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
         ),
         _buildModelSelectionItem(
           context: context,
-          selected: widget.reasoningEnabled,
+          selected: _effectiveReasoningEnabled,
           title: Text(
             '支持',
             style: TextStyle(fontSize: 14, color: context.textPrimary),
@@ -3116,7 +3255,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
         ),
         _buildModelSelectionItem(
           context: context,
-          selected: !widget.reasoningEnabled,
+          selected: !_effectiveReasoningEnabled,
           title: Text(
             '不支持',
             style: TextStyle(fontSize: 14, color: context.textPrimary),
@@ -3208,10 +3347,63 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
     return (model['apiType'] ?? model['provider'] ?? '').toString();
   }
 
+  void _selectModelRole(String roleId) {
+    setState(() {
+      _activeModelRoleId = roleId;
+      final role = _activeModelRole;
+      _draftReasoningValue = _reasoningIndexFor(
+        (role?['reasoningEffort'] ?? '').toString().isEmpty
+            ? widget.reasoningEffort
+            : role!['reasoningEffort'].toString(),
+      ).toDouble();
+    });
+    _modelMenuStateSetter?.call(() {});
+  }
+
+  void _commitModelSettings(
+    int modelId,
+    String reasoningEffort,
+    bool reasoningEnabled,
+  ) {
+    final roleId = _activeModelRole?['roleId']?.toString() ?? '';
+    if (roleId.isNotEmpty && widget.onRoleModelChanged != null) {
+      widget.onRoleModelChanged!(
+        roleId,
+        modelId,
+        reasoningEffort,
+        reasoningEnabled,
+      );
+      return;
+    }
+    widget.onModelChanged?.call(modelId, reasoningEffort, reasoningEnabled);
+  }
+
+  void _previewModelSettings(
+    int modelId,
+    String reasoningEffort,
+    bool reasoningEnabled,
+  ) {
+    final roleId = _activeModelRole?['roleId']?.toString() ?? '';
+    if (roleId.isNotEmpty && widget.onRoleModelPreviewChanged != null) {
+      widget.onRoleModelPreviewChanged!(
+        roleId,
+        modelId,
+        reasoningEffort,
+        reasoningEnabled,
+      );
+      return;
+    }
+    widget.onModelPreviewChanged?.call(
+      modelId,
+      reasoningEffort,
+      reasoningEnabled,
+    );
+  }
+
   void _selectReasoningEnabled(bool value) {
-    widget.onModelChanged?.call(
-      widget.selectedModelId,
-      widget.reasoningEffort,
+    _commitModelSettings(
+      _effectiveSelectedModelId,
+      _effectiveReasoningEffort,
       value,
     );
     _backToModelEffort();
@@ -3233,10 +3425,10 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
     final clamped = value.round().clamp(0, efforts.length - 1);
     setState(() => _draftReasoningValue = clamped.toDouble());
     _modelMenuStateSetter?.call(() {});
-    widget.onModelChanged?.call(
-      widget.selectedModelId,
+    _commitModelSettings(
+      _effectiveSelectedModelId,
       efforts[clamped],
-      widget.reasoningEnabled,
+      _effectiveReasoningEnabled,
     );
   }
 
@@ -3248,10 +3440,10 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
       _reasoningDragging = true;
     });
     _modelMenuStateSetter?.call(() {});
-    widget.onModelPreviewChanged?.call(
-      widget.selectedModelId,
+    _previewModelSettings(
+      _effectiveSelectedModelId,
       efforts[clamped.round()],
-      widget.reasoningEnabled,
+      _effectiveReasoningEnabled,
     );
   }
 

@@ -135,6 +135,12 @@ List<SettingsCategory> buildSettingsCategories({
             icon: Icons.smartphone_outlined,
             route: AppRoutes.settingsAndroidAutomation,
           ),
+        if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS)
+          SettingItem(
+            title: '虚拟屏显示',
+            icon: Icons.splitscreen_outlined,
+            route: AppRoutes.settingsVirtualDisplay,
+          ),
         SettingItem(
           title: '运行概览',
           icon: Icons.monitor_heart_outlined,

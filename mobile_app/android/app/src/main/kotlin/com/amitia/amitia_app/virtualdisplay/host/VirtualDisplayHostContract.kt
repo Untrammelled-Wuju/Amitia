@@ -49,7 +49,17 @@ internal object VirtualDisplayHostBinderRegistry {
             Context.MODE_PRIVATE,
         ).getString(VirtualDisplayHostContract.KEY_TOKEN, null)
         if (expected.isNullOrBlank() || token != expected || !binder.isBinderAlive) return false
-        service = IVirtualDisplayHost.Stub.asInterface(binder)
+        val current = service
+        val currentBinder = try {
+            current?.asBinder()
+        } catch (error: Throwable) {
+            error.printStackTrace()
+            null
+        }
+        if (currentBinder?.isBinderAlive == true && currentBinder !== binder) return false
+        if (currentBinder !== binder) {
+            service = IVirtualDisplayHost.Stub.asInterface(binder)
+        }
         return true
     }
 

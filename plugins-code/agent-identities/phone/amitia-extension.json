@@ -1,0 +1,76 @@
+{
+  "manifestVersion": 1,
+  "placement": "device",
+  "extension": {
+    "id": "com.amitia/agent-identity-phone",
+    "name": { "default": "Agent 手机号身份" },
+    "description": { "default": "为 Agent 提供独立电话号码、短信和语音通话能力。" },
+    "version": "1.0.0",
+    "license": "AGPL-3.0-only",
+    "homepage": "https://amitia.untrammelled.top",
+    "categories": ["agent-identities", "communication"],
+    "keywords": ["phone", "sms", "voice", "twilio", "agent-identity"]
+  },
+  "publisher": { "id": "com.amitia", "displayName": "Amitia", "trustLevel": "official" },
+  "compatibility": { "minHostVersion": "0.1.0", "platforms": ["windows", "linux", "macos", "android", "ios"] },
+  "modules": [
+    {
+      "id": "phone-identity-runtime",
+      "name": { "default": "Agent 手机号运行时" },
+      "description": { "default": "发送短信、读取消息和发起语音通话。" },
+      "type": "javascript",
+      "placement": "device",
+      "runtime": {
+        "type": "javascript",
+        "entryPoint": "dist/index.js",
+        "timeout": "120s",
+        "memory": 268435456,
+        "maxSubprocesses": 0,
+        "capabilities": { "network": true, "filesystem": false },
+        "hostAccess": {
+          "filesystem": { "mode": "none" },
+          "network": { "mode": "host" },
+          "process": { "mode": "none" }
+        }
+      },
+      "providedCapabilities": [{ "id": "agent.identity.phone", "version": "1.0.0" }],
+      "contributions": [
+        {
+          "id": "phone-command",
+          "kind": "tool",
+          "name": { "default": "Agent 手机号命令" },
+          "description": { "default": "配置电话号码并发送短信或发起通话。" },
+          "requiredPermissions": ["storage.state.read", "storage.state.write", "secret.read", "service.network.request"],
+          "spec": {
+            "toolId": "com.amitia/agent-identity-phone/command",
+            "modelName": "agent_phone_command",
+            "handlerName": "command",
+            "inputSchema": {
+              "type": "object",
+              "required": ["action"],
+              "properties": {
+                "action": { "type": "string", "enum": ["status", "config", "configure", "enable", "disable", "execute"] },
+                "config": { "type": "object" },
+                "credentialRef": { "type": "string" },
+                "input": { "type": "object" }
+              },
+              "additionalProperties": false
+            },
+            "outputSchema": { "type": "object", "additionalProperties": true },
+            "riskLevel": "high",
+            "sideEffect": "external",
+            "runtime": { "runtimeType": "javascript", "handlerName": "command" }
+          }
+        }
+      ]
+    }
+  ],
+  "permissions": [
+    { "name": "storage.state.read", "reason": "读取手机号身份配置。", "required": true, "scope": "extension" },
+    { "name": "storage.state.write", "reason": "保存手机号身份配置。", "required": true, "scope": "extension" },
+    { "name": "secret.read", "reason": "读取用户授权的电话 Provider 凭据。", "required": true, "scope": "extension" },
+    { "name": "service.network.request", "reason": "连接电话、短信和语音 Provider。", "required": true, "scope": "extension" }
+  ],
+  "lifecycle": { "backgroundTasks": true, "networkAccess": true, "sandbox": true },
+  "integrity": { "algorithm": "sha256", "contentTreeHash": "" }
+}

@@ -9,7 +9,7 @@ vi.mock("../composables/useApi", () => ({
   useApi: () => ({ get: mocks.get }),
 }));
 
-async function render(sectionId: "character" | "memory" | "tasks" | "continuity" | "game" | "workshop" | "extensions") {
+async function render(sectionId: "character" | "memory" | "tasks" | "game" | "workshop" | "extensions") {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -48,20 +48,16 @@ describe("一级导航对应的第二栏", () => {
     memory.wrapper.unmount();
   });
 
-  it("主动任务和持续事项仅提供新建入口与不可点击的已有标题", async () => {
+  it("任务第二栏仅提供主动任务和持续事项入口", async () => {
     const tasks = await render("tasks");
-    expect(tasks.wrapper.get(".subsection-heading").text()).toBe("已有任务");
-    expect(tasks.wrapper.find(".section-action-list button:not(.primary)").exists()).toBe(false);
-    await tasks.wrapper.get("button.section-action.primary").trigger("click");
-    await vi.waitFor(() => expect(tasks.router.currentRoute.value.fullPath).toBe("/reminders?create=1"));
+    expect(tasks.wrapper.findAll(".section-entry strong").map(node => node.text())).toEqual([
+      "主动任务",
+      "持续事项",
+    ]);
+    expect(tasks.wrapper.find(".section-action").exists()).toBe(false);
+    await tasks.wrapper.findAll(".section-entry")[1].trigger("click");
+    await vi.waitFor(() => expect(tasks.router.currentRoute.value.fullPath).toBe("/continuity"));
     tasks.wrapper.unmount();
-
-    const continuity = await render("continuity");
-    expect(continuity.wrapper.get(".subsection-heading").text()).toBe("已有事项");
-    expect(continuity.wrapper.find(".section-action-list button:not(.primary)").exists()).toBe(false);
-    await continuity.wrapper.get("button.section-action.primary").trigger("click");
-    await vi.waitFor(() => expect(continuity.router.currentRoute.value.fullPath).toBe("/continuity?create=1"));
-    continuity.wrapper.unmount();
   });
 
   it("游戏模式显示添加入口与已安装插件列表", async () => {

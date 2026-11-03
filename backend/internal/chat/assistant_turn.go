@@ -702,16 +702,28 @@ func (r *assistantTurnRecorder) FinalizeFailure(ctx context.Context, status stri
 		"retryable":          true,
 		"userMessage":        "Agent 执行失败，可重试",
 		"internalMessage":    "",
+		"message":            "",
+		"error":              "",
+		"detail":             "",
+		"cause":              "",
+		"rawError":           "",
 		"provider":           strings.TrimSpace(r.Provider),
 		"recoveryCheckpoint": true,
 	}
 	if cause != nil {
-		payload["internalMessage"] = cause.Error()
 		raw := cause.Error()
+		payload["internalMessage"] = raw
+		payload["message"] = raw
+		payload["error"] = raw
+		payload["detail"] = fmt.Sprintf("%+v", cause)
+		payload["cause"] = raw
+		payload["rawError"] = raw
 		var modelErr *TextModelCallError
 		if errors.As(cause, &modelErr) {
 			raw = modelErr.RawError
 			payload["internalMessage"] = raw
+			payload["rawError"] = raw
+			payload["error"] = raw
 		}
 		lower := strings.ToLower(raw)
 		switch {

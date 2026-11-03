@@ -11,6 +11,7 @@ export interface QQInboundPayload {
   accountId: string
   conversationId: string
   peerId: string
+  peerKind: "group" | "private"
   senderId: string
   messageId: string
   contentType: "text" | "image" | "video" | "voice"
@@ -19,6 +20,7 @@ export interface QQInboundPayload {
   videoUrl: string
   audioUrl: string
   createdAt: number
+  triggerMode: "direct" | "all"
 }
 
 export function buildQQInboundPayload(input: {
@@ -44,6 +46,7 @@ export function buildQQInboundPayload(input: {
     accountId: input.accountId || "qqbot",
     conversationId: last.groupId ? `conv-group-${last.groupId}` : `conv-${last.fromUserId}`,
     peerId,
+    peerKind: last.groupId ? "group" : "private",
     senderId: String(last.fromUserId || "").trim(),
     messageId: String(last.messageId || "").trim(),
     contentType,
@@ -52,5 +55,6 @@ export function buildQQInboundPayload(input: {
     videoUrl,
     audioUrl,
     createdAt: Number(last.createdAt) || Date.now(),
+    triggerMode: last.groupId ? "all" : "direct",
   }
 }

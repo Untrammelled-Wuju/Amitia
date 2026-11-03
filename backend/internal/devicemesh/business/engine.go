@@ -57,6 +57,7 @@ type Request struct {
 	SenderID           string                         `json:"senderId,omitempty"`
 	MentionNames       []string                       `json:"mentionNames,omitempty"`
 	ReplyExcerpt       string                         `json:"replyExcerpt,omitempty"`
+	WorkerRole         string                         `json:"workerRole,omitempty"`
 	FileURL            string                         `json:"fileUrl,omitempty"`
 	FileName           string                         `json:"fileName,omitempty"`
 }
@@ -106,6 +107,7 @@ type Generation struct {
 	Reasoning           string          `json:"reasoning,omitempty"`
 	Tokens              int             `json:"tokens"`
 	Partial             bool            `json:"-"`
+	Round               int             `json:"-"`
 }
 
 type Event struct {
@@ -124,6 +126,7 @@ type Event struct {
 	CharacterName   string                      `json:"characterName,omitempty"`
 	CharacterAvatar string                      `json:"characterAvatar,omitempty"`
 	RoleOwnerID     string                      `json:"roleOwnerId,omitempty"`
+	Round           int                         `json:"round,omitempty"`
 }
 
 type TaskEvent struct {
@@ -161,6 +164,8 @@ type Inference struct {
 	Message             string
 	Group               *GroupReplyContext
 	PreparedReply       *PreparedGroupReply
+	WorkerRole          string
+	Round               int `json:"-"`
 }
 
 type DerivedMemory struct {
@@ -225,7 +230,7 @@ type checkpoint struct {
 }
 
 type lane struct {
-	mu    sync.Mutex
+	gate  chan struct{}
 	users int
 }
 
@@ -250,25 +255,43 @@ func (e *Engine) ValidateWiring() error {
 	return nil
 }
 
-func (e *Engine) lock(key string) func() {
+func (e *Engine) lockContext(ctx context.Context, key string) (func(), error) {
 	e.mu.Lock()
 	l := e.lanes[key]
 	if l == nil {
-		l = &lane{}
+		l = &lane{gate: make(chan struct{}, 1)}
 		e.lanes[key] = l
 	}
 	l.users++
 	e.mu.Unlock()
-	l.mu.Lock()
-	return func() {
-		l.mu.Unlock()
+	select {
+	case l.gate <- struct{}{}:
+	case <-ctx.Done():
 		e.mu.Lock()
 		l.users--
 		if l.users == 0 {
 			delete(e.lanes, key)
 		}
 		e.mu.Unlock()
+		return nil, context.Cause(ctx)
 	}
+	return func() {
+		<-l.gate
+		e.mu.Lock()
+		l.users--
+		if l.users == 0 {
+			delete(e.lanes, key)
+		}
+		e.mu.Unlock()
+	}, nil
+}
+
+func (e *Engine) lock(key string) func() {
+	unlock, err := e.lockContext(context.Background(), key)
+	if err != nil {
+		panic(err)
+	}
+	return unlock
 }
 
 func body(value any) json.RawMessage { encoded, _ := json.Marshal(value); return encoded }
@@ -421,7 +444,26 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 	if request.TargetDeviceID == "" {
 		request.TargetDeviceID = request.DeviceID
 	}
-	unlock := e.lock(request.SpaceID + "\x00" + request.TargetDeviceID + "\x00" + request.ConversationID)
+	ctx, cancel := context.WithCancelCause(ctx)
+	activeKey := request.SpaceID + "\x00" + request.DeviceID + "\x00" + request.RequestID
+	e.mu.Lock()
+	if _, exists := e.active[activeKey]; exists {
+		e.mu.Unlock()
+		cancel(nil)
+		return Response{}, errors.New("当前请求正在执行")
+	}
+	e.active[activeKey] = cancel
+	e.mu.Unlock()
+	defer func() {
+		e.mu.Lock()
+		delete(e.active, activeKey)
+		e.mu.Unlock()
+		cancel(nil)
+	}()
+	unlock, err := e.lockContext(ctx, request.SpaceID+"\x00"+request.TargetDeviceID+"\x00"+request.ConversationID)
+	if err != nil {
+		return Response{}, err
+	}
 	defer unlock()
 	return e.runEventsLocked(ctx, request, emit)
 }
@@ -618,7 +660,7 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 	if len(request.WorkingDirectory) > 4096 || strings.ContainsAny(request.WorkingDirectory, "\x00\r\n") {
 		return Response{}, errors.New("对话工作目录无效")
 	}
-	if err := resolveConversationSettings(&request, snapshot); err != nil {
+	if err := resolveConversationSettings(&request, snapshot, role); err != nil {
 		return Response{}, err
 	}
 	fingerprintData := map[string]any{"conversationId": request.ConversationID, "message": request.Message, "roleId": request.RoleID, "historicalRoleId": request.HistoricalRoleID, "targetDeviceId": request.TargetDeviceID, "context": request.Context, "projectId": projectID, "workspaces": workspaces, "primaryWorkspaceId": primaryWorkspaceID, "workingDirectory": request.WorkingDirectory}
@@ -830,7 +872,9 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 		}
 		return nil
 	}
-	inference := Inference{Quote: quote, Attachments: request.Attachments, Context: request.Context, Scope: scope, ConversationID: request.ConversationID, ProjectID: projectID, Workspaces: workspaces, PrimaryWorkspaceID: primaryWorkspaceID, WorkingDirectory: request.WorkingDirectory, Snapshot: snapshot, HistoricalSnapshot: historicalSnapshot, PermissionMode: request.PermissionMode, Message: request.Message, Emit: emitCurrent}
+	inferenceSnapshot := workerInferenceSnapshot(request.WorkerRole, snapshot)
+	inferenceHistoricalSnapshot := workerHistoricalSnapshot(request.WorkerRole, historicalSnapshot)
+	inference := Inference{Quote: quote, Attachments: request.Attachments, Context: request.Context, Scope: scope, ConversationID: request.ConversationID, ProjectID: projectID, Workspaces: workspaces, PrimaryWorkspaceID: primaryWorkspaceID, WorkingDirectory: request.WorkingDirectory, Snapshot: inferenceSnapshot, HistoricalSnapshot: inferenceHistoricalSnapshot, PermissionMode: request.PermissionMode, Message: request.Message, Emit: emitCurrent, WorkerRole: request.WorkerRole}
 	inference.SandboxRoot, inference.SandboxAllowNetwork = sandboxConstraintFromContext(ctx)
 	inference.PreparedReply = request.PreparedReply
 	if prepared != nil && snapshot.Group != nil {
@@ -861,17 +905,21 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 		status, eventType := "completed", "turn.completed"
 		if finalErr != nil || finalResponse.Interrupted || !finalResponse.Saved {
 			status, eventType = "failed", "turn.failed"
-			if finalResponse.Interrupted {
+			if errors.Is(finalErr, ErrInterrupted) {
 				status, eventType = "interrupted", "turn.interrupted"
 			}
 		}
 		payload := map[string]any{"saved": finalResponse.Saved}
 		if finalErr != nil {
-			payload["message"] = finalErr.Error()
 			runtimeError := DescribeRuntimeError(finalErr)
 			payload["errorCode"] = runtimeError.ErrorCode
 			payload["userMessage"] = runtimeError.UserMessage
 			payload["internalMessage"] = runtimeError.InternalMessage
+			payload["message"] = runtimeError.Message
+			payload["error"] = runtimeError.Error
+			payload["detail"] = runtimeError.Detail
+			payload["cause"] = runtimeError.Cause
+			payload["rawError"] = runtimeError.RawError
 			payload["retryable"] = runtimeError.Retryable
 			payload["stage"] = runtimeError.Stage
 			if runtimeError.ToolName != "" {
@@ -880,6 +928,19 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 			if runtimeError.Provider != "" {
 				payload["provider"] = runtimeError.Provider
 			}
+		}
+		if finalErr == nil && finalResponse.Interrupted {
+			runtimeError := DescribeRuntimeError(ErrInterrupted)
+			payload["errorCode"] = runtimeError.ErrorCode
+			payload["userMessage"] = runtimeError.UserMessage
+			payload["internalMessage"] = runtimeError.InternalMessage
+			payload["message"] = runtimeError.Message
+			payload["error"] = runtimeError.Error
+			payload["detail"] = runtimeError.Detail
+			payload["cause"] = runtimeError.Cause
+			payload["rawError"] = runtimeError.RawError
+			payload["retryable"] = runtimeError.Retryable
+			payload["stage"] = runtimeError.Stage
 		}
 		messageID := ""
 		if finalResponse.Saved && !inference.InternalWorker && !(inference.Ingress != nil && inference.Ingress.IsInternal) {
@@ -938,29 +999,39 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 	}
 	if err != nil {
 		if ctx.Err() != nil {
-			response := Response{ConversationID: request.ConversationID, RequestID: request.RequestID, TurnID: scope.TurnID, ExecutionID: scope.ExecutionID, Scope: scope, Interrupted: true, MemoryStatus: "interrupted"}
+			cause := context.Cause(ctx)
+			if cause == nil {
+				cause = ctx.Err()
+			}
+			interrupted := errors.Is(cause, ErrInterrupted)
+			memoryStatus := "failed"
+			if interrupted {
+				memoryStatus = "interrupted"
+			}
+			response := Response{ConversationID: request.ConversationID, RequestID: request.RequestID, TurnID: scope.TurnID, ExecutionID: scope.ExecutionID, Scope: scope, Interrupted: true, MemoryStatus: memoryStatus}
 			if generation.Partial {
 				response.Generation = generation
 			}
 			if port, ok := e.data.(coordination.InterruptionPort); ok && ctx.Value(realtimeContextKey{}) != true {
 				saveContext, saveCancel := context.WithTimeout(context.Background(), 5*time.Second)
-				saveErr := port.SaveInterrupted(saveContext, coordination.InterruptedReply{Scope: scope, ConversationID: request.ConversationID, Text: response.Text, Reasoning: response.Reasoning, Reason: context.Cause(ctx).Error()})
+				reason := cause.Error()
+				saveErr := port.SaveInterrupted(saveContext, coordination.InterruptedReply{Scope: scope, ConversationID: request.ConversationID, Text: response.Text, Reasoning: response.Reasoning, Reason: reason})
 				saveCancel()
 				response.Saved = saveErr == nil
 				if saveErr != nil {
-					return response, errors.Join(context.Cause(ctx), saveErr)
+					return response, errors.Join(cause, saveErr)
 				}
 			}
-			return response, context.Cause(ctx)
+			return response, cause
 		}
 		return Response{}, err
 	}
 	if generation.Reasoning != "" {
-		if err := emitCurrent(Event{Type: "reasoning-completed"}); err != nil {
+		if err := emitCurrent(Event{Type: "reasoning-completed", Round: generation.Round}); err != nil {
 			return Response{}, err
 		}
 	}
-	if err := emitCurrent(Event{Type: "output-completed"}); err != nil {
+	if err := emitCurrent(Event{Type: "output-completed", Round: generation.Round}); err != nil {
 		return Response{}, err
 	}
 	if err := e.coordination.Validate(ctx, scope); err != nil {

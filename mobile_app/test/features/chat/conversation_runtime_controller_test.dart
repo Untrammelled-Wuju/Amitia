@@ -151,6 +151,7 @@ class _FakeChatService extends ChatService {
   bool moreTurns = false;
   String turnCursor = '';
   String requestedTurnCursor = '';
+  int snapshotCount = 0;
   List<Map<String, dynamic>> completedCitationSnapshot =
       const <Map<String, dynamic>>[];
   Completer<AssistantTurnPageDto>? pendingTurnPage;
@@ -204,6 +205,7 @@ class _FakeChatService extends ChatService {
   Future<ConversationSnapshotDto> conversationSnapshot(
     String conversationId,
   ) async {
+    snapshotCount++;
     return ConversationSnapshotDto(
       version: 1,
       revision: 1,
@@ -498,6 +500,84 @@ void main() {
     await events.close();
   });
 
+  test('直接回复流中的工具事件实时生成执行过程', () async {
+    SharedPreferences.setMockInitialValues({});
+    final events = StreamController<ChatStreamEvent>.broadcast();
+    final phases = StreamController<Map<String, dynamic>>();
+    final service = _FakeChatService(events)..streamed = phases;
+    final controller = ConversationRuntimeController(service);
+    final sending = controller.sendText('调用显示状态');
+    await Future<void>.delayed(Duration.zero);
+    final requestId = service.submittedRequestId;
+    final scope = <String, dynamic>{
+      ...(service.owned as _FakeOwnedService).scope(),
+      'requestId': requestId,
+      'turnId': 'turn-live',
+      'executionId': 'execution-live',
+    };
+    phases.add({
+      'type': 'started',
+      'conversationId': 'conversation-1',
+      'executionScope': scope,
+    });
+    phases.add({
+      'type': 'tool-started',
+      'executionScope': scope,
+      'progress': {
+        'toolCallId': 'call-live',
+        'toolName': 'android.display.status',
+        'arguments': '{}',
+      },
+    });
+    phases.add({
+      'type': 'tool-completed',
+      'executionScope': scope,
+      'progress': {
+        'toolCallId': 'call-live',
+        'toolName': 'android.display.status',
+        'result': '{"state":"ready"}',
+        'status': 'SUCCESS',
+      },
+    });
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+
+    final duringTool = controller.messages.singleWhere(
+      (message) => message.role == MessageRole.assistant,
+    );
+    final toolItems =
+        duringTool.assistantTurn?.items
+            .where((item) => item.type == 'tool_call')
+            .toList() ??
+        const <AssistantTurnItemDto>[];
+    expect(toolItems, hasLength(1));
+    expect(toolItems.single.toolName, 'android.display.status');
+    expect(toolItems.single.status, 'completed');
+    expect(toolItems.single.resultJson, contains('"state":"ready"'));
+
+    phases.add({'type': 'delta', 'executionScope': scope, 'text': '已完成'});
+    phases.add({
+      'type': 'completed',
+      'data': {
+        'saved': true,
+        'requestId': requestId,
+        'executionScope': scope,
+        'reply': '已完成',
+      },
+    });
+    await phases.close();
+    await sending;
+    final completed = controller.messages.singleWhere(
+      (message) => message.role == MessageRole.assistant,
+    );
+    expect(completed.status, MessageStatus.delivered);
+    expect(
+      completed.assistantTurn?.items.any((item) => item.type == 'tool_call'),
+      isTrue,
+    );
+    controller.dispose();
+    await events.close();
+  });
+
   test('保存成功后的连接异常不能把回复改回中断', () async {
     SharedPreferences.setMockInitialValues({});
     final events = StreamController<ChatStreamEvent>.broadcast();
@@ -511,6 +591,44 @@ void main() {
           .status,
       MessageStatus.delivered,
     );
+    expect(controller.lastError, isNull);
+    controller.dispose();
+    await events.close();
+  });
+
+  test('失败终态将完整原始错误投影到助手消息', () async {
+    SharedPreferences.setMockInitialValues({});
+    final events = StreamController<ChatStreamEvent>.broadcast();
+    final phases = StreamController<Map<String, dynamic>>();
+    final service = _FakeChatService(events)..streamed = phases;
+    final controller = ConversationRuntimeController(service);
+    final sending = controller.sendText('调用工具');
+    await Future<void>.delayed(Duration.zero);
+    phases.add({
+      'type': 'started',
+      'conversationId': 'conversation-1',
+      'executionScope': (service.owned as _FakeOwnedService).scope(),
+    });
+    phases.add({
+      'type': 'failed',
+      'message': 'tool execution cancelled: device_authority_expired',
+      'errorCode': 'task_execution_failed',
+      'userMessage': 'tool execution cancelled: device_authority_expired',
+      'internalMessage': 'tool execution cancelled: device_authority_expired',
+      'error': 'tool execution cancelled: device_authority_expired',
+      'detail': 'tool execution cancelled: device_authority_expired',
+      'cause': 'device_authority_expired',
+      'rawError': 'tool execution cancelled: device_authority_expired',
+      'data': {'saved': false},
+    });
+    await phases.close();
+    await sending;
+    final assistant = controller.messages.singleWhere(
+      (message) => message.role == MessageRole.assistant,
+    );
+    expect(assistant.status, MessageStatus.error);
+    expect(assistant.runtimeErrorDetail, contains('rawError'));
+    expect(assistant.runtimeErrorDetail, contains('device_authority_expired'));
     expect(controller.lastError, isNull);
     controller.dispose();
     await events.close();
@@ -554,6 +672,97 @@ void main() {
     await controller.openConversation('conversation-1');
     expect(controller.messages.single.status, MessageStatus.delivered);
     expect(controller.messages.single.assistantTurn!.status, 'completed');
+    controller.dispose();
+    await events.close();
+  });
+
+  test('快照暂时缺少刚完成的 Turn 时保留工具执行流', () async {
+    SharedPreferences.setMockInitialValues({});
+    final events = StreamController<ChatStreamEvent>.broadcast();
+    final service = _FakeChatService(events);
+    service.snapshotMessages = (_) => [
+      MessageDto(
+        id: 'reply',
+        conversationId: 'conversation-1',
+        requestId: 'request-1',
+        role: 'assistant',
+        content: '工具执行完成',
+        status: 'completed',
+        createdAt: '2026-11-03T07:00:00Z',
+      ),
+    ];
+    service.snapshotTurns = [
+      const AssistantTurnDto(
+        id: 'turn-1',
+        conversationId: 'conversation-1',
+        requestId: 'request-1',
+        executionId: 'execution-1',
+        status: 'completed',
+        items: [
+          AssistantTurnItemDto(
+            id: 'call-1',
+            turnId: 'turn-1',
+            conversationId: 'conversation-1',
+            sequence: 1,
+            type: 'tool_call',
+            status: 'completed',
+            callId: 'call-1',
+            toolName: 'android.display.status',
+          ),
+          AssistantTurnItemDto(
+            id: 'result-1',
+            turnId: 'turn-1',
+            conversationId: 'conversation-1',
+            sequence: 2,
+            type: 'tool_result',
+            status: 'completed',
+            callId: 'call-1',
+            toolName: 'android.display.status',
+            resultJson: '{"state":"ready"}',
+          ),
+        ],
+      ),
+    ];
+    final controller = ConversationRuntimeController(service);
+    await controller.openConversation('conversation-1');
+    expect(
+      controller.messages.single.assistantTurn?.items
+          .where((item) => item.type.startsWith('tool_'))
+          .length,
+      2,
+    );
+
+    service.snapshotTurns = [];
+    events.add(const ChatStreamEvent('snapshot.required', {}));
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+
+    final assistant = controller.messages.singleWhere(
+      (message) => message.role == MessageRole.assistant,
+    );
+    expect(assistant.assistantTurn?.status, 'completed');
+    expect(
+      assistant.assistantTurn?.items
+          .where((item) => item.type.startsWith('tool_'))
+          .length,
+      2,
+    );
+    controller.dispose();
+    await events.close();
+  });
+
+  test('事件流异常结束立即读取快照校正', () async {
+    SharedPreferences.setMockInitialValues({});
+    final events = StreamController<ChatStreamEvent>.broadcast();
+    final service = _FakeChatService(events);
+    final controller = ConversationRuntimeController(service);
+    await controller.openConversation('conversation-1');
+    final before = service.snapshotCount;
+
+    events.addError(StateError('stream interrupted'));
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+
+    expect(service.snapshotCount, greaterThan(before));
+    expect(controller.lastError.toString(), contains('stream interrupted'));
     controller.dispose();
     await events.close();
   });
@@ -670,7 +879,7 @@ void main() {
     controller.dispose();
     await events.close();
   });
-  test('自动化指示随工具事件更新，断线后等待确认，完成后撤下', () async {
+  test('自动化指示随工具事件更新，断线后按权威快照校正', () async {
     final events = StreamController<ChatStreamEvent>.broadcast();
     final controller = ConversationRuntimeController(_FakeChatService(events));
     await controller.openConversation('conversation-1');
@@ -696,11 +905,50 @@ void main() {
     await emit(2, 'tool.running', 'running');
     expect(controller.automationStatus?.label, '正在点击');
     events.addError(StateError('disconnected'));
-    await Future<void>.delayed(const Duration(milliseconds: 30));
-    expect(controller.automationStatus?.label, '正在同步自动化状态');
-    await Future<void>.delayed(const Duration(milliseconds: 950));
-    await emit(3, 'tool.completed', 'completed');
+    await Future<void>.delayed(const Duration(milliseconds: 80));
     expect(controller.automationStatus, isNull);
+    controller.dispose();
+    await events.close();
+  });
+  test('运行流接受后端 agent_event 并暴露完整审批参数', () async {
+    final events = StreamController<ChatStreamEvent>.broadcast();
+    final controller = ConversationRuntimeController(_FakeChatService(events));
+    await controller.openConversation('conversation-1');
+
+    events.add(
+      ChatStreamEvent(
+        'agent_event',
+        _event(
+            sequence: 1,
+            id: 'approval-event-1',
+            type: 'approval.requested',
+            status: 'waiting_approval',
+          )
+          ..['callId'] = 'call-1'
+          ..['payload'] = {
+            'approvalId': 'approval-1',
+            'tool': 'android_virtual_display_create',
+            'risk': 'high',
+            'arguments': '{"width":1080,"height":1920}',
+            'expiresAt': '2026-11-03T08:20:00Z',
+          },
+      ),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+
+    expect(controller.pendingApprovals, hasLength(1));
+    expect(controller.pendingApprovals.single, {
+      'id': 'approval-1',
+      'conversationId': 'conversation-1',
+      'turnId': 'turn-1',
+      'toolCallId': 'call-1',
+      'toolName': 'android_virtual_display_create',
+      'arguments': '{"width":1080,"height":1920}',
+      'riskLevel': 'high',
+      'expiresAt': '2026-11-03T08:20:00Z',
+    });
+    expect(controller.activeTurnId, 'turn-1');
+
     controller.dispose();
     await events.close();
   });

@@ -15,6 +15,7 @@ import (
 	"github.com/u-ai/backend/internal/conversationstream"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	"github.com/u-ai/backend/internal/extension/kernel/execution"
 	"github.com/u-ai/backend/internal/middleware/security"
 	amitialog "log"
 )
@@ -145,7 +146,9 @@ func registerMeshChatRuntimeRouter(mesh *gin.RouterGroup, services *AppServices,
 					if !found {
 						return errors.New("审批不存在或不属于目标执行")
 					}
-					if err := services.KernelContainer.ApprovalBroker.Resolve(request.ApprovalID, request.Approved); err != nil {
+					if err := services.KernelContainer.ApprovalBroker.ResolveWithActor(request.ApprovalID, request.Approved, execution.ApprovalActor{
+						ID: actor.DeviceID.String(), PrincipalType: string(actor.PrincipalType), AuthMethod: actor.AuthMethod, SessionID: actor.SessionID,
+					}); err != nil {
 						return err
 					}
 					data = gin.H{"approved": request.Approved, "id": request.ApprovalID, "turnId": request.TurnID, "executionScope": view.Scope}

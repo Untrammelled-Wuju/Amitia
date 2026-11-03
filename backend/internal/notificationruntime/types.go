@@ -152,6 +152,21 @@ type PushEnvelope struct {
 	Data           map[string]string
 }
 
+type AttentionNotification struct {
+	SpaceID        string
+	AttentionID    string
+	Kind           string
+	State          string
+	Title          string
+	Body           string
+	ConversationID string
+	CharacterID    string
+	RequestID      string
+	ApprovalID     string
+	DeepLink       string
+	ExpiresAt      *time.Time
+}
+
 type ExecutionState struct {
 	RunID          string
 	ConversationID string

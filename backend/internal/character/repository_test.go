@@ -117,6 +117,68 @@ func TestGetRuntimeProfileUsesVersionedDefaultForBrokenJSON(t *testing.T) {
 	}
 }
 
+func TestCharacterModelSettingsPersistWithoutChangingModelConfig(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "app.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&Character{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`CREATE TABLE model_configs (
+		id INTEGER PRIMARY KEY,
+		name TEXT NOT NULL DEFAULT '',
+		model_name TEXT NOT NULL DEFAULT '',
+		temperature REAL NOT NULL DEFAULT 0.7,
+		is_active INTEGER NOT NULL DEFAULT 0
+	)`).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`INSERT INTO model_configs(id, name, model_name, temperature, is_active) VALUES(7, 'role-model', 'model-a', 0.7, 1)`).Error; err != nil {
+		t.Fatal(err)
+	}
+	ctx := app.NewAppContext(db, nil)
+	svc := NewService(NewRepository(ctx), ctx).(*service)
+	enabled := 1
+	created, err := svc.CreateForSpace(&CreateCharacterRequest{
+		Name: "模型角色", ModelConfigID: 7, ReasoningEffort: "xhigh", ReasoningEnabled: &enabled,
+		PersonalityConfig: json.RawMessage(`{}`),
+	}, "space-model")
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile, err := NewRepository(ctx).(*repository).GetRuntimeProfileForSpace(created.ID, "space-model", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if profile.ModelConfigID != 7 || profile.ReasoningEffort != "xhigh" || profile.ReasoningEnabled != 1 {
+		t.Fatalf("runtime profile missing role model settings: %+v", profile)
+	}
+	effort := "low"
+	disabled := 0
+	modelID := 0
+	if _, err := svc.UpdateForSpace(created.ID, &UpdateCharacterRequest{
+		ModelConfigID: &modelID, ReasoningEffort: &effort, ReasoningEnabled: &disabled,
+	}, "space-model"); err != nil {
+		t.Fatal(err)
+	}
+	var temperature float64
+	var modelName string
+	if err := db.Raw("SELECT temperature, model_name FROM model_configs WHERE id = 7").Row().Scan(&temperature, &modelName); err != nil {
+		t.Fatal(err)
+	}
+	if temperature != 0.7 || modelName != "model-a" {
+		t.Fatalf("role override changed base model config: temperature=%v model=%s", temperature, modelName)
+	}
+	profile, err = NewRepository(ctx).(*repository).GetRuntimeProfileForSpace(created.ID, "space-model", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if profile.ModelConfigID != 0 || profile.ReasoningEffort != "low" || profile.ReasoningEnabled != 0 {
+		t.Fatalf("cleared role model settings were not persisted: %+v", profile)
+	}
+}
+
 func TestCreateThenUpdatePersonalityConfigRoundTrip(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "app.db")), &gorm.Config{})
 	if err != nil {

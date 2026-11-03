@@ -3,6 +3,7 @@ package interaction
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"math"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/agentpermission"
 	"github.com/u-ai/backend/internal/auth"
 	coreexec "github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/temporal"
@@ -97,6 +99,7 @@ var (
 	ErrBackpressureCooldown  = errors.New("unified_entry: in cooldown period")
 	ErrInvalidChannel        = errors.New("unified_entry: invalid channel")
 	ErrScopeResolutionFailed = errors.New("unified_entry: scope resolution failed")
+	ErrSourceAccessDenied    = errors.New("unified_entry: source access denied")
 )
 
 type UnifiedEntryRequest struct {
@@ -106,6 +109,8 @@ type UnifiedEntryRequest struct {
 	SpaceID                  string             `json:"spaceId,omitempty"`
 	DeviceTimezone           string             `json:"deviceTimezone,omitempty"`
 	Source                   string             `json:"source,omitempty"`
+	AdmissionTrigger         string             `json:"admissionTrigger,omitempty"`
+	AdmissionExplicit        bool               `json:"admissionExplicit,omitempty"`
 	ProactiveTaskInstruction string             `json:"-"`
 	ProactiveTimeContext     string             `json:"-"`
 	ProactiveRecentContext   string             `json:"-"`
@@ -113,6 +118,8 @@ type UnifiedEntryRequest struct {
 	ProactiveEmotion         string             `json:"-"`
 	ProactiveMemory          string             `json:"-"`
 	CharacterID              string             `json:"characterId,omitempty"`
+	AgentID                  string             `json:"agentId,omitempty"`
+	TeamID                   string             `json:"teamId,omitempty"`
 	ConversationID           string             `json:"conversationId,omitempty"`
 	ThreadID                 string             `json:"threadId,omitempty"`
 	WorkspaceID              string             `json:"workspaceId,omitempty"`
@@ -147,6 +154,9 @@ type UnifiedEntryRequest struct {
 	RequestID                string             `json:"requestId,omitempty"`
 	TurnID                   string             `json:"turnId,omitempty"`
 	ExecutionID              string             `json:"executionId,omitempty"`
+	TaskRunID                string             `json:"taskRunId,omitempty"`
+	WorkflowRunID            string             `json:"workflowRunId,omitempty"`
+	ApprovalID               string             `json:"approvalId,omitempty"`
 	SessionID                string             `json:"sessionId,omitempty"`
 	IsInternal               bool               `json:"-"`
 	SuppressReplyPersistence bool               `json:"-"`
@@ -163,8 +173,27 @@ type UnifiedEntry struct {
 	execService    *coreexec.ExecutionService
 	bpCfg          BackpressureConfig
 	bpState        *BackpressureState
+	access         *agentpermission.Service
+	agentRuntime   AgentRuntimeProvider
 	mu             sync.Mutex
 	clock          temporal.Clock
+}
+
+type AgentRuntimeProfile struct {
+	AgentID          string   `json:"agentId"`
+	TeamID           string   `json:"teamId"`
+	RuntimeID        string   `json:"runtimeId"`
+	ModelConfigID    int      `json:"modelConfigId"`
+	ReasoningEffort  string   `json:"reasoningEffort"`
+	PermissionMode   string   `json:"permissionMode"`
+	WorkspaceID      string   `json:"workspaceId"`
+	WorkspaceRootURI string   `json:"workspaceRootUri"`
+	Skills           []string `json:"skills"`
+	Tools            []string `json:"tools"`
+}
+
+type AgentRuntimeProvider interface {
+	ResolveAgentRuntime(context.Context, string, string) (AgentRuntimeProfile, bool, error)
 }
 
 type EntryExecutor interface {
@@ -196,6 +225,61 @@ func (e *UnifiedEntry) SetExecutionService(svc *coreexec.ExecutionService) {
 	e.execService = svc
 }
 
+func (e *UnifiedEntry) SetAccessService(svc *agentpermission.Service) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.access = svc
+}
+
+func (e *UnifiedEntry) SetAgentRuntimeProvider(provider AgentRuntimeProvider) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.agentRuntime = provider
+}
+
+func admissionInput(req *UnifiedEntryRequest) agentpermission.AdmissionInput {
+	trigger := strings.TrimSpace(req.AdmissionTrigger)
+	if trigger == "" {
+		switch {
+		case strings.EqualFold(req.Source, "proactive"):
+			trigger = "inferred"
+		case strings.EqualFold(req.PeerKind, "group"):
+			if len(req.MentionNames) > 0 {
+				trigger = "mention"
+			} else if req.ReplyToMessageID != nil && strings.TrimSpace(*req.ReplyToMessageID) != "" {
+				trigger = "reply"
+			} else {
+				trigger = "all"
+			}
+		default:
+			trigger = "direct"
+		}
+	}
+	explicit := req.AdmissionExplicit
+	if !strings.EqualFold(req.PeerKind, "group") || strings.EqualFold(req.Channel, "web") || strings.EqualFold(req.Channel, "voice") {
+		explicit = true
+	}
+	if trigger == "mention" || trigger == "reply" || trigger == "prefix" || trigger == "direct" {
+		explicit = true
+	}
+	if strings.EqualFold(req.Source, "proactive") || strings.EqualFold(req.Source, "runtime") {
+		explicit = false
+	}
+	return agentpermission.AdmissionInput{
+		SpaceID:             req.SpaceID,
+		RequestID:           req.RequestID,
+		ChannelID:           req.Channel,
+		AccountID:           req.SessionID,
+		ConversationID:      req.ConversationID,
+		SenderID:            req.SenderID,
+		PeerKind:            req.PeerKind,
+		Source:              req.Source,
+		TriggerMode:         trigger,
+		Explicit:            explicit,
+		RequestedPermission: req.PermissionMode,
+	}
+}
+
 func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*OrchestrationResult, error) {
 	if req == nil {
 		return nil, ErrOrchestratorInvalidScope
@@ -210,6 +294,8 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 	e.bpState.updateStatusLocked(e.bpCfg)
 	status := e.bpState.Status
 	canonical := e.canonical
+	access := e.access
+	agentRuntime := e.agentRuntime
 	e.mu.Unlock()
 
 	defer func() {
@@ -231,6 +317,47 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 	}
 	if originActor != nil {
 		ctx = auth.WithActor(ctx, originActor)
+		if strings.TrimSpace(req.SpaceID) == "" && originActor.SpaceID.String() != "" {
+			req.SpaceID = originActor.SpaceID.String()
+		}
+	}
+	if access != nil && access.Ready() && !req.IsInternal && !strings.EqualFold(req.Source, "proactive") && !strings.EqualFold(req.Source, "runtime") {
+		admission, err := access.Evaluate(ctx, admissionInput(req))
+		if err != nil {
+			return nil, err
+		}
+		if admission.Observed {
+			return &OrchestrationResult{Outcome: OutcomeObserved, Duration: 0}, nil
+		}
+		if !admission.Allowed {
+			return nil, fmt.Errorf("%w: %s", ErrSourceAccessDenied, admission.Reason)
+		}
+		req.PermissionMode = admission.PermissionMode
+	}
+	if agentRuntime != nil && strings.TrimSpace(req.SpaceID) != "" && strings.TrimSpace(req.CharacterID) != "" {
+		profile, found, err := agentRuntime.ResolveAgentRuntime(ctx, req.SpaceID, req.CharacterID)
+		if err != nil {
+			return nil, err
+		}
+		if found {
+			req.AgentID = profile.AgentID
+			req.TeamID = profile.TeamID
+			if req.ModelConfigID == 0 {
+				req.ModelConfigID = profile.ModelConfigID
+			}
+			if strings.TrimSpace(req.ReasoningEffort) == "" {
+				req.ReasoningEffort = profile.ReasoningEffort
+			}
+			if strings.TrimSpace(req.PermissionMode) == "" {
+				req.PermissionMode = profile.PermissionMode
+			}
+			if strings.TrimSpace(req.WorkspaceID) == "" && profile.WorkspaceID != "" {
+				req.WorkspaceID = profile.WorkspaceID
+				req.WorkspaceRootURI = profile.WorkspaceRootURI
+				req.WorkspaceName = "Agent 电脑"
+				req.WorkspaceKind = "local"
+			}
+		}
 	}
 	if canonical != nil {
 		copied := *req

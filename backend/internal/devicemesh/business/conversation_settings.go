@@ -38,7 +38,7 @@ func validateConversationSettings(request Request) error {
 	return nil
 }
 
-func resolveConversationSettings(request *Request, snapshot coordination.DataSnapshot) error {
+func resolveConversationSettings(request *Request, snapshot coordination.DataSnapshot, role coordination.Role) error {
 	var saved conversationSettings
 	for _, resource := range snapshot.Resources {
 		if resource.Kind == "conversation" && resource.ID == request.ConversationID && !resource.Deleted {
@@ -48,13 +48,23 @@ func resolveConversationSettings(request *Request, snapshot coordination.DataSna
 			break
 		}
 	}
+	if request.ModelConfigID == 0 && role.ModelConfigID > 0 {
+		request.ModelConfigID = role.ModelConfigID
+	}
+	if request.ReasoningEffort == "" {
+		request.ReasoningEffort = role.ReasoningEffort
+	}
+	if request.ReasoningEnabled == nil && role.ReasoningEnabled >= 0 {
+		enabled := role.ReasoningEnabled == 1
+		request.ReasoningEnabled = &enabled
+	}
 	if request.ModelConfigID == 0 {
 		request.ModelConfigID = saved.ModelConfigID
 	}
-	if request.ReasoningEffort == "" {
+	if request.ReasoningEffort == "" && role.ModelConfigID == 0 {
 		request.ReasoningEffort = saved.ReasoningEffort
 	}
-	if request.ReasoningEnabled == nil {
+	if request.ReasoningEnabled == nil && role.ModelConfigID == 0 && role.ReasoningEffort == "" {
 		request.ReasoningEnabled = saved.ReasoningEnabled
 	}
 	if request.PermissionMode == "" {

@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../backend_transport/backend_service_api.dart';
+import '../errors/original_error.dart';
 import '../models/conversation.dart';
 import '../models/project.dart';
 import 'device_owned_attachments.dart';
@@ -76,6 +77,7 @@ Stream<Map<String, dynamic>> decodeOwnedChatStream(
   var buffer = '';
   var scopeStamp = '';
   var terminal = false;
+  var failureTerminal = false;
   var saved = false;
   var total = 0;
   String? transcription;
@@ -105,6 +107,9 @@ Stream<Map<String, dynamic>> decodeOwnedChatStream(
         'transcribed',
         'delta',
         'task',
+        'tool-started',
+        'tool-progress',
+        'tool-completed',
         'reasoning-completed',
         'output-completed',
         'completed',
@@ -116,6 +121,9 @@ Stream<Map<String, dynamic>> decodeOwnedChatStream(
           type == 'delta' ||
           type == 'transcribed' ||
           type == 'task' ||
+          type == 'tool-started' ||
+          type == 'tool-progress' ||
+          type == 'tool-completed' ||
           type == 'reasoning-completed' ||
           type == 'output-completed') {
         final rawScope = event['executionScope'];
@@ -203,14 +211,18 @@ Stream<Map<String, dynamic>> decodeOwnedChatStream(
           saved = true;
         }
         terminal = true;
+        if (type == 'failed' || type == 'interrupted') {
+          failureTerminal = true;
+        }
       }
       yield event;
-      if (type == 'failed' || type == 'interrupted')
-        throw StateError((event['message'] ?? '当前回复已中断').toString());
+      if (failureTerminal) {
+        throw StateError(originalErrorMapText(event));
+      }
     }
     if (buffer.length > 512 * 1024) throw StateError('回复事件超出接收上限');
   }
-  if (buffer.trim().isNotEmpty || !terminal || !saved)
+  if (buffer.trim().isNotEmpty || !terminal || (!saved && !failureTerminal))
     throw StateError('回复连接已断开，结果尚未确认；不会自动重新发送');
 }
 
@@ -403,7 +415,7 @@ Stream<Map<String, dynamic>> decodeOwnedGroupChatStream(
       if (type == 'failed' || type == 'interrupted') {
         terminal = true;
         yield event;
-        throw StateError((event['message'] ?? '当前群聊已中断').toString());
+        throw StateError(originalErrorMapText(event));
       }
       final currentRound = (event['groupRoundId'] ?? '').toString();
       if (currentRound.isNotEmpty) {
@@ -512,8 +524,8 @@ class DeviceOwnedChatService {
         _providerChangeId = (state['changeId'] ?? '').toString();
       }
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+      print("[original-error] $error\n$stackTrace");
+    }
   }
 
   Future<void> _saveProviderState() async {
@@ -528,8 +540,8 @@ class DeviceOwnedChatService {
         }),
       );
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+      print("[original-error] $error\n$stackTrace");
+    }
   }
 
   String? previousSummary(String previousCore, String conversationId) =>
@@ -2137,13 +2149,13 @@ class DeviceOwnedChatService {
                 '/api/device-mesh/v1/business/messages/${Uri.encodeComponent(requestId)}/interrupt',
               )
               .catchError((Object error, StackTrace stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-  return null;
-}),
+                print("[original-error] $error\n$stackTrace");
+                return null;
+              }),
         );
       } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+        print("[original-error] $error\n$stackTrace");
+      }
     }
     token?.cancel(message);
     notice = message;
@@ -2165,13 +2177,13 @@ class DeviceOwnedChatService {
                 '/api/device-mesh/v1/business/messages/${Uri.encodeComponent(entry.key)}/interrupt',
               )
               .catchError((Object error, StackTrace stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-  return null;
-}),
+                print("[original-error] $error\n$stackTrace");
+                return null;
+              }),
         );
       } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+        print("[original-error] $error\n$stackTrace");
+      }
       final token = entry.value;
       token.cancel(message);
     }

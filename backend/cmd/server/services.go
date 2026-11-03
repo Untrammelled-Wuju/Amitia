@@ -18,6 +18,9 @@ import (
 	"github.com/u-ai/backend/config"
 
 	"github.com/u-ai/backend/internal/agent/tool"
+	"github.com/u-ai/backend/internal/agentpermission"
+	"github.com/u-ai/backend/internal/agentplatform"
+	"github.com/u-ai/backend/internal/attention"
 	"github.com/u-ai/backend/internal/belief"
 	"github.com/u-ai/backend/internal/browser"
 	"github.com/u-ai/backend/internal/character"
@@ -63,6 +66,7 @@ import (
 	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
+	kernelexecution "github.com/u-ai/backend/internal/extension/kernel/execution"
 	extensionmcp "github.com/u-ai/backend/internal/extension/kernel/mcp"
 	"github.com/u-ai/backend/internal/extension/kernel/script_host"
 	"github.com/u-ai/backend/internal/extension/kernel/skill"
@@ -74,6 +78,7 @@ import (
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/imagegen"
 	"github.com/u-ai/backend/internal/imageintelligence"
+	"github.com/u-ai/backend/internal/imageprovider"
 	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval"
 	"github.com/u-ai/backend/internal/imageprovider/defaultregistry"
 	"github.com/u-ai/backend/internal/interaction"
@@ -127,6 +132,9 @@ type AppServices struct {
 	MemoryConsumers              *ownedMemoryConsumers
 	Knowledge                    knowledge.Service
 	Vision                       vision.Service
+	ImageGen                     imagegen.Service
+	ImageProviders               *imageprovider.Registry
+	ImageIntelligence            imageintelligence.ImageIntelligence
 	Chat                         chat.Service
 	UnifiedEntry                 *interaction.UnifiedEntry
 	ChatRuntime                  *interaction.RuntimeContextService
@@ -191,6 +199,9 @@ type AppServices struct {
 	Sync                         *syncpkg.Service
 	NativeBridgeRelay            *nativeBridgeRelay
 	NotificationRuntime          *notificationruntime.Runtime
+	AccessPolicy                 *agentpermission.Service
+	Attention                    *attention.Service
+	AgentPlatform                *agentplatform.Service
 }
 
 type RuntimeOrchestrator interface {
@@ -312,8 +323,11 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	}
 
 	imagegenRepo := imagegen.NewRepository(ctx.DB)
-	imagegenSvc := imagegen.NewService(imagegenRepo)
-	providerRegistry, _ := defaultregistry.New()
+	providerRegistry, registryErr := defaultregistry.New()
+	if registryErr != nil {
+		return nil, fmt.Errorf("initialize image provider registry: %w", registryErr)
+	}
+	imagegenSvc := imagegen.NewService(imagegenRepo, providerRegistry)
 	artifactRuntime, artifactErr := BuildArtifactRuntime(ctx.DB, "", nil)
 	if artifactErr != nil {
 		return nil, fmt.Errorf("failed to build artifact runtime: %w", artifactErr)
@@ -330,9 +344,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		}
 	}
 
-	var androidImageIntelligence imageintelligence.ImageIntelligence
+	var imageIntelligence imageintelligence.ImageIntelligence
 	if resourceResolver != nil {
-		androidImageIntelligence = imageintelligence.NewImageIntelligenceFactory(visionSvc, imagegenSvc, providerRegistry, resourceResolver, artifactRuntime.Service).Build()
+		imageIntelligence = imageintelligence.NewImageIntelligenceFactory(visionSvc, imagegenSvc, providerRegistry, resourceResolver, artifactRuntime.Service).Build()
 	}
 
 	var workspaceRegistry *workspace.Registry
@@ -452,7 +466,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		kernelBuilder.WithRuntimeHost(bootstrap.RuntimeHost())
 		kernelBuilder = applyAndroidLinuxProvider(kernelBuilder, bootstrap.RuntimeHost())
 		kernelBuilder = applyIOSNativeProvider(kernelBuilder, bootstrap.IOSNativeProvider())
-		kernelBuilder, _ = applyAndroidNativeProvider(kernelBuilder, bootstrap, androidImageIntelligence, resourceResolver, config.AppCfg.Storage.DataDir)
+		kernelBuilder, _ = applyAndroidNativeProvider(kernelBuilder, bootstrap, imageIntelligence, resourceResolver, config.AppCfg.Storage.DataDir)
 	}
 
 	kernelBuilder.WithMCPAcquisitionPersistence(mcpAcquisitionPersistence)
@@ -682,7 +696,24 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		log.Error("failed to init data lifecycle schema:", err)
 		panic("failed to init data lifecycle schema")
 	}
+	accessPolicy := agentpermission.NewService(ctx.DB)
+	attentionService := attention.NewService(ctx.DB)
+	if kernelContainer != nil && kernelContainer.ApprovalBroker != nil {
+		kernelContainer.ApprovalBroker.AddObservers(func(request kernelexecution.ApprovalRequest) error {
+			payload, err := json.Marshal(map[string]any{"toolName": request.ToolName, "riskLevel": request.RiskLevel, "conversationId": request.ConversationID})
+			if err != nil {
+				return err
+			}
+			_, err = attentionService.Check(context.Background(), attention.CheckInput{
+				SpaceID: request.SpaceID, ConversationID: request.ConversationID,
+				SourceKind: "approval", SourceID: request.ID, EventKind: "confirmation",
+				IdempotencyKey: "approval:" + request.ID, PayloadJSON: string(payload),
+			})
+			return err
+		}, nil)
+	}
 	entry := interaction.NewUnifiedEntry(orch, resolver, temporal.SystemClock{})
+	entry.SetAccessService(accessPolicy)
 	if kernelContainer != nil && kernelContainer.GameHost != nil {
 		kernelContainer.GameHost.SetAgentWakeupPort(&gameHostAgentWakeupAdapter{entry: entry, defaultCharacterProvider: defaultCharProvider})
 	}
@@ -1009,6 +1040,22 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			return nil, fmt.Errorf("initialize desktop pet owner mapper: %w", err)
 		}
 	}
+	agentPlatformService, err := agentplatform.NewService(ctx.DB, agentplatform.ServiceConfig{
+		DataDir:         config.AppCfg.Storage.DataDir,
+		RemoteMarketURL: strings.TrimSpace(os.Getenv("AMITIA_PLUGIN_MARKET_URL")),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("initialize agent platform: %w", err)
+	}
+	usageStore.SetFinishObserver(func(current context.Context, usage mindruntime.ModelUsageRecord) error {
+		return agentPlatformService.RecordModelBudgetUsage(current, usage.SpaceID, agentplatform.ModelBudgetUsageInput{
+			UsageID: usage.ID, CharacterID: usage.RoleID, Model: usage.Model, Provider: usage.Provider,
+			Status: usage.Status, InputTokens: usage.InputTokens, OutputTokens: usage.OutputTokens,
+			TotalTokens: usage.TotalTokens, UsageReported: usage.UsageReported,
+			ReservedTokens: usage.ReservedTokens, InputRate: usage.BudgetInputRate,
+			OutputRate: usage.BudgetOutputRate, ReservedCost: usage.ReservedCostMicroUSD,
+		})
+	})
 
 	services := &AppServices{
 		RuntimeProfile:               runtimeProfile,
@@ -1018,6 +1065,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		MemoryConsumers:              memoryConsumers,
 		Knowledge:                    knowledgeSvc,
 		Vision:                       visionSvc,
+		ImageGen:                     imagegenSvc,
+		ImageProviders:               providerRegistry,
+		ImageIntelligence:            imageIntelligence,
 		Chat:                         chatSvc,
 		UnifiedEntry:                 entry,
 		ChatRuntime:                  orch,
@@ -1081,8 +1131,33 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		DB:                           ctx.DB,
 		NativeBridgeRelay:            newNativeBridgeRelay(),
 		NotificationRuntime:          notificationRuntime,
+		AccessPolicy:                 accessPolicy,
+		Attention:                    attentionService,
+		AgentPlatform:                agentPlatformService,
 	}
-
+	if services.AgentPlatform != nil && services.Extension != nil {
+		services.AgentPlatform.SetMarketplaceInstaller(newMarketplacePackageInstaller(
+			services.Extension,
+			config.AppCfg.Storage.DataDir,
+			runtimeProfile,
+		))
+	}
+	if services.AgentPlatform != nil && services.KernelContainer != nil {
+		runtimeBridge := newAgentPlatformRuntimeBridge(services.AgentPlatform, services.WorkspaceService, services.UnifiedEntry, services.KernelContainer.ApprovalBroker)
+		services.KernelContainer.ApprovalBroker.SetPersistence(services.AgentPlatform)
+		services.AgentPlatform.SetApprovalBroker(services.KernelContainer.ApprovalBroker)
+		services.AgentPlatform.SetWorkspaceRegistrar(agentPlatformWorkspaceRegistrar{workspace: services.WorkspaceService})
+		services.AgentPlatform.SetEvaluationExecutor(runtimeBridge)
+		if services.UnifiedEntry != nil {
+			services.UnifiedEntry.SetAgentRuntimeProvider(runtimeBridge)
+		}
+		if services.KernelContainer.ExecutionKernel != nil {
+			services.KernelContainer.ExecutionKernel.AgentObserver = runtimeBridge
+		}
+	}
+	if services.AgentPlatform != nil && services.KernelContainer != nil && services.KernelContainer.SecretBroker != nil {
+		services.AgentPlatform.SetSecretBroker(services.KernelContainer.SecretBroker)
+	}
 	dataPortability, dataPortabilityErr := buildDataPortabilityCoordinator(dataPortabilityDeps{
 		DataDir:   config.AppCfg.Storage.DataDir,
 		DB:        ctx.DB,
@@ -1233,6 +1308,13 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		}
 		memoryRuntime := &canonicalChatMemoryRuntime{engine: services.OwnedBusiness, spaceID: localSpace.SpaceID(), deviceID: deviceMeshRuntime.LocalDeviceID, begin: inferenceAuthority}
 		services.LocalSpaceID, services.LocalDeviceID = localSpace.SpaceID(), deviceMeshRuntime.LocalDeviceID
+		if services.AgentPlatform != nil && services.UnifiedEntry != nil {
+			services.AgentPlatform.SetA2AExecutor(&a2aUnifiedEntryExecutor{
+				platform: services.AgentPlatform,
+				entry:    services.UnifiedEntry,
+				deviceID: services.LocalDeviceID,
+			})
+		}
 		memoryConsumers.runtime, reflectionMemoryAdapter.runtime = memoryRuntime, memoryRuntime
 		if setter, ok := services.Chat.(interface{ SetOwnedToolRuntime(chat.OwnedToolRuntime) }); ok {
 			setter.SetOwnedToolRuntime(&meshOwnedToolRuntime{services: services, native: nativeMultiAgent})

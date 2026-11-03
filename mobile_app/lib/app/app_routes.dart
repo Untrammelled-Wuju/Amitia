@@ -11,6 +11,7 @@ abstract final class AppRoutes {
   static const characters = '/characters';
   static const charactersCreate = '/characters/create';
   static const agent = '/agent';
+  static const agentOS = '/agent-os';
   static const memory = '/memory';
   static const memoryTimeline = '/memory/timeline';
   static const memoryGraph = '/memory/graph';
@@ -26,6 +27,7 @@ abstract final class AppRoutes {
   static const chatImport = '/chat-import';
   static const extensions = '/extensions';
   static const extensionsPackages = '/extensions/packages';
+  static const extensionsMarket = '/extensions/market';
   static const extensionsMcp = '/extensions/mcp';
   static const extensionsMcpNew = '/extensions/mcp/new';
   static const extensionsAgentSkills = '/extensions/agent-skills';
@@ -46,6 +48,7 @@ abstract final class AppRoutes {
   static const settingsDecisionViz = '/settings/decision-viz';
   static const settingsPermissions = '/settings/permissions';
   static const settingsAndroidAutomation = '/settings/android-automation';
+  static const settingsVirtualDisplay = '/settings/virtual-display';
   static const settingsBackup = '/settings/backup';
   static const settingsAsr = '/settings/asr';
   static const settingsSystem = '/settings/system';

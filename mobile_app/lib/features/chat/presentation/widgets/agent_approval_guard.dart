@@ -1,11 +1,16 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../app/app_routes.dart';
+import '../../../../core/models/attention.dart';
+import '../../../../core/services/providers.dart';
 import '../../runtime/conversation_runtime_controller.dart';
 
 class AgentApprovalGuard extends ConsumerStatefulWidget {
@@ -20,6 +25,38 @@ class AgentApprovalGuard extends ConsumerStatefulWidget {
 class _AgentApprovalGuardState extends ConsumerState<AgentApprovalGuard> {
   bool _dialogOpen = false;
   String _activeApprovalId = '';
+  String _activeAttentionId = '';
+  List<AttentionItem> _attentionItems = const [];
+  final Set<String> _dismissedAttentionIds = <String>{};
+  Timer? _attentionTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadAttention());
+    _attentionTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (mounted && ModalRoute.of(context)?.isCurrent == true) {
+        unawaited(_loadAttention());
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _attentionTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadAttention() async {
+    try {
+      final items = await ref.read(attentionServiceProvider).items();
+      final liveIds = items.map((item) => item.id).toSet();
+      _dismissedAttentionIds.removeWhere((id) => !liveIds.contains(id));
+      if (mounted) setState(() => _attentionItems = items);
+    } catch (error, stackTrace) {
+      print("[original-error] $error\n$stackTrace");
+    }
+  }
 
   Future<void> _showApproval(Map<String, dynamic> item) async {
     final id = (item['id'] ?? '').toString().trim();
@@ -110,9 +147,149 @@ class _AgentApprovalGuardState extends ConsumerState<AgentApprovalGuard> {
     try {
       return const JsonEncoder.withIndent('  ').convert(jsonDecode(raw));
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-return raw.length > 8000 ? raw.substring(0, 8000) : raw;
+      print("[original-error] $error\n$stackTrace");
+      return raw.length > 8000 ? raw.substring(0, 8000) : raw;
     }
+  }
+
+  Future<void> _showAttention(AttentionItem item) async {
+    if (!mounted || _dialogOpen) return;
+    _dialogOpen = true;
+    _activeAttentionId = item.id;
+    try {
+      final approved = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          final isTaskApproval = item.kind == 'task_approval';
+          return AlertDialog(
+            title: Text(item.title),
+            content: SizedBox(
+              width: 560,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (item.summary.isNotEmpty)
+                      Text(
+                        item.summary,
+                        style: AppTypography.sectionTitle(dialogContext),
+                      ),
+                    SizedBox(height: AppSpacing.xs),
+                    Text(
+                      item.reason,
+                      style: AppTypography.bodySmall(dialogContext),
+                    ),
+                    SizedBox(height: AppSpacing.md),
+                    Text(
+                      '事项类型：${_attentionKindLabel(item.kind)}',
+                      style: AppTypography.caption(dialogContext),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('稍后'),
+              ),
+              if (item.threadId.isNotEmpty ||
+                  item.kind == 'task_failed' ||
+                  item.kind == 'task_blocked')
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(dialogContext);
+                    _openAttentionTarget(item);
+                  },
+                  child: const Text('打开详情'),
+                ),
+              if (isTaskApproval) ...[
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: Text(
+                    '拒绝',
+                    style: TextStyle(color: dialogContext.error),
+                  ),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(dialogContext, true),
+                  child: const Text('批准本次执行'),
+                ),
+              ],
+            ],
+          );
+        },
+      );
+      if (approved != null && item.kind == 'task_approval') {
+        final approvals = await ref
+            .read(extensionTaskServiceProvider)
+            .listSourceTaskApprovals();
+        final approval = approvals
+            .where((candidate) => candidate['id'] == item.approvalId)
+            .firstOrNull;
+        if (approval == null) throw StateError('设备审批已不存在或已处理');
+        await ref
+            .read(extensionTaskServiceProvider)
+            .decideSourceTaskApproval(approval, approved);
+      }
+      _clearAttentionDeepLink(item.id);
+      _dismissedAttentionIds.add(item.id);
+      await _loadAttention();
+    } catch (error, stackTrace) {
+      print("[original-error] $error\n$stackTrace");
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
+      }
+    } finally {
+      _dialogOpen = false;
+      _activeAttentionId = '';
+      if (mounted) setState(() {});
+    }
+  }
+
+  String _attentionKindLabel(String kind) {
+    return switch (kind) {
+      'agent_approval' => '工具执行审批',
+      'task_approval' => '设备任务审批',
+      'continuity' => '持续事项等待',
+      'task_failed' => '任务失败恢复',
+      'task_blocked' => '任务等待处理',
+      'automation_failed' => '自动化失败',
+      'automation_approval' => '自动化确认',
+      _ => '需要处理',
+    };
+  }
+
+  void _openAttentionTarget(AttentionItem item) {
+    if (item.workflowId.isNotEmpty) {
+      final deviceId = (item.payload['deviceId'] ?? '').toString();
+      context.push(
+        AppRoutes.workflowEditor(
+          item.workflowId,
+          location: deviceId.isEmpty ? 'cloud' : 'device',
+          deviceId: deviceId,
+        ),
+      );
+      return;
+    }
+    if (item.threadId.isNotEmpty) {
+      context.push('/continuity/${Uri.encodeComponent(item.threadId)}');
+      return;
+    }
+    context.push('/agent');
+  }
+
+  void _clearAttentionDeepLink(String itemId) {
+    if (!mounted) return;
+    final state = GoRouterState.of(context);
+    if (state.uri.queryParameters['attentionId'] != itemId) return;
+    final query = Map<String, String>.from(state.uri.queryParameters)
+      ..remove('attentionId');
+    context.go(Uri(path: state.uri.path, queryParameters: query).toString());
   }
 
   @override
@@ -131,6 +308,41 @@ return raw.length > 8000 ? raw.substring(0, 8000) : raw;
                       conversationId,
             )
             .toList(growable: false);
+    final currentAttentionId =
+        GoRouterState.of(context).uri.queryParameters['attentionId'] ?? '';
+    final linkedAttentionItem = currentAttentionId.isEmpty
+        ? null
+        : _attentionItems
+              .where(
+                (item) =>
+                    item.id == currentAttentionId &&
+                    item.conversationId == conversationId,
+              )
+              .firstOrNull;
+    final attention =
+        _attentionItems
+            .where(
+              (item) =>
+                  item.requiresAction &&
+                  item.kind != 'agent_approval' &&
+                  item.conversationId == conversationId &&
+                  (!_dismissedAttentionIds.contains(item.id) ||
+                      item.id == currentAttentionId),
+            )
+            .toList(growable: false)
+          ..sort((left, right) => right.priority.compareTo(left.priority));
+    final linkedAttention = currentAttentionId.isEmpty
+        ? null
+        : attention.where((item) => item.id == currentAttentionId).firstOrNull;
+    final linkedApproval = linkedAttentionItem?.kind == 'agent_approval'
+        ? approvals
+              .where(
+                (item) =>
+                    (item['id'] ?? '').toString() ==
+                    (linkedAttentionItem?.approvalId ?? ''),
+              )
+              .firstOrNull
+        : null;
     if (_dialogOpen &&
         _activeApprovalId.isNotEmpty &&
         !approvals.any(
@@ -140,10 +352,31 @@ return raw.length > 8000 ? raw.substring(0, 8000) : raw;
         if (!mounted || !_dialogOpen) return;
         Navigator.of(context, rootNavigator: true).maybePop();
       });
+    } else if (_dialogOpen &&
+        _activeAttentionId.isNotEmpty &&
+        !attention.any((item) => item.id == _activeAttentionId)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_dialogOpen) return;
+        Navigator.of(context, rootNavigator: true).maybePop();
+      });
+    } else if (!_dialogOpen && linkedAttention != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_showAttention(linkedAttention));
+      });
+    } else if (!_dialogOpen && linkedApproval != null) {
+      final item = Map<String, dynamic>.from(linkedApproval);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _showApproval(item);
+      });
     } else if (!_dialogOpen && approvals.isNotEmpty) {
       final item = Map<String, dynamic>.from(approvals.first);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _showApproval(item);
+      });
+    } else if (!_dialogOpen && attention.isNotEmpty) {
+      final item = attention.first;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_showAttention(item));
       });
     }
     return const SizedBox.shrink();

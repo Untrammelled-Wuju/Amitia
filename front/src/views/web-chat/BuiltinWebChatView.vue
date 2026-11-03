@@ -190,6 +190,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       :conversation-id="convId"
       :is-group="Boolean(group)"
       :group-members="activeGroupMembers"
+      :role-model-configs="roleModelConfigs"
       :channel="chatExtensionContext.channel"
       :models="llmModels"
       :selected-model-id="selectedModelId"
@@ -199,6 +200,8 @@ SPDX-License-Identifier: AGPL-3.0-only
       :permission-mode="selectedPermissionMode"
       :model-preview-change="handleModelSettingPreviewChange"
       :model-commit-change="handleModelSettingChange"
+      :role-model-preview-change="handleRoleModelSettingPreviewChange"
+      :role-model-commit-change="handleRoleModelSettingChange"
       @send="handleSend"
       @image="onImageAttached"
       @removeImage="onImageRemoved"
@@ -285,6 +288,7 @@ import BuiltinConversationSidebar from "@/components/ui-runtime/BuiltinConversat
 import BuiltinConversationOverlay from "@/components/ui-runtime/BuiltinConversationOverlay.vue";
 import { provideConversationUIContext, readonlyMessages } from "@/ui-runtime/conversationContext";
 import { browserClientPluginRuntime } from "@/ui-runtime/clientPluginRuntime";
+import { roleAuthorityConfig } from "@/runtime/role-authority";
 import { hasUnifiedSlotItem } from "@/ui-runtime/slotLedger";
 import type { OwnedGroupMember, OwnedGroupState } from "@/runtime/device-owned-chat";
 
@@ -391,6 +395,7 @@ const convSummary = ref("");
 const showSummaryDrawer = ref(false);
 const replyTarget = ref<any>(null);
 const llmModels = ref<any[]>([]);
+const roleAuthorityToken = ref("");
 const selectedModelId = ref(0);
 const selectedReasoningEffort = ref("high");
 const selectedReasoningEnabled = ref(true);
@@ -655,6 +660,16 @@ llmModels.value = [];
   }
 }
 
+async function loadRoleAuthority() {
+  try {
+    const authority = await get<{ roleAuthority: string }>("/api/characters/authority");
+    roleAuthorityToken.value = String(authority?.roleAuthority || "");
+  } catch (error) {
+    console.error("[original-error]", error);
+    roleAuthorityToken.value = "";
+  }
+}
+
 function loadDraftModelSettings() {
   try {
     const draft = JSON.parse(
@@ -757,6 +772,53 @@ async function handleModelSettingChange(
   } catch (error) {
   console.error("[original-error]", error);
 await reloadConversationSnapshot();
+    ElMessage.error(error instanceof Error ? error.message : String(error));
+  }
+}
+
+function handleRoleModelSettingPreviewChange(
+  roleId: string,
+  modelId: number,
+  reasoningEffort: string,
+  reasoningEnabled: boolean,
+) {
+  if (roleId !== characterId.value) return;
+  handleModelSettingPreviewChange(modelId, reasoningEffort, reasoningEnabled);
+}
+
+async function handleRoleModelSettingChange(
+  roleId: string,
+  modelId: number,
+  reasoningEffort: string,
+  reasoningEnabled: boolean,
+) {
+  const role = characters.value.find((item: any) => item.id === roleId);
+  if (!role) {
+    ElMessage.error("角色已变化，请重新选择后设置模型");
+    return;
+  }
+  try {
+    if (!role.roleAuthority && !roleAuthorityToken.value) {
+      await loadRoleAuthority();
+    }
+    const updated = await put<any>(
+      `/api/characters/${encodeURIComponent(roleId)}`,
+      {
+        modelConfigId: Number(modelId || 0),
+        reasoningEffort: reasoningEffort || "",
+        reasoningEnabled: reasoningEnabled ? 1 : 0,
+      },
+      roleAuthorityConfig(role.roleAuthority || roleAuthorityToken.value),
+    );
+    Object.assign(role, updated || {}, {
+      modelConfigId: Number(updated?.modelConfigId ?? modelId ?? 0),
+      reasoningEffort: String(updated?.reasoningEffort ?? reasoningEffort ?? ""),
+      reasoningEnabled: Number(updated?.reasoningEnabled ?? (reasoningEnabled ? 1 : 0)),
+    });
+    if (roleId === characterId.value) {
+      handleModelSettingPreviewChange(modelId, reasoningEffort, reasoningEnabled);
+    }
+  } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : String(error));
   }
 }
@@ -965,6 +1027,25 @@ const {
 );
 watch(group, (value) => { groupConversation.value = value; }, { immediate: true, flush: "sync" });
 const activeGroupMembers = computed<OwnedGroupMember[]>(() => (group.value?.members || []).filter((member) => member.status === "active").sort((left, right) => left.orderIndex - right.orderIndex));
+const roleModelConfigs = computed(() => {
+  const members = activeGroupMembers.value;
+  const roleIDs = members.length > 0
+    ? members.map((member) => member.characterId)
+    : [characterId.value].filter(Boolean);
+  return roleIDs.map((roleID) => {
+    const member = members.find((item) => item.characterId === roleID);
+    const role = characters.value.find((item: any) => item.id === roleID);
+    return {
+      roleId: roleID,
+      memberId: member?.memberId || "",
+      name: member?.characterName || role?.name || roleID,
+      avatar: member?.characterAvatar || role?.avatar || "",
+      modelConfigId: Number(role?.modelConfigId || 0),
+      reasoningEffort: String(role?.reasoningEffort || ""),
+      reasoningEnabled: Number(role?.reasoningEnabled ?? -1),
+    };
+  });
+});
 const lastUserMessageId = computed(() => [...persistedMessages.value].reverse().find((message) => message.role === "user" && message.id && !String(message.id).startsWith("client:"))?.id || "");
 
 function syncConversationTitleFromSidebar(conversationId: string) {
@@ -1198,6 +1279,7 @@ onMounted(async () => {
   window.addEventListener("amitia:execution-scope-changed", handleScopeChanged);
   window.addEventListener("amitia:draft-created", handleSidebarDraftCreated);
   void loadLlmModels();
+  void loadRoleAuthority();
   let ownedInitialized = false;
   let ownedInitializationPromise: Promise<void> | null = null;
   let ownedDataRefreshPending = false;
@@ -1224,7 +1306,10 @@ onMounted(async () => {
       return previous?.id === role.id
         && previous?.revision === role.revision
         && previous?.name === role.name
-        && previous?.avatar === role.avatar;
+        && previous?.avatar === role.avatar
+        && previous?.modelConfigId === role.modelConfigId
+        && previous?.reasoningEffort === role.reasoningEffort
+        && previous?.reasoningEnabled === role.reasoningEnabled;
     });
     if (!unchanged) characters.value = next;
   };

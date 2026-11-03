@@ -92,6 +92,8 @@ watch(
 watch(
   route,
   () => {
+    renderError.value = false;
+    capturedError.value = null;
     document.documentElement.dataset.amitiaPage = normalizeStylePageId(route.fullPath);
     document.documentElement.dataset.amitiaPlatform = isDesktopShell() ? "desktop" : "web";
     applyStyleRuntime(stylePatch.value, styleRules.value);
@@ -254,7 +256,7 @@ details {
   padding: 24px;
   color: #303133;
   background: #f5f7fa;
-  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--ac-font-family);
 }
 html.amitia-titlebar-shell .app-shell {
   height: 100%;

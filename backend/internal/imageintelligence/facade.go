@@ -3,6 +3,7 @@ package imageintelligence
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 
 	"github.com/u-ai/backend/internal/imagegen"
@@ -132,18 +133,18 @@ func (factory *ImageIntelligenceFactory) Build() *Facade {
 
 	understand := NewUnderstandProvider(factory.visionSvc)
 	ocr := NewOCRProvider(factory.visionSvc)
-	generate := NewGenerateProvider(factory.imagegenSvc, factory.providerRegistry, factory.artifacts)
 	resolver := NewImageResourceResolver(factory.resourceResolver)
-	detector := NewCapabilityDetector(factory.visionSvc, factory.providerRegistry)
+	generate := NewGenerateProvider(factory.imagegenSvc, factory.providerRegistry, resolver, factory.artifacts)
+	detector := NewCapabilityDetector(factory.visionSvc, factory.imagegenSvc, factory.providerRegistry)
 
 	factory.cached = NewFacade(understand, ocr, generate, resolver, detector)
 	return factory.cached
 }
 
-func marshalResult(v interface{}) json.RawMessage {
+func marshalResult(v interface{}) (json.RawMessage, error) {
 	data, err := json.Marshal(v)
 	if err != nil {
-		return []byte(`{"error":"marshal failed"}`)
+		return nil, fmt.Errorf("marshal image intelligence result: %w", err)
 	}
-	return data
+	return data, nil
 }

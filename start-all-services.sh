@@ -48,8 +48,22 @@ find_database_archive() {
   return 1
 }
 
+terminate_tree() {
+  local pid="$1"
+  [ -n "$pid" ] || return 0
+  local child
+  for child in $(pgrep -P "$pid" 2>/dev/null || true); do
+    terminate_tree "$child"
+  done
+  kill "$pid" >/dev/null 2>&1 || true
+}
+
 stop_project_processes() {
+  if [ -f "$LOG_DIR/desktop.pid" ]; then
+    terminate_tree "$(tr -d '[:space:]' < "$LOG_DIR/desktop.pid")"
+  fi
   pkill -f "$ROOT/desktop/resources/core/AmitiaCore" >/dev/null 2>&1 || true
+  pkill -f "$ROOT/desktop/resources/core/$TARGET/AmitiaCore" >/dev/null 2>&1 || true
   pkill -f "$ROOT/AmitiaData/qdrant/qdrant" >/dev/null 2>&1 || true
   pkill -f "$ROOT/AmitiaData/surrealdb/surreal" >/dev/null 2>&1 || true
 }
@@ -65,6 +79,16 @@ echo "[2/5] 准备核心 ($TARGET)"
 if [ ! -f "$ROOT/desktop/resources/core/AmitiaCore" ] && [ ! -f "$ROOT/desktop/resources/core/$TARGET/AmitiaCore" ]; then
   command -v go >/dev/null 2>&1 || { echo "未找到 go，无法构建 AmitiaCore" >&2; exit 1; }
   (cd "$ROOT/desktop" && node scripts/build-amitiacore.mjs)
+fi
+
+core_root="$ROOT/desktop/resources/core/AmitiaCore"
+core_target="$ROOT/desktop/resources/core/$TARGET/AmitiaCore"
+if [ -f "$core_root" ]; then
+  mkdir -p "$(dirname "$core_target")"
+  if [ ! -f "$core_target" ] || ! cmp -s "$core_root" "$core_target"; then
+    cp "$core_root" "$core_target"
+    chmod +x "$core_target"
+  fi
 fi
 
 echo "[3/5] 准备数据库归档"

@@ -74,8 +74,16 @@ export interface OwnedChatEvent {
   text?: string;
   reasoning?: boolean;
   message?: string;
+  userMessage?: string;
   errorCode?: string;
   internalMessage?: string;
+  error?: string;
+  detail?: string;
+  cause?: string;
+  rawError?: string;
+  stage?: string;
+  toolName?: string;
+  provider?: string;
   retryable?: boolean;
   data?: OwnedChatResponse;
   groupRoundId?: string;
@@ -86,6 +94,54 @@ export interface OwnedChatEvent {
   characterName?: string;
   characterAvatar?: string;
   roleOwnerId?: string;
+}
+
+export class OwnedChatError extends Error {
+  readonly code: string;
+  readonly errorCode: string;
+  readonly userMessage: string;
+  readonly internalMessage: string;
+  readonly detail: string;
+  readonly causeDetail: string;
+  readonly rawError: string;
+  readonly stage: string;
+  readonly toolName: string;
+  readonly provider: string;
+  readonly retryable: boolean;
+  readonly status: number;
+  readonly rawPayload: Record<string, unknown>;
+
+  constructor(payload: Record<string, unknown>, fallback: string, status = 0) {
+    const values: string[] = [];
+    const keys = ["message", "msg", "userMessage", "error", "internalMessage", "detail", "cause", "rawError", "reason", "errorCode", "code"];
+    for (const key of keys) {
+      const value = payload[key];
+      const text = typeof value === "string" ? value.trim() : "";
+      if (text && !values.includes(text)) values.push(text);
+    }
+    super(values.join("\n") || fallback);
+    this.name = "OwnedChatError";
+    this.code = String(payload.code || "");
+    this.errorCode = String(payload.errorCode || "");
+    this.userMessage = String(payload.userMessage || payload.message || "");
+    this.internalMessage = String(payload.internalMessage || "");
+    this.detail = String(payload.detail || "");
+    this.causeDetail = String(payload.cause || "");
+    this.rawError = String(payload.rawError || "");
+    this.stage = String(payload.stage || "");
+    this.toolName = String(payload.toolName || "");
+    this.provider = String(payload.provider || "");
+    this.retryable = payload.retryable === true;
+    this.status = status;
+    this.rawPayload = payload;
+  }
+}
+
+function ownedChatError(payload: unknown, fallback: string, status = 0): OwnedChatError {
+  const record = payload && typeof payload === "object"
+    ? payload as Record<string, unknown>
+    : { message: payload == null ? fallback : String(payload) };
+  return new OwnedChatError(record, fallback, status);
 }
 
 export interface OwnedGroupMember {
@@ -302,7 +358,9 @@ export async function consumeOwnedChatStream(
       terminal = true;
     }
     onEvent(event);
-    if (event.type === "interrupted" || event.type === "failed") throw new Error(event.message || (event.type === "interrupted" ? "当前回复已停止" : "任务执行失败，未返回具体原因"));
+    if (event.type === "interrupted" || event.type === "failed") {
+      throw ownedChatError(event, event.type === "interrupted" ? "当前回复已停止" : "任务执行失败，未返回具体原因");
+    }
   };
   try {
     for (;;) {
@@ -348,7 +406,7 @@ export async function streamOwnedChat(request: OwnedChatRequest, signal: AbortSi
   console.error("[original-error]", error);
   return null;
 });
-    throw new Error(error?.message || error?.msg || `设备对话服务不可用 (${response.status})`);
+    throw ownedChatError(error, `设备对话服务不可用 (${response.status})`, response.status);
   }
   return consumeOwnedChatStream(response.body, request.requestId, onEvent, request.expectedExecutionScope);
 }
@@ -368,7 +426,7 @@ export async function streamOwnedGroupChat(request: OwnedGroupChatRequest, signa
   console.error("[original-error]", error);
   return null;
 });
-    throw new Error(error?.message || error?.msg || `群聊服务不可用 (${response.status})`);
+    throw ownedChatError(error, `群聊服务不可用 (${response.status})`, response.status);
   }
   const reader = response.body.getReader();
   const decoder = new TextDecoder("utf-8", { fatal: true });
@@ -407,7 +465,7 @@ export async function streamOwnedGroupChat(request: OwnedGroupChatRequest, signa
     if (event.type === "failed" || event.type === "interrupted") {
       terminal = true;
       onEvent(event);
-      throw new Error(event.message || "当前群聊已中断");
+      throw ownedChatError(event, "当前群聊已中断");
     }
     if (event.groupRoundId) {
       if (roundId && roundId !== event.groupRoundId) throw new Error("群聊轮次归属已变化");

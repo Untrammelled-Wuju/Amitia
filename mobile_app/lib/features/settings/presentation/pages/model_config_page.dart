@@ -13,6 +13,7 @@ import '../../../../core/services/core_configuration_guard.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_editor.dart';
+import '../../../../core/widgets/conversation_media_image.dart';
 import '../widgets/voice_clone_manager.dart';
 
 class ModelConfigPage extends ConsumerStatefulWidget {
@@ -42,6 +43,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
   bool _busy = false;
   bool _visionSuspended = false;
   bool _canConfigure = false;
+  bool _generatingImage = false;
   String? _error;
   CoreConfigurationIntent? _configurationIntent;
   int _loadEpoch = 0;
@@ -196,6 +198,18 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
         title: _typeName,
         showBackButton: true,
         actions: <Widget>[
+          if (widget.modelType == 'image')
+            IconButton(
+              tooltip: '生成测试',
+              onPressed: _busy || _generatingImage ? null : _generateImage,
+              icon: _generatingImage
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.auto_awesome_outlined),
+            ),
           IconButton(
             tooltip: '新建',
             onPressed: _busy || !_canConfigure
@@ -319,6 +333,154 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
         ],
       ],
     );
+  }
+
+  Future<void> _generateImage() async {
+    final promptController = TextEditingController();
+    final referencesController = TextEditingController();
+    String size = '1024x1024';
+    final request = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: const Text('生成测试'),
+          content: SizedBox(
+            width: 520,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                TextField(
+                  controller: promptController,
+                  autofocus: true,
+                  maxLines: 4,
+                  maxLength: 4096,
+                  onChanged: (_) => setDialogState(() {}),
+                  decoration: const InputDecoration(
+                    labelText: '提示词',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                SizedBox(height: AppSpacing.sm),
+                DropdownButtonFormField<String>(
+                  initialValue: size,
+                  decoration: const InputDecoration(
+                    labelText: '尺寸',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const <DropdownMenuItem<String>>[
+                    DropdownMenuItem(
+                      value: '1024x1024',
+                      child: Text('1024 × 1024'),
+                    ),
+                    DropdownMenuItem(
+                      value: '1280x720',
+                      child: Text('1280 × 720'),
+                    ),
+                    DropdownMenuItem(
+                      value: '720x1280',
+                      child: Text('720 × 1280'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) setDialogState(() => size = value);
+                  },
+                ),
+                SizedBox(height: AppSpacing.sm),
+                TextField(
+                  controller: referencesController,
+                  decoration: const InputDecoration(
+                    labelText: '参考图资源 URI（可选，逗号分隔）',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: promptController.text.trim().isEmpty
+                  ? null
+                  : () => Navigator.pop(dialogContext, <String, dynamic>{
+                      'prompt': promptController.text.trim(),
+                      'size': size,
+                      'references': referencesController.text,
+                    }),
+              child: const Text('开始生成'),
+            ),
+          ],
+        ),
+      ),
+    );
+    promptController.dispose();
+    referencesController.dispose();
+    if (request == null || !mounted) return;
+    setState(() => _generatingImage = true);
+    try {
+      final result = await ref
+          .read(imageGenServiceProvider)
+          .generate(
+            prompt: request['prompt'].toString(),
+            size: request['size'].toString(),
+            referenceResourceUris: request['references']
+                .toString()
+                .split(',')
+                .map((item) => item.trim())
+                .where((item) => item.isNotEmpty)
+                .toList(growable: false),
+          );
+      final images = (result['images'] as List? ?? const [])
+          .whereType<Map>()
+          .map((item) => (item['resourceUri'] ?? '').toString())
+          .where((item) => item.isNotEmpty)
+          .toList(growable: false);
+      if (images.isEmpty) throw StateError('生图服务未返回图片');
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(
+            '生成完成${(result['provider'] ?? '').toString().isEmpty ? '' : ' · ${result['provider']}'}',
+          ),
+          content: SizedBox(
+            width: 620,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: images
+                    .map(
+                      (uri) => Padding(
+                        padding: EdgeInsets.only(bottom: AppSpacing.sm),
+                        child: AspectRatio(
+                          aspectRatio: 1,
+                          child: ConversationMediaImage(
+                            url: uri,
+                            fit: BoxFit.contain,
+                            alt: '生成图片加载失败',
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(growable: false),
+              ),
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('关闭'),
+            ),
+          ],
+        ),
+      );
+    } catch (error) {
+      if (mounted) _toast('生成失败：$error', error: true);
+    } finally {
+      if (mounted) setState(() => _generatingImage = false);
+    }
   }
 
   Future<void> _assignRoute(String scenario, int modelConfigId) async {
@@ -1300,8 +1462,8 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
           return decoded.map((key, value) => MapEntry(key.toString(), value));
         }
       } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+        debugPrint("[original-error] $error\n$stackTrace");
+      }
     }
     return <String, dynamic>{};
   }

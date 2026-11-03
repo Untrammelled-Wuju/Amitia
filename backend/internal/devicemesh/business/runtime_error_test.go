@@ -28,9 +28,9 @@ func TestDescribeRuntimeErrorPrioritizesActionableFailures(t *testing.T) {
 	}
 }
 
-func TestDescribeRuntimeErrorBoundsInternalMessage(t *testing.T) {
+func TestDescribeRuntimeErrorPreservesRawInternalMessage(t *testing.T) {
 	got := DescribeRuntimeError(errors.New(strings.Repeat("连", 700)))
-	if len([]rune(got.InternalMessage)) != 501 {
+	if len([]rune(got.InternalMessage)) != 700 || got.RawError != strings.Repeat("连", 700) {
 		t.Fatalf("internal message rune count = %d", len([]rune(got.InternalMessage)))
 	}
 }

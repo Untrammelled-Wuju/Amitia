@@ -2,6 +2,7 @@ package com.amitia.amitia_app.nativeprovider.accessibility
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.Settings
 import androidx.core.content.FileProvider
@@ -23,6 +24,13 @@ internal object AccessibilityProviderInstaller {
     }
 
     fun isInstalled(context: Context): Boolean = installedVersion(context) != null
+
+    fun signaturesMatch(context: Context): Boolean {
+        return context.packageManager.checkSignatures(
+            context.packageName,
+            PROVIDER_PACKAGE,
+        ) == PackageManager.SIGNATURE_MATCH
+    }
 
     fun launchInstall(context: Context): Boolean {
         return try {
@@ -66,6 +74,22 @@ internal object AccessibilityProviderInstaller {
         } catch (originalError62: Throwable) {
           originalError62.printStackTrace()
 
+            false
+        }
+    }
+
+    fun launchUninstall(context: Context): Boolean {
+        if (!isInstalled(context)) return false
+        val intent = Intent(Intent.ACTION_UNINSTALL_PACKAGE).apply {
+            data = Uri.parse("package:$PROVIDER_PACKAGE")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            putExtra(Intent.EXTRA_RETURN_RESULT, false)
+        }
+        return try {
+            context.startActivity(intent)
+            true
+        } catch (originalError78: Throwable) {
+            originalError78.printStackTrace()
             false
         }
     }

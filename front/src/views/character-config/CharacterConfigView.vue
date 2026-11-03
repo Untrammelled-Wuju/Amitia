@@ -76,6 +76,10 @@ SPDX-License-Identifier: AGPL-3.0-only
             v-model:tags-text="form.tagsText"
             v-model:personality-config="form.personalityConfig"
             v-model:is-active="form.isActive"
+            v-model:model-config-id="form.modelConfigId"
+            v-model:reasoning-effort="form.reasoningEffort"
+            v-model:reasoning-enabled="form.reasoningEnabled"
+            :model-configs="modelConfigs"
             :has-other-active="hasOtherActive"
             :saving="saving"
             :selected-id="selectedId"
@@ -184,6 +188,7 @@ import ExtensionPageHeader from "@/views/extensions/components/ExtensionPageHead
 const {
   generationSession,
   templates,
+  modelConfigs,
   showTemplateDialog,
   templateLoading,
   characters,
@@ -198,6 +203,7 @@ const {
   hasOtherActive,
   fetchTemplates,
   fetchChars,
+  fetchModelConfigs,
   selectChar,
   createNew,
   createFromTemplate,
@@ -278,6 +284,7 @@ async function onConfirmImport() {
 onMounted(async () => {
   await loadPackHistory();
   await fetchTemplates();
+  await fetchModelConfigs();
   await fetchChars();
 });
 </script>

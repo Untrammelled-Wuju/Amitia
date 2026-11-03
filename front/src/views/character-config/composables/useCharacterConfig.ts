@@ -23,6 +23,7 @@ export function useCharacterConfig() {
   const avatarUploading = ref(false);
 
   const templates = ref<any[]>([]);
+  const modelConfigs = ref<any[]>([]);
   const showTemplateDialog = ref(false);
   const templateLoading = ref(false);
 
@@ -78,6 +79,9 @@ export function useCharacterConfig() {
     personalityConfig: { ...DEFAULT_PERSONALITY_CONFIG } as PersonalityConfig,
     chatStyleConfig: null as any,
     sceneRules: null as any,
+    modelConfigId: 0,
+    reasoningEffort: "",
+    reasoningEnabled: -1,
   });
   const cardDataExtra = ref<Record<string, any>>({});
 
@@ -134,6 +138,19 @@ collectionAuthority.value = "";
     }
   }
 
+  async function fetchModelConfigs() {
+    try {
+      const rows = (await get<any[]>("/api/model/available")) || [];
+      modelConfigs.value = rows.filter((model: any) => {
+        const type = String(model.apiType || model.provider || "").toLowerCase();
+        return !["voice", "asr", "embedding", "vector", "vision", "imagegen"].includes(type);
+      });
+    } catch (error) {
+      console.error("[original-error]", error);
+      modelConfigs.value = [];
+    }
+  }
+
   function selectChar(c: any) {
     if (saving.value) return;
     editorAuthority.value = c.roleAuthority || "";
@@ -167,6 +184,9 @@ collectionAuthority.value = "";
     form.personalityConfig = normalizePersonalityConfig(c.personalityConfig);
     form.chatStyleConfig = c.chatStyleConfig || null;
     form.sceneRules = c.sceneRules || null;
+    form.modelConfigId = Number(c.modelConfigId || 0);
+    form.reasoningEffort = String(c.reasoningEffort || "");
+    form.reasoningEnabled = Number(c.reasoningEnabled ?? -1);
     form.isActive = !!c.isActive;
   }
 
@@ -197,6 +217,9 @@ collectionAuthority.value = "";
     form.characterVersion = "";
     form.tagsText = "";
     form.personalityConfig = { ...DEFAULT_PERSONALITY_CONFIG };
+    form.modelConfigId = 0;
+    form.reasoningEffort = "";
+    form.reasoningEnabled = -1;
   }
 
   async function createFromTemplate(tpl: TemplateItem) {
@@ -248,6 +271,9 @@ collectionAuthority.value = "";
     form.personalityConfig = normalizePersonalityConfig(c.personalityConfig);
     form.chatStyleConfig = c.chatStyleConfig || null;
     form.sceneRules = c.sceneRules || null;
+    form.modelConfigId = Number(c.modelConfigId || 0);
+    form.reasoningEffort = String(c.reasoningEffort || "");
+    form.reasoningEnabled = Number(c.reasoningEnabled ?? -1);
     form.isActive = false;
     ElMessage.success("已复制角色，请修改后保存");
   }
@@ -421,6 +447,7 @@ collectionAuthority.value = "";
     readOnly,
     generationSession,
     templates,
+    modelConfigs,
     showTemplateDialog,
     templateLoading,
     characters,
@@ -434,6 +461,7 @@ collectionAuthority.value = "";
     hasOtherActive,
     fetchTemplates,
     fetchChars,
+    fetchModelConfigs,
     selectChar,
     createNew,
     createFromTemplate,

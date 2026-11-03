@@ -209,3 +209,7 @@ func (e *Engine) continuityRoleIDs(ctx context.Context, request Request) ([]stri
 	}
 	return result, nil
 }
+
+func (e *Engine) ContinuityRoleIDs(ctx context.Context, request Request) ([]string, error) {
+	return e.continuityRoleIDs(ctx, request)
+}

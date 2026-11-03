@@ -59,6 +59,54 @@ SPDX-License-Identifier: AGPL-3.0-only
             />
           </el-form-item>
 
+          <el-form-item class="form-item-full" label="角色模型">
+            <el-select
+              :model-value="modelConfigId"
+              style="width: 100%"
+              @update:model-value="emit('update:modelConfigId', Number($event || 0))"
+            >
+              <el-option label="默认模型（跟随全局设置）" :value="0" />
+              <el-option
+                v-for="model in modelConfigs"
+                :key="model.id"
+                :label="`${model.name || model.modelName} (${model.modelName || model.name})`"
+                :value="Number(model.id)"
+              />
+            </el-select>
+            <div class="field-hint">只保存为当前角色的覆盖项，不修改模型本身的配置。</div>
+          </el-form-item>
+
+          <el-form-item label="思考模式">
+            <el-select
+              :model-value="reasoningEnabled"
+              @update:model-value="emit('update:reasoningEnabled', Number($event))"
+            >
+              <el-option label="跟随默认" :value="-1" />
+              <el-option label="开启" :value="1" />
+              <el-option label="关闭" :value="0" />
+            </el-select>
+          </el-form-item>
+
+          <el-form-item label="思考强度">
+            <div class="reasoning-setting">
+              <el-slider
+                :model-value="reasoningLevel"
+                :min="0"
+                :max="3"
+                :step="1"
+                :disabled="reasoningEnabled === 0"
+                show-stops
+                @update:model-value="updateReasoningLevel"
+              />
+              <div class="reasoning-labels">
+                <span>低</span><span>中</span><span>高</span><span>极高</span>
+              </div>
+              <div class="field-hint">
+                {{ reasoningEffort ? `当前覆盖：${reasoningEffort}` : "当前跟随默认强度" }}
+              </div>
+            </div>
+          </el-form-item>
+
           <el-form-item label="性格">
             <el-input
               v-model="personalityModel"
@@ -233,6 +281,10 @@ const props = defineProps<{
   characterVersion: string;
   tagsText: string;
   personalityConfig: PersonalityConfig;
+  modelConfigs: any[];
+  modelConfigId: number;
+  reasoningEffort: string;
+  reasoningEnabled: number;
   isActive: boolean;
   hasOtherActive: boolean;
   saving: boolean;
@@ -245,6 +297,9 @@ const emit = defineEmits<{
   (e: "update:name", v: string): void;
   (e: "update:avatar", v: string): void;
   (e: "update:identity", v: string): void;
+  (e: "update:modelConfigId", v: number): void;
+  (e: "update:reasoningEffort", v: string): void;
+  (e: "update:reasoningEnabled", v: number): void;
   (e: "update:personality", v: string): void;
   (e: "update:speakingStyle", v: string): void;
   (e: "update:relationshipStyle", v: string): void;
@@ -267,6 +322,18 @@ const emit = defineEmits<{
   (e: "save"): void;
   (e: "uploadAvatar", v: File): void;
 }>();
+
+const reasoningEfforts = ["low", "medium", "high", "xhigh"];
+const reasoningLevel = computed(() => {
+  const index = reasoningEfforts.indexOf(props.reasoningEffort);
+  return index >= 0 ? index : 2;
+});
+
+function updateReasoningLevel(value: number | number[]) {
+  const index = Array.isArray(value) ? Number(value[0]) : Number(value);
+  emit("update:reasoningEffort", reasoningEfforts[index] || "high");
+  if (props.reasoningEnabled < 0) emit("update:reasoningEnabled", 1);
+}
 
 const fileInputRef = ref<HTMLInputElement>();
 const avatarLoadFailed = ref(false);
@@ -407,6 +474,25 @@ const isActiveModel = computed({
 
 .form-item-full {
   grid-column: 1 / -1;
+}
+
+.field-hint {
+  margin-top: 4px;
+  color: var(--ac-color-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.reasoning-setting {
+  width: 100%;
+  padding: 0 8px;
+}
+
+.reasoning-labels {
+  display: flex;
+  justify-content: space-between;
+  color: var(--ac-color-text-secondary);
+  font-size: 11px;
 }
 
 .avatar-upload-row {

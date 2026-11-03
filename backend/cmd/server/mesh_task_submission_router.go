@@ -339,5 +339,5 @@ func writeMeshTaskSubmissionError(c *gin.Context, err error) {
 	} else if task_runtime.IsTaskErrorCode(err, task_runtime.ErrTaskDependencyUnavailable) {
 		status = http.StatusServiceUnavailable
 	}
-	c.JSON(status, gin.H{"message": err.Error()})
+	c.JSON(status, meshRuntimeErrorPayload("mesh.task_submission_failed", business.DescribeRuntimeError(err), nil))
 }

@@ -1,0 +1,10 @@
+{
+  "name": "@amitia/agent-identity-browser-profile",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node ../scripts/build-package.mjs --package .",
+    "verify": "node ../scripts/verify-package.mjs ../../../plugin/agent-identities/browser-profile-1.0.0.amitiax"
+  }
+}

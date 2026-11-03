@@ -529,14 +529,14 @@ private let supportedProtocolVersions: Set<Int> = [1]
             content.categoryIdentifier = "AMITIA_MESSAGE"
         } else if type.hasPrefix("reminder.") || type.hasPrefix("proactive.") {
             content.categoryIdentifier = "AMITIA_REMINDER"
-        } else if type.hasPrefix("run.") {
+        } else if type.hasPrefix("run.") || type == "attention.required" {
             content.categoryIdentifier = "AMITIA_EXECUTION"
         }
         if payload["sound"] as? Bool != false {
             content.sound = .default
         }
         var userInfo: [String: Any] = [:]
-        for key in ["notificationId", "type", "spaceId", "conversationId", "characterId", "messageId", "runId", "deepLink"] {
+        for key in ["notificationId", "type", "spaceId", "conversationId", "characterId", "messageId", "runId", "deepLink", "attentionId", "kind", "requestId", "approvalId"] {
             if let value = payload[key] {
                 userInfo[key] = value
             }
@@ -926,6 +926,60 @@ private let supportedProtocolVersions: Set<Int> = [1]
                 "source": "ios.system"
             ],
             error: nil
+        )
+    }
+}
+
+@objc public final class IOSVirtualDisplayPreviewNativeHandler: NSObject, IOSNativeOperationHandler {
+    public let operations: Set<String> = [
+        "virtual_display.preview.status",
+        "virtual_display.preview.set",
+        "virtual_display.preview.permission.request",
+        "virtual_display.preview.position.reset"
+    ]
+
+    private let unavailableReason = "iOS 不提供 VirtualDisplay 后端，也不允许普通应用在桌面或其他应用上方创建任意系统级悬浮窗"
+
+    public func capabilitySnapshot() -> IOSNativeCapability {
+        IOSNativeCapability(
+            available: false,
+            authorized: false,
+            hardwareAvailable: true,
+            platformSupported: false,
+            foregroundRequired: false
+        )
+    }
+
+    public func execute(_ request: IOSNativeRequest) async -> IOSNativeResponse {
+        if request.operation == "virtual_display.preview.status" {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestId: request.requestId,
+                status: "success",
+                result: [
+                    "supported": false,
+                    "enabled": false,
+                    "overlayPermissionGranted": false,
+                    "serviceRunning": false,
+                    "visible": false,
+                    "suppressed": false,
+                    "targetDisplayId": -1,
+                    "state": "unsupported",
+                    "reason": unavailableReason,
+                    "lastError": unavailableReason
+                ],
+                error: nil
+            )
+        }
+        return IOSNativeResponse(
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            status: "error",
+            result: nil,
+            error: IOSNativeError(
+                code: "PLATFORM_NOT_SUPPORTED",
+                message: unavailableReason
+            )
         )
     }
 }

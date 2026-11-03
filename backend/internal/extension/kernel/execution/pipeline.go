@@ -39,6 +39,7 @@ type ExecutionPipeline struct {
 	MetricsRec          *MetricsRecorder
 	CircuitBreaker      *CircuitBreakerCoordinator
 	RetryCtrl           RetryController
+	AgentObserver       AgentExecutionObserver
 	circuitClassifier   CircuitResultClassifier
 
 	ToolResolver            func(ctx context.Context, toolID string) (capability.ToolDefinition, error)
@@ -144,7 +145,7 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 	if err != nil {
 		return p.finalizeCancellation(ctx, inv, p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 			Code:    capability.ErrorCodeInternalError,
-				Message: "resolve timeout budget failed: " + err.Error(),
+			Message: "resolve timeout budget failed: " + err.Error(),
 		}))), nil
 	}
 
@@ -157,7 +158,7 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 	if err != nil {
 		return p.finalizeCancellation(ctx, inv, p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 			Code:    capability.ErrorCodeInternalError,
-				Message: "wrap timeout context failed: " + err.Error(),
+			Message: "wrap timeout context failed: " + err.Error(),
 		}))), nil
 	}
 	defer timeoutCancel()
@@ -249,6 +250,17 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 			if approvalResult != nil {
 				return *approvalResult, nil
 			}
+		}
+	}
+
+	if p.AgentObserver != nil {
+		if err := p.AgentObserver.BeforeToolExecution(timeoutCtx, inv, tool, request.Input); err != nil {
+			return p.finalizeCancellation(timeoutCtx, inv, p.failWithAudit(timeoutCtx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+				Code:     capability.ErrorCodePermissionDenied,
+				Category: capability.ToolErrorCategoryPermission,
+				Message:  err.Error(),
+				Cause:    err,
+			}))), nil
 		}
 	}
 
@@ -395,7 +407,7 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 			result := capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 				Code:     capability.ErrorCodeConcurrencyPolicyInvalid,
 				Category: capability.ToolErrorCategoryResource,
-					Message:  "invalid concurrency policy: " + leaseErr.Error(),
+				Message:  "invalid concurrency policy: " + leaseErr.Error(),
 			})
 			return p.finalizeCancellation(timeoutCtx, inv, result), nil
 		}
@@ -565,7 +577,42 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 		p.MetricsRec.Record(timeoutCtx, tool, result, p.TimeoutCtrl.Now().Sub(startTime))
 	}
 
+	durationMS := p.TimeoutCtrl.Now().Sub(startTime).Milliseconds()
+	if p.AgentObserver != nil {
+		p.AgentObserver.AfterToolExecution(timeoutCtx, inv, tool, result, durationMS)
+		if reason := unknownOutcomeReason(tool, result, dispatched); reason != "" {
+			if err := p.AgentObserver.RecordUnknownOutcome(timeoutCtx, inv, tool, result, reason); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
+		}
+	}
+
 	return p.finalizeCancellation(timeoutCtx, inv, result), nil
+}
+
+func unknownOutcomeReason(tool capability.ToolDefinition, result capability.UnifiedToolResult, dispatched bool) string {
+	if !dispatched {
+		return ""
+	}
+	if result.Error != nil {
+		code := strings.ToLower(result.Error.Code)
+		message := strings.ToLower(result.Error.Message)
+		for _, marker := range []string{"outcome_unknown", "indeterminate", "unconfirmed", "unknown_result", "outcome unknown"} {
+			if strings.Contains(code, marker) || strings.Contains(message, marker) {
+				return result.Error.Error()
+			}
+		}
+	}
+	if result.Status != capability.ToolResultStatusCancelled && result.Status != capability.ToolResultStatusTimedOut {
+		return ""
+	}
+	if len(result.SideEffects) > 0 || tool.HasSideEffects || tool.SideEffect == capability.SideEffectExternal || tool.SideEffect == capability.SideEffectWrite || tool.SideEffect == capability.SideEffectSystem || tool.SideEffect == capability.SideEffectFinancial || tool.SideEffect == capability.SideEffectDestructive {
+		if result.Error != nil {
+			return result.Error.Error()
+		}
+		return string(result.Status)
+	}
+	return ""
 }
 
 func (p *ExecutionPipeline) dispatchAttempt(

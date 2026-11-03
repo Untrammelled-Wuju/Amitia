@@ -21,6 +21,7 @@ import android.os.SystemClock
 import android.util.Base64
 import android.util.SparseArray
 import android.view.KeyEvent
+import android.view.Surface
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
 import org.json.JSONArray
@@ -54,8 +55,14 @@ internal class VirtualDisplayHostService(
         var packageName: String?,
         var generation: Long,
         val display: VirtualDisplay,
-        var reader: ImageReader,
+        var reader: ImageReader?,
+        var externalSurface: Surface?,
         var lastFrameAt: Long,
+        var cachedFrame: EncodedFrame?,
+        var cachedFormat: String,
+        var cachedQuality: Int,
+        var cachedMaxWidth: Int,
+        var cachedMaxHeight: Int,
     )
 
     private val displayManager = createDisplayManager(context)
@@ -117,17 +124,78 @@ internal class VirtualDisplayHostService(
         shutdownHost()
     }
 
+    override fun bindSurface(displayId: Int, surface: Surface): String {
+        return try {
+            synchronized(lock) {
+                val session = sessions[displayId]
+                    ?: throw HostError("VIRTUAL_DISPLAY_NOT_FOUND", "virtual display not found")
+                session.display.setSurface(surface)
+                session.reader?.close()
+                session.reader = null
+                session.externalSurface = surface
+                session.cachedFrame = null
+                generation += 1
+                session.generation = generation
+                session.lastFrameAt = System.currentTimeMillis()
+                successResponse("", sessionJson(displayId, session))
+            }
+        } catch (error: Throwable) {
+            errorResponse(
+                "",
+                "VIRTUAL_DISPLAY_SURFACE_OPERATION_FAILED",
+                error.message ?: error.javaClass.simpleName,
+            )
+        }
+    }
+
+    override fun detachSurface(displayId: Int): String {
+        return try {
+            synchronized(lock) {
+                val session = sessions[displayId]
+                    ?: throw HostError("VIRTUAL_DISPLAY_NOT_FOUND", "virtual display not found")
+                session.display.setSurface(null)
+                session.externalSurface = null
+                val reader = ImageReader.newInstance(
+                    session.width,
+                    session.height,
+                    PixelFormat.RGBA_8888,
+                    3,
+                )
+                session.display.setSurface(reader.surface)
+                session.reader = reader
+                session.cachedFrame = null
+                generation += 1
+                session.generation = generation
+                successResponse("", sessionJson(displayId, session))
+            }
+        } catch (error: Throwable) {
+            errorResponse(
+                "",
+                "VIRTUAL_DISPLAY_SURFACE_OPERATION_FAILED",
+                error.message ?: error.javaClass.simpleName,
+            )
+        }
+    }
+
     private fun create(request: JSONObject): JSONObject {
         val name = request.optString("name").trim().ifEmpty { "amitia_virtual" }
         val width = request.optInt("width", 1080).coerceIn(320, 2560)
         val height = request.optInt("height", 1920).coerceIn(320, 2560)
         val densityDpi = request.optInt("densityDpi", 420).coerceIn(72, 640)
         synchronized(lock) {
+            val sessionToken = UUID.randomUUID().toString().take(8)
+            val uniqueName = "${name}_$sessionToken"
             val reader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 3)
-            val flags = DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC or
-                DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION
+            var flags = DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC or
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION or
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
+                flags = flags or VIRTUAL_DISPLAY_FLAG_TRUSTED or
+                    VIRTUAL_DISPLAY_FLAG_OWN_FOCUS or
+                    VIRTUAL_DISPLAY_FLAG_STEAL_TOP_FOCUS_DISABLED
+            }
             val display = displayManager.createVirtualDisplay(
-                name,
+                uniqueName,
                 width,
                 height,
                 densityDpi,
@@ -146,7 +214,7 @@ internal class VirtualDisplayHostService(
             generation += 1
             val session = DisplaySession(
                 ref = "vd_${displayId}_${generation}",
-                name = name,
+                name = uniqueName,
                 width = width,
                 height = height,
                 densityDpi = densityDpi,
@@ -154,7 +222,13 @@ internal class VirtualDisplayHostService(
                 generation = generation,
                 display = display,
                 reader = reader,
+                externalSurface = null,
                 lastFrameAt = 0L,
+                cachedFrame = null,
+                cachedFormat = "",
+                cachedQuality = 0,
+                cachedMaxWidth = 0,
+                cachedMaxHeight = 0,
             )
             sessions[displayId] = session
             return sessionJson(displayId, session).put("ref", session.ref)
@@ -184,19 +258,21 @@ internal class VirtualDisplayHostService(
         val height = request.optInt("height", session.height).coerceIn(320, 2560)
         val densityDpi = request.optInt("densityDpi", session.densityDpi).coerceIn(72, 640)
         synchronized(lock) {
-            val nextReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 3)
             try {
-                session.display.setSurface(nextReader.surface)
+                if (session.externalSurface == null) {
+                    val nextReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 3)
+                    session.display.setSurface(nextReader.surface)
+                    session.reader?.close()
+                    session.reader = nextReader
+                }
                 session.display.resize(width, height, densityDpi)
             } catch (error: Throwable) {
-                nextReader.close()
                 throw HostError("VIRTUAL_DISPLAY_RESIZE_FAILED", error.message ?: "resize failed")
             }
-            session.reader.close()
-            session.reader = nextReader
             session.width = width
             session.height = height
             session.densityDpi = densityDpi
+            session.cachedFrame = null
             generation += 1
             session.generation = generation
         }
@@ -256,15 +332,45 @@ internal class VirtualDisplayHostService(
         val quality = request.optInt("quality", 82).coerceIn(1, 100)
         val maxWidth = request.optInt("maxWidth", 1280).coerceIn(320, 2560)
         val maxHeight = request.optInt("maxHeight", 1280).coerceIn(320, 2560)
-        val image = acquireImage(pair.second.reader, 3000L)
-        if (image == null) {
+        val session = pair.second
+        val reader = session.reader
+        if (reader == null) {
             return captureWithSystemScreencap(
-                pair.first,
-                pair.second.ref,
-                format,
-                quality,
-                maxWidth,
-                maxHeight,
+                displayId = pair.first,
+                session = session,
+                format = format,
+                quality = quality,
+                maxWidth = maxWidth,
+                maxHeight = maxHeight,
+            )
+        }
+        val image = acquireImage(reader, 50L)
+        if (image == null) {
+            val cached = session.cachedFrame
+            val cachedAt = session.lastFrameAt
+            val cacheFresh = System.currentTimeMillis() - cachedAt <= 1200L
+            if (
+                cached != null &&
+                cacheFresh &&
+                session.cachedFormat == format &&
+                session.cachedMaxWidth == maxWidth &&
+                session.cachedMaxHeight == maxHeight
+            ) {
+                return frameResponse(
+                    pair.first,
+                    session,
+                    cached,
+                    session.cachedQuality,
+                    session.cachedFormat,
+                )
+            }
+            return captureWithSystemScreencap(
+                displayId = pair.first,
+                session = session,
+                format = format,
+                quality = quality,
+                maxWidth = maxWidth,
+                maxHeight = maxHeight,
             )
         }
         val bitmap = try {
@@ -280,22 +386,18 @@ internal class VirtualDisplayHostService(
             bitmap.recycle()
             throw HostError("VIRTUAL_DISPLAY_CAPTURE_FAILED", error.message ?: "encode failed")
         }
-        pair.second.lastFrameAt = System.currentTimeMillis()
-        return JSONObject()
-            .put("displayId", pair.first)
-            .put("ref", pair.second.ref)
-            .put("width", output.width)
-            .put("height", output.height)
-            .put("mimeType", output.mimeType)
-            .put("format", format)
-            .put("quality", quality)
-            .put("dataBase64", Base64.encodeToString(output.bytes, Base64.NO_WRAP))
-            .put("capturedAt", pair.second.lastFrameAt)
+        session.lastFrameAt = System.currentTimeMillis()
+        session.cachedFrame = output
+        session.cachedFormat = format
+        session.cachedQuality = quality
+        session.cachedMaxWidth = maxWidth
+        session.cachedMaxHeight = maxHeight
+        return frameResponse(pair.first, session, output, quality, format)
     }
 
     private fun captureWithSystemScreencap(
         displayId: Int,
-        ref: String,
+        session: DisplaySession,
         format: String,
         quality: Int,
         maxWidth: Int,
@@ -339,26 +441,43 @@ internal class VirtualDisplayHostService(
             throw HostError("VIRTUAL_DISPLAY_CAPTURE_FAILED", error.message ?: "encode failed")
         }
         val capturedAt = System.currentTimeMillis()
+        session.lastFrameAt = capturedAt
+        session.cachedFrame = output
+        session.cachedFormat = format
+        session.cachedQuality = quality
+        session.cachedMaxWidth = maxWidth
+        session.cachedMaxHeight = maxHeight
+        return frameResponse(displayId, session, output, quality, format)
+    }
+
+    private fun frameResponse(
+        displayId: Int,
+        session: DisplaySession,
+        output: EncodedFrame,
+        quality: Int,
+        format: String,
+    ): JSONObject {
         return JSONObject()
             .put("displayId", displayId)
-            .put("ref", ref)
+            .put("ref", session.ref)
             .put("width", output.width)
             .put("height", output.height)
             .put("mimeType", output.mimeType)
             .put("format", format)
             .put("quality", quality)
             .put("dataBase64", Base64.encodeToString(output.bytes, Base64.NO_WRAP))
-            .put("capturedAt", capturedAt)
+            .put("capturedAt", session.lastFrameAt)
     }
 
     private fun resolveSurfaceFlingerDisplayId(displayId: Int): String? {
+        val session = sessions[displayId] ?: return null
         val result = runCommand(
             listOf("/system/bin/dumpsys", "SurfaceFlinger", "--display-id"),
             5000L,
         )
         if (result.exitCode != 0) return null
         val surfaceFlingerIds = result.stdout.lineSequence()
-            .filter { it.contains("displayName=\"amitia_virtual\"") }
+            .filter { it.contains("displayName=\"${session.name}\"") }
             .mapNotNull { line ->
                 Regex("Display\\s+(\\d+)").find(line)?.groupValues?.get(1)
             }
@@ -1022,11 +1141,13 @@ internal class VirtualDisplayHostService(
 
         }
         try {
-            session.reader.close()
+            session.reader?.close()
         } catch (originalError1018: Throwable) {
           originalError1018.printStackTrace()
 
         }
+        session.reader = null
+        session.externalSurface = null
     }
 
     private fun createDisplayManager(context: Context): DisplayManager {
@@ -1258,6 +1379,12 @@ internal class VirtualDisplayHostService(
         val stdout: String,
         val stderr: String,
     )
+
+    private companion object {
+        const val VIRTUAL_DISPLAY_FLAG_TRUSTED = 1 shl 10
+        const val VIRTUAL_DISPLAY_FLAG_OWN_FOCUS = 1 shl 14
+        const val VIRTUAL_DISPLAY_FLAG_STEAL_TOP_FOCUS_DISABLED = 1 shl 16
+    }
 
     private class HostError(
         val code: String,

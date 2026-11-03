@@ -158,8 +158,10 @@ function handleClick(event: MouseEvent) {
 <style scoped>
 .amrp-markdown {
   color: var(--amrp-text);
-  font-size: 14px;
-  line-height: 1.72;
+  font-family: var(--ac-font-family-content);
+  font-size: var(--ac-font-size-content);
+  font-weight: var(--ac-font-weight-ui);
+  line-height: 1.7;
   word-break: break-word;
   overflow-wrap: anywhere;
 }
@@ -182,7 +184,7 @@ function handleClick(event: MouseEvent) {
   max-width: 700px;
   margin: 22px 0 8px;
   line-height: 1.4;
-  font-weight: 720;
+  font-weight: var(--ac-font-weight-semibold);
 }
 
 .amrp-markdown-segment :deep(h1) { font-size: 22px; }
@@ -218,7 +220,7 @@ function handleClick(event: MouseEvent) {
 }
 
 .amrp-markdown-segment :deep(strong) {
-  font-weight: 720;
+  font-weight: var(--ac-font-weight-semibold);
 }
 
 .amrp-markdown-segment :deep(a) {
@@ -356,7 +358,7 @@ function handleClick(event: MouseEvent) {
 
 @media (max-width: 700px) {
   .amrp-markdown {
-    font-size: 14px;
+    font-size: var(--ac-font-size-content);
   }
 
   .amrp-markdown-segment :deep(.amrp-table-scroll),

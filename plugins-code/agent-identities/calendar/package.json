@@ -1,0 +1,10 @@
+{
+  "name": "@amitia/agent-identity-calendar",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node ../scripts/build-package.mjs --package .",
+    "verify": "node ../scripts/verify-package.mjs ../../../plugin/agent-identities/calendar-1.0.0.amitiax"
+  }
+}

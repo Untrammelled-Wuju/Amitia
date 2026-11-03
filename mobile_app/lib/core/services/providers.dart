@@ -13,6 +13,7 @@ import 'profile_service.dart';
 import 'worldbook_service.dart';
 import 'continuity_service.dart';
 import 'reminder_service.dart';
+import 'attention_service.dart';
 import 'model_config_service.dart';
 import 'feedback_service.dart';
 import 'voice_service.dart';
@@ -148,6 +149,10 @@ final continuityServiceProvider = Provider<ContinuityService>(
 
 final reminderServiceProvider = Provider<ReminderService>(
   (ref) => ReminderService(_getDynamicServiceApi(ref)),
+);
+
+final attentionServiceProvider = Provider<AttentionService>(
+  (ref) => AttentionService(_getDynamicServiceApi(ref)),
 );
 
 final modelConfigServiceProvider = Provider<ModelConfigService>(
@@ -324,8 +329,8 @@ final currentSpaceProfileProvider = FutureProvider.autoDispose<SpaceProfile?>((
   try {
     return await ref.read(spaceProfileServiceProvider).fetch();
   } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-return null;
+    print("[original-error] $error\n$stackTrace");
+    return null;
   }
 });
 
@@ -353,8 +358,8 @@ final conversationCharacterProvider = FutureProvider.autoDispose
           if (character.id == id) return character;
         }
       } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+        print("[original-error] $error\n$stackTrace");
+      }
       final character = await service.getById(id);
       return character?.id == id ? character : null;
     });
@@ -366,6 +371,7 @@ final conversationSidebarProvider =
     });
 
 final activeConversationIdProvider = StateProvider<String>((ref) => '');
+
 class ConversationBackHandler {
   bool Function()? onBack;
   DateTime? _lastExitBackAt;
@@ -439,16 +445,16 @@ final clientRuntimeSessionStateProvider = StreamProvider.autoDispose
               );
               revision = (state['revision'] as num?)?.toInt() ?? revision;
             } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+              print("[original-error] $error\n$stackTrace");
+            }
           }
           if (revision != lastRevision) {
             lastRevision = revision;
             yield state;
           }
         } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+          print("[original-error] $error\n$stackTrace");
+        }
         await Future<void>.delayed(const Duration(seconds: 2));
       }
     });
@@ -489,8 +495,8 @@ final conversationUIEventWindowProvider = StreamProvider.autoDispose
             }
             if (page.length < pageSize) break;
           } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-break;
+            print("[original-error] $error\n$stackTrace");
+            break;
           }
         }
         if (changed || !emittedInitial) {

@@ -951,15 +951,34 @@ func (e *Engine) RunGroupEvents(ctx context.Context, request Request, emit func(
 	if request.TargetDeviceID == "" {
 		request.TargetDeviceID = request.DeviceID
 	}
-	unlock := e.lock(request.SpaceID + "\x00" + request.TargetDeviceID + "\x00" + request.ConversationID)
+	ctx, cancel := context.WithCancelCause(ctx)
+	activeKey := request.SpaceID + "\x00" + request.DeviceID + "\x00" + request.RequestID
+	e.mu.Lock()
+	if _, exists := e.active[activeKey]; exists {
+		e.mu.Unlock()
+		cancel(nil)
+		return GroupResponse{}, errors.New("当前请求正在执行")
+	}
+	e.active[activeKey] = cancel
+	e.mu.Unlock()
+	defer func() {
+		e.mu.Lock()
+		delete(e.active, activeKey)
+		e.mu.Unlock()
+		cancel(nil)
+	}()
+	unlock, lockErr := e.lockContext(ctx, request.SpaceID+"\x00"+request.TargetDeviceID+"\x00"+request.ConversationID)
+	if lockErr != nil {
+		return GroupResponse{}, lockErr
+	}
 	defer unlock()
 	ctx, scope, finish, currentRole, state, err := e.beginGroupScope(ctx, request)
 	if err != nil {
 		return GroupResponse{}, err
 	}
 	defer finish()
-	ctx, cancel := context.WithCancelCause(ctx)
-	activeKey := scope.SpaceID + "\x00" + scope.InitiatorDeviceID + "\x00" + scope.RequestID
+	ctx, cancel = context.WithCancelCause(ctx)
+	activeKey = scope.SpaceID + "\x00" + scope.InitiatorDeviceID + "\x00" + scope.RequestID
 	e.mu.Lock()
 	e.active[activeKey] = cancel
 	e.mu.Unlock()

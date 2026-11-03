@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	kernelsqlite "github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
@@ -356,5 +357,62 @@ func TestExplicitStopCancelsOwnedGeneration(t *testing.T) {
 	}
 	if engine.Interrupt("core", "a", "stop-request") {
 		t.Fatal("finished request remains active")
+	}
+}
+
+func TestWaitingConversationRequestCanBeInterrupted(t *testing.T) {
+	engine, _, _, model := engineHarness(t)
+	holderStarted := make(chan struct{})
+	model.generate = func(ctx context.Context, inference Inference) (Generation, error) {
+		if inference.Scope.RequestID == "holder" {
+			close(holderStarted)
+			<-ctx.Done()
+			return Generation{}, context.Cause(ctx)
+		}
+		return Generation{Text: "unexpected"}, nil
+	}
+	holderDone := make(chan error, 1)
+	go func() {
+		_, err := engine.Run(t.Context(), Request{SpaceID: "core", DeviceID: "a", CoreID: "core", ConversationID: "conversation", RequestID: "holder", Message: "hold"})
+		holderDone <- err
+	}()
+	select {
+	case <-holderStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("holder did not start")
+	}
+	waiterDone := make(chan error, 1)
+	go func() {
+		_, err := engine.Run(t.Context(), Request{SpaceID: "core", DeviceID: "a", CoreID: "core", ConversationID: "conversation", RequestID: "waiter", Message: "wait"})
+		waiterDone <- err
+	}()
+	deadline := time.After(2 * time.Second)
+	interrupted := false
+	for !interrupted {
+		select {
+		case <-deadline:
+			t.Fatal("waiter was not registered for interruption")
+		case <-time.After(5 * time.Millisecond):
+			interrupted = engine.Interrupt("core", "a", "waiter")
+		}
+	}
+	select {
+	case err := <-waiterDone:
+		if !errors.Is(err, ErrInterrupted) {
+			t.Fatalf("waiting request error = %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("waiting request remained blocked after interruption")
+	}
+	if !engine.Interrupt("core", "a", "holder") {
+		t.Fatal("holder was not active")
+	}
+	select {
+	case err := <-holderDone:
+		if !errors.Is(err, ErrInterrupted) {
+			t.Fatalf("holder error = %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("holder remained blocked after interruption")
 	}
 }

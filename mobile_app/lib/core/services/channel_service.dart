@@ -6,8 +6,9 @@ class MCPService {
   MCPService(this._api);
 
   dynamic _unwrapData(dynamic response) {
-    if (response is Map && response.containsKey('data'))
+    if (response is Map && response.containsKey('data')) {
       return response['data'];
+    }
     return response;
   }
 
@@ -342,6 +343,27 @@ class ImageGenService {
     final resp = await _api.get<List<dynamic>>('/api/imagegen/providers');
     if (resp == null) return [];
     return resp.map((e) => e as Map<String, dynamic>).toList();
+  }
+
+  Future<Map<String, dynamic>> generate({
+    required String prompt,
+    String size = '1024x1024',
+    List<String> referenceResourceUris = const <String>[],
+  }) async {
+    final parts = size.split('x');
+    final data = await _api.post<Map<String, dynamic>>(
+      '/api/image-intelligence/generate',
+      data: <String, dynamic>{
+        'prompt': prompt,
+        'width': int.tryParse(parts.first) ?? 1024,
+        'height': int.tryParse(parts.last) ?? 1024,
+        'count': 1,
+        if (referenceResourceUris.isNotEmpty)
+          'referenceResourceUris': referenceResourceUris,
+      },
+    );
+    if (data == null) throw StateError('生图服务未返回结果');
+    return data;
   }
 }
 

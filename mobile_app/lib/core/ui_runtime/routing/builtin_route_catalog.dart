@@ -9,6 +9,7 @@ import '../../../features/settings/presentation/pages/notification_settings_page
 import '../../../features/conversations/presentation/pages/conversation_list_page.dart';
 import '../../../features/conversations/presentation/pages/conversation_search_page.dart';
 import '../../../features/agent/presentation/pages/agent_page.dart';
+import '../../../features/agent_os/presentation/pages/agent_os_page.dart';
 import '../../../features/agent/presentation/pages/agent_task_detail_page.dart';
 import '../../../features/characters/presentation/pages/character_list_page.dart';
 import '../../../features/characters/presentation/pages/character_card_workshop_page.dart';
@@ -32,6 +33,7 @@ import '../../../features/chat_import/presentation/pages/chat_import_page.dart';
 import '../../../features/channels/presentation/pages/channel_messages_page.dart';
 import '../../../features/extensions/presentation/pages/extension_center_page.dart';
 import '../../../features/extensions/presentation/pages/extension_packages_page.dart';
+import '../../../features/extensions/presentation/pages/marketplace_page.dart';
 import '../../../features/extensions/presentation/pages/mcp_list_page.dart';
 import '../../../features/extensions/presentation/pages/mcp_detail_page.dart';
 import '../../../features/extensions/presentation/pages/mcp_edit_page.dart';
@@ -61,6 +63,7 @@ import '../../../features/settings/presentation/pages/advanced_system_page.dart'
 import '../../../features/settings/presentation/pages/decision_viz_page.dart';
 import '../../../features/permissions/presentation/pages/permissions_page.dart';
 import '../../../features/permissions/presentation/pages/android_automation_page.dart';
+import '../../../features/permissions/presentation/pages/virtual_display_settings_page.dart';
 import '../../../features/settings/presentation/pages/backup_page.dart';
 import '../../../features/settings/presentation/pages/asr_page.dart';
 import '../../../features/settings/presentation/pages/deployment_page.dart';
@@ -237,6 +240,11 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
     path: '/agent',
     pageBuilder: (context, state) =>
         amitiaSlidePage(state: state, child: const AgentPage()),
+  ),
+  GoRoute(
+    path: '/agent-os',
+    pageBuilder: (context, state) =>
+        amitiaSlidePage(state: state, child: const AgentOSPage()),
   ),
   GoRoute(
     path: '/agent/task/:id',
@@ -453,6 +461,11 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
     ),
   ),
   GoRoute(
+    path: '/extensions/market',
+    pageBuilder: (context, state) =>
+        amitiaSlidePage(state: state, child: const MarketplacePage()),
+  ),
+  GoRoute(
     path: '/extensions/mcp',
     pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
@@ -650,6 +663,14 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
       context: context,
       state: state,
       child: const AndroidAutomationPage(),
+    ),
+  ),
+  GoRoute(
+    path: AppRoutes.settingsVirtualDisplay,
+    pageBuilder: (context, state) => amitiaSlidePage(
+      context: context,
+      state: state,
+      child: const VirtualDisplaySettingsPage(),
     ),
   ),
   GoRoute(

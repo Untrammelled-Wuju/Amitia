@@ -32,7 +32,7 @@ func registerMeshGroupChatRouter(group *gin.RouterGroup, services *AppServices, 
 		case errors.Is(err, coordination.ErrScopeExpired):
 			status = http.StatusConflict
 		}
-		c.JSON(status, gin.H{"code": "mesh.group_conflict", "message": err.Error()})
+		c.JSON(status, meshRuntimeErrorPayload("mesh.group_conflict", business.DescribeRuntimeError(err), result))
 	}
 	group.POST("/conversations/group", func(c *gin.Context) {
 		if security.GetActor(c) == nil {

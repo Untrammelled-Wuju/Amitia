@@ -346,6 +346,7 @@ SPDX-License-Identifier: AGPL-3.0-only
                   data-amitia-ui="chat.composer.model"
                   :disabled="isInputDisabled"
                 >
+                  <span v-if="isGroup && activeModelRole">{{ activeModelRole.name }} · </span>
                   <span>{{ selectedModelLabel }}</span>
                   <span> · </span>
                   <span>{{ reasoningLabel }}</span>
@@ -355,6 +356,25 @@ SPDX-License-Identifier: AGPL-3.0-only
               <Transition name="model-menu-fade" mode="out-in">
                 <div :key="modelMenuView" class="model-menu-page">
               <div v-if="modelMenuView === 'main'" class="model-effort-menu">
+                <div v-if="modelRoles.length > 1" class="model-role-selector">
+                  <div class="model-role-selector__label">选择角色</div>
+                  <div class="model-role-selector__items">
+                    <button
+                      v-for="role in modelRoles"
+                      :key="role.roleId"
+                      type="button"
+                      class="model-role-option"
+                      :class="{ active: role.roleId === activeModelRoleId }"
+                      @click="selectModelRole(role.roleId)"
+                    >
+                      <el-avatar :size="22" :src="role.avatar || undefined">
+                        {{ role.name.slice(0, 1) }}
+                      </el-avatar>
+                      <span>{{ role.name }}</span>
+                      <el-icon v-if="role.roleId === activeModelRoleId"><Check /></el-icon>
+                    </button>
+                  </div>
+                </div>
                 <div class="model-effort-row">
                   <span>强度</span>
                   <strong>{{ draftReasoningLabel }}</strong>
@@ -578,6 +598,15 @@ const props = withDefaults(defineProps<{
   channel?: string;
   isGroup?: boolean;
   groupMembers?: OwnedGroupMember[];
+  roleModelConfigs?: Array<{
+    roleId: string;
+    memberId?: string;
+    name: string;
+    avatar?: string;
+    modelConfigId?: number;
+    reasoningEffort?: string;
+    reasoningEnabled?: number;
+  }>;
   models?: any[];
   selectedModelId?: number;
   reasoningEffort?: string;
@@ -594,12 +623,25 @@ const props = withDefaults(defineProps<{
     reasoningEffort: string,
     reasoningEnabled: boolean,
   ) => void;
+  roleModelPreviewChange?: (
+    roleId: string,
+    modelId: number,
+    reasoningEffort: string,
+    reasoningEnabled: boolean,
+  ) => void;
+  roleModelCommitChange?: (
+    roleId: string,
+    modelId: number,
+    reasoningEffort: string,
+    reasoningEnabled: boolean,
+  ) => void;
 }>(), {
   characterId: "",
   conversationId: "",
   channel: "web",
   isGroup: false,
   groupMembers: () => [],
+  roleModelConfigs: () => [],
   models: () => [],
   selectedModelId: 0,
   reasoningEffort: "high",
@@ -626,6 +668,12 @@ const emit = defineEmits<{
     reasoningEnabled: boolean,
   ];
   "update:model": [
+    modelId: number,
+    reasoningEffort: string,
+    reasoningEnabled: boolean,
+  ];
+  "update:role-model": [
+    roleId: string,
     modelId: number,
     reasoningEffort: string,
     reasoningEnabled: boolean,
@@ -677,6 +725,7 @@ const SKILLS_PAGE_SIZE = 50;
 const voiceMode = ref(false);
 const modelMenuOpen = ref(false);
 const modelMenuView = ref<"main" | "models" | "reasoning">("main");
+const activeModelRoleId = ref(props.characterId || "");
 const draftReasoningValue = ref(1);
 const draftReasoningEnabled = ref(false);
 const modelSliderDragging = ref(false);
@@ -745,14 +794,33 @@ const llmModels = computed(() =>
     return !["voice", "asr", "embedding", "vector", "vision", "imagegen"].includes(type);
   }),
 );
+const modelRoles = computed(() =>
+  props.roleModelConfigs.filter((role) => String(role.roleId || "").trim()),
+);
+const activeModelRole = computed(() =>
+  modelRoles.value.find((role) => role.roleId === activeModelRoleId.value),
+);
+const effectiveSelectedModelId = computed(() => {
+  const roleModelId = Number(activeModelRole.value?.modelConfigId || 0);
+  return roleModelId > 0 ? roleModelId : Number(props.selectedModelId || 0);
+});
+const effectiveReasoningEffort = computed(() =>
+  activeModelRole.value?.reasoningEffort || props.reasoningEffort || "high",
+);
+const effectiveReasoningEnabled = computed(() => {
+  const value = Number(activeModelRole.value?.reasoningEnabled ?? -1);
+  if (value === 0) return false;
+  if (value === 1) return true;
+  return props.reasoningEnabled === true;
+});
 const selectedModel = computed(() =>
-  llmModels.value.find((model: any) => Number(model.id) === Number(props.selectedModelId)),
+  llmModels.value.find((model: any) => Number(model.id) === effectiveSelectedModelId.value),
 );
 const selectedModelLabel = computed(
   () => selectedModel.value?.modelName || selectedModel.value?.name || "选择模型",
 );
 const reasoningLabel = computed(
-  () => reasoningLabels[props.reasoningEffort] || "中",
+  () => reasoningLabels[effectiveReasoningEffort.value] || "中",
 );
 const draftReasoningLevel = computed(() =>
   Math.min(Math.max(Math.round(draftReasoningValue.value), 0), 3),
@@ -764,7 +832,26 @@ const reasoningActiveWidth = computed(
   () => reasoningTrackWidths[draftReasoningLevel.value],
 );
 watch(
-  () => props.reasoningEffort,
+  () => props.characterId,
+  (characterId) => {
+    if (modelRoles.value.some((role) => role.roleId === characterId)) {
+      activeModelRoleId.value = characterId;
+    }
+  },
+  { immediate: true },
+);
+watch(
+  () => modelRoles.value.map((role) => role.roleId).join("|"),
+  () => {
+    if (modelRoles.value.some((role) => role.roleId === activeModelRoleId.value)) return;
+    activeModelRoleId.value = modelRoles.value.some((role) => role.roleId === props.characterId)
+      ? props.characterId
+      : modelRoles.value[0]?.roleId || props.characterId || "";
+  },
+  { immediate: true },
+);
+watch(
+  () => effectiveReasoningEffort.value,
   (value) => {
     if (modelSliderDragging.value) return;
     draftReasoningValue.value = Math.max(
@@ -776,7 +863,7 @@ watch(
 );
 
 watch(
-  () => props.reasoningEnabled,
+  () => effectiveReasoningEnabled.value,
   (value) => {
     draftReasoningEnabled.value = value === true;
   },
@@ -797,6 +884,12 @@ function notifyModelPreview(
   reasoningEffort: string,
   reasoningEnabled: boolean,
 ) {
+  const roleId = activeModelRole.value?.roleId || props.characterId;
+  if (roleId && props.roleModelPreviewChange) {
+    props.roleModelPreviewChange(roleId, modelId, reasoningEffort, reasoningEnabled);
+    emit("preview-model", modelId, reasoningEffort, reasoningEnabled);
+    return;
+  }
   props.modelPreviewChange?.(
     modelId,
     reasoningEffort,
@@ -815,6 +908,12 @@ function notifyModelCommit(
   reasoningEffort: string,
   reasoningEnabled: boolean,
 ) {
+  const roleId = activeModelRole.value?.roleId || props.characterId;
+  if (roleId && props.roleModelCommitChange) {
+    props.roleModelCommitChange(roleId, modelId, reasoningEffort, reasoningEnabled);
+    emit("update:role-model", roleId, modelId, reasoningEffort, reasoningEnabled);
+    return;
+  }
   props.modelCommitChange?.(
     modelId,
     reasoningEffort,
@@ -833,7 +932,7 @@ function previewReasoningIndex(value: number | number[]) {
   modelSliderDragging.value = true;
   draftReasoningValue.value = index;
   notifyModelPreview(
-    Number(props.selectedModelId),
+    effectiveSelectedModelId.value,
     reasoningEffortFromIndex(index),
     draftReasoningEnabled.value,
   );
@@ -845,7 +944,7 @@ function applyReasoningIndex(value: number | number[]) {
   modelSliderDragging.value = false;
   draftReasoningValue.value = index;
   notifyModelCommit(
-    Number(props.selectedModelId),
+    effectiveSelectedModelId.value,
     effort,
     draftReasoningEnabled.value,
   );
@@ -867,7 +966,7 @@ function selectModel(model: any) {
   modelSliderDragging.value = false;
   draftReasoningEnabled.value = model.supportsReasoning === true;
   const effort =
-    model.defaultReasoningEffort || props.reasoningEffort || "high";
+    model.defaultReasoningEffort || effectiveReasoningEffort.value || "high";
   draftReasoningValue.value = Math.max(0, reasoningOptions.indexOf(effort));
   notifyModelCommit(
     Number(model.id),
@@ -881,11 +980,25 @@ function selectReasoningEnabled(value: boolean) {
   modelSliderDragging.value = false;
   draftReasoningEnabled.value = value;
   notifyModelCommit(
-    Number(props.selectedModelId),
-    props.reasoningEffort || "high",
+    effectiveSelectedModelId.value,
+    effectiveReasoningEffort.value || "high",
     value,
   );
   backModelMenuPage();
+}
+
+function selectModelRole(roleId: string) {
+  activeModelRoleId.value = roleId;
+  const role = modelRoles.value.find((item) => item.roleId === roleId);
+  draftReasoningEnabled.value = Number(role?.reasoningEnabled ?? -1) === 0
+    ? false
+    : Number(role?.reasoningEnabled ?? -1) === 1
+      ? true
+      : props.reasoningEnabled === true;
+  draftReasoningValue.value = Math.max(
+    0,
+    reasoningOptions.indexOf(role?.reasoningEffort || props.reasoningEffort || "high"),
+  );
 }
 
 function providerLabel(model: any) {
@@ -1872,6 +1985,46 @@ defineExpose({ focus, setText, insertText: insertComposerText, clear: clearText 
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.model-role-selector {
+  display: grid;
+  gap: 6px;
+  padding: 4px 8px 8px;
+  border-bottom: 1px solid var(--ac-color-border-light);
+}
+
+.model-role-selector__label {
+  color: var(--ac-color-text-muted);
+  font-size: 11px;
+}
+
+.model-role-selector__items {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.model-role-option {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  border: 1px solid var(--ac-color-border);
+  border-radius: 999px;
+  padding: 3px 9px 3px 4px;
+  background: var(--ac-color-surface);
+  color: var(--ac-color-text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.model-role-option.active {
+  border-color: var(--ac-color-primary);
+  background: var(--ac-color-primary-bg);
 }
 
 .model-menu-viewport {

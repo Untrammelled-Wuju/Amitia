@@ -91,6 +91,34 @@ func TestWorkflowExecutionRepositoryPersistsContextStepsAndIdempotency(t *testin
 	}
 }
 
+func TestWorkflowExecutionRepositoryListsAttentionRunsBySpace(t *testing.T) {
+	db := openWorkflowTestDB(t)
+	repo := NewWorkflowExecutionRepository(db)
+	now := time.Now().UTC()
+	for _, run := range []workflow.WorkflowRun{
+		{ExecutionID: "failed-a", WorkflowID: "wf-a", Status: workflow.RunStatusRunning, Context: workflow.ExecutionContext{SpaceID: "space-a", ConversationID: "conversation-a"}, StartedAt: now, UpdatedAt: now},
+		{ExecutionID: "failed-b", WorkflowID: "wf-b", Status: workflow.RunStatusRunning, Context: workflow.ExecutionContext{SpaceID: "space-b"}, StartedAt: now, UpdatedAt: now},
+	} {
+		if _, created, err := repo.Start(context.Background(), run); err != nil || !created {
+			t.Fatalf("start %s: created=%v err=%v", run.ExecutionID, created, err)
+		}
+		run.Status = workflow.RunStatusFailed
+		run.Error = "workflow failed"
+		run.FinishedAt = &now
+		run.UpdatedAt = now
+		if err := repo.Finish(context.Background(), run); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runs, err := repo.ListAttentionRuns(context.Background(), "space-a", now.Add(-time.Minute), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(runs) != 1 || runs[0].ExecutionID != "failed-a" || runs[0].Context.ConversationID != "conversation-a" {
+		t.Fatalf("attention runs=%+v", runs)
+	}
+}
+
 func TestWorkflowTriggerBindingPersistence(t *testing.T) {
 	db := openWorkflowTestDB(t)
 	repo := NewWorkflowDefinitionRepository(db)

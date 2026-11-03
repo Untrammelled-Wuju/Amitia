@@ -54,6 +54,7 @@
 
 | Item | Location | License | Risk |
 |---|---|---|---|
+| Inter 4.1 Variable | front/src/assets/fonts/inter | SIL Open Font License 1.1 | Redistributed with application; preserve OFL notice |
 | Application icons | front/public/icons | License status: TO BE VERIFIED | Confirm original authorship or asset license |
 | PWA manifest icon references | front/public/manifest.webmanifest | License status: TO BE VERIFIED | Confirm icon rights |
 | Runtime voice messages | backend/data/voice_msg | User/runtime generated | Do not redistribute without confirming rights |

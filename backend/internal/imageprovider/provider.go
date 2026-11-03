@@ -9,79 +9,79 @@ import (
 )
 
 type ImageInput struct {
-	Path     string
-	Bytes    []byte
-	MimeType string
+	Path     string `json:"path,omitempty"`
+	Bytes    []byte `json:"bytes,omitempty"`
+	MimeType string `json:"mimeType,omitempty"`
 }
 
 type ImageGenerationRequest struct {
-	RequestID       string
-	IdempotencyKey  string
-	Mode            GenerationMode
-	Prompt          string
-	NegativePrompt  string
-	ReferenceImages []ImageInput
-	Width           int
-	Height          int
-	Seed            *int64
-	OutputCount     int
-	Metadata        map[string]string
+	RequestID       string            `json:"requestId,omitempty"`
+	IdempotencyKey  string            `json:"idempotencyKey,omitempty"`
+	Mode            GenerationMode    `json:"mode,omitempty"`
+	Prompt          string            `json:"prompt"`
+	NegativePrompt  string            `json:"negativePrompt,omitempty"`
+	ReferenceImages []ImageInput      `json:"referenceImages,omitempty"`
+	Width           int               `json:"width,omitempty"`
+	Height          int               `json:"height,omitempty"`
+	Seed            *int64            `json:"seed,omitempty"`
+	OutputCount     int               `json:"outputCount,omitempty"`
+	Metadata        map[string]string `json:"metadata,omitempty"`
 }
 
 type GeneratedImage struct {
-	Bytes    []byte
-	MimeType string
-	Width    int
-	Height   int
-	Metadata map[string]any
+	Bytes    []byte         `json:"bytes,omitempty"`
+	MimeType string         `json:"mimeType,omitempty"`
+	Width    int            `json:"width,omitempty"`
+	Height   int            `json:"height,omitempty"`
+	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
 type GenerationUsage struct {
-	PromptTokens     int64
-	CompletionTokens int64
-	TotalTokens      int64
-	ImageCount       int
-	Raw              map[string]any
+	PromptTokens     int64          `json:"promptTokens,omitempty"`
+	CompletionTokens int64          `json:"completionTokens,omitempty"`
+	TotalTokens      int64          `json:"totalTokens,omitempty"`
+	ImageCount       int            `json:"imageCount,omitempty"`
+	Raw              map[string]any `json:"raw,omitempty"`
 }
 
 type ImageGenerationResult struct {
-	Images       []GeneratedImage
-	Provider     string
-	Model        string
-	RequestID    string
-	RawMetadata  map[string]any
-	Status       string
-	OperationID  string
-	Usage        *GenerationUsage
-	ErrorCode    string
-	ErrorMessage string
+	Images       []GeneratedImage `json:"images,omitempty"`
+	Provider     string           `json:"provider,omitempty"`
+	Model        string           `json:"model,omitempty"`
+	RequestID    string           `json:"requestId,omitempty"`
+	RawMetadata  map[string]any   `json:"rawMetadata,omitempty"`
+	Status       string           `json:"status,omitempty"`
+	OperationID  string           `json:"operationId,omitempty"`
+	Usage        *GenerationUsage `json:"usage,omitempty"`
+	ErrorCode    string           `json:"errorCode,omitempty"`
+	ErrorMessage string           `json:"errorMessage,omitempty"`
 }
 
 type ImageGenerationCapabilities struct {
-	SupportsReferenceImage bool
-	SupportsMultipleImages bool
-	SupportsNegativePrompt bool
-	SupportsSeed           bool
-	SupportsAsyncOperation bool
-	SupportsCancellation   bool
-	MaxReferenceImages     int
-	MaxOutputImages        int
+	SupportsReferenceImage bool `json:"supportsReferenceImage"`
+	SupportsMultipleImages bool `json:"supportsMultipleImages"`
+	SupportsNegativePrompt bool `json:"supportsNegativePrompt"`
+	SupportsSeed           bool `json:"supportsSeed"`
+	SupportsAsyncOperation bool `json:"supportsAsyncOperation"`
+	SupportsCancellation   bool `json:"supportsCancellation"`
+	MaxReferenceImages     int  `json:"maxReferenceImages"`
+	MaxOutputImages        int  `json:"maxOutputImages"`
 }
 
 type ImageGenerationSubmission struct {
-	Status      string
-	OperationID string
-	RequestID   string
-	Result      *ImageGenerationResult
+	Status      string                 `json:"status"`
+	OperationID string                 `json:"operationId,omitempty"`
+	RequestID   string                 `json:"requestId,omitempty"`
+	Result      *ImageGenerationResult `json:"result,omitempty"`
 }
 
 type ImageModelConfig struct {
-	ConfigID  int
-	Name      string
-	ApiType   string
-	ApiKey    string
-	ModelName string
-	BaseUrl   string
+	ConfigID  int    `json:"configId"`
+	Name      string `json:"name"`
+	ApiType   string `json:"apiType"`
+	ApiKey    string `json:"apiKey"`
+	ModelName string `json:"modelName"`
+	BaseUrl   string `json:"baseUrl"`
 }
 
 type ImageGenerationProvider interface {
@@ -97,11 +97,18 @@ type ExtendedProvider interface {
 	ExtendedCapabilities(ctx context.Context, config ImageModelConfig) (ProviderCapabilities, error)
 }
 
+type ConnectionProbe interface {
+	Probe(ctx context.Context, config ImageModelConfig) (*ImageGenerationSubmission, error)
+}
+
 type ProviderDescriptor struct {
 	Name           string
+	DisplayName    string
 	DefaultModel   string
 	DefaultBaseURL string
 	SupportedModes []GenerationMode
+	LocalOnly      bool
+	DeviceOnly     bool
 }
 
 type Registry struct {
@@ -162,6 +169,17 @@ func (r *Registry) Resolve(name string) (ImageGenerationProvider, bool) {
 	return p, ok
 }
 
+func (r *Registry) Select(apiType, apiKey string) (string, ImageGenerationProvider, bool) {
+	name := NormalizeProviderName(apiType)
+	if strings.TrimSpace(apiKey) == "" {
+		if provider, ok := r.Resolve("cloud_core"); ok {
+			return "cloud_core", provider, true
+		}
+	}
+	provider, ok := r.Resolve(name)
+	return name, provider, ok
+}
+
 func (r *Registry) Describe(name string) (ProviderDescriptor, bool) {
 	if r.descriptors == nil {
 		return ProviderDescriptor{}, false
@@ -184,6 +202,14 @@ func (r *Registry) Names() []string {
 		names = append(names, name)
 	}
 	return names
+}
+
+func (r *Registry) Descriptors() []ProviderDescriptor {
+	descriptors := make([]ProviderDescriptor, 0, len(r.descriptors))
+	for _, descriptor := range r.descriptors {
+		descriptors = append(descriptors, descriptor)
+	}
+	return descriptors
 }
 
 func DefaultRegistry() *Registry {

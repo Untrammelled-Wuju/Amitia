@@ -71,9 +71,7 @@ class _OwnedApi implements BackendServiceApi {
           }
           as T;
     if (path.endsWith('/resources')) {
-      resourceQueries.add(
-        Map<String, dynamic>.from(queryParameters ?? {}),
-      );
+      resourceQueries.add(Map<String, dynamic>.from(queryParameters ?? {}));
       return {
             'resource': summaryMode ? null : resource,
             'executionScope': scope(),
@@ -144,10 +142,11 @@ class _OwnedApi implements BackendServiceApi {
     if (path.endsWith('/resources/edit')) postCallback?.call();
     if (editAck != null) {
       return {
-        ...editAck!,
-        if (editAck!['requestId'] == null)
-          'requestId': editRequest?['requestId'],
-      } as T;
+            ...editAck!,
+            if (editAck!['requestId'] == null)
+              'requestId': editRequest?['requestId'],
+          }
+          as T;
     }
     return {
           'ownerId': wrongAck ? 'other-device' : 'device-a',
@@ -1302,9 +1301,23 @@ void main() {
 
   test('会话缓存清空后按原始归属重新加载并归档', () async {
     final api = _OwnedApi();
-    api.resource = {'kind': 'conversation', 'id': 'chat', 'ownerId': 'device-a', 'roleId': 'role-a', 'revision': 7, 'deleted': false, 'body': {'id': 'chat', 'title': '对话'}};
-    api.editAck = {'ownerId': 'device-a', 'versions': {'conversation/chat': 8}};
-    final service = DeviceOwnedChatService(api, providerKey: () => 'https://provider');
+    api.resource = {
+      'kind': 'conversation',
+      'id': 'chat',
+      'ownerId': 'device-a',
+      'roleId': 'role-a',
+      'revision': 7,
+      'deleted': false,
+      'body': {'id': 'chat', 'title': '对话'},
+    };
+    api.editAck = {
+      'ownerId': 'device-a',
+      'versions': {'conversation/chat': 8},
+    };
+    final service = DeviceOwnedChatService(
+      api,
+      providerKey: () => 'https://provider',
+    );
     await service.refresh();
     final id = conversationReference({'ownerId': 'device-a', 'id': 'chat'});
     await service.edit('conversation', id, changes: {'archived': true});
@@ -1828,6 +1841,59 @@ void main() {
     expect(events.last['type'], 'completed');
   });
 
+  test('工具生命周期事件不会中断回复流', () async {
+    final events = await decodeOwnedChatStream(
+      bytes([
+        {'type': 'started', 'executionScope': scope()},
+        {
+          'type': 'tool-started',
+          'executionScope': scope(),
+          'progress': {
+            'toolCallId': 'call-1',
+            'toolName': 'android.display.status',
+          },
+        },
+        {
+          'type': 'tool-progress',
+          'executionScope': scope(),
+          'progress': {
+            'toolCallId': 'call-1',
+            'toolName': 'android.display.status',
+          },
+        },
+        {
+          'type': 'tool-completed',
+          'executionScope': scope(),
+          'progress': {
+            'toolCallId': 'call-1',
+            'toolName': 'android.display.status',
+            'result': '{"supported":true}',
+          },
+        },
+        {'type': 'delta', 'executionScope': scope(), 'text': '已完成'},
+        {
+          'type': 'completed',
+          'data': {
+            'saved': true,
+            'requestId': 'request',
+            'executionScope': scope(),
+            'reply': '已完成',
+          },
+        },
+      ]),
+      'request',
+    ).toList();
+
+    expect(events.map((event) => event['type']), [
+      'started',
+      'tool-started',
+      'tool-progress',
+      'tool-completed',
+      'delta',
+      'completed',
+    ]);
+  });
+
   test('拦截来自新提供者的混入增量', () async {
     expect(
       () => decodeOwnedChatStream(
@@ -1925,6 +1991,34 @@ void main() {
       ).toList(),
       throwsStateError,
     );
+  });
+
+  test('失败终态抛出包含全部服务端原始字段的错误', () async {
+    try {
+      await decodeOwnedChatStream(
+        bytes([
+          {'type': 'started', 'executionScope': scope()},
+          {
+            'type': 'failed',
+            'message': 'tool execution cancelled',
+            'errorCode': 'task_execution_failed',
+            'internalMessage':
+                'tool execution cancelled: device_authority_expired',
+            'error': 'tool execution cancelled: device_authority_expired',
+            'detail': 'tool execution cancelled: device_authority_expired',
+            'cause': 'device_authority_expired',
+            'rawError': 'tool execution cancelled: device_authority_expired',
+            'data': {'saved': false},
+          },
+        ]),
+        'request',
+      ).toList();
+      fail('失败终态必须抛出错误');
+    } catch (error) {
+      expect(error, isA<StateError>());
+      expect(error.toString(), contains('tool execution cancelled'));
+      expect(error.toString(), contains('device_authority_expired'));
+    }
   });
 
   test('未确认保存和结束后额外事件均被拒绝', () async {

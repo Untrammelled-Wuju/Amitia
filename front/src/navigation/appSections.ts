@@ -1,5 +1,6 @@
 export type AppSectionId =
   | "home"
+  | "agents"
   | "character"
   | "memory"
   | "tasks"
@@ -25,6 +26,14 @@ export interface AppSectionDefinition {
 
 export const appSections: AppSectionDefinition[] = [
   {
+    id: "agents",
+    route: "/agents",
+    label: "Agent",
+    entries: [
+      { route: "/agents", label: "Agent OS" },
+    ],
+  },
+  {
     id: "character",
     route: "/characters",
     label: "角色",
@@ -47,6 +56,15 @@ export const appSections: AppSectionDefinition[] = [
     ],
   },
   {
+    id: "tasks",
+    route: "/reminders",
+    label: "任务",
+    entries: [
+      { route: "/reminders", label: "主动任务" },
+      { route: "/continuity", label: "持续事项" },
+    ],
+  },
+  {
     id: "workshop",
     route: "/creative-workshop",
     label: "创意工坊",
@@ -60,6 +78,7 @@ export const appSections: AppSectionDefinition[] = [
     route: "/extensions",
     label: "扩展中心",
     entries: [
+      { route: "/extensions/market", label: "插件市场" },
       { route: "/extensions/packages", label: "扩展包" },
       { route: "/extensions/workflows", label: "工作流" },
       { route: "/extensions/mcp", label: "MCP 服务" },
@@ -71,11 +90,11 @@ export const appSections: AppSectionDefinition[] = [
 export function resolveAppSection(target: string): AppSectionId | null {
   const path = target.split(/[?#]/)[0];
   if (path === "/chat" || path === "/logs") return "home";
+  if (path === "/agents") return "agents";
   if (path === "/settings" || path.startsWith("/settings/")) return "settings";
   if (path === "/my-space" || path.startsWith("/my-space/")) return "account";
   if (path === "/channel-center" || path.startsWith("/channels/")) return "channels";
-  if (path === "/reminders" || /^\/characters\/[^/]+\/active-task$/.test(path)) return "tasks";
-  if (path === "/continuity") return "continuity";
+  if (path === "/reminders" || path === "/continuity" || /^\/characters\/[^/]+\/active-task$/.test(path)) return "tasks";
   if (path === "/game-center" || path.startsWith("/game-center/")) return "game";
   if (path === "/characters" || path === "/character" || path.startsWith("/character/") || path === "/world-book") return "character";
   if (path === "/memory" || path.startsWith("/memory/") || path === "/memory-manager" || path === "/memory-timeline" || path === "/knowledge" || path === "/episodic" || path === "/graph" || path === "/profiles") return "memory";

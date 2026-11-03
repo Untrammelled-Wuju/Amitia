@@ -25,6 +25,9 @@ type ApprovalRequest struct {
 	RuntimeKey     string         `json:"-"`
 	ID             string         `json:"id"`
 	SpaceID        string         `json:"-"`
+	AgentID        string         `json:"agentId,omitempty"`
+	TeamID         string         `json:"teamId,omitempty"`
+	CharacterID    string         `json:"characterId,omitempty"`
 	ConversationID string         `json:"conversationId"`
 	TurnID         string         `json:"turnId,omitempty"`
 	RequestID      string         `json:"requestId,omitempty"`
@@ -35,6 +38,18 @@ type ApprovalRequest struct {
 	Status         ApprovalStatus `json:"status"`
 	CreatedAt      string         `json:"createdAt"`
 	ExpiresAt      string         `json:"expiresAt"`
+	ResolvedBy     string         `json:"resolvedBy,omitempty"`
+	ResolvedByType string         `json:"resolvedByType,omitempty"`
+	ResolvedAt     string         `json:"resolvedAt,omitempty"`
+	AuthMethod     string         `json:"authMethod,omitempty"`
+	SessionID      string         `json:"sessionId,omitempty"`
+}
+
+type ApprovalActor struct {
+	ID            string
+	PrincipalType string
+	AuthMethod    string
+	SessionID     string
 }
 
 type pendingApproval struct {
@@ -46,6 +61,7 @@ type pendingApproval struct {
 type ApprovalBroker struct {
 	mu                 sync.Mutex
 	pending            map[string]*pendingApproval
+	persistence        ApprovalPersistence
 	onRequested        func(ApprovalRequest) error
 	onResolved         func(ApprovalRequest) error
 	requestedObservers []func(ApprovalRequest) error
@@ -54,6 +70,15 @@ type ApprovalBroker struct {
 
 func NewApprovalBroker() *ApprovalBroker {
 	return &ApprovalBroker{pending: make(map[string]*pendingApproval)}
+}
+
+func (b *ApprovalBroker) SetPersistence(persistence ApprovalPersistence) {
+	if b == nil {
+		return
+	}
+	b.mu.Lock()
+	b.persistence = persistence
+	b.mu.Unlock()
 }
 
 func (b *ApprovalBroker) SetObservers(onRequested func(ApprovalRequest) error, onResolved func(ApprovalRequest) error) {
@@ -100,7 +125,21 @@ func (b *ApprovalBroker) Await(ctx context.Context, request ApprovalRequest, tim
 	request.Status = ApprovalStatusPending
 	request.CreatedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	request.ExpiresAt = expiresAt.UTC().Format(time.RFC3339Nano)
-	request.Arguments = truncateApprovalText(request.Arguments, 16*1024)
+	b.mu.Lock()
+	persistence := b.persistence
+	b.mu.Unlock()
+	if persistence != nil {
+		_, found, err := persistence.FindApprovedApproval(ctx, request)
+		if err != nil {
+			return false, err
+		}
+		if found {
+			return true, nil
+		}
+		if err := persistence.SaveApprovalRequest(ctx, request); err != nil {
+			return false, err
+		}
+	}
 	entry := &pendingApproval{value: request, decision: make(chan bool, 1)}
 	b.mu.Lock()
 	b.pending[request.ID] = entry
@@ -178,6 +217,10 @@ func (b *ApprovalBroker) List(spaceID, conversationID string) []ApprovalRequest 
 }
 
 func (b *ApprovalBroker) Resolve(id string, approved bool) error {
+	return b.ResolveWithActor(id, approved, ApprovalActor{})
+}
+
+func (b *ApprovalBroker) ResolveWithActor(id string, approved bool, actor ApprovalActor) error {
 	if b == nil {
 		return fmt.Errorf("approval broker unavailable")
 	}
@@ -198,11 +241,22 @@ func (b *ApprovalBroker) Resolve(id string, approved bool) error {
 	} else {
 		request.Status = ApprovalStatusDenied
 	}
+	request.ResolvedBy = strings.TrimSpace(actor.ID)
+	request.ResolvedByType = strings.TrimSpace(actor.PrincipalType)
+	request.AuthMethod = strings.TrimSpace(actor.AuthMethod)
+	request.SessionID = strings.TrimSpace(actor.SessionID)
+	request.ResolvedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	entry.resolved = true
 	entry.value = request
 	onResolved := b.onResolved
 	resolvedObservers := append([]func(ApprovalRequest) error(nil), b.resolvedObservers...)
+	persistence := b.persistence
 	b.mu.Unlock()
+	if persistence != nil {
+		if err := persistence.SaveApprovalResolution(context.Background(), request, actor); err != nil {
+			return err
+		}
+	}
 	if onResolved != nil {
 		if err := onResolved(request); err != nil {
 			b.mu.Lock()
@@ -225,6 +279,16 @@ func (b *ApprovalBroker) Resolve(id string, approved bool) error {
 	return nil
 }
 
+func (b *ApprovalBroker) HasPending(id string) bool {
+	if b == nil {
+		return false
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	entry, ok := b.pending[strings.TrimSpace(id)]
+	return ok && entry != nil && !entry.resolved
+}
+
 func (b *ApprovalBroker) expire(id string) error {
 	if b == nil {
 		return fmt.Errorf("approval broker unavailable")
@@ -237,11 +301,21 @@ func (b *ApprovalBroker) expire(id string) error {
 	}
 	request := entry.value
 	request.Status = ApprovalStatusExpired
+	request.ResolvedByType = "system"
+	request.ResolvedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	entry.resolved = true
 	entry.value = request
 	onResolved := b.onResolved
 	resolvedObservers := append([]func(ApprovalRequest) error(nil), b.resolvedObservers...)
+	persistence := b.persistence
 	b.mu.Unlock()
+	if persistence != nil {
+		persisted := request
+		persisted.Status = ApprovalStatusExpired
+		if err := persistence.SaveApprovalResolution(context.Background(), persisted, ApprovalActor{PrincipalType: "system"}); err != nil {
+			return err
+		}
+	}
 	if onResolved != nil {
 		if err := onResolved(request); err != nil {
 			return err

@@ -47,28 +47,29 @@ void main() {
     );
   });
 
-  test(
-    'buffers incomplete segments and flushes completion or interruption',
-    () {
-      expect(splitBubbleText('第一段[AMI', complete: false), isEmpty);
-      expect(splitBubbleText('第一段[AMITIA_BR]第二段', complete: false), ['第一段']);
-      expect(splitBubbleText('第一段[AMITIA_BR]第二段', complete: true), [
-        '第一段',
-        '第二段',
-      ]);
-      expect(
-        splitBubbleText('[AMITIA_BR]第一段[AMITIA_BR][AMITIA_BR]', complete: true),
-        ['第一段'],
-      );
-      expect(splitBubbleText('中断的尾段[AMITI', complete: true), ['中断的尾段']);
-      final interrupted = projectBubbleContent(
-        message: AmrpMessage.fromChatMessage(
-          message('剩余消息', status: MessageStatus.interrupted),
-        ),
-      );
-      expect((interrupted.single as BubbleText).content, '剩余消息');
-    },
-  );
+  test('renders the tail while withholding incomplete delimiters', () {
+    expect(splitBubbleText('第一段[AMI', complete: false), ['第一段']);
+    expect(splitBubbleText('第一段[AMITIA_BR]第二段', complete: false), [
+      '第一段',
+      '第二段',
+    ]);
+    expect(splitBubbleText('第一段[', complete: false), ['第一段']);
+    expect(splitBubbleText('第一段[AMITIA_BR]第二段', complete: true), [
+      '第一段',
+      '第二段',
+    ]);
+    expect(
+      splitBubbleText('[AMITIA_BR]第一段[AMITIA_BR][AMITIA_BR]', complete: true),
+      ['第一段'],
+    );
+    expect(splitBubbleText('中断的尾段[AMITI', complete: true), ['中断的尾段']);
+    final interrupted = projectBubbleContent(
+      message: AmrpMessage.fromChatMessage(
+        message('剩余消息', status: MessageStatus.interrupted),
+      ),
+    );
+    expect((interrupted.single as BubbleText).content, '剩余消息');
+  });
 
   test('preserves fenced and inline code delimiter literals', () {
     const content =
@@ -126,9 +127,12 @@ void main() {
         BubbleThinking,
         BubbleTools,
         BubbleText,
+        BubbleText,
       ]);
       expect((projected.first as BubbleThinking).block.content, isEmpty);
       expect((projected[1] as BubbleTools).items, hasLength(2));
+      expect((projected[2] as BubbleText).content, '已读取');
+      expect((projected[3] as BubbleText).content, '未完成');
       expect(
         projectBubbleContent(
           message: normalized,
@@ -176,42 +180,41 @@ void main() {
     );
   }
 
-  testWidgets(
-    'shows complete bubbles without token streaming, then releases the final segment',
-    (tester) async {
-      await tester.binding.setSurfaceSize(const Size(360, 800));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-      Future<void> pump(MessageStatus status) => tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: ListView(
-              children: [
-                AmitiaMessageBubble(
-                  messageStyle: ChatMessageStyle.bubble,
-                  message: message('已完成[AMITIA_BR]暂不显示', status: status),
-                ),
-              ],
-            ),
+  testWidgets('shows complete bubbles and streams every visible segment', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    Future<void> pump(MessageStatus status) => tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ListView(
+            children: [
+              AmitiaMessageBubble(
+                messageStyle: ChatMessageStyle.bubble,
+                message: message('已完成[AMITIA_BR]暂不显示', status: status),
+              ),
+            ],
           ),
         ),
-      );
-      await pump(MessageStatus.streaming);
-      await tester.pump();
-      var markdown = tester
-          .widgetList<AmitiaMarkdownView>(find.byType(AmitiaMarkdownView))
-          .toList();
-      expect(markdown.map((view) => view.source), ['已完成']);
-      expect(markdown.every((view) => !view.streaming), isTrue);
-      expect(find.text('正在回复…'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-      await pump(MessageStatus.sent);
-      await tester.pumpAndSettle();
-      markdown = tester
-          .widgetList<AmitiaMarkdownView>(find.byType(AmitiaMarkdownView))
-          .toList();
-      expect(markdown.map((view) => view.source), ['已完成', '暂不显示']);
-      expect(find.text('正在回复…'), findsNothing);
-      expect(tester.takeException(), isNull);
-    },
-  );
+      ),
+    );
+    await pump(MessageStatus.streaming);
+    await tester.pump();
+    var markdown = tester
+        .widgetList<AmitiaMarkdownView>(find.byType(AmitiaMarkdownView))
+        .toList();
+    expect(markdown.map((view) => view.source), ['已完成', '暂不显示']);
+    expect(markdown.every((view) => !view.streaming), isTrue);
+    expect(find.text('正在回复…'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await pump(MessageStatus.sent);
+    await tester.pumpAndSettle();
+    markdown = tester
+        .widgetList<AmitiaMarkdownView>(find.byType(AmitiaMarkdownView))
+        .toList();
+    expect(markdown.map((view) => view.source), ['已完成', '暂不显示']);
+    expect(find.text('正在回复…'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 }

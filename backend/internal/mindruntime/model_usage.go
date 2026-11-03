@@ -66,6 +66,7 @@ type ModelUsageStore struct {
 	db              *gorm.DB
 	SpaceID         string
 	coreOwnerReview func(context.Context, coordination.ExecutionScope) error
+	finishObserver  func(context.Context, ModelUsageRecord) error
 }
 
 func NewModelUsageStore(db *gorm.DB, spaceID string) (*ModelUsageStore, error) {
@@ -131,6 +132,7 @@ func (s *ModelUsageStore) Finish(ctx context.Context, id string, usage ModelUsag
 	if result.Error != nil {
 		return result.Error
 	}
+	settled := result.RowsAffected == 1
 	if result.RowsAffected != 1 {
 		var saved ModelUsageRecord
 		if err := s.db.WithContext(ctx).Where("id=? AND space_id=?", id, s.SpaceID).First(&saved).Error; err != nil {
@@ -140,7 +142,22 @@ func (s *ModelUsageStore) Finish(ctx context.Context, id string, usage ModelUsag
 			return errors.New("multi_agent: model usage reservation is already settled or interrupted")
 		}
 	}
+	var saved ModelUsageRecord
+	if err := s.db.WithContext(ctx).Where("id=? AND space_id=?", id, s.SpaceID).First(&saved).Error; err != nil {
+		return err
+	}
+	if settled && s.finishObserver != nil {
+		if err := s.finishObserver(ctx, saved); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+func (s *ModelUsageStore) SetFinishObserver(observer func(context.Context, ModelUsageRecord) error) {
+	if s != nil {
+		s.finishObserver = observer
+	}
 }
 
 func (s *ModelUsageStore) Clear(ctx context.Context, filter UsageFilter) (int64, error) {
