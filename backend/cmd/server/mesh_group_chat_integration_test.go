@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/agentplatform"
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
@@ -1068,13 +1069,22 @@ func TestGroupDiscussionEightMembersUsesStableRoundRobin(t *testing.T) {
 
 func ensureGroupCharacter(t *testing.T, fixture *threeCoreFixture, id, name, status string) {
 	t.Helper()
+	platform, err := agentplatform.NewService(fixture.services.DB, agentplatform.ServiceConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	var existing character.Character
-	err := fixture.services.DB.Where("id=?", id).First(&existing).Error
+	err = fixture.services.DB.Where("id=?", id).First(&existing).Error
 	if err == nil {
 		if existing.Status != status || existing.Name != name {
 			if updateErr := fixture.services.DB.Model(&existing).Updates(map[string]any{"status": status, "name": name}).Error; updateErr != nil {
 				t.Fatal(updateErr)
 			}
+			existing.Status = status
+			existing.Name = name
+		}
+		if _, syncErr := platform.SyncRoleAgent(fixture.services.DB, agentplatform.RoleAgentSyncInput{SpaceID: existing.SpaceID, CharacterID: existing.ID, Name: existing.Name, Status: existing.Status}); syncErr != nil {
+			t.Fatal(syncErr)
 		}
 		return
 	}
@@ -1087,6 +1097,9 @@ func ensureGroupCharacter(t *testing.T, fixture *threeCoreFixture, id, name, sta
 	}
 	created := &character.Character{ID: id, SpaceID: base.SpaceID, Name: name, Status: status, Revision: 1, PersonalityConfig: "{}", ChatStyleConfig: "{}", SceneRules: "{}", CardDataJSON: "{}"}
 	if err := fixture.services.DB.Create(created).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := platform.SyncRoleAgent(fixture.services.DB, agentplatform.RoleAgentSyncInput{SpaceID: created.SpaceID, CharacterID: created.ID, Name: created.Name, Status: created.Status}); err != nil {
 		t.Fatal(err)
 	}
 }

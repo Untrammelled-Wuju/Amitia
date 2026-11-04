@@ -20,17 +20,9 @@ import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/settings/current_character_provider.dart';
 import '../../../../core/models/character.dart';
-import '../../../../core/models/memory.dart';
 import '../../../../core/models/model_config.dart';
 import '../../../../core/ui_runtime/mobile_extension_slot.dart';
 import '../../../../core/ui_runtime/ui_runtime_controller.dart';
-
-final characterMemoryPreviewProvider = FutureProvider.autoDispose
-    .family<List<MemoryDto>, String>((ref, characterId) async {
-      return ref
-          .read(deviceOwnedMemoryServiceProvider)
-          .listMemories(characterId: characterId, page: 1, pageSize: 3);
-    });
 
 class CharacterDetailPage extends ConsumerStatefulWidget {
   final String characterId;
@@ -106,9 +98,6 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
   @override
   Widget build(BuildContext context) {
     final characterAsync = ref.watch(characterListProvider);
-    final memoriesAsync = ref.watch(
-      characterMemoryPreviewProvider(widget.characterId),
-    );
     final backendAvailability = ref
         .watch(backendConnectionProvider)
         .valueOrNull;
@@ -143,7 +132,6 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
         return _buildScaffold(
           context,
           character,
-          memoriesAsync,
           hasExtensionTab,
           backendAvailability,
         );
@@ -164,7 +152,6 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
   Widget _buildScaffold(
     BuildContext context,
     CharacterDto character,
-    AsyncValue<List<MemoryDto>> memories,
     bool hasExtensionTab,
     BackendConnectionAvailability? backendAvailability,
   ) {
@@ -228,12 +215,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
               ),
             ),
             Expanded(
-              child: _buildTabContent(
-                context,
-                character,
-                memories,
-                hasExtensionTab,
-              ),
+              child: _buildTabContent(context, character, hasExtensionTab),
             ),
           ],
         ),
@@ -525,12 +507,11 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
   Widget _buildTabContent(
     BuildContext context,
     CharacterDto character,
-    AsyncValue<List<MemoryDto>> memories,
     bool hasExtensionTab,
   ) {
     switch (_selectedTab) {
       case 0:
-        return _buildOverviewTab(context, character, memories);
+        return _buildOverviewTab(context, character);
       case 1:
         return _buildSettingsTab(context, character);
       case 2:
@@ -558,12 +539,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     }
   }
 
-  Widget _buildOverviewTab(
-    BuildContext context,
-    CharacterDto character,
-    AsyncValue<List<MemoryDto>> memories,
-  ) {
-    final preview = memories.valueOrNull ?? const <MemoryDto>[];
+  Widget _buildOverviewTab(BuildContext context, CharacterDto character) {
     return ListView(
       padding: EdgeInsets.all(AppSpacing.pagePadding),
       children: [
@@ -590,26 +566,6 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                 _buildStatItem(context, character.voiceType ?? '默认', '语音类型'),
               ],
             ),
-          ),
-        ),
-        SizedBox(height: AppSpacing.sm),
-        AmitiaCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('最近记忆', style: AppTypography.cardTitle(context)),
-              SizedBox(height: AppSpacing.xs),
-              ...preview.take(3).map((m) => _buildMemoryItem(context, m)),
-              if (preview.isEmpty)
-                Text(
-                  memories.hasError
-                      ? '记忆加载失败'
-                      : memories.isLoading
-                      ? '正在加载记忆…'
-                      : '暂无记忆',
-                  style: AppTypography.caption(context),
-                ),
-            ],
           ),
         ),
         SizedBox(height: AppSpacing.sm),
@@ -972,45 +928,6 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
           ),
           const SizedBox(height: 2),
           Text(label, style: AppTypography.label(context)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMemoryItem(BuildContext context, MemoryDto memory) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 6,
-            height: 6,
-            margin: const EdgeInsets.only(top: 7),
-            decoration: BoxDecoration(
-              color: context.accentPrimary,
-              shape: BoxShape.circle,
-            ),
-          ),
-          SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  memory.value,
-                  style: AppTypography.bodySmall(context),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '${memory.memoryType} · ${memory.importance}',
-                  style: AppTypography.label(context),
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     );

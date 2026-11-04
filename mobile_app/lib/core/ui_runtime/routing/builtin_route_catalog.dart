@@ -14,8 +14,6 @@ import '../../../features/characters/presentation/pages/character_list_page.dart
 import '../../../features/characters/presentation/pages/character_card_workshop_page.dart';
 import '../../../features/characters/presentation/pages/character_detail_page.dart';
 import '../../../features/characters/presentation/pages/character_voice_page.dart';
-import '../../../features/characters/presentation/pages/character_memory_page.dart';
-import '../../../features/characters/presentation/pages/character_timeline_page.dart';
 import '../../../features/characters/presentation/pages/character_psyche_page.dart';
 import '../../../features/characters/presentation/pages/character_teams_page.dart';
 import '../../../features/memory/presentation/pages/memory_overview_page.dart';
@@ -308,37 +306,6 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
       state: state,
       child: CharacterVoicePage(characterId: state.pathParameters['id']!),
     ),
-  ),
-  GoRoute(
-    path: '/characters/:id/memory',
-    pageBuilder: (context, state) => amitiaSlidePage(
-      context: context,
-      state: state,
-      child: CharacterMemoryPage(characterId: state.pathParameters['id']!),
-    ),
-  ),
-  GoRoute(
-    path: '/characters/:id/timeline',
-    pageBuilder: (context, state) => amitiaSlidePage(
-      context: context,
-      state: state,
-      child: CharacterTimelinePage(characterId: state.pathParameters['id']!),
-    ),
-  ),
-  GoRoute(
-    path: '/characters/:id/active-task',
-    pageBuilder: (context, state) => amitiaSlidePage(
-      context: context,
-      state: state,
-      child: RemindersPage(
-        initialCharacterId: state.pathParameters['id'] ?? '',
-      ),
-    ),
-  ),
-  GoRoute(
-    path: '/characters/:id/proactive',
-    redirect: (context, state) =>
-        '/characters/${state.pathParameters['id']}/active-task',
   ),
   GoRoute(
     path: '/characters/:id/psyche',

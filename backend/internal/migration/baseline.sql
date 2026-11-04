@@ -4057,7 +4057,6 @@ CREATE TABLE IF NOT EXISTS agent_releases (
     version TEXT NOT NULL,
     release_notes TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'published',
-    evaluation_run_id TEXT NOT NULL DEFAULT '',
     created_by TEXT NOT NULL DEFAULT '',
     created_at DATETIME NOT NULL,
     superseded_at DATETIME
@@ -4388,80 +4387,6 @@ CREATE INDEX IF NOT EXISTS idx_host_control_sessions_status ON host_control_sess
 CREATE INDEX IF NOT EXISTS idx_host_control_sessions_agent_id ON host_control_sessions(agent_id);
 CREATE INDEX IF NOT EXISTS idx_host_control_sessions_space_id ON host_control_sessions(space_id);
 
-CREATE TABLE IF NOT EXISTS evaluation_suites (
-    id TEXT PRIMARY KEY,
-    space_id TEXT NOT NULL,
-    agent_id TEXT NOT NULL DEFAULT '',
-    name TEXT NOT NULL,
-    description TEXT NOT NULL DEFAULT '',
-    config_json TEXT NOT NULL DEFAULT '{}',
-    gate_policy_json TEXT NOT NULL DEFAULT '{}',
-    created_at DATETIME NOT NULL,
-    updated_at DATETIME NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_evaluation_suites_agent_id ON evaluation_suites(agent_id);
-CREATE INDEX IF NOT EXISTS idx_evaluation_suites_space_id ON evaluation_suites(space_id);
-
-CREATE TABLE IF NOT EXISTS evaluation_cases (
-    id TEXT PRIMARY KEY,
-    space_id TEXT NOT NULL,
-    suite_id TEXT NOT NULL,
-    name TEXT NOT NULL,
-    input_json TEXT NOT NULL DEFAULT '{}',
-    expected_json TEXT NOT NULL DEFAULT '{}',
-    category TEXT NOT NULL DEFAULT 'general',
-    safety_critical INTEGER NOT NULL DEFAULT 0,
-    weight REAL NOT NULL DEFAULT 1,
-    created_at DATETIME NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_evaluation_cases_suite_id ON evaluation_cases(suite_id);
-CREATE INDEX IF NOT EXISTS idx_evaluation_cases_space_id ON evaluation_cases(space_id);
-
-CREATE TABLE IF NOT EXISTS evaluation_runs (
-    id TEXT PRIMARY KEY,
-    space_id TEXT NOT NULL,
-    agent_id TEXT NOT NULL,
-    revision_id TEXT NOT NULL,
-    suite_id TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'running',
-    task_success_rate REAL NOT NULL DEFAULT 0,
-    tool_accuracy REAL NOT NULL DEFAULT 0,
-    safety_violations INTEGER NOT NULL DEFAULT 0,
-    false_success_rate REAL NOT NULL DEFAULT 0,
-    recovery_rate REAL NOT NULL DEFAULT 0,
-    memory_leak_count INTEGER NOT NULL DEFAULT 0,
-    total_tokens INTEGER NOT NULL DEFAULT 0,
-    total_cost_micro_usd INTEGER NOT NULL DEFAULT 0,
-    average_latency_ms INTEGER NOT NULL DEFAULT 0,
-    gate_status TEXT NOT NULL DEFAULT 'pending',
-    gate_reason TEXT NOT NULL DEFAULT '',
-    created_at DATETIME NOT NULL,
-    completed_at DATETIME
-);
-CREATE INDEX IF NOT EXISTS idx_evaluation_runs_status ON evaluation_runs(status);
-CREATE INDEX IF NOT EXISTS idx_evaluation_runs_suite_id ON evaluation_runs(suite_id);
-CREATE INDEX IF NOT EXISTS idx_evaluation_runs_revision_id ON evaluation_runs(revision_id);
-CREATE INDEX IF NOT EXISTS idx_evaluation_runs_agent_id ON evaluation_runs(agent_id);
-CREATE INDEX IF NOT EXISTS idx_evaluation_runs_space_id ON evaluation_runs(space_id);
-
-CREATE TABLE IF NOT EXISTS evaluation_results (
-    id TEXT PRIMARY KEY,
-    space_id TEXT NOT NULL,
-    run_id TEXT NOT NULL,
-    case_id TEXT NOT NULL,
-    passed INTEGER NOT NULL DEFAULT 0,
-    score REAL NOT NULL DEFAULT 0,
-    latency_ms INTEGER NOT NULL DEFAULT 0,
-    tokens INTEGER NOT NULL DEFAULT 0,
-    cost_micro_usd INTEGER NOT NULL DEFAULT 0,
-    tool_trace_json TEXT NOT NULL DEFAULT '[]',
-    failure_json TEXT NOT NULL DEFAULT '',
-    created_at DATETIME NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_evaluation_results_case_id ON evaluation_results(case_id);
-CREATE INDEX IF NOT EXISTS idx_evaluation_results_run_id ON evaluation_results(run_id);
-CREATE INDEX IF NOT EXISTS idx_evaluation_results_space_id ON evaluation_results(space_id);
-
 CREATE TABLE IF NOT EXISTS activity_events (
     id TEXT PRIMARY KEY,
     space_id TEXT NOT NULL,
@@ -4511,55 +4436,6 @@ CREATE TABLE IF NOT EXISTS agent_autonomy_policies (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_autonomy_policies_agent_id ON agent_autonomy_policies(agent_id);
 CREATE INDEX IF NOT EXISTS idx_agent_autonomy_policies_space_id ON agent_autonomy_policies(space_id);
-
-CREATE TABLE IF NOT EXISTS a2a_agent_cards (
-    id TEXT PRIMARY KEY,
-    space_id TEXT NOT NULL,
-    agent_id TEXT NOT NULL,
-    name TEXT NOT NULL,
-    description TEXT NOT NULL DEFAULT '',
-    url TEXT NOT NULL,
-    version TEXT NOT NULL DEFAULT '1.0.0',
-    skills_json TEXT NOT NULL DEFAULT '[]',
-    security_json TEXT NOT NULL DEFAULT '{}',
-    status TEXT NOT NULL DEFAULT 'active',
-    created_at DATETIME NOT NULL,
-    updated_at DATETIME NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_a2a_agent_cards_status ON a2a_agent_cards(status);
-CREATE INDEX IF NOT EXISTS idx_a2a_agent_cards_agent_id ON a2a_agent_cards(agent_id);
-CREATE INDEX IF NOT EXISTS idx_a2a_agent_cards_space_id ON a2a_agent_cards(space_id);
-
-CREATE TABLE IF NOT EXISTS a2a_tasks (
-    id TEXT PRIMARY KEY,
-    space_id TEXT NOT NULL,
-    agent_id TEXT NOT NULL,
-    remote_agent_url TEXT NOT NULL DEFAULT '',
-    status TEXT NOT NULL DEFAULT 'submitted',
-    input_json TEXT NOT NULL DEFAULT '{}',
-    output_json TEXT NOT NULL DEFAULT '',
-    original_error TEXT NOT NULL DEFAULT '',
-    created_at DATETIME NOT NULL,
-    updated_at DATETIME NOT NULL,
-    completed_at DATETIME
-);
-CREATE INDEX IF NOT EXISTS idx_a2a_tasks_status ON a2a_tasks(status);
-CREATE INDEX IF NOT EXISTS idx_a2a_tasks_agent_id ON a2a_tasks(agent_id);
-CREATE INDEX IF NOT EXISTS idx_a2a_tasks_space_id ON a2a_tasks(space_id);
-
-CREATE TABLE IF NOT EXISTS a2_a_replay_records (
-    id TEXT PRIMARY KEY,
-    space_id TEXT NOT NULL,
-    sender_agent_id TEXT NOT NULL,
-    nonce TEXT NOT NULL,
-    signature_hash TEXT NOT NULL,
-    expires_at DATETIME NOT NULL,
-    created_at DATETIME NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_a2_a_replay_records_expires_at ON a2_a_replay_records(expires_at);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_a2_a_replay_records_nonce ON a2_a_replay_records(nonce);
-CREATE INDEX IF NOT EXISTS idx_a2_a_replay_records_sender_agent_id ON a2_a_replay_records(sender_agent_id);
-CREATE INDEX IF NOT EXISTS idx_a2_a_replay_records_space_id ON a2_a_replay_records(space_id);
 
 CREATE TABLE IF NOT EXISTS agent_access_policies (
     id TEXT PRIMARY KEY,

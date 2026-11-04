@@ -1,5 +1,5 @@
 import { apiClient } from "@/composables/useApi";
-import type { AgentProfile, Team } from "@/api/agent-platform";
+import type { AgentProfile, Team } from "@/api/role-types";
 
 const BASE = "/api/roles";
 

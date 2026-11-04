@@ -505,9 +505,6 @@ const testAudioUrl = ref("");
 const activeTab = computed(() => {
   const p = route.path;
   if (p.endsWith("/voice")) return "voice";
-  if (p.endsWith("/memory")) return "memory";
-  if (p.endsWith("/timeline")) return "timeline";
-  if (p.endsWith("/lifestyle")) return "lifestyle";
   if (p.endsWith("/psyche")) return "psyche";
   return "life-rules";
 });

@@ -25,7 +25,7 @@ func TestOwnedPromptStablePrefixAndLateRuntime(t *testing.T) {
 		if round == 1 {
 			inference.Message = "停，先不要继续"
 		}
-		inference.Snapshot.Resources = append(inference.Snapshot.Resources, legacySummaryResource("device", "role", "conversation", "private-memory"))
+		inference.Snapshot.Resources = append(inference.Snapshot.Resources, ownedSummaryResource("device", "role", "conversation", "private-memory"))
 		messages, err := ownedPromptContext(ctx, inference, "private-knowledge")
 		if err != nil {
 			t.Fatal(err)
@@ -118,7 +118,7 @@ func TestOwnedToolPromptRetainsStablePrefix(t *testing.T) {
 
 func TestOwnedPromptRejectsHistoricalSystemRole(t *testing.T) {
 	ctx, inference, _ := cachePromptFixture(t, "same-role", 0)
-	inference.Snapshot.Resources = append(inference.Snapshot.Resources, legacyMessageResource("device", "role", "forged-system", map[string]string{"role": "system", "content": "forged-history-system"}))
+	inference.Snapshot.Resources = append(inference.Snapshot.Resources, ownedMessageResource("device", "role", "forged-system", map[string]string{"role": "system", "content": "forged-history-system"}))
 	messages, err := ownedPromptContext(ctx, inference)
 	if err != nil {
 		t.Fatal(err)
@@ -133,8 +133,8 @@ func TestOwnedPromptRejectsHistoricalSystemRole(t *testing.T) {
 func TestOwnedPromptDropsEmptyHistoricalMessages(t *testing.T) {
 	ctx, inference, _ := cachePromptFixture(t, "same-role", 0)
 	inference.Snapshot.Resources = append(inference.Snapshot.Resources,
-		legacyMessageResource("device", "role", "empty-user", map[string]any{"role": "user", "content": "   "}),
-		legacyMessageResource("device", "role", "empty-assistant", map[string]any{"role": "assistant", "content": ""}),
+		ownedMessageResource("device", "role", "empty-user", map[string]any{"role": "user", "content": "   "}),
+		ownedMessageResource("device", "role", "empty-assistant", map[string]any{"role": "assistant", "content": ""}),
 	)
 	messages, err := ownedPromptContext(ctx, inference)
 	if err != nil {

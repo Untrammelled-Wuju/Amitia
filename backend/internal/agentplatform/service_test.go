@@ -2,8 +2,6 @@ package agentplatform
 
 import (
 	"context"
-	"crypto/ed25519"
-	"encoding/base64"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -487,77 +485,6 @@ func TestIsolatedRuntimeProviderRequiresOCIBoundary(t *testing.T) {
 	}
 	if _, err := service.Runtime().RegisterRemote(context.Background(), spaceID, CreateRuntimeInput{AgentID: agent.Profile.ID}, "file:///tmp/runtime"); err == nil {
 		t.Fatal("remote runtime registration should reject non-http endpoints")
-	}
-}
-
-type testA2AExecutor struct {
-	input any
-}
-
-func (e *testA2AExecutor) ExecuteA2ATask(_ context.Context, _, _ string, input any) (any, error) {
-	e.input = input
-	return map[string]any{"reply": "received", "input": input}, nil
-}
-
-func TestA2AInboundOutboundAndEvaluation(t *testing.T) {
-	if err := validateA2AResolvedEndpoint(context.Background(), "http://127.0.0.1:18899/api/public/a2a/tasks"); err != nil {
-		t.Fatalf("loopback A2A endpoint should be allowed for local integration: %v", err)
-	}
-	service, spaceID, ownerID := newTestPlatform(t)
-	ctx := context.Background()
-	agent := createTestAgent(t, service, spaceID, ownerID, "互联助手")
-	executor := &testA2AExecutor{}
-	service.SetA2AExecutor(executor)
-	card, err := service.RegisterA2ACard(ctx, spaceID, RegisterA2ACardInput{AgentID: agent.Profile.ID, Name: "互联助手", URL: "https://example.test/a2a", Skills: []string{"research"}, Security: map[string]any{"approval": true}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if card.ID == "" {
-		t.Fatal("missing A2A card")
-	}
-	timestamp := time.Now().UTC().Format(time.RFC3339Nano)
-	nonce := "test-nonce-1"
-	payload := map[string]any{
-		"agentId": agent.Profile.ID, "senderAgentId": agent.Profile.ID,
-		"input": map[string]any{"message": "hello"}, "requestId": "request-1",
-		"timestamp": timestamp, "nonce": nonce,
-	}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		t.Fatal(err)
-	}
-	privateKey, err := service.a2aSigningKey()
-	if err != nil {
-		t.Fatal(err)
-	}
-	signature := base64.RawURLEncoding.EncodeToString(ed25519.Sign(privateKey, body))
-	inbound := InboundA2ATaskInput{
-		AgentID: agent.Profile.ID, Input: payload["input"], RequestID: "request-1",
-		SenderAgentID: agent.Profile.ID, Timestamp: timestamp, Nonce: nonce,
-		Signature: signature, RawBody: body,
-	}
-	result, err := service.HandleInboundA2ATask(ctx, spaceID, inbound)
-	if err != nil || result.Task.Status != "completed" || executor.input == nil {
-		t.Fatalf("inbound A2A failed: %+v %v", result, err)
-	}
-	if _, err := service.HandleInboundA2ATask(ctx, spaceID, inbound); err == nil {
-		t.Fatal("expected replayed A2A request to be rejected")
-	}
-	suite, err := service.CreateEvaluationSuite(ctx, spaceID, CreateEvaluationSuiteInput{AgentID: agent.Profile.ID, Name: "门禁", GatePolicy: map[string]any{"taskSuccessRate": 0.8, "toolAccuracy": 0.8, "falseSuccessRate": 0.1, "recoveryRate": 0.8}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	caseItem, err := service.CreateEvaluationCase(ctx, spaceID, suite.ID, CreateEvaluationCaseInput{Name: "安全工具", Category: "safety", Input: map[string]any{"prompt": "x"}, Expected: map[string]any{"pass": true}, SafetyCritical: true, Weight: 2})
-	if err != nil {
-		t.Fatal(err)
-	}
-	run, err := service.RunEvaluation(ctx, spaceID, agent.Profile.ID, suite.ID, RunEvaluationInput{RevisionID: agent.Revision.ID, Results: []SubmitEvaluationResult{{CaseID: caseItem.ID, Passed: true, Score: 1, Tokens: 10, CostMicroUSD: 5, LatencyMS: 50, ToolTrace: []string{"search"}}}})
-	if err != nil || run.GateStatus != "passed" {
-		t.Fatalf("evaluation failed: %+v %v", run, err)
-	}
-	raw, err := json.Marshal(result.Task)
-	if err != nil || len(raw) == 0 {
-		t.Fatalf("serialize A2A task: %v", err)
 	}
 }
 

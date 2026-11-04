@@ -352,11 +352,7 @@ func mergeRoleAgentDuplicates(tx *gorm.DB, spaceID string, canonical AgentProfil
 		{"approval_records", "agent_id"},
 		{"resource_leases", "holder_agent_id"},
 		{"idempotent_operations", "agent_id"},
-		{"evaluation_suites", "agent_id"},
-		{"evaluation_runs", "agent_id"},
 		{"activity_events", "agent_id"},
-		{"a2a_tasks", "agent_id"},
-		{"a2_a_replay_records", "sender_agent_id"},
 	}
 	for _, reference := range references {
 		if err := tx.Table(reference.table).Where(reference.column+" IN ?", duplicateIDs).Update(reference.column, canonical.ID).Error; err != nil {
@@ -369,13 +365,6 @@ func mergeRoleAgentDuplicates(tx *gorm.DB, spaceID string, canonical AgentProfil
 	}
 	if err := tx.Model(&AgentAutonomyPolicy{}).Where("space_id = ? AND agent_id IN ?", spaceID, duplicateIDs).Update("agent_id", canonical.ID).Error; err != nil {
 		return fmt.Errorf("迁移角色自治策略: %w", err)
-	}
-	if err := tx.Where("space_id = ? AND agent_id IN ? AND EXISTS (SELECT 1 FROM a2a_agent_cards c WHERE c.space_id = ? AND c.agent_id = ?)", spaceID, duplicateIDs, spaceID, canonical.ID).
-		Delete(&A2AAgentCard{}).Error; err != nil {
-		return fmt.Errorf("清理重复 A2A 卡片: %w", err)
-	}
-	if err := tx.Model(&A2AAgentCard{}).Where("space_id = ? AND agent_id IN ?", spaceID, duplicateIDs).Update("agent_id", canonical.ID).Error; err != nil {
-		return fmt.Errorf("迁移角色 A2A 卡片: %w", err)
 	}
 	if err := tx.Model(&AgentProfile{}).Where("space_id = ? AND id IN ?", spaceID, duplicateIDs).Updates(map[string]any{
 		"status": "archived", "deleted_at": now, "updated_at": now,

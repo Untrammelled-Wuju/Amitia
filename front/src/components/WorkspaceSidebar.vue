@@ -361,7 +361,7 @@ import NewGroupChatDialog from "@/components/NewGroupChatDialog.vue";
 import TeamCreateDialog from "@/components/TeamCreateDialog.vue";
 import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
 import type { OwnedGroupState } from "@/runtime/device-owned-chat";
-import type { Team } from "@/api/agent-platform";
+import type { Team } from "@/api/role-types";
 import { useConversationDisclosure } from "@/composables/useConversationDisclosure";
 import { useConversationWorkspace } from "@/composables/useConversationWorkspace";
 import { isDesktopShell } from "@/runtime/runtime-capabilities";

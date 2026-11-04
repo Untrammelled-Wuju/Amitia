@@ -221,9 +221,6 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		public.Use(security.RequireWebAccessForDeclaredBrowser(webAccessSvc))
 		security.RegisterWebAccessPublicRoutes(public, webAccessSvc)
 	}
-	if services.AgentPlatform != nil {
-		agentplatform.RegisterPublicRoutes(public, services.AgentPlatform, spaceID)
-	}
 	public.GET("/core/info", func(c *gin.Context) {
 		identity := spaceStore.Identity()
 		c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": gin.H{

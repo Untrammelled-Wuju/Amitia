@@ -22,9 +22,6 @@ func TestMeshConversationSearchHTTPUsesMessageContent(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, id := range []string{"matched", "unmatched", "other-role"} {
-		if err := p.services.DB.Create(&chat.Conversation{ID: id, SpaceID: p.ownerID, Title: "普通标题", Channel: "web"}).Error; err != nil {
-			t.Fatal(err)
-		}
 		role, content := "one", "普通消息"
 		if id == "matched" || id == "other-role" {
 			content = "Needle 在消息正文中"
@@ -32,9 +29,10 @@ func TestMeshConversationSearchHTTPUsesMessageContent(t *testing.T) {
 		if id == "other-role" {
 			role = "two"
 		}
-		if err := p.services.DB.Create(&chat.Message{ID: id + "-message", ConversationID: id, CharacterID: role, Role: "user", Content: content}).Error; err != nil {
-			t.Fatal(err)
-		}
+		conversationBody, _ := json.Marshal(map[string]any{"id": id, "title": "普通标题", "characterId": role, "createdAt": "2026-10-01T00:00:00Z"})
+		messageBody, _ := json.Marshal(map[string]any{"id": id + "-message", "conversationId": id, "characterId": role, "role": "user", "content": content, "createdAt": "2026-10-01T00:00:01Z"})
+		seedOwnedChatManagement(t, p, "conversation", id, role, string(conversationBody))
+		seedOwnedChatManagement(t, p, "message", id+"-message", role, string(messageBody))
 	}
 	service := coordination.NewService(db)
 	router := gin.New()

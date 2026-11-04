@@ -97,7 +97,7 @@ export function resolveNavigationIcon(name?: string): Component {
 const builtinItems: UINavigationItem[] = [
   { id: "home", route: "/chat", label: "主页", description: "开始新对话，或继续最近的聊天。", icon: HomeIcon, group: "home", order: 0, mobile: true, match: ["/chat", "/logs"] },
   { id: "tasks", route: "/reminders", label: "任务", description: "管理主动任务和持续事项。", icon: AlarmClock, group: "tasks", order: 70, mobile: true, match: ["/continuity"] },
-  { id: "character.hub", route: "/characters", label: "角色", description: "管理角色、模型、技能、团队和运行配置。", icon: CharacterIcon, group: "character", order: 20, mobile: true, match: ["/character", "/characters/teams", "/world-book"] },
+  { id: "character.hub", route: "/characters", label: "角色", description: "管理角色、模型、技能与团队。", icon: CharacterIcon, group: "character", order: 20, mobile: true, match: ["/character", "/characters/teams", "/world-book"] },
   { id: "memory.hub", route: "/memory", label: "记忆", description: "查看知识库、用户画像、记忆图谱、情景和时间线。", icon: BrainIcon, group: "memory", order: 50, mobile: true, match: ["/memory-manager", "/memory-timeline", "/knowledge", "/episodic", "/graph", "/profiles"] },
   { id: "workshop.game-center", route: "/game-center", label: "游戏模式", description: "安装、运行并查看游戏插件。", icon: GamepadIcon, group: "workshop", order: 80, runtimeCapability: "gameMode" },
   { id: "workshop", route: "/creative-workshop", label: "创意工坊", description: "创建角色卡、桌宠和其他创作内容。", icon: MagicStick, group: "workshop", order: 85, match: ["/creative-workshop"] },

@@ -38,17 +38,16 @@ type AgentRevision struct {
 }
 
 type AgentRelease struct {
-	ID              string     `gorm:"column:id;primaryKey" json:"id"`
-	SpaceID         string     `gorm:"column:space_id;not null;index" json:"spaceId"`
-	AgentID         string     `gorm:"column:agent_id;not null;index" json:"agentId"`
-	RevisionID      string     `gorm:"column:revision_id;not null;index" json:"revisionId"`
-	Version         string     `gorm:"column:version;not null" json:"version"`
-	ReleaseNotes    string     `gorm:"column:release_notes;not null;default:''" json:"releaseNotes"`
-	Status          string     `gorm:"column:status;not null;default:'published'" json:"status"`
-	EvaluationRunID string     `gorm:"column:evaluation_run_id;not null;default:''" json:"evaluationRunId"`
-	CreatedBy       string     `gorm:"column:created_by;not null;default:''" json:"createdBy"`
-	CreatedAt       time.Time  `gorm:"column:created_at;not null" json:"createdAt"`
-	SupersededAt    *time.Time `gorm:"column:superseded_at" json:"supersededAt,omitempty"`
+	ID           string     `gorm:"column:id;primaryKey" json:"id"`
+	SpaceID      string     `gorm:"column:space_id;not null;index" json:"spaceId"`
+	AgentID      string     `gorm:"column:agent_id;not null;index" json:"agentId"`
+	RevisionID   string     `gorm:"column:revision_id;not null;index" json:"revisionId"`
+	Version      string     `gorm:"column:version;not null" json:"version"`
+	ReleaseNotes string     `gorm:"column:release_notes;not null;default:''" json:"releaseNotes"`
+	Status       string     `gorm:"column:status;not null;default:'published'" json:"status"`
+	CreatedBy    string     `gorm:"column:created_by;not null;default:''" json:"createdBy"`
+	CreatedAt    time.Time  `gorm:"column:created_at;not null" json:"createdAt"`
+	SupersededAt *time.Time `gorm:"column:superseded_at" json:"supersededAt,omitempty"`
 }
 
 type AgentTemplate struct {
@@ -317,68 +316,6 @@ type HostControlSession struct {
 	EndedAt        *time.Time `gorm:"column:ended_at" json:"endedAt,omitempty"`
 }
 
-type EvaluationSuite struct {
-	ID             string    `gorm:"column:id;primaryKey" json:"id"`
-	SpaceID        string    `gorm:"column:space_id;not null;index" json:"spaceId"`
-	AgentID        string    `gorm:"column:agent_id;not null;default:'';index" json:"agentId"`
-	Name           string    `gorm:"column:name;not null" json:"name"`
-	Description    string    `gorm:"column:description;not null;default:''" json:"description"`
-	ConfigJSON     string    `gorm:"column:config_json;not null;default:'{}'" json:"configJson"`
-	GatePolicyJSON string    `gorm:"column:gate_policy_json;not null;default:'{}'" json:"gatePolicyJson"`
-	CreatedAt      time.Time `gorm:"column:created_at;not null" json:"createdAt"`
-	UpdatedAt      time.Time `gorm:"column:updated_at;not null" json:"updatedAt"`
-}
-
-type EvaluationCase struct {
-	ID             string    `gorm:"column:id;primaryKey" json:"id"`
-	SpaceID        string    `gorm:"column:space_id;not null;index" json:"spaceId"`
-	SuiteID        string    `gorm:"column:suite_id;not null;index" json:"suiteId"`
-	Name           string    `gorm:"column:name;not null" json:"name"`
-	InputJSON      string    `gorm:"column:input_json;not null;default:'{}'" json:"inputJson"`
-	ExpectedJSON   string    `gorm:"column:expected_json;not null;default:'{}'" json:"expectedJson"`
-	Category       string    `gorm:"column:category;not null;default:'general'" json:"category"`
-	SafetyCritical bool      `gorm:"column:safety_critical;not null;default:false" json:"safetyCritical"`
-	Weight         float64   `gorm:"column:weight;not null;default:1" json:"weight"`
-	CreatedAt      time.Time `gorm:"column:created_at;not null" json:"createdAt"`
-}
-
-type EvaluationRun struct {
-	ID                string     `gorm:"column:id;primaryKey" json:"id"`
-	SpaceID           string     `gorm:"column:space_id;not null;index" json:"spaceId"`
-	AgentID           string     `gorm:"column:agent_id;not null;index" json:"agentId"`
-	RevisionID        string     `gorm:"column:revision_id;not null;index" json:"revisionId"`
-	SuiteID           string     `gorm:"column:suite_id;not null;index" json:"suiteId"`
-	Status            string     `gorm:"column:status;not null;default:'running';index" json:"status"`
-	TaskSuccessRate   float64    `gorm:"column:task_success_rate;not null;default:0" json:"taskSuccessRate"`
-	ToolAccuracy      float64    `gorm:"column:tool_accuracy;not null;default:0" json:"toolAccuracy"`
-	SafetyViolations  int64      `gorm:"column:safety_violations;not null;default:0" json:"safetyViolations"`
-	FalseSuccessRate  float64    `gorm:"column:false_success_rate;not null;default:0" json:"falseSuccessRate"`
-	RecoveryRate      float64    `gorm:"column:recovery_rate;not null;default:0" json:"recoveryRate"`
-	MemoryLeakCount   int64      `gorm:"column:memory_leak_count;not null;default:0" json:"memoryLeakCount"`
-	TotalTokens       int64      `gorm:"column:total_tokens;not null;default:0" json:"totalTokens"`
-	TotalCostMicroUSD int64      `gorm:"column:total_cost_micro_usd;not null;default:0" json:"totalCostMicroUsd"`
-	AverageLatencyMS  int64      `gorm:"column:average_latency_ms;not null;default:0" json:"averageLatencyMs"`
-	GateStatus        string     `gorm:"column:gate_status;not null;default:'pending'" json:"gateStatus"`
-	GateReason        string     `gorm:"column:gate_reason;not null;default:''" json:"gateReason"`
-	CreatedAt         time.Time  `gorm:"column:created_at;not null" json:"createdAt"`
-	CompletedAt       *time.Time `gorm:"column:completed_at" json:"completedAt,omitempty"`
-}
-
-type EvaluationResult struct {
-	ID            string    `gorm:"column:id;primaryKey" json:"id"`
-	SpaceID       string    `gorm:"column:space_id;not null;index" json:"spaceId"`
-	RunID         string    `gorm:"column:run_id;not null;index" json:"runId"`
-	CaseID        string    `gorm:"column:case_id;not null;index" json:"caseId"`
-	Passed        bool      `gorm:"column:passed;not null;default:false" json:"passed"`
-	Score         float64   `gorm:"column:score;not null;default:0" json:"score"`
-	LatencyMS     int64     `gorm:"column:latency_ms;not null;default:0" json:"latencyMs"`
-	Tokens        int64     `gorm:"column:tokens;not null;default:0" json:"tokens"`
-	CostMicroUSD  int64     `gorm:"column:cost_micro_usd;not null;default:0" json:"costMicroUsd"`
-	ToolTraceJSON string    `gorm:"column:tool_trace_json;not null;default:'[]'" json:"toolTraceJson"`
-	FailureJSON   string    `gorm:"column:failure_json;not null;default:''" json:"failureJson"`
-	CreatedAt     time.Time `gorm:"column:created_at;not null" json:"createdAt"`
-}
-
 type ActivityEvent struct {
 	ID             string    `gorm:"column:id;primaryKey" json:"id"`
 	SpaceID        string    `gorm:"column:space_id;not null;index" json:"spaceId"`
@@ -418,53 +355,6 @@ type AgentAutonomyPolicy struct {
 	UpdatedAt        time.Time `gorm:"column:updated_at;not null" json:"updatedAt"`
 }
 
-type A2AAgentCard struct {
-	ID           string    `gorm:"column:id;primaryKey" json:"id"`
-	SpaceID      string    `gorm:"column:space_id;not null;index" json:"spaceId"`
-	AgentID      string    `gorm:"column:agent_id;not null;index" json:"agentId"`
-	Name         string    `gorm:"column:name;not null" json:"name"`
-	Description  string    `gorm:"column:description;not null;default:''" json:"description"`
-	URL          string    `gorm:"column:url;not null" json:"url"`
-	Version      string    `gorm:"column:version;not null;default:'1.0.0'" json:"version"`
-	SkillsJSON   string    `gorm:"column:skills_json;not null;default:'[]'" json:"skillsJson"`
-	SecurityJSON string    `gorm:"column:security_json;not null;default:'{}'" json:"securityJson"`
-	Status       string    `gorm:"column:status;not null;default:'active';index" json:"status"`
-	CreatedAt    time.Time `gorm:"column:created_at;not null" json:"createdAt"`
-	UpdatedAt    time.Time `gorm:"column:updated_at;not null" json:"updatedAt"`
-}
-
-func (A2AAgentCard) TableName() string {
-	return "a2a_agent_cards"
-}
-
-type A2ATask struct {
-	ID             string     `gorm:"column:id;primaryKey" json:"id"`
-	SpaceID        string     `gorm:"column:space_id;not null;index" json:"spaceId"`
-	AgentID        string     `gorm:"column:agent_id;not null;index" json:"agentId"`
-	RemoteAgentURL string     `gorm:"column:remote_agent_url;not null;default:''" json:"remoteAgentUrl"`
-	Status         string     `gorm:"column:status;not null;default:'submitted';index" json:"status"`
-	InputJSON      string     `gorm:"column:input_json;not null;default:'{}'" json:"inputJson"`
-	OutputJSON     string     `gorm:"column:output_json;not null;default:''" json:"outputJson"`
-	OriginalError  string     `gorm:"column:original_error;not null;default:''" json:"originalError"`
-	CreatedAt      time.Time  `gorm:"column:created_at;not null" json:"createdAt"`
-	UpdatedAt      time.Time  `gorm:"column:updated_at;not null" json:"updatedAt"`
-	CompletedAt    *time.Time `gorm:"column:completed_at" json:"completedAt,omitempty"`
-}
-
-func (A2ATask) TableName() string {
-	return "a2a_tasks"
-}
-
-type A2AReplayRecord struct {
-	ID            string    `gorm:"column:id;primaryKey" json:"id"`
-	SpaceID       string    `gorm:"column:space_id;not null;index" json:"spaceId"`
-	SenderAgentID string    `gorm:"column:sender_agent_id;not null;index" json:"senderAgentId"`
-	Nonce         string    `gorm:"column:nonce;not null;uniqueIndex" json:"nonce"`
-	SignatureHash string    `gorm:"column:signature_hash;not null" json:"signatureHash"`
-	ExpiresAt     time.Time `gorm:"column:expires_at;not null;index" json:"expiresAt"`
-	CreatedAt     time.Time `gorm:"column:created_at;not null" json:"createdAt"`
-}
-
 func platformModels() []any {
 	return []any{
 		&AgentProfile{}, &AgentRevision{}, &AgentRelease{}, &AgentTemplate{},
@@ -473,9 +363,7 @@ func platformModels() []any {
 		&ApprovalRecord{}, &ApprovalDecision{},
 		&ResourceLease{}, &IdempotentOperation{},
 		&RuntimeInstance{}, &RuntimeSnapshot{}, &HostControlSession{},
-		&EvaluationSuite{}, &EvaluationCase{}, &EvaluationRun{}, &EvaluationResult{},
 		&ActivityEvent{},
 		&AgentAutonomyPolicy{},
-		&A2AAgentCard{}, &A2ATask{}, &A2AReplayRecord{},
 	}
 }

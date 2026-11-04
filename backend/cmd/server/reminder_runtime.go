@@ -22,7 +22,6 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/scope"
 	"github.com/u-ai/backend/internal/reminder"
-	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/internal/runtimeprofile"
 	"gorm.io/gorm"
 )
@@ -53,7 +52,10 @@ func wireReminderService(services *AppServices) error {
 	if container.ScheduleService == nil {
 		return errors.New("统一提醒调度底座未接通")
 	}
-	coreID := requestidentity.CanonicalSpaceID()
+	coreID := services.LocalSpaceID
+	if coreID == "" {
+		return errors.New("提醒运行时缺少 Space 身份")
+	}
 	container.ContextualScopeSnapshotCreator = func(ctx context.Context, extension, module string, generation int64, role, conversation string) (string, error) {
 		actor, ok := auth.FromContext(ctx)
 		if !ok || actor == nil {

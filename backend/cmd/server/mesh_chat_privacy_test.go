@@ -114,7 +114,7 @@ func TestPrivacyRealTLSModesAndVersionConflicts(t *testing.T) {
 	if _, err := core.services.DB.DB(); err != nil {
 		t.Fatal(err)
 	}
-	if err := core.services.DB.Exec("DROP TABLE messages").Error; err != nil {
+	if _, err := core.services.KernelContainer.DeviceRegistry.Database().Exec("DROP TABLE kernel_device_owned_resources"); err != nil {
 		t.Fatal(err)
 	}
 	core.request(t, phone, http.MethodPost, "/api/privacy/scan", map[string]any{"scope": []string{"messages"}}, 503)

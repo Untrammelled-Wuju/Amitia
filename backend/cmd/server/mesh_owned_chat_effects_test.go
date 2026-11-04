@@ -39,7 +39,7 @@ func TestOwnedMoodPsycheResourceUsesRoleQualifiedState(t *testing.T) {
 	clear()
 	insert("role", "two", 0)
 	resource, err = p.ownedMoodPsycheResource(t.Context(), scope)
-	if err != nil || resource == nil || resource.ID != "role" || resource.RoleID != "two" {
-		t.Fatalf("同角色旧版状态未兼容读取: %+v %v", resource, err)
+	if err != nil || resource != nil {
+		t.Fatalf("旧版状态仍被读取: %+v %v", resource, err)
 	}
 }

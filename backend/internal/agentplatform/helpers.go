@@ -1,6 +1,10 @@
 package agentplatform
 
-import "strings"
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+)
 
 func firstNonEmpty(values ...string) string {
 	for _, value := range values {
@@ -18,4 +22,12 @@ func containsString(values []string, target string) bool {
 		}
 	}
 	return false
+}
+
+func mustJSON(value any) string {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Sprintf(`{"error":%q}`, err.Error())
+	}
+	return string(data)
 }

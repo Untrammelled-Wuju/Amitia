@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/glebarez/sqlite"
+	"github.com/u-ai/backend/internal/agentplatform"
 	"github.com/u-ai/backend/internal/character"
-	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
@@ -111,8 +111,15 @@ func setupMeshLocalDataPort(t *testing.T) *meshLocalDataPort {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, role := range []character.Character{{ID: "one", Name: "one", SpaceID: p.ownerID, Status: "enabled", Revision: 3}, {ID: "two", Name: "two", SpaceID: p.ownerID, Status: "enabled", Revision: 1}, {ID: "disabled", Name: "disabled", SpaceID: p.ownerID, Status: "disabled", Revision: 1}, {ID: "foreign", Name: "foreign", SpaceID: "another-space", Status: "enabled", Revision: 1}} {
+	platform, err := agentplatform.NewService(db, agentplatform.ServiceConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, role := range []character.Character{{ID: "one", Name: "one", SpaceID: p.spaceID, Status: "enabled", Revision: 3}, {ID: "two", Name: "two", SpaceID: p.spaceID, Status: "enabled", Revision: 1}, {ID: "disabled", Name: "disabled", SpaceID: p.spaceID, Status: "disabled", Revision: 1}, {ID: "foreign", Name: "foreign", SpaceID: "another-space", Status: "enabled", Revision: 1}} {
 		if err := db.Create(&role).Error; err != nil {
+			t.Fatal(err)
+		}
+		if _, err := platform.SyncRoleAgent(db, agentplatform.RoleAgentSyncInput{SpaceID: role.SpaceID, CharacterID: role.ID, Name: role.Name, Status: role.Status}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -126,16 +133,10 @@ func TestMeshLocalSnapshotReadsOnlySelectedDeviceRoleAndLiveMemories(t *testing.
 	if err != nil || len(roles) != 2 {
 		t.Fatalf("roles=%+v err=%v", roles, err)
 	}
-	conversation := chat.Conversation{ID: "old-chat", SpaceID: p.ownerID, Title: "old", Channel: "web"}
-	if err := p.services.DB.Create(&conversation).Error; err != nil {
-		t.Fatal(err)
-	}
-	for _, message := range []chat.Message{{ID: "first", ConversationID: conversation.ID, CharacterID: "one", Role: "user", Content: "allowed", Sequence: 1}, {ID: "second", ConversationID: conversation.ID, CharacterID: "two", Role: "assistant", Content: "other-role", Sequence: 2}} {
-		if err := p.services.DB.Create(&message).Error; err != nil {
-			t.Fatal(err)
-		}
-	}
-	snapshot, err := p.Snapshot(t.Context(), scope, coordination.DataQuery{ConversationID: conversation.ID})
+	seedOwnedChatManagement(t, p, "conversation", "current-chat", "one", `{"id":"current-chat","title":"current","characterId":"one","createdAt":"2026-10-01T00:00:00Z"}`)
+	seedOwnedChatManagement(t, p, "message", "first", "one", `{"id":"first","conversationId":"current-chat","role":"user","content":"allowed","createdAt":"2026-10-01T00:00:01Z"}`)
+	seedOwnedChatManagement(t, p, "message", "second", "two", `{"id":"second","conversationId":"current-chat","role":"assistant","content":"other-role","createdAt":"2026-10-01T00:00:02Z"}`)
+	snapshot, err := p.Snapshot(t.Context(), scope, coordination.DataQuery{ConversationID: "current-chat"})
 	messageCount := 0
 	for _, resource := range snapshot.Resources {
 		if resource.Kind == "message" {

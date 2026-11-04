@@ -119,7 +119,7 @@ import {
   listRoleRuntimeProfiles,
   listRoleTeams,
 } from "@/api/role-runtime";
-import type { AgentProfile, Team } from "@/api/agent-platform";
+import type { AgentProfile, Team } from "@/api/role-types";
 
 const props = defineProps<{
   visible: boolean;

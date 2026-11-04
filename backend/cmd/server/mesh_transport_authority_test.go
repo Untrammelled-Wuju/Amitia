@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/agentplatform"
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/devicemesh"
 	"github.com/u-ai/backend/internal/devicemesh/agent"
@@ -64,8 +65,13 @@ func TestOwnedAuthorityAcrossRealTLSMeshReconnectAndPermissionChange(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := p.services.DB.Model(&character.Character{}).Where("space_id=?", p.ownerID).Update("space_id", space.SpaceID()).Error; err != nil {
+	if err := p.services.DB.Model(&character.Character{}).Where("space_id=?", p.spaceID).Update("space_id", space.SpaceID()).Error; err != nil {
 		t.Fatal(err)
+	}
+	for _, model := range []any{&agentplatform.AgentProfile{}, &agentplatform.AgentRevision{}, &agentplatform.AgentRelease{}} {
+		if err := p.services.DB.Model(model).Where("space_id=?", p.spaceID).Update("space_id", space.SpaceID()).Error; err != nil {
+			t.Fatal(err)
+		}
 	}
 	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "core.db")+"?_pragma=journal_mode(WAL)&_pragma=foreign_keys(ON)&_pragma=busy_timeout(5000)")
 	if err != nil {

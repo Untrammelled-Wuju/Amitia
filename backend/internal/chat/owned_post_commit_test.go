@@ -12,7 +12,7 @@ import (
 
 func TestOwnedTitleSkipsCompletedHistoryBeforeCallingModel(t *testing.T) {
 	role := coordination.Role{ID: "role", Revision: 1, Profile: json.RawMessage(`{"characterId":"role"}`)}
-	inference := business.Inference{Scope: coordination.ExecutionScope{RoleID: "role", RoleRevision: 1, ResourceOwnerID: "device"}, ConversationID: "conversation", Message: "你好", Snapshot: coordination.DataSnapshot{OwnerID: "device", Role: role, Resources: []coordination.Resource{legacyMessageResource("device", "role", "history", map[string]string{"conversationId": "conversation", "role": "assistant", "content": "已有回复"})}}}
+	inference := business.Inference{Scope: coordination.ExecutionScope{RoleID: "role", RoleRevision: 1, ResourceOwnerID: "device", RoleOwnerID: "device"}, ConversationID: "conversation", Message: "你好", Snapshot: coordination.DataSnapshot{OwnerID: "device", Role: role, Resources: []coordination.Resource{ownedMessageResource("device", "role", "history", map[string]string{"conversationId": "conversation", "role": "assistant", "content": "已有回复"})}}}
 	title, err := (&service{}).PlanOwnedTitle(t.Context(), inference, business.Generation{Text: "新回复"})
 	if err != nil || title != "" {
 		t.Fatalf("history triggered title: %q %v", title, err)

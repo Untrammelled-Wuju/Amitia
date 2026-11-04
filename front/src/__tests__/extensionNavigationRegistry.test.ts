@@ -297,11 +297,10 @@ describe("extension navigation registry", () => {
     expect(router.hasRoute("ui-provider:minecraft:routes.minecraft:main")).toBe(true);
   });
 
-  it("serves active task without retired alias routes", () => {
-    const activeTask = builtinBusinessRoutes.find((item) => item.path === "/characters/:id/active-task");
-    expect(activeTask?.name).toBe("characterActiveTask");
-    expect(activeTask?.props).toBeTypeOf("function");
-    expect(builtinBusinessRoutes.some((item) => item.path === "/character/:id/proactive")).toBe(false);
+  it("removes character-scoped task, memory, and timeline routes", () => {
+    expect(builtinBusinessRoutes.some((item) => item.path === "/characters/:id/active-task")).toBe(false);
     expect(builtinBusinessRoutes.some((item) => item.path === "/characters/:id/proactive")).toBe(false);
+    expect(builtinBusinessRoutes.some((item) => item.path === "/character/:id/memory")).toBe(false);
+    expect(builtinBusinessRoutes.some((item) => item.path === "/character/:id/timeline")).toBe(false);
   });
 });

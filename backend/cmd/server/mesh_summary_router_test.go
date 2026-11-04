@@ -10,7 +10,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/auth"
-	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/devicemesh"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
@@ -32,17 +31,12 @@ func TestMeshSummaryHTTPRequiresActorCurrentPageAndOwnerAcknowledgement(t *testi
 	if _, err := db.Exec(`INSERT INTO kernel_devices(device_id,space_id,trust_state,created_at,last_seen_at) VALUES('device-a','core','trusted','now','now')`); err != nil {
 		t.Fatal(err)
 	}
-	conversation := chat.Conversation{ID: "summary-chat", SpaceID: p.ownerID, Title: "历史", Channel: "web"}
-	if err := p.services.DB.Create(&conversation).Error; err != nil {
-		t.Fatal(err)
-	}
-	if err := p.services.DB.Create(&chat.Message{ID: "legacy-summary-message", ConversationID: conversation.ID, CharacterID: "one", Role: "user", Content: "需要记住的事实", Sequence: 1}).Error; err != nil {
-		t.Fatal(err)
-	}
+	seedOwnedChatManagement(t, p, "conversation", "summary-chat", "one", `{"id":"summary-chat","title":"历史","characterId":"one","createdAt":"2026-10-01T00:00:00Z"}`)
+	seedOwnedChatManagement(t, p, "message", "summary-message", "one", `{"id":"summary-message","conversationId":"summary-chat","characterId":"one","role":"user","content":"需要记住的事实","sequence":1,"createdAt":"2026-10-01T00:00:01Z"}`)
 	service := coordination.NewService(db)
 	model := &routerSummaryModel{}
 	engine := business.NewEngine(service, p, model)
-	query, err := engine.Query(t.Context(), business.Request{SpaceID: "core", DeviceID: "device-a", CoreID: "core", RoleID: "one"}, coordination.DataQuery{ConversationID: conversation.ID})
+	query, err := engine.Query(t.Context(), business.Request{SpaceID: "core", DeviceID: "device-a", CoreID: "core", RoleID: "one"}, coordination.DataQuery{ConversationID: "summary-chat"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +64,7 @@ func TestMeshSummaryHTTPRequiresActorCurrentPageAndOwnerAcknowledgement(t *testi
 		router.ServeHTTP(response, request)
 		return response
 	}
-	payload := map[string]any{"requestId": "http-summary", "characterId": "one", "expectedRevision": 0, "expectedExecutionScope": query.Scope, "conversationOrigin": business.ConversationOrigin{OwnerID: "device-a", ID: conversation.ID}}
+	payload := map[string]any{"requestId": "http-summary", "characterId": "one", "expectedRevision": 0, "expectedExecutionScope": query.Scope, "conversationOrigin": business.ConversationOrigin{OwnerID: "device-a", ID: "summary-chat"}}
 	if response := invoke(false, payload); response.Code != 401 {
 		t.Fatalf("unauthorized request: %d", response.Code)
 	}
@@ -103,8 +97,8 @@ func TestMeshSummaryHTTPRequiresActorCurrentPageAndOwnerAcknowledgement(t *testi
 	if err != nil || len(core) != 0 {
 		t.Fatalf("device summary copied into Core: %v", err)
 	}
-	var messages int64
-	if err := p.services.DB.Model(&chat.Message{}).Where("conversation_id = ?", conversation.ID).Count(&messages).Error; err != nil || messages != 1 {
-		t.Fatalf("summary modified original messages: %d %v", messages, err)
+	messages, err := coordination.NewOwnershipStore(db, p.ownerID).List(t.Context(), "message", "one", false)
+	if err != nil || len(messages) != 1 {
+		t.Fatalf("summary modified original messages: %d %v", len(messages), err)
 	}
 }

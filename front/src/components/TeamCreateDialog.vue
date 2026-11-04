@@ -51,7 +51,7 @@ import {
   listRoleRuntimeProfiles,
   listRoleTeamTemplates,
 } from "@/api/role-runtime";
-import type { AgentProfile, Team } from "@/api/agent-platform";
+import type { AgentProfile, Team } from "@/api/role-types";
 import { originalErrorMessage } from "@/runtime/original-error";
 
 const props = defineProps<{ visible: boolean }>();

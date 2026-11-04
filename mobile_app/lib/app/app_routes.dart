@@ -89,10 +89,6 @@ abstract final class AppRoutes {
   static String character(String id) => '/characters/$id';
   static String characterLifeRules(String id) => '/characters/$id/life-rules';
   static String characterVoice(String id) => '/characters/$id/voice';
-  static String characterMemory(String id) => '/characters/$id/memory';
-  static String characterTimeline(String id) => '/characters/$id/timeline';
-  static String characterActiveTask(String id) => '/characters/$id/active-task';
-  static String characterProactive(String id) => characterActiveTask(id);
   static String characterPsyche(String id) => '/characters/$id/psyche';
   static String agentTask(String id) => '/agent/task/$id';
   static String continuityDetail(String id) => '/continuity/$id';

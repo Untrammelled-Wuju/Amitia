@@ -2,14 +2,12 @@ package agentplatform
 
 import (
 	"context"
-	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -21,16 +19,8 @@ type Service struct {
 	db                 *gorm.DB
 	dataDir            string
 	runtime            *RuntimeManager
-	a2aExecutor        A2AExecutor
 	approvalBroker     *execution.ApprovalBroker
 	workspaceRegistrar RuntimeWorkspaceRegistrar
-	evaluationExecutor EvaluationExecutor
-	a2aKeyMu           sync.Mutex
-	a2aPrivateKey      ed25519.PrivateKey
-}
-
-type A2AExecutor interface {
-	ExecuteA2ATask(ctx context.Context, spaceID, agentID string, input any) (any, error)
 }
 
 type ServiceConfig struct {
@@ -71,12 +61,6 @@ func (s *Service) Runtime() *RuntimeManager {
 	return s.runtime
 }
 
-func (s *Service) SetA2AExecutor(executor A2AExecutor) {
-	if s != nil {
-		s.a2aExecutor = executor
-	}
-}
-
 func (s *Service) SetApprovalBroker(broker *execution.ApprovalBroker) {
 	if s != nil {
 		s.approvalBroker = broker
@@ -90,12 +74,6 @@ func (s *Service) SetWorkspaceRegistrar(registrar RuntimeWorkspaceRegistrar) {
 	s.workspaceRegistrar = registrar
 	if s.runtime != nil {
 		s.runtime.workspaceRegistrar = registrar
-	}
-}
-
-func (s *Service) SetEvaluationExecutor(executor EvaluationExecutor) {
-	if s != nil {
-		s.evaluationExecutor = executor
 	}
 }
 

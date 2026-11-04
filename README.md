@@ -19,21 +19,20 @@
 
 ### 简介
 
-**阿米提亚（Amitia）** 是本地优先、跨设备协同的个人智能体系统。每个角色可以拥有独立的模型、人格、长期记忆、技能、应用授权、团队职责和隔离电脑；数据、凭据和运行记录默认由你控制。
+**阿米提亚（Amitia）** 是本地优先、跨设备协同的个人智能体系统。角色可以拥有独立的模型、人格、长期记忆、技能和团队职责，并通过团队完成负责人路由、共享上下文与任务交接。
 
 ### 核心特性
 
-- **角色运行配置** — 草稿、测试、发布、版本差异、回滚、停用、迁移和可携带包
-- **角色电脑** — 本机工作区、OCI 容器、远程电脑和 Android 自动化，支持终端、快照与人工接管
-- **角色团队** — 负责人、成员路由、共享上下文、文件、决策记录和任务交接
-- **可信执行** — 持久审批、副作用对账、能力令牌、网络白名单、数据外传审计和资源租约
+- **角色团队** — 团队模板、负责人、成员路由、共享上下文、共享文件和任务交接
+- **子智能体运行** — 在主对话中查看子智能体状态、消息和运行记录
+- **可信执行** — 持久审批、副作用对账、资源租约和工具执行审计
 - **长期记忆** — Qdrant 向量检索、SurrealDB 知识图谱和团队共享记忆
 - **应用与插件** — MCP、Skills、Native Bridge、渠道插件和带分类的插件市场
 - **数字身份插件** — 邮箱、日历、手机号和钱包均以独立插件包发布，不进入核心
 - **模型路由** — 每个角色可以独立选择模型和推理参数
 - **角色模型** — 每个角色可独立覆盖模型与思考参数，未配置时回退默认模型
 - **语音与主动任务** — TTS、ASR、实时通话、提醒和长期持续事项
-- **跨端协同** — Web、Electron、Android 和 iOS 使用同一 Core、市场、审批与活动主链
+- **跨端协同** — Web、Electron、Android 和 iOS 使用同一 Core、团队、市场和审批主链
 
 ### 技术栈
 
@@ -100,20 +99,19 @@ U-Ai/
 
 ### Overview
 
-**Amitia** is a local-first, cross-device Personal Agent Platform. Each role can own its model, personality, long-term memory, skills, app grants, team role, and isolated computer while keeping data and credentials under your control.
+**Amitia** is a local-first, cross-device Personal Agent Platform. Roles can own their model, personality, long-term memory, skills, and team responsibilities, then collaborate through lead routing, shared context, and task handoff.
 
 ### Features
 
-- **Role Runtime Profiles** — drafts, testing, releases, diffs, rollback, retirement, migration, and portable packages
-- **Role Computers** — local process, OCI container, remote desktop, and Android automation with snapshots and takeover
-- **Role Teams** — leads, routing, shared context, files, decisions, and task handoff
-- **Trusted Execution** — durable approvals, side-effect reconciliation, capability leases, egress policy, and resource locks
+- **Role Teams** — templates, leads, routing, shared context, shared files, and task handoff
+- **Subagent Runs** — status, messages, and execution records for agents started inside a conversation
+- **Trusted Execution** — durable approvals, side-effect reconciliation, resource locks, and tool audit
 - **Long-term Memory** — Qdrant retrieval, SurrealDB knowledge graph, and team context
 - **Apps and Plugins** — MCP, Skills, Native Bridge, channel plugins, and a categorized plugin marketplace
 - **Identity Plugins** — email, calendar, phone, browser profiles, and wallets ship as independent extensions
-- **Models and Budgets** — per-agent routing plus token, cost, tool-call, and concurrency limits
-- **Voice and Autonomy** — TTS, ASR, realtime calls, reminders, routines, and configurable autonomy levels
-- **Cross-device** — Web, Electron, Android, and iOS share the same Core, marketplace, approvals, and activity APIs
+- **Models** — per-role model and reasoning overrides
+- **Voice and Tasks** — TTS, ASR, realtime calls, reminders, routines, and long-running tasks
+- **Cross-device** — Web, Electron, Android, and iOS share the same Core, teams, marketplace, and approvals
 
 ### Tech Stack
 

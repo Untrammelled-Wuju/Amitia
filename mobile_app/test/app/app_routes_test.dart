@@ -87,10 +87,6 @@ void main() {
       expect(AppRoutes.charactersTeams, '/characters/teams');
       expect(AppRoutes.characterLifeRules('c1'), '/characters/c1/life-rules');
       expect(AppRoutes.characterVoice('c1'), '/characters/c1/voice');
-      expect(AppRoutes.characterMemory('c1'), '/characters/c1/memory');
-      expect(AppRoutes.characterTimeline('c1'), '/characters/c1/timeline');
-      expect(AppRoutes.characterActiveTask('c1'), '/characters/c1/active-task');
-      expect(AppRoutes.characterProactive('c1'), '/characters/c1/active-task');
       expect(AppRoutes.characterPsyche('c1'), '/characters/c1/psyche');
       expect(AppRoutes.agentTask('t1'), '/agent/task/t1');
       expect(AppRoutes.continuityDetail('c1'), '/continuity/c1');

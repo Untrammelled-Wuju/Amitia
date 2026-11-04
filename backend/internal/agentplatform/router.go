@@ -2,9 +2,7 @@ package agentplatform
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -20,12 +18,8 @@ type HTTPHandler struct {
 
 func RegisterRoutes(group *gin.RouterGroup, service *Service, spaceID, ownerID string) {
 	handler := &HTTPHandler{service: service, spaceID: spaceID, ownerID: ownerID}
-	auth := group.Group("/agent-platform/auth")
-	auth.POST("/login", handler.loginPlatformUser)
-	auth.POST("/logout", handler.logoutPlatformUser)
-
 	roles := group.Group("/roles")
-	roles.Use(handler.platformActor)
+	roles.Use(handler.localActor)
 	roles.GET("", handler.listAgents)
 
 	teams := roles.Group("/teams")
@@ -42,160 +36,16 @@ func RegisterRoutes(group *gin.RouterGroup, service *Service, spaceID, ownerID s
 	teams.POST("/:id/route", handler.routeTeamMessage)
 	teams.POST("/:id/handoffs/:handoffId/accept", handler.acceptTeamHandoff)
 	teams.POST("/:id/handoffs/:handoffId/complete", handler.completeTeamHandoff)
-
-	evaluations := roles.Group("/evaluations")
-	evaluations.GET("/suites", handler.listEvaluationSuites)
-	evaluations.POST("/suites", handler.createEvaluationSuite)
-	evaluations.GET("/suites/:id/cases", handler.listEvaluationCases)
-	evaluations.POST("/suites/:id/cases", handler.createEvaluationCase)
-	evaluations.POST("/suites/:id/run", handler.runEvaluation)
-	evaluations.GET("/runs", handler.listEvaluationRuns)
-
-	activity := roles.Group("/activity")
-	activity.GET("", handler.listActivity)
-	activity.GET("/:id", handler.getActivity)
-
-	a2a := roles.Group("/a2a")
-	a2a.GET("/cards", handler.listA2ACards)
-	a2a.POST("/cards", handler.registerA2ACard)
-	a2a.GET("/tasks", handler.listA2ATasks)
-	a2a.POST("/tasks", handler.submitA2ATask)
-	a2a.POST("/tasks/:id/cancel", handler.cancelA2ATask)
 }
 
-func RegisterPublicRoutes(group *gin.RouterGroup, service *Service, spaceID string) {
-	handler := &HTTPHandler{service: service, spaceID: spaceID}
-	group.GET("/a2a/agents/:id", handler.getPublicA2ACard)
-	group.POST("/a2a/tasks", handler.handleInboundA2ATask)
-}
-
-func (h *HTTPHandler) platformActor(c *gin.Context) {
-	token := strings.TrimSpace(c.GetHeader("X-Amitia-Platform-Session"))
-	if token == "" {
-		c.Request = c.Request.WithContext(WithPlatformActor(c.Request.Context(), h.ownerID, "local_owner"))
-		c.Next()
-		return
-	}
-	user, _, err := h.service.ResolvePlatformSession(c.Request.Context(), token)
-	if err != nil {
-		h.respondError(c, err)
-		c.Abort()
-		return
-	}
-	permission := "platform.read"
-	if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead && c.Request.Method != http.MethodOptions {
-		permission = "platform.write"
-	}
-	if err := h.service.Authorize(c.Request.Context(), h.spaceID, user.ID, permission); err != nil {
-		h.respondError(c, err)
-		c.Abort()
-		return
-	}
-	c.Set("platformUserID", user.ID)
-	c.Request = c.Request.WithContext(WithPlatformActor(c.Request.Context(), user.ID, "platform_user"))
+func (h *HTTPHandler) localActor(c *gin.Context) {
+	c.Request = c.Request.WithContext(WithPlatformActor(c.Request.Context(), h.ownerID, "local_owner"))
 	c.Next()
-}
-
-func (h *HTTPHandler) loginPlatformUser(c *gin.Context) {
-	var input PlatformLoginInput
-	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
-		return
-	}
-	item, err := h.service.LoginPlatformUser(c.Request.Context(), h.spaceID, input)
-	h.respond(c, item, err)
-}
-
-func (h *HTTPHandler) logoutPlatformUser(c *gin.Context) {
-	token := strings.TrimSpace(c.GetHeader("X-Amitia-Platform-Session"))
-	err := h.service.LogoutPlatformSession(c.Request.Context(), token)
-	h.respond(c, gin.H{"loggedOut": err == nil}, err)
-}
-
-func (h *HTTPHandler) bootstrap(c *gin.Context) {
-	templates := []map[string]any{
-		{"id": "companion", "name": "陪伴 Agent", "archetype": "companion", "category": "agent-identities"},
-		{"id": "worker", "name": "执行 Agent", "archetype": "worker", "category": "productivity"},
-		{"id": "team", "name": "团队负责人", "archetype": "team_lead", "category": "productivity"},
-	}
-	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": gin.H{
-		"spaceId": h.spaceID, "userId": h.ownerID, "templates": templates,
-		"categories": []any{}, "runtimeProviders": []string{"local", "isolated", "oci", "remote", "android"},
-		"roles": []string{"owner", "admin", "operator", "member", "viewer"},
-	}})
-}
-
-func (h *HTTPHandler) overview(c *gin.Context) {
-	ctx := c.Request.Context()
-	events, summary, err := h.service.ListActivity(ctx, h.spaceID, ActivityFilter{Limit: 20})
-	if err != nil {
-		h.respondError(c, err)
-		return
-	}
-	var agents []AgentProfile
-	agents, err = h.service.ListAgents(ctx, h.spaceID, true, 20)
-	if err != nil {
-		h.respondError(c, err)
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": gin.H{
-		"agents": agents, "activity": events, "summary": summary,
-	}})
 }
 
 func (h *HTTPHandler) listAgents(c *gin.Context) {
 	items, err := h.service.ListAgents(c.Request.Context(), h.spaceID, queryBool(c, "includeDisabled"), queryInt(c, "limit"))
 	h.respond(c, items, err)
-}
-
-func (h *HTTPHandler) listTemplates(c *gin.Context) {
-	var items []AgentTemplate
-	err := h.service.db.WithContext(c.Request.Context()).Order("builtin DESC, name ASC").Find(&items).Error
-	h.respond(c, items, err)
-}
-
-func (h *HTTPHandler) listUsers(c *gin.Context) {
-	items, err := h.service.ListUsers(c.Request.Context(), h.spaceID)
-	h.respond(c, items, err)
-}
-
-func (h *HTTPHandler) createUser(c *gin.Context) {
-	var input CreateUserInput
-	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
-		return
-	}
-	item, err := h.service.CreateUser(c.Request.Context(), h.spaceID, input)
-	h.respondStatus(c, item, err, http.StatusCreated)
-}
-
-func (h *HTTPHandler) listMemberships(c *gin.Context) {
-	items, err := h.service.ListMemberships(c.Request.Context(), h.spaceID, c.Query("userId"))
-	h.respond(c, items, err)
-}
-
-func (h *HTTPHandler) inviteUser(c *gin.Context) {
-	var input InviteUserInput
-	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
-		return
-	}
-	item, err := h.service.InviteUser(c.Request.Context(), h.spaceID, h.actorID(c), input)
-	h.respondStatus(c, item, err, http.StatusCreated)
-}
-
-func (h *HTTPHandler) acceptInvitation(c *gin.Context) {
-	var input struct {
-		Token       string `json:"token"`
-		DisplayName string `json:"displayName"`
-		Password    string `json:"password"`
-	}
-	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
-		return
-	}
-	item, err := h.service.AcceptInvitation(c.Request.Context(), h.spaceID, input.Token, input.DisplayName, input.Password)
-	h.respond(c, item, err)
 }
 
 func (h *HTTPHandler) listTeams(c *gin.Context) {
@@ -317,154 +167,7 @@ func (h *HTTPHandler) completeTeamHandoff(c *gin.Context) {
 	h.respond(c, item, err)
 }
 
-func (h *HTTPHandler) listEvaluationSuites(c *gin.Context) {
-	items, err := h.service.ListEvaluationSuites(c.Request.Context(), h.spaceID, c.Query("agentId"))
-	h.respond(c, items, err)
-}
-
-func (h *HTTPHandler) createEvaluationSuite(c *gin.Context) {
-	var input CreateEvaluationSuiteInput
-	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
-		return
-	}
-	item, err := h.service.CreateEvaluationSuite(c.Request.Context(), h.spaceID, input)
-	h.respondStatus(c, item, err, http.StatusCreated)
-}
-
-func (h *HTTPHandler) listEvaluationCases(c *gin.Context) {
-	items, err := h.service.ListEvaluationCases(c.Request.Context(), h.spaceID, c.Param("id"))
-	h.respond(c, items, err)
-}
-
-func (h *HTTPHandler) createEvaluationCase(c *gin.Context) {
-	var input CreateEvaluationCaseInput
-	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
-		return
-	}
-	item, err := h.service.CreateEvaluationCase(c.Request.Context(), h.spaceID, c.Param("id"), input)
-	h.respondStatus(c, item, err, http.StatusCreated)
-}
-
-func (h *HTTPHandler) runEvaluation(c *gin.Context) {
-	var input struct {
-		AgentID string `json:"agentId"`
-		RunEvaluationInput
-	}
-	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
-		return
-	}
-	item, err := h.service.RunEvaluation(c.Request.Context(), h.spaceID, input.AgentID, c.Param("id"), input.RunEvaluationInput)
-	h.respond(c, item, err)
-}
-
-func (h *HTTPHandler) listEvaluationRuns(c *gin.Context) {
-	items, err := h.service.ListEvaluationRuns(c.Request.Context(), h.spaceID, c.Query("agentId"), queryInt(c, "limit"))
-	h.respond(c, items, err)
-}
-
-func (h *HTTPHandler) listActivity(c *gin.Context) {
-	items, summary, err := h.service.ListActivity(c.Request.Context(), h.spaceID, ActivityFilter{
-		AgentID: c.Query("agentId"), TeamID: c.Query("teamId"), ConversationID: c.Query("conversationId"),
-		Kind: c.Query("kind"), State: c.Query("state"), Limit: queryInt(c, "limit"),
-	})
-	if err != nil {
-		h.respondError(c, err)
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": gin.H{"items": items, "summary": summary}})
-}
-
-func (h *HTTPHandler) getActivity(c *gin.Context) {
-	item, err := h.service.GetActivity(c.Request.Context(), h.spaceID, c.Param("id"))
-	h.respond(c, item, err)
-}
-
-func (h *HTTPHandler) listA2ACards(c *gin.Context) {
-	items, err := h.service.ListA2ACards(c.Request.Context(), h.spaceID)
-	h.respond(c, items, err)
-}
-
-func (h *HTTPHandler) registerA2ACard(c *gin.Context) {
-	var input RegisterA2ACardInput
-	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
-		return
-	}
-	item, err := h.service.RegisterA2ACard(c.Request.Context(), h.spaceID, input)
-	h.respondStatus(c, item, err, http.StatusCreated)
-}
-
-func (h *HTTPHandler) listA2ATasks(c *gin.Context) {
-	items, err := h.service.ListA2ATasks(c.Request.Context(), h.spaceID, c.Query("agentId"), queryInt(c, "limit"))
-	h.respond(c, items, err)
-}
-
-func (h *HTTPHandler) submitA2ATask(c *gin.Context) {
-	var input A2ATaskInput
-	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
-		return
-	}
-	item, err := h.service.SubmitA2ATask(c.Request.Context(), h.spaceID, input)
-	h.respond(c, item, err)
-}
-
-func (h *HTTPHandler) cancelA2ATask(c *gin.Context) {
-	var input struct {
-		RemoteCancelURL string `json:"remoteCancelUrl"`
-	}
-	if err := bindOptionalJSON(c, &input); err != nil {
-		h.respondError(c, err)
-		return
-	}
-	item, err := h.service.CancelA2ATask(c.Request.Context(), h.spaceID, c.Param("id"), input.RemoteCancelURL)
-	h.respond(c, item, err)
-}
-
-func (h *HTTPHandler) getPublicA2ACard(c *gin.Context) {
-	item, err := h.service.GetPublicA2ACard(c.Request.Context(), h.spaceID, c.Param("id"))
-	if err != nil {
-		h.respondError(c, err)
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"name": item.Name, "description": item.Description, "url": item.URL,
-		"version": item.Version, "skills": json.RawMessage(item.SkillsJSON),
-		"security": json.RawMessage(item.SecurityJSON),
-	})
-}
-
-func (h *HTTPHandler) handleInboundA2ATask(c *gin.Context) {
-	var input InboundA2ATaskInput
-	body, err := io.ReadAll(io.LimitReader(c.Request.Body, 8<<20))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
-		return
-	}
-	if err := json.Unmarshal(body, &input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
-		return
-	}
-	input.RawBody = body
-	input.SenderAgentID = strings.TrimSpace(c.GetHeader("X-Amitia-A2A-Agent"))
-	input.Timestamp = strings.TrimSpace(c.GetHeader("X-Amitia-A2A-Timestamp"))
-	input.Nonce = strings.TrimSpace(c.GetHeader("X-Amitia-A2A-Nonce"))
-	input.Signature = strings.TrimSpace(c.GetHeader("X-Amitia-A2A-Signature"))
-	ctx := WithPlatformActor(c.Request.Context(), input.SenderAgentID, "remote_agent")
-	item, err := h.service.HandleInboundA2ATask(ctx, h.spaceID, input)
-	h.respond(c, item, err)
-}
-
 func (h *HTTPHandler) actorID(c *gin.Context) string {
-	if value := strings.TrimSpace(c.GetHeader("X-Amitia-User-ID")); value != "" {
-		return value
-	}
-	if value := strings.TrimSpace(c.GetString("platformUserID")); value != "" {
-		return value
-	}
 	return h.ownerID
 }
 
@@ -493,16 +196,6 @@ func (h *HTTPHandler) respondError(c *gin.Context, err error) {
 		status = http.StatusInternalServerError
 	}
 	c.JSON(status, gin.H{"code": status, "msg": message, "error": message})
-}
-
-func bindOptionalJSON(c *gin.Context, target any) error {
-	if c.Request.Body == nil || c.Request.ContentLength == 0 {
-		return nil
-	}
-	if err := c.ShouldBindJSON(target); err != nil && !errors.Is(err, io.EOF) {
-		return err
-	}
-	return nil
 }
 
 func queryInt(c *gin.Context, key string) int {

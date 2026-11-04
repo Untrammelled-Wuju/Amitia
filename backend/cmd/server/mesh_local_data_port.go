@@ -8,10 +8,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/u-ai/backend/internal/agentplatform"
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	"github.com/u-ai/backend/internal/spaceidentity"
 	"github.com/u-ai/backend/internal/tts"
 	"github.com/u-ai/backend/pkg/app"
 	amitialog "log"
@@ -20,6 +22,7 @@ import (
 type meshLocalDataPort struct {
 	services *AppServices
 	ownerID  string
+	spaceID  string
 	roles    character.Repository
 	store    *coordination.OwnershipStore
 }
@@ -63,7 +66,11 @@ func newMeshLocalDataPort(services *AppServices, dataDir, ownerID string) (*mesh
 	if services == nil || services.DB == nil || services.KernelContainer == nil || services.KernelContainer.DeviceRegistry == nil || ownerID == "" {
 		return nil, errors.New("设备业务数据服务不可用")
 	}
-	return &meshLocalDataPort{services: services, ownerID: ownerID, roles: character.NewRepository(app.NewAppContext(services.DB, nil)), store: coordination.NewOwnershipStore(services.KernelContainer.DeviceRegistry.Database(), ownerID)}, nil
+	space, err := spaceidentity.Open(dataDir)
+	if err != nil {
+		return nil, err
+	}
+	return &meshLocalDataPort{services: services, ownerID: ownerID, spaceID: space.SpaceID(), roles: character.NewRepository(app.NewAppContext(services.DB, nil)), store: coordination.NewOwnershipStore(services.KernelContainer.DeviceRegistry.Database(), ownerID)}, nil
 }
 
 func (p *meshLocalDataPort) Roles(ctx context.Context, scope coordination.ExecutionScope) ([]coordination.Role, error) {
@@ -180,9 +187,21 @@ func (p *meshLocalDataPort) roleCatalogLocked(ctx context.Context, scope coordin
 	if err != nil {
 		return nil, err
 	}
+	var agents []agentplatform.AgentProfile
+	if err := p.services.DB.WithContext(ctx).Where("space_id = ? AND deleted_at IS NULL", p.spaceID).Find(&agents).Error; err != nil {
+		return nil, err
+	}
+	agentStatus := make(map[string]string, len(agents))
+	for _, agent := range agents {
+		agentStatus[agent.CharacterID] = agent.Status
+	}
 	roles := make([]coordination.Role, 0, len(characters))
 	for _, row := range characters {
-		if row.SpaceID != p.ownerID {
+		if row.SpaceID != p.spaceID {
+			continue
+		}
+		status, exists := agentStatus[row.ID]
+		if !exists || row.Status == "enabled" && status != "active" || row.Status != "enabled" && status != "disabled" {
 			continue
 		}
 		if row.Status != "enabled" {
@@ -301,9 +320,6 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 			continue
 		}
 		if kind == "project" && query.ResourceKind != "project" {
-			continue
-		}
-		if query.Management && query.Cursor == "" {
 			continue
 		}
 		if query.ResourceKind != "" && query.ResourceKind != kind {

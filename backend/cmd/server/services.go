@@ -1067,7 +1067,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		services.KernelContainer.ApprovalBroker.SetPersistence(services.AgentPlatform)
 		services.AgentPlatform.SetApprovalBroker(services.KernelContainer.ApprovalBroker)
 		services.AgentPlatform.SetWorkspaceRegistrar(agentPlatformWorkspaceRegistrar{workspace: services.WorkspaceService})
-		services.AgentPlatform.SetEvaluationExecutor(runtimeBridge)
 		if services.UnifiedEntry != nil {
 			services.UnifiedEntry.SetAgentRuntimeProvider(runtimeBridge)
 		}
@@ -1201,13 +1200,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		}
 		memoryRuntime := &canonicalChatMemoryRuntime{engine: services.OwnedBusiness, spaceID: localSpace.SpaceID(), deviceID: deviceMeshRuntime.LocalDeviceID, begin: inferenceAuthority}
 		services.LocalSpaceID, services.LocalDeviceID = localSpace.SpaceID(), deviceMeshRuntime.LocalDeviceID
-		if services.AgentPlatform != nil && services.UnifiedEntry != nil {
-			services.AgentPlatform.SetA2AExecutor(&a2aUnifiedEntryExecutor{
-				platform: services.AgentPlatform,
-				entry:    services.UnifiedEntry,
-				deviceID: services.LocalDeviceID,
-			})
-		}
 		memoryConsumers.runtime, reflectionMemoryAdapter.runtime = memoryRuntime, memoryRuntime
 		if setter, ok := services.Chat.(interface{ SetOwnedToolRuntime(chat.OwnedToolRuntime) }); ok {
 			setter.SetOwnedToolRuntime(&meshOwnedToolRuntime{services: services, native: nativeMultiAgent})

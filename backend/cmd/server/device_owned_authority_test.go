@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/u-ai/backend/internal/agentplatform"
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/devicemesh/agent"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
@@ -25,8 +26,13 @@ func TestDeviceOwnedHandlerRejectsDelayedCancelledAndOldPermissionWrites(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := p.services.DB.Model(&character.Character{}).Where("space_id=?", p.ownerID).Update("space_id", space.SpaceID()).Error; err != nil {
+	if err := p.services.DB.Model(&character.Character{}).Where("space_id=?", p.spaceID).Update("space_id", space.SpaceID()).Error; err != nil {
 		t.Fatal(err)
+	}
+	for _, model := range []any{&agentplatform.AgentProfile{}, &agentplatform.AgentRevision{}, &agentplatform.AgentRelease{}} {
+		if err := p.services.DB.Model(model).Where("space_id=?", p.spaceID).Update("space_id", space.SpaceID()).Error; err != nil {
+			t.Fatal(err)
+		}
 	}
 	credential := &agent.StoredCredential{SpaceID: runtimeidentity.SpaceID("core"), DeviceID: identity.DeviceID, RuntimeID: identity.RuntimeID, CredentialID: "test-credential", Credential: "test-value", ExpiresAt: time.Now().Add(time.Hour)}
 	if err := agent.NewCredentialStore(dir).SaveCredential(credential); err != nil {

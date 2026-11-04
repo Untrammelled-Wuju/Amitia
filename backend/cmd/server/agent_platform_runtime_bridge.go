@@ -39,72 +39,6 @@ func newAgentPlatformRuntimeBridge(platform *agentplatform.Service, workspaceSer
 	}
 }
 
-func (b *agentPlatformRuntimeBridge) ExecuteEvaluationCase(ctx context.Context, spaceID, agentID, revisionID string, evaluationCase agentplatform.EvaluationCase) (agentplatform.SubmitEvaluationResult, error) {
-	detail, err := b.platform.GetAgent(ctx, spaceID, agentID)
-	if err != nil {
-		return agentplatform.SubmitEvaluationResult{}, err
-	}
-	if detail.Profile.Status != "active" || detail.Revision.ID != revisionID {
-		return agentplatform.SubmitEvaluationResult{}, errors.New("自动评估只能运行当前已发布的 Agent 版本")
-	}
-	if b.entry == nil {
-		return agentplatform.SubmitEvaluationResult{}, errors.New("Agent 评估入口不可用")
-	}
-	var input map[string]any
-	if err := json.Unmarshal([]byte(evaluationCase.InputJSON), &input); err != nil {
-		return agentplatform.SubmitEvaluationResult{}, fmt.Errorf("解析评估输入: %w", err)
-	}
-	message := runtimeFirstNonEmpty(stringAny(input["message"]), stringAny(input["input"]))
-	if message == "" {
-		encoded, marshalErr := json.Marshal(input)
-		if marshalErr != nil {
-			return agentplatform.SubmitEvaluationResult{}, marshalErr
-		}
-		message = string(encoded)
-	}
-	startedAt := time.Now()
-	runID := capability.NewInvocationID()
-	result, runErr := b.entry.Handle(ctx, &interaction.UnifiedEntryRequest{
-		Channel: "evaluation", Source: "runtime", SpaceID: spaceID,
-		CharacterID: detail.Profile.CharacterID, AgentID: agentID,
-		ConversationID: "agent-evaluation-" + runID, RequestID: runID,
-		Message: message, PermissionMode: "request_approval",
-	})
-	completedAt := time.Now().UTC()
-	latency := completedAt.Sub(startedAt).Milliseconds()
-	if runErr != nil {
-		return agentplatform.SubmitEvaluationResult{
-			CaseID: evaluationCase.ID, Passed: false, Score: 0, LatencyMS: latency,
-			ToolTrace: map[string]any{"error": runErr.Error()}, Failure: runErr.Error(),
-		}, nil
-	}
-	reply := ""
-	outcome := ""
-	interactionID := ""
-	if result != nil {
-		outcome = string(result.Outcome)
-		interactionID = result.InteractionID
-		if result.Response != nil {
-			reply = result.Response.Reply
-		}
-	}
-	var expected map[string]any
-	if err := json.Unmarshal([]byte(evaluationCase.ExpectedJSON), &expected); err != nil {
-		return agentplatform.SubmitEvaluationResult{}, fmt.Errorf("解析评估期望: %w", err)
-	}
-	passed, score, failure := scoreEvaluationReply(reply, expected)
-	usageTotals, err := b.platform.ModelUsageTotalsByWindow(ctx, spaceID, detail.Profile.CharacterID, startedAt, completedAt)
-	if err != nil {
-		return agentplatform.SubmitEvaluationResult{}, err
-	}
-	return agentplatform.SubmitEvaluationResult{
-		CaseID: evaluationCase.ID, Passed: passed, Score: score, LatencyMS: latency,
-		Tokens: usageTotals.TotalTokens, CostMicroUSD: usageTotals.CostMicroUSD,
-		ToolTrace: map[string]any{"interactionId": interactionID, "outcome": outcome, "reply": reply},
-		Failure:   failure,
-	}, nil
-}
-
 func (r agentPlatformWorkspaceRegistrar) RegisterRuntimeWorkspace(ctx context.Context, agentID, name, localRoot string) (agentplatform.RuntimeWorkspace, error) {
 	if r.workspace == nil {
 		return agentplatform.RuntimeWorkspace{}, errors.New("工作区服务不可用")
@@ -340,46 +274,6 @@ func resultActivityJSON(inv capability.ToolInvocationContext, result capability.
 		return fmt.Sprintf(`{"error":%q}`, err.Error())
 	}
 	return string(body)
-}
-
-func scoreEvaluationReply(reply string, expected map[string]any) (bool, float64, string) {
-	checks := 0
-	passed := 0
-	failures := make([]string, 0)
-	check := func(name string, ok bool) {
-		checks++
-		if ok {
-			passed++
-		} else {
-			failures = append(failures, name)
-		}
-	}
-	if value := stringAny(expected["equals"]); value != "" {
-		check("equals", strings.TrimSpace(reply) == strings.TrimSpace(value))
-	}
-	if value := stringAny(expected["contains"]); value != "" {
-		check("contains", strings.Contains(reply, value))
-	}
-	if value := stringAny(expected["notContains"]); value != "" {
-		check("notContains", !strings.Contains(reply, value))
-	}
-	if patterns, ok := expected["containsAll"].([]any); ok {
-		for _, item := range patterns {
-			value := stringAny(item)
-			if value != "" {
-				check("containsAll:"+value, strings.Contains(reply, value))
-			}
-		}
-	}
-	if checks == 0 {
-		ok := strings.TrimSpace(reply) != ""
-		if ok {
-			return true, 1, ""
-		}
-		return false, 0, "Agent 未返回文本"
-	}
-	score := float64(passed) / float64(checks)
-	return passed == checks, score, strings.Join(failures, ", ")
 }
 
 func stringAny(value any) string {

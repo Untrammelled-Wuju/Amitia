@@ -20,6 +20,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
+	"github.com/u-ai/backend/internal/agentplatform"
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/devicemesh/agent"
 	"github.com/u-ai/backend/internal/devicemesh/business"
@@ -61,7 +62,7 @@ func newThreeCoreSchemas(t *testing.T) *threeCoreSchemas {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &threeCoreSchemas{business: businessBytes, kernel: kernelBytes, roleSpace: port.ownerID}
+	return &threeCoreSchemas{business: businessBytes, kernel: kernelBytes, roleSpace: port.spaceID}
 }
 
 func (s *threeCoreSchemas) open(t *testing.T) *AppServices {
@@ -156,11 +157,20 @@ func newThreeCoreFixture(t *testing.T, core string, schemas *threeCoreSchemas, p
 	if err != nil {
 		t.Fatal(err)
 	}
+	ownerSpace, err := spaceidentity.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := spaceidentity.InitializeDefault(dir); err != nil {
 		t.Fatal(err)
 	}
-	if err := sourceServices.DB.Model(&character.Character{}).Where("space_id=?", schemas.roleSpace).Update("space_id", device.DeviceID.String()).Error; err != nil {
+	if err := sourceServices.DB.Model(&character.Character{}).Where("space_id=?", schemas.roleSpace).Update("space_id", ownerSpace.SpaceID()).Error; err != nil {
 		t.Fatal(err)
+	}
+	for _, model := range []any{&agentplatform.AgentProfile{}, &agentplatform.AgentRevision{}, &agentplatform.AgentRelease{}} {
+		if err := sourceServices.DB.Model(model).Where("space_id=?", schemas.roleSpace).Update("space_id", ownerSpace.SpaceID()).Error; err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := sourceServices.DB.Model(&character.Character{}).Where("id=?", "one").Update("name", core+" 的角色").Error; err != nil {
 		t.Fatal(err)
@@ -210,6 +220,7 @@ func newThreeCoreFixture(t *testing.T, core string, schemas *threeCoreSchemas, p
 	rt.BusinessCoordinationReady = true
 	model := &threeCoreModel{core: core, started: make(chan struct{}), cancelled: make(chan struct{}), forwarded: make(chan *business.ForwardedContext, 4), roles: make(chan string, 8), worldbooks: make(chan []coordination.Resource, 16)}
 	services := sourceServices
+	services.LocalSpaceID = core
 	services.DeviceMesh, services.OwnedBusiness = rt, business.NewEngine(rt.Coordination, rt, model)
 	f := &threeCoreFixture{core: core, services: services, local: local, identity: identity, device: device, pairing: pair, router: gin.New(), model: model, platform: platform}
 	f.dispatcher = dispatcher
@@ -343,10 +354,14 @@ func (f *threeCoreFixture) request(t *testing.T, caller *threeCoreFixture, metho
 	if response.StatusCode != expected {
 		var failure struct {
 			Message string `json:"message"`
+			Msg     string `json:"msg"`
 			Data    any    `json:"data"`
 			Code    string `json:"code"`
 		}
 		_ = json.Unmarshal(encoded, &failure)
+		if failure.Message == "" {
+			failure.Message = failure.Msg
+		}
 		skipUnsupportedDeviceIsolationBody(t, failure.Message)
 		t.Fatalf("%s %s: status=%d expected=%d code=%s message=%s data=%v", method, path, response.StatusCode, expected, failure.Code, failure.Message, failure.Data)
 	}
