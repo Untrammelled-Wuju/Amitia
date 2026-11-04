@@ -109,7 +109,7 @@ func TestPhase32ReceiptNoPayloadLeak(t *testing.T) {
 	}
 }
 
-func TestPhase32LegacyAuditResume(t *testing.T) {
+func TestPhase32MissingReceiptCannotResume(t *testing.T) {
 	repo := phase31Repository(t)
 	_, scan, load := phase30PageFixture(40)
 	now := time.Now().UTC()
@@ -120,13 +120,12 @@ func TestPhase32LegacyAuditResume(t *testing.T) {
 	if err := repo.db.Table("knowledge_vector_audit_pages").Where("audit_id = ?", first.AuditID).Delete(&orphanAuditPageReceiptRow{}).Error; err != nil {
 		t.Fatal(err)
 	}
-	next, err := repo.auditOrphanPageWithStore(context.Background(), "tenant-A", []string{"collection-A"}, 25, first.NextCursor, now, scan, load)
-	if err != nil || !next.Finished {
-		t.Fatalf("legacy session cannot continue: %+v %v", next, err)
+	if _, err := repo.auditOrphanPageWithStore(context.Background(), "tenant-A", []string{"collection-A"}, 25, first.NextCursor, now, scan, load); err == nil {
+		t.Fatal("missing receipt must reject continuation")
 	}
 	svc := &service{repo: repo}
 	receipts, err := svc.ListOrphanAuditPageReceipts(context.Background(), "tenant-A", first.AuditID, 0, 10)
-	if err != nil || len(receipts.Items) != 1 || receipts.ChainAnchored {
-		t.Fatalf("legacy chain incorrectly marked complete: %+v %v", receipts, err)
+	if err != nil || len(receipts.Items) != 0 || receipts.ChainAnchored {
+		t.Fatalf("missing receipt chain incorrectly verified: %+v %v", receipts, err)
 	}
 }

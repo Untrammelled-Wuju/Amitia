@@ -277,8 +277,6 @@ func (pi *PackageImporter) executeImport(ctx context.Context, req *ImportPackage
 		IntegrityStatus:     releaseIntegrity,
 		CompatibilityStatus: string(validation.Compatibility),
 		ManifestJSON:        string(manifestJSONBytes),
-		LegacyPackageID:     firstNonEmpty(staging.ID, staging.SourceFilename, staging.SourceContentHash),
-		LegacyVersion:       sequence,
 		CreatedAt:           now,
 		UpdatedAt:           now,
 	}

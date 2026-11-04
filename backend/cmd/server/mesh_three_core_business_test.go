@@ -21,7 +21,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/u-ai/backend/internal/character"
-	"github.com/u-ai/backend/internal/devicemesh"
 	"github.com/u-ai/backend/internal/devicemesh/agent"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
@@ -40,7 +39,7 @@ import (
 
 type threeCoreSchemas struct {
 	business, kernel []byte
-	legacySpace      string
+	roleSpace        string
 }
 
 func newThreeCoreSchemas(t *testing.T) *threeCoreSchemas {
@@ -62,7 +61,7 @@ func newThreeCoreSchemas(t *testing.T) *threeCoreSchemas {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &threeCoreSchemas{business: businessBytes, kernel: kernelBytes, legacySpace: port.legacySpaceID}
+	return &threeCoreSchemas{business: businessBytes, kernel: kernelBytes, roleSpace: port.ownerID}
 }
 
 func (s *threeCoreSchemas) open(t *testing.T) *AppServices {
@@ -157,11 +156,10 @@ func newThreeCoreFixture(t *testing.T, core string, schemas *threeCoreSchemas, p
 	if err != nil {
 		t.Fatal(err)
 	}
-	ownerSpace, err := spaceidentity.Open(dir)
-	if err != nil {
+	if _, err := spaceidentity.InitializeDefault(dir); err != nil {
 		t.Fatal(err)
 	}
-	if err := sourceServices.DB.Model(&character.Character{}).Where("space_id=?", schemas.legacySpace).Update("space_id", ownerSpace.SpaceID()).Error; err != nil {
+	if err := sourceServices.DB.Model(&character.Character{}).Where("space_id=?", schemas.roleSpace).Update("space_id", device.DeviceID.String()).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := sourceServices.DB.Model(&character.Character{}).Where("id=?", "one").Update("name", core+" 的角色").Error; err != nil {
@@ -172,7 +170,7 @@ func newThreeCoreFixture(t *testing.T, core string, schemas *threeCoreSchemas, p
 	if _, err := registry.EnsureDevice(t.Context(), host_registry.DeviceRecord{SpaceID: runtimeidentity.SpaceID(core), DeviceID: device.DeviceID, Platform: platform, TrustState: host_registry.DeviceTrustTrusted}); err != nil {
 		t.Fatal(err)
 	}
-	rt, err := devicemesh.NewCloudRuntime(db, registry)
+	rt, err := newMeshCloudRuntime(t, db, registry)
 	if err != nil {
 		t.Fatal(err)
 	}

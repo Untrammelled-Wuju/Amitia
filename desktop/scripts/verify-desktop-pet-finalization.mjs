@@ -68,6 +68,7 @@ const backendSchemaRegistry = await read("backend/internal/desktoppet/packagefor
 const backendPackageManifest = await read("backend/internal/desktoppet/packageformat/manifest.go");
 const backendModel = await read("backend/internal/desktoppet/installation/model.go");
 const backendDto = await read("backend/internal/desktoppet/installation/dto.go");
+const backendInstallationModel = await read("backend/internal/desktoppet/installation/model.go");
 const backendInstallationCoordinator = await read("backend/internal/desktoppet/installation/coordinator/coordinator.go");
 const backendInstallationHandler = await read("backend/internal/desktoppet/installation/handler.go");
 const backendInstallationRepository = await read("backend/internal/desktoppet/installation/repository.go");
@@ -577,7 +578,7 @@ assert(
 
 assert(
   frontendRuntimeAdapter.includes("isDeviceLocalApiPath") &&
-    frontendRuntimeAdapter.includes('LOCAL_DEVICE_RUNTIME_BASE_URL = "http://127.0.0.1:18899"') &&
+    frontendRuntimeAdapter.includes('LOCAL_DEVICE_RUNTIME_BASE_URL = ""') &&
     frontendRuntimeAdapter.includes("getRuntimeEndpoint") &&
     frontendApi.includes("deviceLocal ? LOCAL_DEVICE_RUNTIME_BASE_URL : runtime.apiBaseURL") &&
     frontendApi.includes("delete config.headers.Authorization") &&
@@ -665,8 +666,9 @@ for (const file of activeClientFiles) {
 }
 
 assert(
-  backendModel.includes('LaunchOnStartup') && backendModel.includes('json:"-"'),
-  "legacy launch_on_startup column must be persistence-only",
+  !backendInstallationModel.includes("launch_on_startup") &&
+    !backendInstallationModel.includes("LaunchOnStartup"),
+  "desktop-pet runtime settings must not retain launch_on_startup compatibility",
 );
 assert(
   !backendDto.includes('json:"launchOnStartup"'),

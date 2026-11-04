@@ -7,7 +7,7 @@ import (
 
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/lifecycle_manager"
-	legacymcp "github.com/u-ai/backend/internal/extension/mcpruntime"
+	mcprepo "github.com/u-ai/backend/internal/extension/mcpruntime"
 )
 
 // RemoteArtifactStorer is the interface needed to resolve a remote PackageURI
@@ -208,13 +208,13 @@ func (b *packagePortBridge) resolveAndStoreArtifact(ctx context.Context, extID s
 // MCPInstallPort implementation
 // ---------------------------------------------------------------------------
 
-// mcpRepositoryBridge wraps legacymcp.Repository to implement MCPInstallPort.
+// mcpRepositoryBridge implements MCPInstallPort over the MCP repository.
 type mcpRepositoryBridge struct {
-	repo *legacymcp.Repository
+	repo *mcprepo.Repository
 }
 
-// NewMCPRepositoryBridge creates a MCPInstallPort backed by legacymcp.Repository.
-func NewMCPRepositoryBridge(repo *legacymcp.Repository) MCPInstallPort {
+// NewMCPRepositoryBridge creates a MCPInstallPort backed by the MCP repository.
+func NewMCPRepositoryBridge(repo *mcprepo.Repository) MCPInstallPort {
 	return &mcpRepositoryBridge{repo: repo}
 }
 
@@ -222,7 +222,7 @@ func (b *mcpRepositoryBridge) InstallMCP(ctx context.Context, serverName string,
 	if b.repo == nil {
 		return "", fmt.Errorf("mcp repository bridge: repository not configured")
 	}
-	input := legacymcp.ServerInput{
+	input := mcprepo.ServerInput{
 		Name:      serverName,
 		Transport: transport,
 		Command:   command,

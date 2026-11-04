@@ -65,9 +65,9 @@ func ServiceSchemaCases() []Case {
 	))
 
 	cases = append(cases, NewCase(
-		"duplicate_capability_in_service",
-		"Service with duplicate capability should be rejected",
-		[]byte(`{"id":"svc-1","kind":"process","capabilities":["custom_rpc","custom_rpc"]}`),
+		"duplicate_host_feature_in_service",
+		"Service with duplicate host feature should be rejected",
+		[]byte(`{"id":"svc-1","kind":"process","hostFeatures":["custom_rpc","custom_rpc"]}`),
 		false,
 		ServiceDescriptorValidator{},
 	))
@@ -89,7 +89,7 @@ func ChannelSchemaCases() []Case {
 
 	channelKinds := []string{"event", "state", "log", "metric", "custom", "binary"}
 	for _, k := range channelKinds {
-		data := []byte(`{"id":"ch-1","kind":"` + k + `"}`)
+		data := []byte(`{"id":"ch-1","kind":"` + k + `","direction":"plugin_to_host"}`)
 		cases = append(cases, NewCase(
 			"channel_kind_"+k,
 			"Channel kind '"+k+"' should be valid",
@@ -113,7 +113,7 @@ func ChannelSchemaCases() []Case {
 
 	hints := []string{"low", "normal", "high", "realtime"}
 	for _, h := range hints {
-		data := []byte(`{"id":"ch-1","kind":"state","frequencyHint":"` + h + `"}`)
+		data := []byte(`{"id":"ch-1","kind":"state","direction":"plugin_to_host","frequencyHint":"` + h + `"}`)
 		cases = append(cases, NewCase(
 			"channel_frequency_"+h,
 			"Channel frequency hint '"+h+"' should be valid",
@@ -123,7 +123,7 @@ func ChannelSchemaCases() []Case {
 		))
 	}
 
-	customSchemaData := []byte(`{"id":"custom-state","kind":"state","schemaId":"example.game.state/v1"}`)
+	customSchemaData := []byte(`{"id":"custom-state","kind":"state","direction":"plugin_to_host","schemaId":"example.game.state/v1"}`)
 	cases = append(cases, NewCase(
 		"custom_schema_id",
 		"Custom schemaId like 'example.game.state/v1' should be preserved",
@@ -167,26 +167,26 @@ func ChannelSchemaCases() []Case {
 	return cases
 }
 
-func CapabilityCases() []Case {
+func HostFeatureCases() []Case {
 	cases := make([]Case, 0)
 
-	knownCaps := []protocol.Capability{
-		protocol.CapabilityRealtimeControl,
-		protocol.CapabilityStateStreaming,
-		protocol.CapabilityEventStreaming,
-		protocol.CapabilityCustomRPC,
-		protocol.CapabilityHostAPI,
-		protocol.CapabilitySharedControl,
-		protocol.CapabilityMultiService,
+	knownCaps := []protocol.HostFeature{
+		protocol.HostFeatureRealtimeControl,
+		protocol.HostFeatureStateStreaming,
+		protocol.HostFeatureEventStreaming,
+		protocol.HostFeatureCustomRPC,
+		protocol.HostFeatureHostAPI,
+		protocol.HostFeatureSharedControl,
+		protocol.HostFeatureMultiService,
 	}
 	for _, cap := range knownCaps {
 		data := []byte(`"` + string(cap) + `"`)
 		cases = append(cases, NewCase(
-			"known_capability_"+string(cap),
-			"Known capability '"+string(cap)+"' should be valid and known",
+			"known_host_feature_"+string(cap),
+			"Known host feature '"+string(cap)+"' should be valid and known",
 			data,
 			true,
-			CapabilityValidator{},
+			HostFeatureValidator{},
 		))
 	}
 
@@ -198,29 +198,29 @@ func CapabilityCases() []Case {
 	for _, cap := range customCaps {
 		data := []byte(`"` + cap + `"`)
 		cases = append(cases, NewCase(
-			"custom_capability_"+cap,
+			"custom_host_feature_"+cap,
 			"Game/tool capability '"+cap+"' must not be a GameHost feature",
 			data,
 			false,
-			CapabilityValidator{},
+			HostFeatureValidator{},
 		))
 	}
 
 	invalidCaps, _ := loadFixture("invalid/invalid_capability.json")
 	cases = append(cases, NewCase(
-		"invalid_capability_empty",
-		"Capability array with empty string should be rejected",
+		"invalid_host_feature_empty",
+		"Host feature array with empty string should be rejected",
 		invalidCaps,
 		false,
-		CapabilityValidator{},
+		HostFeatureValidator{},
 	))
 
 	cases = append(cases, NewCase(
-		"duplicate_capabilities",
-		"Duplicate capabilities should be rejected",
+		"duplicate_host_features",
+		"Duplicate host features should be rejected",
 		[]byte(`["custom_rpc","custom_rpc"]`),
 		false,
-		CapabilityValidator{},
+		HostFeatureValidator{},
 	))
 
 	return cases

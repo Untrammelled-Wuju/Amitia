@@ -25,7 +25,15 @@ internal class DefaultBackendConnectionProvider(
     private val lastErrorRef = AtomicReference<BackendConnectionError?>(null)
 
     override fun current(): BackendConnectionAvailability {
-        val effectivePolicy = resolveEndpointPolicy()
+        val policyResult = resolveEndpointPolicy()
+        val effectivePolicy = policyResult.getOrElse { error ->
+            return unavailable(
+                BackendConnectionError(
+                    BackendConnectionErrorCode.ENDPOINT_UNAVAILABLE,
+                    error.message ?: "embedded runtime endpoint is unavailable",
+                )
+            )
+        }
         val validationError = BackendConnectionValidator.validate(effectivePolicy)
         if (validationError != null) {
             return unavailable(validationError)
@@ -88,7 +96,7 @@ internal class DefaultBackendConnectionProvider(
 
     override fun lastError(): BackendConnectionError? = lastErrorRef.get()
 
-    private fun resolveEndpointPolicy(): BackendEndpointPolicy {
+    private fun resolveEndpointPolicy(): Result<BackendEndpointPolicy> {
         val runRoot = runRootProvider().trim()
         if (runRoot.isNotEmpty()) {
             val file = File(runRoot, "endpoint.json")
@@ -98,16 +106,16 @@ internal class DefaultBackendConnectionProvider(
                     val host = payload.optString("host", "127.0.0.1")
                     val port = payload.optInt("port", 0)
                     if (host == "127.0.0.1" && port in 1..65535) {
-                        return BackendEndpointPolicy(host, port, "http", "ws")
+                        return Result.success(BackendEndpointPolicy(host, port, "http", "ws"))
                     }
                 } catch (originalError103: Exception) {
                   originalError103.printStackTrace()
-
+                    return Result.failure(originalError103)
                 }
             }
         }
-        if (policy.port in 2..65535) return policy
-        return BackendEndpointPolicy("127.0.0.1", 18899, "http", "ws")
+        if (policy.port in 2..65535) return Result.success(policy)
+        return Result.failure(IllegalStateException("embedded runtime endpoint is unavailable"))
     }
 
     private fun unavailable(error: BackendConnectionError): BackendConnectionAvailability {

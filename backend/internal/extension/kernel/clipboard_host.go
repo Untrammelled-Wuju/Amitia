@@ -66,7 +66,7 @@ type clipboardResult struct {
 
 type BridgeClipboardHost struct {
 	hub             *sse.Hub
-	hostRegistry    *host_registry.HostRegistry
+	hostRegistry    *host_registry.Registry
 	mu              sync.Mutex
 	pendingRequests map[string]*pendingClipboardRequest
 }
@@ -78,7 +78,7 @@ func NewBridgeClipboardHost(hub *sse.Hub) *BridgeClipboardHost {
 	}
 }
 
-func NewBridgeClipboardHostWithRegistry(hub *sse.Hub, registry *host_registry.HostRegistry) *BridgeClipboardHost {
+func NewBridgeClipboardHostWithRegistry(hub *sse.Hub, registry *host_registry.Registry) *BridgeClipboardHost {
 	return &BridgeClipboardHost{
 		hub:             hub,
 		hostRegistry:    registry,
@@ -86,7 +86,7 @@ func NewBridgeClipboardHostWithRegistry(hub *sse.Hub, registry *host_registry.Ho
 	}
 }
 
-func (h *BridgeClipboardHost) sendClipboardRequest(ctx context.Context, operation string, capability host_registry.HostCapability, text string) (string, *pendingClipboardRequest, error) {
+func (h *BridgeClipboardHost) sendClipboardRequest(ctx context.Context, operation string, capability host_registry.EndpointFeature, text string) (string, *pendingClipboardRequest, error) {
 	requestID := fmt.Sprintf("clip-%s", uuid.NewString())
 
 	payload := map[string]interface{}{
@@ -137,7 +137,7 @@ func (h *BridgeClipboardHost) WriteText(ctx context.Context, text string) error 
 		return ErrClipboardTextTooLarge
 	}
 
-	requestID, req, err := h.sendClipboardRequest(ctx, "write", host_registry.CapClipboardWrite, text)
+	requestID, req, err := h.sendClipboardRequest(ctx, "write", host_registry.EndpointFeatureClipboardWrite, text)
 	if err != nil {
 		return err
 	}
@@ -159,7 +159,7 @@ func (h *BridgeClipboardHost) WriteText(ctx context.Context, text string) error 
 }
 
 func (h *BridgeClipboardHost) ReadText(ctx context.Context) (string, error) {
-	requestID, req, err := h.sendClipboardRequest(ctx, "read", host_registry.CapClipboardRead, "")
+	requestID, req, err := h.sendClipboardRequest(ctx, "read", host_registry.EndpointFeatureClipboardRead, "")
 	if err != nil {
 		return "", err
 	}
@@ -250,8 +250,8 @@ func (h *BridgeClipboardHost) HasPendingRequest(requestID string) bool {
 
 func (h *BridgeClipboardHost) IsAvailable() bool {
 	if h.hostRegistry != nil {
-		return h.hostRegistry.HasReadyHostString(context.Background(), "", host_registry.CapClipboardWrite) ||
-			h.hostRegistry.HasReadyHostString(context.Background(), "", host_registry.CapClipboardRead)
+		return h.hostRegistry.HasReadyHostString(context.Background(), "", host_registry.EndpointFeatureClipboardWrite) ||
+			h.hostRegistry.HasReadyHostString(context.Background(), "", host_registry.EndpointFeatureClipboardRead)
 	}
 	return h.hub != nil && h.hub.HasClients()
 }

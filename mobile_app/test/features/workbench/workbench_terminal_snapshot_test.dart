@@ -31,8 +31,8 @@ void main() {
     expect(() => WorkbenchTerminalSnapshot.parse(invalidTask), throwsFormatException);
   });
 
-  test('accepts legacy responses without fromCursor', () {
+  test('rejects responses without fromCursor', () {
     final old = frame([65], 0)..remove('fromCursor');
-    expect(WorkbenchTerminalSnapshot.parse(old).fromCursor, isNull);
+    expect(() => WorkbenchTerminalSnapshot.parse(old), throwsFormatException);
   });
 }

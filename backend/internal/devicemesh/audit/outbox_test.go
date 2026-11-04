@@ -16,6 +16,8 @@ import (
 	meshaudit "github.com/u-ai/backend/internal/devicemesh/audit"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/devicemesh/pairing"
+	"github.com/u-ai/backend/internal/devicemesh/server"
+	"github.com/u-ai/backend/internal/deviceruntime"
 	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
 	kernelsqlite "github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 	"github.com/u-ai/backend/internal/runtimeidentity"
@@ -146,7 +148,15 @@ func TestPairingExchangeAuditRollsBackCredentialAndTrustWhenQueueFails(t *testin
 	if _, err := registry.EnsureDevice(t.Context(), host_registry.DeviceRecord{SpaceID: "core", DeviceID: "issuer", Platform: runtimeidentity.PlatformWindows, TrustState: host_registry.DeviceTrustTrusted}); err != nil {
 		t.Fatal(err)
 	}
-	runtime, err := devicemesh.NewCloudRuntime(kernel, registry)
+	sessionStore := deviceruntime.NewSQLiteSessionStore(kernel)
+	if err := sessionStore.EnsureSchema(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	sessions, err := deviceruntime.NewService(sessionStore, deviceruntime.ServiceOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := devicemesh.NewCloudRuntimeWithHubAndSessions(kernel, registry, server.NewConnectionHub(), sessions)
 	if err != nil {
 		t.Fatal(err)
 	}

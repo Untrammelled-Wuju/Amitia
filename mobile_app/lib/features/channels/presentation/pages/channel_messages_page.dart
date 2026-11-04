@@ -304,7 +304,11 @@ class _ChannelHostMessagesViewState
     final groupCount = conversations
         .where((conversation) => _conversationPeerKind(conversation) == 'group')
         .length;
-    final privateCount = conversations.length - groupCount;
+    final privateCount = conversations
+        .where(
+          (conversation) => _conversationPeerKind(conversation) == 'private',
+        )
+        .length;
     final channelTitle =
         presentationsByChannel[widget.channelId]?.displayName ??
         widget.channelId;
@@ -384,19 +388,8 @@ class _ChannelHostMessagesViewState
 
 String _conversationPeerKind(ConversationDto conversation) {
   final origin = conversation.conversationOrigin;
-  final explicit = (origin?['peerKind'] ?? origin?['peer_kind'] ?? '')
-      .toString()
-      .trim()
-      .toLowerCase();
-  if (explicit == 'group' || explicit == 'private') return explicit;
-  final resource = [
-    conversation.id,
-    conversation.sourceResourceId,
-    conversation.title,
-  ].join(' ').toLowerCase();
-  return resource.contains('group') || resource.contains('群')
-      ? 'group'
-      : 'private';
+  final explicit = (origin?['peerKind'] ?? '').toString().trim().toLowerCase();
+  return explicit == 'group' || explicit == 'private' ? explicit : '';
 }
 
 String _formatActivity(String raw) {
@@ -686,8 +679,8 @@ class _ChannelMessageBubble extends StatelessWidget {
             Text('图片解码失败', style: AppTypography.label(context)),
       );
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-return Text(error.toString(), style: AppTypography.label(context));
+      print("[original-error] $error\n$stackTrace");
+      return Text(error.toString(), style: AppTypography.label(context));
     }
   }
 }

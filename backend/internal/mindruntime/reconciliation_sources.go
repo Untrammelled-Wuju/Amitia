@@ -35,7 +35,6 @@ func RegisterDefaultRuntimeReconciliationCheckers(engine *ReconciliationEngine, 
 	if db == nil {
 		return errors.New("reconciliation db is nil")
 	}
-	engine.RegisterChecker(ReconciliationTombstoneDerivedData, NewTombstoneDerivedDataReconciliationChecker(db))
 	registerGormReconciliationChecker(engine, db, ReconciliationLeaseDelivery, leaseDeliverySource(db), deliveryIntentSource(db))
 	registerGormReconciliationChecker(engine, db, ReconciliationOutboxSideEffect, outboxSideEffectSource(db), outboxChannelReceiptSource(db))
 	registerGormReconciliationChecker(engine, db, ReconciliationInteractionRunMsg, interactionRunSource(db), interactionMessageSource(db))

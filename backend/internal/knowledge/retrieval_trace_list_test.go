@@ -23,7 +23,7 @@ func TestListRetrievalTracesIsTenantScopedAndReturnsOnlySanitizedPayload(t *test
 		degraded INTEGER NOT NULL DEFAULT 0, ambiguous INTEGER NOT NULL DEFAULT 0, warnings_json TEXT NOT NULL DEFAULT '[]',
 		candidate_trace_json TEXT NOT NULL DEFAULT '[]', evidence_trace_json TEXT NOT NULL DEFAULT '[]', query_plan_json TEXT NOT NULL DEFAULT '{}',
 		config_hash TEXT NOT NULL DEFAULT '', slo_target_ms INTEGER NOT NULL DEFAULT 0, slo_exceeded INTEGER NOT NULL DEFAULT 0,
-		policy_mode TEXT NOT NULL DEFAULT '', route_reason TEXT NOT NULL DEFAULT '', shadow_level TEXT NOT NULL DEFAULT '', shadow_reason TEXT NOT NULL DEFAULT '',
+		policy_mode TEXT NOT NULL DEFAULT '', route_reason TEXT NOT NULL DEFAULT '',
 		created_at DATETIME NOT NULL
 	)`).Error; err != nil {
 		t.Fatalf("create traces table: %v", err)
@@ -37,10 +37,10 @@ func TestListRetrievalTracesIsTenantScopedAndReturnsOnlySanitizedPayload(t *test
 		if err := db.Exec(`INSERT INTO retrieval_traces
 			(id, tenant_id, request_id, query_hash, candidate_count, selected_count, sufficient, duration_ms, error_code, temporal_mode,
 			 degraded, ambiguous, warnings_json, candidate_trace_json, evidence_trace_json, query_plan_json, config_hash, slo_target_ms, slo_exceeded,
-			 policy_mode, route_reason, shadow_level, shadow_reason, created_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 policy_mode, route_reason, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			id, tenant, "request-"+id, strings.Repeat("e", 64), 12, 2, 1, 88, "", "current", 0, 0, `[]`, string(candidateJSON), string(evidenceJSON), string(planJSON), "cfg", 200, 0,
-			"legacy_shadow", "legacy_non_trivial", RetrievalLevelDeep, "explicit_document_read", created).Error; err != nil {
+			"active", "chat_document_intent", created).Error; err != nil {
 			t.Fatalf("insert trace: %v", err)
 		}
 	}
@@ -59,7 +59,7 @@ func TestListRetrievalTracesIsTenantScopedAndReturnsOnlySanitizedPayload(t *test
 	if items[0].QueryPlan.Level != RetrievalLevelDeep || len(items[0].Candidates) != 1 || len(items[0].Evidence) != 1 {
 		t.Fatalf("sanitized diagnostics were not decoded: %#v", items[0])
 	}
-	if items[0].PolicyMode != "legacy_shadow" || items[0].RouteReason != "legacy_non_trivial" || items[0].ShadowLevel != RetrievalLevelDeep || items[0].ShadowReason != "explicit_document_read" {
+	if items[0].PolicyMode != "active" || items[0].RouteReason != "chat_document_intent" {
 		t.Fatalf("policy diagnostics were not decoded: %#v", items[0])
 	}
 	encoded, _ := json.Marshal(items[0])

@@ -21,8 +21,6 @@ extraResources:
     to: migrations
   - from: resources/config-template
     to: config-template
-  - from: resources/qdrant/config
-    to: qdrant/config
   - from: ../runtime/plugin-host/dist
     to: runtime/plugin-host/dist
   - from: ../runtime/task-host/dist

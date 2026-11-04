@@ -1197,8 +1197,8 @@ func (f *ToolFacade) ExecuteModelToolStream(ctx context.Context, modelName strin
 
 	f.counters.IncPipelineExecution()
 	result, err := streamingKernel.ExecuteStream(ctx, req, sink)
-	legacy := unifiedResultToDispatch(result)
-	return legacy, true, err
+	dispatchResult := unifiedResultToDispatch(result)
+	return dispatchResult, true, err
 }
 
 func capabilityApprovalMode(mode string) capability.ApprovalMode {

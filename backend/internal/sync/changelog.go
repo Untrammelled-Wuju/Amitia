@@ -65,11 +65,7 @@ func (s *sqliteChangeLogStore) ClaimMutationTx(tx *gorm.DB, mutationID MutationI
 	err := tx.Where("space_id = ? AND scope = ? AND mutation_id = ?", spaceID, scope, mutationID).Take(&existing).Error
 	if err == nil {
 		if existing.Status == MutationClaimStatusRolledBack {
-			if delErr := tx.Delete(&existing).Error; delErr != nil {
-				return false, nil, delErr
-			}
-			// Legacy rolled-back claims are retryable. Continue as if no claim existed.
-			err = gorm.ErrRecordNotFound
+			return false, &existing, fmt.Errorf("changelog: mutation %s has invalid rolled_back claim status", mutationID)
 		} else {
 			return false, &existing, nil
 		}
@@ -105,7 +101,7 @@ func (s *sqliteChangeLogStore) CommitClaimTx(tx *gorm.DB, mutationID MutationID,
 }
 
 func (s *sqliteChangeLogStore) RollbackClaimTx(tx *gorm.DB, mutationID MutationID, spaceID string, scope CursorScope) error {
-	return tx.Where("space_id = ? AND scope = ? AND mutation_id = ? AND status IN ?", spaceID, scope, mutationID, []MutationClaimStatus{MutationClaimStatusPending, MutationClaimStatusRolledBack}).
+	return tx.Where("space_id = ? AND scope = ? AND mutation_id = ? AND status = ?", spaceID, scope, mutationID, MutationClaimStatusPending).
 		Delete(&MutationClaim{}).Error
 }
 

@@ -149,8 +149,8 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
           try {
             loaded[key] = jsonDecode(value);
           } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-loaded[key] = value;
+            debugPrint("[original-error] $error\n$stackTrace");
+            loaded[key] = value;
           }
         } else if (value != null) {
           loaded[key] = value;
@@ -165,8 +165,9 @@ loaded[key] = value;
 
   Map<String, dynamic> _asMap(dynamic value) {
     if (value is Map<String, dynamic>) return Map<String, dynamic>.from(value);
-    if (value is Map)
+    if (value is Map) {
       return value.map((key, value) => MapEntry(key.toString(), value));
+    }
     return <String, dynamic>{};
   }
 
@@ -337,7 +338,7 @@ loaded[key] = value;
       target: action.target,
       input: <String, dynamic>{
         ..._resolvedActionInput(action.input, item: item, files: files),
-        if (files != null) 'files': files,
+        'files': ?files,
         if (nodeId.isNotEmpty) 'node_id': nodeId,
         'form_state': Map<String, dynamic>.from(_formState),
         'local_state': Map<String, dynamic>.from(_localState),
@@ -411,12 +412,6 @@ loaded[key] = value;
   void _updateFormState(String path, dynamic value) {
     setState(() {
       _setPath(_formState, path, value);
-    });
-  }
-
-  void _updateLocalState(String path, dynamic value) {
-    setState(() {
-      _setPath(_localState, path, value);
     });
   }
 
@@ -570,19 +565,21 @@ loaded[key] = value;
               child: accessibilityChild,
             ),
           );
-          if (accessibility.keyboardNav)
+          if (accessibility.keyboardNav) {
             accessible = FocusTraversalGroup(child: accessible);
+          }
           return accessible;
         },
       );
     }
     final locale = _parseLocale(doc.locale?.current);
-    if (locale != null)
+    if (locale != null) {
       content = Localizations.override(
         context: context,
         locale: locale,
         child: content,
       );
+    }
     return SchemaUIThemeResolver(theme: doc.theme, child: content);
   }
 
@@ -994,8 +991,9 @@ loaded[key] = value;
     final slotId = (node.props?['slotId'] ?? node.props?['slot_id'] ?? '')
         .toString()
         .trim();
-    if (slotId.isEmpty)
+    if (slotId.isEmpty) {
       return _buildErrorWidget(context, 'extension_slot requires slotId');
+    }
     final contributionId =
         (node.props?['contributionId'] ?? node.props?['contribution_id'])
             ?.toString();
@@ -1019,8 +1017,8 @@ loaded[key] = value;
     return builder(slotId, contributionId, {
       ...?widget.initialContext,
       'schemaNodeId': node.id,
-      if (dispatchKey != null) 'dispatchKey': dispatchKey,
-      if (dispatchOnly != null) 'dispatchOnly': dispatchOnly,
+      'dispatchKey': ?dispatchKey,
+      'dispatchOnly': ?dispatchOnly,
       if (fallback != null && fallback.isNotEmpty) 'slotFallback': fallback,
       if (layout != null && layout.isNotEmpty) 'slotLayout': layout,
       if (surfaceRole != null && surfaceRole.isNotEmpty)
@@ -1152,8 +1150,9 @@ loaded[key] = value;
         caseSensitive: false,
       ).firstMatch(template);
       final repeated = int.tryParse(repeat?.group(1) ?? '');
-      if (repeated != null && repeated > 0)
+      if (repeated != null && repeated > 0) {
         return repeated.clamp(1, 12).toInt();
+      }
 
       final minmax = RegExp(
         r'minmax\(\s*([0-9]+(?:\.[0-9]+)?)px',
@@ -1772,7 +1771,7 @@ loaded[key] = value;
             errorBuilder: (_, failure, __) => error(failure),
           );
         } catch (caughtError, stackTrace) {
-          print("[original-error] $caughtError\n$stackTrace");
+          debugPrint("[original-error] $caughtError\n$stackTrace");
           return error(caughtError);
         }
       }
@@ -1959,7 +1958,7 @@ loaded[key] = value;
 
     final selectedValues = multiple
         ? (rawValue is List ? List<dynamic>.from(rawValue) : <dynamic>[])
-        : <dynamic>[if (rawValue != null) rawValue];
+        : <dynamic>[?rawValue];
     final selectedLabels = options
         .where((option) => selectedValues.any((value) => value == option.value))
         .map((option) => option.label)
@@ -2125,8 +2124,9 @@ loaded[key] = value;
                                           working.removeWhere(
                                             (value) => value == option.value,
                                           );
-                                          if (checked == true)
+                                          if (checked == true) {
                                             working.add(option.value);
+                                          }
                                         });
                                       },
                                     );
@@ -2260,8 +2260,9 @@ loaded[key] = value;
                       ? null
                       : (text) {
                           final next = double.tryParse(text);
-                          if (next != null)
+                          if (next != null) {
                             _updateBinding(binding, next.clamp(min, max));
+                          }
                         },
                 ),
               ),
@@ -2574,14 +2575,6 @@ loaded[key] = value;
           headers.add(key);
         }
       }
-    } else {
-      final legacyHeaders = node.props?['headers'];
-      if (legacyHeaders is List) {
-        for (final header in legacyHeaders) {
-          keys.add(header.toString());
-          headers.add(header.toString());
-        }
-      }
     }
     final rawRows =
         node.props?['data'] ?? node.props?['items'] ?? node.props?['rows'];
@@ -2610,8 +2603,9 @@ loaded[key] = value;
       }
       rows.clear();
       for (final row in rawRows) {
-        if (row is Map)
+        if (row is Map) {
           rows.add(keys.map((key) => row[key]?.toString() ?? '').toList());
+        }
       }
     }
     if (headers.isEmpty) return const SizedBox.shrink();
@@ -2761,8 +2755,9 @@ loaded[key] = value;
         (raw is num ? raw.toDouble() : double.tryParse(raw.toString()) ?? 0)
             .clamp(0.0, 100.0)
             .toDouble();
-    if (percentage <= 1 && (raw is num && raw.toDouble() <= 1))
+    if (percentage <= 1 && (raw is num && raw.toDouble() <= 1)) {
       percentage *= 100;
+    }
     final progress = (percentage / 100).clamp(0.0, 1.0).toDouble();
     final variant =
         node.props?['variant']?.toString().trim().toLowerCase() ?? 'line';
@@ -3087,12 +3082,6 @@ loaded[key] = value;
     );
   }
 
-  String _resolveStringProp(SchemaUINode node, String key, String fallback) {
-    final raw = node.props?[key];
-    if (raw == null) return fallback;
-    return raw.toString();
-  }
-
   Widget _buildErrorWidget(BuildContext context, String message) {
     return Container(
       padding: EdgeInsets.all(AppSpacing.sm),
@@ -3171,9 +3160,12 @@ class _SchemaTabsViewState extends State<_SchemaTabsView> {
   void _activate(int index) {
     if (index < 0 ||
         index >= widget.tabs.length ||
-        widget.isDisabled(widget.tabs[index]))
+        widget.isDisabled(widget.tabs[index])) {
       return;
-    if (_activeIndex != index) setState(() => _activeIndex = index);
+    }
+    if (_activeIndex != index) {
+      setState(() => _activeIndex = index);
+    }
   }
 
   Widget _tabButton(BuildContext context, int index, {required bool vertical}) {

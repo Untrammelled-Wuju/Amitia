@@ -13,13 +13,13 @@ type ExtensionKernelReadiness struct {
 	ScheduleServiceReady   bool
 	RuntimeSupervisorReady bool
 	EnabledRuntimesReady   bool
-	LegacyCounterZero      bool
+	FinalGatePassed        bool
 	NoOrphanRuntimes       bool
 	MCPDuplicateDetails    []MCPDuplicateDetail
 }
 
 func (r ExtensionKernelReadiness) Ready() bool {
-	return r.TaskRuntimeReady && r.EventServiceReady && r.ScheduleServiceReady && r.RuntimeSupervisorReady && r.EnabledRuntimesReady && r.LegacyCounterZero && r.NoOrphanRuntimes
+	return r.TaskRuntimeReady && r.EventServiceReady && r.ScheduleServiceReady && r.RuntimeSupervisorReady && r.EnabledRuntimesReady && r.FinalGatePassed && r.NoOrphanRuntimes
 }
 
 func (r ExtensionKernelReadiness) FailedComponents() []string {
@@ -39,8 +39,8 @@ func (r ExtensionKernelReadiness) FailedComponents() []string {
 	if !r.EnabledRuntimesReady {
 		failed = append(failed, "enabled_runtimes_ready")
 	}
-	if !r.LegacyCounterZero {
-		failed = append(failed, "legacy_counter_zero")
+	if !r.FinalGatePassed {
+		failed = append(failed, "final_gate_failed")
 	}
 	if !r.NoOrphanRuntimes {
 		failed = append(failed, "orphan_runtimes_not_cleaned")
@@ -64,13 +64,12 @@ func (c *Container) CheckExtensionKernelReadiness(ctx context.Context) Extension
 	r.EnabledRuntimesReady = c.checkEnabledRuntimesReady(ctx)
 
 	gateReport := c.EvaluateFinalGate(ctx)
-	r.LegacyCounterZero = gateReport.Passed
+	r.FinalGatePassed = gateReport.Passed
 
 	r.NoOrphanRuntimes = true
 	if c.DevModeReloader != nil {
 		if orphanCount, err := c.DevModeReloader.PendingCleanupFailures(ctx); err == nil && orphanCount > 0 {
 			r.NoOrphanRuntimes = false
-			GlobalLegacyCallCounter().SetOrphanRuntimeInstances(orphanCount)
 		}
 	}
 

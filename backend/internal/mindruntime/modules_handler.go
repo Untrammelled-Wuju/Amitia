@@ -10,7 +10,6 @@ func RunAllModuleChecks() []HealthCheckResult {
 		HealthCheckAffect,
 		HealthCheckBelief,
 		HealthCheckSnapshot,
-		HealthCheckDataLifecycle,
 		HealthCheckPsyche,
 		HealthCheckRelationship,
 	}

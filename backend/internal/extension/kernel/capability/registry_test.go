@@ -131,7 +131,6 @@ func TestBuildToolIDFormat(t *testing.T) {
 		{ToolSourceMCP, "server-uuid", "search", "mcp/server-uuid/search"},
 		{ToolSourcePlugin, "com.example.w", "query", "plugin/com.example.w/query"},
 		{ToolSourceInternal, "agent-skill", "activate", "internal/agent-skill/activate"},
-		{ToolSourceLegacy, "amitia", "get-current-time", "legacy_tool/amitia/get-current-time"},
 		{ToolSourceWorkflow, "com.example.ds", "run", "workflow/com.example.ds/run"},
 	}
 
@@ -403,7 +402,6 @@ func TestCapabilitySourceToToolSource(t *testing.T) {
 	}{
 		{CapabilitySourceBuiltin, ToolSourceBuiltin},
 		{CapabilitySourceMCP, ToolSourceMCP},
-		{CapabilitySourceLegacy, ToolSourceLegacy},
 	}
 
 	for _, c := range cases {

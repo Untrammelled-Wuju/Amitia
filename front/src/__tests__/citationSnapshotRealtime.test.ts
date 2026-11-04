@@ -31,7 +31,7 @@ describe("real-time citation snapshot", () => {
   it("never forwards unsafe links, local paths or token-bearing locator metadata", () => {
     const injected = [
       { marker: "[K1]", kind: "knowledge", index: 1, title: "Private", locator: {
-        page: 7, row: "12", kind: "pdf_page", path: "/home/private/secret.pdf", token: "private", field: "C:\\secret\\key", nested: { accessToken: "private" },
+        page: 7, row: 12, kind: "pdf_page", path: "/home/private/secret.pdf", token: "private", field: "C:\\secret\\key", nested: { accessToken: "private" },
       }, url: "javascript:alert(1)", excerpt: "e".repeat(3000) },
       { marker: "[1]", kind: "web", index: 1, url: "https://example.com/article?query=keep&api_key=secret&access_token=private#part" },
       { marker: "[2]", kind: "web", index: 2, url: "https://user:password@example.com/private" },
@@ -48,18 +48,19 @@ describe("real-time citation snapshot", () => {
     expect(JSON.stringify(rendered.sources)).not.toContain("access_token");
   });
 
-  it("retains safe spreadsheet names and parser aliases without exposing paths", () => {
+  it("retains canonical locator fields without exposing paths or aliases", () => {
     const got = normalizeCitationSnapshot([
-      { marker: "[K1]", kind: "knowledge", index: 1, locator: { sheetName: "年度汇总 2026", rowStart: 146, rowEnd: 150, path: "/private" } },
-      { marker: "[K2]", kind: "knowledge", index: 2, locator: { pageNumber: 37, password: "secret" } },
-      { marker: "[K3]", kind: "knowledge", index: 3, locator: { paragraphIndex: 86 } },
-      { marker: "[K4]", kind: "knowledge", index: 4, locator: { sheetName: "C:\\private\\file", rowStart: 12 } },
-      { marker: "[K5]", kind: "knowledge", index: 5, locator: { sheetName: "2026", rowStart: 32 } },
+      { marker: "[K1]", kind: "knowledge", index: 1, locator: { sheet: "年度汇总 2026", row: 146, path: "/private" } },
+      { marker: "[K2]", kind: "knowledge", index: 2, locator: { page: 37, password: "secret" } },
+      { marker: "[K3]", kind: "knowledge", index: 3, locator: { paragraph: 86 } },
+      { marker: "[K4]", kind: "knowledge", index: 4, locator: { sheet: "C:\\private\\file", row: 12 } },
+      { marker: "[K5]", kind: "knowledge", index: 5, locator: { sheet: "2026", row: 32 } },
+      { marker: "[K6]", kind: "knowledge", index: 6, locator: { pageNumber: 9, rowStart: 2 } },
     ]);
     expect(got.map((item) => item.locator)).toEqual([
-      { sheet: "年度汇总 2026", row: 146 }, { page: 37 }, { paragraph: 86 }, { row: 12 }, { sheet: "2026", row: 32 },
+      { sheet: "年度汇总 2026", row: 146 }, { page: 37 }, { paragraph: 86 }, { row: 12 }, { sheet: "2026", row: 32 }, undefined,
     ]);
-    expect(normalizeAIMessage({ role: "assistant", content: "[K1]", citationSnapshot: got }).sources).toHaveLength(5);
+    expect(normalizeAIMessage({ role: "assistant", content: "[K1]", citationSnapshot: got }).sources).toHaveLength(6);
   });
 
   it("delivers same citation markers in final live block, replay and historical message", () => {

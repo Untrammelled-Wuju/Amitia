@@ -45,7 +45,6 @@ type CreateRuntimeInput struct {
 	AgentID            string  `json:"agentId"`
 	Provider           string  `json:"provider"`
 	Image              string  `json:"image"`
-	NetworkPolicyID    string  `json:"networkPolicyId"`
 	CPUQuota           float64 `json:"cpuQuota"`
 	MemoryBytes        int64   `json:"memoryBytes"`
 	DiskBytes          int64   `json:"diskBytes"`
@@ -128,7 +127,7 @@ func (m *RuntimeManager) Create(ctx context.Context, spaceID string, input Creat
 	instance := RuntimeInstance{
 		ID: newID("runtime"), SpaceID: spaceID, AgentID: input.AgentID,
 		Provider: provider, Image: strings.TrimSpace(input.Image), State: "created",
-		NetworkPolicyID: input.NetworkPolicyID, CPUQuota: input.CPUQuota,
+		CPUQuota:    input.CPUQuota,
 		MemoryBytes: input.MemoryBytes, DiskBytes: input.DiskBytes, ProcessLimit: input.ProcessLimit,
 		IdleTimeoutSeconds: input.IdleTimeoutSeconds, Revision: 1, CreatedAt: now, UpdatedAt: now,
 	}
@@ -178,7 +177,6 @@ func (m *RuntimeManager) RegisterRemote(ctx context.Context, spaceID string, inp
 		State: "running", Endpoint: endpoint, Revision: 1, CreatedAt: now, UpdatedAt: now,
 		CPUQuota: input.CPUQuota, MemoryBytes: input.MemoryBytes, DiskBytes: input.DiskBytes,
 		ProcessLimit: input.ProcessLimit, IdleTimeoutSeconds: input.IdleTimeoutSeconds,
-		NetworkPolicyID: input.NetworkPolicyID,
 	}
 	if instance.CPUQuota <= 0 {
 		instance.CPUQuota = 1
@@ -253,7 +251,6 @@ func (m *RuntimeManager) Start(ctx context.Context, spaceID, runtimeID string) (
 			"--cpus", strconv.FormatFloat(instance.CPUQuota, 'f', 2, 64),
 			"--memory", strconv.FormatInt(instance.MemoryBytes, 10),
 			"--pids-limit", strconv.Itoa(instance.ProcessLimit),
-			"--network", "none",
 			"-v", instance.RootPath + "/workspace:/workspace",
 			"-e", "HOME=/home/agent",
 			"-w", "/workspace",
@@ -649,7 +646,6 @@ func (m *RuntimeManager) Reset(ctx context.Context, spaceID, runtimeID, snapshot
 			"--cpus", strconv.FormatFloat(instance.CPUQuota, 'f', 2, 64),
 			"--memory", strconv.FormatInt(instance.MemoryBytes, 10),
 			"--pids-limit", strconv.Itoa(instance.ProcessLimit),
-			"--network", "none",
 			imageRef, "sleep", "infinity",
 		}
 		output, runErr := exec.CommandContext(ctx, "docker", args...).CombinedOutput()

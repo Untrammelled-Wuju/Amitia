@@ -72,7 +72,6 @@ const (
 	ErrPackageArtifactInvalid              = "PACKAGE_ARTIFACT_INVALID"
 	ErrPackageExportNotAllowed             = "PACKAGE_EXPORT_NOT_ALLOWED"
 	ErrPackageRepositoryUnavailable        = "PACKAGE_REPOSITORY_UNAVAILABLE"
-	ErrLegacyRuntimeEnabled                = "PACKAGE_LEGACY_RUNTIME_ENABLED"
 )
 
 type PackageLimits struct {

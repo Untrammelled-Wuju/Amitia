@@ -205,9 +205,6 @@ func TestKnownSource(t *testing.T) {
 	if !knownSource(SourceRuntimePackage) {
 		t.Error("expected SourceRuntimePackage to be known")
 	}
-	if !knownSource(SourceLegacyWorkspace) {
-		t.Error("expected SourceLegacyWorkspace to be known")
-	}
 	if knownSource(Source("unknown")) {
 		t.Error("expected unknown Source to not be known")
 	}

@@ -14,17 +14,6 @@ export interface UISlotObservable<T> {
   subscribe(listener: () => void): () => void;
 }
 
-/** Framework managed store handle. Components read state through useStore and
- * mutate only through actions; the raw state object is not part of the strict
- * component contract. Plain stores remain accepted for compatibility. */
-/** Compatibility shared handle. Unlike managed handles this object carries one
- * concrete state instance, so the runtime pins it to one scope key at a time. */
-export interface UISlotStoreHandle<State, Actions extends Record<string, (...args: any[]) => any> = Record<string, never>> {
-  readonly state: State;
-  readonly actions: Actions;
-  readonly subscribe?: (listener: () => void) => () => void;
-}
-
 export type UISlotActionDecl<State> = Record<string, (draft: State, ...args: any[]) => void>;
 export type UISlotBakedActions<
   State,
@@ -329,6 +318,44 @@ export type UISlotHookContext<K extends UIKnownSlotId> = UISlotMap[K]["hookConte
 export type UISlotEntryKey<K extends UIKnownSlotId> = UISlotMap[K]["keyProps"] extends infer P extends Record<string, unknown>
   ? keyof P & string
   : string;
+export type UISlotDynamicOwner = UIRootOwner & Record<string, unknown>;
+
+export interface UISlotDynamicDefinition {
+  readonly supportedKinds?: readonly string[];
+  readonly kind: UISlotKind;
+  readonly scope?: UISlotScope;
+  readonly layout?: "inline" | "stack" | "row" | "grid" | "tabs" | "panel" | "drawer" | "modal" | "hidden";
+  readonly fallbackPolicy?: "none" | "skeleton" | "empty" | "default";
+  readonly contractVersion?: number;
+  readonly description?: string;
+}
+
+export interface UISlotDynamicRegisterOptions<K extends string> {
+  readonly name: K;
+  readonly key: string;
+  readonly ordering?: number;
+  readonly priority?: number;
+  readonly props?: Readonly<Record<string, unknown>>;
+  readonly children?: Readonly<Record<string, UISlotDynamicDefinition>>;
+  readonly store?: unknown;
+  readonly inject?: (context: UISlotInjectContext<unknown>) => Record<string, unknown>;
+  readonly entryKey?: string;
+  readonly cellId?: string;
+  readonly label?: string | (() => string);
+  readonly select?: (owner: Record<string, unknown>) => unknown | null;
+}
+
+export type UISlotDynamicComponentProps<K extends string = string> = UISlotDynamicOwner & {
+  readonly slotId: K;
+  readonly pluginId: string;
+  readonly contributionId: string;
+  readonly useGlobal: UISlotSelectorHook<Record<string, unknown>>;
+  readonly useSession: UISlotSelectorHook<Record<string, unknown> | undefined>;
+  useStore<Selected = unknown>(selector?: (value: unknown) => Selected): UISlotReadonlyValue<Selected>;
+  readonly actions: Readonly<Record<string, (...args: any[]) => any>>;
+  renderSlot(slotId: string, owner: Record<string, unknown>, options?: UISlotRenderOptions<UIKnownSlotId>): unknown;
+  renderSlotChain?(slotId: string, owner: Record<string, unknown>, options?: UISlotChainRenderOptions<UIKnownSlotId>): unknown;
+};
 export type UISlotKeyProps<
   K extends UIKnownSlotId,
   EntryKey extends UISlotEntryKey<K> = UISlotEntryKey<K>,
@@ -348,7 +375,6 @@ export interface UISlotRuntimeSpec<K extends UIKnownSlotId = UIKnownSlotId> {
   readonly fallbackPolicy?: "none" | "skeleton" | "empty" | "default";
   readonly description?: string;
   readonly contractVersion?: number;
-  readonly multiplicity?: "single" | "multiple" | "ordered_multiple" | "replaceable_single" | "exclusive";
   /** Optional explicit key domain metadata for runtime inspection. */
   readonly keys?: readonly UISlotEntryKey<K>[];
   /** Common slot-level inject face supplied by the declaring parent. */
@@ -368,8 +394,6 @@ export type UISlotRenderOptions<
 > = {
   /** DSH-compatible keyed dispatch selector. */
   readonly entryKey?: EntryKey;
-  /** Amitia compatibility alias for entryKey. */
-  readonly key?: EntryKey;
   /** List cell filter (DSH `only`). */
   readonly only?: string;
   /** Renderer-specific fallback payload. */
@@ -489,11 +513,9 @@ export type UISlotInjectFace<I extends Record<string, unknown>> = Omit<I, "hooks
 );
 
 type StoreState<S> = S extends UISlotManagedStoreHandle<infer State, any> ? State
-  : S extends UISlotStoreHandle<infer State, any> ? State
-    : S;
+  : S;
 type StoreActions<S> = S extends UISlotManagedStoreHandle<infer State, infer Actions> ? UISlotBakedActions<State, Actions>
-  : S extends UISlotStoreHandle<any, infer Actions> ? Actions
-    : Record<string, (...args: any[]) => any>;
+  : Record<string, (...args: any[]) => any>;
 
 export type UISlotStoreProps<S> = {
   useStore<Selected = StoreState<S>>(selector?: (state: StoreState<S>) => Selected): UISlotReadonlyValue<Selected>;
@@ -583,15 +605,3 @@ export type UISlotRegistrationComponent<
   EntryKey extends UISlotEntryKey<K>,
   C,
 > = C & UISlotComponent<UISlotComponentProps<K, D, S, I, N, EntryKey>> & UISlotRendersCheck<C, D>;
-
-/** Compatibility shape for manifests/declarative packages. New trusted plugins
- * should use UISlotRegisterOptions + slots.register(). */
-export type TypedUISlotEntryDefinition<K extends UIKnownSlotId, TRenderable = unknown> = UISlotRegisterOptions<K> & {
-  readonly renderable: TRenderable;
-};
-
-export function defineUISlotContractEntry<K extends UIKnownSlotId, TRenderable = unknown>(
-  entry: TypedUISlotEntryDefinition<K, TRenderable>,
-): TypedUISlotEntryDefinition<K, TRenderable> {
-  return entry;
-}

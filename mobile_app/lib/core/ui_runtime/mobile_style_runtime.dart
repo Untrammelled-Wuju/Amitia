@@ -77,7 +77,7 @@ class AmitiaStyleRule {
     Map<String, dynamic> raw, {
     String? fallbackId,
   }) {
-    final rawProperties = raw['properties'] ?? raw['set'];
+    final rawProperties = raw['properties'];
     final properties = rawProperties is Map
         ? rawProperties.cast<String, dynamic>()
         : const <String, dynamic>{};
@@ -680,7 +680,7 @@ class AmitiaResolvedStyle {
   BorderRadius? borderRadius(String key) => _parseBorderRadius(properties[key]);
 
   BorderSide? borderSide({BorderSide? fallback}) {
-    final raw = properties['border'] ?? properties['borderSide'];
+    final raw = properties['border'];
     final borderColor = color('borderColor') ?? fallback?.color;
     final width = number('borderWidth') ?? fallback?.width;
     final style = _parseBorderStyle(
@@ -695,7 +695,7 @@ class AmitiaResolvedStyle {
   }
 
   List<BoxShadow>? boxShadow() => _parseBoxShadows(
-    properties['boxShadow'] ?? properties['boxShadows'] ?? properties['shadow'],
+    properties['boxShadow'],
   );
 
   TextStyle applyTextStyle(TextStyle base) {
@@ -1252,11 +1252,8 @@ const Set<String> _supportedProperties = <String>{
   'borderStyle',
   'borderRadius',
   'border',
-  'borderSide',
   'shadowColor',
   'boxShadow',
-  'boxShadows',
-  'shadow',
   'fontFamily',
   'fontSize',
   'fontWeight',

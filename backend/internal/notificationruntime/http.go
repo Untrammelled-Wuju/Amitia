@@ -150,11 +150,6 @@ func RegisterRoutes(router *gin.RouterGroup, runtime *Runtime) {
 		}
 		now := time.Now().UTC()
 		systemNotificationsDefault := true
-		if existing == nil {
-			if enabled, found := runtime.migratedSystemNotificationEnabled(c.Request.Context(), spaceID, deviceID); found {
-				systemNotificationsDefault = enabled
-			}
-		}
 		endpoint := &DeviceEndpoint{
 			SpaceID:                      spaceID,
 			DeviceID:                     deviceID,

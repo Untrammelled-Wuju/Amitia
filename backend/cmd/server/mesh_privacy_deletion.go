@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"gorm.io/gorm"
@@ -22,7 +21,6 @@ type privacyDeletionReference struct {
 	ID             string `json:"id"`
 	RoleID         string `json:"roleId"`
 	Revision       int64  `json:"revision"`
-	Legacy         bool   `json:"legacy"`
 	ConversationID string `json:"conversationId,omitempty"`
 	RequestID      string `json:"requestId,omitempty"`
 }
@@ -44,19 +42,7 @@ type privacyDeletionJob struct {
 var privacyDeletionLocks sync.Map
 
 func (p *meshLocalDataPort) privacyDeletionRecords(ctx context.Context, scope coordination.ExecutionScope) ([]ownedChatManagementRecord, error) {
-	records, err := p.privacyChatRecords(ctx)
-	if err != nil {
-		return nil, err
-	}
 	result := []ownedChatManagementRecord{}
-	for _, row := range records {
-		if row.Legacy {
-			if scope.Coordinated && p.ownerID == scope.CoreID && p.services.DeviceMesh != nil && scope.TargetDeviceID == p.services.DeviceMesh.LocalDeviceID {
-				continue
-			}
-			result = append(result, row)
-		}
-	}
 	rows, err := p.services.KernelContainer.DeviceRegistry.Database().QueryContext(ctx, `SELECT kind,resource_id,role_id,revision,body,source_id FROM kernel_device_owned_resources WHERE owner_id=? AND deleted=0 AND NOT(kind='checkpoint' AND resource_id LIKE 'privacy-deletion/%') ORDER BY role_id,kind,resource_id`, p.ownerID)
 	if err != nil {
 		return nil, err
@@ -117,16 +103,13 @@ func (p *meshLocalDataPort) managedPrivacyDeletion(ctx context.Context, scope co
 	for _, row := range records {
 		match := row.ID == input.TargetID && row.Kind == input.TargetType
 		targetRole := row.RoleID
-		if row.Legacy && targetRole == "" {
-			targetRole = role
-		}
 		if input.TargetType == "character" {
 			match = targetRole == input.TargetID
 		}
 		if !match {
 			continue
 		}
-		key := fmt.Sprintf("%t/%s", row.Legacy, targetRole)
+		key := targetRole
 		if input.TargetType == "character" {
 			key = targetRole
 		}
@@ -134,7 +117,7 @@ func (p *meshLocalDataPort) managedPrivacyDeletion(ctx context.Context, scope co
 			continue
 		}
 		seen[key] = true
-		targets = append(targets, coordination.PrivacyDeletionTarget{ID: input.TargetID, Kind: input.TargetType, OwnerID: p.ownerID, RoleID: targetRole, Legacy: row.Legacy && input.TargetType != "character", Revision: row.Revision, Fingerprint: fingerprint, ExecutionScope: scope})
+		targets = append(targets, coordination.PrivacyDeletionTarget{ID: input.TargetID, Kind: input.TargetType, OwnerID: p.ownerID, RoleID: targetRole, Revision: row.Revision, Fingerprint: fingerprint, ExecutionScope: scope})
 	}
 	if request.Operation == "privacy/deletion-preview" {
 		return map[string]any{"targets": targets}, nil
@@ -156,7 +139,7 @@ func (p *meshLocalDataPort) managedPrivacyDeletion(ctx context.Context, scope co
 	}
 	selected := false
 	for _, target := range targets {
-		if target.ID == input.Target.ID && target.Kind == input.Target.Kind && target.OwnerID == input.Target.OwnerID && target.RoleID == input.Target.RoleID && target.Legacy == input.Target.Legacy && target.Revision == input.Target.Revision && target.Fingerprint == input.Target.Fingerprint {
+		if target.ID == input.Target.ID && target.Kind == input.Target.Kind && target.OwnerID == input.Target.OwnerID && target.RoleID == input.Target.RoleID && target.Revision == input.Target.Revision && target.Fingerprint == input.Target.Fingerprint {
 			selected = true
 			break
 		}
@@ -182,7 +165,7 @@ func privacyDeletionSelection(records []ownedChatManagementRecord, target coordi
 		if target.Kind == "character" && row.RoleID == target.ID && row.Kind == "conversation" {
 			conversations[row.ID] = true
 		}
-		if target.Kind == "message" && row.Kind == "message" && row.ID == target.ID && row.RoleID == target.RoleID && row.Legacy == target.Legacy {
+		if target.Kind == "message" && row.Kind == "message" && row.ID == target.ID && row.RoleID == target.RoleID {
 			conversations[chatManagementString(row.Body, "conversationId")] = true
 			if id := chatManagementString(row.Body, "requestId"); id != "" {
 				requests[id] = true
@@ -218,7 +201,7 @@ func privacyDeletionSelection(records []ownedChatManagementRecord, target coordi
 		if metadata, ok := row.Body["executionScope"].(map[string]any); ok && requestID == "" {
 			requestID = chatManagementString(metadata, "requestId")
 		}
-		primary := (row.Kind == "message" && row.ID == target.ID || row.Kind == "conversation" && row.ID == target.ID) && row.Legacy == target.Legacy
+		primary := row.Kind == "message" && row.ID == target.ID || row.Kind == "conversation" && row.ID == target.ID
 		linked := target.Kind == "character" || conversations[conversation] && conversation != "" || row.SourceID != "" && sources[row.SourceID]
 		if target.Kind == "message" {
 			if row.Kind == "message" {
@@ -254,14 +237,8 @@ func privacyDeletionSelection(records []ownedChatManagementRecord, target coordi
 		if selection == "trace" {
 			include = row.Kind == "checkpoint" || row.Kind == "tool-result" || row.Kind == "summary" || row.Kind == "working"
 		}
-		if row.Legacy && row.Kind != "message" && row.Kind != "conversation" {
-			include = false
-		}
-		if row.Legacy && selection != "all" {
-			include = false
-		}
 		if include {
-			result = append(result, privacyDeletionReference{Kind: row.Kind, ID: row.ID, RoleID: row.RoleID, Revision: row.Revision, Legacy: row.Legacy, ConversationID: conversation, RequestID: requestID})
+			result = append(result, privacyDeletionReference{Kind: row.Kind, ID: row.ID, RoleID: row.RoleID, Revision: row.Revision, ConversationID: conversation, RequestID: requestID})
 		}
 	}
 	return result
@@ -278,23 +255,9 @@ func (p *meshLocalDataPort) savePrivacyDeletion(ctx context.Context, scope coord
 }
 
 func (p *meshLocalDataPort) advancePrivacyDeletion(ctx context.Context, scope coordination.ExecutionScope, job privacyDeletionJob, revision int64) (map[string]any, error) {
-	if !job.PrimaryCompleted {
-		if err := p.deletePrivacyLegacy(ctx, scope, job); err != nil {
-			job.LastError = err.Error()
-			job.Status = "failed"
-			job.FailedCount = 1
-			if err := p.savePrivacyDeletion(ctx, scope, job, revision); err != nil {
-				amitialog.Printf("[original-error] %v", err)
-			}
-			return privacyDeletionResponse(job), nil
-		}
-		job.PrimaryCompleted = true
-	}
+	job.PrimaryCompleted = true
 	commits := []coordination.Commit{}
 	for _, ref := range job.References {
-		if ref.Legacy {
-			continue
-		}
 		row, err := p.store.Get(ctx, ref.Kind, ref.ID)
 		if err != nil {
 			return nil, err
@@ -347,70 +310,10 @@ func privacyDeletionResponse(job privacyDeletionJob) map[string]any {
 	return result
 }
 
-func (p *meshLocalDataPort) deletePrivacyLegacy(ctx context.Context, scope coordination.ExecutionScope, job privacyDeletionJob) error {
-	selections := map[string]*chat.ManagedHistorySelection{}
-	for _, ref := range job.References {
-		if !ref.Legacy {
-			continue
-		}
-		selected := selections[ref.RoleID]
-		if selected == nil {
-			selected = &chat.ManagedHistorySelection{EraseContent: true, KeepConversations: job.TargetType == "message", ConversationRevisions: map[string]int64{}, MessageRevisions: map[string]int64{}}
-			selections[ref.RoleID] = selected
-		}
-		if ref.Kind == "message" {
-			var message chat.Message
-			if err := p.services.DB.WithContext(ctx).Where("id=? AND character_id=?", ref.ID, ref.RoleID).First(&message).Error; err != nil {
-				return err
-			}
-			if message.DeletedAt != nil && message.Revision == ref.Revision+1 && message.Content == "" {
-				continue
-			}
-			if message.DeletedAt != nil || message.Revision != ref.Revision {
-				return coordination.ErrResourceVersion
-			}
-			selected.MessageRevisions[ref.ID] = ref.Revision
-			var conversation chat.Conversation
-			if err := p.services.DB.WithContext(ctx).Where("id=? AND deleted_at IS NULL AND (space_id=? OR space_id='' OR space_id='default')", message.ConversationID, p.legacySpaceID).First(&conversation).Error; err != nil {
-				return err
-			}
-			selected.ConversationRevisions[conversation.ID] = conversation.Revision
-		}
-	}
-	for role, selected := range selections {
-		if len(selected.MessageRevisions) == 0 {
-			continue
-		}
-		if err := chat.DeleteOwnedManagedHistory(ctx, p.services.DB, p.services.Chat, p.legacySpaceID, role, *selected); err != nil {
-			return err
-		}
-	}
-	for _, ref := range job.References {
-		if ref.Kind != "message" {
-			continue
-		}
-		if err := p.services.DB.WithContext(ctx).Exec("DELETE FROM message_feedback WHERE space_id=? AND owner_id=? AND core_id=? AND role_id=? AND message_id=?", p.legacySpaceID, p.ownerID, scope.CoreID, ref.RoleID, ref.ID).Error; err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (p *meshLocalDataPort) privacyDeletionProgress(ctx context.Context, scope coordination.ExecutionScope, job privacyDeletionJob, revision int64) (map[string]any, error) {
 	complete := job.PrimaryCompleted && job.RetrievalBlocked
 	blocked := job.PrimaryCompleted
 	for _, ref := range job.References {
-		if ref.Legacy {
-			if ref.Kind == "message" {
-				var count int64
-				if err := p.services.DB.WithContext(ctx).Model(&chat.Message{}).Where("id=? AND character_id=? AND (deleted_at IS NULL OR content<>'' OR reasoning_content<>'')", ref.ID, ref.RoleID).Count(&count).Error; err != nil {
-					return nil, err
-				}
-				complete = complete && count == 0
-				blocked = blocked && count == 0
-			}
-			continue
-		}
 		row, err := p.store.Get(ctx, ref.Kind, ref.ID)
 		if err != nil {
 			return nil, err

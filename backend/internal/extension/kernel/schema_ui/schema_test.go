@@ -137,18 +137,18 @@ func TestSchemaValidatorRejectsInvalidNodeDataSourceAndDisabledCondition(t *test
 		t.Fatalf("expected binding/expression validation errors, got %s", joined)
 	}
 }
-func TestSchemaFormStateBindingAlias(t *testing.T) {
-	doc := validDocument("form-state alias")
+func TestSchemaFormStateBinding(t *testing.T) {
+	doc := validDocument("form state")
 	doc.Children[0].Bindings = []SchemaUIBinding{{Source: SourceFormState, Path: "profile.name"}}
 	compiled, err := Compile(doc)
 	if err != nil {
-		t.Fatalf("form_state binding alias failed to compile: %v", err)
+		t.Fatalf("formState binding failed to compile: %v", err)
 	}
 	value := NewRenderer(compiled, ThemeTokens{}, "zh-CN").Render(map[string]any{
-		"form_state": map[string]any{"profile": map[string]any{"name": "Amitia"}},
+		"formState": map[string]any{"profile": map[string]any{"name": "Amitia"}},
 	})
 	if len(value) != 1 || value[0].Props["profile.name"] != "Amitia" {
-		t.Fatalf("form_state binding did not resolve: %#v", value)
+		t.Fatalf("formState binding did not resolve: %#v", value)
 	}
 }
 func TestSchemaDocumentDefaultsMatchClientContracts(t *testing.T) {

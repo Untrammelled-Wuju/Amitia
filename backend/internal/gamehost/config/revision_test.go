@@ -117,4 +117,3 @@ func TestComputeRevision_Format(t *testing.T) {
 		t.Errorf("expected revision to start with 'crev-', got %q", r)
 	}
 }
-

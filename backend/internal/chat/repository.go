@@ -63,11 +63,7 @@ func (r *repository) ListConversations(q ConversationQuery) ([]Conversation, int
 		query = query.Where("COALESCE(archived_at, '') = ''")
 	}
 	if q.SpaceID != "" {
-		if q.IncludeLegacyDefault {
-			query = query.Where("space_id = ? OR space_id = '' OR space_id IS NULL OR space_id = 'default'", q.SpaceID)
-		} else {
-			query = query.Where("space_id = ?", q.SpaceID)
-		}
+		query = query.Where("space_id = ?", q.SpaceID)
 	}
 	if q.Channel != "" {
 		query = query.Where("channel = ?", q.Channel)
@@ -205,11 +201,7 @@ func (r *repository) SearchMessages(q MessageSearchQuery) ([]Message, int64, err
 	query := r.db.Model(&Message{}).Select("messages.*").Where("messages.deleted_at IS NULL AND messages.content LIKE ?", "%"+q.Keyword+"%")
 	if q.SpaceID != "" {
 		query = query.Joins("JOIN conversations ON conversations.id = messages.conversation_id").Where("conversations.deleted_at IS NULL")
-		if q.IncludeLegacyDefault {
-			query = query.Where("conversations.space_id = ? OR conversations.space_id = '' OR conversations.space_id IS NULL OR conversations.space_id = 'default'", q.SpaceID)
-		} else {
-			query = query.Where("conversations.space_id = ?", q.SpaceID)
-		}
+		query = query.Where("conversations.space_id = ?", q.SpaceID)
 	}
 	if q.ConversationID != "" {
 		query = query.Where("messages.conversation_id = ?", q.ConversationID)

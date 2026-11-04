@@ -14,12 +14,19 @@ func RegisterCharacterRouter(r *gin.RouterGroup, ctx *app.AppContext, chatTester
 }
 
 func RegisterCharacterRouterWithRecorder(r *gin.RouterGroup, ctx *app.AppContext, chatTester ChatTester, recorder sync.ChangeRecorder) {
+	RegisterCharacterRouterWithLifecycle(r, ctx, chatTester, recorder, nil)
+}
+
+func RegisterCharacterRouterWithLifecycle(r *gin.RouterGroup, ctx *app.AppContext, chatTester ChatTester, recorder sync.ChangeRecorder, lifecycle AgentRoleLifecycle) {
 	repo := NewRepository(ctx)
 	var cardWorldbook CardWorldbookBridge
 	if bridge, ok := chatTester.(CardWorldbookBridge); ok {
 		cardWorldbook = bridge
 	}
 	svc := NewServiceWithCardWorldbook(repo, ctx, cardWorldbook, recorder)
+	if concrete, ok := svc.(*service); ok {
+		concrete.SetAgentRoleLifecycle(lifecycle)
+	}
 	handler := NewHandler(svc)
 	handler.chatTester = chatTester
 	admin := security.SharedCoreAdminOnly()

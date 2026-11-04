@@ -14,7 +14,6 @@ const (
 	TimezoneNarrative    = "narrative"
 	DefaultTimezone      = "Asia/Shanghai"
 	SnapshotVersion      = "temporal-snapshot-v1"
-	LegacySpaceOwnerID   = "default"
 )
 
 type Profile struct {

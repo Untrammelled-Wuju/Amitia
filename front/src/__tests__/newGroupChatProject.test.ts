@@ -7,10 +7,22 @@ import type { OwnedGroupState } from "@/runtime/device-owned-chat";
 const mocks = vi.hoisted(() => ({
   projects: vi.fn(),
   createGroupConversation: vi.fn(),
+  listTeams: vi.fn(),
+  listRoles: vi.fn(),
+  getTeam: vi.fn(),
 }));
 
 vi.mock("@/composables/useDeviceOwnedConversation", () => ({
   useDeviceOwnedConversation: () => mocks,
+}));
+
+vi.mock("@/api/role-runtime", () => ({
+  listRoleTeams: mocks.listTeams,
+  listRoleRuntimeProfiles: mocks.listRoles,
+  getRoleTeam: mocks.getTeam,
+  listRoleTeamTemplates: vi.fn().mockResolvedValue([]),
+  createRoleTeam: vi.fn(),
+  createRoleTeamFromTemplate: vi.fn(),
 }));
 
 const project = {
@@ -35,7 +47,7 @@ const project = {
   executionScope: {},
 };
 
-function mountDialog() {
+function mountDialog(projectRequired = false) {
   return mount(NewGroupChatDialog, {
     props: {
       visible: false,
@@ -44,6 +56,7 @@ function mountDialog() {
         { id: "role-b", name: "角色 B" },
       ],
       defaultRoleId: "role-a",
+      projectRequired,
     },
     global: {
       stubs: {
@@ -58,9 +71,9 @@ function mountDialog() {
             loading: Boolean,
             class: String,
           },
-          emits: ["update:modelValue"],
+          emits: ["update:modelValue", "change"],
           template:
-            "<select :data-amitia-ui=\"$attrs['data-amitia-ui']\" :value=\"modelValue\" :disabled=\"disabled\" @change=\"$emit('update:modelValue', $event.target.value)\"><slot /></select>",
+            "<select :data-amitia-ui=\"$attrs['data-amitia-ui']\" :value=\"modelValue\" :disabled=\"disabled\" @change=\"$emit('update:modelValue', $event.target.value); $emit('change', $event.target.value)\"><slot /></select>",
         }),
         ElOption: defineComponent({
           props: { value: String, label: String },
@@ -83,6 +96,7 @@ function mountDialog() {
         ElIcon: defineComponent({
           template: "<span><slot /></span>",
         }),
+        TeamCreateDialog: true,
       },
     },
   });
@@ -146,6 +160,22 @@ describe("桌面端新建群聊项目选择", () => {
       },
       members: [],
     } satisfies OwnedGroupState);
+    mocks.listTeams.mockResolvedValue([
+      { id: "team-a", name: "团队 A", leadAgentId: "agent-a", status: "active" },
+    ]);
+    mocks.listRoles.mockResolvedValue([
+      { id: "agent-a", characterId: "role-a", name: "角色 A", status: "active" },
+      { id: "agent-b", characterId: "role-b", name: "角色 B", status: "active" },
+    ]);
+    mocks.getTeam.mockResolvedValue({
+      team: { id: "team-a", name: "团队 A", leadAgentId: "agent-a" },
+      members: [
+        { memberType: "agent", memberId: "agent-a", role: "lead" },
+        { memberType: "agent", memberId: "agent-b", role: "member" },
+      ],
+      contexts: [],
+      handoffs: [],
+    });
   });
 
   it("不选择项目时按默认消息创建群聊", async () => {
@@ -199,6 +229,41 @@ describe("桌面端新建群聊项目选择", () => {
     await flushPromises();
 
     expect(mocks.projects).toHaveBeenLastCalledWith("role-b");
+    wrapper.unmount();
+  });
+
+  it("项目模式必须选择项目后才能创建群聊", async () => {
+    const wrapper = mountDialog(true);
+    await openDialog(wrapper);
+    await selectRole(wrapper, "角色 B");
+    await (wrapper.vm as unknown as { create: () => Promise<void> }).create();
+    await flushPromises();
+    expect(mocks.createGroupConversation).not.toHaveBeenCalled();
+    await selectProject(wrapper, "project-a");
+    await (wrapper.vm as unknown as { create: () => Promise<void> }).create();
+    await flushPromises();
+    expect(mocks.createGroupConversation).toHaveBeenCalledWith(
+      "role-a",
+      [{ characterId: "role-b", shareHistory: false }],
+      "project-a",
+    );
+    wrapper.unmount();
+  });
+
+  it("选择持久团队时只复制当前成员快照", async () => {
+    const wrapper = mountDialog();
+    await openDialog(wrapper);
+    const teamSelect = wrapper.find('[data-amitia-ui="new-group.team"]');
+    await teamSelect.setValue("team-a");
+    await flushPromises();
+    expect(mocks.getTeam).toHaveBeenCalledWith("team-a");
+    await (wrapper.vm as unknown as { create: () => Promise<void> }).create();
+    await flushPromises();
+    expect(mocks.createGroupConversation).toHaveBeenCalledWith(
+      "role-a",
+      [{ characterId: "role-b", shareHistory: false }],
+      "",
+    );
     wrapper.unmount();
   });
 });

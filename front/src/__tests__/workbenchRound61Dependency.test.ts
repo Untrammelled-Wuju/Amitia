@@ -7,7 +7,7 @@ function response() {
     summary: { total: 1, active: 1, paused: 0, succeeded: 0, failed: 0, runtimeObserved: 0, checkpointOnly: 1, needsReconciliation: 0, codingWorkersRequiringReview: 0 },
     tasks: [{ coordinationId: 'coord', status: 'running', updatedAt: '2026-10-23T00:00:00Z', recoveryState: 'checkpoint-only',
       completedCount: 1, failedCount: 0, assignmentCount: 2, assignments: [
-        { id: 'first', status: 'succeeded', role: 'worker', objective: 'prepare', reviewRequired: false },
+        { id: 'first', status: 'succeeded', role: 'worker', objective: 'prepare', reviewRequired: false, dependencies: [] },
         { id: 'second', status: 'pending', role: 'worker', objective: 'verify', reviewRequired: false, dependencies: ['first'] },
       ],
     }],
@@ -15,11 +15,16 @@ function response() {
 }
 
 describe('Round 61 Workbench durable dependency projection', () => {
-  it('preserves a valid DAG and accepts legacy absent dependencies', () => {
+  it('preserves a valid DAG with explicit dependencies', () => {
     const responseValue = response();
     const result = parseWorkbenchTaskList(responseValue, 'conversation');
     expect(result.tasks[0].assignments[0].dependencies).toEqual([]);
     expect(result.tasks[0].assignments[1].dependencies).toEqual(['first']);
+  });
+  it('rejects absent dependencies', () => {
+    const data = response();
+    delete (data.tasks[0].assignments[0] as { dependencies?: string[] }).dependencies;
+    expect(() => parseWorkbenchTaskList(data, 'conversation')).toThrow('依赖');
   });
   it.each(['missing', 'self', 'cycle', 'duplicate'] as const)('rejects an invalid %s dependency', kind => {
     const data = response();

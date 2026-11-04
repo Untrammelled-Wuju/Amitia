@@ -126,7 +126,7 @@ class SchemaUIBinding {
   factory SchemaUIBinding.fromJson(Map<String, dynamic> json) {
     return SchemaUIBinding(
       path: json['path'] as String? ?? '',
-      sourcePath: (json['sourcePath'] ?? json['source_path']) as String?,
+      sourcePath: json['sourcePath'] as String?,
       source: json['source'] as String? ?? '',
       format: json['format'] as String?,
       defaultValue: json['default'],
@@ -155,7 +155,7 @@ class SchemaUIActionBinding {
       target: json['target'] as String? ?? '',
       input: json['input'] as Map<String, dynamic>?,
       confirmation: json['confirmation'] as String?,
-      statePath: (json['statePath'] ?? json['state_path']) as String?,
+      statePath: json['statePath'] as String?,
     );
   }
 }
@@ -246,8 +246,8 @@ class SchemaUINode {
         final decoded = jsonDecode(raw);
         if (decoded is Map<String, dynamic>) return decoded;
       } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+        print("[original-error] $error\n$stackTrace");
+      }
     }
     return null;
   }
@@ -494,8 +494,8 @@ class SchemaUIDocument {
         return SchemaUIDocument.fromJson(decoded);
       }
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+      print("[original-error] $error\n$stackTrace");
+    }
     return null;
   }
 }

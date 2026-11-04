@@ -49,7 +49,6 @@ export interface DesktopPetInstallation {
   currentReleaseId?: string;
   lifecycleState?: string;
   integrityStatus?: string;
-  legacyPackageId?: string;
   previewArtifactPath?: string;
   defaultActionReleaseId?: string;
   installedContentHash?: string;

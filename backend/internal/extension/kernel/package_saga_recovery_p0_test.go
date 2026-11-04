@@ -89,7 +89,7 @@ func TestRecoverPackageOperationDoesNotCompleteFromVersionAlone(t *testing.T) {
 		SpaceID: "user-1", ScopeType: "global", ExtensionID: installed.ExtensionID,
 		TargetVersion: installed.Version, OperationType: "install", Status: "in_progress",
 		CurrentStep: "commit_installed_tree", ArtifactID: artifact.ArtifactID,
-		StartedAt: now, UpdatedAt: now, ConfirmationsJSON: "{}",
+		StartedAt: now, UpdatedAt: now,
 	}
 	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
 		t.Fatal(err)
@@ -548,18 +548,17 @@ func TestProveUninstalledPackageOperationChecksRecoverySteps(t *testing.T) {
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	op := PackageOperationRecord{
-		OperationID:       "op-proof-recovery-steps",
-		TraceID:           "trace-proof-recovery",
-		SpaceID:           "user-1",
-		ScopeType:         "global",
-		ExtensionID:       installed.ExtensionID,
-		TargetVersion:     installed.Version,
-		OperationType:     "uninstall",
-		Status:            "completed",
-		ArtifactID:        "art-1",
-		StartedAt:         now,
-		UpdatedAt:         now,
-		ConfirmationsJSON: "{}",
+		OperationID:   "op-proof-recovery-steps",
+		TraceID:       "trace-proof-recovery",
+		SpaceID:       "user-1",
+		ScopeType:     "global",
+		ExtensionID:   installed.ExtensionID,
+		TargetVersion: installed.Version,
+		OperationType: "uninstall",
+		Status:        "completed",
+		ArtifactID:    "art-1",
+		StartedAt:     now,
+		UpdatedAt:     now,
 	}
 
 	completed := map[string]PackageOperationStep{

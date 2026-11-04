@@ -19,6 +19,7 @@ import '../../../../core/models/conversation.dart';
 import '../../../../core/models/project.dart';
 import '../../../../core/services/chat_service.dart';
 import '../../../chat/presentation/widgets/group_chat_invite_sheet.dart';
+import '../../../characters/presentation/widgets/team_create_sheet.dart';
 import '../../../chat/runtime/conversation_runtime_controller.dart';
 import '../widgets/conversation_list_tile.dart';
 import '../widgets/conversation_swipe_tile.dart';
@@ -61,14 +62,19 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
 
   @override
   void dispose() {
-    if (identical(_backRegistry.onBack, _backHandler)) _backRegistry.onBack = null;
+    if (identical(_backRegistry.onBack, _backHandler))
+      _backRegistry.onBack = null;
     _activityPollTimer?.cancel();
     super.dispose();
   }
 
   bool _handleSelectionBack() {
     if (!_selecting) return false;
-    if (!_batchBusy) setState(() { _selecting = false; _selected.clear(); });
+    if (!_batchBusy)
+      setState(() {
+        _selecting = false;
+        _selected.clear();
+      });
     return true;
   }
 
@@ -92,27 +98,83 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
   Future<void> _showBatchMenu(Offset position) async {
     if (_batchBusy) return;
     final conversations = _projectMode
-        ? (ref.read(conversationSidebarProvider).valueOrNull?.projects.where((project) => project.hiddenAt.isEmpty).expand((project) => project.conversations).toList() ?? <ConversationDto>[])
-        : (ref.read(conversationListProvider).valueOrNull ?? <ConversationDto>[]);
-    final selectable = {for (final row in conversations) if (row.archivedAt.isEmpty && !_isChannelConversation(row)) row.id: row};
-    final allSelected = selectable.isNotEmpty && selectable.keys.every(_selected.containsKey);
+        ? (ref
+                  .read(conversationSidebarProvider)
+                  .valueOrNull
+                  ?.projects
+                  .where((project) => project.hiddenAt.isEmpty)
+                  .expand((project) => project.conversations)
+                  .toList() ??
+              <ConversationDto>[])
+        : (ref.read(conversationListProvider).valueOrNull ??
+              <ConversationDto>[]);
+    final selectable = {
+      for (final row in conversations)
+        if (row.archivedAt.isEmpty && !_isChannelConversation(row)) row.id: row,
+    };
+    final allSelected =
+        selectable.isNotEmpty && selectable.keys.every(_selected.containsKey);
     final action = await showAmitiaPopupMenu<String>(
       context: context,
       anchorRect: Rect.fromCenter(center: position, width: 1, height: 1),
       items: [
-        PopupMenuItem(value: 'all', enabled: selectable.isNotEmpty, child: AmitiaPopupMenuLabel(icon: Icons.select_all, label: allSelected ? '取消全选' : '全选')),
-        PopupMenuItem(value: 'archive', enabled: _selected.isNotEmpty, child: const AmitiaPopupMenuLabel(icon: Icons.archive_outlined, label: '归档')),
-        PopupMenuItem(value: 'read', enabled: _selected.isNotEmpty, child: const AmitiaPopupMenuLabel(icon: Icons.mark_chat_read_outlined, label: '标为已读')),
-        PopupMenuItem(value: 'pin', enabled: _selected.isNotEmpty, child: const AmitiaPopupMenuLabel(icon: Icons.push_pin_outlined, label: '置顶')),
-        PopupMenuItem(value: 'move', enabled: _selected.isNotEmpty, child: const AmitiaPopupMenuLabel(icon: Icons.drive_file_move_outlined, label: '移动到项目')),
-        PopupMenuItem(value: 'delete', enabled: _selected.isNotEmpty, child: const AmitiaPopupMenuLabel(icon: Icons.delete_outline, label: '删除')),
+        PopupMenuItem(
+          value: 'all',
+          enabled: selectable.isNotEmpty,
+          child: AmitiaPopupMenuLabel(
+            icon: Icons.select_all,
+            label: allSelected ? '取消全选' : '全选',
+          ),
+        ),
+        PopupMenuItem(
+          value: 'archive',
+          enabled: _selected.isNotEmpty,
+          child: const AmitiaPopupMenuLabel(
+            icon: Icons.archive_outlined,
+            label: '归档',
+          ),
+        ),
+        PopupMenuItem(
+          value: 'read',
+          enabled: _selected.isNotEmpty,
+          child: const AmitiaPopupMenuLabel(
+            icon: Icons.mark_chat_read_outlined,
+            label: '标为已读',
+          ),
+        ),
+        PopupMenuItem(
+          value: 'pin',
+          enabled: _selected.isNotEmpty,
+          child: const AmitiaPopupMenuLabel(
+            icon: Icons.push_pin_outlined,
+            label: '置顶',
+          ),
+        ),
+        PopupMenuItem(
+          value: 'move',
+          enabled: _selected.isNotEmpty,
+          child: const AmitiaPopupMenuLabel(
+            icon: Icons.drive_file_move_outlined,
+            label: '移动到项目',
+          ),
+        ),
+        PopupMenuItem(
+          value: 'delete',
+          enabled: _selected.isNotEmpty,
+          child: const AmitiaPopupMenuLabel(
+            icon: Icons.delete_outline,
+            label: '删除',
+          ),
+        ),
       ],
     );
     if (!mounted || action == null) return;
     if (action == 'all') {
       setState(() {
         if (allSelected) {
-          for (final id in selectable.keys) { _selected.remove(id); }
+          for (final id in selectable.keys) {
+            _selected.remove(id);
+          }
         } else {
           _selected.addAll(selectable);
         }
@@ -123,12 +185,22 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
     if (action == 'move') {
       final sidebar = await ref.read(conversationSidebarProvider.future);
       if (!mounted) return;
-      final selection = await showProjectPickerSheet(context, projects: sidebar.projects, title: '选择目标项目');
+      final selection = await showProjectPickerSheet(
+        context,
+        projects: sidebar.projects,
+        title: '选择目标项目',
+      );
       if (selection == null || !mounted) return;
       target = selection.project?.id ?? '';
     }
     if (action == 'delete') {
-      final confirmed = await showAmitiaConfirmDialog(context, title: '批量删除', message: '确定删除选中的 ${_selected.length} 个对话及其聊天记录吗？此操作不可撤销。', confirmLabel: '删除', isDestructive: true);
+      final confirmed = await showAmitiaConfirmDialog(
+        context,
+        title: '批量删除',
+        message: '确定删除选中的 ${_selected.length} 个对话及其聊天记录吗？此操作不可撤销。',
+        confirmLabel: '删除',
+        isDestructive: true,
+      );
       if (confirmed != true || !mounted) return;
     }
     setState(() => _batchBusy = true);
@@ -138,11 +210,26 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
     for (final row in _selected.values.toList()) {
       try {
         switch (action) {
-          case 'archive': await service.archiveConversation(row.id, characterId: row.characterId);
-          case 'read': await service.markConversationRead(row.id, lastTerminalTurnSequence: row.lastTerminalTurnSequence, characterId: row.characterId);
-          case 'pin': await service.setConversationPinned(row.id, true);
-          case 'move': await service.moveConversationToProject(row.id, target);
-          case 'delete': await service.deleteConversation(row.id, characterId: row.characterId);
+          case 'archive':
+            await service.archiveConversation(
+              row.id,
+              characterId: row.characterId,
+            );
+          case 'read':
+            await service.markConversationRead(
+              row.id,
+              lastTerminalTurnSequence: row.lastTerminalTurnSequence,
+              characterId: row.characterId,
+            );
+          case 'pin':
+            await service.setConversationPinned(row.id, true);
+          case 'move':
+            await service.moveConversationToProject(row.id, target);
+          case 'delete':
+            await service.deleteConversation(
+              row.id,
+              characterId: row.characterId,
+            );
         }
         succeeded.add(row.id);
       } catch (error, stackTrace) {
@@ -150,12 +237,31 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
       }
     }
     if (!mounted) return;
-    setState(() { _batchBusy = false; for (final id in succeeded) { _selected.remove(id); } });
+    setState(() {
+      _batchBusy = false;
+      for (final id in succeeded) {
+        _selected.remove(id);
+      }
+    });
     ref.invalidate(conversationListProvider);
     ref.invalidate(conversationSidebarProvider);
     ref.read(conversationCollectionRevisionProvider.notifier).state++;
     if (failures.isNotEmpty) {
-      await showDialog<void>(context: context, builder: (context) => AlertDialog(title: Text('完成 ${succeeded.length} 项，失败 ${failures.length} 项'), content: SingleChildScrollView(child: SelectableText(failures.join('\n\n'))), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('关闭'))]));
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('完成 ${succeeded.length} 项，失败 ${failures.length} 项'),
+          content: SingleChildScrollView(
+            child: SelectableText(failures.join('\n\n')),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('关闭'),
+            ),
+          ],
+        ),
+      );
     } else {
       amitiaSnackBar(context, '已完成 ${succeeded.length} 项');
     }
@@ -236,9 +342,11 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
     }
     if (!mounted) return;
     var projects = const <ProjectDto>[];
-    if (_projectMode) {
+    try {
       final sidebar = await ref.read(conversationSidebarProvider.future);
       projects = sidebar.projects;
+    } catch (error) {
+      if (mounted) amitiaSnackBar(context, '项目加载失败：$error');
     }
     if (!mounted) return;
     final result = await createGroupChatWithInvites(
@@ -246,7 +354,8 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
       ref,
       characters: characters,
       projects: projects,
-      showProjectSelector: _projectMode,
+      showProjectSelector: true,
+      projectRequired: _projectMode,
     );
     if (result == null || !mounted) return;
     ref.invalidate(conversationListProvider);
@@ -276,78 +385,85 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
         if (!didPop) _handleSelectionBack();
       },
       child: AmitiaScaffold(
-      handlesSystemBack: false,
-      appBar: AmitiaAppBar(
-        titleWidget: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              _selecting ? '选择对话' : (_projectMode ? '项目' : '消息'),
-              style: AppTypography.pageTitle(context),
-            ),
-            const SizedBox(width: 2),
-            if (!_selecting) IconButton(
-              key: const ValueKey('conversation-view-switch'),
-              tooltip: _projectMode ? '切换为消息模式' : '切换为项目模式',
-              visualDensity: VisualDensity.compact,
-              onPressed: () => _setProjectMode(!_projectMode),
-              icon: Icon(
-                Icons.swap_horiz_rounded,
-                size: 21,
-                color: _projectMode
-                    ? context.accentPrimary
-                    : context.textSecondary,
+        handlesSystemBack: false,
+        appBar: AmitiaAppBar(
+          titleWidget: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _selecting ? '选择对话' : (_projectMode ? '项目' : '消息'),
+                style: AppTypography.pageTitle(context),
               ),
-            ),
-          ],
-        ),
-        backgroundColor: context.surfacePrimary,
-        toolbarHeight: AmitiaAppBar.rootPageToolbarHeight,
-        leading: const SizedBox.shrink(),
-        leadingWidth: 0,
-        actions: [
-          IconButton(
-            tooltip: _selecting ? '退出多选' : '批量选择',
-            onPressed: _batchBusy ? null : () => setState(() { _selecting = !_selecting; _selected.clear(); }),
-            icon: Icon(_selecting ? Icons.close : Icons.checklist_rounded),
+              const SizedBox(width: 2),
+              if (!_selecting)
+                IconButton(
+                  key: const ValueKey('conversation-view-switch'),
+                  tooltip: _projectMode ? '切换为消息模式' : '切换为项目模式',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => _setProjectMode(!_projectMode),
+                  icon: Icon(
+                    Icons.swap_horiz_rounded,
+                    size: 21,
+                    color: _projectMode
+                        ? context.accentPrimary
+                        : context.textSecondary,
+                  ),
+                ),
+            ],
           ),
-          AmitiaPopupMenuButton<_MessageCreateAction>(
-            key: const ValueKey('message-create-button'),
-            tooltip: '新建',
-            icon: const AmitiaIcon(AmitiaIconGlyph.add, size: 21),
-            menuWidth: 140,
-            itemVerticalPadding: 0,
-            itemFontSize: 14.5,
-            itemIconSize: 18,
-            itemHorizontalPadding: 14,
-            itemHorizontalMargin: 0,
-            itemMinHeight: 46,
-            onSelected: (action) {
-              switch (action) {
-                case _MessageCreateAction.chat:
-                  _startNewChat();
-                case _MessageCreateAction.group:
-                  _startNewGroupChat();
-                case _MessageCreateAction.project:
-                  _showCreateProject();
-              }
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: _MessageCreateAction.chat,
-                child: AmitiaPopupMenuLabel(
-                  icon: Icons.add_comment_outlined,
-                  label: '新对话',
+          backgroundColor: context.surfacePrimary,
+          toolbarHeight: AmitiaAppBar.rootPageToolbarHeight,
+          leading: const SizedBox.shrink(),
+          leadingWidth: 0,
+          actions: [
+            IconButton(
+              tooltip: _selecting ? '退出多选' : '批量选择',
+              onPressed: _batchBusy
+                  ? null
+                  : () => setState(() {
+                      _selecting = !_selecting;
+                      _selected.clear();
+                    }),
+              icon: Icon(_selecting ? Icons.close : Icons.checklist_rounded),
+            ),
+            AmitiaPopupMenuButton<_MessageCreateAction>(
+              key: const ValueKey('message-create-button'),
+              tooltip: '新建',
+              icon: const AmitiaIcon(AmitiaIconGlyph.add, size: 21),
+              menuWidth: 140,
+              itemVerticalPadding: 0,
+              itemFontSize: 14.5,
+              itemIconSize: 18,
+              itemHorizontalPadding: 14,
+              itemHorizontalMargin: 0,
+              itemMinHeight: 46,
+              onSelected: (action) {
+                switch (action) {
+                  case _MessageCreateAction.chat:
+                    _startNewChat();
+                  case _MessageCreateAction.group:
+                    _startNewGroupChat();
+                  case _MessageCreateAction.project:
+                    _showCreateProject();
+                  case _MessageCreateAction.team:
+                    _showCreateTeam();
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: _MessageCreateAction.chat,
+                  child: AmitiaPopupMenuLabel(
+                    icon: Icons.add_comment_outlined,
+                    label: '新对话',
+                  ),
                 ),
-              ),
-              const PopupMenuItem(
-                value: _MessageCreateAction.group,
-                child: AmitiaPopupMenuLabel(
-                  icon: Icons.group_add_outlined,
-                  label: '新群聊',
+                const PopupMenuItem(
+                  value: _MessageCreateAction.group,
+                  child: AmitiaPopupMenuLabel(
+                    icon: Icons.group_add_outlined,
+                    label: '新群聊',
+                  ),
                 ),
-              ),
-              if (_projectMode)
                 const PopupMenuItem(
                   value: _MessageCreateAction.project,
                   child: AmitiaPopupMenuLabel(
@@ -355,75 +471,82 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
                     label: '新项目',
                   ),
                 ),
-            ],
-          ),
-          const SizedBox(width: 4),
-        ],
-      ),
-      body: Column(
-        children: [
-          Padding(
-            key: const ValueKey('message-search-region'),
-            padding: EdgeInsets.fromLTRB(
-              AppSpacing.pagePadding,
-              AppSpacing.md,
-              AppSpacing.pagePadding,
-              AppSpacing.xs,
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Material(
-                    key: const ValueKey('message-search-field'),
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: () => context.push(AppRoutes.conversationSearch),
-                      borderRadius: BorderRadius.circular(20),
-                      overlayColor: const WidgetStatePropertyAll(
-                        Colors.transparent,
-                      ),
-                      splashFactory: NoSplash.splashFactory,
-                      child: Ink(
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: context.surfacePrimary,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            AmitiaIcon(
-                              AmitiaIconGlyph.search,
-                              size: 17,
-                              color: context.textTertiary,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              '搜索',
-                              style: AppTypography.bodySmall(
-                                context,
-                              ).copyWith(color: context.textTertiary),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+                const PopupMenuItem(
+                  value: _MessageCreateAction.team,
+                  child: AmitiaPopupMenuLabel(
+                    icon: Icons.groups_outlined,
+                    label: '新团队',
                   ),
                 ),
               ],
             ),
-          ),
-          Expanded(
-            child: _projectMode
-                ? _buildProjectList(context, sidebarAsync!, charactersById)
-                : _buildConversationList(
-                    context,
-                    conversationsAsync,
-                    charactersById,
+            const SizedBox(width: 4),
+          ],
+        ),
+        body: Column(
+          children: [
+            Padding(
+              key: const ValueKey('message-search-region'),
+              padding: EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                AppSpacing.md,
+                AppSpacing.pagePadding,
+                AppSpacing.xs,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Material(
+                      key: const ValueKey('message-search-field'),
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => context.push(AppRoutes.conversationSearch),
+                        borderRadius: BorderRadius.circular(20),
+                        overlayColor: const WidgetStatePropertyAll(
+                          Colors.transparent,
+                        ),
+                        splashFactory: NoSplash.splashFactory,
+                        child: Ink(
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: context.surfacePrimary,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              AmitiaIcon(
+                                AmitiaIconGlyph.search,
+                                size: 17,
+                                color: context.textTertiary,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                '搜索',
+                                style: AppTypography.bodySmall(
+                                  context,
+                                ).copyWith(color: context.textTertiary),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
-          ),
-        ],
-      ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: _projectMode
+                  ? _buildProjectList(context, sidebarAsync!, charactersById)
+                  : _buildConversationList(
+                      context,
+                      conversationsAsync,
+                      charactersById,
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -440,7 +563,11 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
       }),
       data: (conversations) {
         final filtered = conversations
-            .where((conversation) => !_isChannelConversation(conversation) && conversation.archivedAt.isEmpty)
+            .where(
+              (conversation) =>
+                  !_isChannelConversation(conversation) &&
+                  conversation.archivedAt.isEmpty,
+            )
             .toList();
         filtered.sort(_sortConversations);
         if (filtered.isEmpty) {
@@ -470,8 +597,12 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
                 character: charactersById[conversation.characterId],
                 timeText: formatConversationTime(conversation.updatedAt),
                 showDivider: index < filtered.length - 1,
-                onTap: () => _selecting ? _toggleSelection(conversation) : _openConversation(conversation),
-                onLongPressAt: (position) => _selecting ? _showBatchMenu(position) : _showActionsSheet(conversation, position),
+                onTap: () => _selecting
+                    ? _toggleSelection(conversation)
+                    : _openConversation(conversation),
+                onLongPressAt: (position) => _selecting
+                    ? _showBatchMenu(position)
+                    : _showActionsSheet(conversation, position),
               ),
             );
           },
@@ -525,8 +656,12 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
                   _expandedProjects.add(project.id);
                 }
               }),
-              onOpenConversation: (conversation) => _selecting ? _toggleSelection(conversation) : _openConversation(conversation),
-              onConversationLongPress: (conversation, position) => _selecting ? _showBatchMenu(position) : _showActionsSheet(conversation, position),
+              onOpenConversation: (conversation) => _selecting
+                  ? _toggleSelection(conversation)
+                  : _openConversation(conversation),
+              onConversationLongPress: (conversation, position) => _selecting
+                  ? _showBatchMenu(position)
+                  : _showActionsSheet(conversation, position),
               onConversationPin: _setConversationPinned,
               onConversationArchive: _archiveConversation,
               onConversationMarkRead: _markConversationRead,
@@ -663,12 +798,28 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
       if (project == null || !mounted) return;
       await _refreshProjectCollections();
       if (!mounted) return;
-      setState(() => _expandedProjects.add(project.id));
+      setState(() {
+        _projectMode = true;
+        _expandedProjects.add(project.id);
+      });
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.setBool(_projectModePreferenceKey, true);
+      if (!mounted) return;
       amitiaSnackBar(context, '项目已创建');
     } catch (error) {
       if (mounted) amitiaSnackBar(context, '创建项目失败：$error');
     } finally {
       if (mounted) setState(() => _projectBusy = false);
+    }
+  }
+
+  Future<void> _showCreateTeam() async {
+    try {
+      final team = await showTeamCreateSheet(context, ref);
+      if (team == null || !mounted) return;
+      amitiaSnackBar(context, '团队「${team['name'] ?? ''}」已创建');
+    } catch (error) {
+      if (mounted) amitiaSnackBar(context, '创建团队失败：$error');
     }
   }
 
@@ -872,24 +1023,71 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
       context: context,
       anchorRect: Rect.fromCenter(center: position, width: 1, height: 1),
       items: [
-        const PopupMenuItem(value: 'rename', child: AmitiaPopupMenuLabel(icon: Icons.edit_outlined, label: '重命名')),
-        PopupMenuItem(value: 'pin', child: AmitiaPopupMenuLabel(icon: Icons.push_pin_outlined, label: conv.pinnedAt.trim().isEmpty ? '置顶' : '取消置顶')),
-        const PopupMenuItem(value: 'archive', child: AmitiaPopupMenuLabel(icon: Icons.archive_outlined, label: '归档')),
-        const PopupMenuItem(value: 'read', child: AmitiaPopupMenuLabel(icon: Icons.mark_chat_read_outlined, label: '标为已读')),
-        const PopupMenuItem(value: 'select', child: AmitiaPopupMenuLabel(icon: Icons.checklist_rounded, label: '多选')),
-        PopupMenuItem(value: 'move', child: AmitiaPopupMenuLabel(icon: Icons.drive_file_move_outline, label: conv.projectId.isEmpty ? '移动到项目' : '调整所属项目')),
-        const PopupMenuItem(value: 'delete', child: AmitiaPopupMenuLabel(icon: Icons.delete_outline, label: '删除')),
+        const PopupMenuItem(
+          value: 'rename',
+          child: AmitiaPopupMenuLabel(icon: Icons.edit_outlined, label: '重命名'),
+        ),
+        PopupMenuItem(
+          value: 'pin',
+          child: AmitiaPopupMenuLabel(
+            icon: Icons.push_pin_outlined,
+            label: conv.pinnedAt.trim().isEmpty ? '置顶' : '取消置顶',
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'archive',
+          child: AmitiaPopupMenuLabel(
+            icon: Icons.archive_outlined,
+            label: '归档',
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'read',
+          child: AmitiaPopupMenuLabel(
+            icon: Icons.mark_chat_read_outlined,
+            label: '标为已读',
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'select',
+          child: AmitiaPopupMenuLabel(
+            icon: Icons.checklist_rounded,
+            label: '多选',
+          ),
+        ),
+        PopupMenuItem(
+          value: 'move',
+          child: AmitiaPopupMenuLabel(
+            icon: Icons.drive_file_move_outline,
+            label: conv.projectId.isEmpty ? '移动到项目' : '调整所属项目',
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'delete',
+          child: AmitiaPopupMenuLabel(icon: Icons.delete_outline, label: '删除'),
+        ),
       ],
     );
     if (!mounted || action == null) return;
     switch (action) {
-      case 'rename': await _renameConversation(conv);
-      case 'pin': await _setConversationPinned(conv);
-      case 'archive': await _archiveConversation(conv);
-      case 'read': await _markConversationRead(conv);
-      case 'select': setState(() { _selecting = true; _selected.clear(); _selected[conv.id] = conv; });
-      case 'move': await _showMoveConversationSheet(conv);
-      case 'delete': await _deleteConversation(conv);
+      case 'rename':
+        await _renameConversation(conv);
+      case 'pin':
+        await _setConversationPinned(conv);
+      case 'archive':
+        await _archiveConversation(conv);
+      case 'read':
+        await _markConversationRead(conv);
+      case 'select':
+        setState(() {
+          _selecting = true;
+          _selected.clear();
+          _selected[conv.id] = conv;
+        });
+      case 'move':
+        await _showMoveConversationSheet(conv);
+      case 'delete':
+        await _deleteConversation(conv);
     }
   }
 
@@ -1092,7 +1290,9 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
     );
     if (confirmed != true) return;
     try {
-      await ref.read(chatServiceProvider).deleteConversation(conv.id, characterId: conv.characterId);
+      await ref
+          .read(chatServiceProvider)
+          .deleteConversation(conv.id, characterId: conv.characterId);
       ref.invalidate(conversationListProvider);
       ref.invalidate(conversationSidebarProvider);
       if (mounted) amitiaSnackBar(context, '对话已删除');
@@ -1102,7 +1302,7 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
   }
 }
 
-enum _MessageCreateAction { chat, group, project }
+enum _MessageCreateAction { chat, group, project, team }
 
 bool _isChannelConversation(ConversationDto conversation) {
   final channel = conversation.channel.trim().toLowerCase();

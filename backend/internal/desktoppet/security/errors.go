@@ -20,7 +20,6 @@ var (
 	ErrJobConflict           = errors.New("security: job ownership conflict")
 	ErrCandidateConflict     = errors.New("security: candidate ownership conflict")
 	ErrResourceOrphan        = errors.New("security: resource ownership broken")
-	ErrLegacyWriteBlocked    = errors.New("security: legacy write blocked after migration")
 	ErrMigrationLockFailed   = errors.New("security: migration lock acquisition failed")
 	ErrForbiddenPermission   = errors.New("security: permission denied")
 )

@@ -127,7 +127,7 @@ func TestRecoveryUsesAtomicFinalizer(t *testing.T) {
 		SpaceID: "user-1", ScopeType: "global", ExtensionID: installed.ExtensionID,
 		TargetVersion: installed.Version, OperationType: "install", Status: "in_progress",
 		CurrentStep: "commit_installed_tree", ArtifactID: artifact.ArtifactID,
-		StartedAt: now, UpdatedAt: now, ConfirmationsJSON: "{}",
+		StartedAt: now, UpdatedAt: now,
 		CurrentPointerJSON: "{}",
 	}
 	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {

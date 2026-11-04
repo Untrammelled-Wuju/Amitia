@@ -84,7 +84,7 @@ func TestDarwinNetworkSandboxE2E(t *testing.T) {
 func runDarwinSandboxProbe(t *testing.T, policy ServiceNetworkPolicy, executable string, args []string) (string, string, error) {
 	t.Helper()
 	work := t.TempDir()
-	plan, err := prepareNetworkLaunch(policy, executable, args, work, work)
+	plan, err := prepareNetworkLaunchWithStateRoot(policy, executable, args, work, work, work)
 	if err != nil {
 		return "", "", err
 	}

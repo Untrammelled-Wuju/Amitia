@@ -483,8 +483,6 @@ class KnowledgeSearchResultDto {
   final String routingMode;
   final String policyMode;
   final String routeReason;
-  final String shadowLevel;
-  final String shadowReason;
   final bool routeDegraded;
   final String routeDegradationReason;
   final List<String> queryHistory;
@@ -509,8 +507,6 @@ class KnowledgeSearchResultDto {
     required this.routingMode,
     required this.policyMode,
     required this.routeReason,
-    required this.shadowLevel,
-    required this.shadowReason,
     required this.routeDegraded,
     required this.routeDegradationReason,
     required this.queryHistory,
@@ -550,8 +546,6 @@ class KnowledgeSearchResultDto {
       routingMode: (json['routingMode'] ?? 'diagnostic').toString(),
       policyMode: (json['policyMode'] ?? '').toString(),
       routeReason: (json['routeReason'] ?? '').toString(),
-      shadowLevel: (json['shadowLevel'] ?? '').toString(),
-      shadowReason: (json['shadowReason'] ?? '').toString(),
       routeDegraded: json['routeDegraded'] == true,
       routeDegradationReason: (json['routeDegradationReason'] ?? '').toString(),
       queryHistory: (json['queryHistory'] as List? ?? const [])
@@ -573,8 +567,6 @@ class KnowledgeSearchResultDto {
 
 class KnowledgeRuntimeStatusDto {
   final String configHash;
-  final bool retrievalPolicyEnabled;
-  final bool retrievalPolicyShadow;
   final bool canonicalReaderEnabled;
   final bool agenticInvestigationEnabled;
   final int readerWorkers;
@@ -584,8 +576,6 @@ class KnowledgeRuntimeStatusDto {
 
   const KnowledgeRuntimeStatusDto({
     required this.configHash,
-    required this.retrievalPolicyEnabled,
-    required this.retrievalPolicyShadow,
     required this.canonicalReaderEnabled,
     required this.agenticInvestigationEnabled,
     required this.readerWorkers,
@@ -597,8 +587,6 @@ class KnowledgeRuntimeStatusDto {
   factory KnowledgeRuntimeStatusDto.fromJson(Map<String, dynamic> json) =>
       KnowledgeRuntimeStatusDto(
         configHash: (json['configHash'] ?? '').toString(),
-        retrievalPolicyEnabled: json['retrievalPolicyEnabled'] == true,
-        retrievalPolicyShadow: json['retrievalPolicyShadow'] == true,
         canonicalReaderEnabled: json['canonicalReaderEnabled'] == true,
         agenticInvestigationEnabled:
             json['agenticInvestigationEnabled'] == true,
@@ -832,7 +820,6 @@ class KnowledgeRetrievalTraceDto {
   final String level;
   final String policyMode;
   final String routeReason;
-  final String shadowLevel;
   final int sloTargetMs;
   final bool sloExceeded;
   final String createdAt;
@@ -850,7 +837,6 @@ class KnowledgeRetrievalTraceDto {
     required this.level,
     required this.policyMode,
     required this.routeReason,
-    required this.shadowLevel,
     required this.sloTargetMs,
     required this.sloExceeded,
     required this.createdAt,
@@ -873,7 +859,6 @@ class KnowledgeRetrievalTraceDto {
       level: (queryPlan['level'] ?? '').toString(),
       policyMode: (json['policyMode'] ?? '').toString(),
       routeReason: (json['routeReason'] ?? '').toString(),
-      shadowLevel: (json['shadowLevel'] ?? '').toString(),
       sloTargetMs: (json['sloTargetMs'] as num?)?.toInt() ?? 0,
       sloExceeded: json['sloExceeded'] == true,
       createdAt: (json['createdAt'] ?? '').toString(),

@@ -64,11 +64,6 @@ func ApplyUserPreferenceSignals(candidates []BehaviorCandidate, preferences map[
 	return result
 }
 
-// ApplySoftPreferencesToAll 保留兼容: 只写入 UserPreferenceScore, 不再修改 FinalScore
-func ApplySoftPreferencesToAll(candidates []BehaviorCandidate, input SoftPreferenceInput, config SoftPreferenceConfig) []BehaviorCandidate {
-	return ApplyUserPreferenceSignals(candidates, input.UserPreferences)
-}
-
 func computeRelationshipStateBias(candidate BehaviorCandidate, rel RelationshipSnapshot) float64 {
 	if len(rel.Dimensions) == 0 {
 		return 0

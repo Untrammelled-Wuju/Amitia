@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("quick","integration","security","migration","frontend","electron","all")]
+    [ValidateSet("quick","integration","security","frontend","electron","all")]
     [string]$Group = "quick",
     [switch]$Verbose
 )
@@ -11,7 +11,6 @@ $scripts = @{
     "quick"       = @("run-extension-unit.ps1")
     "integration" = @("run-extension-integration.ps1", "run-mcp-integration.ps1")
     "security"    = @("run-extension-security.ps1")
-    "migration"   = @("run-extension-migration.ps1")
     "frontend"    = @("run-extension-frontend.ps1")
     "electron"    = @("run-extension-electron.ps1")
 }
@@ -19,7 +18,7 @@ $scripts = @{
 $exitCode = 0
 
 if ($Group -eq "all") {
-    $allGroups = @("quick", "integration", "security", "migration", "frontend", "electron")
+    $allGroups = @("quick", "integration", "security", "frontend", "electron")
 } else {
     $allGroups = @($Group)
 }

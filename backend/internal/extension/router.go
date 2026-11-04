@@ -27,8 +27,6 @@ func RegisterRouter(group *gin.RouterGroup, ctx *app.AppContext, runtime *Runtim
 	extensions := group.Group("/extensions")
 	extensions.GET("/openapi.json", handler.OpenAPI)
 
-	registerRetiredLegacyRoutes(extensions, retiredExtensionLegacyRoutes)
-	registerRetiredLegacyRoutes(group, retiredRootLegacyRoutes)
 	registerSelfHostedExtensionRegistryRoutes(group, runtime)
 
 	extensions.Use(extensionAuth())

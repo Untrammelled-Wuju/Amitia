@@ -85,9 +85,6 @@ func syncGlobalSettingsAllowed() bool {
 
 func syncOwnerScope(query *gorm.DB, column, spaceID string) *gorm.DB {
 	owner := requestidentity.NormalizeSpaceID(spaceID)
-	if syncLocalSingleUserMode() {
-		return query.Where("("+column+" = ? OR "+column+" = '' OR "+column+" IS NULL OR "+column+" = ?)", owner, requestidentity.LegacySpaceID)
-	}
 	return query.Where(column+" = ?", owner)
 }
 

@@ -83,7 +83,7 @@ func (p *meshLocalDataPort) BusinessUsage(ctx context.Context, scope coordinatio
 			Day   string
 			Count int64
 		}
-		query := p.services.DB.WithContext(ctx).Table("message_feedback").Where("space_id=? AND owner_id=? AND core_id=? AND message_id IN ? AND deleted_at IS NULL", p.legacySpaceID, p.ownerID, scope.CoreID, keys)
+		query := p.services.DB.WithContext(ctx).Table("message_feedback").Where("space_id=? AND owner_id=? AND core_id=? AND message_id IN ? AND deleted_at IS NULL", p.ownerID, p.ownerID, scope.CoreID, keys)
 		if since != "" {
 			query = query.Where("julianday(created_at)>=julianday(?)", since)
 		}

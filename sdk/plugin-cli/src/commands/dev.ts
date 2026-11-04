@@ -10,13 +10,17 @@ export const devCommand: CliCommand = {
   usage: "amitia-ext dev [options]",
   options: [
     { name: "--manifest", shortName: "-m", description: "Manifest path", takesValue: true, defaultValue: "./manifest.json" },
-    { name: "--host", description: "Developer Host endpoint", takesValue: true, defaultValue: "http://127.0.0.1:18899" },
+    { name: "--host", description: "Developer Host endpoint", takesValue: true, defaultValue: "" },
     { name: "--watch", shortName: "-w", description: "Watch source for changes" },
     { name: "--no-hot-reload", description: "Disable hot reload" },
     { name: "--port", description: "Dev server port (avoid 3000)", takesValue: true, defaultValue: "18900" },
   ],
   async run(ctx: CliContext, args: string[]): Promise<CliCommandResult> {
     const opts = parseOptions(args);
+    const host = opts["--host"] ?? "";
+    if (!host.trim()) {
+      return { exitCode: EXIT_CODES.CONFIGURATION_ERROR, message: "missing required option: --host" };
+    }
     const manifestPath = path.resolve(ctx.cwd, opts["--manifest"] ?? "./manifest.json");
     if (!fs.existsSync(manifestPath)) {
       return {
@@ -34,7 +38,7 @@ export const devCommand: CliCommand = {
     const watchSrc = opts["--no-hot-reload"] === undefined;
     ctx.logger.info(`dev mode started`, {
       manifest: path.relative(ctx.cwd, manifestPath),
-      host: opts["--host"],
+      host,
       port,
       watch: watchSrc,
     });

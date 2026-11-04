@@ -17,8 +17,6 @@ func registerDataPortabilityRoutes(r *gin.RouterGroup, handler *Handler) {
 
 func registerStorageStatusRoutes(r *gin.RouterGroup, handler *Handler) {
 	r.GET("/storage/info", handler.StorageInfo)
-	r.GET("/storage/migrations", handler.StorageMigrations)
-	r.POST("/storage/migrations/check", handler.StorageMigrationsCheck)
 }
 
 func registerDataPortabilityMigrationRoutes(r *gin.RouterGroup, handler *Handler) {

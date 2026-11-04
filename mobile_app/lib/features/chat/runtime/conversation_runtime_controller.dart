@@ -2727,7 +2727,7 @@ class ConversationRuntimeRegistry extends ChangeNotifier {
       _sessions.values.toSet();
 
   ConversationRuntimeController session(String key) {
-    final normalized = key.trim().isEmpty ? '__legacy__' : key.trim();
+    final normalized = key.trim().isEmpty ? 'default' : key.trim();
     final existing = _sessions[normalized];
     if (existing != null) return existing;
     final controller = ConversationRuntimeController(
@@ -2905,5 +2905,5 @@ final conversationRuntimeControllerProvider =
     ChangeNotifierProvider<ConversationRuntimeController>((ref) {
       return ref
           .watch(conversationRuntimeRegistryProvider)
-          .session('__legacy__');
+          .session('default');
     });

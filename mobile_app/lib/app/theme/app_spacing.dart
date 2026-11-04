@@ -1,7 +1,6 @@
-import 'package:flutter/material.dart';
 import 'design_tokens.dart';
 
-/// Backward-compatible layout facade backed by the active ui.tokens provider.
+/// Layout facade backed by the active ui.tokens provider.
 class AppSpacing {
   AppSpacing._();
 

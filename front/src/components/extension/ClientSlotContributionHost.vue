@@ -155,7 +155,7 @@ function bindInjectedFace(
 function renderAuthorizedSlot(
   slotId: string,
   owner: Record<string, unknown> = {},
-  options: { entryKey?: string; key?: string; only?: string; fallback?: unknown; hookContext?: unknown; chain?: boolean; overlay?: boolean } = {},
+  options: { entryKey?: string; only?: string; fallback?: unknown; hookContext?: unknown; chain?: boolean; overlay?: boolean } = {},
 ): VNode {
   browserClientPluginRuntime.slots.assertRenderAuthority(props.contribution.contributionId, slotId);
   const definition = browserClientPluginRuntime.slots.getDefinition(slotId);
@@ -170,7 +170,7 @@ function renderAuthorizedSlot(
   return h(AuthorizedSlotOutlet, {
     slotId,
     context: owner,
-    dispatchKey: options.entryKey ?? options.key,
+    dispatchKey: options.entryKey,
     dispatchOnly: options.only,
     hookContext: options.hookContext,
     chainOverlay: options.chain === true && options.overlay === true,
@@ -180,7 +180,7 @@ function renderAuthorizedSlot(
   }, slots);
 }
 
-function renderSlot(slotId: string, owner: Record<string, unknown> = {}, options?: { entryKey?: string; key?: string; only?: string; fallback?: unknown; hookContext?: unknown }): VNode {
+function renderSlot(slotId: string, owner: Record<string, unknown> = {}, options?: { entryKey?: string; only?: string; fallback?: unknown; hookContext?: unknown }): VNode {
   return renderAuthorizedSlot(slotId, owner, options);
 }
 
@@ -270,23 +270,10 @@ const componentProps = computed<Record<string, unknown>>(() => ({
   ...(props.matched !== undefined ? { matched: props.matched } : {}),
 }));
 
-const compatibilityProps = computed(() => props.contribution.strict ? {} : {
-  context: props.context,
-  "slot-id": props.contribution.slotId,
-  "plugin-id": props.contribution.pluginId,
-  "contribution-id": props.contribution.contributionId,
-  "slot-store": instance.value.store,
-  "slot-inject": readonly(instance.value.injected),
-});
-
 provide(CLIENT_SLOT_RUNTIME_CONTEXT, {
   pluginId: props.contribution.pluginId,
   slotId: props.contribution.slotId,
   contributionId: props.contribution.contributionId,
-  ...(props.contribution.strict ? {} : {
-    store: instance.value.store,
-    injected: instance.value.injected,
-  }),
   parent,
 });
 </script>
@@ -294,6 +281,6 @@ provide(CLIENT_SLOT_RUNTIME_CONTEXT, {
 <template>
   <component
     :is="contribution.component"
-    v-bind="{ ...componentProps, ...compatibilityProps }"
+    v-bind="componentProps"
   />
 </template>

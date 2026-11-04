@@ -60,14 +60,14 @@ func TestBuildExternalAutomationToolsIDs(t *testing.T) {
 
 func TestBuildExternalAutomationToolsOperations(t *testing.T) {
 	expectedOps := map[string]string{
-		ToolIDStatus:        OperationStatus,
-		ToolIDResolveApp:    OperationResolveApp,
-		ToolIDOpenApp:       OperationOpenApp,
-		ToolIDResolveURI:    OperationResolveURI,
-		ToolIDOpenURI:       OperationOpenURI,
-		ToolIDOpenSettings:  OperationOpenSettings,
-		ToolIDInvokeIntent:  OperationInvokeIntent,
-		ToolIDForeground:    OperationForeground,
+		ToolIDStatus:         OperationStatus,
+		ToolIDResolveApp:     OperationResolveApp,
+		ToolIDOpenApp:        OperationOpenApp,
+		ToolIDResolveURI:     OperationResolveURI,
+		ToolIDOpenURI:        OperationOpenURI,
+		ToolIDOpenSettings:   OperationOpenSettings,
+		ToolIDInvokeIntent:   OperationInvokeIntent,
+		ToolIDForeground:     OperationForeground,
 		ToolIDWaitForeground: OperationWaitForeground,
 	}
 

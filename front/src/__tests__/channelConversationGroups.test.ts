@@ -15,10 +15,10 @@ describe("channel conversation groups", () => {
     expect(groups.every((group) => group.items.length === 0)).toBe(true);
   });
 
-  it("places legacy wechat conversations under their inferred channels", () => {
+  it("places conversations under explicit channels", () => {
     const groups = buildChannelConversationGroups(presentations, [
-      { id: "meshconv1:owner:conv-user@im.wechat", resourceId: "conv-user@im.wechat", title: "微信会话" },
-      { id: "meshconv1:owner:wechat-ipad860-account-peer", resourceId: "wechat-ipad860-account-peer", title: "个人微信会话" },
+      { id: "meshconv1:owner:conv-user@im.wechat", resourceId: "conv-user@im.wechat", channel: "wechat", title: "微信会话" },
+      { id: "meshconv1:owner:wechat-ipad860-account-peer", resourceId: "wechat-ipad860-account-peer", channel: "wechat_ipad860", title: "个人微信会话" },
     ]);
     expect(groups.find((group) => group.channel === "wechat")?.items).toHaveLength(1);
     expect(groups.find((group) => group.channel === "wechat_ipad860")?.items).toHaveLength(1);
@@ -27,9 +27,9 @@ describe("channel conversation groups", () => {
 
   it("routes qq personal conversations to their own channel", () => {
     const groups = buildChannelConversationGroups(presentations, [
-      { id: "conv-qq-personal-group-193879020", title: "个人 QQ 群" },
-      { id: "conv-qq-personal-private-3151508592", title: "个人 QQ 私聊" },
-      { id: "conv-group-100", title: "历史 QQ 会话" },
+      { id: "conv-qq-personal-group-193879020", channel: "qq_personal", title: "个人 QQ 群" },
+      { id: "conv-qq-personal-private-3151508592", channel: "qq_personal", title: "个人 QQ 私聊" },
+      { id: "conv-group-100", channel: "qq", title: "QQ 群" },
     ]);
     expect(groups.find((group) => group.channel === "qq_personal")?.items).toHaveLength(2);
     expect(groups.find((group) => group.channel === "qq")?.items).toHaveLength(1);

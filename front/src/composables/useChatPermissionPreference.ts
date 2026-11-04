@@ -5,9 +5,6 @@ export type ChatPermissionMode = "request_approval" | "full_access";
 export const CHAT_PERMISSION_MODE_STORAGE_KEY =
   "amitia.chat.permission-mode.v1";
 
-const LEGACY_MODEL_SETTINGS_DRAFT_KEY =
-  "amitia.chat.model-settings.draft.v1";
-
 type ChatPermissionStorage = Pick<Storage, "getItem" | "setItem">;
 
 function resolveStorage(storage?: ChatPermissionStorage): ChatPermissionStorage | null {
@@ -29,17 +26,6 @@ export function loadChatPermissionMode(
     const stored = target.getItem(CHAT_PERMISSION_MODE_STORAGE_KEY);
     if (stored === "full_access" || stored === "request_approval") {
       return stored;
-    }
-    const legacy = target.getItem(LEGACY_MODEL_SETTINGS_DRAFT_KEY);
-    if (!legacy) return "request_approval";
-    const parsed = JSON.parse(legacy);
-    if (
-      parsed?.permissionMode === "full_access" ||
-      parsed?.permissionMode === "request_approval"
-    ) {
-      const mode = normalizeChatPermissionMode(parsed.permissionMode);
-      target.setItem(CHAT_PERMISSION_MODE_STORAGE_KEY, mode);
-      return mode;
     }
   } catch (error) {
   console.error("[original-error]", error);

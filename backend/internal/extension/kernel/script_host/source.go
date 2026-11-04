@@ -5,14 +5,13 @@ package script_host
 type Source string
 
 const (
-	SourceExplicit        Source = "explicit"
-	SourceRuntimePackage  Source = "runtime-package"
-	SourceLegacyWorkspace Source = "legacy-workspace"
+	SourceExplicit       Source = "explicit"
+	SourceRuntimePackage Source = "runtime-package"
 )
 
 func knownSource(s Source) bool {
 	switch s {
-	case SourceExplicit, SourceRuntimePackage, SourceLegacyWorkspace:
+	case SourceExplicit, SourceRuntimePackage:
 		return true
 	}
 	return false

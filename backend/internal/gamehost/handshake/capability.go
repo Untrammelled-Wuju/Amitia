@@ -19,24 +19,24 @@ func ValidateCapabilities(caps []string) error {
 			"too many capabilities advertised",
 		)
 	}
-	seen := make(map[domain.Capability]struct{}, len(caps))
+	seen := make(map[domain.HostFeature]struct{}, len(caps))
 	for _, c := range caps {
-		capab := domain.Capability(c)
-		if err := domain.ValidateCapability(capab); err != nil {
+		feature := domain.HostFeature(c)
+		if err := domain.ValidateHostFeature(feature); err != nil {
 			return NewHandshakeError(
 				HandshakeErrorCapabilityMismatch,
 				domain.ErrInvalidArgument,
-				"invalid capability: "+string(capab),
+				"invalid capability: "+string(feature),
 			)
 		}
-		if _, ok := seen[capab]; ok {
+		if _, ok := seen[feature]; ok {
 			return NewHandshakeError(
 				HandshakeErrorCapabilityMismatch,
 				domain.ErrInvalidArgument,
-				"duplicate capability: "+string(capab),
+				"duplicate capability: "+string(feature),
 			)
 		}
-		seen[capab] = struct{}{}
+		seen[feature] = struct{}{}
 	}
 	return nil
 }

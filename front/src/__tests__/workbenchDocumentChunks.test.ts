@@ -14,13 +14,11 @@ describe('workbench raw-byte file preview', () => {
     expect(() => parseWorkbenchDocumentChunk({ isText: true, content: 'x', nextOffset: 6 }, null, 0)).toThrow();
     expect(() => parseWorkbenchDocumentChunk({ isText: true, content: 'x', bytesRead: 2 }, null, 0)).toThrow();
     expect(() => parseWorkbenchDocumentChunk({ isText: true, content: '', hasMore: true }, null, 0)).toThrow();
-    const first = parseWorkbenchDocumentChunk({ isText: true, content: 'x' }, null, 0);
+    const first = parseWorkbenchDocumentChunk({ isText: true, contentBase64: 'eA==', bytesRead: 1, nextOffset: 1, hasMore: false }, null, 0);
     expect(() => parseWorkbenchDocumentChunk({ isText: true, content: 'y' }, first, 0)).toThrow();
   });
 
-  it('accepts legacy content-only response', () => {
-    const part = parseWorkbenchDocumentChunk({ isText: true, content: '你好' }, null, 0);
-    expect(part.text).toBe('你好');
-    expect(part.offset).toBe(6);
+  it('rejects content-only responses', () => {
+    expect(() => parseWorkbenchDocumentChunk({ isText: true, content: '你好' }, null, 0)).toThrow();
   });
 });

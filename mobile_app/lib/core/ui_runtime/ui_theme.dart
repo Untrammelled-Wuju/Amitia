@@ -51,18 +51,6 @@ double _double(Map<String, dynamic> source, String key, double fallback) {
   return value is num ? value.toDouble() : fallback;
 }
 
-double _doubleAlias(
-  Map<String, dynamic> source,
-  List<String> keys,
-  double fallback,
-) {
-  for (final key in keys) {
-    final value = source[key];
-    if (value is num) return value.toDouble();
-  }
-  return fallback;
-}
-
 int _intAlias(Map<String, dynamic> source, List<String> keys, int fallback) {
   for (final key in keys) {
     final value = source[key];
@@ -90,11 +78,8 @@ AmitiaLayoutTokens mergeLayoutTokens(
     key,
     _double(source, key, fallback),
   );
-  double radiusValue(String key, String legacyKey, double fallback) => _double(
-    radius.isEmpty ? source : radius,
-    key,
-    _double(source, legacyKey, fallback),
-  );
+  double radiusValue(String key, double fallback) =>
+      _double(radius.isEmpty ? source : radius, key, fallback);
   return AmitiaLayoutTokens(
     xs: spacingValue('xs', defaults.xs),
     sm: spacingValue('sm', defaults.sm),
@@ -135,16 +120,12 @@ AmitiaLayoutTokens mergeLayoutTokens(
     ),
     buttonHeight: _double(source, 'buttonHeight', defaults.buttonHeight),
     inputMinHeight: _double(source, 'inputMinHeight', defaults.inputMinHeight),
-    radiusExtraSmall: radiusValue(
-      'xs',
-      'radiusExtraSmall',
-      defaults.radiusExtraSmall,
-    ),
-    radiusSmall: radiusValue('sm', 'radiusSmall', defaults.radiusSmall),
-    radiusMedium: radiusValue('md', 'radiusMedium', defaults.radiusMedium),
-    radiusLarge: radiusValue('lg', 'radiusLarge', defaults.radiusLarge),
-    radiusTag: radiusValue('tag', 'radiusTag', defaults.radiusTag),
-    radiusPill: radiusValue('pill', 'radiusPill', defaults.radiusPill),
+    radiusExtraSmall: radiusValue('xs', defaults.radiusExtraSmall),
+    radiusSmall: radiusValue('sm', defaults.radiusSmall),
+    radiusMedium: radiusValue('md', defaults.radiusMedium),
+    radiusLarge: radiusValue('lg', defaults.radiusLarge),
+    radiusTag: radiusValue('tag', defaults.radiusTag),
+    radiusPill: radiusValue('pill', defaults.radiusPill),
     density: _double(source, 'density', defaults.density),
   );
 }
@@ -159,10 +140,7 @@ AmitiaTypographyTokens _mergeTypography(
       : <String, dynamic>{...source, ...typography};
   return AmitiaTypographyTokens(
     fontFamily: _string(values, 'fontFamily', defaults.fontFamily),
-    pageTitleSize: _doubleAlias(values, const [
-      'pageTitleSize',
-      'titleSize',
-    ], defaults.pageTitleSize),
+    pageTitleSize: _double(values, 'pageTitleSize', defaults.pageTitleSize),
     pageLargeTitleSize: _double(
       values,
       'pageLargeTitleSize',
@@ -175,10 +153,7 @@ AmitiaTypographyTokens _mergeTypography(
     ),
     cardTitleSize: _double(values, 'cardTitleSize', defaults.cardTitleSize),
     bodySize: _double(values, 'bodySize', defaults.bodySize),
-    bodySmallSize: _doubleAlias(values, const [
-      'bodySmallSize',
-      'smallBodySize',
-    ], defaults.bodySmallSize),
+    bodySmallSize: _double(values, 'bodySmallSize', defaults.bodySmallSize),
     captionSize: _double(values, 'captionSize', defaults.captionSize),
     labelSize: _double(values, 'labelSize', defaults.labelSize),
     statusLabelSize: _double(
@@ -223,22 +198,11 @@ AmitiaIconTokens _mergeIcons(
       ? source
       : <String, dynamic>{...source, ...icons};
   return AmitiaIconTokens(
-    extraSmall: _doubleAlias(values, const [
-      'extraSmall',
-      'iconExtraSmall',
-    ], defaults.extraSmall),
-    small: _doubleAlias(values, const ['small', 'iconSmall'], defaults.small),
-    medium: _doubleAlias(values, const [
-      'medium',
-      'size',
-      'iconMedium',
-    ], defaults.medium),
-    large: _doubleAlias(values, const ['large', 'iconLarge'], defaults.large),
-    navigation: _doubleAlias(values, const [
-      'navigation',
-      'navigationSize',
-      'iconNavigation',
-    ], defaults.navigation),
+    extraSmall: _double(values, 'extraSmall', defaults.extraSmall),
+    small: _double(values, 'small', defaults.small),
+    medium: _double(values, 'medium', defaults.medium),
+    large: _double(values, 'large', defaults.large),
+    navigation: _double(values, 'navigation', defaults.navigation),
   );
 }
 
@@ -252,10 +216,7 @@ AmitiaComponentTokens _mergeComponents(
       : <String, dynamic>{...source, ...components};
   return AmitiaComponentTokens(
     toolbarHeight: _double(values, 'toolbarHeight', defaults.toolbarHeight),
-    drawerMaxWidth: _doubleAlias(values, const [
-      'drawerWidth',
-      'drawerMaxWidth',
-    ], defaults.drawerMaxWidth),
+    drawerMaxWidth: _double(values, 'drawerMaxWidth', defaults.drawerMaxWidth),
     borderWidth: _double(values, 'borderWidth', defaults.borderWidth),
     controlHeight: _double(values, 'controlHeight', defaults.controlHeight),
     compactControlHeight: _double(

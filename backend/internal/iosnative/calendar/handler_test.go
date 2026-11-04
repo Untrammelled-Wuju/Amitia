@@ -388,7 +388,7 @@ func TestAuthorizationLevelFromNative(t *testing.T) {
 		{"denied", AuthorizationDenied},
 		{"writeOnly", AuthorizationWriteOnly},
 		{"fullAccess", AuthorizationFullAccess},
-		{"authorized", AuthorizationLegacyAuthorized},
+		{"authorized", AuthorizationNotDetermined},
 		{"", AuthorizationNotDetermined},
 	}
 
@@ -409,7 +409,6 @@ func TestCanCreateEvent(t *testing.T) {
 	}{
 		{AuthorizationWriteOnly, true},
 		{AuthorizationFullAccess, true},
-		{AuthorizationLegacyAuthorized, true},
 		{AuthorizationNotDetermined, false},
 		{AuthorizationDenied, false},
 		{AuthorizationRestricted, false},
@@ -431,7 +430,6 @@ func TestCanReadEvents(t *testing.T) {
 		expected bool
 	}{
 		{AuthorizationFullAccess, true},
-		{AuthorizationLegacyAuthorized, true},
 		{AuthorizationWriteOnly, false},
 		{AuthorizationNotDetermined, false},
 		{AuthorizationDenied, false},

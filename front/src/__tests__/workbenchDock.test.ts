@@ -49,11 +49,12 @@ describe('WorkbenchDock', () => {
       'Git 变更',
       '打开浏览器',
       '任务状态',
+      '子智能体',
       '交互终端',
       '关闭未固定标签',
       '收起工作区',
     ]);
-    expect(wrapper.findAll('.dock-actions svg')).toHaveLength(7);
+    expect(wrapper.findAll('.dock-actions svg')).toHaveLength(8);
     expect(wrapper.findAll('.tab-icon svg')).toHaveLength(2);
     expect(wrapper.text()).toContain('工作区');
     wrapper.unmount();

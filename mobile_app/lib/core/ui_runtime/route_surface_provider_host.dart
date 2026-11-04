@@ -66,7 +66,6 @@ class RouteSurfaceProviderHost extends ConsumerWidget {
         'pathParameters': providerRoutePathParameters(route),
         'surface': capability,
         'surfaceId': canonicalUISurfaceId(route),
-        'routeAliases': uiRouteAliases(route).toList(growable: false),
         ...providerRouteIdentity(route),
       },
       fallback: child,

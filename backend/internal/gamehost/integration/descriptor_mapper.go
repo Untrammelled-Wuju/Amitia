@@ -48,13 +48,13 @@ func (m *DefaultGamePluginContributionMapper) ToDescriptor(
 		return gamehostdomain.PluginDescriptor{}, fmt.Errorf("validate game plugin spec: %w", err)
 	}
 
-	hostFeatures := make([]gamehostdomain.Capability, 0, len(spec.HostFeatures))
+	hostFeatures := make([]gamehostdomain.HostFeature, 0, len(spec.HostFeatures))
 	for _, feature := range spec.HostFeatures {
-		capability := gamehostdomain.Capability(feature)
-		if err := gamehostdomain.ValidateCapability(capability); err != nil {
+		hostFeature := gamehostdomain.HostFeature(feature)
+		if err := gamehostdomain.ValidateHostFeature(hostFeature); err != nil {
 			return gamehostdomain.PluginDescriptor{}, fmt.Errorf("invalid host feature %q: %w", feature, err)
 		}
-		hostFeatures = append(hostFeatures, capability)
+		hostFeatures = append(hostFeatures, hostFeature)
 	}
 
 	services, err := mapDeclaredServices(extension, spec)

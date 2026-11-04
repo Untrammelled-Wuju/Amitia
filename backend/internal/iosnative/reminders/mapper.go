@@ -10,8 +10,6 @@ func AuthorizationLevelFromNative(native string) AuthorizationLevel {
 		return AuthorizationDenied
 	case "fullAccess":
 		return AuthorizationFullAccess
-	case "authorized":
-		return AuthorizationLegacyAuthorized
 	default:
 		return AuthorizationNotDetermined
 	}
@@ -19,7 +17,7 @@ func AuthorizationLevelFromNative(native string) AuthorizationLevel {
 
 func CanReadReminders(level AuthorizationLevel) bool {
 	switch level {
-	case AuthorizationFullAccess, AuthorizationLegacyAuthorized:
+	case AuthorizationFullAccess:
 		return true
 	default:
 		return false
@@ -28,7 +26,7 @@ func CanReadReminders(level AuthorizationLevel) bool {
 
 func CanCreateReminders(level AuthorizationLevel) bool {
 	switch level {
-	case AuthorizationFullAccess, AuthorizationLegacyAuthorized:
+	case AuthorizationFullAccess:
 		return true
 	default:
 		return false
@@ -37,7 +35,7 @@ func CanCreateReminders(level AuthorizationLevel) bool {
 
 func CanUpdateReminders(level AuthorizationLevel) bool {
 	switch level {
-	case AuthorizationFullAccess, AuthorizationLegacyAuthorized:
+	case AuthorizationFullAccess:
 		return true
 	default:
 		return false
@@ -46,7 +44,7 @@ func CanUpdateReminders(level AuthorizationLevel) bool {
 
 func CanDeleteReminders(level AuthorizationLevel) bool {
 	switch level {
-	case AuthorizationFullAccess, AuthorizationLegacyAuthorized:
+	case AuthorizationFullAccess:
 		return true
 	default:
 		return false
@@ -55,7 +53,7 @@ func CanDeleteReminders(level AuthorizationLevel) bool {
 
 func CanListReminderLists(level AuthorizationLevel) bool {
 	switch level {
-	case AuthorizationFullAccess, AuthorizationLegacyAuthorized:
+	case AuthorizationFullAccess:
 		return true
 	default:
 		return false
@@ -88,7 +86,7 @@ func PriorityToNative(priority Priority) int {
 
 func IsValidAuthorizationLevelForReminders(level AuthorizationLevel) bool {
 	switch level {
-	case AuthorizationFullAccess, AuthorizationLegacyAuthorized:
+	case AuthorizationFullAccess:
 		return true
 	default:
 		return false

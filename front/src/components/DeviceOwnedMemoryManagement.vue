@@ -155,17 +155,17 @@ async function loadGenerationConversations() {
   try {
     if (source === "current") { const rows = await owned.conversations(scope.roleId); if (ticket !== generation || source !== generationSource.value) return; conversations.value = rows.filter((row) => row.ownerId === scope.resourceOwnerId); return; }
     if (!historicalRoles.value.some((role) => role.id === source)) throw new Error("历史角色目录已变化");
-    const rows = new Map<string, any>(); let cursor = ""; let legacyCursor = ""; const visited = new Set<string>();
+    const rows = new Map<string, any>(); let cursor = ""; const visited = new Set<string>();
     do {
-      const result = await owned.data("conversation", scope.roleId, "", "", { historicalRoleId: source, historicalCursor: cursor, historicalLegacyCursor: legacyCursor });
+      const result = await owned.data("conversation", scope.roleId, "", "", { historicalRoleId: source, historicalCursor: cursor });
       if (ticket !== generation || source !== generationSource.value) return;
       if (ownedMemoryAuthority(result.executionScope) !== ownedMemoryAuthority(scope)) throw new Error("服务归属已变化，请重新打开候选提取");
       const history = result.historicalSnapshot;
       if (!history || history.ownerId !== scope.targetDeviceId || (history as typeof history & { role?: { id: string } }).role?.id !== source) throw new Error("旧设备会话来源无效");
       for (const resource of history.resources || []) { if (resource.kind !== "conversation" || resource.deleted) continue; if (resource.ownerId !== scope.targetDeviceId || resource.roleId !== source) throw new Error("旧设备会话归属无效"); rows.set(resource.id, { ...resource.body, id: resource.id, ownerId: resource.ownerId }); }
-      cursor = history.nextCursors?.conversation || ""; legacyCursor = history.nextCursors?.legacyConversation || "";
-      const key = JSON.stringify([cursor, legacyCursor]); if (rows.size > 4096 || (cursor || legacyCursor) && visited.has(key)) throw new Error("旧设备会话分页无效"); visited.add(key);
-    } while (cursor || legacyCursor);
+      cursor = history.nextCursors?.conversation || "";
+      if (rows.size > 4096 || cursor && visited.has(cursor)) throw new Error("旧设备会话分页无效"); visited.add(cursor);
+    } while (cursor);
     conversations.value = [...rows.values()];
   } catch (cause) { if (ticket === generation && source === generationSource.value) error.value = cause instanceof Error ? cause.message : "对话加载失败"; }
   finally { if (ticket === generation && source === generationSource.value) loading.value = false; }

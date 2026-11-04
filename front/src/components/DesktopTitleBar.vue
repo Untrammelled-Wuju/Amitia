@@ -5,6 +5,7 @@ import { useAppStore } from "@/stores/app";
 import { isDesktopShell } from "@/runtime/runtime-capabilities";
 import { setWindowLayerFallback, useWindowLayerState } from "@/composables/useWindowLayer";
 import AmitiaIcon from "@/components/icons/AmitiaIcon.vue";
+import SearchModal from "@/components/SearchModal.vue";
 
 const props = defineProps<{ transparent?: boolean }>();
 const appStore = useAppStore();
@@ -34,6 +35,7 @@ const hasOnboardingWorld = ref(false);
 const isFullscreen = ref(false);
 const canGoBack = ref(false);
 const canGoForward = ref(false);
+const searchModal = ref<InstanceType<typeof SearchModal> | null>(null);
 const isChatPage = computed(() => route.path === "/chat");
 const hasWorkspaceSidebar = computed(() => !appStore.sidebarCollapsed);
 
@@ -208,6 +210,15 @@ async function handleClose() {
         >
           <AmitiaIcon name="chevronRight" :stroke-width="1.6" />
         </button>
+        <button
+          type="button"
+          class="nav-icon-btn no-drag"
+          title="全局搜索"
+          aria-label="全局搜索"
+          @click="searchModal?.open()"
+        >
+          <AmitiaIcon name="search" :stroke-width="1.6" />
+        </button>
       </div>
     </div>
 
@@ -232,6 +243,7 @@ async function handleClose() {
         <AmitiaIcon name="close" :stroke-width="1.5" />
       </div>
     </div>
+    <SearchModal ref="searchModal" />
   </div>
 </template>
 

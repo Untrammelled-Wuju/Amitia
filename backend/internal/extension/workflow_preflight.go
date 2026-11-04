@@ -79,12 +79,12 @@ func (api *WorkflowAPI) preflightDefinition(ctx context.Context, def workflow.Wo
 	}
 	kc := api.runtime.Kernel.Container()
 
-	migrated, err := workflow.MigrateDefinition(def)
+	normalized, err := workflow.NormalizeDefinition(def)
 	if err != nil {
 		report.add("schema.compatible", WorkflowPreflightBlocked, err.Error(), "", map[string]any{"schemaVersion": def.SchemaVersion})
 		return report
 	}
-	def = migrated
+	def = normalized
 	report.SchemaVersion = def.SchemaVersion
 	if def.DefinitionHash == "" {
 		def.DefinitionHash = workflow.ComputeDefinitionHash(def)

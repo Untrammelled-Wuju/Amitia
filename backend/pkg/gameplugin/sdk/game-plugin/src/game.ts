@@ -66,7 +66,7 @@ export interface PluginNetworkPolicy {
   allowedIPs?: string[];
   /** Explicit destination ports. Restricted mode only. */
   allowedPorts?: number[];
-  /** Host-mediated transports. Omitted in restricted mode defaults to HTTP/HTTPS for compatibility. */
+  /** Host-mediated transports allowed in restricted mode. */
   allowedTransports?: ('http' | 'https' | 'tcp' | 'udp' | 'websocket')[];
   /** Allow the portable `host-loopback` destination without sharing the host network namespace. */
   allowHostLoopback?: boolean;
@@ -89,8 +89,8 @@ export interface PluginChannelSpec {
   serviceId?: string;
   kind: 'event' | 'state' | 'log' | 'metric' | 'custom' | 'binary';
   schemaId?: string;
-  /** Channel flow direction. Omitted defaults to plugin_to_host for backward compatibility. */
-  direction?: ChannelDirection;
+  /** Channel flow direction. */
+  direction: ChannelDirection;
   /** Informational expected message-frequency hint; the host does not treat this as rate limiting. */
   frequencyHint?: FrequencyHint;
   metadata?: Record<string, string>;

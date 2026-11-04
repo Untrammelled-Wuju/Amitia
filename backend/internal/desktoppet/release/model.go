@@ -139,31 +139,6 @@ const (
 	ImportJournalStageManualReview      = "import_manual_review"
 )
 
-type LegacyPackageMapping struct {
-	ID                   string `gorm:"column:id;primaryKey;type:text" json:"id"`
-	LegacyPackageID      string `gorm:"column:legacy_package_id;type:text" json:"legacyPackageId"`
-	MigratedPetID        string `gorm:"column:migrated_pet_id;type:text" json:"migratedPetId"`
-	MigratedReleaseID    string `gorm:"column:migrated_release_id;type:text" json:"migratedReleaseId"`
-	MigrationStatus      string `gorm:"column:migration_status;type:text;default:'pending'" json:"migrationStatus"`
-	SourceContentHash    string `gorm:"column:source_content_hash;type:text" json:"sourceContentHash"`
-	OwnerSpaceID         string `gorm:"column:owner_space_id;type:text" json:"ownerSpaceId"`
-	SourceManifestHash   string `gorm:"column:source_manifest_hash;type:text" json:"sourceManifestHash"`
-	MigrationOperationId string `gorm:"column:migration_operation_id;type:text" json:"migrationOperationId"`
-	ErrorMessage         string `gorm:"column:error_message;type:text" json:"errorMessage"`
-	CreatedAt            string `gorm:"column:created_at;type:text" json:"createdAt"`
-	UpdatedAt            string `gorm:"column:updated_at;type:text" json:"updatedAt"`
-}
-
-func (LegacyPackageMapping) TableName() string { return "desktop_pet_legacy_package_mappings" }
-
-const (
-	LegacyMigrationStatusPending      = "pending"
-	LegacyMigrationStatusMigrated     = "migrated"
-	LegacyMigrationStatusInvalid      = "invalid"
-	LegacyMigrationStatusManualReview = "manual_review"
-	LegacyMigrationStatusFailed       = "failed"
-)
-
 type ReleaseLifecycle string
 
 const (
@@ -349,8 +324,6 @@ type ReleaseData struct {
 	ArchivedAt            string `json:"archivedAt,omitempty" gorm:"-"`
 	RevokedAt             string `json:"revokedAt,omitempty" gorm:"-"`
 	RevocationReason      string `json:"revocationReason,omitempty" gorm:"-"`
-	LegacyPackageID       string `json:"legacyPackageId,omitempty"`
-	LegacyVersion         int    `json:"legacyVersion,omitempty"`
 	CreatedAt             string `json:"createdAt"`
 	UpdatedAt             string `json:"updatedAt"`
 }

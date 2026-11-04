@@ -101,47 +101,6 @@ func (r *Runtime) ExecuteInstall(ctx context.Context, archivePath string) (Kerne
 				return result, fmt.Errorf("kernel: signature verification failed: %s: %s", verResult.Status, verResult.Reason)
 			}
 		}
-	} else if pkg.Signatures != nil {
-		sigVerifier := r.container.PackageSecurity.GetSignatureVerifier()
-		if sigVerifier != nil {
-			pubKey, ok := sigVerifier.TrustedKeys()[pkg.Signatures.KeyID]
-			if !ok {
-				return result, fmt.Errorf("kernel: legacy signature verification failed: unknown_key: %s", pkg.Signatures.KeyID)
-			}
-			pkgSig := package_security.PackageSignature{
-				Algorithm:       pkg.Signatures.Algorithm,
-				KeyID:           pkg.Signatures.KeyID,
-				PublisherID:     pkg.Signatures.PublisherID,
-				SignedAt:        pkg.Signatures.SignedAt,
-				ContentTreeHash: pkg.Tree.TreeHash,
-				Signature:       pkg.Signatures.Signature,
-			}
-			verResult := sigVerifier.Verify(ctx, package_security.SignatureVerificationInput{
-				Signature:             pkgSig,
-				PublicKey:             pubKey,
-				ActualContentTreeHash: pkg.Tree.TreeHash,
-			})
-			if verResult.Status != package_security.SignatureValid {
-				switch verResult.Status {
-				case package_security.SignatureUnknownKey:
-					return result, fmt.Errorf("kernel: legacy signature verification failed: unknown_key: %s", verResult.Status)
-				case package_security.SignatureRevokedKey:
-					return result, fmt.Errorf("kernel: legacy signature verification failed: revoked_key: %s", verResult.Status)
-				case package_security.SignatureExpiredKey:
-					return result, fmt.Errorf("kernel: legacy signature verification failed: expired_key: %s", verResult.Status)
-				case package_security.SignaturePublisherMismatch:
-					return result, fmt.Errorf("kernel: legacy signature verification failed: publisher_mismatch: %s", verResult.Status)
-				case package_security.SignatureContentMismatch:
-					return result, fmt.Errorf("kernel: legacy signature verification failed: content_mismatch: %s", verResult.Status)
-				case package_security.SignatureUnsupportedAlgorithm:
-					return result, fmt.Errorf("kernel: legacy signature verification failed: unsupported_algorithm: %s", verResult.Status)
-				case package_security.SignatureInvalid:
-					return result, fmt.Errorf("kernel: legacy signature verification failed: invalid: %s", verResult.Status)
-				default:
-					return result, fmt.Errorf("kernel: legacy signature verification failed: %s", verResult.Status)
-				}
-			}
-		}
 	}
 
 	manifest := pkg.Manifest

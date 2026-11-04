@@ -77,22 +77,22 @@ func (v ChannelDescriptorValidator) Validate(data []byte) error {
 	return ch.Validate()
 }
 
-type CapabilityValidator struct{}
+type HostFeatureValidator struct{}
 
-func (v CapabilityValidator) Name() string {
-	return "capability_validator"
+func (v HostFeatureValidator) Name() string {
+	return "host_feature_validator"
 }
 
-func (v CapabilityValidator) Validate(data []byte) error {
-	var caps []protocol.Capability
-	if err := json.Unmarshal(data, &caps); err != nil {
-		var single protocol.Capability
+func (v HostFeatureValidator) Validate(data []byte) error {
+	var features []protocol.HostFeature
+	if err := json.Unmarshal(data, &features); err != nil {
+		var single protocol.HostFeature
 		if err2 := json.Unmarshal(data, &single); err2 != nil {
 			return fmt.Errorf("failed to unmarshal capability: %w", err)
 		}
-		return protocol.ValidateCapability(single)
+		return protocol.ValidateHostFeature(single)
 	}
-	return protocol.ValidateCapabilities(caps)
+	return protocol.ValidateHostFeatures(features)
 }
 
 type ProtocolErrorValidator struct{}

@@ -2,7 +2,9 @@ package integration
 
 import (
 	"context"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,6 +20,23 @@ type testKernelSource struct {
 	plugins []KernelGamePlugin
 }
 
+type testGenerationResolver struct {
+	root string
+}
+
+func (r testGenerationResolver) ResolveInstalledGeneration(_ context.Context, extensionID string) (InstalledGeneration, error) {
+	safeID := strings.NewReplacer("/", "__", "\\", "__", ":", "_").Replace(extensionID)
+	generationRoot := filepath.Join(r.root, safeID)
+	moduleRoot := filepath.Join(generationRoot, "modules", "runtime-module")
+	if err := os.MkdirAll(moduleRoot, 0o700); err != nil {
+		return InstalledGeneration{}, err
+	}
+	if err := os.WriteFile(filepath.Join(moduleRoot, "index.js"), nil, 0o600); err != nil {
+		return InstalledGeneration{}, err
+	}
+	return InstalledGeneration{Path: generationRoot}, nil
+}
+
 func (s testKernelSource) ListEnabledGamePlugins(ctx context.Context) ([]KernelGamePlugin, error) {
 	return s.plugins, nil
 }
@@ -31,13 +50,14 @@ func newTestProvisioner(t *testing.T, source KernelContributionSource) (*Runtime
 	defMapper := service_definition.NewDefinitionMapper()
 
 	provisioner, err := NewRuntimeGraphProvisioner(RuntimeGraphProvisionerOptions{
-		Source:           source,
-		Mapper:           NewDefaultGamePluginContributionMapper(),
-		PluginRegistry:   pluginReg,
-		RuntimeManager:   rtManager,
-		TopologyStore:    topoStore,
-		Supervisor:       supervisor,
-		DefinitionMapper: defMapper,
+		Source:             source,
+		Mapper:             NewDefaultGamePluginContributionMapper(),
+		PluginRegistry:     pluginReg,
+		RuntimeManager:     rtManager,
+		TopologyStore:      topoStore,
+		Supervisor:         supervisor,
+		DefinitionMapper:   defMapper,
+		GenerationResolver: testGenerationResolver{root: t.TempDir()},
 	})
 	if err != nil {
 		t.Fatalf("NewRuntimeGraphProvisioner error: %v", err)
@@ -111,7 +131,7 @@ func (e *recordingRuntimeExecutor) SetRuntimeSubscriptionWatcher(ghruntime.Runti
 
 func TestRuntimeGraphProvisioner_Reconcile_CreatesRuntime(t *testing.T) {
 	source := testKernelSource{plugins: []KernelGamePlugin{
-		makeTestPlugin("ext-a", "game", "C:/test/game.exe"),
+		makeTestPlugin("ext-a", "game", "index.js"),
 	}}
 
 	provisioner, rtManager, _ := newTestProvisioner(t, source)
@@ -132,7 +152,7 @@ func TestRuntimeGraphProvisioner_Reconcile_CreatesRuntime(t *testing.T) {
 
 func TestRuntimeGraphProvisioner_Reconcile_NoAutoStart(t *testing.T) {
 	source := testKernelSource{plugins: []KernelGamePlugin{
-		makeTestPlugin("ext-a", "game", "C:/test/game.exe"),
+		makeTestPlugin("ext-a", "game", "index.js"),
 	}}
 
 	provisioner, rtManager, _ := newTestProvisioner(t, source)
@@ -152,8 +172,8 @@ func TestRuntimeGraphProvisioner_Reconcile_NoAutoStart(t *testing.T) {
 
 func TestRuntimeGraphProvisioner_Reconcile_TwoPlugins_TwoRuntimes(t *testing.T) {
 	source := testKernelSource{plugins: []KernelGamePlugin{
-		makeTestPlugin("ext-a", "game-a", "C:/test/a.exe"),
-		makeTestPlugin("ext-b", "game-b", "C:/test/b.exe"),
+		makeTestPlugin("ext-a", "game-a", "index.js"),
+		makeTestPlugin("ext-b", "game-b", "index.js"),
 	}}
 
 	provisioner, rtManager, _ := newTestProvisioner(t, source)
@@ -175,7 +195,7 @@ func TestRuntimeGraphProvisioner_Reconcile_TwoPlugins_TwoRuntimes(t *testing.T) 
 
 func TestRuntimeGraphProvisioner_Reconcile_Idempotent(t *testing.T) {
 	source := testKernelSource{plugins: []KernelGamePlugin{
-		makeTestPlugin("ext-a", "game", "C:/test/game.exe"),
+		makeTestPlugin("ext-a", "game", "index.js"),
 	}}
 
 	provisioner, rtManager, _ := newTestProvisioner(t, source)
@@ -199,7 +219,7 @@ func TestRuntimeGraphProvisioner_Reconcile_Idempotent(t *testing.T) {
 
 func TestRuntimeGraphProvisioner_Reconcile_RecreatesRunningRuntime(t *testing.T) {
 	source := testKernelSource{plugins: []KernelGamePlugin{
-		makeTestPlugin("ext-a", "game", "C:/test/game.exe"),
+		makeTestPlugin("ext-a", "game", "index.js"),
 	}}
 
 	provisioner, rtManager, _ := newTestProvisioner(t, source)
@@ -248,7 +268,7 @@ func TestRuntimeGraphProvisioner_Reconcile_RecreatesRunningRuntime(t *testing.T)
 
 func TestRuntimeGraphProvisioner_Reconcile_RegistersDefinition(t *testing.T) {
 	source := testKernelSource{plugins: []KernelGamePlugin{
-		makeTestPlugin("ext-a", "game", "C:/test/game.exe"),
+		makeTestPlugin("ext-a", "game", "index.js"),
 	}}
 
 	provisioner, _, supervisor := newTestProvisioner(t, source)
@@ -262,7 +282,7 @@ func TestRuntimeGraphProvisioner_Reconcile_RegistersDefinition(t *testing.T) {
 		ExtensionID: "ext-a",
 		ModuleID:    "runtime-module",
 		RuntimeType: "service",
-		EntryPoint:  "C:/test/game.exe",
+		EntryPoint:  "index.js",
 	}
 
 	defID := view.ToDefinitionID()

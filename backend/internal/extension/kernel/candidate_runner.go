@@ -204,53 +204,7 @@ func (r *ProductionCandidateRunner) StopInstance(ctx context.Context, instanceID
 		return r.stopInstanceWithCleanupRepo(ctx, instanceID)
 	}
 
-	return r.stopInstanceLegacy(ctx, instanceID)
-}
-
-func (r *ProductionCandidateRunner) stopInstanceLegacy(ctx context.Context, instanceID string) error {
-	record, ok := r.candidateMgr.GetCandidate(instanceID)
-	if !ok {
-		return nil
-	}
-
-	var firstErr error
-
-	if record.Status == CandidateStatusPromoted {
-		for _, instID := range record.InstanceIDs {
-			if err := r.supervisor.Stop(ctx, instID, runtime_supervisor.StopReasonRollback); err != nil && firstErr == nil {
-				firstErr = fmt.Errorf("candidate_runner: stop instance %s: %w", instID, err)
-			}
-		}
-		extID := string(record.ExtensionID)
-		genID := record.GenerationID
-		if gen, _ := r.generationMgr.Get(ctx, extID, genID); gen != nil {
-			if gen.State == update.GenerationStateActive {
-				if err := r.generationMgr.DrainGeneration(ctx, extID, genID); err != nil {
-					amitialog.Printf("[original-error] %v", err)
-				}
-			}
-			if firstErr != nil {
-				if err := r.generationMgr.Transition(ctx, extID, genID, update.GenerationStateFailed); err != nil {
-					amitialog.Printf("[original-error] %v", err)
-				}
-			} else {
-				if err := r.generationMgr.StopGeneration(ctx, extID, genID); err != nil {
-					amitialog.Printf("[original-error] %v", err)
-				}
-			}
-		}
-		if err := r.generationMgr.RemoveGeneration(ctx, extID, genID); err != nil {
-			amitialog.Printf("[original-error] %v", err)
-		}
-		r.candidateMgr.RemovePromotedRecord(instanceID)
-		return firstErr
-	}
-
-	if err := r.candidateMgr.DiscardCandidate(ctx, instanceID); err != nil && firstErr == nil {
-		firstErr = err
-	}
-
-	return firstErr
+	return fmt.Errorf("candidate_runner: cleanup repository is required")
 }
 
 func (r *ProductionCandidateRunner) stopInstanceWithCleanupRepo(ctx context.Context, candidateID string) error {

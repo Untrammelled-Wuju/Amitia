@@ -106,11 +106,11 @@ func newTestHandshakeManager() (*handshake.HandshakeManager, *rpc.NamespaceRegis
 
 	mgr := handshake.NewHandshakeManager(handshake.HandshakeManagerConfig{
 		HostSupportedProtocols: []string{"amitia-game-host/1"},
-		HostCapabilities: []domain.Capability{
-			domain.CapabilityCustomRPC,
-			domain.CapabilityEventStreaming,
-			domain.CapabilityStateStreaming,
-			domain.CapabilityHostAPI,
+		HostCapabilities: []domain.HostFeature{
+			domain.HostFeatureCustomRPC,
+			domain.HostFeatureEventStreaming,
+			domain.HostFeatureStateStreaming,
+			domain.HostFeatureHostAPI,
 		},
 		NamespaceAdapter:   adapter,
 		ChannelAdvertiser:  advertiser,

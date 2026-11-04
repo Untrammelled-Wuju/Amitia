@@ -31,10 +31,8 @@ const [
   mobileContinuity,
   ownedContinuityRuntime,
   ownedContinuityAdapters,
-  continuityMigration,
   emotionOwner,
   emotionSnapshot,
-  emotionMigration,
   ownedChatEffects,
   frontendPsyche,
   mobilePsyche,
@@ -65,10 +63,8 @@ const [
   read("mobile_app/lib/core/services/continuity_service.dart"),
   read("backend/cmd/server/owned_continuity_runtime.go"),
   read("backend/cmd/server/owned_continuity_kernel_adapters.go"),
-  read("backend/cmd/server/continuity_migration.go"),
   read("backend/internal/devicemesh/business/emotion.go"),
   read("backend/cmd/server/owned_emotion_snapshot.go"),
-  read("backend/cmd/server/emotion_migration.go"),
   read("backend/cmd/server/mesh_owned_chat_effects.go"),
   read("front/src/views/character/CharacterPsycheView.vue"),
   read("mobile_app/lib/core/services/character_detail_service.dart"),
@@ -94,31 +90,27 @@ assert(
     frontendContinuity.includes("/api/device-mesh/v1/business/continuity") &&
     mobileContinuity.includes("/api/device-mesh/v1/business/continuity") &&
     serverServices.includes("newOwnedContinuityRuntime") &&
-    serverServices.includes("migrateLegacyContinuity") &&
+    !serverServices.includes("migrateLegacyContinuity") &&
     serverServices.includes("wireOwnedContinuityKernelObservers") &&
     ownedContinuityRuntime.includes("func (r *ownedContinuityRuntime) Resolve") &&
     ownedContinuityRuntime.includes("func (r *ownedContinuityRuntime) Observe") &&
     ownedContinuityRuntime.includes("ApplyWorkflow") &&
     ownedContinuityRuntime.includes("ApplyTask") &&
     ownedContinuityRuntime.includes("ApplyApprovalRequested") &&
-    ownedContinuityAdapters.includes("AddRunLifecycleSink") &&
-    continuityMigration.includes("engine.ImportContinuity"),
-  "continuity must use the Owner ledger only, retain chat resolution/observation and runtime wake semantics, and migrate legacy rows",
+    ownedContinuityAdapters.includes("AddRunLifecycleSink"),
+  "continuity must use the Owner ledger only and retain chat resolution/observation and runtime wake semantics",
 );
 assert(
   emotionOwner.includes('EmotionSnapshotKind = "emotion"') &&
     emotionSnapshot.includes("ownedMoodDetectionSettings") &&
     ownedChatEffects.includes("business.EmotionSnapshotKind") &&
-    emotionMigration.includes("migrateLegacyEmotionHistory") &&
-    emotionMigration.includes("emotion_states") &&
-    emotionMigration.includes('HasColumn("messages", "mood")') &&
     frontendPsyche.includes('mesh.data("emotion"') &&
     mobilePsyche.includes("emotionHistory(") &&
     desktopMoodSettings.includes("/api/config/mood-detection") &&
     mobileMoodSettings.includes("/api/config/mood-detection") &&
     !serverRouter.includes("mood.RegisterMoodRouter") &&
     !mobileFeedback.includes("/api/moods"),
-  "emotion history must use Owner snapshots, honor detection settings, migrate legacy mood/emotion/affect data, and be connected to both clients",
+  "emotion history must use Owner snapshots, honor detection settings, and be connected to both clients",
 );
 
 assert(

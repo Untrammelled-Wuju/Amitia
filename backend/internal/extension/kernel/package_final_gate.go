@@ -165,7 +165,7 @@ func (r *Runtime) verifyPackageFinalGateWithGuard(ctx context.Context, operation
 
 	checkClaims := PackageFinalGateCheck{Name: "claims_verified"}
 	{
-		if operation.ConfirmationClaimsJSON == "" && operation.ConfirmationsJSON == "" {
+		if operation.ConfirmationClaimsJSON == "" {
 			checkClaims.Detail = "confirmation claims not persisted"
 		} else {
 			claims, parseErr := parseAndValidateOperationConfirmationClaims(operation, packagePolicyVersion)
@@ -1418,22 +1418,6 @@ func (r *Runtime) loadRollbackFinalGateSnapshotRequirement(ctx context.Context, 
 func parseOperationConfirmationClaims(operation PackageOperationRecord) (PackageConfirmationClaims, error) {
 	if operation.ConfirmationClaimsJSON != "" && operation.ConfirmationClaimsJSON != "{}" {
 		return parseAndValidateOperationConfirmationClaims(operation, packagePolicyVersion)
-	}
-	if operation.ConfirmationsJSON != "" && operation.ConfirmationsJSON != "{}" {
-		var legacy packageConfirmationClaims
-		if err := json.Unmarshal([]byte(operation.ConfirmationsJSON), &legacy); err != nil {
-			return PackageConfirmationClaims{}, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: %v", ErrPackageConfirmationClaimsInvalid, err))
-		}
-		return PackageConfirmationClaims{
-			ExtensionID:             legacy.ExtensionID,
-			ArtifactID:              legacy.ArtifactID,
-			ArtifactPolicy:          legacy.ArtifactPolicy,
-			CurrentVersionID:        legacy.CurrentVersionID,
-			CurrentGenerationID:     legacy.CurrentGenerationID,
-			SnapshotRequirementHash: legacy.SnapshotRequirementHash,
-			PolicyVersion:           legacy.PolicyVersion,
-			SecurityPolicyHash:      legacy.SecurityPolicyHash,
-		}, nil
 	}
 	return PackageConfirmationClaims{}, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, ErrPackageConfirmationClaimsInvalid)
 }

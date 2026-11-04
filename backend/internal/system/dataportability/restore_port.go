@@ -14,7 +14,6 @@ type RestoreOptions struct {
 	DefaultCharacterID string
 	ActivateImported   bool
 	IncludeSecrets     bool
-	AllowLegacySecrets bool
 	IdentityMap        *ImportIdentityMap
 	SecretProvider     SecretProvider
 }

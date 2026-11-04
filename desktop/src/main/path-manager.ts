@@ -3,10 +3,6 @@ import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "node:url";
 import {
-  migrateLegacyDataDir,
-  migrateLegacyElectronProfile,
-} from "./data-location";
-import {
   resolveElectronSessionDataDir,
   resolveElectronUserDataDir,
   resolveSiblingDataDir,
@@ -27,10 +23,6 @@ export function getInstallDir(): string {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 }
 
-function getLegacyDataLocationFile(): string {
-  return path.join(app.getPath("userData"), "data-location.json");
-}
-
 export function getAmitiaDataDir(): string {
   const override = process.env.AMITIA_DATA_DIR?.trim();
   if (override) {
@@ -41,10 +33,6 @@ export function getAmitiaDataDir(): string {
   }
 
   const dataDir = resolveSiblingDataDir(getInstallDir());
-  migrateLegacyDataDir({
-    targetDataDir: dataDir,
-    locationFile: getLegacyDataLocationFile(),
-  });
   cachedAmitiaDataDir = dataDir;
   return cachedAmitiaDataDir;
 }
@@ -53,11 +41,6 @@ export function configureElectronStorage(): void {
   const dataDir = getAmitiaDataDir();
   const userDataDir = resolveElectronUserDataDir(dataDir);
   const sessionDataDir = resolveElectronSessionDataDir(dataDir);
-  const previousUserDataDir = app.getPath("userData");
-  migrateLegacyElectronProfile({
-    sourceProfileDir: previousUserDataDir,
-    targetProfileDir: userDataDir,
-  });
   fs.mkdirSync(userDataDir, { recursive: true });
   fs.mkdirSync(sessionDataDir, { recursive: true });
   app.setPath("userData", userDataDir);

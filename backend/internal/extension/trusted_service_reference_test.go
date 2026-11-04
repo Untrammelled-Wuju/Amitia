@@ -21,9 +21,8 @@ import (
 
 func TestTrustedServiceReferenceRejectsAmbiguousAndMissingTargets(t *testing.T) {
 	engine := gin.New()
-	engine.GET("/services", trustedServiceReference(func(c *gin.Context) { c.JSON(200, gin.H{"id": c.Param("serviceId")}) }))
-	engine.GET("/services/:serviceId", trustedServiceReference(func(c *gin.Context) { c.JSON(200, gin.H{"id": c.Param("serviceId")}) }))
-	for _, path := range []string{"/services", "/services?service_id=", "/services?service_id=%20", "/services?service_id=a&service_id=a", "/services?service_id=a&service_id=b", "/services/a?service_id=b", "/services?service_id=%zz"} {
+	engine.GET("/services", trustedServiceReference(func(c *gin.Context) { c.JSON(200, gin.H{"id": trustedServiceID(c)}) }))
+	for _, path := range []string{"/services", "/services?service_id=", "/services?service_id=%20", "/services?service_id=a&service_id=a", "/services?service_id=a&service_id=b", "/services?service_id=%zz"} {
 		response := httptest.NewRecorder()
 		engine.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
 		if response.Code != 400 {
@@ -41,7 +40,7 @@ func TestTrustedServiceReferenceRejectsAmbiguousAndMissingTargets(t *testing.T) 
 	}
 }
 
-func TestTrustedServiceAliasesKeepAuthenticationAndDefaultGinRouting(t *testing.T) {
+func TestTrustedServiceRoutesKeepAuthenticationAndDefaultGinRouting(t *testing.T) {
 	engine := gin.New()
 	NewTrustedServiceAPI(nil).RegisterRoutes(engine.Group("/api/extensions", extensionAuth()))
 	for _, path := range []string{"/services?service_id=x/y", "/services/health?service_id=x/y", "/services/status?service_id=x/y"} {
@@ -69,7 +68,7 @@ func TestTrustedServiceAliasesKeepAuthenticationAndDefaultGinRouting(t *testing.
 	}
 }
 
-func TestTrustedServiceAliasesReachActualSupervisorAndPreserveLegacyNames(t *testing.T) {
+func TestTrustedServiceRoutesReachActualSupervisor(t *testing.T) {
 	k, err := kernel.NewRuntime(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -111,15 +110,6 @@ func TestTrustedServiceAliasesReachActualSupervisorAndPreserveLegacyNames(t *tes
 		call(http.MethodGet, "/health"+query, "", 200)
 		call(http.MethodPost, "/invoke"+query, `{"operation":"test"}`, 500)
 		call(http.MethodPost, "/stop"+query, "{}", 200)
-		if id == "health" || id == "status" {
-			payload := call(http.MethodGet, "/"+id, "", 200)
-			var instance struct {
-				ServiceID string `json:"service_id"`
-			}
-			if err := json.Unmarshal(payload, &instance); err != nil || instance.ServiceID != id {
-				t.Fatal("static operation stole a legacy service name", err)
-			}
-		}
 		call(http.MethodDelete, query, "", 200)
 		if supervisor.HasDefinition(id) {
 			t.Fatal("delete did not unregister original service")

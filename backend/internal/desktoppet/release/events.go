@@ -1,13 +1,11 @@
 package release
 
 const (
-	EventReleaseBuildStarted          = "desktop_pet.release.build_started"
-	EventReleaseBuildCompleted        = "desktop_pet.release.build_completed"
-	EventReleaseBuildFailed           = "desktop_pet.release.build_failed"
-	EventReleaseArchived              = "desktop_pet.release.archived"
-	EventReleaseRevoked               = "desktop_pet.release.revoked"
-	EventLegacyPackageMigrated        = "desktop_pet.legacy_package.migrated"
-	EventLegacyPackageMigrationFailed = "desktop_pet.legacy_package.migration_failed"
+	EventReleaseBuildStarted   = "desktop_pet.release.build_started"
+	EventReleaseBuildCompleted = "desktop_pet.release.build_completed"
+	EventReleaseBuildFailed    = "desktop_pet.release.build_failed"
+	EventReleaseArchived       = "desktop_pet.release.archived"
+	EventReleaseRevoked        = "desktop_pet.release.revoked"
 )
 
 type ReleaseEvent struct {

@@ -6,7 +6,7 @@ func kernelSignatureStatus(status string) PackageSignatureStatus {
 		return PackageSignatureTrusted
 	case "unsigned":
 		return PackageSignatureUnsigned
-	case "unknown_key", "legacy_signature":
+	case "unknown_key":
 		return PackageSignatureUntrusted
 	default:
 		return PackageSignatureInvalid

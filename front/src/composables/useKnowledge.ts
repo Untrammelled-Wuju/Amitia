@@ -262,8 +262,6 @@ export interface KnowledgeBenchmarkRunSummary {
 
 export interface KnowledgeRuntimeStatus {
   configHash: string;
-  retrievalPolicyEnabled: boolean;
-  retrievalPolicyShadow: boolean;
   canonicalReaderEnabled: boolean;
   agenticInvestigationEnabled: boolean;
   readerWorkers: number;
@@ -375,7 +373,7 @@ export interface KnowledgeOrphanRecheckResult {
   page: number;
   recheckId?: string;
   manualRecoveryAllowed: boolean;
-  status: "matched" | "changed" | "legacy_no_digest" | "unanchored" | "checkpoint_mismatch" | "expired" | "collections_changed" | "unavailable";
+  status: "matched" | "changed" | "unanchored" | "checkpoint_mismatch" | "expired" | "collections_changed" | "unavailable";
   observedAt: string;
   chainAnchored: boolean;
   sampleMatched: boolean;
@@ -453,8 +451,6 @@ export interface KnowledgeRetrievalTraceSummary {
   sloExceeded: boolean;
   policyMode?: string;
   routeReason?: string;
-  shadowLevel?: string;
-  shadowReason?: string;
   createdAt: string;
 }
 
@@ -470,10 +466,8 @@ export interface KnowledgeSearchResponse {
   requestedRetrievalLevel: "auto" | "none" | "fast" | "deep" | "agentic" | string;
   retrievalLevel: "none" | "fast" | "deep" | "agentic" | string;
   routingMode: "chat" | "diagnostic" | string;
-  policyMode: "active" | "active_shadow" | "legacy" | "legacy_shadow" | "diagnostic" | string;
+  policyMode: "active" | "diagnostic" | string;
   routeReason: string;
-  shadowLevel?: string;
-  shadowReason?: string;
   routeDegraded: boolean;
   routeDegradationReason?: string;
   queryHistory?: string[];

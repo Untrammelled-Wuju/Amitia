@@ -63,8 +63,8 @@ func TestCapabilityState_IsUsable(t *testing.T) {
 
 func TestCapabilities_Available(t *testing.T) {
 	caps := Capabilities{
-		Available: true,
-		Probe:     true,
+		Available:  true,
+		Probe:      true,
 		StreamCopy: true,
 	}
 

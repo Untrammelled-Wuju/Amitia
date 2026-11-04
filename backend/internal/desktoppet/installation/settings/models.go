@@ -21,7 +21,6 @@ type RuntimeSettings struct {
 	DeviceID       string
 
 	AlwaysOnTop            int
-	LaunchOnStartup        int
 	Scale                  float64
 	PositionX              int
 	PositionY              int

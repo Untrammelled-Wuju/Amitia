@@ -41,7 +41,6 @@ func (s *service) AttachTaskRuntime(runtime *task_runtime.TaskRuntimeService) er
 	}
 	s.taskRuntime = runtime
 	value := runtime.MaxConcurrent()
-	var migratedTimeout *timeoutpolicy.Settings
 	err := configwrite.Transaction(s.db, func(tx *gorm.DB) error {
 		store := NewSettingsStore(tx)
 		raw, revision, err := store.Get(taskPolicyKey)
@@ -49,16 +48,6 @@ func (s *service) AttachTaskRuntime(runtime *task_runtime.TaskRuntimeService) er
 			return err
 		}
 		if revision == 0 {
-			legacy, _, err := store.Get("long_running_max_tasks")
-			if err != nil {
-				return err
-			}
-			if legacy != "" {
-				parsed, err := strconv.Atoi(legacy)
-				if err == nil && task_runtime.ValidateMaxConcurrent(parsed) == nil {
-					value = parsed
-				}
-			}
 			if _, err := store.Upsert(taskPolicyKey, strconv.Itoa(value)); err != nil {
 				return err
 			}
@@ -68,37 +57,12 @@ func (s *service) AttachTaskRuntime(runtime *task_runtime.TaskRuntimeService) er
 				return errors.New("任务并发配置无效")
 			}
 		}
-		_, timeoutRevision, err := store.Get(timeoutSettingsKey)
-		if err != nil {
-			return err
-		}
-		if timeoutRevision == 0 {
-			legacy, _, err := store.Get("long_running_timeout")
-			if err != nil {
-				return err
-			}
-			minutes, parseErr := strconv.Atoi(legacy)
-			settings := timeoutpolicy.Settings{Seconds: minutes * 60}
-			if parseErr == nil && timeoutpolicy.Validate(settings) == nil {
-				encoded, err := json.Marshal(settings)
-				if err != nil {
-					return err
-				}
-				if _, err := store.Upsert(timeoutSettingsKey, string(encoded)); err != nil {
-					return err
-				}
-				migratedTimeout = &settings
-			}
-		}
-		return tx.Where("key IN ?", []string{"long_running_max_tasks", "long_running_timeout"}).Delete(&AppSetting{}).Error
+		return nil
 	})
 	if err != nil {
 		return err
 	}
 	runtime.ApplyMaxConcurrent(value)
-	if migratedTimeout != nil {
-		timeoutpolicy.Configure(*migratedTimeout)
-	}
 	return nil
 }
 

@@ -19,12 +19,13 @@ import (
 )
 
 type CreateTeamInput struct {
-	Name            string `json:"name"`
-	Description     string `json:"description"`
-	OwnerID         string `json:"ownerId"`
-	LeadAgentID     string `json:"leadAgentId"`
-	SharedMemory    bool   `json:"sharedMemory"`
-	SharedWorkspace bool   `json:"sharedWorkspace"`
+	Name            string   `json:"name"`
+	Description     string   `json:"description"`
+	OwnerID         string   `json:"ownerId"`
+	LeadAgentID     string   `json:"leadAgentId"`
+	MemberIDs       []string `json:"memberIds"`
+	SharedMemory    bool     `json:"sharedMemory"`
+	SharedWorkspace bool     `json:"sharedWorkspace"`
 }
 
 type UpdateTeamInput struct {
@@ -103,11 +104,12 @@ type TeamRouteResult struct {
 }
 
 type CreateTeamFromTemplateInput struct {
-	TemplateID  string `json:"templateId"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	LeadAgentID string `json:"leadAgentId"`
-	OwnerID     string `json:"ownerId"`
+	TemplateID  string   `json:"templateId"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	LeadAgentID string   `json:"leadAgentId"`
+	MemberIDs   []string `json:"memberIds"`
+	OwnerID     string   `json:"ownerId"`
 }
 
 func (s *Service) CreateUser(ctx context.Context, spaceID string, input CreateUserInput) (PlatformUser, error) {
@@ -311,10 +313,15 @@ func (s *Service) CreateTeam(ctx context.Context, spaceID string, input CreateTe
 	if name == "" {
 		return Team{}, errors.New("团队名称不能为空")
 	}
+	leadAgentID := strings.TrimSpace(input.LeadAgentID)
+	memberIDs := uniqueNonEmptyStrings(append([]string{leadAgentID}, input.MemberIDs...))
+	if err := s.validateTeamAgentIDs(ctx, spaceID, memberIDs); err != nil {
+		return Team{}, err
+	}
 	now := time.Now().UTC()
 	team := Team{
 		ID: newID("team"), SpaceID: spaceID, Name: name,
-		Description: strings.TrimSpace(input.Description), OwnerID: strings.TrimSpace(input.OwnerID), LeadAgentID: strings.TrimSpace(input.LeadAgentID),
+		Description: strings.TrimSpace(input.Description), OwnerID: strings.TrimSpace(input.OwnerID), LeadAgentID: leadAgentID,
 		SharedMemory: input.SharedMemory, SharedWorkspace: input.SharedWorkspace,
 		Status: "active", Revision: 1, CreatedAt: now, UpdatedAt: now,
 	}
@@ -330,17 +337,33 @@ func (s *Service) CreateTeam(ctx context.Context, spaceID string, input CreateTe
 		if err := tx.Create(&team).Error; err != nil {
 			return fmt.Errorf("创建团队: %w", err)
 		}
-		if team.LeadAgentID != "" {
+		if leadAgentID != "" {
 			member := TeamMember{
 				ID: newID("teammember"), SpaceID: spaceID, TeamID: team.ID,
-				MemberType: "agent", MemberID: team.LeadAgentID, Role: "lead",
+				MemberType: "agent", MemberID: leadAgentID, Role: "lead",
 				ResponderMode: "lead", Capabilities: `["*"]`, CreatedAt: now, UpdatedAt: now,
 			}
 			if err := tx.Create(&member).Error; err != nil {
 				return fmt.Errorf("添加团队负责人: %w", err)
 			}
-			if err := tx.Model(&AgentProfile{}).Where("id = ? AND space_id = ?", team.LeadAgentID, spaceID).Updates(map[string]any{"team_id": team.ID, "updated_at": now}).Error; err != nil {
+			if err := tx.Model(&AgentProfile{}).Where("id = ? AND space_id = ?", leadAgentID, spaceID).Updates(map[string]any{"team_id": team.ID, "updated_at": now}).Error; err != nil {
 				return fmt.Errorf("绑定团队负责人 Agent: %w", err)
+			}
+		}
+		for _, memberID := range memberIDs {
+			if memberID == leadAgentID {
+				continue
+			}
+			member := TeamMember{
+				ID: newID("teammember"), SpaceID: spaceID, TeamID: team.ID,
+				MemberType: "agent", MemberID: memberID, Role: "member",
+				ResponderMode: "mention_or_lead", Capabilities: "[]", CreatedAt: now, UpdatedAt: now,
+			}
+			if err := tx.Create(&member).Error; err != nil {
+				return fmt.Errorf("添加团队成员 %s: %w", memberID, err)
+			}
+			if err := tx.Model(&AgentProfile{}).Where("id = ? AND space_id = ?", memberID, spaceID).Updates(map[string]any{"team_id": team.ID, "updated_at": now}).Error; err != nil {
+				return fmt.Errorf("绑定团队成员 %s: %w", memberID, err)
 			}
 		}
 		return nil
@@ -351,6 +374,49 @@ func (s *Service) CreateTeam(ctx context.Context, spaceID string, input CreateTe
 		return Team{}, err
 	}
 	return team, nil
+}
+
+func uniqueNonEmptyStrings(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
+}
+
+func (s *Service) validateTeamAgentIDs(ctx context.Context, spaceID string, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	var found []string
+	if err := s.db.WithContext(ctx).Model(&AgentProfile{}).
+		Where("space_id = ? AND id IN ? AND deleted_at IS NULL", spaceID, ids).
+		Pluck("id", &found).Error; err != nil {
+		return fmt.Errorf("校验团队角色成员: %w", err)
+	}
+	foundSet := make(map[string]struct{}, len(found))
+	for _, id := range found {
+		foundSet[id] = struct{}{}
+	}
+	missing := make([]string, 0)
+	for _, id := range ids {
+		if _, ok := foundSet[id]; !ok {
+			missing = append(missing, id)
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("团队成员包含不存在的角色: %s", strings.Join(missing, ", "))
+	}
+	return nil
 }
 
 func (s *Service) ListTeams(ctx context.Context, spaceID string) ([]Team, error) {
@@ -384,7 +450,7 @@ func (s *Service) CreateTeamFromTemplate(ctx context.Context, spaceID string, in
 	}
 	team, err := s.CreateTeam(ctx, spaceID, CreateTeamInput{
 		Name: name, Description: description, OwnerID: input.OwnerID, LeadAgentID: input.LeadAgentID,
-		SharedMemory: template.SharedMemory, SharedWorkspace: template.SharedWorkspace,
+		MemberIDs: input.MemberIDs, SharedMemory: template.SharedMemory, SharedWorkspace: template.SharedWorkspace,
 	})
 	if err != nil {
 		return Team{}, err

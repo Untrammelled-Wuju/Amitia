@@ -90,6 +90,9 @@ export interface RuntimeHostAccess {
 export interface ManifestContribution {
   id: string;
   kind: string;
+  adapter?: ContributionAdapter;
+  contractVersion?: number;
+  schema?: Record<string, unknown>;
   name: LocalizedText;
   description?: LocalizedText;
   version?: string;
@@ -97,6 +100,82 @@ export interface ManifestContribution {
   requiredPermissions?: string[];
   requiredScope?: string[];
 }
+
+export function defineContribution<const T extends ManifestContribution>(contribution: T): T {
+  return contribution;
+}
+
+export interface CustomManifestContribution<
+  Kind extends string = string,
+  Spec extends Record<string, unknown> = Record<string, unknown>,
+> extends ManifestContribution {
+  kind: Kind;
+  adapter: ContributionAdapter;
+  contractVersion: number;
+  schema: Record<string, unknown>;
+  spec: Spec;
+}
+
+export function defineCustomContribution<
+  const Kind extends string,
+  const Spec extends Record<string, unknown>,
+>(contribution: CustomManifestContribution<Kind, Spec>): CustomManifestContribution<Kind, Spec> {
+  return contribution;
+}
+
+export type ContributionAdapter =
+  | "tool"
+  | "agent_skill"
+  | "workflow"
+  | "mcp_server"
+  | "hook"
+  | "event"
+  | "schedule"
+  | "ui"
+  | "ui_provider"
+  | "ui_slot"
+  | "background"
+  | "provider"
+  | "game"
+  | "desktop_pet";
+
+const contributionAdapters = new Set<ContributionAdapter>([
+  "tool",
+  "agent_skill",
+  "workflow",
+  "mcp_server",
+  "hook",
+  "event",
+  "schedule",
+  "ui",
+  "ui_provider",
+  "ui_slot",
+  "background",
+  "provider",
+  "game",
+  "desktop_pet",
+]);
+
+const builtInContributionKinds = new Set([
+  "tool",
+  "agent_skill",
+  "workflow",
+  "mcp_server",
+  "hook",
+  "event_subscription",
+  "schedule",
+  "background_task",
+  "ui_page",
+  "ui_panel",
+  "ui_chat",
+  "ui_context_action",
+  "ui_desktop",
+  "ui_provider",
+  "ui_slot",
+  "provider",
+  "gamex",
+  "petx",
+]);
 
 export interface ManifestDependency {
   type: string;
@@ -415,6 +494,18 @@ export function validateManifest(manifest: AmitiaxManifestV1): string[] {
       errors.push(`module ${module.id}: runtime.type is required`);
     }
     for (const contribution of module.contributions ?? []) {
+      if (!builtInContributionKinds.has(contribution.kind)) {
+        if (!contribution.adapter) errors.push(`module ${module.id} contribution ${contribution.id}: adapter is required`);
+        if (!contribution.contractVersion || contribution.contractVersion < 1) {
+          errors.push(`module ${module.id} contribution ${contribution.id}: positive contractVersion is required`);
+        }
+        if (!contribution.schema || typeof contribution.schema !== "object") {
+          errors.push(`module ${module.id} contribution ${contribution.id}: schema is required`);
+        }
+      }
+      if (contribution.adapter && !contributionAdapters.has(contribution.adapter)) {
+        errors.push(`module ${module.id} contribution ${contribution.id}: unknown adapter ${contribution.adapter}`);
+      }
       if (contribution.kind !== "ui_provider") continue;
       const spec = contribution.spec as Partial<UIProviderDefinition> | undefined;
       if (!spec?.providerId) errors.push(`module ${module.id} contribution ${contribution.id}: ui_provider.providerId is required`);

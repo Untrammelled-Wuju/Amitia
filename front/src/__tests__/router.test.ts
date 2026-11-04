@@ -17,30 +17,13 @@ describe("router", () => {
     expect(route.name).toBe("catchAll");
   });
 
-  it("旧资料与设备地址指向统一空间并保留查询参数", () => {
-    const legacyRoutes = [
-      ["/user-settings", "/my-space/profile"],
-      ["/devices", "/my-space/runtime"],
-      ["/my-space", "/my-space/profile"],
-      ["/my-space/devices", "/my-space/runtime"],
-      ["/my-space#space-identity", "/my-space/identity"],
-      ["/devices#bound-devices", "/my-space/runtime"],
-    ] as const;
-    for (const [source, destination] of legacyRoutes) {
-      const route = router.resolve(`${source}${source.includes("#") ? "" : "?source=legacy"}`);
-      const redirect = route.matched.at(-1)?.redirect;
-      expect(typeof redirect).toBe("function");
-      if (typeof redirect !== "function") continue;
-      const result = redirect(route as Parameters<typeof redirect>[0], router.currentRoute.value);
-      expect(result).toEqual({
-        path: destination,
-        query: source.includes("#") ? {} : { source: "legacy" },
-      });
-    }
-    const deployment = router.resolve("/settings/deployment");
-    expect(deployment.matched.at(-1)?.redirect).toBe("/my-space/runtime");
+  it("仅提供当前空间与设备地址", () => {
+    expect(router.resolve("/my-space").matched.at(-1)?.redirect).toBe("/my-space/profile");
     for (const section of ["profile", "identity", "runtime"]) {
       expect(router.resolve(`/my-space/${section}`).name).toBe(`mySpace${section[0].toUpperCase()}${section.slice(1)}`);
+    }
+    for (const removed of ["/user-settings", "/devices", "/my-space/devices"]) {
+      expect(router.resolve(removed).name).toBe("catchAll");
     }
   });
 });

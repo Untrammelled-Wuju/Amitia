@@ -307,7 +307,7 @@ describe("AssistantTurnTimeline", () => {
     expect(wrapper.find(".turn-tool-stream-summary").text()).toBe("修改文件 · 1/3 完成");
   });
 
-  it("deduplicates legacy results without call records", () => {
+  it("does not render results without call records", () => {
     const wrapper = mount(AssistantTurnTimeline, {
       props: {
         turn: {
@@ -351,7 +351,7 @@ describe("AssistantTurnTimeline", () => {
       },
     });
 
-    expect(wrapper.find(".turn-tool-stream-summary").text()).toBe("2 个工具 · 已完成");
+    expect(wrapper.find(".turn-tool-stream-summary").exists()).toBe(false);
   });
 
   it("shows a semantic tool label and live duration while running", async () => {

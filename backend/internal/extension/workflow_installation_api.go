@@ -69,8 +69,7 @@ func (api *WorkflowAPI) installationFor(ctx context.Context, def workflow.Workfl
 	if !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
 	}
-	// Compatibility for databases created before WorkflowInstallation existed.
-	return repo.EnsureLegacy(ctx, def, spaceID, location)
+	return nil, errors.New("workflow installation not found")
 }
 
 func applyInstallation(def workflow.WorkflowDefinition, inst workflow.WorkflowInstallation) workflow.WorkflowDefinition {
@@ -123,16 +122,14 @@ func workflowResponse(def workflow.WorkflowDefinition, inst *workflow.WorkflowIn
 	return workflowAPIResponse{WorkflowDefinition: applyInstallation(def, *inst), Installation: *inst}
 }
 
-func (api *WorkflowAPI) expectedRevision(c *gin.Context, current int64) (int64, error) {
+func (api *WorkflowAPI) expectedRevision(c *gin.Context, _ int64) (int64, error) {
 	value := strings.TrimSpace(c.Query("expectedRevision"))
 	if value == "" {
 		value = strings.TrimSpace(c.GetHeader("If-Match"))
 		value = strings.Trim(value, `"`)
 	}
 	if value == "" {
-		// Legacy clients did not know about installation revisions. They may keep
-		// working, while updated clients always submit expectedRevision.
-		return current, nil
+		return 0, errors.New("expectedRevision is required")
 	}
 	revision, err := strconv.ParseInt(value, 10, 64)
 	if err != nil || revision <= 0 {

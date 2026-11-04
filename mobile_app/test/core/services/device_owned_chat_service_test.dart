@@ -1715,23 +1715,6 @@ void main() {
     expect(service.notice, contains('批准'));
   });
 
-  test('原设备记忆游标独立传递，已完成的新存储不会重新分页', () async {
-    final api = _OwnedApi();
-    final service = DeviceOwnedChatService(
-      api,
-      providerKey: () => 'https://core-b',
-    );
-    await service.refresh();
-    await service.data(
-      'memory',
-      characterId: 'role-a',
-      legacyCursor: 'original-device-page',
-    );
-    expect(api.queries.last['cursor'], '');
-    expect(api.queries.last['legacyCursor'], 'original-device-page');
-    expect(api.queries.last['historicalLegacyCursor'], '');
-  });
-
   test('编辑使用实际归属及版本，错误保存确认不允许成功', () async {
     final api = _OwnedApi();
     final service = DeviceOwnedChatService(

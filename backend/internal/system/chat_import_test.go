@@ -47,7 +47,7 @@ func newChatImportTestRouter(t *testing.T) (*gin.Engine, *gorm.DB) {
 			t.Fatal(err)
 		}
 	}
-	handler := NewHandler(NewService(&app.AppContext{DB: db}, runtimeprofile.ProfileLocal), db, chatImportSummaryStub{}, nil, nil, nil, nil)
+	handler := NewHandler(NewService(&app.AppContext{DB: db}, runtimeprofile.ProfileLocal), db, chatImportSummaryStub{}, nil, nil, nil)
 	router := gin.New()
 	router.Use(func(c *gin.Context) {
 		c.Set("actorContext", &auth.ActorContext{

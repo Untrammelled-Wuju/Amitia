@@ -358,7 +358,7 @@ export function useConversationRuntime(
     if (Number(snapshot.version) !== 1) throw new Error(`Unsupported conversation snapshot version: ${snapshot.version}`);
     const completedTurns = reducer.turns.filter((turn) => isTerminalTurn(turn.status) && turn.conversationId === conversationId.value);
     reducer.reset(snapshot.turns || [], Number(snapshot.lastEventSequence || 0), snapshot.activeTurn || null);
-    const savedRequestIds = new Set((snapshot.messages || []).filter((message) => message.role === "assistant").map((message) => String(message.requestId || message.request_id || "").trim()).filter(Boolean));
+    const savedRequestIds = new Set((snapshot.messages || []).filter((message) => message.role === "assistant").map((message) => String(message.requestId || "").trim()).filter(Boolean));
     reducer.mergeTurns(completedTurns.filter((turn) => turn.requestId && savedRequestIds.has(turn.requestId) && !(snapshot.turns || []).some((current) => current.requestId === turn.requestId && current.id !== turn.id)));
     turnHistoryCursor.value = String(snapshot.turnHistory?.nextCursor || "");
     hasMoreTurnHistory.value = snapshot.turnHistory?.hasMore === true;

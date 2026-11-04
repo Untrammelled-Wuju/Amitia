@@ -493,34 +493,6 @@ func TestNestedWorkflowDepthLimit(t *testing.T) {
 	}
 }
 
-func TestWorkflowCompensationRunsAndPersists(t *testing.T) {
-	registry := NewWorkflowRegistry()
-	_ = registry.Register(WorkflowDefinition{ID: "compensate", Name: "compensate", Enabled: true, Nodes: []WorkflowNode{{ID: "create", Type: "ok"}, {ID: "fail", Type: "fail", DependsOn: []string{"create"}}}})
-	executor := NewWorkflowExecutor(registry)
-	executor.RegisterHandler("ok", &countingHandler{})
-	executor.RegisterHandler("fail", failingHandler{})
-	compensated := false
-	manager := NewCompensationManager()
-	manager.Register("create", CompensationAction{NodeID: "create", Handler: func(ctx context.Context, output json.RawMessage) error {
-		compensated = true
-		return nil
-	}})
-	executor.SetCompensationManager(manager)
-	store := newMemoryRunStore()
-	executor.SetRunStore(store)
-	result, err := executor.Execute(context.Background(), ExecuteRequest{WorkflowID: "compensate", Context: ExecutionContext{InvocationID: "compensate-run"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.Success || !compensated || result.Status != RunStatusCompensated || len(result.CompensationResults) != 1 || result.CompensationResults[0].Status != "succeeded" {
-		t.Fatalf("unexpected compensation result: %+v compensated=%v", result, compensated)
-	}
-	run, _ := store.Get(context.Background(), "compensate-run")
-	if len(run.CompensationResults) != 1 {
-		t.Fatalf("compensation state was not persisted: %+v", run)
-	}
-}
-
 func TestWorkflowRecoveryUsesCheckpoint(t *testing.T) {
 	registry := NewWorkflowRegistry()
 	_ = registry.Register(WorkflowDefinition{ID: "recover", Name: "recover", Enabled: true, Nodes: []WorkflowNode{{ID: "step", Type: "count"}}})

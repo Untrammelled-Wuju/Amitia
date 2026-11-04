@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
 
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
@@ -23,7 +24,6 @@ import '../../../../core/models/memory.dart';
 import '../../../../core/models/model_config.dart';
 import '../../../../core/ui_runtime/mobile_extension_slot.dart';
 import '../../../../core/ui_runtime/ui_runtime_controller.dart';
-import '../../../memory/presentation/pages/owned_memory_page.dart';
 
 final characterMemoryPreviewProvider = FutureProvider.autoDispose
     .family<List<MemoryDto>, String>((ref, characterId) async {
@@ -61,7 +61,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
   bool _savingSettings = false;
   bool _uploadingAvatar = false;
 
-  final _tabs = const ['概览', '设定', '记忆', '关系', '能力'];
+  final _tabs = const ['概览', '设定', '关系', '能力'];
 
   @override
   void dispose() {
@@ -116,7 +116,12 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     final hasExtensionTab =
         uiSnapshot
             ?.contributionsForSlot('character.detail.tab')
-            .where((item) => !item.runtimeId.startsWith('host.character.'))
+            .where(
+              (item) =>
+                  !item.runtimeId.startsWith('host.character.') &&
+                  item.contributionId !=
+                      'com.amitia.builtin.active-task.character-tab',
+            )
             .isNotEmpty ??
         false;
 
@@ -529,12 +534,10 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
       case 1:
         return _buildSettingsTab(context, character);
       case 2:
-        return OwnedMemoryPage(characterId: character.id, embedded: true);
-      case 3:
         return _buildRelationTab(context, character);
-      case 4:
+      case 3:
         return _buildAbilityTab(context, character);
-      case 5:
+      case 4:
         if (hasExtensionTab) {
           return ListView(
             padding: EdgeInsets.all(AppSpacing.pagePadding),
@@ -542,6 +545,9 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
               MobileExtensionSlot(
                 slotId: 'character.detail.tab',
                 context: _characterSlotContext(character),
+                excludedContributionIds: const {
+                  'com.amitia.builtin.active-task.character-tab',
+                },
               ),
             ],
           );
@@ -992,14 +998,14 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  memory.content,
+                  memory.value,
                   style: AppTypography.bodySmall(context),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${memory.type} · ${memory.importance}',
+                  '${memory.memoryType} · ${memory.importance}',
                   style: AppTypography.label(context),
                 ),
               ],
@@ -1162,7 +1168,12 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                         Navigator.pop(sheetContext, true);
                       }
                     } catch (error, stackTrace) {
-                      print('[original-error] $error\n$stackTrace');
+                      developer.log(
+                        '[original-error] $error',
+                        name: 'character.model-settings',
+                        error: error,
+                        stackTrace: stackTrace,
+                      );
                       if (sheetContext.mounted) {
                         amitiaSnackBar(sheetContext, '保存失败：$error');
                       }
@@ -1231,16 +1242,6 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
         title: '语音与声音复刻',
         icon: Icons.record_voice_over_outlined,
         route: AppRoutes.characterVoice(widget.characterId),
-      ),
-      _ManageEntry(
-        title: '角色记忆',
-        icon: Icons.memory_outlined,
-        route: AppRoutes.characterMemory(widget.characterId),
-      ),
-      _ManageEntry(
-        title: '关系时间线',
-        icon: Icons.timeline_outlined,
-        route: AppRoutes.characterTimeline(widget.characterId),
       ),
       _ManageEntry(
         title: '心理状态',

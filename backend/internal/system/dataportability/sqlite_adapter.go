@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/u-ai/backend/internal/migration"
 	"gorm.io/gorm"
 	amitialog "log"
 )
@@ -13,19 +12,10 @@ import (
 type SQLiteAdapter struct {
 	DB        *gorm.DB
 	BackupDir string
-	runner    *migration.Runner
 }
 
 func NewSQLiteAdapter(db *gorm.DB, backupDir string) *SQLiteAdapter {
-	return &SQLiteAdapter{
-		DB:        db,
-		BackupDir: backupDir,
-		runner: &migration.Runner{
-			DB:         db,
-			BackupDir:  backupDir,
-			SkipBackup: false,
-		},
-	}
+	return &SQLiteAdapter{DB: db, BackupDir: backupDir}
 }
 
 func (a *SQLiteAdapter) CheckpointWAL() {

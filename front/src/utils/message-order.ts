@@ -19,10 +19,6 @@ export function parseMessageTime(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function field(message: any, camel: string, snake: string) {
-  return message?.[camel] ?? message?.[snake];
-}
-
 export function compareChatMessages(a: any, b: any): number {
   if (a?.groupRoundId && a.groupRoundId === b?.groupRoundId && a?.deliveryId && b?.deliveryId) {
     const aIndex = numericValue(a.deliveryIndex);
@@ -54,28 +50,7 @@ export function compareChatMessages(a: any, b: any): number {
 }
 
 export function normalizeRealtimeMessage(payload: any): any {
-  const message = { ...payload };
-  const mappings = [
-    ["id", "messageId"],
-    ["conversationId", "conversation_id"],
-    ["msgType", "msg_type"],
-    ["extensionType", "extension_type"],
-    ["contentType", "content_type"],
-    ["altText", "alt_text"],
-    ["isAnimated", "is_animated"],
-    ["width", "media_width"],
-    ["height", "media_height"],
-    ["imageUrl", "image_url"],
-    ["originalAssetReference", "original_asset_reference"],
-    ["fallbackAssetReference", "fallback_asset_reference"],
-    ["createdAt", "created_at"],
-    ["requestId", "request_id"],
-    ["clientMessageId", "client_message_id"],
-  ] as const;
-  for (const [target, fallback] of mappings) {
-    const value = payload?.[target] ?? payload?.[fallback];
-    if (value !== undefined && value !== null) message[target] = value;
-  }
+  const message = { ...payload, id: payload?.messageId };
   if (!message.clientMessageId && message.role === "user" && message.requestId) {
     message.clientMessageId = message.requestId;
   }
@@ -90,26 +65,16 @@ export function getClientMessageId(message: any): string {
 }
 
 export function getMessageRequestId(message: any): string {
-  return String(message?.requestId || message?.request_id || "").trim();
+  return String(message?.requestId || "").trim();
 }
 
 export function getMessageSenderId(message: any): string {
   if (message?.role !== "assistant") return "";
-  return String(
-    field(message, "characterId", "character_id") ||
-      message?.senderId ||
-      message?.sender_id ||
-      "",
-  ).trim();
+  return String(message?.characterId || message?.senderId || "").trim();
 }
 
 export function getMessageCharacterId(message: any): string {
-  return String(
-    field(message, "characterId", "character_id") ||
-      message?.senderId ||
-      message?.sender_id ||
-      "",
-  ).trim();
+  return String(message?.characterId || message?.senderId || "").trim();
 }
 
 export function shouldShowRoleSwitch(previous: any, current: any): boolean {
@@ -143,7 +108,7 @@ export function getMessageUIKey(message: any, index = 0): string {
   if (clientMessageId) return `client:${clientMessageId}`;
   const id = String(message?.id || "").trim();
   if (id) return `server:${id}`;
-  return `fallback:${String(message?.role || "unknown")}:${String(message?.createdAt || message?.timestamp || "")}:${index}`;
+  return `fallback:${String(message?.role || "unknown")}:${String(message?.createdAt || "")}:${index}`;
 }
 
 function messageCollectionKey(message: any, index: number): string {
@@ -151,10 +116,10 @@ function messageCollectionKey(message: any, index: number): string {
   if (id) return `id:${id}`;
   const clientMessageId = String(message?.clientMessageId || "").trim();
   if (clientMessageId) return `client:${clientMessageId}`;
-  const requestId = String(message?.requestId || message?.request_id || "").trim();
+  const requestId = String(message?.requestId || "").trim();
   if (requestId) return `request:${requestId}:${String(message?.role || "")}:${index}`;
   return `fallback:${String(message?.role || "")}:${String(
-    message?.createdAt || message?.created_at || "",
+    message?.createdAt || "",
   )}:${index}`;
 }
 

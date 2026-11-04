@@ -1,7 +1,6 @@
 import 'mobile_deployment_mode.dart';
 import 'backend_topology.dart';
 
-
 abstract interface class BackendTopologyResolver {
   MobileBackendTopology resolve(MobileDeploymentConfig config);
 }
@@ -22,8 +21,12 @@ class DefaultBackendTopologyResolver implements BackendTopologyResolver {
   }
 
   MobileBackendTopology _resolveLocal(MobileDeploymentConfig config) {
-    final localEp =
-        localEndpointProvider?.call() ?? Uri.parse('http://127.0.0.1:18899');
+    final localEp = localEndpointProvider?.call();
+    if (localEp == null) {
+      throw DeploymentConfigValidationError(
+        'local mode requires an embedded runtime endpoint',
+      );
+    }
     final normalized = normalizeLocalUri(localEp);
     final wsUri = toWebSocketUri(normalized);
     final endpoint = BackendEndpoint(
@@ -56,8 +59,12 @@ class DefaultBackendTopologyResolver implements BackendTopologyResolver {
       websocketBaseUri: wsUri,
       isRemote: true,
     );
-    final localEp =
-        localEndpointProvider?.call() ?? Uri.parse('http://127.0.0.1:18899');
+    final localEp = localEndpointProvider?.call();
+    if (localEp == null) {
+      throw DeploymentConfigValidationError(
+        'cloud mode requires an embedded runtime endpoint',
+      );
+    }
     final localNormalized = normalizeLocalUri(localEp);
     final localEndpoint = BackendEndpoint(
       role: BackendEndpointRole.localRuntime,
@@ -133,18 +140,16 @@ Uri normalizeRemoteCoreUri(String raw) {
   }
 
   final explicitPort = parsed.hasPort ? parsed.port : null;
-  final canonicalPort = (scheme == 'https' && explicitPort == 443) ||
+  final canonicalPort =
+      (scheme == 'https' && explicitPort == 443) ||
           (scheme == 'http' && explicitPort == 80)
       ? null
       : explicitPort;
-  return Uri(
-    scheme: scheme,
-    host: host,
-    port: canonicalPort,
-  );
+  return Uri(scheme: scheme, host: host, port: canonicalPort);
 }
 
-bool _hasHttpScheme(String raw) => RegExp(r'^https?://', caseSensitive: false).hasMatch(raw);
+bool _hasHttpScheme(String raw) =>
+    RegExp(r'^https?://', caseSensitive: false).hasMatch(raw);
 
 bool _isPrivateOrLoopbackHost(String hostname) {
   final host = hostname.toLowerCase();
@@ -157,7 +162,9 @@ bool _isPrivateOrLoopbackHost(String hostname) {
   final parts = host.split('.');
   if (parts.length != 4) return false;
   final octets = parts.map(int.tryParse).toList(growable: false);
-  if (octets.any((part) => part == null || part < 0 || part > 255)) return false;
+  if (octets.any((part) => part == null || part < 0 || part > 255)) {
+    return false;
+  }
   final a = octets[0]!;
   final b = octets[1]!;
   if (a == 127 || a == 10) return true;
@@ -174,7 +181,14 @@ Uri toWebSocketUri(Uri httpUri) {
 
 Uri normalizeLocalUri(Uri uri) {
   if (uri.scheme != 'http' && uri.scheme != 'https') {
-    return Uri.parse('http://127.0.0.1:${uri.port == 0 ? 18899 : uri.port}');
+    throw DeploymentConfigValidationError(
+      'embedded runtime endpoint must use http or https',
+    );
+  }
+  if (uri.port <= 0) {
+    throw DeploymentConfigValidationError(
+      'embedded runtime endpoint requires a concrete port',
+    );
   }
   return uri;
 }

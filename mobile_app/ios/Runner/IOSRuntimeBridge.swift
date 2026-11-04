@@ -91,7 +91,7 @@ final class IOSRuntimeBridge: NSObject, FlutterStreamHandler {
                         "livenessPath": "/livez", "readinessPath": "/readyz"]
             }
         }
-        return ["host": "127.0.0.1", "port": 18899, "httpScheme": "http", "webSocketScheme": "ws",
+        return ["host": "127.0.0.1", "port": 0, "httpScheme": "http", "webSocketScheme": "ws",
                 "livenessPath": "/livez", "readinessPath": "/readyz"]
     }
 
@@ -291,7 +291,10 @@ final class IOSRuntimeBridge: NSObject, FlutterStreamHandler {
         if state == "STARTING" && Date().timeIntervalSince(startedAt) > 60 { stop(reason: nil); fail("READINESS_TIMEOUT", "iOS Core 启动超时"); return }
         guard !probeInFlight else { return }
         probeInFlight = true
-        let port = runtimeEndpoint()["port"] as? Int ?? 18899
+        guard let port = runtimeEndpoint()["port"] as? Int, (1...65535).contains(port) else {
+            fail("ENDPOINT_UNAVAILABLE", "iOS Runtime endpoint is unavailable", retryable: true)
+            return
+        }
         var request = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/readyz")!)
         request.timeoutInterval = 2
         request.setValue(token, forHTTPHeaderField: "X-Amitia-Local-Token")
@@ -312,7 +315,10 @@ final class IOSRuntimeBridge: NSObject, FlutterStreamHandler {
     }
 
     private func verifyRunningIdentity(_ current: Int, child: IOSBusinessRuntimeProcess) {
-        let port = runtimeEndpoint()["port"] as? Int ?? 18899
+        guard let port = runtimeEndpoint()["port"] as? Int, (1...65535).contains(port) else {
+            fail("ENDPOINT_UNAVAILABLE", "iOS Runtime endpoint is unavailable", retryable: true)
+            return
+        }
         var request = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/internal/device-mesh/identity")!)
         request.timeoutInterval = 2
         request.setValue(token, forHTTPHeaderField: "X-Amitia-Local-Token")

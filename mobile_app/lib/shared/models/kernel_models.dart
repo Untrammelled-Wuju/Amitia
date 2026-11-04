@@ -138,22 +138,6 @@ class DevConsoleLog {
   });
 }
 
-class MigrationPlan {
-  final String id;
-  final String name;
-  final String status;
-  final int progress;
-  final String? rollbackReason;
-
-  MigrationPlan({
-    required this.id,
-    required this.name,
-    required this.status,
-    this.progress = 0,
-    this.rollbackReason,
-  });
-}
-
 class DevWorkspace {
   final String id;
   final String name;

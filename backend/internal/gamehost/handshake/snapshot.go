@@ -9,7 +9,7 @@ import (
 
 type HandshakeSnapshot struct {
 	Protocol      string
-	Capabilities  []domain.Capability
+	Capabilities  []domain.HostFeature
 	RPCNamespaces []string
 	Channels      []string
 	SDKName       string
@@ -19,13 +19,13 @@ type HandshakeSnapshot struct {
 
 func NewHandshakeSnapshot(
 	protocol string,
-	capabilities []domain.Capability,
+	capabilities []domain.HostFeature,
 	rpcNamespaces []string,
 	channels []string,
 	sdkName string,
 	sdkVersion string,
 ) *HandshakeSnapshot {
-	caps := make([]domain.Capability, len(capabilities))
+	caps := make([]domain.HostFeature, len(capabilities))
 	copy(caps, capabilities)
 
 	nss := make([]string, len(rpcNamespaces))
@@ -64,7 +64,7 @@ func (s *HandshakeSnapshot) Clone() *HandshakeSnapshot {
 	return clone
 }
 
-func (s *HandshakeSnapshot) HasCapability(name domain.Capability) bool {
+func (s *HandshakeSnapshot) HasCapability(name domain.HostFeature) bool {
 	if s == nil {
 		return false
 	}

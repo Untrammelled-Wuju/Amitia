@@ -112,15 +112,14 @@ func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, versi
 	operationID := "package-operation-" + uuid.NewString()
 	traceID := "package-trace-" + uuid.NewString()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	confirmedItemsJSON, _ := json.Marshal(confirmedItemsToMap(rollbackClaims.ConfirmedItems))
 	rollbackOp := PackageOperationRecord{OperationID: operationID, TraceID: traceID,
 		SpaceID: spaceID, ScopeType: scopeType, ScopeID: scopeID, ExtensionID: extensionID,
 		TargetVersion: version, FromVersion: current.InstalledVersion.String(),
-		OperationType: "rollback", Status: "created", CurrentStep: "created",
-		ArtifactID: artifact.ArtifactID, ConfirmationsJSON: string(confirmedItemsJSON),
-		ConfirmationClaimsJSON: string(claimsJSON), SnapshotRequirementHash: rollbackClaims.SnapshotRequirementHash,
-		PreviewSessionID: rollbackClaims.PreviewSessionID,
-		IdempotencyKey:   idempotencyKey, RequestHash: computePackageRequestHash(PackageOperationRecord{
+		OperationType: "rollback", Status: string(PackageOperationPending), CurrentStep: "created",
+		ArtifactID: artifact.ArtifactID, ConfirmationClaimsJSON: string(claimsJSON),
+		SnapshotRequirementHash: rollbackClaims.SnapshotRequirementHash,
+		PreviewSessionID:        rollbackClaims.PreviewSessionID,
+		IdempotencyKey:          idempotencyKey, RequestHash: computePackageRequestHash(PackageOperationRecord{
 			OperationType: "rollback", ExtensionID: extensionID, TargetVersion: version,
 			ArtifactID: artifact.ArtifactID, ScopeType: scopeType, ScopeID: scopeID,
 			PreviewSessionID: rollbackClaims.PreviewSessionID,
@@ -1010,16 +1009,10 @@ func (r *Runtime) ExecutePackageUninstall(ctx context.Context, req ExecutePackag
 	if err != nil {
 		return PackageOperationRecord{}, fmt.Errorf("marshal confirmation claims: %w", err)
 	}
-	confirmationsJSON, err := json.Marshal(claims.Confirmations)
-	if err != nil {
-		return PackageOperationRecord{}, fmt.Errorf("marshal confirmations: %w", err)
-	}
-
 	uninstallOp := PackageOperationRecord{OperationID: operationID, TraceID: traceID,
 		SpaceID: spaceID, ScopeType: scopeType, ScopeID: scopeID, ExtensionID: extensionID,
-		TargetVersion: initialPreview.CurrentVersion, OperationType: "uninstall", Status: "created", CurrentStep: "created",
-		ArtifactID: initialPreview.ArtifactID, ConfirmationsJSON: string(confirmationsJSON),
-		ConfirmationClaimsJSON:  string(claimsJSON),
+		TargetVersion: initialPreview.CurrentVersion, OperationType: "uninstall", Status: string(PackageOperationPending), CurrentStep: "created",
+		ArtifactID: initialPreview.ArtifactID, ConfirmationClaimsJSON: string(claimsJSON),
 		SnapshotRequirementHash: claims.SnapshotRequirementHash,
 		IdempotencyKey:          idempotencyKey, RequestHash: computePackageRequestHash(PackageOperationRecord{
 			OperationType: "uninstall", ExtensionID: extensionID, TargetVersion: initialPreview.CurrentVersion,
@@ -1468,9 +1461,8 @@ func (r *Runtime) beginSimplePackageOperation(ctx context.Context, spaceID, scop
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	op := PackageOperationRecord{OperationID: "package-operation-" + uuid.NewString(), TraceID: "package-trace-" + uuid.NewString(),
 		SpaceID: spaceID, ScopeType: scopeType, ScopeID: scopeID, ExtensionID: extensionID,
-		TargetVersion: version, OperationType: operationType, Status: "created", CurrentStep: "created",
-		ArtifactID: artifactID, ConfirmationsJSON: "{}",
-		StartedAt: now, UpdatedAt: now}
+		TargetVersion: version, OperationType: operationType, Status: string(PackageOperationPending), CurrentStep: "created",
+		ArtifactID: artifactID, StartedAt: now, UpdatedAt: now}
 	return op, r.container.PackageRepository.CreateOperation(ctx, op)
 }
 

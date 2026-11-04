@@ -11,7 +11,7 @@ import (
 )
 
 type FakeTopology struct {
-	mu sync.Mutex
+	mu       sync.Mutex
 	runtimes map[domain.RuntimeInstanceID]domain.PluginID
 	services map[domain.RuntimeInstanceID]map[domain.ServiceID]bool
 }
@@ -93,7 +93,7 @@ func (c *FakeEffPermChecker) CheckControlOutput(ctx context.Context, runtimeID d
 }
 
 type FakeAuthorityReader struct {
-	mu       sync.Mutex
+	mu        sync.Mutex
 	snapshots map[domain.RuntimeInstanceID]ControlAuthoritySnapshot
 }
 
@@ -127,9 +127,9 @@ func (r *FakeAuthorityReader) GetSnapshot(ctx context.Context, runtimeID domain.
 }
 
 type FakeMetrics struct {
-	mu       sync.Mutex
-	allowed  int
-	denied   int
+	mu          sync.Mutex
+	allowed     int
+	denied      int
 	denyReasons map[OutputDecisionReason]int
 }
 

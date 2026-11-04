@@ -141,7 +141,7 @@ func (s *AgentSkillRuntime) Installed(ctx context.Context, spaceID, characterID,
 			continue
 		}
 		for _, contribution := range contributions {
-			if contribution.Kind != domain.ContributionKindAgentSkill {
+			if contribution.EffectiveAdapter() != domain.ContributionAdapterAgentSkill {
 				continue
 			}
 			defData, err := json.Marshal(contribution.Definition)

@@ -10,7 +10,7 @@ export interface TerminalSnapshot {
   exitCode: number;
   data: string;
   cursor: number;
-  fromCursor?: number;
+  fromCursor: number;
   truncated: boolean;
 }
 

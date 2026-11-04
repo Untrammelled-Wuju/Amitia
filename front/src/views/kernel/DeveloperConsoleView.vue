@@ -382,42 +382,6 @@
         <el-empty v-if="!loading && uiSessions.length === 0" description="暂无 UI 会话" />
       </el-tab-pane>
 
-      <el-tab-pane label="迁移" name="migration">
-        <div class="tab-toolbar">
-          <el-button @click="loadMigration" :icon="Refresh">刷新</el-button>
-        </div>
-        <el-table :data="migration" border size="small" v-loading="loading">
-          <el-table-column prop="stage" label="阶段" min-width="160" />
-          <el-table-column label="状态" width="100">
-            <template #default="{ row }">
-              <el-tag :type="migrationStatusType(row.status)" size="small">{{ row.status }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="details" label="详情" min-width="300" show-overflow-tooltip />
-          <el-table-column label="时间" width="180">
-            <template #default="{ row }">{{ formatDate(row.at) }}</template>
-          </el-table-column>
-        </el-table>
-        <el-empty v-if="!loading && migration.length === 0" description="暂无迁移记录" />
-      </el-tab-pane>
-
-      <el-tab-pane label="兼容性" name="compatibility">
-        <div class="tab-toolbar">
-          <el-button @click="loadCompatibility" :icon="Refresh">刷新</el-button>
-        </div>
-        <el-table :data="compatibility" border size="small" v-loading="loading">
-          <el-table-column prop="extension" label="扩展" min-width="160" show-overflow-tooltip />
-          <el-table-column prop="required" label="要求版本" width="120" />
-          <el-table-column prop="host" label="宿主版本" width="120" />
-          <el-table-column label="兼容" width="80">
-            <template #default="{ row }">
-              <el-tag :type="row.ok ? 'success' : 'danger'" size="small">{{ row.ok ? '是' : '否' }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="reason" label="原因" min-width="240" show-overflow-tooltip />
-        </el-table>
-        <el-empty v-if="!loading && compatibility.length === 0" description="暂无兼容性记录" />
-      </el-tab-pane>
     </el-tabs>
 
     <el-dialog v-model="fieldsVisible" title="日志字段" width="600px">
@@ -449,8 +413,6 @@ import {
   fetchResources,
   fetchStorage,
   fetchUISessions,
-  fetchMigration,
-  fetchCompatibility,
   fetchHostAPIAudits,
   exportDiagnostics,
   type DevConsoleOverview,
@@ -466,8 +428,6 @@ import {
   type ResourceRecord,
   type StorageEntryRecord,
   type UISessionRecord,
-  type MigrationRecord,
-  type CompatibilityRecord,
   type HostAPIAuditEntry,
 } from "./dev-console-api";
 
@@ -488,8 +448,6 @@ const scopes = ref<ScopeRecord[]>([]);
 const resources = ref<ResourceRecord[]>([]);
 const storage = ref<StorageEntryRecord[]>([]);
 const uiSessions = ref<UISessionRecord[]>([]);
-const migration = ref<MigrationRecord[]>([]);
-const compatibility = ref<CompatibilityRecord[]>([]);
 const hostApiAudits = ref<HostAPIAuditEntry[]>([]);
 const hostApiAuditTotal = ref(0);
 
@@ -550,7 +508,6 @@ const metrics = computed(() => {
     { label: "错误", value: o.errors, class: "danger" },
     { label: "警告", value: o.warnings, class: "warn" },
     { label: "生命周期事件", value: o.lifecycleEvents, class: "" },
-    { label: "兼容性问题", value: o.compatibilityIssues, class: o.compatibilityIssues > 0 ? "danger" : "" },
   ];
 });
 
@@ -588,13 +545,6 @@ function logLevelType(level: string): "success" | "warning" | "danger" | "info" 
   if (l === "error" || l === "fatal") return "danger";
   if (l === "warn" || l === "warning") return "warning";
   if (l === "info") return "success";
-  return "info";
-}
-
-function migrationStatusType(status: string): "success" | "warning" | "danger" | "info" {
-  if (status === "completed" || status === "done") return "success";
-  if (status === "running" || status === "pending") return "warning";
-  if (status === "failed") return "danger";
   return "info";
 }
 
@@ -759,22 +709,6 @@ async function loadUISessions() {
   }
 }
 
-async function loadMigration() {
-  try {
-    migration.value = await fetchMigration();
-  } catch (e: any) {
-    ElMessage.error("加载迁移记录失败: " + (e?.message || e));
-  }
-}
-
-async function loadCompatibility() {
-  try {
-    compatibility.value = await fetchCompatibility();
-  } catch (e: any) {
-    ElMessage.error("加载兼容性记录失败: " + (e?.message || e));
-  }
-}
-
 async function loadActiveTab() {
   switch (activeTab.value) {
     case "overview":
@@ -818,12 +752,6 @@ async function loadActiveTab() {
       break;
     case "uiSessions":
       await loadUISessions();
-      break;
-    case "migration":
-      await loadMigration();
-      break;
-    case "compatibility":
-      await loadCompatibility();
       break;
   }
 }

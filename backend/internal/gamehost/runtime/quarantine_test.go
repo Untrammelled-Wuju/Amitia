@@ -13,12 +13,12 @@ func TestQuarantineAdapter_HandleQuarantineEvent(t *testing.T) {
 
 	ctx := context.Background()
 	err := adapter.HandleQuarantineEvent(ctx, SupervisorQuarantineEvent{
-		RuntimeID:    "rt-1",
-		ServiceID:    "bridge",
-		Generation:   1,
-		Quarantined:  true,
-		Reason:       "frequent_crash",
-		Occurred:     time.Now(),
+		RuntimeID:   "rt-1",
+		ServiceID:   "bridge",
+		Generation:  1,
+		Quarantined: true,
+		Reason:      "frequent_crash",
+		Occurred:    time.Now(),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -162,9 +162,9 @@ func TestQuarantineAdapter_MultiRuntimeSameDefinition(t *testing.T) {
 
 func TestQuarantineReasonFromTrustedService(t *testing.T) {
 	tests := map[string]string{
-		"frequent_crash":           "frequent_crash",
-		"signature_failure":        "signature_failure",
-		"process_tree_unkillable":  "process_tree_unkillable",
+		"frequent_crash":          "frequent_crash",
+		"signature_failure":       "signature_failure",
+		"process_tree_unkillable": "process_tree_unkillable",
 	}
 
 	for input, expected := range tests {

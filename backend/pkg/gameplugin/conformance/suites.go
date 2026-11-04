@@ -12,7 +12,7 @@ func StandardSuite() []Case {
 
 	cases = append(cases, ServiceSchemaCases()...)
 	cases = append(cases, ChannelSchemaCases()...)
-	cases = append(cases, CapabilityCases()...)
+	cases = append(cases, HostFeatureCases()...)
 	cases = append(cases, PluginErrorCases()...)
 	cases = append(cases, DescriptorConformanceCases()...)
 
@@ -36,7 +36,7 @@ func SchemaSuite() []Case {
 	cases := make([]Case, 0)
 	cases = append(cases, ServiceSchemaCases()...)
 	cases = append(cases, ChannelSchemaCases()...)
-	cases = append(cases, CapabilityCases()...)
+	cases = append(cases, HostFeatureCases()...)
 	cases = append(cases, PluginErrorCases()...)
 	cases = append(cases, DescriptorConformanceCases()...)
 	return cases

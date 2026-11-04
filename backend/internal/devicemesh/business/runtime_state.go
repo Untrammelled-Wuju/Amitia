@@ -194,15 +194,6 @@ func (e *Engine) ApplyRuntimeState(ctx context.Context, request Request, effect 
 			if resourceErr != nil {
 				return resourceErr
 			}
-			if resource == nil || resource.Deleted {
-				legacy, legacyErr := port.Resource(ctx, scope, kind, coordination.LegacyRuntimeStateID(kind))
-				if legacyErr != nil {
-					return legacyErr
-				}
-				if legacy != nil && !legacy.Deleted && legacy.RoleID == scope.RoleID {
-					resource = legacy
-				}
-			}
 			if resource != nil && !resource.Deleted {
 				snapshot.Resources = append(snapshot.Resources, *resource)
 			}
@@ -243,14 +234,8 @@ func (e *Engine) ApplyRuntimeState(ctx context.Context, request Request, effect 
 
 func preferredRuntimeStateResource(resources []coordination.Resource, kind, roleID string) (coordination.Resource, bool) {
 	qualifiedID := coordination.RoleRuntimeStateID(kind, roleID)
-	legacyID := coordination.LegacyRuntimeStateID(kind)
 	for _, resource := range resources {
 		if resource.Kind == kind && resource.RoleID == roleID && resource.ID == qualifiedID && !resource.Deleted {
-			return resource, true
-		}
-	}
-	for _, resource := range resources {
-		if resource.Kind == kind && resource.RoleID == roleID && resource.ID == legacyID && !resource.Deleted {
 			return resource, true
 		}
 	}

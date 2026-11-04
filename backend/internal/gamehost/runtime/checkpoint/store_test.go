@@ -86,10 +86,10 @@ func TestFileStore_SaveLoadCheckpoint(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 
 	cp := RuntimeCheckpoint{
-		SchemaVersion:      MetadataSchemaVersion,
-		RuntimeID:          "test-runtime-2",
-		PluginID:           "com.example.plugin",
-		RuntimeState:       domain.RuntimeStateRunning,
+		SchemaVersion: MetadataSchemaVersion,
+		RuntimeID:     "test-runtime-2",
+		PluginID:      "com.example.plugin",
+		RuntimeState:  domain.RuntimeStateRunning,
 		Services: []ServiceCheckpoint{
 			{
 				ServiceID: "bridge",
@@ -180,11 +180,11 @@ func TestFileStore_AtomicWritePreservesOld(t *testing.T) {
 	now := time.Now().UTC()
 
 	v1 := RuntimeCheckpoint{
-		RuntimeID:    "runtime-atomic",
-		PluginID:     "com.atomic",
-		RuntimeState: domain.RuntimeStateCreated,
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		RuntimeID:     "runtime-atomic",
+		PluginID:      "com.atomic",
+		RuntimeState:  domain.RuntimeStateCreated,
+		CreatedAt:     now,
+		UpdatedAt:     now,
 		CleanShutdown: false,
 	}
 

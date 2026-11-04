@@ -70,7 +70,6 @@ $excludes = @(
     "--exclude=$folderName/backend/amitiax.exe"
     "--exclude=$folderName/backend/extension.test.exe"
     "--exclude=$folderName/backend/kernel.test.exe"
-    "--exclude=$folderName/backend/legacy-package-migrate.exe"
     "--exclude=$folderName/backend/worker.test.exe"
     "--exclude=$folderName/backend/cmd/server/server.exe"
     "--exclude=$folderName/backend/cmd/server/backend.exe"

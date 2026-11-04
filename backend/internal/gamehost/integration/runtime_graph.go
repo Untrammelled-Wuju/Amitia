@@ -56,7 +56,6 @@ type RuntimeGraphProvisioner struct {
 	supervisor         *trusted_service.ProcessSupervisor
 	definitionMapper   *service_definition.DefinitionMapper
 	secretRegistrar    StartupSecretManifestRegistrar
-	extensionRoot      string
 	nodeResolver       script_host.NodeEnvironmentResolver
 	generationResolver InstalledGenerationResolver
 	runtimeExecutor    ghruntime.RuntimeExecutor
@@ -72,7 +71,6 @@ type RuntimeGraphProvisionerOptions struct {
 	Supervisor         *trusted_service.ProcessSupervisor
 	DefinitionMapper   *service_definition.DefinitionMapper
 	SecretRegistrar    StartupSecretManifestRegistrar
-	ExtensionRoot      string
 	NodeResolver       script_host.NodeEnvironmentResolver
 	GenerationResolver InstalledGenerationResolver
 	ChannelReconciler  *channel.Reconciler
@@ -109,7 +107,6 @@ func NewRuntimeGraphProvisioner(opts RuntimeGraphProvisionerOptions) (*RuntimeGr
 		supervisor:         opts.Supervisor,
 		definitionMapper:   opts.DefinitionMapper,
 		secretRegistrar:    opts.SecretRegistrar,
-		extensionRoot:      opts.ExtensionRoot,
 		nodeResolver:       opts.NodeResolver,
 		generationResolver: opts.GenerationResolver,
 		channelReconciler:  opts.ChannelReconciler,
@@ -530,6 +527,9 @@ func (p *RuntimeGraphProvisioner) buildBootServices(ctx context.Context, kp Kern
 }
 
 func (p *RuntimeGraphProvisioner) buildBootServiceFor(ctx context.Context, kp KernelGamePlugin, gameSpec gameprotocol.PluginHostSpec, runtimeModuleID, serviceIDOverride, nameOverride string) (bootServiceInfo, error) {
+	if p.generationResolver == nil {
+		return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: package generation resolver is required", kp.Extension.ID, kp.Contribution.ID)
+	}
 	runtimeModuleID = strings.TrimSpace(runtimeModuleID)
 	if runtimeModuleID == "" {
 		return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: runtime module id is required", kp.Extension.ID, kp.Contribution.ID)
@@ -589,43 +589,21 @@ func (p *RuntimeGraphProvisioner) buildBootServiceFor(ctx context.Context, kp Ke
 	}
 
 	entryPath := module.Runtime.EntryPoint
-	if p.generationResolver != nil {
-		generation, resolveErr := p.generationResolver.ResolveInstalledGeneration(ctx, string(kp.Extension.ID))
-		if resolveErr != nil {
-			return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: resolve authoritative package generation: %w", kp.Extension.ID, kp.Contribution.ID, resolveErr)
-		}
-		if generation.Version != "" && generation.Version != fmt.Sprintf("%v", kp.Extension.Version) {
-			return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: package generation version %q does not match enabled definition version %q", kp.Extension.ID, kp.Contribution.ID, generation.Version, kp.Extension.Version)
-		}
-		entryPath, resolveErr = resolveGamePluginEntry(generation.Path, runtimeModuleID, entryPath)
-		if resolveErr != nil {
-			return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: entry point: %w", kp.Extension.ID, kp.Contribution.ID, resolveErr)
-		}
-		if err := ensureRegularFile(entryPath); err != nil {
-			return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: entry point: %w", kp.Extension.ID, kp.Contribution.ID, err)
-		}
-		info.SandboxReadOnlyRoot = generation.Path
-	} else if p.extensionRoot != "" {
-		// Compatibility path for isolated tests/legacy embedders only. Production
-		// wiring supplies generationResolver and therefore never guesses paths.
-		definitionHash, hashErr := hashExtensionDefinition(kp.Extension)
-		if hashErr != nil {
-			return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: hash installed definition: %w", kp.Extension.ID, kp.Contribution.ID, hashErr)
-		}
-		bundlePath := resolveGamePluginBundlePath(p.extensionRoot, string(kp.Extension.ID), fmt.Sprintf("%v", kp.Extension.Version), definitionHash)
-		if bundlePath == "" {
-			return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: installed bundle path not found", kp.Extension.ID, kp.Contribution.ID)
-		}
-		var resolveErr error
-		entryPath, resolveErr = resolveGamePluginEntry(bundlePath, runtimeModuleID, entryPath)
-		if resolveErr != nil {
-			return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: entry point: %w", kp.Extension.ID, kp.Contribution.ID, resolveErr)
-		}
-		if err := ensureRegularFile(entryPath); err != nil {
-			return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: entry point: %w", kp.Extension.ID, kp.Contribution.ID, err)
-		}
-		info.SandboxReadOnlyRoot = bundlePath
+	generation, resolveErr := p.generationResolver.ResolveInstalledGeneration(ctx, string(kp.Extension.ID))
+	if resolveErr != nil {
+		return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: resolve authoritative package generation: %w", kp.Extension.ID, kp.Contribution.ID, resolveErr)
 	}
+	if generation.Version != "" && generation.Version != fmt.Sprintf("%v", kp.Extension.Version) {
+		return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: package generation version %q does not match enabled definition version %q", kp.Extension.ID, kp.Contribution.ID, generation.Version, kp.Extension.Version)
+	}
+	entryPath, resolveErr = resolveGamePluginEntry(generation.Path, runtimeModuleID, entryPath)
+	if resolveErr != nil {
+		return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: entry point: %w", kp.Extension.ID, kp.Contribution.ID, resolveErr)
+	}
+	if err := ensureRegularFile(entryPath); err != nil {
+		return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: entry point: %w", kp.Extension.ID, kp.Contribution.ID, err)
+	}
+	info.SandboxReadOnlyRoot = generation.Path
 
 	switch info.RuntimeType {
 	case service_definition.JavaScriptRuntimeType:

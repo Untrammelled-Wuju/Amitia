@@ -119,6 +119,9 @@ export interface ExtensionCenterContribution {
   contributionId: string;
   moduleId: string;
   kind: string;
+  adapter: string;
+  contractVersion?: number;
+  schema?: Record<string, unknown>;
   title: string;
   description: string;
   enabled: boolean;

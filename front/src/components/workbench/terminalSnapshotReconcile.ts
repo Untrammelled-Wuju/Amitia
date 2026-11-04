@@ -12,7 +12,7 @@ export function reconcileTerminalChunk(snapshot: TerminalSnapshot, currentCursor
     throw new Error('终端输出分片协议无效');
   }
   const binary = atob(snapshot.data);
-  const start = snapshot.fromCursor ?? snapshot.cursor - binary.length;
+  const start = snapshot.fromCursor;
   if (!Number.isSafeInteger(start) || start < 0 || start > snapshot.cursor ||
       snapshot.cursor - start !== binary.length) {
     throw new Error('终端输出分片游标不一致');

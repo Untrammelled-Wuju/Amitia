@@ -374,52 +374,6 @@ func TestRuntimePackageCandidates(t *testing.T) {
 	}
 }
 
-func TestLinuxARM64LegacyCandidates(t *testing.T) {
-	candidates := legacyCandidates(platform.GuestPlatformLinux, "arm64", "/runtime", "/workspace")
-	if len(candidates) == 0 {
-		t.Fatal("expected Linux ARM64 legacy candidates")
-	}
-	found := false
-	for _, c := range candidates {
-		if filepath.Base(c) == "qdrant_linux_aarch64" {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatal("expected qdrant_linux_aarch64 candidate")
-	}
-}
-
-func TestLinuxAMD64LegacyCandidates(t *testing.T) {
-	candidates := legacyCandidates(platform.GuestPlatformLinux, "amd64", "/runtime", "/workspace")
-	found := false
-	for _, c := range candidates {
-		if filepath.Base(c) == "qdrant_linux_x86" {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatal("expected qdrant_linux_x86 candidate")
-	}
-}
-
-func TestMacOSCandidates(t *testing.T) {
-	candidates := legacyCandidates(platform.GuestPlatformMacOS, "arm64", "/runtime", "/workspace")
-	if len(candidates) == 0 {
-		t.Fatal("expected macOS candidates")
-	}
-}
-
-func TestUnknownArchitectureUsesOnlyCanonicalNames(t *testing.T) {
-	candidates := legacyCandidates(platform.GuestPlatformLinux, "riscv64", "/runtime", "/workspace")
-	for _, c := range candidates {
-		base := filepath.Base(c)
-		if base != "qdrant" {
-			t.Fatalf("unexpected candidate for unknown arch: %s", base)
-		}
-	}
-}
-
 func TestUnixBinaryRequiresExecutablePermission(t *testing.T) {
 	info := &fakeOSInfo{info: fakeFileInfo{mode: 0644}}
 	valid, reason := isValidBinaryPath(info, platform.GuestPlatformLinux)

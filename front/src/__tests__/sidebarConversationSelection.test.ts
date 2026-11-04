@@ -32,7 +32,6 @@ vi.mock("../ui-runtime/navigationRegistry", async () => {
     isUINavigationItemActive: () => false,
   };
 });
-vi.mock("../components/SearchModal.vue", () => ({ default: { template: "<div />" } }));
 vi.mock("@/runtime/runtime-capabilities", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), isDesktopShell: () => true }));
 
 const conversation = {
@@ -63,6 +62,11 @@ async function renderSidebar(path: string, errorHandler = vi.fn()) {
   return { wrapper, router, chat: useChatStore(pinia) };
 }
 
+async function showProjects(wrapper: Awaited<ReturnType<typeof renderSidebar>>["wrapper"]) {
+  await wrapper.get('[data-amitia-ui="workspace.view.projects"]').trigger("click");
+  await flushPromises();
+}
+
 describe("sidebar conversation selection", () => {
   beforeEach(() => {
     localStorage.clear();
@@ -74,13 +78,16 @@ describe("sidebar conversation selection", () => {
   it("moves selection from the draft to the title after a conversation is created", async () => {
     const { wrapper, router, chat } = await renderSidebar("/chat");
     try {
-      expect(wrapper.get('[aria-label="搜索"]').text()).toBe("");
-      expect(wrapper.get('[data-amitia-ui="workspace.new-chat"]').text()).toBe("新对话");
+      expect(wrapper.get('[aria-label="搜索对话"]').attributes("placeholder")).toBe("搜索对话...");
+      expect(wrapper.find('[data-amitia-ui="workspace.create-menu"]').exists()).toBe(true);
+      expect((wrapper.get('[data-amitia-ui="workspace.create-menu"]').element as HTMLElement).closest(".workspace-chat-search")).toBeNull();
       chat.sidebar.recent = [conversation];
       await router.replace({ path: "/chat", query: { conversationId: conversation.id } });
       await flushPromises();
       expect(wrapper.get('[aria-current="page"] .thread-title').text()).toBe(conversation.title);
-      await wrapper.get('[data-amitia-ui="workspace.new-chat"]').trigger("click");
+      await wrapper.get('[data-amitia-ui="workspace.create-menu"]').trigger("click");
+      expect(contextMenuState.items.map((item) => item.label)).toEqual(["新对话", "新群聊", "新团队", "新项目"]);
+      await contextMenuState.items[0].action?.();
       await flushPromises();
       expect(mocks.startDraft).toHaveBeenCalledOnce();
       expect(router.currentRoute.value.query.conversationId).toBeUndefined();
@@ -95,11 +102,75 @@ describe("sidebar conversation selection", () => {
     const listener = vi.fn();
     window.addEventListener("amitia:draft-created", listener);
     try {
-      await wrapper.get('[data-amitia-ui="workspace.new-chat"]').trigger("click");
+      await wrapper.get('[data-amitia-ui="workspace.create-menu"]').trigger("click");
+      await contextMenuState.items[0].action?.();
       await flushPromises();
       expect(listener).toHaveBeenCalledOnce();
     } finally {
       window.removeEventListener("amitia:draft-created", listener);
+      wrapper.unmount();
+    }
+  });
+
+  it("asks for a target project before creating a conversation in project view", async () => {
+    const { wrapper, chat, router } = await renderSidebar("/chat");
+    const project = { id: "project-target", name: "目标项目", workspaceId: "workspace-target", deviceId: "source", rootUri: "amitia://workspace/@workspace-target/", workspaces: [{ id: "workspace-target", deviceId: "source", name: "目标项目", kind: "local", rootUri: "amitia://workspace/@workspace-target/" }], primaryWorkspaceId: "workspace-target", available: true, status: "available", conversationCount: 0, conversations: [] };
+    try {
+      chat.sidebar.projects = [project];
+      await flushPromises();
+      await showProjects(wrapper);
+      await wrapper.get('[data-amitia-ui="workspace.create-menu"]').trigger("click");
+      await contextMenuState.items.find((item) => item.id === "new-chat")?.action?.();
+      await flushPromises();
+      expect(document.body.textContent).toContain("选择要为哪个项目创建对话");
+      expect(mocks.startDraft).not.toHaveBeenCalled();
+      document.querySelector<HTMLButtonElement>(".project-conversation-choice")?.click();
+      await flushPromises();
+      [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "创建对话")?.click();
+      await flushPromises();
+      expect(mocks.startDraft).toHaveBeenCalledWith(project.id);
+      expect(router.currentRoute.value.query.projectId).toBe(project.id);
+    } finally {
+      closeContextMenu();
+      wrapper.unmount();
+    }
+  });
+
+  it("filters conversations in the sidebar search field without opening the global search", async () => {
+    const { wrapper, chat } = await renderSidebar("/chat");
+    try {
+      chat.sidebar.recent = [
+        conversation,
+        { ...conversation, id: "another-conversation", title: "另一个话题" },
+      ];
+      await flushPromises();
+      await wrapper.get('[aria-label="搜索对话"]').setValue("第一条");
+      expect(wrapper.get('[data-amitia-ui="workspace.chat-search-results"]').text()).toContain(conversation.title);
+      expect(wrapper.get('[data-amitia-ui="workspace.chat-search-results"]').text()).not.toContain("另一个话题");
+      expect(wrapper.find(".search-overlay").exists()).toBe(false);
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it("places active search results before archived results and restores archived conversations", async () => {
+    const { wrapper, chat } = await renderSidebar("/chat");
+    const active = { ...conversation, id: "active-search-result", title: "话题：进行中" };
+    const archived = { ...conversation, id: "archived-search-result", title: "话题：已归档", archivedAt: "2026-11-01T00:00:00Z" };
+    const restore = vi.spyOn(chat, "restoreConversation").mockResolvedValue(undefined);
+    try {
+      chat.sidebar.recent = [archived, active];
+      await flushPromises();
+      await wrapper.get('[aria-label="搜索对话"]').setValue("话题");
+      const results = wrapper.findAll(".workspace-search-result");
+      expect(results.map((item) => item.get(".workspace-search-result-copy strong").text())).toEqual([active.title, archived.title]);
+      expect(results[0].find(".workspace-search-restore").exists()).toBe(false);
+      expect(results[1].get(".workspace-search-restore").text()).toBe("撤销归档");
+      await results[1].get(".workspace-search-restore").trigger("click");
+      await flushPromises();
+      expect(restore).toHaveBeenCalledWith(archived.id);
+    } finally {
+      restore.mockRestore();
       wrapper.unmount();
     }
   });
@@ -132,27 +203,47 @@ describe("sidebar conversation selection", () => {
     }
   });
 
-  it("renders recent conversations before projects", async () => {
+  it("switches between conversation and project views", async () => {
     const { wrapper, chat } = await renderSidebar("/chat");
     const project = { id: "project-order", name: "排序项目", workspaceId: "workspace-order", deviceId: "source", rootUri: "amitia://workspace/@workspace-order/", workspaces: [{ id: "workspace-order", deviceId: "source", name: "排序项目", kind: "local", rootUri: "amitia://workspace/@workspace-order/" }], primaryWorkspaceId: "workspace-order", available: true, status: "available", conversationCount: 0, conversations: [] };
     try {
       chat.sidebar.recent = [conversation];
       chat.sidebar.projects = [project];
       await flushPromises();
-      expect(wrapper.findAll(".section-caption > span").map((item) => item.text())).toEqual(["聊天", "项目"]);
+      expect(wrapper.findAll(".section-caption > span").map((item) => item.text())).toEqual(["聊天"]);
+      expect(wrapper.get('[data-amitia-ui="workspace.view.chat"]').attributes("aria-selected")).toBe("true");
+      expect(wrapper.find(".workspace-view-indicator").exists()).toBe(true);
+      await showProjects(wrapper);
+      expect(wrapper.findAll(".section-caption > span").map((item) => item.text())).toEqual(["项目"]);
+      expect(wrapper.get('[data-amitia-ui="workspace.view.projects"]').attributes("aria-selected")).toBe("true");
     } finally {
       wrapper.unmount();
     }
   });
 
+  it("persists the selected sidebar view", async () => {
+    const first = await renderSidebar("/chat");
+    await showProjects(first.wrapper);
+    expect(localStorage.getItem("uai-workspace-sidebar-view")).toBe("project");
+    first.wrapper.unmount();
+
+    const second = await renderSidebar("/chat");
+    try {
+      expect(second.wrapper.get('[data-amitia-ui="workspace.view.projects"]').attributes("aria-selected")).toBe("true");
+      expect(second.wrapper.findAll(".section-caption > span").map((item) => item.text())).toEqual(["项目"]);
+    } finally {
+      second.wrapper.unmount();
+    }
+  });
+
   it("分组标题右键只提供多选与对应新增操作", async () => {
     const { wrapper } = await renderSidebar("/chat");
-    const headings = wrapper.findAll('.project-caption');
-    await headings[0].trigger('contextmenu');
+    await wrapper.get('.project-caption').trigger('contextmenu');
     expect(contextMenuState.items.map((item) => item.label)).toEqual(['多选', '新建对话']);
     await contextMenuState.items[0].action?.();
     await flushPromises();
-    await headings[1].trigger('contextmenu');
+    await showProjects(wrapper);
+    await wrapper.get('.project-caption').trigger('contextmenu');
     expect(contextMenuState.items.map((item) => item.label)).toEqual(['取消多选', '新增项目']);
     closeContextMenu();
     wrapper.unmount();
@@ -163,6 +254,7 @@ describe("sidebar conversation selection", () => {
     const project = { id: "project-context", name: "右键项目", workspaceId: "main", deviceId: "source", rootUri: "amitia://workspace/@main/", workspaces: [{ id: "main", deviceId: "source", name: "主目录", kind: "local", rootUri: "amitia://workspace/@main/" }, { id: "sub", deviceId: "source", name: "子目录", kind: "local", rootUri: "amitia://workspace/@sub/" }], primaryWorkspaceId: "main", available: true, status: "available", conversationCount: 0, conversations: [] };
     chat.sidebar.projects = [project];
     await flushPromises();
+    await showProjects(wrapper);
     await wrapper.get('.project-row').trigger('contextmenu');
     expect(contextMenuState.title).toBe('右键项目');
     expect(contextMenuState.items.map((item) => item.label)).toEqual(['新建对话', '重命名项目', '添加子工作区', '主工作区：主目录', '子工作区：子目录（设为主工作区）', '移除工作区：主目录', '移除工作区：子目录', '置顶', '在资源管理器中打开主工作区', '从侧边栏移除']);
@@ -171,19 +263,24 @@ describe("sidebar conversation selection", () => {
     wrapper.unmount();
   });
 
-  it("enables selection for chats and project conversations together", async () => {
+  it("keeps multi-selection while switching between conversations and projects", async () => {
     const { wrapper, chat } = await renderSidebar("/chat");
     const projectConversation = { ...conversation, id: "project-conversation", projectId: "project" };
     chat.sidebar.recent = [conversation];
     chat.sidebar.projects = [{ id: "project", name: "项目", workspaceId: "", deviceId: "", rootUri: "", workspaces: [], primaryWorkspaceId: "", available: true, status: "available", conversationCount: 1, conversations: [projectConversation] }];
     await flushPromises();
     await wrapper.findAll('[title="批量选择"]')[0].trigger("click");
+    await wrapper.get('.thread-main').trigger('click');
+    expect((wrapper.get('.thread-row input[type="checkbox"]').element as HTMLInputElement).checked).toBe(true);
+    await showProjects(wrapper);
     await wrapper.get('.project-main').trigger('click');
     await flushPromises();
-    expect(wrapper.findAll('.thread-row input[type="checkbox"]')).toHaveLength(2);
+    expect(wrapper.findAll('.thread-row input[type="checkbox"]')).toHaveLength(1);
     await wrapper.findAll('.thread-main')[0].trigger('click');
     expect((wrapper.findAll('.thread-row input[type="checkbox"]')[0].element as HTMLInputElement).checked).toBe(true);
-    expect(wrapper.findAll('[title="退出多选"]')).toHaveLength(2);
+    await wrapper.get('[data-amitia-ui="workspace.view.chat"]').trigger("click");
+    await flushPromises();
+    expect((wrapper.get('.thread-row input[type="checkbox"]').element as HTMLInputElement).checked).toBe(true);
     wrapper.unmount();
   });
 
@@ -193,15 +290,15 @@ describe("sidebar conversation selection", () => {
     chat.sidebar.recent = [conversation];
     chat.sidebar.projects = [{ id: "project", name: "项目", workspaceId: "", deviceId: "", rootUri: "", workspaces: [], primaryWorkspaceId: "", available: true, status: "available", conversationCount: 1, conversations: [projectConversation] }];
     await flushPromises();
+    await showProjects(wrapper);
     await wrapper.get('.project-main').trigger('click');
     await flushPromises();
     const rows = wrapper.findAllComponents(SidebarConversationRow);
-    rows[1].vm.$emit("startBatch", projectConversation);
+    rows[0].vm.$emit("startBatch", projectConversation);
     await flushPromises();
     const checkboxes = wrapper.findAll('.thread-row input[type="checkbox"]');
-    expect(checkboxes).toHaveLength(2);
-    expect((checkboxes[0].element as HTMLInputElement).checked).toBe(false);
-    expect((checkboxes[1].element as HTMLInputElement).checked).toBe(true);
+    expect(checkboxes).toHaveLength(1);
+    expect((checkboxes[0].element as HTMLInputElement).checked).toBe(true);
     wrapper.unmount();
   });
 
@@ -211,6 +308,7 @@ describe("sidebar conversation selection", () => {
     chat.sidebar.recent = [conversation];
     chat.sidebar.projects = [{ id: "project", name: "项目", workspaceId: "", deviceId: "", rootUri: "", workspaces: [], primaryWorkspaceId: "", available: true, status: "available", conversationCount: 1, conversations: [projectConversation] }];
     await flushPromises();
+    await showProjects(wrapper);
     await wrapper.get('.project-main').trigger('click');
     await wrapper.findAll('[title="批量选择"]')[0].trigger('click');
     await wrapper.findAll('.thread-main')[0].trigger('contextmenu');
@@ -231,6 +329,7 @@ describe("sidebar conversation selection", () => {
     const { wrapper, chat } = await renderSidebar("/chat");
     const project = { id: "project-empty-state", name: "已有项目", workspaceId: "workspace-empty-state", deviceId: "source", rootUri: "amitia://workspace/@workspace-empty-state/", workspaces: [{ id: "workspace-empty-state", deviceId: "source", name: "已有项目", kind: "local", rootUri: "amitia://workspace/@workspace-empty-state/" }], primaryWorkspaceId: "workspace-empty-state", available: true, status: "available", conversationCount: 0, conversations: [] };
     try {
+      await showProjects(wrapper);
       expect(wrapper.text()).toContain("暂无项目");
       chat.sidebar.projects = [project];
       await flushPromises();
@@ -274,7 +373,8 @@ describe("侧边栏项目弹窗", () => {
     });
     try {
       await flushPromises();
-      await wrapper.get('[aria-label="新增项目"]').trigger("click");
+      await wrapper.get('[data-amitia-ui="workspace.create-menu"]').trigger("click");
+      await contextMenuState.items.find((item) => item.id === "new-project")?.action?.();
       await flushPromises();
       expect(document.body.textContent).toContain("新建项目");
       [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "创建项目")?.click();
@@ -299,6 +399,8 @@ describe("侧边栏项目弹窗", () => {
       expect(mocks.registerProjectWorkspaces).toHaveBeenCalledWith(["/tmp/第二个文件夹"]);
       expect(mocks.createProjectFromWorkspaces).toHaveBeenCalledOnce();
       expect(mocks.createProjectFromWorkspaces).toHaveBeenCalledWith("第一个文件夹", [firstWorkspace, secondWorkspace]);
+      expect(wrapper.get('[data-amitia-ui="workspace.view.projects"]').attributes("aria-selected")).toBe("true");
+      expect(localStorage.getItem("uai-workspace-sidebar-view")).toBe("project");
       expect(errors).not.toHaveBeenCalled();
     } finally {
       Object.defineProperty(window, "amitiaDesktop", { configurable: true, value: originalDesktop });
@@ -314,6 +416,7 @@ describe("侧边栏项目弹窗", () => {
     chat.ownedProjects = true;
     chat.projectIntent = { coreId: "test-core" } as NonNullable<typeof chat.projectIntent>;
     chat.sidebar.projects = [project];
+    await showProjects(wrapper);
     const action = operation === "重命名" ? vi.spyOn(chat, "updateProject").mockResolvedValue(undefined) : vi.spyOn(chat, "hideProject").mockResolvedValue(undefined);
     const dialog = operation === "移除" ? vi.spyOn(ElMessageBox, "confirm") : vi.spyOn(ElMessageBox, "prompt");
     async function trigger() {

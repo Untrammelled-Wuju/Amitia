@@ -71,29 +71,49 @@ void main() {
   });
 
   group('DefaultBackendTopologyResolver', () {
-    const resolver = DefaultBackendTopologyResolver();
+    final resolver = DefaultBackendTopologyResolver(
+      localEndpointProvider: () => Uri.parse('http://127.0.0.1:43821'),
+    );
 
-    test('cloud mode keeps business core remote and local runtime on device', () {
-      final topology = resolver.resolve(
-        const MobileDeploymentConfig(
-          mode: MobileDeploymentMode.cloud,
-          remoteCoreUri: 'cloud.example.com',
-        ),
-      );
+    test(
+      'cloud mode keeps business core remote and local runtime on device',
+      () {
+        final topology = resolver.resolve(
+          const MobileDeploymentConfig(
+            mode: MobileDeploymentMode.cloud,
+            remoteCoreUri: 'cloud.example.com',
+          ),
+        );
 
-      expect(topology.businessCore.httpBaseUri.toString(), 'https://cloud.example.com');
-      expect(topology.businessCore.isRemote, isTrue);
-      expect(topology.localRuntime!.httpBaseUri.toString(), 'http://127.0.0.1:18899');
-      expect(topology.localRuntime!.isRemote, isFalse);
-      expect(topology.embeddedRuntimeProfile, EmbeddedRuntimeProfile.deviceAgent);
-      expect(topology.requiresEmbeddedRuntime, isTrue);
-    });
+        expect(
+          topology.businessCore.httpBaseUri.toString(),
+          'https://cloud.example.com',
+        );
+        expect(topology.businessCore.isRemote, isTrue);
+        expect(
+          topology.localRuntime!.httpBaseUri.toString(),
+          'http://127.0.0.1:43821',
+        );
+        expect(topology.localRuntime!.isRemote, isFalse);
+        expect(
+          topology.embeddedRuntimeProfile,
+          EmbeddedRuntimeProfile.deviceAgent,
+        );
+        expect(topology.requiresEmbeddedRuntime, isTrue);
+      },
+    );
 
     test('local mode uses the embedded runtime for both execution planes', () {
       final topology = resolver.resolve(MobileDeploymentConfig.local);
 
-      expect(topology.businessCore.httpBaseUri.toString(), 'http://127.0.0.1:18899');
-      expect(topology.localRuntime!.httpBaseUri, topology.businessCore.httpBaseUri);
+      expect(
+        topology.businessCore.httpBaseUri.toString(),
+        'http://127.0.0.1:43821',
+      );
+      expect(
+        topology.localRuntime!.httpBaseUri,
+        topology.businessCore.httpBaseUri,
+      );
       expect(topology.embeddedRuntimeProfile, EmbeddedRuntimeProfile.local);
     });
   });

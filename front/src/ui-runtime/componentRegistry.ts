@@ -5,7 +5,7 @@ export type UIComponentVariant = Record<string, string | number | boolean>;
 
 function readVariants(providerMetadata: Record<string, unknown> | undefined): Record<string, unknown> {
   if (!providerMetadata) return {};
-  const variants = providerMetadata.componentVariants ?? providerMetadata.components;
+  const variants = providerMetadata.componentVariants;
   return variants && typeof variants === "object" && !Array.isArray(variants)
     ? variants as Record<string, unknown>
     : {};

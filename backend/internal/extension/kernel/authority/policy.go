@@ -51,9 +51,9 @@ var canonicalBindings = []CanonicalBinding{
 		Domain:       DomainDevice,
 		OwnerPackage: "backend/internal/extension/kernel/host_registry",
 		PrimaryTypes: []string{
-			"HostRegistry",
-			"HostEntry",
-			"ConnectionState",
+			"Registry",
+			"RuntimeEntry",
+			"PresenceState",
 		},
 	},
 	{

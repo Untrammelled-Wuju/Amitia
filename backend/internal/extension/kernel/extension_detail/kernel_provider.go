@@ -2,6 +2,7 @@ package extension_detail
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -162,14 +163,17 @@ func (p *KernelDetailProvider) populateModules(ctx context.Context, detail *Exte
 	}
 	for _, contribution := range contributions {
 		detail.Contributions = append(detail.Contributions, ContributionDetail{
-			ContributionID: string(contribution.ID),
-			ModuleID:       string(contribution.ModuleID),
-			Kind:           string(contribution.Kind),
-			Title:          contribution.Name.Default,
-			Description:    contribution.Description.Default,
-			Enabled:        true,
-			Exposure:       contributionExposure(contribution.Exposure),
-			Deprecated:     metadataBool(contribution.Metadata, "deprecated"),
+			ContributionID:  string(contribution.ID),
+			ModuleID:        string(contribution.ModuleID),
+			Kind:            string(contribution.Kind),
+			Adapter:         string(contribution.EffectiveAdapter()),
+			ContractVersion: contribution.ContractVersion,
+			Schema:          append(json.RawMessage(nil), contribution.Schema...),
+			Title:           contribution.Name.Default,
+			Description:     contribution.Description.Default,
+			Enabled:         true,
+			Exposure:        contributionExposure(contribution.Exposure),
+			Deprecated:      metadataBool(contribution.Metadata, "deprecated"),
 		})
 	}
 	return nil

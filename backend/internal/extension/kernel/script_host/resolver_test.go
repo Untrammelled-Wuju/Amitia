@@ -185,79 +185,6 @@ func TestResolver_TaskHost_ExplicitResolves(t *testing.T) {
 	}
 }
 
-func TestResolver_LegacyWorkspace_Resolves(t *testing.T) {
-	tmpDir := t.TempDir()
-	runtimeRoot := t.TempDir()
-	legacyDir := filepath.Join(tmpDir, "runtime", "plugin-host", "dist")
-	if err := os.MkdirAll(legacyDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	legacyFile := filepath.Join(legacyDir, "index.js")
-	if err := os.WriteFile(legacyFile, []byte("// legacy"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	host := newFakeRuntimeHost(util.RuntimePaths{WorkspaceDir: tmpDir, Root: runtimeRoot})
-	inspector := newFakeFileInspector()
-	inspector.addFile(legacyFile, false)
-
-	r, err := NewArtifactResolver(ResolveContext{
-		Host:      host,
-		Inspector: inspector,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	artifact, err := r.Resolve(context.Background(), KindPluginHost)
-	if err != nil {
-		t.Fatalf("expected success: %v", err)
-	}
-	if artifact.Source != SourceLegacyWorkspace {
-		t.Errorf("expected SourceLegacyWorkspace, got %s", artifact.Source)
-	}
-}
-
-func TestResolver_LegacyWorkspace_NotFound(t *testing.T) {
-	tmpDir := t.TempDir()
-	runtimeRoot := t.TempDir()
-
-	host := newFakeRuntimeHost(util.RuntimePaths{WorkspaceDir: tmpDir, Root: runtimeRoot})
-	inspector := newFakeFileInspector()
-
-	r, err := NewArtifactResolver(ResolveContext{
-		Host:      host,
-		Inspector: inspector,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = r.Resolve(context.Background(), KindPluginHost)
-	if !errors.Is(err, ErrHostArtifactNotFound) {
-		t.Fatalf("expected ErrHostArtifactNotFound, got: %v", err)
-	}
-}
-
-func TestResolver_LegacyWorkspace_EmptyWorkspaceDir(t *testing.T) {
-	runtimeRoot := t.TempDir()
-	host := newFakeRuntimeHost(util.RuntimePaths{WorkspaceDir: "", Root: runtimeRoot})
-	inspector := newFakeFileInspector()
-
-	r, err := NewArtifactResolver(ResolveContext{
-		Host:      host,
-		Inspector: inspector,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = r.Resolve(context.Background(), KindPluginHost)
-	if !errors.Is(err, ErrWorkspaceUnavailable) {
-		t.Fatalf("expected ErrWorkspaceUnavailable, got: %v", err)
-	}
-}
-
 func TestResolver_ContextCancellation(t *testing.T) {
 	host := newFakeRuntimeHost(util.RuntimePaths{})
 	inspector := newFakeFileInspector()
@@ -279,26 +206,26 @@ func TestResolver_ContextCancellation(t *testing.T) {
 	}
 }
 
-func TestResolver_ExplicitPriority_OverridesLegacy(t *testing.T) {
+func TestResolver_ExplicitPriority_OverridesRuntimePackage(t *testing.T) {
 	tmpDir := t.TempDir()
 	explicitFile := filepath.Join(tmpDir, "override.js")
 	if err := os.WriteFile(explicitFile, []byte("// override"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	legacyDir := filepath.Join(tmpDir, "runtime", "plugin-host", "dist")
-	if err := os.MkdirAll(legacyDir, 0o755); err != nil {
+	runtimeDir := filepath.Join(tmpDir, "runtime", "plugin-host", "dist")
+	if err := os.MkdirAll(runtimeDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	legacyFile := filepath.Join(legacyDir, "index.js")
-	if err := os.WriteFile(legacyFile, []byte("// legacy"), 0o644); err != nil {
+	runtimeFile := filepath.Join(runtimeDir, "index.js")
+	if err := os.WriteFile(runtimeFile, []byte("// runtime"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	host := newFakeRuntimeHost(util.RuntimePaths{WorkspaceDir: tmpDir})
 	inspector := newFakeFileInspector()
 	inspector.addFile(explicitFile, false)
-	inspector.addFile(legacyFile, false)
+	inspector.addFile(runtimeFile, false)
 
 	r, err := NewArtifactResolver(ResolveContext{
 		Host:               host,
@@ -318,21 +245,21 @@ func TestResolver_ExplicitPriority_OverridesLegacy(t *testing.T) {
 	}
 }
 
-func TestResolver_RuntimeFallsBackToLegacy(t *testing.T) {
+func TestResolver_RuntimePackageMissingFailsClosed(t *testing.T) {
 	tmpDir := t.TempDir()
 	runtimeRoot := t.TempDir()
-	legacyDir := filepath.Join(tmpDir, "runtime", "task-host", "dist")
-	if err := os.MkdirAll(legacyDir, 0o755); err != nil {
+	runtimeDir := filepath.Join(tmpDir, "runtime", "task-host", "dist")
+	if err := os.MkdirAll(runtimeDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	legacyFile := filepath.Join(legacyDir, "index.js")
-	if err := os.WriteFile(legacyFile, []byte("// task fallback"), 0o644); err != nil {
+	runtimeFile := filepath.Join(runtimeDir, "index.js")
+	if err := os.WriteFile(runtimeFile, []byte("// task runtime"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	host := newFakeRuntimeHost(util.RuntimePaths{WorkspaceDir: tmpDir, Root: runtimeRoot})
 	inspector := newFakeFileInspector()
-	inspector.addFile(legacyFile, false)
+	inspector.addFile(runtimeFile, false)
 
 	r, err := NewArtifactResolver(ResolveContext{
 		Host:      host,
@@ -342,12 +269,9 @@ func TestResolver_RuntimeFallsBackToLegacy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	artifact, err := r.Resolve(context.Background(), KindTaskHost)
-	if err != nil {
-		t.Fatalf("expected success: %v", err)
-	}
-	if artifact.Source != SourceLegacyWorkspace {
-		t.Errorf("expected SourceLegacyWorkspace fallback, got %s", artifact.Source)
+	_, err = r.Resolve(context.Background(), KindTaskHost)
+	if !errors.Is(err, ErrHostArtifactNotFound) {
+		t.Fatalf("expected ErrHostArtifactNotFound, got %v", err)
 	}
 }
 

@@ -5,10 +5,10 @@ import vue from "@vitejs/plugin-vue"
 import { resolve } from "path"
 import { existsSync, readFileSync } from "fs"
 
-const apiTarget = process.env.AMITIA_WEB_API_TARGET || "http://127.0.0.1:18899"
+const apiTarget = process.env.AMITIA_WEB_API_TARGET?.trim() || ""
 const localTokenPath = resolve(__dirname, "../AmitiaData/security/local-token")
 
-const apiProxy = {
+const apiProxy = apiTarget ? {
   target: apiTarget,
   changeOrigin: true,
   configure(proxy: any) {
@@ -19,7 +19,15 @@ const apiProxy = {
       if (token) request.setHeader("X-Amitia-Local-Token", token)
     })
   },
-}
+} : undefined
+
+const proxy = apiProxy ? {
+  "/api": apiProxy,
+  "/internal": apiProxy,
+  "/media": apiProxy,
+  "/livez": apiProxy,
+  "/readyz": apiProxy,
+} : undefined
 
 export default defineConfig({
   plugins: [vue()],
@@ -44,12 +52,6 @@ export default defineConfig({
   server: {
     port: 0,
     strictPort: false,
-    proxy: {
-      "/api": apiProxy,
-      "/internal": apiProxy,
-      "/media": apiProxy,
-      "/livez": apiProxy,
-      "/readyz": apiProxy,
-    },
+    proxy,
   },
 })

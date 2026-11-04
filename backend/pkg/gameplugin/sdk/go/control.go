@@ -25,13 +25,6 @@ const (
 	ControlModePluginControl = "plugin_control"
 	ControlModeUserControl   = "user_control"
 	ControlModeSuspended     = "suspended"
-
-	// Backward-compatible constant names. Values are the canonical GameHost v1
-	// wire values above.
-	ControlModeObserve = ControlModeObserveOnly
-	ControlModeShared  = ControlModeSharedControl
-	ControlModePlugin  = ControlModePluginControl
-	ControlModeUser    = ControlModeUserControl
 )
 
 const (

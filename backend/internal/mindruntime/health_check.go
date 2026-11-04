@@ -9,12 +9,11 @@ import (
 type HealthCheckTarget string
 
 const (
-	HealthCheckAffect        HealthCheckTarget = "affect"
-	HealthCheckBelief        HealthCheckTarget = "belief"
-	HealthCheckSnapshot      HealthCheckTarget = "snapshot"
-	HealthCheckPsyche        HealthCheckTarget = "psyche"
-	HealthCheckRelationship  HealthCheckTarget = "relationship"
-	HealthCheckDataLifecycle HealthCheckTarget = "data_lifecycle"
+	HealthCheckAffect       HealthCheckTarget = "affect"
+	HealthCheckBelief       HealthCheckTarget = "belief"
+	HealthCheckSnapshot     HealthCheckTarget = "snapshot"
+	HealthCheckPsyche       HealthCheckTarget = "psyche"
+	HealthCheckRelationship HealthCheckTarget = "relationship"
 )
 
 type HealthCheckResult struct {
@@ -89,8 +88,6 @@ func resolveHealthChecks(target HealthCheckTarget) []ComponentCheck {
 		return healthCheckPsyche()
 	case HealthCheckRelationship:
 		return healthCheckRelationship()
-	case HealthCheckDataLifecycle:
-		return healthCheckDataLifecycle()
 	default:
 		return []ComponentCheck{{
 			Name:    "target_resolution",
@@ -279,10 +276,6 @@ func healthCheckRelationship() []ComponentCheck {
 			Message: "no unresolved events with stale timestamps",
 		},
 	}
-}
-
-func healthCheckDataLifecycle() []ComponentCheck {
-	return []ComponentCheck{{Name: "owner_scope_required", Passed: false, Message: "旧删除协调器已退役；请通过 /api/privacy/deletion/stats 核验当前Owner的实际删除状态"}}
 }
 
 func formatInt(val int) string {

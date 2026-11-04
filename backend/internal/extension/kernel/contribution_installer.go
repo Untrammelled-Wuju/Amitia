@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/agent_skill"
@@ -31,13 +32,17 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/ui_provider"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
 	"github.com/u-ai/backend/internal/extension/runtimegate"
+	"github.com/u-ai/backend/internal/runtimeprofile"
 	gameprotocol "github.com/u-ai/backend/pkg/gameplugin/protocol"
 	"github.com/u-ai/backend/pkg/resourceuri"
 )
 
 type TypedContributionInstaller struct {
-	container   *Container
-	candidateNS *CandidateNamespace
+	container    *Container
+	candidateNS  *CandidateNamespace
+	adaptersMu   sync.RWMutex
+	adaptersOnce sync.Once
+	adapters     map[domain.ContributionAdapter]contributionAdapterHandler
 }
 
 func normalizeJSONSchemaRaw(raw json.RawMessage) json.RawMessage {
@@ -55,8 +60,15 @@ func normalizeJSONSchemaRaw(raw json.RawMessage) json.RawMessage {
 	return json.RawMessage(trimmed)
 }
 
+type contributionAdapterHandler struct {
+	build      func(context.Context, domain.ContributionDefinition, []byte, int64) (installOp, error)
+	activate   func(context.Context, domain.ContributionDefinition, int64) error
+	deactivate func(context.Context, domain.ContributionDefinition) error
+	discard    func(context.Context, domain.ContributionDefinition, []byte, map[string]bool) error
+}
+
 func NewTypedContributionInstaller(container *Container) *TypedContributionInstaller {
-	return &TypedContributionInstaller{container: container}
+	return &TypedContributionInstaller{container: container, adapters: make(map[domain.ContributionAdapter]contributionAdapterHandler)}
 }
 
 func (i *TypedContributionInstaller) SetContainer(container *Container) {
@@ -71,6 +83,151 @@ func (i *TypedContributionInstaller) SetCandidateNamespace(ns *CandidateNamespac
 		return
 	}
 	i.candidateNS = ns
+}
+
+func (i *TypedContributionInstaller) registerAdapter(adapter domain.ContributionAdapter, handler contributionAdapterHandler) {
+	if i == nil || adapter == "" {
+		return
+	}
+	i.adaptersMu.Lock()
+	defer i.adaptersMu.Unlock()
+	if i.adapters == nil {
+		i.adapters = make(map[domain.ContributionAdapter]contributionAdapterHandler)
+	}
+	i.adapters[adapter] = handler
+}
+
+func (i *TypedContributionInstaller) adapterHandler(adapter domain.ContributionAdapter) (contributionAdapterHandler, bool) {
+	if i == nil {
+		return contributionAdapterHandler{}, false
+	}
+	i.adaptersOnce.Do(i.registerBuiltInAdapters)
+	i.adaptersMu.RLock()
+	defer i.adaptersMu.RUnlock()
+	handler, ok := i.adapters[adapter]
+	return handler, ok
+}
+
+func (i *TypedContributionInstaller) registerBuiltInAdapters() {
+	i.registerAdapter(domain.ContributionAdapterTool, contributionAdapterHandler{
+		build: i.buildToolOp,
+		activate: func(ctx context.Context, contrib domain.ContributionDefinition, _ int64) error {
+			return i.activateTool(ctx, contrib)
+		},
+		deactivate: i.deactivateTool,
+		discard: func(ctx context.Context, contrib domain.ContributionDefinition, data []byte, _ map[string]bool) error {
+			return i.discardTool(ctx, contrib, data)
+		},
+	})
+	i.registerAdapter(domain.ContributionAdapterEvent, contributionAdapterHandler{
+		build: func(ctx context.Context, contrib domain.ContributionDefinition, data []byte, _ int64) (installOp, error) {
+			return i.buildEventSubscriptionOp(ctx, contrib, data)
+		},
+		activate: func(ctx context.Context, contrib domain.ContributionDefinition, _ int64) error {
+			return i.activateEventSubscription(ctx, contrib)
+		},
+		deactivate: i.deactivateEventSubscription,
+		discard: func(ctx context.Context, contrib domain.ContributionDefinition, data []byte, _ map[string]bool) error {
+			return i.discardEventSubscription(ctx, contrib, data)
+		},
+	})
+	i.registerAdapter(domain.ContributionAdapterHook, contributionAdapterHandler{
+		build: func(ctx context.Context, contrib domain.ContributionDefinition, data []byte, _ int64) (installOp, error) {
+			return i.buildHookOp(ctx, contrib, data)
+		},
+		activate: func(ctx context.Context, contrib domain.ContributionDefinition, _ int64) error {
+			return i.activateHook(ctx, contrib)
+		},
+		deactivate: i.deactivateHook,
+		discard: func(ctx context.Context, contrib domain.ContributionDefinition, data []byte, _ map[string]bool) error {
+			return i.discardHook(ctx, contrib, data)
+		},
+	})
+	i.registerAdapter(domain.ContributionAdapterSchedule, contributionAdapterHandler{
+		build: func(ctx context.Context, contrib domain.ContributionDefinition, data []byte, _ int64) (installOp, error) {
+			return i.buildScheduleOp(ctx, contrib, data)
+		},
+		activate: func(ctx context.Context, contrib domain.ContributionDefinition, _ int64) error {
+			return i.activateSchedule(ctx, contrib)
+		},
+		deactivate: i.deactivateSchedule,
+		discard:    i.discardSchedule,
+	})
+	i.registerAdapter(domain.ContributionAdapterAgentSkill, contributionAdapterHandler{
+		build: func(ctx context.Context, contrib domain.ContributionDefinition, data []byte, _ int64) (installOp, error) {
+			return i.buildAgentSkillOp(ctx, contrib, data)
+		},
+		activate: func(ctx context.Context, contrib domain.ContributionDefinition, _ int64) error {
+			return i.activateAgentSkill(ctx, contrib)
+		},
+		deactivate: i.deactivateAgentSkill,
+		discard:    func(context.Context, domain.ContributionDefinition, []byte, map[string]bool) error { return nil },
+	})
+	i.registerAdapter(domain.ContributionAdapterWorkflow, contributionAdapterHandler{
+		build: func(ctx context.Context, contrib domain.ContributionDefinition, data []byte, _ int64) (installOp, error) {
+			return i.buildWorkflowOp(ctx, contrib, data)
+		},
+		activate: func(ctx context.Context, contrib domain.ContributionDefinition, _ int64) error {
+			return i.activateWorkflow(ctx, contrib)
+		},
+		deactivate: i.deactivateWorkflow,
+		discard: func(ctx context.Context, contrib domain.ContributionDefinition, data []byte, _ map[string]bool) error {
+			return i.discardWorkflow(ctx, contrib, data)
+		},
+	})
+	i.registerAdapter(domain.ContributionAdapterBackground, contributionAdapterHandler{
+		build: i.buildTaskDefinitionOp,
+		discard: func(ctx context.Context, contrib domain.ContributionDefinition, data []byte, _ map[string]bool) error {
+			return i.discardTaskDefinition(ctx, contrib, data)
+		},
+	})
+	i.registerAdapter(domain.ContributionAdapterMCPServer, contributionAdapterHandler{
+		build:      i.buildMCPServerOp,
+		activate:   i.activateMCPServer,
+		deactivate: i.deactivateMCPServer,
+		discard: func(ctx context.Context, contrib domain.ContributionDefinition, data []byte, _ map[string]bool) error {
+			return i.discardMCPServer(ctx, contrib, data)
+		},
+	})
+	i.registerAdapter(domain.ContributionAdapterUI, contributionAdapterHandler{
+		build:      i.buildUIContributionOp,
+		activate:   i.activateUI,
+		deactivate: i.deactivateUI,
+		discard: func(ctx context.Context, contrib domain.ContributionDefinition, data []byte, _ map[string]bool) error {
+			if isDesktopUIContribution(contrib) {
+				return i.discardDesktopContribution(ctx, contrib, data)
+			}
+			return i.discardUIContribution(ctx, contrib, data)
+		},
+	})
+	i.registerAdapter(domain.ContributionAdapterUIProvider, contributionAdapterHandler{
+		build: i.buildUIProviderOp,
+		activate: func(ctx context.Context, contrib domain.ContributionDefinition, _ int64) error {
+			return i.activateUIProvider(ctx, contrib)
+		},
+		deactivate: i.deactivateUIProvider,
+		discard: func(ctx context.Context, contrib domain.ContributionDefinition, data []byte, _ map[string]bool) error {
+			return i.discardUIProvider(ctx, contrib, data)
+		},
+	})
+	i.registerAdapter(domain.ContributionAdapterUISlot, contributionAdapterHandler{
+		build: func(ctx context.Context, contrib domain.ContributionDefinition, data []byte, _ int64) (installOp, error) {
+			return i.buildUISlotOp(ctx, contrib, data)
+		},
+		activate: func(ctx context.Context, contrib domain.ContributionDefinition, _ int64) error {
+			return i.activateUISlot(ctx, contrib)
+		},
+		deactivate: i.deactivateUISlot,
+		discard: func(ctx context.Context, contrib domain.ContributionDefinition, data []byte, _ map[string]bool) error {
+			return i.discardUISlot(ctx, contrib, data)
+		},
+	})
+	i.registerAdapter(domain.ContributionAdapterGame, contributionAdapterHandler{
+		build: i.buildGamePluginOp,
+	})
+	i.registerAdapter(domain.ContributionAdapterDesktopPet, contributionAdapterHandler{
+		build: i.buildDesktopPetPluginOp,
+	})
 }
 
 type installOp struct {
@@ -178,7 +335,7 @@ func orderContributionsForInstall(contribs []domain.ContributionDefinition) ([]d
 	others := make([]domain.ContributionDefinition, 0, len(contribs))
 	batchSlots := make(map[extension_slots.SlotID]struct{})
 	for _, contrib := range contribs {
-		if contrib.Kind != domain.ContributionKindUISlot {
+		if contrib.EffectiveAdapter() != domain.ContributionAdapterUISlot {
 			others = append(others, contrib)
 			continue
 		}
@@ -226,7 +383,7 @@ func orderContributionsForTeardown(contribs []domain.ContributionDefinition) ([]
 	nonSlots := make([]domain.ContributionDefinition, 0, len(ordered))
 	slots := make([]domain.ContributionDefinition, 0)
 	for _, contrib := range ordered {
-		if contrib.Kind == domain.ContributionKindUISlot {
+		if contrib.EffectiveAdapter() == domain.ContributionAdapterUISlot {
 			slots = append(slots, contrib)
 		} else {
 			nonSlots = append(nonSlots, contrib)
@@ -236,6 +393,14 @@ func orderContributionsForTeardown(contribs []domain.ContributionDefinition) ([]
 		nonSlots = append(nonSlots, slots[idx])
 	}
 	return nonSlots, nil
+}
+
+func isDesktopUIContribution(contrib domain.ContributionDefinition) bool {
+	if contrib.Definition == nil {
+		return false
+	}
+	kind, _ := contrib.Definition["kind"].(string)
+	return kind == string(ui_contribution.UIContributionDesktopCommand)
 }
 
 func (i *TypedContributionInstaller) buildInstallOp(ctx context.Context, contrib domain.ContributionDefinition, generation int64) (installOp, error) {
@@ -248,38 +413,11 @@ func (i *TypedContributionInstaller) buildInstallOp(ctx context.Context, contrib
 		return installOp{}, fmt.Errorf("marshal definition: %w", err)
 	}
 
-	switch contrib.Kind {
-	case domain.ContributionKindProvider:
-		return installOp{}, fmt.Errorf("legacy provider contribution must be normalized to module provider metadata: %s", contrib.ID)
-	case domain.ContributionKindTool:
-		return i.buildToolOp(ctx, contrib, defData, generation)
-	case domain.ContributionKindEventSubscription:
-		return i.buildEventSubscriptionOp(ctx, contrib, defData)
-	case domain.ContributionKindHook:
-		return i.buildHookOp(ctx, contrib, defData)
-	case domain.ContributionKindSchedule:
-		return i.buildScheduleOp(ctx, contrib, defData)
-	case domain.ContributionKindAgentSkill:
-		return i.buildAgentSkillOp(ctx, contrib, defData)
-	case domain.ContributionKindWorkflow:
-		return i.buildWorkflowOp(ctx, contrib, defData)
-	case domain.ContributionKindBackgroundTask:
-		return i.buildTaskDefinitionOp(ctx, contrib, defData, generation)
-	case domain.ContributionKindMCPServer:
-		return i.buildMCPServerOp(ctx, contrib, defData, generation)
-	case domain.ContributionKindUIPage, domain.ContributionKindUIPanel, domain.ContributionKindUIChat, domain.ContributionKindUIContextAction, domain.ContributionKindUIDesktop:
-		return i.buildUIContributionOp(ctx, contrib, defData, generation)
-	case domain.ContributionKindUIProvider:
-		return i.buildUIProviderOp(ctx, contrib, defData, generation)
-	case domain.ContributionKindUISlot:
-		return i.buildUISlotOp(ctx, contrib, defData)
-	case domain.ContributionKindGamePlugin:
-		return i.buildGamePluginOp(ctx, contrib, defData, generation)
-	case domain.ContributionKindPetPlugin:
-		return i.buildDesktopPetPluginOp(ctx, contrib, defData, generation)
-	default:
-		return installOp{}, fmt.Errorf("unsupported contribution kind: %s", contrib.Kind)
+	handler, ok := i.adapterHandler(contrib.EffectiveAdapter())
+	if !ok || handler.build == nil {
+		return installOp{}, fmt.Errorf("unsupported contribution adapter %s for kind %s", contrib.EffectiveAdapter(), contrib.Kind)
 	}
+	return handler.build(ctx, contrib, defData, generation)
 }
 
 func (i *TypedContributionInstaller) buildUISlotOp(ctx context.Context, contrib domain.ContributionDefinition, defData []byte) (installOp, error) {
@@ -353,8 +491,8 @@ func normalizeUISlotDefinition(contrib domain.ContributionDefinition, defData []
 	if def.ContractVersion == 0 {
 		def.ContractVersion = 1
 	}
-	if def.Multiplicity == "" {
-		def.Multiplicity = extension_slots.MultiplicityOrderedMultiple
+	if def.DispatchKind == "" {
+		def.DispatchKind = extension_slots.DispatchList
 	}
 	if def.Layout == "" {
 		def.Layout = extension_slots.LayoutStack
@@ -1165,6 +1303,7 @@ func (i *TypedContributionInstaller) buildUIContributionOp(ctx context.Context, 
 	if err := json.Unmarshal(defData, &uiDef); err != nil {
 		return installOp{}, fmt.Errorf("unmarshal ui contribution: %w", err)
 	}
+	uiDef.Schema = normalizeJSONSchemaRaw(uiDef.Schema)
 	if uiDef.ContributionID == "" {
 		uiDef.ContributionID = ui_contribution.ContributionID(contrib.ID)
 	}
@@ -1201,12 +1340,13 @@ func (i *TypedContributionInstaller) buildUIContributionOp(ctx context.Context, 
 		}
 	}
 	hasPage := !hostRuntime && (uiDef.Kind == ui_contribution.UIContributionSchemaPage || (uiDef.Kind == ui_contribution.UIContributionWebPage && uiDef.Sandbox.Type == ui_contribution.SandboxSchemaRenderer))
-	hasSchema := !hostRuntime && (uiDef.Entry.SchemaPath != "" || uiDef.Sandbox.Type == ui_contribution.SandboxSchemaRenderer)
-	if hasSchema && uiDef.Entry.SchemaPath == "" {
-		return installOp{}, fmt.Errorf("schema ui contribution %s requires entry.schema_path", uiDef.ContributionID)
+	hasSchema := !hostRuntime && (uiDef.Entry.SchemaPath != "" || len(uiDef.Schema) > 0 || uiDef.Sandbox.Type == ui_contribution.SandboxSchemaRenderer)
+	hasInlineSchema := len(uiDef.Schema) > 0
+	if hasSchema && uiDef.Entry.SchemaPath == "" && !hasInlineSchema {
+		return installOp{}, fmt.Errorf("schema ui contribution %s requires entry.schema_path or inline schema", uiDef.ContributionID)
 	}
 	basePath := ""
-	if hasSchema {
+	if hasSchema && !hasInlineSchema {
 		if i.container.SchemaRegistry == nil {
 			return installOp{}, fmt.Errorf("schema registry not configured")
 		}
@@ -1218,9 +1358,17 @@ func (i *TypedContributionInstaller) buildUIContributionOp(ctx context.Context, 
 		if err := validationRegistry.LoadFromPathWithContext(string(uiDef.ExtensionID), string(uiDef.ContributionID), generation, "", "", basePath, uiDef.Entry.SchemaPath); err != nil {
 			return installOp{}, fmt.Errorf("validate schema resource: %w", err)
 		}
+	} else if hasInlineSchema {
+		if i.container.SchemaRegistry == nil {
+			return installOp{}, fmt.Errorf("schema registry not configured")
+		}
+		validationRegistry := schema_ui.NewSchemaRegistry(i.container.SchemaValidator, nil)
+		if err := validationRegistry.LoadFromBytesWithContext(string(uiDef.ExtensionID), string(uiDef.ContributionID), generation, "", "", uiDef.Schema); err != nil {
+			return installOp{}, fmt.Errorf("validate inline schema: %w", err)
+		}
 	}
 
-	if contrib.Kind == domain.ContributionKindUIDesktop {
+	if isDesktopUIContribution(contrib) {
 		return i.buildDesktopContributionOp(ctx, contrib, defData, uiDef, generation)
 	}
 
@@ -1228,7 +1376,11 @@ func (i *TypedContributionInstaller) buildUIContributionOp(ctx context.Context, 
 		kind: contrib.Kind,
 		doInstall: func(ctx context.Context) error {
 			if hasSchema {
-				if err := i.container.SchemaRegistry.LoadFromPathWithContext(string(uiDef.ExtensionID), string(uiDef.ContributionID), generation, "", "", basePath, uiDef.Entry.SchemaPath); err != nil {
+				if hasInlineSchema {
+					if err := i.container.SchemaRegistry.LoadFromBytesWithContext(string(uiDef.ExtensionID), string(uiDef.ContributionID), generation, "", "", uiDef.Schema); err != nil {
+						return fmt.Errorf("load inline schema: %w", err)
+					}
+				} else if err := i.container.SchemaRegistry.LoadFromPathWithContext(string(uiDef.ExtensionID), string(uiDef.ContributionID), generation, "", "", basePath, uiDef.Entry.SchemaPath); err != nil {
 					return fmt.Errorf("load schema resource: %w", err)
 				}
 			}
@@ -1557,7 +1709,7 @@ func (i *TypedContributionInstaller) ActivateContributions(ctx context.Context, 
 }
 
 func (i *TypedContributionInstaller) applyLocalUnsignedTrustOverride(ctx context.Context, extID domain.ExtensionID, contribs []domain.ContributionDefinition) {
-	if !strings.EqualFold(strings.TrimSpace(os.Getenv("AMITIA_RUN_MODE")), "desktop") {
+	if i == nil || i.container == nil || i.container.RuntimeProfile != runtimeprofile.ProfileLocal {
 		return
 	}
 	installation, err := i.container.InstallationRepository.GetInstallation(ctx, extID)
@@ -1569,7 +1721,7 @@ func (i *TypedContributionInstaller) applyLocalUnsignedTrustOverride(ctx context
 		return
 	}
 	for index := range contribs {
-		if contribs[index].Kind != domain.ContributionKindUIProvider {
+		if contribs[index].EffectiveAdapter() != domain.ContributionAdapterUIProvider {
 			continue
 		}
 		if contribs[index].Definition == nil {
@@ -1580,27 +1732,12 @@ func (i *TypedContributionInstaller) applyLocalUnsignedTrustOverride(ctx context
 }
 
 func (i *TypedContributionInstaller) activateSingle(ctx context.Context, contrib domain.ContributionDefinition, generation int64) error {
-	switch contrib.Kind {
-	case domain.ContributionKindTool:
-		return i.activateTool(ctx, contrib)
-	case domain.ContributionKindEventSubscription:
-		return i.activateEventSubscription(ctx, contrib)
-	case domain.ContributionKindHook:
-		return i.activateHook(ctx, contrib)
-	case domain.ContributionKindSchedule:
-		return i.activateSchedule(ctx, contrib)
-	case domain.ContributionKindAgentSkill:
-		return i.activateAgentSkill(ctx, contrib)
-	case domain.ContributionKindWorkflow:
-		return i.activateWorkflow(ctx, contrib)
-	case domain.ContributionKindMCPServer:
-		return i.activateMCPServer(ctx, contrib, generation)
-	case domain.ContributionKindUIPage, domain.ContributionKindUIPanel, domain.ContributionKindUIChat, domain.ContributionKindUIContextAction, domain.ContributionKindUIDesktop:
-		return i.activateUI(ctx, contrib, generation)
-	case domain.ContributionKindUIProvider:
-		return i.activateUIProvider(ctx, contrib)
-	case domain.ContributionKindUISlot:
-		return i.activateUISlot(ctx, contrib)
+	handler, ok := i.adapterHandler(contrib.EffectiveAdapter())
+	if !ok {
+		return fmt.Errorf("unsupported contribution adapter %s for kind %s", contrib.EffectiveAdapter(), contrib.Kind)
+	}
+	if handler.activate != nil {
+		return handler.activate(ctx, contrib, generation)
 	}
 	return nil
 }
@@ -2022,7 +2159,7 @@ func (i *TypedContributionInstaller) activateUI(ctx context.Context, contrib dom
 			return fmt.Errorf("mount ui contribution %s: %w", uiDef.ContributionID, err)
 		}
 	}
-	if contrib.Kind == domain.ContributionKindUIDesktop && i.container.DesktopHost != nil {
+	if isDesktopUIContribution(contrib) && i.container.DesktopHost != nil {
 		i.container.DesktopHost.EnableExtension(ctx, string(contrib.ExtensionID))
 	}
 	return nil
@@ -2070,27 +2207,12 @@ func (i *TypedContributionInstaller) DeactivateContributions(ctx context.Context
 }
 
 func (i *TypedContributionInstaller) deactivateSingle(ctx context.Context, contrib domain.ContributionDefinition) error {
-	switch contrib.Kind {
-	case domain.ContributionKindTool:
-		return i.deactivateTool(ctx, contrib)
-	case domain.ContributionKindEventSubscription:
-		return i.deactivateEventSubscription(ctx, contrib)
-	case domain.ContributionKindHook:
-		return i.deactivateHook(ctx, contrib)
-	case domain.ContributionKindSchedule:
-		return i.deactivateSchedule(ctx, contrib)
-	case domain.ContributionKindAgentSkill:
-		return i.deactivateAgentSkill(ctx, contrib)
-	case domain.ContributionKindWorkflow:
-		return i.deactivateWorkflow(ctx, contrib)
-	case domain.ContributionKindMCPServer:
-		return i.deactivateMCPServer(ctx, contrib)
-	case domain.ContributionKindUIPage, domain.ContributionKindUIPanel, domain.ContributionKindUIChat, domain.ContributionKindUIContextAction, domain.ContributionKindUIDesktop:
-		return i.deactivateUI(ctx, contrib)
-	case domain.ContributionKindUIProvider:
-		return i.deactivateUIProvider(ctx, contrib)
-	case domain.ContributionKindUISlot:
-		return i.deactivateUISlot(ctx, contrib)
+	handler, ok := i.adapterHandler(contrib.EffectiveAdapter())
+	if !ok {
+		return fmt.Errorf("unsupported contribution adapter %s for kind %s", contrib.EffectiveAdapter(), contrib.Kind)
+	}
+	if handler.deactivate != nil {
+		return handler.deactivate(ctx, contrib)
 	}
 	return nil
 }
@@ -2387,7 +2509,7 @@ func (i *TypedContributionInstaller) UninstallContributions(ctx context.Context,
 		}
 		if contributions, err := i.container.ContributionRepository.ListContributions(ctx, extID); err == nil && i.container.Store != nil {
 			for _, contribution := range contributions {
-				if contribution.Kind != domain.ContributionKindAgentSkill {
+				if contribution.EffectiveAdapter() != domain.ContributionAdapterAgentSkill {
 					continue
 				}
 				if _, err := i.container.Store.DB().ExecContext(ctx, `DELETE FROM extension_agent_skill_overrides WHERE owner_space_id = ? AND skill_id = ?`, ownerSpaceID, string(contribution.ExtensionID)+":"+string(contribution.ID)); err != nil {
@@ -2410,7 +2532,7 @@ func (i *TypedContributionInstaller) UninstallContributions(ctx context.Context,
 	if i.container.WorkflowRegistry != nil {
 		contribs, _ := i.container.ContributionRepository.ListContributions(ctx, extID)
 		for _, contrib := range contribs {
-			if contrib.Kind != domain.ContributionKindWorkflow {
+			if contrib.EffectiveAdapter() != domain.ContributionAdapterWorkflow {
 				continue
 			}
 			defData, _ := json.Marshal(contrib.Definition)
@@ -2601,8 +2723,8 @@ func (i *TypedContributionInstaller) recoverInMemoryRegistrations(ctx context.Co
 		return fmt.Errorf("list contributions for recover: %w", err)
 	}
 	for _, contrib := range contribs {
-		switch contrib.Kind {
-		case domain.ContributionKindAgentSkill:
+		switch contrib.EffectiveAdapter() {
+		case domain.ContributionAdapterAgentSkill:
 			if i.container.AgentSkillCatalog != nil {
 				defData, _ := json.Marshal(contrib.Definition)
 				var def agent_skill.AgentSkillDefinition
@@ -2631,7 +2753,10 @@ func (i *TypedContributionInstaller) recoverInMemoryRegistrations(ctx context.Co
 					}
 				}
 			}
-		case domain.ContributionKindUIDesktop:
+		case domain.ContributionAdapterUI:
+			if !isDesktopUIContribution(contrib) {
+				continue
+			}
 			if i.container.DesktopHost != nil {
 				defData, _ := json.Marshal(contrib.Definition)
 				var desktopDef desktop.DesktopContributionDefinition
@@ -2770,34 +2895,11 @@ func (i *TypedContributionInstaller) discardSingleContribution(ctx context.Conte
 		return fmt.Errorf("marshal definition: %w", err)
 	}
 
-	switch contrib.Kind {
-	case domain.ContributionKindTool:
-		return i.discardTool(ctx, contrib, defData)
-	case domain.ContributionKindEventSubscription:
-		return i.discardEventSubscription(ctx, contrib, defData)
-	case domain.ContributionKindHook:
-		return i.discardHook(ctx, contrib, defData)
-	case domain.ContributionKindSchedule:
-		return i.discardSchedule(ctx, contrib, defData, scheduleIDSet)
-	case domain.ContributionKindAgentSkill:
-		return nil
-	case domain.ContributionKindWorkflow:
-		return i.discardWorkflow(ctx, contrib, defData)
-	case domain.ContributionKindBackgroundTask:
-		return i.discardTaskDefinition(ctx, contrib, defData)
-	case domain.ContributionKindMCPServer:
-		return i.discardMCPServer(ctx, contrib, defData)
-	case domain.ContributionKindUIPage, domain.ContributionKindUIPanel, domain.ContributionKindUIChat, domain.ContributionKindUIContextAction:
-		return i.discardUIContribution(ctx, contrib, defData)
-	case domain.ContributionKindUIDesktop:
-		return i.discardDesktopContribution(ctx, contrib, defData)
-	case domain.ContributionKindUIProvider:
-		return i.discardUIProvider(ctx, contrib, defData)
-	case domain.ContributionKindUISlot:
-		return i.discardUISlot(ctx, contrib, defData)
-	default:
+	handler, ok := i.adapterHandler(contrib.EffectiveAdapter())
+	if !ok || handler.discard == nil {
 		return nil
 	}
+	return handler.discard(ctx, contrib, defData, scheduleIDSet)
 }
 
 func (i *TypedContributionInstaller) discardUISlot(ctx context.Context, contrib domain.ContributionDefinition, defData []byte) error {

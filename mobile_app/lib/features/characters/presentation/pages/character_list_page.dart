@@ -77,6 +77,11 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
         navigation: AmitiaAppBarNavigation.back,
         actions: [
           AmitiaIconButton(
+            icon: Icons.groups_outlined,
+            tooltip: '团队',
+            onPressed: () => context.push(AppRoutes.charactersTeams),
+          ),
+          AmitiaIconButton(
             icon: _searchVisible ? Icons.close : Icons.search,
             tooltip: _searchVisible ? '退出搜索' : '搜索',
             onPressed: () {
@@ -402,6 +407,18 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                 children: [
                   Text('管理角色', style: AppTypography.pageTitle(context)),
                   const SizedBox(height: 16),
+                  AmitiaListTile(
+                    leading: _buildSheetIcon(
+                      context,
+                      Icons.groups_outlined,
+                      context.accentPrimary,
+                    ),
+                    title: '团队管理',
+                    onTap: () {
+                      Navigator.pop(sheetContext);
+                      context.push(AppRoutes.charactersTeams);
+                    },
+                  ),
                   AmitiaListTile(
                     leading: _buildSheetIcon(
                       context,

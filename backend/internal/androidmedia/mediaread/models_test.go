@@ -136,7 +136,7 @@ func TestNormalizedImageJSON(t *testing.T) {
 		MIMEType:    "image/jpeg",
 		Width:       800,
 		Height:      600,
-		SizeBytes:    100000,
+		SizeBytes:   100000,
 		Normalized:  true,
 		SourceURI:   "amitia://temp/original.jpg",
 	}

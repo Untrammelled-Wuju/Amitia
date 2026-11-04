@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 )
 
@@ -103,26 +102,16 @@ func (p *meshLocalDataPort) managedConversationAction(ctx context.Context, scope
 		if chatManagementString(target.Body, "title") == title {
 			return target.Body, nil
 		}
-		if target.Legacy {
-			result := p.services.DB.WithContext(ctx).Model(&chat.Conversation{}).Where("id=? AND revision=? AND deleted_at IS NULL", target.ID, target.Revision).Updates(map[string]any{"title": title, "revision": target.Revision + 1, "updated_at": time.Now().UTC().Format(time.RFC3339Nano)})
-			if result.Error != nil {
-				return nil, result.Error
-			}
-			if result.RowsAffected != 1 {
-				return nil, coordination.ErrResourceVersion
-			}
-		} else {
-			target.Body["title"], target.Body["updatedAt"] = title, time.Now().UTC().Format(time.RFC3339Nano)
-			encoded, err := json.Marshal(target.Body)
-			if err != nil {
-				return nil, err
-			}
-			current := scope
-			digest := sha256.Sum256([]byte(request.RequestID))
-			current.RequestID = "rename-chat/" + hex.EncodeToString(digest[:])
-			if _, err := p.store.Apply(ctx, coordination.Commit{Scope: current, Mutations: []coordination.Mutation{{Kind: "conversation", ID: target.ID, RoleID: role, ExpectedRevision: target.Revision, Body: encoded}}}); err != nil {
-				return nil, err
-			}
+		target.Body["title"], target.Body["updatedAt"] = title, time.Now().UTC().Format(time.RFC3339Nano)
+		encoded, err := json.Marshal(target.Body)
+		if err != nil {
+			return nil, err
+		}
+		current := scope
+		digest := sha256.Sum256([]byte(request.RequestID))
+		current.RequestID = "rename-chat/" + hex.EncodeToString(digest[:])
+		if _, err := p.store.Apply(ctx, coordination.Commit{Scope: current, Mutations: []coordination.Mutation{{Kind: "conversation", ID: target.ID, RoleID: role, ExpectedRevision: target.Revision, Body: encoded}}}); err != nil {
+			return nil, err
 		}
 		target.Body["title"] = title
 		return target.Body, nil

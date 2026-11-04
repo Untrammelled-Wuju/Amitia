@@ -26,7 +26,6 @@ func TestDirectoryManager_EnsureAll(t *testing.T) {
 		DataRoot:         dataRoot,
 		StorageDir:       filepath.Join(dataRoot, "storage"),
 		SnapshotsDir:     filepath.Join(dataRoot, "snapshots"),
-		MigrationDir:     filepath.Join(dataRoot, "migration"),
 	}
 
 	dm := NewDirectoryManager(nil)
@@ -34,7 +33,7 @@ func TestDirectoryManager_EnsureAll(t *testing.T) {
 		t.Fatalf("Ensure: %v", err)
 	}
 
-	dirs := []string{configRoot, dataRoot, filepath.Join(dataRoot, "storage"), filepath.Join(dataRoot, "snapshots"), filepath.Join(dataRoot, "migration")}
+	dirs := []string{configRoot, dataRoot, filepath.Join(dataRoot, "storage"), filepath.Join(dataRoot, "snapshots")}
 	for _, dir := range dirs {
 		info, err := os.Stat(dir)
 		if err != nil {
@@ -100,6 +99,5 @@ func buildTestLayout(base string) Layout {
 		DataRoot:         dataRoot,
 		StorageDir:       filepath.Join(dataRoot, "storage"),
 		SnapshotsDir:     filepath.Join(dataRoot, "snapshots"),
-		MigrationDir:     filepath.Join(dataRoot, "migration"),
 	}
 }

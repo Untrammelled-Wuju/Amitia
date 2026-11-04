@@ -20,6 +20,7 @@ import (
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/agentpermission"
 	"github.com/u-ai/backend/internal/agentplatform"
+	"github.com/u-ai/backend/internal/agentrun"
 	"github.com/u-ai/backend/internal/attention"
 	"github.com/u-ai/backend/internal/belief"
 	"github.com/u-ai/backend/internal/browser"
@@ -28,12 +29,10 @@ import (
 	chatlocalmodel "github.com/u-ai/backend/internal/chat/localmodel"
 	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/delivery"
-	"github.com/u-ai/backend/internal/desktoppet"
 	"github.com/u-ai/backend/internal/desktoppet/behavior"
 	"github.com/u-ai/backend/internal/desktoppet/behavior/adapters"
 	"github.com/u-ai/backend/internal/desktoppet/behavior/events"
 	"github.com/u-ai/backend/internal/desktoppet/behavior/wiring"
-	"github.com/u-ai/backend/internal/desktoppet/device"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
 	"github.com/u-ai/backend/internal/desktoppet/installation/coordinator"
 	installationprojection "github.com/u-ai/backend/internal/desktoppet/installation/projection"
@@ -43,9 +42,6 @@ import (
 	"github.com/u-ai/backend/pkg/platform"
 
 	channelsandbox "github.com/u-ai/backend/internal/channel/sandbox"
-	"github.com/u-ai/backend/internal/desktoppet/maintenance"
-	"github.com/u-ai/backend/internal/desktoppet/migration"
-	migrationplans "github.com/u-ai/backend/internal/desktoppet/migration/plans"
 	"github.com/u-ai/backend/internal/desktoppet/readiness"
 	"github.com/u-ai/backend/internal/desktoppet/release"
 	releasebuild "github.com/u-ai/backend/internal/desktoppet/release/build"
@@ -85,7 +81,6 @@ import (
 	"github.com/u-ai/backend/internal/knowledge"
 	"github.com/u-ai/backend/internal/media"
 	"github.com/u-ai/backend/internal/middleware/security"
-	migrationcore "github.com/u-ai/backend/internal/migration"
 	"github.com/u-ai/backend/internal/mindruntime"
 	"github.com/u-ai/backend/internal/nativebridge"
 	"github.com/u-ai/backend/internal/notificationruntime"
@@ -123,7 +118,6 @@ type AppServices struct {
 	DeviceMesh                   *devicemesh.Runtime
 	OwnedBusiness                *business.Engine
 	Reminders                    *reminder.Service
-	ClosureGate                  *Stage2ClosureGateAdapter
 	DeliveryStore                *delivery.SQLiteDeliveryStore
 	ChatDeliveryAdapter          chat.DeliveryStore
 	DeliveryWorker               *delivery.Worker
@@ -140,7 +134,6 @@ type AppServices struct {
 	ChatRuntime                  *interaction.RuntimeContextService
 	OwnedIngress                 *ownedChatIngress
 	ContinuityOwner              *ownedContinuityRuntime
-	DataLifecycle                *mindruntime.DataLifecycleCoordinator
 	RuntimeQueue                 *queue.SQLiteRuntimeQueueStore
 	NewOutbox                    *newoutbox.SQLiteOutboxStore
 	OutboxWorker                 *newoutbox.Worker
@@ -177,12 +170,8 @@ type AppServices struct {
 	CanonicalStdioCaller         *CanonicalStdioCaller
 	MCPRuntime                   *mcpservice.Runtime
 	DesktopInstanceStore         *security.DesktopInstanceStore
-	DeviceRepository             *device.Repository
 	RuntimeOrchestrator          RuntimeOrchestrator
 	RuntimeDomainEventConsumer   *runtimev1.OutboxConsumer
-	DesktopPetMigrationRunner    *migration.Runner
-	DesktopPetMaintenanceHandler *maintenance.Handler
-	MigrationLock                *migrationcore.PersistentLock
 	RecoveryDescriptor           *interaction.RecoveryDescriptorService
 	PauseResumeService           *interaction.PauseResumeService
 	BackgroundTaskCoordinator    *interaction.BackgroundTaskCoordinator
@@ -193,7 +182,6 @@ type AppServices struct {
 	WorkspaceRegistry            *workspace.Registry
 	WorkspaceService             *workspace.Service
 	WorkspaceGitHandler          *workspacegit.GitHandler
-	ProductionCutover            *cutoverComposition
 	DataPortability              *dataportability.Coordinator
 	Artifact                     *ArtifactRuntime
 	Sync                         *syncpkg.Service
@@ -202,6 +190,7 @@ type AppServices struct {
 	AccessPolicy                 *agentpermission.Service
 	Attention                    *attention.Service
 	AgentPlatform                *agentplatform.Service
+	AgentRuns                    *agentrun.Service
 }
 
 type RuntimeOrchestrator interface {
@@ -260,6 +249,10 @@ func (a reflectionMemoryServiceAdapter) SubmitReflectionCandidate(req interactio
 func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runtimeBootstrap, runtimeProfile runtimeprofile.Profile, policy runtimeprofile.Policy) (*AppServices, error) {
 	if config.AppCfg == nil {
 		config.AppCfg = &config.Config{}
+	}
+	agentRunService, err := agentrun.NewService(ctx.DB)
+	if err != nil {
+		return nil, err
 	}
 	temporalSvc := temporal.NewService(temporal.NewRepository(ctx.DB), temporal.SystemClock{})
 	memoryConsumers := &ownedMemoryConsumers{}
@@ -426,6 +419,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	}
 	kernelChatAppender := newConversationMessageAppenderAdapter()
 	kernelBuilder := kernel.NewContainerBuilder().
+		WithKernelRuntime(extensionRuntime.Kernel).
 		WithTaskOwnershipBinding(taskOwnershipBinding).
 		WithRuntimeIdentity(kernelRuntimeIdentity).
 		WithWorkshopModelGenerator(chatSvc).
@@ -503,10 +497,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	}
 	if err := kernelContainer.Recover(context.Background()); err != nil {
 		log.Warn("kernel recovery warning: ", err)
-	}
-	if err := extension.MigrateLegacyAgentSkills(context.Background(), ctx.DB, extensionRuntime.Kernel); err != nil {
-		log.Error("legacy agent skill migration failed: ", err)
-		panic("failed to migrate legacy agent skills")
 	}
 	if kernelContainer.WorkflowExecutor != nil {
 		if _, err := kernelContainer.WorkflowExecutor.ReapStuck(context.Background(), 90*time.Second, 24*time.Hour, 100); err != nil {
@@ -615,7 +605,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	chatSvc.SetContinuationService(continuationService)
 	if kernelContainer.DevConsoleService != nil {
 		kernelContainer.DevConsoleService.SetToolFacadeProvider(toolFacade.Counters())
-		kernelContainer.DevConsoleService.SetLegacyCallProvider(kernel.GlobalLegacyCallCounter())
 	}
 	if kernelContainer.HookService != nil {
 		toolFacade.SetHookService(kernelContainer.HookService)
@@ -691,11 +680,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 
 	defaultCharProvider := &defaultCharacterProvider{repo: charRepo}
 	resolver := interaction.NewScopeResolverWithDefaultChar(interaction.NewConversationScopeBindingLookup(ctx.DB), defaultCharProvider)
-	dataLifecycle := mindruntime.NewDataLifecycleCoordinator(ctx.DB)
-	if err := dataLifecycle.InitSchema(); err != nil {
-		log.Error("failed to init data lifecycle schema:", err)
-		panic("failed to init data lifecycle schema")
-	}
 	accessPolicy := agentpermission.NewService(ctx.DB)
 	attentionService := attention.NewService(ctx.DB)
 	if kernelContainer != nil && kernelContainer.ApprovalBroker != nil {
@@ -740,9 +724,10 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	ownedWorkerPort := &ownedWorkerEnginePort{}
 	codingAllocator := &codingWorkerWorktreeAllocator{git: workspaceGitHandler, localDeviceID: kernelRuntimeIdentity.DeviceID.String()}
 	ownedWorkerRunner := newOwnedMultiAgentWorkerRunner(ownedWorkerPort, tracker)
+	ownedWorkerRunner.agentRuns = agentRunService
 	ownedWorkerRunner.usageStore = usageStore
 	multiAgentCoordinator := interaction.NewMultiAgentCoordinator(tracker, goalRegistry, recoveryDescriptor, interaction.NewCodingWorktreeWorkerRunner(ownedWorkerRunner, codingAllocator), pauseResumeService, interaction.DefaultMultiAgentPolicy())
-	nativeMultiAgent := &chatMultiAgentRuntime{coordinator: multiAgentCoordinator, tracker: tracker, goals: goalRegistry}
+	nativeMultiAgent := &chatMultiAgentRuntime{coordinator: multiAgentCoordinator, tracker: tracker, goals: goalRegistry, agentRuns: agentRunService}
 	codingReviewer := &codingWorktreeReviewerService{git: workspaceGitHandler, localDeviceID: kernelRuntimeIdentity.DeviceID.String()}
 	nativeMultiAgent.worktreeReviewer = codingReviewer
 	nativeMultiAgent.terminalReader = newCodingTaskTerminalReader()
@@ -828,10 +813,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	}
 	importStagingRepo := desktoppetsecurity.NewImportStagingRepository(ctx.DB)
 
-	if err := desktoppet.RefreshLegacyWriteFlagsFromDB(ctx.DB); err != nil {
-		return nil, fmt.Errorf("initialize desktop pet legacy write guards: %w", err)
-	}
-
 	coordRepo := installation.NewCoordinatorRepoAdapter(installationRepoV2)
 	coordValidator := &coordinatorReleaseValidator{releases: releaseRepo}
 	coordStager := installation.NewReleaseStager(ctx.DB, pathRegistry)
@@ -856,8 +837,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	runtimeRecovery := installationrecovery.NewRuntimeRecovery(installationRecoveryWorker, recoveryRepo, runtimeRecoveryPort, runtimeFinalizer)
 	switchRecovery := installationrecovery.NewSwitchRecovery(installationRecoveryWorker, recoveryRepo, installationrecovery.NewProductionSwitchRepo(runtimeRecoveryPort))
 	installationRecoveryWorker.ConfigureRecoveries(stagingRecovery, dbRecovery, runtimeRecovery, switchRecovery, runtimeFinalizer)
-
-	deviceRepo := device.NewRepository(ctx.DB)
 
 	var desktopInstanceStore *security.DesktopInstanceStore
 	if config.AppCfg.Security.Mode == "local_single_user" {
@@ -948,56 +927,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		}
 	}
 
-	migrationRepo := migration.NewDBRepository(ctx.DB)
-	migrationRunner := migration.NewRunner(migrationRepo)
-	backupDir := filepath.Join(config.AppCfg.Storage.DataDir, "migration_backups")
-	lockDir := filepath.Join(config.AppCfg.Storage.DataDir, "migration_locks")
-	if err := os.MkdirAll(lockDir, 0o700); err != nil {
-		return nil, fmt.Errorf("initialize migration lock directory: %w", err)
-	}
-	if err := os.MkdirAll(backupDir, 0o700); err != nil {
-		return nil, fmt.Errorf("initialize migration backup directory: %w", err)
-	}
-	migrationLock := migrationcore.NewPersistentLock(ctx.DB, lockDir)
-	migrationRunner.SetLock(migrationLock)
-	migrationRunner.SetBackupDir(backupDir)
-	backupPort := migration.NewDomainMigrationBackupPort(ctx.DB, backupDir)
-	migrationRunner.SetBackupPort(backupPort)
-	migrationRunner.SetLegacyWriteRefresh(func() error {
-		return desktoppet.RefreshLegacyWriteFlagsFromDB(ctx.DB)
-	})
-	migrationRunner.RegisterPlan(migrationplans.NewDesktopPetV2CutoverPlan(migrationplans.Dependencies{
-		DB: ctx.DB,
-		ReadPathReady: func() error {
-			return verifyDesktopPetProductionReader(context.Background(), installationRepoV2)
-		},
-		WritePathReady: func() error {
-			if projectionBridge == nil || installationRecoveryWorker == nil || desiredOutboxWorker == nil {
-				return errors.New("V2 projection/recovery/outbox production wiring is incomplete")
-			}
-			canaryCtx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
-			defer cancel()
-			_, err := executeDesktopPetWriteCanary(canaryCtx, installationCoordinator, installationRepoV2, runtimeV1Facade)
-			return err
-		},
-		ReleasePublishedReady: func(storageKey string) error {
-			publishedPath, err := pathRegistry.Resolve(desktoppetsecurity.RootReleasePublished, storageKey)
-			if err != nil {
-				return err
-			}
-			info, err := os.Lstat(publishedPath)
-			if err != nil {
-				return err
-			}
-			if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-				return fmt.Errorf("published path is not a regular directory: %s", publishedPath)
-			}
-			return nil
-		},
-	}))
-
-	maintenanceHandler := maintenance.NewHandler(migrationRunner, nil, nil, nil)
-
 	artifactRuntime.SetEventPublisher(kernelContainer.EventService)
 	chatSvc.SetArtifactResolver(&chatArtifactAdapter{resolver: artifactRuntime.Resolver})
 	chatSvc.SetArtifactImporter(artifactRuntime.Service)
@@ -1041,14 +970,16 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		}
 	}
 	agentPlatformService, err := agentplatform.NewService(ctx.DB, agentplatform.ServiceConfig{
-		DataDir:         config.AppCfg.Storage.DataDir,
-		RemoteMarketURL: strings.TrimSpace(os.Getenv("AMITIA_PLUGIN_MARKET_URL")),
+		DataDir: config.AppCfg.Storage.DataDir,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("initialize agent platform: %w", err)
 	}
+	if err := agentPlatformService.ReconcileRoleAgents(context.Background()); err != nil {
+		return nil, fmt.Errorf("reconcile role agents: %w", err)
+	}
 	usageStore.SetFinishObserver(func(current context.Context, usage mindruntime.ModelUsageRecord) error {
-		return agentPlatformService.RecordModelBudgetUsage(current, usage.SpaceID, agentplatform.ModelBudgetUsageInput{
+		return agentPlatformService.RecordModelUsageActivity(current, usage.SpaceID, agentplatform.ModelUsageActivityInput{
 			UsageID: usage.ID, CharacterID: usage.RoleID, Model: usage.Model, Provider: usage.Provider,
 			Status: usage.Status, InputTokens: usage.InputTokens, OutputTokens: usage.OutputTokens,
 			TotalTokens: usage.TotalTokens, UsageReported: usage.UsageReported,
@@ -1071,7 +1002,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		Chat:                         chatSvc,
 		UnifiedEntry:                 entry,
 		ChatRuntime:                  orch,
-		DataLifecycle:                dataLifecycle,
 		RuntimeQueue:                 runtimeQueue,
 		NewOutbox:                    newOutboxStore,
 		DeliveryStore:                deliveryStore,
@@ -1111,11 +1041,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		CanonicalStdioCaller:         NewCanonicalStdioCaller(canonicalStdioRegistry),
 		MCPRuntime:                   mcpRuntime,
 		DesktopInstanceStore:         desktopInstanceStore,
-		DeviceRepository:             deviceRepo,
 		RuntimeDomainEventConsumer:   runtimeDomainEventConsumer,
-		DesktopPetMigrationRunner:    migrationRunner,
-		DesktopPetMaintenanceHandler: maintenanceHandler,
-		MigrationLock:                migrationLock,
 		RecoveryDescriptor:           recoveryDescriptor,
 		PauseResumeService:           pauseResumeService,
 		BackgroundTaskCoordinator:    backgroundTaskCoordinator,
@@ -1134,13 +1060,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		AccessPolicy:                 accessPolicy,
 		Attention:                    attentionService,
 		AgentPlatform:                agentPlatformService,
-	}
-	if services.AgentPlatform != nil && services.Extension != nil {
-		services.AgentPlatform.SetMarketplaceInstaller(newMarketplacePackageInstaller(
-			services.Extension,
-			config.AppCfg.Storage.DataDir,
-			runtimeProfile,
-		))
+		AgentRuns:                    agentRunService,
 	}
 	if services.AgentPlatform != nil && services.KernelContainer != nil {
 		runtimeBridge := newAgentPlatformRuntimeBridge(services.AgentPlatform, services.WorkspaceService, services.UnifiedEntry, services.KernelContainer.ApprovalBroker)
@@ -1155,9 +1075,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			services.KernelContainer.ExecutionKernel.AgentObserver = runtimeBridge
 		}
 	}
-	if services.AgentPlatform != nil && services.KernelContainer != nil && services.KernelContainer.SecretBroker != nil {
-		services.AgentPlatform.SetSecretBroker(services.KernelContainer.SecretBroker)
-	}
 	dataPortability, dataPortabilityErr := buildDataPortabilityCoordinator(dataPortabilityDeps{
 		DataDir:   config.AppCfg.Storage.DataDir,
 		DB:        ctx.DB,
@@ -1171,15 +1088,12 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	}
 	services.DataPortability = dataPortability
 
-	if _, err := ctx.DB.DB(); err != nil {
+	sqlDB, err := ctx.DB.DB()
+	if err != nil {
 		return nil, fmt.Errorf("failed to get sql.DB from gorm: %w", err)
 	}
 	dispatcher := devicemesh.NewCloudRuntimeDispatcher(kernelContainer.AdapterRegistry)
 	{
-		sqlDB, dbErr := ctx.DB.DB()
-		if dbErr != nil {
-			return nil, fmt.Errorf("failed to get sql.DB from gorm: %w", dbErr)
-		}
 		if kernelContainer.DeviceRuntimeSessions == nil {
 			return nil, fmt.Errorf("cloud/local device mesh requires kernel DeviceRuntimeSessions authority")
 		}
@@ -1187,9 +1101,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			return nil, fmt.Errorf("cloud/local device mesh requires kernel device registry database")
 		}
 		meshDB := kernelContainer.DeviceRegistry.Database()
-		if err := devicemesh.ImportLegacyState(context.Background(), sqlDB, meshDB); err != nil {
-			return nil, fmt.Errorf("consolidate device mesh authority: %w", err)
-		}
 		deviceMeshRuntime, meshErr := devicemesh.NewCloudRuntimeWithHubAndSessions(
 			meshDB, kernelContainer.DeviceRegistry, meshHub, kernelContainer.DeviceRuntimeSessions,
 		)
@@ -1223,24 +1134,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		}
 		deviceMeshRuntime.LocalDeviceID = physicalIdentity.DeviceID.String()
 		deviceMeshRuntime.LocalDeviceDataPort = deviceData
-		worldbookMigrationOwner := physicalIdentity.DeviceID.String()
-		if runtimeProfile == runtimeprofile.ProfileCloudCore {
-			worldbookMigrationOwner = localSpace.SpaceID()
-		}
-		if err := migrateLegacyWorldbook(context.Background(), services.DB, meshDB, localSpace.SpaceID(), worldbookMigrationOwner); err != nil {
-			return nil, fmt.Errorf("migrate legacy worldbook: %w", err)
-		}
-		runtimeStateOwners := []string{localSpace.SpaceID(), physicalIdentity.DeviceID.String()}
-		seenRuntimeStateOwners := map[string]bool{}
-		for _, runtimeStateOwner := range runtimeStateOwners {
-			if runtimeStateOwner == "" || seenRuntimeStateOwners[runtimeStateOwner] {
-				continue
-			}
-			seenRuntimeStateOwners[runtimeStateOwner] = true
-			if err := migrateLegacyRuntimeState(context.Background(), services.DB, meshDB, localSpace.SpaceID(), runtimeStateOwner); err != nil {
-				return nil, fmt.Errorf("migrate legacy runtime state for %s: %w", runtimeStateOwner, err)
-			}
-		}
 		if err := bindCoreOwnedTaskRuntime(taskOwnershipBinding, deviceMeshRuntime, localSpace.SpaceID()); err != nil {
 			return nil, fmt.Errorf("initialize owned task runtime: %w", err)
 		}
@@ -1249,20 +1142,26 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			return nil, fmt.Errorf("Core 缺少设备归属计算端口")
 		}
 		services.OwnedBusiness = business.NewEngine(deviceMeshRuntime.Coordination, deviceMeshRuntime, ownedModel)
-		feedbackOwnerID := deviceMeshRuntime.LocalDeviceID
-		if policy, err := deviceMeshRuntime.Coordination.Get(context.Background(), localSpace.SpaceID(), physicalIdentity.DeviceID.String()); err != nil {
-			return nil, err
-		} else if policy.Coordinated {
-			feedbackOwnerID = localSpace.SpaceID()
-		}
-		if err := migrateLegacyMessageFeedback(context.Background(), services.DB, localSpace.SpaceID(), feedbackOwnerID, localSpace.SpaceID()); err != nil {
-			return nil, err
-		}
-		if err := migrateLegacySafetyGovernance(context.Background(), services.DB, localSpace.SpaceID(), deviceMeshRuntime.LocalDeviceID, localSpace.SpaceID(), feedbackOwnerID); err != nil {
-			return nil, err
-		}
 		services.ContinuityOwner = newOwnedContinuityRuntime(services.OwnedBusiness, chatSvc, embedding.NewService(ctx.DB), localSpace.SpaceID(), deviceMeshRuntime.LocalDeviceID, localSpace.SpaceID())
 		multiAgentCoordinator.SetDurableProgressObserver(func(current context.Context, parentID string, ref interaction.MultiAgentRecoveryRef) error {
+			if services.AgentRuns != nil {
+				assignments := make([]agentrun.Assignment, 0, len(ref.AssignmentRefs))
+				for _, assignment := range ref.AssignmentRefs {
+					assignments = append(assignments, agentrun.Assignment{
+						AssignmentID: assignment.AssignmentID, ChildInteraction: assignment.ChildInteractionID,
+						CharacterID: assignment.CharacterID, WorkerRole: assignment.Role,
+						Objective: assignment.Objective, Status: assignment.Status,
+					})
+				}
+				if err := services.AgentRuns.SyncCoordination(current, agentrun.Coordination{
+					SpaceID: ref.ParentGoalSpaceID, ConversationID: ref.ParentGoalConversationID,
+					CoordinationID: ref.CoordinationID, ParentInteractionID: parentID,
+					ParentCharacterID: ref.ParentGoalCharacterID, Status: ref.Status,
+					Depth: ref.Depth, Assignments: assignments,
+				}); err != nil {
+					return err
+				}
+			}
 			parent, found, err := tracker.Get(current, parentID)
 			if err != nil || !found {
 				return err
@@ -1279,12 +1178,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			}
 			return nil
 		})
-		if err := migrateLegacyContinuity(context.Background(), services.DB, services.OwnedBusiness, localSpace.SpaceID(), deviceMeshRuntime.LocalDeviceID, localSpace.SpaceID()); err != nil {
-			return nil, err
-		}
-		if err := migrateLegacyEmotionHistory(context.Background(), services.DB, services.OwnedBusiness, localSpace.SpaceID(), deviceMeshRuntime.LocalDeviceID, localSpace.SpaceID()); err != nil {
-			return nil, err
-		}
 		wireOwnedContinuityKernelObservers(kernelContainer, services.ContinuityOwner)
 		agentAdminController.owned = services.OwnedBusiness
 		agentAdminController.ownedData = deviceMeshRuntime
@@ -1429,30 +1322,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 				}
 				return nil
 			},
-			MigrationReady: func() error {
-				return checkMigrationState(ctx.DB)
-			},
-			LegacyChainReady: func() error {
-				if !desktoppet.LegacyPackageWritesDisabled {
-					return fmt.Errorf("legacy package writes not disabled")
-				}
-				return nil
-			},
-			CanonicalCutoverReady: func() error {
-				if services.DesktopPetRuntimeV1 == nil || services.InstallationRepo == nil || services.InstallationCoordinator == nil {
-					return fmt.Errorf("desktop pet canonical v1 wiring is incomplete")
-				}
-				if !desktoppet.LegacyPackageWritesDisabled {
-					return fmt.Errorf("legacy desktop pet package writes are still enabled")
-				}
-				if err := desktoppet.LegacyWriteCutoverReady(ctx.DB); err != nil {
-					return fmt.Errorf("desktop pet legacy write cutover is incomplete: %w", err)
-				}
-				if err := runCanonicalBuildAssertions(services); err != nil {
-					return fmt.Errorf("canonical build assertions: %w", err)
-				}
-				return nil
-			},
 			MeshReady: func() error {
 				return checkDesktopPetMeshReadiness(services)
 			},
@@ -1552,20 +1421,6 @@ func mcpDataDirectory(ctx *app.AppContext) string {
 		}
 	}
 	return filepath.Join(".", "data")
-}
-
-func checkMigrationState(db *gorm.DB) error {
-	if db == nil {
-		return fmt.Errorf("database is nil")
-	}
-	var count int64
-	if err := db.Raw("SELECT COUNT(*) FROM schema_migrations WHERE status = ?", "failed").Count(&count).Error; err != nil {
-		return fmt.Errorf("check migration state: %w", err)
-	}
-	if count > 0 {
-		return fmt.Errorf("found %d failed migrations", count)
-	}
-	return nil
 }
 
 type characterOwnerPort struct {

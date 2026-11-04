@@ -9,12 +9,11 @@ import (
 type ReconciliationTarget string
 
 const (
-	ReconciliationSQLiteQdrant         ReconciliationTarget = "sqlite_qdrant"
-	ReconciliationSQLiteSurrealDB      ReconciliationTarget = "sqlite_surrealdb"
-	ReconciliationInteractionRunMsg    ReconciliationTarget = "interactionrun_messages"
-	ReconciliationOutboxSideEffect     ReconciliationTarget = "outbox_side_effect"
-	ReconciliationLeaseDelivery        ReconciliationTarget = "lease_delivery"
-	ReconciliationTombstoneDerivedData ReconciliationTarget = "tombstone_derived_data"
+	ReconciliationSQLiteQdrant      ReconciliationTarget = "sqlite_qdrant"
+	ReconciliationSQLiteSurrealDB   ReconciliationTarget = "sqlite_surrealdb"
+	ReconciliationInteractionRunMsg ReconciliationTarget = "interactionrun_messages"
+	ReconciliationOutboxSideEffect  ReconciliationTarget = "outbox_side_effect"
+	ReconciliationLeaseDelivery     ReconciliationTarget = "lease_delivery"
 
 	ReconciliationAgentGoalAction        ReconciliationTarget = "agent_goal_action"
 	ReconciliationAgentActionObservation ReconciliationTarget = "agent_action_observation"

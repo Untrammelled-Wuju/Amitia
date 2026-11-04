@@ -147,7 +147,7 @@ func TestCharacterModelSettingsPersistWithoutChangingModelConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	profile, err := NewRepository(ctx).(*repository).GetRuntimeProfileForSpace(created.ID, "space-model", false)
+	profile, err := NewRepository(ctx).(*repository).GetRuntimeProfileForSpace(created.ID, "space-model")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +170,7 @@ func TestCharacterModelSettingsPersistWithoutChangingModelConfig(t *testing.T) {
 	if temperature != 0.7 || modelName != "model-a" {
 		t.Fatalf("role override changed base model config: temperature=%v model=%s", temperature, modelName)
 	}
-	profile, err = NewRepository(ctx).(*repository).GetRuntimeProfileForSpace(created.ID, "space-model", false)
+	profile, err = NewRepository(ctx).(*repository).GetRuntimeProfileForSpace(created.ID, "space-model")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,9 +251,9 @@ func TestCreateThenUpdatePersonalityConfigRoundTrip(t *testing.T) {
 
 	newConfig := json.RawMessage(`{"warmth":80,"sensitivity":60,"tolerance":30}`)
 	cfg := newConfig
-	updated, err := svc.Update(created.ID, &UpdateCharacterRequest{
+	updated, err := svc.(*service).UpdateForSpace(created.ID, &UpdateCharacterRequest{
 		PersonalityConfig: &cfg,
-	})
+	}, created.SpaceID)
 	if err != nil {
 		t.Fatal(err)
 	}

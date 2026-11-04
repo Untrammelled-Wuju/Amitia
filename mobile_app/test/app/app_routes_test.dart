@@ -16,6 +16,7 @@ void main() {
           AppRoutes.dashboard,
           AppRoutes.characters,
           AppRoutes.charactersCreate,
+          AppRoutes.charactersTeams,
           AppRoutes.agent,
           AppRoutes.memory,
           AppRoutes.memoryTimeline,
@@ -83,6 +84,7 @@ void main() {
     test('dynamic route helpers produce correct paths', () {
       expect(AppRoutes.knowledge, '/memory/knowledge');
       expect(AppRoutes.character('c1'), '/characters/c1');
+      expect(AppRoutes.charactersTeams, '/characters/teams');
       expect(AppRoutes.characterLifeRules('c1'), '/characters/c1/life-rules');
       expect(AppRoutes.characterVoice('c1'), '/characters/c1/voice');
       expect(AppRoutes.characterMemory('c1'), '/characters/c1/memory');
@@ -110,6 +112,7 @@ void main() {
         AppRoutes.dashboard,
         AppRoutes.characters,
         AppRoutes.charactersCreate,
+        AppRoutes.charactersTeams,
         AppRoutes.agent,
         AppRoutes.memory,
         AppRoutes.memoryTimeline,

@@ -16,8 +16,7 @@ import (
 	amitialog "log"
 )
 
-// CanonicalStdioConnection is the Extension Kernel owned MCP stdio connection.
-// It wraps Legacy MCP transport and client to provide canonical interface.
+// CanonicalStdioConnection is the Extension Kernel MCP stdio connection.
 type CanonicalStdioConnection struct {
 	spec       MCPStdioResolvedSpec
 	mu         sync.RWMutex

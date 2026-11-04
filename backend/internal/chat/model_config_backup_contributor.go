@@ -198,7 +198,6 @@ func (c *ModelConfigBackupContributor) Import(ctx context.Context, req dataporta
 		DefaultCharacterID: req.DefaultCharacterID,
 		ActivateImported:   req.ActivateImported,
 		IncludeSecrets:     req.Manifest != nil && req.Manifest.IncludesSecrets,
-		AllowLegacySecrets: req.Manifest != nil && req.Manifest.SecretsPolicy == 0 && req.Manifest.Encrypted,
 		IdentityMap:        req.IdentityMap,
 		SecretProvider:     req.SecretProvider,
 	}
@@ -237,7 +236,7 @@ func (c *ModelConfigBackupContributor) restoreModelConfigLines(ctx context.Conte
 		if err := json.Unmarshal(line, &rec); err != nil {
 			return fmt.Errorf("模型配置备份记录无效: %w", err)
 		}
-		if containsSensitiveModelProviderField(rec.ProviderConfigJSON) && !opts.IncludeSecrets && !opts.AllowLegacySecrets {
+		if containsSensitiveModelProviderField(rec.ProviderConfigJSON) && !opts.IncludeSecrets {
 			return fmt.Errorf("模型配置 %s 包含未授权的供应商凭证", rec.Name)
 		}
 

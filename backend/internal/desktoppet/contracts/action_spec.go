@@ -197,23 +197,3 @@ type ActionPreset struct {
 	ActionKeys    []string   `json:"actionKeys"`
 	RequiredAnyOf [][]string `json:"requiredAnyOf"`
 }
-
-func CompatibleLoopType(mode PlaybackMode) string {
-	switch mode {
-	case PlaybackLoop, PlaybackPingPong:
-		return "loop"
-	default:
-		return "once"
-	}
-}
-
-func CompatibleReturnAction(policy ReturnPolicy, returnKey string) string {
-	switch policy {
-	case ReturnSpecific:
-		return returnKey
-	case ReturnDefaultIdle:
-		return "idle_normal"
-	default:
-		return ""
-	}
-}

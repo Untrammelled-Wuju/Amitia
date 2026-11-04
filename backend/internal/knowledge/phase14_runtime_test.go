@@ -87,7 +87,7 @@ func TestRuntimeStatusReflectsPhase14Settings(t *testing.T) {
 	if status.ConfigHash != settings.ConfigHash {
 		t.Fatalf("config hash = %q, want %q", status.ConfigHash, settings.ConfigHash)
 	}
-	if !status.RetrievalPolicyEnabled || status.RetrievalPolicyShadow || !status.CanonicalReaderEnabled || !status.AgenticInvestigationEnabled {
+	if !status.CanonicalReaderEnabled || !status.AgenticInvestigationEnabled {
 		t.Fatalf("unexpected feature status: %+v", status)
 	}
 	if status.ReaderWorkers != settings.ReaderWorkers {

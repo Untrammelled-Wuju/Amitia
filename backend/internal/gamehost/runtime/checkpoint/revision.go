@@ -30,7 +30,7 @@ func ComputeDescriptorRevision(descriptor domain.PluginDescriptor) string {
 	writeString(descriptor.Version)
 	writeString(descriptor.ProtocolVersion)
 
-	caps := make([]domain.Capability, len(descriptor.Capabilities))
+	caps := make([]domain.HostFeature, len(descriptor.Capabilities))
 	copy(caps, descriptor.Capabilities)
 	sort.SliceStable(caps, func(i, j int) bool {
 		return caps[i] < caps[j]

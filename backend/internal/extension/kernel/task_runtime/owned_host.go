@@ -191,12 +191,12 @@ func (p AcknowledgedTaskHostPort) Inspect(ctx context.Context, run *TaskRun, def
 	}
 	id := TaskHostNativeOperationID(run, requestID, call)
 	if call.EffectID != "" {
-		legacy, err := resources.Resource(ctx, scope, "tool-result", taskHostOperationID(run, requestID))
+		conflictingEffect, err := resources.Resource(ctx, scope, "tool-result", taskHostOperationID(run, requestID))
 		if err != nil {
 			return empty, err
 		}
-		if legacy != nil {
-			return empty, NewTaskError(ErrTaskExecutionAttemptInvalid, "同一次Native调用已有旧式执行记录，必须先对账再切换稳定效果编号")
+		if conflictingEffect != nil {
+			return empty, NewTaskError(ErrTaskExecutionAttemptInvalid, "同一次Native调用存在冲突效果记录，必须先对账再继续")
 		}
 	}
 	stored, err := resources.Resource(ctx, scope, "tool-result", id)

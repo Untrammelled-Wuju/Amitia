@@ -32,7 +32,7 @@ func TestMeshSummaryHTTPRequiresActorCurrentPageAndOwnerAcknowledgement(t *testi
 	if _, err := db.Exec(`INSERT INTO kernel_devices(device_id,space_id,trust_state,created_at,last_seen_at) VALUES('device-a','core','trusted','now','now')`); err != nil {
 		t.Fatal(err)
 	}
-	conversation := chat.Conversation{ID: "summary-chat", SpaceID: p.legacySpaceID, Title: "历史", Channel: "web"}
+	conversation := chat.Conversation{ID: "summary-chat", SpaceID: p.ownerID, Title: "历史", Channel: "web"}
 	if err := p.services.DB.Create(&conversation).Error; err != nil {
 		t.Fatal(err)
 	}

@@ -4,49 +4,51 @@ import '../../../lib/features/workbench/runtime/workbench_terminal_output.dart';
 void main() {
   test('retains UTF-8 across snapshot boundaries', () {
     final output = WorkbenchTerminalOutput();
-    output.append(2, [0xe4, 0xb8]);
+    output.append(2, [0xe4, 0xb8], fromCursor: 0);
     expect(output.text, '');
-    output.append(4, [0xad, 0x0a]);
+    output.append(4, [0xad, 0x0a], fromCursor: 2);
     expect(output.text, '中\n');
   });
 
   test('ignores duplicate and older snapshots', () {
     final output = WorkbenchTerminalOutput();
-    output.append(1, [65]);
-    output.append(1, [66]);
-    output.append(0, [67]);
+    output.append(1, [65], fromCursor: 0);
+    output.append(1, [66], fromCursor: 0);
     expect(output.text, 'A');
   });
 
   test('filters ANSI control sequences and clears line', () {
     final output = WorkbenchTerminalOutput();
-    output.append(7, [65, 66, 67, 27, 91, 50, 75]);
+    output.append(7, [65, 66, 67, 27, 91, 50, 75], fromCursor: 0);
     expect(output.text, '');
-    output.append(12, [27, 91, 51, 49, 109]);
-    output.append(13, [68]);
+    output.append(12, [27, 91, 51, 49, 109], fromCursor: 7);
+    output.append(13, [68], fromCursor: 12);
     expect(output.text, 'D');
   });
 
   test('marks truncated output and stays bounded', () {
     final output = WorkbenchTerminalOutput();
-    output.append(1, [65]);
-    output.append(2, [66], truncated: true);
+    output.append(1, [65], fromCursor: 0);
+    output.append(3, [66], fromCursor: 2, truncated: true);
     expect(output.text, contains('已被截断'));
-    for (var i = 3; i < 4000; i++) {
-      output.append(i, List.filled(80, 67));
+    var cursor = 3;
+    for (var i = 0; i < 4000; i++) {
+      final next = cursor + 80;
+      output.append(next, List.filled(80, 67), fromCursor: cursor);
+      cursor = next;
     }
     expect(output.text.length, lessThanOrEqualTo(WorkbenchTerminalOutput.maxCharacters));
   });
 
   test('CSI and OSC sequences remain hidden across snapshot boundaries', () {
     final output = WorkbenchTerminalOutput();
-    output.append(4, [65, 27, 91, 51]);
-    output.append(7, [49, 109, 66]);
+    output.append(4, [65, 27, 91, 51], fromCursor: 0);
+    output.append(7, [49, 109, 66], fromCursor: 4);
     expect(output.text, 'AB');
-    output.append(13, [27, 93, 48, 59, 88, 27]);
-    output.append(15, [92, 67]);
+    output.append(13, [27, 93, 48, 59, 88, 27], fromCursor: 7);
+    output.append(15, [92, 67], fromCursor: 13);
     expect(output.text, 'ABC');
-    output.append(19, [27, 91, 50, 74]);
+    output.append(19, [27, 91, 50, 74], fromCursor: 15);
     expect(output.text, '');
   });
   test('overlapping snapshots do not duplicate byte ranges', () {

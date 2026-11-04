@@ -10,23 +10,23 @@ import (
 )
 
 type fakeOverlayClient struct {
-	statusResult    CapabilityState
-	statusErr       error
-	permResult      PermissionResult
-	permErr         error
-	createResult    OverlayInstance
-	createErr       error
-	updateResult    OverlayInstance
-	updateErr       error
-	showResult      OverlayInstance
-	showErr         error
-	hideResult      OverlayInstance
-	hideErr         error
-	closeErr        error
-	closeAllCount   int
-	closeAllErr     error
-	listResult      []OverlayInstance
-	listErr         error
+	statusResult  CapabilityState
+	statusErr     error
+	permResult    PermissionResult
+	permErr       error
+	createResult  OverlayInstance
+	createErr     error
+	updateResult  OverlayInstance
+	updateErr     error
+	showResult    OverlayInstance
+	showErr       error
+	hideResult    OverlayInstance
+	hideErr       error
+	closeErr      error
+	closeAllCount int
+	closeAllErr   error
+	listResult    []OverlayInstance
+	listErr       error
 }
 
 func (f *fakeOverlayClient) Status(ctx context.Context) (CapabilityState, error) {
@@ -119,9 +119,9 @@ func TestHandlerStatusError(t *testing.T) {
 func TestHandlerPermissionRequest(t *testing.T) {
 	client := newDefaultFakeClient()
 	client.permResult = PermissionResult{
-		Opened:           true,
+		Opened:             true,
 		UserActionRequired: true,
-		PermissionGranted: false,
+		PermissionGranted:  false,
 	}
 	handler := NewOverlayHandler(client)
 

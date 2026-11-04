@@ -48,10 +48,6 @@ type ModernHTTPClient interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
-type LegacyHTTPClient interface {
-	Do(req *http.Request) (*http.Response, error)
-}
-
 type Modern2026Adapter struct {
 	client  ModernHTTPClient
 	timeout time.Duration
@@ -88,44 +84,5 @@ func (a *Modern2026Adapter) Close() error {
 }
 
 func (a *Modern2026Adapter) HealthProbe(ctx context.Context, endpoint string, headers map[string]string) (HealthProbeResult, error) {
-	return HealthProbeResult{}, nil
-}
-
-type Legacy2025Adapter struct {
-	client  LegacyHTTPClient
-	timeout time.Duration
-}
-
-func NewLegacy2025Adapter(client LegacyHTTPClient, timeout time.Duration) *Legacy2025Adapter {
-	if timeout <= 0 {
-		timeout = 15 * time.Second
-	}
-	if client == nil {
-		client = http.DefaultClient
-	}
-	return &Legacy2025Adapter{client: client, timeout: timeout}
-}
-
-func (a *Legacy2025Adapter) Era() ProtocolEra {
-	return MCPProtocolEraLegacy
-}
-
-func (a *Legacy2025Adapter) Discover(ctx context.Context, endpoint string, headers map[string]string) (DiscoverResult, error) {
-	return DiscoverResult{Era: MCPProtocolEraLegacy}, nil
-}
-
-func (a *Legacy2025Adapter) Call(ctx context.Context, endpoint, method string, params map[string]any, headers map[string]string) (CallResult, error) {
-	return CallResult{}, nil
-}
-
-func (a *Legacy2025Adapter) Subscribe(ctx context.Context, endpoint string, params map[string]any, headers map[string]string) (SubscribeResult, error) {
-	return SubscribeResult{}, nil
-}
-
-func (a *Legacy2025Adapter) Close() error {
-	return nil
-}
-
-func (a *Legacy2025Adapter) HealthProbe(ctx context.Context, endpoint string, headers map[string]string) (HealthProbeResult, error) {
 	return HealthProbeResult{}, nil
 }

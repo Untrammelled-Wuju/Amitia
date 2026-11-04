@@ -12,9 +12,6 @@ func TestRound88DurableParentAtomicRevocationAndLimits(t *testing.T) {
 	model := modelBudgetFixture()
 	tool := testOwnedToolBudget()
 	limits := OwnedBudgetParentLimits{ToolCalls: tool.Limit, Tokens: model.TokenLimit, ChildInteractionID: "child-interaction"}
-	if err := db.Exec(`CREATE TABLE interaction_records (id TEXT PRIMARY KEY,space_id TEXT,character_id TEXT,status TEXT,cancel_requested_at TEXT,recovery_descriptor_json TEXT,causation_id TEXT,correlation_id TEXT)`).Error; err != nil {
-		t.Fatal(err)
-	}
 	parent := map[string]any{"multiAgent": map[string]any{
 		"coordinationId": model.CoordinationID, "status": "running",
 		"ownedScope":      map[string]any{"spaceId": model.SpaceID, "roleId": model.RoleID, "resourceOwnerId": model.OwnerID},

@@ -32,27 +32,14 @@ func (c *Coordinator) RestorePreview(ctx context.Context, archivePath string) (*
 	if manifest.Format != FormatName {
 		return nil, ErrRestoreFormatUnsupported
 	}
-	if manifest.FormatVersion > FormatVersion {
+	if manifest.FormatVersion != FormatVersion {
 		return nil, ErrRestoreFormatUnsupported
 	}
-	if manifest.SchemaFingerprint != "" && !compatibleSchemaFingerprint(manifest.SchemaFingerprint, c.SchemaFinger) {
+	if manifest.SchemaFingerprint == "" || manifest.SchemaFingerprint != c.SchemaFinger {
 		return nil, ErrRestoreSchemaUnsupported
 	}
 	_ = ctx
 	return manifest, nil
-}
-
-func compatibleSchemaFingerprint(source, current string) bool {
-	if source == current {
-		return true
-	}
-	var sourceMigrations, currentMigrations int
-	if _, err := fmt.Sscanf(source, "mig-%d-", &sourceMigrations); err == nil {
-		if _, err := fmt.Sscanf(current, "migrations-v1-%d", &currentMigrations); err == nil {
-			return sourceMigrations == currentMigrations
-		}
-	}
-	return false
 }
 
 func (c *Coordinator) RestoreVerify(ctx context.Context, archivePath string) error {

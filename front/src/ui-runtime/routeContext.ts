@@ -28,9 +28,7 @@ export function resolveRouteIdentity(
       || text(params?.id)
       || characterIdFromSegments(pathMatch)
       || characterIdFromSegments(pathSegments),
-    conversationId: text(params?.conversationId)
-      || text(params?.conversation)
-      || text(params?.conversation_id),
+    conversationId: text(params?.conversationId),
   };
 }
 

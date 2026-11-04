@@ -181,20 +181,12 @@ describe("owned conversation history", () => {
     expect(messages[1].sourceRevision).toBe(7);
   });
 
-  it("passes the original device memory cursor after the owned store is exhausted", async () => {
+  it("passes historical memory cursor without changing the Core role", async () => {
     const owned = useDeviceOwnedConversation();
     owned.coreId.value = "core";
     mocks.get.mockResolvedValue(response({}));
-    await owned.data("memory", "role", "", "", { legacyCursor: "device-original-page" });
-    expect(mocks.get).toHaveBeenCalledWith("/api/device-mesh/v1/business/data", { params: { kind: "memory", characterId: "role", conversationId: "", cursor: "", legacyCursor: "device-original-page" } });
-  });
-
-  it("passes both historical memory cursors without changing the Core role", async () => {
-    const owned = useDeviceOwnedConversation();
-    owned.coreId.value = "core";
-    mocks.get.mockResolvedValue(response({}));
-    await owned.data("memory", "role", "", "", { historicalRoleId: "device-old-role", historicalCursor: "owned-page", historicalLegacyCursor: "legacy-page" });
-    expect(mocks.get).toHaveBeenCalledWith("/api/device-mesh/v1/business/data", { params: { kind: "memory", characterId: "role", conversationId: "", cursor: "", historicalRoleId: "device-old-role", historicalCursor: "owned-page", historicalLegacyCursor: "legacy-page" } });
+    await owned.data("memory", "role", "", "", { historicalRoleId: "device-old-role", historicalCursor: "owned-page" });
+    expect(mocks.get).toHaveBeenCalledWith("/api/device-mesh/v1/business/data", { params: { kind: "memory", characterId: "role", conversationId: "", cursor: "", historicalRoleId: "device-old-role", historicalCursor: "owned-page" } });
   });
 
   it("preserves the authority seen by the page when submitting an edit", async () => {
@@ -216,10 +208,10 @@ describe("owned conversation history", () => {
     expect(owned.hasMore("chat", "role")).toBe(true);
     mocks.get.mockResolvedValueOnce(response({ legacyMessage: "local-2" }));
     await owned.query("chat", "role", true);
-    expect(mocks.get.mock.calls.at(-1)?.[1].params).toEqual({ characterId: "role", resourceKind: "message", cursor: "core-1", legacyCursor: "local-1", historicalCursor: "old-1", historicalLegacyCursor: "old-local-1" });
+    expect(mocks.get.mock.calls.at(-1)?.[1].params).toEqual({ characterId: "role", resourceKind: "message", cursor: "core-1", historicalCursor: "old-1" });
     mocks.get.mockResolvedValueOnce(response({ message: "unrequested-first-page" }));
     await owned.query("chat", "role", true);
-    expect(mocks.get.mock.calls.at(-1)?.[1].params).toEqual({ characterId: "role", resourceKind: "message", legacyCursor: "local-2" });
+    expect(mocks.get.mock.calls.at(-1)?.[1].params).toEqual({ characterId: "role", resourceKind: "message" });
     expect(owned.hasMore("chat", "role")).toBe(false);
   });
   it("rejects a changed role revision between pages", async () => {

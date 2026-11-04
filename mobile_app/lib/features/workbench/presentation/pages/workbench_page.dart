@@ -11,6 +11,7 @@ import '../../../toolbox/presentation/pages/toolbox_file_browser_page.dart';
 import '../../../toolbox/presentation/pages/toolbox_workspace_page.dart';
 import 'workbench_document_view.dart';
 import 'workbench_tasks_view.dart';
+import 'workbench_agent_runs_view.dart';
 import 'workbench_terminal_view.dart';
 import 'workbench_remote_browser_view.dart';
 import '../../runtime/workbench_mobile_events.dart';
@@ -85,6 +86,7 @@ class _WorkbenchTab {
           'browser',
           'terminal',
           'tasks',
+          'agents',
         }.contains(type))
       return null;
     return _WorkbenchTab(
@@ -318,6 +320,7 @@ class _WorkbenchPageState extends ConsumerState<WorkbenchPage> {
                     'browser': '浏览器',
                     'terminal': '交互终端',
                     'tasks': '任务状态',
+                    'agents': '子智能体',
                   }[type] ??
                   type,
         uri: uri,
@@ -482,6 +485,12 @@ class _WorkbenchPageState extends ConsumerState<WorkbenchPage> {
         characterId: widget.characterId,
         active: _tabs[_index].id == tab.id,
       );
+    if (tab.type == 'agents')
+      return WorkbenchAgentRunsView(
+        conversationId: widget.conversationId,
+        characterId: widget.characterId,
+        active: _tabs[_index].id == tab.id,
+      );
     if (tab.type == 'terminal')
       return WorkbenchTerminalView(
         conversationId: scopedConversation,
@@ -597,6 +606,8 @@ class _WorkbenchPageState extends ConsumerState<WorkbenchPage> {
         return Icons.terminal;
       case 'tasks':
         return Icons.checklist_rtl;
+      case 'agents':
+        return Icons.hub_outlined;
       default:
         return Icons.tab_outlined;
     }
@@ -657,6 +668,13 @@ class _WorkbenchPageState extends ConsumerState<WorkbenchPage> {
                 Icons.checklist_rtl,
                 '任务',
                 '查看多 Agent 任务与检查点',
+              ),
+              _newTabTile(
+                sheetContext,
+                'agents',
+                Icons.hub_outlined,
+                '子智能体',
+                '查看父子运行、消息与人工接管',
               ),
             ],
           ),

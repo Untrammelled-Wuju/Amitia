@@ -175,7 +175,6 @@ func TestSettings_MaxIndexingThreadsTooLarge(t *testing.T) {
 	}
 }
 
-
 func TestSettings_WALCapacityInvalid(t *testing.T) {
 	s := BalancedSettings()
 	s.WALCapacityMB = 64

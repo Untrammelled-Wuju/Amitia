@@ -3,6 +3,7 @@ package mindruntime
 import (
 	"context"
 	"github.com/glebarez/sqlite"
+	"github.com/u-ai/backend/internal/migration"
 	"gorm.io/gorm"
 	"path/filepath"
 	"testing"
@@ -12,6 +13,9 @@ func usageTestStore(t *testing.T) (*ModelUsageStore, *gorm.DB) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "usage.db")), &gorm.Config{})
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := migration.ApplyBaseline(db); err != nil {
 		t.Fatal(err)
 	}
 	store, err := NewModelUsageStore(db, "core")

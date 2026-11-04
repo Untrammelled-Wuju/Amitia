@@ -1,7 +1,7 @@
 import { RuntimeFiber, type ExtensionFiber, type Disposer } from "./fiber";
-import type { UISlotClient, UISlotDefinition, UISlotRegistration, UISlotInjectionEffect, UISlotContributionOptions, UISlotContributionRegistration } from "./ui";
+import type { UISlotClient, UISlotDefinition, UISlotRegistration, UISlotInjectionEffect, UISlotContributionRegistration } from "./ui";
 import { ValidationError } from "./errors";
-import type { UIChildrenDecl, UIKnownSlotId, UILocaleNamespaceMap, UISlotEntryKey, UISlotComponent, UISlotInjectContext, UISlotRegisterOptions, UISlotRegistrationComponent, UISlotStore, UISlotStoreContext } from "./slot-contract";
+import type { UIChildrenDecl, UIKnownSlotId, UILocaleNamespaceMap, UISlotEntryKey, UISlotComponent, UISlotInjectContext, UISlotRegisterOptions, UISlotRegistrationComponent, UISlotStore, UISlotStoreContext, UISlotDynamicComponentProps, UISlotDynamicRegisterOptions } from "./slot-contract";
 
 export interface ClientPluginServiceRegistry {
   provide<T>(serviceId: string, value: T): Disposer;
@@ -30,13 +30,10 @@ export interface ClientPluginSlotContext {
     options: UISlotRegisterOptions<K, D, S, I, N, EntryKey>,
     renderable: UISlotRegistrationComponent<K, D, S, I, N, EntryKey, C>,
   ): UISlotContributionRegistration<C, S, I>;
-  registerLegacy<T = unknown>(
-    slotId: string,
-    key: string,
-    renderable: T,
-    options?: UISlotContributionOptions,
+  registerDynamic<K extends string, T = unknown>(
+    options: UISlotDynamicRegisterOptions<K>,
+    renderable: (props: UISlotDynamicComponentProps<K>) => T,
   ): UISlotContributionRegistration<T>;
-  observe(slotId: string, callback: (definition: UISlotDefinition) => UISlotInjectionEffect): Promise<Disposer>;
   /** Slot-declaration lifetime dependency. Business injection belongs to register({ inject }). */
   inject(slotId: string, callback: (definition: UISlotDefinition) => UISlotInjectionEffect): Promise<Disposer>;
   list(): Promise<UISlotDefinition[]>;
@@ -196,26 +193,6 @@ export class ClientPluginRuntime {
     services: ClientPluginServiceRegistry,
     events: ClientPluginEventBus,
   ): ClientPluginSlotContext {
-    const scopeLegacyOptions = (input?: UISlotContributionOptions): UISlotContributionOptions | undefined => {
-      if (!input) return undefined;
-      const originalStore = input.store;
-      const originalInject = input.inject;
-      return {
-        ...input,
-        store: typeof originalStore === "function"
-          ? ((context: UISlotStoreContext) => originalStore({ ...context, pluginId }))
-          : originalStore,
-        inject: originalInject
-          ? ((context: UISlotInjectContext<unknown>) => originalInject({
-              ...context,
-              pluginId,
-              services: { get: services.get, list: services.list },
-              events: { emit: events.emit },
-            }))
-          : undefined,
-      };
-    };
-
     return {
       declare: async (definition) => {
         const registration = await slots.declare(definition);
@@ -244,16 +221,14 @@ export class ClientPluginRuntime {
         fiber.own(registration.dispose);
         return registration;
       }) as ClientPluginSlotContext["register"],
-      registerLegacy: (slotId, key, renderable, options) => {
-        const registration = slots.registerLegacy(slotId, `${fiber.id}:${key}`, renderable, scopeLegacyOptions(options));
+      registerDynamic: (<K extends string, T = unknown>(
+        options: UISlotDynamicRegisterOptions<K>,
+        renderable: (props: UISlotDynamicComponentProps<K>) => T,
+      ) => {
+        const registration = slots.registerDynamic(options, renderable);
         fiber.own(registration.dispose);
         return registration;
-      },
-      observe: async (slotId, callback) => {
-        const dispose = await slots.observe(slotId, callback);
-        fiber.own(dispose);
-        return dispose;
-      },
+      }) as ClientPluginSlotContext["registerDynamic"],
       inject: async (slotId, callback) => {
         const dispose = await slots.inject(slotId, callback);
         fiber.own(dispose);

@@ -105,7 +105,7 @@ func TestRestrictedNetworkRequestAllowsOnlyExactDeclaredLoopbackEndpoint(t *test
 	}
 	client, err := newRestrictedHTTPClient(trusted_service.ServiceNetworkPolicy{
 		Mode: "restricted", Enforce: true, RequireProxy: true,
-		AllowedIPs: []string{"127.0.0.1"}, AllowedPorts: []int{port},
+		AllowedIPs: []string{"127.0.0.1"}, AllowedPorts: []int{port}, AllowedTransports: []string{"http"},
 	})
 	if err != nil {
 		t.Fatal(err)

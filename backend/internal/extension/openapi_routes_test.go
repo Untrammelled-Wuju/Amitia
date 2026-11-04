@@ -2,7 +2,6 @@ package extension
 
 import (
 	"encoding/json"
-	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -59,24 +58,6 @@ func TestOpenAPICoversExtensionBusinessRoutes(t *testing.T) {
 	}
 }
 
-func TestRetiredPackageInstallEndpointReturnsGone(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	recorder := httptest.NewRecorder()
-	ctx, _ := gin.CreateTestContext(recorder)
-	ctx.Request = httptest.NewRequest(http.MethodPost, "/api/extensions/packages/install", nil)
-	retiredPackageInstallEndpoint(ctx)
-	if recorder.Code != http.StatusGone {
-		t.Fatalf("expected 410, got %d", recorder.Code)
-	}
-	var payload map[string]string
-	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
-		t.Fatal(err)
-	}
-	if payload["error_code"] != "PACKAGE_INSTALL_ENDPOINT_RETIRED" || payload["replacement_endpoint"] != packageAPIReplacement {
-		t.Fatalf("unexpected retirement response: %v", payload)
-	}
-}
-
 func TestKernelAPIUserUsesExtensionAuthenticationIdentity(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
@@ -105,44 +86,6 @@ func TestAgentSkillRoutesUseKernelOnly(t *testing.T) {
 	}
 	if !hasCanonical {
 		t.Fatal("canonical kernel agent skill routes are not registered")
-	}
-}
-
-func TestRetiredPackageRoutesOpenAPIContract(t *testing.T) {
-	var document struct {
-		Paths map[string]map[string]struct {
-			Deprecated  bool                       `json:"deprecated"`
-			Responses   map[string]json.RawMessage `json:"responses"`
-			Replacement string                     `json:"x-replacement-endpoint"`
-		} `json:"paths"`
-	}
-	raw, err := openAPIFS.ReadFile("schema/openapi.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := json.Unmarshal(raw, &document); err != nil {
-		t.Fatal(err)
-	}
-	paths := []string{
-		"/extensions/kernel/extensions/install",
-		"/extensions/kernel/extensions/preview",
-		"/extensions/packages/import/install",
-		"/extensions/packages/import/preview",
-		"/extensions/packages/install",
-		"/extensions/{id}/upgrade",
-		"/extensions/{id}/upgrade/preview",
-	}
-	for _, path := range paths {
-		operation, ok := document.Paths[path]["post"]
-		if !ok {
-			t.Fatalf("retired route missing from OpenAPI: %s", path)
-		}
-		if !operation.Deprecated || operation.Replacement != packageAPIReplacement {
-			t.Fatalf("retired route contract incomplete: %s", path)
-		}
-		if _, ok := operation.Responses["410"]; !ok || len(operation.Responses) != 1 {
-			t.Fatalf("retired route must only declare 410: %s", path)
-		}
 	}
 }
 

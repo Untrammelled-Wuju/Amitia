@@ -129,9 +129,6 @@ func (s *EncryptedFileStore) Get(ctx context.Context, ref string) ([]byte, error
 		return nil, err
 	}
 	rawRef := ref
-	if strings.HasPrefix(rawRef, schemeLegacy) {
-		rawRef = legacyPrefixReplacer.Replace(rawRef)
-	}
 	if !strings.HasPrefix(rawRef, schemeCanonical) {
 		return nil, ErrSecretNotFound
 	}
@@ -161,9 +158,6 @@ func (s *EncryptedFileStore) Delete(ctx context.Context, ref string) error {
 		return err
 	}
 	rawRef := ref
-	if strings.HasPrefix(rawRef, schemeLegacy) {
-		rawRef = legacyPrefixReplacer.Replace(rawRef)
-	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	records, err := s.readLocked()

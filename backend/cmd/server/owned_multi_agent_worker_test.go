@@ -15,6 +15,7 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/interaction"
+	"github.com/u-ai/backend/internal/mindruntime"
 	"gorm.io/gorm"
 )
 
@@ -389,6 +390,9 @@ func ownedWorkerBudgetDatabase(t *testing.T) (*interaction.SQLiteInteractionTrac
 	t.Cleanup(func() { _ = sqlDB.Close() })
 	tracker := interaction.NewSQLiteInteractionTracker(db)
 	if err := tracker.InitSchema(); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&mindruntime.ModelUsageRecord{}, &mindruntime.UsageBaseline{}, &mindruntime.OwnedToolCallRecord{}); err != nil {
 		t.Fatal(err)
 	}
 	return tracker, db

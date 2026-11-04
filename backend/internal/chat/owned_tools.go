@@ -48,7 +48,7 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 	filtered := make([]tool.Tool, 0, len(definitions))
 	bufferNativeOutput := false
 	for _, definition := range definitions {
-		if ownedNativeTaskTool(definition.Function.Name) {
+		if ownedParentOnlyNativeTaskTool(definition.Function.Name) {
 			if inference.InternalWorker {
 				continue
 			}
@@ -242,7 +242,7 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 			if original, exists := toolAliases[modelName]; exists {
 				modelName = original
 			}
-			if !allowed[modelName] || inference.InternalWorker && ownedNativeTaskTool(modelName) {
+			if !allowed[modelName] || inference.InternalWorker && ownedParentOnlyNativeTaskTool(modelName) {
 				seen[call.ID] = true
 				messages = append(messages, map[string]interface{}{"role": "tool", "tool_call_id": call.ID, "content": "工具执行失败：TOOL_NOT_ADVERTISED: 该能力未授权或未暴露，不能执行。请使用当前可用能力。"})
 				continue
@@ -342,5 +342,13 @@ func emitOwnedProgressText(ctx context.Context, inference business.Inference, te
 }
 
 func ownedNativeTaskTool(name string) bool {
+	return ownedParentOnlyNativeTaskTool(name) || isAgentRunMessageToolName(name)
+}
+
+func ownedParentOnlyNativeTaskTool(name string) bool {
 	return name == "harness_multi_agent_delegate" || name == "harness_multi_agent_status" || name == "harness_multi_agent_wait"
+}
+
+func isAgentRunMessageToolName(name string) bool {
+	return name == "harness_agent_run_list" || name == "harness_agent_message_send" || name == "harness_agent_message_read"
 }

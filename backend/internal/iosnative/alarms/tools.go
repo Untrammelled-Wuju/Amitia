@@ -9,7 +9,4 @@ const (
 	ToolIDSchedule             = "ios.alarms.schedule"
 	ToolIDStop                 = "ios.alarms.stop"
 	ToolIDCancel               = "ios.alarms.cancel"
-	ToolIDCountdown            = "ios.alarms.countdown"
-	ToolIDPause                = "ios.alarms.pause"
-	ToolIDResume               = "ios.alarms.resume"
 )

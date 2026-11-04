@@ -10,10 +10,10 @@ import (
 )
 
 type fakeProcessSupervisor struct {
-	instances    map[string]*fakeInstance
-	startErr     error
-	stopErr      error
-	definitions  map[string]*trusted_service.ServiceRuntimeDefinition
+	instances   map[string]*fakeInstance
+	startErr    error
+	stopErr     error
+	definitions map[string]*trusted_service.ServiceRuntimeDefinition
 }
 
 type fakeInstance struct {

@@ -479,7 +479,7 @@ func buildPackageConfirmationAuthorityEvidence(
 	return evidence, nil
 }
 
-func standardConfirmationClaimsFromLegacy(operationType string, claims packageConfirmationClaims) PackageConfirmationClaims {
+func standardConfirmationClaimsFromPreview(operationType string, claims packageConfirmationClaims) PackageConfirmationClaims {
 	return PackageConfirmationClaims{
 		SchemaVersion:             PackageConfirmationClaimsSchemaVersion,
 		OperationType:             operationType,

@@ -16,7 +16,7 @@ func TestComputeDescriptorRevision_Stable(t *testing.T) {
 			{ID: "svc-a", Name: "Service A", Kind: domain.ServiceKindProcess, Required: true, DependsOn: []domain.ServiceID{"svc-b"}},
 			{ID: "svc-b", Name: "Service B", Kind: domain.ServiceKindExternal, Required: false},
 		},
-		Capabilities: []domain.Capability{"cap-2", "cap-1", "cap-3"},
+		Capabilities: []domain.HostFeature{"cap-2", "cap-1", "cap-3"},
 	}
 
 	first := ComputeDescriptorRevision(descriptor)
@@ -39,7 +39,7 @@ func TestComputeDescriptorRevision_OrderIndependent(t *testing.T) {
 			{ID: "a-service", Name: "A", Kind: domain.ServiceKindProcess},
 			{ID: "m-service", Name: "M", Kind: domain.ServiceKindProcess},
 		},
-		Capabilities: []domain.Capability{"z-cap", "a-cap", "m-cap"},
+		Capabilities: []domain.HostFeature{"z-cap", "a-cap", "m-cap"},
 	}
 
 	revision := ComputeDescriptorRevision(descriptor)
@@ -72,7 +72,7 @@ func TestComputeDescriptorRevision_DifferentDescriptors(t *testing.T) {
 
 func TestComputeDescriptorRevision_WithDependencies(t *testing.T) {
 	d1 := domain.PluginDescriptor{
-		ID:       "com.dep",
+		ID: "com.dep",
 		Services: []domain.ServiceDescriptor{
 			{ID: "a", DependsOn: []domain.ServiceID{"b", "c"}},
 			{ID: "b", DependsOn: []domain.ServiceID{}},
@@ -80,7 +80,7 @@ func TestComputeDescriptorRevision_WithDependencies(t *testing.T) {
 		},
 	}
 	d2 := domain.PluginDescriptor{
-		ID:       "com.dep",
+		ID: "com.dep",
 		Services: []domain.ServiceDescriptor{
 			{ID: "a", DependsOn: []domain.ServiceID{"c", "b"}},
 			{ID: "b", DependsOn: []domain.ServiceID{}},

@@ -215,9 +215,7 @@ func installedPermissionRequirementsFromDefinition(extensionID domain.ExtensionI
 func uiToolInvocationRequirement(extensionID domain.ExtensionID, modules []domain.ModuleDefinition) (sqlite.PermissionRequirement, bool) {
 	for _, module := range modules {
 		for _, contribution := range module.Contributions {
-			switch contribution.Kind {
-			case domain.ContributionKindUIPage, domain.ContributionKindUIPanel, domain.ContributionKindUIChat, domain.ContributionKindUIContextAction, domain.ContributionKindUIDesktop:
-			default:
+			if contribution.EffectiveAdapter() != domain.ContributionAdapterUI {
 				continue
 			}
 			actions, ok := contribution.Definition["actions"].([]any)

@@ -38,6 +38,7 @@ const (
 
 var (
 	ErrInstallationNotFound        = errors.New("installation not found")
+	ErrInstallationDeviceRequired  = errors.New("installation device id is required")
 	ErrInstallationDuplicate       = errors.New("installation already exists for the same package and version")
 	ErrInstallationInvalid         = errors.New("installation is invalid for this operation")
 	ErrInstallationFailed          = errors.New("installation failed")

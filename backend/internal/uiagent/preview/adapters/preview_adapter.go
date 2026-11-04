@@ -9,7 +9,7 @@ import (
 
 // DiagnosticRunner runs external diagnostic tools (dart analyze, flutter analyze, tsc, etc.)
 type DiagnosticRunner interface {
-	RunDiagnostics(ctx context.Context, workspaceID string, paths []string) ([]string, []string, error)
+	RunPlatformDiagnostics(ctx context.Context, platform string, workspaceID string, paths []string) ([]string, []string, error)
 	Supports(platform string) bool
 }
 
@@ -37,7 +37,7 @@ func NewDiagnosticRunnerWithAnalyzers(flutter FlutterAnalyzer, web WebAnalyzer) 
 	}
 }
 
-func (r *defaultDiagnosticRunner) RunDiagnostics(ctx context.Context, workspaceID string, paths []string) ([]string, []string, error) {
+func (r *defaultDiagnosticRunner) RunPlatformDiagnostics(ctx context.Context, platform string, workspaceID string, paths []string) ([]string, []string, error) {
 	return []string{"external diagnostic runner not configured"}, nil, nil
 }
 
@@ -55,18 +55,6 @@ func NewRealDiagnosticRunner(flutter FlutterAnalyzer, web WebAnalyzer) Diagnosti
 		flutterAnalyzer: flutter,
 		webAnalyzer:     web,
 	}
-}
-
-func (r *realDiagnosticRunner) RunDiagnostics(ctx context.Context, workspaceID string, paths []string) ([]string, []string, error) {
-	// Compatibility path for callers that do not provide a platform. Prefer the
-	// only configured analyzer; source preview uses RunPlatformDiagnostics.
-	if r.flutterAnalyzer != nil && r.webAnalyzer == nil {
-		return r.flutterAnalyzer.Analyze(ctx, workspaceID, paths)
-	}
-	if r.webAnalyzer != nil && r.flutterAnalyzer == nil {
-		return r.webAnalyzer.TypeCheck(ctx, workspaceID, paths)
-	}
-	return nil, nil, fmt.Errorf("diagnostic platform required when multiple analyzers are configured")
 }
 
 func (r *realDiagnosticRunner) RunPlatformDiagnostics(ctx context.Context, platform string, workspaceID string, paths []string) ([]string, []string, error) {
@@ -184,7 +172,7 @@ func NewWebSourcePreviewAdapterWithRunner(runner DiagnosticRunner) PreviewAdapte
 func (a *webSourcePreviewAdapter) Generate(ctx context.Context, req PreviewRequest) (*PreviewDiagnostics, error) {
 	d := &PreviewDiagnostics{}
 	if a.diagnosticRunner != nil && a.diagnosticRunner.Supports("web") {
-		compileErrors, warnings, err := a.diagnosticRunner.RunDiagnostics(ctx, req.Target.WorkspaceID, nil)
+		compileErrors, warnings, err := a.diagnosticRunner.RunPlatformDiagnostics(ctx, "web", req.Target.WorkspaceID, nil)
 		if err != nil {
 			return d, fmt.Errorf("web diagnostic failed: %w", err)
 		}
@@ -211,7 +199,7 @@ func NewFlutterSourcePreviewAdapterWithRunner(runner DiagnosticRunner) PreviewAd
 func (a *flutterSourcePreviewAdapter) Generate(ctx context.Context, req PreviewRequest) (*PreviewDiagnostics, error) {
 	d := &PreviewDiagnostics{}
 	if a.diagnosticRunner != nil && a.diagnosticRunner.Supports("flutter") {
-		compileErrors, warnings, err := a.diagnosticRunner.RunDiagnostics(ctx, req.Target.WorkspaceID, nil)
+		compileErrors, warnings, err := a.diagnosticRunner.RunPlatformDiagnostics(ctx, "flutter", req.Target.WorkspaceID, nil)
 		if err != nil {
 			return d, fmt.Errorf("flutter diagnostic failed: %w", err)
 		}

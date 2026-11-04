@@ -118,7 +118,7 @@ async function restore(snapshotValue: Json) {
 
 function applyThemeChanges(changes: Json) {
   const theme = useTheme();
-  const mode = changes.themeMode ?? changes.preset;
+  const mode = changes.themeMode;
   if (typeof mode === "string" && ["system", "light", "dark"].includes(mode)) {
     theme.setPreset(mode as ThemePreset);
   }
@@ -197,13 +197,13 @@ function ruleInputs(changes: Json): unknown[] {
   const values: unknown[] = [];
   if (Array.isArray(changes.targets)) values.push(...changes.targets);
   if (Array.isArray(changes.rules)) values.push(...changes.rules);
-  if (changes.target || changes.selector || changes.component) values.push(changes);
+  if (changes.target) values.push(changes);
   return values.map((value) => {
     if (!isRecord(value)) return value;
     return {
       ...value,
-      target: value.target ?? value.selector ?? value.component,
-      properties: value.properties ?? value.set ?? value.styles,
+      target: value.target,
+      properties: value.properties,
       scope: value.scope ?? {
         platform: value.platform,
         page: value.page,
@@ -238,11 +238,7 @@ function readFilters(changes: Json): StyleRuleFilters {
     : undefined;
   return {
     scope: Object.keys(scope).length > 0 ? scope : undefined,
-    target: typeof changes.target === "string"
-      ? changes.target
-      : typeof changes.selector === "string"
-        ? changes.selector
-        : undefined,
+    target: typeof changes.target === "string" ? changes.target : undefined,
     states,
     properties,
     transactionId: typeof changes.transactionId === "string" ? changes.transactionId : undefined,

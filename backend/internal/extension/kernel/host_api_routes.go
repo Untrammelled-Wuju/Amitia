@@ -8,6 +8,9 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -283,6 +286,7 @@ type HostAPIRouteDeps struct {
 	EventService                *event.Service
 	ScheduleService             *schedule.ScheduleService
 	ToolFacade                  *ToolFacade
+	PluginPackages              HostPluginPackageManagerPort
 	ExecutionKernel             *execution.ExecutionPipeline
 	ToolRegistry                *capability.ToolRegistry
 	OperationRepository         sqlite.OperationRepository
@@ -298,6 +302,8 @@ type HostAPIRouteDeps struct {
 	ExtensionDataSources        ExtensionDataSource
 	ResourceLinks               *ResourceLinkManager
 	VectorStore                 ExtensionVectorStore
+	NetworkClient               *http.Client
+	NetworkAllowPrivate         bool
 }
 
 type SecretStore interface {
@@ -2010,6 +2016,265 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 			},
 		},
 		{
+			method:          host_api.MethodPluginInstall,
+			riskLevel:       host_api.RiskHigh,
+			sideEffectLevel: host_api.SideEffectExternal,
+			timeout:         30 * time.Minute,
+			handler: func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+				if deps.PluginPackages == nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "plugin package manager not configured"},
+					}, nil
+				}
+				var input struct {
+					ExtensionID      string          `json:"extensionId"`
+					Version          string          `json:"version"`
+					PreviewSessionID string          `json:"previewSessionId"`
+					Confirmations    map[string]bool `json:"confirmations"`
+					IdempotencyKey   string          `json:"idempotencyKey,omitempty"`
+				}
+				if err := json.Unmarshal(req.Input, &input); err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()},
+					}, nil
+				}
+				input.ExtensionID = strings.TrimSpace(input.ExtensionID)
+				input.Version = strings.TrimSpace(input.Version)
+				input.PreviewSessionID = strings.TrimSpace(input.PreviewSessionID)
+				if input.ExtensionID == "" || input.Version == "" || input.PreviewSessionID == "" {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: "extensionId, version and previewSessionId are required"},
+					}, nil
+				}
+				result, err := deps.PluginPackages.Install(ctx, InstallHostPluginPackageRequest{
+					SpaceID: req.SpaceID, ExtensionID: input.ExtensionID, Version: input.Version,
+					PreviewSessionID: input.PreviewSessionID, Confirmations: input.Confirmations,
+					IdempotencyKey: input.IdempotencyKey,
+				})
+				if err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+					}, nil
+				}
+				output, err := json.Marshal(result)
+				if err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+					}, nil
+				}
+				return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
+			},
+		},
+		{
+			method:          host_api.MethodPluginPreview,
+			riskLevel:       host_api.RiskHigh,
+			sideEffectLevel: host_api.SideEffectExternal,
+			timeout:         30 * time.Minute,
+			handler: func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+				if deps.PluginPackages == nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "plugin package manager not configured"},
+					}, nil
+				}
+				var input struct {
+					ExtensionID string                  `json:"extensionId"`
+					Version     string                  `json:"version"`
+					PackageURI  string                  `json:"packageUri"`
+					SHA256      string                  `json:"sha256"`
+					FileName    string                  `json:"fileName,omitempty"`
+					Source      PackageSourceProvenance `json:"source,omitempty"`
+				}
+				if err := json.Unmarshal(req.Input, &input); err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()},
+					}, nil
+				}
+				preview, err := deps.PluginPackages.Prepare(ctx, PrepareHostPluginPackageRequest{
+					SpaceID: req.SpaceID, ExtensionID: input.ExtensionID, Version: input.Version,
+					PackageURI: input.PackageURI, SHA256: input.SHA256, FileName: input.FileName, Source: input.Source,
+				})
+				if err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+					}, nil
+				}
+				output, err := json.Marshal(preview)
+				if err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+					}, nil
+				}
+				return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
+			},
+		},
+		{
+			method:          host_api.MethodNetworkRequest,
+			riskLevel:       host_api.RiskMedium,
+			sideEffectLevel: host_api.SideEffectExternal,
+			timeout:         2 * time.Minute,
+			handler: func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+				if deps.NetworkClient == nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "network requester not configured"},
+					}, nil
+				}
+				var input struct {
+					URL            string            `json:"url"`
+					Method         string            `json:"method"`
+					Headers        map[string]string `json:"headers"`
+					Body           json.RawMessage   `json:"body"`
+					TimeoutMS      int64             `json:"timeoutMs"`
+					IdempotencyKey string            `json:"idempotencyKey,omitempty"`
+				}
+				if err := json.Unmarshal(req.Input, &input); err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()},
+					}, nil
+				}
+				target, err := url.Parse(strings.TrimSpace(input.URL))
+				if err != nil || (target.Scheme != "https" && target.Scheme != "http") || target.Hostname() == "" || target.User != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: "url must be an absolute HTTP or HTTPS URL without user information"},
+					}, nil
+				}
+				if !deps.NetworkAllowPrivate {
+					if err := rejectPrivateNetworkURL(ctx, target); err != nil {
+						return host_api.CallResult{
+							Status: host_api.StatusFailed,
+							Error:  &host_api.Error{Code: host_api.ErrorCodePermissionDenied, Message: err.Error()},
+						}, nil
+					}
+				}
+				method := strings.ToUpper(strings.TrimSpace(input.Method))
+				if method == "" {
+					method = http.MethodGet
+				}
+				switch method {
+				case http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+				default:
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: "unsupported HTTP method: " + method},
+					}, nil
+				}
+				var body io.Reader
+				if len(input.Body) > 0 && string(input.Body) != "null" {
+					var encoded string
+					if json.Unmarshal(input.Body, &encoded) == nil {
+						body = strings.NewReader(encoded)
+					} else {
+						body = strings.NewReader(string(input.Body))
+					}
+				}
+				timeout := 2 * time.Minute
+				if input.TimeoutMS > 0 && input.TimeoutMS < timeout.Milliseconds() {
+					timeout = time.Duration(input.TimeoutMS) * time.Millisecond
+				}
+				requestCtx, cancel := context.WithTimeout(ctx, timeout)
+				defer cancel()
+				request, err := http.NewRequestWithContext(requestCtx, method, target.String(), body)
+				if err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()},
+					}, nil
+				}
+				for key, value := range input.Headers {
+					if strings.EqualFold(strings.TrimSpace(key), "host") {
+						continue
+					}
+					request.Header.Set(key, value)
+				}
+				if request.Header.Get("User-Agent") == "" {
+					request.Header.Set("User-Agent", "Amitia-Plugin-Host")
+				}
+				client := *deps.NetworkClient
+				if !deps.NetworkAllowPrivate {
+					guardedClient, guardErr := privateNetworkGuardedHTTPClient(&client)
+					if guardErr != nil {
+						return host_api.CallResult{
+							Status: host_api.StatusFailed,
+							Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: guardErr.Error()},
+						}, nil
+					}
+					client = *guardedClient
+				}
+				client.CheckRedirect = func(next *http.Request, via []*http.Request) error {
+					if len(via) >= 5 {
+						return errors.New("network redirect limit exceeded")
+					}
+					if !deps.NetworkAllowPrivate {
+						if err := rejectPrivateNetworkURL(next.Context(), next.URL); err != nil {
+							return err
+						}
+					}
+					for key := range next.Header {
+						if strings.EqualFold(key, "Authorization") || strings.EqualFold(key, "Cookie") {
+							next.Header.Del(key)
+						}
+					}
+					return nil
+				}
+				response, err := client.Do(request)
+				if err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+					}, nil
+				}
+				defer response.Body.Close()
+				payload, err := io.ReadAll(io.LimitReader(response.Body, (16<<20)+1))
+				if err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+					}, nil
+				}
+				if len(payload) > 16<<20 {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeOutputInvalid, Message: "network response exceeds 16 MiB"},
+					}, nil
+				}
+				headers := make(map[string]string, len(response.Header))
+				for key := range response.Header {
+					headers[key] = response.Header.Get(key)
+				}
+				var responseBody any = string(payload)
+				if strings.Contains(strings.ToLower(response.Header.Get("Content-Type")), "json") && len(payload) > 0 {
+					if err := json.Unmarshal(payload, &responseBody); err != nil {
+						return host_api.CallResult{
+							Status: host_api.StatusFailed,
+							Error:  &host_api.Error{Code: host_api.ErrorCodeOutputInvalid, Message: err.Error()},
+						}, nil
+					}
+				}
+				output, err := json.Marshal(map[string]any{
+					"status": response.StatusCode, "headers": headers, "body": responseBody,
+					"ok": response.StatusCode >= 200 && response.StatusCode < 300,
+				})
+				if err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+					}, nil
+				}
+				return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
+			},
+		},
+		{
 			method:          host_api.MethodUINotify,
 			riskLevel:       host_api.RiskLow,
 			sideEffectLevel: host_api.SideEffectNone,
@@ -2495,4 +2760,31 @@ func extractDepth(parentID string) int {
 		}
 	}
 	return d
+}
+
+func rejectPrivateNetworkURL(ctx context.Context, target *url.URL) error {
+	if target == nil || target.Hostname() == "" {
+		return errors.New("network destination host is required")
+	}
+	host := target.Hostname()
+	if ip := net.ParseIP(host); ip != nil {
+		if isPrivateNetworkIP(ip) {
+			return errors.New("network destination cannot target a private or local address")
+		}
+		return nil
+	}
+	addresses, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+	if err != nil {
+		return fmt.Errorf("resolve network destination: %w", err)
+	}
+	for _, address := range addresses {
+		if isPrivateNetworkIP(address.IP) {
+			return errors.New("network destination resolves to a private or local address")
+		}
+	}
+	return nil
+}
+
+func isPrivateNetworkIP(ip net.IP) bool {
+	return ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() || ip.IsMulticast()
 }

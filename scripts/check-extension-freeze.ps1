@@ -52,7 +52,7 @@ $script:violations = New-Object System.Collections.Generic.List[string]
 $BaselineManifestTopLevel = @('$schema', '$id', '$defs', 'oneOf')
 $BaselineManifestDefs = @('semver', 'metadata', 'compatibility', 'entry', 'skill', 'plugin')
 $BaselineManifestKinds = @('Skill', 'Plugin')
-$BaselineEntryKinds = @('builtin', 'legacy_tool', 'workflow', 'instructions')
+$BaselineEntryKinds = @('builtin', 'workflow', 'instructions')
 $BaselineSkillProperties = @(
     '$schema', 'apiVersion', 'kind', 'metadata', 'compatibility', 'entry',
     'capabilities', 'triggers', 'execution', 'inputSchema', 'outputSchema',

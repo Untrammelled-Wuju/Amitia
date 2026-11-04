@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../app/app_routes.dart';
+import '../../../../app/theme/app_radius.dart';
+import '../../../../app/theme/app_spacing.dart';
+import '../../../../app/theme/app_typography.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 import '../../../../core/services/device_owned_memory_service.dart';
@@ -52,7 +55,6 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
   String _memoryView = 'all';
   String _kind = 'memory';
   String _next = '';
-  String _nextLegacy = '';
   String _source = 'current';
   List<Map<String, dynamic>> _historicalRoles = [];
   String _scope = '';
@@ -91,8 +93,8 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
     try {
       _role = owned.selectRole(widget.characterId);
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+      print("[original-error] $error\n$stackTrace");
+    }
     if (_role.isEmpty && owned.roles.isNotEmpty)
       _role = owned.roles.first['id'].toString();
     _memoryView = widget.characterId == null
@@ -113,7 +115,6 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
         _consolidationNotice = '';
         _rows.clear();
         _next = '';
-        _nextLegacy = '';
         _scope = '';
       }
     });
@@ -167,10 +168,8 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
         _kind,
         characterId: _role,
         cursor: !historical && older ? _next : '',
-        legacyCursor: !historical && older ? _nextLegacy : '',
         historicalRoleId: historical ? _source.substring(8) : '',
         historicalCursor: historical && older ? _next : '',
-        historicalLegacyCursor: historical && older ? _nextLegacy : '',
         memoryView: historical ? '' : _memoryView,
       );
       if (!mounted || ticket != _generation) return;
@@ -757,8 +756,7 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
       original,
       changes: {
         'content': content is Map ? {...content, field: value} : value,
-        if (original['kind'] == 'memory')
-          'correctionReason': '用户在手机记忆管理中更正正文',
+        if (original['kind'] == 'memory') 'correctionReason': '用户在手机记忆管理中更正正文',
       },
     );
   }
@@ -848,7 +846,8 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
 
   bool _canRestoreLifecycle(Map row) {
     final body = row['body'] is Map ? row['body'] as Map : const {};
-    final state = (body['effectiveDecayState'] ?? body['decayState']).toString();
+    final state = (body['effectiveDecayState'] ?? body['decayState'])
+        .toString();
     return body['archivedAt'] == null &&
         (state == 'dormant' || state == 'archived');
   }
@@ -856,11 +855,7 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
   Future<void> _restoreLifecycle(Map row) async {
     await _edit(
       row,
-      changes: {
-        'retentionLevel': 4,
-        'memoryStrength': 0.5,
-        'pinned': false,
-      },
+      changes: {'retentionLevel': 4, 'memoryStrength': 0.5, 'pinned': false},
     );
   }
 
@@ -914,10 +909,16 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
         children: [
           for (final version in versions)
             SimpleDialogOption(
-              onPressed: () => Navigator.pop(context, version['revision'] as int),
-              child: Text('版本 ${version['revision']} · ${version['createdAt']}'),
+              onPressed: () =>
+                  Navigator.pop(context, version['revision'] as int),
+              child: Text(
+                '版本 ${version['revision']} · ${version['createdAt']}',
+              ),
             ),
-          SimpleDialogOption(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
         ],
       ),
     );
@@ -1096,7 +1097,7 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                     itemCount:
                         visible.length +
                         (_kind == 'graph' ? 1 : 0) +
-                        (_next.isNotEmpty || _nextLegacy.isNotEmpty ? 1 : 0),
+                        (_next.isNotEmpty ? 1 : 0),
                     separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
                     itemBuilder: (context, index) {
                       if (_kind == 'graph' && index == 0)
@@ -1264,8 +1265,7 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
     final entries = groups.entries.toList();
     return ListView.separated(
       padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-      itemCount:
-          entries.length + (_next.isNotEmpty || _nextLegacy.isNotEmpty ? 1 : 0),
+      itemCount: entries.length + (_next.isNotEmpty ? 1 : 0),
       separatorBuilder: (_, _) => SizedBox(height: AppSpacing.md),
       itemBuilder: (context, index) {
         if (index == entries.length)
@@ -2191,7 +2191,10 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                                   ? null
                                   : () => _detailAction(
                                       sheetContext,
-                                      () => _retrievalFeedback(row, 'not_helpful'),
+                                      () => _retrievalFeedback(
+                                        row,
+                                        'not_helpful',
+                                      ),
                                     ),
                               child: const Text('召回无用'),
                             ),

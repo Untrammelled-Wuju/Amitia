@@ -741,11 +741,7 @@ func (c *MeshClient) executeRuntimeInvoke(invoke protocol.RuntimeInvokePayload) 
 	if invoke.Handler == executionjournal.TaskInspectionHandler {
 		return c.inspectTaskJournal(invoke)
 	}
-	handler := c.resolveHandler(invoke.Handler)
-	var contextual CancellableRuntimeInvokeHandler
-	if dispatcher, ok := c.conf.RuntimeDispatcher.(RuntimeContextDispatcher); ok {
-		contextual = dispatcher.ResolveContext(invoke.Handler)
-	}
+	handler := c.conf.RuntimeDispatcher.ResolveContext(invoke.Handler)
 	if handler == nil {
 		return nil, fmt.Errorf("unsupported handler: %s", invoke.Handler)
 	}
@@ -753,10 +749,7 @@ func (c *MeshClient) executeRuntimeInvoke(invoke protocol.RuntimeInvokePayload) 
 		if c.State() != StateReady || invoke.RuntimeSessionID != c.sessionIdentity() || invoke.ConnectionGeneration != c.sessionGeneration() {
 			return nil, fmt.Errorf("设备调用执行前会话已失效")
 		}
-		if contextual != nil {
-			return contextual(current, invoke)
-		}
-		return handler(invoke)
+		return handler(current, invoke)
 	}
 	var result *protocol.RuntimeResultPayload
 	var err error
@@ -807,10 +800,6 @@ func (c *MeshClient) executeRuntimeInvoke(invoke protocol.RuntimeInvokePayload) 
 		result.ConnectionGeneration = invoke.ConnectionGeneration
 	}
 	return result, nil
-}
-
-func (c *MeshClient) resolveHandler(handlerName string) RuntimeInvokeHandler {
-	return c.conf.RuntimeDispatcher.Resolve(handlerName)
 }
 
 func (c *MeshClient) sendRuntimeResult(result *protocol.RuntimeResultPayload) {

@@ -21,8 +21,6 @@ type KnowledgeRuntimeConfig struct {
 }
 
 type KnowledgeFeatureConfig struct {
-	RetrievalPolicyEnabled      bool `mapstructure:"retrievalPolicyEnabled" json:"retrievalPolicyEnabled"`
-	RetrievalPolicyShadow       bool `mapstructure:"retrievalPolicyShadow" json:"retrievalPolicyShadow"`
 	CanonicalReaderEnabled      bool `mapstructure:"canonicalReaderEnabled" json:"canonicalReaderEnabled"`
 	AgenticInvestigationEnabled bool `mapstructure:"agenticInvestigationEnabled" json:"agenticInvestigationEnabled"`
 }
@@ -79,7 +77,7 @@ type KnowledgeResourceConfig struct {
 	PDFTextPageTimeoutSec     int   `mapstructure:"pdfTextPageTimeoutSec" json:"pdfTextPageTimeoutSec"`
 	OCRRasterTimeoutSec       int   `mapstructure:"ocrRasterTimeoutSec" json:"ocrRasterTimeoutSec"`
 	OCRTimeoutSec             int   `mapstructure:"ocrTimeoutSec" json:"ocrTimeoutSec"`
-	LegacyDocTimeoutSec       int   `mapstructure:"legacyDocTimeoutSec" json:"legacyDocTimeoutSec"`
+	DocTimeoutSec             int   `mapstructure:"docTimeoutSec" json:"docTimeoutSec"`
 	MaxOOXMLFiles             int   `mapstructure:"maxOoxmlFiles" json:"maxOoxmlFiles"`
 	MaxOOXMLUncompressedBytes int64 `mapstructure:"maxOoxmlUncompressedBytes" json:"maxOoxmlUncompressedBytes"`
 	MaxSharedStrings          int   `mapstructure:"maxSharedStrings" json:"maxSharedStrings"`
@@ -117,7 +115,7 @@ type KnowledgeSLOConfig struct {
 
 func DefaultKnowledgeRuntimeConfig() KnowledgeRuntimeConfig {
 	return KnowledgeRuntimeConfig{
-		Features: KnowledgeFeatureConfig{RetrievalPolicyEnabled: true, RetrievalPolicyShadow: false, CanonicalReaderEnabled: true, AgenticInvestigationEnabled: true},
+		Features: KnowledgeFeatureConfig{CanonicalReaderEnabled: true, AgenticInvestigationEnabled: true},
 		Chunk:    KnowledgeChunkConfig{TargetRunes: 1200, OverlapRunes: 160, ParentMaxRunes: 6000},
 		Retrieval: KnowledgeRetrievalConfig{
 			MaxResultLimit: 30,
@@ -131,7 +129,7 @@ func DefaultKnowledgeRuntimeConfig() KnowledgeRuntimeConfig {
 			MaxSourceBytes: 2 << 30, OnlineRetrievalWorkers: 32, ReaderWorkers: 16, IngestWorkers: 2, IndexWorkers: 2, OCRWorkers: 1, EmbeddingBatchSize: 32, QdrantBatchSize: 64,
 			StreamBufferBytes: 128 << 10, UploadBufferBytes: 256 << 10, TextScannerMaxBytes: 4 << 20, TextUnitMaxBytes: 16 << 10, JSONUnitMaxBytes: 8 << 20,
 			MaxPDFPages: 20000, MaxOCRImageBytes: 64 << 20, OCRRasterDPI: 180,
-			PDFInfoTimeoutSec: 30, PDFTextPageTimeoutSec: 45, OCRRasterTimeoutSec: 45, OCRTimeoutSec: 60, LegacyDocTimeoutSec: 90,
+			PDFInfoTimeoutSec: 30, PDFTextPageTimeoutSec: 45, OCRRasterTimeoutSec: 45, OCRTimeoutSec: 60, DocTimeoutSec: 90,
 			MaxOOXMLFiles: 20000, MaxOOXMLUncompressedBytes: 512 << 20, MaxSharedStrings: 500000, MaxSharedStringBytes: 128 << 20,
 			MaxWorksheetRowCells: 20000, MaxCellTextBytes: 2 << 20,
 		},
@@ -191,7 +189,7 @@ func validateKnowledgeRuntimeConfig(cfg KnowledgeRuntimeConfig) error {
 		res.TextScannerMaxBytes < 64<<10 || res.TextScannerMaxBytes > 64<<20 || res.TextUnitMaxBytes < 1<<10 || res.TextUnitMaxBytes > 4<<20 ||
 		res.JSONUnitMaxBytes < 64<<10 || res.JSONUnitMaxBytes > 64<<20 || res.MaxPDFPages < 1 || res.MaxPDFPages > 100000 ||
 		res.MaxOCRImageBytes < 1<<20 || res.MaxOCRImageBytes > 1<<30 || res.OCRRasterDPI < 72 || res.OCRRasterDPI > 600 ||
-		res.PDFInfoTimeoutSec < 1 || res.PDFInfoTimeoutSec > 300 || res.PDFTextPageTimeoutSec < 1 || res.PDFTextPageTimeoutSec > 300 || res.OCRRasterTimeoutSec < 1 || res.OCRRasterTimeoutSec > 300 || res.OCRTimeoutSec < 1 || res.OCRTimeoutSec > 600 || res.LegacyDocTimeoutSec < 1 || res.LegacyDocTimeoutSec > 600 ||
+		res.PDFInfoTimeoutSec < 1 || res.PDFInfoTimeoutSec > 300 || res.PDFTextPageTimeoutSec < 1 || res.PDFTextPageTimeoutSec > 300 || res.OCRRasterTimeoutSec < 1 || res.OCRRasterTimeoutSec > 300 || res.OCRTimeoutSec < 1 || res.OCRTimeoutSec > 600 || res.DocTimeoutSec < 1 || res.DocTimeoutSec > 600 ||
 		res.MaxOOXMLFiles < 100 || res.MaxOOXMLFiles > 200000 || res.MaxOOXMLUncompressedBytes < 1<<20 || res.MaxOOXMLUncompressedBytes > 8<<30 ||
 		res.MaxSharedStrings < 100 || res.MaxSharedStrings > 5000000 || res.MaxSharedStringBytes < 1<<20 || res.MaxSharedStringBytes > 2<<30 || res.MaxWorksheetRowCells < 10 || res.MaxWorksheetRowCells > 100000 || res.MaxCellTextBytes < 1024 || res.MaxCellTextBytes > 64<<20 {
 		return fmt.Errorf("resource limit 参数超出安全范围")

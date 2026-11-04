@@ -24,8 +24,6 @@ func NewKernelAPI(runtime *Runtime) *KernelAPI {
 
 func (api *KernelAPI) RegisterRoutes(group *gin.RouterGroup) {
 	kernel := group.Group("/kernel")
-	kernel.POST("/extensions/preview", api.previewInstall)
-	kernel.POST("/extensions/install", api.install)
 	kernel.POST("/extensions/enable", api.enable)
 	kernel.POST("/extensions/disable", api.disable)
 	kernel.POST("/extensions/uninstall/preview", api.previewUninstall)
@@ -317,14 +315,6 @@ func isSystemManagedExtension(ctx context.Context, container *kernelruntime.Cont
 	}
 	value, _ := def.Metadata["system.managed"].(bool)
 	return value
-}
-
-func (api *KernelAPI) previewInstall(c *gin.Context) {
-	retiredPackagePreviewEndpoint(c)
-}
-
-func (api *KernelAPI) install(c *gin.Context) {
-	retiredPackageInstallEndpoint(c)
 }
 
 func kernelAPIUser(c *gin.Context) string {

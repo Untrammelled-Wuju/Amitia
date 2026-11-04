@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../models/schema_ui_types.dart';
 import '../renderer/schema_ui_renderer.dart';
-import 'extension_page_host.dart';
+import 'error_boundary.dart';
 
 class ChatExtensionHost extends ConsumerStatefulWidget {
   final String extensionId;

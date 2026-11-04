@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/agent/tool"
+	"github.com/u-ai/backend/internal/agentrun"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
@@ -28,6 +29,7 @@ type chatMultiAgentRuntime struct {
 	goals            *decision.GoalRegistry
 	worktreeReviewer codingWorktreeReviewer
 	terminalReader   codingTaskTerminalReader
+	agentRuns        *agentrun.Service
 	mu               sync.Mutex
 	dispatches       map[string]*multiAgentDispatchLock
 }
@@ -74,26 +76,30 @@ func multiAgentToolParameters(schema string) tool.Parameters {
 }
 
 func (m *chatMultiAgentRuntime) ModelTools(ctx context.Context, scope chat.SkillScope) []tool.Tool {
-	if !m.available(ctx, scope) || coordination.ValidateCurrent(ctx) != nil {
-		return nil
+	tools := make([]tool.Tool, 0, 6)
+	if m.available(ctx, scope) && coordination.ValidateCurrent(ctx) == nil {
+		tools = append(tools, []tool.Tool{
+			tool.Tool{Type: "function", Function: tool.Function{
+				Name:        multiAgentDelegateTool,
+				Description: "Delegate two to four coding subtasks within the authorized workspace. Optional dependencies is an array aligned to objectives; each row contains zero-based prerequisite objective indices, with cycles and self-dependencies forbidden. Optional deadline_minutes limits the entire coordination to 1-240 minutes. Optional max_tool_calls limits the total number of actual authorized tool invocations across all child workers (1-256); reservations are durable and uncertain effects remain charged. Optional max_total_tokens sets the parent total model-token allowance (1-100000000); the full configured context window is reserved before each model invocation, with unused tokens released only after trusted usage reporting. Calls without a configured context window are blocked when this limit is enabled. Optional max_cost_microusd limits the shared configured-rate cost allowance (millionths of USD) across children; it fails closed unless the model has an operator-maintained rate-ceiling version and input/output rates. This is NOT verification of the provider's final invoice. Returns task IDs, not proof of completion. Do not dispatch another batch until the first finishes.",
+				Parameters:  multiAgentToolParameters(`{"type":"object","properties":{"objectives":{"type":"array","minItems":2,"maxItems":4,"items":{"type":"string","minLength":8,"maxLength":2000}},"worker_roles":{"type":"array","minItems":2,"maxItems":4,"items":{"type":"string","enum":["research_worker","coding_worker","review_worker","operator_worker"]}},"constraints":{"type":"array","minItems":2,"maxItems":4,"items":{"type":"array","items":{"type":"string","minLength":1,"maxLength":500}}},"strategy":{"type":"string","enum":["parallel","sequential"]},"dependencies":{"type":"array","minItems":2,"maxItems":4,"items":{"type":"array","items":{"type":"integer","minimum":0,"maximum":3},"uniqueItems":true}},"deadline_minutes":{"type":"integer","minimum":1,"maximum":240},"max_tool_calls":{"type":"integer","minimum":1,"maximum":256},"max_total_tokens":{"type":"integer","minimum":1,"maximum":100000000},"max_cost_microusd":{"type":"integer","minimum":1,"maximum":100000000000}},"required":["objectives"],"additionalProperties":false}`),
+			}},
+			tool.Tool{Type: "function", Function: tool.Function{
+				Name:        multiAgentStatusTool,
+				Description: "Read coordinator and coding worker states, including worktree evidence, trusted terminal metadata and verificationGate. The verificationSummary only reflects scoped evidence; worker succeeded is not verified test success. Never claim completion without parent verification.",
+				Parameters:  multiAgentToolParameters(`{"type":"object","properties":{"coordination_id":{"type":"string"}},"required":["coordination_id"]}`),
+			}},
+			tool.Tool{Type: "function", Function: tool.Function{
+				Name:        multiAgentWaitTool,
+				Description: "Await actual worker completion with bounded timeout. After terminal, inspect each worktreeReview.verificationGate and verificationSummary. Worker success and exit code zero are not evidence of tested or merged code. Manual approval remains required.",
+				Parameters:  multiAgentToolParameters(`{"type":"object","properties":{"coordination_id":{"type":"string"},"wait_seconds":{"type":"integer","minimum":1,"maximum":30}},"required":["coordination_id"]}`),
+			}},
+		}...)
 	}
-	return []tool.Tool{
-		tool.Tool{Type: "function", Function: tool.Function{
-			Name:        multiAgentDelegateTool,
-			Description: "Delegate two to four coding subtasks within the authorized workspace. Optional dependencies is an array aligned to objectives; each row contains zero-based prerequisite objective indices, with cycles and self-dependencies forbidden. Optional deadline_minutes limits the entire coordination to 1-240 minutes. Optional max_tool_calls limits the total number of actual authorized tool invocations across all child workers (1-256); reservations are durable and uncertain effects remain charged. Optional max_total_tokens sets the parent total model-token allowance (1-100000000); the full configured context window is reserved before each model invocation, with unused tokens released only after trusted usage reporting. Calls without a configured context window are blocked when this limit is enabled. Optional max_cost_microusd limits the shared configured-rate cost allowance (millionths of USD) across children; it fails closed unless the model has an operator-maintained rate-ceiling version and input/output rates. This is NOT verification of the provider's final invoice. Returns task IDs, not proof of completion. Do not dispatch another batch until the first finishes.",
-			Parameters:  multiAgentToolParameters(`{"type":"object","properties":{"objectives":{"type":"array","minItems":2,"maxItems":4,"items":{"type":"string","minLength":8,"maxLength":2000}},"worker_roles":{"type":"array","minItems":2,"maxItems":4,"items":{"type":"string","enum":["research_worker","coding_worker","review_worker","operator_worker"]}},"constraints":{"type":"array","minItems":2,"maxItems":4,"items":{"type":"array","items":{"type":"string","minLength":1,"maxLength":500}}},"strategy":{"type":"string","enum":["parallel","sequential"]},"dependencies":{"type":"array","minItems":2,"maxItems":4,"items":{"type":"array","items":{"type":"integer","minimum":0,"maximum":3},"uniqueItems":true}},"deadline_minutes":{"type":"integer","minimum":1,"maximum":240},"max_tool_calls":{"type":"integer","minimum":1,"maximum":256},"max_total_tokens":{"type":"integer","minimum":1,"maximum":100000000},"max_cost_microusd":{"type":"integer","minimum":1,"maximum":100000000000}},"required":["objectives"],"additionalProperties":false}`),
-		}},
-		tool.Tool{Type: "function", Function: tool.Function{
-			Name:        multiAgentStatusTool,
-			Description: "Read coordinator and coding worker states, including worktree evidence, trusted terminal metadata and verificationGate. The verificationSummary only reflects scoped evidence; worker succeeded is not verified test success. Never claim completion without parent verification.",
-			Parameters:  multiAgentToolParameters(`{"type":"object","properties":{"coordination_id":{"type":"string"}},"required":["coordination_id"]}`),
-		}},
-		tool.Tool{Type: "function", Function: tool.Function{
-			Name:        multiAgentWaitTool,
-			Description: "Await actual worker completion with bounded timeout. After terminal, inspect each worktreeReview.verificationGate and verificationSummary. Worker success and exit code zero are not evidence of tested or merged code. Manual approval remains required.",
-			Parameters:  multiAgentToolParameters(`{"type":"object","properties":{"coordination_id":{"type":"string"},"wait_seconds":{"type":"integer","minimum":1,"maximum":30}},"required":["coordination_id"]}`),
-		}},
+	if coordination.ValidateCurrent(ctx) == nil {
+		tools = append(tools, m.agentRunTools(ctx, scope)...)
 	}
+	return tools
 }
 
 func multiAgentToolFailure(code string, err error) chat.ToolResult {
@@ -111,6 +117,9 @@ func multiAgentToolSuccess(v any) chat.ToolResult {
 func (m *chatMultiAgentRuntime) Execute(ctx context.Context, name string, input json.RawMessage, scope chat.SkillScope) chat.ToolResult {
 	if err := coordination.ValidateCurrent(ctx); err != nil {
 		return multiAgentToolFailure("MULTI_AGENT_NOT_AUTHORIZED", err)
+	}
+	if isAgentRunMessageTool(name) {
+		return m.executeAgentRunMessageTool(ctx, name, input, scope)
 	}
 	if !m.available(ctx, scope) {
 		return multiAgentToolFailure("MULTI_AGENT_NOT_AUTHORIZED", fmt.Errorf("multi-agent tools are available only to an authorized, workspace-bound parent turn"))

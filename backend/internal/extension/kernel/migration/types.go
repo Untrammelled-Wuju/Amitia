@@ -304,16 +304,6 @@ var ForbiddenDomains = map[ForbiddenMigrationDomain]bool{
 	ForbiddenElectronConfig:  true,
 }
 
-type WriteStrategy string
-
-const (
-	WriteStrategyOldOnly              WriteStrategy = "old_only"
-	WriteStrategyNewOnly              WriteStrategy = "new_only"
-	WriteStrategyDualWriteValidated   WriteStrategy = "dual_write_validated"
-	WriteStrategyStagedWrite          WriteStrategy = "staged_write"
-	WriteStrategyReadCompatibleShared WriteStrategy = "read_compatible_shared"
-)
-
 type SideEffectClass string
 
 const (

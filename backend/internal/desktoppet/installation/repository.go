@@ -24,6 +24,14 @@ import (
 
 const installationTimeFormat = "2006-01-02 15:04:05"
 
+func normalizeRepositoryDeviceID(deviceID string) (string, error) {
+	deviceID = strings.TrimSpace(deviceID)
+	if deviceID == "" {
+		return "", ErrInstallationDeviceRequired
+	}
+	return deviceID, nil
+}
+
 type Repository interface {
 	DB() *gorm.DB
 
@@ -446,13 +454,14 @@ func (r *repository) UpdateRuntimeSettingsWithCAS(installationID string, expecte
 }
 
 func (r *repository) GetInstallationBySpaceDevicePet(spaceID, deviceID, petID string) (*Installation, error) {
-	var inst Installation
-	query := r.db.Where("space_id = ? AND pet_id = ?", spaceID, petID)
-	if deviceID != "" {
-		query = query.Where("device_id = ? OR device_id = ''", deviceID)
+	deviceID, err := normalizeRepositoryDeviceID(deviceID)
+	if err != nil {
+		return nil, err
 	}
+	var inst Installation
+	query := r.db.Where("space_id = ? AND pet_id = ? AND device_id = ?", spaceID, petID, deviceID)
 	query = query.Where("status NOT IN ?", []string{StatusUninstalled, StatusUninstalling, StatusInvalid})
-	err := query.First(&inst).Error
+	err = query.First(&inst).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrInstallationNotFound
@@ -463,12 +472,12 @@ func (r *repository) GetInstallationBySpaceDevicePet(spaceID, deviceID, petID st
 }
 
 func (r *repository) ListInstallationsBySpaceDevice(spaceID, deviceID string) ([]*Installation, error) {
-	var installations []*Installation
-	query := r.db.Where("space_id = ?", spaceID)
-	if deviceID != "" {
-		query = query.Where("device_id = ? OR device_id = ''", deviceID)
+	deviceID, err := normalizeRepositoryDeviceID(deviceID)
+	if err != nil {
+		return nil, err
 	}
-	err := query.Order("created_at DESC").Find(&installations).Error
+	var installations []*Installation
+	err = r.db.Where("space_id = ? AND device_id = ?", spaceID, deviceID).Order("created_at DESC").Find(&installations).Error
 	if installations == nil {
 		installations = []*Installation{}
 	}
@@ -476,9 +485,12 @@ func (r *repository) ListInstallationsBySpaceDevice(spaceID, deviceID string) ([
 }
 
 func (r *repository) GetInstallationForSpaceDevice(spaceID, deviceID, installationID string) (*Installation, error) {
+	deviceID, err := normalizeRepositoryDeviceID(deviceID)
+	if err != nil {
+		return nil, err
+	}
 	var inst Installation
-	err := r.db.Where("id = ? AND space_id = ? AND (device_id = ? OR (device_id = '' AND ? = ''))",
-		installationID, spaceID, deviceID, deviceID).First(&inst).Error
+	err = r.db.Where("id = ? AND space_id = ? AND device_id = ?", installationID, spaceID, deviceID).First(&inst).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrInstallationNotFound
@@ -489,12 +501,12 @@ func (r *repository) GetInstallationForSpaceDevice(spaceID, deviceID, installati
 }
 
 func (r *repository) ListInstallationsForSpaceDevice(spaceID, deviceID string) ([]*Installation, error) {
-	var list []*Installation
-	tx := r.db.Where("space_id = ?", spaceID)
-	if deviceID != "" {
-		tx = tx.Where("device_id = ? OR device_id = ''", deviceID)
+	deviceID, err := normalizeRepositoryDeviceID(deviceID)
+	if err != nil {
+		return nil, err
 	}
-	if err := tx.Order("installed_at desc").Find(&list).Error; err != nil {
+	var list []*Installation
+	if err := r.db.Where("space_id = ? AND device_id = ?", spaceID, deviceID).Order("installed_at desc").Find(&list).Error; err != nil {
 		return nil, err
 	}
 	return list, nil
@@ -509,9 +521,12 @@ func (r *repository) UpdateInstallationTx(tx *gorm.DB, inst *Installation) error
 }
 
 func (r *repository) GetInstallationBySpaceDevicePetTx(tx *gorm.DB, spaceID, deviceID, petID string) (*Installation, error) {
+	deviceID, err := normalizeRepositoryDeviceID(deviceID)
+	if err != nil {
+		return nil, err
+	}
 	var inst Installation
-	err := tx.Where("space_id = ? AND pet_id = ?", spaceID, petID).
-		Where("device_id = ? OR device_id = ''", deviceID).
+	err = tx.Where("space_id = ? AND pet_id = ? AND device_id = ?", spaceID, petID, deviceID).
 		First(&inst).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -527,13 +542,9 @@ func (r *repository) DeleteInstallationTx(tx *gorm.DB, id string) error {
 }
 
 func (r *repository) GetRuntimeSettingsForSpaceDevice(spaceID, deviceID, installationID string) (*RuntimeSettings, error) {
-	// Scope the settings lookup through the owning installation. Runtime settings
-	// do not carry user/device columns themselves, so installation_id alone is
-	// not an ownership boundary. Legacy device-less installations remain valid
-	// for their owner and are narrowed by space_id.
 	var installation Installation
 	if err := r.db.Where("id = ? AND space_id = ?", installationID, spaceID).
-		Where("device_id = ? OR device_id = ''", deviceID).
+		Where("device_id = ?", deviceID).
 		First(&installation).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrInstallationNotFound
@@ -557,9 +568,12 @@ func (r *repository) CreateRuntimeSettingsTx(tx *gorm.DB, settings *RuntimeSetti
 }
 
 func (r *repository) UpdateRuntimeSettingsCAS(tx *gorm.DB, installationID, spaceID, deviceID string, expectedRevision int, updates map[string]interface{}) (*RuntimeSettings, error) {
+	deviceID, err := normalizeRepositoryDeviceID(deviceID)
+	if err != nil {
+		return nil, err
+	}
 	var installation Installation
-	if err := tx.Where("id = ? AND space_id = ?", installationID, spaceID).
-		Where("device_id = ? OR device_id = ''", deviceID).
+	if err := tx.Where("id = ? AND space_id = ? AND device_id = ?", installationID, spaceID, deviceID).
 		Clauses(clause.Locking{Strength: "UPDATE"}).
 		First(&installation).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -569,7 +583,7 @@ func (r *repository) UpdateRuntimeSettingsCAS(tx *gorm.DB, installationID, space
 	}
 
 	var settings RuntimeSettings
-	err := tx.Where("installation_id = ? AND settings_revision = ?", installation.ID, expectedRevision).
+	err = tx.Where("installation_id = ? AND settings_revision = ?", installation.ID, expectedRevision).
 		Clauses(clause.Locking{Strength: "UPDATE"}).
 		First(&settings).Error
 	if err != nil {

@@ -24,9 +24,9 @@ func TestPluginDescriptorConstruction(t *testing.T) {
 		Version:         "1.0.0",
 		ProtocolVersion: "v1",
 
-		Capabilities: []Capability{
-			CapabilityRealtimeControl,
-			CapabilityStateStreaming,
+		Capabilities: []HostFeature{
+			HostFeatureRealtimeControl,
+			HostFeatureStateStreaming,
 		},
 		Services: []ServiceDescriptor{
 			{
@@ -63,13 +63,13 @@ func TestPluginDescriptorConstruction(t *testing.T) {
 }
 
 func TestCustomCapability(t *testing.T) {
-	customCap := Capability("example.navigation")
+	customCap := HostFeature("example.navigation")
 	if string(customCap) != "example.navigation" {
 		t.Fatalf("custom capability changed unexpectedly: %s", customCap)
 	}
 
 	desc := PluginDescriptor{
-		Capabilities: []Capability{
+		Capabilities: []HostFeature{
 			"example.navigation",
 			"example.build",
 			"custom.visual-agent",

@@ -236,16 +236,16 @@ export function projectionSpec(contribution: UIContributionSummary): Conversatio
   const projection = contribution.dataContract?.projection;
   if (!projection || typeof projection !== "object" || Array.isArray(projection)) return null;
   const raw = projection as Record<string, unknown>;
-  const eventTypes = stringArray(raw.event_types ?? raw.eventTypes);
+  const eventTypes = stringArray(raw.event_types);
   if (eventTypes.length === 0) return null;
   return {
     eventTypes,
-    startEvents: stringArray(raw.start_events ?? raw.startEvents),
-    endEvents: stringArray(raw.end_events ?? raw.endEvents),
-    nodeType: text(raw.node_type ?? raw.nodeType),
-    keyPath: text(raw.key_path ?? raw.keyPath),
-    titlePath: text(raw.title_path ?? raw.titlePath),
-    maxEvents: positiveInt(raw.max_events ?? raw.maxEvents, 100),
+    startEvents: stringArray(raw.start_events),
+    endEvents: stringArray(raw.end_events),
+    nodeType: text(raw.node_type),
+    keyPath: text(raw.key_path),
+    titlePath: text(raw.title_path),
+    maxEvents: positiveInt(raw.max_events, 100),
   };
 }
 
@@ -856,18 +856,10 @@ function locationScopeId(
   if (requested) return requested;
   if (visibility === "conversation") return event.conversationId;
   if (visibility === "turn") {
-    return locationPayloadId(event.payload, ["turnId", "turn_id", "turn.id"]) || event.conversationId;
+    return locationPayloadId(event.payload, ["turnId"]) || event.conversationId;
   }
   if (visibility === "step") {
-    return locationPayloadId(event.payload, [
-      "stepId",
-      "step_id",
-      "step.id",
-      "toolCallId",
-      "tool_call_id",
-      "taskId",
-      "task_id",
-    ]) || contextId;
+    return locationPayloadId(event.payload, ["stepId", "toolCallId", "taskId"]) || contextId;
   }
   return `${definitionId}:${contextId}`;
 }

@@ -114,14 +114,12 @@ type ProviderDescriptor struct {
 type Registry struct {
 	providers   map[string]ImageGenerationProvider
 	descriptors map[string]ProviderDescriptor
-	aliases     map[string]string
 }
 
 func NewRegistry() *Registry {
 	return &Registry{
 		providers:   make(map[string]ImageGenerationProvider),
 		descriptors: make(map[string]ProviderDescriptor),
-		aliases:     make(map[string]string),
 	}
 }
 
@@ -150,21 +148,11 @@ func (r *Registry) RegisterWithDescriptor(name string, provider ImageGenerationP
 	return nil
 }
 
-func (r *Registry) RegisterAlias(alias, canonical string) {
-	if r.aliases == nil {
-		r.aliases = make(map[string]string)
-	}
-	r.aliases[NormalizeProviderName(alias)] = NormalizeProviderName(canonical)
-}
-
 func (r *Registry) Resolve(name string) (ImageGenerationProvider, bool) {
 	if r.providers == nil {
 		return nil, false
 	}
 	canonical := NormalizeProviderName(name)
-	if alias, ok := r.aliases[canonical]; ok {
-		canonical = alias
-	}
 	p, ok := r.providers[canonical]
 	return p, ok
 }
@@ -185,9 +173,6 @@ func (r *Registry) Describe(name string) (ProviderDescriptor, bool) {
 		return ProviderDescriptor{}, false
 	}
 	canonical := NormalizeProviderName(name)
-	if alias, ok := r.aliases[canonical]; ok {
-		canonical = alias
-	}
 	desc, ok := r.descriptors[canonical]
 	return desc, ok
 }
@@ -220,10 +205,4 @@ func NormalizeProviderName(name string) string {
 	s := strings.TrimSpace(name)
 	s = strings.ToLower(s)
 	return s
-}
-
-var defaultAliases = map[string]string{
-	"volcengine_seedream": "seedream",
-	"doubao_seedream":     "seedream",
-	"ark_seedream":        "seedream",
 }

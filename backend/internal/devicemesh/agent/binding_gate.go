@@ -29,14 +29,7 @@ func (g *bindingGate) ResolveContext(name string) CancellableRuntimeInvokeHandle
 	if g.dispatcher == nil {
 		return nil
 	}
-	var handler CancellableRuntimeInvokeHandler
-	if contextual, ok := g.dispatcher.(RuntimeContextDispatcher); ok {
-		handler = contextual.ResolveContext(name)
-	} else if legacy := g.dispatcher.Resolve(name); legacy != nil {
-		handler = func(_ context.Context, invoke protocol.RuntimeInvokePayload) (*protocol.RuntimeResultPayload, error) {
-			return legacy(invoke)
-		}
-	}
+	handler := g.dispatcher.ResolveContext(name)
 	if handler == nil {
 		return nil
 	}

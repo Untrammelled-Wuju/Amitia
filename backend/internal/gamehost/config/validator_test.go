@@ -174,8 +174,8 @@ func TestValidator_EnumConstraint(t *testing.T) {
 	v := NewValidator(fakeSecretRegistry{providers: []string{"vault"}})
 
 	field := ConfigField{
-		Type:  ConfigTypeString,
-		Enum:  []json.RawMessage{rawString("a"), rawString("b"), rawString("c")},
+		Type: ConfigTypeString,
+		Enum: []json.RawMessage{rawString("a"), rawString("b"), rawString("c")},
 	}
 
 	errs := v.ValidateValue("mode", rawString("b"), field, ConfigScopePlugin)

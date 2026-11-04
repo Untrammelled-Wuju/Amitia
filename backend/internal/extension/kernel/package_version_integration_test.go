@@ -87,7 +87,6 @@ func newFinalizationOperation(
 	}
 
 	operation.ConfirmationClaimsJSON = string(claimsJSON)
-	operation.ConfirmationsJSON = "{}"
 
 	if err := container.PackageRepository.PutArtifact(
 		ctx,

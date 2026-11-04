@@ -78,8 +78,17 @@ class AppUpdateManifest {
   });
 
   factory AppUpdateManifest.fromMap(Map<String, dynamic> value) {
+    final schemaVersion = _asInt(value['schemaVersion']);
+    if (schemaVersion != 1) {
+      throw FormatException('不支持的更新清单版本: $schemaVersion');
+    }
+    final updateTitle = (value['updateTitle'] ?? '').toString().trim();
+    final highlights = _asStringList(value['highlights']);
+    if (updateTitle.isEmpty || highlights.isEmpty) {
+      throw const FormatException('更新清单缺少更新标题或亮点');
+    }
     return AppUpdateManifest(
-      schemaVersion: _asInt(value['schemaVersion']),
+      schemaVersion: schemaVersion,
       product: (value['product'] ?? '').toString(),
       packageName: (value['packageName'] ?? '').toString(),
       channel: (value['channel'] ?? '').toString(),
@@ -95,8 +104,8 @@ class AppUpdateManifest {
         ),
       ),
       releaseNotes: (value['releaseNotes'] ?? '').toString(),
-      updateTitle: (value['updateTitle'] ?? '').toString().trim(),
-      highlights: _asStringList(value['highlights']),
+      updateTitle: updateTitle,
+      highlights: highlights,
     );
   }
 

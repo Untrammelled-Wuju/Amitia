@@ -435,7 +435,7 @@ def check_backend_ready(validation_report: report.ValidationReport, layout: runt
 
 def run_business_probe(validation_report: report.ValidationReport, layout: runtime_layout.GuestLayout) -> None:
     result = business_probe.probe_readonly_api(
-        host="127.0.0.1", port=18899, data_root=layout.dataRoot,
+        host="127.0.0.1", port=28899, data_root=layout.dataRoot,
     )
     validation_report.business = result.to_safe_dict()
     status = report.CheckStatus.PASSED.value if result.success else report.CheckStatus.FAILED.value
@@ -458,7 +458,7 @@ def stop_backend(validation_report: report.ValidationReport, backend_info: proce
     ))
 
     time.sleep(2)
-    port_released = not http_probe.check_port_in_use("127.0.0.1", 18899)
+    port_released = not http_probe.check_port_in_use("127.0.0.1", 28899)
     validation_report.add_check(report.Check(
         id="backend.portRelease",
         status=report.CheckStatus.PASSED.value if port_released else report.CheckStatus.FAILED.value,

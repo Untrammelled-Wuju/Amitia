@@ -5,6 +5,7 @@ package v1
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sort"
 	"sync"
@@ -104,6 +105,9 @@ func (f *RuntimeFacade) Start(ctx context.Context) error {
 	}
 	if !f.config.Enabled {
 		return nil
+	}
+	if f.deviceRuntimeSessions == nil {
+		return fmt.Errorf("runtime v1 facade requires authoritative device runtime session service")
 	}
 
 	fctx, cancel := context.WithCancel(ctx)

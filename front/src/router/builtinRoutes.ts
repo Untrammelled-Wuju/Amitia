@@ -1,30 +1,7 @@
-import type { LocationQuery, RouteRecordRaw } from "vue-router";
-
-const legacySpaceSections: Record<string, string> = {
-  "local-profile": "profile",
-  "space-identity": "identity",
-  "device-pairing": "runtime",
-  "current-device": "runtime",
-  "bound-devices": "runtime",
-  profile: "profile",
-  identity: "identity",
-  runtime: "runtime",
-  devices: "runtime",
-};
-
-function resolveMySpaceLegacy(
-  to: { hash: string; query: LocationQuery },
-  fallback: "profile" | "identity" | "runtime",
-) {
-  return { path: `/my-space/${legacySpaceSections[to.hash.slice(1)] ?? fallback}`, query: to.query };
-}
+import type { RouteRecordRaw } from "vue-router";
 
 /** Built-in business pages. Core router owns only bootstrap/recovery routes. */
 export const builtinBusinessRoutes: RouteRecordRaw[] = [
-{ path: "/dashboard", redirect: "/settings/overview" },
-  { path: "/dashboard/run", redirect: "/settings/overview" },
-  { path: "/dashboard/data", redirect: "/settings/data" },
-  { path: "/agents", name: "agentOS", component: () => import("@/views/agent-os/AgentOSView.vue"), meta: { requiresAuth: true, fullHeight: true } },
   { path: "/chat", name: "chat", component: () => import("@/views/web-chat/WebChatView.vue"), meta: { requiresAuth: true } },
   { path: "/call/:conversationId", name: "ownedIncomingCall", component: () => import("@/views/realtime/OwnedIncomingCallView.vue"), meta: { requiresAuth: true } },
 { path: "/extensions", name: "extensionCenter", component: () => import("@/views/SectionPlaceholderView.vue"), props: { title: "扩展中心", description: "管理扩展包、工作流、MCP 服务与 Agent Skills。" }, meta: { requiresAuth: true } },
@@ -38,20 +15,15 @@ export const builtinBusinessRoutes: RouteRecordRaw[] = [
 { path: "/kernel/desktop", name: "desktopCenter", component: () => import("@/views/kernel/DesktopCenterView.vue"), meta: { requiresAuth: true } },
 { path: "/kernel/updates", name: "updateCenter", component: () => import("@/views/kernel/UpdateCenterView.vue"), meta: { requiresAuth: true } },
 { path: "/kernel/dev-console", name: "developerConsole", component: () => import("@/views/kernel/DeveloperConsoleView.vue"), meta: { requiresAuth: true } },
-{ path: "/kernel/migrations", name: "migrationCenter", component: () => import("@/views/kernel/MigrationCenterView.vue"), meta: { requiresAuth: true } },
 { path: "/kernel/dev-mode", name: "devMode", component: () => import("@/views/kernel/DevModeView.vue"), meta: { requiresAuth: true } },
 { path: "/extension/page/:pageId", name: "extensionPage", component: () => import("@/components/extension/ExtensionPageHost.vue"), meta: { requiresAuth: true, fullHeight: true } },
 { path: "/extensions/mcp", name: "extensionMCP", component: () => import("@/views/mcp/MCPServerView.vue"), meta: { requiresAuth: true } },
 { path: "/extensions/packages", name: "extensionPackages", component: () => import("@/views/extensions/packages/PackageManagerView.vue"), meta: { requiresAuth: true } },
-{ path: "/extensions/market", name: "extensionMarketplace", component: () => import("@/views/extensions/market/MarketplaceView.vue"), meta: { requiresAuth: true } },
 { path: "/extensions/agent-skills", name: "extensionAgentSkills", component: () => import("@/views/extensions/agent-skills/AgentSkillListView.vue"), meta: { requiresAuth: true } },
 { path: "/creative-workshop", name: "creativeWorkshop", component: () => import("@/views/SectionPlaceholderView.vue"), props: { title: "创意工坊", description: "创建和管理角色卡与桌宠内容。" }, meta: { requiresAuth: true } },
 { path: "/creative-workshop/character-cards", name: "characterCardWorkshop", component: () => import("@/views/character-config/CharacterConfigView.vue"), meta: { requiresAuth: true } },
 { path: "/extensions/workflows", name: "extensionWorkflows", component: () => import("@/views/extensions/workflows/WorkflowListView.vue"), meta: { requiresAuth: true } },
 { path: "/extensions/workflows/:id", name: "extensionWorkflowBuilder", component: () => import("@/views/extensions/workflows/WorkflowBuilderView.vue"), meta: { requiresAuth: true } },
-{ path: "/creative-workshop/workflows", redirect: (to) => ({ path: "/extensions/workflows", query: to.query }) },
-{ path: "/creative-workshop/workflows/:id", redirect: (to) => ({ path: `/extensions/workflows/${String(to.params.id)}`, query: to.query }) },
-
 { path: "/creative-workshop/pet", name: "creativeWorkshopPet", component: () => import("@/views/creative-workshop/PetHubView.vue"), meta: { requiresAuth: true } },
 { path: "/creative-workshop/pet/installations", name: "pet-installations", component: () => import("@/views/creative-workshop/PetInstallationsView.vue"), meta: { requiresAuth: true } },
 {
@@ -62,7 +34,6 @@ export const builtinBusinessRoutes: RouteRecordRaw[] = [
   children: [
     { path: "overview", name: "settingsOverview", component: () => import("@/views/dashboard/RunView.vue"), meta: { requiresAuth: true } },
     { path: "data", name: "settingsData", component: () => import("@/views/dashboard/DataView.vue"), meta: { requiresAuth: true } },
-    { path: "deployment", name: "settingsDeployment", redirect: "/my-space/runtime" },
     { path: "runtime", name: "settingsRuntime", component: () => import("@/views/settings/RuntimePanel.vue"), meta: { requiresAuth: true } },
     { path: "system", name: "settingsSystem", component: () => import("@/views/settings/SystemSettingsPanel.vue"), meta: { requiresAuth: true } },
     { path: "data-management", name: "settingsDataManagement", component: () => import("@/views/settings/DataManagementPanel.vue"), meta: { requiresAuth: true } },
@@ -95,11 +66,8 @@ export const builtinBusinessRoutes: RouteRecordRaw[] = [
     { path: "ui-providers", name: "settingsUIProviders", component: () => import("@/views/settings/UIProviderSettingsView.vue"), meta: { requiresAuth: true } },
   ],
 },
-{ path: "/model", redirect: "/settings/model" },
-{ path: "/model/:path*", redirect: (to: any) => "/settings/model/" + (to.params.path || "") },
-{ path: "/safety", redirect: "/settings/safety" },
-{ path: "/maintenance", redirect: "/settings/maintenance" },
 { path: "/characters", name: "characterHub", component: () => import("@/views/SectionPlaceholderView.vue"), props: { title: "角色", description: "管理角色、画像与世界观设定。" }, meta: { requiresAuth: true } },
+{ path: "/characters/teams", name: "characterTeams", component: () => import("@/views/character/CharacterTeamsView.vue"), meta: { requiresAuth: true } },
 { path: "/character", name: "character", component: () => import("../views/character/CharacterView.vue"), meta: { requiresAuth: true } },
 { path: "/graph", name: "graph", component: () => import("@/views/graph/GraphView.vue"), meta: { requiresAuth: true } },
 { path: "/continuity", name: "continuity", component: () => import("@/views/continuity/ContinuityThreadsView.vue"), meta: { requiresAuth: true } },
@@ -109,28 +77,23 @@ export const builtinBusinessRoutes: RouteRecordRaw[] = [
 { path: "/character/:id/memory", name: "characterMemory", component: () => import("../views/character/CharacterView.vue"), meta: { requiresAuth: true } },
 { path: "/character/:id/timeline", name: "characterTimeline", component: () => import("../views/character/CharacterView.vue"), meta: { requiresAuth: true } },
 { path: "/character/:id/lifestyle", name: "characterLifestyle", component: () => import("../views/character/CharacterView.vue"), meta: { requiresAuth: true } },
-{ path: "/character/:id/active-task", redirect: (to: any) => `/characters/${to.params.id}/active-task` },
-{ path: "/character/:id/proactive", redirect: (to: any) => `/characters/${to.params.id}/active-task` },
 { path: "/character/:id/psyche", name: "characterPsyche", component: () => import("../views/character/CharacterView.vue"), meta: { requiresAuth: true } },
 { path: "/logs", name: "logs", component: () => import("@/views/chat-logs/ChatLogsView.vue"), meta: { requiresAuth: true, fullHeight: true } },
 { path: "/channel-center", name: "channelCenter", component: () => import("@/views/channels/ChannelHubView.vue"), meta: { requiresAuth: true } },
 { path: "/import", name: "import", component: () => import("@/views/chat-import/ChatImportView.vue"), meta: { requiresAuth: true } },
 { path: "/characters/:id/active-task", name: "characterActiveTask", component: () => import("@/views/reminders/Reminders.vue"), props: (to) => ({ initialCharacterId: String(to.params.id || "") }), meta: { requiresAuth: true } },
-{ path: "/characters/:id/proactive", redirect: (to: any) => `/characters/${to.params.id}/active-task` },
 { path: "/reminders", name: "reminders", component: () => import("@/views/reminders/Reminders.vue"), meta: { requiresAuth: true } },
 { path: "/settings/theme", name: "settingsTheme", component: () => import("@/views/settings/ThemeSettingsView.vue"), meta: { requiresAuth: true } },
 { path: "/storage", name: "storage", component: () => import("@/views/chat-cleanup/ChatCleanupView.vue"), meta: { requiresAuth: true } },
 { path: "/profiles", name: "profiles", component: () => import("@/views/profile/ProfileView.vue"), meta: { requiresAuth: true } },
 { path: "/my-space", component: () => import("@/views/user-settings/MySpaceView.vue"), meta: { requiresAuth: true },
-  redirect: (to) => resolveMySpaceLegacy(to, "profile"),
+  redirect: "/my-space/profile",
   children: [
     { path: "profile", name: "mySpaceProfile", component: () => import("@/views/user-settings/UserSettingsView.vue") },
     { path: "identity", name: "mySpaceIdentity", component: () => import("@/views/user-settings/SpaceIdentityView.vue") },
     { path: "runtime", name: "mySpaceRuntime", component: () => import("@/views/user-settings/MySpaceRuntimeView.vue") },
-    { path: "devices", redirect: (to) => ({ path: "/my-space/runtime", query: to.query }) },
   ],
 },
-{ path: "/user-settings", name: "userSettings", redirect: (to) => resolveMySpaceLegacy(to, "profile") },
 { path: "/episodic", name: "episodic", component: () => import("@/views/episodic/EpisodicView.vue"), meta: { requiresAuth: true } },
 { path: "/world-book", name: "worldBook", component: () => import("@/views/world-book/WorldBookView.vue"), meta: { requiresAuth: true } },
 { path: "/knowledge", name: "knowledge", component: () => import("@/views/knowledge/KnowledgeView.vue"), meta: { requiresAuth: true } },
@@ -143,6 +106,5 @@ export const builtinBusinessRoutes: RouteRecordRaw[] = [
 { path: "/privacy-scan", name: "privacyScan", component: () => import("@/views/privacy-scan/PrivacyScanView.vue"), meta: { requiresAuth: true } },
 { path: "/game-center", name: "gameCenter", component: () => import("@/views/game-center/GameCenterView.vue"), meta: { requiresAuth: true, runtimeCapability: "gameMode" } },
 { path: "/game-center/plugin", name: "gamePlugin", component: () => import("@/views/game-center/GamePluginView.vue"), meta: { requiresAuth: true, runtimeCapability: "gameMode" } },
-{ path: "/devices", name: "devices", redirect: (to) => resolveMySpaceLegacy(to, "runtime") },
 { path: "/long-running", name: "longRunning", component: () => import("@/views/long-running/LongRunningView.vue"), meta: { requiresAuth: true } },
 ];

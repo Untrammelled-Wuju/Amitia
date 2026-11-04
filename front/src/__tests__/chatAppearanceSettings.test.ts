@@ -113,8 +113,8 @@ describe("chat message appearance", () => {
     expect(restored.userMessageGlass.value).toBe(true);
   });
 
-  it("migrates legacy glass and switches mutually exclusive materials without changing chat style", async () => {
-    localStorage.setItem("amitia.chat.user-message-glass.desktop.v1", "true");
+  it("switches mutually exclusive materials without changing chat style", async () => {
+    localStorage.setItem("amitia.chat.user-message-material.desktop.v1", "frosted");
     const module = await import("../composables/useChatAppearancePreference");
     const preference = module.useChatAppearancePreference();
     expect(preference.userMessageGlass.value).toBe(true);

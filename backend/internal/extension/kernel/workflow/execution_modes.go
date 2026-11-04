@@ -49,10 +49,8 @@ func (o ExecutionOptions) Normalize() (ExecutionOptions, error) {
 	default:
 		return ExecutionOptions{}, fmt.Errorf("workflow: unsupported execution mode %q", o.Mode)
 	}
-	if o.SideEffectLimit == 0 {
-		// Zero-value requests historically meant unlimited. Keep that compatibility
-		// while DefaultExecutionOptions continues to use -1 explicitly.
-		o.SideEffectLimit = -1
+	if o.SideEffectLimit < -1 {
+		return ExecutionOptions{}, fmt.Errorf("workflow: sideEffectLimit must be -1 or a non-negative limit")
 	}
 	seen := make(map[string]struct{}, len(o.ApprovedSideEffects))
 	approved := make([]string, 0, len(o.ApprovedSideEffects))

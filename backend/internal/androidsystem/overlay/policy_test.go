@@ -98,8 +98,8 @@ func TestValidateCreateRequestWidthTooLarge(t *testing.T) {
 	p := DefaultPolicy()
 	w := p.MaxWidth + 1
 	req := CreateRequest{
-		Kind:    OverlayKindText,
-		Width:   &w,
+		Kind:  OverlayKindText,
+		Width: &w,
 	}
 
 	err := p.ValidateCreateRequest(req, 0)
@@ -112,8 +112,8 @@ func TestValidateCreateRequestHeightTooLarge(t *testing.T) {
 	p := DefaultPolicy()
 	h := p.MaxHeight + 1
 	req := CreateRequest{
-		Kind:    OverlayKindText,
-		Height:  &h,
+		Kind:   OverlayKindText,
+		Height: &h,
 	}
 
 	err := p.ValidateCreateRequest(req, 0)

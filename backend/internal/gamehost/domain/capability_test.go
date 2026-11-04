@@ -2,53 +2,53 @@ package domain
 
 import "testing"
 
-func TestValidateCapability(t *testing.T) {
-	validCases := []Capability{
-		CapabilityRealtimeControl, CapabilityStateStreaming, CapabilityEventStreaming, CapabilityCustomRPC, CapabilityHostAPI, CapabilityBinaryStreaming,
+func TestValidateHostFeature(t *testing.T) {
+	validCases := []HostFeature{
+		HostFeatureRealtimeControl, HostFeatureStateStreaming, HostFeatureEventStreaming, HostFeatureCustomRPC, HostFeatureHostAPI, HostFeatureBinaryStreaming,
 	}
 	for _, cap := range validCases {
-		if err := ValidateCapability(cap); err != nil {
+		if err := ValidateHostFeature(cap); err != nil {
 			t.Errorf("expected known host feature %s to be valid: %v", cap, err)
 		}
 	}
 }
 
-func TestValidateCapabilityRejectsUnknown(t *testing.T) {
-	for _, cap := range []Capability{"example.navigation", "vendor.visual-agent", "custom.gameplay", ""} {
-		if err := ValidateCapability(cap); err == nil {
+func TestValidateHostFeatureRejectsUnknown(t *testing.T) {
+	for _, cap := range []HostFeature{"example.navigation", "vendor.visual-agent", "custom.gameplay", ""} {
+		if err := ValidateHostFeature(cap); err == nil {
 			t.Errorf("expected unknown host feature %q to be rejected", cap)
 		}
 	}
 }
 
-func TestIsKnownCapability(t *testing.T) {
-	for _, cap := range []Capability{
-		CapabilityRealtimeControl, CapabilityStateStreaming, CapabilityEventStreaming, CapabilityCustomRPC,
-		CapabilityHostAPI, CapabilitySharedControl, CapabilityMultiService, CapabilityBinaryStreaming,
+func TestIsKnownHostFeature(t *testing.T) {
+	for _, cap := range []HostFeature{
+		HostFeatureRealtimeControl, HostFeatureStateStreaming, HostFeatureEventStreaming, HostFeatureCustomRPC,
+		HostFeatureHostAPI, HostFeatureSharedControl, HostFeatureMultiService, HostFeatureBinaryStreaming,
 	} {
-		if !IsKnownCapability(cap) {
+		if !IsKnownHostFeature(cap) {
 			t.Errorf("expected %s to be known", cap)
 		}
 	}
-	for _, cap := range []Capability{"example.navigation", "example.build", "vendor.custom-agent", "custom_ui"} {
-		if IsKnownCapability(cap) {
+	for _, cap := range []HostFeature{"example.navigation", "example.build", "vendor.custom-agent", "custom_ui"} {
+		if IsKnownHostFeature(cap) {
 			t.Errorf("game/tool/non-GameHost capability %s must not be a GameHost feature", cap)
 		}
 	}
 }
 
-func TestAllKnownCapabilities(t *testing.T) {
-	all := AllKnownCapabilities()
+func TestAllKnownHostFeatures(t *testing.T) {
+	all := AllKnownHostFeatures()
 	if len(all) != 8 {
 		t.Fatalf("expected 8 known host features, got %d", len(all))
 	}
-	seen := make(map[Capability]struct{}, len(all))
+	seen := make(map[HostFeature]struct{}, len(all))
 	for _, cap := range all {
 		if _, ok := seen[cap]; ok {
 			t.Fatalf("duplicate host feature: %s", cap)
 		}
 		seen[cap] = struct{}{}
-		if !IsKnownCapability(cap) {
+		if !IsKnownHostFeature(cap) {
 			t.Fatalf("unknown feature returned: %s", cap)
 		}
 	}

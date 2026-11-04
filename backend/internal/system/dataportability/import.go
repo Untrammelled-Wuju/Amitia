@@ -42,7 +42,7 @@ func (c *Coordinator) PreviewImport(ctx context.Context, archivePath string) (*I
 	if manifest.FormatVersion > FormatVersion {
 		return nil, ErrImportFormatUnsupported
 	}
-	if manifest.SchemaFingerprint != "" && !compatibleSchemaFingerprint(manifest.SchemaFingerprint, c.SchemaFinger) {
+	if manifest.SchemaFingerprint == "" || manifest.SchemaFingerprint != c.SchemaFinger {
 		return nil, ErrRestoreSchemaUnsupported
 	}
 
@@ -106,7 +106,7 @@ func (c *Coordinator) executeImportWithOperation(ctx context.Context, archivePat
 	if manifest.Format != FormatName || manifest.FormatVersion > FormatVersion {
 		return nil, nil, ErrImportFormatUnsupported
 	}
-	if manifest.SchemaFingerprint != "" && !compatibleSchemaFingerprint(manifest.SchemaFingerprint, c.SchemaFinger) {
+	if manifest.SchemaFingerprint == "" || manifest.SchemaFingerprint != c.SchemaFinger {
 		return nil, nil, ErrRestoreSchemaUnsupported
 	}
 	if err := c.validateManifestComponents(manifest); err != nil {

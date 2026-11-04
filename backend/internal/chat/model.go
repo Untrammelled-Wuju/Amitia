@@ -286,26 +286,24 @@ type CreateConversationRequest struct {
 }
 
 type ConversationQuery struct {
-	SpaceID              string `form:"-" json:"-"`
-	IncludeLegacyDefault bool   `form:"-" json:"-"`
-	IncludeArchived      bool   `form:"-" json:"-"`
-	ArchivedOnly         bool   `form:"archivedOnly" json:"-"`
-	Page                 int    `form:"page"`
-	PageSize             int    `form:"pageSize"`
-	Channel              string `form:"channel"`
-	Source               string `form:"source"`
-	RecentOnly           bool   `form:"recentOnly"`
-	Keyword              string `form:"keyword"`
+	SpaceID         string `form:"-" json:"-"`
+	IncludeArchived bool   `form:"-" json:"-"`
+	ArchivedOnly    bool   `form:"archivedOnly" json:"-"`
+	Page            int    `form:"page"`
+	PageSize        int    `form:"pageSize"`
+	Channel         string `form:"channel"`
+	Source          string `form:"source"`
+	RecentOnly      bool   `form:"recentOnly"`
+	Keyword         string `form:"keyword"`
 }
 
 type MessageSearchQuery struct {
-	SpaceID              string `form:"-" json:"-"`
-	IncludeLegacyDefault bool   `form:"-" json:"-"`
-	Keyword              string `form:"keyword" binding:"required"`
-	ConversationID       string `form:"conversationId"`
-	Sequence             int64  `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
-	Page                 int    `form:"page"`
-	PageSize             int    `form:"pageSize"`
+	SpaceID        string `form:"-" json:"-"`
+	Keyword        string `form:"keyword" binding:"required"`
+	ConversationID string `form:"conversationId"`
+	Sequence       int64  `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
+	Page           int    `form:"page"`
+	PageSize       int    `form:"pageSize"`
 }
 
 type ChatResponse struct {

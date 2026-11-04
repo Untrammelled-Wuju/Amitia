@@ -2,7 +2,6 @@ package extension
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -233,12 +232,4 @@ func (r *Runtime) RunPackageStartupCleanup(ctx context.Context) error {
 	}
 	r.Repository.RetryOwnedResourceCleanup(ctx)
 	return nil
-}
-
-func (r *Runtime) DetectLegacyPackagesReadOnly(ctx context.Context) (LegacyMigrationReport, error) {
-	if r.Kernel == nil {
-		return LegacyMigrationReport{}, fmt.Errorf("extension kernel unavailable")
-	}
-	detector := NewLegacyMigrationDetector(r.Kernel, r.Repository.db)
-	return detector.Detect(ctx)
 }

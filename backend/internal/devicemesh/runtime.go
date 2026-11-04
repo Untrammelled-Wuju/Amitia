@@ -26,10 +26,6 @@ import (
 	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
-type dispatcherResolveAdapter interface {
-	Resolve(handlerName string) agent.RuntimeInvokeHandler
-}
-
 type Runtime struct {
 	DB                        *sql.DB
 	BootstrapSvc              *bootstrap.Service
@@ -47,8 +43,8 @@ type Runtime struct {
 	PendingInvocations        *capability.PendingInvocationManager
 	PendingTasks              *task_runtime.PendingTaskManager
 	sessions                  *deviceruntime.Service
-	dispatcher                dispatcherResolveAdapter
-	deviceDispatcher          dispatcherResolveAdapter
+	dispatcher                agent.RuntimeDispatcher
+	deviceDispatcher          agent.RuntimeDispatcher
 	taskRuntime               agent.TaskRuntimeExecutor
 	deliveryMu                sync.Mutex
 	deliveryCancel            context.CancelFunc
@@ -57,21 +53,6 @@ type Runtime struct {
 	auditDone                 chan struct{}
 }
 
-func NewCloudRuntime(db *sql.DB, deviceReg *host_registry.Registry) (*Runtime, error) {
-	hub := server.NewConnectionHub()
-	return NewCloudRuntimeWithHub(db, deviceReg, hub)
-}
-
-func NewCloudRuntimeWithHub(db *sql.DB, deviceReg *host_registry.Registry, hub *server.ConnectionHub) (*Runtime, error) {
-	return NewCloudRuntimeWithHubAndSessions(db, deviceReg, hub, nil)
-}
-
-// NewCloudRuntimeWithHubAndSessions constructs the cloud runtime around the
-// caller-provided authoritative DeviceRuntime session service. Production
-// wiring should pass the Kernel-owned service so Desktop Pet, DeviceMesh and
-// the extension kernel share one in-process session authority. A nil service
-// is accepted only for compatibility callers and tests, where this constructor
-// creates an isolated service backed by the same database.
 func NewCloudRuntimeWithHubAndSessions(
 	db *sql.DB,
 	deviceReg *host_registry.Registry,
@@ -80,6 +61,9 @@ func NewCloudRuntimeWithHubAndSessions(
 ) (*Runtime, error) {
 	if db == nil || deviceReg == nil || deviceReg.Database() != db {
 		return nil, fmt.Errorf("devicemesh: credentials and device registry must share the authoritative database")
+	}
+	if sessions == nil {
+		return nil, fmt.Errorf("devicemesh: authoritative device runtime session service is required")
 	}
 	if err := EnsureSchema(context.Background(), db); err != nil {
 		return nil, err
@@ -122,18 +106,6 @@ func NewCloudRuntimeWithHubAndSessions(
 
 	probe := server.NewProbeService(hub)
 
-	if sessions == nil {
-		sessionStore := deviceruntime.NewSQLiteSessionStore(db)
-		if err := sessionStore.EnsureSchema(context.Background()); err != nil {
-			return nil, err
-		}
-		var err error
-		sessions, err = deviceruntime.NewService(sessionStore, deviceruntime.ServiceOptions{})
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	rt := &Runtime{
 		DB:            db,
 		BootstrapSvc:  bootstrapSvc,
@@ -167,7 +139,7 @@ func (rt *Runtime) SetSessions(sessions *deviceruntime.Service) {
 	}
 }
 
-func (rt *Runtime) SetDispatcher(d dispatcherResolveAdapter) {
+func (rt *Runtime) SetDispatcher(d agent.RuntimeDispatcher) {
 	rt.dispatcher = d
 	if rt.Handler != nil && d != nil {
 		rt.Handler.SetDispatcher(d)
@@ -190,7 +162,7 @@ func (rt *Runtime) GetSessions() *deviceruntime.Service {
 	return rt.sessions
 }
 
-func (rt *Runtime) GetDispatcher() dispatcherResolveAdapter {
+func (rt *Runtime) GetDispatcher() agent.RuntimeDispatcher {
 	return rt.dispatcher
 }
 
@@ -240,7 +212,7 @@ func (rt *Runtime) Stop() error {
 	return nil
 }
 
-func NewDeviceAgentRuntime(dataDir string, platform runtimeidentity.Platform, taskRuntime agent.TaskRuntimeExecutor, dispatcher dispatcherResolveAdapter, databases ...*sql.DB) (*Runtime, error) {
+func NewDeviceAgentRuntime(dataDir string, platform runtimeidentity.Platform, taskRuntime agent.TaskRuntimeExecutor, dispatcher agent.RuntimeDispatcher, databases ...*sql.DB) (*Runtime, error) {
 	if dispatcher == nil {
 		return nil, fmt.Errorf("devicemesh: device-agent runtime dispatcher is required")
 	}
@@ -320,7 +292,7 @@ func (rt *Runtime) autoRecoverCredential(handler *agent.LocalHandler) {
 	meshClient.Start()
 }
 
-func (rt *Runtime) AttachDeviceAgent(dataDir string, platform runtimeidentity.Platform, dispatcher dispatcherResolveAdapter, observer func(*agent.StoredCredential) error) error {
+func (rt *Runtime) AttachDeviceAgent(dataDir string, platform runtimeidentity.Platform, dispatcher agent.RuntimeDispatcher, observer func(*agent.StoredCredential) error) error {
 	if rt.LocalHandler != nil || dispatcher == nil {
 		return fmt.Errorf("设备 Agent 已存在或缺少能力路由")
 	}

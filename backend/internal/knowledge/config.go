@@ -9,8 +9,6 @@ import (
 type runtimeSettings struct {
 	ConfigHash string
 
-	RetrievalPolicyEnabled      bool
-	RetrievalPolicyShadow       bool
 	CanonicalReaderEnabled      bool
 	AgenticInvestigationEnabled bool
 
@@ -57,7 +55,7 @@ type runtimeSettings struct {
 	PDFTextPageTimeout        time.Duration
 	OCRRasterTimeout          time.Duration
 	OCRTimeout                time.Duration
-	LegacyDocTimeout          time.Duration
+	DocTimeout                time.Duration
 	MaxOOXMLFiles             int
 	MaxOOXMLUncompressedBytes int64
 	MaxSharedStrings          int
@@ -104,7 +102,6 @@ func loadRuntimeSettings() runtimeSettings {
 func runtimeSettingsFromConfig(c config.KnowledgeRuntimeConfig) runtimeSettings {
 	return runtimeSettings{
 		ConfigHash:             c.Hash(),
-		RetrievalPolicyEnabled: c.Features.RetrievalPolicyEnabled, RetrievalPolicyShadow: c.Features.RetrievalPolicyShadow,
 		CanonicalReaderEnabled: c.Features.CanonicalReaderEnabled, AgenticInvestigationEnabled: c.Features.AgenticInvestigationEnabled,
 		ChunkTargetRunes: c.Chunk.TargetRunes, ChunkOverlapRunes: c.Chunk.OverlapRunes, ParentMaxRunes: c.Chunk.ParentMaxRunes,
 		MaxResultLimit: c.Retrieval.MaxResultLimit,
@@ -116,7 +113,7 @@ func runtimeSettingsFromConfig(c config.KnowledgeRuntimeConfig) runtimeSettings 
 		MaxSourceBytes: c.Resources.MaxSourceBytes, OnlineRetrievalWorkers: c.Resources.OnlineRetrievalWorkers, ReaderWorkers: c.Resources.ReaderWorkers, IngestWorkers: c.Resources.IngestWorkers, IndexWorkers: c.Resources.IndexWorkers, OCRWorkers: c.Resources.OCRWorkers, EmbeddingBatchSize: c.Resources.EmbeddingBatchSize, QdrantBatchSize: c.Resources.QdrantBatchSize,
 		StreamBufferBytes: c.Resources.StreamBufferBytes, UploadBufferBytes: c.Resources.UploadBufferBytes, TextScannerMaxBytes: c.Resources.TextScannerMaxBytes, TextUnitMaxBytes: c.Resources.TextUnitMaxBytes, JSONUnitMaxBytes: c.Resources.JSONUnitMaxBytes,
 		MaxPDFPages: c.Resources.MaxPDFPages, MaxOCRImageBytes: c.Resources.MaxOCRImageBytes, OCRRasterDPI: c.Resources.OCRRasterDPI,
-		PDFInfoTimeout: time.Duration(c.Resources.PDFInfoTimeoutSec) * time.Second, PDFTextPageTimeout: time.Duration(c.Resources.PDFTextPageTimeoutSec) * time.Second, OCRRasterTimeout: time.Duration(c.Resources.OCRRasterTimeoutSec) * time.Second, OCRTimeout: time.Duration(c.Resources.OCRTimeoutSec) * time.Second, LegacyDocTimeout: time.Duration(c.Resources.LegacyDocTimeoutSec) * time.Second,
+		PDFInfoTimeout: time.Duration(c.Resources.PDFInfoTimeoutSec) * time.Second, PDFTextPageTimeout: time.Duration(c.Resources.PDFTextPageTimeoutSec) * time.Second, OCRRasterTimeout: time.Duration(c.Resources.OCRRasterTimeoutSec) * time.Second, OCRTimeout: time.Duration(c.Resources.OCRTimeoutSec) * time.Second, DocTimeout: time.Duration(c.Resources.DocTimeoutSec) * time.Second,
 		MaxOOXMLFiles: c.Resources.MaxOOXMLFiles, MaxOOXMLUncompressedBytes: c.Resources.MaxOOXMLUncompressedBytes, MaxSharedStrings: c.Resources.MaxSharedStrings, MaxSharedStringBytes: c.Resources.MaxSharedStringBytes, MaxWorksheetRowCells: c.Resources.MaxWorksheetRowCells, MaxCellTextBytes: c.Resources.MaxCellTextBytes,
 		MaintenanceInitialDelay: time.Duration(c.Maintenance.InitialDelaySec) * time.Second, MaintenanceInterval: time.Duration(c.Maintenance.IntervalSec) * time.Second, MaintenanceTenantPassTimeout: time.Duration(c.Maintenance.TenantPassTimeoutSec) * time.Second,
 		JobHeartbeatInterval: time.Duration(c.Maintenance.JobHeartbeatSec) * time.Second, JobStaleAfter: time.Duration(c.Maintenance.JobStaleSec) * time.Second, OutboxLease: time.Duration(c.Maintenance.OutboxLeaseSec) * time.Second,
@@ -173,8 +170,6 @@ func (s runtimeSettings) sloTarget(level string) time.Duration {
 
 func runtimeFeatures(settings runtimeSettings) config.KnowledgeFeatureConfig {
 	return config.KnowledgeFeatureConfig{
-		RetrievalPolicyEnabled:      settings.RetrievalPolicyEnabled,
-		RetrievalPolicyShadow:       settings.RetrievalPolicyShadow,
 		CanonicalReaderEnabled:      settings.CanonicalReaderEnabled,
 		AgenticInvestigationEnabled: settings.AgenticInvestigationEnabled,
 	}

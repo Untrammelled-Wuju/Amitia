@@ -114,11 +114,7 @@ func (b *processExitBridgeImpl) OnProcessExit(event trusted_service.ProcessExitE
 
 	generation := event.Generation
 	if generation == 0 {
-		var genErr error
-		generation, genErr = b.registry.GetCurrentGeneration(runtimeID)
-		if genErr != nil {
-			log.Printf("[process-exit-bridge] could not determine generation for runtime %s: %v", runtimeID, genErr)
-		}
+		log.Printf("[process-exit-bridge] process exit lacks generation for runtime %s", runtimeID)
 	}
 
 	// Network handles are host-owned resources and must be released for every
@@ -130,9 +126,10 @@ func (b *processExitBridgeImpl) OnProcessExit(event trusted_service.ProcessExitE
 	revoker := b.leaseRevoker
 	b.mu.Unlock()
 	if networkCloser != nil {
-		// generation==0 deliberately means fail-safe cleanup for the runtime/module
-		// when legacy supervisor metadata cannot recover the exact generation.
 		networkCloser.CloseRuntimeGenerationNetwork(string(runtimeID), event.ModuleID, generation)
+	}
+	if generation == 0 {
+		return
 	}
 	if revoker != nil && generation > 0 {
 		revoker.RevokeRuntimeGenerationLeases(string(runtimeID), generation, "unexpected process exit")

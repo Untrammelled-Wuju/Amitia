@@ -9,11 +9,11 @@ function stringList(value: unknown): string[] {
 
 function messageMimeTypes(message: Record<string, any>): string[] {
   const values = new Set<string>();
-  for (const value of [message.mimeType, message.mime_type, message.contentType, message.content_type]) {
+  for (const value of [message.mimeType, message.contentType]) {
     if (value) values.add(String(value).toLowerCase());
   }
   for (const attachment of Array.isArray(message.attachments) ? message.attachments : []) {
-    for (const value of [attachment?.mimeType, attachment?.mime_type, attachment?.contentType, attachment?.type]) {
+    for (const value of [attachment?.mimeType, attachment?.contentType, attachment?.type]) {
       if (value) values.add(String(value).toLowerCase());
     }
   }
@@ -36,7 +36,7 @@ function scoreProvider(provider: UIProviderDefinition, message: Record<string, a
   const channelIds = stringList(metadata.channelIds);
   const type = String(message.type ?? message.messageType ?? message.msgType ?? "text").toLowerCase();
   const role = String(message.role ?? "").toLowerCase();
-  const extensionType = String(message.extensionType ?? message.extension_type ?? "").toLowerCase();
+  const extensionType = String(message.extensionType ?? "").toLowerCase();
   const channelId = String(message.channelId ?? message.channel ?? "").toLowerCase();
   const actualMimes = messageMimeTypes(message);
 

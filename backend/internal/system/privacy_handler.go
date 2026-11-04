@@ -79,7 +79,7 @@ func (h *Handler) PrivacyScan(c *gin.Context) {
 				privacyError(c, 503, "消息隐私数据无效", nil)
 				return
 			}
-			raw, _ := json.Marshal([]interface{}{entry.OwnerID, entry.RoleID, entry.Legacy, entry.ID, entry.Scope})
+			raw, _ := json.Marshal([]interface{}{entry.OwnerID, entry.RoleID, entry.ID, entry.Scope})
 			digest := sha256.Sum256(raw)
 			id := "privacy-message/" + hex.EncodeToString(digest[:])
 			source := ""
@@ -114,7 +114,7 @@ func (h *Handler) PrivacyScan(c *gin.Context) {
 			}
 			id, _ := finding["id"].(string)
 			if entry, exists := receipts[id]; exists {
-				finding["recordId"], finding["ownerId"], finding["characterId"], finding["revision"], finding["legacy"], finding["executionScope"] = entry.ID, entry.OwnerID, entry.RoleID, entry.Revision, entry.Legacy, entry.Scope
+				finding["recordId"], finding["ownerId"], finding["characterId"], finding["revision"], finding["executionScope"] = entry.ID, entry.OwnerID, entry.RoleID, entry.Revision, entry.Scope
 			}
 		}
 		svc.finalizePrivacyScan(result)

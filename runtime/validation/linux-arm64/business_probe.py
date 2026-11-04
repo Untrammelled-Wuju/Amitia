@@ -60,7 +60,7 @@ def read_local_token(data_root: str) -> Optional[str]:
 
 def probe_readonly_api(
     host: str = "127.0.0.1",
-    port: int = 18899,
+    port: int = 28899,
     data_root: str = "/var/lib/amitia",
 ) -> BusinessProbeResult:
     result = BusinessProbeResult()

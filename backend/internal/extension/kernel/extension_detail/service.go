@@ -2,6 +2,7 @@ package extension_detail
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -63,15 +64,18 @@ type ModuleDetail struct {
 }
 
 type ContributionDetail struct {
-	ContributionID string `json:"contributionId"`
-	ModuleID       string `json:"moduleId"`
-	Kind           string `json:"kind"`
-	Title          string `json:"title"`
-	Description    string `json:"description,omitempty"`
-	Enabled        bool   `json:"enabled"`
-	Exposure       string `json:"exposure,omitempty"`
-	RiskLevel      string `json:"riskLevel,omitempty"`
-	Deprecated     bool   `json:"deprecated"`
+	ContributionID  string          `json:"contributionId"`
+	ModuleID        string          `json:"moduleId"`
+	Kind            string          `json:"kind"`
+	Adapter         string          `json:"adapter"`
+	ContractVersion int             `json:"contractVersion,omitempty"`
+	Schema          json.RawMessage `json:"schema,omitempty"`
+	Title           string          `json:"title"`
+	Description     string          `json:"description,omitempty"`
+	Enabled         bool            `json:"enabled"`
+	Exposure        string          `json:"exposure,omitempty"`
+	RiskLevel       string          `json:"riskLevel,omitempty"`
+	Deprecated      bool            `json:"deprecated"`
 }
 
 type PermissionDetail struct {

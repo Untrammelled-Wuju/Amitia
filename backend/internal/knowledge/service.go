@@ -1010,8 +1010,6 @@ func (s *service) GetRuntimeStatus() RuntimeStatus {
 	settings := s.settings
 	return RuntimeStatus{
 		ConfigHash:                   settings.ConfigHash,
-		RetrievalPolicyEnabled:       settings.RetrievalPolicyEnabled,
-		RetrievalPolicyShadow:        settings.RetrievalPolicyShadow,
 		CanonicalReaderEnabled:       settings.CanonicalReaderEnabled,
 		AgenticInvestigationEnabled:  settings.AgenticInvestigationEnabled,
 		ReaderWorkers:                settings.ReaderWorkers,

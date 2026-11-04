@@ -184,7 +184,7 @@ func collectPackageDiagnostics(pkgPath string, bundle *diagnosticsBundle) {
 		"fileCount":   len(pkg.Integrity.Files),
 		"treeHash":    pkg.Tree.TreeHash,
 		"algorithm":   pkg.Tree.Algorithm,
-		"signed":      pkg.Signatures != nil,
+		"signed":      len(pkg.V2Signature) > 0,
 	}
 
 	var fileList []string
@@ -199,10 +199,6 @@ func collectPackageDiagnostics(pkgPath string, bundle *diagnosticsBundle) {
 		}
 	}
 	bundle.FileList = fileList
-
-	if pkg.Signatures != nil {
-		bundle.Diagnostics = append(bundle.Diagnostics, fmt.Sprintf("签名: keyId=%s publisher=%s algorithm=%s", pkg.Signatures.KeyID, pkg.Signatures.PublisherID, pkg.Signatures.Algorithm))
-	}
 
 	if err := amitiax.VerifyIntegrity(pkg); err != nil {
 		bundle.ErrorLogs = append(bundle.ErrorLogs, fmt.Sprintf("完整性验证失败: %v", err))

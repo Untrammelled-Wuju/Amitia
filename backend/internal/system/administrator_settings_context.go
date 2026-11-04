@@ -59,10 +59,10 @@ func (s *service) AdministratorSettingsContext(ctx context.Context, operation st
 		}
 	case "update":
 		setBool("autoCheck", "auto_update")
-	case "setup-finish", "onboarding-complete":
-		settings = map[string]string{"setup_completed": "true", "onboarding_completed": "true", "setup_step": "done"}
-	case "setup-reset", "onboarding-reset":
-		settings = map[string]string{"setup_completed": "false", "onboarding_completed": "false", "setup_step": ""}
+	case "onboarding-complete":
+		settings = map[string]string{"onboarding_completed": "true", "setup_step": "done"}
+	case "onboarding-reset":
+		settings = map[string]string{"onboarding_completed": "false", "setup_step": ""}
 	case "setup-step":
 		step, _ := body["step"].(string)
 		settings["setup_step"] = step

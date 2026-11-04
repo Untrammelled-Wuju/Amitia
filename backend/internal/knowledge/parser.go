@@ -59,7 +59,7 @@ func (r *ParserRegistry) For(src SourceRef) (SourceParser, error) {
 	case ".docx":
 		return docxParser{settings: r.settings}, nil
 	case ".doc":
-		return legacyDocParser{settings: r.settings}, nil
+		return docParser{settings: r.settings}, nil
 	case ".xlsx":
 		return xlsxParser{settings: r.settings}, nil
 	case ".pdf":

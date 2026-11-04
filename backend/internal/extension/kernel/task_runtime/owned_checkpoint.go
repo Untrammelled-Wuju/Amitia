@@ -81,28 +81,7 @@ func checkpointNextEffects(payload json.RawMessage) ([]checkpointPlannedEffect, 
 	if err := json.Unmarshal(payload, &object); err != nil || object == nil {
 		return nil, nil
 	}
-	legacy, hasLegacy := object["nextEffectIds"]
 	raw, hasPlan := object["nextEffects"]
-	if hasLegacy && hasPlan {
-		return nil, NewTaskError(ErrTaskCheckpointIncompatible, "新旧后续效果清单不能同时使用")
-	}
-	if hasLegacy {
-		var ids []string
-		if len(legacy) == 0 || legacy[0] != '[' || json.Unmarshal(legacy, &ids) != nil || len(ids) == 0 || len(ids) > 32 {
-			return nil, NewTaskError(ErrTaskCheckpointIncompatible, "旧检查点效果清单格式无效")
-		}
-		seen := make(map[string]struct{}, len(ids))
-		for _, id := range ids {
-			if !validTaskHostEffectID(id) {
-				return nil, NewTaskError(ErrTaskCheckpointIncompatible, "旧检查点效果编号无效")
-			}
-			if _, exists := seen[id]; exists {
-				return nil, NewTaskError(ErrTaskCheckpointIncompatible, "旧检查点效果编号重复")
-			}
-			seen[id] = struct{}{}
-		}
-		return nil, nil
-	}
 	if !hasPlan {
 		return nil, nil
 	}

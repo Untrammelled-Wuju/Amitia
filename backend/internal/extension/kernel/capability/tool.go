@@ -8,7 +8,6 @@ const (
 	ToolSourceMCP         ToolSource = "mcp"
 	ToolSourceWorkflow    ToolSource = "workflow"
 	ToolSourceInternal    ToolSource = "internal"
-	ToolSourceLegacy      ToolSource = "legacy_tool"
 	ToolSourceAcquisition ToolSource = "acquisition"
 )
 

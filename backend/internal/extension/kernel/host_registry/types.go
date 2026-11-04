@@ -30,12 +30,12 @@ func (k RegistryEntryKind) IsValid() bool {
 	}
 }
 
-func ParseRegistryEntryKind(raw string) RegistryEntryKind {
+func ParseRegistryEntryKind(raw string) (RegistryEntryKind, error) {
 	switch RegistryEntryKind(raw) {
 	case RegistryEntryKindRuntime, RegistryEntryKindUIHost:
-		return RegistryEntryKind(raw)
+		return RegistryEntryKind(raw), nil
 	default:
-		return RegistryEntryKindUIHost
+		return "", ErrInvalidRegistryEntry
 	}
 }
 
@@ -45,14 +45,6 @@ const (
 	PresenceStateReady        PresenceState = "ready"
 	PresenceStateDisconnected PresenceState = "disconnected"
 	PresenceStateExpired      PresenceState = "expired"
-)
-
-type ConnectionState = PresenceState
-
-const (
-	HostStateReady        = PresenceStateReady
-	HostStateDisconnected = PresenceStateDisconnected
-	HostStateExpired      = PresenceStateExpired
 )
 
 type EndpointFeature string
@@ -66,19 +58,6 @@ const (
 	EndpointFeatureClipboardRead  EndpointFeature = "clipboard.read"
 	EndpointFeatureDesktopMenu    EndpointFeature = "desktop.menu"
 	EndpointFeatureDesktopTray    EndpointFeature = "desktop.tray"
-)
-
-type HostCapability = EndpointFeature
-
-const (
-	CapUINotify       = EndpointFeatureUINotify
-	CapUIDialog       = EndpointFeatureUIDialog
-	CapUINavigate     = EndpointFeatureUINavigate
-	CapUIStyle        = EndpointFeatureUIStyle
-	CapClipboardWrite = EndpointFeatureClipboardWrite
-	CapClipboardRead  = EndpointFeatureClipboardRead
-	CapDesktopMenu    = EndpointFeatureDesktopMenu
-	CapDesktopTray    = EndpointFeatureDesktopTray
 )
 
 type RuntimeEntry struct {
@@ -102,17 +81,6 @@ type RuntimeEntry struct {
 	RuntimeSessionID     runtimeidentity.RuntimeSessionID
 	ConnectionGeneration int64
 	Revision             int64
-}
-
-type HostEntry = RuntimeEntry
-
-func (e *RuntimeEntry) NormalizeCompatibility() {
-	if e.EntryID == "" && e.HostClientID != "" {
-		e.EntryID = e.HostClientID
-	}
-	if e.Kind == "" {
-		e.Kind = RegistryEntryKindUIHost
-	}
 }
 
 func (e RuntimeEntry) HasDeviceIdentity() bool {
@@ -160,10 +128,6 @@ func (e RuntimeEntry) HasFeature(feature EndpointFeature) bool {
 		}
 	}
 	return false
-}
-
-func (e RuntimeEntry) HasCapability(cap HostCapability) bool {
-	return e.HasFeature(EndpointFeature(cap))
 }
 
 type DevicePresence struct {

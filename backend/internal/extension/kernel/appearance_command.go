@@ -41,11 +41,11 @@ func (n *SSEUIHostNotifier) ExecuteAppearanceCommand(ctx context.Context, action
 	if n.hostRegistry == nil || n.hub == nil {
 		return nil, ErrUIHostUnavailable
 	}
-	hosts, err := n.hostRegistry.ListReadyHostsString(ctx, string(actor.SpaceID), host_registry.CapUIStyle)
+	hosts, err := n.hostRegistry.ListReadyHostsString(ctx, string(actor.SpaceID), host_registry.EndpointFeatureUIStyle)
 	if err != nil {
 		return nil, err
 	}
-	var selected *host_registry.HostEntry
+	var selected *host_registry.RuntimeEntry
 	for _, host := range hosts {
 		if host == nil || host.DeviceID != actor.DeviceID || host.SpaceID != actor.SpaceID ||
 			!n.hub.ClientExists(host.HostClientID) {

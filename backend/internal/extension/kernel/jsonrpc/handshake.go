@@ -20,12 +20,11 @@ const (
 type RuntimeType string
 
 const (
-	RuntimeTypeMain     RuntimeType = "main"
-	RuntimeTypeTask     RuntimeType = "task"
-	RuntimeTypeService  RuntimeType = "service"
-	RuntimeTypeWASM     RuntimeType = "wasm"
-	RuntimeTypeUI       RuntimeType = "ui"
-	RuntimeTypeLegacyGo RuntimeType = "legacy_go"
+	RuntimeTypeMain    RuntimeType = "main"
+	RuntimeTypeTask    RuntimeType = "task"
+	RuntimeTypeService RuntimeType = "service"
+	RuntimeTypeWASM    RuntimeType = "wasm"
+	RuntimeTypeUI      RuntimeType = "ui"
 )
 
 type HelloMessage struct {

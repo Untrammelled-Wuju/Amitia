@@ -12,25 +12,20 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/extension_slots"
 )
 
-// ChatSlotID is an alias of the canonical Extension Kernel SlotID. Chat-specific
-// metadata lives in this package, but the UI slot surface itself is declared and
-// lifecycle-managed exclusively by extension_slots.SlotRegistry.
-type ChatSlotID = extension_slots.SlotID
-
 const (
-	SlotChatHeaderAction        ChatSlotID = "chat.header.action"
-	SlotChatSidebarPanel        ChatSlotID = "chat.sidebar.panel"
-	SlotChatProfileSummaryPanel ChatSlotID = "chat.profile_summary.panel"
-	SlotChatMemoryContextPanel  ChatSlotID = "chat.memory_context.panel"
-	SlotChatMessageAction       ChatSlotID = "chat.message.action"
-	SlotChatMessageBadge        ChatSlotID = "chat.message.badge"
-	SlotChatMessageAttachment   ChatSlotID = "chat.message.attachment_renderer"
-	SlotChatMessageCustom       ChatSlotID = "chat.message.custom_renderer"
-	SlotChatComposerAction      ChatSlotID = "chat.composer.action"
-	SlotChatComposerAttachment  ChatSlotID = "chat.composer.attachment"
-	SlotChatComposerHint        ChatSlotID = "chat.composer.hint"
-	SlotChatEmptyStateCard      ChatSlotID = "chat.empty_state.card"
-	SlotChatStatusItem          ChatSlotID = "chat.status.item"
+	SlotChatHeaderAction        extension_slots.SlotID = "chat.header.action"
+	SlotChatSidebarPanel        extension_slots.SlotID = "chat.sidebar.panel"
+	SlotChatProfileSummaryPanel extension_slots.SlotID = "chat.profile_summary.panel"
+	SlotChatMemoryContextPanel  extension_slots.SlotID = "chat.memory_context.panel"
+	SlotChatMessageAction       extension_slots.SlotID = "chat.message.action"
+	SlotChatMessageBadge        extension_slots.SlotID = "chat.message.badge"
+	SlotChatMessageAttachment   extension_slots.SlotID = "chat.message.attachment_renderer"
+	SlotChatMessageCustom       extension_slots.SlotID = "chat.message.custom_renderer"
+	SlotChatComposerAction      extension_slots.SlotID = "chat.composer.action"
+	SlotChatComposerAttachment  extension_slots.SlotID = "chat.composer.attachment"
+	SlotChatComposerHint        extension_slots.SlotID = "chat.composer.hint"
+	SlotChatEmptyStateCard      extension_slots.SlotID = "chat.empty_state.card"
+	SlotChatStatusItem          extension_slots.SlotID = "chat.status.item"
 )
 
 type ChatUIContext struct {

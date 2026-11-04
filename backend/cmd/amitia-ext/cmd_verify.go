@@ -40,12 +40,11 @@ func runVerify(args []string, output *Output) int {
 		OK:      true,
 		Message: fmt.Sprintf("完整性验证通过: %s", archivePath),
 		Data: map[string]any{
-			"extensionId":  pkg.Manifest.Extension.ID,
-			"version":      pkg.Manifest.Extension.Version,
-			"treeHash":     pkg.Tree.TreeHash,
-			"fileCount":    len(pkg.Integrity.Files),
-			"hasV2Sig":     len(pkg.V2Signature) > 0,
-			"hasLegacySig": pkg.Signatures != nil,
+			"extensionId": pkg.Manifest.Extension.ID,
+			"version":     pkg.Manifest.Extension.Version,
+			"treeHash":    pkg.Tree.TreeHash,
+			"fileCount":   len(pkg.Integrity.Files),
+			"hasV2Sig":    len(pkg.V2Signature) > 0,
 		},
 	}
 
@@ -112,25 +111,6 @@ func runVerify(args []string, output *Output) int {
 		result.Message = fmt.Sprintf("验证通过（完整性+V2签名）: %s", archivePath)
 	} else if len(pkg.V2Signature) > 0 {
 		result.Warnings = append(result.Warnings, "包有 V2 签名但未提供公钥，跳过签名验证")
-	} else if pkg.Signatures != nil && *pubkeyFile != "" {
-		pubKey, err := loadPublicKey(*pubkeyFile)
-		if err != nil {
-			output.fail(ExitConfig, err.Error())
-		}
-		if err := amitiax.VerifySignature(pkg, pubKey); err != nil {
-			output.fail(ExitSig, fmt.Sprintf("旧格式签名验证失败: %v", err))
-		}
-		data := result.Data.(map[string]any)
-		data["signatureVerified"] = true
-		data["signatureFormat"] = "legacy"
-		data["keyId"] = pkg.Signatures.KeyID
-		data["publisherId"] = pkg.Signatures.PublisherID
-		data["algorithm"] = pkg.Signatures.Algorithm
-		result.Message = fmt.Sprintf("验证通过（完整性+旧格式签名）: %s", archivePath)
-		result.Warnings = append(result.Warnings, "检测到旧格式签名，建议使用 amitiax sign 重新签名为 amitiax-signature-v1 格式")
-	} else if pkg.Signatures != nil {
-		result.Warnings = append(result.Warnings, "包有旧格式签名但未提供公钥，跳过签名验证")
-		result.Warnings = append(result.Warnings, "建议使用 amitiax sign 重新签名为 amitiax-signature-v1 格式")
 	}
 
 	output.emit(result)

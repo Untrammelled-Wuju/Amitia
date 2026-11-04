@@ -9,7 +9,6 @@ import '../../../features/settings/presentation/pages/notification_settings_page
 import '../../../features/conversations/presentation/pages/conversation_list_page.dart';
 import '../../../features/conversations/presentation/pages/conversation_search_page.dart';
 import '../../../features/agent/presentation/pages/agent_page.dart';
-import '../../../features/agent_os/presentation/pages/agent_os_page.dart';
 import '../../../features/agent/presentation/pages/agent_task_detail_page.dart';
 import '../../../features/characters/presentation/pages/character_list_page.dart';
 import '../../../features/characters/presentation/pages/character_card_workshop_page.dart';
@@ -18,6 +17,7 @@ import '../../../features/characters/presentation/pages/character_voice_page.dar
 import '../../../features/characters/presentation/pages/character_memory_page.dart';
 import '../../../features/characters/presentation/pages/character_timeline_page.dart';
 import '../../../features/characters/presentation/pages/character_psyche_page.dart';
+import '../../../features/characters/presentation/pages/character_teams_page.dart';
 import '../../../features/memory/presentation/pages/memory_overview_page.dart';
 import '../../../features/memory/presentation/pages/episodic_memory_page.dart';
 import '../../../features/memory/presentation/pages/memory_graph_page.dart';
@@ -33,7 +33,6 @@ import '../../../features/chat_import/presentation/pages/chat_import_page.dart';
 import '../../../features/channels/presentation/pages/channel_messages_page.dart';
 import '../../../features/extensions/presentation/pages/extension_center_page.dart';
 import '../../../features/extensions/presentation/pages/extension_packages_page.dart';
-import '../../../features/extensions/presentation/pages/marketplace_page.dart';
 import '../../../features/extensions/presentation/pages/mcp_list_page.dart';
 import '../../../features/extensions/presentation/pages/mcp_detail_page.dart';
 import '../../../features/extensions/presentation/pages/mcp_edit_page.dart';
@@ -102,7 +101,6 @@ import '../../../features/developer/presentation/pages/schedules_page.dart';
 import '../../../features/developer/presentation/pages/desktop_contributions_page.dart';
 import '../../../features/developer/presentation/pages/updates_page.dart';
 import '../../../features/developer/presentation/pages/dev_console_page.dart';
-import '../../../features/developer/presentation/pages/migrations_page.dart';
 import '../../../features/developer/presentation/pages/dev_mode_page.dart';
 import '../../../core/widgets/plugin_unavailable_page.dart';
 import '../../../core/widgets/main_tab_scaffold.dart';
@@ -242,11 +240,6 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
         amitiaSlidePage(state: state, child: const AgentPage()),
   ),
   GoRoute(
-    path: '/agent-os',
-    pageBuilder: (context, state) =>
-        amitiaSlidePage(state: state, child: const AgentOSPage()),
-  ),
-  GoRoute(
     path: '/agent/task/:id',
     pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
@@ -278,6 +271,14 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
       context: context,
       state: state,
       child: const CharacterCreatePage(),
+    ),
+  ),
+  GoRoute(
+    path: AppRoutes.charactersTeams,
+    pageBuilder: (context, state) => amitiaSlidePage(
+      context: context,
+      state: state,
+      child: const CharacterTeamsPage(),
     ),
   ),
   GoRoute(
@@ -459,11 +460,6 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
       state: state,
       child: const ExtensionPackagesPage(),
     ),
-  ),
-  GoRoute(
-    path: '/extensions/market',
-    pageBuilder: (context, state) =>
-        amitiaSlidePage(state: state, child: const MarketplacePage()),
   ),
   GoRoute(
     path: '/extensions/mcp',
@@ -992,14 +988,6 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
       context: context,
       state: state,
       child: const DevConsolePage(),
-    ),
-  ),
-  GoRoute(
-    path: '/developer/kernel/migrations',
-    pageBuilder: (context, state) => amitiaSlidePage(
-      context: context,
-      state: state,
-      child: const MigrationsPage(),
     ),
   ),
   GoRoute(

@@ -82,7 +82,7 @@ func (p *meshLocalDataPort) RelationshipTime(ctx context.Context, scope coordina
 				defaults := temporal.DefaultRelationshipTimeSettings(scope.RoleID)
 				settings = &defaults
 			}
-			space := temporal.RelationshipOwnerSpace(p.legacySpaceID, p.ownerID)
+			space := temporal.RelationshipOwnerSpace(p.ownerID, p.ownerID)
 			state, err := coordinator.GetState(ctx, space, scope.RoleID)
 			if err != nil {
 				return err

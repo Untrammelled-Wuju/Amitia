@@ -15,12 +15,6 @@ export const CONTROL_MODE_PLUGIN_CONTROL = 'plugin_control';
 export const CONTROL_MODE_USER_CONTROL = 'user_control';
 export const CONTROL_MODE_SUSPENDED = 'suspended';
 
-// Backward-compatible symbol names using canonical GameHost v1 wire values.
-export const CONTROL_MODE_OBSERVE = CONTROL_MODE_OBSERVE_ONLY;
-export const CONTROL_MODE_SHARED = CONTROL_MODE_SHARED_CONTROL;
-export const CONTROL_MODE_PLUGIN = CONTROL_MODE_PLUGIN_CONTROL;
-export const CONTROL_MODE_USER = CONTROL_MODE_USER_CONTROL;
-
 export const OUTPUT_KIND_CUSTOM_RPC = 'custom_rpc';
 export const OUTPUT_KIND_CHANNEL = 'channel';
 export const OUTPUT_KIND_BINARY = 'binary';

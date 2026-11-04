@@ -279,38 +279,6 @@ func TestCompilerMaxNodesExceeded(t *testing.T) {
 	}
 }
 
-func TestCompilerFromLegacy(t *testing.T) {
-	def := WorkflowDefinition{
-		ID:              "test-legacy",
-		SchemaVersion:   CompiledSchemaVersion,
-		Name:            "Legacy Linear",
-		CallableByAgent: true,
-		Enabled:         true,
-		Limits:          WorkflowLimits{MaxSteps: 10, MaxConcurrency: 4},
-		Nodes: []WorkflowNode{
-			{ID: "step-a", Type: "tool", Step: WorkflowStepInput{Input: json.RawMessage(`{"op":"first"}`)}},
-			{ID: "step-b", Type: "tool", Step: WorkflowStepInput{Input: json.RawMessage(`{"op":"second"}`)}},
-			{ID: "step-c", Type: "tool", Step: WorkflowStepInput{Input: json.RawMessage(`{"op":"third"}`)}},
-		},
-	}
-
-	compiler := NewCompiler()
-	dag, err := compiler.CompileFromLegacy(def)
-	if err != nil {
-		t.Fatalf("compile from legacy: %v", err)
-	}
-
-	bNode := dag.Nodes["step-b"]
-	if len(bNode.DependsOn) != 1 || bNode.DependsOn[0] != "step-a" {
-		t.Errorf("step-b.DependsOn = %v, want [step-a]", bNode.DependsOn)
-	}
-
-	cNode := dag.Nodes["step-c"]
-	if len(cNode.DependsOn) != 1 || cNode.DependsOn[0] != "step-b" {
-		t.Errorf("step-c.DependsOn = %v, want [step-b]", cNode.DependsOn)
-	}
-}
-
 func TestCompilerPermissionClosure(t *testing.T) {
 	def := WorkflowDefinition{
 		ID:              "test-perms",

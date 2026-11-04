@@ -1134,11 +1134,11 @@ class DesktopPetMobileRuntimeNotifier
     // nested settings/manifest objects. Keep compatibility with a future
     // explicitly nested shape, but use the authoritative flattened response
     // today instead of treating it as an empty installation.
-    final nestedInstallation = _map(detail['installation'] ?? detail['Installation']);
+    final nestedInstallation = _map(detail['installation']);
     final installation = nestedInstallation.isNotEmpty ? nestedInstallation : detail;
-    final manifest = _map(detail['manifest'] ?? detail['Manifest']);
+    final manifest = _map(detail['manifest']);
     final manifestIntegrity = _map(manifest['integrity']);
-    final persistedSettings = _map(detail['settings'] ?? detail['Settings']);
+    final persistedSettings = _map(detail['settings']);
     final desiredSettings = _map(inner['settingsSnapshot']);
     final settings = desiredSettings.isNotEmpty ? desiredSettings : persistedSettings;
 

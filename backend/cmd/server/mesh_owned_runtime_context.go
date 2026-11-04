@@ -15,9 +15,9 @@ func (p *meshLocalDataPort) ownedRuntimeContext(ctx context.Context, scope coord
 	if scope.ResourceOwnerID != p.ownerID || scope.RoleOwnerID != p.ownerID {
 		return nil, coordination.ErrWrongOwner
 	}
-	legacyScope := interaction.InteractionScope{SpaceID: p.legacySpaceID, CharacterID: scope.RoleID, ConversationID: query.ConversationID, Channel: "web", RequestID: scope.RequestID}
+	interactionScope := interaction.InteractionScope{SpaceID: p.ownerID, CharacterID: scope.RoleID, ConversationID: query.ConversationID, Channel: "web", RequestID: scope.RequestID}
 	if query.ChatRuntime != nil {
-		legacyScope.Channel, legacyScope.Source, legacyScope.PeerID = query.ChatRuntime.Channel, query.ChatRuntime.Source, query.ChatRuntime.PeerID
+		interactionScope.Channel, interactionScope.Source, interactionScope.PeerID = query.ChatRuntime.Channel, query.ChatRuntime.Source, query.ChatRuntime.PeerID
 		ctx = temporal.ContextWithDeviceTimezone(ctx, query.ChatRuntime.DeviceTimezone)
 	}
 	loaders := []interaction.ContextLoader{interaction.NewUnresolvedThreadContextLoader(p.services.DB)}
@@ -33,7 +33,7 @@ func (p *meshLocalDataPort) ownedRuntimeContext(ctx context.Context, scope coord
 			return nil, err
 		}
 		loadContext, cancel := context.WithTimeout(ctx, loader.Timeout())
-		value, err := loader.Load(loadContext, legacyScope, "owned-role-"+strconv.FormatInt(scope.RoleRevision, 10))
+		value, err := loader.Load(loadContext, interactionScope, "owned-role-"+strconv.FormatInt(scope.RoleRevision, 10))
 		cancel()
 		if err != nil {
 			value = interaction.FieldUnavailable[any](loader.Name())
@@ -48,7 +48,7 @@ func (p *meshLocalDataPort) ownedRuntimeContext(ctx context.Context, scope coord
 		if err := coordination.ValidateCurrent(ctx); err != nil {
 			return nil, err
 		}
-		prepared, err := p.services.RelTimeCoordinator.ForOwner(p.ownerID).PrepareInbound(ctx, temporal.PrepareInboundInput{SpaceID: temporal.RelationshipOwnerSpace(p.legacySpaceID, p.ownerID), CharacterID: scope.RoleID, ConversationID: query.ConversationID, Channel: legacyScope.Channel, PeerID: legacyScope.PeerID, Source: legacyScope.Source, RequestID: scope.RequestID, InteractionID: scope.TurnID, ObservedAt: time.Now().UTC(), Message: query.ChatRuntime.Message})
+		prepared, err := p.services.RelTimeCoordinator.ForOwner(p.ownerID).PrepareInbound(ctx, temporal.PrepareInboundInput{SpaceID: temporal.RelationshipOwnerSpace(p.ownerID, p.ownerID), CharacterID: scope.RoleID, ConversationID: query.ConversationID, Channel: interactionScope.Channel, PeerID: interactionScope.PeerID, Source: interactionScope.Source, RequestID: scope.RequestID, InteractionID: scope.TurnID, ObservedAt: time.Now().UTC(), Message: query.ChatRuntime.Message})
 		if err != nil {
 			return nil, err
 		}

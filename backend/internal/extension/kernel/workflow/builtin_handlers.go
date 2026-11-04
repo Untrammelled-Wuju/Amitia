@@ -26,10 +26,6 @@ func (PassthroughHandler) Execute(ctx context.Context, node WorkflowNode, input 
 	return input, nil
 }
 
-// ConditionHandler keeps the historical passthrough behavior unless an
-// explicit condition operation is configured in runtime metadata (or the
-// dedicated conditionOp input field). Business payloads are allowed to contain
-// an unrelated "op" key without silently changing old workflow semantics.
 type ConditionHandler struct{}
 
 func (ConditionHandler) Execute(ctx context.Context, node WorkflowNode, input json.RawMessage) (json.RawMessage, error) {
@@ -46,7 +42,7 @@ func (ConditionHandler) Execute(ctx context.Context, node WorkflowNode, input js
 	}
 	op := normalizeBuiltinOp(builtinFirstString(node.Runtime.Metadata["op"], object["conditionOp"]))
 	if op == "" {
-		return input, nil
+		return nil, fmt.Errorf("condition op is required")
 	}
 	result, err := evaluateLogicObject(object, op)
 	if err != nil {
@@ -160,7 +156,7 @@ func (ExtractHandler) Execute(ctx context.Context, node WorkflowNode, input json
 }
 
 // TransformHandler is the workflow-v2 data transformation runtime. It contains
-// the operations that previously only existed in the legacy Workshop executor,
+// the operations provided by the current Workshop executor,
 // plus a few common low-risk data operations used by Android automation flows.
 type TransformHandler struct{}
 
@@ -174,20 +170,7 @@ func (TransformHandler) Execute(ctx context.Context, node WorkflowNode, input js
 	}
 	op := normalizeBuiltinOp(builtinFirstString(object["op"], node.Runtime.Metadata["op"]))
 	if op == "" {
-		// Compatibility with the original kernel handler: metadata.field means
-		// select one top-level field and emit it directly.
-		field := strings.TrimSpace(builtinFirstString(node.Runtime.Metadata["field"]))
-		if field == "" {
-			return input, nil
-		}
-		value, found, err := extractBuiltinPath(object, field, defaultBuiltinDataMaxItems)
-		if err != nil {
-			return nil, err
-		}
-		if !found {
-			return nil, fmt.Errorf("transform field %s not found", field)
-		}
-		return marshalBuiltinOutput(value)
+		return nil, fmt.Errorf("transform op is required")
 	}
 
 	source := builtinSource(object)

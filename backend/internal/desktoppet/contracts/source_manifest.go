@@ -6,12 +6,11 @@ const (
 	GenerationModeSpriteSheet GenerationMode = "sprite_sheet"
 	GenerationModeKeyframe    GenerationMode = "keyframe"
 	GenerationModeSingleFrame GenerationMode = "single_frame"
-	GenerationModeLegacyFrame GenerationMode = "legacy_frame"
 )
 
 func IsValidGenerationMode(m string) bool {
 	switch GenerationMode(m) {
-	case GenerationModeSpriteSheet, GenerationModeKeyframe, GenerationModeSingleFrame, GenerationModeLegacyFrame:
+	case GenerationModeSpriteSheet, GenerationModeKeyframe, GenerationModeSingleFrame:
 		return true
 	default:
 		return false

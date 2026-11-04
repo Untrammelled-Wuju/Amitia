@@ -14,7 +14,9 @@ import (
 
 type allowBinaryFeatureChecker struct{}
 
-func (allowBinaryFeatureChecker) HasNegotiatedCapability(string, domain.Capability) bool { return true }
+func (allowBinaryFeatureChecker) HasNegotiatedCapability(string, domain.HostFeature) bool {
+	return true
+}
 
 type allowBinaryResourceAdmission struct{}
 

@@ -342,7 +342,6 @@ func importBatchView(batch *importbatch.Batch, items []importbatch.Item) map[str
 		"message_count":               batch.MessageCount,
 		"promotedConversationId":      batch.PromotedConversationID,
 		"promotedConversationOwnerId": batch.PromotedConversationOwner,
-		"legacyConversationId":        batch.LegacyConversationID,
 		"createdAt":                   batch.CreatedAt,
 		"created_at":                  batch.CreatedAt,
 		"updatedAt":                   batch.UpdatedAt,

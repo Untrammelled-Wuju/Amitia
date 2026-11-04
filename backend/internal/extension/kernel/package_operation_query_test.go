@@ -35,13 +35,13 @@ func insertRawOperation(t *testing.T, db *sql.DB, op PackageOperationRecord) {
 		INSERT INTO extension_package_operations (
 			operation_id, trace_id, space_id, scope_type, scope_id, extension_id, target_version,
 			operation_type, status, current_step, artifact_id, preview_session_id,
-			confirmations_json, confirmation_claims_json, error_code, error_detail,
+			confirmation_claims_json, error_code, error_detail,
 			started_at, updated_at, completed_at, stable_generation, target_generation,
 			current_pointer_json, snapshot_requirement_hash
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		op.OperationID, op.TraceID, op.SpaceID, op.ScopeType, op.ScopeID, op.ExtensionID, op.TargetVersion,
 		op.OperationType, op.Status, op.CurrentStep, op.ArtifactID, op.PreviewSessionID,
-		op.ConfirmationsJSON, op.ConfirmationClaimsJSON, op.ErrorCode, op.ErrorDetail,
+		op.ConfirmationClaimsJSON, op.ErrorCode, op.ErrorDetail,
 		op.StartedAt, op.UpdatedAt, op.CompletedAt, op.StableGeneration, op.TargetGeneration,
 		op.CurrentPointerJSON, op.SnapshotRequirementHash,
 	)
@@ -69,7 +69,6 @@ func TestListIncompleteOperationsReadsClaimsAndHash(t *testing.T) {
 		CurrentStep:             "commit_installed_tree",
 		ArtifactID:              "artifact-1",
 		PreviewSessionID:        "preview-1",
-		ConfirmationsJSON:       `{"riskAccepted":true}`,
 		ConfirmationClaimsJSON:  claimsJSON,
 		StartedAt:               "2025-06-01T00:00:00Z",
 		UpdatedAt:               "2025-06-01T00:00:00Z",
@@ -89,7 +88,6 @@ func TestListIncompleteOperationsReadsClaimsAndHash(t *testing.T) {
 		CurrentStep:             "completed",
 		ArtifactID:              "artifact-2",
 		PreviewSessionID:        "",
-		ConfirmationsJSON:       "{}",
 		ConfirmationClaimsJSON:  "{}",
 		StartedAt:               "2025-06-01T00:00:00Z",
 		UpdatedAt:               "2025-06-01T00:00:01Z",
@@ -119,9 +117,6 @@ func TestListIncompleteOperationsReadsClaimsAndHash(t *testing.T) {
 	if got.SnapshotRequirementHash != hashValue {
 		t.Fatalf("SnapshotRequirementHash mismatch: got %q, want %q", got.SnapshotRequirementHash, hashValue)
 	}
-	if got.ConfirmationsJSON != `{"riskAccepted":true}` {
-		t.Fatalf("ConfirmationsJSON mismatch: got %q", got.ConfirmationsJSON)
-	}
 	if got.Status != "in_progress" {
 		t.Fatalf("expected status in_progress, got %s", got.Status)
 	}
@@ -142,7 +137,7 @@ func TestListIncompleteOperationsMultiRecord(t *testing.T) {
 			OperationID: "op-running", TraceID: "t-1", SpaceID: "user-multi",
 			ScopeType: "global", ExtensionID: "ext-a", TargetVersion: "1.0.0",
 			OperationType: "install", Status: "in_progress", CurrentStep: "commit",
-			ArtifactID: "art-a", PreviewSessionID: "ps-a", ConfirmationsJSON: "{}",
+			ArtifactID: "art-a", PreviewSessionID: "ps-a",
 			ConfirmationClaimsJSON: `{"running":true}`, ErrorCode: "", ErrorDetail: "",
 			StartedAt: "2025-06-01T00:00:00Z", UpdatedAt: "2025-06-01T00:00:00Z",
 			SnapshotRequirementHash: installHash,
@@ -151,7 +146,7 @@ func TestListIncompleteOperationsMultiRecord(t *testing.T) {
 			OperationID: "op-recovery", TraceID: "t-2", SpaceID: "user-multi",
 			ScopeType: "global", ExtensionID: "ext-b", TargetVersion: "2.0.0",
 			OperationType: "update", Status: "requires_recovery", CurrentStep: "failed-step",
-			ArtifactID: "art-b", PreviewSessionID: "ps-b", ConfirmationsJSON: "{}",
+			ArtifactID: "art-b", PreviewSessionID: "ps-b",
 			ConfirmationClaimsJSON: requiresRecoveryClaims, ErrorCode: "PACKAGE_UPDATE_FAILED",
 			ErrorDetail: "simulated failure",
 			StartedAt:   "2025-06-01T00:00:01Z", UpdatedAt: "2025-06-01T00:00:01Z",
@@ -161,7 +156,7 @@ func TestListIncompleteOperationsMultiRecord(t *testing.T) {
 			OperationID: "op-finalizing", TraceID: "t-3", SpaceID: "user-multi",
 			ScopeType: "global", ExtensionID: "ext-c", TargetVersion: "1.5.0",
 			OperationType: "rollback", Status: "finalizing", CurrentStep: "final_gate",
-			ArtifactID: "art-c", PreviewSessionID: "", ConfirmationsJSON: "{}",
+			ArtifactID: "art-c", PreviewSessionID: "",
 			ConfirmationClaimsJSON: "{}", ErrorCode: "", ErrorDetail: "",
 			StartedAt: "2025-06-01T00:00:02Z", UpdatedAt: "2025-06-01T00:00:02Z",
 			SnapshotRequirementHash: rollbackHash,
@@ -170,7 +165,7 @@ func TestListIncompleteOperationsMultiRecord(t *testing.T) {
 			OperationID: "op-install-uninstall", TraceID: "t-4", SpaceID: "user-multi",
 			ScopeType: "global", ExtensionID: "ext-d", TargetVersion: "1.0.0",
 			OperationType: "uninstall", Status: "in_progress", CurrentStep: "quarantine_move",
-			ArtifactID: "art-d", PreviewSessionID: "", ConfirmationsJSON: "{}",
+			ArtifactID: "art-d", PreviewSessionID: "",
 			ConfirmationClaimsJSON: "{}", ErrorCode: "", ErrorDetail: "",
 			StartedAt: "2025-06-01T00:00:03Z", UpdatedAt: "2025-06-01T00:00:03Z",
 			SnapshotRequirementHash: uninstallHash,
@@ -179,7 +174,7 @@ func TestListIncompleteOperationsMultiRecord(t *testing.T) {
 			OperationID: "op-completed", TraceID: "t-5", SpaceID: "user-multi",
 			ScopeType: "global", ExtensionID: "ext-e", TargetVersion: "1.0.0",
 			OperationType: "install", Status: "completed", CurrentStep: "completed",
-			ArtifactID: "art-e", PreviewSessionID: "", ConfirmationsJSON: "{}",
+			ArtifactID: "art-e", PreviewSessionID: "",
 			ConfirmationClaimsJSON: "{}", ErrorCode: "", ErrorDetail: "",
 			StartedAt: "2025-06-01T00:00:00Z", UpdatedAt: "2025-06-01T00:00:01Z",
 			CompletedAt:             "2025-06-01T00:00:01Z",
@@ -189,7 +184,7 @@ func TestListIncompleteOperationsMultiRecord(t *testing.T) {
 			OperationID: "op-failed", TraceID: "t-6", SpaceID: "user-multi",
 			ScopeType: "global", ExtensionID: "ext-f", TargetVersion: "1.0.0",
 			OperationType: "install", Status: "failed", CurrentStep: "failed",
-			ArtifactID: "art-f", PreviewSessionID: "", ConfirmationsJSON: "{}",
+			ArtifactID: "art-f", PreviewSessionID: "",
 			ConfirmationClaimsJSON: "{}", ErrorCode: "INSTALL_FAIL", ErrorDetail: "boom",
 			StartedAt: "2025-06-01T00:00:00Z", UpdatedAt: "2025-06-01T00:00:01Z",
 			CompletedAt:             "2025-06-01T00:00:01Z",
@@ -276,7 +271,6 @@ func TestGetOperationReadsClaimsAndHash(t *testing.T) {
 		CurrentStep:             "execute_migrations",
 		ArtifactID:              "artifact-getop",
 		PreviewSessionID:        "preview-getop",
-		ConfirmationsJSON:       `{"riskAccepted":true,"migrationAccepted":true}`,
 		ConfirmationClaimsJSON:  claimsJSON,
 		ErrorCode:               "",
 		ErrorDetail:             "",
@@ -302,9 +296,6 @@ func TestGetOperationReadsClaimsAndHash(t *testing.T) {
 	}
 	if got.OperationType != "update" {
 		t.Fatalf("expected update got %s", got.OperationType)
-	}
-	if got.ConfirmationsJSON != `{"riskAccepted":true,"migrationAccepted":true}` {
-		t.Fatalf("ConfirmationsJSON mismatch: %q", got.ConfirmationsJSON)
 	}
 	if got.ConfirmationClaimsJSON != claimsJSON {
 		t.Fatalf("ConfirmationClaimsJSON mismatch: got %q want %q", got.ConfirmationClaimsJSON, claimsJSON)
@@ -336,7 +327,7 @@ func TestGetCompletedOperationByPreviewReadsClaimsAndHash(t *testing.T) {
 			ScopeType: "global", ExtensionID: "ext-preview", TargetVersion: "1.0.0",
 			OperationType: "install", Status: "in_progress", CurrentStep: "commit",
 			ArtifactID: "art-1", PreviewSessionID: "preview-session-xyz",
-			ConfirmationsJSON: "{}", ConfirmationClaimsJSON: "{}", ErrorCode: "", ErrorDetail: "",
+			ConfirmationClaimsJSON: "{}", ErrorCode: "", ErrorDetail: "",
 			StartedAt: "2025-06-01T00:00:00Z", UpdatedAt: "2025-06-01T00:00:00Z",
 			SnapshotRequirementHash: "incomplete-hash",
 		},
@@ -345,7 +336,7 @@ func TestGetCompletedOperationByPreviewReadsClaimsAndHash(t *testing.T) {
 			ScopeType: "global", ExtensionID: "ext-preview", TargetVersion: "1.0.0",
 			OperationType: "install", Status: "completed", CurrentStep: "completed",
 			ArtifactID: "art-1", PreviewSessionID: "preview-session-xyz",
-			ConfirmationsJSON: "{}", ConfirmationClaimsJSON: "{}", ErrorCode: "", ErrorDetail: "",
+			ConfirmationClaimsJSON: "{}", ErrorCode: "", ErrorDetail: "",
 			StartedAt: "2025-06-01T00:00:00Z", UpdatedAt: "2025-06-01T00:00:01Z",
 			CompletedAt:             "2025-06-01T00:00:01Z",
 			SnapshotRequirementHash: "old-hash",
@@ -355,7 +346,7 @@ func TestGetCompletedOperationByPreviewReadsClaimsAndHash(t *testing.T) {
 			ScopeType: "global", ExtensionID: "ext-preview", TargetVersion: "1.0.0",
 			OperationType: "install", Status: "completed", CurrentStep: "completed",
 			ArtifactID: "art-1", PreviewSessionID: "preview-session-xyz",
-			ConfirmationsJSON: "{}", ConfirmationClaimsJSON: completedClaims, ErrorCode: "", ErrorDetail: "",
+			ConfirmationClaimsJSON: completedClaims, ErrorCode: "", ErrorDetail: "",
 			StartedAt: "2025-06-01T00:01:00Z", UpdatedAt: "2025-06-01T00:01:01Z",
 			CompletedAt:             "2025-06-01T00:01:01Z",
 			SnapshotRequirementHash: completedHash,
@@ -398,7 +389,6 @@ func TestListOperationsPagination(t *testing.T) {
 			Status:                  "in_progress",
 			CurrentStep:             "commit",
 			ArtifactID:              "artifact-page-" + string(rune('a'+i)),
-			ConfirmationsJSON:       "{}",
 			ConfirmationClaimsJSON:  `{"page":"` + string(rune('0'+i)) + `"}`,
 			StartedAt:               "2025-06-01T00:00:0" + string(rune('0'+i)) + "Z",
 			UpdatedAt:               "2025-06-01T00:00:00Z",

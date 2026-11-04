@@ -37,7 +37,6 @@ type Installation struct {
 	IntegrityRoot          string                   `gorm:"column:integrity_root;type:text;default:''" json:"integrityRoot"`
 	LastErrorCode          string                   `gorm:"column:last_error_code;type:text;default:''" json:"lastErrorCode"`
 	LastErrorMessage       string                   `gorm:"column:last_error_message;type:text;default:''" json:"lastErrorMessage"`
-	LegacyPackageID        string                   `gorm:"column:legacy_package_id;type:text;default:''" json:"legacyPackageId"`
 	Runtime                *InstallationRuntimeView `gorm:"-" json:"runtime,omitempty"`
 }
 
@@ -61,13 +60,9 @@ type InstallationRuntimeView struct {
 func (Installation) TableName() string { return "desktop_pet_installations" }
 
 type RuntimeSettings struct {
-	ID             string `gorm:"column:id;primaryKey;type:text" json:"id"`
-	InstallationID string `gorm:"column:installation_id;type:text" json:"installationId"`
-	AlwaysOnTop    int    `gorm:"column:always_on_top;type:integer" json:"alwaysOnTop"`
-	// LaunchOnStartup is a legacy persisted column kept only for schema/data
-	// compatibility. OS-level Amitia auto-launch is owned exclusively by the
-	// Electron ConfigStore; per-pet startup behavior is RestoreOnAppStart.
-	LaunchOnStartup        int     `gorm:"column:launch_on_startup;type:integer" json:"-"`
+	ID                     string  `gorm:"column:id;primaryKey;type:text" json:"id"`
+	InstallationID         string  `gorm:"column:installation_id;type:text" json:"installationId"`
+	AlwaysOnTop            int     `gorm:"column:always_on_top;type:integer" json:"alwaysOnTop"`
 	Scale                  float64 `gorm:"column:scale;type:real" json:"scale"`
 	PositionX              int     `gorm:"column:position_x;type:integer" json:"positionX"`
 	PositionY              int     `gorm:"column:position_y;type:integer" json:"positionY"`
@@ -145,13 +140,6 @@ const (
 
 	PositionPolicyCenterPrimary = "center_primary_display"
 	PositionPolicyCenterActive  = "center_active_display"
-
-	LegacyMigrationPending      = "pending"
-	LegacyMigrationMigrated     = "migrated"
-	LegacyMigrationInvalidPkg   = "invalid_package"
-	LegacyMigrationMissingFiles = "missing_files"
-	LegacyMigrationManualReview = "manual_review"
-	LegacyMigrationFailed       = "failed"
 )
 
 func (i *Installation) IsActivated() bool {

@@ -213,9 +213,9 @@ func buildUserDataBatchChainSpec(manifest UserDataTableManifest) (UserDataBatchC
 }
 
 const (
-	PackageErrCodeUserDataNamespaceViolation  = "PACKAGE_USER_DATA_NAMESPACE_VIOLATION"
-	PackageErrCodeUserDataJournalHashMismatch = "PACKAGE_USER_DATA_JOURNAL_HASH_MISMATCH"
-	PackageErrCodeUserDataJournalLegacyEmpty  = "PACKAGE_USER_DATA_JOURNAL_LEGACY_EMPTY"
+	PackageErrCodeUserDataNamespaceViolation          = "PACKAGE_USER_DATA_NAMESPACE_VIOLATION"
+	PackageErrCodeUserDataJournalHashMismatch         = "PACKAGE_USER_DATA_JOURNAL_HASH_MISMATCH"
+	PackageErrCodeUserDataJournalRequiredFieldMissing = "PACKAGE_USER_DATA_JOURNAL_REQUIRED_FIELD_MISSING"
 )
 
 const userDataRestoreJournalDDL = `CREATE TABLE IF NOT EXISTS extension_package_user_data_restore_journal (
@@ -1174,7 +1174,7 @@ error_detail
 				fmt.Errorf("kernel: restore journal %s row count differs from manifest: journal=%d manifest=%d", journal.JournalID, journal.TotalRows, manifest.RecordCount))
 		}
 		if journal.NamespaceHash == "" {
-			return nil, NewPackageError(PackageErrCodeUserDataJournalLegacyEmpty, 422,
+			return nil, NewPackageError(PackageErrCodeUserDataJournalRequiredFieldMissing, 422,
 				fmt.Errorf("kernel: restore journal %s has empty namespace hash", journal.JournalID))
 		}
 		if journal.NamespaceHash != expectedNamespaceHash {
@@ -1182,7 +1182,7 @@ error_detail
 				fmt.Errorf("kernel: restore journal %s namespace hash mismatch: expected=%s actual=%s", journal.JournalID, expectedNamespaceHash, journal.NamespaceHash))
 		}
 		if journal.ExpectedAggregateHash == "" {
-			return nil, NewPackageError(PackageErrCodeUserDataJournalLegacyEmpty, 422,
+			return nil, NewPackageError(PackageErrCodeUserDataJournalRequiredFieldMissing, 422,
 				fmt.Errorf("kernel: restore journal %s has empty expected aggregate hash", journal.JournalID))
 		}
 		if journal.ExpectedAggregateHash != manifest.AggregateHash {
@@ -1190,7 +1190,7 @@ error_detail
 				fmt.Errorf("kernel: restore journal %s expected aggregate differs from manifest: journal=%s manifest=%s", journal.JournalID, journal.ExpectedAggregateHash, manifest.AggregateHash))
 		}
 		if journal.DataExportReference == "" {
-			return nil, NewPackageError(PackageErrCodeUserDataJournalLegacyEmpty, 422,
+			return nil, NewPackageError(PackageErrCodeUserDataJournalRequiredFieldMissing, 422,
 				fmt.Errorf("kernel: restore journal %s has empty data export reference", journal.JournalID))
 		}
 		if journal.DataExportReference != manifest.DataExportReference {
@@ -1198,7 +1198,7 @@ error_detail
 				fmt.Errorf("kernel: restore journal %s belongs to export %s, cannot use export %s", journal.JournalID, journal.DataExportReference, manifest.DataExportReference))
 		}
 		if journal.GenesisHash == "" {
-			return nil, NewPackageError(PackageErrCodeUserDataJournalLegacyEmpty, 422,
+			return nil, NewPackageError(PackageErrCodeUserDataJournalRequiredFieldMissing, 422,
 				fmt.Errorf("kernel: restore journal %s has empty genesis hash", journal.JournalID))
 		}
 		if journal.GenesisHash != manifest.GenesisHash {
@@ -1206,7 +1206,7 @@ error_detail
 				fmt.Errorf("kernel: restore journal %s genesis differs from manifest", journal.JournalID))
 		}
 		if journal.ExpectedFinalBatchHash == "" {
-			return nil, NewPackageError(PackageErrCodeUserDataJournalLegacyEmpty, 422,
+			return nil, NewPackageError(PackageErrCodeUserDataJournalRequiredFieldMissing, 422,
 				fmt.Errorf("kernel: restore journal %s expected final batch hash missing", journal.JournalID))
 		}
 		if journal.ExpectedFinalBatchHash != manifest.FinalBatchHash {
@@ -1976,7 +1976,7 @@ func (s *UserDataSnapshotStore) verifyAggregateHashClosure(
 			fmt.Errorf("kernel: manifest aggregate hash invalid for table %s: %w", journal.TableName, err))
 	}
 	if journal.ExpectedAggregateHash == "" {
-		return NewPackageError(PackageErrCodeUserDataJournalLegacyEmpty, 422,
+		return NewPackageError(PackageErrCodeUserDataJournalRequiredFieldMissing, 422,
 			fmt.Errorf("kernel: journal expected aggregate hash missing for table %s", journal.TableName))
 	}
 	if journal.ExpectedAggregateHash != manifest.AggregateHash {
@@ -2253,7 +2253,7 @@ func (s *UserDataSnapshotStore) VerifyUserDataRestore(ctx context.Context, opera
 				fmt.Errorf("kernel: user data restore cursor not at EOF for table %s: cursor=%s expected=%s", table, cursor, expectedCursor))
 		}
 		if namespaceHash == "" {
-			return NewPackageError(PackageErrCodeUserDataJournalLegacyEmpty, 422,
+			return NewPackageError(PackageErrCodeUserDataJournalRequiredFieldMissing, 422,
 				fmt.Errorf("kernel: restore journal for table %s has empty namespace hash", table))
 		}
 		if dataExportRef == "" {
@@ -2261,11 +2261,11 @@ func (s *UserDataSnapshotStore) VerifyUserDataRestore(ctx context.Context, opera
 				fmt.Errorf("kernel: restore journal for table %s has empty data_export_reference", table))
 		}
 		if genesisHash == "" {
-			return NewPackageError(PackageErrCodeUserDataJournalLegacyEmpty, 422,
+			return NewPackageError(PackageErrCodeUserDataJournalRequiredFieldMissing, 422,
 				fmt.Errorf("kernel: restore journal for table %s has empty genesis hash", table))
 		}
 		if expectedFinalBatchHash == "" {
-			return NewPackageError(PackageErrCodeUserDataJournalLegacyEmpty, 422,
+			return NewPackageError(PackageErrCodeUserDataJournalRequiredFieldMissing, 422,
 				fmt.Errorf("kernel: restore journal for table %s has empty expected final batch hash", table))
 		}
 		if totalRows > 0 && batchHash == "" {
@@ -2289,7 +2289,7 @@ func (s *UserDataSnapshotStore) VerifyUserDataRestore(ctx context.Context, opera
 				fmt.Errorf("kernel: restore journal for table %s uses unsupported batch algorithm version: got %s expected %s", table, batchAlgoVer, userDataBatchHashAlgorithmVersion))
 		}
 		if expectedAggregateHash == "" {
-			return NewPackageError(PackageErrCodeUserDataJournalLegacyEmpty, 422,
+			return NewPackageError(PackageErrCodeUserDataJournalRequiredFieldMissing, 422,
 				fmt.Errorf("kernel: restore journal for table %s has empty expected aggregate hash", table))
 		}
 		if err := validateUserDataAggregateHashFormat(expectedAggregateHash); err != nil {

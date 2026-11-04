@@ -487,10 +487,6 @@ function historyEmotionLabel(item: EmotionHistoryItem) {
 }
 
 function historySource(source: string) {
-  if (source === "legacy-mood") return "旧心情";
-  if (source === "legacy-message-mood") return "旧消息";
-  if (source === "legacy-emotion") return "旧情绪";
-  if (source === "legacy-affect") return "旧 Affect";
   if (source === "chat") return "聊天";
   if (source === "proactive") return "主动消息";
   return source || "未知";

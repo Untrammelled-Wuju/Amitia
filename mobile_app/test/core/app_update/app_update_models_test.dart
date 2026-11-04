@@ -59,28 +59,28 @@ void main() {
     expect(manifest.requiresVersion(10), isFalse);
   });
 
-  test('keeps legacy manifests compatible without presentation fields', () {
-    final manifest = AppUpdateManifest.fromMap(<String, dynamic>{
-      'schemaVersion': 1,
-      'product': 'android',
-      'packageName': 'com.amitia.amitia_app',
-      'channel': 'stable',
-      'versionCode': 12,
-      'versionName': '1.0.3',
-      'minSupportedVersionCode': 0,
-      'mandatory': false,
-      'rolloutPercentage': 100,
-      'apk': <String, dynamic>{
-        'url': 'https://example.com/app.apk',
-        'size': 1234,
-        'sha256': 'a' * 64,
-        'abi': 'arm64-v8a',
-      },
-      'releaseNotes': '',
-    });
-
-    expect(manifest.updateTitle, isEmpty);
-    expect(manifest.highlights, isEmpty);
+  test('rejects manifests without presentation fields', () {
+    expect(
+      () => AppUpdateManifest.fromMap(<String, dynamic>{
+        'schemaVersion': 1,
+        'product': 'android',
+        'packageName': 'com.amitia.amitia_app',
+        'channel': 'stable',
+        'versionCode': 12,
+        'versionName': '1.0.3',
+        'minSupportedVersionCode': 0,
+        'mandatory': false,
+        'rolloutPercentage': 100,
+        'apk': <String, dynamic>{
+          'url': 'https://example.com/app.apk',
+          'size': 1234,
+          'sha256': 'a' * 64,
+          'abi': 'arm64-v8a',
+        },
+        'releaseNotes': '',
+      }),
+      throwsFormatException,
+    );
   });
 
   test('parses install result and download progress', () {

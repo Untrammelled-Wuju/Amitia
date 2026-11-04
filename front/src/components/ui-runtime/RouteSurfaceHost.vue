@@ -5,7 +5,7 @@ import UIProviderHost from "./UIProviderHost.vue";
 import type { UIProviderCapability } from "@/ui-runtime/types";
 import { useExtensionUIStore } from "@/stores/extensionUI";
 import { resolvePageProvider } from "@/ui-runtime/pageProviderRegistry";
-import { canonicalUISurfaceId, uiRouteAliases } from "@/ui-runtime/uiSurfaceCatalog";
+import { canonicalUISurfaceId } from "@/ui-runtime/uiSurfaceCatalog";
 import { buildProviderRouteContext } from "@/ui-runtime/routeContext";
 
 const props = defineProps<{ fallback: Component }>();
@@ -46,7 +46,6 @@ const providerContext = computed(() => buildProviderRouteContext(
   route.query,
   {
     surfaceId: canonicalUISurfaceId(route.path),
-    routeAliases: uiRouteAliases(route.path),
   },
 ));
 

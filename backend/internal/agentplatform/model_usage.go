@@ -8,10 +8,9 @@ import (
 	"time"
 
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
-type ModelBudgetUsageInput struct {
+type ModelUsageActivityInput struct {
 	UsageID        string
 	CharacterID    string
 	Model          string
@@ -64,7 +63,7 @@ func (s *Service) ModelUsageTotalsByRequest(ctx context.Context, spaceID, reques
 	result.OutputTokens = aggregate.OutputTokens
 	result.TotalTokens = aggregate.TotalTokens
 	roleFilter := ""
-	costArgs := []any{spaceID, result.RequestID}
+	costArgs := []any{spaceID, spaceID, result.RequestID}
 	if strings.TrimSpace(roleID) != "" {
 		roleFilter = " AND role_id = ?"
 		costArgs = append(costArgs, roleID)
@@ -73,13 +72,13 @@ func (s *Service) ModelUsageTotalsByRequest(ctx context.Context, spaceID, reques
 		CostMicroUSD int64
 	}
 	costQuery := `
-		SELECT MAX(cost_micro_usd) AS cost_micro_usd
-		FROM budget_usages
-		WHERE request_id IN (
-			SELECT id FROM runtime_model_usage
-			WHERE space_id = ? AND request_id = ?` + roleFilter + `
-		)
-		GROUP BY request_id
+		SELECT COALESCE(SUM(cost_micro_usd), 0) AS cost_micro_usd
+		FROM activity_events
+		WHERE space_id = ? AND kind = 'model.usage'
+			AND json_extract(payload_json, '$.usageId') IN (
+				SELECT id FROM runtime_model_usage
+				WHERE space_id = ? AND request_id = ?` + roleFilter + `
+			)
 	`
 	if err := s.db.WithContext(ctx).Raw(costQuery, costArgs...).Scan(&costRows).Error; err != nil {
 		return ModelUsageTotals{}, fmt.Errorf("汇总 Agent 模型费用: %w", err)
@@ -123,15 +122,15 @@ func (s *Service) ModelUsageTotalsByWindow(ctx context.Context, spaceID, roleID 
 		CostMicroUSD int64
 	}
 	costQuery := `
-		SELECT MAX(cost_micro_usd) AS cost_micro_usd
-		FROM budget_usages
-		WHERE request_id IN (
-			SELECT id FROM runtime_model_usage
-			WHERE space_id = ? AND role_id = ? AND completed_at >= ? AND completed_at <= ?
-		)
-		GROUP BY request_id
+		SELECT COALESCE(SUM(cost_micro_usd), 0) AS cost_micro_usd
+		FROM activity_events
+		WHERE space_id = ? AND kind = 'model.usage'
+			AND json_extract(payload_json, '$.usageId') IN (
+				SELECT id FROM runtime_model_usage
+				WHERE space_id = ? AND role_id = ? AND completed_at >= ? AND completed_at <= ?
+			)
 	`
-	if err := s.db.WithContext(ctx).Raw(costQuery, spaceID, roleID, startValue, endValue).Scan(&costRows).Error; err != nil {
+	if err := s.db.WithContext(ctx).Raw(costQuery, spaceID, spaceID, roleID, startValue, endValue).Scan(&costRows).Error; err != nil {
 		return ModelUsageTotals{}, fmt.Errorf("按时间汇总 Agent 模型费用: %w", err)
 	}
 	for _, row := range costRows {
@@ -140,9 +139,9 @@ func (s *Service) ModelUsageTotalsByWindow(ctx context.Context, spaceID, roleID 
 	return result, nil
 }
 
-func (s *Service) RecordModelBudgetUsage(ctx context.Context, spaceID string, input ModelBudgetUsageInput) error {
+func (s *Service) RecordModelUsageActivity(ctx context.Context, spaceID string, input ModelUsageActivityInput) error {
 	if s == nil || s.db == nil {
-		return errors.New("Agent 模型预算服务不可用")
+		return errors.New("Agent 模型用量服务不可用")
 	}
 	agentID := ""
 	teamID := ""
@@ -181,31 +180,7 @@ func (s *Service) RecordModelBudgetUsage(ctx context.Context, spaceID string, in
 	if cost < 0 {
 		cost = 0
 	}
-	scopes := []struct{ kind, id string }{{"space", spaceID}}
-	if agentID != "" {
-		scopes = append(scopes, struct{ kind, id string }{"agent", agentID})
-	}
-	if teamID != "" {
-		scopes = append(scopes, struct{ kind, id string }{"team", teamID})
-	}
 	now := time.Now().UTC()
-	for _, scope := range scopes {
-		policies, err := s.ListBudgetPolicies(ctx, spaceID, scope.kind, scope.id)
-		if err != nil {
-			return err
-		}
-		for _, policy := range policies {
-			usageID := stableID("budgetusage", "model:"+input.UsageID+":"+policy.ID)
-			usage := BudgetUsage{
-				ID: usageID, SpaceID: spaceID, PolicyID: policy.ID,
-				RequestID: input.UsageID, InputTokens: inputTokens, OutputTokens: outputTokens,
-				CostMicroUSD: cost, Provider: input.Provider, Model: input.Model, CreatedAt: now,
-			}
-			if err := s.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&usage).Error; err != nil {
-				return fmt.Errorf("记录 Agent 模型预算用量: %w", err)
-			}
-		}
-	}
 	detail := fmt.Sprintf("%s/%s · %d tokens · %d μUSD · %s", input.Provider, input.Model, totalTokens, cost, input.Status)
 	event := ActivityEvent{
 		ID:      stableID("activity", "model:"+input.UsageID),

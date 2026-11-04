@@ -388,36 +388,6 @@ func TestHandler_Cancel_Success(t *testing.T) {
 	}
 }
 
-func TestHandler_Countdown_MissingID(t *testing.T) {
-	h := NewAlarmHandler(newMockAlarmBridge(nativebridge.Response{}, nil))
-	req := baseAlarmRequest(OperationCountdown)
-	resp := h.Execute(context.Background(), req)
-
-	if resp.Status != "error" {
-		t.Errorf("expected error status, got %s", resp.Status)
-	}
-}
-
-func TestHandler_Pause_MissingID(t *testing.T) {
-	h := NewAlarmHandler(newMockAlarmBridge(nativebridge.Response{}, nil))
-	req := baseAlarmRequest(OperationPause)
-	resp := h.Execute(context.Background(), req)
-
-	if resp.Status != "error" {
-		t.Errorf("expected error status, got %s", resp.Status)
-	}
-}
-
-func TestHandler_Resume_MissingID(t *testing.T) {
-	h := NewAlarmHandler(newMockAlarmBridge(nativebridge.Response{}, nil))
-	req := baseAlarmRequest(OperationResume)
-	resp := h.Execute(context.Background(), req)
-
-	if resp.Status != "error" {
-		t.Errorf("expected error status, got %s", resp.Status)
-	}
-}
-
 func TestHandler_ContextCancel(t *testing.T) {
 	bridge := &mockAlarmBridge{
 		delay: 5 * time.Second,

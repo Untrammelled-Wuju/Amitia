@@ -1,8 +1,6 @@
 import { ref } from "vue";
 import { normalizeStylePageId } from "./stylePage";
 
-const PATCH_KEY = "amitia.ui.style.patch.v1";
-const REVISION_KEY = "amitia.ui.style.revision.v1";
 const HISTORY_KEY = "amitia.ui.style.history.v1";
 const DOCUMENT_KEY = "amitia.ui.style.document.v1";
 const MAX_HISTORY = 30;
@@ -105,15 +103,9 @@ function normalizeScope(value: unknown): StyleScope {
 
 function normalizeRule(value: unknown): StyleRule | null {
   if (!isRecord(value)) return null;
-  const target = String(value.target ?? value.selector ?? value.component ?? "").trim();
+  const target = String(value.target ?? "").trim();
   if (!target) return null;
-  const properties = isRecord(value.properties)
-    ? value.properties
-    : isRecord(value.set)
-      ? value.set
-      : isRecord(value.styles)
-        ? value.styles
-        : {};
+  const properties = isRecord(value.properties) ? value.properties : {};
   if (Object.keys(properties).length === 0) return null;
   const source = value.source === "user" ? "user" : "ai";
   const createdAt = typeof value.createdAt === "string" && value.createdAt
@@ -159,16 +151,6 @@ function normalizeTransaction(value: unknown): StyleTransaction | null {
   };
 }
 
-function readLegacyPatch(): StylePatch {
-  const value = readJSON<unknown>(PATCH_KEY, {});
-  return isRecord(value) ? clone(value) : {};
-}
-
-function readLegacyRevision(): number {
-  if (typeof localStorage === "undefined") return 0;
-  return Math.max(0, Number(localStorage.getItem(REVISION_KEY) ?? 0) || 0);
-}
-
 function persistStyleDocument() {
   if (typeof localStorage === "undefined") return;
   const documentValue: StyleDocument = {
@@ -179,28 +161,26 @@ function persistStyleDocument() {
     revision: styleRevision.value,
   };
   localStorage.setItem(DOCUMENT_KEY, JSON.stringify(documentValue));
-  localStorage.setItem(PATCH_KEY, JSON.stringify(stylePatch.value));
-  localStorage.setItem(REVISION_KEY, String(styleRevision.value));
 }
 
 export function initializeStyleProfile() {
   const stored = readJSON<unknown>(DOCUMENT_KEY, null);
   if (isRecord(stored)) {
-    stylePatch.value = isRecord(stored.patch) ? clone(stored.patch) : readLegacyPatch();
+    stylePatch.value = isRecord(stored.patch) ? clone(stored.patch) : {};
     styleRules.value = Array.isArray(stored.rules)
       ? stored.rules.map(normalizeRule).filter((rule): rule is StyleRule => !!rule)
       : [];
     styleTransactions.value = Array.isArray(stored.transactions)
       ? stored.transactions.map(normalizeTransaction).filter((item): item is StyleTransaction => !!item)
       : [];
-    styleRevision.value = Math.max(0, Number(stored.revision ?? readLegacyRevision()) || 0);
+    styleRevision.value = Math.max(0, Number(stored.revision ?? 0) || 0);
     persistStyleDocument();
     return;
   }
-  stylePatch.value = readLegacyPatch();
+  stylePatch.value = {};
   styleRules.value = [];
   styleTransactions.value = [];
-  styleRevision.value = readLegacyRevision();
+  styleRevision.value = 0;
   persistStyleDocument();
 }
 

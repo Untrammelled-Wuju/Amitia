@@ -107,7 +107,7 @@ func validatePackage(path string, output *Output) int {
 			"modules":     len(pkg.Manifest.Modules),
 			"treeHash":    pkg.Tree.TreeHash,
 			"fileCount":   len(pkg.Integrity.Files),
-			"signed":      pkg.Signatures != nil,
+			"signed":      len(pkg.V2Signature) > 0,
 		},
 	}
 

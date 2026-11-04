@@ -22,21 +22,21 @@ bool matchesMobileUIContributionVisibility(
   }
 
   final platforms = _strings(
-    visibility['platforms'] ?? visibility['platform'],
+    visibility['platforms'],
   ).toSet();
   if (platforms.isNotEmpty && !platforms.contains(activePlatform)) {
     return false;
   }
 
   final required = _strings(
-    visibility['required_context'] ?? visibility['requiredContext'],
+    visibility['required_context'],
   );
   for (final path in required) {
     if (!_hasPath(context, path)) return false;
   }
 
   final messageTypes = _strings(
-    visibility['message_types'] ?? visibility['messageTypes'],
+    visibility['message_types'],
   ).toSet();
   if (messageTypes.isNotEmpty) {
     final actual =

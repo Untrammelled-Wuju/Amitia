@@ -34,8 +34,8 @@ func makeTestEnvironment(root string) nodeenv.Environment {
 		WorkDir:          filepath.Join(root, "workspace"),
 		DistributionRoot: root,
 		Source:           nodeenv.SourceRuntimePackage,
-		Guest:             platform.GuestPlatformLinux,
-		Architecture:      "amd64",
+		Guest:            platform.GuestPlatformLinux,
+		Architecture:     "amd64",
 	}
 }
 
@@ -43,12 +43,12 @@ type stubFileInfo struct {
 	mode os.FileMode
 }
 
-func (stubFileInfo) Name() string       { return "stub" }
-func (stubFileInfo) Size() int64        { return 0 }
+func (stubFileInfo) Name() string        { return "stub" }
+func (stubFileInfo) Size() int64         { return 0 }
 func (s stubFileInfo) Mode() os.FileMode { return s.mode }
-func (stubFileInfo) ModTime() time.Time { return time.Time{} }
-func (stubFileInfo) IsDir() bool        { return false }
-func (stubFileInfo) Sys() interface{}   { return nil }
+func (stubFileInfo) ModTime() time.Time  { return time.Time{} }
+func (stubFileInfo) IsDir() bool         { return false }
+func (stubFileInfo) Sys() interface{}    { return nil }
 
 type stubFileInspector struct {
 	files map[string]bool

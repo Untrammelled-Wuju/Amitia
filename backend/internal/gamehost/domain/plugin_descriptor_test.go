@@ -12,10 +12,10 @@ func TestPluginDescriptorValid(t *testing.T) {
 		Version:         "1.0.0",
 		ProtocolVersion: "amitia-game-host/1",
 
-		Capabilities: []Capability{
-			CapabilityStateStreaming,
-			CapabilityEventStreaming,
-			CapabilityCustomRPC,
+		Capabilities: []HostFeature{
+			HostFeatureStateStreaming,
+			HostFeatureEventStreaming,
+			HostFeatureCustomRPC,
 		},
 		Services: []ServiceDescriptor{
 			{
@@ -152,9 +152,9 @@ func TestPluginDescriptorRejectsDuplicateCapability(t *testing.T) {
 		Name:            "Test",
 		Version:         "1.0.0",
 		ProtocolVersion: "amitia-game-host/1",
-		Capabilities: []Capability{
-			CapabilityCustomRPC,
-			CapabilityCustomRPC,
+		Capabilities: []HostFeature{
+			HostFeatureCustomRPC,
+			HostFeatureCustomRPC,
 		},
 	}
 
@@ -171,7 +171,7 @@ func TestPluginDescriptorRejectsGameToolCapabilityAsHostFeature(t *testing.T) {
 	desc := PluginDescriptor{
 		ID: PluginID("test-plugin"), ExtensionID: "com.example.test", Name: "Test",
 		Version: "1.0.0", ProtocolVersion: "amitia-game-host/1",
-		Capabilities: []Capability{Capability("example.navigation")},
+		Capabilities: []HostFeature{HostFeature("example.navigation")},
 	}
 	if err := desc.Validate(); err == nil {
 		t.Fatal("game/tool capability must not be accepted as a GameHost feature")
@@ -294,9 +294,9 @@ func TestPluginDescriptorCloneDeepCopy(t *testing.T) {
 		Name:            "Test",
 		Version:         "1.0.0",
 		ProtocolVersion: "amitia-game-host/1",
-		Capabilities: []Capability{
-			CapabilityRealtimeControl,
-			CapabilityHostAPI,
+		Capabilities: []HostFeature{
+			HostFeatureRealtimeControl,
+			HostFeatureHostAPI,
 		},
 		Services: []ServiceDescriptor{
 			{
@@ -328,7 +328,7 @@ func TestPluginDescriptorCloneDeepCopy(t *testing.T) {
 	cloned := original.Clone()
 
 	cloned.Metadata["vendor"] = "modified"
-	cloned.Capabilities[0] = Capability("modified")
+	cloned.Capabilities[0] = HostFeature("modified")
 	cloned.Services[0].DependsOn[0] = ServiceID("modified")
 	cloned.Services[0].Metadata["key"] = "modified"
 	cloned.Channels[0].Metadata["schema"] = "modified"
@@ -336,7 +336,7 @@ func TestPluginDescriptorCloneDeepCopy(t *testing.T) {
 	if original.Metadata["vendor"] != "example" {
 		t.Error("original Metadata should not be affected by clone modification")
 	}
-	if original.Capabilities[0] != CapabilityRealtimeControl {
+	if original.Capabilities[0] != HostFeatureRealtimeControl {
 		t.Error("original Capabilities should not be affected by clone modification")
 	}
 	if original.Services[0].DependsOn[0] != ServiceID("svc-2") {
@@ -354,7 +354,7 @@ func TestGameToolCapabilitiesStayOutsideGameHostDescriptor(t *testing.T) {
 	desc := PluginDescriptor{
 		ID: PluginID("example-game-plugin"), ExtensionID: "com.example.game",
 		Name: "Example Game Plugin", Version: "1.0.0", ProtocolVersion: "amitia-game-host/1",
-		Capabilities: []Capability{Capability("example.build")},
+		Capabilities: []HostFeature{HostFeature("example.build")},
 	}
 	if err := desc.Validate(); err == nil {
 		t.Fatal("game-specific tool capability must be registered through Extension Kernel, not GameHost")
@@ -368,8 +368,8 @@ func TestDescriptorHasNoGameSpecificRequirement(t *testing.T) {
 		Name:            "Generic Controller",
 		Version:         "0.1.0",
 		ProtocolVersion: "amitia-game-host/1",
-		Capabilities: []Capability{
-			CapabilityCustomRPC,
+		Capabilities: []HostFeature{
+			HostFeatureCustomRPC,
 		},
 		Services: []ServiceDescriptor{
 			{
@@ -410,20 +410,20 @@ func TestPluginIDExtensionIDSeparation(t *testing.T) {
 
 func TestPluginDescriptorHasCapability(t *testing.T) {
 	desc := PluginDescriptor{
-		Capabilities: []Capability{
-			CapabilityStateStreaming,
-			CapabilityEventStreaming,
-			CapabilityBinaryStreaming,
+		Capabilities: []HostFeature{
+			HostFeatureStateStreaming,
+			HostFeatureEventStreaming,
+			HostFeatureBinaryStreaming,
 		},
 	}
 
-	if !desc.HasCapability(CapabilityStateStreaming) {
+	if !desc.HasCapability(HostFeatureStateStreaming) {
 		t.Error("expected to find state_streaming capability")
 	}
-	if !desc.HasCapability(CapabilityEventStreaming) {
+	if !desc.HasCapability(HostFeatureEventStreaming) {
 		t.Error("expected to find event_streaming capability")
 	}
-	if !desc.HasCapability(CapabilityBinaryStreaming) {
+	if !desc.HasCapability(HostFeatureBinaryStreaming) {
 		t.Error("expected to find binary_streaming capability")
 	}
 }

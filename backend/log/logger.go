@@ -117,7 +117,7 @@ func removeExpiredLogFiles(logPath string, maxAge time.Duration) error {
 
 func isRetainedLogFile(name string) bool {
 	lower := strings.ToLower(name)
-	if strings.HasSuffix(lower, ".log") || strings.HasSuffix(lower, ".log.old") {
+	if strings.HasSuffix(lower, ".log") {
 		return true
 	}
 	index := strings.LastIndex(lower, ".log.")

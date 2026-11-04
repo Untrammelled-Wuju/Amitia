@@ -1,41 +1,122 @@
 <template>
   <aside class="workspace-sidebar" data-amitia-ui="app.workspace-sidebar" @contextmenu.capture="handleBatchContextMenu">
-    <div class="workspace-panel-header">
+    <div ref="chatSearchRoot" class="workspace-panel-header">
+      <div class="workspace-chat-search" :class="{ 'is-open': showChatSearchResults }">
+        <el-icon class="workspace-search-icon"><Search /></el-icon>
+        <input
+          ref="chatSearchInput"
+          v-model="chatSearchQuery"
+          class="workspace-search-input"
+          type="search"
+          autocomplete="off"
+          aria-label="搜索对话"
+          placeholder="搜索对话..."
+          @focus="chatSearchOpen = true"
+          @keydown="handleChatSearchKeydown"
+        />
+        <button
+          v-if="chatSearchQuery"
+          type="button"
+          class="workspace-search-clear"
+          aria-label="清空对话搜索"
+          title="清空搜索"
+          @click="clearChatSearch"
+        >
+          ×
+        </button>
+      </div>
       <button
+        v-if="isChatPage"
         type="button"
-        class="workspace-new-chat"
-        aria-label="新建对话"
-        title="新建对话"
-        data-amitia-ui="workspace.new-chat"
-        @click="handleNewChat"
+        class="workspace-create-button"
+        aria-label="新建"
+        title="新建对话、群聊、团队或项目"
+        data-amitia-ui="workspace.create-menu"
+        @click.stop="openCreateMenu"
       >
-        <el-icon><NewConversationIcon /></el-icon>
-        <span>新对话</span>
+        <el-icon><Plus /></el-icon>
       </button>
-      <button
-        type="button"
-        class="workspace-new-group"
-        aria-label="新建群聊"
-        title="新建群聊"
-        @click="handleNewGroupChat"
+      <div ref="viewSwitchRef" class="workspace-view-switch" role="tablist" aria-label="侧栏内容">
+        <button
+          ref="chatViewTabRef"
+          type="button"
+          role="tab"
+          :aria-selected="sidebarView === 'chat'"
+          :tabindex="sidebarView === 'chat' ? 0 : -1"
+          data-amitia-ui="workspace.view.chat"
+          @click="switchSidebarView('chat')"
+          @keydown.left.prevent="switchSidebarView('chat', true)"
+          @keydown.right.prevent="switchSidebarView('project', true)"
+        >
+          <span>对话</span>
+        </button>
+        <button
+          ref="projectViewTabRef"
+          type="button"
+          role="tab"
+          :aria-selected="sidebarView === 'project'"
+          :tabindex="sidebarView === 'project' ? 0 : -1"
+          data-amitia-ui="workspace.view.projects"
+          @click="switchSidebarView('project')"
+          @keydown.left.prevent="switchSidebarView('chat', true)"
+          @keydown.right.prevent="switchSidebarView('project', true)"
+        >
+          <span>项目</span>
+        </button>
+        <span class="workspace-view-indicator" :style="viewIndicatorStyle" aria-hidden="true"></span>
+      </div>
+
+      <div
+        v-if="showChatSearchResults"
+        class="workspace-chat-search-results"
+        data-amitia-ui="workspace.chat-search-results"
+        @mousedown.stop
       >
-        <el-icon><ChatDotRound /></el-icon>
-        <span>新群聊</span>
-      </button>
-      <button
-        type="button"
-        class="workspace-search"
-        aria-label="搜索"
-        title="搜索"
-        @click="searchModal?.open()"
-      >
-        <el-icon><Search /></el-icon>
-      </button>
+        <div class="workspace-search-status">
+          <span>搜索结果</span>
+          <span v-if="chatSearchLoading" class="is-loading">正在搜索</span>
+          <span v-else>{{ chatSearchResults.length }} 项</span>
+        </div>
+        <div
+          v-for="(item, index) in chatSearchResults"
+          :key="item.id"
+          class="workspace-search-result"
+          :class="{ 'is-active': chatSearchActiveIndex === index }"
+          role="option"
+          tabindex="0"
+          :aria-selected="chatSearchActiveIndex === index"
+          @mouseenter="chatSearchActiveIndex = index"
+          @click="selectChatSearchResult(item)"
+          @keydown.enter.self.prevent="selectChatSearchResult(item)"
+          @keydown.space.self.prevent="selectChatSearchResult(item)"
+        >
+          <button type="button" class="workspace-search-result-main" tabindex="-1">
+            <el-icon><ChatDotRound /></el-icon>
+            <span class="workspace-search-result-copy">
+              <strong>{{ item.title || "新对话" }}</strong>
+              <small>{{ chatSearchResultMeta(item) }}</small>
+            </span>
+          </button>
+          <button
+            v-if="item.archivedAt"
+            type="button"
+            class="workspace-search-restore"
+            :disabled="restoringChatSearchId === item.id"
+            @click.stop="restoreArchivedSearchResult(item)"
+          >
+            {{ restoringChatSearchId === item.id ? "撤销中" : "撤销归档" }}
+          </button>
+        </div>
+        <div v-if="chatSearchError" class="workspace-search-message is-error">{{ chatSearchError }}</div>
+        <div v-else-if="!chatSearchLoading && chatSearchResults.length === 0" class="workspace-search-message">
+          没有找到相关对话
+        </div>
+      </div>
     </div>
 
     <div class="workspace-scroll">
       <div class="thread-sidebar">
-        <div v-if="chatStore.sidebar.pinned.length || pinnedProjects.length" class="thread-section">
+        <div v-if="sidebarView === 'chat' && chatStore.sidebar.pinned.length" class="thread-section">
           <div class="section-caption">置顶</div>
           <SidebarConversationRow
             v-for="conversation in chatStore.sidebar.pinned"
@@ -54,6 +135,9 @@
             @mark-read="handleMarkConversationRead"
             @delete="handleDeleteConversation"
           />
+        </div>
+        <div v-if="sidebarView === 'project' && pinnedProjects.length" class="thread-section">
+          <div class="section-caption">置顶</div>
           <SidebarProjectBlock
             v-for="project in pinnedProjects"
             :key="project.id"
@@ -76,7 +160,7 @@
           />
         </div>
 
-        <div class="thread-section">
+        <div v-if="sidebarView === 'chat'" class="thread-section">
           <div class="section-caption project-caption" @contextmenu="openSectionContextMenu($event, 'chat')">
             <span>聊天</span>
             <button type="button" class="section-add" :title="batchSelecting ? '退出多选' : '批量选择'" @click="toggleBatchSelection">☑</button>
@@ -112,7 +196,7 @@
           <div v-if="chatStore.sidebar.recent.length === 0" class="thread-empty">暂无对话</div>
         </div>
 
-        <div class="thread-section">
+        <div v-if="sidebarView === 'project'" class="thread-section">
           <div class="section-caption project-caption" @contextmenu="openSectionContextMenu($event, 'project')">
             <span>项目</span>
             <button type="button" class="section-add" :title="batchSelecting ? '退出多选' : '批量选择'" @click="toggleBatchSelection">☑</button>
@@ -214,18 +298,54 @@
         <el-button type="primary" :loading="projectCreating" :disabled="projectCreating || projectSelectingFolder" @click="handleCreateProject">创建项目</el-button>
       </template>
     </el-dialog>
+    <el-dialog
+      v-model="projectConversationDialogVisible"
+      data-amitia-ui="project.conversation-dialog"
+      title="新建对话"
+      width="min(480px, calc(100vw - 32px))"
+      align-center
+      destroy-on-close
+      @closed="projectConversationTargetId = ''"
+    >
+      <p class="project-conversation-dialog-copy">选择要为哪个项目创建对话。</p>
+      <div class="project-conversation-list" role="listbox" aria-label="选择项目">
+        <button
+          v-for="project in chatStore.sidebar.projects"
+          :key="project.id"
+          type="button"
+          class="project-conversation-choice"
+          :class="{ 'is-selected': projectConversationTargetId === project.id }"
+          role="option"
+          :aria-selected="projectConversationTargetId === project.id"
+          :disabled="!project.available || project.readOnly"
+          @click="projectConversationTargetId = project.id"
+        >
+          <el-icon><FolderOpened /></el-icon>
+          <span class="project-conversation-choice-copy">
+            <strong>{{ project.name }}</strong>
+            <small>{{ project.readOnly ? "只读项目" : project.available ? `${project.workspaces.length} 个工作区` : project.statusReason || "项目不可用" }}</small>
+          </span>
+        </button>
+        <div v-if="chatStore.sidebar.projects.length === 0" class="project-conversation-empty">暂无项目，请先新建项目。</div>
+      </div>
+      <template #footer>
+        <el-button @click="projectConversationDialogVisible = false">取消</el-button>
+        <el-button type="primary" :disabled="!projectConversationTargetId" @click="createConversationInSelectedProject">创建对话</el-button>
+      </template>
+    </el-dialog>
     <NewGroupChatDialog
       v-model:visible="newGroupDialogVisible"
       :characters="owned.roles.value"
       :default-role-id="newGroupDefaultRoleId"
+      :project-required="sidebarView === 'project'"
       @created="handleGroupCreated"
     />
-    <SearchModal ref="searchModal" />
+    <TeamCreateDialog v-model:visible="teamCreateDialogVisible" @created="handleTeamCreated" />
   </aside>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ChatDotRound, FolderOpened, Plus, Search } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
@@ -234,16 +354,19 @@ import {
   projectContextMenuAccessKeys,
   type ContextMenuAction,
 } from "./context-menu/contextMenuStore";
-import { useChatStore, type ConversationItem, type ProjectItem, type ProjectWorkspace } from "@/stores/chat";
+import { conversationChannel, useChatStore, type ConversationItem, type ProjectItem, type ProjectWorkspace } from "@/stores/chat";
 import { useApi } from "@/composables/useApi";
 import NewConversationIcon from "@/components/icons/NewConversationIcon.vue";
 import NewGroupChatDialog from "@/components/NewGroupChatDialog.vue";
+import TeamCreateDialog from "@/components/TeamCreateDialog.vue";
 import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
 import type { OwnedGroupState } from "@/runtime/device-owned-chat";
+import type { Team } from "@/api/agent-platform";
 import { useConversationDisclosure } from "@/composables/useConversationDisclosure";
 import { useConversationWorkspace } from "@/composables/useConversationWorkspace";
 import { isDesktopShell } from "@/runtime/runtime-capabilities";
-import SearchModal from "./SearchModal.vue";
+import { originalErrorMessage } from "@/runtime/original-error";
+import { ownedProjectReference } from "@/runtime/owned-project-reference";
 import SidebarConversationRow from "./SidebarConversationRow.vue";
 import SidebarProjectBlock from "./SidebarProjectBlock.vue";
 
@@ -262,9 +385,40 @@ const {
   removeWorkspaceFromProject,
   setPrimaryWorkspace,
 } = useConversationWorkspace();
-const searchModal = ref<InstanceType<typeof SearchModal> | null>(null);
+const chatSearchRoot = ref<HTMLElement | null>(null);
+const chatSearchInput = ref<HTMLInputElement | null>(null);
+const viewSwitchRef = ref<HTMLElement | null>(null);
+const chatViewTabRef = ref<HTMLButtonElement | null>(null);
+const projectViewTabRef = ref<HTMLButtonElement | null>(null);
+const viewIndicatorStyle = ref<Record<string, string>>({});
+const chatSearchQuery = ref("");
+const chatSearchOpen = ref(false);
+const chatSearchLoading = ref(false);
+const chatSearchError = ref("");
+const chatSearchActiveIndex = ref(0);
+const restoringChatSearchId = ref("");
+const remoteChatSearchResults = ref<ConversationItem[]>([]);
+const remoteChatSearchIds = ref(new Set<string>());
+type SidebarView = "chat" | "project";
+const SIDEBAR_VIEW_STORAGE_KEY = "uai-workspace-sidebar-view";
+function readSidebarView(): SidebarView {
+  try {
+    return localStorage.getItem(SIDEBAR_VIEW_STORAGE_KEY) === "project" ? "project" : "chat";
+  } catch (error) {
+    console.error("[original-error]", error);
+    ElMessage.error(originalErrorMessage(error));
+    return "chat";
+  }
+}
+const sidebarView = ref<SidebarView>(readSidebarView());
+let viewSwitchResizeObserver: ResizeObserver | undefined;
+let chatSearchTimer: number | null = null;
+let chatSearchRequest = 0;
 const projectDialogOpen = ref(false);
+const projectConversationDialogVisible = ref(false);
+const projectConversationTargetId = ref("");
 const newGroupDialogVisible = ref(false);
+const teamCreateDialogVisible = ref(false);
 const projectCreating = ref(false);
 const projectSelectingFolder = ref(false);
 const projectDraftName = ref("");
@@ -273,6 +427,7 @@ const projectNameInitialized = ref(false);
 const projectDragActive = ref(false);
 const projectDragDepth = ref(0);
 const activeConversationId = computed(() => String(route.query.conversationId || ""));
+const isChatPage = computed(() => route.path === "/chat");
 const newGroupDefaultRoleId = computed(() => String(route.query.characterId || localStorage.getItem(`webchat-char-id:${owned.coreId.value}:${owned.roleOwnerId.value}`) || owned.selectInitialRole()));
 const {
   visible: visibleRecentConversations,
@@ -286,8 +441,233 @@ const pinnedProjects = computed(() =>
 const regularProjects = computed(() =>
   chatStore.sidebar.projects.filter((project) => !project.pinnedAt),
 );
+const sidebarConversationRows = computed(() => {
+  const rows = new Map<string, ConversationItem>();
+  for (const conversation of [
+    ...chatStore.sidebar.pinned,
+    ...chatStore.sidebar.recent,
+    ...chatStore.sidebar.projects.flatMap((project) => project.conversations),
+  ]) {
+    if (conversation.id) rows.set(conversation.id, conversation);
+  }
+  return [...rows.values()];
+});
+const projectNames = computed(() => new Map(chatStore.sidebar.projects.map((project) => [project.id, project.name])));
+const showChatSearchResults = computed(() => chatSearchOpen.value && Boolean(chatSearchQuery.value.trim()));
+const chatSearchResults = computed(() => {
+  const query = chatSearchQuery.value.trim().toLocaleLowerCase();
+  if (!query) return [];
+  const rows = new Map<string, ConversationItem>();
+  for (const conversation of sidebarConversationRows.value) {
+    const projectName = projectNames.value.get(conversation.projectId) || "";
+    const lastMessage = conversation.lastMessagePreview || conversation.lastMessage || "";
+    if (![conversation.title, projectName, lastMessage].some((value) => String(value || "").toLocaleLowerCase().includes(query))) continue;
+    rows.set(conversation.id, conversation);
+  }
+  for (const conversation of remoteChatSearchResults.value) rows.set(conversation.id, conversation);
+  return [...rows.values()]
+    .sort((left, right) => {
+      const archivedOrder = Number(Boolean(left.archivedAt)) - Number(Boolean(right.archivedAt));
+      if (archivedOrder !== 0) return archivedOrder;
+      const leftTitle = String(left.title || "").toLocaleLowerCase();
+      const rightTitle = String(right.title || "").toLocaleLowerCase();
+      const leftStarts = leftTitle.startsWith(query) ? 0 : 1;
+      const rightStarts = rightTitle.startsWith(query) ? 0 : 1;
+      return leftStarts - rightStarts || String(right.updatedAt || "").localeCompare(String(left.updatedAt || ""));
+    })
+    .slice(0, 30);
+});
 let conversationActivityTimer: number | null = null;
 let conversationActivityRefreshing = false;
+
+function normalizeSearchResult(value: Record<string, any>): ConversationItem | null {
+  const id = String(value.id || "").trim();
+  if (!id) return null;
+  const channel = conversationChannel(value);
+  return {
+    ...value,
+    id,
+    title: String(value.title || value.name || "新对话"),
+    projectId: value.projectId && value.ownerId ? ownedProjectReference(String(value.ownerId), String(value.projectId)) : "",
+    channel,
+    source: String(value.source || "device-mesh"),
+    messageCount: Number(value.messageCount || 0),
+    createdAt: String(value.createdAt || ""),
+    updatedAt: String(value.updatedAt || ""),
+  };
+}
+
+async function loadRemoteChatSearch(query: string) {
+  const ticket = ++chatSearchRequest;
+  const role = String(route.query.characterId || localStorage.getItem(`webchat-char-id:${owned.coreId.value}:${owned.roleOwnerId.value}`) || owned.selectInitialRole());
+  if (!role) {
+    remoteChatSearchResults.value = [];
+    remoteChatSearchIds.value = new Set();
+    chatSearchLoading.value = false;
+    return;
+  }
+  try {
+    if (!owned.enabled.value && !(await owned.refresh())) throw new Error(owned.notice.value || "设备对话服务尚未就绪");
+    const values = await owned.conversations(role, query);
+    if (ticket !== chatSearchRequest || query !== chatSearchQuery.value.trim()) return;
+    const normalized = values
+      .map((value) => normalizeSearchResult(value))
+      .filter((value): value is ConversationItem => Boolean(value));
+    remoteChatSearchResults.value = normalized;
+    remoteChatSearchIds.value = new Set(normalized.map((item) => item.id));
+    chatSearchActiveIndex.value = Math.min(chatSearchActiveIndex.value, Math.max(0, chatSearchResults.value.length - 1));
+  } catch (error) {
+    if (ticket !== chatSearchRequest) return;
+    console.error("[original-error]", error);
+    chatSearchError.value = originalErrorMessage(error);
+    remoteChatSearchResults.value = [];
+    remoteChatSearchIds.value = new Set();
+  } finally {
+    if (ticket === chatSearchRequest) chatSearchLoading.value = false;
+  }
+}
+
+function clearChatSearch() {
+  chatSearchQuery.value = "";
+  chatSearchOpen.value = false;
+  chatSearchActiveIndex.value = 0;
+  chatSearchLoading.value = false;
+  chatSearchError.value = "";
+  remoteChatSearchResults.value = [];
+  remoteChatSearchIds.value = new Set();
+  chatSearchInput.value?.focus();
+}
+
+function chatSearchResultMeta(conversation: ConversationItem) {
+  const projectName = projectNames.value.get(conversation.projectId) || "";
+  const type = String((conversation as any).conversationType || "").includes("group") ? "群聊" : "对话";
+  const matchedInMessages = remoteChatSearchIds.value.has(conversation.id) && !String(conversation.title || "").toLocaleLowerCase().includes(chatSearchQuery.value.trim().toLocaleLowerCase());
+  return [type, projectName, conversation.archivedAt ? "已归档" : matchedInMessages ? "匹配聊天记录" : conversation.lastMessagePreview || conversation.lastMessage || ""]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+async function restoreArchivedSearchResult(conversation: ConversationItem) {
+  if (restoringChatSearchId.value) return;
+  restoringChatSearchId.value = conversation.id;
+  try {
+    await chatStore.restoreConversation(conversation.id);
+    remoteChatSearchResults.value = remoteChatSearchResults.value.map((item) =>
+      item.id === conversation.id ? { ...item, archivedAt: null } : item,
+    );
+    ElMessage.success("已撤销归档");
+  } catch (error) {
+    console.error("[original-error]", error);
+    ElMessage.error(originalErrorMessage(error));
+  } finally {
+    restoringChatSearchId.value = "";
+  }
+}
+
+async function selectChatSearchResult(conversation: ConversationItem) {
+  clearChatSearch();
+  await handleSelectConversation(conversation);
+}
+
+function handleChatSearchKeydown(event: KeyboardEvent) {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    clearChatSearch();
+    return;
+  }
+  if (!chatSearchResults.value.length) return;
+  if (event.key === "ArrowDown") {
+    event.preventDefault();
+    chatSearchActiveIndex.value = (chatSearchActiveIndex.value + 1) % chatSearchResults.value.length;
+    return;
+  }
+  if (event.key === "ArrowUp") {
+    event.preventDefault();
+    chatSearchActiveIndex.value = (chatSearchActiveIndex.value - 1 + chatSearchResults.value.length) % chatSearchResults.value.length;
+    return;
+  }
+  if (event.key === "Enter") {
+    event.preventDefault();
+    const conversation = chatSearchResults.value[chatSearchActiveIndex.value];
+    if (conversation) void selectChatSearchResult(conversation);
+  }
+}
+
+function handleDocumentPointerDown(event: PointerEvent) {
+  if (!chatSearchRoot.value?.contains(event.target as Node)) chatSearchOpen.value = false;
+}
+
+function openCreateMenu(event: MouseEvent) {
+  const anchor = event.currentTarget as HTMLElement | null;
+  if (!anchor) return;
+  const rect = anchor.getBoundingClientRect();
+  openContextMenu({
+    x: Math.max(8, rect.right - 188),
+    y: rect.bottom + 6,
+    items: [
+      { id: "new-chat", label: "新对话", icon: NewConversationIcon, accessKey: "N", action: handleCreateConversation },
+      { id: "new-group", label: "新群聊", icon: ChatDotRound, accessKey: "G", action: handleNewGroupChat },
+      { id: "new-team", label: "新团队", icon: ChatDotRound, accessKey: "T", action: () => { teamCreateDialogVisible.value = true; } },
+      { id: "new-project", label: "新项目", icon: FolderOpened, accessKey: "P", action: handleAddProject },
+    ],
+  });
+}
+
+function switchSidebarView(value: SidebarView, focus = false) {
+  sidebarView.value = value;
+  try {
+    localStorage.setItem(SIDEBAR_VIEW_STORAGE_KEY, value);
+  } catch (error) {
+    console.error("[original-error]", error);
+    ElMessage.error(originalErrorMessage(error));
+  }
+  if (focus) {
+    requestAnimationFrame(() => {
+      chatSearchRoot.value
+        ?.closest(".workspace-sidebar")
+        ?.querySelector<HTMLElement>(`[data-amitia-ui="workspace.view.${value === "chat" ? "chat" : "projects"}"]`)
+        ?.focus();
+    });
+  }
+}
+
+function syncViewIndicator() {
+  const container = viewSwitchRef.value;
+  const activeTab = sidebarView.value === "chat" ? chatViewTabRef.value : projectViewTabRef.value;
+  if (!container || !activeTab) return;
+  const width = Math.max(18, Math.min(28, activeTab.offsetWidth - 24));
+  const center = activeTab.offsetLeft + activeTab.offsetWidth / 2;
+  viewIndicatorStyle.value = {
+    left: `${center - width / 2}px`,
+    width: `${width}px`,
+  };
+}
+
+watch(chatSearchQuery, (value) => {
+  if (chatSearchTimer !== null) window.clearTimeout(chatSearchTimer);
+  chatSearchTimer = null;
+  chatSearchError.value = "";
+  chatSearchActiveIndex.value = 0;
+  const query = value.trim();
+  if (!query) {
+    chatSearchRequest++;
+    chatSearchLoading.value = false;
+    remoteChatSearchResults.value = [];
+    remoteChatSearchIds.value = new Set();
+    return;
+  }
+  chatSearchOpen.value = true;
+  remoteChatSearchResults.value = [];
+  remoteChatSearchIds.value = new Set();
+  chatSearchLoading.value = true;
+  chatSearchTimer = window.setTimeout(() => {
+    chatSearchTimer = null;
+    void loadRemoteChatSearch(query);
+  }, 220);
+});
+watch(sidebarView, () => {
+  void nextTick(syncViewIndicator);
+});
 
 function syncConversationActivityPolling() {
   if (conversationActivityTimer !== null) return;
@@ -327,6 +707,20 @@ async function handleNewGroupChat() {
   }
 }
 
+function handleCreateConversation() {
+  if (sidebarView.value === "chat") {
+    void handleNewChat();
+    return;
+  }
+  if (chatStore.sidebar.projects.length === 0) {
+    ElMessage.warning("暂无项目，请先新建项目");
+    handleAddProject();
+    return;
+  }
+  projectConversationTargetId.value = "";
+  projectConversationDialogVisible.value = true;
+}
+
 async function handleGroupCreated(group: OwnedGroupState, baseRoleId: string, projectId = "") {
   chatStore.setConversationId(group.conversationId);
   await chatStore.fetchSidebar().catch((error) => {
@@ -338,6 +732,10 @@ async function handleGroupCreated(group: OwnedGroupState, baseRoleId: string, pr
     : null;
   chatStore.currentProjectId = project?.id || "";
   await router.push({ path: "/chat", query: { conversationId: group.conversationId, characterId: baseRoleId } });
+}
+
+function handleTeamCreated(team: Team) {
+  ElMessage.success(`团队「${team.name}」已创建`);
 }
 
 async function handleSelectConversation(conversation: ConversationItem) {
@@ -446,18 +844,26 @@ async function handleMoveConversation(conversation: ConversationItem, projectId:
   if (activeConversationId.value === conversation.id) applySnapshotWorkspace(null, projectId);
 }
 
-async function handleCreateProjectConversation(project: ProjectItem) {
+async function handleCreateProjectConversation(project: ProjectItem): Promise<boolean> {
   if (project.readOnly) {
     ElMessage.warning("该项目为只读");
-    return;
+    return false;
   }
   try {
     await startDraftConversation(project.id);
     await router.push({ path: "/chat", query: { projectId: project.id } });
     window.dispatchEvent(new CustomEvent("amitia:draft-created"));
+    return true;
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : "新建项目对话失败");
+    return false;
   }
+}
+
+async function createConversationInSelectedProject() {
+  const project = chatStore.sidebar.projects.find((item) => item.id === projectConversationTargetId.value);
+  if (!project) return;
+  if (await handleCreateProjectConversation(project)) projectConversationDialogVisible.value = false;
 }
 
 function handleProjectDialogDismiss(error: unknown): undefined {
@@ -576,6 +982,7 @@ async function handleCreateProject() {
   try {
     await createProjectFromWorkspaces(projectDraftName.value, projectDraftWorkspaces.value);
     projectDialogOpen.value = false;
+    switchSidebarView("project");
     ElMessage.success("项目已添加");
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : "创建项目失败");
@@ -669,6 +1076,14 @@ async function handleOpenProject(project: ProjectItem) {
 }
 
 onMounted(() => {
+  document.addEventListener("pointerdown", handleDocumentPointerDown);
+  if (typeof ResizeObserver !== "undefined") {
+    viewSwitchResizeObserver = new ResizeObserver(syncViewIndicator);
+    if (viewSwitchRef.value) viewSwitchResizeObserver.observe(viewSwitchRef.value);
+    if (chatViewTabRef.value) viewSwitchResizeObserver.observe(chatViewTabRef.value);
+    if (projectViewTabRef.value) viewSwitchResizeObserver.observe(projectViewTabRef.value);
+  }
+  void nextTick(syncViewIndicator);
   void chatStore.fetchSidebar().catch((error) => {
   console.error("[original-error]", error);
   return undefined;
@@ -677,6 +1092,11 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  document.removeEventListener("pointerdown", handleDocumentPointerDown);
+  viewSwitchResizeObserver?.disconnect();
+  viewSwitchResizeObserver = undefined;
+  if (chatSearchTimer !== null) window.clearTimeout(chatSearchTimer);
+  chatSearchRequest++;
   if (conversationActivityTimer !== null) {
     window.clearInterval(conversationActivityTimer);
     conversationActivityTimer = null;
@@ -696,46 +1116,191 @@ onUnmounted(() => {
   background: var(--workbench-bg);
   border-right: 1px solid var(--surface-border);
 }
-.workspace-panel-header { display: flex; align-items: center; gap: 8px; padding: 8px 8px 6px; }
-.workspace-search {
-  width: 36px;
-  height: 36px;
-  flex: 0 0 36px;
+.workspace-panel-header {
+  position: relative;
+  z-index: 4;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 8px 6px;
+}
+.workspace-chat-search {
   display: flex;
   align-items: center;
-  justify-content: center;
+  min-width: 0;
+  flex: 1 1 auto;
+  height: 31px;
+  box-sizing: border-box;
+  padding: 0 2px 0 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: var(--surface-bg-elevated);
+  color: var(--text-muted);
+  transition: border-color 0.16s ease, background-color 0.16s ease, box-shadow 0.16s ease;
+}
+.workspace-chat-search:focus-within,
+.workspace-chat-search.is-open {
+  border-color: color-mix(in srgb, var(--ac-color-primary) 42%, var(--surface-border));
+  background: var(--surface-bg);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ac-color-primary) 10%, transparent);
+}
+.workspace-search-icon { flex: 0 0 auto; font-size: 14px; }
+.workspace-search-input {
+  min-width: 0;
+  flex: 1 1 auto;
+  height: 100%;
+  padding: 0 8px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--ac-font-size-xs);
+  appearance: none;
+}
+.workspace-search-input::-webkit-search-cancel-button { display: none; }
+.workspace-search-input::placeholder { color: var(--text-muted); }
+.workspace-search-clear,
+.workspace-create-button {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
   padding: 0;
   border: 0;
-  border-radius: 9px;
-  background: var(--surface-bg-elevated);
+  border-radius: 7px;
+  background: transparent;
   color: var(--text-muted);
   cursor: pointer;
   font: inherit;
 }
-.workspace-search:hover { color: var(--text-primary); }
-.workspace-new-chat {
+.workspace-search-clear { width: 24px; height: 24px; font-size: 16px; line-height: 1; }
+.workspace-search-clear:hover { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
+.workspace-create-button { width: 28px; height: 31px; color: var(--text-muted); background: var(--surface-bg-elevated); }
+.workspace-create-button:hover,
+.workspace-create-button:focus-visible { color: var(--text-secondary); background: var(--workbench-sidebar-hover); }
+.workspace-create-button .el-icon { font-size: 16px; }
+.workspace-view-switch {
+  position: relative;
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  min-width: 0;
+  padding: 0;
+  background: transparent;
+}
+.workspace-view-switch button {
+  position: relative;
+  bottom: -1px;
+  flex: 0 0 auto;
+  min-width: 0;
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--ac-font-size-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  transition: color 0.2s ease;
+}
+.workspace-view-switch button:hover { color: var(--ac-color-primary); }
+.workspace-view-switch button[aria-selected="true"] {
+  color: var(--ac-color-primary);
+}
+.workspace-view-indicator {
+  position: absolute;
+  bottom: 0;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--ac-color-primary);
+  pointer-events: none;
+  transition: left 0.2s ease, width 0.2s ease;
+}
+.workspace-chat-search-results {
+  position: absolute;
+  top: calc(100% - 2px);
+  right: 8px;
+  left: 8px;
+  max-height: min(420px, 56vh);
+  overflow-y: auto;
+  padding: 5px;
+  border: 1px solid var(--surface-border);
+  border-radius: 11px;
+  background: var(--surface-bg-elevated);
+  box-shadow: var(--tp-shadow-float);
+}
+.workspace-search-status {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 7px 7px;
+  color: var(--text-muted);
+  font-size: var(--ac-font-size-xs);
+}
+.workspace-search-status .is-loading { color: var(--ac-color-primary); }
+.workspace-search-result {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 7px;
-  min-width: 0;
-  height: 36px;
-  flex: 1 1 auto;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 9px;
-  background: var(--surface-bg-elevated);
-  color: var(--text-muted);
+  gap: 6px;
+  width: 100%;
+  min-height: 44px;
+  padding: 4px 6px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
   cursor: pointer;
   font: inherit;
+  text-align: left;
 }
-.workspace-new-chat span { min-width: 0; overflow: hidden; font-size: var(--ac-font-size-sm); text-overflow: ellipsis; white-space: nowrap; }
-.workspace-new-chat .el-icon { flex: 0 0 auto; font-size: 16px; }
-.workspace-new-chat:hover { color: var(--text-primary); }
-.workspace-new-group { display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 36px; flex: 0 0 auto; padding: 0 9px; border: 1px solid color-mix(in srgb, var(--ac-color-primary) 24%, transparent); border-radius: 9px; background: color-mix(in srgb, var(--ac-color-primary) 8%, var(--surface-bg-elevated)); color: var(--ac-color-primary); cursor: pointer; font: inherit; font-size: 11px; }
-.workspace-new-group:hover, .workspace-new-group:focus-visible { border-color: color-mix(in srgb, var(--ac-color-primary) 55%, transparent); color: var(--text-primary); outline: none; }
-.workspace-new-group .el-icon { font-size: 15px; }
-@media (max-width: 760px) { .workspace-new-group span { display: none; } .workspace-new-group { width: 36px; padding: 0; } }
+.workspace-search-result:hover,
+.workspace-search-result.is-active { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
+.workspace-search-result-main {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: 3px 2px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+.workspace-search-result-main > .el-icon { flex: 0 0 auto; font-size: 15px; }
+.workspace-search-result-copy { min-width: 0; flex: 1 1 auto; }
+.workspace-search-result-copy strong,
+.workspace-search-result-copy small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workspace-search-result-copy strong { font-size: var(--ac-font-size-sm); font-weight: 560; }
+.workspace-search-result-copy small { margin-top: 2px; color: var(--text-muted); font-size: var(--ac-font-size-xs); }
+.workspace-search-restore {
+  flex: 0 0 auto;
+  padding: 4px 7px;
+  border: 1px solid var(--surface-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--ac-font-size-xs);
+  white-space: nowrap;
+}
+.workspace-search-restore:hover:not(:disabled) { background: var(--surface-bg); color: var(--text-primary); }
+.workspace-search-restore:disabled { cursor: wait; opacity: 0.6; }
+.workspace-search-message { padding: 14px 10px 16px; color: var(--text-muted); font-size: var(--ac-font-size-xs); text-align: center; }
+.workspace-search-message.is-error { color: var(--ac-color-danger); text-align: left; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
 .workspace-scroll { min-height: 0; flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; padding: 6px 8px 8px; }
 .thread-sidebar { display: flex; flex-direction: column; padding: 2px 0 8px; }
 .section-caption { padding: 0 9px 5px; color: var(--text-muted); font-size: var(--ac-font-size-xs); font-weight: 550; }
@@ -839,6 +1404,37 @@ onUnmounted(() => {
 .project-folder-clear:hover { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
 .project-folder-hint { margin: 6px 0 0; color: var(--text-muted); font-size: var(--ac-font-size-xs); line-height: 1.5; }
 .project-folder-picker:disabled, .project-folder-clear:disabled { cursor: not-allowed; opacity: 0.6; }
+.project-conversation-dialog-copy { margin: 0 0 12px; color: var(--text-secondary); font-size: var(--ac-font-size-sm); }
+.project-conversation-list { display: grid; gap: 6px; max-height: min(360px, 52vh); overflow-y: auto; }
+.project-conversation-choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 8px 10px;
+  border: 1px solid var(--surface-border);
+  border-radius: 9px;
+  background: var(--surface-bg);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+.project-conversation-choice:hover,
+.project-conversation-choice.is-selected {
+  border-color: color-mix(in srgb, var(--ac-color-primary) 45%, var(--surface-border));
+  background: var(--workbench-sidebar-hover);
+  color: var(--text-primary);
+}
+.project-conversation-choice:disabled { cursor: not-allowed; opacity: 0.55; }
+.project-conversation-choice > .el-icon { flex: 0 0 auto; font-size: 17px; }
+.project-conversation-choice-copy { min-width: 0; flex: 1 1 auto; }
+.project-conversation-choice-copy strong,
+.project-conversation-choice-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-conversation-choice-copy strong { font-size: var(--ac-font-size-sm); font-weight: 560; }
+.project-conversation-choice-copy small { margin-top: 3px; color: var(--text-muted); font-size: var(--ac-font-size-xs); }
+.project-conversation-empty { padding: 20px 10px; color: var(--text-muted); font-size: var(--ac-font-size-sm); text-align: center; }
 .workspace-sidebar :deep(button), .thread-name-input, .section-caption { line-height: 1.45; }
 .workspace-sidebar :deep(button:not(:disabled):focus-visible) { outline: 2px solid var(--ac-color-primary); outline-offset: -2px; }
 </style>

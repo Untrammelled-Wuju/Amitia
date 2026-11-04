@@ -71,7 +71,6 @@ var (
 	ErrPackageUninstallArtifactReferenced          = errors.New("kernel: uninstall artifact still referenced")
 	ErrPackageMigrationSQLUnparseable              = errors.New("kernel: migration sql statement unparseable")
 	ErrPackageMigrationNamespaceViolation          = errors.New("kernel: migration namespace violation")
-	ErrPackageLegacyRuntimeEnabled                 = errors.New("kernel: legacy runtime enabled in production")
 	ErrPackageConfirmationStale                    = errors.New("kernel: confirmation token stale, re-preview required")
 	ErrPackageRollbackRequirementChanged           = errors.New("kernel: rollback snapshot requirement changed after confirmation")
 	ErrPackageUninstallArtifactRemovalFailed       = errors.New("kernel: uninstall artifact removal failed")
@@ -144,7 +143,6 @@ const (
 	PackageErrCodeResourceSnapshotInvalid              = "PACKAGE_RESOURCE_SNAPSHOT_INVALID"
 	PackageErrCodeMigrationSQLUnparseable              = "PACKAGE_MIGRATION_SQL_UNPARSEABLE"
 	PackageErrCodeMigrationNamespaceViolation          = "PACKAGE_MIGRATION_NAMESPACE_VIOLATION"
-	PackageErrCodeLegacyRuntimeEnabled                 = "PACKAGE_LEGACY_RUNTIME_ENABLED"
 	PackageErrCodeUserDataSnapshotInvalid              = "PACKAGE_USER_DATA_SNAPSHOT_INVALID"
 	PackageErrCodeUserDataSnapshotStoreUnavailable     = "PACKAGE_USER_DATA_SNAPSHOT_STORE_UNAVAILABLE"
 	PackageErrCodeConfirmationTokenInvalid             = "PACKAGE_CONFIRMATION_TOKEN_INVALID"
@@ -290,7 +288,6 @@ var packageErrorHTTPStatus = map[string]int{
 	PackageErrCodeUninstallArtifactReferenced:          409,
 	PackageErrCodeMigrationSQLUnparseable:              422,
 	PackageErrCodeMigrationNamespaceViolation:          403,
-	PackageErrCodeLegacyRuntimeEnabled:                 403,
 	PackageErrCodeConfirmationTokenInvalid:             403,
 	PackageErrCodeConfirmationBindingMismatch:          403,
 	PackageErrCodeConfirmationStale:                    409,

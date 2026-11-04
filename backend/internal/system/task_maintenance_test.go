@@ -39,15 +39,17 @@ func TestTaskMaintenanceRouterUsesCanonicalService(t *testing.T) {
 	}
 }
 
-func TestTaskMaintenancePolicyMigratesAppliesAndRestoresAcrossProfiles(t *testing.T) {
+func TestTaskMaintenancePolicyAppliesAndRestoresAcrossProfiles(t *testing.T) {
 	restore := timeoutpolicy.Configure(timeoutpolicy.Default())
 	defer restore()
 	for _, profile := range []runtimeprofile.Profile{runtimeprofile.ProfileLocal, runtimeprofile.ProfileCloudCore, runtimeprofile.ProfileDeviceAgent} {
 		t.Run(string(profile), func(t *testing.T) {
 			svc := newSetupServiceTest(t)
 			svc.runtimeProfile = profile
-			svc.setAppSetting("long_running_max_tasks", "7")
-			svc.setAppSetting("long_running_timeout", "10")
+			svc.setAppSetting(taskPolicyKey, "7")
+			if err := svc.UpdateTimeoutSettings(timeoutpolicy.Settings{Seconds: 600}); err != nil {
+				t.Fatal(err)
+			}
 			runtime := task_runtime.NewTaskRuntimeService(nil, task_runtime.DefaultTaskRuntimeConfig())
 			if err := svc.AttachTaskRuntime(runtime); err != nil {
 				t.Fatal(err)
@@ -55,11 +57,6 @@ func TestTaskMaintenancePolicyMigratesAppliesAndRestoresAcrossProfiles(t *testin
 			config, err := svc.TaskMaintenanceConfig(t.Context())
 			if err != nil || config.MaxTasks != 7 || config.Timeout.Seconds != 600 || !config.Applied || config.RuntimeProfile != string(profile) {
 				t.Fatalf("migration: %+v %v", config, err)
-			}
-			for _, key := range []string{"long_running_max_tasks", "long_running_timeout"} {
-				if value := svc.getAppSetting(key); value != "" {
-					t.Fatal("legacy setting is still active")
-				}
 			}
 			request := TaskMaintenanceUpdate{MaxTasks: 2, Timeout: timeoutpolicy.Settings{Seconds: 90}, ExpectedRevision: config.Revision, ExpectedTimeoutRevision: config.TimeoutRevision}
 			saved, err := svc.UpdateTaskMaintenanceConfig(t.Context(), request)
@@ -118,7 +115,6 @@ func TestTaskMaintenancePreservesUnifiedTimeoutAndRejectsStaleTimeoutRevision(t 
 	if err := svc.UpdateTimeoutSettings(timeoutpolicy.Settings{Disabled: true, Seconds: 120}); err != nil {
 		t.Fatal(err)
 	}
-	svc.setAppSetting("long_running_timeout", "20")
 	if err := svc.AttachTaskRuntime(task_runtime.NewTaskRuntimeService(nil, task_runtime.DefaultTaskRuntimeConfig())); err != nil {
 		t.Fatal(err)
 	}

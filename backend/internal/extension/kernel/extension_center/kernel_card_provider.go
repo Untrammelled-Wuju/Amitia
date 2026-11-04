@@ -465,27 +465,25 @@ func contributionTags(ext domain.ExtensionDefinition) []ContributionTag {
 	tagSet := make(map[ContributionTag]bool)
 	for _, mod := range ext.Modules {
 		for _, contributionDefinition := range mod.Contributions {
-			switch contributionDefinition.Kind {
-			case domain.ContributionKindTool:
+			switch contributionDefinition.EffectiveAdapter() {
+			case domain.ContributionAdapterTool:
 				tagSet[TagTools] = true
-			case domain.ContributionKindAgentSkill:
+			case domain.ContributionAdapterAgentSkill:
 				tagSet[TagSkills] = true
-			case domain.ContributionKindWorkflow:
+			case domain.ContributionAdapterWorkflow:
 				tagSet[TagWorkflows] = true
-			case domain.ContributionKindMCPServer:
+			case domain.ContributionAdapterMCPServer:
 				tagSet[TagMCP] = true
-			case domain.ContributionKindUIPage, domain.ContributionKindUIPanel,
-				domain.ContributionKindUIChat, domain.ContributionKindUIContextAction,
-				domain.ContributionKindUIDesktop, domain.ContributionKindUIProvider,
-				domain.ContributionKindUISlot:
+			case domain.ContributionAdapterUI, domain.ContributionAdapterUIProvider,
+				domain.ContributionAdapterUISlot:
 				tagSet[TagUI] = true
-			case domain.ContributionKindHook:
+			case domain.ContributionAdapterHook:
 				tagSet[TagHooks] = true
-			case domain.ContributionKindEventSubscription:
+			case domain.ContributionAdapterEvent:
 				tagSet[TagEvents] = true
-			case domain.ContributionKindSchedule:
+			case domain.ContributionAdapterSchedule:
 				tagSet[TagTasks] = true
-			case domain.ContributionKindBackgroundTask:
+			case domain.ContributionAdapterBackground:
 				tagSet[TagDesktop] = true
 			}
 		}

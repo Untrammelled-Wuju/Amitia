@@ -81,7 +81,7 @@ export interface ChannelDescriptor {
   id: string;
   kind: ChannelKind;
   schemaId?: string;
-  direction?: ChannelDirection;
+  direction: ChannelDirection;
   frequencyHint?: FrequencyHint;
   metadata?: Record<string, unknown>;
 }

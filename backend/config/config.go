@@ -91,10 +91,9 @@ type ProcessComponentConfig struct {
 }
 
 type ServerConfig struct {
-	Port              int    `mapstructure:"port"`
-	Host              string `mapstructure:"host"`
-	Mode              string `mapstructure:"mode"`
-	CompatibilityPort int    `mapstructure:"compatibilityPort"`
+	Port int    `mapstructure:"port"`
+	Host string `mapstructure:"host"`
+	Mode string `mapstructure:"mode"`
 }
 
 func (c *ServerConfig) Addr() string {
@@ -169,10 +168,8 @@ type PromptFeatureFlags struct {
 }
 
 type RuntimeConfig struct {
-	Mode       string                   `mapstructure:"mode"`
-	Node       NodeRuntimeConfig        `mapstructure:"node"`
-	TaskHost   ProcessHostRuntimeConfig `mapstructure:"taskHost"`
-	IOSSandbox IOSSandboxRuntimeConfig  `mapstructure:"iosSandbox"`
+	Mode       string                  `mapstructure:"mode"`
+	IOSSandbox IOSSandboxRuntimeConfig `mapstructure:"iosSandbox"`
 }
 
 type IOSSandboxRuntimeConfig struct {
@@ -198,19 +195,6 @@ func (c IOSSandboxRuntimeConfig) Validate() error {
 		}
 	}
 	return nil
-}
-
-type NodeRuntimeConfig struct {
-	BinaryPath string `mapstructure:"binaryPath"`
-	NPMPath    string `mapstructure:"npmPath"`
-	NPXPath    string `mapstructure:"npxPath"`
-	WorkDir    string `mapstructure:"workDir"`
-}
-
-type ProcessHostRuntimeConfig struct {
-	Enabled   bool   `mapstructure:"enabled"`
-	EntryPath string `mapstructure:"entryPath"`
-	WorkDir   string `mapstructure:"workDir"`
 }
 
 type DesktopPetRuntimeConfig struct {
@@ -308,9 +292,13 @@ func loadConfig(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("配置解析失败: %w", err)
 	}
 
+	for _, key := range []string{"qdrant", "surrealdb"} {
+		if v.InConfig(key) {
+			return nil, fmt.Errorf("配置包含已删除的旧顶层键 %q", key)
+		}
+	}
+
 	cfg.App.Version = AppVersion()
-	applyLegacyProviderConfig(v, cfg)
-	normalizeLegacyDynamicPortDefaults(cfg)
 	normalizeConfig(cfg)
 
 	if err := validateConfig(cfg); err != nil {
@@ -323,8 +311,6 @@ func loadConfig(configPath string) (*Config, error) {
 
 func setDefaults(v *viper.Viper) {
 	knowledgeDefaults := DefaultKnowledgeRuntimeConfig()
-	v.SetDefault("knowledge.features.retrievalPolicyEnabled", knowledgeDefaults.Features.RetrievalPolicyEnabled)
-	v.SetDefault("knowledge.features.retrievalPolicyShadow", knowledgeDefaults.Features.RetrievalPolicyShadow)
 	v.SetDefault("knowledge.features.canonicalReaderEnabled", knowledgeDefaults.Features.CanonicalReaderEnabled)
 	v.SetDefault("knowledge.features.agenticInvestigationEnabled", knowledgeDefaults.Features.AgenticInvestigationEnabled)
 	v.SetDefault("knowledge.chunk.targetRunes", knowledgeDefaults.Chunk.TargetRunes)
@@ -369,7 +355,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("knowledge.resources.pdfTextPageTimeoutSec", knowledgeDefaults.Resources.PDFTextPageTimeoutSec)
 	v.SetDefault("knowledge.resources.ocrRasterTimeoutSec", knowledgeDefaults.Resources.OCRRasterTimeoutSec)
 	v.SetDefault("knowledge.resources.ocrTimeoutSec", knowledgeDefaults.Resources.OCRTimeoutSec)
-	v.SetDefault("knowledge.resources.legacyDocTimeoutSec", knowledgeDefaults.Resources.LegacyDocTimeoutSec)
+	v.SetDefault("knowledge.resources.docTimeoutSec", knowledgeDefaults.Resources.DocTimeoutSec)
 	v.SetDefault("knowledge.resources.maxOoxmlFiles", knowledgeDefaults.Resources.MaxOOXMLFiles)
 	v.SetDefault("knowledge.resources.maxOoxmlUncompressedBytes", knowledgeDefaults.Resources.MaxOOXMLUncompressedBytes)
 	v.SetDefault("knowledge.resources.maxSharedStrings", knowledgeDefaults.Resources.MaxSharedStrings)
@@ -397,10 +383,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("knowledge.slo.agenticP95TargetMs", knowledgeDefaults.SLO.AgenticP95TargetMs)
 	v.SetDefault("knowledge.slo.windowMinutes", knowledgeDefaults.SLO.WindowMinutes)
 	v.SetDefault("knowledge.slo.minSamples", knowledgeDefaults.SLO.MinSamples)
-	v.SetDefault("server.port", 1)
+	v.SetDefault("server.port", 0)
 	v.SetDefault("server.host", "127.0.0.1")
 	v.SetDefault("server.mode", "debug")
-	v.SetDefault("server.compatibilityPort", 18899)
 	v.SetDefault("storage.dataDir", "../data")
 	v.SetDefault("app.name", "U-Ai")
 	v.SetDefault("app.version", DefaultAppVersion)
@@ -440,13 +425,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("desktopPetRuntime.retryMaxDelayMs", 30000)
 	v.SetDefault("desktopPetRuntime.commandRetentionHours", 24)
 	v.SetDefault("runtime.mode", "desktop")
-	v.SetDefault("runtime.node.binaryPath", "")
-	v.SetDefault("runtime.node.npmPath", "")
-	v.SetDefault("runtime.node.npxPath", "")
-	v.SetDefault("runtime.node.workDir", "")
-	v.SetDefault("runtime.taskHost.enabled", true)
-	v.SetDefault("runtime.taskHost.entryPath", "")
-	v.SetDefault("runtime.taskHost.workDir", "")
 	v.SetDefault("providers.scriptRuntime.enabled", true)
 	v.SetDefault("providers.scriptRuntime.required", false)
 	v.SetDefault("providers.scriptRuntime.provider", "builtin.node-process")
@@ -458,7 +436,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("providers.vectorStore.required", false)
 	v.SetDefault("providers.vectorStore.provider", "builtin.qdrant-process")
 	v.SetDefault("providers.vectorStore.qdrant.host", "127.0.0.1")
-	v.SetDefault("providers.vectorStore.qdrant.port", 1)
+	v.SetDefault("providers.vectorStore.qdrant.port", 0)
 	v.SetDefault("providers.vectorStore.qdrant.collectionName", "amitia_vectors")
 	v.SetDefault("providers.vectorStore.qdrant.vectorDim", 2560)
 	v.SetDefault("providers.vectorStore.qdrant.limit", 10)
@@ -472,7 +450,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("providers.graphStore.required", false)
 	v.SetDefault("providers.graphStore.provider", "builtin.surrealdb-process")
 	v.SetDefault("providers.graphStore.surrealdb.host", "127.0.0.1")
-	v.SetDefault("providers.graphStore.surrealdb.port", 1)
+	v.SetDefault("providers.graphStore.surrealdb.port", 0)
 	v.SetDefault("providers.graphStore.surrealdb.namespace", "uai")
 	v.SetDefault("providers.graphStore.surrealdb.database", "memory_graph")
 	v.SetDefault("providers.graphStore.surrealdb.username", "root")
@@ -526,10 +504,9 @@ type runtimeEnvEntry struct {
 }
 
 var runtimeEnvEntries = []runtimeEnvEntry{
-	{key: "runtime.mode", environments: []string{"AMITIA_RUNTIME_MODE", "AMITIA_RUN_MODE"}},
+	{key: "runtime.mode", environments: []string{"AMITIA_RUNTIME_MODE"}},
 	{key: "server.host", environments: []string{"AMITIA_SERVER_HOST"}},
 	{key: "server.port", environments: []string{"AMITIA_SERVER_PORT"}},
-	{key: "server.compatibilityPort", environments: []string{"AMITIA_SERVER_COMPAT_PORT"}},
 	{key: "server.mode", environments: []string{"AMITIA_SERVER_MODE"}},
 	{key: "storage.dataDir", environments: []string{"AMITIA_DATA_DIR"}},
 	{key: "app.deployMode", environments: []string{"AMITIA_DEPLOY_MODE"}},
@@ -537,13 +514,6 @@ var runtimeEnvEntries = []runtimeEnvEntry{
 	{key: "security.allowRemoteAccess", environments: []string{"AMITIA_ALLOW_REMOTE_ACCESS"}},
 	{key: "security.localToken", environments: []string{"AMITIA_LOCAL_TOKEN"}},
 	{key: "security.localTokenFile", environments: []string{"AMITIA_LOCAL_TOKEN_FILE"}},
-	{key: "runtime.node.binaryPath", environments: []string{"AMITIA_NODE_BIN"}},
-	{key: "runtime.node.npmPath", environments: []string{"AMITIA_NPM_BIN"}},
-	{key: "runtime.node.npxPath", environments: []string{"AMITIA_NPX_BIN"}},
-	{key: "runtime.node.workDir", environments: []string{"AMITIA_NODE_WORK_DIR"}},
-	{key: "runtime.taskHost.enabled", environments: []string{"AMITIA_TASK_HOST_ENABLED"}},
-	{key: "runtime.taskHost.entryPath", environments: []string{"AMITIA_TASK_HOST_PATH"}},
-	{key: "runtime.taskHost.workDir", environments: []string{"AMITIA_TASK_HOST_WORK_DIR"}},
 	{key: "runtime.iosSandbox.enabled", environments: []string{"AMITIA_IOS_SANDBOX_ENABLED"}},
 	{key: "providers.scriptRuntime.enabled", environments: []string{"AMITIA_SCRIPT_RUNTIME_ENABLED"}},
 	{key: "providers.scriptRuntime.required", environments: []string{"AMITIA_SCRIPT_RUNTIME_REQUIRED"}},
@@ -582,63 +552,6 @@ var runtimeEnvEntries = []runtimeEnvEntry{
 	{key: "desktopPetRuntime.enabled", environments: []string{"AMITIA_DESKTOP_PET_RUNTIME_ENABLED"}},
 }
 
-func applyLegacyProviderConfig(v *viper.Viper, cfg *Config) {
-	if v.InConfig("qdrant.host") && !v.InConfig("providers.vectorStore.qdrant.host") {
-		log.Printf("[Config] 检测到遗留 qdrant 顶层配置，迁移到 providers.vectorStore.qdrant")
-		cfg.Providers.VectorStore.Qdrant.Host = v.GetString("qdrant.host")
-	}
-	if v.InConfig("qdrant.port") && !v.InConfig("providers.vectorStore.qdrant.port") {
-		cfg.Providers.VectorStore.Qdrant.Port = v.GetInt("qdrant.port")
-	}
-	if v.InConfig("qdrant.binaryPath") && !v.InConfig("providers.vectorStore.qdrant.binaryPath") {
-		cfg.Providers.VectorStore.Qdrant.BinaryPath = v.GetString("qdrant.binaryPath")
-	}
-	if v.InConfig("qdrant.dataDir") && !v.InConfig("providers.vectorStore.qdrant.dataDir") {
-		cfg.Providers.VectorStore.Qdrant.DataDir = v.GetString("qdrant.dataDir")
-	}
-	if v.InConfig("qdrant.collectionName") && !v.InConfig("providers.vectorStore.qdrant.collectionName") {
-		cfg.Providers.VectorStore.Qdrant.CollectionName = v.GetString("qdrant.collectionName")
-	}
-	if v.InConfig("qdrant.vectorDim") && !v.InConfig("providers.vectorStore.qdrant.vectorDim") {
-		cfg.Providers.VectorStore.Qdrant.VectorDim = v.GetInt("qdrant.vectorDim")
-	}
-	if v.InConfig("qdrant.limit") && !v.InConfig("providers.vectorStore.qdrant.limit") {
-		cfg.Providers.VectorStore.Qdrant.Limit = v.GetInt("qdrant.limit")
-	}
-	if v.InConfig("qdrant.enabled") && !v.InConfig("providers.vectorStore.qdrant.enabled") {
-		cfg.Providers.VectorStore.Qdrant.Enabled = v.GetBool("qdrant.enabled")
-	}
-
-	if v.InConfig("surrealdb.host") && !v.InConfig("providers.graphStore.surrealdb.host") {
-		log.Printf("[Config] 检测到遗留 surrealdb 顶层配置，迁移到 providers.graphStore.surrealdb")
-		cfg.Providers.GraphStore.SurrealDB.Host = v.GetString("surrealdb.host")
-	}
-	if v.InConfig("surrealdb.port") && !v.InConfig("providers.graphStore.surrealdb.port") {
-		cfg.Providers.GraphStore.SurrealDB.Port = v.GetInt("surrealdb.port")
-	}
-	if v.InConfig("surrealdb.binaryPath") && !v.InConfig("providers.graphStore.surrealdb.binaryPath") {
-		cfg.Providers.GraphStore.SurrealDB.BinaryPath = v.GetString("surrealdb.binaryPath")
-	}
-	if v.InConfig("surrealdb.namespace") && !v.InConfig("providers.graphStore.surrealdb.namespace") {
-		cfg.Providers.GraphStore.SurrealDB.Namespace = v.GetString("surrealdb.namespace")
-	}
-	if v.InConfig("surrealdb.database") && !v.InConfig("providers.graphStore.surrealdb.database") {
-		cfg.Providers.GraphStore.SurrealDB.Database = v.GetString("surrealdb.database")
-	}
-	if v.InConfig("surrealdb.username") && !v.InConfig("providers.graphStore.surrealdb.username") {
-		cfg.Providers.GraphStore.SurrealDB.Username = v.GetString("surrealdb.username")
-	}
-	if v.InConfig("surrealdb.password") && !v.InConfig("providers.graphStore.surrealdb.password") {
-		cfg.Providers.GraphStore.SurrealDB.Password = v.GetString("surrealdb.password")
-	}
-	if v.InConfig("surrealdb.dataPath") && !v.InConfig("providers.graphStore.surrealdb.dataPath") {
-		cfg.Providers.GraphStore.SurrealDB.DataPath = v.GetString("surrealdb.dataPath")
-	}
-	if v.InConfig("surrealdb.enabled") && !v.InConfig("providers.graphStore.surrealdb.enabled") {
-		cfg.Providers.GraphStore.SurrealDB.Enabled = v.GetBool("surrealdb.enabled")
-	}
-}
-
 func normalizeConfig(cfg *Config) {
 	if cfg.Providers.ScriptRuntime.Provider == "" {
 		cfg.Providers.ScriptRuntime.Provider = "builtin.node-process"
@@ -648,27 +561,6 @@ func normalizeConfig(cfg *Config) {
 	}
 	if cfg.Providers.GraphStore.Provider == "" {
 		cfg.Providers.GraphStore.Provider = "builtin.surrealdb-process"
-	}
-}
-
-func normalizeLegacyDynamicPortDefaults(cfg *Config) {
-	if cfg.Server.Port == 1 {
-		cfg.Server.Port = 0
-	}
-	if cfg.Providers.VectorStore.Qdrant.Port == 1 {
-		cfg.Providers.VectorStore.Qdrant.Port = 0
-	}
-	if cfg.Providers.GraphStore.SurrealDB.Port == 1 {
-		cfg.Providers.GraphStore.SurrealDB.Port = 0
-	}
-	if _, ok := os.LookupEnv("AMITIA_SERVER_PORT"); !ok && cfg.Server.Port == 18899 {
-		cfg.Server.Port = 0
-	}
-	if _, ok := os.LookupEnv("AMITIA_QDRANT_PORT"); !ok && cfg.Providers.VectorStore.Qdrant.Port == 19178 {
-		cfg.Providers.VectorStore.Qdrant.Port = 0
-	}
-	if _, ok := os.LookupEnv("AMITIA_SURREAL_PORT"); !ok && cfg.Providers.GraphStore.SurrealDB.Port == 18000 {
-		cfg.Providers.GraphStore.SurrealDB.Port = 0
 	}
 }
 
@@ -704,10 +596,6 @@ func validateConfig(cfg *Config) error {
 	if cfg.Server.Port < 0 || cfg.Server.Port > 65535 {
 		return fmt.Errorf("server.port 超有效范围: %d", cfg.Server.Port)
 	}
-	if cfg.Server.CompatibilityPort < 0 || cfg.Server.CompatibilityPort > 65535 {
-		return fmt.Errorf("server.compatibilityPort 超有效范围: %d", cfg.Server.CompatibilityPort)
-	}
-
 	if err := validateComponentURI(cfg.Components.TaskHost.EntryURI); err != nil {
 		return fmt.Errorf("taskHost.entryUri: %w", err)
 	}

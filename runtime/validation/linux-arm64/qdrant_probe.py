@@ -13,18 +13,18 @@ except ImportError:
     from errors import ValidationErrorCode, ValidationException
 
 
-QDRANT_INTERNAL_PORT = 19178
+QDRANT_INTERNAL_PORT = 29178
 DEFAULT_PROFILES = ["desktop-default", "mobile-compact", "mobile-balanced", "mobile-performance"]
 MOBILE_PROFILES = ["mobile-compact", "mobile-balanced", "mobile-performance"]
 
 PROFILE_DEFAULTS = {
     "desktop-default": {
-        "service": {"host": "127.0.0.1", "http_port": 19178, "grpc_port": 19179},
+        "service": {"host": "127.0.0.1", "http_port": 29178, "grpc_port": 29179},
         "cluster": {"enabled": False},
         "telemetry_disabled": True,
     },
     "mobile-compact": {
-        "service": {"host": "127.0.0.1", "http_port": 19178, "grpc_port": 19179},
+        "service": {"host": "127.0.0.1", "http_port": 29178, "grpc_port": 29179},
         "max_workers": 1,
         "max_search_threads": 1,
         "optimizer_cpu_budget": 0,
@@ -34,7 +34,7 @@ PROFILE_DEFAULTS = {
         "telemetry_disabled": True,
     },
     "mobile-balanced": {
-        "service": {"host": "127.0.0.1", "http_port": 19178, "grpc_port": 19179},
+        "service": {"host": "127.0.0.1", "http_port": 29178, "grpc_port": 29179},
         "max_workers": 2,
         "max_search_threads": 2,
         "optimizer_cpu_budget": 1,
@@ -44,7 +44,7 @@ PROFILE_DEFAULTS = {
         "telemetry_disabled": True,
     },
     "mobile-performance": {
-        "service": {"host": "127.0.0.1", "http_port": 19178, "grpc_port": 19179},
+        "service": {"host": "127.0.0.1", "http_port": 29178, "grpc_port": 29179},
         "max_workers": 4,
         "max_search_threads": 4,
         "optimizer_cpu_budget": 2,
@@ -181,7 +181,7 @@ def verify_qdrant_config(config_path: str, expected_profile: str) -> List[str]:
     return errors
 
 
-def query_qdrant_identity(host: str = "127.0.0.1", port: int = 19178) -> Optional[QdrantIdentity]:
+def query_qdrant_identity(host: str = "127.0.0.1", port: int = 29178) -> Optional[QdrantIdentity]:
     result = http_probe.http_get_json(f"http://{host}:{port}/")
     if not result.ok:
         return None
@@ -196,22 +196,22 @@ def query_qdrant_identity(host: str = "127.0.0.1", port: int = 19178) -> Optiona
     return QdrantIdentity(title=title, version=version, raw=payload)
 
 
-def check_qdrant_live(host: str = "127.0.0.1", port: int = 19178) -> bool:
+def check_qdrant_live(host: str = "127.0.0.1", port: int = 29178) -> bool:
     result = http_probe.http_get_json(f"http://{host}:{port}/livez")
     return result.ok and result.status == 200
 
 
-def check_qdrant_ready(host: str = "127.0.0.1", port: int = 19178) -> bool:
+def check_qdrant_ready(host: str = "127.0.0.1", port: int = 29178) -> bool:
     result = http_probe.http_get_json(f"http://{host}:{port}/readyz")
     return result.ok and result.status == 200
 
 
-def check_qdrant_healthy(host: str = "127.0.0.1", port: int = 19178) -> bool:
+def check_qdrant_healthy(host: str = "127.0.0.1", port: int = 29178) -> bool:
     result = http_probe.http_get_json(f"http://{host}:{port}/healthz")
     return result.ok and result.status == 200
 
 
-def wait_for_qdrant_ready(timeout: float = 60.0, host: str = "127.0.0.1", port: int = 19178) -> bool:
+def wait_for_qdrant_ready(timeout: float = 60.0, host: str = "127.0.0.1", port: int = 29178) -> bool:
     deadline = time.time() + timeout
     while time.time() < deadline:
         if check_qdrant_ready(host, port):

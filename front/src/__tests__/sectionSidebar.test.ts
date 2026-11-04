@@ -32,6 +32,7 @@ describe("一级导航对应的第二栏", () => {
     const character = await render("character");
     expect(character.wrapper.findAll(".section-entry strong").map(node => node.text())).toEqual([
       "角色管理",
+      "团队",
       "世界书",
     ]);
     character.wrapper.unmount();

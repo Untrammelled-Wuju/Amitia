@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import settingsSource from "../views/ai-character-settings/AiCharacterSettingsView.vue?raw";
 import characterViewSource from "../views/character/CharacterView.vue?raw";
+import teamsViewSource from "../views/character/CharacterTeamsView.vue?raw";
 
 describe("角色信息设置回归", () => {
   it("使用现行角色接口完成保存、默认切换和重置", () => {
@@ -22,5 +23,20 @@ describe("角色信息设置回归", () => {
     expect(settingsSource).not.toContain("SpecialEventsSection");
     expect(settingsSource).not.toContain("WorkProfileSection");
     expect(characterViewSource).toContain('slot-id="character.detail.tab"');
+  });
+
+  it("角色详情不再提供记忆、时间线、主动任务和团队职责入口", () => {
+    expect(characterViewSource).not.toContain('label="记忆" name="memory"');
+    expect(characterViewSource).not.toContain('label="时间线" name="timeline"');
+    expect(characterViewSource).not.toContain('label="主动任务"');
+    expect(characterViewSource).not.toContain("团队职责");
+  });
+
+  it("角色和团队不再提供技术运行配置", () => {
+    expect(characterViewSource).not.toContain('label="运行配置" name="runtime"');
+    expect(characterViewSource).not.toContain("CharacterRuntimeConfig");
+    expect(characterViewSource).not.toContain('endsWith("/runtime")');
+    expect(teamsViewSource).not.toContain("团队预算");
+    expect(teamsViewSource).not.toContain("新增预算");
   });
 });

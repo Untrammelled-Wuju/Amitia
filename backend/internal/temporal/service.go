@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/requestidentity"
 	"gorm.io/gorm"
 )
@@ -73,8 +72,7 @@ func (s *Service) CharacterOwnedBy(characterID, spaceID string) (bool, error) {
 	if owner == requested && requested != "" {
 		return true, nil
 	}
-	local := config.AppCfg != nil && strings.EqualFold(strings.TrimSpace(config.AppCfg.Security.Mode), "local_single_user")
-	return local && requested != "" && (owner == "" || owner == requestidentity.LegacySpaceID), nil
+	return owner != "" && owner == requested, nil
 }
 
 func defaultProfile(ownerType, ownerID string, now time.Time) *Profile {

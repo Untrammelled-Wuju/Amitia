@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentProcessProfile resolves the profile of the already-started server
-// process without consulting legacy application config. Server binaries launched
+// process without consulting application config. Server binaries launched
 // by the desktop shell always pass --runtime-profile explicitly; environment is
 // retained for service/container deployments.
 func CurrentProcessProfile() Profile {

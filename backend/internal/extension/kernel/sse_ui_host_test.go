@@ -2,13 +2,92 @@ package kernel
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/u-ai/backend/internal/auth"
+	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/pkg/sse"
 )
+
+type sseUITestFixture struct {
+	notifier    *SSEUIHostNotifier
+	ctx         context.Context
+	hub         *sse.Hub
+	client      *sse.Client
+	clientID    string
+	hostSession string
+	spaceID     string
+}
+
+func newSSEUITestFixture(t *testing.T) sseUITestFixture {
+	t.Helper()
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if _, err := db.Exec(`CREATE TABLE kernel_host_registry (
+		host_client_id TEXT PRIMARY KEY,
+		host_session_id TEXT NOT NULL,
+		space_id TEXT NOT NULL DEFAULT '',
+		platform TEXT NOT NULL DEFAULT '',
+		device_id TEXT NOT NULL DEFAULT '',
+		runtime_id TEXT NOT NULL DEFAULT '',
+		window_id TEXT NOT NULL DEFAULT '',
+		capabilities TEXT NOT NULL DEFAULT '[]',
+		entry_kind TEXT NOT NULL DEFAULT 'ui_host',
+		authenticated_at TEXT NOT NULL,
+		last_heartbeat TEXT NOT NULL,
+		connection_state TEXT NOT NULL DEFAULT 'disconnected',
+		session_token TEXT NOT NULL DEFAULT '',
+		created_at TEXT NOT NULL,
+		expires_at TEXT,
+		runtime_session_id TEXT NOT NULL DEFAULT '',
+		connection_generation INTEGER NOT NULL DEFAULT 0,
+		entry_id TEXT NOT NULL DEFAULT ''
+	)`); err != nil {
+		t.Fatal(err)
+	}
+	registry := host_registry.NewRegistry(db)
+	actor := &auth.ActorContext{
+		PrincipalType: auth.PrincipalTrustedDevice,
+		SpaceID:       runtimeidentity.SpaceID("space-" + t.Name()),
+		DeviceID:      runtimeidentity.DeviceID("device-" + t.Name()),
+		SessionID:     "auth-session-" + t.Name(),
+	}
+	clientID := "ui-host-" + strings.ReplaceAll(t.Name(), "/", "-")
+	hostSession := "ui-host-session-" + t.Name()
+	if err := registry.RegisterHost(context.Background(), &host_registry.RuntimeEntry{
+		EntryID:       clientID,
+		Kind:          host_registry.RegistryEntryKindUIHost,
+		SpaceID:       actor.SpaceID,
+		DeviceID:      actor.DeviceID,
+		Platform:      runtimeidentity.PlatformWindows,
+		Features:      []host_registry.EndpointFeature{host_registry.EndpointFeatureUINotify, host_registry.EndpointFeatureUIDialog, host_registry.EndpointFeatureUINavigate},
+		PresenceState: host_registry.PresenceStateReady,
+		HostClientID:  clientID,
+		HostSessionID: hostSession,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	hub := sse.Global
+	client := hub.Subscribe(clientID)
+	t.Cleanup(func() { hub.Unsubscribe(clientID) })
+	return sseUITestFixture{
+		notifier:    NewSSEUIHostNotifier(hub, registry),
+		ctx:         auth.WithActor(context.Background(), actor),
+		hub:         hub,
+		client:      client,
+		clientID:    clientID,
+		hostSession: hostSession,
+		spaceID:     actor.SpaceID.String(),
+	}
+}
 
 func TestDefaultUIHostNotifier_FailClosed(t *testing.T) {
 	n := NewDefaultUIHostNotifier()
@@ -28,7 +107,7 @@ func TestDefaultUIHostNotifier_FailClosed(t *testing.T) {
 
 func TestSSEUIHostNotifier_HostUnavailableWithoutClients(t *testing.T) {
 	hub := &sse.Hub{}
-	n := NewSSEUIHostNotifier(hub)
+	n := NewSSEUIHostNotifier(hub, nil)
 
 	if err := n.Notify(context.Background(), "ext-1", "title", "body", "info"); !errors.Is(err, ErrUIHostUnavailable) {
 		t.Errorf("Notify() error = %v, want ErrUIHostUnavailable", err)
@@ -44,7 +123,7 @@ func TestSSEUIHostNotifier_HostUnavailableWithoutClients(t *testing.T) {
 }
 
 func TestSSEUIHostNotifier_NilHub(t *testing.T) {
-	n := NewSSEUIHostNotifier(nil)
+	n := NewSSEUIHostNotifier(nil, nil)
 
 	if err := n.Notify(context.Background(), "ext-1", "title", "body", "info"); !errors.Is(err, ErrUIHostUnavailable) {
 		t.Errorf("Notify() error = %v, want ErrUIHostUnavailable", err)
@@ -60,12 +139,10 @@ func TestSSEUIHostNotifier_NilHub(t *testing.T) {
 }
 
 func TestSSEUIHostNotifier_NotifyWithClients(t *testing.T) {
-	hub := sse.Global
-	client := hub.Subscribe("test-notify-" + t.Name())
-	defer hub.Unsubscribe("test-notify-" + t.Name())
+	fixture := newSSEUITestFixture(t)
+	client := fixture.client
 
-	n := NewSSEUIHostNotifier(hub)
-	if err := n.Notify(context.Background(), "ext-1", "Test Title", "Test Body", "info"); err != nil {
+	if err := fixture.notifier.Notify(fixture.ctx, "ext-1", "Test Title", "Test Body", "info"); err != nil {
 		t.Fatalf("Notify() error = %v, want nil", err)
 	}
 
@@ -116,12 +193,10 @@ func TestSSEUIHostNotifier_NotifyWithClients(t *testing.T) {
 }
 
 func TestSSEUIHostNotifier_NavigateWithClients(t *testing.T) {
-	hub := sse.Global
-	client := hub.Subscribe("test-navigate-" + t.Name())
-	defer hub.Unsubscribe("test-navigate-" + t.Name())
+	fixture := newSSEUITestFixture(t)
+	client := fixture.client
 
-	n := NewSSEUIHostNotifier(hub)
-	if err := n.Navigate(context.Background(), "ext-1", "/chat"); err != nil {
+	if err := fixture.notifier.Navigate(fixture.ctx, "ext-1", "/chat"); err != nil {
 		t.Fatalf("Navigate() error = %v, want nil", err)
 	}
 
@@ -157,11 +232,8 @@ func TestSSEUIHostNotifier_NavigateWithClients(t *testing.T) {
 }
 
 func TestSSEUIHostNotifier_DialogWithResolution(t *testing.T) {
-	hub := sse.Global
-	client := hub.Subscribe("test-dialog-" + t.Name())
-	defer hub.Unsubscribe("test-dialog-" + t.Name())
-
-	n := NewSSEUIHostNotifier(hub)
+	fixture := newSSEUITestFixture(t)
+	client := fixture.client
 
 	dialogID := "test-dlg-resolve"
 	resultCh := make(chan struct {
@@ -170,7 +242,7 @@ func TestSSEUIHostNotifier_DialogWithResolution(t *testing.T) {
 	}, 1)
 
 	go func() {
-		result, err := n.Dialog(context.Background(), "ext-1", dialogID, "Choose", []string{"Yes", "No"})
+		result, err := fixture.notifier.Dialog(fixture.ctx, "ext-1", dialogID, "Choose", []string{"Yes", "No"})
 		resultCh <- struct {
 			result string
 			err    error
@@ -210,11 +282,11 @@ func TestSSEUIHostNotifier_DialogWithResolution(t *testing.T) {
 		t.Fatal("timeout waiting for SSE event")
 	}
 
-	if !n.HasPendingDialog(dialogID) {
+	if !fixture.notifier.HasPendingDialog(dialogID) {
 		t.Fatal("expected pending dialog to exist")
 	}
 
-	if !n.ResolveDialog(dialogID, "Yes") {
+	if !fixture.notifier.ResolveDialogWithHost(dialogID, fixture.clientID, fixture.hostSession, "Yes") {
 		t.Fatal("ResolveDialog returned false, expected true")
 	}
 
@@ -230,22 +302,19 @@ func TestSSEUIHostNotifier_DialogWithResolution(t *testing.T) {
 		t.Fatal("timeout waiting for dialog result")
 	}
 
-	if n.HasPendingDialog(dialogID) {
+	if fixture.notifier.HasPendingDialog(dialogID) {
 		t.Fatal("expected pending dialog to be removed after resolution")
 	}
 }
 
 func TestSSEUIHostNotifier_DialogTimeout(t *testing.T) {
-	hub := sse.Global
-	client := hub.Subscribe("test-dialog-timeout-" + t.Name())
-	defer hub.Unsubscribe("test-dialog-timeout-" + t.Name())
+	fixture := newSSEUITestFixture(t)
+	client := fixture.client
 
-	n := NewSSEUIHostNotifier(hub)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel := context.WithTimeout(fixture.ctx, 100*time.Millisecond)
 	defer cancel()
 
-	_, err := n.Dialog(ctx, "ext-1", "test-dlg-timeout", "msg", []string{"OK"})
+	_, err := fixture.notifier.Dialog(ctx, "ext-1", "test-dlg-timeout", "msg", []string{"OK"})
 	if err == nil {
 		t.Fatal("expected timeout error, got nil")
 	}
@@ -257,7 +326,7 @@ func TestSSEUIHostNotifier_DialogTimeout(t *testing.T) {
 
 func TestSSEUIHostNotifier_ResolveDialogNotFound(t *testing.T) {
 	hub := &sse.Hub{}
-	n := NewSSEUIHostNotifier(hub)
+	n := NewSSEUIHostNotifier(hub, nil)
 
 	if n.ResolveDialog("nonexistent", "ok") {
 		t.Fatal("ResolveDialog returned true for non-existent dialog, expected false")
@@ -270,7 +339,7 @@ func TestSSEUIHostNotifier_ResolveDialogNotFound(t *testing.T) {
 
 func TestSSEEventEnvelope_Fields(t *testing.T) {
 	payload := map[string]interface{}{"key": "value"}
-	envelope := NewEventEnvelope("ui_notify", "ext-1", payload, 5*time.Minute)
+	envelope := NewSSEEventEnvelope("ui_notify", "ext-1", payload, 5*time.Minute)
 
 	if envelope.EventType != "ui_notify" {
 		t.Errorf("expected EventType 'ui_notify', got %v", envelope.EventType)
@@ -302,8 +371,8 @@ func TestSSEEventEnvelope_Fields(t *testing.T) {
 
 func TestSSEEventEnvelope_UniqueRequestIDs(t *testing.T) {
 	payload := map[string]interface{}{"key": "value"}
-	e1 := NewEventEnvelope("ui_notify", "ext-1", payload, 5*time.Minute)
-	e2 := NewEventEnvelope("ui_notify", "ext-1", payload, 5*time.Minute)
+	e1 := NewSSEEventEnvelope("ui_notify", "ext-1", payload, 5*time.Minute)
+	e2 := NewSSEEventEnvelope("ui_notify", "ext-1", payload, 5*time.Minute)
 	if e1.RequestID == e2.RequestID {
 		t.Error("expected RequestIDs to be unique")
 	}
@@ -311,7 +380,7 @@ func TestSSEEventEnvelope_UniqueRequestIDs(t *testing.T) {
 
 func TestSSEEventEnvelope_ToMap(t *testing.T) {
 	payload := map[string]interface{}{"title": "test"}
-	envelope := NewEventEnvelope("ui_notify", "ext-1", payload, 5*time.Minute)
+	envelope := NewSSEEventEnvelope("ui_notify", "ext-1", payload, 5*time.Minute)
 	m := envelope.ToMap()
 
 	if m["eventType"] != "ui_notify" {
@@ -335,9 +404,30 @@ func TestSSEEventEnvelope_ToMap(t *testing.T) {
 }
 
 func TestSSEUIHostNotifier_ClientRuntimeSessionRevisionIsAuthoritative(t *testing.T) {
-	n := NewSSEUIHostNotifier(nil)
+	fixture := newSSEUITestFixture(t)
+	n := fixture.notifier
+	go func() {
+		for message := range fixture.client.Events {
+			data, _ := message["data"].(map[string]interface{})
+			payload, _ := data["payload"].(map[string]interface{})
+			switch message["event"] {
+			case "ui_dialog":
+				dialogID, _ := payload["dialogId"].(string)
+				n.ResolveDialogWithHost(dialogID, fixture.clientID, fixture.hostSession, "allow")
+			case "ui_client_runtime_command":
+				commandID, _ := payload["commandId"].(string)
+				state, _ := payload["sessionState"].(map[string]interface{})
+				revision, _ := state["revision"].(int64)
+				n.ResolveClientRuntimeCommandWithHost(commandID, fixture.clientID, fixture.hostSession, map[string]interface{}{
+					"ok":       true,
+					"state":    "reconciled",
+					"revision": revision,
+				}, "")
+			}
+		}
+	}()
 	scope := map[string]interface{}{
-		"spaceId":        "user-1",
+		"spaceId":        fixture.spaceID,
 		"conversationId": "conversation-1",
 		"requestId":      "request-1",
 	}
@@ -349,7 +439,7 @@ func TestSSEUIHostNotifier_ClientRuntimeSessionRevisionIsAuthoritative(t *testin
 			"contributions": []interface{}{},
 		},
 	}
-	defined, err := n.ExecuteClientRuntimeCommand(context.Background(), "define", definePayload)
+	defined, err := n.ExecuteClientRuntimeCommand(fixture.ctx, "define", definePayload)
 	if err != nil {
 		t.Fatalf("define failed: %v", err)
 	}
@@ -360,12 +450,12 @@ func TestSSEUIHostNotifier_ClientRuntimeSessionRevisionIsAuthoritative(t *testin
 	if got := definedState["revision"]; got != int64(1) {
 		t.Fatalf("define revision = %v, want 1", got)
 	}
-	if got := defined["delivery"]; got != "deferred" {
-		t.Fatalf("define delivery = %v, want deferred", got)
+	if got := defined["delivery"]; got != "live" {
+		t.Fatalf("define delivery = %v, want live", got)
 	}
 
 	runPayload := map[string]interface{}{"_runtimeScope": scope, "id": "demo", "version": "1.0.0"}
-	run, err := n.ExecuteClientRuntimeCommand(context.Background(), "run", runPayload)
+	run, err := n.ExecuteClientRuntimeCommand(fixture.ctx, "run", runPayload)
 	if err != nil {
 		t.Fatalf("run failed: %v", err)
 	}
@@ -374,7 +464,7 @@ func TestSSEUIHostNotifier_ClientRuntimeSessionRevisionIsAuthoritative(t *testin
 		t.Fatalf("run revision = %v, want 4 (approval + activation + delivery preparation)", got)
 	}
 
-	inspect, err := n.ExecuteClientRuntimeCommand(context.Background(), "inspect", map[string]interface{}{"_runtimeScope": scope})
+	inspect, err := n.ExecuteClientRuntimeCommand(fixture.ctx, "inspect", map[string]interface{}{"_runtimeScope": scope})
 	if err != nil {
 		t.Fatalf("inspect failed: %v", err)
 	}
@@ -383,7 +473,7 @@ func TestSSEUIHostNotifier_ClientRuntimeSessionRevisionIsAuthoritative(t *testin
 		t.Fatalf("inspect revision = %v, want 4", got)
 	}
 
-	stop, err := n.ExecuteClientRuntimeCommand(context.Background(), "stop", map[string]interface{}{"_runtimeScope": scope, "id": "demo"})
+	stop, err := n.ExecuteClientRuntimeCommand(fixture.ctx, "stop", map[string]interface{}{"_runtimeScope": scope, "id": "demo"})
 	if err != nil {
 		t.Fatalf("stop failed: %v", err)
 	}
@@ -394,7 +484,7 @@ func TestSSEUIHostNotifier_ClientRuntimeSessionRevisionIsAuthoritative(t *testin
 }
 
 func TestSSEUIHostNotifier_ClientRuntimeResponseIsBoundAndDeduplicated(t *testing.T) {
-	n := NewSSEUIHostNotifier(nil)
+	n := NewSSEUIHostNotifier(nil, nil)
 	pending := &pendingClientRuntimeCommand{
 		responseCh: make(chan clientRuntimeHostResponse, 2),
 		allowedHosts: map[string]string{
@@ -426,7 +516,7 @@ func TestSSEUIHostNotifier_ClientRuntimeResponseIsBoundAndDeduplicated(t *testin
 }
 
 func TestSSEUIHostNotifier_ClientRuntimeDeferredResponseDoesNotFailRevisionGate(t *testing.T) {
-	n := NewSSEUIHostNotifier(nil)
+	n := NewSSEUIHostNotifier(nil, nil)
 	pending := &pendingClientRuntimeCommand{
 		responseCh:     make(chan clientRuntimeHostResponse, 1),
 		allowedHosts:   map[string]string{"host-a": "session-a"},
@@ -448,7 +538,7 @@ func TestSSEUIHostNotifier_ClientRuntimeDeferredResponseDoesNotFailRevisionGate(
 }
 
 func TestSSEUIHostNotifier_ClientRuntimeActiveResponseEnforcesRevisionGate(t *testing.T) {
-	n := NewSSEUIHostNotifier(nil)
+	n := NewSSEUIHostNotifier(nil, nil)
 	pending := &pendingClientRuntimeCommand{
 		responseCh:     make(chan clientRuntimeHostResponse, 1),
 		allowedHosts:   map[string]string{"host-a": "session-a"},
@@ -471,7 +561,7 @@ func TestSSEUIHostNotifier_ClientRuntimeActiveResponseEnforcesRevisionGate(t *te
 }
 
 func TestSSEUIHostNotifier_ClientRuntimeRollbackRestoresCommittedStateWithNewRevision(t *testing.T) {
-	n := NewSSEUIHostNotifier(nil)
+	n := NewSSEUIHostNotifier(nil, nil)
 	spaceID, conversationID := "user-rollback", "conversation-rollback"
 	definePayload := map[string]interface{}{
 		"package": map[string]interface{}{"id": "demo", "version": "1", "contributions": []interface{}{}},
@@ -543,7 +633,7 @@ func TestValidateClientRuntimePackageDefinitionRejectsDuplicateChildSlotDeclarat
 }
 
 func TestSSEUIHostNotifier_ClientRuntimeCurrentAdvancesOnlyAfterBrowserAck(t *testing.T) {
-	n := NewSSEUIHostNotifier(nil)
+	n := NewSSEUIHostNotifier(nil, nil)
 	spaceID, conversationID := "user-current-next", "conversation-current-next"
 	definePayload := map[string]interface{}{
 		"package": map[string]interface{}{"id": "demo", "version": "1", "contributions": []interface{}{}},
@@ -604,7 +694,7 @@ func TestSSEUIHostNotifier_ClientRuntimeCurrentAdvancesOnlyAfterBrowserAck(t *te
 }
 
 func TestSSEUIHostNotifier_ClientRuntimeFailedUpdateKeepsCurrentAndNextDiagnostics(t *testing.T) {
-	n := NewSSEUIHostNotifier(nil)
+	n := NewSSEUIHostNotifier(nil, nil)
 	spaceID, conversationID := "user-failed-next", "conversation-failed-next"
 	for _, version := range []string{"1", "2"} {
 		if err := n.recordClientRuntimeDefinition(spaceID, conversationID, map[string]interface{}{
@@ -650,7 +740,7 @@ func TestSSEUIHostNotifier_ClientRuntimeFailedUpdateKeepsCurrentAndNextDiagnosti
 }
 
 func TestSSEUIHostNotifier_ClientRuntimeRunModeRestartsCurrentAndRequiresUpdateForVersionSwitch(t *testing.T) {
-	n := NewSSEUIHostNotifier(nil)
+	n := NewSSEUIHostNotifier(nil, nil)
 	spaceID, conversationID := "user-run-mode", "conversation-run-mode"
 	for _, version := range []string{"1", "2"} {
 		if err := n.recordClientRuntimeDefinition(spaceID, conversationID, map[string]interface{}{
@@ -699,7 +789,7 @@ func TestSSEUIHostNotifier_ClientRuntimeRunModeRestartsCurrentAndRequiresUpdateF
 }
 
 func TestSSEUIHostNotifier_ClientRuntimeFutureVersionApprovalCoversLaterImmutablePackages(t *testing.T) {
-	n := NewSSEUIHostNotifier(nil)
+	n := NewSSEUIHostNotifier(nil, nil)
 	spaceID, conversationID := "user-future-approval", "conversation-future-approval"
 	for _, version := range []string{"1", "2"} {
 		if err := n.recordClientRuntimeDefinition(spaceID, conversationID, map[string]interface{}{

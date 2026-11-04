@@ -46,7 +46,7 @@ Map<String, dynamic> ownedConversationRow(
     'ownerId': owner,
     'conversationOrigin': origin,
     'origin': row['origin'],
-    'readOnly': row['readOnly'] == true || row['origin'] == 'legacy',
+    'readOnly': row['readOnly'] == true,
     'pinnedAt': row['pinned'] is bool
         ? row['pinned'] == true
               ? row['updatedAt'] ?? 'pinned'

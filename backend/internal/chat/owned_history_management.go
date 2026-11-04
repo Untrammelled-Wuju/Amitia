@@ -18,7 +18,7 @@ type ManagedHistorySelection struct {
 	MessageRevisions      map[string]int64
 }
 
-func DeleteOwnedManagedHistory(ctx context.Context, db *gorm.DB, configured Service, legacySpaceID, roleID string, selection ManagedHistorySelection) error {
+func DeleteOwnedManagedHistory(ctx context.Context, db *gorm.DB, configured Service, ownerSpaceID, roleID string, selection ManagedHistorySelection) error {
 	s := &service{db: db}
 	if configured != nil {
 		var ok bool
@@ -58,7 +58,7 @@ func DeleteOwnedManagedHistory(ctx context.Context, db *gorm.DB, configured Serv
 			if result.RowsAffected != 1 {
 				return coordination.ErrResourceVersion
 			}
-			if err := s.recordMessageChangeTx(tx, &message, syncapi.OpDelete, revision+1, legacySpaceID); err != nil {
+			if err := s.recordMessageChangeTx(tx, &message, syncapi.OpDelete, revision+1, ownerSpaceID); err != nil {
 				return err
 			}
 			if err := tx.Where("message_id=?", id).Delete(&MessageAttachment{}).Error; err != nil {
@@ -67,7 +67,7 @@ func DeleteOwnedManagedHistory(ctx context.Context, db *gorm.DB, configured Serv
 		}
 		for id, revision := range selection.ConversationRevisions {
 			var conversation Conversation
-			if err := tx.Where("id=? AND revision=? AND deleted_at IS NULL AND (space_id=? OR space_id='' OR space_id='default')", id, revision, legacySpaceID).First(&conversation).Error; err != nil {
+			if err := tx.Where("id=? AND revision=? AND deleted_at IS NULL AND space_id=?", id, revision, ownerSpaceID).First(&conversation).Error; err != nil {
 				return coordination.ErrResourceVersion
 			}
 			var remaining int64
@@ -94,7 +94,7 @@ func DeleteOwnedManagedHistory(ctx context.Context, db *gorm.DB, configured Serv
 			if result.RowsAffected != 1 {
 				return coordination.ErrResourceVersion
 			}
-			if err := s.recordConversationChangeTx(tx, &conversation, operation, revision+1, legacySpaceID); err != nil {
+			if err := s.recordConversationChangeTx(tx, &conversation, operation, revision+1, ownerSpaceID); err != nil {
 				return err
 			}
 			if selection.EraseContent {

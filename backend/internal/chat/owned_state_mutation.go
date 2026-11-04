@@ -14,7 +14,6 @@ import (
 	"github.com/u-ai/backend/internal/need"
 	"github.com/u-ai/backend/internal/psyche"
 	"github.com/u-ai/backend/internal/relationship"
-	amitialog "log"
 )
 
 type ownedPsycheStateDocument struct {
@@ -92,8 +91,6 @@ func currentOwnedPsycheState(resources []coordination.Resource, roleID string) (
 	var value interaction.PsycheState
 	revision := int64(0)
 	qualifiedID := coordination.RoleRuntimeStateID(coordination.RuntimeStateKindPsyche, roleID)
-	legacyID := coordination.LegacyRuntimeStateID(coordination.RuntimeStateKindPsyche)
-	legacyFound := false
 	for _, resource := range resources {
 		if resource.Kind != coordination.RuntimeStateKindPsyche || resource.RoleID != roleID || resource.Deleted {
 			continue
@@ -104,14 +101,9 @@ func currentOwnedPsycheState(resources []coordination.Resource, roleID string) (
 			}
 			break
 		}
-		if resource.ID == legacyID && json.Unmarshal(resource.Body, &value) == nil {
-			legacyFound = true
-		}
 	}
 	if revision == 0 {
-		if !legacyFound {
-			value = defaultOwnedPsycheState()
-		}
+		value = defaultOwnedPsycheState()
 	}
 	return value, revision
 }
@@ -120,7 +112,6 @@ func currentOwnedRelationshipState(resources []coordination.Resource, roleID str
 	var value interaction.RelationshipState
 	revision := int64(0)
 	qualifiedID := coordination.RoleRuntimeStateID(coordination.RuntimeStateKindRelationship, roleID)
-	legacyID := coordination.LegacyRuntimeStateID(coordination.RuntimeStateKindRelationship)
 	for _, resource := range resources {
 		if resource.Kind != coordination.RuntimeStateKindRelationship || resource.RoleID != roleID || resource.Deleted {
 			continue
@@ -130,11 +121,6 @@ func currentOwnedRelationshipState(resources []coordination.Resource, roleID str
 				revision = resource.Revision
 			}
 			break
-		}
-		if resource.ID == legacyID {
-			if err := json.Unmarshal(resource.Body, &value); err != nil {
-				amitialog.Printf("[original-error] %v", err)
-			}
 		}
 	}
 	if value == (interaction.RelationshipState{}) {
@@ -147,7 +133,6 @@ func currentOwnedNeedState(resources []coordination.Resource, roleID string) (in
 	var value interaction.NeedState
 	revision := int64(0)
 	qualifiedID := coordination.RoleRuntimeStateID(coordination.RuntimeStateKindNeeds, roleID)
-	legacyID := coordination.LegacyRuntimeStateID(coordination.RuntimeStateKindNeeds)
 	for _, resource := range resources {
 		if resource.Kind != coordination.RuntimeStateKindNeeds || resource.RoleID != roleID || resource.Deleted {
 			continue
@@ -157,11 +142,6 @@ func currentOwnedNeedState(resources []coordination.Resource, roleID string) (in
 				revision = resource.Revision
 			}
 			break
-		}
-		if resource.ID == legacyID {
-			if err := json.Unmarshal(resource.Body, &value); err != nil {
-				amitialog.Printf("[original-error] %v", err)
-			}
 		}
 	}
 	if value.Count == 0 {

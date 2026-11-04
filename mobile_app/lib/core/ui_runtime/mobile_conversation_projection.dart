@@ -101,14 +101,14 @@ class MobileConversationProjection {
     for (final contribution in contributions) {
       final projection = (contribution.dataContract['projection'] as Map?)?.cast<String, dynamic>();
       if (projection == null) continue;
-      final eventTypes = _stringList(projection['event_types'] ?? projection['eventTypes']);
+      final eventTypes = _stringList(projection['event_types']);
       if (eventTypes.isEmpty) continue;
-      final startEvents = _stringList(projection['start_events'] ?? projection['startEvents']);
-      final endEvents = _stringList(projection['end_events'] ?? projection['endEvents']);
-      final keyPath = (projection['key_path'] ?? projection['keyPath'] ?? '').toString().trim();
-      final titlePath = (projection['title_path'] ?? projection['titlePath'] ?? '').toString().trim();
-      final nodeType = (projection['node_type'] ?? projection['nodeType'] ?? contribution.kind).toString();
-      final maxEvents = (((projection['max_events'] ?? projection['maxEvents']) as num?)?.toInt() ?? 100).clamp(1, 1000).toInt();
+      final startEvents = _stringList(projection['start_events']);
+      final endEvents = _stringList(projection['end_events']);
+      final keyPath = (projection['key_path'] ?? '').toString().trim();
+      final titlePath = (projection['title_path'] ?? '').toString().trim();
+      final nodeType = (projection['node_type'] ?? contribution.kind).toString();
+      final maxEvents = ((projection['max_events'] as num?)?.toInt() ?? 100).clamp(1, 1000).toInt();
       final active = <String, _ProjectionLifecycle>{};
       final startedGroups = <String>{};
 

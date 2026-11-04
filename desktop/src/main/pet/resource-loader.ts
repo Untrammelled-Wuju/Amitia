@@ -99,7 +99,7 @@ export interface Manifest {
   preview?: string;
   actions: ManifestAction[];
   binding?: { installationId?: string; petId?: string };
-  compatibility?: { minRuntimeVersion?: string; minimumRuntimeVersion?: string };
+  compatibility?: { minRuntimeVersion?: string };
   integrity?: { contentRootHash?: string; manifestHash?: string; files?: IntegrityFileEntry[] };
 }
 
@@ -335,7 +335,7 @@ throw new Error(
     const actions = new Map<string, RuntimeAction>();
     const manifestActions: ManifestAction[] = [];
     for (const [key, sharedAction] of pkg.actions) {
-      const localAction = this.mapRuntimeAction(sharedAction, request.installPath, pkg.schemaVersion);
+      const localAction = this.mapRuntimeAction(sharedAction, request.installPath);
       actions.set(key, localAction);
       manifestActions.push(this.mapManifestAction(sharedAction));
     }
@@ -445,13 +445,7 @@ throw new Error(
       throw new Error(`${ACTION_JSON_PARSE_FAILED}: ${errorMessage(err)}`);
     }
 
-    let reader: PackageReader;
-    try {
-      reader = this.normalizer.getReader(loaded.manifest.schemaVersion);
-    } catch (error) {
-  console.error("[original-error]", error);
-reader = this.normalizer.getReader(1);
-    }
+    const reader = this.normalizer.getReader(loaded.manifest.schemaVersion);
 
     let result: ActionReadResult;
     try {
@@ -460,7 +454,7 @@ reader = this.normalizer.getReader(1);
       throw new Error(errorMessage(err));
     }
 
-    const localAction = this.mapRuntimeAction(result.action, loaded.installPath, loaded.manifest.schemaVersion);
+    const localAction = this.mapRuntimeAction(result.action, loaded.installPath);
     loaded.actions.set(actionKey, localAction);
 
     if (loaded.defaultAction?.key === actionKey && localAction.available) {
@@ -504,7 +498,6 @@ reader = this.normalizer.getReader(1);
   private mapRuntimeAction(
     action: SharedRuntimeAction,
     installPath: string,
-    schemaVersion: number,
   ): RuntimeAction {
     const configPath = normalizePackagePath(action.configPath);
     const frames = action.frames.map((frame) => {
@@ -513,23 +506,7 @@ reader = this.normalizer.getReader(1);
         configPath,
         frameFile,
       );
-      try {
-        return resolvePackagePathUnderRoot(installPath, packageRelativePath);
-      } catch (error) {
-        // Package V1 packages in the wild used both action-relative and
-        // package-root-relative frame paths. Preserve that migration-only
-        // compatibility without weakening the frozen Package V1 contract.
-        if (schemaVersion === 1) {
-          try {
-            return resolvePackagePathUnderRoot(installPath, frameFile);
-          } catch (error) {
-  console.error("[original-error]", error);
-// Surface the original action-relative failure for deterministic
-            // diagnostics and to avoid silently accepting an unrelated file.
-          }
-        }
-        throw error;
-      }
+      return resolvePackagePathUnderRoot(installPath, packageRelativePath);
     });
     const frameDurationMs = action.fps > 0 ? Math.round(1000 / action.fps) : 100;
 

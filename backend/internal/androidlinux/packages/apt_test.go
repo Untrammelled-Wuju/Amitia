@@ -38,9 +38,9 @@ func joinArgs(args []string) string {
 func TestAptDetector_Detect_Available(t *testing.T) {
 	executor := &fakeShellExecutor{
 		results: map[string]shell.ShellExecuteResult{
-			"apt-get --version": {ExitCode: 0, Stdout: "apt 2.4.8 (amd64)"},
+			"apt-get --version":         {ExitCode: 0, Stdout: "apt 2.4.8 (amd64)"},
 			"dpkg --print-architecture": {ExitCode: 0, Stdout: "amd64"},
-			"id -u": {ExitCode: 0, Stdout: "0"},
+			"id -u":                     {ExitCode: 0, Stdout: "0"},
 		},
 	}
 	detector := NewAptDetector(executor)
@@ -81,9 +81,9 @@ func TestAptDetector_Detect_NotAvailable(t *testing.T) {
 func TestAptDetector_Detect_NonRoot(t *testing.T) {
 	executor := &fakeShellExecutor{
 		results: map[string]shell.ShellExecuteResult{
-			"apt-get --version": {ExitCode: 0, Stdout: "apt 2.4.8"},
+			"apt-get --version":         {ExitCode: 0, Stdout: "apt 2.4.8"},
 			"dpkg --print-architecture": {ExitCode: 0, Stdout: "amd64"},
-			"id -u": {ExitCode: 0, Stdout: "1000"},
+			"id -u":                     {ExitCode: 0, Stdout: "1000"},
 		},
 	}
 	detector := NewAptDetector(executor)

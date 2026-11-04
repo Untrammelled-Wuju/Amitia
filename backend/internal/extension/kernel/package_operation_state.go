@@ -13,6 +13,7 @@ import (
 type PackageOperationStatus string
 
 const (
+	PackageOperationCreated          PackageOperationStatus = "created"
 	PackageOperationPending          PackageOperationStatus = "pending"
 	PackageOperationInProgress       PackageOperationStatus = "in_progress"
 	PackageOperationCompleted        PackageOperationStatus = "completed"
@@ -261,15 +262,15 @@ func (r *PackageRepository) createOrGetOperation(ctx context.Context, op Package
 	defer tx.Rollback()
 	result, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO extension_package_operations (
 		operation_id, trace_id, space_id, scope_type, scope_id, extension_id, target_version,
-		operation_type, status, current_step, artifact_id, preview_session_id, confirmations_json,
+		operation_type, status, current_step, artifact_id, preview_session_id,
 		error_code, error_detail, started_at, updated_at, completed_at, stable_generation,
 		target_generation, current_pointer_json, idempotency_key, request_hash, from_version,
 		recovery_required, cancel_requested_at, lease_owner, lease_expires_at, attempt_count,
 		fencing_token, owner_instance_id, confirmation_claims_json, snapshot_requirement_hash
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		op.OperationID, op.TraceID, op.SpaceID, op.ScopeType, op.ScopeID, op.ExtensionID, op.TargetVersion,
 		op.OperationType, op.Status, op.CurrentStep, op.ArtifactID, op.PreviewSessionID,
-		op.ConfirmationsJSON, op.ErrorCode, op.ErrorDetail, op.StartedAt, op.UpdatedAt, op.CompletedAt,
+		op.ErrorCode, op.ErrorDetail, op.StartedAt, op.UpdatedAt, op.CompletedAt,
 		op.StableGeneration, op.TargetGeneration, op.CurrentPointerJSON, op.IdempotencyKey,
 		op.RequestHash, op.FromVersion, boolInteger(op.RecoveryRequired), op.CancelRequestedAt,
 		op.LeaseOwner, op.LeaseExpiresAt, op.AttemptCount, op.FencingToken, op.OwnerInstanceID, op.ConfirmationClaimsJSON, op.SnapshotRequirementHash)
@@ -690,7 +691,7 @@ func (r *PackageRepository) getAuthoritativeOperationByID(ctx context.Context, o
 
 const authoritativeOperationSelect = `SELECT operation_id, trace_id, space_id, scope_type, scope_id,
 	extension_id, target_version, operation_type, status, current_step, artifact_id, preview_session_id,
-	confirmations_json, error_code, error_detail, started_at, updated_at, completed_at,
+	error_code, error_detail, started_at, updated_at, completed_at,
 	stable_generation, target_generation, current_pointer_json, idempotency_key, request_hash,
 	from_version, recovery_required, cancel_requested_at, lease_owner, lease_expires_at, attempt_count,
 	fencing_token, owner_instance_id, confirmation_claims_json, snapshot_requirement_hash
@@ -704,7 +705,7 @@ func scanAuthoritativeOperation(row operationRow) (PackageOperationRecord, error
 	var op PackageOperationRecord
 	err := row.Scan(&op.OperationID, &op.TraceID, &op.SpaceID, &op.ScopeType, &op.ScopeID,
 		&op.ExtensionID, &op.TargetVersion, &op.OperationType, &op.Status, &op.CurrentStep,
-		&op.ArtifactID, &op.PreviewSessionID, &op.ConfirmationsJSON, &op.ErrorCode, &op.ErrorDetail,
+		&op.ArtifactID, &op.PreviewSessionID, &op.ErrorCode, &op.ErrorDetail,
 		&op.StartedAt, &op.UpdatedAt, &op.CompletedAt, &op.StableGeneration, &op.TargetGeneration,
 		&op.CurrentPointerJSON, &op.IdempotencyKey, &op.RequestHash, &op.FromVersion,
 		&op.RecoveryRequired, &op.CancelRequestedAt, &op.LeaseOwner, &op.LeaseExpiresAt, &op.AttemptCount,
@@ -736,6 +737,8 @@ func scanExtensionLease(row operationRow) (PackageExtensionLease, error) {
 
 func validOperationTransition(expected []PackageOperationStatus, target PackageOperationStatus) bool {
 	allowed := map[PackageOperationStatus]map[PackageOperationStatus]bool{
+		PackageOperationCreated: {PackageOperationCreated: true, PackageOperationPending: true,
+			PackageOperationInProgress: true, PackageOperationFailed: true, PackageOperationCancelled: true},
 		PackageOperationPending: {PackageOperationPending: true, PackageOperationInProgress: true,
 			PackageOperationFailed: true, PackageOperationCancelled: true},
 		PackageOperationInProgress: {PackageOperationInProgress: true, PackageOperationCompleted: true,
@@ -787,10 +790,6 @@ func IsPackageOperationError(err error, code string) bool {
 func IsPackageErrorCode(err error, code string) bool {
 	var pkgErr *PackageError
 	return errors.As(err, &pkgErr) && pkgErr.Code == code
-}
-
-func hashLegacyOperationRequest(op PackageOperationRecord) string {
-	return fmt.Sprintf("legacy:%s:%s:%s:%s:%s", op.OperationType, op.ExtensionID, op.TargetVersion, op.ArtifactID, op.PreviewSessionID)
 }
 
 func consumePackageConfirmationNonceTx(ctx context.Context, tx *sql.Tx, operationID string, binding PackageConfirmationNonceBinding) error {

@@ -122,9 +122,8 @@ class AmitiaColorTokens extends ThemeExtension<AmitiaColorTokens> {
   }
 }
 
-/// Layout values are intentionally brightness-independent. Legacy
-/// AppSpacing/AppRadius names are compatibility facades backed by
-/// DesignTokenRuntime, so existing pages consume runtime provider values too.
+/// Layout values are intentionally brightness-independent and resolve through
+/// the active token runtime.
 @immutable
 class AmitiaLayoutTokens extends ThemeExtension<AmitiaLayoutTokens> {
   const AmitiaLayoutTokens({
@@ -513,9 +512,7 @@ class AmitiaComponentVariants extends ThemeExtension<AmitiaComponentVariants> {
   }
 }
 
-/// Runtime fallback for provider-aware widgets that are built outside a
-/// ThemeData scope. AppSpacing/AppRadius are compatibility facades over this
-/// state, so legacy pages receive runtime provider values as well.
+/// Runtime token state for provider-aware widgets built outside ThemeData.
 abstract final class DesignTokenRuntime {
   static AmitiaLayoutTokens _layout = const AmitiaLayoutTokens();
   static AmitiaTypographyTokens _typography = const AmitiaTypographyTokens();

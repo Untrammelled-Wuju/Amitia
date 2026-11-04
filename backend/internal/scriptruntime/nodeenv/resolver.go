@@ -205,12 +205,9 @@ func (r *nodeEnvResolver) detectNode(ctx context.Context, env *Environment, prov
 
 	if err := r.resolveNodeFromRuntimePackage(ctx, env, paths); err == nil {
 		return nil
-	} else if errors.Is(err, ErrNodeNotFound) {
 	} else {
 		return err
 	}
-
-	return r.resolveNodeFromLegacy(ctx, env, paths)
 }
 
 func (r *nodeEnvResolver) resolveNodeFromExplicitPath(env *Environment, path string) error {
@@ -287,38 +284,6 @@ func (r *nodeEnvResolver) resolveNodeFromRuntimePackage(ctx context.Context, env
 	return newNodeNotFound(SourceRuntimePackage)
 }
 
-func (r *nodeEnvResolver) resolveNodeFromLegacy(ctx context.Context, env *Environment, paths util.RuntimePaths) error {
-	if err := r.installBundledNode(ctx, env.Guest, paths.Root); err != nil {
-		return err
-	}
-	candidates := legacyNodeCandidates(env.Guest, paths.Root, paths.WorkspaceDir)
-	for _, cand := range candidates {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		info, err := r.inspector.Stat(cand.path)
-		if err != nil {
-			r.addDiagnostic(CandidateKindNode, SourceLegacyBundled, cand.path, CandidateResultNotFound, "not found")
-			continue
-		}
-		if info.IsDir() {
-			r.addDiagnostic(CandidateKindNode, SourceLegacyBundled, cand.path, CandidateResultInvalidFile, "path is a directory")
-			continue
-		}
-		if env.Guest != platform.GuestPlatformWindows {
-			if !hasExecPerm(info.Mode()) {
-				r.addDiagnostic(CandidateKindNode, SourceLegacyBundled, cand.path, CandidateResultNotExecutable, "missing execute permission")
-				continue
-			}
-		}
-		env.NodeBinary = cand.path
-		env.Source = SourceLegacyBundled
-		r.addDiagnostic(CandidateKindNode, SourceLegacyBundled, cand.path, CandidateResultSelected, "")
-		return nil
-	}
-	return newNodeNotFound(SourceLegacyBundled)
-}
-
 func (r *nodeEnvResolver) installBundledNode(ctx context.Context, guest platform.GuestPlatform, runtimeRoot string) error {
 	if runtimeRoot == "" {
 		return nil
@@ -355,12 +320,7 @@ func (r *nodeEnvResolver) installBundledNode(ctx context.Context, guest platform
 	return nil
 }
 
-func (r *nodeEnvResolver) detectPackageManagers(ctx context.Context, env *Environment, providerCfg config.ScriptRuntimeProviderConfig, distributionRoot string) error {
-	distroRoot := distributionRoot
-	if env.DistributionRoot != "" {
-		distroRoot = env.DistributionRoot
-	}
-
+func (r *nodeEnvResolver) detectPackageManagers(ctx context.Context, env *Environment, providerCfg config.ScriptRuntimeProviderConfig, _ string) error {
 	explicitNpm := strings.TrimSpace(providerCfg.Node.NPMPath)
 	if explicitNpm != "" {
 		npmPath, err := r.normalizeExplicitPath(explicitNpm, r.host.Paths().Root)
@@ -381,19 +341,6 @@ func (r *nodeEnvResolver) detectPackageManagers(ctx context.Context, env *Enviro
 				if info, err := r.inspector.Stat(local); err == nil && !info.IsDir() && isPackageManagerExtension(local) {
 					env.NPMCLI = local
 					r.addDiagnostic(CandidateKindNPMCLI, SourceRuntimePackage, local, CandidateResultSelected, "")
-					found = true
-					break
-				}
-			}
-		}
-		if !found {
-			for _, cand := range legacyNpmCandidates(distroRoot, env.Guest) {
-				if err := ctx.Err(); err != nil {
-					return err
-				}
-				if info, err := r.inspector.Stat(cand.path); err == nil && !info.IsDir() {
-					env.NPMCLI = cand.path
-					r.addDiagnostic(CandidateKindNPMCLI, SourceLegacyBundled, cand.path, CandidateResultSelected, "")
 					found = true
 					break
 				}
@@ -424,19 +371,6 @@ func (r *nodeEnvResolver) detectPackageManagers(ctx context.Context, env *Enviro
 				if info, err := r.inspector.Stat(local); err == nil && !info.IsDir() && isPackageManagerExtension(local) {
 					env.NPXCLI = local
 					r.addDiagnostic(CandidateKindNPXCLI, SourceRuntimePackage, local, CandidateResultSelected, "")
-					found = true
-					break
-				}
-			}
-		}
-		if !found {
-			for _, cand := range legacyNpxCandidates(distroRoot, env.Guest) {
-				if err := ctx.Err(); err != nil {
-					return err
-				}
-				if info, err := r.inspector.Stat(cand.path); err == nil && !info.IsDir() {
-					env.NPXCLI = cand.path
-					r.addDiagnostic(CandidateKindNPXCLI, SourceLegacyBundled, cand.path, CandidateResultSelected, "")
 					found = true
 					break
 				}

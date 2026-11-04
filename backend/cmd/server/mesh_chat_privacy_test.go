@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/middleware/security"
@@ -17,7 +16,7 @@ import (
 
 func registerPrivacyFixture(core *threeCoreFixture) {
 	consumers := &ownedMemoryConsumers{runtime: &canonicalChatMemoryRuntime{engine: core.services.OwnedBusiness, spaceID: core.core, deviceID: core.device.DeviceID.String()}}
-	handler := system.NewHandler(system.NewService(app.NewAppContext(core.services.DB, nil), ""), core.services.DB, nil, nil, nil, nil, consumers)
+	handler := system.NewHandler(system.NewService(app.NewAppContext(core.services.DB, nil), ""), core.services.DB, nil, nil, nil, consumers)
 	system.WithCanonicalMemory(core.services.OwnedBusiness, core.core)(handler)
 	auth := security.AuthenticationMiddleware(security.AuthConfig{Mode: "network", SpaceID: core.core, DeviceCredentials: core.services.DeviceMesh.CredentialSvc, DeviceRegistry: core.services.KernelContainer.DeviceRegistry, Coordination: core.services.DeviceMesh.Coordination})
 	api := core.router.Group("/api/privacy", auth, handler.PrivacyAuthority())
@@ -34,7 +33,7 @@ func registerPrivacyFixture(core *threeCoreFixture) {
 	api.POST("/deletion/security-tests", handler.PrivacyDeletionSecurityTests)
 }
 
-func TestPrivacyRealTLSModesLegacyImportAndVersionConflicts(t *testing.T) {
+func TestPrivacyRealTLSModesAndVersionConflicts(t *testing.T) {
 	schemas := newThreeCoreSchemas(t)
 	phone := newThreeCoreFixture(t, "privacy-phone", schemas, runtimeidentity.PlatformAndroid)
 	core := newThreeCoreFixture(t, "privacy-core", schemas)
@@ -57,15 +56,7 @@ func TestPrivacyRealTLSModesLegacyImportAndVersionConflicts(t *testing.T) {
 	if reply.Scope.ResourceOwnerID != phone.device.DeviceID.String() {
 		t.Fatal("wrong initial owner")
 	}
-	legacy := chat.Conversation{ID: "legacy-private", SpaceID: schemas.legacySpace, Source: "import"}
 	port := phone.services.DeviceMesh.LocalDeviceDataPort.(*meshLocalDataPort)
-	legacy.SpaceID = port.legacySpaceID
-	if err := phone.services.DB.Create(&legacy).Error; err != nil {
-		t.Fatal(err)
-	}
-	if err := phone.services.DB.Create(&chat.Message{ID: "legacy-secret", ConversationID: legacy.ID, CharacterID: "one", Role: "user", Content: "token old-secret", Revision: 1}).Error; err != nil {
-		t.Fatal(err)
-	}
 	seedOwnedChatManagement(t, port, "conversation", "imported-private", "one", `{"source":"import"}`)
 	seedOwnedChatManagement(t, port, "message", "imported-secret", "one", `{"conversationId":"imported-private","role":"user","content":"api_key imported-secret","id":"imported-secret"}`)
 	result := scan()
@@ -77,7 +68,7 @@ func TestPrivacyRealTLSModesLegacyImportAndVersionConflicts(t *testing.T) {
 	foreign := findings[0].(map[string]any)
 	core.request(t, desktop, http.MethodPost, "/api/privacy/mask", map[string]any{"items": []map[string]any{{"id": foreign["id"], "sourceTable": foreign["source_table"]}}, "confirmToken": "确认脱敏"}, 409)
 
-	if len(findings) != 3 || result["status"] != "completed" {
+	if len(findings) != 2 || result["status"] != "completed" {
 		t.Fatalf("incomplete scan: %+v", result)
 	}
 	for _, raw := range findings {

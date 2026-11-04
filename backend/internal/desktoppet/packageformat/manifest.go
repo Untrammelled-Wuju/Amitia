@@ -61,29 +61,11 @@ var validPlaybackModes = map[string]bool{
 }
 
 func NormalizePlaybackMode(mode string) string {
-	if mode == "ping-pong" || mode == "pingpong" {
-		return PlaybackModePingPong
-	}
 	return mode
 }
 
 func IsValidPlaybackMode(mode string) bool {
 	return validPlaybackModes[mode]
-}
-
-func IsLegacyLoopType(mode string) bool {
-	return mode == LoopTypeNone || mode == LoopTypeLoop || mode == LoopTypeOnce || mode == LoopTypeHold || mode == LoopTypePingPong
-}
-
-func MapLegacyLoopType(loopType string) string {
-	switch loopType {
-	case LoopTypeLoop, LoopTypeOnce, LoopTypeHold, LoopTypePingPong:
-		return loopType
-	case LoopTypeNone:
-		return PlaybackModeOnce
-	default:
-		return PlaybackModeLoop
-	}
 }
 
 const (

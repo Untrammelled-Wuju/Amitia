@@ -1101,7 +1101,6 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
                 '${result.degraded ? ' · 降级检索' : ''}'
                 '${result.routeDegraded ? ' · 路由降级(${result.routeDegradationReason})' : ''}'
                 '${result.requestedRetrievalLevel == result.retrievalLevel ? '' : ' · 请求 ${result.requestedRetrievalLevel} → 实际 ${result.retrievalLevel}'}'
-                '${result.shadowLevel.isEmpty ? '' : ' · shadow ${result.shadowLevel}'}'
                 '${result.ambiguous ? ' · 存在冲突证据' : ''}'
                 ' · ${_temporalModeLabel(result.temporalMode)}'
                 '${result.asOf.isEmpty ? '' : ' · asOf ${_formatIso(result.asOf)}'}',

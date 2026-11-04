@@ -386,14 +386,6 @@ func normalizedNetworkMode(policy ServiceNetworkPolicy) string {
 	}
 }
 
-func prepareNetworkLaunch(policy ServiceNetworkPolicy, executable string, args []string, workingDir, tempDir string, readOnlyRoots ...string) (sandboxLaunchPlan, error) {
-	return prepareNetworkLaunchWithStateRoot(policy, executable, args, workingDir, tempDir, "", readOnlyRoots...)
-}
-
-// prepareNetworkLaunchWithStateRoot is the production launch path. stateRoot is
-// host-owned durable storage used by platform sandboxes that need crash-recovery
-// metadata (currently Windows AppContainer). Tests and legacy callers may use
-// prepareNetworkLaunch, which falls back to a host-only OS temp state directory.
 func prepareNetworkLaunchWithStateRoot(policy ServiceNetworkPolicy, executable string, args []string, workingDir, tempDir, stateRoot string, readOnlyRoots ...string) (sandboxLaunchPlan, error) {
 	if !policy.Enforce {
 		return directSandboxLaunch(executable, args, workingDir), nil

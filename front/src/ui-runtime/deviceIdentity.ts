@@ -1,6 +1,6 @@
 import { getWebDeviceMeshIdentity } from "@/runtime/web-device-mesh";
 
-const LEGACY_DEVICE_ID_KEY = "amitia.ui.device-id.v1";
+const UI_DEVICE_ID_KEY = "amitia.ui.device-id.v1";
 
 export function getUIHostDeviceId(): string {
   if (typeof window === "undefined") return "";
@@ -8,7 +8,7 @@ export function getUIHostDeviceId(): string {
     return getWebDeviceMeshIdentity().deviceId;
   }
   try {
-    return window.localStorage.getItem(LEGACY_DEVICE_ID_KEY)?.trim() || "";
+    return window.localStorage.getItem(UI_DEVICE_ID_KEY)?.trim() || "";
   } catch (error) {
   console.error("[original-error]", error);
 return "";

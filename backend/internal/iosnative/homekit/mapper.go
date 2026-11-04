@@ -109,8 +109,6 @@ func MapNativeTriggerType(appleTriggerType string) string {
 	switch appleTriggerType {
 	case "HMEventTrigger":
 		return AutomationTypeEvent
-	case "HMTimerTrigger":
-		return AutomationTypeTimerLegacy
 	default:
 		return AutomationTypeUnknown
 	}

@@ -66,6 +66,16 @@ type PreviewScope struct {
 	Scopes         []string `json:"scopes"`
 }
 
+type PackageSourceProvenance struct {
+	URI         string `json:"uri,omitempty"`
+	CatalogID   string `json:"catalogId,omitempty"`
+	SourceType  string `json:"sourceType,omitempty"`
+	Publisher   string `json:"publisher,omitempty"`
+	TrustLevel  string `json:"trustLevel,omitempty"`
+	EntryID     string `json:"entryId,omitempty"`
+	ResolvedURL string `json:"resolvedUrl,omitempty"`
+}
+
 type InstallPreview struct {
 	SessionID                 string                                  `json:"sessionId"`
 	ArtifactID                string                                  `json:"artifactId"`
@@ -81,6 +91,7 @@ type InstallPreview struct {
 	ContentTreeHash           string                                  `json:"contentTreeHash"`
 	SignatureStatus           string                                  `json:"signatureStatus"`
 	TrustDecision             string                                  `json:"trustDecision"`
+	Source                    PackageSourceProvenance                 `json:"source,omitempty"`
 	DevOnly                   bool                                    `json:"devOnly"`
 	DeveloperSessionID        string                                  `json:"developerSessionId,omitempty"`
 	SignerKeyID               string                                  `json:"signerKeyId,omitempty"`
@@ -114,6 +125,7 @@ type PackagePreviewRequest struct {
 	AllowUnsignedDev   bool
 	AllowUnsignedLocal bool
 	DeveloperSessionID string
+	Source             PackageSourceProvenance
 }
 
 type PackageInstallRequest struct {

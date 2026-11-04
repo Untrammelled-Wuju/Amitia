@@ -91,7 +91,6 @@ export interface RuntimeEndpoint {
   port: number;
   httpBaseURL: string;
   websocketBaseURL: string;
-  compatibilityBaseURL?: string;
 }
 
 export interface ExternalWebUIAcquireRequest {

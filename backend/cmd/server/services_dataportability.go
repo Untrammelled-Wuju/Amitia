@@ -15,7 +15,6 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/embedding_config"
 	"github.com/u-ai/backend/internal/extension"
-	"github.com/u-ai/backend/internal/migration"
 	"github.com/u-ai/backend/internal/reminder"
 	"github.com/u-ai/backend/internal/safety"
 	"github.com/u-ai/backend/internal/system"
@@ -37,7 +36,7 @@ type dataPortabilityDeps struct {
 }
 
 func buildDataPortabilityCoordinator(deps dataPortabilityDeps) (*dataportability.Coordinator, error) {
-	schemaFinger := fmt.Sprintf("migrations-v1-%d", len(migration.DefaultMigrations()))
+	schemaFinger := "baseline-v1"
 
 	staging := dataportability.NewStagingManager(deps.DataDir)
 	coord := dataportability.NewCoordinator(deps.DataDir, config.AppVersion(), runtime.GOOS, schemaFinger, staging)

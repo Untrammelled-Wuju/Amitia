@@ -135,21 +135,17 @@ func (e *Engine) summaryHistory(ctx context.Context, request Request, authority 
 				if resource.Kind != "message" || resource.Deleted {
 					continue
 				}
-				legacyReadOnly := resource.Origin == "legacy" && resource.ReadOnly && resource.Revision == 0
-				if resource.OwnerID != snapshot.OwnerID || resource.RoleID != snapshot.Role.ID || resource.Revision < 1 && !legacyReadOnly {
+				if resource.OwnerID != snapshot.OwnerID || resource.RoleID != snapshot.Role.ID || resource.Revision < 1 {
 					return nil, nil, coordination.ErrWrongOwner
 				}
 				if !coordination.ResourceUsable(resource.Body, time.Now()) {
 					continue
 				}
 				revision := resource.Revision
-				if legacyReadOnly {
-					revision = 0
-				}
 				if err := appendMessage(resource.Body, resource.ID, revision); err != nil {
 					return nil, nil, err
 				}
-				if !legacyReadOnly && resource.OwnerID == authority.ResourceOwnerID {
+				if resource.OwnerID == authority.ResourceOwnerID {
 					dependencies["message/"+resource.ID] = coordination.ResourceVersion{Kind: "message", ID: resource.ID, Revision: resource.Revision}
 				}
 			}
@@ -163,15 +159,15 @@ func (e *Engine) summaryHistory(ctx context.Context, request Request, authority 
 			historical = result.HistoricalSnapshot.NextCursors
 		}
 		if !currentDone {
-			query.Cursor, query.LegacyCursor = current["message"], current["legacyMessage"]
+			query.Cursor = current["message"]
 		}
 		if !historicalDone {
-			query.HistoricalCursor, query.HistoricalLegacyCursor = historical["message"], historical["legacyMessage"]
+			query.HistoricalCursor = historical["message"]
 		}
-		currentDone = currentDone || query.Cursor == "" && query.LegacyCursor == ""
-		historicalDone = historicalDone || query.HistoricalCursor == "" && query.HistoricalLegacyCursor == ""
-		key := string(body([]string{query.Cursor, query.LegacyCursor, query.HistoricalCursor, query.HistoricalLegacyCursor}))
-		if query.Cursor == "" && query.LegacyCursor == "" && query.HistoricalCursor == "" && query.HistoricalLegacyCursor == "" {
+		currentDone = currentDone || query.Cursor == ""
+		historicalDone = historicalDone || query.HistoricalCursor == ""
+		key := string(body([]string{query.Cursor, query.HistoricalCursor}))
+		if query.Cursor == "" && query.HistoricalCursor == "" {
 			break
 		}
 		if visited[key] {

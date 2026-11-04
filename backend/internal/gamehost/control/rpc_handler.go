@@ -33,7 +33,7 @@ type SinkDeclarationProvider interface {
 }
 
 type NegotiatedFeatureChecker interface {
-	HasNegotiatedCapability(connectionID string, feature domain.Capability) bool
+	HasNegotiatedCapability(connectionID string, feature domain.HostFeature) bool
 }
 
 type ControlHandler struct {
@@ -74,7 +74,7 @@ func (h *ControlHandler) SetNegotiatedFeatureChecker(checker NegotiatedFeatureCh
 }
 
 func (h *ControlHandler) requireRealtimeControl(request rpc.RPCRequest) *rpc.RPCResponse {
-	if h == nil || h.featureChecker == nil || !h.featureChecker.HasNegotiatedCapability(request.ConnectionID, domain.CapabilityRealtimeControl) {
+	if h == nil || h.featureChecker == nil || !h.featureChecker.HasNegotiatedCapability(request.ConnectionID, domain.HostFeatureRealtimeControl) {
 		response := rpc.RPCResponse{
 			RequestID: request.ID,
 			Error: &rpc.RPCRoutedError{

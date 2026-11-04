@@ -48,15 +48,6 @@ const _displayModeFallback = <String, String>{
   'reframe': '重构表达',
 };
 
-const _legacyCoping = <String, String>{
-  'active': 'problem_solving',
-  'support': 'seek_support',
-  'reframe': 'reappraisal',
-  'avoid': 'avoidance',
-  'suppress': 'suppression',
-  'accept': 'acceptance',
-};
-
 Future<bool?> showBdiPolicyEditor(BuildContext context) {
   return showDialog<bool>(
     context: context,
@@ -196,14 +187,14 @@ class _BdiPolicyDialogState extends ConsumerState<_BdiPolicyDialog> {
     }
     final coping = config['copingStrategy'];
     if (coping is Map) {
-      final selected = _normalizeCoping('${coping['selected'] ?? ''}');
+      final selected = '${coping['selected'] ?? ''}'.trim();
       _copingSelected = _coping.containsKey(selected)
           ? selected
           : 'problem_solving';
       final alternatives = coping['alternatives'];
       if (alternatives is List) {
         for (final item in alternatives) {
-          final value = _normalizeCoping('$item');
+          final value = '$item'.trim();
           if (_coping.containsKey(value)) _alternatives.add(value);
         }
       }
@@ -228,11 +219,6 @@ class _BdiPolicyDialogState extends ConsumerState<_BdiPolicyDialog> {
   double _toDouble(Object? value, double fallback) {
     if (value is num) return value.toDouble();
     return double.tryParse('$value') ?? fallback;
-  }
-
-  String _normalizeCoping(String value) {
-    final trimmed = value.trim();
-    return _legacyCoping[trimmed] ?? trimmed;
   }
 
   void _addRule() {

@@ -12,7 +12,6 @@ import (
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/desktoppet/behavior"
-	"github.com/u-ai/backend/internal/desktoppet/device"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
 	"github.com/u-ai/backend/internal/desktoppet/readiness"
 	"github.com/u-ai/backend/internal/desktoppet/release"
@@ -20,6 +19,7 @@ import (
 	runtimev1 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v1"
 	"github.com/u-ai/backend/internal/devicemesh/agent"
 	"github.com/u-ai/backend/internal/extension"
+	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
 	"github.com/u-ai/backend/internal/middleware"
 	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/internal/runtimeidentity"
@@ -234,12 +234,11 @@ func registerDeviceAgentDesktopPetRoutes(
 			c.JSON(http.StatusForbidden, gin.H{"code": 403, "msg": "unsupported local auth method"})
 			return
 		}
-		if err := services.DeviceRepository.RegisterOrTouch(c.Request.Context(), device.Identity{
-			SpaceID:           actor.SpaceID,
-			DeviceID:          runtimeidentity.DeviceID(strings.TrimSpace(request.DeviceID)),
-			DesktopInstanceID: request.DesktopInstanceID,
-			Platform:          runtimeidentity.Platform(strings.TrimSpace(request.Platform)),
-			AppVersion:        strings.TrimSpace(request.AppVersion),
+		if _, err := services.KernelContainer.DeviceRegistry.EnsureDevice(c.Request.Context(), host_registry.DeviceRecord{
+			SpaceID:    actor.SpaceID,
+			DeviceID:   runtimeidentity.DeviceID(strings.TrimSpace(request.DeviceID)),
+			Platform:   runtimeidentity.Platform(strings.TrimSpace(request.Platform)),
+			TrustState: host_registry.DeviceTrustTrusted,
 		}); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": err.Error()})
 			return
@@ -264,7 +263,7 @@ func registerDeviceAgentDesktopPetRoutes(
 			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": util.OriginalErrorMessage(err, "runtimeId is required")})
 			return
 		}
-		if err := services.DeviceRepository.RequireOwned(c.Request.Context(), string(actor.SpaceID), deviceID); err != nil {
+		if err := services.KernelContainer.DeviceRegistry.RequireTrustedDevice(c.Request.Context(), actor.SpaceID, runtimeidentity.ParseDeviceID(deviceID)); err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"code": 404, "msg": err.Error()})
 			return
 		}

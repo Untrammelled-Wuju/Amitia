@@ -19,7 +19,7 @@ func NewDescriptor(id string, name string, version string) *DescriptorBuilder {
 			ProtocolVersion: protocol.ProtocolVersion,
 			Services:        make([]protocol.ServiceDescriptor, 0),
 			Channels:        make([]protocol.ChannelDescriptor, 0),
-			Capabilities:    make([]protocol.HostFeature, 0),
+			HostFeatures:    make([]protocol.HostFeature, 0),
 			Metadata:        make(map[string]json.RawMessage),
 		},
 	}
@@ -36,15 +36,8 @@ func (b *DescriptorBuilder) WithChannel(ch protocol.ChannelDescriptor) *Descript
 }
 
 func (b *DescriptorBuilder) WithHostFeature(feature protocol.HostFeature) *DescriptorBuilder {
-	b.descriptor.Capabilities = append(b.descriptor.Capabilities, feature)
+	b.descriptor.HostFeatures = append(b.descriptor.HostFeatures, feature)
 	return b
-}
-
-// WithCapability is retained for source compatibility. Capabilities in a
-// GameHost descriptor are HostFeatures, not AI/tool capabilities.
-// Deprecated: use WithHostFeature.
-func (b *DescriptorBuilder) WithCapability(feature protocol.HostFeature) *DescriptorBuilder {
-	return b.WithHostFeature(feature)
 }
 
 func (b *DescriptorBuilder) WithMetadata(key string, value json.RawMessage) *DescriptorBuilder {

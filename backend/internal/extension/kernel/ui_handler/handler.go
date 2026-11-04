@@ -65,7 +65,7 @@ type HTTPHandler struct {
 	dialogResolver        DialogResolver
 	clientRuntimeResolver ClientRuntimeCommandResolver
 	clipboardResolver     ClipboardResolver
-	hostRegistry          *host_registry.HostRegistry
+	hostRegistry          *host_registry.Registry
 	extRoot               string
 	resourceLinks         ResourceLinkResolver
 }
@@ -125,7 +125,7 @@ func (h *HTTPHandler) SetClipboardResolver(r ClipboardResolver) {
 	h.clipboardResolver = r
 }
 
-func (h *HTTPHandler) SetHostRegistry(registry *host_registry.HostRegistry) {
+func (h *HTTPHandler) SetHostRegistry(registry *host_registry.Registry) {
 	h.hostRegistry = registry
 }
 
@@ -250,7 +250,6 @@ func (h *HTTPHandler) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 		SlotID            string                                      `json:"slotId"`
 		ContractVersion   int                                         `json:"contractVersion"`
 		SupportedKinds    []string                                    `json:"supportedKinds"`
-		Multiplicity      extension_slots.SlotMultiplicity            `json:"multiplicity"`
 		DispatchKind      extension_slots.SlotDispatchKind            `json:"kind,omitempty"`
 		Layout            extension_slots.SlotLayout                  `json:"layout"`
 		FallbackPolicy    extension_slots.FallbackPolicy              `json:"fallbackPolicy"`
@@ -273,7 +272,6 @@ func (h *HTTPHandler) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 			SlotID:            string(s.SlotID),
 			ContractVersion:   s.ContractVersion,
 			SupportedKinds:    append([]string(nil), s.SupportedKinds...),
-			Multiplicity:      s.Multiplicity,
 			DispatchKind:      s.DispatchKind,
 			Layout:            s.Layout,
 			FallbackPolicy:    s.FallbackPolicy,
@@ -982,7 +980,7 @@ func (h *HTTPHandler) handleHostSession(w http.ResponseWriter, r *http.Request) 
 	}
 	now := time.Now().UTC()
 	hostSessionID := "uihs_" + uuid.NewString()
-	entry := &host_registry.HostEntry{
+	entry := &host_registry.RuntimeEntry{
 		EntryID:         hostClientID,
 		Kind:            host_registry.RegistryEntryKindUIHost,
 		SpaceID:         actor.SpaceID,

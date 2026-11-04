@@ -461,16 +461,6 @@ class _BackupPageState extends ConsumerState<BackupPage> {
     });
   }
 
-  Future<void> _checkMigrations() async {
-    await _run('迁移检查', () async {
-      final result = await ref
-          .read(backendServiceProvider)
-          .post<Map<String, dynamic>>('/api/storage/migrations/check');
-      final needs = result?['needsMigration'] == true;
-      _show(needs ? '检测到待处理的数据迁移' : '数据结构已是最新状态');
-    });
-  }
-
   Future<void> _cleanupTemp() async {
     await _run('缓存清理', () async {
       await ref
@@ -628,7 +618,6 @@ class _BackupPageState extends ConsumerState<BackupPage> {
                   ('迁移导出', Icons.file_upload_outlined, _exportData),
                   ('迁移导入', Icons.file_download_outlined, _importData),
                   ('完整备份', Icons.save_outlined, _createBackup),
-                  ('迁移检查', Icons.sync_alt_outlined, _checkMigrations),
                   ('清理缓存', Icons.cleaning_services_outlined, _cleanupTemp),
                 ],
               ),

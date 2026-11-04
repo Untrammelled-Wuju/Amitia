@@ -1831,22 +1831,6 @@
         ]
       }
     },
-    "/extensions/kernel/extensions/install": {
-      "post": {
-        "deprecated": true,
-        "description": "Retired kernel install endpoint",
-        "responses": {
-          "410": {
-            "description": "PACKAGE_INSTALL_ENDPOINT_RETIRED"
-          }
-        },
-        "summary": "Retired kernel install endpoint",
-        "x-replacement-endpoint": "/api/extensions/packages/artifacts",
-        "tags": [
-          "Kernel"
-        ]
-      }
-    },
     "/extensions/kernel/extensions/pause": {
       "post": {
         "description": "Pause kernel extension",
@@ -1873,22 +1857,6 @@
         }
       }
     },
-    "/extensions/kernel/extensions/preview": {
-      "post": {
-        "deprecated": true,
-        "description": "Retired kernel preview endpoint",
-        "responses": {
-          "410": {
-            "description": "PACKAGE_PREVIEW_ENDPOINT_RETIRED"
-          }
-        },
-        "summary": "Retired kernel preview endpoint",
-        "x-replacement-endpoint": "/api/extensions/packages/artifacts",
-        "tags": [
-          "Kernel"
-        ]
-      }
-    },
     "/extensions/kernel/extensions/resume-uninstall": {
       "post": {
         "description": "Resume kernel extension uninstall",
@@ -1904,22 +1872,6 @@
         "tags": [
           "Kernel"
         ]
-      }
-    },
-    "/extensions/kernel/extensions/rollback": {
-      "post": {
-        "deprecated": true,
-        "description": "Retired rollback endpoint. Use the package version rollback preview, confirm and execute flow.",
-        "responses": {
-          "410": {
-            "description": "LEGACY_PACKAGE_ENDPOINT_RETIRED"
-          }
-        },
-        "summary": "Retired kernel extension rollback endpoint",
-        "tags": [
-          "Kernel"
-        ],
-        "x-replacement-endpoint": "/api/extensions/{id}/versions/{version}/rollback"
       }
     },
     "/extensions/kernel/extensions/uninstall": {
@@ -1971,91 +1923,6 @@
         "summary": "Get kernel status",
         "tags": [
           "Kernel"
-        ]
-      }
-    },
-    "/extensions/migrations": {
-      "get": {
-        "description": "List migrations",
-        "responses": {
-          "200": {
-            "description": "OK"
-          },
-          "401": {
-            "description": "Unauthorized"
-          }
-        },
-        "summary": "List migrations",
-        "tags": [
-          "Migrations"
-        ]
-      }
-    },
-    "/extensions/migrations/execute": {
-      "post": {
-        "description": "Execute migration",
-        "responses": {
-          "200": {
-            "description": "OK"
-          },
-          "401": {
-            "description": "Unauthorized"
-          }
-        },
-        "summary": "Execute migration",
-        "tags": [
-          "Migrations"
-        ]
-      }
-    },
-    "/extensions/migrations/operations/{operationId}": {
-      "get": {
-        "description": "Get migration operation",
-        "responses": {
-          "200": {
-            "description": "OK"
-          },
-          "401": {
-            "description": "Unauthorized"
-          }
-        },
-        "summary": "Get migration operation",
-        "tags": [
-          "Migrations"
-        ]
-      }
-    },
-    "/extensions/migrations/plan": {
-      "post": {
-        "description": "Plan migration",
-        "responses": {
-          "200": {
-            "description": "OK"
-          },
-          "401": {
-            "description": "Unauthorized"
-          }
-        },
-        "summary": "Plan migration",
-        "tags": [
-          "Migrations"
-        ]
-      }
-    },
-    "/extensions/migrations/{migrationId}": {
-      "get": {
-        "description": "Get migration",
-        "responses": {
-          "200": {
-            "description": "OK"
-          },
-          "401": {
-            "description": "Unauthorized"
-          }
-        },
-        "summary": "Get migration",
-        "tags": [
-          "Migrations"
         ]
       }
     },
@@ -2171,74 +2038,6 @@
         "summary": "Upload an immutable package artifact and create its preview"
       }
     },
-    "/extensions/packages/import/install": {
-      "post": {
-        "deprecated": true,
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PackageInstallRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "410": {
-            "description": "PACKAGE_INSTALL_ENDPOINT_RETIRED"
-          }
-        },
-        "summary": "Retired package install endpoint",
-        "x-replacement-endpoint": "/api/extensions/packages/artifacts"
-      }
-    },
-    "/extensions/packages/import/preview": {
-      "post": {
-        "deprecated": true,
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            },
-            "multipart/form-data": {
-              "schema": {
-                "properties": {
-                  "file": {
-                    "format": "binary",
-                    "type": "string"
-                  },
-                  "scopeId": {
-                    "type": "string"
-                  },
-                  "scopeType": {
-                    "enum": [
-                      "global",
-                      "character"
-                    ]
-                  }
-                },
-                "required": [
-                  "file",
-                  "scopeType"
-                ],
-                "type": "object"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "410": {
-            "description": "PACKAGE_PREVIEW_ENDPOINT_RETIRED"
-          }
-        },
-        "summary": "Retired package preview endpoint",
-        "x-replacement-endpoint": "/api/extensions/packages/artifacts"
-      }
-    },
     "/extensions/packages/import/sessions/{sessionId}": {
       "delete": {
         "parameters": [
@@ -2275,37 +2074,6 @@
           }
         },
         "summary": "Get a package preview session"
-      }
-    },
-    "/extensions/packages/install": {
-      "post": {
-        "deprecated": true,
-        "requestBody": {
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "properties": {
-                  "package": {
-                    "format": "binary",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "package"
-                ],
-                "type": "object"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "410": {
-            "description": "PACKAGE_INSTALL_ENDPOINT_RETIRED"
-          }
-        },
-        "summary": "Retired package install endpoint",
-        "x-replacement-endpoint": "/api/extensions/packages/artifacts"
       }
     },
     "/extensions/packages/metrics": {
@@ -2469,23 +2237,6 @@
         "summary": "Read a self-hosted extension package artifact"
       }
     },
-    "/extensions/recovery/execute": {
-      "post": {
-        "description": "Execute recovery action",
-        "responses": {
-          "200": {
-            "description": "OK"
-          },
-          "401": {
-            "description": "Unauthorized"
-          }
-        },
-        "summary": "Execute recovery action",
-        "tags": [
-          "Recovery"
-        ]
-      }
-    },
     "/extensions/recovery/scan": {
       "get": {
         "description": "Scan for recovery actions",
@@ -2532,40 +2283,6 @@
           }
         },
         "summary": "Get rollback plan",
-        "tags": [
-          "Rollbacks"
-        ]
-      }
-    },
-    "/extensions/rollbacks/{rollbackId}/execute": {
-      "post": {
-        "description": "Execute rollback",
-        "responses": {
-          "200": {
-            "description": "OK"
-          },
-          "401": {
-            "description": "Unauthorized"
-          }
-        },
-        "summary": "Execute rollback",
-        "tags": [
-          "Rollbacks"
-        ]
-      }
-    },
-    "/extensions/rollbacks/{rollbackId}/recover": {
-      "post": {
-        "description": "Recover rollback",
-        "responses": {
-          "200": {
-            "description": "OK"
-          },
-          "401": {
-            "description": "Unauthorized"
-          }
-        },
-        "summary": "Recover rollback",
         "tags": [
           "Rollbacks"
         ]
@@ -4607,52 +4324,6 @@
         "tags": [
           "ExtensionUpdates"
         ]
-      }
-    },
-    "/extensions/{id}/upgrade": {
-      "post": {
-        "deprecated": true,
-        "description": "Retired package install endpoint. Use /api/extensions/packages/artifacts.",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "410": {
-            "description": "PACKAGE_INSTALL_ENDPOINT_RETIRED"
-          }
-        },
-        "summary": "Retired package install endpoint",
-        "x-replacement-endpoint": "/api/extensions/packages/artifacts"
-      }
-    },
-    "/extensions/{id}/upgrade/preview": {
-      "post": {
-        "deprecated": true,
-        "description": "Retired package preview endpoint. Use /api/extensions/packages/artifacts.",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "410": {
-            "description": "PACKAGE_PREVIEW_ENDPOINT_RETIRED"
-          }
-        },
-        "summary": "Retired package preview endpoint",
-        "x-replacement-endpoint": "/api/extensions/packages/artifacts"
       }
     },
     "/extensions/versions": {

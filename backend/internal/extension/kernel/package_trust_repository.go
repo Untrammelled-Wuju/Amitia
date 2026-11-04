@@ -342,8 +342,8 @@ func (r *PackageTrustRepository) SetTrusted(ctx context.Context, fingerprint str
 	if err != nil {
 		return record, err
 	}
-	if len(record.PublicKey) != ed25519.PublicKeySize || record.TrustSource == "legacy_fingerprint_only" {
-		return record, fmt.Errorf("kernel: legacy fingerprint cannot become a trusted verification key")
+	if len(record.PublicKey) != ed25519.PublicKeySize {
+		return record, fmt.Errorf("kernel: publisher key is incomplete and cannot become a trusted verification key")
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if trusted {
@@ -369,7 +369,7 @@ func (r *PackageTrustRepository) Restore(ctx context.Context, service *trust.Tru
 	}
 	grouped := map[string][]PackagePublisherKeyRecord{}
 	for _, record := range records {
-		if len(record.PublicKey) == ed25519.PublicKeySize && record.TrustSource != "legacy_fingerprint_only" {
+		if len(record.PublicKey) == ed25519.PublicKeySize {
 			grouped[record.PublisherID] = append(grouped[record.PublisherID], record)
 		}
 	}

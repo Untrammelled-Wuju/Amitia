@@ -57,9 +57,14 @@ func buildCharacterFeatureExtension(
 					Type:       domain.RuntimeTypeBuiltin,
 					EntryPoint: runtimeID,
 				},
-				Contributions: []domain.ContributionDefinition{
-					buildCharacterTabContribution(extID, modID, displayName, tabTitle, tabKey, runtimeID, order),
-				},
+				Contributions: func() []domain.ContributionDefinition {
+					if tabTitle == "" {
+						return nil
+					}
+					return []domain.ContributionDefinition{
+						buildCharacterTabContribution(extID, modID, displayName, tabTitle, tabKey, runtimeID, order),
+					}
+				}(),
 				Placement: domain.ModulePlacementDevice,
 				ProvidedCapabilities: func() []domain.ProvidedCapability {
 					out := make([]domain.ProvidedCapability, 0, len(capabilities))

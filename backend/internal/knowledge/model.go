@@ -300,8 +300,6 @@ type SearchRequest struct {
 	SkipTrace       bool       `json:"-"`
 	PolicyMode      string     `json:"-"`
 	RouteReason     string     `json:"-"`
-	ShadowLevel     string     `json:"-"`
-	ShadowReason    string     `json:"-"`
 }
 
 type SearchResponse struct {
@@ -318,8 +316,6 @@ type SearchResponse struct {
 	RoutingMode             string     `json:"routingMode"`
 	PolicyMode              string     `json:"policyMode"`
 	RouteReason             string     `json:"routeReason"`
-	ShadowLevel             string     `json:"shadowLevel,omitempty"`
-	ShadowReason            string     `json:"shadowReason,omitempty"`
 	RouteDegraded           bool       `json:"routeDegraded"`
 	RouteDegradationReason  string     `json:"routeDegradationReason,omitempty"`
 	QueryHistory            []string   `json:"queryHistory,omitempty"`
@@ -339,8 +335,6 @@ type SearchResponse struct {
 	TraceSLOTargetMs           int64  `json:"-"`
 	TracePolicyMode            string `json:"-"`
 	TraceRouteReason           string `json:"-"`
-	TraceShadowLevel           string `json:"-"`
-	TraceShadowReason          string `json:"-"`
 }
 
 // RetrievalTraceSummary is a privacy-safe developer view of a retrieval run.
@@ -367,8 +361,6 @@ type RetrievalTraceSummary struct {
 	SLOExceeded    bool                      `json:"sloExceeded"`
 	PolicyMode     string                    `json:"policyMode,omitempty"`
 	RouteReason    string                    `json:"routeReason,omitempty"`
-	ShadowLevel    string                    `json:"shadowLevel,omitempty"`
-	ShadowReason   string                    `json:"shadowReason,omitempty"`
 	CreatedAt      time.Time                 `json:"createdAt"`
 }
 
@@ -445,8 +437,6 @@ type RetrievalSLOSummary struct {
 
 type RuntimeStatus struct {
 	ConfigHash                   string `json:"configHash"`
-	RetrievalPolicyEnabled       bool   `json:"retrievalPolicyEnabled"`
-	RetrievalPolicyShadow        bool   `json:"retrievalPolicyShadow"`
 	CanonicalReaderEnabled       bool   `json:"canonicalReaderEnabled"`
 	AgenticInvestigationEnabled  bool   `json:"agenticInvestigationEnabled"`
 	ReaderWorkers                int    `json:"readerWorkers"`

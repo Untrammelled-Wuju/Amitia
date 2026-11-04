@@ -27,15 +27,9 @@ export function resolveConversationChannelId(
   const body = conversation.body && typeof conversation.body === "object"
     ? conversation.body as Record<string, unknown>
     : {}
-  const explicit = text(conversation.channel ?? conversation.channelId ?? body.channel ?? body.channelId)
-  const id = text(conversation.resourceId ?? conversation.id)
-  let inferred = explicit
-  if (!inferred && id.startsWith("wechat-ipad860-")) inferred = "wechat_ipad860"
-  if (!inferred && (id.includes("@im.wechat") || id.includes("@chatroom"))) inferred = "wechat"
-  if (!inferred && id.startsWith("conv-qq-personal-")) inferred = "qq_personal"
-  if (!inferred && (id.startsWith("conv-group-") || id.startsWith("conv-"))) inferred = "qq"
-  if (availableChannels && inferred && !availableChannels.has(inferred)) return ""
-  return inferred
+  const channel = text(conversation.channel ?? conversation.channelId ?? body.channelId)
+  if (availableChannels && channel && !availableChannels.has(channel)) return ""
+  return channel
 }
 
 const IMAGE_EXTENSIONS = /\.(?:png|jpe?g|gif|webp|bmp|svg)(?:[?#]|$)/i
@@ -73,10 +67,10 @@ function kindFromUrl(url: string, fallback: ChannelMediaKind = "file"): ChannelM
 }
 
 function attachmentUrl(attachment: Record<string, unknown>): string {
-  const direct = text(attachment.url ?? attachment.src ?? attachment.href)
+  const direct = text(attachment.url)
   if (direct) return direct
-  const mime = text(attachment.mimeType ?? attachment.mime_type ?? attachment.contentType ?? attachment.content_type)
-  const data = text(attachment.data ?? attachment.base64)
+  const mime = text(attachment.mimeType)
+  const data = text(attachment.data)
   return data && mime ? `data:${mime};base64,${data}` : ""
 }
 
@@ -99,39 +93,32 @@ export function normalizeChannelMessage(message: Record<string, unknown>, channe
     })
   }
 
-  const imageUrl = text(message.imageUrl ?? message.image_url ?? message.image)
-  const videoUrl = text(message.videoUrl ?? message.video_url ?? message.video)
-  const audioUrl = text(message.audioUrl ?? message.audio_url ?? message.audio ?? message.voiceUrl ?? message.voice_url)
-  const fileUrl = text(message.fileUrl ?? message.file_url ?? message.file)
-  add("image", imageUrl, message.altText ?? message.alt_text, message.mimeType ?? message.mime_type)
-  add("video", videoUrl, message.fileName ?? message.file_name, message.mimeType ?? message.mime_type)
-  add("audio", audioUrl, message.fileName ?? message.file_name, message.mimeType ?? message.mime_type)
-  add("file", fileUrl, message.fileName ?? message.file_name, message.mimeType ?? message.mime_type)
+  const imageUrl = text(message.imageUrl)
+  const videoUrl = text(message.videoUrl)
+  const audioUrl = text(message.audioUrl)
+  const fileUrl = text(message.fileUrl)
+  add("image", imageUrl, message.altText, message.mimeType)
+  add("video", videoUrl, message.fileName, message.mimeType)
+  add("audio", audioUrl, message.fileName, message.mimeType)
+  add("file", fileUrl, message.fileName, message.mimeType)
 
   const attachments = Array.isArray(message.attachments) ? message.attachments : []
   for (const raw of attachments) {
     if (!raw || typeof raw !== "object") continue
     const attachment = raw as Record<string, unknown>
-    const mime = text(attachment.mimeType ?? attachment.mime_type ?? attachment.contentType ?? attachment.content_type)
+    const mime = text(attachment.mimeType)
     const explicit = text(attachment.kind ?? attachment.type).toLowerCase()
     const hint: ChannelMediaKind = explicit === "image" || explicit === "video" || explicit === "audio" || explicit === "file"
       ? explicit
       : kindFromMime(mime)
     const url = attachmentUrl(attachment)
-    add(kindFromUrl(url, hint), url, attachment.name ?? attachment.fileName ?? attachment.file_name, mime)
+    add(kindFromUrl(url, hint), url, attachment.name ?? attachment.fileName, mime)
   }
 
-  const content = text(message.content ?? message.text)
+  const content = text(message.content)
   const placeholder = /^\[(?:图片|视频|语音|音频|文件)\]$/.test(content)
   const role = text(message.role) || "user"
-  const senderLabel = text(
-    message.senderName ??
-    message.sender_name ??
-    message.fromUserName ??
-    message.from_user_name ??
-    message.authorName ??
-    message.author_name,
-  ) || (role === "user" ? "对方" : "Amitia")
+  const senderLabel = text(message.senderName) || (role === "user" ? "对方" : "Amitia")
 
   const quote = message.quote && typeof message.quote === "object" ? message.quote as Record<string, unknown> : {}
   const mentionNames = Array.isArray(message.mentionNames)
@@ -140,15 +127,15 @@ export function normalizeChannelMessage(message: Record<string, unknown>, channe
 
   return {
     ...message,
-    channelId: text(message.channelId ?? message.channel ?? channelId),
+    channelId: text(message.channelId ?? channelId),
     role,
     text: media.length > 0 && placeholder ? "" : content,
     senderLabel,
-    senderID: text(message.senderId ?? message.sender_id),
+    senderID: text(message.senderId),
     mentions: mentionNames,
-    replyExcerpt: text(message.replyToExcerpt ?? message.reply_excerpt ?? quote.content),
-    replySender: text(message.replySenderName ?? message.reply_sender_name ?? quote.senderName),
-    peerKind: text(message.peerKind ?? message.peer_kind),
+    replyExcerpt: text(message.replyExcerpt ?? quote.content),
+    replySender: text(message.replySenderName ?? quote.senderName),
+    peerKind: text(message.peerKind),
     media,
   }
 }

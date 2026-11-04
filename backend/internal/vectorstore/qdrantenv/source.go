@@ -7,5 +7,4 @@ type Source string
 const (
 	SourceExplicit       Source = "explicit"
 	SourceRuntimePackage Source = "runtime-package"
-	SourceLegacyBundled  Source = "legacy-bundled"
 )

@@ -36,8 +36,8 @@ func (r *CanaryRepository) SavePolicy(ctx context.Context, policy CanaryPolicy) 
 		INSERT INTO extension_canary_policies
 			(policy_id, extension_id, mode, stages_json, cohort_key, stable_seed,
 			 min_observations, min_duration_sec, max_duration_sec,
-			 health_policy_json, abort_policy_json, write_strategy, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			 health_policy_json, abort_policy_json, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(policy_id) DO UPDATE SET
 			extension_id = excluded.extension_id,
 			mode = excluded.mode,
@@ -48,13 +48,12 @@ func (r *CanaryRepository) SavePolicy(ctx context.Context, policy CanaryPolicy) 
 			min_duration_sec = excluded.min_duration_sec,
 			max_duration_sec = excluded.max_duration_sec,
 			health_policy_json = excluded.health_policy_json,
-			abort_policy_json = excluded.abort_policy_json,
-			write_strategy = excluded.write_strategy
+			abort_policy_json = excluded.abort_policy_json
 	`,
 		policy.PolicyID, policy.ExtensionID, string(policy.Mode), string(stagesJSON),
 		string(policy.CohortKey), policy.StableSeed,
 		policy.MinObservations, int(policy.MinDuration/time.Second), int(policy.MaxDuration/time.Second),
-		string(healthJSON), string(abortJSON), policy.WriteStrategy, now,
+		string(healthJSON), string(abortJSON), now,
 	)
 	if err != nil {
 		return fmt.Errorf("canary: save policy: %w", err)
@@ -69,12 +68,12 @@ func (r *CanaryRepository) GetPolicy(ctx context.Context, policyID string) (*Can
 	err := r.db.QueryRowContext(ctx, `
 		SELECT policy_id, extension_id, mode, stages_json, cohort_key, stable_seed,
 		       min_observations, min_duration_sec, max_duration_sec,
-		       health_policy_json, abort_policy_json, write_strategy
+		       health_policy_json, abort_policy_json
 		FROM extension_canary_policies WHERE policy_id = ?
 	`, policyID).Scan(
 		&policy.PolicyID, &policy.ExtensionID, &mode, &stagesJSON, &cohortKey, &policy.StableSeed,
 		&policy.MinObservations, &minDurationSec, &maxDurationSec,
-		&healthJSON, &abortJSON, &policy.WriteStrategy,
+		&healthJSON, &abortJSON,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {

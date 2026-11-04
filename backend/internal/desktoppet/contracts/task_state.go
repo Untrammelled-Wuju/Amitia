@@ -75,21 +75,6 @@ func IsValidLifecycleStatus(s string) bool {
 	return false
 }
 
-var deprecatedStatuses = map[string]string{
-	"skipped":   "",
-	"warning":   "",
-	"submitted": "",
-	"polling":   "",
-	"completed": "",
-	"draft":     "",
-	"running":   "",
-}
-
-func IsDeprecatedStatus(s string) bool {
-	_, ok := deprecatedStatuses[s]
-	return ok
-}
-
 func AllowedStatusesFor(et EntityType) []LifecycleStatus {
 	switch et {
 	case EntityGenerationTask, EntityGenerationAction:

@@ -33,7 +33,7 @@ func operationFixture(id, spaceID, key, requestHash, extensionID string) Package
 	return PackageOperationRecord{OperationID: id, TraceID: "trace-" + id, SpaceID: spaceID,
 		ScopeType: "global", ExtensionID: extensionID, TargetVersion: "2.0.0", FromVersion: "1.0.0",
 		OperationType: "install", Status: string(PackageOperationPending), CurrentStep: "created",
-		ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now, IdempotencyKey: key,
+		StartedAt: now, UpdatedAt: now, IdempotencyKey: key,
 		RequestHash: requestHash, AttemptCount: 1}
 }
 
@@ -177,45 +177,6 @@ func TestOperationCancelAndRetryRequireStateRecoveryAndLease(t *testing.T) {
 	retried, err := repository.RetryOperation(context.Background(), op.OperationID, "worker-1")
 	if err != nil || retried.Status != string(PackageOperationPending) || retried.AttemptCount != 2 {
 		t.Fatalf("unexpected retry result: %#v err=%v", retried, err)
-	}
-}
-
-func TestOperationAuthorityMigratesLegacyDatabase(t *testing.T) {
-	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "legacy.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-	if _, err := db.Exec(`CREATE TABLE extension_package_operations (
-		operation_id TEXT PRIMARY KEY, trace_id TEXT NOT NULL, space_id TEXT NOT NULL,
-		scope_type TEXT NOT NULL, scope_id TEXT NOT NULL DEFAULT '', extension_id TEXT NOT NULL,
-		target_version TEXT NOT NULL DEFAULT '', operation_type TEXT NOT NULL, status TEXT NOT NULL,
-		current_step TEXT NOT NULL, artifact_id TEXT NOT NULL DEFAULT '', preview_session_id TEXT NOT NULL DEFAULT '',
-		confirmations_json TEXT NOT NULL DEFAULT '{}', error_code TEXT NOT NULL DEFAULT '',
-		error_detail TEXT NOT NULL DEFAULT '', started_at TEXT NOT NULL, updated_at TEXT NOT NULL,
-		completed_at TEXT NOT NULL DEFAULT '')`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(`CREATE TABLE extension_package_operation_steps (
-		step_id TEXT PRIMARY KEY, operation_id TEXT NOT NULL, step_name TEXT NOT NULL, step_order INTEGER NOT NULL,
-		status TEXT NOT NULL, attempt_count INTEGER NOT NULL DEFAULT 0, result_json TEXT NOT NULL DEFAULT '{}',
-		error_code TEXT NOT NULL DEFAULT '', started_at TEXT NOT NULL DEFAULT '', completed_at TEXT NOT NULL DEFAULT '',
-		UNIQUE(operation_id, step_name))`); err != nil {
-		t.Fatal(err)
-	}
-	if err := persistencesqlite.Migrate(context.Background(), db); err != nil {
-		t.Fatal(err)
-	}
-	for table, columns := range map[string][]string{
-		"extension_package_operations":      {"idempotency_key", "request_hash", "recovery_required", "lease_owner", "attempt_count"},
-		"extension_package_operation_steps": {"input_hash", "side_effect_evidence", "compensation_status", "cas_version"},
-	} {
-		for _, column := range columns {
-			var count int
-			if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name=?`, table, column).Scan(&count); err != nil || count != 1 {
-				t.Fatalf("missing migrated column %s.%s count=%d err=%v", table, column, count, err)
-			}
-		}
 	}
 }
 

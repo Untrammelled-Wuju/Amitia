@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/extension_slots"
@@ -43,7 +45,14 @@ func (k UIContributionKind) Valid() bool {
 		UIContributionChatSidebarKind:
 		return true
 	}
-	return false
+	return k.IsCustom()
+}
+
+var customUIContributionKindPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._/-]{2,127}$`)
+
+func (k UIContributionKind) IsCustom() bool {
+	value := string(k)
+	return strings.ContainsAny(value, "./") && customUIContributionKindPattern.MatchString(value)
 }
 
 func (k UIContributionKind) DefaultSandbox() UISandboxType {
@@ -77,25 +86,6 @@ const (
 func (s UISandboxType) Valid() bool {
 	switch s {
 	case SandboxHostNative, SandboxSchemaRenderer, SandboxClientModule:
-		return true
-	}
-	return false
-}
-
-type SlotMultiplicity string
-
-const (
-	MultiplicitySingle            SlotMultiplicity = "single"
-	MultiplicityMultiple          SlotMultiplicity = "multiple"
-	MultiplicityOrderedMultiple   SlotMultiplicity = "ordered_multiple"
-	MultiplicityReplaceableSingle SlotMultiplicity = "replaceable_single"
-	MultiplicityExclusive         SlotMultiplicity = "exclusive"
-)
-
-func (m SlotMultiplicity) Valid() bool {
-	switch m {
-	case MultiplicitySingle, MultiplicityMultiple, MultiplicityOrderedMultiple,
-		MultiplicityReplaceableSingle, MultiplicityExclusive:
 		return true
 	}
 	return false
@@ -296,7 +286,7 @@ type UIConflictPolicy struct {
 // UIContributionDispatch carries server/declarative dispatch identity. Trusted
 // client plugins can use executable select() functions; server-driven entries
 // use Visibility as their chain predicate and these stable identities for
-// list/keyed cells. All fields are optional for backwards compatibility.
+// list/keyed cells.
 type UIContributionDispatch struct {
 	EntryKey string          `json:"entry_key,omitempty"`
 	CellID   string          `json:"cell_id,omitempty"`
@@ -326,6 +316,7 @@ type UIContributionDefinition struct {
 	ContractVersion int                      `json:"contract_version"`
 	Display         UIDisplayMetadata        `json:"display"`
 	Entry           UIEntryDefinition        `json:"entry"`
+	Schema          json.RawMessage          `json:"schema,omitempty"`
 	Visibility      UIVisibilityRule         `json:"visibility,omitempty"`
 	DataContract    UIDataContract           `json:"data_contract,omitempty"`
 	Actions         []UIActionDefinition     `json:"actions,omitempty"`
@@ -360,7 +351,6 @@ type UISlotContract struct {
 	AllowedActions    []string                         `json:"allowed_actions,omitempty"`
 	AllowedSandboxes  []UISandboxType                  `json:"allowed_sandboxes"`
 	DispatchKind      extension_slots.SlotDispatchKind `json:"kind"`
-	Multiplicity      SlotMultiplicity                 `json:"multiplicity"`
 	OrderingPolicy    string                           `json:"ordering_policy,omitempty"`
 	FailurePolicy     string                           `json:"failure_policy,omitempty"`
 	PerformanceBudget UIPerformanceBudget              `json:"performance_budget"`
@@ -372,7 +362,6 @@ var (
 	ErrModuleIDEmpty           = errors.New("ui_contribution: module_id empty")
 	ErrInvalidKind             = errors.New("ui_contribution: invalid kind")
 	ErrInvalidSandbox          = errors.New("ui_contribution: invalid sandbox type")
-	ErrInvalidMultiplicity     = errors.New("ui_contribution: invalid multiplicity")
 	ErrInvalidRiskLevel        = errors.New("ui_contribution: invalid risk level")
 	ErrSlotIDEmpty             = errors.New("ui_contribution: slot_id empty")
 	ErrEntryPathEmpty          = errors.New("ui_contribution: entry path empty")
@@ -385,6 +374,15 @@ var (
 	ErrActionNotDeclared       = errors.New("ui_contribution: action not declared in slot")
 	ErrPayloadTooLarge         = errors.New("ui_contribution: payload exceeds max")
 )
+
+func validDispatchKind(kind extension_slots.SlotDispatchKind) bool {
+	switch kind {
+	case extension_slots.DispatchSingle, extension_slots.DispatchList, extension_slots.DispatchKeyed, extension_slots.DispatchChain:
+		return true
+	default:
+		return false
+	}
+}
 
 func ValidateDefinition(def *UIContributionDefinition) error {
 	if def == nil {
@@ -408,8 +406,11 @@ func ValidateDefinition(def *UIContributionDefinition) error {
 	if def.ContractVersion <= 0 {
 		return ErrContractVersionZero
 	}
-	if def.Entry.Path == "" && def.Entry.SchemaPath == "" {
+	if def.Entry.Path == "" && def.Entry.SchemaPath == "" && len(def.Schema) == 0 {
 		return ErrEntryPathEmpty
+	}
+	if len(def.Schema) > 0 && !json.Valid(def.Schema) {
+		return errors.New("ui_contribution: inline schema is not valid JSON")
 	}
 	if def.Entry.ContentHash == "" {
 		return ErrEntryHashEmpty
@@ -476,9 +477,6 @@ func ValidateAgainstSlot(def *UIContributionDefinition, slot *UISlotContract) er
 		if !sandboxAllowed {
 			return fmt.Errorf("%w: %s not in slot %s", ErrSandboxNotAllowedBySlot, def.Sandbox.Type, slot.SlotID)
 		}
-	}
-	if !slot.Multiplicity.Valid() {
-		return fmt.Errorf("%w: %s", ErrInvalidMultiplicity, slot.Multiplicity)
 	}
 	for _, a := range def.Actions {
 		if len(slot.AllowedActions) > 0 {
@@ -651,7 +649,7 @@ var DefaultSlots = buildDefaultSlotContracts()
 
 // SlotContractFromDefinition converts the public slot registry contract into the
 // stricter UIHost contract. extension_slots is the single source of truth for
-// slot identity, layout, multiplicity and performance/fallback metadata; UIHost
+// slot identity, layout and performance/fallback metadata; UIHost
 // only adds sandbox policy required to validate concrete contributions.
 func SlotContractFromDefinition(def *extension_slots.SlotDefinition) (*UISlotContract, error) {
 	if def == nil || def.SlotID == "" {
@@ -685,7 +683,6 @@ func SlotContractFromDefinition(def *extension_slots.SlotDefinition) (*UISlotCon
 		InputSchema:      append(json.RawMessage(nil), def.ContextSchema...),
 		AllowedSandboxes: sandboxes,
 		DispatchKind:     def.DispatchKind,
-		Multiplicity:     SlotMultiplicity(def.Multiplicity),
 		OrderingPolicy:   def.OrderingPolicy,
 		FailurePolicy:    def.FailurePolicy,
 		PerformanceBudget: UIPerformanceBudget{
@@ -725,6 +722,9 @@ func durationToRateHz(updateFrequency time.Duration) int {
 }
 
 func allowedSandboxesForKind(kind UIContributionKind) []UISandboxType {
+	if kind.IsCustom() {
+		return []UISandboxType{SandboxSchemaRenderer, SandboxClientModule, SandboxHostNative}
+	}
 	switch kind {
 	case UIContributionSchemaPage, UIContributionSettingsSection, UIContributionPanel,
 		UIContributionCard, UIContributionBadge, UIContributionDetailSectionKind,

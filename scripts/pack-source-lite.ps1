@@ -133,7 +133,6 @@ $excludes = @(
     "--exclude=backend/amitiax.exe"
     "--exclude=backend/extension.test.exe"
     "--exclude=backend/kernel.test.exe"
-    "--exclude=backend/legacy-package-migrate.exe"
     "--exclude=backend/worker.test.exe"
     "--exclude=backend/server_*.exe"
     "--exclude=temp_apk_extract"

@@ -16,14 +16,6 @@ export interface CitationSnapshotEntry {
 }
 
 const citationNumericLocatorKeys = ["page", "row", "sheet", "paragraph", "section", "index"] as const;
-const citationLocatorAliases: Record<(typeof citationNumericLocatorKeys)[number], readonly string[]> = {
-  page: ["page", "pageNumber", "page_number"],
-  row: ["row", "rowStart", "row_start", "rowEnd", "row_end"],
-  sheet: ["sheet", "sheetName", "sheet_name"],
-  paragraph: ["paragraph", "paragraphIndex", "paragraph_index"],
-  section: ["section"],
-  index: ["index"],
-};
 const citationTextLocatorKeys = ["kind", "field"] as const;
 const sensitiveCitationQueryKeys = ["token", "secret", "password", "passwd", "apikey", "api_key", "auth", "signature", "credential", "session", "access_key", "code"];
 
@@ -49,14 +41,8 @@ export function normalizeCitationLocator(raw: unknown): Record<string, unknown> 
   const record = raw as Record<string, unknown>;
   const locator: Record<string, unknown> = {};
   for (const key of citationNumericLocatorKeys) {
-    const alias = citationLocatorAliases[key].find((name) => Object.prototype.hasOwnProperty.call(record, name));
-    const rawValue = alias ? record[alias] : undefined;
-    if (key === "sheet" && alias !== "sheet" && typeof rawValue === "string" && safeCitationLocatorLabel(rawValue)) {
-      locator[key] = rawValue.trim();
-      continue;
-    }
-    const value = typeof rawValue === "string" && /^\d+$/.test(rawValue.trim()) ? Number(rawValue) : rawValue;
-    if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && value <= 1000000000) locator[key] = value;
+    const rawValue = record[key];
+    if (typeof rawValue === "number" && Number.isSafeInteger(rawValue) && rawValue >= 0 && rawValue <= 1000000000) locator[key] = rawValue;
     else if (key === "sheet" && typeof rawValue === "string" && safeCitationLocatorLabel(rawValue)) locator[key] = rawValue.trim();
   }
   for (const key of citationTextLocatorKeys) {

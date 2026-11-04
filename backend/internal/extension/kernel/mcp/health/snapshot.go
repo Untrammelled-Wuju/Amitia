@@ -74,5 +74,4 @@ type ProtocolEra string
 const (
 	MCPProtocolEraUnknown ProtocolEra = "unknown"
 	MCPProtocolEraModern  ProtocolEra = "modern_2026"
-	MCPProtocolEraLegacy  ProtocolEra = "legacy_2025"
 )

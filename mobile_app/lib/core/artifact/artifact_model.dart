@@ -65,18 +65,18 @@ class ArtifactMetadata {
 
   factory ArtifactMetadata.fromJson(Map<String, dynamic> json) {
     return ArtifactMetadata(
-      id: (json['artifactId'] ?? json['artifact_id'] ?? json['id'])?.toString() ?? '',
-      ownerSpaceId: (json['ownerSpaceId'] ?? json['owner_space_id'])?.toString() ?? '',
-      workspaceId: (json['workspaceId'] ?? json['workspace_id'])?.toString() ?? '',
+      id: json['artifactId']?.toString() ?? '',
+      ownerSpaceId: json['ownerSpaceId']?.toString() ?? '',
+      workspaceId: json['workspaceId']?.toString() ?? '',
       kind: ArtifactKind.values.firstWhere(
         (k) => k.value == json['kind'],
         orElse: () => ArtifactKind.file,
       ),
-      blobDigest: (json['blobDigest'] ?? json['blob_digest'])?.toString() ?? '',
-      sizeBytes: ((json['sizeBytes'] ?? json['size_bytes']) as num?)?.toInt() ?? 0,
-      mimeType: (json['mimeType'] ?? json['mime_type'])?.toString() ?? '',
+      blobDigest: json['blobDigest']?.toString() ?? '',
+      sizeBytes: (json['sizeBytes'] as num?)?.toInt() ?? 0,
+      mimeType: json['mimeType']?.toString() ?? '',
       filename: json['filename'] as String? ?? '',
-      fileExtension: (json['fileExtension'] ?? json['file_extension'])?.toString() ?? '',
+      fileExtension: json['fileExtension']?.toString() ?? '',
       status: ArtifactStatus.values.firstWhere(
         (s) => s.value == json['status'],
         orElse: () => ArtifactStatus.uploading,
@@ -84,10 +84,10 @@ class ArtifactMetadata {
       source: json['source'] as String? ?? '',
       width: (json['width'] as num?)?.toInt() ?? 0,
       height: (json['height'] as num?)?.toInt() ?? 0,
-      durationMs: ((json['durationMs'] ?? json['duration_ms']) as num?)?.toInt() ?? 0,
+      durationMs: (json['durationMs'] as num?)?.toInt() ?? 0,
       revision: (json['revision'] as num?)?.toInt() ?? 1,
-      createdAt: DateTime.tryParse((json['createdAt'] ?? json['created_at'])?.toString() ?? '') ?? DateTime.now(),
-      updatedAt: DateTime.tryParse((json['updatedAt'] ?? json['updated_at'])?.toString() ?? '') ?? DateTime.now(),
+      createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ?? DateTime.now(),
+      updatedAt: DateTime.tryParse(json['updatedAt']?.toString() ?? '') ?? DateTime.now(),
     );
   }
 

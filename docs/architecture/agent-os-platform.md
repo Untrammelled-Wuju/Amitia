@@ -2,15 +2,15 @@
 
 ## 目标
 
-Amitia Agent OS 是本地优先、跨设备协同的个人 Agent 操作系统。核心提供 Agent、团队、审批、凭据、网络、运行时、预算、评估、活动、市场和 A2A 通用契约；邮箱、日历、手机号、浏览器 Profile 和钱包 Provider 由独立插件发布。
+Amitia Agent OS 是本地优先、跨设备协同的个人 Agent 操作系统。核心提供 Agent、团队、审批、凭据、网络、运行时、预算、评估、活动和 A2A 通用契约；插件市场、邮箱、日历、手机号、浏览器 Profile 和钱包 Provider 都由普通插件发布。
 
 ## 后端边界
 
 | 模块 | 责任 |
 | --- | --- |
-| `backend/internal/agentplatform` | AgentProfile、版本发布、团队、成员、审批、对账、运行时、策略、预算、评估、市场、A2A |
-| `backend/internal/adminrelease` | 市场分类、插件包、版本上传、发布、撤回、下载和签名/SBOM 元数据 |
-| `backend/cmd/server/marketplace_installer.go` | 从市场下载并验证插件，再进入 Extension Kernel 预览、确认和安装 Saga |
+| `backend/internal/agentplatform` | AgentProfile、版本发布、团队、成员、审批、对账、运行时、策略、预算、评估、A2A |
+| `backend/internal/adminrelease` | 管理端市场分类、插件包、版本上传、发布、撤回、下载和签名/SBOM 元数据 |
+| `backend/internal/extension/kernel/pluginmarket` | 预装普通市场插件的目录读取、安装审查和 Host API 调用 |
 | `backend/cmd/server/a2a_executor.go` | 将公开 A2A 任务送入现有 UnifiedEntry |
 | `plugins-code/agent-identities` | 身份 Provider 插件源码 |
 | `plugin/agent-identities` | 身份插件构建产物 |
@@ -34,27 +34,34 @@ Amitia Agent OS 是本地优先、跨设备协同的个人 Agent 操作系统。
 - `/host-control`：桌面屏幕、鼠标、键盘和窗口接管
 - `/evaluations`：评估套件、结果、成本和发布门禁；自动评估回填本次真实 `runtime_model_usage` 的 Token、费用和延迟
 - `/activity`：面向用户的 Agent 活动、等待原因和成本
-- `/market`：分类、搜索、安装和更新
 - `/a2a`：Agent Card 和带 Ed25519 签名、时间窗与防重放校验的远程任务
 
 公开 A2A 入口位于 `/api/public/a2a`。
 
-## 市场
+## 插件市场
 
-扩展中心新增 `/extensions/market`。插件市场按分类、信任级别、平台和关键词筛选，已安装插件会显示为“更新”。
+核心不实现市场业务、市场数据库、市场安装接口或固定市场路由。官方市场是预装普通插件 `com.amitia.builtin.plugin-market`，通过通用 Host API 组合目录读取、安装预览、逐项确认和安装：
 
-管理端新增 `/marketplace`：
+- `host.network.request` 读取插件目录和包资源。
+- `host.plugin.preview` 固定包 URI 与 SHA-256 后执行宿主安全审查。
+- `host.plugin.install` 消费预览会话和用户确认并进入安装 Saga。
+- `ui`、`ui_provider`、`ui_slot` 和 `route.registry` 提供市场页面、导航与扩展点。
+
+第三方市场插件可使用同一组能力独立实现目录、分类、搜索、更新检查和安装体验，不需要宿主新增市场类型或市场专属接口。禁用官方市场插件后，其页面、导航和命令会随插件生命周期消失。
+
+管理端通过 `/marketplace` 发布插件包：
 
 - 创建和管理分类
-- 创建和编辑插件信息
-- 上传 `.amitiax` 版本
+- 上传 `.amitiax` 并直接发布版本
 - 发布、替代和撤回版本
 - 查看 SHA-256、SHA-512、SBOM、兼容性和下载次数
 - 下载已发布或历史版本
 - 上传时校验 `.amitiax` ZIP、路径、扩展 ID 和版本
 - 发布时复核文件 SHA-256、manifest、SBOM、兼容性声明和官方签名
 
-市场文件保存在管理端发布根目录的 `marketplace/` 下。核心通过 `AMITIA_PLUGIN_MARKET_URL` 同步远程目录；本地开发也会索引 `plugin/agent-identities`。索引官方包前会验证包完整性、Publisher、Key ID 和 Ed25519 签名，验证失败时拒绝写入官方目录。
+市场文件保存在管理端发布根目录的 `marketplace/` 下。用户端市场插件通过 `AMITIA_PLUGIN_MARKET_CATALOG_URL` 或自身配置选择目录来源；目录中的信任元数据只用于发现和展示，最终安装仍由宿主重新验证包完整性、Publisher、Key ID、Ed25519 签名、权限和兼容性。
+
+完整协议、标准目录格式和第三方扩展方式见 `docs/architecture/plugin-system.md`。
 
 ## 身份插件
 

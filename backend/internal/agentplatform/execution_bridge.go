@@ -189,29 +189,3 @@ func (s *Service) agentForCharacter(ctx context.Context, spaceID, characterID st
 	}
 	return agent, nil
 }
-
-func (s *Service) AuthorizeAgentCredentialRef(ctx context.Context, spaceID, agentID, ref string) error {
-	ref = strings.TrimSpace(ref)
-	if !strings.HasPrefix(ref, "secret://agent-platform/") {
-		return nil
-	}
-	parts := strings.Split(strings.TrimPrefix(ref, "secret://"), "/")
-	if len(parts) < 3 || parts[0] != "agent-platform" || parts[1] != agentID {
-		return errors.New("Agent 凭据引用不属于当前 Agent")
-	}
-	var grant CredentialGrant
-	err := s.db.WithContext(ctx).Where(
-		"space_id = ? AND agent_id = ? AND secret_ref = ? AND status = ?",
-		spaceID, agentID, ref, "active",
-	).First(&grant).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return errors.New("Agent 凭据引用没有对应授权")
-	}
-	if err != nil {
-		return fmt.Errorf("读取 Agent 凭据授权: %w", err)
-	}
-	if grant.ExpiresAt != nil && !grant.ExpiresAt.After(time.Now().UTC()) {
-		return errors.New("Agent 凭据授权已经过期")
-	}
-	return nil
-}

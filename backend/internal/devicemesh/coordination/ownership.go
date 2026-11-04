@@ -241,7 +241,7 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 		}
 		if !mutation.Deleted && (mutation.Kind == "graph" || mutation.Kind == "vector") {
 			var purged int
-			if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM kernel_device_owned_resources journal, json_each(json_extract(CAST(journal.body AS TEXT),'$.references')) ref WHERE journal.owner_id=? AND journal.kind='checkpoint' AND journal.resource_id LIKE 'privacy-deletion/%' AND journal.deleted=0 AND json_extract(ref.value,'$.kind')=? AND json_extract(ref.value,'$.id')=? AND COALESCE(json_extract(ref.value,'$.legacy'),0)=0`, s.ownerID, mutation.Kind, mutation.ID).Scan(&purged); err != nil {
+			if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM kernel_device_owned_resources journal, json_each(json_extract(CAST(journal.body AS TEXT),'$.references')) ref WHERE journal.owner_id=? AND journal.kind='checkpoint' AND journal.resource_id LIKE 'privacy-deletion/%' AND journal.deleted=0 AND json_extract(ref.value,'$.kind')=? AND json_extract(ref.value,'$.id')=?`, s.ownerID, mutation.Kind, mutation.ID).Scan(&purged); err != nil {
 				return Acknowledgement{}, err
 			}
 			if purged > 0 {

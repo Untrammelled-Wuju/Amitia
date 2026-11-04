@@ -652,7 +652,7 @@ const RawMemoryFactExtractor = `// [factExtractor] — LLM 事实抽取
 import type { ExtractionResult, L1State, EmotionState, LlmClient } from '../engine/types'
 import { normalizeConfidence } from '../../shared/confidence'
 import { isValidSubcategory } from './taxonomy'
-import { FACT_EXTRACT_TEMPERATURE, FACT_EXTRACT_SYS_ZH, buildFactExtractSysOld, buildFactExtractUserMsg } from '../prompt/memory-fact-extract'
+import { FACT_EXTRACT_TEMPERATURE, FACT_EXTRACT_SYS_ZH, FACT_EXTRACT_SYS_EN, buildFactExtractUserMsg } from '../prompt/memory-fact-extract'
 import { FACT_EXTRACTION_MAX_PER_TURN } from '../engine/ackemParams'
 
 export class FactExtractor {
@@ -668,8 +668,7 @@ export class FactExtractor {
   ): Promise<ExtractionResult> {
     const lang =
       locale.startsWith('ja') ? 'ja' : locale.startsWith('en') || locale === 'en' ? 'en' : 'zh'
-    // v1.1 升级版 prompt（中文用详细版，其他语言用旧版兼容）
-    const sys = lang === 'zh' ? FACT_EXTRACT_SYS_ZH : buildFactExtractSysOld(locale)
+    const sys = lang === 'zh' ? FACT_EXTRACT_SYS_ZH : FACT_EXTRACT_SYS_EN
 
     const raw = await llm.chatCompletionJson({
       temperature: FACT_EXTRACT_TEMPERATURE,
@@ -1854,31 +1853,6 @@ export function recordOpenerUsed(opener: string): void {
   if (recentOpeners.length > MAX_RECENT_OPENERS) recentOpeners.shift()
 }
 
-/** 兼容旧接口：返回单个推荐 opener */
-export function getReactionOpener(label: string): string {
-  const pool = REACTION_OPENERS[label]
-  if (!pool?.length) return ''
-  const recentSet = new Set(recentOpeners)
-  const fresh = pool.filter(w => !recentSet.has(w))
-  const pick = fresh.length > 0 ? fresh[Math.floor(Math.random() * fresh.length)] : pool[0]
-  return pick
-}
-
-/** 返回 3 个推荐词池（兼容 orchestrator 调用） */
-export function getReactionOpenerPool(label: string): string[] {
-  const pool = REACTION_OPENERS[label]
-  if (!pool?.length) return []
-  const recentSet = new Set(recentOpeners)
-  const fresh = pool.filter(w => !recentSet.has(w))
-  const source = fresh.length >= 3 ? fresh : pool
-  const shuffled = [...source]
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
-  }
-  return shuffled.slice(0, 3)
-}
-
 /** 重置 opener 状态（新会话时调用） */
 export function resetReactionOpener(): void {
   recentOpeners.length = 0
@@ -2243,18 +2217,6 @@ const SUBCAT_LINES = Object.entries(SUBCATEGORIES)
   .map(([d, arr]) => ` + "`" + `${d}: ${(arr as readonly string[]).join(', ')}` + "`" + `)
   .join('\n')
 
-/** 旧版 prompt（保持兼容） */
-export function buildFactExtractSysOld(locale: string): string {
-  if (locale.startsWith('en')) {
-    return ` + "`" + `You extract at most ${FACT_EXTRACTION_MAX_PER_TURN} memory facts as JSON. Domains: ${DOMAIN_LIST}. Subcategories per domain:\n${SUBCAT_LINES}\nweight: 0-3. confidence: 0.0-1.0. Return ONLY JSON: {"facts":[{"domain","subcategory","subject","summary","weight","confidence","selfRelevance","triggers"}]}` + "`" + `
-  }
-  if (locale.startsWith('ja')) {
-    return ` + "`" + `会話から最大${FACT_EXTRACTION_MAX_PER_TURN}件の事実をJSONで抽出。ドメイン: ${DOMAIN_LIST}。サブカテゴリ:\n${SUBCAT_LINES}\nweight: 0-3。confidence: 0.0-1.0。JSONのみ: {"facts":[{"domain","subcategory","subject","summary","weight","confidence","selfRelevance","triggers"}]}` + "`" + `
-  }
-  return ` + "`" + `从对话中抽取最多 ${FACT_EXTRACTION_MAX_PER_TURN} 条可记忆事实，输出 JSON。领域：${DOMAIN_LIST}。子类：\n${SUBCAT_LINES}\nweight: 0-3。confidence: 0.0-1.0（小数，非百分制）。仅输出 JSON：{"facts":[{"domain","subcategory","subject","summary","weight","confidence","selfRelevance","triggers"}]}` + "`" + `
-}
-
-/** v1.1 升级版 prompt（含 25 子类定义 + weight/confidence 规则 + 拒绝清单） */
 export const FACT_EXTRACT_SYS_ZH = ` + "`" + `你是 Amitia 的记忆抽取器。从【本轮对话】中抽取关于用户的结构化事实。
 
 ── 核心原则 ──

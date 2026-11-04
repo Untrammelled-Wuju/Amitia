@@ -79,27 +79,6 @@ func (r *WorkflowInstallationRepository) Create(ctx context.Context, inst workfl
 	return &inst, nil
 }
 
-func (r *WorkflowInstallationRepository) EnsureLegacy(ctx context.Context, def workflow.WorkflowDefinition, ownerSpaceID string, location workflow.WorkflowLocation) (*workflow.WorkflowInstallation, error) {
-	ownerSpaceID = strings.TrimSpace(ownerSpaceID)
-	if ownerSpaceID == "" || strings.TrimSpace(def.ID) == "" {
-		return nil, errors.New("legacy workflow installation requires owner and workflow id")
-	}
-	if current, err := r.Get(ctx, ownerSpaceID, def.ID, location, ""); err == nil {
-		return current, nil
-	} else if !errors.Is(err, sql.ErrNoRows) {
-		return nil, err
-	}
-	return r.Create(ctx, workflow.WorkflowInstallation{
-		WorkflowID:      def.ID,
-		OwnerSpaceID:    ownerSpaceID,
-		Location:        location,
-		Enabled:         def.Enabled,
-		Triggers:        def.Triggers,
-		CallableByAgent: def.CallableByAgent,
-		AgentTool:       def.AgentTool,
-	})
-}
-
 func (r *WorkflowInstallationRepository) Get(ctx context.Context, ownerSpaceID, workflowID string, location workflow.WorkflowLocation, hostDeviceID string) (*workflow.WorkflowInstallation, error) {
 	row := r.db.QueryRowContext(ctx, `
 		SELECT installation_id, workflow_id, owner_space_id, location, host_device_id, enabled,

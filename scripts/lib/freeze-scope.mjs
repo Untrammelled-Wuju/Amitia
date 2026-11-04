@@ -12,7 +12,6 @@ const DIRECTORY_SPECS = [
   { base: "desktop/resources/config-template", extensions: null },
   { base: "desktop/resources/bridge", extensions: null },
   { base: "desktop/resources/migrations", extensions: null },
-  { base: "desktop/resources/qdrant/config", extensions: null },
   { base: "front/public", extensions: null },
   { base: "Logo", extensions: null },
   { base: "front/src", extensions: [".ts", ".tsx", ".vue"] },

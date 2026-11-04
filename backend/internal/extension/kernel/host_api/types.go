@@ -15,6 +15,8 @@ type Method string
 
 const (
 	MethodToolExecute               Method = "host.tool.execute"
+	MethodPluginPreview             Method = "host.plugin.preview"
+	MethodPluginInstall             Method = "host.plugin.install"
 	MethodStateGet                  Method = "host.state.get"
 	MethodStateCAS                  Method = "host.state.cas"
 	MethodStateDelete               Method = "host.state.delete"

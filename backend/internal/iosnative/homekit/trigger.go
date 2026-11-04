@@ -7,7 +7,6 @@ const (
 	AutomationTypeCalendar       = "calendar"
 	AutomationTypePresence       = "presence"
 	AutomationTypeCharacteristic = "characteristic"
-	AutomationTypeTimerLegacy    = "timer_legacy"
 	AutomationTypeUnknown        = "unknown"
 )
 

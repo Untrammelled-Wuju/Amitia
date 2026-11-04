@@ -3,7 +3,6 @@ package com.amitia.amitia_app.notifications
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
-import android.content.pm.ShortcutManager
 import android.net.Uri
 import android.util.Log
 import android.os.Build
@@ -117,20 +116,6 @@ class NotificationPlatformPlugin : FlutterPlugin, MethodChannel.MethodCallHandle
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         appContext = binding.applicationContext
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            runCatching {
-                val shortcuts = appContext.getSystemService(Context.SHORTCUT_SERVICE) as ShortcutManager
-                val legacy = shortcuts.getShortcuts(
-                    ShortcutManager.FLAG_MATCH_DYNAMIC or
-                        ShortcutManager.FLAG_MATCH_PINNED or
-                        ShortcutManager.FLAG_MATCH_CACHED,
-                ).map { it.id }.filter { it.startsWith("amitia-chat-") }
-                if (legacy.isNotEmpty()) {
-                    shortcuts.removeDynamicShortcuts(legacy)
-                    shortcuts.removeLongLivedShortcuts(legacy)
-                }
-            }.onFailure { Log.w("AmitiaFloatingChat", "Legacy bubble cleanup failed", it) }
-        }
         NotificationRenderer.ensureChannels(appContext)
         channel = MethodChannel(binding.binaryMessenger, CHANNEL).also { it.setMethodCallHandler(this) }
         current = WeakReference(this)

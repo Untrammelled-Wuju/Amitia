@@ -20,20 +20,18 @@ let roleSourceGeneration = 0;
 let deploymentChanging = false;
 const WEB_DEPLOYMENT_CONFIG_KEY = "amitia.web.deployment.v1";
 
-export let LOCAL_DEVICE_RUNTIME_BASE_URL = "http://127.0.0.1:18899";
+export let LOCAL_DEVICE_RUNTIME_BASE_URL = "";
 
 async function resolveLocalRuntimeBaseURL(): Promise<string> {
   const api = window.amitiaDesktop;
-  if (!api?.getRuntimeEndpoint) return LOCAL_DEVICE_RUNTIME_BASE_URL;
-  try {
-    const endpoint = await api.getRuntimeEndpoint();
-    if (endpoint?.httpBaseURL) {
-      LOCAL_DEVICE_RUNTIME_BASE_URL = endpoint.httpBaseURL.replace(/\/+$/, "");
-    }
-  } catch (error) {
-  console.error("[original-error]", error);
-return LOCAL_DEVICE_RUNTIME_BASE_URL;
+  if (!api?.getRuntimeEndpoint) {
+    throw new Error("Desktop runtime endpoint provider is unavailable");
   }
+  const endpoint = await api.getRuntimeEndpoint();
+  if (!endpoint?.httpBaseURL) {
+    throw new Error("Desktop runtime endpoint is unavailable");
+  }
+  LOCAL_DEVICE_RUNTIME_BASE_URL = endpoint.httpBaseURL.replace(/\/+$/, "");
   return LOCAL_DEVICE_RUNTIME_BASE_URL;
 }
 
@@ -66,10 +64,6 @@ export const DEVICE_LOCAL_ROUTE_PREFIXES = [
   "/api/artifacts/v1/previews",
   "/internal/device-mesh",
 ] as const;
-
-// Kept as an alias for callers that still use the old Desktop-Pet-specific
-// name. Workflow local routing now shares the same canonical registry.
-export const DESKTOP_PET_DEVICE_LOCAL_ROUTE_PREFIXES = DEVICE_LOCAL_ROUTE_PREFIXES;
 
 export function isDeviceLocalApiPath(path: string): boolean {
   const normalized = String(path || "").split("?", 1)[0];

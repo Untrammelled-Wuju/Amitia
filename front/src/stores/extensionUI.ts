@@ -66,9 +66,8 @@ export interface SlotSnapshot {
   slotId: string;
   contractVersion: number;
   supportedKinds?: string[];
-  kind?: "single" | "list" | "keyed" | "chain";
+  kind: "single" | "list" | "keyed" | "chain";
   layout: "inline" | "stack" | "row" | "grid" | "tabs" | "panel" | "drawer" | "modal" | "hidden";
-  multiplicity: "single" | "multiple" | "ordered_multiple" | "replaceable_single" | "exclusive";
   fallbackPolicy: "none" | "skeleton" | "empty" | "default";
   description?: string;
   platforms?: string[];

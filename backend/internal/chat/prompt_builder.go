@@ -339,10 +339,10 @@ func toneLabel(tone decision.ExpressionTone) string {
 
 func (s *service) getRoleRuntimeProfileForSpace(characterID, spaceID string) (*character.RoleRuntimeProfile, error) {
 	type scopedRuntimeProfileRepository interface {
-		GetRuntimeProfileForSpace(id, spaceID string, includeLegacyDefault bool) (*character.RoleRuntimeProfile, error)
+		GetRuntimeProfileForSpace(id, spaceID string) (*character.RoleRuntimeProfile, error)
 	}
 	if scoped, ok := s.charRepo.(scopedRuntimeProfileRepository); ok {
-		return scoped.GetRuntimeProfileForSpace(characterID, normalizeConversationOwner(spaceID), chatLocalSingleUserMode())
+		return scoped.GetRuntimeProfileForSpace(characterID, normalizeConversationOwner(spaceID))
 	}
 	if strings.TrimSpace(characterID) != "" {
 		var owner string

@@ -120,8 +120,7 @@ export interface BackendSlotSnapshotEntry {
   slotId: string;
   contractVersion: number;
   supportedKinds?: string[];
-  kind?: "single" | "list" | "keyed" | "chain";
-  multiplicity: string;
+  kind: "single" | "list" | "keyed" | "chain";
   layout: string;
   fallbackPolicy: string;
   performanceBudget?: {

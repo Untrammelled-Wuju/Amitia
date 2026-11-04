@@ -21,21 +21,19 @@ class WorkbenchTerminalOutput {
     _cursor = 0;
   }
 
-  void append(int nextCursor, List<int> bytes, {bool truncated = false, int? fromCursor}) {
-    if (fromCursor != null && (fromCursor < 0 || fromCursor > nextCursor ||
-        nextCursor - fromCursor != bytes.length)) {
+  void append(int nextCursor, List<int> bytes, {bool truncated = false, required int fromCursor}) {
+    if (fromCursor < 0 || fromCursor > nextCursor ||
+        nextCursor - fromCursor != bytes.length) {
       throw const FormatException('终端输出游标不一致');
     }
     if (nextCursor < _cursor) return;
     var incoming = bytes;
-    if (fromCursor != null) {
-      if (fromCursor > _cursor && !truncated) {
-        throw const FormatException('终端输出有缺口，需要重新读取');
-      }
-      final overlap = _cursor > fromCursor ? _cursor - fromCursor : 0;
-      incoming = bytes.sublist(overlap);
-      truncated = truncated && fromCursor > _cursor;
+    if (fromCursor > _cursor && !truncated) {
+      throw const FormatException('终端输出有缺口，需要重新读取');
     }
+    final overlap = _cursor > fromCursor ? _cursor - fromCursor : 0;
+    incoming = bytes.sublist(overlap);
+    truncated = truncated && fromCursor > _cursor;
     if (nextCursor == _cursor && !truncated) return;
     if (truncated) {
       _pendingUtf8 = [];

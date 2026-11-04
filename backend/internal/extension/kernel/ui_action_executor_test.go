@@ -159,7 +159,7 @@ func TestUIActionSnapshotDeriverSwitchesModuleWithinExtension(t *testing.T) {
 	}
 }
 
-func TestUIActionToolInputDropsUndeclaredRendererMeta(t *testing.T) {
+func TestUIActionToolInputRejectsRendererMeta(t *testing.T) {
 	ctx := context.Background()
 	registry := capability.NewToolRegistry()
 	if err := registry.Register(ctx, capability.ToolDefinition{
@@ -173,28 +173,14 @@ func TestUIActionToolInputDropsUndeclaredRendererMeta(t *testing.T) {
 	}
 	executor := &UIActionExecutor{toolRegistry: registry}
 
-	got, err := executor.normalizeToolInput(
+	_, err := executor.normalizeToolInput(
 		ctx,
 		"com.amitia.builtin.active-task/command",
 		json.RawMessage(`{"action":"ui.dashboard","node_id":"lifecycle:command","form_state":{"enabled":true}}`),
 		nil,
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var payload map[string]json.RawMessage
-	if err := json.Unmarshal(got, &payload); err != nil {
-		t.Fatal(err)
-	}
-	if string(payload["action"]) != `"ui.dashboard"` {
-		t.Fatalf("expected action to survive, got %s", got)
-	}
-	if _, exists := payload["node_id"]; exists {
-		t.Fatalf("undeclared node_id should be stripped, got %s", got)
-	}
-	if _, exists := payload["form_state"]; exists {
-		t.Fatalf("undeclared form_state should be stripped, got %s", got)
+	if err == nil {
+		t.Fatal("renderer metadata in tool input must be rejected")
 	}
 }
 

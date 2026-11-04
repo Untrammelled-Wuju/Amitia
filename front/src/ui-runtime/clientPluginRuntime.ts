@@ -23,7 +23,6 @@ import type {
   ClientSlotManagedStoreHandle,
   ClientSlotManagedStoreInstance,
   ClientSlotStoreFactory,
-  ClientSlotStoreHandle,
   ClientSlotStoreResource,
 } from "@/ui-runtime/slotContract";
 
@@ -35,8 +34,7 @@ export interface ClientSlotDefinition {
   contractVersion: number;
   supportedKinds: string[];
   /** single/list/keyed/chain dispatch semantics. */
-  kind?: ClientSlotKind;
-  multiplicity?: SlotSnapshot["multiplicity"];
+  kind: ClientSlotKind;
   layout?: SlotSnapshot["layout"];
   fallbackPolicy?: SlotSnapshot["fallbackPolicy"];
   parentSlotId?: string;
@@ -55,8 +53,7 @@ export interface ClientSlotRegistration {
   dispose(): void | Promise<void>;
 }
 
-/** Legacy/declarative contribution options. Trusted plugins use the strict
- * register({ name, children, store, inject }, component) API instead. */
+/** Dynamic contribution options used by the runtime bridge. */
 export interface ClientSlotContributionOptions<
   TProps extends Record<string, unknown> = Record<string, unknown>,
   TStore = unknown,
@@ -88,8 +85,6 @@ interface ClientSlotRegistrationEnvironment {
 export interface ClientContributionInstance {
   readonly scopeKey: string;
   readonly sessionId?: string;
-  /** Compatibility snapshot; strict components consume getSnapshot/useStore. */
-  readonly store: unknown;
   readonly actions: Readonly<Record<string, (...args: any[]) => any>>;
   readonly getSnapshot: () => unknown;
   readonly subscribe?: (listener: () => void) => () => void;
@@ -116,14 +111,13 @@ export interface ClientSlotContribution {
   sequence: number;
   /** Selector for `chain` slots. */
   select?: (owner: Record<string, unknown>) => unknown | null;
-  /** Optional locale namespace bound to the strict component as `t`. */
+  /** Optional locale namespace bound to the component as `t`. */
   localeNamespace?: string;
   /** Child keys this exact entry is authorized to render. */
   childSlotIds: ReadonlySet<string>;
   scope: "root" | "session-maybe" | "session";
-  strict: boolean;
   active: boolean;
-  /** A crashed strict shadowing entry remains registered but yields dispatch. */
+  /** A crashed shadowing entry remains registered but yields dispatch. */
   abdicated: boolean;
   storeDecl?: unknown | ClientSlotStoreFactory<unknown>;
   /** Direct managed handle mount, used to release the shared-scope ledger. */
@@ -137,10 +131,6 @@ export interface ClientSlotContribution {
   claimedStaticChildren: string[];
   /** Declaration observers may initialize asynchronously; disposal waits them out. */
   childActivations: Promise<unknown>[];
-  /** Root-scoped compatibility aliases. */
-  store?: unknown;
-  actions?: Readonly<Record<string, (...args: any[]) => any>>;
-  injected?: Readonly<Record<string, unknown>>;
 }
 
 export interface ClientSlotDispatchResult {
@@ -246,8 +236,6 @@ export class BrowserSlotRuntime {
   }>();
   /** DSH invariant: one shared managed handle may mount under one scope kind. */
   private readonly managedStoreScopes = new WeakMap<object, { scope: ClientSlotDefinition["scope"]; count: number }>();
-  /** Compatibility concrete-state handles are stricter: one live scope key. */
-  private readonly sharedStoreScopes = new WeakMap<object, { scopeKey: string; count: number }>();
   private readonly entryErrorListeners = new Set<(event: { contributionId: string; slotId: string; pluginId: string; error: unknown; abdicated: boolean }) => void>();
   private contributionSequence = 0;
   readonly revision = shallowRef(0);
@@ -270,8 +258,6 @@ export class BrowserSlotRuntime {
     }
   }
 
-  /** Advanced compatibility primitive. New composition should declare children
-   * on registerEntry so declaration and render authority share one lifetime. */
   async declare(input: ClientSlotDefinition): Promise<ClientSlotRegistration> {
     const parentId = input.parentSlotId?.trim();
     const parent = parentId ? this.current(parentId) : undefined;
@@ -304,7 +290,7 @@ export class BrowserSlotRuntime {
     };
   }
 
-  async observe(slotId: string, callback: (definition: ClientSlotDefinition) => ClientSlotEffect): Promise<ClientDisposer> {
+  async inject(slotId: string, callback: (definition: ClientSlotDefinition) => ClientSlotEffect): Promise<ClientDisposer> {
     const id = slotId.trim();
     if (!id) throw new Error("slotId is required");
     let subscribers = this.subscribers.get(id);
@@ -322,12 +308,6 @@ export class BrowserSlotRuntime {
       subscriber.cleanup = undefined;
       if (subscribers?.size === 0) this.subscribers.delete(id);
     };
-  }
-
-  /** Slot-declaration lifetime injection. This remains first-class and is not
-   * the same thing as the business `inject` field on registerEntry. */
-  inject(slotId: string, callback: (definition: ClientSlotDefinition) => ClientSlotEffect): Promise<ClientDisposer> {
-    return this.observe(slotId, callback);
   }
 
   /** DSH-style single composition API used by trusted client plugins. */
@@ -349,7 +329,6 @@ export class BrowserSlotRuntime {
         contractVersion: spec.contractVersion ?? 1,
         supportedKinds: [...(spec.supportedKinds ?? ["panel"])],
         kind: spec.kind,
-        multiplicity: spec.multiplicity ?? multiplicityFromClientKind(spec.kind),
         layout: spec.layout,
         fallbackPolicy: spec.fallbackPolicy,
         scope: spec.scope,
@@ -376,23 +355,9 @@ export class BrowserSlotRuntime {
       label: kindOptions.label,
       select: kindOptions.select,
       localeNamespace: typeof options.locale === "string" ? options.locale : undefined,
-    }, environment, true);
+    }, environment);
   }
 
-  /** Explicit compatibility path. Keeping it separate prevents it from
-   * weakening the public SlotMap register() type gate. */
-  registerLegacy(
-    pluginId: string,
-    slotId: string,
-    key: string,
-    component: Component,
-    options: ClientSlotContributionOptions = {},
-    environment: ClientSlotRegistrationEnvironment = EMPTY_ENVIRONMENT,
-  ): ClientDisposer {
-    return this.registerInternal(pluginId, slotId, key, component, options, environment, false);
-  }
-
-  /** Internal compatibility alias for older host code/tests. */
   register(
     pluginId: string,
     slotId: string,
@@ -401,7 +366,7 @@ export class BrowserSlotRuntime {
     options: ClientSlotContributionOptions = {},
     environment: ClientSlotRegistrationEnvironment = EMPTY_ENVIRONMENT,
   ): ClientDisposer {
-    return this.registerLegacy(pluginId, slotId, key, component, options, environment);
+    return this.registerInternal(pluginId, slotId, key, component, options, environment);
   }
 
   private registerInternal(
@@ -411,7 +376,6 @@ export class BrowserSlotRuntime {
     component: Component,
     options: ClientSlotContributionOptions,
     environment: ClientSlotRegistrationEnvironment,
-    strict: boolean,
   ): ClientDisposer {
     const normalizedPluginId = pluginId.trim();
     const normalizedSlotId = slotId.trim();
@@ -451,21 +415,19 @@ export class BrowserSlotRuntime {
         if (existing.ownerEntryId && existing.ownerEntryId !== contributionId) {
           throw new Error(`child slot ${child.slotId} is already owned by ${existing.ownerEntryId}`);
         }
-        const existingKind = existing.kind ?? clientKindFromMultiplicity(existing.multiplicity);
-        const requestedKind = child.kind ?? clientKindFromMultiplicity(child.multiplicity);
-        if (strict && existingKind !== requestedKind) {
+        const existingKind = existing.kind;
+        const requestedKind = child.kind;
+        if (existingKind !== requestedKind) {
           throw new Error(`child slot ${child.slotId} kind mismatch: host=${existingKind}, requested=${requestedKind}`);
         }
-        if (strict && (existing.scope ?? "root") !== (child.scope ?? "root")) {
+        if ((existing.scope ?? "root") !== (child.scope ?? "root")) {
           throw new Error(`child slot ${child.slotId} scope mismatch: host=${existing.scope ?? "root"}, requested=${child.scope ?? "root"}`);
         }
-        if (strict) {
-          const claim = this.childClaims.get(child.slotId);
-          if (claim && claim.ownerEntryId !== contributionId) {
-            throw new Error(`child slot ${child.slotId} is already declared by ${claim.ownerEntryId}`);
-          }
-          staticChildrenToClaim.push(child);
+        const claim = this.childClaims.get(child.slotId);
+        if (claim && claim.ownerEntryId !== contributionId) {
+          throw new Error(`child slot ${child.slotId} is already declared by ${claim.ownerEntryId}`);
         }
+        staticChildrenToClaim.push(child);
         continue;
       }
       childrenToDeclare.push(child);
@@ -486,20 +448,17 @@ export class BrowserSlotRuntime {
     if (preexistingById?.active) throw new Error(`client contribution ${contributionId} already registered`);
     if (preexistingById) this.contributionsById.delete(contributionId);
 
-    const dispatchKind = parentDefinition.kind ?? clientKindFromMultiplicity(parentDefinition.multiplicity);
-    if (strict) {
-      if (dispatchKind === "keyed" && !options.entryKey?.trim()) throw new Error(`keyed slot ${normalizedSlotId} requires entryKey`);
-      if (dispatchKind === "list" && !options.cellId?.trim()) throw new Error(`list slot ${normalizedSlotId} requires id`);
-      if (dispatchKind === "chain" && typeof options.select !== "function") throw new Error(`chain slot ${normalizedSlotId} requires select()`);
-      if (dispatchKind !== "chain") {
-        const cell = dispatchKind === "keyed" ? options.entryKey!.trim() : dispatchKind === "list" ? options.cellId!.trim() : "__single__";
-        const priority = Number.isFinite(options.priority) ? Number(options.priority) : 0;
-        for (const existing of slotContributions.values()) {
-          if (!existing.strict) continue;
-          const existingCell = dispatchKind === "keyed" ? existing.entryKey : dispatchKind === "list" ? existing.cellId : "__single__";
-          if (existingCell === cell && existing.priority === priority) {
-            throw new Error(`slot ${normalizedSlotId} cell ${cell} already has strict priority ${priority} occupant ${existing.contributionId}`);
-          }
+    const dispatchKind = parentDefinition.kind;
+    if (dispatchKind === "keyed" && !options.entryKey?.trim()) throw new Error(`keyed slot ${normalizedSlotId} requires entryKey`);
+    if (dispatchKind === "list" && !options.cellId?.trim()) throw new Error(`list slot ${normalizedSlotId} requires id`);
+    if (dispatchKind === "chain" && typeof options.select !== "function") throw new Error(`chain slot ${normalizedSlotId} requires select()`);
+    if (dispatchKind !== "chain") {
+      const cell = dispatchKind === "keyed" ? options.entryKey!.trim() : dispatchKind === "list" ? options.cellId!.trim() : "__single__";
+      const priority = Number.isFinite(options.priority) ? Number(options.priority) : 0;
+      for (const existing of slotContributions.values()) {
+        const existingCell = dispatchKind === "keyed" ? existing.entryKey : dispatchKind === "list" ? existing.cellId : "__single__";
+        if (existingCell === cell && existing.priority === priority) {
+          throw new Error(`slot ${normalizedSlotId} cell ${cell} already has strict priority ${priority} occupant ${existing.contributionId}`);
         }
       }
     }
@@ -528,7 +487,6 @@ export class BrowserSlotRuntime {
       localeNamespace: options.localeNamespace?.trim() || undefined,
       childSlotIds: childIds,
       scope: parentDefinition.scope ?? "root",
-      strict,
       active: true,
       abdicated: false,
       storeDecl: options.store,
@@ -544,15 +502,9 @@ export class BrowserSlotRuntime {
     slotContributions.set(mapKey, contribution);
     this.contributionsById.set(contributionId, contribution);
 
-    // Root entries have a single framework-owned instance and retain the old
-    // store/injected aliases for inspection. Session entries are instantiated
-    // per session at the outlet.
     if (contribution.scope === "root") {
       try {
-        const instance = this.acquireContributionInstance(contributionId);
-        contribution.store = instance.store;
-        contribution.actions = instance.actions;
-        contribution.injected = instance.injected;
+        this.acquireContributionInstance(contributionId);
       } catch (error) {
         slotContributions.delete(mapKey);
         if (slotContributions.size === 0) this.contributions.delete(normalizedSlotId);
@@ -696,14 +648,6 @@ export class BrowserSlotRuntime {
       clearPersisted = () => managed.clearPersisted();
       disposers.push(() => managed.dispose());
     };
-    const attachSharedStore = (handle: ClientSlotStoreHandle<unknown, Record<string, (...args: any[]) => any>>) => {
-      disposers.push(this.pinSharedStoreScope(handle as object, scopeKey));
-      store = handle.state;
-      getSnapshot = () => handle.state;
-      actions = Object.freeze({ ...(handle.actions ?? {}) });
-      subscribe = handle.subscribe;
-    };
-
     if (typeof contribution.storeDecl === "function") {
       const created = (contribution.storeDecl as ClientSlotStoreFactory<unknown>)(resourceContext);
       if (isClientSlotStoreResource(created)) {
@@ -714,18 +658,12 @@ export class BrowserSlotRuntime {
         if (created.dispose) disposers.push(() => created.dispose?.());
       } else if (isClientSlotManagedStoreHandle(created)) {
         attachManagedStore(created);
-      } else if (isClientSlotStoreHandle(created)) {
-        attachSharedStore(created);
       } else {
         store = created;
         getSnapshot = () => store;
       }
     } else if (isClientSlotManagedStoreHandle(contribution.storeDecl)) {
       attachManagedStore(contribution.storeDecl);
-    } else if (isClientSlotStoreHandle(contribution.storeDecl)) {
-      // Compatibility shared handles remain supported, but unlike managed
-      // handles they are forbidden from silently crossing scope instances.
-      attachSharedStore(contribution.storeDecl);
     } else {
       store = cloneSessionStoreIfNeeded(contribution.storeDecl, contribution.scope, normalizedSessionId);
       getSnapshot = () => store;
@@ -752,7 +690,6 @@ export class BrowserSlotRuntime {
     const instance: ClientContributionInstance = {
       scopeKey,
       sessionId: normalizedSessionId,
-      store,
       actions,
       getSnapshot,
       subscribe,
@@ -782,24 +719,6 @@ export class BrowserSlotRuntime {
     if (!existing || existing.scope !== scope) return;
     existing.count -= 1;
     if (existing.count <= 0) this.managedStoreScopes.delete(handle);
-  }
-
-  private pinSharedStoreScope(handle: object, scopeKey: string): ClientDisposer {
-    const existing = this.sharedStoreScopes.get(handle);
-    if (existing && existing.scopeKey !== scopeKey) {
-      throw new Error(`shared slot store handle is already pinned to scope ${existing.scopeKey}; cannot reuse it in ${scopeKey}`);
-    }
-    if (existing) existing.count += 1;
-    else this.sharedStoreScopes.set(handle, { scopeKey, count: 1 });
-    let active = true;
-    return () => {
-      if (!active) return;
-      active = false;
-      const current = this.sharedStoreScopes.get(handle);
-      if (!current || current.scopeKey !== scopeKey) return;
-      current.count -= 1;
-      if (current.count <= 0) this.sharedStoreScopes.delete(handle);
-    };
   }
 
   async disposeSessionRuntime(sessionId: string): Promise<void> {
@@ -867,53 +786,35 @@ export class BrowserSlotRuntime {
     const definition = this.current(slotId);
     if (!definition) return [];
     const entries = this.listContributions(slotId);
-    const kind = definition.kind ?? clientKindFromMultiplicity(definition.multiplicity);
-    const strict = entries.filter((entry) => entry.strict && !entry.abdicated);
-    if (strict.length > 0) {
-      if (kind === "keyed") {
-        if (!dispatchKey) return [];
-        const winner = strict.filter((entry) => entry.entryKey === dispatchKey).sort(compareStrictShadow)[0];
-        return winner ? [{ contribution: winner }] : [];
-      }
-      if (kind === "list") {
-        const cells = new Map<string, ClientSlotContribution>();
-        for (const entry of [...strict].sort(compareStrictShadow)) {
-          const cell = entry.cellId ?? entry.key;
-          if (!cells.has(cell)) cells.set(cell, entry);
-        }
-        const winners = Array.from(cells.values()).sort(compareStrictListDisplay);
-        return winners
-          .filter((entry) => !listOnly || entry.cellId === listOnly)
-          .map((contribution) => ({ contribution }));
-      }
-      if (kind === "single") {
-        const winner = [...strict].sort(compareStrictShadow)[0];
-        return winner ? [{ contribution: winner }] : [];
-      }
-      const ordered = [...strict].sort(compareClientChain);
-      for (const contribution of ordered) {
-        if (!contribution.select) continue;
-        const matched = contribution.select(owner);
-        if (matched != null) return [{ contribution, matched }];
-      }
-      return [];
-    }
-    // Legacy entries keep Amitia's historical behavior when no strict DSH-style
-    // entry occupies the slot. This preserves the existing Provider/Schema/UI ecosystem.
+    const kind = definition.kind;
+    const active = entries.filter((entry) => !entry.abdicated);
     if (kind === "keyed") {
       if (!dispatchKey) return [];
-      return entries.filter((entry) => entry.entryKey === dispatchKey).map((contribution) => ({ contribution }));
+      const winner = active.filter((entry) => entry.entryKey === dispatchKey).sort(compareStrictShadow)[0];
+      return winner ? [{ contribution: winner }] : [];
     }
-    if (kind === "chain") {
-      const ordered = [...entries].sort(compareLegacyChain);
-      for (const contribution of ordered) {
-        if (!contribution.select) continue;
-        const matched = contribution.select(owner);
-        if (matched != null) return [{ contribution, matched }];
+    if (kind === "list") {
+      const cells = new Map<string, ClientSlotContribution>();
+      for (const entry of [...active].sort(compareStrictShadow)) {
+        const cell = entry.cellId ?? entry.key;
+        if (!cells.has(cell)) cells.set(cell, entry);
       }
-      return [];
+      const winners = Array.from(cells.values()).sort(compareStrictListDisplay);
+      return winners
+        .filter((entry) => !listOnly || entry.cellId === listOnly)
+        .map((contribution) => ({ contribution }));
     }
-    return entries.map((contribution) => ({ contribution }));
+    if (kind === "single") {
+      const winner = [...active].sort(compareStrictShadow)[0];
+      return winner ? [{ contribution: winner }] : [];
+    }
+    const ordered = [...active].sort(compareClientChain);
+    for (const contribution of ordered) {
+      if (!contribution.select) continue;
+      const matched = contribution.select(owner);
+      if (matched != null) return [{ contribution, matched }];
+    }
+    return [];
   }
 
   onEntryError(listener: (event: { contributionId: string; slotId: string; pluginId: string; error: unknown; abdicated: boolean }) => void): ClientDisposer {
@@ -933,8 +834,8 @@ export class BrowserSlotRuntime {
     const contribution = this.contributionsById.get(contributionId);
     if (!contribution || !contribution.active) return false;
     const definition = this.current(contribution.slotId);
-    const kind = definition?.kind ?? clientKindFromMultiplicity(definition?.multiplicity);
-    const canAbdicate = contribution.strict && options.abdicate === true && kind !== "chain";
+    const kind = definition?.kind;
+    const canAbdicate = options.abdicate === true && kind !== "chain";
     if (canAbdicate && !contribution.abdicated) {
       contribution.abdicated = true;
       this.bumpRevision();
@@ -974,7 +875,6 @@ export class BrowserSlotRuntime {
         localeNamespace: entry.localeNamespace,
         ordering: entry.ordering,
         priority: entry.priority,
-        strict: entry.strict,
         abdicated: entry.abdicated,
         childSlots: Array.from(entry.childSlotIds).sort(),
         instances: Array.from(entry.instances.keys()).sort(),
@@ -1027,10 +927,6 @@ function compareClientChain(a: ClientSlotContribution, b: ClientSlotContribution
   return a.priority - b.priority || a.sequence - b.sequence;
 }
 
-function compareLegacyChain(a: ClientSlotContribution, b: ClientSlotContribution): number {
-  return b.priority - a.priority || a.ordering - b.ordering || a.contributionId.localeCompare(b.contributionId);
-}
-
 function compareStrictShadow(a: ClientSlotContribution, b: ClientSlotContribution): number {
   return a.priority - b.priority || a.sequence - b.sequence;
 }
@@ -1039,29 +935,11 @@ function compareStrictListDisplay(a: ClientSlotContribution, b: ClientSlotContri
   return a.ordering - b.ordering || a.sequence - b.sequence;
 }
 
-function clientKindFromMultiplicity(multiplicity: ClientSlotDefinition["multiplicity"]): ClientSlotKind {
-  if (multiplicity === "single" || multiplicity === "replaceable_single" || multiplicity === "exclusive") return "single";
-  return "list";
-}
-
-function multiplicityFromClientKind(kind: ClientSlotKind): NonNullable<ClientSlotDefinition["multiplicity"]> {
-  return kind === "single" ? "replaceable_single" : "ordered_multiple";
-}
-
 function isClientSlotManagedStoreHandle(value: unknown): value is ClientSlotManagedStoreHandle<unknown, any> {
   return !!value
     && typeof value === "object"
     && (value as { __amitiaManagedSlotStoreHandle?: unknown }).__amitiaManagedSlotStoreHandle === true
     && typeof (value as { create?: unknown }).create === "function";
-}
-
-function isClientSlotStoreHandle(value: unknown): value is ClientSlotStoreHandle<unknown, Record<string, (...args: any[]) => any>> {
-  return !!value
-    && typeof value === "object"
-    && "state" in value
-    && "actions" in value
-    && !!(value as { actions?: unknown }).actions
-    && typeof (value as { actions?: unknown }).actions === "object";
 }
 
 function cloneSessionStoreIfNeeded(value: unknown, scope: ClientSlotContribution["scope"], sessionId?: string): unknown {
@@ -1156,7 +1034,6 @@ export interface BrowserClientPluginContext {
   };
   slots: {
     declare(definition: ClientSlotDefinition): Promise<ClientSlotRegistration>;
-    observe(slotId: string, callback: (definition: ClientSlotDefinition) => ClientSlotEffect): Promise<ClientDisposer>;
     /** Slot-declaration lifetime dependency. */
     inject(slotId: string, callback: (definition: ClientSlotDefinition) => ClientSlotEffect): Promise<ClientDisposer>;
     register<
@@ -1171,12 +1048,22 @@ export interface BrowserClientPluginContext {
       options: ClientSlotRegisterOptions<K, D, S, I, N, EntryKey>,
       component: ClientSlotRegistrationComponent<K, D, S, I, N, EntryKey, C>,
     ): ClientDisposer;
-    /** Explicit compatibility path for declarative/legacy packages. */
-    registerLegacy(
-      slotId: string,
-      key: string,
+    registerDynamic<K extends string>(
+      options: {
+        readonly name: K;
+        readonly key: string;
+        readonly ordering?: number;
+        readonly priority?: number;
+        readonly props?: Readonly<Record<string, unknown>>;
+        readonly children?: Readonly<Record<string, ClientSlotDefinition>>;
+        readonly store?: unknown;
+        readonly inject?: ClientSlotInjectFactory<unknown, Record<string, unknown>>;
+        readonly entryKey?: string;
+        readonly cellId?: string;
+        readonly label?: string | (() => string);
+        readonly select?: (owner: Record<string, unknown>) => unknown | null;
+      },
       component: Component,
-      options?: ClientSlotContributionOptions,
     ): ClientDisposer;
     onEntryError(callback: (event: { contributionId: string; slotId: string; pluginId: string; error: unknown; abdicated: boolean }) => void): ClientDisposer;
     revive(contributionId: string): boolean;
@@ -1458,17 +1345,16 @@ export class BrowserClientPluginRuntime {
       atomicUpdate: true,
       setup: async (ctx) => {
         for (const contribution of normalized.contributions ?? []) {
-          await ctx.slots.observe(contribution.slotId, () => ctx.slots.registerLegacy(
-            contribution.slotId,
-            contribution.key,
-            ClientRuntimeSchemaContribution,
+          await ctx.slots.inject(contribution.slotId, () => ctx.slots.registerDynamic(
             {
+              name: contribution.slotId,
+              key: contribution.key,
               ordering: contribution.ordering ?? 0,
               priority: contribution.priority ?? 0,
               entryKey: contribution.entryKey ?? contribution.key,
               cellId: contribution.cellId ?? contribution.key,
               select: (owner) => matchesDeclarativeOwner(owner, contribution.match) ? { owner } : null,
-              children: contribution.children ?? [],
+              children: Object.fromEntries((contribution.children ?? []).map((child) => [child.slotId, child])),
               props: {
                 sourceExtensionId: contribution.sourceExtensionId,
                 sourceContributionId: contribution.sourceContributionId,
@@ -1476,10 +1362,11 @@ export class BrowserClientPluginRuntime {
                 kind: contribution.kind ?? "panel",
               },
             },
+            ClientRuntimeSchemaContribution,
           ));
         }
         for (const node of normalized.conversationNodes ?? []) {
-          await ctx.slots.observe("chat.conversation.node", () => ctx.conversationNodes.register(
+          await ctx.slots.inject("chat.conversation.node", () => ctx.conversationNodes.register(
             node.key,
             ClientRuntimeSchemaContribution,
             declarativeConversationNodeDefinition(node.projection),
@@ -1729,11 +1616,6 @@ export class BrowserClientPluginRuntime {
           fiber.own(registration.dispose);
           return registration;
         },
-        observe: async (slotId, callback) => {
-          const dispose = await this.slots.observe(slotId, callback);
-          fiber.own(dispose);
-          return dispose;
-        },
         inject: async (slotId, callback) => {
           const dispose = await this.slots.inject(slotId, callback);
           fiber.own(dispose);
@@ -1754,7 +1636,7 @@ export class BrowserClientPluginRuntime {
           const dispose = this.slots.registerEntry(pluginId, options as never, component, environment);
           return fiber.own(dispose);
         }) as BrowserClientPluginContext["slots"]["register"],
-        registerLegacy: (slotId, key, component, options) => {
+        registerDynamic: (options, component) => {
           const environment: ClientSlotRegistrationEnvironment = {
             services: {
               get: <T>(serviceId: string) => this.services.get(serviceId) as T | undefined,
@@ -1766,7 +1648,25 @@ export class BrowserClientPluginRuntime {
               },
             },
           };
-          return fiber.own(this.slots.registerLegacy(pluginId, slotId, key, component, options, environment));
+          const children = options.children
+            ? Object.entries(options.children).map(([slotId, child]) => ({
+                ...child,
+                slotId,
+                contractVersion: child.contractVersion ?? 1,
+                supportedKinds: child.supportedKinds.length > 0 ? child.supportedKinds : ["panel"],
+              }))
+            : undefined;
+          return fiber.own(this.slots.register(pluginId, options.name, options.key, component, {
+            ordering: options.ordering,
+            priority: options.priority,
+            props: options.props,
+            children,
+            store: options.store,
+            inject: options.inject,
+            entryKey: options.entryKey,
+            cellId: options.cellId,
+            label: options.label,
+          }, environment));
         },
         onEntryError: (callback) => fiber.own(this.slots.onEntryError(callback)),
         revive: (contributionId) => this.slots.reviveContribution(contributionId),
@@ -1783,7 +1683,7 @@ export class BrowserClientPluginRuntime {
           if (!normalizedKey) throw new Error("conversation node key is required");
           const slotId = "chat.conversation.node";
           const contributionId = `client:${pluginId}:${slotId}:${normalizedKey}`;
-          const disposeView = this.slots.registerLegacy(
+          const disposeView = this.slots.register(
             pluginId,
             slotId,
             normalizedKey,
@@ -1993,7 +1893,6 @@ function fromSnapshot(slot: SlotSnapshot): ClientSlotDefinition {
     contractVersion: slot.contractVersion,
     supportedKinds: slot.supportedKinds ?? [],
     kind: slot.kind,
-    multiplicity: slot.multiplicity,
     layout: slot.layout,
     fallbackPolicy: slot.fallbackPolicy,
     parentSlotId: slot.parentSlotId,
@@ -2025,8 +1924,7 @@ function normalizeDefinition(definition: ClientSlotDefinition): ClientSlotDefini
     slotId,
     contractVersion: definition.contractVersion || 1,
     supportedKinds: [...definition.supportedKinds],
-    kind: definition.kind ?? clientKindFromMultiplicity(definition.multiplicity),
-    multiplicity: definition.multiplicity ?? multiplicityFromClientKind(definition.kind ?? "list"),
+    kind: definition.kind,
     scope,
     declarationEpoch: definition.declarationEpoch && definition.declarationEpoch > 0 ? definition.declarationEpoch : undefined,
   };

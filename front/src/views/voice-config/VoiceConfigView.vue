@@ -195,7 +195,7 @@ SPDX-License-Identifier: AGPL-3.0-only
             placeholder="例如：S_xxxxxxxx；按服务商控制台要求填写"
           />
           <div class="form-hint">
-            使用需要预购槽位的复刻接口时填写；留空时兼容旧接口，以显示名称作为请求 ID。
+            使用需要预购槽位的复刻接口时必须填写服务商 speakerId。
           </div>
         </el-form-item>
         <el-form-item label="语言">

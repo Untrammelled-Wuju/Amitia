@@ -23,11 +23,9 @@ func currentPackageHostVersion() string {
 func normalizePackagePlatform(value string) string {
 	normalized := strings.ToLower(strings.TrimSpace(value))
 	switch {
-	case normalized == "windows" || normalized == "win32" || normalized == "win64" ||
-		strings.HasPrefix(normalized, "windows-"):
+	case normalized == "windows" || strings.HasPrefix(normalized, "windows-"):
 		return "windows"
-	case normalized == "darwin" || normalized == "macos" || normalized == "osx" || normalized == "mac" ||
-		strings.HasPrefix(normalized, "macos-") || strings.HasPrefix(normalized, "darwin-"):
+	case normalized == "darwin" || strings.HasPrefix(normalized, "darwin-"):
 		return "darwin"
 	case normalized == "linux" || strings.HasPrefix(normalized, "linux-"):
 		return "linux"
@@ -50,24 +48,24 @@ func packagePlatformMatches(values []string, platform string) bool {
 	return false
 }
 
-func packageVersionAtLeast(actual, minimum string) bool {
-	minimum = strings.TrimSpace(minimum)
-	if minimum == "" {
+func packageVersionMatches(actual, required string) bool {
+	required = strings.TrimSpace(required)
+	if required == "" {
 		return true
 	}
 	actualVersion, actualErr := domain.ParseVersion(strings.TrimSpace(actual))
-	minimumVersion, minimumErr := domain.ParseVersion(minimum)
-	return actualErr == nil && minimumErr == nil && actualVersion.Compare(minimumVersion) >= 0
+	requiredVersion, requiredErr := domain.ParseVersion(required)
+	return actualErr == nil && requiredErr == nil && actualVersion.Compare(requiredVersion) >= 0
 }
 
-func packageVersionAtMost(actual, maximum string) bool {
-	maximum = strings.TrimSpace(maximum)
-	if maximum == "" {
+func packageVersionAtMost(actual, required string) bool {
+	required = strings.TrimSpace(required)
+	if required == "" {
 		return true
 	}
 	actualVersion, actualErr := domain.ParseVersion(strings.TrimSpace(actual))
-	maximumVersion, maximumErr := domain.ParseVersion(maximum)
-	return actualErr == nil && maximumErr == nil && actualVersion.Compare(maximumVersion) <= 0
+	requiredVersion, requiredErr := domain.ParseVersion(required)
+	return actualErr == nil && requiredErr == nil && actualVersion.Compare(requiredVersion) <= 0
 }
 
 func appendPackageHostCompatibilityIssues(manifest manifest_v1.Manifest, preview *InstallPreview) {
@@ -84,19 +82,19 @@ func appendPackageHostCompatibilityIssues(manifest manifest_v1.Manifest, preview
 			Path:     "compatibility.platforms",
 		})
 	}
-	if !packageVersionAtLeast(hostVersion, manifest.Compatibility.MinHostVersion) {
+	if !packageVersionMatches(hostVersion, manifest.Compatibility.MinHostVersion) {
 		preview.Issues = append(preview.Issues, PreviewIssue{
 			Category: PreviewNotInstallable,
 			Code:     "host_version_too_old",
-			Message:  fmt.Sprintf("host version %s is below extension minimum %s", hostVersion, manifest.Compatibility.MinHostVersion),
+			Message:  fmt.Sprintf("host version %s does not match extension version %s", hostVersion, manifest.Compatibility.MinHostVersion),
 			Path:     "compatibility.minHostVersion",
 		})
 	}
-	if !packageVersionAtMost(hostVersion, manifest.Compatibility.MaxHostVersion) {
+	if strings.TrimSpace(manifest.Compatibility.MaxHostVersion) != "" && !packageVersionAtMost(hostVersion, manifest.Compatibility.MaxHostVersion) {
 		preview.Issues = append(preview.Issues, PreviewIssue{
 			Category: PreviewNotInstallable,
 			Code:     "host_version_too_new",
-			Message:  fmt.Sprintf("host version %s is above extension maximum %s", hostVersion, manifest.Compatibility.MaxHostVersion),
+			Message:  fmt.Sprintf("host version %s does not match extension version %s", hostVersion, manifest.Compatibility.MaxHostVersion),
 			Path:     "compatibility.maxHostVersion",
 		})
 	}
@@ -115,7 +113,7 @@ func packageModuleSupported(mod manifest_v1.ModuleMeta, platform, hostVersion st
 	if !packagePlatformMatches(mod.Compatibility.Platforms, platform) {
 		return false
 	}
-	return packageVersionAtLeast(hostVersion, mod.Compatibility.MinHostVersion)
+	return packageVersionMatches(hostVersion, mod.Compatibility.MinHostVersion)
 }
 
 func packageGamePluginNetworkPolicy(spec *gameprotocol.PluginNetworkPolicy, requiredPermissions []string) (trusted_service.ServiceNetworkPolicy, string, error) {
@@ -144,7 +142,7 @@ func appendGamePluginNetworkCompatibilityIssuesWithHostValidator(manifest manife
 	devMode := packageDevelopmentModeEnabled()
 	for moduleIndex, mod := range manifest.Modules {
 		for contributionIndex, contribution := range mod.Contributions {
-			if domain.NormalizeContributionKind(domain.ContributionKind(strings.TrimSpace(string(contribution.Kind)))) != domain.ContributionKindGamePlugin {
+			if contribution.EffectiveAdapter() != domain.ContributionAdapterGame {
 				continue
 			}
 			spec, err := gameprotocol.ParsePluginHostSpec(contribution.Spec)
@@ -192,7 +190,7 @@ func appendGamePluginArtifactPackageIssues(pkg *amitiax.Package, preview *Instal
 
 	for moduleIndex, mod := range pkg.Manifest.Modules {
 		for contributionIndex, contribution := range mod.Contributions {
-			if domain.NormalizeContributionKind(domain.ContributionKind(strings.TrimSpace(string(contribution.Kind)))) != domain.ContributionKindGamePlugin {
+			if contribution.EffectiveAdapter() != domain.ContributionAdapterGame {
 				continue
 			}
 			spec, err := gameprotocol.ParsePluginHostSpec(contribution.Spec)

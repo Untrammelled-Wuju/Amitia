@@ -22,8 +22,6 @@ type Registry struct {
 	heartbeatValidity time.Duration
 }
 
-type HostRegistry = Registry
-
 func NewRegistry(db *sql.DB) *Registry {
 	return &Registry{
 		db:                db,
@@ -33,27 +31,14 @@ func NewRegistry(db *sql.DB) *Registry {
 	}
 }
 
-func NewHostRegistry(db *sql.DB) *HostRegistry {
-	return NewRegistry(db)
-}
-
 func (r *Registry) Database() *sql.DB {
 	return r.db
-}
-
-func MigrateSessionTokens(ctx context.Context, db *sql.DB) error {
-	return (&registryRepository{db: db}).MigrateSessionTokens(ctx)
-}
-
-func MigrateRuntimeSessionColumns(ctx context.Context, db *sql.DB) error {
-	return (&registryRepository{db: db}).MigrateRuntimeSessionColumns(ctx)
 }
 
 func (r *Registry) RegisterEntry(ctx context.Context, entry *RuntimeEntry) error {
 	if entry == nil {
 		return ErrInvalidRegistryEntry
 	}
-	entry.NormalizeCompatibility()
 	if entry.EntryID == "" {
 		return ErrInvalidRegistryEntry
 	}
@@ -88,7 +73,7 @@ func (r *Registry) RegisterEntry(ctx context.Context, entry *RuntimeEntry) error
 	return nil
 }
 
-func (r *Registry) RegisterHost(ctx context.Context, entry *HostEntry) error {
+func (r *Registry) RegisterHost(ctx context.Context, entry *RuntimeEntry) error {
 	if entry != nil && entry.Kind == "" {
 		entry.Kind = RegistryEntryKindUIHost
 	}
@@ -126,7 +111,7 @@ func (r *Registry) GetEntry(ctx context.Context, entryID string) (*RuntimeEntry,
 	return cloneRuntimeEntry(entry), nil
 }
 
-func (r *Registry) GetHost(ctx context.Context, hostClientID string) (*HostEntry, error) {
+func (r *Registry) GetHost(ctx context.Context, hostClientID string) (*RuntimeEntry, error) {
 	entry, err := r.GetEntry(ctx, hostClientID)
 	if err != nil {
 		return nil, err
@@ -196,12 +181,12 @@ func (r *Registry) ListReadyEntries(ctx context.Context, spaceID runtimeidentity
 	return sortRuntimeEntries(result), nil
 }
 
-func (r *Registry) ListHostsBySpace(ctx context.Context, spaceID runtimeidentity.SpaceID) ([]*HostEntry, error) {
+func (r *Registry) ListHostsBySpace(ctx context.Context, spaceID runtimeidentity.SpaceID) ([]*RuntimeEntry, error) {
 	entries, err := r.ListEntriesBySpace(ctx, spaceID)
 	if err != nil {
 		return nil, err
 	}
-	var result []*HostEntry
+	var result []*RuntimeEntry
 	for _, e := range entries {
 		if e.Kind == RegistryEntryKindUIHost {
 			result = append(result, e)
@@ -210,29 +195,29 @@ func (r *Registry) ListHostsBySpace(ctx context.Context, spaceID runtimeidentity
 	return result, nil
 }
 
-func (r *Registry) ListHostsBySpaceString(ctx context.Context, spaceID string) ([]*HostEntry, error) {
+func (r *Registry) ListHostsBySpaceString(ctx context.Context, spaceID string) ([]*RuntimeEntry, error) {
 	return r.ListHostsBySpace(ctx, runtimeidentity.ParseSpaceID(spaceID))
 }
 
-func (r *Registry) ListReadyHosts(ctx context.Context, spaceID runtimeidentity.SpaceID, capability HostCapability) ([]*HostEntry, error) {
+func (r *Registry) ListReadyHosts(ctx context.Context, spaceID runtimeidentity.SpaceID, capability EndpointFeature) ([]*RuntimeEntry, error) {
 	hosts, err := r.ListHostsBySpace(ctx, spaceID)
 	if err != nil {
 		return nil, err
 	}
 	now := time.Now().UTC()
-	var result []*HostEntry
+	var result []*RuntimeEntry
 	for _, h := range hosts {
 		if h.PresenceState == PresenceStateReady &&
 			h.IsHeartbeatValidAt(now, r.heartbeatValidity) &&
 			!h.IsExpiredAt(now) &&
-			h.HasCapability(capability) {
+			h.HasFeature(capability) {
 			result = append(result, h)
 		}
 	}
 	return result, nil
 }
 
-func (r *Registry) ListReadyHostsString(ctx context.Context, spaceID string, capability HostCapability) ([]*HostEntry, error) {
+func (r *Registry) ListReadyHostsString(ctx context.Context, spaceID string, capability EndpointFeature) ([]*RuntimeEntry, error) {
 	return r.ListReadyHosts(ctx, runtimeidentity.ParseSpaceID(spaceID), capability)
 }
 
@@ -269,7 +254,7 @@ func (r *Registry) SetDisconnected(ctx context.Context, hostClientID string) err
 	return r.SetEntryDisconnected(ctx, hostClientID)
 }
 
-func (r *Registry) FindTargetHost(ctx context.Context, spaceID runtimeidentity.SpaceID, capability HostCapability, platform runtimeidentity.Platform, windowID string) (*HostEntry, error) {
+func (r *Registry) FindTargetHost(ctx context.Context, spaceID runtimeidentity.SpaceID, capability EndpointFeature, platform runtimeidentity.Platform, windowID string) (*RuntimeEntry, error) {
 	if spaceID == "" {
 		return r.findTargetHostForUniqueSpace(ctx, capability, platform, windowID)
 	}
@@ -284,12 +269,12 @@ func (r *Registry) FindTargetHost(ctx context.Context, spaceID runtimeidentity.S
 // invocations that do not carry an HTTP actor context. Routing is allowed only
 // when every eligible ready UI Host belongs to the same Space; if multiple
 // Spaces are present no target is chosen.
-func (r *Registry) findTargetHostForUniqueSpace(ctx context.Context, capability HostCapability, platform runtimeidentity.Platform, windowID string) (*HostEntry, error) {
+func (r *Registry) findTargetHostForUniqueSpace(ctx context.Context, capability EndpointFeature, platform runtimeidentity.Platform, windowID string) (*RuntimeEntry, error) {
 	entries, err := r.repo.ListAllEntries(ctx)
 	if err != nil {
 		return nil, err
 	}
-	hosts := make([]*HostEntry, 0, len(entries))
+	hosts := make([]*RuntimeEntry, 0, len(entries))
 	for _, entry := range entries {
 		if entry != nil && entry.Kind == RegistryEntryKindUIHost {
 			hosts = append(hosts, entry)
@@ -298,7 +283,7 @@ func (r *Registry) findTargetHostForUniqueSpace(ctx context.Context, capability 
 	now := time.Now().UTC()
 	var selectedSpace runtimeidentity.SpaceID
 	hasSelectedSpace := false
-	var bestMatch *HostEntry
+	var bestMatch *RuntimeEntry
 	for _, host := range hosts {
 		if !hostEligibleForTarget(host, capability, platform, windowID, now, r.heartbeatValidity) {
 			continue
@@ -316,9 +301,9 @@ func (r *Registry) findTargetHostForUniqueSpace(ctx context.Context, capability 
 	return cloneRuntimeEntry(bestMatch), nil
 }
 
-func (r *Registry) pickTargetHost(hosts []*HostEntry, capability HostCapability, platform runtimeidentity.Platform, windowID string) *HostEntry {
+func (r *Registry) pickTargetHost(hosts []*RuntimeEntry, capability EndpointFeature, platform runtimeidentity.Platform, windowID string) *RuntimeEntry {
 	now := time.Now().UTC()
-	var bestMatch *HostEntry
+	var bestMatch *RuntimeEntry
 	for _, host := range hosts {
 		if !hostEligibleForTarget(host, capability, platform, windowID, now, r.heartbeatValidity) {
 			continue
@@ -330,14 +315,14 @@ func (r *Registry) pickTargetHost(hosts []*HostEntry, capability HostCapability,
 	return cloneRuntimeEntry(bestMatch)
 }
 
-func hostEligibleForTarget(host *HostEntry, capability HostCapability, platform runtimeidentity.Platform, windowID string, now time.Time, heartbeatValidity time.Duration) bool {
+func hostEligibleForTarget(host *RuntimeEntry, capability EndpointFeature, platform runtimeidentity.Platform, windowID string, now time.Time, heartbeatValidity time.Duration) bool {
 	if host == nil || host.PresenceState != PresenceStateReady {
 		return false
 	}
 	if !host.IsHeartbeatValidAt(now, heartbeatValidity) || host.IsExpiredAt(now) {
 		return false
 	}
-	if !host.HasCapability(capability) {
+	if !host.HasFeature(capability) {
 		return false
 	}
 	if platform != "" && host.Platform != platform {
@@ -349,7 +334,7 @@ func hostEligibleForTarget(host *HostEntry, capability HostCapability, platform 
 	return true
 }
 
-func (r *Registry) FindTargetHostString(ctx context.Context, spaceID string, capability HostCapability, platform string, windowID string) (*HostEntry, error) {
+func (r *Registry) FindTargetHostString(ctx context.Context, spaceID string, capability EndpointFeature, platform string, windowID string) (*RuntimeEntry, error) {
 	plat, err := runtimeidentity.ParsePlatform(platform)
 	if err != nil {
 		return nil, err
@@ -463,7 +448,7 @@ func (r *Registry) HasReadyRuntime(ctx context.Context, spaceID runtimeidentity.
 	return false
 }
 
-func (r *Registry) HasReadyHost(ctx context.Context, spaceID runtimeidentity.SpaceID, capability HostCapability) bool {
+func (r *Registry) HasReadyHost(ctx context.Context, spaceID runtimeidentity.SpaceID, capability EndpointFeature) bool {
 	hosts, err := r.ListReadyHosts(ctx, spaceID, capability)
 	if err != nil {
 		return false
@@ -471,7 +456,7 @@ func (r *Registry) HasReadyHost(ctx context.Context, spaceID runtimeidentity.Spa
 	return len(hosts) > 0
 }
 
-func (r *Registry) HasReadyHostString(ctx context.Context, spaceID string, capability HostCapability) bool {
+func (r *Registry) HasReadyHostString(ctx context.Context, spaceID string, capability EndpointFeature) bool {
 	return r.HasReadyHost(ctx, runtimeidentity.ParseSpaceID(spaceID), capability)
 }
 
@@ -493,7 +478,6 @@ func (r *Registry) LoadFromStore(ctx context.Context) error {
 	r.mu.Lock()
 	r.entries = make(map[string]*RuntimeEntry, len(entries))
 	for _, e := range entries {
-		e.NormalizeCompatibility()
 		r.entries[e.EntryID] = cloneRuntimeEntry(e)
 	}
 	r.loaded = true

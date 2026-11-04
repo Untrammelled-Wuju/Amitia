@@ -27,6 +27,14 @@ Git 安装路径：C:\Code\Git\Git\bin\git.exe
 启动=启动完整项目。
 重启=重启完整项目。
 
+单版本策略：
+
+当前版本视为系统首个版本，只支持与当前源码同时构建和发布的 Web、Electron、Android、iOS、后端、Runtime Package、插件包、协议及数据格式。
+禁止新增或保留任何旧版本兼容，包括旧字段、旧路由、旧端口、旧协议分支、旧消息格式、旧配置、旧本地存储、旧数据库结构升级、旧插件包迁移、旧运行包、legacy 别名、回退端点、双写、双读、自动归一化和兼容适配器。
+旧版本输入必须直接失败并原样返回完整原始错误，禁止静默转换、降级、回退或尝试修复。
+删除功能或协议时，同步删除其兼容代码、运行时分支、脚本、测试和文档引用；不得以保留兼容层作为过渡方案。
+仅允许当前版本内部的数据迁移、数据库迁移、扩展更新和错误恢复机制；这些机制不得读取、升级或转换任何历史版本格式。
+
 错误处理强制规则：
 所有端、所有模块和所有错误处理路径必须原样保留并返回原始报错信息，包括错误对象、错误链、cause、message、msg、error、detail、internalMessage、reason 和堆栈信息。
 禁止静默捕获、空 catch、丢弃 error、错误参数未使用、将原始错误替换为固定文案、按错误码或状态码改写原始信息、截断原始错误、无 cause 重新抛错，以及仅记录日志却向调用方返回固定错误。
@@ -104,7 +112,7 @@ electron-builder保持compression: normal，实际7z压缩等级由scripts/build
 - 发布输出目录默认为 `desktop/release`，可用 `AMITIA_RELEASE_DIR` 指定相对 desktop 的目录名；当 `release` 被系统进程锁住（例如杀软仍持有 `win-unpacked/resources/app.asar`）导致 `EPERM` 时，用它输出到新目录后重试，且该目录仍需落在 `desktop/release-*` 忽略规则内。
 - GitHub Actions 的 Backend Full Test Gate 仍按工作流执行全量后端测试，与本地发布门禁相互独立。
 - 桌面端构建前先跑一次范围预检确认门禁内容（不执行任何命令）：在 desktop 目录用项目内 node 执行 `scripts/verify-release-prerequisites.mjs`，并设置 `AMITIA_RELEASE_PLAN_ONLY=1`；随后按预检结果执行 `pnpm dist:win`。
-- 已知与本轮改动无关的陈旧用例：`internal/search` 的超时断言停留在 `timeoutpolicy` 之前、`internal/system` 仍在断言已删除的 legacy web-chat 路由、`internal/psyche_testdata` 未注入统一入口执行器。它们不在定向门禁范围内，重建对应模块时一并修复。
+- 已知与本轮改动无关的陈旧用例：`internal/search` 的超时断言停留在 `timeoutpolicy` 之前、`internal/system` 仍在断言已删除的 web-chat 路由、`internal/psyche_testdata` 未注入统一入口执行器。它们不在定向门禁范围内，重建对应模块时一并修复。
 
 必须根据差异生成面向用户的更新日志。桌面端更新 desktop/release-notes.md；Android Release 更新对应发布说明。生成内容作为本次发布版本的更新说明。
 
@@ -388,34 +396,14 @@ nginx 要求：
 
 Electron 桌面端启动时会自动通过 CoreManager 拉起后端服务（AmitiaCore.exe），无需手动单独启动后端。
 
-数据库迁移规则（三库统一版本注册）：
+数据库版本规则（单版本基线）：
 
-架构概述：
-
-- SQLite 主库：baseline.sql（go:embed 嵌入）为声明式基线，包含全部 CREATE TABLE IF NOT EXISTS 语句
-- 增量迁移：backend/internal/migration/migrations.go 中 DefaultMigrations() 返回有序迁移列表
-- 版本追踪：统一注册到 schema_migrations 表，Qdrant 前缀 qdrant:NNN，SurrealDB 前缀 surreal:NNN
-- Checksum 校验：每个迁移执行后计算 SHA-256 checksum 写入 schema_migrations，防止迁移被篡改
-
-每次数据库结构变更时必须执行以下两步：
-
-1. 追加增量迁移：在 migrations.go 的 DefaultMigrations() 末尾追加 Migration，Version 命名为 YYYYMMDDNNN（日期+三位序号）
-2. 同步更新基线：在 baseline.sql 中追加对应的 CREATE TABLE IF NOT EXISTS 语句，保证新装用户一次建全
-
-迁移编写约束：
-
-- 迁移只增不改：已发布的迁移禁止修改，否则 Checksum 校验失败导致启动拒绝
-- 如需兼容历史 checksum 变更：在 Migration 的 AcceptedChecksums 字段中声明旧 checksum
-- CREATE TABLE 用 IF NOT EXISTS，ADD COLUMN 用 Step.AddColumn（内部自动判重）
-- 数据迁移类操作（UPDATE/DELETE）放在 Up 函数中用 Step.Execute 执行
-- 禁止在迁移中使用 DROP COLUMN 或 DROP TABLE（SQLite 限制），需要时用建新表+迁移数据+删旧表方式
-- AutoMigrate 产生的表必须收编为正式版本化迁移（参照 ConsolidationAutoMigrateMigration），禁止在代码中直接 AutoMigrate
-
-新库与老库自动处理：
-
-- 新数据库：IsNewDatabase 检测空库 → ApplyBaseline 一次性建全部表 → MarkAllMigrationsApplied 标记所有迁移已应用 → 跳过历史迁移执行
-- 已有数据库：CreatePreMigrationBackup 预迁移备份 → ApplyBaseline 幂等补全 → Apply 依次执行未应用的版本化迁移
-- 内核 SQLite（extension/kernel/persistence/sqlite）有独立迁移系统，不纳入统一注册
+- backend/internal/migration/baseline.sql 是唯一数据库基线，只描述当前版本 schema。
+- 禁止维护历史版本迁移链、schema_migrations 版本兼容、旧 checksum、旧结构修复和旧数据升级。
+- 新数据库直接应用当前基线；已有数据库只允许结构与当前基线一致，禁止自动转换旧 schema。
+- 数据库结构变更直接更新当前基线和当前版本包，不新增面向旧版本的增量迁移。
+- 禁止 AutoMigrate 和启动时隐式修复旧表结构。
+- 扩展内核当前版本的包更新迁移保留，但禁止迁移或读取旧应用版本、旧插件包和旧 manifest。
 
 Android 构建与真机安装规则：
 

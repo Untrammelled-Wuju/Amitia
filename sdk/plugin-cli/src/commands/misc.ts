@@ -201,7 +201,7 @@ export const installCommand: CliCommand = {
   usage: "amitia-ext install [options]",
   options: [
     { name: "--package", shortName: "-p", description: "Package path", takesValue: true, required: true },
-    { name: "--host", description: "Developer Host endpoint", takesValue: true, defaultValue: "http://127.0.0.1:18899" },
+    { name: "--host", description: "Developer Host endpoint", takesValue: true, defaultValue: "" },
   ],
   async run(ctx: CliContext, args: string[]): Promise<CliCommandResult> {
     const opts = parseOptions(args);
@@ -223,7 +223,7 @@ export const uninstallCommand: CliCommand = {
   description: "Uninstall an extension by ID via the Developer Host",
   usage: "amitia-ext uninstall <extensionId>",
   options: [
-    { name: "--host", description: "Developer Host endpoint", takesValue: true, defaultValue: "http://127.0.0.1:18899" },
+    { name: "--host", description: "Developer Host endpoint", takesValue: true, defaultValue: "" },
   ],
   async run(ctx: CliContext, args: string[]): Promise<CliCommandResult> {
     const extensionId = args[0];
@@ -262,22 +262,6 @@ export const publishCheckCommand: CliCommand = {
   },
 };
 
-export const migrateCommand: CliCommand = {
-  name: "migrate",
-  description: "Assist in migrating legacy extension projects to v1",
-  usage: "amitia-ext migrate [options]",
-  options: [
-    { name: "--source", shortName: "-s", description: "Legacy source directory", takesValue: true },
-    { name: "--report", description: "Write migration report to file", takesValue: true },
-  ],
-  async run(_ctx: CliContext, _args: string[]): Promise<CliCommandResult> {
-    return {
-      exitCode: EXIT_CODES.CONFIGURATION_ERROR,
-      message: "legacy migration is not available in the MVP",
-    };
-  },
-};
-
 export const doctorCommand: CliCommand = {
   name: "doctor",
   description: "Diagnose environment, toolchain, and SDK installation",
@@ -297,7 +281,7 @@ export const doctorCommand: CliCommand = {
 
 export const sdkCommand: CliCommand = {
   name: "sdk",
-  description: "Inspect SDK version and compatibility matrix",
+  description: "Inspect SDK and current protocol versions",
   usage: "amitia-ext sdk [info|version]",
   async run(_ctx: CliContext, _args: string[]): Promise<CliCommandResult> {
     return {
@@ -306,9 +290,8 @@ export const sdkCommand: CliCommand = {
       data: {
         sdkVersion: "1.0.0",
         supportedManifestVersion: 1,
-        supportedHostApiRange: ">=1.0.0 <2.0.0",
-        supportedRuntimeRpcRange: ">=1.0.0 <2.0.0",
-        minAmitiaVersion: "0.1.0",
+        hostApiVersion: "1.0.0",
+        runtimeRpcVersion: "1.0.0",
       },
     };
   },
@@ -319,7 +302,7 @@ export const exportDiagnosticsCommand: CliCommand = {
   description: "Export diagnostics data from the backend API",
   usage: "amitia-ext export-diagnostics [options]",
   options: [
-    { name: "--host", shortName: "-h", description: "Backend API host", takesValue: true, defaultValue: "http://127.0.0.1:18899" },
+    { name: "--host", shortName: "-h", description: "Backend API host", takesValue: true, defaultValue: "" },
     { name: "--extension", shortName: "-e", description: "Filter by extension ID", takesValue: true },
     { name: "--severity", description: "Filter by severity level", takesValue: true },
     { name: "--output", shortName: "-o", description: "Output file path (default: stdout)", takesValue: true },
@@ -327,7 +310,10 @@ export const exportDiagnosticsCommand: CliCommand = {
   ],
   async run(ctx: CliContext, args: string[]): Promise<CliCommandResult> {
     const opts = parseOptions(args, exportDiagnosticsCommand.options);
-    const host = opts["--host"] ?? "http://127.0.0.1:18899";
+    const host = opts["--host"] ?? "";
+    if (!host.trim()) {
+      return { exitCode: EXIT_CODES.CONFIGURATION_ERROR, message: "missing required option: --host" };
+    }
     const extension = opts["--extension"];
     const severity = opts["--severity"];
     const output = opts["--output"];

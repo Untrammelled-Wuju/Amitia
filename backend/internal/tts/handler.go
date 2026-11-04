@@ -403,18 +403,10 @@ func (h *Handler) CloneVoice(c *gin.Context) {
 
 	providerSpeakerID := requestedSpeakerID
 	if providerSpeakerID == "" {
-		// V1 MegaTTS cloning addresses a purchased provider slot and therefore
-		// requires an explicit speaker ID. Older clients put that slot ID in the
-		// name field, so keep accepting an identifier-shaped name for compatibility.
 		if accessKey != "" && appKey != "" {
-			if !isProviderSpeakerID(displayName) {
-				util.ErrorResponse(c, response.InvalidParams, "当前声音复刻配置需要填写服务商 speakerId/槽位 ID", nil)
-				return
-			}
-			providerSpeakerID = strings.TrimSpace(displayName)
+			util.ErrorResponse(c, response.InvalidParams, "当前声音复刻配置需要填写服务商 speakerId/槽位 ID", nil)
+			return
 		} else {
-			// V3 custom-speaker cloning can use an opaque client-generated ID. Human
-			// display names are never sent directly as provider identifiers.
 			providerSpeakerID = safeProviderSpeakerID(displayName)
 		}
 	}

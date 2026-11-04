@@ -8,33 +8,25 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
-	"github.com/u-ai/backend/internal/extension/kernel/secret"
 	"gorm.io/gorm"
 )
 
 type Service struct {
-	db                   *gorm.DB
-	dataDir              string
-	runtime              *RuntimeManager
-	marketplaceInstaller MarketplaceInstaller
-	a2aExecutor          A2AExecutor
-	secretBroker         *secret.Broker
-	remoteMarketURL      string
-	remoteMarketClient   *http.Client
-	remoteMarketMu       sync.Mutex
-	remoteMarketSynced   time.Time
-	approvalBroker       *execution.ApprovalBroker
-	workspaceRegistrar   RuntimeWorkspaceRegistrar
-	evaluationExecutor   EvaluationExecutor
-	a2aKeyMu             sync.Mutex
-	a2aPrivateKey        ed25519.PrivateKey
+	db                 *gorm.DB
+	dataDir            string
+	runtime            *RuntimeManager
+	a2aExecutor        A2AExecutor
+	approvalBroker     *execution.ApprovalBroker
+	workspaceRegistrar RuntimeWorkspaceRegistrar
+	evaluationExecutor EvaluationExecutor
+	a2aKeyMu           sync.Mutex
+	a2aPrivateKey      ed25519.PrivateKey
 }
 
 type A2AExecutor interface {
@@ -42,8 +34,7 @@ type A2AExecutor interface {
 }
 
 type ServiceConfig struct {
-	DataDir         string
-	RemoteMarketURL string
+	DataDir string
 }
 
 type platformActorContextKey struct{}
@@ -64,8 +55,6 @@ func NewService(db *gorm.DB, config ServiceConfig) (*Service, error) {
 	}
 	service := &Service{
 		db: db, dataDir: strings.TrimSpace(config.DataDir),
-		remoteMarketURL:    strings.TrimSpace(config.RemoteMarketURL),
-		remoteMarketClient: &http.Client{Timeout: 20 * time.Second},
 	}
 	service.runtime = NewRuntimeManager(db, service.dataDir)
 	return service, nil
@@ -80,12 +69,6 @@ func (s *Service) Runtime() *RuntimeManager {
 		return nil
 	}
 	return s.runtime
-}
-
-func (s *Service) SetSecretBroker(broker *secret.Broker) {
-	if s != nil {
-		s.secretBroker = broker
-	}
 }
 
 func (s *Service) SetA2AExecutor(executor A2AExecutor) {

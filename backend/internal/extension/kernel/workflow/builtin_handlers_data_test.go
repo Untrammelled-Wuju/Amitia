@@ -77,7 +77,7 @@ func TestLogicHandlerNestedExpressions(t *testing.T) {
 	}
 }
 
-func TestTransformHandlerLegacyAndDataOperations(t *testing.T) {
+func TestTransformHandlerDataOperations(t *testing.T) {
 	h := TransformHandler{}
 
 	out, err := h.Execute(context.Background(), WorkflowNode{}, json.RawMessage(`{"op":"array_filter","source":[{"score":3},{"score":9}],"field":"score","operator":"gte","expected":5}`))
@@ -98,14 +98,8 @@ func TestTransformHandlerLegacyAndDataOperations(t *testing.T) {
 		t.Fatalf("unexpected merge output: %#v", merged)
 	}
 
-	legacyNode := WorkflowNode{Runtime: capability.RuntimeBinding{Metadata: map[string]any{"field": "value"}}}
-	out, err = h.Execute(context.Background(), legacyNode, json.RawMessage(`{"value":{"ok":true}}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	legacy := decodeTestJSON(t, out).(map[string]any)
-	if legacy["ok"] != true {
-		t.Fatalf("legacy field compatibility broken: %#v", legacy)
+	if _, err := h.Execute(context.Background(), WorkflowNode{Runtime: capability.RuntimeBinding{Metadata: map[string]any{"field": "value"}}}, json.RawMessage(`{"value":{"ok":true}}`)); err == nil {
+		t.Fatal("transform without op must fail")
 	}
 }
 
@@ -116,19 +110,15 @@ func TestExtractHandlerRequiredMissing(t *testing.T) {
 	}
 }
 
-func TestConditionHandlerPreservesLegacyPayloadOp(t *testing.T) {
+func TestConditionHandlerRequiresExplicitOperation(t *testing.T) {
 	h := ConditionHandler{}
 	in := json.RawMessage(`{"op":"delete","value":42}`)
-	out, err := h.Execute(context.Background(), WorkflowNode{}, in)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(out) != string(in) {
-		t.Fatalf("legacy condition passthrough changed: %s", out)
+	if _, err := h.Execute(context.Background(), WorkflowNode{}, in); err == nil {
+		t.Fatal("condition without explicit operation must fail")
 	}
 
 	node := WorkflowNode{Runtime: capability.RuntimeBinding{Metadata: map[string]any{"op": "gte"}}}
-	out, err = h.Execute(context.Background(), node, json.RawMessage(`{"left":9,"right":8}`))
+	out, err := h.Execute(context.Background(), node, json.RawMessage(`{"left":9,"right":8}`))
 	if err != nil {
 		t.Fatal(err)
 	}

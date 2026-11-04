@@ -25,9 +25,6 @@ const (
 	ActionQualityManualReview   AuditAction = "quality.manual_review"
 	ActionBehaviorGlobalConfig  AuditAction = "behavior.global_config"
 	ActionRuntimeManualCommand  AuditAction = "runtime.manual_command"
-	ActionMigrationStart        AuditAction = "migration.start"
-	ActionMigrationComplete     AuditAction = "migration.complete"
-	ActionMigrationFailure      AuditAction = "migration.failure"
 	ActionDoctorRepair          AuditAction = "doctor.repair"
 	ActionDeadLetterReplay      AuditAction = "dead_letter.replay"
 )

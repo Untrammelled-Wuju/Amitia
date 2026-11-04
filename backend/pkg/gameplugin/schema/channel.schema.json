@@ -50,7 +50,7 @@
         "host_to_plugin",
         "bidirectional"
       ],
-      "description": "Channel flow direction. Omitted defaults to plugin_to_host for backward compatibility."
+      "description": "Channel flow direction."
     },
     "frequencyHint": {
       "type": "string",

@@ -3,6 +3,7 @@ package extension
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	kernelruntime "github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
@@ -106,26 +107,29 @@ func translateKernelPackagePreviewDirect(ctx context.Context, container *kernelr
 }
 
 func packagePreviewManagementTarget(preview kernelruntime.InstallPreview) (string, []string) {
-	kinds := make([]domain.ContributionKind, 0)
+	adapters := make([]domain.ContributionAdapter, 0)
 	kindNames := make([]string, 0)
 	seen := make(map[string]struct{})
 	for _, module := range preview.Manifest.Modules {
 		for _, contribution := range module.Contributions {
-			kind := string(domain.NormalizeContributionKind(domain.ContributionKind(contribution.Kind)))
+			kind := strings.TrimSpace(contribution.Kind)
 			if kind == "" {
 				continue
 			}
-			kinds = append(kinds, domain.ContributionKind(kind))
+			adapters = append(adapters, domain.ResolveContributionAdapter(
+				domain.ContributionKind(contribution.Kind),
+				domain.ContributionAdapter(contribution.Adapter),
+			))
 			if _, exists := seen[kind]; !exists {
 				seen[kind] = struct{}{}
 				kindNames = append(kindNames, kind)
 			}
 		}
 	}
-	if len(kinds) == 0 {
+	if len(adapters) == 0 {
 		return "", kindNames
 	}
-	extensionDomain, err := domain.ResolveDomainFromKinds(kinds)
+	extensionDomain, err := domain.ResolveDomainFromAdapters(adapters)
 	if err != nil {
 		return "", kindNames
 	}

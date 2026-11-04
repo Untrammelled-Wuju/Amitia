@@ -12,7 +12,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/enablement"
 	"github.com/u-ai/backend/internal/extension/kernel/lifecycle_manager"
 	"github.com/u-ai/backend/internal/extension/kernel/mcp"
-	legacymcp "github.com/u-ai/backend/internal/extension/mcpruntime"
+	mcprepo "github.com/u-ai/backend/internal/extension/mcpruntime"
 	amitialog "log"
 )
 
@@ -296,7 +296,7 @@ type EnableExistingDeps struct {
 	InstallRepo        domain.InstallationRepository
 	DefinitionRepo     domain.DefinitionRepository
 	InstanceReconciler capability.ProviderInstanceReconciler
-	MCPRepository      *legacymcp.Repository
+	MCPRepository      *mcprepo.Repository
 	MCPLifecycle       *mcp.MCPLifecycle
 	AgentSkillCatalog  *agent_skill.AgentSkillCatalog
 	ProviderRegistry   *capability.ProviderRegistry
@@ -334,7 +334,7 @@ type enableExistingPortBridge struct {
 	installRepo        domain.InstallationRepository
 	definitionRepo     domain.DefinitionRepository
 	instanceReconciler capability.ProviderInstanceReconciler
-	mcpRepository      *legacymcp.Repository
+	mcpRepository      *mcprepo.Repository
 	mcpLifecycle       *mcp.MCPLifecycle
 	agentSkillCatalog  *agent_skill.AgentSkillCatalog
 	providerRegistry   *capability.ProviderRegistry

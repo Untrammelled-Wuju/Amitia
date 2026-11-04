@@ -34,7 +34,6 @@ func (m *directoryManager) Ensure(ctx context.Context, layout Layout) error {
 		layout.DataRoot,
 		layout.StorageDir,
 		layout.SnapshotsDir,
-		layout.MigrationDir,
 	}
 
 	created := make([]string, 0, len(dirs))

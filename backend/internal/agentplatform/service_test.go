@@ -1,14 +1,12 @@
 package agentplatform
 
 import (
-	"archive/zip"
 	"context"
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -39,6 +37,7 @@ func newTestPlatform(t *testing.T) (*Service, string, string) {
 		base_prompt TEXT NOT NULL DEFAULT '',
 		generated_prompt TEXT NOT NULL DEFAULT '',
 		revision INTEGER NOT NULL DEFAULT 1,
+		deleted_at TEXT NOT NULL DEFAULT '',
 		created_at TEXT NOT NULL DEFAULT '',
 		updated_at TEXT NOT NULL DEFAULT ''
 	)`).Error; err != nil {
@@ -67,129 +66,79 @@ func newTestPlatform(t *testing.T) (*Service, string, string) {
 	return service, "space_test", owner.ID
 }
 
+func createTestAgent(t *testing.T, service *Service, spaceID, ownerID, name string, teamIDs ...string) AgentDetail {
+	t.Helper()
+	characterID := newID("character")
+	if err := service.db.Exec(
+		`INSERT INTO characters(id,space_id,name,description,base_prompt,status,revision) VALUES(?,?,?,?,?,?,1)`,
+		characterID, spaceID, name, "测试角色", "验证任务之后再报告完成。", "enabled",
+	).Error; err != nil {
+		t.Fatal(err)
+	}
+	profile, err := service.SyncRoleAgent(service.db, RoleAgentSyncInput{
+		SpaceID: spaceID, CharacterID: characterID, Name: name,
+		Description: "测试角色", Instructions: "验证任务之后再报告完成。",
+		Status: "enabled", ModelConfigID: 1, ReasoningEffort: "medium",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	teamID := ""
+	if len(teamIDs) > 0 {
+		teamID = teamIDs[0]
+	}
+	if err := service.db.Model(&AgentProfile{}).Where("id = ?", profile.ID).Updates(map[string]any{
+		"owner_id": ownerID, "archetype": "worker", "team_id": teamID,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	detail, err := service.GetAgent(context.Background(), spaceID, profile.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return detail
+}
+
 type testWorkspaceRegistrar struct{}
 
 func (testWorkspaceRegistrar) RegisterRuntimeWorkspace(_ context.Context, agentID, name, localRoot string) (RuntimeWorkspace, error) {
 	return RuntimeWorkspace{ID: "workspace-" + agentID, Name: name, RootURI: "amitia://workspace/@" + agentID + "/"}, nil
 }
 
-func validAgentConfig() map[string]any {
-	return map[string]any{
-		"identity":     map[string]any{"kind": "worker"},
-		"instructions": "验证任务之后再报告完成。",
-		"model":        map[string]any{"provider": "custom", "name": "test-model"},
-		"memory":       map[string]any{"scope": "agent"},
-		"permissions":  map[string]any{"mode": "request_approval"},
-		"runtime":      map[string]any{"provider": "local"},
-	}
-}
-
-func TestAgentLifecycleReleaseRollbackAndPortability(t *testing.T) {
-	service, spaceID, ownerID := newTestPlatform(t)
-	ctx := WithPlatformActor(context.Background(), ownerID, "platform_user")
-	detail, err := service.CreateAgent(ctx, spaceID, CreateAgentInput{Name: "执行助手", Description: "测试 Agent", Archetype: "worker", OwnerID: ownerID, Config: validAgentConfig()})
-	if err != nil {
-		t.Fatal(err)
-	}
-	revision, err := service.TestAgentRevision(ctx, spaceID, detail.Profile.ID, detail.Revision.ID)
-	if err != nil || revision.TestStatus != "passed" {
-		t.Fatalf("test revision failed: %+v %v", revision, err)
-	}
-	firstRelease, err := service.PublishAgent(ctx, spaceID, detail.Profile.ID, PublishAgentInput{ExpectedRevision: detail.Profile.Revision, Version: "1.0.0"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	profile, found, err := service.ResolveAgentRuntime(ctx, spaceID, detail.Profile.CharacterID)
-	if err != nil || !found || profile.AgentID != detail.Profile.ID || profile.PermissionMode != "request_approval" {
-		t.Fatalf("published agent runtime profile missing: %+v %t %v", profile, found, err)
-	}
-	updatedConfig := validAgentConfig()
-	updatedConfig["instructions"] = "所有外部动作都需要审批。"
-	updated, err := service.UpdateAgent(ctx, spaceID, detail.Profile.ID, UpdateAgentInput{ExpectedRevision: 1, ChangeNote: "收紧权限", Config: updatedConfig})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := service.TestAgentRevision(ctx, spaceID, detail.Profile.ID, updated.Revision.ID); err != nil {
-		t.Fatal(err)
-	}
-	secondRelease, err := service.PublishAgent(ctx, spaceID, detail.Profile.ID, PublishAgentInput{ExpectedRevision: updated.Profile.Revision, Version: "1.0.1"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	rolledBack, err := service.RollbackAgent(ctx, spaceID, detail.Profile.ID, firstRelease.ID, updated.Profile.Revision)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if rolledBack.Profile.CurrentReleaseID != firstRelease.ID || rolledBack.Release == nil || rolledBack.Release.Version != "1.0.0" {
-		t.Fatalf("unexpected rollback result: %+v", rolledBack)
-	}
-	var rolledBackPrompt string
-	if err := service.db.Table("characters").Select("base_prompt").Where("id = ?", rolledBack.Profile.CharacterID).Scan(&rolledBackPrompt).Error; err != nil {
-		t.Fatal(err)
-	}
-	if rolledBackPrompt != "验证任务之后再报告完成。" {
-		t.Fatalf("rollback did not restore character prompt: %q", rolledBackPrompt)
-	}
-	if secondRelease.ID == firstRelease.ID {
-		t.Fatal("release identities must differ")
-	}
-	pkg, err := service.ExportAgentPackage(ctx, spaceID, detail.Profile.ID, "1.0.0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	imported, err := service.ImportAgentPackage(ctx, spaceID, ownerID, pkg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if imported.Profile.ID == detail.Profile.ID || imported.Profile.Name != detail.Profile.Name {
-		t.Fatalf("unexpected imported agent: %+v", imported)
-	}
-}
-
-func TestPersistentApprovalAndReconciliation(t *testing.T) {
+func TestCreateTeamWithSelectedMembers(t *testing.T) {
 	service, spaceID, ownerID := newTestPlatform(t)
 	ctx := context.Background()
-	detail, err := service.CreateAgent(ctx, spaceID, CreateAgentInput{Name: "审批助手", Archetype: "worker", OwnerID: ownerID, Config: validAgentConfig()})
-	if err != nil {
-		t.Fatal(err)
-	}
-	approval, err := service.CreateApproval(ctx, spaceID, CreateApprovalInput{
-		AgentID: detail.Profile.ID, ConversationID: "conv-1", ToolCallID: "call-1",
-		ToolName: "email.send", ActionSummary: "发送邮件", ResourceSummary: "客户邮箱",
-		Arguments: map[string]any{"body": "hello"}, Scope: map[string]any{"account": "agent-mail"},
-		RiskLevel: "high", RequestedBy: ownerID,
+	lead := createTestAgent(t, service, spaceID, ownerID, "负责人角色")
+	member := createTestAgent(t, service, spaceID, ownerID, "执行角色")
+	team, err := service.CreateTeam(ctx, spaceID, CreateTeamInput{
+		Name:        "成员选择团队",
+		OwnerID:     ownerID,
+		LeadAgentID: lead.Profile.ID,
+		MemberIDs:   []string{member.Profile.ID, member.Profile.ID, lead.Profile.ID},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	decided, err := service.DecideApproval(ctx, spaceID, approval.ID, DecideApprovalInput{Decision: "approved", GrantMode: "once", ActorID: ownerID, ExpectedRevision: approval.Revision})
+	detail, err := service.GetTeam(ctx, spaceID, team.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if decided.Status != "approved" || decided.DecidedBy != ownerID {
-		t.Fatalf("unexpected approval: %+v", decided)
+	if len(detail.Members) != 2 {
+		t.Fatalf("expected lead and selected member, got %d", len(detail.Members))
 	}
-	resumed, err := service.ResumeApproval(ctx, spaceID, approval.ID)
-	if err != nil || resumed.ResumedAt == nil {
-		t.Fatalf("resume failed: %+v %v", resumed, err)
+	roles := map[string]string{}
+	for _, item := range detail.Members {
+		roles[item.MemberID] = item.Role
 	}
-	reconciliation, err := service.CreateReconciliation(ctx, spaceID, CreateReconciliationInput{AgentID: detail.Profile.ID, ApprovalID: approval.ID, ToolCallID: "call-1", Reason: "远程结果未知", OriginalError: "connection reset"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	resolved, err := service.ResolveReconciliation(ctx, spaceID, reconciliation.ID, ResolveReconciliationInput{Resolution: "用户核对后确认已发送", ActorID: ownerID, ExpectedRevision: reconciliation.Revision})
-	if err != nil || resolved.Status != "resolved" {
-		t.Fatalf("reconciliation failed: %+v %v", resolved, err)
+	if roles[lead.Profile.ID] != "lead" || roles[member.Profile.ID] != "member" {
+		t.Fatalf("unexpected member roles: %#v", roles)
 	}
 }
 
 func TestApprovalBrokerPersistsAndResumesWithoutLiveWaiter(t *testing.T) {
 	service, spaceID, ownerID := newTestPlatform(t)
 	ctx := context.Background()
-	agent, err := service.CreateAgent(ctx, spaceID, CreateAgentInput{Name: "持久审批", Archetype: "worker", OwnerID: ownerID, Config: validAgentConfig()})
-	if err != nil {
-		t.Fatal(err)
-	}
+	agent := createTestAgent(t, service, spaceID, ownerID, "持久审批")
 	broker := execution.NewApprovalBroker()
 	broker.SetPersistence(service)
 	service.SetApprovalBroker(broker)
@@ -210,8 +159,10 @@ func TestApprovalBrokerPersistsAndResumesWithoutLiveWaiter(t *testing.T) {
 	var pending []ApprovalRecord
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		pending, err = service.ListApprovals(ctx, spaceID, "pending", agent.Profile.ID, "conversation", 10)
-		if err != nil {
+		if err := service.db.WithContext(ctx).Where(
+			"space_id = ? AND agent_id = ? AND conversation_id = ? AND status = ?",
+			spaceID, agent.Profile.ID, "conversation", "pending",
+		).Order("created_at DESC").Limit(10).Find(&pending).Error; err != nil {
 			t.Fatal(err)
 		}
 		if len(pending) == 1 {
@@ -222,8 +173,8 @@ func TestApprovalBrokerPersistsAndResumesWithoutLiveWaiter(t *testing.T) {
 	if len(pending) != 1 {
 		t.Fatal("approval request was not persisted")
 	}
-	if _, err := service.DecideApproval(ctx, spaceID, pending[0].ID, DecideApprovalInput{
-		Decision: "approved", GrantMode: "once", ActorID: ownerID, ExpectedRevision: pending[0].Revision,
+	if err := broker.ResolveWithActor(pending[0].ID, true, execution.ApprovalActor{
+		ID: ownerID, PrincipalType: "platform_user", AuthMethod: "platform_session", SessionID: ownerID,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -243,11 +194,11 @@ func TestApprovalBrokerPersistsAndResumesWithoutLiveWaiter(t *testing.T) {
 	}
 }
 
-func TestResourceLeaseIdempotencyAndBudgetConcurrency(t *testing.T) {
+func TestResourceLeaseAndIdempotency(t *testing.T) {
 	service, spaceID, ownerID := newTestPlatform(t)
 	ctx := context.Background()
-	agentA, _ := service.CreateAgent(ctx, spaceID, CreateAgentInput{Name: "A", Archetype: "worker", OwnerID: ownerID, Config: validAgentConfig()})
-	agentB, _ := service.CreateAgent(ctx, spaceID, CreateAgentInput{Name: "B", Archetype: "worker", OwnerID: ownerID, Config: validAgentConfig()})
+	agentA := createTestAgent(t, service, spaceID, ownerID, "A")
+	agentB := createTestAgent(t, service, spaceID, ownerID, "B")
 	lease, err := service.AcquireResourceLease(ctx, spaceID, AcquireResourceLeaseInput{AgentID: agentA.Profile.ID, ResourceType: "calendar", ResourceID: "primary", Mode: "exclusive", TTLSeconds: 60})
 	if err != nil {
 		t.Fatal(err)
@@ -269,113 +220,26 @@ func TestResourceLeaseIdempotencyAndBudgetConcurrency(t *testing.T) {
 	if _, err := service.CompleteIdempotentOperation(ctx, spaceID, begin.Operation.ID, CompleteIdempotentOperationInput{Result: map[string]any{"ok": true}, ExpectedRevision: begin.Operation.Revision}); err != nil {
 		t.Fatal(err)
 	}
-	budget, err := service.CreateBudgetPolicy(ctx, spaceID, CreateBudgetPolicyInput{ScopeType: "agent", ScopeID: agentA.Profile.ID, Period: "monthly", TokenLimit: 1000, CostLimitMicroUSD: 1000, ToolCallLimit: 10, ConcurrencyLimit: 1, WarningPercent: 80, HardStop: true})
-	if err != nil || budget.ConcurrencyLimit != 1 {
-		t.Fatalf("create budget failed: %+v %v", budget, err)
-	}
-	budgetLease, _, err := service.AcquireBudgetLease(ctx, spaceID, AcquireBudgetLeaseInput{ScopeType: "agent", ScopeID: agentA.Profile.ID, HolderID: "holder-1", RequestID: "r1", TTLSeconds: 60})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := service.AcquireBudgetLease(ctx, spaceID, AcquireBudgetLeaseInput{ScopeType: "agent", ScopeID: agentA.Profile.ID, HolderID: "holder-2", RequestID: "r2", TTLSeconds: 60}); err == nil {
-		t.Fatal("expected budget concurrency rejection")
-	}
-	if _, err := service.ReleaseBudgetLease(ctx, spaceID, budgetLease.ID, "holder-1"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := service.RecordBudgetUsage(ctx, spaceID, budget.ID, RecordBudgetUsageInput{RequestID: "tool-call-1", ToolCalls: 1}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := service.RecordBudgetUsage(ctx, spaceID, budget.ID, RecordBudgetUsageInput{RequestID: "tool-call-1", ToolCalls: 1}); err != nil {
-		t.Fatal(err)
-	}
-	var usageRows int64
-	if err := service.db.WithContext(ctx).Model(&BudgetUsage{}).Where("policy_id = ? AND request_id = ?", budget.ID, "tool-call-1").Count(&usageRows).Error; err != nil {
-		t.Fatal(err)
-	}
-	if usageRows != 1 {
-		t.Fatalf("duplicate tool budget usage was charged %d times", usageRows)
-	}
 }
 
-func TestNetworkPolicyUpdateKeepsRevisionAndAllowlist(t *testing.T) {
-	service, spaceID, ownerID := newTestPlatform(t)
-	ctx := context.Background()
-	agent, err := service.CreateAgent(ctx, spaceID, CreateAgentInput{Name: "网络助手", Archetype: "worker", OwnerID: ownerID, Config: validAgentConfig()})
-	if err != nil {
-		t.Fatal(err)
-	}
-	policy, err := service.CreateNetworkPolicy(ctx, spaceID, CreateNetworkPolicyInput{
-		AgentID: agent.Profile.ID, Name: "网络策略", DefaultAction: "deny",
-		AllowDomains: []string{"api.first.test"}, AllowedPorts: []int{443},
-		UploadPolicy: "approval", SensitiveDataPolicy: "block",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	updated, err := service.UpdateNetworkPolicy(ctx, spaceID, policy.ID, UpdateNetworkPolicyInput{
-		Name: policy.Name, DefaultAction: "deny",
-		AllowDomains: []string{"api.first.test", "api.second.test"},
-		AllowedPorts: []int{443}, UploadPolicy: "approval", SensitiveDataPolicy: "block",
-		ExpectedRevision: policy.Revision,
-	})
-	if err != nil || updated.Revision != policy.Revision+1 {
-		t.Fatalf("update network policy failed: %+v %v", updated, err)
-	}
-	for _, target := range []string{"https://api.first.test/v1", "https://api.second.test/v1"} {
-		decision, err := service.EvaluateEgress(ctx, spaceID, EgressRequest{AgentID: agent.Profile.ID, URL: target, Method: "GET"})
-		if err != nil || !decision.Allowed {
-			t.Fatalf("updated allowlist did not allow %s: %+v %v", target, decision, err)
-		}
-	}
-	if _, err := service.UpdateNetworkPolicy(ctx, spaceID, policy.ID, UpdateNetworkPolicyInput{
-		Name: policy.Name, DefaultAction: "deny", AllowDomains: []string{"api.third.test"},
-		AllowedPorts: []int{443}, UploadPolicy: "approval", SensitiveDataPolicy: "block",
-		ExpectedRevision: policy.Revision,
-	}); err == nil {
-		t.Fatal("stale network policy revision should be rejected")
-	}
-}
-
-func TestModelUsageChargesAgentAndTeamBudgetsOnce(t *testing.T) {
+func TestModelUsageActivityAndTotals(t *testing.T) {
 	service, spaceID, ownerID := newTestPlatform(t)
 	ctx := WithPlatformActor(context.Background(), ownerID, "platform_user")
 	team, err := service.CreateTeam(ctx, spaceID, CreateTeamInput{Name: "模型预算团队", OwnerID: ownerID, SharedWorkspace: false})
 	if err != nil {
 		t.Fatal(err)
 	}
-	agent, err := service.CreateAgent(ctx, spaceID, CreateAgentInput{Name: "模型预算 Agent", Archetype: "worker", TeamID: team.ID, OwnerID: ownerID, Config: validAgentConfig()})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := service.CreateBudgetPolicy(ctx, spaceID, CreateBudgetPolicyInput{ScopeType: "agent", ScopeID: agent.Profile.ID, Period: "daily", TokenLimit: 1000, CostLimitMicroUSD: 1000000, ToolCallLimit: 10, ConcurrencyLimit: 1, WarningPercent: 80, HardStop: true}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := service.CreateBudgetPolicy(ctx, spaceID, CreateBudgetPolicyInput{ScopeType: "team", ScopeID: team.ID, Period: "daily", TokenLimit: 2000, CostLimitMicroUSD: 2000000, ToolCallLimit: 20, ConcurrencyLimit: 2, WarningPercent: 80, HardStop: true}); err != nil {
-		t.Fatal(err)
-	}
-	input := ModelBudgetUsageInput{
+	agent := createTestAgent(t, service, spaceID, ownerID, "模型预算 Agent", team.ID)
+	input := ModelUsageActivityInput{
 		UsageID: "model-usage-1", CharacterID: agent.Profile.CharacterID, Model: "test", Provider: "openai",
 		Status: "succeeded", InputTokens: 120, OutputTokens: 30, TotalTokens: 150,
 		UsageReported: true, InputRate: 1000000, OutputRate: 2000000,
 	}
-	if err := service.RecordModelBudgetUsage(ctx, spaceID, input); err != nil {
+	if err := service.RecordModelUsageActivity(ctx, spaceID, input); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.RecordModelBudgetUsage(ctx, spaceID, input); err != nil {
+	if err := service.RecordModelUsageActivity(ctx, spaceID, input); err != nil {
 		t.Fatal(err)
-	}
-	var usages []BudgetUsage
-	if err := service.db.WithContext(ctx).Where("space_id = ? AND request_id = ?", spaceID, input.UsageID).Find(&usages).Error; err != nil {
-		t.Fatal(err)
-	}
-	if len(usages) != 2 {
-		t.Fatalf("expected exactly one usage row for agent and team, got %+v", usages)
-	}
-	for _, usage := range usages {
-		if usage.InputTokens != 120 || usage.OutputTokens != 30 || usage.CostMicroUSD != 180 {
-			t.Fatalf("unexpected model usage accounting: %+v", usage)
-		}
 	}
 	var events []ActivityEvent
 	if err := service.db.WithContext(ctx).Where("kind = ? AND payload_json LIKE ?", "model.usage", "%model-usage-1%").Find(&events).Error; err != nil {
@@ -398,7 +262,7 @@ func TestModelUsageChargesAgentAndTeamBudgetsOnce(t *testing.T) {
 	)`).Error; err != nil {
 		t.Fatal(err)
 	}
-	for index, usage := range []struct {
+	for _, usage := range []struct {
 		id, requestID string
 		input, output int64
 		cost          int64
@@ -412,13 +276,14 @@ func TestModelUsageChargesAgentAndTeamBudgetsOnce(t *testing.T) {
 		).Error; err != nil {
 			t.Fatal(err)
 		}
-		for _, policyID := range []string{"policy-a-" + strconv.Itoa(index), "policy-b-" + strconv.Itoa(index)} {
-			if err := service.db.Create(&BudgetUsage{
-				ID: stableID("budgetusage", policyID+usage.id), SpaceID: spaceID, PolicyID: policyID,
-				RequestID: usage.id, CostMicroUSD: usage.cost, CreatedAt: time.Now().UTC(),
-			}).Error; err != nil {
-				t.Fatal(err)
-			}
+		if err := service.db.Create(&ActivityEvent{
+			ID: stableID("activity", "model:"+usage.id), SpaceID: spaceID,
+			AgentID: agent.Profile.ID, TeamID: team.ID, Kind: "model.usage",
+			State: "succeeded", Title: "Agent 模型调用", CostMicroUSD: usage.cost,
+			PayloadJSON: mustJSON(map[string]any{"usageId": usage.id}),
+			OccurredAt:  time.Now().UTC(),
+		}).Error; err != nil {
+			t.Fatal(err)
 		}
 	}
 	totals, err := service.ModelUsageTotalsByRequest(ctx, spaceID, "request-summary", agent.Profile.CharacterID)
@@ -502,7 +367,7 @@ func TestTeamInvitationLoginAndSharedContext(t *testing.T) {
 func TestRuntimeSnapshotResetAndMarketSeed(t *testing.T) {
 	service, spaceID, ownerID := newTestPlatform(t)
 	ctx := context.Background()
-	agent, _ := service.CreateAgent(ctx, spaceID, CreateAgentInput{Name: "电脑助手", Archetype: "worker", OwnerID: ownerID, Config: validAgentConfig()})
+	agent := createTestAgent(t, service, spaceID, ownerID, "电脑助手")
 	runtime, err := service.Runtime().Create(ctx, spaceID, CreateRuntimeInput{AgentID: agent.Profile.ID, Provider: "local"})
 	if err != nil {
 		t.Fatal(err)
@@ -561,45 +426,6 @@ func TestRuntimeSnapshotResetAndMarketSeed(t *testing.T) {
 	if restoreEvents != 1 {
 		t.Fatalf("expected one snapshot restore event, got %d", restoreEvents)
 	}
-	archive, err := service.CreateAgentArchive(ctx, spaceID, agent.Profile.ID, "1.0.0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	imported, err := service.ImportAgentArchive(ctx, spaceID, ownerID, archive.Path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	importedRuntimes, err := service.Runtime().List(ctx, spaceID, imported.Profile.ID)
-	if err != nil || len(importedRuntimes) != 1 || importedRuntimes[0].SnapshotID == "" {
-		t.Fatalf("agent archive did not restore runtime snapshot: %+v %v", importedRuntimes, err)
-	}
-	importedBody, err := os.ReadFile(filepath.Join(importedRuntimes[0].RootPath, "workspace", "state.txt"))
-	if err != nil || string(importedBody) != "snapshot-value" {
-		t.Fatalf("imported snapshot mismatch: %q %v", importedBody, err)
-	}
-	pluginRoot := filepath.Join(t.TempDir(), "plugins")
-	if err := os.MkdirAll(pluginRoot, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	pkgPath := filepath.Join(pluginRoot, "mail.amitiax")
-	file, err := os.Create(pkgPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	writer := zip.NewWriter(file)
-	entry, _ := writer.Create("manifest.json")
-	if _, err := entry.Write([]byte(`{"extension":{"id":"com.test/mail","version":"1.0.0","name":{"default":"测试邮箱"},"description":{"default":"测试"}},"publisher":{"id":"com.test","trustLevel":"community"}}`)); err != nil {
-		t.Fatal(err)
-	}
-	writer.Close()
-	file.Close()
-	if err := service.SeedLocalPluginMarketplace(ctx, pluginRoot); err != nil {
-		t.Fatal(err)
-	}
-	listings, err := service.ListMarketplace(ctx, MarketplaceFilter{Search: "测试邮箱"})
-	if err != nil || len(listings) != 1 || listings[0].Listing.ExtensionID != "com.test/mail" {
-		t.Fatalf("market seed mismatch: %+v %v", listings, err)
-	}
 }
 
 func TestOfficialIdentityPluginPackagesVerify(t *testing.T) {
@@ -644,10 +470,7 @@ func TestRuntimeContainerWorkingDirectoryContainment(t *testing.T) {
 
 func TestIsolatedRuntimeProviderRequiresOCIBoundary(t *testing.T) {
 	service, spaceID, ownerID := newTestPlatform(t)
-	agent, err := service.CreateAgent(context.Background(), spaceID, CreateAgentInput{Name: "隔离电脑", Archetype: "worker", OwnerID: ownerID, Config: validAgentConfig()})
-	if err != nil {
-		t.Fatal(err)
-	}
+	agent := createTestAgent(t, service, spaceID, ownerID, "隔离电脑")
 	runtime, err := service.Runtime().Create(context.Background(), spaceID, CreateRuntimeInput{AgentID: agent.Profile.ID, Provider: "isolated"})
 	if err != nil {
 		t.Fatal(err)
@@ -682,10 +505,7 @@ func TestA2AInboundOutboundAndEvaluation(t *testing.T) {
 	}
 	service, spaceID, ownerID := newTestPlatform(t)
 	ctx := context.Background()
-	agent, _ := service.CreateAgent(ctx, spaceID, CreateAgentInput{Name: "互联助手", Archetype: "worker", OwnerID: ownerID, Config: validAgentConfig()})
-	if err := service.db.Model(&AgentProfile{}).Where("id = ?", agent.Profile.ID).Update("status", "active").Error; err != nil {
-		t.Fatal(err)
-	}
+	agent := createTestAgent(t, service, spaceID, ownerID, "互联助手")
 	executor := &testA2AExecutor{}
 	service.SetA2AExecutor(executor)
 	card, err := service.RegisterA2ACard(ctx, spaceID, RegisterA2ACardInput{AgentID: agent.Profile.ID, Name: "互联助手", URL: "https://example.test/a2a", Skills: []string{"research"}, Security: map[string]any{"approval": true}})
@@ -758,10 +578,7 @@ func TestHostControlCapabilityMapping(t *testing.T) {
 
 func TestHostControlRejectsUnsupportedPermissions(t *testing.T) {
 	service, spaceID, ownerID := newTestPlatform(t)
-	agent, err := service.CreateAgent(context.Background(), spaceID, CreateAgentInput{Name: "桌面助手", Archetype: "worker", OwnerID: ownerID, Config: validAgentConfig()})
-	if err != nil {
-		t.Fatal(err)
-	}
+	agent := createTestAgent(t, service, spaceID, ownerID, "桌面助手")
 	if _, err := service.Runtime().CreateHostControl(context.Background(), spaceID, CreateHostControlInput{
 		AgentID: agent.Profile.ID, Capabilities: []string{"screen.capture"},
 	}); err != nil {
@@ -790,14 +607,6 @@ func TestEmptyAgentPlatformCollectionsSerializeAsArrays(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	approvals, err := service.ListApprovals(ctx, spaceID, "pending", "", "", 20)
-	if err != nil {
-		t.Fatal(err)
-	}
-	reconciliations, err := service.ListReconciliations(ctx, spaceID, "open", 20)
-	if err != nil {
-		t.Fatal(err)
-	}
 	teams, err := service.ListTeams(ctx, spaceID)
 	if err != nil {
 		t.Fatal(err)
@@ -807,8 +616,7 @@ func TestEmptyAgentPlatformCollectionsSerializeAsArrays(t *testing.T) {
 		t.Fatal(err)
 	}
 	collections := map[string]any{
-		"activity": events, "agents": agents, "approvals": approvals,
-		"reconciliations": reconciliations, "teams": teams, "runtimes": runtimes,
+		"activity": events, "agents": agents, "teams": teams, "runtimes": runtimes,
 	}
 	for name, value := range collections {
 		encoded, err := json.Marshal(value)

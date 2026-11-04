@@ -229,11 +229,6 @@ func runPackageDistributionProductionFlow(t *testing.T, profile runtimeprofile.P
 		}
 		assertDistributionVersion(t, container, extensionID, "1.0.0")
 	}
-
-	retired := distributionJSONWithStatus(t, server.URL, http.MethodPost, "/api/extensions/retired/updates/install", map[string]any{}, http.StatusGone)
-	if retired["error_code"] != "LEGACY_PACKAGE_ENDPOINT_RETIRED" {
-		t.Fatalf("old update endpoint must be retired: %v", retired)
-	}
 }
 
 type distributionNodeResolver struct {
@@ -250,7 +245,7 @@ func (r distributionArtifactResolver) Resolve(context.Context, script_host.Kind)
 		Kind:             script_host.KindPluginHost,
 		EntryPath:        r.entryPath,
 		DistributionRoot: filepath.Dir(filepath.Dir(r.entryPath)),
-		Source:           script_host.SourceLegacyWorkspace,
+		Source:           script_host.SourceExplicit,
 	}, nil
 }
 
@@ -259,7 +254,7 @@ func (r distributionNodeResolver) Resolve(context.Context) (nodeenv.Environment,
 		NodeBinary:       r.nodeBinary,
 		WorkDir:          r.workDir,
 		DistributionRoot: filepath.Dir(filepath.Dir(r.nodeBinary)),
-		Source:           nodeenv.SourceLegacyBundled,
+		Source:           nodeenv.SourceExplicit,
 		Guest:            distributionGuestPlatform(),
 		Architecture:     runtime.GOARCH,
 	}

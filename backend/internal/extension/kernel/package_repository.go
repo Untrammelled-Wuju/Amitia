@@ -79,7 +79,6 @@ type PackageOperationRecord struct {
 	CurrentStep             string
 	ArtifactID              string
 	PreviewSessionID        string
-	ConfirmationsJSON       string
 	ConfirmationClaimsJSON  string
 	ErrorCode               string
 	ErrorDetail             string
@@ -176,7 +175,7 @@ func NewPackageRepository(db *sql.DB) *PackageRepository {
 
 const packageOperationSelectColumns = `operation_id, trace_id, space_id, scope_type, scope_id,
 	extension_id, target_version, operation_type, status, current_step, artifact_id,
-	preview_session_id, confirmations_json, confirmation_claims_json, error_code, error_detail, started_at, updated_at,
+	preview_session_id, confirmation_claims_json, error_code, error_detail, started_at, updated_at,
 	completed_at, stable_generation, target_generation, current_pointer_json, snapshot_requirement_hash, fencing_token`
 
 type sqlScanner interface {
@@ -198,7 +197,6 @@ func scanPackageOperation(scanner sqlScanner) (*PackageOperationRecord, error) {
 		&op.CurrentStep,
 		&op.ArtifactID,
 		&op.PreviewSessionID,
-		&op.ConfirmationsJSON,
 		&op.ConfirmationClaimsJSON,
 		&op.ErrorCode,
 		&op.ErrorDetail,
@@ -511,9 +509,8 @@ func (r *PackageRepository) CreateOperation(ctx context.Context, op PackageOpera
 	if op.Status == "" || op.Status == "created" {
 		op.Status = string(PackageOperationPending)
 	}
-	op.IdempotencyKey = "legacy:" + op.OperationID
-	hash := sha256.Sum256([]byte(hashLegacyOperationRequest(op)))
-	op.RequestHash = "sha256:" + hex.EncodeToString(hash[:])
+	op.IdempotencyKey = op.OperationID
+	op.RequestHash = computePackageRequestHash(op)
 	_, _, err := r.CreateOrGetOperation(ctx, op)
 	return err
 }
@@ -532,29 +529,7 @@ func (r *PackageRepository) SetOperation(ctx context.Context, id, status, step, 
 		return err
 	}
 	source := PackageOperationStatus(op.Status)
-	if op.Status == "created" || op.Status == "compensating" {
-		normalized := PackageOperationPending
-		if op.Status == "compensating" {
-			normalized = PackageOperationInProgress
-		}
-		result, updateErr := r.db.ExecContext(ctx, `UPDATE extension_package_operations SET status=?, updated_at=? WHERE operation_id=? AND status=?`,
-			string(normalized), time.Now().UTC().Format(time.RFC3339Nano), id, op.Status)
-		if updateErr != nil {
-			return storageOperationError("normalize legacy operation status", updateErr)
-		}
-		rows, rowsErr := result.RowsAffected()
-		if rowsErr != nil {
-			return storageOperationError("inspect legacy operation normalization", rowsErr)
-		}
-		if rows != 1 {
-			return operationStateError(OperationErrTransitionConflict, "operation status changed", nil)
-		}
-		source = normalized
-	}
 	target := PackageOperationStatus(status)
-	if status == "compensating" {
-		target = PackageOperationInProgress
-	}
 	if source == PackageOperationPending && (target == PackageOperationCompleted || target == PackageOperationRequiresRecovery) {
 		if err := r.TransitionOperation(ctx, id, []PackageOperationStatus{source}, PackageOperationInProgress,
 			PackageOperationTransition{CurrentStep: step}, guard); err != nil {
@@ -644,7 +619,7 @@ func (r *PackageRepository) GetOperation(ctx context.Context, spaceID, operation
 	err := r.db.QueryRowContext(ctx, query, spaceID, operationID).Scan(
 		&op.OperationID, &op.TraceID, &op.SpaceID, &op.ScopeType, &op.ScopeID, &op.ExtensionID,
 		&op.TargetVersion, &op.OperationType, &op.Status, &op.CurrentStep, &op.ArtifactID,
-		&op.PreviewSessionID, &op.ConfirmationsJSON, &op.ConfirmationClaimsJSON, &op.ErrorCode, &op.ErrorDetail,
+		&op.PreviewSessionID, &op.ConfirmationClaimsJSON, &op.ErrorCode, &op.ErrorDetail,
 		&op.StartedAt, &op.UpdatedAt, &op.CompletedAt, &op.StableGeneration, &op.TargetGeneration,
 		&op.CurrentPointerJSON, &op.SnapshotRequirementHash, &op.FencingToken,
 	)

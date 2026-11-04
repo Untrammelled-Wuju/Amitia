@@ -12,7 +12,6 @@ type Source string
 
 const (
 	SourceDefault Source = "default"
-	SourceLegacy  Source = "legacy"
 	SourceEnv     Source = "env"
 	SourceCLI     Source = "cli"
 )
@@ -23,18 +22,13 @@ type Resolution struct {
 }
 
 type ResolveInput struct {
-	Args             []string
-	Env              map[string]string
-	LegacyDeployMode string
+	Args []string
+	Env  map[string]string
 }
 
 const envKey = "AMITIA_RUNTIME_PROFILE"
 const cliFlag = "--runtime-profile"
 
-// Resolve applies the precedence CLI > environment > legacy deploy mode >
-// default. Every explicitly supplied value is fail-closed: malformed, empty,
-// or duplicate CLI values and malformed environment/legacy values are errors
-// instead of silently falling back to local execution.
 func Resolve(input ResolveInput) (Resolution, error) {
 	if profile, found, err := resolveCLI(input.Args); found || err != nil {
 		if err != nil {
@@ -48,13 +42,6 @@ func Resolve(input ResolveInput) (Resolution, error) {
 			return Resolution{}, err
 		}
 		return Resolution{Profile: profile, Source: SourceEnv}, nil
-	}
-
-	if profile, found, err := resolveLegacy(input.LegacyDeployMode); found || err != nil {
-		if err != nil {
-			return Resolution{}, err
-		}
-		return Resolution{Profile: profile, Source: SourceLegacy}, nil
 	}
 
 	return Resolution{Profile: Default(), Source: SourceDefault}, nil
@@ -123,21 +110,6 @@ func resolveEnv(env map[string]string) (Profile, bool, error) {
 		return "", true, err
 	}
 	return profile, true, nil
-}
-
-func resolveLegacy(legacyDeployMode string) (Profile, bool, error) {
-	raw := strings.ToLower(strings.TrimSpace(legacyDeployMode))
-	if raw == "" {
-		return "", false, nil
-	}
-	switch raw {
-	case "desktop-local":
-		return ProfileLocal, true, nil
-	case "cloud-web":
-		return ProfileCloudCore, true, nil
-	default:
-		return "", true, &InvalidProfileError{Raw: legacyDeployMode}
-	}
 }
 
 func ResolveOrExit(input ResolveInput) Resolution {

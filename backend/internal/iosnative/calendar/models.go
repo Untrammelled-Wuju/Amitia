@@ -5,12 +5,11 @@ import "time"
 type AuthorizationLevel string
 
 const (
-	AuthorizationNotDetermined    AuthorizationLevel = "not_determined"
-	AuthorizationRestricted       AuthorizationLevel = "restricted"
-	AuthorizationDenied           AuthorizationLevel = "denied"
-	AuthorizationWriteOnly        AuthorizationLevel = "write_only"
-	AuthorizationFullAccess       AuthorizationLevel = "full_access"
-	AuthorizationLegacyAuthorized AuthorizationLevel = "legacy_authorized"
+	AuthorizationNotDetermined AuthorizationLevel = "not_determined"
+	AuthorizationRestricted    AuthorizationLevel = "restricted"
+	AuthorizationDenied        AuthorizationLevel = "denied"
+	AuthorizationWriteOnly     AuthorizationLevel = "write_only"
+	AuthorizationFullAccess    AuthorizationLevel = "full_access"
 )
 
 type EventSpan string

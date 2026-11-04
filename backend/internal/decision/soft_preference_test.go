@@ -108,24 +108,3 @@ func TestApplyUserPreferenceSignalsOnlySetsPreferenceScore(t *testing.T) {
 		t.Fatalf("FinalScore 不应被修改, 实际 %f", result[0].FinalScore)
 	}
 }
-
-func TestApplySoftPreferencesToAllNowOnlySetsUserPreferenceScore(t *testing.T) {
-	candidates := []BehaviorCandidate{
-		{ID: "chat_reply", Tag: BehaviorTagReply, FinalScore: 0.5},
-		{ID: "offer_support", Tag: BehaviorTagOfferSupport, FinalScore: 0.4},
-	}
-	input := SoftPreferenceInput{
-		PersonalityWeights: map[BehaviorTag]float64{
-			BehaviorTagOfferSupport: 0.9,
-			BehaviorTagReply:        0.3,
-		},
-	}
-	result := ApplySoftPreferencesToAll(candidates, input, DefaultSoftPreferenceConfig())
-	if len(result) != 2 {
-		t.Fatalf("应有 2 个候选, 实际 %d", len(result))
-	}
-	// FinalScore should NOT be modified by ApplySoftPreferencesToAll anymore
-	if result[0].FinalScore != 0.5 {
-		t.Fatalf("ApplySoftPreferencesToAll 不应修改 FinalScore, 实际 %f", result[0].FinalScore)
-	}
-}

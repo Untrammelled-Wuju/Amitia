@@ -613,10 +613,8 @@ func shouldAdoptReceivedInteraction(ctx *BehaviorContextSnapshot, event Behavior
 
 	candidateStartedAt := interactionEventTime(event)
 	currentStartedAt := ctx.Transient.InteractionStartedAt
-	// Legacy snapshots do not carry InteractionStartedAt. A newly received
-	// interaction is the only reliable foreground authority in that case.
 	if currentStartedAt.IsZero() {
-		return true
+		return false
 	}
 	if candidateStartedAt.IsZero() {
 		return false
@@ -654,11 +652,11 @@ func applyInteractionPhase(ctx *BehaviorContextSnapshot, event BehaviorEventEnve
 			return false
 		}
 	}
+	if ctx.Transient.InteractionStartedAt.IsZero() {
+		return false
+	}
 
 	ctx.Transient.InteractionPhase = target
-	if ctx.Transient.InteractionStartedAt.IsZero() {
-		ctx.Transient.InteractionStartedAt = interactionEventTime(event)
-	}
 	if statusVersion > 0 {
 		ctx.Transient.StatusVersion = statusVersion
 	}

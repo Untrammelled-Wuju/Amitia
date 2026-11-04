@@ -14,10 +14,7 @@ class DeveloperHomePage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return AmitiaScaffold(
-      appBar: const AmitiaAppBar(
-        title: '开发者模式',
-        showBackButton: true,
-      ),
+      appBar: const AmitiaAppBar(title: '开发者模式', showBackButton: true),
       body: SafeArea(
         top: false,
         child: ListView(
@@ -27,7 +24,10 @@ class DeveloperHomePage extends ConsumerWidget {
               padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
               child: AmitiaCard(
                 backgroundColor: context.accentSoft,
-                border: Border.all(color: context.accentPrimary.withValues(alpha: 0.2), width: 0.5),
+                border: Border.all(
+                  color: context.accentPrimary.withValues(alpha: 0.2),
+                  width: 0.5,
+                ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -45,7 +45,10 @@ class DeveloperHomePage extends ConsumerWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('开发者模式已开启', style: AppTypography.cardTitle(context)),
+                          Text(
+                            '开发者模式已开启',
+                            style: AppTypography.cardTitle(context),
+                          ),
                           const SizedBox(height: 4),
                           Text(
                             '开发者模式提供扩展内核、WASM Runtime、Hook 中心、可信服务等高级功能的管理入口。请谨慎操作。',
@@ -131,12 +134,6 @@ class DeveloperHomePage extends ConsumerWidget {
         route: AppRoutes.kernelPage('dev-console'),
       ),
       _DevEntry(
-        title: '迁移与灰度',
-        subtitle: '迁移计划与灰度发布管理',
-        icon: Icons.merge_type_outlined,
-        route: AppRoutes.kernelPage('migrations'),
-      ),
-      _DevEntry(
         title: '开发模式',
         subtitle: '开发工作区与热重载',
         icon: Icons.developer_mode_outlined,
@@ -146,7 +143,10 @@ class DeveloperHomePage extends ConsumerWidget {
 
     return entries.map((e) {
       return Padding(
-        padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: 2),
+        padding: EdgeInsets.symmetric(
+          horizontal: AppSpacing.pagePadding,
+          vertical: 2,
+        ),
         child: AmitiaListTile(
           leading: Container(
             width: 36,
@@ -159,7 +159,11 @@ class DeveloperHomePage extends ConsumerWidget {
           ),
           title: e.title,
           subtitle: e.subtitle,
-          trailing: Icon(Icons.chevron_right, color: context.textTertiary, size: 20),
+          trailing: Icon(
+            Icons.chevron_right,
+            color: context.textTertiary,
+            size: 20,
+          ),
           onTap: () => context.push(e.route),
         ),
       );

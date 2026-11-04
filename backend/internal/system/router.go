@@ -34,11 +34,11 @@ func WithSafetyCoordination(coordinator *coordination.Service) SystemRouterOptio
 	}
 }
 
-func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, svc Service, chatSvc chat.Service, unifiedEntry *interaction.UnifiedEntry, dataLifecycle *mindruntime.DataLifecycleCoordinator, reconciliation *mindruntime.ReconciliationEngine, memoryConsumer business.MemoryConsumerPort, temporalSvc *temporal.Service, dpCoord *dataportability.Coordinator, artifactSvc *artifact.Service, channelAccess ChannelAvailability, options ...SystemRouterOption) {
+func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, svc Service, chatSvc chat.Service, unifiedEntry *interaction.UnifiedEntry, reconciliation *mindruntime.ReconciliationEngine, memoryConsumer business.MemoryConsumerPort, temporalSvc *temporal.Service, dpCoord *dataportability.Coordinator, artifactSvc *artifact.Service, channelAccess ChannelAvailability, options ...SystemRouterOption) {
 	if svc == nil {
 		panic("system router requires the canonical system service")
 	}
-	handler := NewHandler(svc, ctx.DB, chatSvc, dataLifecycle, unifiedEntry, reconciliation, memoryConsumer)
+	handler := NewHandler(svc, ctx.DB, chatSvc, unifiedEntry, reconciliation, memoryConsumer)
 	for _, option := range options {
 		if option != nil {
 			option(handler)

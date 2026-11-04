@@ -1164,7 +1164,7 @@ func (r *WorkflowExecutionRepository) Finish(ctx context.Context, run workflow.W
 	}
 	// Definition-driven compensation writes its durable progress through
 	// CompensationStore while it runs. Finish only seals the immutable run
-	// summary; writing the legacy five-column compensation shape here would
+	// summary; writing a reduced compensation shape here would
 	// discard generation/idempotency/input/output metadata.
 	return nil
 }

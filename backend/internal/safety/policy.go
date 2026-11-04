@@ -149,58 +149,6 @@ func (r *Repository) SaveBDI(ctx context.Context, scope PolicyScope, bdi BdiConf
 	return r.savePolicy(ctx, scope, expected, "bdi_json", raw)
 }
 
-func (r *Repository) ImportLegacy(ctx context.Context, scopes []PolicyScope) error {
-	if r == nil || r.db == nil {
-		return errors.New("安全策略存储不可用")
-	}
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var values []struct {
-			Key   string `gorm:"column:key"`
-			Value string `gorm:"column:value"`
-		}
-		if err := tx.Table("app_settings").Select("key,value").Where("key IN ? AND deleted_at IS NULL", []string{"safety_config", "safety_bdi_config"}).Scan(&values).Error; err != nil {
-			return err
-		}
-		if len(values) == 0 {
-			return nil
-		}
-		config := *defaultSafetyConfig()
-		bdi := DefaultBdiConfig()
-		for _, value := range values {
-			switch value.Key {
-			case "safety_config":
-				if json.Unmarshal([]byte(value.Value), &config) != nil {
-					return errors.New("旧安全配置无法解析")
-				}
-			case "safety_bdi_config":
-				if json.Unmarshal([]byte(value.Value), &bdi) != nil {
-					return errors.New("旧 BDI 安全配置无法解析")
-				}
-			}
-		}
-		config.Revision, config.ExpectedRevision = 0, 0
-		bdi.Revision, bdi.ExpectedRevision = 0, 0
-		configRaw, err := json.Marshal(config)
-		if err != nil {
-			return err
-		}
-		bdiRaw, err := json.Marshal(bdi)
-		if err != nil {
-			return err
-		}
-		now := time.Now().UTC().Format(time.RFC3339Nano)
-		for _, scope := range scopes {
-			if validatePolicyScope(scope) != nil {
-				continue
-			}
-			if err := tx.Exec(`INSERT INTO safety_policies(space_id,owner_id,core_id,revision,config_json,bdi_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(space_id,owner_id) DO NOTHING`, scope.SpaceID, scope.OwnerID, scope.CoreID, 1, string(configRaw), string(bdiRaw), now, now).Error; err != nil {
-				return err
-			}
-		}
-		return tx.Exec("DELETE FROM app_settings WHERE key IN ?", []string{"safety_config", "safety_bdi_config"}).Error
-	})
-}
-
 func (r *Repository) ensurePolicy(ctx context.Context, scope PolicyScope) (RuntimePolicy, error) {
 	var row struct {
 		CoreID     string `gorm:"column:core_id"`

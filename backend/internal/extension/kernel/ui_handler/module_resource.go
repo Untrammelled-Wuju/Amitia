@@ -26,30 +26,6 @@ func (h *HTTPHandler) resolveExtensionBasePath(extensionID string) string {
 			}
 		}
 	}
-	installedRoot := filepath.Join(h.extRoot, "installed", safeID)
-	entries, err := os.ReadDir(installedRoot)
-	if err != nil {
-		return ""
-	}
-	for i := len(entries) - 1; i >= 0; i-- {
-		if !entries[i].IsDir() {
-			continue
-		}
-		versionDir := filepath.Join(installedRoot, entries[i].Name())
-		subEntries, err := os.ReadDir(versionDir)
-		if err != nil {
-			continue
-		}
-		for _, sub := range subEntries {
-			if !sub.IsDir() {
-				continue
-			}
-			candidate := filepath.Join(versionDir, sub.Name())
-			if _, err := os.Stat(filepath.Join(candidate, "manifest.json")); err == nil {
-				return candidate
-			}
-		}
-	}
 	return ""
 }
 

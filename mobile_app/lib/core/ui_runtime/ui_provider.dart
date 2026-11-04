@@ -295,10 +295,11 @@ class UIProviderDefinition {
         const <String, dynamic>{};
     final entries = <String, UIProviderEntry>{};
     for (final item in rawEntries.entries) {
-      if (item.value is Map)
+      if (item.value is Map) {
         entries[item.key] = UIProviderEntry.fromJson(
           (item.value as Map).cast<String, dynamic>(),
         );
+      }
     }
     return UIProviderDefinition(
       providerId: (json['providerId'] ?? '').toString(),
@@ -343,29 +344,35 @@ class UIProviderDefinition {
   bool compatibleWith(UIProviderResolveContext context, String platform) {
     if (!enabled || entryFor(platform) == null) return false;
     if (placement == UIProviderPlacement.device && !context.localRuntime) {
-      if ((context.deviceId ?? '').isEmpty || !context.deviceOnline)
+      if ((context.deviceId ?? '').isEmpty || !context.deviceOnline) {
         return false;
+      }
     }
     final req = deviceRequirements;
     if (req == null) return true;
     bool contains(List<String> values, String value) =>
         values.any((item) => item.toLowerCase() == value.toLowerCase());
-    if (req.platforms.isNotEmpty && !contains(req.platforms, platform))
+    if (req.platforms.isNotEmpty && !contains(req.platforms, platform)) {
       return false;
+    }
     if (req.architectures.isNotEmpty) {
       if ((context.architecture ?? '').isEmpty ||
-          !contains(req.architectures, context.architecture!))
+          !contains(req.architectures, context.architecture!)) {
         return false;
+      }
     }
     if ((req.minAppVersion ?? '').isNotEmpty) {
       if ((context.appVersion ?? '').isEmpty ||
-          _compareVersion(context.appVersion!, req.minAppVersion!) < 0)
+          _compareVersion(context.appVersion!, req.minAppVersion!) < 0) {
         return false;
+      }
     }
     if ((req.minRuntimeVersion ?? '').isNotEmpty) {
       if ((context.runtimeVersion ?? '').isEmpty ||
-          _compareVersion(context.runtimeVersion!, req.minRuntimeVersion!) < 0)
+          _compareVersion(context.runtimeVersion!, req.minRuntimeVersion!) <
+              0) {
         return false;
+      }
     }
     for (final feature in req.requiredFeatures) {
       if (!contains(context.deviceCapabilities, feature)) return false;
@@ -376,29 +383,40 @@ class UIProviderDefinition {
   UIProviderEntry? entryFor(String platform) {
     UIProviderEntry? supported(String key) {
       final entry = entries[key];
-      if (entry == null || entry.type == UIProviderEntryType.webModule)
+      if (entry == null || entry.type == UIProviderEntryType.webModule) {
         return null;
+      }
       return entry;
     }
 
     if (platform == 'android' || platform == 'ios') {
-      if (supported('flutter_$platform') case final flutterPlatform?)
+      if (supported('flutter_$platform') case final flutterPlatform?) {
         return flutterPlatform;
-      if (supported('flutter_mobile') case final flutterMobile?)
+      }
+      if (supported('flutter_mobile') case final flutterMobile?) {
         return flutterMobile;
+      }
     }
     if (platform == 'windows' || platform == 'macos' || platform == 'linux') {
-      if (supported('flutter_$platform') case final flutterPlatform?)
+      if (supported('flutter_$platform') case final flutterPlatform?) {
         return flutterPlatform;
-      if (supported('flutter_desktop') case final flutterDesktop?)
+      }
+      if (supported('flutter_desktop') case final flutterDesktop?) {
         return flutterDesktop;
+      }
     }
-    if (supported(platform) case final direct?) return direct;
+    if (supported(platform) case final direct?) {
+      return direct;
+    }
     if (platform == 'android' || platform == 'ios') {
-      if (supported('mobile') case final mobile?) return mobile;
+      if (supported('mobile') case final mobile?) {
+        return mobile;
+      }
     }
     if (platform == 'windows' || platform == 'macos' || platform == 'linux') {
-      if (supported('desktop') case final desktop?) return desktop;
+      if (supported('desktop') case final desktop?) {
+        return desktop;
+      }
     }
     return supported('*');
   }
@@ -573,47 +591,33 @@ class UIContributionSnapshotEntry {
     final dispatch =
         (json['dispatch'] as Map?)?.cast<String, dynamic>() ??
         const <String, dynamic>{};
-    final contributionId =
-        (json['contribution_id'] ?? json['contributionId'] ?? '').toString();
-    final sortKey = (ordering['sort_key'] ?? ordering['sortKey'] ?? '')
-        .toString()
-        .trim();
+    final contributionId = (json['contribution_id'] ?? '').toString();
+    final sortKey = (ordering['sort_key'] ?? '').toString().trim();
     final permissions = ((json['permissions'] as List?) ?? const [])
         .whereType<Map>()
-        .map((item) => (item['name'] ?? item['permission'] ?? '').toString())
+        .map((item) => (item['name'] ?? '').toString())
         .where((item) => item.isNotEmpty)
         .toList(growable: false);
     final rawMatch = json['match'] ?? dispatch['match'];
     return UIContributionSnapshotEntry(
       contributionId: contributionId,
-      sourceContributionId:
-          (json['source_contribution_id'] ?? json['sourceContributionId'])
-              ?.toString(),
-      runtimePackageId: (json['runtime_package_id'] ?? json['runtimePackageId'])
-          ?.toString(),
-      runtimePackageVersion:
-          (json['runtime_package_version'] ?? json['runtimePackageVersion'])
-              ?.toString(),
-      extensionId: (json['extension_id'] ?? json['extensionId'] ?? '')
-          .toString(),
-      moduleId: (json['module_id'] ?? json['moduleId'] ?? '').toString(),
+      sourceContributionId: json['sourceContributionId']?.toString(),
+      runtimePackageId: json['runtimePackageId']?.toString(),
+      runtimePackageVersion: json['runtimePackageVersion']?.toString(),
+      extensionId: (json['extension_id'] ?? '').toString(),
+      moduleId: (json['module_id'] ?? '').toString(),
       kind: (json['kind'] ?? '').toString(),
-      slotId: (slot['slot_id'] ?? slot['slotId'] ?? '').toString(),
+      slotId: (slot['slot_id'] ?? '').toString(),
       contractVersion:
           (json['contract_version'] as num?)?.toInt() ??
-          (json['contractVersion'] as num?)?.toInt() ??
           1,
       entryType: (entry['type'] ?? '').toString(),
-      runtimeId: (entry['runtime_id'] ?? entry['runtimeId'] ?? '')
-          .toString()
-          .trim(),
+      runtimeId: (entry['runtime_id'] ?? '').toString().trim(),
       entryPath: (entry['path'] ?? '').toString(),
-      schemaPath: (entry['schema_path'] ?? entry['schemaPath'])?.toString(),
+      schemaPath: entry['schema_path']?.toString(),
       permissions: permissions,
       dataContract:
-          (json['data_contract'] as Map?)?.cast<String, dynamic>() ??
-          (json['dataContract'] as Map?)?.cast<String, dynamic>() ??
-          const {},
+          (json['data_contract'] as Map?)?.cast<String, dynamic>() ?? const {},
       visibility:
           (json['visibility'] as Map?)?.cast<String, dynamic>() ?? const {},
       ordering:
@@ -622,22 +626,12 @@ class UIContributionSnapshotEntry {
           0,
       priority: (ordering['priority'] as num?)?.toInt() ?? 0,
       entryKey:
-          (dispatch['entry_key'] ?? dispatch['entryKey'] ?? sortKey)
-              .toString()
-              .trim()
-              .isNotEmpty
-          ? (dispatch['entry_key'] ?? dispatch['entryKey'] ?? sortKey)
-                .toString()
-                .trim()
+          (dispatch['entry_key'] ?? sortKey).toString().trim().isNotEmpty
+          ? (dispatch['entry_key'] ?? sortKey).toString().trim()
           : contributionId,
       cellId:
-          (dispatch['cell_id'] ?? dispatch['cellId'] ?? sortKey)
-              .toString()
-              .trim()
-              .isNotEmpty
-          ? (dispatch['cell_id'] ?? dispatch['cellId'] ?? sortKey)
-                .toString()
-                .trim()
+          (dispatch['cell_id'] ?? sortKey).toString().trim().isNotEmpty
+          ? (dispatch['cell_id'] ?? sortKey).toString().trim()
           : contributionId,
       matched: dispatch['matched'],
       matchRules: rawMatch is List
@@ -654,8 +648,7 @@ class UISlotSnapshotEntry {
   final String slotId;
   final int contractVersion;
   final List<String> supportedKinds;
-  final String? kind;
-  final String multiplicity;
+  final String kind;
   final String layout;
   final String fallbackPolicy;
   final String? ownerExtension;
@@ -669,8 +662,7 @@ class UISlotSnapshotEntry {
     required this.slotId,
     required this.contractVersion,
     this.supportedKinds = const <String>[],
-    this.kind,
-    required this.multiplicity,
+    required this.kind,
     required this.layout,
     required this.fallbackPolicy,
     this.ownerExtension,
@@ -684,32 +676,24 @@ class UISlotSnapshotEntry {
   factory UISlotSnapshotEntry.fromJson(
     Map<String, dynamic> json,
   ) => UISlotSnapshotEntry(
-    slotId: (json['slotId'] ?? json['slot_id'] ?? '').toString(),
+    slotId: (json['slotId'] ?? '').toString(),
     contractVersion:
-        (json['contractVersion'] as num?)?.toInt() ??
-        (json['contract_version'] as num?)?.toInt() ??
-        1,
+        (json['contractVersion'] as num?)?.toInt() ?? 1,
     supportedKinds:
-        ((json['supportedKinds'] ?? json['supported_kinds']) as List? ??
-                const <dynamic>[])
+        ((json['supportedKinds']) as List? ?? const <dynamic>[])
             .map((item) => item.toString().trim())
             .where((item) => item.isNotEmpty)
             .toList(growable: false),
-    kind: _nullableText(json['kind']),
-    multiplicity: (json['multiplicity'] ?? 'ordered_multiple').toString(),
+    kind: _text(json['kind']),
     layout: (json['layout'] ?? 'stack').toString(),
     fallbackPolicy:
-        (json['fallbackPolicy'] ?? json['fallback_policy'] ?? 'empty')
-            .toString(),
-    ownerExtension: (json['ownerExtension'] ?? json['owner_extension'])
-        ?.toString(),
-    parentSlotId: (json['parentSlotId'] ?? json['parent_slot_id'])?.toString(),
+        (json['fallbackPolicy'] ?? 'empty').toString(),
+    ownerExtension: json['ownerExtension']?.toString(),
+    parentSlotId: json['parentSlotId']?.toString(),
     declarationEpoch:
-        (json['declarationEpoch'] as num?)?.toInt() ??
-        (json['declaration_epoch'] as num?)?.toInt() ??
-        0,
+        (json['declarationEpoch'] as num?)?.toInt() ?? 0,
     scope: (json['scope'] ?? 'root').toString(),
-    dynamicSlot: json['dynamic'] == true || json['dynamicSlot'] == true,
+    dynamicSlot: json['dynamic'] == true,
     contributions: ((json['contributions'] as List?) ?? const [])
         .whereType<Map>()
         .map(
@@ -721,10 +705,7 @@ class UISlotSnapshotEntry {
   );
 }
 
-String? _nullableText(dynamic value) {
-  final text = value?.toString().trim() ?? '';
-  return text.isEmpty ? null : text;
-}
+String _text(Object? value) => (value ?? '').toString().trim();
 
 class UIProviderSnapshot {
   final List<UIProviderDefinition> providers;
@@ -752,10 +733,11 @@ class UIProviderSnapshot {
     final resolved = <String, UIProviderDefinition>{};
     final rawResolved = (json['resolved'] as Map?) ?? const {};
     for (final entry in rawResolved.entries) {
-      if (entry.value is Map)
+      if (entry.value is Map) {
         resolved[entry.key.toString()] = UIProviderDefinition.fromJson(
           (entry.value as Map).cast<String, dynamic>(),
         );
+      }
     }
     return UIProviderSnapshot(
       providers: providers,
@@ -836,8 +818,9 @@ class UIProviderSnapshot {
     for (final provider in providers) {
       if (provider.builtin &&
           provider.capability == capability &&
-          provider.compatibleWith(context, platform))
+          provider.compatibleWith(context, platform)) {
         return provider;
+      }
     }
     return null;
   }

@@ -54,20 +54,20 @@ func TestResolveExtensionBasePathUsesCurrentGeneration(t *testing.T) {
 	}
 }
 
-func TestResolveExtensionBasePathFallsBackToLegacyInstall(t *testing.T) {
+func TestResolveExtensionBasePathRejectsInstalledLayout(t *testing.T) {
 	root := t.TempDir()
-	extensionID := "com.example/legacy"
-	legacyPath := filepath.Join(root, "installed", "com.example__legacy", "1.0.0", "bundle")
-	if err := os.MkdirAll(legacyPath, 0o700); err != nil {
+	extensionID := "com.example/retired"
+	retiredPath := filepath.Join(root, "installed", "com.example__retired", "1.0.0", "bundle")
+	if err := os.MkdirAll(retiredPath, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(legacyPath, "manifest.json"), []byte(`{}`), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(retiredPath, "manifest.json"), []byte(`{}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
 	handler := &HTTPHandler{extRoot: root}
-	if got := handler.resolveExtensionBasePath(extensionID); got != legacyPath {
-		t.Fatalf("resolveExtensionBasePath() = %q, want %q", got, legacyPath)
+	if got := handler.resolveExtensionBasePath(extensionID); got != "" {
+		t.Fatalf("resolveExtensionBasePath() accepted retired installed layout: %q", got)
 	}
 }
 

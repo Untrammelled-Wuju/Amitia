@@ -22,9 +22,7 @@ func (l WorkflowLocation) Valid() bool {
 	}
 }
 
-// WorkflowInstallation is the authoritative deployment state for a user
-// workflow. Definition fields with equivalent names remain readable during the
-// compatibility window, but new code should read/write installation state.
+// WorkflowInstallation is the authoritative deployment state for a user workflow.
 type WorkflowInstallation struct {
 	InstallationID  string                      `json:"installationId"`
 	WorkflowID      string                      `json:"workflowId"`
@@ -72,8 +70,7 @@ const (
 	WorkflowOfflineWait WorkflowOfflinePolicy = "wait"
 )
 
-// WorkflowExecutionTarget describes where a single node should execute. Empty
-// values preserve legacy behavior and are normalized by the execution router.
+// WorkflowExecutionTarget describes where a single node should execute.
 type WorkflowExecutionTarget struct {
 	Placement          WorkflowExecutionPlacement `json:"placement,omitempty"`
 	DeviceID           string                     `json:"deviceId,omitempty"`

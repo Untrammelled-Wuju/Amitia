@@ -6,7 +6,7 @@ import type { AssistantTurnData } from "../conversation/rendering/types";
 
 describe("bubble message delivery", () => {
   it("ends thinking independently and flushes text when output ends before saving", () => {
-    const raw = { id: "phase", role: "assistant", status: "streaming", content: "正文末段", reasoningContent: "思考内容", reasoningComplete: true };
+    const raw = { id: "phase", role: "assistant", state: "streaming", content: "正文末段", reasoningContent: "思考内容", reasoningComplete: true };
     const output = projectBubbleContent(normalizeAIMessage(raw));
     expect(output.find(item => item.kind === "thinking")).toMatchObject({ complete: true, content: "思考内容" });
     expect(projectBubbleContent(normalizeAIMessage({ ...raw, outputComplete: true })).find(item => item.kind === "text")).toMatchObject({ content: "正文末段" });
@@ -56,7 +56,7 @@ describe("bubble message delivery", () => {
 
   it("handles resource-only media and converts history separators when returning to flow", () => {
     for (const type of ["audio", "image", "video"]) {
-      const normalized = normalizeAIMessage({ id: type, role: "user", msgType: type, resourceUri: "amitia://artifacts/a1", status: "sent" });
+      const normalized = normalizeAIMessage({ id: type, role: "user", blocks: [{ kind: type, id: `${type}-1`, url: "amitia://artifacts/a1" }], state: "completed" });
       expect(normalized.blocks[0]).toMatchObject({ kind: type, url: "amitia://artifacts/a1" });
     }
     expect(flowBubbleText("第一段[AMITIA_BR]第二段")).toBe("第一段\n\n第二段");

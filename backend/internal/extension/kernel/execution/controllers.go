@@ -145,12 +145,18 @@ func NewRuntimeDispatcher(adapterRegistry *capability.RuntimeAdapterRegistry, re
 	if len(resolvers) > 0 && resolvers[0] != nil {
 		resolver = resolvers[0]
 	} else {
-		resolver = &capability.LegacyRuntimeExecutionResolver{}
+		resolver = missingRuntimeExecutionResolver{}
 	}
 	return &RuntimeDispatcher{
 		adapterRegistry:   adapterRegistry,
 		executionResolver: resolver,
 	}
+}
+
+type missingRuntimeExecutionResolver struct{}
+
+func (missingRuntimeExecutionResolver) ResolveRuntimeExecution(context.Context, capability.ToolDefinition, capability.ToolInvocationContext) (capability.RuntimeExecutionRoute, error) {
+	return capability.RuntimeExecutionRoute{}, capability.ErrProviderExecutionTargetInvalid
 }
 
 type RuntimeDispatcher struct {

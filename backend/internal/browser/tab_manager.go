@@ -154,7 +154,7 @@ func (m *productionTabManager) CloseTab(ctx context.Context, sessionID BrowserSe
 	if err != nil {
 		return &BrowserError{
 			Code:    ErrCodeSessionStale,
-				Message: "session is stale: " + err.Error(),
+			Message: "session is stale: " + err.Error(),
 		}
 	}
 
@@ -219,7 +219,7 @@ func (m *productionTabManager) GetTab(ctx context.Context, sessionID BrowserSess
 	if err != nil {
 		return BrowserTabInfo{}, &BrowserError{
 			Code:    ErrCodeSessionStale,
-				Message: "session is stale: " + err.Error(),
+			Message: "session is stale: " + err.Error(),
 		}
 	}
 
@@ -255,7 +255,7 @@ func (m *productionTabManager) ListTabs(ctx context.Context, sessionID BrowserSe
 	if err != nil {
 		return nil, &BrowserError{
 			Code:    ErrCodeSessionStale,
-				Message: "session is stale: " + err.Error(),
+			Message: "session is stale: " + err.Error(),
 		}
 	}
 
@@ -297,7 +297,7 @@ func (m *productionTabManager) ActivateTab(ctx context.Context, sessionID Browse
 	if err != nil {
 		return &BrowserError{
 			Code:    ErrCodeSessionStale,
-				Message: "session is stale: " + err.Error(),
+			Message: "session is stale: " + err.Error(),
 		}
 	}
 
@@ -382,7 +382,7 @@ func (m *productionTabManager) ResolveTab(ctx context.Context, sessionID Browser
 	if err != nil {
 		return ResolvedBrowserTab{}, &BrowserError{
 			Code:    ErrCodeSessionStale,
-				Message: "session is stale: " + err.Error(),
+			Message: "session is stale: " + err.Error(),
 		}
 	}
 

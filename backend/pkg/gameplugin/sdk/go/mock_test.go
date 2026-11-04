@@ -93,8 +93,8 @@ func (m *MockTransport) IsClosed() bool {
 }
 
 type FixedIDGenerator struct {
-	ids       []string
-	current   int
+	ids     []string
+	current int
 }
 
 func NewFixedIDGenerator(ids ...string) *FixedIDGenerator {

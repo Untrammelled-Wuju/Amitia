@@ -33,10 +33,10 @@ describe("channel message media normalization", () => {
     expect(message.media).toEqual([]);
   });
 
-  it("infers legacy channel ids for installed wechat conversations", () => {
+  it("uses explicit channel ids without inferring from conversation ids", () => {
     const available = new Set(["wechat", "wechat_ipad860", "qq"]);
-    expect(resolveConversationChannelId({ id: "conv-user@im.wechat" }, available)).toBe("wechat");
-    expect(resolveConversationChannelId({ id: "wechat-ipad860-account-peer" }, available)).toBe("wechat_ipad860");
-    expect(resolveConversationChannelId({ id: "conv-group-10001" }, available)).toBe("qq");
+    expect(resolveConversationChannelId({ id: "conv-user@im.wechat", channel: "wechat" }, available)).toBe("wechat");
+    expect(resolveConversationChannelId({ id: "wechat-ipad860-account-peer", channelId: "wechat_ipad860" }, available)).toBe("wechat_ipad860");
+    expect(resolveConversationChannelId({ id: "conv-group-10001" }, available)).toBe("");
   });
 });

@@ -4150,10 +4150,12 @@ void 0;
     }
     const appliedHash = this.lastAppliedDesiredHash.trim();
     if (!appliedHash) {
-      // Legacy/recovered state without a trustworthy hash is re-applied instead
-      // of being guessed idempotent. The successful apply will establish the
-      // canonical revision+hash pair.
-      return null;
+      return {
+        status: "rejected",
+        errorCode: "DESIRED_HASH_MISSING",
+        errorMessage: "applied desired state has no canonical hash",
+        appliedRevision: this.lastAppliedDesiredRevision,
+      };
     }
     if (appliedHash !== desiredHash) {
       return {

@@ -86,7 +86,7 @@ func TestEnvironmentValidateWithoutPackageManagers(t *testing.T) {
 		NodeBinary:                 filepath.Join(root, "bin", "node"),
 		WorkDir:                    filepath.Join(root, "workspace"),
 		DistributionRoot:           root,
-		Source:                     SourceLegacyBundled,
+		Source:                     SourceRuntimePackage,
 		Guest:                      platform.GuestPlatformWindows,
 		Architecture:               "amd64",
 		PackageManagementAvailable: false,
@@ -420,9 +420,6 @@ func TestSourceConstants(t *testing.T) {
 	}
 	if string(SourceRuntimePackage) != "runtime-package" {
 		t.Fatalf("SourceRuntimePackage mismatch: %s", SourceRuntimePackage)
-	}
-	if string(SourceLegacyBundled) != "legacy-bundled" {
-		t.Fatalf("SourceLegacyBundled mismatch: %s", SourceLegacyBundled)
 	}
 }
 

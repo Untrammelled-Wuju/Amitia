@@ -70,7 +70,7 @@ defineEmits<{
 }>();
 
 const messageSemanticTarget = computed(() => {
-  const messageType = String(props.message?.msgType || props.message?.msg_type || props.message?.type || "").toLowerCase();
+  const messageType = String(props.message?.msgType || props.message?.type || "").toLowerCase();
   if (messageType.includes("tool") || props.message?.assistantTurn?.items?.some((item: any) => String(item?.type || "").toLowerCase().includes("tool"))) {
     return "chat.message.tool";
   }

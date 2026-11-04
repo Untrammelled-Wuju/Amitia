@@ -156,7 +156,6 @@ export async function getDeletionStats() {
 }
 
 export interface DeletionIntent {
-  legacyDeletionId?: string;
   targetId: string;
   targetType: string;
   scope: string;

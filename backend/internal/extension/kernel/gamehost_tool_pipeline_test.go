@@ -64,6 +64,12 @@ func (pipelineScopeRelationChecker) SessionValid(context.Context, string, string
 	return false
 }
 
+type pipelineRuntimeResolver struct{}
+
+func (pipelineRuntimeResolver) ResolveRuntimeExecution(_ context.Context, tool capability.ToolDefinition, _ capability.ToolInvocationContext) (capability.RuntimeExecutionRoute, error) {
+	return capability.RuntimeExecutionRoute{Binding: tool.Runtime}, nil
+}
+
 func (p *pipelineGameControlPlane) Attach(context.Context, ipc.Peer, ipc.Transport) (*ipc.Connection, error) {
 	return nil, fmt.Errorf("not used")
 }
@@ -176,7 +182,7 @@ func TestGameHostToolRunsThroughAgentExecutionPipeline(t *testing.T) {
 
 	pipeline := &execution.ExecutionPipeline{
 		TimeoutCtrl: execution.NewTimeoutController(5 * time.Second),
-		Dispatcher:  execution.NewRuntimeDispatcher(adapterRegistry),
+		Dispatcher:  execution.NewRuntimeDispatcher(adapterRegistry, pipelineRuntimeResolver{}),
 		ScopeGate:   &execution.ScopeGate{ScopeManager: scopeManager},
 		ToolResolver: func(ctx context.Context, toolID string) (capability.ToolDefinition, error) {
 			def, ok := toolRegistry.Get(ctx, toolID)

@@ -232,9 +232,9 @@ func TestMustTransitionAcceptsValid(t *testing.T) {
 	}
 }
 
-func TestTaskLegacyBooleans(t *testing.T) {
+func TestTaskExecutionBooleans(t *testing.T) {
 	def := TaskDefinition{
-		TaskID:      "task-legacy",
+		TaskID:      "task-execution-flags",
 		ExtensionID: "com.example",
 		Entry:       "entry.js",
 		Checkpoint:  true,

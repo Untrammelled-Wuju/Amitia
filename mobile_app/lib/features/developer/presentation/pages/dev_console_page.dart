@@ -37,8 +37,6 @@ class _DevConsolePageState extends ConsumerState<DevConsolePage> {
     '资源': '/api/dev-console/resources',
     '生命周期': '/api/dev-console/lifecycle',
     '性能': '/api/dev-console/performance',
-    '迁移': '/api/dev-console/migration',
-    '兼容性': '/api/dev-console/compatibility',
     'Host API': '/api/dev-console/host-api-audits',
   };
 
@@ -117,8 +115,8 @@ class _DevConsolePageState extends ConsumerState<DevConsolePage> {
         final decoded = jsonDecode(line);
         if (decoded is Map) structured = Map<String, dynamic>.from(decoded);
       } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+        print("[original-error] $error\n$stackTrace");
+      }
       return <String, dynamic>{
         ...row,
         'message': structured['@message'] ?? structured['message'] ?? line,

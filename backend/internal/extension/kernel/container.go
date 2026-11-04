@@ -231,7 +231,6 @@ type Container struct {
 	CanaryHealthCollector   *canary.HealthMetricsCollector
 	CanaryHealthEvaluator   *canary.HealthEvaluator
 	CanaryCohortResolver    *canary.CohortResolver
-	CanaryDualWriteManager  *canary.DualWriteManager
 	CanaryShadowManager     *canary.ShadowManager
 	CanaryOwnershipResolver *canary.BackgroundOwnershipResolver
 
@@ -445,7 +444,7 @@ func (c *Container) Recover(ctx context.Context) error {
 
 			gameHostOwned := make(map[domain.ModuleID]struct{})
 			for _, cd := range contribs {
-				if cd.Kind != domain.ContributionKindGamePlugin {
+				if cd.EffectiveAdapter() != domain.ContributionAdapterGame {
 					continue
 				}
 				moduleIDs, err := gameHostContributionRuntimeModules(cd)
@@ -528,11 +527,6 @@ func (c *Container) assertNoDuplicateOwnerSource(ctx context.Context) {
 				}
 			}
 			fmt.Printf("[kernel-startup-assert] WARNING: %d unresolved duplicate MCP tool registration(s) detected\n", count)
-		}
-	}
-	if GlobalLegacyCallCounter() != nil {
-		if dupContrib := GlobalLegacyCallCounter().DuplicateContributionRegistrations(); dupContrib > 0 {
-			fmt.Printf("[kernel-startup-assert] WARNING: %d duplicate contribution registration(s) detected\n", dupContrib)
 		}
 	}
 }

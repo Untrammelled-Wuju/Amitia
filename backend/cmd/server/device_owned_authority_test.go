@@ -21,11 +21,11 @@ func TestDeviceOwnedHandlerRejectsDelayedCancelledAndOldPermissionWrites(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	space, err := spaceidentity.Open(dir)
+	space, err := spaceidentity.InitializeDefault(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := p.services.DB.Model(&character.Character{}).Where("space_id=?", p.legacySpaceID).Update("space_id", space.SpaceID()).Error; err != nil {
+	if err := p.services.DB.Model(&character.Character{}).Where("space_id=?", p.ownerID).Update("space_id", space.SpaceID()).Error; err != nil {
 		t.Fatal(err)
 	}
 	credential := &agent.StoredCredential{SpaceID: runtimeidentity.SpaceID("core"), DeviceID: identity.DeviceID, RuntimeID: identity.RuntimeID, CredentialID: "test-credential", Credential: "test-value", ExpiresAt: time.Now().Add(time.Hour)}

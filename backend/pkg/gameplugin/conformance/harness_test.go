@@ -171,17 +171,17 @@ func TestChannelSchemaConformance(t *testing.T) {
 	}
 }
 
-func TestCapabilityConformance(t *testing.T) {
+func TestHostFeatureConformance(t *testing.T) {
 	caps := []string{
 		"realtime_control", "state_streaming", "event_streaming",
 		"custom_rpc", "host_api", "shared_control", "multi_service",
 	}
 
-	validator := CapabilityValidator{}
+	validator := HostFeatureValidator{}
 	for _, cap := range caps {
 		data := []byte(`"` + cap + `"`)
 		if err := validator.Validate(data); err != nil {
-			t.Errorf("capability %s failed: %v", cap, err)
+			t.Errorf("host feature %s failed: %v", cap, err)
 		}
 	}
 
@@ -193,15 +193,15 @@ func TestCapabilityConformance(t *testing.T) {
 }
 
 func TestCustomCapabilityConformance(t *testing.T) {
-	validator := CapabilityValidator{}
+	validator := HostFeatureValidator{}
 
 	data := []byte(`"example.navigation"`)
 	if err := validator.Validate(data); err == nil {
 		t.Error("game/tool capability must not validate as a host feature")
 	}
 
-	if protocol.IsKnownCapability("example.navigation") {
-		t.Error("custom capability should not be known")
+	if protocol.IsKnownHostFeature("example.navigation") {
+		t.Error("custom capability should not be a known host feature")
 	}
 }
 
@@ -378,14 +378,14 @@ func TestDuplicateServiceRejected(t *testing.T) {
 	}
 }
 
-func TestDuplicateCapabilityRejected(t *testing.T) {
+func TestDuplicateHostFeatureRejected(t *testing.T) {
 	data := []byte(`["custom_rpc","custom_rpc"]`)
-	var caps []protocol.Capability
+	var caps []protocol.HostFeature
 	if err := json.Unmarshal(data, &caps); err != nil {
 		t.Fatalf("unmarshal failed: %v", err)
 	}
-	if err := protocol.ValidateCapabilities(caps); err == nil {
-		t.Error("duplicate capabilities should be rejected")
+	if err := protocol.ValidateHostFeatures(caps); err == nil {
+		t.Error("duplicate host features should be rejected")
 	}
 }
 

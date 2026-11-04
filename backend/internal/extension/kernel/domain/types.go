@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -477,30 +478,98 @@ const (
 	ContributionKindUISlot            ContributionKind = "ui_slot"
 	ContributionKindBackgroundTask    ContributionKind = "background_task"
 	ContributionKindBackgroundService ContributionKind = "background_task"
-	// Deprecated: legacy manifest input only. Production definitions must use Module.Provider.
-	ContributionKindProvider         ContributionKind = "provider"
-	ContributionKindGamePlugin       ContributionKind = "gamex"
-	ContributionKindPetPlugin        ContributionKind = "petx"
-	ContributionKindDesktopPetPlugin                  = ContributionKindPetPlugin
+	ContributionKindProvider          ContributionKind = "provider"
+	ContributionKindGamePlugin        ContributionKind = "gamex"
+	ContributionKindPetPlugin         ContributionKind = "petx"
+	ContributionKindDesktopPetPlugin                   = ContributionKindPetPlugin
 )
 
-func NormalizeContributionKind(kind ContributionKind) ContributionKind {
-	switch kind {
-	case "background_service":
-		return ContributionKindBackgroundTask
+type ContributionAdapter string
+
+const (
+	ContributionAdapterTool       ContributionAdapter = "tool"
+	ContributionAdapterAgentSkill ContributionAdapter = "agent_skill"
+	ContributionAdapterWorkflow   ContributionAdapter = "workflow"
+	ContributionAdapterMCPServer  ContributionAdapter = "mcp_server"
+	ContributionAdapterHook       ContributionAdapter = "hook"
+	ContributionAdapterEvent      ContributionAdapter = "event"
+	ContributionAdapterSchedule   ContributionAdapter = "schedule"
+	ContributionAdapterUI         ContributionAdapter = "ui"
+	ContributionAdapterUIProvider ContributionAdapter = "ui_provider"
+	ContributionAdapterUISlot     ContributionAdapter = "ui_slot"
+	ContributionAdapterBackground ContributionAdapter = "background"
+	ContributionAdapterProvider   ContributionAdapter = "provider"
+	ContributionAdapterGame       ContributionAdapter = "game"
+	ContributionAdapterDesktopPet ContributionAdapter = "desktop_pet"
+)
+
+func (a ContributionAdapter) Valid() bool {
+	switch a {
+	case ContributionAdapterTool, ContributionAdapterAgentSkill, ContributionAdapterWorkflow,
+		ContributionAdapterMCPServer, ContributionAdapterHook, ContributionAdapterEvent,
+		ContributionAdapterSchedule, ContributionAdapterUI, ContributionAdapterUIProvider,
+		ContributionAdapterUISlot, ContributionAdapterBackground, ContributionAdapterProvider,
+		ContributionAdapterGame, ContributionAdapterDesktopPet:
+		return true
 	default:
-		return kind
+		return false
 	}
 }
 
+func ContributionAdapterForKind(kind ContributionKind) ContributionAdapter {
+	switch kind {
+	case ContributionKindTool:
+		return ContributionAdapterTool
+	case ContributionKindAgentSkill:
+		return ContributionAdapterAgentSkill
+	case ContributionKindWorkflow:
+		return ContributionAdapterWorkflow
+	case ContributionKindMCPServer:
+		return ContributionAdapterMCPServer
+	case ContributionKindHook:
+		return ContributionAdapterHook
+	case ContributionKindEventSubscription:
+		return ContributionAdapterEvent
+	case ContributionKindSchedule:
+		return ContributionAdapterSchedule
+	case ContributionKindUIPage, ContributionKindUIPanel, ContributionKindUIChat,
+		ContributionKindUIContextAction, ContributionKindUIDesktop:
+		return ContributionAdapterUI
+	case ContributionKindUIProvider:
+		return ContributionAdapterUIProvider
+	case ContributionKindUISlot:
+		return ContributionAdapterUISlot
+	case ContributionKindBackgroundTask:
+		return ContributionAdapterBackground
+	case ContributionKindProvider:
+		return ContributionAdapterProvider
+	case ContributionKindGamePlugin:
+		return ContributionAdapterGame
+	case ContributionKindPetPlugin:
+		return ContributionAdapterDesktopPet
+	default:
+		return ContributionAdapter("")
+	}
+}
+
+func ResolveContributionAdapter(kind ContributionKind, adapter ContributionAdapter) ContributionAdapter {
+	if adapter != "" {
+		return adapter
+	}
+	return ContributionAdapterForKind(kind)
+}
+
 type ContributionDefinition struct {
-	ID          ContributionID   `json:"id"`
-	ModuleID    ModuleID         `json:"moduleId"`
-	ExtensionID ExtensionID      `json:"extensionId"`
-	Kind        ContributionKind `json:"kind"`
-	Name        LocalizedText    `json:"name"`
-	Description LocalizedText    `json:"description,omitempty"`
-	Version     string           `json:"version,omitempty"`
+	ID              ContributionID      `json:"id"`
+	ModuleID        ModuleID            `json:"moduleId"`
+	ExtensionID     ExtensionID         `json:"extensionId"`
+	Kind            ContributionKind    `json:"kind"`
+	Adapter         ContributionAdapter `json:"adapter,omitempty"`
+	ContractVersion int                 `json:"contractVersion,omitempty"`
+	Schema          json.RawMessage     `json:"schema,omitempty"`
+	Name            LocalizedText       `json:"name"`
+	Description     LocalizedText       `json:"description,omitempty"`
+	Version         string              `json:"version,omitempty"`
 
 	Definition          map[string]any         `json:"definition"`
 	RequiredPermissions []string               `json:"requiredPermissions,omitempty"`
@@ -519,10 +588,34 @@ func (c *ContributionDefinition) Validate() error {
 	if c.Kind == "" {
 		return fmt.Errorf("domain: contribution %s missing kind", c.ID)
 	}
+	if ContributionAdapterForKind(c.Kind) == "" {
+		if c.Adapter == "" {
+			return fmt.Errorf("domain: contribution %s custom kind %s requires an adapter", c.ID, c.Kind)
+		}
+		if c.ContractVersion <= 0 {
+			return fmt.Errorf("domain: contribution %s custom kind %s requires a positive contract version", c.ID, c.Kind)
+		}
+		if len(c.Schema) == 0 {
+			return fmt.Errorf("domain: contribution %s custom kind %s requires a JSON schema", c.ID, c.Kind)
+		}
+	}
+	if adapter := c.EffectiveAdapter(); !adapter.Valid() {
+		return fmt.Errorf("domain: contribution %s has invalid adapter %q", c.ID, adapter)
+	}
+	if c.ContractVersion < 0 {
+		return fmt.Errorf("domain: contribution %s has invalid contract version %d", c.ID, c.ContractVersion)
+	}
+	if len(c.Schema) > 0 && !json.Valid(c.Schema) {
+		return fmt.Errorf("domain: contribution %s schema is not valid JSON", c.ID)
+	}
 	if c.ModuleID == "" {
 		return fmt.Errorf("domain: contribution %s missing module id", c.ID)
 	}
 	return nil
+}
+
+func (c ContributionDefinition) EffectiveAdapter() ContributionAdapter {
+	return ResolveContributionAdapter(c.Kind, c.Adapter)
 }
 
 type Exposure struct {

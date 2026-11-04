@@ -74,7 +74,7 @@ export function inspectPackage(packagePath: string): PackageInspection {
 
 function collectProjectEntries(projectDir: string, manifestPath: string, manifest: AmitiaxManifestV1): ArchiveEntry[] {
   const entries: ArchiveEntry[] = [{ path: "manifest.json", data: fs.readFileSync(manifestPath) }];
-  for (const directory of ["modules", "resources", "assets", "migrations", "licenses", "docs", "signatures"]) {
+  for (const directory of ["modules", "resources", "assets", "migrations", "licenses", "docs"]) {
     const absolute = path.join(projectDir, directory);
     if (fs.existsSync(absolute)) collectDirectory(absolute, directory, entries);
   }

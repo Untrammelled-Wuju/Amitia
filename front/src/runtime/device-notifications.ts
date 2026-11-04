@@ -65,55 +65,19 @@ export async function listNotificationDevices(): Promise<DeviceNotificationEndpo
   return unwrap<DeviceNotificationEndpoint[]>(await apiClient.get("/api/notifications/devices"));
 }
 
-export function legacyReplyPreferences(): Partial<DeviceNotificationPreferences> {
-  const result: Partial<DeviceNotificationPreferences> = {};
-  try {
-    const notify = localStorage.getItem("amitia.reply-notifications.desktop.v1");
-    const sound = localStorage.getItem("amitia.reply-sound.desktop.v1");
-    if (notify !== null) {
-      const enabled = notify === "true";
-      result.messagePushEnabled = enabled;
-      if (enabled) {
-        result.pushEnabled = true;
-        result.systemNotificationsEnabled = true;
-      }
-    }
-    if (sound !== null) result.soundEnabled = sound === "true";
-  } catch (error) {
-  console.error("[original-error]", error);
-}
-  return result;
-}
-
-export function clearLegacyReplyPreferences() {
-  try {
-    localStorage.removeItem("amitia.reply-notifications.desktop.v1");
-    localStorage.removeItem("amitia.reply-sound.desktop.v1");
-  } catch (error) {
-  console.error("[original-error]", error);
-}
-}
-
 export async function ensureNotificationDevice(deviceId: string): Promise<DeviceNotificationEndpoint> {
   const platform = notificationPlatform();
   const existing = (await listNotificationDevices()).find(
     (endpoint) => endpoint.deviceId === deviceId && endpoint.platform === platform,
   );
-  const legacy = legacyReplyPreferences();
-  if (existing) {
-    if (Object.keys(legacy).length === 0) return existing;
-    const migrated = await updateNotificationPreferences(deviceId, legacy);
-    clearLegacyReplyPreferences();
-    return migrated;
-  }
+  if (existing) return existing;
   unwrap<DeviceNotificationEndpoint>(
-    await apiClient.post("/api/notifications/devices/register", notificationRegistrationPayload(deviceId, platform, legacy)),
+    await apiClient.post("/api/notifications/devices/register", notificationRegistrationPayload(deviceId, platform)),
   );
   const registered = (await listNotificationDevices()).find(
     (endpoint) => endpoint.deviceId === deviceId && endpoint.platform === platform,
   );
   if (!registered) throw new Error("正式通知设备注册未确认");
-  clearLegacyReplyPreferences();
   return registered;
 }
 

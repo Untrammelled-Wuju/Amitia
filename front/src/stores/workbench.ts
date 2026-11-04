@@ -1,7 +1,7 @@
 import { defineStore } from "pinia";
 import { computed, ref, watch } from "vue";
 
-export type WorkbenchViewKind = "files" | "file" | "git" | "diff" | "browser" | "terminal" | "tasks";
+export type WorkbenchViewKind = "files" | "file" | "git" | "diff" | "browser" | "terminal" | "tasks" | "agents";
 export type WorkbenchFocusPolicy = "activate" | "background";
 
 export interface WorkbenchTab {
@@ -46,7 +46,7 @@ interface WorkbenchSession {
 const storageKey = "amitia:workbench:layout:v1";
 const defaultWidth = 550;
 const maxTabs = 40;
-const allowedKinds: readonly WorkbenchViewKind[] = ["files", "file", "git", "diff", "browser", "terminal", "tasks"];
+const allowedKinds: readonly WorkbenchViewKind[] = ["files", "file", "git", "diff", "browser", "terminal", "tasks", "agents"];
 const emptySession = (): WorkbenchSession => ({ tabs: [], activeTabId: "", visible: false, width: defaultWidth, operations: [] });
 const normalizeConversation = (value: string) => value.trim() || "__draft__";
 const clampWidth = (value: number) => Number.isFinite(value) ? Math.min(1000, Math.max(350, value)) : defaultWidth;
@@ -159,7 +159,7 @@ export const useWorkbenchStore = defineStore("workbench", () => {
         if (value.tabs.length >= maxTabs) throw new Error(`单个对话最多打开 ${maxTabs} 个工作区标签`);
         const tab: WorkbenchTab = {
           id: makeTabId(), kind: request.kind,
-          title: clampText(request.title, 140) || ({ files: "文件", file: "文件预览", git: "Git", diff: "代码变更", browser: "浏览器", terminal: "终端输出", tasks: "任务状态" }[request.kind]),
+          title: clampText(request.title, 140) || ({ files: "文件", file: "文件预览", git: "Git", diff: "代码变更", browser: "浏览器", terminal: "终端输出", tasks: "任务状态", agents: "子智能体" }[request.kind]),
           resourceUri, workspaceUri, targetDeviceId, browserRef, taskId, createdAt: Date.now(), pinned: false,
         };
         value.tabs.push(tab);
@@ -182,7 +182,7 @@ export const useWorkbenchStore = defineStore("workbench", () => {
     if (!allowedKinds.includes(input.kind) || (input.focus !== undefined && input.focus !== "activate" && input.focus !== "background")) return null;
     if (input.browserRef && (input.kind !== "browser" || !/^[A-Za-z0-9_-]{32}$/.test(input.browserRef))) return null;
     if (input.taskId && (input.kind !== "terminal" || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(input.taskId))) return null;
-    if (input.kind === "tasks" && (input.resourceUri || input.workspaceUri || input.targetDeviceId || input.browserRef || input.taskId)) return null;
+    if ((input.kind === "tasks" || input.kind === "agents") && (input.resourceUri || input.workspaceUri || input.targetDeviceId || input.browserRef || input.taskId)) return null;
     if (input.kind === "browser" && input.resourceUri) {
       try {
         const parsed = new URL(input.resourceUri);

@@ -131,7 +131,7 @@ func (s *service) fetchKnowledgeContext(ctx context.Context, tenantID, question 
 	}
 	level := decision.EffectiveLevel
 	retrievalTask, _ := trace.begin(ctx, "retrieval.started", "正在检索知识库", map[string]any{"retrievalLevel": level})
-	result, err := s.knowledgePort.Search(ctx, tenantID, knowledge.SearchRequest{Query: question, RetrievalLevel: level, Limit: 8, PolicyMode: decision.PolicyMode, RouteReason: decision.RouteReason, ShadowLevel: decision.ShadowLevel, ShadowReason: decision.ShadowReason})
+	result, err := s.knowledgePort.Search(ctx, tenantID, knowledge.SearchRequest{Query: question, RetrievalLevel: level, Limit: 8, PolicyMode: decision.PolicyMode, RouteReason: decision.RouteReason})
 	if err == nil {
 		if cfg.Features.CanonicalReaderEnabled && knowledge.NeedsCanonicalRead(question) {
 			result = s.expandCanonicalEvidence(ctx, tenantID, question, result, trace, citations)

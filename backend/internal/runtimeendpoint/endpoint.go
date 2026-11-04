@@ -21,17 +21,16 @@ type ServiceEndpoint struct {
 }
 
 type Endpoint struct {
-	SchemaVersion        int                        `json:"schemaVersion"`
-	Version              string                     `json:"version,omitempty"`
-	InstanceID           string                     `json:"instanceId,omitempty"`
-	PID                  int                        `json:"pid"`
-	StartedAt            string                     `json:"startedAt"`
-	Host                 string                     `json:"host"`
-	Port                 int                        `json:"port"`
-	HTTPBaseURL          string                     `json:"httpBaseURL"`
-	WebSocketBaseURL     string                     `json:"websocketBaseURL"`
-	CompatibilityBaseURL string                     `json:"compatibilityBaseURL,omitempty"`
-	Services             map[string]ServiceEndpoint `json:"services,omitempty"`
+	SchemaVersion    int                        `json:"schemaVersion"`
+	Version          string                     `json:"version,omitempty"`
+	InstanceID       string                     `json:"instanceId,omitempty"`
+	PID              int                        `json:"pid"`
+	StartedAt        string                     `json:"startedAt"`
+	Host             string                     `json:"host"`
+	Port             int                        `json:"port"`
+	HTTPBaseURL      string                     `json:"httpBaseURL"`
+	WebSocketBaseURL string                     `json:"websocketBaseURL"`
+	Services         map[string]ServiceEndpoint `json:"services,omitempty"`
 }
 
 func FilePath(runDir string) string {

@@ -2,7 +2,6 @@ package skill
 
 import (
 	"context"
-	"strings"
 	"testing"
 )
 
@@ -214,41 +213,6 @@ func TestOpenAIAdapter_Analyze_PolicyImplicit(t *testing.T) {
 	}
 }
 
-func TestClaudeLegacyAdapter_Detect_CommandPath(t *testing.T) {
-	adapter := NewClaudeLegacyCommandAdapter()
-	parsed := ParsedSkill{}
-	pkg := SkillPackageView{
-		Parsed:     parsed,
-		SourceFile: ".claude/commands/deploy.md",
-	}
-	detection, err := adapter.Detect(context.Background(), pkg, parsed)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(detection.Detected) != 1 {
-		t.Fatalf("expected 1 detected profile, got %d", len(detection.Detected))
-	}
-	if detection.Detected[0].ID != ProfileIDClaudeCommandLegacy {
-		t.Fatalf("expected profile ID %q, got %q", ProfileIDClaudeCommandLegacy, detection.Detected[0].ID)
-	}
-}
-
-func TestClaudeLegacyAdapter_Analyze_DeriveName(t *testing.T) {
-	adapter := NewClaudeLegacyCommandAdapter()
-	parsed := ParsedSkill{Body: "Deploy the application to production."}
-	pkg := SkillPackageView{
-		Parsed:     parsed,
-		SourceFile: ".claude/commands/deploy.md",
-	}
-	overlay, err := adapter.Analyze(context.Background(), pkg, parsed)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(overlay.Errors) > 0 {
-		t.Fatalf("unexpected errors: %+v", overlay.Errors)
-	}
-}
-
 func TestProfileDetector_Detect(t *testing.T) {
 	detector := NewProfileDetector(
 		NewClaudeCodeProfileAdapter(),
@@ -388,33 +352,5 @@ func TestComputeFingerprint(t *testing.T) {
 	}
 	if fp.CapabilityGen != CapabilityGeneration {
 		t.Fatalf("expected capability generation, got %d", fp.CapabilityGen)
-	}
-}
-
-func TestDeriveFirstParagraph(t *testing.T) {
-	body := "First paragraph of the command.\n\nSecond paragraph."
-	result := deriveFirstParagraph(body)
-	if !strings.Contains(result, "First paragraph") {
-		t.Fatalf("expected 'First paragraph' in result, got %q", result)
-	}
-	if strings.Contains(result, "Second") {
-		t.Fatalf("result should not contain second paragraph, got %q", result)
-	}
-}
-
-func TestDeriveNameFromSource(t *testing.T) {
-	tests := []struct {
-		source   string
-		expected string
-	}{
-		{".claude/commands/deploy.md", "deploy"},
-		{".claude/commands/my-command.md", "my-command"},
-		{"SKILL.md", "skill"},
-	}
-	for _, tt := range tests {
-		result := deriveNameFromSource(tt.source)
-		if result != tt.expected {
-			t.Fatalf("from %q: expected %q, got %q", tt.source, tt.expected, result)
-		}
 	}
 }

@@ -2,8 +2,6 @@ package system
 
 import (
 	"testing"
-
-	"github.com/u-ai/backend/internal/requestidentity"
 )
 
 func TestSystemTime_FallbackWhenNoTemporalService(t *testing.T) {
@@ -28,7 +26,6 @@ func TestSystemTime_ForcesCanonicalUser(t *testing.T) {
 }
 
 func TestSystemTime_IgnoresBodyUserId(t *testing.T) {
-	_ = requestidentity.LegacySpaceID
 	result := (&service{}).systemTimeResult(map[string]interface{}{
 		"spaceId":     "attacker-id",
 		"characterId": "char-1",

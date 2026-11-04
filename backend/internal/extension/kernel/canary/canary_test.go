@@ -3,7 +3,6 @@ package canary
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -31,7 +30,6 @@ func setupTestDB(t *testing.T) *sql.DB {
 			max_duration_sec INTEGER NOT NULL DEFAULT 3600,
 			health_policy_json TEXT,
 			abort_policy_json TEXT,
-			write_strategy TEXT NOT NULL DEFAULT 'old_only',
 			created_at DATETIME NOT NULL
 		)`,
 		`CREATE TABLE IF NOT EXISTS extension_canary_states (
@@ -136,7 +134,6 @@ func makeTestCanaryPolicy() *CanaryPolicy {
 			AbortOnErrorRateExceeded: true,
 			AbortOnCrashExceeded:     true,
 		},
-		WriteStrategy: "dual_write",
 	}
 }
 
@@ -451,117 +448,6 @@ func TestHealthMetricsCollector(t *testing.T) {
 		}
 		if errRate != 0.05 {
 			t.Errorf("expected baseline error rate 0.05, got %f", errRate)
-		}
-	})
-}
-
-func TestDualWriteManager(t *testing.T) {
-	manager := NewDualWriteManager()
-	ctx := context.Background()
-
-	t.Run("consistency check same data", func(t *testing.T) {
-		data, err := json.Marshal(map[string]interface{}{"result": "ok", "count": 1})
-		if err != nil {
-			t.Fatalf("marshal failed: %v", err)
-		}
-		result, err := manager.CheckConsistency(ctx, data, data)
-		if err != nil {
-			t.Fatalf("expected no error for same data, got %v", err)
-		}
-		if !result.Consistent {
-			t.Fatalf("expected consistent result for same data")
-		}
-		if len(result.DifferFields) != 0 {
-			t.Errorf("expected no differ fields for same data, got %v", result.DifferFields)
-		}
-	})
-
-	t.Run("consistency check different data", func(t *testing.T) {
-		oldData, err := json.Marshal(map[string]interface{}{"result": "ok", "count": 1})
-		if err != nil {
-			t.Fatalf("marshal oldData failed: %v", err)
-		}
-		newData, err := json.Marshal(map[string]interface{}{"result": "ok", "count": 2})
-		if err != nil {
-			t.Fatalf("marshal newData failed: %v", err)
-		}
-		result, err := manager.CheckConsistency(ctx, oldData, newData)
-		if err == nil {
-			t.Fatalf("expected error for different data, got nil")
-		}
-		if result.Consistent {
-			t.Fatalf("expected inconsistent result for different data")
-		}
-		if len(result.DifferFields) == 0 {
-			t.Errorf("expected differ fields for different data, got none")
-		}
-
-		found := false
-		for _, f := range result.DifferFields {
-			if f == "count" {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("expected differ fields to contain 'count', got %v", result.DifferFields)
-		}
-	})
-
-	t.Run("dual write both writers succeed", func(t *testing.T) {
-		policy := DualWritePolicy{
-			RequiredIdempotent:  true,
-			RecordBothSides:     true,
-			ValidateConsistency: true,
-			ExternalSideEffect:  false,
-		}
-		data, err := json.Marshal(map[string]interface{}{"result": "ok"})
-		if err != nil {
-			t.Fatalf("marshal failed: %v", err)
-		}
-		oldWriter := func(ctx context.Context) (json.RawMessage, error) {
-			return data, nil
-		}
-		newWriter := func(ctx context.Context) (json.RawMessage, error) {
-			return data, nil
-		}
-
-		result, err := manager.ExecuteDualWrite(ctx, policy, oldWriter, newWriter)
-		if err != nil {
-			t.Fatalf("expected no error when both writers succeed, got %v", err)
-		}
-		if !result.Consistent {
-			t.Fatalf("expected consistent result when both writers return same data")
-		}
-		if len(result.Errors) != 0 {
-			t.Errorf("expected no errors, got %v", result.Errors)
-		}
-	})
-
-	t.Run("dual write one writer fails", func(t *testing.T) {
-		policy := DualWritePolicy{
-			RequiredIdempotent:  true,
-			RecordBothSides:     true,
-			ValidateConsistency: true,
-			ExternalSideEffect:  false,
-		}
-		data, err := json.Marshal(map[string]interface{}{"result": "ok"})
-		if err != nil {
-			t.Fatalf("marshal failed: %v", err)
-		}
-		oldWriter := func(ctx context.Context) (json.RawMessage, error) {
-			return data, nil
-		}
-		newWriter := func(ctx context.Context) (json.RawMessage, error) {
-			return nil, fmt.Errorf("new writer error")
-		}
-
-		result, err := manager.ExecuteDualWrite(ctx, policy, oldWriter, newWriter)
-		if err == nil {
-			t.Fatalf("expected error when one writer fails, got nil")
-		}
-		if len(result.Errors) == 0 {
-			t.Errorf("expected errors recorded in result when writer fails")
 		}
 	})
 }

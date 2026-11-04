@@ -12,11 +12,7 @@ export interface CoreEndpoint {
   port: number;
   httpBaseURL: string;
   websocketBaseURL: string;
-  compatibilityBaseURL?: string;
 }
-
-const LEGACY_CORE_BASE_URL = "http://127.0.0.1:18899";
-const LEGACY_CORE_WS_URL = "ws://127.0.0.1:18899";
 
 let currentEndpoint: CoreEndpoint | null = null;
 let endpointEpoch = 0;
@@ -55,10 +51,6 @@ export function parseCoreEndpoint(payload: unknown): CoreEndpoint | null {
       port,
       httpBaseURL: httpBaseURL.replace(/\/+$/, ""),
       websocketBaseURL: websocketBaseURL.replace(/\/+$/, ""),
-      compatibilityBaseURL:
-        typeof record.compatibilityBaseURL === "string" && record.compatibilityBaseURL.trim()
-          ? record.compatibilityBaseURL.trim().replace(/\/+$/, "")
-          : undefined,
     };
   } catch (error) {
   console.error("[original-error]", error);
@@ -126,7 +118,6 @@ export function setCoreEndpoint(endpoint: CoreEndpoint | null): void {
 export function invalidateCoreEndpoint(): void {
   currentEndpoint = null;
   endpointEpoch += 1;
-  setLocalMeshBaseURL(LEGACY_CORE_BASE_URL);
 }
 
 export function waitForCoreEndpoint(timeoutMs = 30000): Promise<CoreEndpoint> {
@@ -163,23 +154,11 @@ export function coreEndpointIdentity(endpoint: CoreEndpoint): string {
 }
 
 export function getCoreBaseURL(): string {
-  return currentEndpoint?.httpBaseURL || LEGACY_CORE_BASE_URL;
+  return currentEndpoint?.httpBaseURL || "";
 }
 
 export function getCoreWebSocketBaseURL(): string {
-  return currentEndpoint?.websocketBaseURL || LEGACY_CORE_WS_URL;
-}
-
-export function legacyCoreEndpoint(): CoreEndpoint {
-  return {
-    schemaVersion: 1,
-    pid: 0,
-    startedAt: "",
-    host: "127.0.0.1",
-    port: 18899,
-    httpBaseURL: LEGACY_CORE_BASE_URL,
-    websocketBaseURL: LEGACY_CORE_WS_URL,
-  };
+  return currentEndpoint?.websocketBaseURL || "";
 }
 
 function isLoopbackHost(host: string): boolean {

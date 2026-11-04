@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/u-ai/backend/internal/devicemesh"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
 	"github.com/u-ai/backend/internal/runtimeidentity"
@@ -73,10 +72,7 @@ func TestChannelDeliveryRecoveryRestoresOwnerAndRevocationGuard(t *testing.T) {
 			if _, err := registry.EnsureDevice(t.Context(), host_registry.DeviceRecord{SpaceID: "core", DeviceID: "phone", Platform: runtimeidentity.PlatformAndroid, TrustState: host_registry.DeviceTrustTrusted}); err != nil {
 				t.Fatal(err)
 			}
-			rt, err := devicemesh.NewCloudRuntime(db, registry)
-			if err != nil {
-				t.Fatal(err)
-			}
+			rt := newCloudRuntimeForTest(t, db, registry)
 			rt.LocalDeviceID = "phone"
 			if mode == "coordinated" || mode == "cloud-target-offline" {
 				if _, err := rt.Coordination.InitializeCoordinated(t.Context(), "core", "phone", 1, "role"); err != nil {
@@ -136,10 +132,7 @@ func TestChannelDeliveryRecoveryContinuesPastStalePage(t *testing.T) {
 	if _, err := registry.EnsureDevice(t.Context(), host_registry.DeviceRecord{SpaceID: "core", DeviceID: "phone", Platform: runtimeidentity.PlatformAndroid, TrustState: host_registry.DeviceTrustTrusted}); err != nil {
 		t.Fatal(err)
 	}
-	rt, err := devicemesh.NewCloudRuntime(db, registry)
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt := newCloudRuntimeForTest(t, db, registry)
 	rt.LocalDeviceID = "phone"
 	port := &channelRecoveryPort{roleRevision: 1}
 	rt.LocalDeviceDataPort = port

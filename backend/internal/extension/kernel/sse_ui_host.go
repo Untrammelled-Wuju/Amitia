@@ -66,18 +66,9 @@ type clientRuntimeSessionState struct {
 	Packages       map[string]*clientRuntimePackageState `json:"packages"`
 }
 
-// SSEUIHostNotifier sends UI notifications/dialogs/navigate actions to connected
-// UI endpoints via SSE transport.
-//
-// Production wiring MUST use NewSSEUIHostNotifierWithRegistry (the With-Registry variant).
-// The no-registry fallback (NewSSEUIHostNotifier) is for test/standalone use only.
-//
-// The notifier uses G6 host_registry.Registry (the authoritative connected-device registry)
-// to determine the target UI endpoint. Hub verifies transport connection existence only;
-// it does NOT replace Registry for target selection.
 type SSEUIHostNotifier struct {
 	hub                          *sse.Hub
-	hostRegistry                 *host_registry.HostRegistry
+	hostRegistry                 *host_registry.Registry
 	mu                           sync.Mutex
 	pendingDialogs               map[string]*pendingDialog
 	pendingClientRuntimeCommands map[string]*pendingClientRuntimeCommand
@@ -85,25 +76,7 @@ type SSEUIHostNotifier struct {
 	clientRuntimeDB              *sql.DB
 }
 
-// NewSSEUIHostNotifier creates an SSE UI notifier WITHOUT G6 registry injection.
-// Using this constructor in production causes broadcast fallback, which is NOT allowed.
-// Production wiring MUST use NewSSEUIHostNotifierWithRegistry.
-//
-// Deprecated: Production wiring must inject the shared host_registry.Registry.
-// This constructor is retained only for test/standalone composition.
-func NewSSEUIHostNotifier(hub *sse.Hub) *SSEUIHostNotifier {
-	return &SSEUIHostNotifier{
-		hub:                          hub,
-		pendingDialogs:               make(map[string]*pendingDialog),
-		pendingClientRuntimeCommands: make(map[string]*pendingClientRuntimeCommand),
-		clientRuntimeSessions:        make(map[string]*clientRuntimeSessionState),
-	}
-}
-
-// NewSSEUIHostNotifierWithRegistry creates an SSE UI notifier with the G6
-// host_registry.Registry for target endpoint selection.
-// This is the production constructor. The registry must be the G18-shared instance.
-func NewSSEUIHostNotifierWithRegistry(hub *sse.Hub, registry *host_registry.HostRegistry) *SSEUIHostNotifier {
+func NewSSEUIHostNotifier(hub *sse.Hub, registry *host_registry.Registry) *SSEUIHostNotifier {
 	return &SSEUIHostNotifier{
 		hub:                          hub,
 		hostRegistry:                 registry,
@@ -120,31 +93,14 @@ func (n *SSEUIHostNotifier) SetClientRuntimeDatabase(db *sql.DB) {
 }
 
 func (n *SSEUIHostNotifier) Notify(ctx context.Context, extensionID string, title string, body string, severity string) error {
-	if n.hostRegistry != nil {
-		target, err := n.hostRegistry.FindTargetHostString(ctx, uiHostSpaceID(ctx), host_registry.CapUINotify, "", "")
-		if err != nil {
-			return err
-		}
-		if target == nil {
-			return ErrUIHostUnavailable
-		}
-		if n.hub == nil || !n.hub.ClientExists(target.HostClientID) {
-			return ErrUIHostUnavailable
-		}
-		payload := map[string]interface{}{
-			"title":    title,
-			"body":     body,
-			"severity": severity,
-		}
-		envelope := NewSSEEventEnvelope("ui_notify", extensionID, payload, defaultEventTTL)
-		envelopeMap := envelope.ToMap()
-		envelopeMap["hostClientId"] = target.HostClientID
-		envelopeMap["hostSessionId"] = target.HostSessionID
-		n.hub.SendToClient(target.HostClientID, "ui_notify", envelopeMap)
-		return nil
+	if n.hostRegistry == nil {
+		return ErrUIHostUnavailable
 	}
-
-	if n.hub == nil || !n.hub.HasClients() {
+	target, err := n.hostRegistry.FindTargetHostString(ctx, uiHostSpaceID(ctx), host_registry.EndpointFeatureUINotify, "", "")
+	if err != nil {
+		return err
+	}
+	if target == nil || n.hub == nil || !n.hub.ClientExists(target.HostClientID) {
 		return ErrUIHostUnavailable
 	}
 	payload := map[string]interface{}{
@@ -153,7 +109,10 @@ func (n *SSEUIHostNotifier) Notify(ctx context.Context, extensionID string, titl
 		"severity": severity,
 	}
 	envelope := NewSSEEventEnvelope("ui_notify", extensionID, payload, defaultEventTTL)
-	n.hub.Broadcast("ui_notify", envelope.ToMap())
+	envelopeMap := envelope.ToMap()
+	envelopeMap["hostClientId"] = target.HostClientID
+	envelopeMap["hostSessionId"] = target.HostSessionID
+	n.hub.SendToClient(target.HostClientID, "ui_notify", envelopeMap)
 	return nil
 }
 
@@ -167,50 +126,33 @@ func (n *SSEUIHostNotifier) Dialog(ctx context.Context, extensionID string, dial
 		errCh:    make(chan error, 1),
 	}
 
-	if n.hostRegistry != nil {
-		target, err := n.hostRegistry.FindTargetHostString(ctx, uiHostSpaceID(ctx), host_registry.CapUIDialog, "", "")
-		if err != nil {
-			return "", err
-		}
-		if target == nil {
-			return "", ErrDialogHostUnavailable
-		}
-		if n.hub == nil || !n.hub.ClientExists(target.HostClientID) {
-			return "", ErrDialogHostUnavailable
-		}
-		pd.hostClientID = target.HostClientID
-		pd.hostSessionID = target.HostSessionID
-
-		n.mu.Lock()
-		n.pendingDialogs[dialogID] = pd
-		n.mu.Unlock()
-
-		payload := map[string]interface{}{
-			"dialogId": dialogID,
-			"message":  message,
-			"buttons":  buttons,
-		}
-		envelope := NewSSEEventEnvelope("ui_dialog", extensionID, payload, dialogEventTTL)
-		envelopeMap := envelope.ToMap()
-		envelopeMap["hostClientId"] = target.HostClientID
-		envelopeMap["hostSessionId"] = target.HostSessionID
-		n.hub.SendToClient(target.HostClientID, "ui_dialog", envelopeMap)
-	} else {
-		if n.hub == nil || !n.hub.HasClients() {
-			return "", ErrDialogHostUnavailable
-		}
-		n.mu.Lock()
-		n.pendingDialogs[dialogID] = pd
-		n.mu.Unlock()
-
-		payload := map[string]interface{}{
-			"dialogId": dialogID,
-			"message":  message,
-			"buttons":  buttons,
-		}
-		envelope := NewSSEEventEnvelope("ui_dialog", extensionID, payload, dialogEventTTL)
-		n.hub.Broadcast("ui_dialog", envelope.ToMap())
+	if n.hostRegistry == nil {
+		return "", ErrDialogHostUnavailable
 	}
+	target, err := n.hostRegistry.FindTargetHostString(ctx, uiHostSpaceID(ctx), host_registry.EndpointFeatureUIDialog, "", "")
+	if err != nil {
+		return "", err
+	}
+	if target == nil || n.hub == nil || !n.hub.ClientExists(target.HostClientID) {
+		return "", ErrDialogHostUnavailable
+	}
+	pd.hostClientID = target.HostClientID
+	pd.hostSessionID = target.HostSessionID
+
+	n.mu.Lock()
+	n.pendingDialogs[dialogID] = pd
+	n.mu.Unlock()
+
+	payload := map[string]interface{}{
+		"dialogId": dialogID,
+		"message":  message,
+		"buttons":  buttons,
+	}
+	envelope := NewSSEEventEnvelope("ui_dialog", extensionID, payload, dialogEventTTL)
+	envelopeMap := envelope.ToMap()
+	envelopeMap["hostClientId"] = target.HostClientID
+	envelopeMap["hostSessionId"] = target.HostSessionID
+	n.hub.SendToClient(target.HostClientID, "ui_dialog", envelopeMap)
 
 	defer func() {
 		n.mu.Lock()
@@ -231,36 +173,24 @@ func (n *SSEUIHostNotifier) Dialog(ctx context.Context, extensionID string, dial
 }
 
 func (n *SSEUIHostNotifier) Navigate(ctx context.Context, extensionID string, target string) error {
-	if n.hostRegistry != nil {
-		host, err := n.hostRegistry.FindTargetHostString(ctx, uiHostSpaceID(ctx), host_registry.CapUINavigate, "", "")
-		if err != nil {
-			return err
-		}
-		if host == nil {
-			return ErrNavigationHostUnavailable
-		}
-		if n.hub == nil || !n.hub.ClientExists(host.HostClientID) {
-			return ErrNavigationHostUnavailable
-		}
-		payload := map[string]interface{}{
-			"target": target,
-		}
-		envelope := NewSSEEventEnvelope("ui_navigate", extensionID, payload, defaultEventTTL)
-		envelopeMap := envelope.ToMap()
-		envelopeMap["hostClientId"] = host.HostClientID
-		envelopeMap["hostSessionId"] = host.HostSessionID
-		n.hub.SendToClient(host.HostClientID, "ui_navigate", envelopeMap)
-		return nil
+	if n.hostRegistry == nil {
+		return ErrNavigationHostUnavailable
 	}
-
-	if n.hub == nil || !n.hub.HasClients() {
+	host, err := n.hostRegistry.FindTargetHostString(ctx, uiHostSpaceID(ctx), host_registry.EndpointFeatureUINavigate, "", "")
+	if err != nil {
+		return err
+	}
+	if host == nil || n.hub == nil || !n.hub.ClientExists(host.HostClientID) {
 		return ErrNavigationHostUnavailable
 	}
 	payload := map[string]interface{}{
 		"target": target,
 	}
 	envelope := NewSSEEventEnvelope("ui_navigate", extensionID, payload, defaultEventTTL)
-	n.hub.Broadcast("ui_navigate", envelope.ToMap())
+	envelopeMap := envelope.ToMap()
+	envelopeMap["hostClientId"] = host.HostClientID
+	envelopeMap["hostSessionId"] = host.HostSessionID
+	n.hub.SendToClient(host.HostClientID, "ui_navigate", envelopeMap)
 	return nil
 }
 
@@ -561,9 +491,9 @@ func (n *SSEUIHostNotifier) approveClientRuntimeVersion(spaceID, conversationID,
 
 func (n *SSEUIHostNotifier) requestClientRuntimeApproval(ctx context.Context, spaceID, conversationID, packageID, version string) (string, error) {
 	if n.hostRegistry == nil {
-		return "version", nil
+		return "", ErrDialogHostUnavailable
 	}
-	target, err := n.hostRegistry.FindTargetHostString(ctx, spaceID, host_registry.CapUIDialog, "", "")
+	target, err := n.hostRegistry.FindTargetHostString(ctx, spaceID, host_registry.EndpointFeatureUIDialog, "", "")
 	if err != nil {
 		return "", err
 	}
@@ -864,7 +794,7 @@ collect:
 }
 
 func (n *SSEUIHostNotifier) broadcastClientRuntimeSnapshot(
-	targets []*host_registry.HostEntry,
+	targets []*host_registry.RuntimeEntry,
 	spaceID, conversationID string,
 	state map[string]interface{},
 ) {
@@ -893,15 +823,18 @@ func (n *SSEUIHostNotifier) broadcastClientRuntimeSnapshot(
 	}
 }
 
-func (n *SSEUIHostNotifier) clientRuntimeTargets(ctx context.Context, spaceID string) ([]*host_registry.HostEntry, error) {
-	if n.hub == nil || n.hostRegistry == nil {
-		return nil, nil
+func (n *SSEUIHostNotifier) clientRuntimeTargets(ctx context.Context, spaceID string) ([]*host_registry.RuntimeEntry, error) {
+	if n.hub == nil {
+		return nil, ErrUIHostUnavailable
 	}
-	hosts, err := n.hostRegistry.ListReadyHostsString(ctx, spaceID, host_registry.CapUINotify)
+	if n.hostRegistry == nil {
+		return nil, ErrUIHostUnavailable
+	}
+	hosts, err := n.hostRegistry.ListReadyHostsString(ctx, spaceID, host_registry.EndpointFeatureUINotify)
 	if err != nil {
 		return nil, err
 	}
-	result := make([]*host_registry.HostEntry, 0, len(hosts))
+	result := make([]*host_registry.RuntimeEntry, 0, len(hosts))
 	for _, host := range hosts {
 		if host != nil && n.hub.ClientExists(host.HostClientID) {
 			result = append(result, host)
@@ -1062,10 +995,10 @@ func validateClientRuntimePackageDefinition(pkg map[string]interface{}) error {
 		if item["clientCode"] != nil {
 			return fmt.Errorf("client runtime contribution %d clientCode is not supported", index)
 		}
-		slotID := runtimeMapString(item, "slotId", "slot_id")
+		slotID := runtimeMapString(item, "slotId")
 		key := runtimeMapString(item, "key")
-		sourceExtensionID := runtimeMapString(item, "sourceExtensionId", "source_extension_id")
-		sourceContributionID := runtimeMapString(item, "sourceContributionId", "source_contribution_id")
+		sourceExtensionID := runtimeMapString(item, "sourceExtensionId")
+		sourceContributionID := runtimeMapString(item, "sourceContributionId")
 		if slotID == "" || key == "" {
 			return fmt.Errorf("client runtime contribution %d requires slotId/key", index)
 		}
@@ -1083,7 +1016,7 @@ func validateClientRuntimePackageDefinition(pkg map[string]interface{}) error {
 			return fmt.Errorf("client runtime contribution %d child slots exceed %d", index, maxClientRuntimeChildSlots)
 		}
 		for childIndex, child := range children {
-			childID := runtimeMapString(child, "slotId", "slot_id")
+			childID := runtimeMapString(child, "slotId")
 			if childID == "" || childID == slotID {
 				return fmt.Errorf("client runtime contribution %d child %d has invalid slotId", index, childIndex)
 			}
@@ -1110,8 +1043,8 @@ func validateClientRuntimePackageDefinition(pkg map[string]interface{}) error {
 	}
 	for index, item := range conversationNodes {
 		key := runtimeMapString(item, "key")
-		sourceExtensionID := runtimeMapString(item, "sourceExtensionId", "source_extension_id")
-		sourceContributionID := runtimeMapString(item, "sourceContributionId", "source_contribution_id")
+		sourceExtensionID := runtimeMapString(item, "sourceExtensionId")
+		sourceContributionID := runtimeMapString(item, "sourceContributionId")
 		projection, ok := item["projection"].(map[string]interface{})
 		if key == "" || sourceExtensionID == "" || sourceContributionID == "" || !ok {
 			return fmt.Errorf("client runtime conversation node %d is invalid", index)

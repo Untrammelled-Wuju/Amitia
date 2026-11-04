@@ -23,7 +23,6 @@ $env:AMITIA_RUNTIME_ROOT = Join-Path $root "AmitiaData"
 $env:AMITIA_CONFIG_DIR = Join-Path $env:AMITIA_RUNTIME_ROOT "config"
 $env:AMITIA_WORKSPACE_DIR = $root
 $env:AMITIA_DATA_DIR = Join-Path $root "AmitiaData"
-$env:AMITIA_RUN_MODE = "desktop"
 $env:AMITIA_EXTENSION_DEV_MODE = "true"
 
 function Stop-ProjectProcess {

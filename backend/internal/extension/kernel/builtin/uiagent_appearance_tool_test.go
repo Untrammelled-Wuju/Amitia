@@ -24,34 +24,18 @@ func (r *captureAppearanceRunner) ExecuteAppearanceCommand(_ context.Context, ac
 func TestValidateAppearanceChangesAcceptsStylePatchV1(t *testing.T) {
 	changes := map[string]interface{}{
 		"schemaVersion": 1,
-		"themeMode":     "dark",
-		"accentColor":   "#52B788",
-		"palette": map[string]interface{}{
-			"backgroundPrimary": "#111214",
-			"surfacePrimary":    "#191A1C",
-		},
-		"typography": map[string]interface{}{
-			"bodySize": 15,
-		},
-		"layout": map[string]interface{}{
-			"spacing": map[string]interface{}{"page": 18},
-			"radius":  map[string]interface{}{"md": 14},
-		},
-		"components": map[string]interface{}{
-			"controlHeight": 46,
-		},
-		"componentVariants": map[string]interface{}{
-			"button": map[string]interface{}{
-				"fontWeight": 600,
+		"targets": []interface{}{
+			map[string]interface{}{
+				"target": "app.root",
+				"states": []string{"default"},
+				"properties": map[string]interface{}{
+					"backgroundColor": "#111214",
+					"foregroundColor": "#F5F7FA",
+					"fontSize":        15,
+					"padding":         18,
+					"borderRadius":    14,
+				},
 			},
-		},
-		"background": map[string]interface{}{
-			"mode":          "gradient",
-			"gradientStart": "#111214",
-			"gradientEnd":   "#1A2635",
-			"opacity":       0.8,
-			"blurEnabled":   true,
-			"blurRadius":    12,
 		},
 	}
 	if err := validateAppearanceChanges(changes); err != nil {
@@ -87,7 +71,8 @@ func TestUIAgentAppearancePassesExpectedRevision(t *testing.T) {
 			"action":           "apply",
 			"expectedRevision": 7,
 			"changes": map[string]interface{}{
-				"themeMode": "dark",
+				"target":     "app.root",
+				"properties": map[string]interface{}{"backgroundColor": "#111214"},
 			},
 		},
 	)
@@ -171,7 +156,7 @@ func TestValidateAppearanceChangesAcceptsSingleTargetRule(t *testing.T) {
 		},
 		"target": "chat.composer.send",
 		"states": []string{"default", "pressed"},
-		"set": map[string]interface{}{
+		"properties": map[string]interface{}{
 			"backgroundColor": "#FF0000",
 			"borderRadius":    999,
 			"elevation":       4,

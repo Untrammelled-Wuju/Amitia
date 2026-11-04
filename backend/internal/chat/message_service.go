@@ -261,7 +261,6 @@ func (s *service) SearchMessages(q MessageSearchQuery) (*MessageSearchResponse, 
 
 func (s *service) SearchMessagesForSpace(q MessageSearchQuery, spaceID string) (*MessageSearchResponse, error) {
 	q.SpaceID = normalizeConversationOwner(spaceID)
-	q.IncludeLegacyDefault = chatLocalSingleUserMode()
 	if q.ConversationID != "" {
 		if _, err := s.requireConversationOwner(q.ConversationID, spaceID); err != nil {
 			return nil, err

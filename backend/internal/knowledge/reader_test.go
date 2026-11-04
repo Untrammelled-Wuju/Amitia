@@ -128,11 +128,11 @@ func TestCanonicalReaderRejectsPurgedOrUnreadyRevision(t *testing.T) {
 	}
 }
 
-func TestCanonicalReaderFindsStructuredLocatorAliases(t *testing.T) {
+func TestCanonicalReaderFindsStructuredLocator(t *testing.T) {
 	repo := newKnowledgeTestRepository(t)
 	seedReadableKnowledgeSource(t, repo, "tenant-a", "sheet-source", 1, RevisionStatusReadyDegraded)
-	seedReaderUnit(t, repo, "tenant-a", "sheet-source", 1, 0, "row-145", "wrong row", `{"sheetName":"Data","rowStart":145,"rowEnd":145}`)
-	want := seedReaderUnit(t, repo, "tenant-a", "sheet-source", 1, 1, "row-146", "target row", `{"sheetName":"Data","rowStart":146,"rowEnd":146}`)
+	seedReaderUnit(t, repo, "tenant-a", "sheet-source", 1, 0, "row-145", "wrong row", `{"sheet":"Data","row":145}`)
+	want := seedReaderUnit(t, repo, "tenant-a", "sheet-source", 1, 1, "row-146", "target row", `{"sheet":"Data","row":146}`)
 
 	svc := &service{repo: repo}
 	got, err := svc.Read(context.Background(), "tenant-a", ReadRequest{

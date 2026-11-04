@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"sort"
 	"time"
 )
 
@@ -226,24 +225,6 @@ func stripSource(reasons []BehaviorReason, source string) []BehaviorReason {
 	if len(result) == 0 {
 		return nil
 	}
-	return result
-}
-
-// ScoreBehaviorCandidates 兼容 API:
-// 对已有 Component Scores 的候选直接使用 Canonical FinalScore Formula 计算 FinalScore, 并排序
-// 不调用 Context Signals, 不重算 Component (保持向后兼容)
-// 新生产 Agent 主链应使用 ScoreCandidates
-func ScoreBehaviorCandidates(candidates []BehaviorCandidate, options BehaviorScoringOptions) []BehaviorCandidate {
-	result := make([]BehaviorCandidate, 0, len(candidates))
-	for _, candidate := range candidates {
-		next := cloneCandidate(candidate)
-		next.FinalScore = computeFinalScore(next, options)
-		next.ScoringVersion = BehaviorFormulaVersionV2
-		result = append(result, next)
-	}
-	sort.SliceStable(result, func(i, j int) bool {
-		return result[i].FinalScore > result[j].FinalScore
-	})
 	return result
 }
 

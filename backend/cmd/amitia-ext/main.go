@@ -12,9 +12,6 @@ func usage() {
 用法:
   amitiax <命令> [选项] [参数]
 
-别名:
-  amitia-ext  (兼容别名，指向同一二进制)
-
 命令:
   init               创建新扩展项目
   validate           校验 manifest.json 或 .amitiax 包
@@ -44,7 +41,7 @@ func usage() {
   amitiax doctor
   amitiax keys create --output ./keys
   amitiax keys export-public --key private.key
-  amitiax dev ./my-ext --host localhost:18899
+  amitiax dev ./my-ext --host 127.0.0.1:<port>
   amitiax test ./my-ext --host-version 0.1.0 --platform windows
   amitiax export-diagnostics ./my-ext diagnostics.json
 `, CLIVersion)

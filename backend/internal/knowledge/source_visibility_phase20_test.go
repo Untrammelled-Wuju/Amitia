@@ -12,11 +12,11 @@ import (
 func TestPhase20DeletedSourceCannotBeSearchedReadOrOutlined(t *testing.T) {
 	repo := newKnowledgeTestRepository(t)
 	seedReadableKnowledgeSource(t, repo, "tenant-A", "source-A", 1, RevisionStatusReady)
-	unit := seedReaderUnit(t, repo, "tenant-A", "source-A", 1, 0, "unit-A", "unpublished-secret-needle", `{"sheetName":"Data","rowStart":146}`)
+	unit := seedReaderUnit(t, repo, "tenant-A", "source-A", 1, 0, "unit-A", "unpublished-secret-needle", `{"sheet":"Data","row":146}`)
 	chunk := Chunk{
 		ID: "chunk-A", TenantID: "tenant-A", SourceID: "source-A", SourceRevision: 1, UnitID: unit.ID,
 		ChunkIndex: 0, Content: "unpublished-secret-needle", EmbeddingText: "unpublished-secret-needle",
-		LocatorJSON: `{"sheetName":"Data","rowStart":146}`, MetadataJSON: `{}`,
+		LocatorJSON: `{"sheet":"Data","row":146}`, MetadataJSON: `{}`,
 		EmbeddingVersion: "active", IndexVersion: DefaultIndexVersion, Status: "indexed", CreatedAt: time.Now().UTC(),
 	}
 	if err := repo.DB().Create(&chunk).Error; err != nil {

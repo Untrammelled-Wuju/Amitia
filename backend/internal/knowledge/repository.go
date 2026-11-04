@@ -1438,24 +1438,6 @@ func validateCanonicalReadLocator(locator map[string]any) error {
 	return nil
 }
 
-func locatorAliases(key string) []string {
-	switch strings.ToLower(strings.TrimSpace(key)) {
-	case "page":
-		return []string{"pageNumber", "page_number"}
-	case "pagenumber", "page_number":
-		return []string{"page"}
-	case "row":
-		return []string{"rowStart", "rowEnd", "row_start", "row_end"}
-	case "rowstart", "row_start":
-		return []string{"row"}
-	case "paragraph":
-		return []string{"paragraphIndex", "paragraph_index"}
-	case "sheet":
-		return []string{"sheetName", "sheet_name"}
-	}
-	return nil
-}
-
 func locatorSubsetMatch(actual, requested map[string]any) bool {
 	for key, expected := range requested {
 		key = strings.TrimSpace(key)
@@ -1464,24 +1446,12 @@ func locatorSubsetMatch(actual, requested map[string]any) bool {
 		}
 		got, ok := actual[key]
 		if !ok {
-			for _, alias := range locatorAliases(key) {
-				if candidate, exists := actual[alias]; exists {
-					got, ok = candidate, true
-					break
-				}
-			}
-		}
-		if !ok {
 			return false
 		}
 		left, lerr := json.Marshal(got)
 		right, rerr := json.Marshal(expected)
 		if lerr != nil || rerr != nil || string(left) != string(right) {
-			// JSON numbers can arrive as int/float depending on the client. Compare
-			// their textual values as a final compatibility path.
-			if fmt.Sprint(got) != fmt.Sprint(expected) {
-				return false
-			}
+			return false
 		}
 	}
 	return true

@@ -66,7 +66,6 @@ if (!cookie || !csrf) throw new Error("admin login did not return session cookie
 const categories = await request("/api/v1/admin/marketplace/categories", { cookie, csrf });
 const category = categories.payload.data.find((item) => item.slug === "agent-identities");
 if (!category) throw new Error("agent-identities category is missing");
-const packages = await request("/api/v1/admin/marketplace/packages", { cookie, csrf });
 for (const name of readdirSync(root).filter((item) => item.endsWith(".amitiax")).sort()) {
   const path = join(root, name);
   const data = readFileSync(path);
@@ -74,49 +73,22 @@ for (const name of readdirSync(root).filter((item) => item.endsWith(".amitiax"))
   const manifest = JSON.parse(files.get("manifest.json").toString("utf8"));
   const extensionId = manifest.extension.id;
   const version = manifest.extension.version;
-  let item = packages.payload.data.find((entry) => entry.extensionId === extensionId);
-  if (!item) {
-    const created = await request("/api/v1/admin/marketplace/packages", {
-      method: "POST",
-      cookie,
-      csrf,
-      body: {
-        extensionId,
-        categoryId: category.id,
-        displayName: manifest.extension.name?.default || extensionId,
-        summary: manifest.extension.description?.default || "",
-        description: manifest.extension.description?.default || "",
-        publisherId: manifest.publisher?.id || "com.amitia",
-        trustLevel: manifest.publisher?.trustLevel || "official",
-        securityScore: 90,
-        icon: "",
-        tags: manifest.extension.keywords || [],
-      },
-    });
-    item = created.payload.data;
-  }
+  const sbomPath = `${path}.sbom.json`;
+  if (!existsSync(sbomPath)) throw new Error(`SBOM is required: ${sbomPath}`);
   const form = new FormData();
   form.append("package", new Blob([data], { type: "application/octet-stream" }), basename(path));
-  form.append("version", version);
+  form.append("sbom", new Blob([readFileSync(sbomPath)], { type: "application/json" }), basename(sbomPath));
+  form.append("categoryId", String(category.id));
+  form.append("expectedExtensionId", extensionId);
   form.append("releaseNotes", "Agent identity plugin release");
   const embeddedSignature = files.get("META-INF/amitia-signature.json")?.toString("utf8") || "";
   form.append("signature", process.env.AMITIA_PLUGIN_SIGNATURE || embeddedSignature);
-  const sbomPath = `${path}.sbom.json`;
-  form.append("sbomJson", process.env.AMITIA_PLUGIN_SBOM || (existsSync(sbomPath) ? readFileSync(sbomPath, "utf8") : "{}"));
   form.append("compatibilityJson", JSON.stringify(manifest.compatibility || {}));
-  const uploaded = await request(`/api/v1/admin/marketplace/packages/${item.id}/versions`, {
+  await request("/api/v1/admin/marketplace/publish", {
     method: "POST",
     cookie,
     csrf,
     body: form,
   });
-  if (process.env.AMITIA_MARKET_PUBLISH === "1") {
-    await request(`/api/v1/admin/marketplace/versions/${uploaded.payload.data.version.id}/publish`, {
-      method: "POST",
-      cookie,
-      csrf,
-      body: {},
-    });
-  }
-  console.log(`uploaded=${extensionId}@${version}`);
+  console.log(`published=${extensionId}@${version}`);
 }

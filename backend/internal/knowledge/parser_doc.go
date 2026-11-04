@@ -9,11 +9,7 @@ import (
 	"strings"
 )
 
-// legacyDocParser converts binary .doc files to a temporary DOCX and then
-// feeds that file through the canonical streaming DOCX parser. The original
-// source remains immutable; conversion artifacts are ephemeral and never
-// become canonical knowledge data.
-type legacyDocParser struct{ settings runtimeSettings }
+type docParser struct{ settings runtimeSettings }
 
 func officeCommand() string {
 	for _, name := range []string{"soffice", "libreoffice"} {
@@ -24,9 +20,9 @@ func officeCommand() string {
 	return ""
 }
 
-func (legacyDocParser) Inspect(_ context.Context, src SourceRef) (DocumentInfo, error) {
+func (docParser) Inspect(_ context.Context, src SourceRef) (DocumentInfo, error) {
 	if officeCommand() == "" {
-		return DocumentInfo{}, fmt.Errorf("LibreOffice/soffice is required for legacy DOC ingestion")
+		return DocumentInfo{}, fmt.Errorf("LibreOffice/soffice is required for DOC ingestion")
 	}
 	return DocumentInfo{Format: "doc", Metadata: map[string]any{
 		"filename":   src.Filename,
@@ -34,10 +30,10 @@ func (legacyDocParser) Inspect(_ context.Context, src SourceRef) (DocumentInfo, 
 	}}, nil
 }
 
-func (p legacyDocParser) StreamUnits(ctx context.Context, src SourceRef, c Cursor, consume func(RawUnit) error) error {
+func (p docParser) StreamUnits(ctx context.Context, src SourceRef, c Cursor, consume func(RawUnit) error) error {
 	cmdPath := officeCommand()
 	if cmdPath == "" {
-		return fmt.Errorf("LibreOffice/soffice is required for legacy DOC ingestion")
+		return fmt.Errorf("LibreOffice/soffice is required for DOC ingestion")
 	}
 	tmp, err := os.MkdirTemp("", "amitia-knowledge-doc-*")
 	if err != nil {
@@ -54,9 +50,9 @@ func (p legacyDocParser) StreamUnits(ctx context.Context, src SourceRef, c Curso
 		return err
 	}
 
-	timeout := p.settings.LegacyDocTimeout
+	timeout := p.settings.DocTimeout
 	if timeout <= 0 {
-		timeout = defaultRuntimeSettings().LegacyDocTimeout
+		timeout = defaultRuntimeSettings().DocTimeout
 	}
 	cctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()

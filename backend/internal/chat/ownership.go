@@ -7,14 +7,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/requestidentity"
 	"gorm.io/gorm"
 )
-
-func chatLocalSingleUserMode() bool {
-	return config.AppCfg != nil && strings.EqualFold(strings.TrimSpace(config.AppCfg.Security.Mode), "local_single_user")
-}
 
 func normalizeConversationOwner(spaceID string) string {
 	return requestidentity.NormalizeSpaceID(spaceID)
@@ -23,13 +18,7 @@ func normalizeConversationOwner(spaceID string) string {
 func conversationOwnerMatches(stored, requested string) bool {
 	stored = strings.TrimSpace(stored)
 	requested = normalizeConversationOwner(requested)
-	if stored == "" && requested == "" {
-		return true
-	}
-	if stored != "" && stored == requested {
-		return true
-	}
-	return chatLocalSingleUserMode() && requested != "" && (stored == "" || stored == requestidentity.LegacySpaceID)
+	return stored != "" && stored == requested
 }
 
 func (s *service) requireConversationOwner(convID, spaceID string) (*Conversation, error) {
@@ -67,8 +56,5 @@ func (s *service) requireMessageOwner(messageID, spaceID string) (*Message, erro
 
 func applyConversationOwnerScope(query *gorm.DB, spaceID string) *gorm.DB {
 	owner := normalizeConversationOwner(spaceID)
-	if chatLocalSingleUserMode() {
-		return query.Where("space_id = ? OR space_id = '' OR space_id IS NULL OR space_id = ?", owner, requestidentity.LegacySpaceID)
-	}
 	return query.Where("space_id = ?", owner)
 }

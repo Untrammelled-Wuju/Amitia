@@ -75,7 +75,7 @@ func TestMCPHealthStateValues(t *testing.T) {
 }
 
 func TestProtocolEraValues(t *testing.T) {
-	eras := []ProtocolEra{MCPProtocolEraUnknown, MCPProtocolEraModern, MCPProtocolEraLegacy}
+	eras := []ProtocolEra{MCPProtocolEraUnknown, MCPProtocolEraModern}
 	seen := make(map[ProtocolEra]bool)
 	for _, e := range eras {
 		if e == "" {

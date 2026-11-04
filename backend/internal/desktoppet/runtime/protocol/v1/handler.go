@@ -324,86 +324,48 @@ func (h *Handler) HandleHello(conn *Connection, payload *HelloPayload) (*HelloAc
 	conn.SetNegotiatedRuntime(payload.RuntimeVersion, payload.Capabilities)
 
 	now := time.Now().UTC()
-
-	if h.deviceRuntimeSessions != nil {
-		acqReq := HelloToAcquireRequest(*payload, conn.SpaceID, runtimeidentity.PlatformUnknown, now)
-
-		result, err := h.deviceRuntimeSessions.Acquire(context.Background(), acqReq)
-		if err != nil {
-			return nil, NewProtocolError(ErrCodeEnvelopeInvalid, fmt.Sprintf("session acquire failed: %v", err))
-		}
-
-		_, projectionErr := h.sessions.SyncFromDeviceRuntimeSession(nil, result.Session, *payload)
-		if projectionErr != nil {
-			closeErr := h.deviceRuntimeSessions.Close(context.Background(), result.Session.ID, result.Session.ConnectionGeneration, "desktop_pet_projection_failed", now)
-			if closeErr != nil {
-				projectionErr = errors.Join(projectionErr, fmt.Errorf("close failed session after projection error: %w", closeErr))
-			}
-			return nil, NewProtocolError(ErrCodeEnvelopeInvalid, fmt.Sprintf("sync projection failed: %v", projectionErr))
-		}
-
-		if result.Session.Status != protocol.SessionStatusReady {
-			if _, markErr := h.deviceRuntimeSessions.MarkReady(context.Background(), result.Session.ID, result.Session.ConnectionGeneration, now); markErr != nil {
-				closeErr := h.deviceRuntimeSessions.Close(context.Background(), result.Session.ID, result.Session.ConnectionGeneration, "presence_projection_failed", now)
-				if closeErr != nil {
-					markErr = errors.Join(markErr, fmt.Errorf("close failed session after mark-ready error: %w", closeErr))
-				}
-				return nil, NewProtocolError(ErrCodeEnvelopeInvalid, fmt.Sprintf("session mark ready failed: %v", markErr))
-			}
-		}
-
-		conn.ActivateSession(result.Session.ID.String(), result.Session.ConnectionGeneration, result.Session.LastEventSequence)
-		authoritativeRevision, reconcileErr := h.commands.ReconcileDesiredStateOnHello(
-			string(conn.SpaceID), string(conn.DeviceID), string(conn.RuntimeID),
-			payload.LastAppliedDesiredRevision, result.Session.ConnectionGeneration,
-		)
-		if reconcileErr != nil {
-			return nil, NewProtocolError(ErrCodeEnvelopeInvalid, fmt.Sprintf("desired-state reconciliation failed: %v", reconcileErr))
-		}
-		helloAck := SessionResultToHelloAck(result, authoritativeRevision)
-		if payload.LastAppliedDesiredRevision < authoritativeRevision {
-			helloAck.ResumeMode = string(protocol.ResumeModeFull)
-		}
-		return helloAck, nil
+	if h.deviceRuntimeSessions == nil {
+		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, "authoritative device runtime session service is required")
 	}
 
-	newSession, oldSession, err := h.sessions.AcquireSession(
-		nil,
-		conn.SpaceID, conn.DeviceID, conn.RuntimeID,
-		payload.Capabilities, payload.RuntimeContractVersion,
-		payload.LastAppliedDesiredRevision,
-		payload.LastProcessedCommandSequence,
-		payload.LastEventSequence,
-		payload.RuntimeContractVersion,
-	)
+	acqReq := HelloToAcquireRequest(*payload, conn.SpaceID, runtimeidentity.PlatformUnknown, now)
+	result, err := h.deviceRuntimeSessions.Acquire(context.Background(), acqReq)
 	if err != nil {
 		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, fmt.Sprintf("session acquire failed: %v", err))
 	}
-	_ = oldSession
 
-	conn.ActivateSession(newSession.ID, newSession.ConnectionGeneration, newSession.LastEventSequence)
+	_, projectionErr := h.sessions.SyncFromDeviceRuntimeSession(context.Background(), result.Session, *payload)
+	if projectionErr != nil {
+		closeErr := h.deviceRuntimeSessions.Close(context.Background(), result.Session.ID, result.Session.ConnectionGeneration, "desktop_pet_projection_failed", now)
+		if closeErr != nil {
+			projectionErr = errors.Join(projectionErr, fmt.Errorf("close failed session after projection error: %w", closeErr))
+		}
+		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, fmt.Sprintf("sync projection failed: %v", projectionErr))
+	}
+
+	if result.Session.Status != protocol.SessionStatusReady {
+		if _, markErr := h.deviceRuntimeSessions.MarkReady(context.Background(), result.Session.ID, result.Session.ConnectionGeneration, now); markErr != nil {
+			closeErr := h.deviceRuntimeSessions.Close(context.Background(), result.Session.ID, result.Session.ConnectionGeneration, "presence_projection_failed", now)
+			if closeErr != nil {
+				markErr = errors.Join(markErr, fmt.Errorf("close failed session after mark-ready error: %w", closeErr))
+			}
+			return nil, NewProtocolError(ErrCodeEnvelopeInvalid, fmt.Sprintf("session mark ready failed: %v", markErr))
+		}
+	}
+
+	conn.ActivateSession(result.Session.ID.String(), result.Session.ConnectionGeneration, result.Session.LastEventSequence)
 	authoritativeRevision, reconcileErr := h.commands.ReconcileDesiredStateOnHello(
 		string(conn.SpaceID), string(conn.DeviceID), string(conn.RuntimeID),
-		payload.LastAppliedDesiredRevision, newSession.ConnectionGeneration,
+		payload.LastAppliedDesiredRevision, result.Session.ConnectionGeneration,
 	)
 	if reconcileErr != nil {
 		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, fmt.Sprintf("desired-state reconciliation failed: %v", reconcileErr))
 	}
-	resumeMode := protocol.ResumeModeResumeOrFull
+	helloAck := SessionResultToHelloAck(result, authoritativeRevision)
 	if payload.LastAppliedDesiredRevision < authoritativeRevision {
-		resumeMode = protocol.ResumeModeFull
+		helloAck.ResumeMode = string(protocol.ResumeModeFull)
 	}
-
-	return &HelloAckPayload{
-		Accepted:                           true,
-		SessionID:                          runtimeidentity.ParseRuntimeSessionID(newSession.ID),
-		ServerTime:                         time.Now(),
-		DesiredRevision:                    authoritativeRevision,
-		ResumeMode:                         string(resumeMode),
-		ServerLastAppliedDesiredRevision:   newSession.LastAppliedDesiredRevision,
-		ServerLastProcessedCommandSequence: newSession.LastProcessedCommandSequence,
-		LastCommittedClientEventSequence:   newSession.LastEventSequence,
-	}, nil
+	return helloAck, nil
 }
 
 func validateEstablishedInboundEnvelope(conn *Connection, env *Envelope) (string, int64, error) {

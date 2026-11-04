@@ -131,12 +131,12 @@ describe("网页六层记忆的数据归属入口", () => {
     expect(wrapper.find('select[aria-label="工作角色"]').exists()).toBe(false);
     expect((selector.element as HTMLSelectElement).value).toBe("all");
     await selector.setValue("role:other"); await flushPromises();
-    expect(mocks.data.mock.calls.at(-1)).toEqual(["memory", "other", "", "", { legacyCursor: "", memoryView: "role:other" }]);
+    expect(mocks.data.mock.calls.at(-1)).toEqual(["memory", "other", "", "", { memoryView: "role:other" }]);
   });
   it("用户画像默认按角色隔离，并允许查看全部或全局", async () => {
     const wrapper = open(DeviceOwnedDataView, { title: "用户画像", initialKind: "profile" }); await flushPromises();
     expect(wrapper.find('select[aria-label="记忆查看范围"]').findAll("option").map(option => option.text())).toEqual(["全部记忆", "全局记忆", "角色"]);
-    expect(mocks.data).toHaveBeenCalledWith("profile", "role", "", "", { legacyCursor: "", memoryView: "all" });
+    expect(mocks.data).toHaveBeenCalledWith("profile", "role", "", "", { memoryView: "all" });
   });
   it.each(["memory", "episodic", "graph", "profile", "timeline"])("%s 页面来源切换后只展示对应范围，搜索入口唯一", async (kind) => {
     mocks.owned.coordinated.value = true;
@@ -196,7 +196,7 @@ describe("网页六层记忆的数据归属入口", () => {
     mocks.projections.mockResolvedValue({ executionScope: scope, status: { layers: [] } });
     const wrapper = open(DeviceOwnedMemoryPanel, { initialKind: kind });
     await flushPromises();
-    expect(mocks.data).toHaveBeenCalledWith(kind, "role", "", "", { legacyCursor: "" });
+    expect(mocks.data).toHaveBeenCalledWith(kind, "role", "", "", {});
     expect(mocks.legacy).not.toHaveBeenCalled();
     expect(wrapper.findAll("button").some((button) => button.text() === "删除")).toBe(kind === "summary");
   });

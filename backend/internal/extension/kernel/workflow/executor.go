@@ -60,8 +60,6 @@ type WorkflowExecutor struct {
 	registry          *WorkflowRegistry
 	handlers          map[string]StepHandler
 	checkpoint        CheckpointStore
-	compensation      *CompensationManager
-	retryMax          int
 	runStore          RunStore
 	guard             StepGuard
 	activeMu          sync.Mutex
@@ -183,7 +181,6 @@ func NewWorkflowExecutor(registry *WorkflowRegistry) *WorkflowExecutor {
 	return &WorkflowExecutor{
 		registry:      registry,
 		handlers:      make(map[string]StepHandler),
-		retryMax:      3,
 		active:        make(map[string]context.CancelFunc),
 		pauseControls: make(map[string]*WorkflowExecutionControl),
 	}
@@ -195,14 +192,6 @@ func (e *WorkflowExecutor) RegisterHandler(nodeType string, handler StepHandler)
 
 func (e *WorkflowExecutor) SetCheckpointStore(store CheckpointStore) {
 	e.checkpoint = store
-}
-
-func (e *WorkflowExecutor) SetCompensationManager(cm *CompensationManager) {
-	e.compensation = cm
-}
-
-func (e *WorkflowExecutor) SetRetryMax(max int) {
-	e.retryMax = max
 }
 
 func (e *WorkflowExecutor) SetRunStore(store RunStore) {
@@ -1880,8 +1869,6 @@ func (e *WorkflowExecutor) Execute(ctx context.Context, req ExecuteRequest) (res
 				amitialog.Printf("[original-error] %v", err)
 			}
 			result.CompensationResults = e.compensateDeclaredWorkflow(execCtx, wf, result.Steps, req.Input, req.Context, journal)
-		} else if e.compensation != nil {
-			result.CompensationResults = e.compensation.Compensate(ctx, result.Steps)
 		}
 
 		result.Duration = time.Since(start)
@@ -2017,17 +2004,15 @@ func (e *WorkflowExecutor) recoverDeclaredCompensation(ctx context.Context, run 
 	if def.ID != run.WorkflowID {
 		return fmt.Errorf("workflow: compensation snapshot id %q does not match run workflow %q", def.ID, run.WorkflowID)
 	}
-	// DefinitionHash authenticates the exact immutable snapshot that the run
-	// started with. Verify before any in-memory schema migration changes the
-	// representation used for execution.
+	// DefinitionHash authenticates the exact immutable snapshot used for execution.
 	if run.Context.DefinitionHash != "" && ComputeDefinitionHash(def) != run.Context.DefinitionHash {
 		return errors.New("workflow: compensation definition snapshot hash mismatch")
 	}
-	migrated, err := MigrateDefinition(def)
+	normalized, err := NormalizeDefinition(def)
 	if err != nil {
-		return fmt.Errorf("workflow: migrate compensation definition snapshot: %w", err)
+		return fmt.Errorf("workflow: normalize compensation definition snapshot: %w", err)
 	}
-	def = migrated
+	def = normalized
 
 	stepRuns, err := stepStore.ListStepRuns(ctx, run.ExecutionID)
 	if err != nil {
@@ -2364,18 +2349,9 @@ func (e *WorkflowExecutor) saveAttempt(ctx context.Context, workflowID string, n
 func (e *WorkflowExecutor) executeStep(ctx context.Context, handler StepHandler, node WorkflowNode, input json.RawMessage, limits WorkflowLimits, journal *SideEffectJournal, workflowID string) StepResult {
 	start := time.Now()
 
-	var retryPolicy *WorkflowRetryPolicy
-	if node.Retry == nil && node.Step.OnError.Mode == "retry" {
-		// Preserve the compatibility executor's historical SetRetryMax semantics:
-		// retryMax counts retries in addition to the first attempt.
-		retryPolicy = DefaultRetryPolicy()
-		retryPolicy.MaxAttempts = e.retryMax + 1
-	} else {
-		var retryErr error
-		retryPolicy, retryErr = NewCompiler().compileRetry(node)
-		if retryErr != nil {
-			return StepResult{Status: "failed", Error: retryErr.Error(), Duration: time.Since(start), Attempt: 0}
-		}
+	retryPolicy, retryErr := NewCompiler().compileRetry(node)
+	if retryErr != nil {
+		return StepResult{Status: "failed", Error: retryErr.Error(), Duration: time.Since(start), Attempt: 0}
 	}
 	retryPolicy = retryPolicyNormalize(retryPolicy)
 	maxAttempts := retryPolicy.MaxAttempts

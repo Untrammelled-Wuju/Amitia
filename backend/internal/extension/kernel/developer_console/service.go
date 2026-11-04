@@ -31,29 +31,27 @@ type ConsoleFilters struct {
 }
 
 type ConsoleOverview struct {
-	GeneratedAt         time.Time          `json:"generatedAt"`
-	Extensions          int                `json:"extensions"`
-	Modules             int                `json:"modules"`
-	Contributions       int                `json:"contributions"`
-	Runtimes            int                `json:"runtimes"`
-	ActiveInvocations   int                `json:"activeInvocations"`
-	HostAPICalls        int                `json:"hostApiCalls"`
-	EventsLast5Min      int                `json:"eventsLast5Min"`
-	HookInvocations     int                `json:"hookInvocations"`
-	ActiveTasks         int                `json:"activeTasks"`
-	ActiveUISessions    int                `json:"activeUiSessions"`
-	StorageEntries      int                `json:"storageEntries"`
-	PermissionGrants    int                `json:"permissionGrants"`
-	ActiveScopes        int                `json:"activeScopes"`
-	Resources           int                `json:"resources"`
-	Errors              int                `json:"errors"`
-	Warnings            int                `json:"warnings"`
-	LifecycleEvents     int                `json:"lifecycleEvents"`
-	DevWorkspaces       int                `json:"devWorkspaces"`
-	CompatibilityIssues int                `json:"compatibilityIssues"`
-	TopExtensions       []ExtensionSummary `json:"topExtensions"`
-	ToolFacadeCounters  map[string]int64   `json:"toolFacadeCounters"`
-	LegacyCallCounters  map[string]int64   `json:"legacyCallCounters"`
+	GeneratedAt        time.Time          `json:"generatedAt"`
+	Extensions         int                `json:"extensions"`
+	Modules            int                `json:"modules"`
+	Contributions      int                `json:"contributions"`
+	Runtimes           int                `json:"runtimes"`
+	ActiveInvocations  int                `json:"activeInvocations"`
+	HostAPICalls       int                `json:"hostApiCalls"`
+	EventsLast5Min     int                `json:"eventsLast5Min"`
+	HookInvocations    int                `json:"hookInvocations"`
+	ActiveTasks        int                `json:"activeTasks"`
+	ActiveUISessions   int                `json:"activeUiSessions"`
+	StorageEntries     int                `json:"storageEntries"`
+	PermissionGrants   int                `json:"permissionGrants"`
+	ActiveScopes       int                `json:"activeScopes"`
+	Resources          int                `json:"resources"`
+	Errors             int                `json:"errors"`
+	Warnings           int                `json:"warnings"`
+	LifecycleEvents    int                `json:"lifecycleEvents"`
+	DevWorkspaces      int                `json:"devWorkspaces"`
+	TopExtensions      []ExtensionSummary `json:"topExtensions"`
+	ToolFacadeCounters map[string]int64   `json:"toolFacadeCounters"`
 }
 
 type ExtensionSummary struct {
@@ -82,7 +80,6 @@ type ConsoleAggregators struct {
 	PermissionProvider PermissionSummaryProvider
 	LifecycleProvider  LifecycleSummaryProvider
 	ToolFacadeProvider ToolFacadeSummaryProvider
-	LegacyCallProvider ToolFacadeSummaryProvider
 }
 
 type ExtensionSummaryProvider interface {
@@ -129,15 +126,6 @@ func (s *ConsoleService) SetToolFacadeProvider(provider ToolFacadeSummaryProvide
 		s.aggregators = &ConsoleAggregators{}
 	}
 	s.aggregators.ToolFacadeProvider = provider
-}
-
-func (s *ConsoleService) SetLegacyCallProvider(provider ToolFacadeSummaryProvider) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.aggregators == nil {
-		s.aggregators = &ConsoleAggregators{}
-	}
-	s.aggregators.LegacyCallProvider = provider
 }
 
 var (
@@ -274,9 +262,6 @@ func (s *ConsoleService) BuildOverview(ctx context.Context) (*ConsoleOverview, e
 	}
 	if s.aggregators.ToolFacadeProvider != nil {
 		overview.ToolFacadeCounters = s.aggregators.ToolFacadeProvider.Snapshot()
-	}
-	if s.aggregators.LegacyCallProvider != nil {
-		overview.LegacyCallCounters = s.aggregators.LegacyCallProvider.Snapshot()
 	}
 	return overview, nil
 }

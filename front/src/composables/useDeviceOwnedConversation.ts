@@ -158,7 +158,7 @@ window.addEventListener("amitia:runtime-connection-changed", () => {
 });
 
 export function useDeviceOwnedConversation() {
-	async function data(kind: string, characterId: string, conversationId = "", cursor = "", historical: { memoryView?: string; legacyCursor?: string; historicalRoleId?: string; historicalCursor?: string; historicalLegacyCursor?: string } = {}): Promise<MeshQueryResult> {
+	async function data(kind: string, characterId: string, conversationId = "", cursor = "", historical: { memoryView?: string; historicalRoleId?: string; historicalCursor?: string } = {}): Promise<MeshQueryResult> {
 	  const captured = revision;
 	  const result = unwrap<MeshQueryResult>(await apiClient.get("/api/device-mesh/v1/business/data", { params: { kind, characterId, conversationId, cursor, ...historical } }));
 	  if (captured !== revision || result.executionScope.coreId !== coreId.value) throw new Error("服务状态已变化，请重新加载记忆");
@@ -275,7 +275,6 @@ export function useDeviceOwnedConversation() {
     if (historyRequests.size > 128) historyRequests.delete(historyRequests.keys().next().value!);
     const previous = historyPages.get(key);
     const kind = conversationId ? "message" : "conversation";
-    const legacyKind = conversationId ? "legacyMessage" : "legacyConversation";
     const cursors = older ? previous?.cursors || {} : {};
     const params = { characterId, ...(keyword ? { keyword } : {}), ...(origin ? { conversationOwnerId: origin.ownerId } : {}), ...(older ? { resourceKind: kind, ...cursors } : {}) };
     const result = unwrap<MeshQueryResult>(await apiClient.get(path, { params }));
@@ -284,8 +283,8 @@ export function useDeviceOwnedConversation() {
     if (older && previous?.scope !== scope) throw new Error("服务或角色已变化，请重新加载当前对话");
     const next: Record<string, string> = {};
     for (const [parameter, snapshot, cursorKind] of [
-      ["cursor", result.snapshot, kind], ["legacyCursor", result.snapshot, legacyKind],
-      ["historicalCursor", result.historicalSnapshot, kind], ["historicalLegacyCursor", result.historicalSnapshot, legacyKind],
+      ["cursor", result.snapshot, kind],
+      ["historicalCursor", result.historicalSnapshot, kind],
     ] as const) {
       if (older && !cursors[parameter]) continue;
       const value = snapshot?.nextCursors?.[cursorKind];
@@ -410,7 +409,7 @@ export function useDeviceOwnedConversation() {
     }
     if (captured !== revision) throw new Error("服务状态已变化，请重新加载后再操作");
     if (!resource || resource.deleted) throw new Error("该记录不在当前数据来源中，请在原设备管理历史数据");
-    if (resource.readOnly || resource.origin === "legacy") throw new Error("旧系统记录只读，请在当前数据所有者中创建新记录");
+    if (resource.readOnly) throw new Error("该记录只读");
     id = resource.id;
     if (options.expectedOwnerId && resource.ownerId !== options.expectedOwnerId) throw new Error("记录所属设备已变化，请在原设备管理历史数据");
     if (!resource.executionScope) throw new Error("记录缺少数据来源版本，请重新加载");
@@ -434,7 +433,7 @@ export function useDeviceOwnedConversation() {
       const row = snapshot.resources.find((resource) => resource.kind === "summary" && !resource.deleted && resource.body);
       if (row) {
         const content = row.body.content;
-        const value = { summaryViewId: crypto.randomUUID(), summaryText: String(typeof content === "object" && content !== null ? content.summary || content.text || "" : content || ""), sourceOwnerId: snapshot.ownerId, sourceResourceId: row.id, sourceRevision: row.revision, sourceScope: { ...result.executionScope }, editable: snapshot === result.snapshot && row.ownerId === result.executionScope.resourceOwnerId && row.origin !== "legacy" && row.readOnly !== true };
+        const value = { summaryViewId: crypto.randomUUID(), summaryText: String(typeof content === "object" && content !== null ? content.summary || content.text || "" : content || ""), sourceOwnerId: snapshot.ownerId, sourceResourceId: row.id, sourceRevision: row.revision, sourceScope: { ...result.executionScope }, editable: snapshot === result.snapshot && row.ownerId === result.executionScope.resourceOwnerId && row.readOnly !== true };
         summaryViews.set(conversationId, value);
         if (summaryViews.size > 64) summaryViews.delete(summaryViews.keys().next().value!);
         return { ...value, sourceScope: { ...value.sourceScope } };
@@ -499,7 +498,7 @@ export function useDeviceOwnedConversation() {
     const seen = new Set<string>();
     for (const snapshot of [result.historicalSnapshot, result.snapshot]) {
       if (!snapshot) continue;
-      const rows = snapshot.resources.filter((resource) => resource.kind === "message").map((resource) => ({ ...resource.body, origin: resource.origin, readOnly: resource.readOnly || resource.origin === "legacy", sourceRevision: resource.origin === "legacy" || resource.readOnly ? null : resource.revision }));
+      const rows = snapshot.resources.filter((resource) => resource.kind === "message").map((resource) => ({ ...resource.body, origin: resource.origin, readOnly: resource.readOnly, sourceRevision: resource.readOnly ? null : resource.revision }));
       for (const row of rows) {
         if (!row?.id || !["user", "assistant"].includes(row.role)) continue;
         const key = `${snapshot.ownerId}:${row.id}`;

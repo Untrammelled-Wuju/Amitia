@@ -1,6 +1,46 @@
-import type { AmitiaxManifestV1 } from "@amitia/plugin-sdk";
+import type { AmitiaxManifestV1, CustomManifestContribution } from "@amitia/plugin-sdk";
+import { defineCustomContribution } from "@amitia/plugin-sdk";
 
-export type { AmitiaxManifestV1 };
+export type { AmitiaxManifestV1, CustomManifestContribution };
+export { defineCustomContribution };
+
+const contributionAdapters = new Set([
+  "tool",
+  "agent_skill",
+  "workflow",
+  "mcp_server",
+  "hook",
+  "event",
+  "schedule",
+  "ui",
+  "ui_provider",
+  "ui_slot",
+  "background",
+  "provider",
+  "game",
+  "desktop_pet",
+]);
+
+const builtInContributionKinds = new Set([
+  "tool",
+  "agent_skill",
+  "workflow",
+  "mcp_server",
+  "hook",
+  "event_subscription",
+  "schedule",
+  "background_task",
+  "ui_page",
+  "ui_panel",
+  "ui_chat",
+  "ui_context_action",
+  "ui_desktop",
+  "ui_provider",
+  "ui_slot",
+  "provider",
+  "gamex",
+  "petx",
+]);
 
 export function validateManifest(manifest: AmitiaxManifestV1): string[] {
   const errors: string[] = [];
@@ -27,6 +67,22 @@ export function validateManifest(manifest: AmitiaxManifestV1): string[] {
     }
     if (access?.process?.mode === "direct" && (!access.process.maxProcesses || access.process.maxProcesses < 1)) {
       errors.push(`module ${module.id}: direct process access requires maxProcesses`);
+    }
+    for (const contribution of module.contributions ?? []) {
+      if (!builtInContributionKinds.has(contribution.kind)) {
+        if (!contribution.adapter) {
+          errors.push(`module ${module.id}: contribution ${contribution.id} requires adapter for custom kind ${contribution.kind}`);
+        }
+        if (!contribution.contractVersion || contribution.contractVersion < 1) {
+          errors.push(`module ${module.id}: contribution ${contribution.id} requires contractVersion for custom kind ${contribution.kind}`);
+        }
+        if (!contribution.schema || typeof contribution.schema !== "object") {
+          errors.push(`module ${module.id}: contribution ${contribution.id} requires schema for custom kind ${contribution.kind}`);
+        }
+      }
+      if (contribution.adapter && !contributionAdapters.has(contribution.adapter)) {
+        errors.push(`module ${module.id}: contribution ${contribution.id} uses unknown adapter ${contribution.adapter}`);
+      }
     }
   }
   if (!manifest.integrity?.algorithm) errors.push("integrity.algorithm is required");

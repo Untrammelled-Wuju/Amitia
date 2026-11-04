@@ -8,7 +8,7 @@ export const qqSidecarConfig = {
   mergeWindowMs: parseInt(process.env.MERGE_WINDOW_MS || "6000", 10),
   host: envStr("QQ_SIDECAR_HOST", "127.0.0.1"),
   port: parseInt(envStr("QQ_SIDECAR_PORT", "19877"), 10),
-  coreUrl: envStr("AMITIA_CORE_URL", envStr("CORE_URL", "http://127.0.0.1:18899")),
+  coreUrl: envStr("AMITIA_CORE_URL", ""),
   serviceAuthToken: envStr("AMITIA_SERVICE_AUTH_TOKEN", envStr("BRIDGE_API_TOKEN", "")),
   localToken: envStr("AMITIA_LOCAL_TOKEN", ""),
   extensionId: envStr("AMITIA_EXTENSION_ID", "com.amitia/channel-qq"),

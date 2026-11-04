@@ -8,13 +8,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"regexp"
 	"time"
 
 	"github.com/u-ai/backend/internal/runtimeidentity"
 )
-
-var hashedTokenRe = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 func hashSessionToken(token string) string {
 	h := sha256.Sum256([]byte(token))
@@ -23,59 +20,6 @@ func hashSessionToken(token string) string {
 
 type registryRepository struct {
 	db *sql.DB
-}
-
-func (r *registryRepository) MigrateRuntimeSessionColumns(ctx context.Context) error {
-	if r.db == nil {
-		return nil
-	}
-	if exists, err := r.columnExists(ctx, "kernel_host_registry", "runtime_session_id"); err != nil {
-		return err
-	} else if !exists {
-		if _, err := r.db.ExecContext(ctx, `ALTER TABLE kernel_host_registry ADD COLUMN runtime_session_id TEXT NOT NULL DEFAULT ''`); err != nil {
-			return fmt.Errorf("host_registry: add runtime_session_id column: %w", err)
-		}
-	}
-	if exists, err := r.columnExists(ctx, "kernel_host_registry", "connection_generation"); err != nil {
-		return err
-	} else if !exists {
-		if _, err := r.db.ExecContext(ctx, `ALTER TABLE kernel_host_registry ADD COLUMN connection_generation INTEGER NOT NULL DEFAULT 0`); err != nil {
-			return fmt.Errorf("host_registry: add connection_generation column: %w", err)
-		}
-	}
-	if exists, err := r.columnExists(ctx, "kernel_host_registry", "entry_id"); err != nil {
-		return err
-	} else if !exists {
-		if _, err := r.db.ExecContext(ctx, `ALTER TABLE kernel_host_registry ADD COLUMN entry_id TEXT NOT NULL DEFAULT ''`); err != nil {
-			return fmt.Errorf("host_registry: add entry_id column: %w", err)
-		}
-	}
-	return nil
-}
-
-func (r *registryRepository) columnExists(ctx context.Context, table, column string) (bool, error) {
-	rows, err := r.db.QueryContext(ctx, fmt.Sprintf("PRAGMA table_info(%s)", table))
-	if err != nil {
-		return false, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var (
-			cid     int
-			name    string
-			ctype   string
-			notnull int
-			dflt    string
-			pk      int
-		)
-		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
-			return false, err
-		}
-		if name == column {
-			return true, nil
-		}
-	}
-	return false, rows.Err()
 }
 
 func (r *registryRepository) SaveEntry(ctx context.Context, entry *RuntimeEntry) error {
@@ -539,7 +483,11 @@ func scanEntry(row rowScanner) (*RuntimeEntry, error) {
 	entry.Platform = plat
 	entry.DeviceID = runtimeidentity.ParseDeviceID(deviceID)
 	entry.RuntimeID = runtimeidentity.ParseRuntimeID(runtimeID)
-	entry.Kind = ParseRegistryEntryKind(kind)
+	parsedKind, err := ParseRegistryEntryKind(kind)
+	if err != nil {
+		return nil, fmt.Errorf("host_registry: invalid entry kind %q: %w", kind, err)
+	}
+	entry.Kind = parsedKind
 	entry.RuntimeSessionID = runtimeidentity.ParseRuntimeSessionID(runtimeSessionID)
 	entry.ConnectionGeneration = connectionGeneration
 
@@ -590,46 +538,4 @@ func scanEntries(rows *sql.Rows) ([]*RuntimeEntry, error) {
 		result = append(result, entry)
 	}
 	return result, rows.Err()
-}
-
-func (r *registryRepository) MigrateSessionTokens(ctx context.Context) error {
-	if r.db == nil {
-		return nil
-	}
-	rows, err := r.db.QueryContext(ctx, `SELECT host_client_id, session_token FROM kernel_host_registry WHERE session_token != ''`)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil
-		}
-		return fmt.Errorf("host_registry: query session tokens: %w", err)
-	}
-	defer rows.Close()
-
-	type migrationRow struct {
-		entryID string
-		token   string
-	}
-	var pending []migrationRow
-	for rows.Next() {
-		var entryID, token string
-		if err := rows.Scan(&entryID, &token); err != nil {
-			return fmt.Errorf("host_registry: scan session token: %w", err)
-		}
-		if token == "" || hashedTokenRe.MatchString(token) {
-			continue
-		}
-		pending = append(pending, migrationRow{entryID: entryID, token: token})
-	}
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("host_registry: iterate session tokens: %w", err)
-	}
-
-	for _, row := range pending {
-		tokenHash := sha256.Sum256([]byte(row.token))
-		hexHash := hex.EncodeToString(tokenHash[:])
-		if _, err := r.db.ExecContext(ctx, `UPDATE kernel_host_registry SET session_token = ? WHERE host_client_id = ?`, hexHash, row.entryID); err != nil {
-			return fmt.Errorf("host_registry: hash session token for %s: %w", row.entryID, err)
-		}
-	}
-	return nil
 }

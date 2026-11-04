@@ -174,8 +174,8 @@ func (r *meshOwnedToolRuntime) Execute(ctx context.Context, inference business.I
 	if name == business.GroupInviteReplyTool {
 		return r.executeGroupInvite(inference, call, input)
 	}
-	if isChatMultiAgentTool(name) {
-		if r.native == nil || inference.InternalWorker {
+	if isChatMultiAgentTool(name) || isAgentRunMessageTool(name) {
+		if r.native == nil || (inference.InternalWorker && isChatMultiAgentTool(name)) {
 			return chat.ToolResult{}, coordination.ErrWrongOwner
 		}
 		if err := r.services.OwnedBusiness.WithExecutionScope(ctx, inference.Scope, func(context.Context) error { return nil }); err != nil {

@@ -812,25 +812,7 @@ func (api *WorkflowAPI) meshOwnedRun(ctx context.Context, spaceID, runID string)
 		return nil, nil, errors.New("workflow run not found")
 	}
 	requestedSpaceID := strings.TrimSpace(spaceID)
-	if owner := strings.TrimSpace(run.Context.SpaceID); owner != "" {
-		if owner != requestedSpaceID {
-			return nil, nil, errors.New("workflow run not found")
-		}
-		return run, executor, nil
-	}
-	// Legacy runs may predate persisted Context.SpaceID. Prefer their immutable
-	// definition snapshot before falling back to the mutable registry.
-	var def workflow.WorkflowDefinition
-	owned := false
-	if len(run.Context.DefinitionSnapshot) > 0 && json.Unmarshal(run.Context.DefinitionSnapshot, &def) == nil {
-		owned = workflowOwnedBy(def, requestedSpaceID)
-	}
-	if !owned {
-		if current, ok := kc.WorkflowRegistry.Get(run.WorkflowID); ok {
-			owned = workflowOwnedBy(current, requestedSpaceID)
-		}
-	}
-	if !owned {
+	if owner := strings.TrimSpace(run.Context.SpaceID); owner == "" || owner != requestedSpaceID {
 		return nil, nil, errors.New("workflow run not found")
 	}
 	return run, executor, nil

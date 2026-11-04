@@ -170,7 +170,6 @@ func setupR46FgOperation(t *testing.T, ctx context.Context, container *Container
 		OperationType: "uninstall", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
 		ArtifactID:             artifactID,
-		ConfirmationsJSON:      claimsJSON,
 		ConfirmationClaimsJSON: confirmationClaimsJSON,
 		FencingToken:           1,
 	}
@@ -917,7 +916,7 @@ func TestFinalGateUninstallArtifactNotFoundPasses(t *testing.T) {
 		SpaceID: "user-1", ScopeType: "global", ExtensionID: extensionID,
 		OperationType: "uninstall", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
-		ConfirmationsJSON: "{}", FencingToken: 1,
+		FencingToken: 1,
 	}
 	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
 		t.Fatal(err)
@@ -977,7 +976,7 @@ func TestFinalGateRollbackSnapshotFailClosedOnMissingRollbackPoint(t *testing.T)
 		TargetVersion: "2.0.0", FromVersion: "1.0.0",
 		OperationType: "rollback", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
-		ConfirmationsJSON: "{}", FencingToken: 1,
+		FencingToken: 1,
 	}
 	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
 		t.Fatal(err)
@@ -1143,8 +1142,6 @@ func TestFinalGateRetainArtifactPolicyFailsWhenArtifactNotFound(t *testing.T) {
 	operationID := "op-fail-closed-retain-notfound"
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
-	claimsJSON := `{"artifactId":"art-retain-notfound","artifactPolicy":"retainArtifact","versionId":"1.0.0","currentGenerationId":"gen-1","confirm":true,"expiresAt":9999999999}`
-
 	artifactID := "art-retain-notfound"
 	// Artifact must exist for CreateOperation to acquire reference, then mark deleted so Final Gate sees it as gone.
 	putTestArtifact(t, ctx, container, artifactID, extensionID)
@@ -1154,8 +1151,9 @@ func TestFinalGateRetainArtifactPolicyFailsWhenArtifactNotFound(t *testing.T) {
 		SpaceID: "user-1", ScopeType: "global", ExtensionID: extensionID,
 		OperationType: "uninstall", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
-		ArtifactID:        artifactID,
-		ConfirmationsJSON: claimsJSON, FencingToken: 1,
+		ArtifactID:             artifactID,
+		ConfirmationClaimsJSON: r46FgConfirmationClaimsJSON(extensionID, artifactID, string(ArtifactPolicyRetainArtifact)),
+		FencingToken:           1,
 	}
 	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
 		t.Fatal(err)
@@ -1203,8 +1201,6 @@ func TestFinalGateRetainForRollbackPolicyFailsWhenArtifactNotFound(t *testing.T)
 	operationID := "op-fail-closed-retain-rollback-notfound"
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
-	claimsJSON := `{"artifactId":"art-retain-rollback-notfound","artifactPolicy":"retainForRollback","versionId":"1.0.0","currentGenerationId":"gen-2","confirm":true,"expiresAt":9999999999}`
-
 	artifactID := "art-retain-rollback-notfound"
 	putTestArtifact(t, ctx, container, artifactID, extensionID)
 
@@ -1213,8 +1209,9 @@ func TestFinalGateRetainForRollbackPolicyFailsWhenArtifactNotFound(t *testing.T)
 		SpaceID: "user-1", ScopeType: "global", ExtensionID: extensionID,
 		OperationType: "uninstall", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
-		ArtifactID:        artifactID,
-		ConfirmationsJSON: claimsJSON, FencingToken: 1,
+		ArtifactID:             artifactID,
+		ConfirmationClaimsJSON: r46FgConfirmationClaimsJSON(extensionID, artifactID, string(ArtifactPolicyRetainForRollback)),
+		FencingToken:           1,
 	}
 	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
 		t.Fatal(err)
@@ -1261,8 +1258,6 @@ func TestFinalGateRetainForExportPolicyFailsWhenArtifactNotFound(t *testing.T) {
 	operationID := "op-fail-closed-retain-export-notfound"
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
-	claimsJSON := `{"artifactId":"art-retain-export-notfound","artifactPolicy":"retainForExport","versionId":"1.0.0","currentGenerationId":"gen-3","confirm":true,"expiresAt":9999999999}`
-
 	artifactID := "art-retain-export-notfound"
 	putTestArtifact(t, ctx, container, artifactID, extensionID)
 
@@ -1271,8 +1266,9 @@ func TestFinalGateRetainForExportPolicyFailsWhenArtifactNotFound(t *testing.T) {
 		SpaceID: "user-1", ScopeType: "global", ExtensionID: extensionID,
 		OperationType: "uninstall", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
-		ArtifactID:        artifactID,
-		ConfirmationsJSON: claimsJSON, FencingToken: 1,
+		ArtifactID:             artifactID,
+		ConfirmationClaimsJSON: r46FgConfirmationClaimsJSON(extensionID, artifactID, string(ArtifactPolicyRetainForExport)),
+		FencingToken:           1,
 	}
 	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
 		t.Fatal(err)
@@ -1319,8 +1315,6 @@ func TestFinalGateDeleteStepArtifactIDMismatchFailsClosed(t *testing.T) {
 	operationID := "op-fail-closed-step-mismatch"
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
-	claimsJSON := `{"artifactId":"art-expected","artifactPolicy":"deleteArtifact","versionId":"1.0.0","currentGenerationId":"gen-1","confirm":true,"expiresAt":9999999999}`
-
 	putTestArtifact(t, ctx, container, "art-expected", extensionID)
 
 	op := PackageOperationRecord{
@@ -1328,8 +1322,9 @@ func TestFinalGateDeleteStepArtifactIDMismatchFailsClosed(t *testing.T) {
 		SpaceID: "user-1", ScopeType: "global", ExtensionID: extensionID,
 		OperationType: "uninstall", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
-		ArtifactID:        "art-expected",
-		ConfirmationsJSON: claimsJSON, FencingToken: 1,
+		ArtifactID:             "art-expected",
+		ConfirmationClaimsJSON: r46FgConfirmationClaimsJSON(extensionID, "art-expected", string(ArtifactPolicyDeleteArtifact)),
+		FencingToken:           1,
 	}
 	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
 		t.Fatal(err)
@@ -1389,8 +1384,6 @@ func TestFinalGateUninstallVersionIDMismatchFailsClosed(t *testing.T) {
 	operationID := "op-fail-closed-version-mismatch"
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
-	claimsJSON := `{"artifactId":"art-version-mismatch","artifactPolicy":"deleteArtifact","versionId":"9.9.9","currentGenerationId":"gen-1","confirm":true,"expiresAt":9999999999}`
-
 	putTestArtifact(t, ctx, container, "art-version-mismatch", extensionID)
 
 	op := PackageOperationRecord{
@@ -1399,8 +1392,9 @@ func TestFinalGateUninstallVersionIDMismatchFailsClosed(t *testing.T) {
 		OperationType: "uninstall", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
 		ArtifactID: "art-version-mismatch", TargetVersion: "1.0.0",
-		TargetGeneration:  "gen-1",
-		ConfirmationsJSON: claimsJSON, FencingToken: 1,
+		TargetGeneration:       "gen-1",
+		ConfirmationClaimsJSON: r46FgConfirmationClaimsJSON(extensionID, "art-version-mismatch", string(ArtifactPolicyDeleteArtifact)),
+		FencingToken:           1,
 	}
 	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
 		t.Fatal(err)
@@ -1447,8 +1441,6 @@ func TestFinalGateUninstallGenerationIDMismatchFailsClosed(t *testing.T) {
 	operationID := "op-fail-closed-gen-mismatch"
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
-	claimsJSON := `{"artifactId":"art-gen-mismatch","artifactPolicy":"deleteArtifact","versionId":"1.0.0","currentGenerationId":"gen-drifted","confirm":true,"expiresAt":9999999999}`
-
 	putTestArtifact(t, ctx, container, "art-gen-mismatch", extensionID)
 
 	op := PackageOperationRecord{
@@ -1457,8 +1449,9 @@ func TestFinalGateUninstallGenerationIDMismatchFailsClosed(t *testing.T) {
 		OperationType: "uninstall", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
 		ArtifactID: "art-gen-mismatch", TargetVersion: "1.0.0",
-		TargetGeneration:  "gen-original",
-		ConfirmationsJSON: claimsJSON, FencingToken: 1,
+		TargetGeneration:       "gen-original",
+		ConfirmationClaimsJSON: r46FgConfirmationClaimsJSON(extensionID, "art-gen-mismatch", string(ArtifactPolicyDeleteArtifact)),
+		FencingToken:           1,
 	}
 	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
 		t.Fatal(err)
@@ -1563,8 +1556,6 @@ func TestFinalGateUpdatePreviewHashDriftDetected(t *testing.T) {
 	operationID := "op-fail-closed-previewhash-drift"
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
-	claimsJSON := `{"artifactId":"art-preview-drift","artifactPolicy":"deleteArtifact","versionId":"2.0.0","currentGenerationId":"gen-1","previewHash":"sha256:drifted-preview","confirm":true,"expiresAt":9999999999}`
-
 	putTestArtifact(t, ctx, container, "art-preview-drift", extensionID)
 
 	op := PackageOperationRecord{
@@ -1574,8 +1565,8 @@ func TestFinalGateUpdatePreviewHashDriftDetected(t *testing.T) {
 		TargetGeneration: "gen-2",
 		OperationType:    "update", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
-		ArtifactID:        "art-preview-drift",
-		ConfirmationsJSON: claimsJSON, FencingToken: 1,
+		ArtifactID:   "art-preview-drift",
+		FencingToken: 1,
 	}
 	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
 		t.Fatal(err)
@@ -1729,11 +1720,6 @@ func TestFinalGateSnapshotExemptClaimsHashMatchWithRollbackPoint(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Use legacy ConfirmationsJSON format (bypasses strict ConfirmationClaims validation).
-	// For update operations the Final Gate uses R4-2 (valid snapshot present is sufficient)
-	// since ManifestNoDataChange=false makes the snapshot always required.
-	claimsJSON := `{"artifactId":"art-exempt-match","artifactPolicy":"deleteArtifact","previewHash":"sha256:preview-match","currentVersionId":"2.0.0","currentGenerationId":"gen-1","snapshotRequirementHash":"sha256:exempt-match","securityPolicyHash":"sha256:sec-match"}`
-
 	op := PackageOperationRecord{
 		OperationID: operationID, TraceID: "trace-exempt-match",
 		SpaceID: "user-1", ScopeType: "global", ExtensionID: extensionID,
@@ -1741,8 +1727,8 @@ func TestFinalGateSnapshotExemptClaimsHashMatchWithRollbackPoint(t *testing.T) {
 		TargetGeneration: "gen-2",
 		OperationType:    "update", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
-		ArtifactID:        "art-exempt-match",
-		ConfirmationsJSON: claimsJSON, FencingToken: 1,
+		ArtifactID:   "art-exempt-match",
+		FencingToken: 1,
 	}
 	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
 		t.Fatal(err)
@@ -1752,8 +1738,6 @@ func TestFinalGateSnapshotExemptClaimsHashMatchWithRollbackPoint(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Snapshot exemption passes via legacy claims, but overall Final Gate still fails
-	// because update operations also require installation record, generation store, etc.
 	result, err := runtime.VerifyPackageFinalGate(ctx, operationID)
 	if err == nil {
 		t.Fatalf("expected Final Gate to fail for update without full installation setup: %+v", result)
@@ -1790,8 +1774,8 @@ func TestFinalGateSnapshotExemptMissingClaimsFails(t *testing.T) {
 		TargetGeneration: "gen-2",
 		OperationType:    "update", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
-		ArtifactID:        "art-missing-claims",
-		ConfirmationsJSON: `{}`, FencingToken: 1,
+		ArtifactID:   "art-missing-claims",
+		FencingToken: 1,
 	}
 	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
 		t.Fatal(err)

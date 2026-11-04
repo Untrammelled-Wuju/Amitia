@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/u-ai/backend/internal/devicemesh"
 	"github.com/u-ai/backend/internal/devicemesh/agent"
 	"github.com/u-ai/backend/internal/devicemesh/pairing"
 	"github.com/u-ai/backend/internal/devicemesh/proof"
@@ -23,10 +22,7 @@ func TestSignedPairingApprovalAndDuplicateBlockingAcrossPhoneAndComputerPlatform
 				if _, err := registry.EnsureDevice(t.Context(), host_registry.DeviceRecord{SpaceID: "core", DeviceID: "issuer", Platform: issuerPlatform, TrustState: host_registry.DeviceTrustTrusted}); err != nil {
 					t.Fatal(err)
 				}
-				rt, err := devicemesh.NewCloudRuntime(db, registry)
-				if err != nil {
-					t.Fatal(err)
-				}
+				rt := newCloudRuntimeForTest(t, db, registry)
 				service, err := pairing.NewService(db, t.TempDir(), "core", registry, rt.BootstrapSvc)
 				if err != nil {
 					t.Fatal(err)

@@ -8,8 +8,8 @@ import (
 )
 
 type mockUIAccessibilitySource struct {
-	statusFunc    func(ctx context.Context) SourceStatus
-	snapshotFunc  func(ctx context.Context, request SnapshotRequest) (RawSnapshot, error)
+	statusFunc   func(ctx context.Context) SourceStatus
+	snapshotFunc func(ctx context.Context, request SnapshotRequest) (RawSnapshot, error)
 }
 
 func (m *mockUIAccessibilitySource) Type() SourceType {

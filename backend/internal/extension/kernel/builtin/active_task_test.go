@@ -17,7 +17,10 @@ func TestActiveTaskBuiltinDefinition(t *testing.T) {
 	if module.Runtime == nil || module.Runtime.EntryPoint != "host.character.active-task" {
 		t.Fatalf("unexpected runtime %#v", module.Runtime)
 	}
-	if len(module.Contributions) != 1 || module.Contributions[0].Kind != "ui_page" {
-		t.Fatalf("active task contribution missing")
+	if len(module.Contributions) != 0 {
+		t.Fatalf("active task must not contribute a character detail tab")
+	}
+	if def.BootstrapRevision != 2 {
+		t.Fatalf("unexpected bootstrap revision %d", def.BootstrapRevision)
 	}
 }

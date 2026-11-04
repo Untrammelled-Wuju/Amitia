@@ -31,7 +31,7 @@ export function isManagedLogName(name: string): boolean {
 
 function isRetainedLogName(name: string): boolean {
   const lower = name.toLowerCase();
-  if (lower.endsWith(".log") || lower.endsWith(".log.old")) return true;
+  if (lower.endsWith(".log")) return true;
   const match = lower.match(/\.log\.(\d+)$/);
   return match !== null;
 }

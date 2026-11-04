@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/requestidentity"
 	"gorm.io/gorm"
 )
@@ -15,16 +14,9 @@ func webChatSpaceID(c *gin.Context) string {
 	return requestidentity.ResolveGin(c)
 }
 
-func webChatLocalSingleUserMode() bool {
-	return config.AppCfg != nil && strings.EqualFold(strings.TrimSpace(config.AppCfg.Security.Mode), "local_single_user")
-}
-
 func (h *Handler) webChatCharacterQuery(spaceID string) *gorm.DB {
 	q := h.db.Table("characters").Where("deleted_at IS NULL")
 	owner := requestidentity.NormalizeSpaceID(spaceID)
-	if webChatLocalSingleUserMode() {
-		return q.Where("(space_id = ? OR space_id = '' OR space_id IS NULL OR space_id = ?)", owner, requestidentity.LegacySpaceID)
-	}
 	return q.Where("space_id = ?", owner)
 }
 

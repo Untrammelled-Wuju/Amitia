@@ -215,11 +215,7 @@ func ownedRuntimeDocuments(view business.QueryResult, key string) ([]map[string]
 			}
 		case "message":
 			document["sourceOwnerId"], document["sourceScope"], document["origin"], document["readOnly"] = resource.OwnerID, view.Scope, resource.Origin, resource.ReadOnly
-			if resource.Origin == "legacy" {
-				document["sourceRevision"] = nil
-			} else {
-				document["sourceRevision"] = resource.Revision
-			}
+			document["sourceRevision"] = resource.Revision
 			messages = append(messages, document)
 		case "checkpoint":
 			if !strings.HasPrefix(resource.ID, "turn/") {

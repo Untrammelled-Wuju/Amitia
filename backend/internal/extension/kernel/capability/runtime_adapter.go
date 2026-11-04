@@ -19,7 +19,6 @@ const (
 	RuntimeTypeMCP               RuntimeType = "mcp"
 	RuntimeTypeWorkflow          RuntimeType = "workflow"
 	RuntimeTypeInternal          RuntimeType = "internal"
-	RuntimeTypeLegacy            RuntimeType = "legacy"
 	RuntimeTypeJavaScript        RuntimeType = "javascript"
 	RuntimeTypeWASM              RuntimeType = "wasm"
 	RuntimeTypeTrustedService    RuntimeType = "trusted_service"

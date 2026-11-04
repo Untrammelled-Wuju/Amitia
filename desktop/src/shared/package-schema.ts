@@ -1064,18 +1064,18 @@ export class RuntimePackageNormalizer {
         "compatibility.minRuntimeVersion is required",
       );
     }
-    if (!compareVersions(manifest.compatibility.minRuntimeVersion, runtimeVersion)) {
+    if (manifest.compatibility.minRuntimeVersion !== runtimeVersion) {
       throw createPackageError(
         "RUNTIME_VERSION_UNSUPPORTED",
-        `runtime version ${runtimeVersion} is below required ${manifest.compatibility.minRuntimeVersion}`,
+        `runtime version ${runtimeVersion} does not match required ${manifest.compatibility.minRuntimeVersion}`,
         { expected: manifest.compatibility.minRuntimeVersion, actual: runtimeVersion },
       );
     }
     if (manifest.compatibility.maxRuntimeVersion) {
-      if (!compareVersions(runtimeVersion, manifest.compatibility.maxRuntimeVersion)) {
+      if (manifest.compatibility.maxRuntimeVersion !== runtimeVersion) {
         throw createPackageError(
           "RUNTIME_VERSION_UNSUPPORTED",
-          `runtime version ${runtimeVersion} is above max ${manifest.compatibility.maxRuntimeVersion}`,
+        `runtime version ${runtimeVersion} does not match max ${manifest.compatibility.maxRuntimeVersion}`,
           { expected: manifest.compatibility.maxRuntimeVersion, actual: runtimeVersion },
         );
       }

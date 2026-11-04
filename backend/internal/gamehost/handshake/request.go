@@ -42,7 +42,7 @@ type HelloResponse struct {
 const HelloMethod = "control.handshake.hello"
 
 type ServiceCapabilities interface {
-	GetCapability(name domain.Capability) bool
-	HasCapability(name domain.Capability) bool
-	ListCapabilities() []domain.Capability
+	GetCapability(name domain.HostFeature) bool
+	HasCapability(name domain.HostFeature) bool
+	ListCapabilities() []domain.HostFeature
 }

@@ -71,6 +71,11 @@ type CardWorldbookBridge interface {
 	ExportCardWorldbook(ctx context.Context, spaceID, characterID string) (*card.CharacterBook, error)
 }
 
+type AgentRoleLifecycle interface {
+	EnsureRoleAgent(tx *gorm.DB, character *Character) error
+	ArchiveRoleAgent(tx *gorm.DB, character *Character) error
+}
+
 type CardImportOperation struct {
 	SpaceID           string `gorm:"column:space_id;primaryKey"`
 	ID                string `gorm:"column:id;primaryKey"`
@@ -95,6 +100,7 @@ type service struct {
 	db             *gorm.DB
 	changeRecorder sync.ChangeRecorder
 	cardWorldbook  CardWorldbookBridge
+	agentLifecycle AgentRoleLifecycle
 }
 
 func NewService(repo Repository, ctx *app.AppContext, recorder ...sync.ChangeRecorder) Service {
@@ -107,6 +113,10 @@ func NewServiceWithCardWorldbook(repo Repository, ctx *app.AppContext, bridge Ca
 		r = recorder[0]
 	}
 	return &service{repo: repo, db: ctx.DB, changeRecorder: r, cardWorldbook: bridge}
+}
+
+func (s *service) SetAgentRoleLifecycle(lifecycle AgentRoleLifecycle) {
+	s.agentLifecycle = lifecycle
 }
 
 func (s *service) List(includeDisabled bool) ([]Character, error) {
@@ -254,6 +264,9 @@ func (s *service) CreateForSpace(req *CreateCharacterRequest, spaceID string) (*
 			}
 		}
 		if err := tx.Create(c).Error; err != nil {
+			return err
+		}
+		if err := s.ensureRoleAgent(tx, c); err != nil {
 			return err
 		}
 		if s.changeRecorder != nil {
@@ -448,6 +461,13 @@ func (s *service) UpdateForSpace(id string, req *UpdateCharacterRequest, spaceID
 		if result.RowsAffected == 0 {
 			return fmt.Errorf("角色版本冲突")
 		}
+		var updated Character
+		if err := s.characterOwnerQuery(tx.Where("id = ?", id), spaceID).First(&updated).Error; err != nil {
+			return err
+		}
+		if err := s.ensureRoleAgent(tx, &updated); err != nil {
+			return err
+		}
 		if s.changeRecorder != nil {
 			payload, marshalErr := json.Marshal(map[string]interface{}{"id": id, "revision": newRevision, "meta": updates})
 			if marshalErr != nil {
@@ -520,6 +540,10 @@ func (s *service) DeleteForSpace(id string, spaceID string) error {
 		if result.RowsAffected == 0 {
 			return fmt.Errorf("角色版本冲突")
 		}
+		current.DeletedAt = new(string)
+		if err := s.archiveRoleAgent(tx, &current); err != nil {
+			return err
+		}
 		if s.changeRecorder != nil {
 			payload, marshalErr := json.Marshal(map[string]string{"id": id})
 			if marshalErr != nil {
@@ -559,9 +583,26 @@ func (s *service) updateCharacterFieldsForSpace(id string, updates map[string]in
 		if err := s.characterOwnerQuery(tx.Where("id = ?", id), spaceID).First(&updated).Error; err != nil {
 			return err
 		}
+		if err := s.ensureRoleAgent(tx, &updated); err != nil {
+			return err
+		}
 		return s.recordCharacterChangeTx(tx, &updated, sync.OpUpdate, spaceID)
 	})
 	return &updated, err
+}
+
+func (s *service) ensureRoleAgent(tx *gorm.DB, character *Character) error {
+	if s.agentLifecycle == nil || character == nil {
+		return nil
+	}
+	return s.agentLifecycle.EnsureRoleAgent(tx, character)
+}
+
+func (s *service) archiveRoleAgent(tx *gorm.DB, character *Character) error {
+	if s.agentLifecycle == nil || character == nil {
+		return nil
+	}
+	return s.agentLifecycle.ArchiveRoleAgent(tx, character)
 }
 
 func (s *service) recordCharacterChangeTx(tx *gorm.DB, c *Character, op sync.OperationType, spaceID string) error {

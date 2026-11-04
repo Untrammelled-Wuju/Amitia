@@ -405,16 +405,6 @@ func TestModern2026Adapter_Era(t *testing.T) {
 	}
 }
 
-func TestLegacy2025Adapter_Era(t *testing.T) {
-	client := roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		return &http.Response{}, nil
-	})
-	adapter := NewLegacy2025Adapter(client, 0)
-	if adapter.Era() != MCPProtocolEraLegacy {
-		t.Fatalf("expected legacy era, got %s", adapter.Era())
-	}
-}
-
 func TestAdapter_DefaultTimeout(t *testing.T) {
 	client := roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		return &http.Response{}, nil

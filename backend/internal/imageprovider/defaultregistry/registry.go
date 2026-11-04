@@ -14,13 +14,6 @@ import (
 
 func New() (*imageprovider.Registry, error) {
 	registry := imageprovider.NewRegistry()
-	for alias, canonical := range map[string]string{
-		"volcengine_seedream": "seedream",
-		"doubao_seedream":     "seedream",
-		"ark_seedream":        "seedream",
-	} {
-		registry.RegisterAlias(alias, canonical)
-	}
 	if err := seedream.Register(registry); err != nil {
 		return nil, fmt.Errorf("failed to register seedream provider: %w", err)
 	}
@@ -45,19 +38,6 @@ func New() (*imageprovider.Registry, error) {
 	if err := tongyi.Register(registry); err != nil {
 		return nil, fmt.Errorf("failed to register tongyi provider: %w", err)
 	}
-	for alias, canonical := range map[string]string{
-		"openai_compatible": "openai",
-		"dall-e":            "openai",
-		"stable_diffusion":  "stability",
-		"stability_ai":      "stability",
-		"dashscope":         "tongyi",
-		"wanx":              "tongyi",
-		"zhipu":             "cogview",
-		"glm":               "cogview",
-		"silicon_flow":      "siliconflow",
-	} {
-		registry.RegisterAlias(alias, canonical)
-	}
 	if runtimeprofile.CurrentProcessProfile().IsDeviceAgent() {
 		if err := registry.RegisterWithDescriptor(cloudbridge.ProviderName, cloudbridge.NewProvider(config.AppCfg.Storage.DataDir), imageprovider.ProviderDescriptor{
 			Name:           cloudbridge.ProviderName,
@@ -68,7 +48,6 @@ func New() (*imageprovider.Registry, error) {
 				imageprovider.ModeSingleFrame,
 				imageprovider.ModeSpriteSheet,
 				imageprovider.ModeKeyframe,
-				imageprovider.ModeLegacyFrame,
 			},
 			DeviceOnly: true,
 		}); err != nil {

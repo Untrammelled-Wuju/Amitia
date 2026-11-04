@@ -24,6 +24,8 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/credential"
 	"github.com/u-ai/backend/internal/devicemesh/executionjournal"
 	meshprotocol "github.com/u-ai/backend/internal/devicemesh/protocol"
+	"github.com/u-ai/backend/internal/devicemesh/server"
+	"github.com/u-ai/backend/internal/deviceruntime"
 	"github.com/u-ai/backend/internal/deviceruntime/protocol"
 	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/extension/kernel"
@@ -37,6 +39,19 @@ import (
 	"github.com/u-ai/backend/internal/spaceidentity"
 )
 
+func newMeshCloudRuntime(t *testing.T, db *sql.DB, registry *host_registry.Registry) (*devicemesh.Runtime, error) {
+	t.Helper()
+	sessionStore := deviceruntime.NewSQLiteSessionStore(db)
+	if err := sessionStore.EnsureSchema(t.Context()); err != nil {
+		return nil, err
+	}
+	sessions, err := deviceruntime.NewService(sessionStore, deviceruntime.ServiceOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return devicemesh.NewCloudRuntimeWithHubAndSessions(db, registry, server.NewConnectionHub(), sessions)
+}
+
 func TestOwnedAuthorityAcrossRealTLSMeshReconnectAndPermissionChange(t *testing.T) {
 	p := setupMeshLocalDataPort(t)
 	dir := t.TempDir()
@@ -45,11 +60,11 @@ func TestOwnedAuthorityAcrossRealTLSMeshReconnectAndPermissionChange(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	space, err := spaceidentity.Open(dir)
+	space, err := spaceidentity.InitializeDefault(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := p.services.DB.Model(&character.Character{}).Where("space_id=?", p.legacySpaceID).Update("space_id", space.SpaceID()).Error; err != nil {
+	if err := p.services.DB.Model(&character.Character{}).Where("space_id=?", p.ownerID).Update("space_id", space.SpaceID()).Error; err != nil {
 		t.Fatal(err)
 	}
 	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "core.db")+"?_pragma=journal_mode(WAL)&_pragma=foreign_keys(ON)&_pragma=busy_timeout(5000)")
@@ -67,7 +82,7 @@ func TestOwnedAuthorityAcrossRealTLSMeshReconnectAndPermissionChange(t *testing.
 			t.Fatal(err)
 		}
 	}
-	rt, err := devicemesh.NewCloudRuntime(db, registry)
+	rt, err := newMeshCloudRuntime(t, db, registry)
 	if err != nil {
 		t.Fatal(err)
 	}

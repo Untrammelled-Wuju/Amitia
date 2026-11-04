@@ -211,7 +211,6 @@ func createUninstallRecoveryOp(t *testing.T, ctx context.Context, container *Con
 		CurrentStep:        "move_to_quarantine",
 		ArtifactID:         res.ArtifactID,
 		PreviewSessionID:   previewSessionID,
-		ConfirmationsJSON:  `{}`,
 		StartedAt:          now,
 		UpdatedAt:          now,
 		StableGeneration:   res.GenerationID,

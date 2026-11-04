@@ -163,7 +163,6 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 			request.ConversationOrigin = &business.ConversationOrigin{OwnerID: owner, ID: query.ConversationID}
 		}
 		query.ResourceKind, query.Cursor, query.HistoricalCursor = c.Query("resourceKind"), c.Query("cursor"), c.Query("historicalCursor")
-		query.LegacyCursor, query.HistoricalLegacyCursor = c.Query("legacyCursor"), c.Query("historicalLegacyCursor")
 		query.HistoricalListCursor = c.Query("historicalListCursor")
 		if len(query.HistoricalListCursor) > 4096 || (query.HistoricalListCursor != "" && (!query.ListConversations || query.ResourceKind != "conversation")) {
 			c.JSON(400, gin.H{"message": "设备历史会话分页参数无效"})
@@ -173,7 +172,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 			c.JSON(400, gin.H{"message": "聊天历史类型无效"})
 			return
 		}
-		if len(query.Cursor) > 4096 || len(query.HistoricalCursor) > 4096 || len(query.LegacyCursor) > 4096 || len(query.HistoricalLegacyCursor) > 4096 || ((query.Cursor != "" || query.HistoricalCursor != "" || query.LegacyCursor != "" || query.HistoricalLegacyCursor != "") && query.ResourceKind == "") {
+		if len(query.Cursor) > 4096 || len(query.HistoricalCursor) > 4096 || ((query.Cursor != "" || query.HistoricalCursor != "") && query.ResourceKind == "") {
 			c.JSON(400, gin.H{"message": "聊天历史分页参数无效"})
 			return
 		}
@@ -238,8 +237,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 			return
 		}
 		cursor := c.Query("cursor")
-		legacyCursor := c.Query("legacyCursor")
-		if len(cursor) > 4096 || len(legacyCursor) > 4096 {
+		if len(cursor) > 4096 {
 			c.JSON(400, gin.H{"message": "记忆分页参数无效"})
 			return
 		}
@@ -247,12 +245,11 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 		historicalRole := c.Query("historicalRoleId")
 		request.MemoryView = c.Query("memoryView")
 		historicalCursor := c.Query("historicalCursor")
-		historicalLegacyCursor := c.Query("historicalLegacyCursor")
-		if len(historicalRole) > 512 || len(historicalCursor) > 4096 || len(historicalLegacyCursor) > 4096 {
+		if len(historicalRole) > 512 || len(historicalCursor) > 4096 {
 			c.JSON(400, gin.H{"message": "历史记忆参数无效"})
 			return
 		}
-		result, err := services.OwnedBusiness.Query(c.Request.Context(), request, coordination.DataQuery{ResourceKind: kind, Cursor: cursor, LegacyCursor: legacyCursor, HistoricalCursor: historicalCursor, HistoricalLegacyCursor: historicalLegacyCursor, HistoricalRoleID: historicalRole, ConversationID: c.Query("conversationId"), Management: true, Limit: 128})
+		result, err := services.OwnedBusiness.Query(c.Request.Context(), request, coordination.DataQuery{ResourceKind: kind, Cursor: cursor, HistoricalCursor: historicalCursor, HistoricalRoleID: historicalRole, ConversationID: c.Query("conversationId"), Management: true, Limit: 128})
 		if err != nil {
 			c.JSON(409, gin.H{"message": err.Error()})
 			return

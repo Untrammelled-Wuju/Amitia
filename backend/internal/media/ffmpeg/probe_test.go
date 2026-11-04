@@ -49,13 +49,13 @@ func TestParseProbeOutput(t *testing.T) {
 		expected *ProbeResult
 	}{
 		{
-			name:  "empty",
-			input: "",
+			name:     "empty",
+			input:    "",
 			expected: nil,
 		},
 		{
-			name:  "invalid json",
-			input: "not json",
+			name:     "invalid json",
+			input:    "not json",
 			expected: nil,
 		},
 		{
@@ -73,9 +73,9 @@ func TestParseProbeOutput(t *testing.T) {
 				]
 			}`,
 			expected: &ProbeResult{
-				Valid:        true,
-				FormatNames:  []string{"mov", "mp4", "m4a", "3gp", "3g2", "mj2"},
-				DurationMS:   120500,
+				Valid:       true,
+				FormatNames: []string{"mov", "mp4", "m4a", "3gp", "3g2", "mj2"},
+				DurationMS:  120500,
 				Streams: []StreamSummary{
 					{CodecName: "h264", CodecType: "video", Width: 1920, Height: 1080},
 					{CodecName: "aac", CodecType: "audio"},

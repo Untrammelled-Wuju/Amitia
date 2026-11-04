@@ -1,9 +1,9 @@
 package chat
 
-func conservativeModelOutputCeiling(configured, legacy int, anthropic bool, thinking int) int64 {
+func conservativeModelOutputCeiling(configured, maxTokens int, anthropic bool, thinking int) int64 {
 	output := configured
-	if legacy > output {
-		output = legacy
+	if maxTokens > output {
+		output = maxTokens
 	}
 	if output <= 0 {
 		output = 4096

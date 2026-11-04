@@ -26,7 +26,7 @@ type (
 
 	// MCPLifecyclePort queries MCP installations.
 	MCPLifecyclePort interface {
-		ListInstallations() []interface{}
+		ListInstallations() ([]interface{}, error)
 	}
 
 	// ExtensionCenterPort queries Extension Center cards.
@@ -289,13 +289,13 @@ func (s *AgentSkillSource) extractProvidedCapabilities(item agent_skill.AgentSki
 // MCPPackageSource 从 MCP 包中搜索候选
 type MCPPackageSource struct {
 	lifecycle interface {
-		ListInstallations() []interface{}
+		ListInstallations() ([]interface{}, error)
 	}
 }
 
 // NewMCPPackageSource 创建 MCPPackageSource 实例
 func NewMCPPackageSource(lifecycle interface {
-	ListInstallations() []interface{}
+	ListInstallations() ([]interface{}, error)
 }) *MCPPackageSource {
 	return &MCPPackageSource{
 		lifecycle: lifecycle,
@@ -315,7 +315,10 @@ func (s *MCPPackageSource) Search(ctx context.Context, request AcquisitionReques
 		return nil, fmt.Errorf("mcp_package source: lifecycle not configured")
 	}
 
-	installations := s.lifecycle.ListInstallations()
+	installations, err := s.lifecycle.ListInstallations()
+	if err != nil {
+		return nil, fmt.Errorf("mcp_package source: list installations: %w", err)
+	}
 	if len(installations) == 0 {
 		return nil, nil
 	}

@@ -11,6 +11,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	ghdomain "github.com/u-ai/backend/internal/gamehost/domain"
+	ghruntime "github.com/u-ai/backend/internal/gamehost/runtime"
 )
 
 type networkTestGateway struct {
@@ -23,6 +24,13 @@ func (g *networkTestGateway) RegisterRoute(route kernelhostapi.Route) error {
 	}
 	if _, exists := g.routes[route.Method]; exists {
 		return kernelhostapi.ErrRouteExists
+	}
+	g.routes[route.Method] = route
+	return nil
+}
+func (g *networkTestGateway) ReplaceRoute(route kernelhostapi.Route) error {
+	if _, exists := g.routes[route.Method]; !exists {
+		return kernelhostapi.ErrRouteNotFound
 	}
 	g.routes[route.Method] = route
 	return nil
@@ -122,6 +130,69 @@ func TestRegisterNetworkRouteGovernance(t *testing.T) {
 		if route.RiskLevel != kernelhostapi.RiskMedium || route.SideEffectLevel != kernelhostapi.SideEffectExternal {
 			t.Fatalf("%s unexpected route governance: risk=%s sideEffect=%s", method, route.RiskLevel, route.SideEffectLevel)
 		}
+	}
+}
+
+func TestRegisterNetworkRoutePreservesGenericFallback(t *testing.T) {
+	fallback := kernelhostapi.Handler(func(context.Context, kernelhostapi.CallRequest) (kernelhostapi.CallResult, error) {
+		return kernelhostapi.CallResult{Status: kernelhostapi.StatusSuccess, Output: json.RawMessage(`{"source":"generic"}`)}, nil
+	})
+	gateway := &networkTestGateway{routes: map[kernelhostapi.Method]kernelhostapi.Route{
+		kernelhostapi.MethodNetworkRequest: {
+			Method:  kernelhostapi.MethodNetworkRequest,
+			Version: 1,
+			Handler: fallback,
+		},
+	}}
+	lifecycle, err := RegisterNetworkRouteWithLifecycle(NetworkRouteDeps{
+		Gateway:    gateway,
+		Topology:   networkTestTopology{err: &ghruntime.TopologyError{Code: ghruntime.ErrNotFound, Message: "runtime not found"}},
+		Supervisor: networkTestDefinitions{definition: restrictedTestDefinition()},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lifecycle.Shutdown()
+	route, ok := gateway.QueryCapability(context.Background(), kernelhostapi.MethodNetworkRequest)
+	if !ok {
+		t.Fatal("network request route was not registered")
+	}
+	result, err := route.Handler(context.Background(), kernelhostapi.CallRequest{
+		RuntimeIdentity: gameRuntimeIdentity(),
+		Input:           json.RawMessage(`{"url":"https://example.com/"}`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(result.Output) != `{"source":"generic"}` {
+		t.Fatalf("output = %s, want generic fallback", result.Output)
+	}
+}
+
+func TestNetworkRouteDoesNotFallbackOnTopologyFailure(t *testing.T) {
+	fallbackCalled := false
+	h := &networkRouteHost{
+		topology: networkTestTopology{
+			err: &ghruntime.TopologyError{Code: ghruntime.ErrInvalidArgument, Message: "ambiguous module mapping"},
+		},
+		supervisor: networkTestDefinitions{definition: restrictedTestDefinition()},
+		fallback: func(context.Context, kernelhostapi.CallRequest) (kernelhostapi.CallResult, error) {
+			fallbackCalled = true
+			return kernelhostapi.CallResult{Status: kernelhostapi.StatusSuccess}, nil
+		},
+	}
+	_, err := h.networkRequest(context.Background(), kernelhostapi.CallRequest{
+		RuntimeIdentity: gameRuntimeIdentity(),
+		Input:           json.RawMessage(`{"url":"https://example.com/"}`),
+	})
+	if err == nil {
+		t.Fatal("topology failure must fail closed")
+	}
+	if fallbackCalled {
+		t.Fatal("topology failure must not use the generic fallback")
+	}
+	if !errors.Is(err, kernelhostapi.ErrHostUnavailable) {
+		t.Fatalf("error = %v, want ErrHostUnavailable", err)
 	}
 }
 

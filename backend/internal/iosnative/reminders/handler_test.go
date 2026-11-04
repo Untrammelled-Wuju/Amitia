@@ -350,7 +350,7 @@ func TestAuthorizationLevelFromNative(t *testing.T) {
 		{"restricted", AuthorizationRestricted},
 		{"denied", AuthorizationDenied},
 		{"fullAccess", AuthorizationFullAccess},
-		{"authorized", AuthorizationLegacyAuthorized},
+		{"authorized", AuthorizationNotDetermined},
 		{"", AuthorizationNotDetermined},
 	}
 
@@ -370,7 +370,6 @@ func TestCanReadReminders(t *testing.T) {
 		expected bool
 	}{
 		{AuthorizationFullAccess, true},
-		{AuthorizationLegacyAuthorized, true},
 		{AuthorizationNotDetermined, false},
 		{AuthorizationDenied, false},
 		{AuthorizationRestricted, false},
@@ -392,7 +391,6 @@ func TestCanCreateReminders(t *testing.T) {
 		expected bool
 	}{
 		{AuthorizationFullAccess, true},
-		{AuthorizationLegacyAuthorized, true},
 		{AuthorizationNotDetermined, false},
 		{AuthorizationDenied, false},
 		{AuthorizationRestricted, false},
@@ -463,9 +461,6 @@ func TestIsValidAuthorizationLevelForReminders(t *testing.T) {
 	}
 	if !IsValidAuthorizationLevelForReminders(AuthorizationFullAccess) {
 		t.Fatal("full_access should be valid for reminders")
-	}
-	if !IsValidAuthorizationLevelForReminders(AuthorizationLegacyAuthorized) {
-		t.Fatal("legacy_authorized should be valid for reminders")
 	}
 }
 

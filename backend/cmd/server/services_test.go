@@ -8,6 +8,7 @@ import (
 	"github.com/glebarez/sqlite"
 	"github.com/u-ai/backend/internal/migration"
 	"github.com/u-ai/backend/internal/runtimeprofile"
+	"github.com/u-ai/backend/internal/spaceidentity"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -27,8 +28,8 @@ func TestNewAppServicesBuildsCoreServicesOnce(t *testing.T) {
 	if err := migration.ApplyBaseline(db); err != nil {
 		t.Fatalf("apply baseline: %v", err)
 	}
-	if err := migration.MarkAllMigrationsApplied(db, migration.DefaultMigrations()); err != nil {
-		t.Fatal(err)
+	if _, err := spaceidentity.InitializeDefault(t.TempDir()); err != nil {
+		t.Fatalf("initialize space identity: %v", err)
 	}
 	profile := runtimeprofile.ProfileLocal
 	services, err := NewAppServices(app.NewAppContext(db, nil), nil, nil, profile, runtimeprofile.PolicyFor(profile))

@@ -127,7 +127,6 @@ const (
 	RuntimeTypeTrustedService RuntimeType = "trusted_service"
 	RuntimeTypeWASM           RuntimeType = "wasm"
 	RuntimeTypeUI             RuntimeType = "ui"
-	RuntimeTypeLegacyGo       RuntimeType = "legacy_go"
 )
 
 type ProcessBoundary struct {

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	goruntime "runtime"
@@ -60,6 +61,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
+	"github.com/u-ai/backend/internal/extension/kernel/pluginmarket"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	"github.com/u-ai/backend/internal/extension/kernel/schedule"
 	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
@@ -143,6 +145,7 @@ type ContainerBuilder struct {
 	runtimeProfile               runtimeprofile.Profile
 	runtimePolicy                runtimeprofile.Policy
 	runtimeIdentity              runtimeidentity.Identity
+	kernelRuntime                *Runtime
 
 	mcpRepository          *mcp.Repository
 	mcpRuntimeConnectPort  acquisition.MCPRuntimeConnectPort
@@ -264,6 +267,11 @@ func (b *ContainerBuilder) WithRuntimeHost(
 
 func (b *ContainerBuilder) WithRuntimeIdentity(identity runtimeidentity.Identity) *ContainerBuilder {
 	b.runtimeIdentity = identity
+	return b
+}
+
+func (b *ContainerBuilder) WithKernelRuntime(runtime *Runtime) *ContainerBuilder {
+	b.kernelRuntime = runtime
 	return b
 }
 
@@ -509,22 +517,6 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	if err := workflowRegistry.LoadFromStore(ctx); err != nil {
 		log.Printf("[original-error] %v", err)
 	}
-	legacyWorkflowLocation := workflow.WorkflowLocationLocal
-	if b.runtimeProfile == runtimeprofile.ProfileCloudCore {
-		legacyWorkflowLocation = workflow.WorkflowLocationCloud
-	}
-	for _, def := range workflowRegistry.List(workflow.WorkflowFilter{}) {
-		if def.Source != "user" || def.Metadata == nil {
-			continue
-		}
-		ownerSpaceID := strings.TrimSpace(fmt.Sprint(def.Metadata["ownerSpaceId"]))
-		if ownerSpaceID == "" {
-			continue
-		}
-		if _, ensureErr := workflowInstallationRepo.EnsureLegacy(ctx, def, ownerSpaceID, legacyWorkflowLocation); ensureErr != nil {
-			return nil, fmt.Errorf("migrate workflow installation %s: %w", def.ID, ensureErr)
-		}
-	}
 	workflowExecutor := workflow.NewWorkflowExecutor(workflowRegistry)
 	workflowExecutor.SetRevisionBinder(func(ctx context.Context, ownerSpaceID string, def workflow.WorkflowDefinition) (string, error) {
 		ownerSpaceID = strings.TrimSpace(ownerSpaceID)
@@ -541,7 +533,6 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		return revision.RevisionID, nil
 	})
 	workflowExecutor.SetCheckpointStore(sqlite.NewSQLiteCheckpointStore(db))
-	workflowExecutor.SetCompensationManager(workflow.NewCompensationManager())
 	workflowExecRepo := sqlite.NewWorkflowExecutionRepository(db)
 	workflowExecutor.SetRunStore(workflowExecRepo)
 	workflowTriggerManager := workflow.NewTriggerManager(workflowExecutor)
@@ -1095,7 +1086,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		return nil, fmt.Errorf("kernel: load device registry: %w", err)
 	}
 
-	uiHostNotifier := NewSSEUIHostNotifierWithRegistry(sse.Global, deviceRegistry)
+	uiHostNotifier := NewSSEUIHostNotifier(sse.Global, deviceRegistry)
 	uiHostNotifier.SetClientRuntimeDatabase(db)
 	tool.SetExecutionEventSink(func(eventCtx context.Context, execCtx tool.ToolExecutionContext, name string, result tool.ToolCallResult) {
 		payload, err := json.Marshal(map[string]interface{}{
@@ -1202,6 +1193,16 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 
 	builtinCatalog := builtin.NewCatalog()
 	builtinHandlerRegistry := builtin.NewHandlerRegistry()
+	pluginMarketCatalogURL := strings.TrimSpace(os.Getenv("AMITIA_PLUGIN_MARKET_CATALOG_URL"))
+	if pluginMarketCatalogURL == "" {
+		pluginMarketCatalogURL = pluginmarket.DefaultCatalogURL
+	}
+	builtinHandlerRegistry.Register(
+		domain.ExtensionID(pluginmarket.ExtensionID),
+		domain.ModuleID(pluginmarket.RuntimeModuleID),
+		pluginmarket.HandlerName,
+		pluginmarket.New(hostAPIGateway, pluginMarketCatalogURL),
+	)
 	builtinBootstrapper := builtin.NewBootstrapper(builtinCatalog, defRepo, instRepo)
 	builtinBootstrapper.SetModuleRepository(moduleRepo)
 	builtinBootstrapper.SetContributionRepository(contribRepo)
@@ -1289,13 +1290,13 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	extensionCenterService := extension_center.NewCenterService(extensionCenterCardProvider)
 	extensionCenterService.SetTargetMode(b.runtimeProfile.String())
 	acquisitionSourceRegistry.Register(acquisition.NewExtensionCatalogSource(extensionCenterService))
+	for _, uri := range extensionCatalogURLs() {
+		acquisitionSourceRegistry.Register(acquisition.NewRemoteCatalogSource(uri))
+	}
 
 	if b.mcpRepository != nil {
 		mcpAdapter := acquisition.NewMCPRepositoryAdapter(b.mcpRepository)
 		acquisitionSourceRegistry.Register(acquisition.NewMCPPackageSource(mcpAdapter))
-	}
-	if uri := os.Getenv("AMITIA_EXTENSION_CATALOG_URL"); uri != "" {
-		acquisitionSourceRegistry.Register(acquisition.NewRemoteCatalogSource(uri))
 	}
 	if uri := os.Getenv("AMITIA_MCP_CATALOG_URL"); uri != "" {
 		acquisitionSourceRegistry.Register(acquisition.NewRemoteMCPCatalogSource(uri))
@@ -1392,6 +1393,10 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 	recoveryService := acquisition.NewRecoveryService(acquisitionService)
 	toolFacade.SetRecoveryService(recoveryService)
+	var hostPluginPackages HostPluginPackageManagerPort
+	if b.kernelRuntime != nil {
+		hostPluginPackages = NewHostPluginPackageManager(b.kernelRuntime, b.runtimeProfile)
+	}
 	if err := setupDefaultHostAPIRoutes(hostAPIGateway, HostAPIRouteDeps{
 		StateStore:                  extensionStateStore,
 		CharacterReader:             charReader,
@@ -1404,6 +1409,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		EventService:                eventSvc,
 		ScheduleService:             scheduleSvc,
 		ToolFacade:                  toolFacade,
+		PluginPackages:              hostPluginPackages,
 		ExecutionKernel:             executionKernel,
 		ToolRegistry:                toolRegistry,
 		OperationRepository:         opRepo,
@@ -1416,6 +1422,8 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		ExtensionDataSources:        b.extensionDataSources,
 		ResourceLinks:               resourceLinks,
 		VectorStore:                 b.vectorStore,
+		NetworkClient:               &http.Client{Timeout: 2 * time.Minute},
+		NetworkAllowPrivate:         b.runtimeProfile != runtimeprofile.ProfileCloudCore,
 	}); err != nil {
 		return nil, fmt.Errorf("kernel: setup host api routes: %w", err)
 	}
@@ -1445,6 +1453,25 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	})
 
 	builtinDispatcher := func(ctx context.Context, handlerName string, input json.RawMessage, invocation capability.ToolInvocationContext) (json.RawMessage, error) {
+		if handler, ok := builtinHandlerRegistry.Resolve(handlerName, invocation.ExtensionID, invocation.ModuleID); ok {
+			result := handler.Execute(ctx, invocation, input)
+			if result.Error != nil {
+				return nil, fmt.Errorf("%s: %s", result.Error.Code, result.Error.Message)
+			}
+			if len(result.Structured) > 0 {
+				return result.Structured, nil
+			}
+			parts := make([]string, 0, len(result.Content))
+			for _, content := range result.Content {
+				if strings.TrimSpace(content.Text) != "" {
+					parts = append(parts, content.Text)
+				}
+			}
+			if len(parts) > 0 {
+				return json.RawMessage(strings.Join(parts, "\n")), nil
+			}
+			return json.RawMessage(`{}`), nil
+		}
 		if agentAdminTools.CanHandle(handlerName) {
 			return agentAdminTools.Dispatch(ctx, handlerName, input, invocation)
 		}
@@ -1514,7 +1541,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		WorkflowCancel:    makeWorkflowCancelFunc(workflowExecutor),
 		BuiltinDispatcher: builtinDispatcher,
 		BuiltinHandlerVerifier: func(name string) bool {
-			return tool.HasHandler(name) || agentAdminTools.CanHandle(name) || builtinUtilityTools.CanHandle(name)
+			return builtinHandlerRegistry.HasName(name) || tool.HasHandler(name) || agentAdminTools.CanHandle(name) || builtinUtilityTools.CanHandle(name)
 		},
 		AndroidLinuxProvider:  b.androidLinuxProvider,
 		AndroidNativeProvider: b.androidNativeProvider,
@@ -1568,9 +1595,6 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 	if err := reconcileEnabledBuiltinProviderInstances(ctx, defRepo, instRepo, providerInstanceReconciler); err != nil {
 		return nil, fmt.Errorf("kernel: reconcile enabled builtin provider instances: %w", err)
-	}
-	if err := taskRuntimeService.DeleteTaskDefinition(ctx, "system.search.deep"); err != nil {
-		return nil, fmt.Errorf("kernel: remove legacy deep search task: %w", err)
 	}
 	registerWorkflowStepHandlers(workflowExecutor, executionKernel, adapterRegistry, NewWorkflowExecutionRouter(capabilityService, toolRegistry, taskRuntimeService, sessionService))
 
@@ -1714,17 +1738,6 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	})
 	uiContribRepo := sqlite.NewSQLiteUIContributionRepository(store.DB())
 	savedContribs, _ := uiContribRepo.ListAll(ctx)
-	activeContribs := savedContribs[:0]
-	for _, def := range savedContribs {
-		if string(def.ExtensionID) == builtin.LegacyProactiveExtensionID {
-			if err := uiContribRepo.DeleteContribution(ctx, string(def.ContributionID)); err != nil {
-				log.Printf("[original-error] %v", err)
-			}
-			continue
-		}
-		activeContribs = append(activeContribs, def)
-	}
-	savedContribs = activeContribs
 	slotRegistry := extension_slots.DefaultSlotRegistry()
 	pageRegistry := extension_page_host.NewPageRegistry()
 	pageSessionMgr := extension_page_host.NewSessionManager()
@@ -1736,9 +1749,15 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	schemaRegistry := schema_ui.NewSchemaRegistry(schemaValidator, schemaCache)
 	for _, def := range savedContribs {
 		if def.Entry.SchemaPath != "" || def.Sandbox.Type == ui_contribution.SandboxSchemaRenderer {
-			basePath := resolveExtensionBundlePath(b.extRoot, string(def.ExtensionID))
-			if basePath == "" || schemaRegistry.LoadFromPathWithContext(string(def.ExtensionID), string(def.ContributionID), def.Integrity.Generation, "", "", basePath, def.Entry.SchemaPath) != nil {
-				continue
+			if len(def.Schema) > 0 {
+				if err := schemaRegistry.LoadFromBytesWithContext(string(def.ExtensionID), string(def.ContributionID), def.Integrity.Generation, "", "", def.Schema); err != nil {
+					continue
+				}
+			} else {
+				basePath := resolveExtensionBundlePath(b.extRoot, string(def.ExtensionID))
+				if basePath == "" || schemaRegistry.LoadFromPathWithContext(string(def.ExtensionID), string(def.ContributionID), def.Integrity.Generation, "", "", basePath, def.Entry.SchemaPath) != nil {
+					continue
+				}
 			}
 		}
 		if err := uiHost.RegisterContribution(def); err != nil {
@@ -1783,15 +1802,11 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		updateBaseDir = filepath.Join(os.TempDir(), "amitia-package-distribution")
 	}
 	registryURL := strings.TrimSpace(os.Getenv("AMITIA_EXTENSION_UPDATE_REGISTRY_URL"))
-	if registryURL == "" {
-		registryURL = package_distribution.DefaultRegistryURL
-	}
 	registryPublicKey := strings.TrimSpace(os.Getenv("AMITIA_REGISTRY_PUBLIC_KEY"))
 	if registryPublicKey == "" {
 		registryPublicKey = package_distribution.DefaultRegistryPublicKey
 	}
 	allowPrivateDownloads, _ := strconv.ParseBool(strings.TrimSpace(os.Getenv("AMITIA_EXTENSION_UPDATE_ALLOW_PRIVATE")))
-	allowPrivateDownloads = allowPrivateDownloads || registryURL == package_distribution.DefaultRegistryURL
 	packageDistribution := package_distribution.NewService(package_distribution.Config{
 		RegistryURL:           registryURL,
 		RegistryPublicKey:     registryPublicKey,
@@ -1898,7 +1913,6 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	canaryHealthCollector := canary.NewHealthMetricsCollector()
 	canaryHealthEvaluator := canary.NewHealthEvaluator()
 	canaryCohortResolver := canary.NewCohortResolver()
-	canaryDualWriteMgr := canary.NewDualWriteManager()
 	canaryShadowMgr := canary.NewShadowManager()
 	canaryOwnershipResolver := canary.NewBackgroundOwnershipResolver()
 
@@ -2046,7 +2060,6 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		CanaryHealthCollector:   canaryHealthCollector,
 		CanaryHealthEvaluator:   canaryHealthEvaluator,
 		CanaryCohortResolver:    canaryCohortResolver,
-		CanaryDualWriteManager:  canaryDualWriteMgr,
 		CanaryShadowManager:     canaryShadowMgr,
 		CanaryOwnershipResolver: canaryOwnershipResolver,
 
@@ -2201,9 +2214,7 @@ func activateBuiltinUIContributions(
 			return fmt.Errorf("kernel: list builtin contributions %s: %w", inst.ExtensionID, err)
 		}
 		for _, contrib := range contributions {
-			switch contrib.Kind {
-			case domain.ContributionKindUIPage, domain.ContributionKindUIPanel, domain.ContributionKindUIChat,
-				domain.ContributionKindUIContextAction, domain.ContributionKindUIDesktop:
+			if contrib.EffectiveAdapter() == domain.ContributionAdapterUI {
 				if err := installer.activateUI(ctx, contrib, inst.Generation); err != nil {
 					return fmt.Errorf("kernel: activate builtin ui contribution %s: %w", contrib.ID, err)
 				}
@@ -2403,9 +2414,6 @@ func (k *gameHostKernelLifecycle) ExecuteUpdate(ctx context.Context, extensionID
 func (b *ContainerBuilder) buildStore(ctx context.Context) (*sqlite.Store, error) {
 	if b.db != nil {
 		store := sqlite.NewStoreFromDB(b.db)
-		if err := host_registry.MigrateSessionTokens(ctx, store.DB()); err != nil {
-			return nil, fmt.Errorf("kernel: migrate session tokens: %w", err)
-		}
 		return store, nil
 	}
 	if b.dbPath == "" {
@@ -2418,10 +2426,6 @@ func (b *ContainerBuilder) buildStore(ctx context.Context) (*sqlite.Store, error
 	if err := store.Migrate(ctx); err != nil {
 		store.Close()
 		return nil, fmt.Errorf("kernel: migrate store: %w", err)
-	}
-	if err := host_registry.MigrateSessionTokens(ctx, store.DB()); err != nil {
-		store.Close()
-		return nil, fmt.Errorf("kernel: migrate session tokens: %w", err)
 	}
 	return store, nil
 }
@@ -2504,6 +2508,25 @@ func (a *kernelArtifactStoreAdapter) HasArtifactAtHash(expectedHash string) (str
 
 func (a *kernelArtifactStoreAdapter) ArtifactIDFromHash(hash string) string {
 	return a.store.ArtifactIDFromHash(hash)
+}
+
+func extensionCatalogURLs() []string {
+	values := []string{os.Getenv("AMITIA_EXTENSION_CATALOG_URL"), os.Getenv("AMITIA_EXTENSION_CATALOG_URLS")}
+	seen := map[string]bool{}
+	urls := make([]string, 0)
+	for _, value := range values {
+		for _, item := range strings.FieldsFunc(value, func(r rune) bool {
+			return r == ',' || r == '\n' || r == '\r'
+		}) {
+			item = strings.TrimSpace(item)
+			if item == "" || seen[item] {
+				continue
+			}
+			seen[item] = true
+			urls = append(urls, item)
+		}
+	}
+	return urls
 }
 
 // kernelArtifactRegistryAdapter adapts PackageRepository to the acquisition RemoteArtifactRegistry interface.

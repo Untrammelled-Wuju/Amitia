@@ -282,7 +282,7 @@ func (s *service) browserAgentExecute(ctx context.Context, scope extensionkernel
 	if !found {
 		return nil, errors.New("typed browser tool is unavailable: " + toolID)
 	}
-	if !legacyToolSucceeded(toolResult) {
+	if !toolSucceeded(toolResult) {
 		message := strings.TrimSpace(toolResult.VisibleText)
 		if toolResult.Error != nil {
 			if message == "" {

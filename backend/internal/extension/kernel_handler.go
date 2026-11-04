@@ -12,8 +12,6 @@ import (
 	middlewaresecurity "github.com/u-ai/backend/internal/middleware/security"
 )
 
-const packageAPIReplacement = "/api/extensions/packages/artifacts"
-
 func registerExtensionPackageRoutes(group *gin.RouterGroup, runtime *Runtime) {
 	group.POST("/packages/artifacts", func(c *gin.Context) { createPackageArtifactPreview(c, runtime) })
 	group.POST("/packages/previews", func(c *gin.Context) { createPackageArtifactPreview(c, runtime) })
@@ -35,18 +33,6 @@ func registerExtensionPackageRoutes(group *gin.RouterGroup, runtime *Runtime) {
 		}
 		c.JSON(http.StatusOK, operation)
 	})
-}
-
-func retiredPackageInstallEndpoint(c *gin.Context) {
-	c.JSON(http.StatusGone, gin.H{"error_code": "PACKAGE_INSTALL_ENDPOINT_RETIRED", "replacement_endpoint": packageAPIReplacement})
-}
-
-func retiredPackagePreviewEndpoint(c *gin.Context) {
-	c.JSON(http.StatusGone, gin.H{"error_code": "PACKAGE_PREVIEW_ENDPOINT_RETIRED", "replacement_endpoint": packageAPIReplacement})
-}
-
-func retiredLegacyPackageEndpoint(c *gin.Context) {
-	c.JSON(http.StatusGone, gin.H{"error_code": "LEGACY_PACKAGE_ENDPOINT_RETIRED", "replacement_endpoint": packageAPIReplacement})
 }
 
 func createPackageArtifactPreview(c *gin.Context, runtime *Runtime) {

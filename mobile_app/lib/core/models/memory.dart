@@ -68,59 +68,33 @@ class MemoryDto {
     this.updatedAt = '',
   });
 
-  /// Backward-compatible aliases used by existing UI widgets.
-  String get content => value;
-  String get type => memoryType;
-  String get status => verifiedStatus;
-
   factory MemoryDto.fromJson(Map<String, dynamic> json) {
     return MemoryDto(
       id: (json['id'] ?? '').toString(),
       characterId: (json['characterId'] ?? '').toString(),
-      memoryType: (json['memoryType'] ?? json['type'] ?? 'custom').toString(),
-      memorySubtype: (json['memorySubtype'] ?? json['memory_subtype'] ?? '')
-          .toString(),
+      memoryType: (json['memoryType'] ?? 'custom').toString(),
+      memorySubtype: (json['memorySubtype'] ?? '').toString(),
       source: (json['source'] ?? 'manual').toString(),
       scope: (json['scope'] ?? 'character').toString(),
       key: (json['key'] ?? '').toString(),
-      value: (json['value'] ?? json['content'] ?? '').toString(),
+      value: (json['value'] ?? '').toString(),
       importance: _asInt(json['importance']),
       confidence: _asInt(json['confidence'], fallback: 50),
-      verifiedStatus: (json['verifiedStatus'] ?? json['status'] ?? 'unverified')
-          .toString(),
+      verifiedStatus: (json['verifiedStatus'] ?? 'unverified').toString(),
       useCount: _asInt(json['useCount']),
-      retentionLevel: _asInt(
-        json['retentionLevel'] ?? json['retention_level'],
-        fallback: 3,
-      ),
-      memoryStrength: _asDouble(
-        json['memoryStrength'] ?? json['memory_strength'],
-        fallback: 0.68,
-      ),
-      strengthUpdatedAt: _nullableString(
-        json['strengthUpdatedAt'] ?? json['strength_updated_at'],
-      ),
-      lastReinforcedAt: _nullableString(
-        json['lastReinforcedAt'] ?? json['last_reinforced_at'],
-      ),
-      reinforceCount: _asInt(json['reinforceCount'] ?? json['reinforce_count']),
-      retrievedCount: _asInt(json['retrievedCount'] ?? json['retrieved_count']),
-      injectedCount: _asInt(json['injectedCount'] ?? json['injected_count']),
-      decayState: (json['decayState'] ?? json['decay_state'] ?? 'active')
-          .toString(),
+      retentionLevel: _asInt(json['retentionLevel'], fallback: 3),
+      memoryStrength: _asDouble(json['memoryStrength'], fallback: 0.68),
+      strengthUpdatedAt: _nullableString(json['strengthUpdatedAt']),
+      lastReinforcedAt: _nullableString(json['lastReinforcedAt']),
+      reinforceCount: _asInt(json['reinforceCount']),
+      retrievedCount: _asInt(json['retrievedCount']),
+      injectedCount: _asInt(json['injectedCount']),
+      decayState: (json['decayState'] ?? 'active').toString(),
       pinned: _asBool(json['pinned']),
-      archivedAt: _nullableString(json['archivedAt'] ?? json['archived_at']),
-      sensitivityLevel:
-          (json['sensitivityLevel'] ?? json['sensitivity_level'] ?? 'internal')
-              .toString(),
-      allowContextUse: _asBool(
-        json['allowContextUse'] ?? json['allow_context_use'],
-        fallback: true,
-      ),
-      allowProactiveMention: _asBool(
-        json['allowProactiveMention'] ?? json['allow_proactive_mention'],
-        fallback: true,
-      ),
+      archivedAt: _nullableString(json['archivedAt']),
+      sensitivityLevel: (json['sensitivityLevel'] ?? 'internal').toString(),
+      allowContextUse: _asBool(json['allowContextUse'], fallback: true),
+      allowProactiveMention: _asBool(json['allowProactiveMention'], fallback: true),
       requiresConfirmation: _asBool(json['requiresConfirmation']),
       createdAt: (json['createdAt'] ?? '').toString(),
       updatedAt: (json['updatedAt'] ?? '').toString(),
@@ -217,29 +191,21 @@ class MemoryCandidateDto {
     this.createdAt = '',
   });
 
-  /// Backward-compatible aliases for existing candidate UI.
-  String get content => value.isNotEmpty ? value : sourceText;
-  String get source => sourceText;
-  String get status =>
-      proposedAction.isNotEmpty ? proposedAction : candidateKind;
-
   factory MemoryCandidateDto.fromJson(Map<String, dynamic> json) {
     return MemoryCandidateDto(
       id: (json['id'] ?? '').toString(),
       characterId: (json['characterId'] ?? '').toString(),
       key: (json['key'] ?? '').toString(),
-      value: (json['value'] ?? json['content'] ?? '').toString(),
-      memoryType: (json['memoryType'] ?? json['type'] ?? 'custom').toString(),
-      memorySubtype: (json['memorySubtype'] ?? json['memory_subtype'] ?? '')
-          .toString(),
+      value: (json['value'] ?? '').toString(),
+      memoryType: (json['memoryType'] ?? 'custom').toString(),
+      memorySubtype: (json['memorySubtype'] ?? '').toString(),
       importance: MemoryDto._asInt(json['importance'], fallback: 5),
       confidence: _normalizedConfidence(
         json['confidenceReal'] ?? json['confidence'],
       ),
-      sourceText: (json['sourceText'] ?? json['source'] ?? '').toString(),
+      sourceText: (json['sourceText'] ?? '').toString(),
       candidateKind: (json['candidateKind'] ?? '').toString(),
-      proposedAction: (json['proposedAction'] ?? json['status'] ?? '')
-          .toString(),
+      proposedAction: (json['proposedAction'] ?? '').toString(),
       reason: (json['reason'] ?? '').toString(),
       createdAt: (json['createdAt'] ?? '').toString(),
     );

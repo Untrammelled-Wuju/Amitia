@@ -6,14 +6,9 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/requestidentity"
 	"gorm.io/gorm"
 )
-
-func characterLocalSingleUserMode() bool {
-	return config.AppCfg != nil && strings.EqualFold(strings.TrimSpace(config.AppCfg.Security.Mode), "local_single_user")
-}
 
 func normalizeCharacterOwner(spaceID string) string {
 	return requestidentity.NormalizeSpaceID(spaceID)
@@ -22,10 +17,7 @@ func normalizeCharacterOwner(spaceID string) string {
 func characterOwnerMatches(stored, requested string) bool {
 	stored = strings.TrimSpace(stored)
 	requested = normalizeCharacterOwner(requested)
-	if stored == requested {
-		return true
-	}
-	return characterLocalSingleUserMode() && (stored == "" || stored == requestidentity.LegacySpaceID)
+	return stored != "" && stored == requested
 }
 
 func (s *service) requireCharacterOwner(id, spaceID string) (*Character, error) {
@@ -41,9 +33,6 @@ func (s *service) requireCharacterOwner(id, spaceID string) (*Character, error) 
 
 func (s *service) characterOwnerQuery(db *gorm.DB, spaceID string) *gorm.DB {
 	owner := normalizeCharacterOwner(spaceID)
-	if characterLocalSingleUserMode() {
-		return db.Where("(space_id = ? OR space_id = '' OR space_id IS NULL OR space_id = ?)", owner, requestidentity.LegacySpaceID)
-	}
 	return db.Where("space_id = ?", owner)
 }
 

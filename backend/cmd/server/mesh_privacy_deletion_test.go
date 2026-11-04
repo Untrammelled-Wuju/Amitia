@@ -6,10 +6,8 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
-	"github.com/u-ai/backend/internal/mindruntime"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
@@ -81,84 +79,6 @@ func TestPrivacyDeletionRealTLSModesAndActualReadBlocking(t *testing.T) {
 	core.request(t, phone, http.MethodPost, endpoint+"security-tests", map[string]any{"targetId": "nonexistent", "targetType": "message"}, 409)
 }
 
-func TestPrivacyDeletionLegacyHistoricalAndFailureRetry(t *testing.T) {
-	schemas := newThreeCoreSchemas(t)
-	phone := newThreeCoreFixture(t, "legacy-delete-phone", schemas, runtimeidentity.PlatformAndroid)
-	core := newThreeCoreFixture(t, "legacy-delete-core", schemas)
-	registerPrivacyFixture(core)
-	pairThreeCoreFixtures(t, phone, core)
-	port := phone.services.DeviceMesh.LocalDeviceDataPort.(*meshLocalDataPort)
-	for _, row := range []chat.Conversation{{ID: "legacy-delete", SpaceID: port.legacySpaceID}, {ID: "unrelated", SpaceID: "foreign-space"}} {
-		if err := phone.services.DB.Create(&row).Error; err != nil {
-			t.Fatal(err)
-		}
-	}
-	for _, row := range []chat.Message{{ID: "legacy-delete-one", ConversationID: "legacy-delete", CharacterID: "one", Role: "user", Content: "private legacy", ReasoningContent: "private reasoning", Revision: 1}, {ID: "legacy-delete-two", ConversationID: "legacy-delete", CharacterID: "one", Role: "assistant", Content: "sibling", Revision: 1}, {ID: "foreign-message", ConversationID: "unrelated", CharacterID: "one", Role: "user", Content: "foreign", Revision: 1}} {
-		if err := phone.services.DB.Create(&row).Error; err != nil {
-			t.Fatal(err)
-		}
-	}
-	remove := func(id string, fail bool) map[string]any {
-		t.Helper()
-		input := map[string]any{"targetId": id, "targetType": "message", "scope": "all"}
-		preview := decodeThreeCoreMemoryResponse[map[string]any](t, core.request(t, phone, http.MethodPost, "/api/privacy/deletion/preview", input, 200))
-		targets := preview["targets"].([]any)
-		if len(targets) != 1 {
-			t.Fatalf("preview: %v", preview)
-		}
-		input["target"], input["requestId"] = targets[0], uuid.NewString()
-		if fail {
-			if err := phone.services.DB.Exec("ALTER TABLE message_feedback RENAME TO message_feedback_paused").Error; err != nil {
-				t.Fatal(err)
-			}
-		}
-		result := decodeThreeCoreMemoryResponse[map[string]any](t, core.request(t, phone, http.MethodPost, "/api/privacy/deletion/request", input, 200))
-		if fail {
-			if result["retrievalBlocked"] == true || result["status"] != "failed" {
-				t.Fatalf("false success after failure: %v", result)
-			}
-			if err := phone.services.DB.Exec("ALTER TABLE message_feedback_paused RENAME TO message_feedback").Error; err != nil {
-				t.Fatal(err)
-			}
-			core.request(t, phone, http.MethodPost, "/api/privacy/deletion/cleanup", nil, 200)
-			result = decodeThreeCoreMemoryResponse[map[string]any](t, core.request(t, phone, http.MethodGet, "/api/privacy/deletion/status/"+result["id"].(string), nil, 200))
-		}
-		if result["status"] != "completed" {
-			t.Fatalf("legacy not erased: %v", result)
-		}
-		var message chat.Message
-		if err := phone.services.DB.Where("id=?", id).First(&message).Error; err != nil {
-			t.Fatal(err)
-		}
-		if message.DeletedAt == nil || message.Content != "" || message.ReasoningContent != "" {
-			t.Fatalf("legacy source retained payload: %+v", message)
-		}
-		return result
-	}
-	remove("legacy-delete-one", true)
-	var kept chat.Message
-	if err := phone.services.DB.Where("id='legacy-delete-two' AND deleted_at IS NULL").First(&kept).Error; err != nil {
-		t.Fatal("sibling was deleted")
-	}
-	policy, err := core.services.DeviceMesh.Coordination.Get(t.Context(), core.core, phone.device.DeviceID.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	ensureCoordinatedForTest(t, core, phone, policy.ModeRevision)
-	result := remove("legacy-delete-two", false)
-	if result["ownerId"] != phone.device.DeviceID.String() {
-		t.Fatal("historical deletion was routed to Core")
-	}
-	stats := decodeThreeCoreMemoryResponse[map[string]any](t, core.request(t, phone, http.MethodGet, "/api/privacy/deletion/stats", nil, 200))
-	if stats["total"] != float64(2) {
-		t.Fatalf("owner stats missing: %v", stats)
-	}
-	foreign := decodeThreeCoreMemoryResponse[map[string]any](t, core.request(t, phone, http.MethodPost, "/api/privacy/deletion/preview", map[string]any{"targetId": "foreign-message", "targetType": "message", "scope": "all"}, 200))
-	if len(foreign["targets"].([]any)) != 0 {
-		t.Fatal("foreign space exposed in preview")
-	}
-}
-
 func TestPrivacyDeletionConversationAndCharacterScopes(t *testing.T) {
 	for _, kind := range []string{"conversation", "character"} {
 		t.Run(kind, func(t *testing.T) {
@@ -221,64 +141,5 @@ func TestPrivacyDeletionMemoryPreviewAndReplay(t *testing.T) {
 	replay := decodeThreeCoreMemoryResponse[map[string]any](t, core.request(t, phone, http.MethodPost, "/api/privacy/deletion/request", input, 200))
 	if replay["id"] != result["id"] {
 		t.Fatal("memory replay lost receipt")
-	}
-}
-
-func TestPrivacyDeletionLegacyJobMigrationAndVersionFence(t *testing.T) {
-	schemas := newThreeCoreSchemas(t)
-	phone := newThreeCoreFixture(t, "migrate-delete-phone", schemas)
-	core := newThreeCoreFixture(t, "migrate-delete-core", schemas)
-	registerPrivacyFixture(core)
-	pairThreeCoreFixtures(t, phone, core)
-	policy, err := core.services.DeviceMesh.Coordination.Get(t.Context(), core.core, phone.device.DeviceID.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	ensureCoordinatedForTest(t, core, phone, policy.ModeRevision)
-	policy, err = core.services.DeviceMesh.Coordination.Get(t.Context(), core.core, phone.device.DeviceID.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := core.services.DeviceMesh.Coordination.GrantAdministrator(t.Context(), core.core, phone.device.DeviceID.String(), policy.PermissionRevision, true); err != nil {
-		t.Fatal(err)
-	}
-	id := uuid.NewString()
-	reply := decodeThreeCoreMemoryResponse[business.Response](t, core.request(t, phone, http.MethodPost, "/api/device-mesh/v1/business/messages", map[string]any{"requestId": id, "characterId": "one", "message": "legacy task migration"}, 200))
-	<-core.model.roles
-	legacy := mindruntime.NewDataLifecycleCoordinator(core.services.DB)
-	if err := legacy.InitSchema(); err != nil {
-		t.Fatal(err)
-	}
-	tombstone, err := legacy.RequestDeletion(mindruntime.DeletionRequest{TargetID: id + "/user", TargetType: "message", Scope: mindruntime.DeletionScopeAll})
-	if err != nil {
-		t.Fatal(err)
-	}
-	input := map[string]any{"targetId": id + "/user", "targetType": "message", "scope": "all", "legacyDeletionId": tombstone.ID}
-	preview := decodeThreeCoreMemoryResponse[map[string]any](t, core.request(t, phone, http.MethodPost, "/api/privacy/deletion/preview", input, 200))
-	targets := preview["targets"].([]any)
-	if len(targets) != 1 {
-		t.Fatal(preview)
-	}
-	input["target"], input["requestId"] = targets[0], uuid.NewString()
-	if _, err := core.services.KernelContainer.DeviceRegistry.Database().Exec(`UPDATE kernel_device_owned_resources SET revision=revision+1 WHERE owner_id=? AND kind='message' AND resource_id=?`, reply.Scope.ResourceOwnerID, id+"/user"); err != nil {
-		t.Fatal(err)
-	}
-	core.request(t, phone, http.MethodPost, "/api/privacy/deletion/request", input, 409)
-	preview = decodeThreeCoreMemoryResponse[map[string]any](t, core.request(t, phone, http.MethodPost, "/api/privacy/deletion/preview", input, 200))
-	input["target"], input["requestId"] = preview["targets"].([]any)[0], uuid.NewString()
-	result := decodeThreeCoreMemoryResponse[map[string]any](t, core.request(t, phone, http.MethodPost, "/api/privacy/deletion/request", input, 200))
-	if result["status"] != "completed" {
-		t.Fatal(result)
-	}
-	var migrated mindruntime.DeletionTombstoneModel
-	if err := core.services.DB.Where("id=?", tombstone.ID).First(&migrated).Error; err != nil {
-		t.Fatal(err)
-	}
-	if migrated.MigratedTo != result["id"] || migrated.Status != "migrated" {
-		t.Fatal("old task not linked to real receipt")
-	}
-	status := decodeThreeCoreMemoryResponse[map[string]any](t, core.request(t, phone, http.MethodGet, "/api/privacy/deletion/status/"+tombstone.ID, nil, 200))
-	if status["status"] != "completed" {
-		t.Fatal(status)
 	}
 }

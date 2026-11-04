@@ -90,18 +90,6 @@ SPDX-License-Identifier: AGPL-3.0-only
               :key="`voice-${selectedId}`"
             />
           </el-tab-pane>
-          <el-tab-pane label="记忆" name="memory">
-            <MemoryManagerView
-              v-if="activeTab === 'memory'"
-              :key="`memory-${selectedId}`"
-            />
-          </el-tab-pane>
-          <el-tab-pane label="时间线" name="timeline">
-            <MemoryTimeline
-              v-if="activeTab === 'timeline'"
-              :key="`timeline-${selectedId}`"
-            />
-          </el-tab-pane>
           <el-tab-pane label="心理状态" name="psyche">
             <CharacterPsycheView
               v-if="activeTab === 'psyche'"
@@ -376,8 +364,6 @@ import {
   AiCharacterSettingsView,
   CharacterVoiceView,
 } from "../../ui-index";
-import MemoryManagerView from "@/views/memory-manager/MemoryManagerView.vue";
-import MemoryTimeline from "@/views/memory-timeline/MemoryTimeline.vue";
 import CharacterPsycheView from "@/views/character/CharacterPsycheView.vue";
 import ImportPackDialog from "@/views/character-config/components/ImportPackDialog.vue";
 import TemplatePickerDialog from "@/views/character-config/components/TemplatePickerDialog.vue";

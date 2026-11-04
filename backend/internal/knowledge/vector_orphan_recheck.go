@@ -77,7 +77,7 @@ func (r *Repository) recheckOrphanAuditLatestWithSources(ctx context.Context, te
 	result.PreviousSampled = previous.Sampled
 	result.PreviousSuspected = previous.SuspectedOrphans
 	if len(previous.ObservationDigest) != 64 {
-		result.Status = "legacy_no_digest"
+		result.Status = "checkpoint_mismatch"
 		return result, nil
 	}
 	if now.After(row.ExpiresAt) {

@@ -28,6 +28,9 @@ func TestAgentSkillPackagePromptActivationAndResources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if !preview.Installable {
+		t.Fatalf("preview is not installable: %+v", preview.Issues)
+	}
 	confirmations := map[string]bool{}
 	for _, item := range preview.RequiredConfirmations {
 		confirmations[item] = true

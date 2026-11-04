@@ -9,7 +9,9 @@ import '../../../../core/models/project.dart';
 import '../../../../core/settings/current_character_provider.dart';
 import '../../../../core/services/device_owned_chat_service.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 import '../../../../core/widgets/amitia_misc.dart';
+import '../../../characters/presentation/widgets/team_create_sheet.dart';
 import '../../runtime/conversation_runtime_controller.dart';
 
 class GroupChatSelection {
@@ -31,12 +33,122 @@ class CreatedGroupChat {
   final String baseRoleId;
 }
 
+class GroupTeamOption {
+  const GroupTeamOption({
+    required this.id,
+    required this.name,
+    required this.leadCharacterId,
+    required this.memberCharacterIds,
+  });
+
+  final String id;
+  final String name;
+  final String leadCharacterId;
+  final List<String> memberCharacterIds;
+}
+
+void _applyTeam(
+  GroupTeamOption team,
+  List<CharacterDto> characters,
+  String fallbackBaseRoleId,
+  void Function(String baseRoleId, Set<String> members, Set<String> derived)
+  apply,
+) {
+  final availableIds = characters.map((role) => role.id).toSet();
+  final ids = team.memberCharacterIds
+      .where(availableIds.contains)
+      .toSet()
+      .toList(growable: false);
+  if (ids.isEmpty) {
+    apply(fallbackBaseRoleId, <String>{}, <String>{});
+    return;
+  }
+  final baseRoleId = availableIds.contains(team.leadCharacterId)
+      ? team.leadCharacterId
+      : ids.first;
+  final members = ids.where((id) => id != baseRoleId).take(7).toSet();
+  apply(baseRoleId, members, Set<String>.from(members));
+}
+
+Future<List<GroupTeamOption>> _loadGroupTeams(WidgetRef ref) async {
+  final api = ref.read(rawBackendServiceApiProvider);
+  if (api == null) throw StateError('执行 Core 尚未就绪');
+  final values = await Future.wait<dynamic>([
+    api.get<dynamic>('/api/roles/teams'),
+    api.get<dynamic>('/api/roles', queryParameters: {'includeDisabled': false}),
+  ]);
+  final teams = _mapList(values[0]);
+  final roles = _mapList(values[1]);
+  final details = await Future.wait(
+    teams.map(
+      (team) => api.get<dynamic>(
+        '/api/roles/teams/${Uri.encodeComponent(team['id'].toString())}',
+      ),
+    ),
+  );
+  return details
+      .map((detail) => _teamOption(detail, roles))
+      .whereType<GroupTeamOption>()
+      .toList(growable: false);
+}
+
+Future<GroupTeamOption?> _loadGroupTeamOption(WidgetRef ref, String id) async {
+  final api = ref.read(rawBackendServiceApiProvider);
+  if (api == null) throw StateError('执行 Core 尚未就绪');
+  final values = await Future.wait<dynamic>([
+    api.get<dynamic>('/api/roles/teams/${Uri.encodeComponent(id)}'),
+    api.get<dynamic>('/api/roles', queryParameters: {'includeDisabled': false}),
+  ]);
+  return _teamOption(values[0], _mapList(values[1]));
+}
+
+GroupTeamOption? _teamOption(dynamic value, List<Map<String, dynamic>> roles) {
+  if (value is! Map) return null;
+  final detail = Map<String, dynamic>.from(value);
+  final team = detail['team'] is Map
+      ? Map<String, dynamic>.from(detail['team'] as Map)
+      : detail;
+  final id = team['id']?.toString() ?? '';
+  if (id.isEmpty) return null;
+  final roleByAgentId = <String, Map<String, dynamic>>{
+    for (final role in roles)
+      if (role['id'] != null) role['id'].toString(): role,
+  };
+  final memberCharacterIds = <String>[];
+  for (final member in _mapList(detail['members'])) {
+    if (member['memberType']?.toString() != 'agent') continue;
+    final role = roleByAgentId[member['memberId']?.toString() ?? ''];
+    final characterId = role?['characterId']?.toString() ?? '';
+    if (characterId.isNotEmpty && !memberCharacterIds.contains(characterId)) {
+      memberCharacterIds.add(characterId);
+    }
+  }
+  final leadRole = roleByAgentId[team['leadAgentId']?.toString() ?? ''];
+  return GroupTeamOption(
+    id: id,
+    name: team['name']?.toString() ?? '未命名团队',
+    leadCharacterId: leadRole?['characterId']?.toString() ?? '',
+    memberCharacterIds: memberCharacterIds,
+  );
+}
+
+List<Map<String, dynamic>> _mapList(dynamic value) {
+  if (value is! List) return const [];
+  return value
+      .whereType<Map>()
+      .map((item) => Map<String, dynamic>.from(item))
+      .toList(growable: false);
+}
+
 Future<GroupChatSelection?> showGroupChatInviteSheet(
   BuildContext context, {
+  required WidgetRef ref,
   required List<CharacterDto> characters,
   required String preferredRoleId,
   List<ProjectDto> projects = const <ProjectDto>[],
+  List<GroupTeamOption> teams = const <GroupTeamOption>[],
   bool showProjectSelector = false,
+  bool projectRequired = false,
 }) {
   var baseRoleId = characters.any((role) => role.id == preferredRoleId)
       ? preferredRoleId
@@ -50,8 +162,12 @@ Future<GroupChatSelection?> showGroupChatInviteSheet(
             project.workspaces.isNotEmpty,
       )
       .toList(growable: false);
-  var selectedProjectId = availableProjects.firstOrNull?.id ?? '';
+  var selectedProjectId = '';
   final selected = <String>{};
+  var selectedTeamId = '';
+  var teamDerivedMembers = <String>{};
+  var creatingTeam = false;
+  final availableTeams = [...teams];
   return showModalBottomSheet<GroupChatSelection>(
     context: context,
     isScrollControlled: true,
@@ -77,13 +193,131 @@ Future<GroupChatSelection?> showGroupChatInviteSheet(
                 Text('新建群聊', style: AppTypography.pageTitle(context)),
                 SizedBox(height: AppSpacing.xs),
                 Text('选择默认发言角色和要邀请的群成员', style: AppTypography.caption(context)),
+                SizedBox(height: AppSpacing.lg),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '从团队创建',
+                        style: AppTypography.sectionTitle(context),
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: creatingTeam
+                          ? null
+                          : () async {
+                              setSheetState(() => creatingTeam = true);
+                              try {
+                                final created = await showTeamCreateSheet(
+                                  context,
+                                  ref,
+                                );
+                                final id = created?['id']?.toString() ?? '';
+                                if (id.isEmpty) return;
+                                final option = await _loadGroupTeamOption(
+                                  ref,
+                                  id,
+                                );
+                                if (option == null) {
+                                  throw StateError('新团队缺少可用角色成员');
+                                }
+                                if (!availableTeams.any(
+                                  (team) => team.id == option.id,
+                                )) {
+                                  availableTeams.insert(0, option);
+                                }
+                                _applyTeam(option, characters, baseRoleId, (
+                                  base,
+                                  members,
+                                  derived,
+                                ) {
+                                  setSheetState(() {
+                                    baseRoleId = base;
+                                    selected
+                                      ..clear()
+                                      ..addAll(members);
+                                    teamDerivedMembers = derived;
+                                    selectedTeamId = option.id;
+                                    selectedProjectId = '';
+                                  });
+                                });
+                              } catch (error) {
+                                if (context.mounted) {
+                                  amitiaSnackBar(context, '创建团队失败：$error');
+                                }
+                              } finally {
+                                if (context.mounted) {
+                                  setSheetState(() => creatingTeam = false);
+                                }
+                              }
+                            },
+                      icon: const Icon(Icons.add),
+                      label: Text(creatingTeam ? '创建中' : '创建团队'),
+                    ),
+                  ],
+                ),
+                SizedBox(height: AppSpacing.sm),
+                if (availableTeams.isEmpty)
+                  Text(
+                    '暂无持久团队，也可以直接在下方选择角色',
+                    style: AppTypography.caption(context),
+                  )
+                else
+                  DropdownButtonFormField<String>(
+                    initialValue: selectedTeamId.isEmpty
+                        ? null
+                        : selectedTeamId,
+                    decoration: const InputDecoration(labelText: '选择团队'),
+                    items: availableTeams
+                        .map(
+                          (team) => DropdownMenuItem(
+                            value: team.id,
+                            child: Text(team.name),
+                          ),
+                        )
+                        .toList(growable: false),
+                    onChanged: (value) {
+                      if (value == null) {
+                        setSheetState(() {
+                          selected.removeAll(teamDerivedMembers);
+                          teamDerivedMembers = <String>{};
+                          selectedTeamId = '';
+                        });
+                        return;
+                      }
+                      final team = availableTeams.firstWhere(
+                        (item) => item.id == value,
+                      );
+                      _applyTeam(team, characters, baseRoleId, (
+                        base,
+                        members,
+                        derived,
+                      ) {
+                        setSheetState(() {
+                          baseRoleId = base;
+                          selected
+                            ..clear()
+                            ..addAll(members);
+                          teamDerivedMembers = derived;
+                          selectedTeamId = team.id;
+                          selectedProjectId = '';
+                        });
+                      });
+                    },
+                  ),
+                Text(
+                  '团队仅作为本次群聊的成员快照，不会建立持久关联。',
+                  style: AppTypography.caption(context),
+                ),
                 if (showProjectSelector) ...[
                   SizedBox(height: AppSpacing.lg),
-                  Text('选择工作区', style: AppTypography.sectionTitle(context)),
+                  Text('创建到项目', style: AppTypography.sectionTitle(context)),
                   SizedBox(height: AppSpacing.sm),
                   if (availableProjects.isEmpty)
                     Text(
-                      '暂无可用项目，请先在项目模式中创建项目',
+                      projectRequired
+                          ? '项目模式下必须选择项目，请先创建可用项目'
+                          : '暂无可用项目，可不加入项目',
                       style: AppTypography.bodySmall(
                         context,
                       ).copyWith(color: context.warning),
@@ -162,7 +396,7 @@ Future<GroupChatSelection?> showGroupChatInviteSheet(
                 FilledButton(
                   onPressed:
                       selected.isEmpty ||
-                          (showProjectSelector && selectedProjectId.isEmpty)
+                          (projectRequired && selectedProjectId.isEmpty)
                       ? null
                       : () => Navigator.of(sheetContext).pop(
                           GroupChatSelection(
@@ -189,19 +423,30 @@ Future<CreatedGroupChat?> createGroupChatWithInvites(
   WidgetRef ref, {
   required List<CharacterDto> characters,
   List<ProjectDto> projects = const <ProjectDto>[],
-  bool showProjectSelector = false,
+  bool showProjectSelector = true,
+  bool projectRequired = false,
 }) async {
   if (characters.length < 2) {
     amitiaSnackBar(context, '至少需要两个可用角色才能创建群聊，请先创建角色');
     return null;
   }
   final preferredRoleId = ref.read(currentCharacterIdProvider);
+  List<GroupTeamOption> teams = const [];
+  try {
+    teams = await _loadGroupTeams(ref);
+  } catch (error) {
+    if (context.mounted) amitiaSnackBar(context, '团队加载失败：$error');
+  }
+  if (!context.mounted) return null;
   final selection = await showGroupChatInviteSheet(
     context,
+    ref: ref,
     characters: characters,
     preferredRoleId: preferredRoleId,
     projects: projects,
+    teams: teams,
     showProjectSelector: showProjectSelector,
+    projectRequired: projectRequired,
   );
   if (selection == null || !context.mounted) return null;
   try {

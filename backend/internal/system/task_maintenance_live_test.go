@@ -80,7 +80,7 @@ func TestTaskMaintenanceRealHTTPQueueSQLiteAndNode(t *testing.T) {
 	if err := svc.AttachTaskRuntime(runtime); err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(svc, svc.db, nil, nil, nil, nil, nil)
+	handler := NewHandler(svc, svc.db, nil, nil, nil, nil)
 	router := gin.New()
 	router.GET("/config", handler.TaskMaintenanceConfig)
 	router.PUT("/config", handler.UpdateTaskMaintenanceConfig)

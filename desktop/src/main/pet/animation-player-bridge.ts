@@ -121,7 +121,6 @@ export class AnimationPlayerBridge implements DesktopPetPlayerPort, PlayerLifecy
     }
 
     const commandId = context?.commandId?.trim() || randomUUID();
-    const oldKey = this.currentAction?.key ?? null;
 
     this.pendingAction = action;
     this.pendingPlaybackId = null;
@@ -133,7 +132,6 @@ export class AnimationPlayerBridge implements DesktopPetPlayerPort, PlayerLifecy
     // Playback identity is renderer-authoritative. Keep every in-flight
     // submission, not only the latest one: Renderer -> Main events can be delayed
     // while Main has already submitted a newer replacement.
-    void oldKey;
     this.submittedPlaybacks.set(commandId, { action, playbackId: null });
     const delivered = this.sendPlayCommand(action, commandId, context);
     if (!delivered) {

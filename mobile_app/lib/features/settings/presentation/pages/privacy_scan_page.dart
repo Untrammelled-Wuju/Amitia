@@ -42,7 +42,6 @@ class _PrivacyScanPageState extends ConsumerState<PrivacyScanPage> {
   final TextEditingController _targetIdController = TextEditingController();
   final TextEditingController _reasonController = TextEditingController();
   String _targetType = 'memory';
-  String _legacyDeletionId = '';
   String _deletionScope = 'all';
 
   @override
@@ -247,13 +246,13 @@ class _PrivacyScanPageState extends ConsumerState<PrivacyScanPage> {
     setState(() => _deletionBusy = true);
     try {
       final service = ref.read(privacyServiceProvider);
-      final intents = await service.previewDeletion(targetId:targetId,targetType:_targetType,scope:_deletionScope,reason:_reasonController.text.trim(),legacyDeletionId:_legacyDeletionId);
+      final intents = await service.previewDeletion(targetId:targetId,targetType:_targetType,scope:_deletionScope,reason:_reasonController.text.trim());
       if (!mounted) return;
       Map<String,dynamic>? intent;
       if (intents.length == 1) {
         intent = intents.first;
       } else {
-        intent = await showDialog<Map<String,dynamic>>(context:context,builder:(dialogContext) => SimpleDialog(title:const Text('请选择要删除的数据来源'),children:intents.map((item) { final target = item['target'] as Map;return SimpleDialogOption(onPressed:()=>Navigator.pop(dialogContext,item),child:Text('${target['ownerId']} / ${target['roleId']} / ${target['legacy'] == true ? '历史记录' : '当前记录'}')); }).toList(growable:false)));
+        intent = await showDialog<Map<String,dynamic>>(context:context,builder:(dialogContext) => SimpleDialog(title:const Text('请选择要删除的数据来源'),children:intents.map((item) { final target = item['target'] as Map;return SimpleDialogOption(onPressed:()=>Navigator.pop(dialogContext,item),child:Text('${target['ownerId']} / ${target['roleId']}')); }).toList(growable:false)));
       }
       if (!mounted || intent == null) return;
       final target = intent['target'];
@@ -559,13 +558,6 @@ class _PrivacyScanPageState extends ConsumerState<PrivacyScanPage> {
         AmitiaCard(
           child: Column(
             children: [
-              if (_maps(_deletionStats['legacyRecords']).isNotEmpty)
-                DropdownButtonFormField<String>(
-                  initialValue: _legacyDeletionId,
-                  decoration: const InputDecoration(labelText: '选择需要确认归属的旧删除任务'),
-                  items: [const DropdownMenuItem(value:'',child:Text('不迁移旧任务')),..._maps(_deletionStats['legacyRecords']).map((item) => DropdownMenuItem(value:item['id'].toString(),child:Text('${item['targetType']} / ${item['targetId']}')))],
-                  onChanged:_deletionBusy ? null : (value) => setState(() { _legacyDeletionId=value ?? '';for (final item in _maps(_deletionStats['legacyRecords'])) { if (item['id']==value) { _targetType=item['targetType'].toString();_deletionScope=item['scope'].toString();_targetIdController.text=item['targetId'].toString(); } } }),
-                ),
               Row(
                 children: [
                   Expanded(

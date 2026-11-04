@@ -38,7 +38,7 @@ func (e Environment) Validate() error {
 	if e.Source == "" {
 		return newInvalidQdrantBinary("", "source is empty")
 	}
-	if e.Source != SourceExplicit && e.Source != SourceRuntimePackage && e.Source != SourceLegacyBundled {
+	if e.Source != SourceExplicit && e.Source != SourceRuntimePackage {
 		return newInvalidQdrantBinary("", "unknown source: "+string(e.Source))
 	}
 	if e.Guest == platform.GuestPlatformUnknown {

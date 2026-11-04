@@ -159,7 +159,7 @@ func TestMapperPreservesHostFeatures(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	expectedCaps := map[gamehostdomain.Capability]struct{}{
+	expectedCaps := map[gamehostdomain.HostFeature]struct{}{
 		"realtime_control": {},
 		"custom_rpc":       {},
 	}

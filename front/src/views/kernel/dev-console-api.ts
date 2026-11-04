@@ -22,7 +22,6 @@ export interface DevConsoleOverview {
   warnings: number;
   lifecycleEvents: number;
   devWorkspaces: number;
-  compatibilityIssues: number;
   topExtensions: ExtensionSummary[];
 }
 
@@ -149,21 +148,6 @@ export interface PerformanceRecord {
   metric: string;
   value: number;
   at: string;
-}
-
-export interface MigrationRecord {
-  stage: string;
-  status: string;
-  at: string;
-  details?: string;
-}
-
-export interface CompatibilityRecord {
-  extension: string;
-  required: string;
-  host: string;
-  ok: boolean;
-  reason?: string;
 }
 
 export interface HostAPIAuditEntry {
@@ -310,16 +294,6 @@ export async function fetchPerformance(params?: ConsoleFilter): Promise<Performa
   return res.data;
 }
 
-export async function fetchMigration(): Promise<MigrationRecord[]> {
-  const res = await apiClient.get(`${BASE}/migration`);
-  return res.data;
-}
-
-export async function fetchCompatibility(): Promise<CompatibilityRecord[]> {
-  const res = await apiClient.get(`${BASE}/compatibility`);
-  return res.data;
-}
-
 export async function fetchHostAPIAudits(params?: HostAPIAuditFilter): Promise<HostAPIAuditResponse> {
   const sp = new URLSearchParams();
   if (params?.extension) sp.set("extension", params.extension);
@@ -347,7 +321,7 @@ export async function closeSession(id: string): Promise<void> {
 
 export async function exportDiagnostics(params?: ConsoleFilter): Promise<Blob> {
   const filter: ConsoleFilter = params || {};
-  const [overview, invocations, events, hooks, tasks, uiSessions, storage, permissions, scopes, resources, lifecycle, logs, performance, migration, compatibility, hostApiAudits] = await Promise.all([
+  const [overview, invocations, events, hooks, tasks, uiSessions, storage, permissions, scopes, resources, lifecycle, logs, performance, hostApiAudits] = await Promise.all([
     fetchOverview().catch((error) => {
   console.error("[original-error]", error);
   return null;
@@ -400,14 +374,6 @@ export async function exportDiagnostics(params?: ConsoleFilter): Promise<Blob> {
   console.error("[original-error]", error);
   return [];
 }),
-    fetchMigration().catch((error) => {
-  console.error("[original-error]", error);
-  return [];
-}),
-    fetchCompatibility().catch((error) => {
-  console.error("[original-error]", error);
-  return [];
-}),
     fetchHostAPIAudits({ extension: filter.extension, limit: 1000 }).catch((error) => {
       console.error("[original-error]", error);
       return { entries: [], total: 0, limit: 1000, offset: 0 };
@@ -429,8 +395,6 @@ export async function exportDiagnostics(params?: ConsoleFilter): Promise<Blob> {
     lifecycle,
     logs,
     performance,
-    migration,
-    compatibility,
     hostApiAudits,
   };
   return new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });

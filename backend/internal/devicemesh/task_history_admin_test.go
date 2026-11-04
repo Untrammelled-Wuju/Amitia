@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/u-ai/backend/internal/auth"
-	"github.com/u-ai/backend/internal/devicemesh"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
 	"github.com/u-ai/backend/internal/runtimeidentity"
@@ -20,10 +19,7 @@ func TestCurrentAdministratorReadsCoreTaskAfterOriginalDeviceRevoked(t *testing.
 			t.Fatal(err)
 		}
 	}
-	rt, err := devicemesh.NewCloudRuntime(db, registry)
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt := newCloudRuntimeForTest(t, db, registry)
 	policy, err := rt.Coordination.InitializeCoordinated(t.Context(), "core", "admin", 1, "current-role")
 	if err != nil {
 		t.Fatal(err)

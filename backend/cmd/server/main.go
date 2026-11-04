@@ -4,7 +4,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"github.com/u-ai/backend/internal/conversationstream"
 	"github.com/u-ai/backend/internal/devicemesh/business"
@@ -19,7 +18,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -147,9 +145,8 @@ func main() {
 	conversationstream.DefaultManager().SetMaxConcurrentExecutions(config.AppCfg.Chat.AgentMaxParallelTurns)
 
 	profileResolution, err := runtimeprofile.Resolve(runtimeprofile.ResolveInput{
-		Args:             os.Args[1:],
-		Env:              nil,
-		LegacyDeployMode: config.AppCfg.App.DeployMode,
+		Args: os.Args[1:],
+		Env:  nil,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -310,91 +307,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	if policy.CoreBusinessServices {
-		productionCutover := initCutoverGate(db, services)
-		closureGate := NewStage2ClosureGateAdapterFromCanonical(services, productionCutover.runtimeGate, productionCutover.closureGate)
-		services.ProductionCutover = productionCutover
-		services.ClosureGate = closureGate
-
-		archReady := closureGate.ArchitectureReady()
-		if !archReady.Ready {
-			log.Info("Closure gate not ready:", archReady.Reasons)
-		}
-
-		checkResult, err := productionCutover.cutoverPlan.ComputeCutoverCheck(appCtx)
-		if err != nil {
-			log.Error("检查生产切换状态失败:", err)
-			if err := bootstrap.StopAll(context.Background()); err != nil {
-				amitialog.Printf("[original-error] %v", err)
-			}
-			os.Exit(1)
-		}
-
-		if checkResult.Failed {
-			if checkResult.State != nil && strings.Contains(checkResult.State.ErrorMessage, "PlatformBridge not initialized") {
-				log.Info("检测到旧版本桌面端遗留的切换失败记录，初始化兼容基线")
-				if err := initializeCommittedCutoverState(db, services); err != nil {
-					log.Error("恢复生产切换兼容基线失败:", err)
-					if err := bootstrap.StopAll(context.Background()); err != nil {
-						amitialog.Printf("[original-error] %v", err)
-					}
-					os.Exit(1)
-				}
-				checkResult.Failed = false
-				checkResult.Committed = true
-			} else {
-				log.Error("检测到生产切换失败状态，进入recovery模式")
-				if err := bootstrap.StopAll(context.Background()); err != nil {
-					amitialog.Printf("[original-error] %v", err)
-				}
-				os.Exit(1)
-			}
-		}
-
-		if !checkResult.Committed {
-			if checkResult.NeverRun {
-				log.Info("数据库无cutover记录，初始化兼容基线")
-				if err := initializeCommittedCutoverState(db, services); err != nil {
-					log.Error("初始化生产切换兼容基线失败:", err)
-					if err := bootstrap.StopAll(context.Background()); err != nil {
-						amitialog.Printf("[original-error] %v", err)
-					}
-					os.Exit(1)
-				}
-			} else {
-				canRun, reasons := closureGate.CanRunCutover()
-				if !canRun {
-					log.Error(closureGate.FailureMessage(reasons))
-					if err := bootstrap.StopAll(context.Background()); err != nil {
-						amitialog.Printf("[original-error] %v", err)
-					}
-					os.Exit(1)
-				}
-				if checkResult.Incomplete {
-					log.Info("检测到未完成的生产切换，正在恢复执行...")
-				} else {
-					log.Info("执行生产切换...")
-				}
-				if err := productionCutover.RunCutover(appCtx); err != nil {
-					log.Error("生产切换执行失败:", err)
-					if err := bootstrap.StopAll(context.Background()); err != nil {
-						amitialog.Printf("[original-error] %v", err)
-					}
-					os.Exit(1)
-				}
-				log.Info("生产切换完成")
-			}
-		}
-
-		if err := runCanonicalRuntimeAssertions(services); err != nil {
-			log.Error("Post-cutover canonical assertions failed:", err)
-			if err := bootstrap.StopAll(context.Background()); err != nil {
-				amitialog.Printf("[original-error] %v", err)
-			}
-			os.Exit(1)
-		}
-	}
-
 	cleanup := func() {
 		if err := bootstrap.StopAll(context.Background()); err != nil {
 			amitialog.Printf("[original-error] %v", err)
@@ -541,37 +453,8 @@ func startCoreWorkers(appCtx context.Context, services *AppServices, r *http.Ser
 	return nil
 }
 
-func startCompatibilityListener(srv *http.Server) net.Listener {
-	port := config.AppCfg.Server.CompatibilityPort
-	if port <= 0 {
-		return nil
-	}
-	if _, currentPort, err := net.SplitHostPort(srv.Addr); err == nil && currentPort == strconv.Itoa(port) {
-		return nil
-	}
-	address := net.JoinHostPort(config.AppCfg.Server.Host, strconv.Itoa(port))
-	listener, err := net.Listen("tcp", address)
-	if err != nil {
-		log.Info("兼容端口未启用: ", address, " ", err)
-		return nil
-	}
-	go func() {
-		if serveErr := srv.Serve(listener); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
-			log.Warn("兼容端口监听停止: ", serveErr)
-		}
-	}()
-	log.Info("兼容旧版本端口已启用: ", address)
-	return listener
-}
-
 func runCoreServer(appCtx context.Context, srv *http.Server, listener net.Listener, serverErr chan error, services *AppServices, endpoint runtimeendpoint.Endpoint, runDir string) {
 	log.Info("所有服务已就绪，开始监听 ", srv.Addr)
-	if compatibility := startCompatibilityListener(srv); compatibility != nil {
-		endpoint.CompatibilityBaseURL = "http://" + compatibility.Addr().String()
-		if err := runtimeendpoint.Write(runDir, endpoint); err != nil {
-			log.Warn("写兼容端点失败: ", err)
-		}
-	}
 	go func() {
 		serverErr <- srv.Serve(listener)
 	}()
@@ -607,12 +490,6 @@ func newHTTPServer(addr string, appCtx context.Context) *http.Server {
 
 func runDeviceAgentServer(appCtx context.Context, srv *http.Server, listener net.Listener, serverErr chan error, services *AppServices, endpoint runtimeendpoint.Endpoint, runDir string) {
 	log.Info("Device Agent已就绪，开始监听 ", srv.Addr)
-	if compatibility := startCompatibilityListener(srv); compatibility != nil {
-		endpoint.CompatibilityBaseURL = "http://" + compatibility.Addr().String()
-		if err := runtimeendpoint.Write(runDir, endpoint); err != nil {
-			log.Warn("写兼容端点失败: ", err)
-		}
-	}
 	go func() {
 		serverErr <- srv.Serve(listener)
 	}()
@@ -663,61 +540,11 @@ func validateProfileSecurity(profile runtimeprofile.Profile, secCfg *security.Se
 	return nil
 }
 
-func applyDatabaseStartupMigrations(db *gorm.DB, dataDir string) error {
-	isNew, err := migration.IsNewDatabase(db)
-	if err != nil {
-		return fmt.Errorf("check existing database: %w", err)
-	}
-	hasCoreSchema, err := migration.HasCoreSchema(db)
-	if err != nil {
-		return fmt.Errorf("check core schema: %w", err)
-	}
-	migrations := migration.DefaultMigrations()
-	lockDir := filepath.Join(dataDir, "locks")
-	if err := os.MkdirAll(lockDir, 0o700); err != nil {
-		return fmt.Errorf("create lock directory: %w", err)
-	}
-	persistentLock := migration.NewPersistentLock(db, lockDir)
-	migRunner := migration.Runner{
-		DB:                          db,
-		Locker:                      persistentLock,
-		LockName:                    "schema_migrations",
-		LockTTL:                     5 * time.Minute,
-		SkipBackup:                  !isNew,
-		AllowUnknownAppliedChecksum: true,
-	}
-	if isNew || !hasCoreSchema {
-		if !isNew {
-			if err := migRunner.CreatePreMigrationBackup(); err != nil {
-				return fmt.Errorf("预迁移备份失败: %w", err)
-			}
-		}
-		log.Info("检测到新数据库，执行基线快通道...")
-		if err := migration.ApplyBaseline(db); err != nil {
-			return fmt.Errorf("apply baseline: %w", err)
-		}
-		if isNew {
-			if err := migration.MarkDesktopPetCanonicalBaselineCutover(db); err != nil {
-				return fmt.Errorf("mark desktop pet canonical baseline cutover: %w", err)
-			}
-		}
-		log.Info("基线建表完成，标记所有迁移为已应用")
-		if err := migration.MarkAllMigrationsApplied(db, migrations); err != nil {
-			return fmt.Errorf("mark all migrations applied: %w", err)
-		}
-		log.Info("所有迁移已标记为已应用，跳过增量迁移执行")
-		return nil
-	}
-	if err := migRunner.CreatePreMigrationBackup(); err != nil {
-		return fmt.Errorf("预迁移备份失败: %w", err)
-	}
+func applyDatabaseStartupMigrations(db *gorm.DB, _ string) error {
 	if err := migration.ApplyBaseline(db); err != nil {
 		return fmt.Errorf("apply baseline: %w", err)
 	}
-	log.Info("基线建表完成")
-	if err := migRunner.Apply(migrations); err != nil {
-		return fmt.Errorf("apply versioned migrations: %w", err)
-	}
+	log.Info("当前版本基线建表完成")
 	return nil
 }
 
@@ -745,57 +572,4 @@ func isNewDatabase(db *gorm.DB) bool {
 		return false
 	}
 	return count == 0
-}
-
-func initializeCommittedCutoverState(db *gorm.DB, services *AppServices) error {
-	if db == nil {
-		return fmt.Errorf("database is nil")
-	}
-	existing := &migration.CutoverState{}
-	err := db.Order("started_at DESC").First(existing).Error
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		return err
-	}
-	if err == nil && existing.OperationID != "" && existing.Status == "committed" {
-		return nil
-	}
-
-	var canonicalGeneration int64 = 1
-	if services != nil && services.KernelContainer != nil {
-		container := services.KernelContainer
-		if container.ToolFacade != nil || container.PermissionBroker != nil ||
-			container.EventService != nil || container.ScheduleService != nil ||
-			container.TaskRuntimeService != nil || container.HookService != nil {
-			canonicalGeneration = 2
-		}
-	}
-
-	now := time.Now().UTC().Format(time.RFC3339)
-	if existing.OperationID != "" {
-		return db.Model(&migration.CutoverState{}).Where("operation_id = ?", existing.OperationID).Updates(map[string]any{
-			"phase":                "commit",
-			"status":               "committed",
-			"phase_status":         "completed",
-			"error_message":        "",
-			"updated_at":           now,
-			"completed_at":         now,
-			"canonical_generation": canonicalGeneration,
-			"plan_version":         1,
-		}).Error
-	}
-	return db.Exec(`INSERT INTO production_cutover_state
-	(operation_id, phase, status, phase_status, snapshot_id, error_message, started_at, updated_at, completed_at, canonical_generation, plan_version)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		"baseline-"+time.Now().Format("20060102"),
-		"commit",
-		"committed",
-		"completed",
-		"",
-		"",
-		now,
-		now,
-		now,
-		canonicalGeneration,
-		1,
-	).Error
 }

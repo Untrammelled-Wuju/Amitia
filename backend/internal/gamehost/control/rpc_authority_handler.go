@@ -37,7 +37,7 @@ func (h *AuthorityRPCHandler) SetNegotiatedFeatureChecker(checker NegotiatedFeat
 }
 
 func (h *AuthorityRPCHandler) requireSharedControl(request rpc.RPCRequest) *rpc.RPCResponse {
-	if h == nil || h.featureChecker == nil || !h.featureChecker.HasNegotiatedCapability(request.ConnectionID, domain.CapabilitySharedControl) {
+	if h == nil || h.featureChecker == nil || !h.featureChecker.HasNegotiatedCapability(request.ConnectionID, domain.HostFeatureSharedControl) {
 		response := rpc.RPCResponse{RequestID: request.ID, Error: &rpc.RPCRoutedError{
 			Code:    string(domain.ErrPermissionDenied),
 			Message: "shared_control was not negotiated for this service connection",

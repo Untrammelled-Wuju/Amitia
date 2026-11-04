@@ -10,7 +10,8 @@
 - 插件搜索 GitHub 上带原生 Amitia manifest 的 `.amitiax` 发布包，其他产品的插件需要先适配 Amitia。
 - 本地 Skill 默认读取运行时根目录和扩展根目录下的 `skills`；本地插件包读取运行时根目录及其父目录下的 `plugin`。
 - `AMITIA_SKILL_DIRS`、`AMITIA_PACKAGE_DIRS` 可追加目录，使用平台路径列表分隔符。
-- 私有目录可通过 `AMITIA_SKILL_CATALOG_URL`、`AMITIA_EXTENSION_CATALOG_URL`、`AMITIA_MCP_CATALOG_URL` 配置。没有配置时不请求不存在的自有目录接口。
+- 私有目录可通过 `AMITIA_SKILL_CATALOG_URL`、`AMITIA_EXTENSION_CATALOG_URL`、`AMITIA_EXTENSION_CATALOG_URLS`、`AMITIA_MCP_CATALOG_URL` 配置。`AMITIA_EXTENSION_CATALOG_URLS` 使用逗号或换行分隔多个插件目录，每个目录独立保留来源身份。没有配置时不请求不存在的自有目录接口。
+- 插件目录支持 `amitia.plugin.catalog/v1`。目录中的发布者、签名和信任信息仅用于发现，实际签名、哈希、权限和兼容性由正式安装预览重新验证。
 
 ## 聊天调用
 

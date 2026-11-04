@@ -2,13 +2,10 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
-	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -28,7 +25,6 @@ type agentPlatformRuntimeBridge struct {
 
 	mu       sync.Mutex
 	leases   map[string][]agentplatform.ResourceLease
-	budgets  map[string][]agentplatform.BudgetLease
 	acquired map[string]bool
 }
 
@@ -39,7 +35,7 @@ type agentPlatformWorkspaceRegistrar struct {
 func newAgentPlatformRuntimeBridge(platform *agentplatform.Service, workspaceService *workspace.Service, entry *interaction.UnifiedEntry, broker *execution.ApprovalBroker) *agentPlatformRuntimeBridge {
 	return &agentPlatformRuntimeBridge{
 		platform: platform, workspace: workspaceService, entry: entry, broker: broker,
-		leases: map[string][]agentplatform.ResourceLease{}, budgets: map[string][]agentplatform.BudgetLease{}, acquired: map[string]bool{},
+		leases: map[string][]agentplatform.ResourceLease{}, acquired: map[string]bool{},
 	}
 }
 
@@ -154,28 +150,16 @@ func (b *agentPlatformRuntimeBridge) BeforeToolExecution(ctx context.Context, in
 			return fmt.Errorf("Agent 技能白名单不允许激活 %s", skillName)
 		}
 	}
-	if agentID, ok := agentIDFromSecretRefs(tool.SecretReferences); ok && agentID != profile.AgentID {
-		return fmt.Errorf("工具凭据 %s 不属于当前 Agent %s", agentID, profile.AgentID)
-	}
-	for _, ref := range credentialRefs(tool.SecretReferences, input) {
-		if err := b.platform.AuthorizeAgentCredentialRef(ctx, inv.SpaceID, profile.AgentID, ref); err != nil {
-			return err
-		}
-	}
-	if err := b.enforceBudgets(ctx, inv, profile); err != nil {
-		return err
-	}
 	if err := b.acquireResourceLeases(ctx, inv, tool, input, profile); err != nil {
 		return err
 	}
 	if err := b.enforceAutonomy(ctx, inv, tool, input, profile); err != nil {
 		return err
 	}
-	return b.enforceNetwork(ctx, inv, tool, input, profile)
+	return nil
 }
 
 func (b *agentPlatformRuntimeBridge) AfterToolExecution(ctx context.Context, inv capability.ToolInvocationContext, tool capability.ToolDefinition, result capability.UnifiedToolResult, durationMS int64) {
-	b.recordToolBudgetUsage(ctx, inv)
 	b.releaseRuntimeLeases(ctx, inv.InvocationID)
 	profile, found, err := b.platform.ResolveAgentRuntime(ctx, inv.SpaceID, inv.CharacterID)
 	if err != nil {
@@ -209,77 +193,6 @@ func (b *agentPlatformRuntimeBridge) AfterToolExecution(ctx context.Context, inv
 	}
 }
 
-func (b *agentPlatformRuntimeBridge) recordToolBudgetUsage(ctx context.Context, inv capability.ToolInvocationContext) {
-	b.mu.Lock()
-	leases := append([]agentplatform.BudgetLease(nil), b.budgets[inv.InvocationID]...)
-	b.mu.Unlock()
-	seen := map[string]bool{}
-	for _, lease := range leases {
-		if seen[lease.PolicyID] {
-			continue
-		}
-		seen[lease.PolicyID] = true
-		if _, err := b.platform.RecordBudgetUsage(ctx, inv.SpaceID, lease.PolicyID, agentplatform.RecordBudgetUsageInput{
-			RequestID: runtimeFirstNonEmpty(inv.ExternalCallID, inv.InvocationID), ToolCalls: 1,
-		}); err != nil {
-			log.Printf("[original-error] %v", err)
-		}
-	}
-}
-
-func (b *agentPlatformRuntimeBridge) RecordUnknownOutcome(ctx context.Context, inv capability.ToolInvocationContext, tool capability.ToolDefinition, result capability.UnifiedToolResult, reason string) error {
-	profile, found, err := b.platform.ResolveAgentRuntime(ctx, inv.SpaceID, inv.CharacterID)
-	if err != nil {
-		return err
-	}
-	agentID := ""
-	if found {
-		agentID = profile.AgentID
-	}
-	body, marshalErr := json.Marshal(result)
-	if marshalErr != nil {
-		return marshalErr
-	}
-	sum := sha256.Sum256(body)
-	_, err = b.platform.CreateReconciliation(ctx, inv.SpaceID, agentplatform.CreateReconciliationInput{
-		AgentID: agentID, ToolCallID: runtimeFirstNonEmpty(inv.ExternalCallID, inv.InvocationID),
-		Reason: runtimeFirstNonEmpty(reason, "工具执行结果未知"), OriginalError: reason,
-		ResultHash: hex.EncodeToString(sum[:]),
-	})
-	return err
-}
-
-func (b *agentPlatformRuntimeBridge) enforceBudgets(ctx context.Context, inv capability.ToolInvocationContext, profile agentplatform.ResolvedAgentRuntime) error {
-	scopes := []struct{ kind, id string }{{"agent", profile.AgentID}}
-	if profile.TeamID != "" {
-		scopes = append(scopes, struct{ kind, id string }{"team", profile.TeamID})
-	}
-	for _, scope := range scopes {
-		policies, err := b.platform.ListBudgetPolicies(ctx, inv.SpaceID, scope.kind, scope.id)
-		if err != nil {
-			return err
-		}
-		for _, policy := range policies {
-			lease, reservation, err := b.platform.AcquireBudgetLease(ctx, inv.SpaceID, agentplatform.AcquireBudgetLeaseInput{
-				ScopeType: scope.kind, ScopeID: scope.id, HolderID: inv.InvocationID,
-				RequestID: runtimeFirstNonEmpty(inv.ExternalCallID, inv.InvocationID), TTLSeconds: 300,
-			})
-			if err != nil {
-				return fmt.Errorf("Agent 预算门禁失败: %w", err)
-			}
-			if reservation.Warning {
-				if err := b.recordBudgetWarning(ctx, inv, profile, policy); err != nil {
-					return err
-				}
-			}
-			b.mu.Lock()
-			b.budgets[inv.InvocationID] = append(b.budgets[inv.InvocationID], lease)
-			b.mu.Unlock()
-		}
-	}
-	return nil
-}
-
 func (b *agentPlatformRuntimeBridge) acquireResourceLeases(ctx context.Context, inv capability.ToolInvocationContext, tool capability.ToolDefinition, input []byte, profile agentplatform.ResolvedAgentRuntime) error {
 	if !tool.HasSideEffects {
 		return nil
@@ -299,82 +212,6 @@ func (b *agentPlatformRuntimeBridge) acquireResourceLeases(ctx context.Context, 
 	b.leases[inv.InvocationID] = append(b.leases[inv.InvocationID], lease)
 	b.mu.Unlock()
 	return nil
-}
-
-func (b *agentPlatformRuntimeBridge) enforceNetwork(ctx context.Context, inv capability.ToolInvocationContext, tool capability.ToolDefinition, input []byte, profile agentplatform.ResolvedAgentRuntime) error {
-	policies, err := b.platform.ListNetworkPolicies(ctx, inv.SpaceID, profile.AgentID)
-	if err != nil {
-		return err
-	}
-	if len(policies) == 0 {
-		return nil
-	}
-	urls := extractURLs(input)
-	for _, target := range urls {
-		method := runtimeFirstNonEmpty(agentStringMetadata(tool.Metadata, "httpMethod"), agentStringMetadata(tool.Metadata, "method"), "POST")
-		decision, err := b.platform.EvaluateEgress(ctx, inv.SpaceID, agentplatform.EgressRequest{
-			AgentID: profile.AgentID, URL: target, Method: method,
-			SensitiveData: tool.RiskLevel == capability.RiskHigh || containsSensitiveInput(input),
-		})
-		if err != nil {
-			return err
-		}
-		if !decision.Allowed {
-			return fmt.Errorf("Agent 网络策略拒绝访问 %s: %s", target, decision.Reason)
-		}
-		if decision.RequiresApproval {
-			approved, err := b.broker.Await(ctx, execution.ApprovalRequest{
-				SpaceID: inv.SpaceID, AgentID: profile.AgentID, TeamID: profile.TeamID,
-				CharacterID: inv.CharacterID, ConversationID: inv.ConversationID,
-				ToolCallID: runtimeFirstNonEmpty(inv.ExternalCallID, inv.InvocationID) + ":network:" + target,
-				ToolName:   "network.egress", Arguments: string(input), RiskLevel: string(tool.RiskLevel),
-			}, 5*time.Minute)
-			if err != nil {
-				return err
-			}
-			if !approved {
-				return fmt.Errorf("用户拒绝 Agent 网络外传: %s", target)
-			}
-		}
-	}
-	return nil
-}
-
-func containsSensitiveInput(input []byte) bool {
-	var value any
-	if err := json.Unmarshal(input, &value); err != nil {
-		return false
-	}
-	sensitiveKeys := []string{"password", "passwd", "privatekey", "private_key", "apikey", "api_key", "authorization", "creditcard", "credit_card", "身份证", "银行卡"}
-	var walk func(any) bool
-	walk = func(current any) bool {
-		switch typed := current.(type) {
-		case map[string]any:
-			for key, child := range typed {
-				lower := strings.ToLower(key)
-				for _, marker := range sensitiveKeys {
-					if strings.Contains(lower, marker) && child != nil && strings.TrimSpace(fmt.Sprint(child)) != "" {
-						return true
-					}
-				}
-				if walk(child) {
-					return true
-				}
-			}
-		case []any:
-			for _, child := range typed {
-				if walk(child) {
-					return true
-				}
-			}
-		case string:
-			if strings.Contains(strings.ToLower(typed), "bearer ") {
-				return true
-			}
-		}
-		return false
-	}
-	return walk(value)
 }
 
 func (b *agentPlatformRuntimeBridge) enforceAutonomy(ctx context.Context, inv capability.ToolInvocationContext, tool capability.ToolDefinition, input []byte, profile agentplatform.ResolvedAgentRuntime) error {
@@ -449,28 +286,13 @@ func withinQuietHours(now time.Time, value string) bool {
 func (b *agentPlatformRuntimeBridge) releaseRuntimeLeases(ctx context.Context, invocationID string) {
 	b.mu.Lock()
 	resourceLeases := append([]agentplatform.ResourceLease(nil), b.leases[invocationID]...)
-	budgetLeases := append([]agentplatform.BudgetLease(nil), b.budgets[invocationID]...)
 	delete(b.leases, invocationID)
-	delete(b.budgets, invocationID)
 	b.mu.Unlock()
 	for _, lease := range resourceLeases {
 		if _, err := b.platform.ReleaseResourceLease(ctx, lease.SpaceID, lease.ID, lease.HolderAgentID); err != nil {
 			log.Printf("[original-error] %v", err)
 		}
 	}
-	for _, lease := range budgetLeases {
-		if _, err := b.platform.ReleaseBudgetLease(ctx, lease.SpaceID, lease.ID, lease.HolderID); err != nil {
-			log.Printf("[original-error] %v", err)
-		}
-	}
-}
-
-func (b *agentPlatformRuntimeBridge) recordBudgetWarning(ctx context.Context, inv capability.ToolInvocationContext, profile agentplatform.ResolvedAgentRuntime, policy agentplatform.BudgetPolicy) error {
-	return b.platform.RecordExecutionActivity(ctx, agentplatform.ActivityEvent{
-		SpaceID: inv.SpaceID, AgentID: profile.AgentID, TeamID: profile.TeamID,
-		ConversationID: inv.ConversationID, Kind: "budget", State: "warning",
-		Title: "Agent 预算接近上限", Detail: policy.ID, OccurredAt: time.Now().UTC(), PayloadJSON: "{}",
-	})
 }
 
 func resourceIdentity(tool capability.ToolDefinition, input []byte) (string, string) {
@@ -487,49 +309,6 @@ func resourceIdentity(tool capability.ToolDefinition, input []byte) (string, str
 		}
 	}
 	return resourceType, resourceID
-}
-
-func extractURLs(input []byte) []string {
-	var value any
-	if err := json.Unmarshal(input, &value); err != nil {
-		return nil
-	}
-	found := map[string]struct{}{}
-	var walk func(any)
-	walk = func(current any) {
-		switch typed := current.(type) {
-		case map[string]any:
-			for _, child := range typed {
-				walk(child)
-			}
-		case []any:
-			for _, child := range typed {
-				walk(child)
-			}
-		case string:
-			parsed, err := url.Parse(strings.TrimSpace(typed))
-			if err == nil && (parsed.Scheme == "http" || parsed.Scheme == "https") && parsed.Hostname() != "" {
-				found[parsed.String()] = struct{}{}
-			}
-		}
-	}
-	walk(value)
-	result := make([]string, 0, len(found))
-	for item := range found {
-		result = append(result, item)
-	}
-	return result
-}
-
-func agentIDFromSecretRefs(refs []string) (string, bool) {
-	for _, raw := range refs {
-		path := strings.TrimPrefix(strings.TrimSpace(raw), "secret://")
-		parts := strings.Split(path, "/")
-		if len(parts) >= 3 && parts[0] == "agent-platform" {
-			return parts[1], true
-		}
-	}
-	return "", false
 }
 
 func agentAllowsTool(allowed []string, tool capability.ToolDefinition) bool {
@@ -549,17 +328,6 @@ func containsFold(values []string, expected string) bool {
 		}
 	}
 	return false
-}
-
-func credentialRefs(toolRefs []string, input []byte) []string {
-	result := append([]string(nil), toolRefs...)
-	var payload map[string]any
-	if err := json.Unmarshal(input, &payload); err == nil {
-		if ref := stringAny(payload["credentialRef"]); ref != "" {
-			result = append(result, ref)
-		}
-	}
-	return result
 }
 
 func resultActivityJSON(inv capability.ToolInvocationContext, result capability.UnifiedToolResult) string {

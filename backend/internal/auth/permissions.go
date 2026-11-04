@@ -13,13 +13,10 @@ const (
 	PermDesktopPetRuntimeControl = "desktop_pet.runtime.control"
 	PermDesktopPetBehaviorManage = "desktop_pet.behavior.manage"
 	PermDesktopPetBehaviorAdmin  = "desktop_pet.behavior.admin"
-	PermDesktopPetMigrate        = "desktop_pet.migrate"
 	PermDesktopPetRepair         = "desktop_pet.repair"
 	PermMaintenanceRead          = "desktop_pet.maintenance.read"
 	PermBackupCreate             = "desktop_pet.backup.create"
 	PermExportCreate             = "desktop_pet.export.create"
-	PermMigrationRun             = "desktop_pet.migration.run"
-	PermCutoverExecute           = "desktop_pet.cutover.execute"
 	PermSecurityAuditRead        = "security.audit.read"
 	PermDoctorRun                = "doctor.run"
 	PermDoctorRepair             = "doctor.repair"
@@ -41,13 +38,10 @@ func OwnerDevicePermissions() []string {
 	return append(StandardPermissions(),
 		PermSystemAdmin, PermWorkbenchBrowserControl,
 		PermDesktopPetBehaviorAdmin,
-		PermDesktopPetMigrate,
 		PermDesktopPetRepair,
 		PermMaintenanceRead,
 		PermBackupCreate,
 		PermExportCreate,
-		PermMigrationRun,
-		PermCutoverExecute,
 		PermSecurityAuditRead,
 		PermDoctorRun,
 		PermDoctorRepair,
@@ -57,9 +51,6 @@ func OwnerDevicePermissions() []string {
 
 func SystemWorkerPermissions() []string {
 	return []string{PermDesktopPetRead, PermDesktopPetWrite, PermDesktopPetGenerate, PermDesktopPetRuntimeControl, PermDesktopPetBehaviorManage}
-}
-func MigrationPermissions() []string {
-	return []string{PermDesktopPetRead, PermDesktopPetWrite, PermDesktopPetMigrate}
 }
 func RepairPermissions() []string {
 	return append(StandardPermissions(), PermDesktopPetRepair, PermDoctorRun, PermDoctorRepair)

@@ -269,6 +269,23 @@ func TestRegisterAdapter(t *testing.T) {
 	}
 }
 
+func TestRegisterAdapterUsesContributionAdapter(t *testing.T) {
+	r := NewDefaultRegistry()
+	adapter := &fakeAdapter{kind: domain.ContributionKindTool}
+	r.RegisterAdapter(adapter)
+	contribution := makeContribution("custom-1", domain.ContributionKind("com.example.market/page"), "com.example/test", "main")
+	contribution.Adapter = domain.ContributionAdapterTool
+	result := r.RegisterBatch(context.Background(), ContributionRegistrationBatch{
+		ExtensionID:   "com.example/test",
+		ModuleID:      "main",
+		Generation:    1,
+		Contributions: []domain.ContributionDefinition{contribution},
+	})
+	if len(result.Errors) != 0 || adapter.registerCount != 1 {
+		t.Fatalf("custom kind did not dispatch through adapter: errors=%v calls=%d", result.Errors, adapter.registerCount)
+	}
+}
+
 type fakeAdapter struct {
 	kind            domain.ContributionKind
 	registerCount   int
@@ -277,7 +294,9 @@ type fakeAdapter struct {
 	unregisterCount int
 }
 
-func (a *fakeAdapter) Kind() domain.ContributionKind { return a.kind }
+func (a *fakeAdapter) Adapter() domain.ContributionAdapter {
+	return domain.ContributionAdapterForKind(a.kind)
+}
 func (a *fakeAdapter) OnRegister(_ context.Context, _ RegisteredContribution) error {
 	a.registerCount++
 	return nil

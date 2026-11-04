@@ -14,7 +14,6 @@ type Layout struct {
 	DataRoot     string
 	StorageDir   string
 	SnapshotsDir string
-	MigrationDir string
 }
 
 func (l Layout) Clone() Layout {
@@ -43,10 +42,6 @@ func (l Layout) Validate() error {
 	if l.SnapshotsDir == "" {
 		return newInvalidLayout("snapshots dir is empty")
 	}
-	if l.MigrationDir == "" {
-		return newInvalidLayout("migration dir is empty")
-	}
-
 	if !filepath.IsAbs(l.DistributionRoot) {
 		return newInvalidLayout("distribution root is not absolute")
 	}
@@ -68,10 +63,6 @@ func (l Layout) Validate() error {
 	if !filepath.IsAbs(l.SnapshotsDir) {
 		return newInvalidLayout("snapshots dir is not absolute")
 	}
-	if !filepath.IsAbs(l.MigrationDir) {
-		return newInvalidLayout("migration dir is not absolute")
-	}
-
 	cleanDist := filepath.Clean(l.DistributionRoot)
 	if cleanDist != l.DistributionRoot {
 		return newInvalidLayout("distribution root is not clean")
@@ -100,11 +91,6 @@ func (l Layout) Validate() error {
 	if cleanSnaps != l.SnapshotsDir {
 		return newInvalidLayout("snapshots dir is not clean")
 	}
-	cleanMigr := filepath.Clean(l.MigrationDir)
-	if cleanMigr != l.MigrationDir {
-		return newInvalidLayout("migration dir is not clean")
-	}
-
 	if !containsPath(l.DistributionRoot, l.BinaryPath) {
 		return newInvalidLayout("binary path must be within distribution root")
 	}
@@ -117,18 +103,8 @@ func (l Layout) Validate() error {
 	if !containsPath(l.DataRoot, l.SnapshotsDir) {
 		return newInvalidLayout("snapshots dir must be within data root")
 	}
-	if !containsPath(l.DataRoot, l.MigrationDir) {
-		return newInvalidLayout("migration dir must be within data root")
-	}
-
 	if l.StorageDir == l.SnapshotsDir {
 		return newPathOverlap(l.StorageDir, l.SnapshotsDir)
-	}
-	if l.StorageDir == l.MigrationDir {
-		return newPathOverlap(l.StorageDir, l.MigrationDir)
-	}
-	if l.SnapshotsDir == l.MigrationDir {
-		return newPathOverlap(l.SnapshotsDir, l.MigrationDir)
 	}
 
 	if l.DistributionRoot == l.ConfigRoot {

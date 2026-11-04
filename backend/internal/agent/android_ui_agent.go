@@ -180,7 +180,7 @@ func (s *service) RunAndroidUIAgent(ctx context.Context, execCtx tool.ToolExecut
 			result.Steps = append(result.Steps, step)
 			continue
 		}
-		if !legacyToolSucceeded(toolResult) {
+		if !toolSucceeded(toolResult) {
 			step.Status = "failed"
 			step.Error = strings.TrimSpace(toolResult.VisibleText)
 			if toolResult.Error != nil {
@@ -280,7 +280,7 @@ func (s *service) executeAndroidUIActionWithRecovery(
 			fmt.Sprintf("android-ui-agent:%s:%d:%s", runKey, index, callSuffix))
 	}
 	result, found := execute("primary", toolID, input)
-	if !found || legacyToolSucceeded(result) {
+	if !found || toolSucceeded(result) {
 		return toolID, input, result, found, 0
 	}
 	if blocked, _ := androidUIInteractionBlocked(result); blocked {
@@ -303,7 +303,7 @@ func (s *service) executeAndroidUIActionWithRecovery(
 				retryAction.Target = rematched
 				if retryTool, retryInput, retryErr := mapAndroidUIAction(req, retryAction); retryErr == nil {
 					retryResult, retryFound := execute("semantic-rematch", retryTool, retryInput)
-					if retryFound && legacyToolSucceeded(retryResult) {
+					if retryFound && toolSucceeded(retryResult) {
 						return retryTool, retryInput, retryResult, true, 1
 					}
 					result, found, toolID, input = retryResult, retryFound, retryTool, retryInput
@@ -370,7 +370,7 @@ func (s *service) androidUIObservation(ctx context.Context, scope extensionkerne
 		}
 		return nil, "", androidUIObservationQuality{}, androidUITreeEnvelope{}, errors.New("android.ui_tree.snapshot is unavailable")
 	}
-	if !legacyToolSucceeded(result) {
+	if !toolSucceeded(result) {
 		if displayID > 0 {
 			return s.androidUIVisualObservation(ctx, scope, runKey, index, displayID)
 		}
@@ -409,7 +409,7 @@ func (s *service) androidUIVisualObservation(ctx context.Context, scope extensio
 	if !found {
 		return nil, "", androidUIObservationQuality{}, androidUITreeEnvelope{}, errors.New("android.interaction.screenshot is unavailable")
 	}
-	if !legacyToolSucceeded(result) {
+	if !toolSucceeded(result) {
 		message := strings.TrimSpace(result.VisibleText)
 		if result.Error != nil && message == "" {
 			message = result.Error.Message
@@ -796,9 +796,9 @@ func androidUIInteractionBlocked(result extensionkernel.ToolDispatchResult) (boo
 	return false, ""
 }
 
-func legacyToolSucceeded(result extensionkernel.ToolDispatchResult) bool {
+func toolSucceeded(result extensionkernel.ToolDispatchResult) bool {
 	status := strings.ToUpper(strings.TrimSpace(result.Status))
-	return status == "SUCCESS" || status == "SUCCEEDED" || status == "OK"
+	return status == "SUCCESS"
 }
 
 func oneOf(value string, values ...string) bool {

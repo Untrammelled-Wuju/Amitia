@@ -44,24 +44,23 @@ describe("platform-artifacts", () => {
     expect(resolveCorePath(sandbox, "darwin", "arm64")).toBe(path.join(targetDir, "AmitiaCore"));
   });
 
-  it("缺少平台目录时回退到旧版可执行文件", () => {
+  it("缺少平台目录时不回退到其他可执行文件", () => {
     fs.mkdirSync(path.join(sandbox, "core"), { recursive: true });
     fs.writeFileSync(path.join(sandbox, "core", "AmitiaCore.exe"), "legacy", "utf8");
-    expect(resolveCorePath(sandbox, "win32", "x64")).toBe(path.join(sandbox, "core", "AmitiaCore.exe"));
+    expect(resolveCorePath(sandbox, "win32", "x64")).toBe(path.join(sandbox, "core", "windows-x64", "AmitiaCore.exe"));
   });
 
-  it("核心候选路径包含平台目录与旧版路径", () => {
+  it("核心候选路径只包含当前平台目录", () => {
     const candidates = corePathCandidates(sandbox, "darwin", "arm64");
-    expect(candidates[0]).toBe(path.join(sandbox, "core", "macos-arm64", "AmitiaCore"));
-    expect(candidates).toContain(path.join(sandbox, "core", "AmitiaCore.exe"));
+    expect(candidates).toEqual([path.join(sandbox, "core", "macos-arm64", "AmitiaCore")]);
   });
 
   it("按平台选择数据库归档名", () => {
     expect(databaseArchiveNames("qdrant", "darwin", "arm64")).toEqual(
-      expect.arrayContaining(["qdrant-darwin-arm64.zip"]),
+      ["qdrant.zip"],
     );
     expect(databaseArchiveNames("surrealdb", "win32", "x64")).toEqual(
-      expect.arrayContaining(["surreal.exe.zip"]),
+      ["surreal.zip"],
     );
   });
 

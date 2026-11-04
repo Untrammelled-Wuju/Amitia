@@ -13,7 +13,6 @@ import (
 )
 
 var requiredPackageFinalGateMetrics = []string{
-	"legacy_package_write_calls",
 	"unresolved_package_operations",
 	"orphan_artifacts",
 	"orphan_installation_generations",
@@ -92,27 +91,23 @@ func TestPackageFinalGateReportsExactReleaseMetrics(t *testing.T) {
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	for _, operation := range []PackageOperationRecord{
-		{OperationID: "uninstall-restore-failed", TraceID: "trace-1", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "uninstall", Status: "requires_recovery", CurrentStep: "restore_quarantine", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", ErrorDetail: "restore quarantined installation failed", StartedAt: now, UpdatedAt: now},
-		{OperationID: "ambiguous-recovery", TraceID: "trace-2", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "requires_recovery", CurrentStep: "recovery_manual", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", ErrorDetail: "consistency could not be proven", StartedAt: now, UpdatedAt: now},
-		{OperationID: "pending-operation", TraceID: "trace-3", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "pending", CurrentStep: "pending", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now},
-		{OperationID: "created-operation", TraceID: "trace-4", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "created", CurrentStep: "created", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now},
-		{OperationID: "in-progress-operation", TraceID: "trace-5", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "in_progress", CurrentStep: "commit", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now},
-		{OperationID: "compensating-operation", TraceID: "trace-6", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "compensating", CurrentStep: "compensate", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now},
-		{OperationID: "retrying-operation", TraceID: "trace-7", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "retrying", CurrentStep: "retry", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now},
-		{OperationID: "cancel-requested-operation", TraceID: "trace-8", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "cancel_requested", CurrentStep: "cancel", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now},
-		{OperationID: "manual-recovery-operation", TraceID: "trace-9", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "manual_recovery", CurrentStep: "recover", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now},
-		{OperationID: "completed-operation", TraceID: "trace-10", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "completed", CurrentStep: "complete", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now},
-		{OperationID: "failed-operation", TraceID: "trace-11", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "failed", CurrentStep: "fail", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now},
-		{OperationID: "cancelled-operation", TraceID: "trace-12", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "cancelled", CurrentStep: "cancel", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now},
-		{OperationID: "rolled-back-operation", TraceID: "trace-13", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "rolled_back", CurrentStep: "rollback", ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now},
+		{OperationID: "uninstall-restore-failed", TraceID: "trace-1", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "uninstall", Status: "requires_recovery", CurrentStep: "restore_quarantine", ArtifactID: artifact.ArtifactID, ErrorDetail: "restore quarantined installation failed", StartedAt: now, UpdatedAt: now},
+		{OperationID: "ambiguous-recovery", TraceID: "trace-2", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "requires_recovery", CurrentStep: "recovery_manual", ArtifactID: artifact.ArtifactID, ErrorDetail: "consistency could not be proven", StartedAt: now, UpdatedAt: now},
+		{OperationID: "pending-operation", TraceID: "trace-3", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "pending", CurrentStep: "pending", ArtifactID: artifact.ArtifactID, StartedAt: now, UpdatedAt: now},
+		{OperationID: "created-operation", TraceID: "trace-4", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "created", CurrentStep: "created", ArtifactID: artifact.ArtifactID, StartedAt: now, UpdatedAt: now},
+		{OperationID: "in-progress-operation", TraceID: "trace-5", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "in_progress", CurrentStep: "commit", ArtifactID: artifact.ArtifactID, StartedAt: now, UpdatedAt: now},
+		{OperationID: "compensating-operation", TraceID: "trace-6", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "compensating", CurrentStep: "compensate", ArtifactID: artifact.ArtifactID, StartedAt: now, UpdatedAt: now},
+		{OperationID: "retrying-operation", TraceID: "trace-7", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "retrying", CurrentStep: "retry", ArtifactID: artifact.ArtifactID, StartedAt: now, UpdatedAt: now},
+		{OperationID: "cancel-requested-operation", TraceID: "trace-8", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "cancel_requested", CurrentStep: "cancel", ArtifactID: artifact.ArtifactID, StartedAt: now, UpdatedAt: now},
+		{OperationID: "manual-recovery-operation", TraceID: "trace-9", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "manual_recovery", CurrentStep: "recover", ArtifactID: artifact.ArtifactID, StartedAt: now, UpdatedAt: now},
+		{OperationID: "completed-operation", TraceID: "trace-10", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "completed", CurrentStep: "complete", ArtifactID: artifact.ArtifactID, StartedAt: now, UpdatedAt: now},
+		{OperationID: "failed-operation", TraceID: "trace-11", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "failed", CurrentStep: "fail", ArtifactID: artifact.ArtifactID, StartedAt: now, UpdatedAt: now},
+		{OperationID: "cancelled-operation", TraceID: "trace-12", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "cancelled", CurrentStep: "cancel", ArtifactID: artifact.ArtifactID, StartedAt: now, UpdatedAt: now},
+		{OperationID: "rolled-back-operation", TraceID: "trace-13", SpaceID: "user", ScopeType: "global", ExtensionID: artifact.ExtensionID, OperationType: "install", Status: "rolled_back", CurrentStep: "rollback", ArtifactID: artifact.ArtifactID, StartedAt: now, UpdatedAt: now},
 	} {
 		if err := container.PackageRepository.CreateOperation(ctx, operation); err != nil {
 			t.Fatal(err)
 		}
-	}
-	if _, err := container.Store.DB().ExecContext(ctx, `INSERT INTO kernel_legacy_call_counters(metric_name, count, updated_at)
-		VALUES ('legacy_package_write_calls', 3, ?) ON CONFLICT(metric_name) DO UPDATE SET count=3, updated_at=excluded.updated_at`, now); err != nil {
-		t.Fatal(err)
 	}
 	report := &FinalGateReport{Metrics: map[string]int64{}, Details: []FinalGateIssue{}, Errors: []string{}}
 	NewFinalGateProbe(container).probePackageReleaseGate(ctx, report)
@@ -120,7 +115,7 @@ func TestPackageFinalGateReportsExactReleaseMetrics(t *testing.T) {
 		t.Fatalf("package final gate queries failed: %v", report.Errors)
 	}
 	expected := map[string]int64{
-		"legacy_package_write_calls": 3, "incomplete_package_operations": 9, "unresolved_package_operations": 9, "orphan_artifacts": 1,
+		"incomplete_package_operations": 9, "unresolved_package_operations": 9, "orphan_artifacts": 1,
 		"orphan_installation_generations": 0, "installation_read_model_mismatches": initialInstallationMismatches + 1,
 		"unsigned_production_packages": 1, "untrusted_installed_packages": 1, "corrupted_artifacts": 1,
 		"failed_uninstall_restores": 1, "ambiguous_recovery_operations": 1,

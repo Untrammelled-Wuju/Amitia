@@ -64,7 +64,7 @@ test("installs a verified SnowLuma package with shared writable data", async () 
   }
   const allowedRoot = path.join(work, "plugin-data")
   const installer = new SnowLumaInstaller(allowedRoot)
-  const status = await installer.install("", {
+  const status = await installer.install({
     version: "2.2.0",
     platform: "linux",
     arch: "x64",
@@ -82,7 +82,7 @@ test("installs a verified SnowLuma package with shared writable data", async () 
   assert.equal(fs.readFileSync(path.join(allowedRoot, "snowluma", "shared", "config", "onebot.json"), "utf8"), "{\"networks\":{}}\n")
   assert.equal(fs.readFileSync(path.join(allowedRoot, "snowluma", "shared", "data", "10001", "messages.db"), "utf8"), "fixture\n")
   const firstInstallDir = pointer.installDir
-  const reinstalled = await installer.install("", {
+  const reinstalled = await installer.install({
     version: "2.2.0",
     platform: "linux",
     arch: "x64",
@@ -124,7 +124,7 @@ test("installs a verified Windows ZIP package", async () => {
   }
   const allowedRoot = path.join(work, "plugin-data")
   const installer = new SnowLumaInstaller(allowedRoot)
-  const status = await installer.install("", {
+  const status = await installer.install({
     version: "2.2.0",
     platform: "win32",
     arch: "x64",

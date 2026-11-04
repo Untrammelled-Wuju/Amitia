@@ -1074,7 +1074,7 @@ async function onReinstall(item: DesktopPetInstallation) {
   actionTargetId.value = item.id;
   try {
     const releaseId =
-      item.currentReleaseId || item.legacyPackageId || item.packageId;
+      item.currentReleaseId || item.packageId;
     if (!releaseId) {
       ElMessage.warning("缺少资源版本信息,无法重新安装");
       return;

@@ -272,7 +272,7 @@ await _patch.pushHistory(snapshot);
       'schemaVersion': 1,
     });
 
-    final themeMode = changes['themeMode'] ?? changes['preset'];
+    final themeMode = changes['themeMode'];
     if (themeMode != null) {
       appearance = appearance.copyWith(
         themeMode: switch (themeMode.toString()) {
@@ -505,7 +505,7 @@ await _patch.pushHistory(snapshot);
       if (target == null || target.isEmpty) {
         throw StateError('style target is required');
       }
-      final rawProperties = raw['properties'] ?? raw['set'] ?? raw['changes'];
+      final rawProperties = raw['properties'];
       final properties = rawProperties is Map
           ? rawProperties.cast<String, dynamic>()
           : const <String, dynamic>{};

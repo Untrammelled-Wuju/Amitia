@@ -9,9 +9,9 @@ import (
 )
 
 type fakeCrashContext struct {
-	stopping  bool
-	terminal  bool
-	shutdown  bool
+	stopping bool
+	terminal bool
+	shutdown bool
 }
 
 func (f *fakeCrashContext) IsRuntimeStopping(runtimeID domain.RuntimeInstanceID) (bool, error) {

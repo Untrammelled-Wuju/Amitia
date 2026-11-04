@@ -156,7 +156,9 @@ export function validateChannel(channel: ChannelDescriptor): string[] {
   if (schemaIdErr) errors.push(`channel '${channel.id}': ${schemaIdErr}`);
 
   const validDirections = ['plugin_to_host', 'host_to_plugin', 'bidirectional'];
-  if (channel.direction && !validDirections.includes(channel.direction)) {
+  if (!channel.direction) {
+    errors.push(`channel '${channel.id}': direction is required`);
+  } else if (!validDirections.includes(channel.direction)) {
     errors.push(`channel '${channel.id}': invalid direction '${channel.direction}'`);
   }
 
@@ -389,6 +391,9 @@ function validateNetworkPolicy(network: PluginNetworkPolicy | undefined): string
   const allowHostLoopback = network.allowHostLoopback ?? false;
   const maxConnections = network.maxConnections ?? 0;
   if (mode === 'restricted') {
+    if (transports.length === 0) {
+      return ['network.allowedTransports is required for restricted mode'];
+    }
     return validateRestrictedNetworkAllowlist(domains, ips, ports, transports, allowHostLoopback, maxConnections);
   }
   if (mode === 'none' || mode === 'loopback' || mode === 'unrestricted') {
@@ -756,7 +761,7 @@ export function validatePluginHostSpec(input: unknown): string[] {
     if (idErr) errors.push(`channels[${index}] id: ${idErr}`);
     const schemaIdErr = validateChannelSchemaId((channel.schemaId ?? '').trim());
     if (schemaIdErr) errors.push(`channels[${index}] schemaId: ${schemaIdErr}`);
-    if (channel.direction && !['plugin_to_host', 'host_to_plugin', 'bidirectional'].includes(channel.direction)) {
+    if (!channel.direction || !['plugin_to_host', 'host_to_plugin', 'bidirectional'].includes(channel.direction)) {
       errors.push(`channels[${index}] direction: invalid channel direction '${channel.direction}'`);
     }
     if (channel.frequencyHint && !['low', 'normal', 'high', 'realtime'].includes(channel.frequencyHint)) {

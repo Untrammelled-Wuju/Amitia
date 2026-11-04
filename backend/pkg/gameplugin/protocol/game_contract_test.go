@@ -10,7 +10,7 @@ func TestPluginHostSpecValidateGenericContract(t *testing.T) {
 			{ID: "control", ModuleID: "control-runtime", Kind: "process", Required: true},
 			{ID: "events", ModuleID: "event-runtime", Kind: "process", Required: true, DependsOn: []string{"control"}},
 		},
-		Channels:           []PluginChannelSpec{{ID: "events", ServiceID: "events", Kind: "event"}},
+		Channels:           []PluginChannelSpec{{ID: "events", ServiceID: "events", Kind: "event", Direction: ChannelDirectionPluginToHost}},
 		ControlEffectSinks: []PluginControlEffectSinkSpec{{ID: "effect", ServiceID: "control"}},
 		Network:            &PluginNetworkPolicy{Mode: "none"},
 	}
@@ -99,11 +99,11 @@ func TestPluginNetworkPolicyExposesProtocolV1Modes(t *testing.T) {
 			t.Fatalf("mode %s rejected: %v", mode, err)
 		}
 	}
-	restricted := PluginHostSpec{ProtocolVersion: ProtocolVersion, RuntimeModuleID: "runtime", Network: &PluginNetworkPolicy{Mode: "restricted", AllowedDomains: []string{"api.example.com", "*.cdn.example.com"}, AllowedPorts: []int{443, 8443}}}
+	restricted := PluginHostSpec{ProtocolVersion: ProtocolVersion, RuntimeModuleID: "runtime", Network: &PluginNetworkPolicy{Mode: "restricted", AllowedDomains: []string{"api.example.com", "*.cdn.example.com"}, AllowedPorts: []int{443, 8443}, AllowedTransports: []string{"https"}}}
 	if err := restricted.Validate(); err != nil {
 		t.Fatalf("valid restricted mode rejected: %v", err)
 	}
-	ipRestricted := PluginHostSpec{ProtocolVersion: ProtocolVersion, RuntimeModuleID: "runtime", Network: &PluginNetworkPolicy{Mode: "restricted", AllowedIPs: []string{"127.0.0.1", "2001:db8::10"}, AllowedPorts: []int{18080}}}
+	ipRestricted := PluginHostSpec{ProtocolVersion: ProtocolVersion, RuntimeModuleID: "runtime", Network: &PluginNetworkPolicy{Mode: "restricted", AllowedIPs: []string{"127.0.0.1", "2001:db8::10"}, AllowedPorts: []int{18080}, AllowedTransports: []string{"tcp"}}}
 	if err := ipRestricted.Validate(); err != nil {
 		t.Fatalf("valid exact-IP restricted mode rejected: %v", err)
 	}
@@ -131,7 +131,7 @@ func TestPluginNetworkPolicyExposesProtocolV1Modes(t *testing.T) {
 }
 
 func TestPluginHostSpecBinaryChannelRequiresNegotiatedFeature(t *testing.T) {
-	spec := PluginHostSpec{ProtocolVersion: ProtocolVersion, RuntimeModuleID: "runtime", Channels: []PluginChannelSpec{{ID: "frames", Kind: "binary"}}, Network: &PluginNetworkPolicy{Mode: "none"}}
+	spec := PluginHostSpec{ProtocolVersion: ProtocolVersion, RuntimeModuleID: "runtime", Channels: []PluginChannelSpec{{ID: "frames", Kind: "binary", Direction: ChannelDirectionPluginToHost}}, Network: &PluginNetworkPolicy{Mode: "none"}}
 	if err := spec.Validate(); err == nil {
 		t.Fatal("binary channel without binary_streaming host feature must be rejected")
 	}
@@ -257,7 +257,7 @@ func TestPluginHostSpecRejectsServiceDependencyCycle(t *testing.T) {
 func TestPluginHostSpecRuntimeModuleIDMustBelongToDeclaredServices(t *testing.T) {
 	spec := PluginHostSpec{
 		ProtocolVersion: ProtocolVersion,
-		RuntimeModuleID: "legacy-runtime",
+		RuntimeModuleID: "invalid-runtime",
 		HostFeatures:    []HostFeature{HostFeatureMultiService},
 		Services: []PluginServiceSpec{
 			{ID: "a", ModuleID: "module-a"},
@@ -270,7 +270,7 @@ func TestPluginHostSpecRuntimeModuleIDMustBelongToDeclaredServices(t *testing.T)
 	}
 	spec.RuntimeModuleID = "module-a"
 	if err := spec.Validate(); err != nil {
-		t.Fatalf("Validate() rejected compatible legacy runtimeModuleId: %v", err)
+		t.Fatalf("Validate() rejected canonical runtimeModuleId: %v", err)
 	}
 }
 

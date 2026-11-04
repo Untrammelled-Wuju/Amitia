@@ -53,7 +53,6 @@ func New() *Adapter {
 		imageprovider.ModeSpriteSheet,
 		imageprovider.ModeKeyframe,
 		imageprovider.ModeSingleFrame,
-		imageprovider.ModeLegacyFrame,
 	})
 }
 
@@ -73,7 +72,6 @@ func NewWithClient(client *http.Client) *Adapter {
 		imageprovider.ModeSpriteSheet,
 		imageprovider.ModeKeyframe,
 		imageprovider.ModeSingleFrame,
-		imageprovider.ModeLegacyFrame,
 	}}
 }
 
@@ -510,7 +508,6 @@ func Register(registry *imageprovider.Registry) error {
 		imageprovider.ModeSpriteSheet,
 		imageprovider.ModeKeyframe,
 		imageprovider.ModeSingleFrame,
-		imageprovider.ModeLegacyFrame,
 	})
 }
 

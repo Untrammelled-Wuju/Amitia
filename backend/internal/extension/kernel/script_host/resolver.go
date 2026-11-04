@@ -63,18 +63,10 @@ func (r *artifactResolver) Resolve(ctx context.Context, kind Kind) (Artifact, er
 	}
 
 	artifact, err := r.resolveFromRuntimePackage(ctx, kind)
-	if err == nil {
-		return artifact, nil
-	}
-	if errors.Is(err, ErrNativeResourceNotAllowedEquivalent) || errors.Is(err, ErrRuntimeResourceUnavailable) {
+	if err != nil {
 		return Artifact{Kind: kind}, err
 	}
-
-	if err := ctx.Err(); err != nil {
-		return Artifact{Kind: kind}, err
-	}
-
-	return r.resolveFromLegacy(ctx, kind)
+	return artifact, nil
 }
 
 func (r *artifactResolver) explicitURI(kind Kind) string {
@@ -157,42 +149,6 @@ func (r *artifactResolver) resolveFromRuntimePackage(ctx context.Context, kind K
 	}, nil
 }
 
-func (r *artifactResolver) resolveFromLegacy(ctx context.Context, kind Kind) (Artifact, error) {
-	workspaceDir := r.host.Paths().WorkspaceDir
-	if workspaceDir == "" {
-		return Artifact{Kind: kind}, newWorkspaceUnavailable(kind)
-	}
-
-	relative := defaultLegacyRelative(kind)
-	candidates := []string{
-		filepath.Join(workspaceDir, relative),
-	}
-
-	for _, cand := range candidates {
-		if err := ctx.Err(); err != nil {
-			return Artifact{Kind: kind}, err
-		}
-		info, err := r.inspector.Stat(cand)
-		if err != nil {
-			continue
-		}
-		if info.IsDir() {
-			continue
-		}
-		if !isHostEntryExtension(cand) {
-			return Artifact{Kind: kind}, newUnsupportedHostEntry(kind, cand, filepath.Ext(cand))
-		}
-		return Artifact{
-			Kind:             kind,
-			EntryPath:        filepath.Clean(cand),
-			DistributionRoot: deriveDistributionRoot(cand),
-			Source:           SourceLegacyWorkspace,
-		}, nil
-	}
-
-	return Artifact{Kind: kind}, newHostArtifactNotFound(kind, SourceLegacyWorkspace, filepath.Join(workspaceDir, relative))
-}
-
 func (r *artifactResolver) resolveURIToLocal(uriStr string) (string, error) {
 	physical := resourceuri.PhysicalRootsFromRuntimePaths(r.host.Paths())
 	resolver, err := resourceuri.NewPhysicalResolver(physical)
@@ -219,16 +175,6 @@ func defaultRuntimeURI(kind Kind) string {
 		return "amitia://runtime/plugin-host/dist/index.js"
 	case KindTaskHost:
 		return "amitia://runtime/task-host/dist/index.js"
-	}
-	return ""
-}
-
-func defaultLegacyRelative(kind Kind) string {
-	switch kind {
-	case KindPluginHost:
-		return "runtime/plugin-host/dist/index.js"
-	case KindTaskHost:
-		return "runtime/task-host/dist/index.js"
 	}
 	return ""
 }

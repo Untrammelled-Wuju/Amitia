@@ -69,54 +69,63 @@ class _KernelHomePageState extends ConsumerState<KernelHomePage> {
 
   Future<int?> _loadWasmCount() async {
     try {
-      final data = await ref.read(backendServiceProvider).get<List<dynamic>>('/api/wasm/modules');
+      final data = await ref
+          .read(backendServiceProvider)
+          .get<List<dynamic>>('/api/wasm/modules');
       return data?.length;
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-return null;
+      print("[original-error] $error\n$stackTrace");
+      return null;
     }
   }
 
   Future<int?> _loadHookCount() async {
     try {
-      final data = await ref.read(backendServiceProvider).get<Map<String, dynamic>>(
-        '/api/extensions/hooks/contributions',
-        fromJson: (value) => Map<String, dynamic>.from(value as Map),
-      );
+      final data = await ref
+          .read(backendServiceProvider)
+          .get<Map<String, dynamic>>(
+            '/api/extensions/hooks/contributions',
+            fromJson: (value) => Map<String, dynamic>.from(value as Map),
+          );
       return (data?['contributions'] as List?)?.length;
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-return null;
+      print("[original-error] $error\n$stackTrace");
+      return null;
     }
   }
 
   Future<int?> _loadTrustedServiceCount() async {
     try {
-      final data = await ref.read(backendServiceProvider).get<Map<String, dynamic>>(
-        '/api/extensions/services',
-        fromJson: (value) => Map<String, dynamic>.from(value as Map),
-      );
+      final data = await ref
+          .read(backendServiceProvider)
+          .get<Map<String, dynamic>>(
+            '/api/extensions/services',
+            fromJson: (value) => Map<String, dynamic>.from(value as Map),
+          );
       return (data?['services'] as List?)?.length;
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-return null;
+      print("[original-error] $error\n$stackTrace");
+      return null;
     }
   }
 
   Future<int?> _loadTaskCount() async {
     try {
-      final runs = await ref.read(extensionTaskServiceProvider).listRuns(limit: 200);
+      final runs = await ref
+          .read(extensionTaskServiceProvider)
+          .listRuns(limit: 200);
       return runs.length;
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-return null;
+      print("[original-error] $error\n$stackTrace");
+      return null;
     }
   }
 
   @override
   Widget build(BuildContext context) {
     if (_loading) return const AmitiaLoadingState();
-    if (_error != null) return AmitiaErrorState(message: _error!, onRetry: _load);
+    if (_error != null)
+      return AmitiaErrorState(message: _error!, onRetry: _load);
 
     return AmitiaScaffold(
       appBar: const AmitiaAppBar(
@@ -158,7 +167,8 @@ return null;
     final orchestrator = checks['orchestrator'] is Map
         ? Map<String, dynamic>.from(checks['orchestrator'] as Map)
         : <String, dynamic>{};
-    final databaseHealthy = health['database'] == 'ok' || checks['database'] == 'ok';
+    final databaseHealthy =
+        health['database'] == 'ok' || checks['database'] == 'ok';
     final ready = health['ready'] == true || health['health'] == true;
     final runtimeReady = orchestrator['ready'] == true;
     final version = (health['version'] ?? 'unknown').toString();
@@ -177,7 +187,11 @@ return null;
                   color: context.accentSoft,
                   borderRadius: AppRadius.brSmall,
                 ),
-                child: Icon(Icons.memory, size: 24, color: context.accentPrimary),
+                child: Icon(
+                  Icons.memory,
+                  size: 24,
+                  color: context.accentPrimary,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -186,24 +200,50 @@ return null;
                   children: [
                     Text('扩展内核', style: AppTypography.cardTitle(context)),
                     const SizedBox(height: 2),
-                    Text('v$version · Runtime ${runtimeReady ? 'ready' : 'not ready'}', style: AppTypography.caption(context)),
+                    Text(
+                      'v$version · Runtime ${runtimeReady ? 'ready' : 'not ready'}',
+                      style: AppTypography.caption(context),
+                    ),
                   ],
                 ),
               ),
               AmitiaStatusBadge(
                 label: statusLabel,
-                type: ready ? BadgeType.success : (databaseHealthy ? BadgeType.warning : BadgeType.error),
+                type: ready
+                    ? BadgeType.success
+                    : (databaseHealthy ? BadgeType.warning : BadgeType.error),
               ),
             ],
           ),
           SizedBox(height: AppSpacing.md),
           Row(
             children: [
-              Expanded(child: _buildStatItem(context, 'WASM 模块', _countText(_wasmCount), Icons.extension_outlined)),
+              Expanded(
+                child: _buildStatItem(
+                  context,
+                  'WASM 模块',
+                  _countText(_wasmCount),
+                  Icons.extension_outlined,
+                ),
+              ),
               Container(width: 1, height: 36, color: context.borderPrimary),
-              Expanded(child: _buildStatItem(context, 'Hook 点', _countText(_hookCount), Icons.account_tree_outlined)),
+              Expanded(
+                child: _buildStatItem(
+                  context,
+                  'Hook 点',
+                  _countText(_hookCount),
+                  Icons.account_tree_outlined,
+                ),
+              ),
               Container(width: 1, height: 36, color: context.borderPrimary),
-              Expanded(child: _buildStatItem(context, '可信服务', _countText(_trustedCount), Icons.verified_user_outlined)),
+              Expanded(
+                child: _buildStatItem(
+                  context,
+                  '可信服务',
+                  _countText(_trustedCount),
+                  Icons.verified_user_outlined,
+                ),
+              ),
             ],
           ),
         ],
@@ -213,12 +253,20 @@ return null;
 
   String _countText(int? value) => value == null ? '—' : '$value';
 
-  Widget _buildStatItem(BuildContext context, String label, String value, IconData icon) {
+  Widget _buildStatItem(
+    BuildContext context,
+    String label,
+    String value,
+    IconData icon,
+  ) {
     return Column(
       children: [
         Icon(icon, size: 18, color: context.accentPrimary),
         const SizedBox(height: 4),
-        Text(value, style: AppTypography.cardTitle(context).copyWith(fontSize: 18)),
+        Text(
+          value,
+          style: AppTypography.cardTitle(context).copyWith(fontSize: 18),
+        ),
         const SizedBox(height: 2),
         Text(label, style: AppTypography.label(context)),
       ],
@@ -227,10 +275,30 @@ return null;
 
   Widget _buildModuleGrid(BuildContext context) {
     final modules = <_KernelModule>[
-      _KernelModule(title: 'WASM Runtime', subtitle: _wasmCount == null ? '数量不可用' : '$_wasmCount 个模块', icon: Icons.extension_outlined, route: AppRoutes.kernelPage('wasm')),
-      _KernelModule(title: 'Hook 中心', subtitle: _hookCount == null ? '数量不可用' : '$_hookCount 个 Hook 点', icon: Icons.account_tree_outlined, route: AppRoutes.kernelPage('hooks')),
-      _KernelModule(title: '可信服务', subtitle: _trustedCount == null ? '数量不可用' : '$_trustedCount 个服务', icon: Icons.verified_user_outlined, route: AppRoutes.kernelPage('trusted-services')),
-      _KernelModule(title: '任务运行时', subtitle: _taskCount == null ? '数量不可用' : '$_taskCount 个任务', icon: Icons.play_circle_outline, route: AppRoutes.kernelPage('tasks')),
+      _KernelModule(
+        title: 'WASM Runtime',
+        subtitle: _wasmCount == null ? '数量不可用' : '$_wasmCount 个模块',
+        icon: Icons.extension_outlined,
+        route: AppRoutes.kernelPage('wasm'),
+      ),
+      _KernelModule(
+        title: 'Hook 中心',
+        subtitle: _hookCount == null ? '数量不可用' : '$_hookCount 个 Hook 点',
+        icon: Icons.account_tree_outlined,
+        route: AppRoutes.kernelPage('hooks'),
+      ),
+      _KernelModule(
+        title: '可信服务',
+        subtitle: _trustedCount == null ? '数量不可用' : '$_trustedCount 个服务',
+        icon: Icons.verified_user_outlined,
+        route: AppRoutes.kernelPage('trusted-services'),
+      ),
+      _KernelModule(
+        title: '任务运行时',
+        subtitle: _taskCount == null ? '数量不可用' : '$_taskCount 个任务',
+        icon: Icons.play_circle_outline,
+        route: AppRoutes.kernelPage('tasks'),
+      ),
     ];
 
     return GridView.builder(
@@ -262,7 +330,10 @@ return null;
                 child: Icon(m.icon, size: 18, color: context.accentPrimary),
               ),
               SizedBox(height: AppSpacing.sm),
-              Text(m.title, style: AppTypography.cardTitle(context).copyWith(fontSize: 14)),
+              Text(
+                m.title,
+                style: AppTypography.cardTitle(context).copyWith(fontSize: 14),
+              ),
               const SizedBox(height: 2),
               Text(m.subtitle, style: AppTypography.label(context)),
             ],
@@ -274,18 +345,50 @@ return null;
 
   List<Widget> _buildMoreEntries(BuildContext context) {
     final entries = <_DevEntry>[
-      _DevEntry(title: '事件中心', subtitle: '事件订阅与历史', icon: Icons.notifications_active_outlined, route: AppRoutes.kernelPage('events')),
-      _DevEntry(title: '调度中心', subtitle: '定时任务管理', icon: Icons.schedule_outlined, route: AppRoutes.kernelPage('schedules')),
-      _DevEntry(title: '桌面贡献中心', subtitle: '快捷键与窗口', icon: Icons.desktop_windows_outlined, route: AppRoutes.kernelPage('desktop')),
-      _DevEntry(title: '更新中心', subtitle: '版本更新与回滚', icon: Icons.system_update_outlined, route: AppRoutes.kernelPage('updates')),
-      _DevEntry(title: '诊断控制台', subtitle: '日志与诊断', icon: Icons.terminal, route: AppRoutes.kernelPage('dev-console')),
-      _DevEntry(title: '迁移与灰度', subtitle: '数据迁移与灰度发布', icon: Icons.merge_type_outlined, route: AppRoutes.kernelPage('migrations')),
-      _DevEntry(title: '开发模式', subtitle: '工作区与热重载', icon: Icons.developer_mode_outlined, route: AppRoutes.kernelPage('dev-mode')),
+      _DevEntry(
+        title: '事件中心',
+        subtitle: '事件订阅与历史',
+        icon: Icons.notifications_active_outlined,
+        route: AppRoutes.kernelPage('events'),
+      ),
+      _DevEntry(
+        title: '调度中心',
+        subtitle: '定时任务管理',
+        icon: Icons.schedule_outlined,
+        route: AppRoutes.kernelPage('schedules'),
+      ),
+      _DevEntry(
+        title: '桌面贡献中心',
+        subtitle: '快捷键与窗口',
+        icon: Icons.desktop_windows_outlined,
+        route: AppRoutes.kernelPage('desktop'),
+      ),
+      _DevEntry(
+        title: '更新中心',
+        subtitle: '版本更新与回滚',
+        icon: Icons.system_update_outlined,
+        route: AppRoutes.kernelPage('updates'),
+      ),
+      _DevEntry(
+        title: '诊断控制台',
+        subtitle: '日志与诊断',
+        icon: Icons.terminal,
+        route: AppRoutes.kernelPage('dev-console'),
+      ),
+      _DevEntry(
+        title: '开发模式',
+        subtitle: '工作区与热重载',
+        icon: Icons.developer_mode_outlined,
+        route: AppRoutes.kernelPage('dev-mode'),
+      ),
     ];
 
     return entries.map((e) {
       return Padding(
-        padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: 2),
+        padding: EdgeInsets.symmetric(
+          horizontal: AppSpacing.pagePadding,
+          vertical: 2,
+        ),
         child: AmitiaListTile(
           leading: Container(
             width: 36,
@@ -298,7 +401,11 @@ return null;
           ),
           title: e.title,
           subtitle: e.subtitle,
-          trailing: Icon(Icons.chevron_right, color: context.textTertiary, size: 20),
+          trailing: Icon(
+            Icons.chevron_right,
+            color: context.textTertiary,
+            size: 20,
+          ),
           onTap: () => context.push(e.route),
         ),
       );
@@ -312,7 +419,12 @@ class _KernelModule {
   final IconData icon;
   final String route;
 
-  _KernelModule({required this.title, required this.subtitle, required this.icon, required this.route});
+  _KernelModule({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.route,
+  });
 }
 
 class _DevEntry {
@@ -321,5 +433,10 @@ class _DevEntry {
   final IconData icon;
   final String route;
 
-  _DevEntry({required this.title, required this.subtitle, required this.icon, required this.route});
+  _DevEntry({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.route,
+  });
 }

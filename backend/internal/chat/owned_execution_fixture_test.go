@@ -11,6 +11,7 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	kernelsqlite "github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
+	"github.com/u-ai/backend/internal/migration"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -82,10 +83,7 @@ func newOwnedExecutionFixture(t *testing.T) *ownedExecutionFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = modelDB.AutoMigrate(&ModelConfig{}); err != nil {
-		t.Fatal(err)
-	}
-	if err = modelDB.Exec(`CREATE TABLE model_scenario_routes (scenario TEXT PRIMARY KEY, model_config_id INTEGER NOT NULL DEFAULT 0)`).Error; err != nil {
+	if err = migration.ApplyBaseline(modelDB); err != nil {
 		t.Fatal(err)
 	}
 	if err = modelDB.Create(&ModelConfig{Name: "owned-test", APIType: "openai-compatible", BaseURL: "http://127.0.0.1", ModelName: "owned-test", IsActive: 1, MaxTokens: 128}).Error; err != nil {

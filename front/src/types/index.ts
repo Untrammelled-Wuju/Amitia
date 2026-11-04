@@ -502,7 +502,7 @@ export interface TriggerQueueSummary {
 // Extension Kernel - 新领域类型 解除Skill概念过载
 // ============================================================
 
-export type ToolSource = "builtin" | "plugin" | "mcp" | "workflow" | "internal" | "legacy_tool";
+export type ToolSource = "builtin" | "plugin" | "mcp" | "workflow" | "internal";
 
 export type RiskLevel = "low" | "medium" | "high";
 

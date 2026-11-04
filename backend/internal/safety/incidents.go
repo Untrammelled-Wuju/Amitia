@@ -9,7 +9,6 @@ import (
 
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"gorm.io/gorm"
-	amitialog "log"
 )
 
 type Incident struct {
@@ -29,7 +28,6 @@ type Incident struct {
 	PolicyRevision int64  `json:"policyRevision"`
 	Revision       int64  `json:"revision"`
 	DetailsJSON    string `json:"details"`
-	LegacyEventID  string `json:"-"`
 	CreatedAt      string `json:"createdAt"`
 	UpdatedAt      string `json:"updatedAt"`
 	ResolvedAt     string `json:"resolvedAt,omitempty"`
@@ -76,8 +74,8 @@ func (r *Repository) RecordIncident(ctx context.Context, incident Incident) erro
 		incident.CreatedAt = now
 	}
 	incident.UpdatedAt = now
-	return r.db.WithContext(ctx).Exec(`INSERT INTO safety_incidents(id,space_id,owner_id,core_id,role_id,conversation_id,message_id,feedback_id,request_id,event_type,severity,description,status,policy_revision,revision,details_json,legacy_event_id,created_at,updated_at,resolved_at,resolved_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(feedback_id) WHERE feedback_id IS NOT NULL DO NOTHING`,
-		incident.ID, incident.SpaceID, incident.OwnerID, incident.CoreID, incident.RoleID, incident.ConversationID, incident.MessageID, incident.FeedbackID, incident.RequestID, incident.EventType, incident.Severity, incident.Description, incident.Status, incident.PolicyRevision, incident.Revision, incident.DetailsJSON, incident.LegacyEventID, incident.CreatedAt, incident.UpdatedAt, incident.ResolvedAt, incident.ResolvedBy).Error
+	return r.db.WithContext(ctx).Exec(`INSERT INTO safety_incidents(id,space_id,owner_id,core_id,role_id,conversation_id,message_id,feedback_id,request_id,event_type,severity,description,status,policy_revision,revision,details_json,created_at,updated_at,resolved_at,resolved_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(feedback_id) WHERE feedback_id IS NOT NULL DO NOTHING`,
+		incident.ID, incident.SpaceID, incident.OwnerID, incident.CoreID, incident.RoleID, incident.ConversationID, incident.MessageID, incident.FeedbackID, incident.RequestID, incident.EventType, incident.Severity, incident.Description, incident.Status, incident.PolicyRevision, incident.Revision, incident.DetailsJSON, incident.CreatedAt, incident.UpdatedAt, incident.ResolvedAt, incident.ResolvedBy).Error
 }
 
 func (r *Repository) ListIncidents(ctx context.Context, scope PolicyScope, page, pageSize int, status string) ([]Incident, int64, error) {
@@ -165,50 +163,4 @@ func (r *Repository) DeleteIncidents(ctx context.Context, scope PolicyScope) (in
 	}
 	result := r.db.WithContext(ctx).Where("space_id=? AND owner_id=? AND core_id=?", scope.SpaceID, scope.OwnerID, scope.CoreID).Delete(&Incident{})
 	return result.RowsAffected, result.Error
-}
-
-func (r *Repository) MigrateLegacyEvents(ctx context.Context, scope PolicyScope) error {
-	if err := validatePolicyScope(scope); err != nil {
-		return err
-	}
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if !tx.Migrator().HasTable("safety_events") {
-			return nil
-		}
-		var rows []struct {
-			ID             string `gorm:"column:id"`
-			ConversationID string `gorm:"column:conversation_id"`
-			EventType      string `gorm:"column:event_type"`
-			Description    string `gorm:"column:description"`
-			Direction      string `gorm:"column:direction"`
-			Handled        int    `gorm:"column:handled"`
-			CreatedAt      string `gorm:"column:created_at"`
-		}
-		if err := tx.Table("safety_events").Select("id,conversation_id,event_type,description,direction,handled,created_at").Order("created_at,id").Scan(&rows).Error; err != nil {
-			return err
-		}
-		now := time.Now().UTC().Format(time.RFC3339Nano)
-		for _, row := range rows {
-			status, resolvedAt := "open", ""
-			if row.Handled != 0 {
-				status, resolvedAt = "resolved", now
-			}
-			var roleID string
-			if err := tx.Table("messages").Select("character_id").Where("conversation_id=? AND character_id<>''", row.ConversationID).Limit(1).Scan(&roleID).Error; err != nil {
-				amitialog.Printf("[original-error] %v", err)
-			}
-			if row.EventType == "" {
-				row.EventType = "legacy_safety_event"
-			}
-			if row.CreatedAt == "" {
-				row.CreatedAt = now
-			}
-			details, _ := json.Marshal(map[string]any{"source": "legacy.safety_events", "direction": row.Direction})
-			if err := tx.Exec(`INSERT INTO safety_incidents(id,space_id,owner_id,core_id,role_id,conversation_id,message_id,feedback_id,request_id,event_type,severity,description,status,policy_revision,revision,details_json,legacy_event_id,created_at,updated_at,resolved_at,resolved_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(legacy_event_id) WHERE legacy_event_id <> '' DO NOTHING`,
-				"legacy-safety/"+row.ID, scope.SpaceID, scope.OwnerID, scope.CoreID, roleID, row.ConversationID, "", nil, "", row.EventType, "medium", row.Description, status, 0, 1, string(details), row.ID, row.CreatedAt, now, resolvedAt, "").Error; err != nil {
-				return err
-			}
-		}
-		return tx.Migrator().DropTable("safety_events")
-	})
 }

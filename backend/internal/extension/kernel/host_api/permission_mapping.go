@@ -31,6 +31,8 @@ func DefaultPermissionMapping() map[Method][]PermissionMappingEntry {
 		MethodScheduleCancel:            {{PermissionID: "schedule.manage", Resource: "schedule"}},
 		MethodScheduleList:              {{PermissionID: "schedule.create", Resource: "schedule"}},
 		MethodToolExecute:               {{PermissionID: "tool.invoke", Resource: "tool"}},
+		MethodPluginPreview:             {{PermissionID: "extensions.install", Resource: "extension"}},
+		MethodPluginInstall:             {{PermissionID: "extensions.install", Resource: "extension"}},
 		MethodCharacterRead:             {{PermissionID: "character.read", Resource: "character"}},
 		MethodCharacterList:             {{PermissionID: "character.read", Resource: "character"}},
 		MethodConversationRead:          {{PermissionID: "conversation.read", Resource: "conversation"}},
@@ -154,7 +156,7 @@ func RouteRiskForMethod(method Method) RiskLevel {
 		return RiskMedium
 	case MethodUIDialog:
 		return RiskMedium
-	case MethodToolExecute, MethodConversationMessageSend, MethodConversationMessageAppend:
+	case MethodToolExecute, MethodPluginPreview, MethodPluginInstall, MethodConversationMessageSend, MethodConversationMessageAppend:
 		return RiskHigh
 	case MethodExtensionDataRead:
 		return RiskMedium
@@ -189,7 +191,7 @@ func RouteSideEffectForMethod(method Method) SideEffectLevel {
 		return SideEffectWrite
 	case MethodEventEmit:
 		return SideEffectWrite
-	case MethodToolExecute, MethodConversationMessageSend, MethodConversationMessageAppend, MethodNetworkRequest, MethodNetworkTCPOpen, MethodNetworkTCPRead, MethodNetworkTCPWrite, MethodNetworkTCPClose,
+	case MethodToolExecute, MethodPluginPreview, MethodPluginInstall, MethodConversationMessageSend, MethodConversationMessageAppend, MethodNetworkRequest, MethodNetworkTCPOpen, MethodNetworkTCPRead, MethodNetworkTCPWrite, MethodNetworkTCPClose,
 		MethodNetworkUDPOpen, MethodNetworkUDPReceive, MethodNetworkUDPSend, MethodNetworkUDPClose,
 		MethodNetworkWebSocketOpen, MethodNetworkWebSocketReceive, MethodNetworkWebSocketSend, MethodNetworkWebSocketClose:
 		return SideEffectExternal
@@ -217,6 +219,7 @@ func RegisterPermissionDefinitions(registry *permission.PermissionDefinitionRegi
 		{ID: "schedule.create", Name: "Create Schedule", Description: "Create a namespaced scheduled host task", Category: permission.CategoryWorkflow, RiskLevel: capability.RiskMedium, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule}, PersistentGrantable: true, BackgroundAllowed: true, ChildInvocation: permission.ChildReevaluate, DefaultApproval: permission.ApprovalManual},
 		{ID: "schedule.manage", Name: "Manage Schedule", Description: "Cancel or modify a namespaced scheduled host task", Category: permission.CategoryWorkflow, RiskLevel: capability.RiskMedium, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule}, PersistentGrantable: true, BackgroundAllowed: true, ChildInvocation: permission.ChildReevaluate, DefaultApproval: permission.ApprovalManual},
 		{ID: "tool.invoke", Name: "Invoke Host Tool", Description: "Invoke a host tool from an extension runtime", Category: permission.CategoryExtension, RiskLevel: capability.RiskHigh, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule, permission.ScopeTool}, PersistentGrantable: false, RequiresPerUse: true, BackgroundAllowed: false, ChildInvocation: permission.ChildReevaluate, DefaultApproval: permission.ApprovalManual},
+		{ID: "extensions.install", Name: "Install Extension", Description: "Install a verified plugin package through the host package manager", Category: permission.CategoryExtension, RiskLevel: capability.RiskHigh, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal}, PersistentGrantable: false, RequiresPerUse: true, BackgroundAllowed: false, ChildInvocation: permission.ChildDeny, DefaultApproval: permission.ApprovalManual},
 		{ID: "character.read", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeCharacter}},
 		{ID: "conversation.read", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeConversation, permission.ScopeCharacter}},
 		{ID: "memory.read", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeCharacter, permission.ScopeConversation}},

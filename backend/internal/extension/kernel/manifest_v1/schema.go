@@ -132,7 +132,10 @@ const manifestSchema = `{
               "required": ["id", "kind", "name"],
               "properties": {
                 "id": {"type": "string", "minLength": 1},
-                "kind": {"type": "string", "enum": ["tool", "agent_skill", "workflow", "mcp_server", "provider", "hook", "event_subscription", "schedule", "background_task", "ui_page", "ui_panel", "ui_chat", "ui_context_action", "ui_desktop", "ui_provider", "ui_slot", "gamex", "petx"]},
+                "kind": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._/-]{0,127}$"},
+                "adapter": {"type": "string", "enum": ["tool", "agent_skill", "workflow", "mcp_server", "hook", "event", "schedule", "ui", "ui_provider", "ui_slot", "background", "provider", "game", "desktop_pet"]},
+                "contractVersion": {"type": "integer", "minimum": 1},
+                "schema": {"type": "object"},
                 "name": {
                   "type": "object",
                   "required": ["default"],

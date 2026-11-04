@@ -1,47 +1,40 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 )
 
 var (
-	ErrLegacyMCPManagerPresent  = errors.New("canonical startup violation: Legacy MCP manager must not be present in production")
-	ErrToolFacadeMissing        = errors.New("canonical startup violation: ToolFacade must be the unique tool authority")
-	ErrPermissionBrokerMissing  = errors.New("canonical startup violation: PermissionBroker must be the unique permission authority")
-	ErrTaskRuntimeMissing       = errors.New("canonical startup violation: TaskRuntime must be the unique task authority")
-	ErrEventServiceMissing      = errors.New("canonical startup violation: EventService must be the unique event authority")
-	ErrScheduleServiceMissing   = errors.New("canonical startup violation: ScheduleService must be the unique schedule authority")
-	ErrMemoryRawWriterPresent   = errors.New("canonical startup violation: Memory raw writer must not be present in production")
-	ErrChannelResolverMissing   = errors.New("canonical startup violation: CapabilityChannelResolver must be the delivery authority")
-	ErrBackgroundRuntimeMissing = errors.New("canonical startup violation: canonical background removal runtime must be configured")
+	ErrMCPDuplicateProviderPresent = errors.New("canonical startup violation: unresolved MCP duplicate registrations must not be present in production")
+	ErrToolFacadeMissing           = errors.New("canonical startup violation: ToolFacade must be the unique tool authority")
+	ErrPermissionBrokerMissing     = errors.New("canonical startup violation: PermissionBroker must be the unique permission authority")
+	ErrTaskRuntimeMissing          = errors.New("canonical startup violation: TaskRuntime must be the unique task authority")
+	ErrEventServiceMissing         = errors.New("canonical startup violation: EventService must be the unique event authority")
+	ErrScheduleServiceMissing      = errors.New("canonical startup violation: ScheduleService must be the unique schedule authority")
+	ErrChannelResolverMissing      = errors.New("canonical startup violation: CapabilityChannelResolver must be the delivery authority")
+	ErrBackgroundRuntimeMissing    = errors.New("canonical startup violation: canonical background removal runtime must be configured")
 )
 
 type CanonicalRuntimeSnapshot struct {
-	LegacyMCPManagerPresent bool
-	MemoryRawWriterPresent  bool
-
 	ToolFacadeCount       int
 	PermissionBrokerCount int
 	TaskRuntimeCount      int
 	EventServiceCount     int
 	ScheduleServiceCount  int
-
-	LegacyRuntimeActive int
-	LegacyWriteEnabled  int
-}
-
-type LegacyRuntimeSnapshot struct {
-	LegacyMCPManagerActive bool
-	MemoryRawWriterActive  bool
 }
 
 func runCanonicalStartupAssertions(services *AppServices) error {
 	if services == nil {
 		return nil
 	}
-	if !services.hasNoLegacyMCPManager() {
-		return ErrLegacyMCPManagerPresent
+	duplicateMCP, err := services.hasDuplicateMCPRegistrations()
+	if err != nil {
+		return err
+	}
+	if duplicateMCP {
+		return ErrMCPDuplicateProviderPresent
 	}
 	if services.KernelContainer == nil {
 		return fmt.Errorf("%w: KernelContainer is nil", ErrToolFacadeMissing)
@@ -76,9 +69,6 @@ func runCanonicalStartupAssertions(services *AppServices) error {
 			return ErrScheduleServiceMissing
 		}
 	}
-	if !services.hasNoMemoryRawWriter() {
-		return ErrMemoryRawWriterPresent
-	}
 	return nil
 }
 
@@ -86,36 +76,14 @@ func runCanonicalRuntimeAssertions(services *AppServices) error {
 	if services == nil {
 		return fmt.Errorf("services is nil")
 	}
-	snapshot := services.LegacyRuntimeSnapshot()
-	if snapshot.LegacyMCPManagerActive {
-		return fmt.Errorf("%w: legacy MCP manager is active", ErrLegacyMCPManagerPresent)
+	duplicateMCP, err := services.hasDuplicateMCPRegistrations()
+	if err != nil {
+		return err
 	}
-	if snapshot.MemoryRawWriterActive {
-		return fmt.Errorf("%w: memory raw writer is active", ErrMemoryRawWriterPresent)
-	}
-
-	if services.KernelContainer != nil {
-		if services.KernelContainer.MCPDuplicateProvider != nil {
-			if unresolved, err := services.KernelContainer.MCPDuplicateProvider.CountUnresolved(nil); err == nil && unresolved > 0 {
-				return fmt.Errorf("canonical startup violation: %d unresolved MCP duplicate registrations", unresolved)
-			}
-		}
+	if duplicateMCP {
+		return ErrMCPDuplicateProviderPresent
 	}
 	return nil
-}
-
-func (s *AppServices) LegacyRuntimeSnapshot() LegacyRuntimeSnapshot {
-	snap := LegacyRuntimeSnapshot{}
-	if s == nil {
-		return snap
-	}
-	if s.hasLegacyMCPManager() {
-		snap.LegacyMCPManagerActive = true
-	}
-	if s.hasMemoryRawWriter() {
-		snap.MemoryRawWriterActive = true
-	}
-	return snap
 }
 
 func (s *AppServices) CanonicalRuntimeSnapshot() CanonicalRuntimeSnapshot {
@@ -142,36 +110,21 @@ func (s *AppServices) CanonicalRuntimeSnapshot() CanonicalRuntimeSnapshot {
 		snap.ScheduleServiceCount = 1
 	}
 
-	legacy := s.LegacyRuntimeSnapshot()
-	snap.LegacyMCPManagerPresent = legacy.LegacyMCPManagerActive
-	snap.MemoryRawWriterPresent = legacy.MemoryRawWriterActive
 	return snap
 }
 
-func (s *AppServices) hasNoLegacyMCPManager() bool {
-	return !s.hasLegacyMCPManager()
-}
-
-func (s *AppServices) hasLegacyMCPManager() bool {
+func (s *AppServices) hasDuplicateMCPRegistrations() (bool, error) {
 	if s == nil || s.KernelContainer == nil {
-		return false
+		return false, nil
 	}
 	if s.KernelContainer.MCPDuplicateProvider == nil {
-		return false
+		return false, nil
 	}
-	count, err := s.KernelContainer.MCPDuplicateProvider.CountUnresolved(nil)
+	count, err := s.KernelContainer.MCPDuplicateProvider.CountUnresolved(context.Background())
 	if err != nil {
-		return false
+		return false, fmt.Errorf("canonical startup: count unresolved MCP duplicate registrations: %w", err)
 	}
-	return count > 0
-}
-
-func (s *AppServices) hasNoMemoryRawWriter() bool {
-	return !s.hasMemoryRawWriter()
-}
-
-func (s *AppServices) hasMemoryRawWriter() bool {
-	return false
+	return count > 0, nil
 }
 
 func verifyCanonicalStartupOrPanic(services *AppServices) {

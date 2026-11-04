@@ -108,13 +108,6 @@ func collectAndroidNativeToolDefinitions() []capability.ToolDefinition {
 
 	if screenshotTool, err := screenshot.BuildToolDefinition(); err == nil {
 		defs = append(defs, screenshotTool)
-		captureAlias := screenshotTool
-		captureAlias.ID = "android.screen.capture_screenshot"
-		captureAlias.ModelName = "capture_screenshot"
-		captureAlias.Name = "Capture Screenshot"
-		captureAlias.Description = "Capture one static Android screenshot and return an amitia:// resource reference. This is the compatibility alias for capture_screenshot."
-		captureAlias.ToolVersion.Revision = "b34-screen-shot-alias-v1"
-		defs = append(defs, captureAlias)
 	}
 
 	if cameraTools, err := camera.BuildCameraTools(); err == nil {

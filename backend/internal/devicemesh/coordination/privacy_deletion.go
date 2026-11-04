@@ -13,20 +13,18 @@ type PrivacyDeletionTarget struct {
 	Kind           string         `json:"kind"`
 	OwnerID        string         `json:"ownerId"`
 	RoleID         string         `json:"roleId"`
-	Legacy         bool           `json:"legacy"`
 	Revision       int64          `json:"revision"`
 	Fingerprint    string         `json:"fingerprint"`
 	ExecutionScope ExecutionScope `json:"executionScope"`
 }
 
 type PrivacyDeletionRequest struct {
-	LegacyDeletionID string                 `json:"legacyDeletionId,omitempty"`
-	TargetID         string                 `json:"targetId"`
-	TargetType       string                 `json:"targetType"`
-	Selection        string                 `json:"scope"`
-	Reason           string                 `json:"reason,omitempty"`
-	ID               string                 `json:"id,omitempty"`
-	Target           *PrivacyDeletionTarget `json:"target,omitempty"`
+	TargetID   string                 `json:"targetId"`
+	TargetType string                 `json:"targetType"`
+	Selection  string                 `json:"scope"`
+	Reason     string                 `json:"reason,omitempty"`
+	ID         string                 `json:"id,omitempty"`
+	Target     *PrivacyDeletionTarget `json:"target,omitempty"`
 }
 
 type privacyDeletionCommitKey struct{}

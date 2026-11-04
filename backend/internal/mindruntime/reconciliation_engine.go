@@ -346,7 +346,6 @@ func (e *ReconciliationEngine) RunWorker(ctx context.Context, interval time.Dura
 
 func DefaultReconciliationWorkerTargets() []ReconciliationWorkerTarget {
 	return []ReconciliationWorkerTarget{
-		{Target: ReconciliationTombstoneDerivedData, Strategy: StrategyLogicalInvalid},
 		{Target: ReconciliationLeaseDelivery, Strategy: StrategyReleaseLease},
 		{Target: ReconciliationOutboxSideEffect, Strategy: StrategyCompensate},
 		{Target: ReconciliationInteractionRunMsg, Strategy: StrategyCompensate},

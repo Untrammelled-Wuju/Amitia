@@ -37,7 +37,8 @@
         {
           "id": "events",
           "serviceId": "a",
-          "kind": "event"
+          "kind": "event",
+          "direction": "plugin_to_host"
         },
         {
           "id": "events",
@@ -78,6 +79,9 @@
         "allowedPorts": [
           443,
           8443
+        ],
+        "allowedTransports": [
+          "https"
         ]
       }
     }
@@ -386,7 +390,7 @@
     "valid": false,
     "spec": {
       "protocolVersion": "amitia-game-host/1",
-      "runtimeModuleId": "legacy",
+      "runtimeModuleId": "invalid-runtime",
       "services": [
         {
           "id": "a",

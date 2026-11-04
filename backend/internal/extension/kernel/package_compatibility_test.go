@@ -37,17 +37,19 @@ func TestPackageCompatibilityUsesManifestRuntimeSourceOfTruth(t *testing.T) {
 	}
 }
 
-func TestPackagePlatformAliases(t *testing.T) {
+func TestPackagePlatformUsesCanonicalValues(t *testing.T) {
 	cases := []struct {
 		values   []string
 		platform string
 		want     bool
 	}{
-		{[]string{"macos"}, "darwin", true},
-		{[]string{"darwin"}, "macos", true},
-		{[]string{"win32"}, "windows", true},
-		{[]string{"windows"}, "win32", true},
+		{[]string{"macos"}, "darwin", false},
+		{[]string{"darwin"}, "macos", false},
+		{[]string{"win32"}, "windows", false},
+		{[]string{"windows"}, "win32", false},
 		{[]string{"linux"}, "linux", true},
+		{[]string{"darwin"}, "darwin", true},
+		{[]string{"windows"}, "windows", true},
 		{[]string{"all"}, "darwin", true},
 		{[]string{"linux"}, "windows", false},
 	}

@@ -43,7 +43,7 @@ func runInspect(args []string, output *Output) int {
 		"fileCount":   len(pkg.Integrity.Files),
 		"treeHash":    pkg.Tree.TreeHash,
 		"algorithm":   pkg.Tree.Algorithm,
-		"signed":      pkg.Signatures != nil,
+		"signed":      len(pkg.V2Signature) > 0,
 	}
 
 	if len(pkg.Manifest.Dependencies) > 0 {
@@ -60,15 +60,6 @@ func runInspect(args []string, output *Output) int {
 			perms = append(perms, p.Name)
 		}
 		data["permissions"] = perms
-	}
-
-	if pkg.Signatures != nil {
-		data["signature"] = map[string]any{
-			"keyId":       pkg.Signatures.KeyID,
-			"publisherId": pkg.Signatures.PublisherID,
-			"algorithm":   pkg.Signatures.Algorithm,
-			"signedAt":    pkg.Signatures.SignedAt,
-		}
 	}
 
 	if *showModules {

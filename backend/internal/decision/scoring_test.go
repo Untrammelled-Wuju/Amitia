@@ -6,26 +6,6 @@ import (
 	"time"
 )
 
-func TestScoreBehaviorCandidatesSortsByFinalScore(t *testing.T) {
-	candidates := []BehaviorCandidate{
-		{ID: "reply", BaseScore: 0.4, PersonalityScore: 0.1, NeedScore: 0.2, RelationshipScore: 0.1, RiskScore: 0.1},
-		{ID: "repair", BaseScore: 0.3, PersonalityScore: 0.3, NeedScore: 0.3, RelationshipScore: 0.1, RiskScore: 0.05},
-		{ID: "delay", BaseScore: 0.2, PersonalityScore: 0.1, NeedScore: 0.1, RelationshipScore: 0.1, RiskScore: 0.3},
-	}
-
-	scored := ScoreBehaviorCandidates(candidates, DefaultBehaviorScoringOptions())
-
-	if len(scored) != 3 {
-		t.Fatalf("unexpected candidate count: %d", len(scored))
-	}
-	if scored[0].ID != "repair" || scored[1].ID != "reply" || scored[2].ID != "delay" {
-		t.Fatalf("unexpected sort order: %#v", scored)
-	}
-	if scored[0].FinalScore <= scored[1].FinalScore {
-		t.Fatalf("expected top candidate to have highest score: %#v", scored)
-	}
-}
-
 func TestHardConstraintBlockedByCandidate(t *testing.T) {
 	candidates := []BehaviorCandidate{
 		{
@@ -59,36 +39,6 @@ func TestHardConstraintBlockedByCandidate(t *testing.T) {
 	}
 	if len(blocked) != 1 || blocked[0].ID != "boundary" {
 		t.Fatalf("boundary should be blocked: %#v", blocked)
-	}
-}
-
-func TestScoreBehaviorCandidatesPenalizesHigherRisk(t *testing.T) {
-	candidates := []BehaviorCandidate{
-		{ID: "low-risk", BaseScore: 0.5, PersonalityScore: 0.2, RiskScore: 0.1},
-		{ID: "high-risk", BaseScore: 0.5, PersonalityScore: 0.2, RiskScore: 0.4},
-	}
-
-	scored := ScoreBehaviorCandidates(candidates, DefaultBehaviorScoringOptions())
-
-	if scored[0].ID != "low-risk" {
-		t.Fatalf("expected lower risk candidate first: %#v", scored)
-	}
-	if scored[0].FinalScore <= scored[1].FinalScore {
-		t.Fatalf("expected risk penalty to reduce score: %#v", scored)
-	}
-}
-
-func TestScoreBehaviorCandidatesKeepsStableOrderOnTie(t *testing.T) {
-	candidates := []BehaviorCandidate{
-		{ID: "first", BaseScore: 0.4, PersonalityScore: 0.2, RiskScore: 0.1},
-		{ID: "second", BaseScore: 0.4, PersonalityScore: 0.2, RiskScore: 0.1},
-		{ID: "third", BaseScore: 0.2, PersonalityScore: 0.1, RiskScore: 0.3},
-	}
-
-	scored := ScoreBehaviorCandidates(candidates, DefaultBehaviorScoringOptions())
-
-	if scored[0].ID != "first" || scored[1].ID != "second" {
-		t.Fatalf("expected stable order for tied scores: %#v", scored)
 	}
 }
 
@@ -132,33 +82,6 @@ func TestComputeAffectScoreReturnsLowestForNegativeEmotion(t *testing.T) {
 	score := ComputeAffectScore(state)
 	if score > 0.15 {
 		t.Fatalf("expected strong negative to yield minimal affect score, got %f", score)
-	}
-}
-
-func TestScoreBehaviorCandidateIncludesAffectScore(t *testing.T) {
-	candidates := []BehaviorCandidate{
-		{ID: "positive-affect", BaseScore: 0.3, AffectScore: 0.45, RiskScore: 0.1},
-		{ID: "negative-affect", BaseScore: 0.3, AffectScore: 0.10, RiskScore: 0.1},
-	}
-	scored := ScoreBehaviorCandidates(candidates, DefaultBehaviorScoringOptions())
-	if scored[0].ID != "positive-affect" {
-		t.Fatalf("expected positive affect candidate to rank first: %#v", scored)
-	}
-	if scored[0].FinalScore <= scored[1].FinalScore {
-		t.Fatalf("expected affect score to influence ranking: %#v", scored)
-	}
-}
-
-func TestAffectWeightCanBeTuned(t *testing.T) {
-	candidates := []BehaviorCandidate{
-		{ID: "high-affect", BaseScore: 0.2, AffectScore: 0.45, RiskScore: 0.1},
-		{ID: "low-affect", BaseScore: 0.4, AffectScore: 0.10, RiskScore: 0.1},
-	}
-	opts := DefaultBehaviorScoringOptions()
-	opts.AffectWeight = 2.0
-	scored := ScoreBehaviorCandidates(candidates, opts)
-	if scored[0].ID != "high-affect" {
-		t.Fatalf("expected boosted affect weight to prioritize high affect: %#v", scored)
 	}
 }
 
@@ -249,16 +172,12 @@ func TestScoreCandidates_formulaAccuracy(t *testing.T) {
 	}
 	options := DefaultBehaviorScoringOptions()
 
-	// Test using compat API which preserves component scores
-	result := ScoreBehaviorCandidates(candidates, options)
+	result := computeFinalScore(candidates[0], options)
 
 	// 0.6 + 0.1 + 0.2 + 0.05 + 0.03 + 0.04 - 0.1 - 0.15 - 0.1 = 0.67
 	expected := 0.67
-	if result[0].FinalScore != expected {
-		t.Fatalf("expected FinalScore=%f, got %f", expected, result[0].FinalScore)
-	}
-	if result[0].ScoringVersion != BehaviorFormulaVersionV2 {
-		t.Fatalf("expected ScoringVersion=%s, got %s", BehaviorFormulaVersionV2, result[0].ScoringVersion)
+	if result != expected {
+		t.Fatalf("expected FinalScore=%f, got %f", expected, result)
 	}
 }
 

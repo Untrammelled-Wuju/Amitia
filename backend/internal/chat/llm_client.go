@@ -200,7 +200,7 @@ func (s *service) invokeProcessLLMWithToolsStream(ctx context.Context, cfg *Mode
 	if err != nil {
 		return "", "", nil, 0, err
 	}
-	text, reasoning, calls, tokens := modelResultToLegacy(result)
+	text, reasoning, calls, tokens := modelResultToChatCompletion(result)
 	return text, reasoning, calls, tokens, nil
 }
 
@@ -599,7 +599,7 @@ func messagesToModelRequest(cfg *ModelConfig, messages []map[string]interface{},
 			msgs = append(msgs, ModelMessage{Role: "user", Parts: parts})
 		case "assistant":
 			parts := extractContentParts(m)
-			toolCalls := modelToolCallsFromLegacy(m["tool_calls"])
+			toolCalls := modelToolCallsFromChatCompletion(m["tool_calls"])
 			if len(parts) == 0 && len(toolCalls) == 0 {
 				continue
 			}
@@ -639,7 +639,7 @@ func messagesToModelRequest(cfg *ModelConfig, messages []map[string]interface{},
 	return req
 }
 
-func modelToolCallsFromLegacy(value interface{}) []ModelToolCall {
+func modelToolCallsFromChatCompletion(value interface{}) []ModelToolCall {
 	var rawCalls []map[string]interface{}
 	switch calls := value.(type) {
 	case []map[string]interface{}:
@@ -711,7 +711,7 @@ func modelToolParameters(parameters tool.Parameters) map[string]any {
 	return result
 }
 
-func modelResultToLegacy(result *ModelResult) (string, string, []map[string]interface{}, int) {
+func modelResultToChatCompletion(result *ModelResult) (string, string, []map[string]interface{}, int) {
 	var toolCalls []map[string]interface{}
 	for _, tc := range result.ToolCalls {
 		toolCalls = append(toolCalls, map[string]interface{}{
@@ -775,7 +775,7 @@ func (s *service) callLLMWithAdapterMode(ctx context.Context, cfg *ModelConfig, 
 	if err != nil {
 		return "", 0, err
 	}
-	text, _, _, tokens := modelResultToLegacy(result)
+	text, _, _, tokens := modelResultToChatCompletion(result)
 	return text, tokens, nil
 }
 
@@ -795,24 +795,6 @@ func reasoningBudget(effort string) int {
 		return 16384
 	default:
 		return 0
-	}
-}
-
-func applyLegacyAnthropicThinking(
-	requestBody map[string]interface{},
-	effort string,
-	maxTokens int,
-) {
-	budget := reasoningBudget(effort)
-	if budget <= 0 {
-		return
-	}
-	if maxTokens <= budget {
-		requestBody["max_tokens"] = budget + 2048
-	}
-	requestBody["thinking"] = map[string]interface{}{
-		"type":          "enabled",
-		"budget_tokens": budget,
 	}
 }
 

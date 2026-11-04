@@ -42,11 +42,11 @@ func (n *ProtocolNegotiator) Negotiate(peerSupported []string) (string, error) {
 }
 
 type CapabilityNegotiator struct {
-	hostSupported map[domain.Capability]struct{}
+	hostSupported map[domain.HostFeature]struct{}
 }
 
-func NewCapabilityNegotiator(hostCaps []domain.Capability) *CapabilityNegotiator {
-	m := make(map[domain.Capability]struct{}, len(hostCaps))
+func NewCapabilityNegotiator(hostCaps []domain.HostFeature) *CapabilityNegotiator {
+	m := make(map[domain.HostFeature]struct{}, len(hostCaps))
 	for _, c := range hostCaps {
 		m[c] = struct{}{}
 	}
@@ -54,15 +54,15 @@ func NewCapabilityNegotiator(hostCaps []domain.Capability) *CapabilityNegotiator
 }
 
 func (n *CapabilityNegotiator) Negotiate(
-	descriptorCaps []domain.Capability,
-	serviceAdvertised []domain.Capability,
-) ([]domain.Capability, error) {
-	descriptorSet := make(map[domain.Capability]struct{}, len(descriptorCaps))
+	descriptorCaps []domain.HostFeature,
+	serviceAdvertised []domain.HostFeature,
+) ([]domain.HostFeature, error) {
+	descriptorSet := make(map[domain.HostFeature]struct{}, len(descriptorCaps))
 	for _, c := range descriptorCaps {
 		descriptorSet[c] = struct{}{}
 	}
 
-	advertisedSet := make(map[domain.Capability]struct{}, len(serviceAdvertised))
+	advertisedSet := make(map[domain.HostFeature]struct{}, len(serviceAdvertised))
 	for _, c := range serviceAdvertised {
 		if _, ok := descriptorSet[c]; !ok {
 			return nil, NewHandshakeError(
@@ -74,7 +74,7 @@ func (n *CapabilityNegotiator) Negotiate(
 		advertisedSet[c] = struct{}{}
 	}
 
-	result := make([]domain.Capability, 0)
+	result := make([]domain.HostFeature, 0)
 	for c := range advertisedSet {
 		if _, ok := n.hostSupported[c]; !ok {
 			continue
@@ -86,8 +86,8 @@ func (n *CapabilityNegotiator) Negotiate(
 	return result, nil
 }
 
-func ValidateCapabilitiesNoDuplicate(caps []domain.Capability) error {
-	seen := make(map[domain.Capability]struct{}, len(caps))
+func ValidateCapabilitiesNoDuplicate(caps []domain.HostFeature) error {
+	seen := make(map[domain.HostFeature]struct{}, len(caps))
 	for _, c := range caps {
 		if _, ok := seen[c]; ok {
 			return NewHandshakeError(

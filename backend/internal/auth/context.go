@@ -18,7 +18,6 @@ const (
 	PrincipalSystemWorker  PrincipalType = "system_worker"
 	PrincipalAutomation    PrincipalType = "automation"
 	PrincipalExtension     PrincipalType = "extension"
-	PrincipalMigration     PrincipalType = "migration"
 	PrincipalRepair        PrincipalType = "repair"
 	PrincipalTest          PrincipalType = "test"
 )
@@ -73,7 +72,7 @@ func (a *ActorContext) HasCapability(cap string) bool {
 	return false
 }
 func (a *ActorContext) IsSystemActor() bool {
-	return a != nil && (a.PrincipalType == PrincipalSystemWorker || a.PrincipalType == PrincipalMigration || a.PrincipalType == PrincipalRepair)
+	return a != nil && (a.PrincipalType == PrincipalSystemWorker || a.PrincipalType == PrincipalRepair)
 }
 func (a *ActorContext) Clone() *ActorContext {
 	if a == nil {

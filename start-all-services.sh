@@ -5,7 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DATA_DIR="$ROOT/AmitiaData"
 LOG_DIR="$DATA_DIR/logs"
 
-mkdir -p "$DATA_DIR/qdrant" "$DATA_DIR/surrealdb" "$LOG_DIR"
+mkdir -p "$DATA_DIR/qdrant" "$DATA_DIR/surrealdb" "$DATA_DIR/node" "$LOG_DIR"
 
 case "$(uname -s)" in
   Darwin) HOST_OS=macos ;;
@@ -31,8 +31,13 @@ find_database_archive() {
   local kind="$1"
   local legacy="$2"
   local names=("$legacy" "${kind}-${TARGET}.zip")
+  if [ "$kind" = "surrealdb" ]; then
+    names+=("surreal-${TARGET}.zip")
+  fi
   local roots=(
+    "$ROOT/desktop/resources/databases/$TARGET/$kind"
     "$ROOT/desktop/resources/databases/$TARGET"
+    "$ROOT/desktop/resources/release-runtime/$kind"
     "$ROOT/desktop/resources/$kind"
     "$ROOT/backend/$kind"
   )
@@ -68,7 +73,12 @@ stop_project_processes() {
   pkill -f "$ROOT/AmitiaData/surrealdb/surreal" >/dev/null 2>&1 || true
 }
 
-command -v node >/dev/null 2>&1 || { echo "未找到 node，请先安装 Node.js" >&2; exit 1; }
+if [ ! -x "$DATA_DIR/node/bin/node" ]; then
+  unzip -oq "$ROOT/desktop/resources/core/node/node.zip" -d "$DATA_DIR/node"
+  chmod +x "$DATA_DIR/node/bin/node"
+fi
+export PATH="$DATA_DIR/node/bin:/usr/local/bin:/usr/bin:/bin"
+command -v node >/dev/null 2>&1 || { echo "项目 Node 运行时不可用" >&2; exit 1; }
 command -v pnpm >/dev/null 2>&1 || { echo "未找到 pnpm，请先启用 corepack pnpm" >&2; exit 1; }
 
 echo "[1/5] 清理旧进程"
@@ -106,6 +116,14 @@ if [ ! -f "$DATA_DIR/surrealdb/surreal.zip" ]; then
   }
   cp "$surreal_archive" "$DATA_DIR/surrealdb/surreal.zip"
 fi
+if [ ! -x "$DATA_DIR/qdrant/qdrant" ]; then
+  unzip -oq "$DATA_DIR/qdrant/qdrant.zip" -d "$DATA_DIR/qdrant"
+  chmod +x "$DATA_DIR/qdrant/qdrant"
+fi
+if [ ! -x "$DATA_DIR/surrealdb/surreal" ]; then
+  unzip -oq "$DATA_DIR/surrealdb/surreal.zip" -d "$DATA_DIR/surrealdb"
+  chmod +x "$DATA_DIR/surrealdb/surreal"
+fi
 
 echo "[4/5] 检查依赖"
 for package in front desktop; do
@@ -119,7 +137,6 @@ export AMITIA_RUNTIME_ROOT="$DATA_DIR"
 export AMITIA_CONFIG_DIR="$DATA_DIR/config"
 export AMITIA_WORKSPACE_DIR="$ROOT"
 export AMITIA_DATA_DIR="$DATA_DIR"
-export AMITIA_RUN_MODE=desktop
 export AMITIA_EXTENSION_DEV_MODE=true
 
 nohup pnpm --dir "$ROOT/desktop" dev > "$LOG_DIR/desktop.log" 2>&1 &
@@ -127,8 +144,12 @@ echo "$!" > "$LOG_DIR/desktop.pid"
 disown >/dev/null 2>&1 || true
 
 for _ in $(seq 1 90); do
-  if curl -fsS http://127.0.0.1:18899/api/health >/dev/null 2>&1; then
-    echo "服务已就绪: http://127.0.0.1:18899"
+  core_port=""
+  if [ -f "$DATA_DIR/run/endpoint.json" ]; then
+    core_port="$(node -e 'const fs=require("fs");const value=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));process.stdout.write(String(value.port||""))' "$DATA_DIR/run/endpoint.json" 2>/dev/null || true)"
+  fi
+  if [ -n "$core_port" ] && curl -fsS "http://127.0.0.1:${core_port}/api/health" >/dev/null 2>&1; then
+    echo "服务已就绪: http://127.0.0.1:${core_port}"
     echo "日志: $LOG_DIR/desktop.log"
     exit 0
   fi

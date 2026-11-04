@@ -131,7 +131,7 @@ class DailySizeRotatingLog(
 
     private fun isRetainedLogName(name: String): Boolean {
         val lower = name.lowercase(Locale.US)
-        if (lower.endsWith(".log") || lower.endsWith(".log.old")) return true
+        if (lower.endsWith(".log")) return true
         val index = lower.lastIndexOf(".log.")
         if (index < 0) return false
         val suffix = lower.substring(index + ".log.".length)

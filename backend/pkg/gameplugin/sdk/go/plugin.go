@@ -18,7 +18,7 @@ type Descriptor struct {
 
 	Services     []protocol.ServiceDescriptor `json:"services,omitempty"`
 	Channels     []protocol.ChannelDescriptor `json:"channels,omitempty"`
-	Capabilities []protocol.HostFeature       `json:"capabilities,omitempty"`
+	HostFeatures []protocol.HostFeature       `json:"hostFeatures,omitempty"`
 
 	Metadata map[string]json.RawMessage `json:"metadata,omitempty"`
 }
@@ -36,7 +36,7 @@ func (d Descriptor) Validate() error {
 	if err := protocol.ValidateChannels(d.Channels); err != nil {
 		return NewValidationError("channels validation failed: %v", err)
 	}
-	if err := protocol.ValidateCapabilities(d.Capabilities); err != nil {
+	if err := protocol.ValidateHostFeatures(d.HostFeatures); err != nil {
 		return NewValidationError("capabilities validation failed: %v", err)
 	}
 	return nil

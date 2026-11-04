@@ -321,7 +321,7 @@ func (r *productionResourceTransfer) Upload(ctx context.Context, request Browser
 	} else if request.TargetInput != "" {
 		return nil, &BrowserError{
 			Code:    ErrCodeUploadTargetNotFileInput,
-			Message: "legacy TargetInput not supported, use Element",
+			Message: "TargetInput is not supported, use Element",
 		}
 	} else {
 		return nil, &BrowserError{

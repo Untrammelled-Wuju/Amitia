@@ -39,7 +39,7 @@ func BuildManifestProviderID(extensionID domain.ExtensionID, moduleID domain.Mod
 
 func runtimeTypeFromManifest(runtimeType domain.RuntimeType, placement domain.ModulePlacement) RuntimeType {
 	switch runtimeType {
-	case domain.RuntimeTypeBuiltin:
+	case domain.RuntimeTypeBuiltin, domain.RuntimeTypeGo:
 		return RuntimeTypeBuiltin
 	case domain.RuntimeTypeJavaScript:
 		if placement == domain.ModulePlacementDevice {
@@ -52,15 +52,19 @@ func runtimeTypeFromManifest(runtimeType domain.RuntimeType, placement domain.Mo
 		return RuntimeTypePluginService
 	case domain.RuntimeTypeMCP:
 		return RuntimeTypeMCP
+	case domain.RuntimeTypeTask:
+		return RuntimeTypeTask
+	case domain.RuntimeTypeBackgroundRemoval:
+		return RuntimeTypeBackgroundRemoval
 	default:
-		return RuntimeTypeLegacy
+		return ""
 	}
 }
 
 func runtimeBindingFromManifestModule(mod domain.ModuleDefinition) RuntimeBinding {
 	if mod.Runtime == nil {
 		return RuntimeBinding{
-			RuntimeType: RuntimeTypeLegacy,
+			RuntimeType: "",
 			RuntimeID:   string(mod.ID),
 			HandlerName: string(mod.ID),
 		}

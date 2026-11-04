@@ -96,8 +96,8 @@ func TestStatusToolReadOnly(t *testing.T) {
 	if status.Idempotent != true {
 		t.Error("status tool should be idempotent")
 	}
-if status.ExecutionPolicy.ApprovalRequired {
-			t.Error("status tool should not require approval")
+	if status.ExecutionPolicy.ApprovalRequired {
+		t.Error("status tool should not require approval")
 	}
 }
 
@@ -117,8 +117,8 @@ func TestCreateToolSideEffects(t *testing.T) {
 	if create.HasSideEffects != true {
 		t.Error("create tool should have side effects")
 	}
-if !create.ExecutionPolicy.ApprovalRequired {
-			t.Error("create tool should require approval")
+	if !create.ExecutionPolicy.ApprovalRequired {
+		t.Error("create tool should require approval")
 	}
 	if create.Idempotent != false {
 		t.Error("create tool should not be idempotent")
@@ -144,8 +144,8 @@ func TestPermissionRequestTool(t *testing.T) {
 	if permTool.HasSideEffects != true {
 		t.Error("permission request tool should have side effects")
 	}
-if !permTool.ExecutionPolicy.ApprovalRequired {
-			t.Error("permission request tool should require approval")
+	if !permTool.ExecutionPolicy.ApprovalRequired {
+		t.Error("permission request tool should require approval")
 	}
 	if permTool.Idempotent != false {
 		t.Error("permission request tool should not be idempotent")

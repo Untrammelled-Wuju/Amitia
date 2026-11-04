@@ -1882,7 +1882,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final text = input['text']?.toString() ?? '';
     final fileName = (input['fileName'] ?? input['filename'] ?? 'image.png')
         .toString();
-    final mimeType = (input['mimeType'] ?? input['mime_type'] ?? 'image/png')
+    final mimeType = (input['mimeType'] ?? 'image/png')
         .toString();
     if (encoded.isEmpty && resourceUri.isEmpty) {
       final camera = input['source']?.toString() == 'camera';
@@ -1923,11 +1923,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final text = input['text']?.toString() ?? '';
     final fileName = (input['fileName'] ?? input['filename'] ?? 'video.mp4')
         .toString();
-    final mimeType = (input['mimeType'] ?? input['mime_type'] ?? 'video/mp4')
+    final mimeType = (input['mimeType'] ?? 'video/mp4')
         .toString();
     final durationMs =
         int.tryParse(
-          (input['durationMs'] ?? input['duration_ms'] ?? '0').toString(),
+          (input['durationMs'] ?? '0').toString(),
         ) ??
         0;
     if (encoded.isEmpty && resourceUri.isEmpty) {
@@ -1978,11 +1978,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         .trim();
     final sizeBytes =
         int.tryParse(
-          (input['sizeBytes'] ?? input['size_bytes'] ?? '0').toString(),
+          (input['sizeBytes'] ?? '0').toString(),
         ) ??
         0;
     final mimeType =
-        (input['mimeType'] ?? input['mime_type'] ?? 'application/octet-stream')
+        (input['mimeType'] ?? 'application/octet-stream')
             .toString();
     await _runtime.sendFile(
       resourceUri: resourceUri,
@@ -2010,11 +2010,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     }
     final fileName = (input['fileName'] ?? input['filename'] ?? 'voice.webm')
         .toString();
-    final mimeType = (input['mimeType'] ?? input['mime_type'] ?? 'audio/webm')
+    final mimeType = (input['mimeType'] ?? 'audio/webm')
         .toString();
     final durationMs =
         int.tryParse(
-          (input['durationMs'] ?? input['duration_ms'] ?? '0').toString(),
+          (input['durationMs'] ?? '0').toString(),
         ) ??
         0;
     await _withArtifactUpload((service) async {

@@ -76,7 +76,7 @@ func TestCanonicalStartupAssertions_NilContainer(t *testing.T) {
 	}
 }
 
-func TestCanonicalStartupAssertions_LegacyMCPAbsent(t *testing.T) {
+func TestCanonicalStartupAssertions_NoDuplicateMCPRegistrations(t *testing.T) {
 	services := &AppServices{
 		KernelContainer: &kernel.Container{
 			ToolFacade:         new(kernel.ToolFacade),
@@ -87,10 +87,11 @@ func TestCanonicalStartupAssertions_LegacyMCPAbsent(t *testing.T) {
 			HookService:        new(hook.Service),
 		},
 	}
-	if services.hasLegacyMCPManager() {
-		t.Fatal("expected hasLegacyMCPManager to return false after Legacy MCP removal")
+	duplicate, err := services.hasDuplicateMCPRegistrations()
+	if err != nil {
+		t.Fatalf("check duplicate MCP registrations: %v", err)
 	}
-	if services.hasMemoryRawWriter() {
-		t.Fatal("expected hasMemoryRawWriter to return false after Legacy MCP removal")
+	if duplicate {
+		t.Fatal("expected no duplicate MCP registrations")
 	}
 }

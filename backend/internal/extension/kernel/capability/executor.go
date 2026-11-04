@@ -59,7 +59,15 @@ func (e *DefaultToolExecutor) Execute(
 
 	resolver := e.ExecutionResolver
 	if resolver == nil {
-		resolver = &LegacyRuntimeExecutionResolver{}
+		return UnifiedToolResult{
+			InvocationID: invocation.InvocationID,
+			Status:       ToolResultStatusFailed,
+			Error: &ToolError{
+				Code:        ErrorCodeRuntimeUnavailable,
+				Message:     "execution resolver is required",
+				UserVisible: false,
+			},
+		}
 	}
 
 	route, err := resolver.ResolveRuntimeExecution(ctx, tool, invocation)

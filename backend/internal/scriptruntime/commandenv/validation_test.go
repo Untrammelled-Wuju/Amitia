@@ -127,8 +127,8 @@ func TestNormalizeCommandTrimsSpace(t *testing.T) {
 
 func TestClassifyCommand(t *testing.T) {
 	tests := []struct {
-		cmd       string
-		wantKind  Kind
+		cmd         string
+		wantKind    Kind
 		wantManaged bool
 	}{
 		{"node", KindNode, true},

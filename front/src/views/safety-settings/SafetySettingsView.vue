@@ -564,7 +564,7 @@ const softPreferences = ref<
     contribution: number;
   }>
 >([]);
-const copingSelected = ref("active");
+const copingSelected = ref("problem_solving");
 const copingAlternatives = ref<string[]>([]);
 const copingReason = ref("");
 const emotionDisplayMode = ref<"show" | "suppress" | "reframe">("show");
@@ -592,15 +592,6 @@ const bdiOptions = ref<{
   copingStrategies: [],
   displayModes: [],
 });
-
-const legacyCoping: Record<string, string> = {
-  active: "problem_solving",
-  support: "seek_support",
-  reframe: "reappraisal",
-  avoid: "avoidance",
-  suppress: "suppression",
-  accept: "acceptance",
-};
 
 const blockRuleCount = computed(
   () => hardConstraints.value.filter((rule) => rule.severity === "block").length,
@@ -711,10 +702,8 @@ async function fetchBdiConfig() {
     if (r?.softPreferences) softPreferences.value = r.softPreferences;
     if (r?.copingStrategy) {
       const selected = String(r.copingStrategy.selected || "problem_solving");
-      copingSelected.value = legacyCoping[selected] || selected;
-      copingAlternatives.value = (r.copingStrategy.alternatives || []).map(
-        (value: string) => legacyCoping[value] || value,
-      );
+      copingSelected.value = selected;
+      copingAlternatives.value = r.copingStrategy.alternatives || [];
       copingReason.value = r.copingStrategy.selectionReason || "";
     }
     if (r?.emotionExpression) {

@@ -330,9 +330,7 @@ func (c *restrictedHTTPClient) portAllowed(port int) bool {
 func (c *restrictedHTTPClient) transportAllowed(transport string) bool {
 	transport = strings.ToLower(strings.TrimSpace(transport))
 	if len(c.policy.AllowedTransports) == 0 {
-		// Compatibility for protocol-v1 restricted manifests created before
-		// mediated raw transports existed. They remain HTTP/HTTPS-only.
-		return transport == "http" || transport == "https"
+		return false
 	}
 	for _, raw := range c.policy.AllowedTransports {
 		if strings.ToLower(strings.TrimSpace(raw)) == transport {

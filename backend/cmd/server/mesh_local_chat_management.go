@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -14,23 +13,18 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/chat/importbatch"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"gorm.io/gorm"
-	amitialog "log"
 )
 
 type ownedChatManagementRecord struct {
-	SourceID        string
-	ID              string
-	Kind            string
-	RoleID          string
-	Legacy          bool
-	Revision        int64
-	HasLegacyMirror bool
-	LegacyRevision  int64
-	Body            map[string]any
+	SourceID string
+	ID       string
+	Kind     string
+	RoleID   string
+	Revision int64
+	Body     map[string]any
 }
 
 type ownedChatCleanupPlan struct {
@@ -79,49 +73,6 @@ func (p *meshLocalDataPort) chatManagementRecords(ctx context.Context, role stri
 	if err != nil {
 		return nil, err
 	}
-	legacyDB := p.services.DB.WithContext(ctx)
-	var conversations []chat.Conversation
-	if err := legacyDB.Where("deleted_at IS NULL AND (space_id=? OR space_id='' OR space_id='default') AND EXISTS (SELECT 1 FROM messages WHERE messages.conversation_id=conversations.id AND messages.character_id=? AND messages.deleted_at IS NULL)", p.legacySpaceID, role).Order("id").Find(&conversations).Error; err != nil {
-		return nil, err
-	}
-	for _, conversation := range conversations {
-		raw, _ := json.Marshal(conversation)
-		var body map[string]any
-		if err := json.Unmarshal(raw, &body); err != nil {
-			amitialog.Printf("[original-error] %v", err)
-		}
-		records = append(records, ownedChatManagementRecord{ID: conversation.ID, Kind: "conversation", Legacy: true, Revision: conversation.Revision, Body: body})
-		var messages []chat.Message
-		if err := legacyDB.Where("conversation_id=? AND character_id=? AND deleted_at IS NULL", conversation.ID, role).Order("id").Find(&messages).Error; err != nil {
-			return nil, err
-		}
-		for _, message := range messages {
-			raw, _ := json.Marshal(message)
-			var body map[string]any
-			if err := json.Unmarshal(raw, &body); err != nil {
-				amitialog.Printf("[original-error] %v", err)
-			}
-			records = append(records, ownedChatManagementRecord{ID: message.ID, Kind: "message", Legacy: true, Revision: message.Revision, Body: body})
-		}
-		var otherRoles int64
-		if err := legacyDB.Model(&chat.Message{}).Where("conversation_id=? AND character_id<>? AND deleted_at IS NULL", conversation.ID, role).Count(&otherRoles).Error; err != nil {
-			return nil, err
-		}
-		if otherRoles == 0 {
-			var summaries []chat.ConversationSummary
-			if err := legacyDB.Where("conversation_id=?", conversation.ID).Order("id").Find(&summaries).Error; err != nil {
-				return nil, err
-			}
-			for _, summary := range summaries {
-				raw, _ := json.Marshal(summary)
-				var body map[string]any
-				if err := json.Unmarshal(raw, &body); err != nil {
-					amitialog.Printf("[original-error] %v", err)
-				}
-				records = append(records, ownedChatManagementRecord{ID: fmt.Sprint(summary.ID), Kind: "summary", Legacy: true, Body: body})
-			}
-		}
-	}
 	return canonicalChatManagementRecords(records), nil
 }
 
@@ -140,15 +91,7 @@ func canonicalChatManagementRecords(records []ownedChatManagementRecord) []owned
 			continue
 		}
 		current := result[index]
-		if row.Legacy && !current.Legacy {
-			current.HasLegacyMirror = true
-			current.LegacyRevision = row.Revision
-			result[index] = current
-			continue
-		}
-		if !row.Legacy && current.Legacy {
-			row.HasLegacyMirror = true
-			row.LegacyRevision = current.Revision
+		if row.Revision > current.Revision {
 			result[index] = row
 		}
 	}
@@ -300,7 +243,7 @@ func (p *meshLocalDataPort) manageChatForRole(ctx context.Context, scope coordin
 		if strings.TrimSpace(request.ImportBatchID) == "" || strings.TrimSpace(request.ConversationID) == "" {
 			return nil, errors.New("导入批次和正式会话不能为空")
 		}
-		if err := importbatch.NewRepository(p.services.DB).MarkPromoted(ctx, p.legacySpaceID, request.ImportBatchID, role, request.ConversationID, scope.ResourceOwnerID, scope.CoreID); err != nil {
+		if err := importbatch.NewRepository(p.services.DB).MarkPromoted(ctx, p.ownerID, request.ImportBatchID, role, request.ConversationID, scope.ResourceOwnerID, scope.CoreID); err != nil {
 			return nil, err
 		}
 		return map[string]any{"promoted": true, "conversationId": request.ConversationID}, nil
@@ -522,34 +465,15 @@ func (p *meshLocalDataPort) manageImportBatch(ctx context.Context, scope coordin
 	if batchID == "" || request.RequestID == "" {
 		return nil, errors.New("导入会话和请求编号不能为空")
 	}
-	batch, items, err := importbatch.NewRepository(p.services.DB).Get(ctx, p.legacySpaceID, batchID)
+	batch, items, err := importbatch.NewRepository(p.services.DB).Get(ctx, p.ownerID, batchID)
 	if err != nil {
 		return nil, err
 	}
 	if batch.RoleID == "" || batch.RoleID != role {
 		return nil, importbatch.ErrRoleMismatch
 	}
-	repo := importbatch.NewRepository(p.services.DB)
 	if batch.Status == importbatch.StatusPromoted && batch.PromotedConversationID != "" {
 		return map[string]any{"promotedConversationId": batch.PromotedConversationID}, nil
-	}
-	if batch.LegacyConversationID != "" {
-		var promotedConversationID string
-		err = p.services.KernelContainer.DeviceRegistry.Database().QueryRowContext(
-			ctx,
-			`SELECT resource_id FROM kernel_device_owned_resources WHERE owner_id = ? AND kind = 'conversation' AND deleted = 0 AND json_extract(body, '$.importOrigin.conversationId') = ? LIMIT 1`,
-			p.ownerID,
-			batch.LegacyConversationID,
-		).Scan(&promotedConversationID)
-		if err == nil && promotedConversationID != "" {
-			if err := repo.MarkPromoted(ctx, scope.SpaceID, batch.ID, role, promotedConversationID, scope.ResourceOwnerID, scope.CoreID); err != nil {
-				return nil, err
-			}
-			return map[string]any{"promotedConversationId": promotedConversationID}, nil
-		}
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return nil, err
-		}
 	}
 	archive := importbatch.PromotionArchive(batch, items, p.ownerID)
 	raw, err := json.Marshal(archive)
@@ -654,7 +578,7 @@ func (p *meshLocalDataPort) deleteManagedChat(ctx context.Context, scope coordin
 		adapted.RoleID = role
 		adapted.MemoryRoleID = role
 		for _, row := range plan.Records {
-			if row.Legacy || row.Kind != "conversation" {
+			if row.Kind != "conversation" {
 				continue
 			}
 			adapted.RequestID = "chat-cleanup/" + plan.Fingerprint + "/" + row.ID
@@ -665,7 +589,7 @@ func (p *meshLocalDataPort) deleteManagedChat(ctx context.Context, scope coordin
 		}
 		if plan.IncludeMemories {
 			for _, row := range plan.Records {
-				if row.Legacy || row.Kind != "memory" {
+				if row.Kind != "memory" {
 					continue
 				}
 				current, err := p.store.Get(ctx, "memory", row.ID)
@@ -683,31 +607,17 @@ func (p *meshLocalDataPort) deleteManagedChat(ctx context.Context, scope coordin
 				}
 			}
 		}
-		selection := chat.ManagedHistorySelection{ConversationRevisions: map[string]int64{}, MessageRevisions: map[string]int64{}}
 		feedbackMessageIDs := []string{}
 		for _, row := range plan.Records {
 			if row.Kind == "message" {
 				feedbackMessageIDs = append(feedbackMessageIDs, row.ID)
 			}
-			if !row.Legacy && !row.HasLegacyMirror {
-				continue
-			}
-			revision := row.LegacyRevision
-			if row.Legacy {
-				revision = row.Revision
-			}
-			if row.Kind == "conversation" {
-				selection.ConversationRevisions[row.ID] = revision
-			}
-			if row.Kind == "message" {
-				selection.MessageRevisions[row.ID] = revision
-			}
 		}
 		if len(feedbackMessageIDs) > 0 {
-			if err := p.services.DB.WithContext(ctx).Exec("DELETE FROM message_feedback WHERE space_id=? AND owner_id=? AND core_id=? AND role_id=? AND message_id IN ?", p.legacySpaceID, p.ownerID, scope.CoreID, role, feedbackMessageIDs).Error; err != nil {
+			if err := p.services.DB.WithContext(ctx).Exec("DELETE FROM message_feedback WHERE space_id=? AND owner_id=? AND core_id=? AND role_id=? AND message_id IN ?", p.ownerID, p.ownerID, scope.CoreID, role, feedbackMessageIDs).Error; err != nil {
 				return err
 			}
 		}
-		return chat.DeleteOwnedManagedHistory(ctx, p.services.DB, p.services.Chat, p.legacySpaceID, role, selection)
+		return nil
 	})
 }

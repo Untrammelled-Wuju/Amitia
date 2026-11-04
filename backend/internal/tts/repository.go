@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/configwrite"
 	"github.com/u-ai/backend/internal/requestidentity"
 	"gorm.io/gorm"
@@ -133,29 +132,15 @@ func (r *repository) resolveActiveConfig() *TtsConfig {
 	}
 }
 
-func ttsLocalSingleUserMode() bool {
-	return config.AppCfg != nil && strings.EqualFold(strings.TrimSpace(config.AppCfg.Security.Mode), "local_single_user")
-}
-
 func ttsOwnerQuery(db *gorm.DB, column, spaceID string) *gorm.DB {
 	owner := requestidentity.NormalizeSpaceID(spaceID)
-	if ttsLocalSingleUserMode() {
-		return db.Where(
-			fmt.Sprintf("(%s = ? OR %s = '' OR %s IS NULL OR %s = ?)", column, column, column, column),
-			owner,
-			requestidentity.LegacySpaceID,
-		)
-	}
 	return db.Where(fmt.Sprintf("%s = ?", column), owner)
 }
 
 func ttsSameOwner(existingSpaceID, requestedSpaceID string) bool {
 	existingSpaceID = strings.TrimSpace(existingSpaceID)
 	requestedSpaceID = requestidentity.NormalizeSpaceID(requestedSpaceID)
-	if existingSpaceID == requestedSpaceID {
-		return true
-	}
-	return ttsLocalSingleUserMode() && (existingSpaceID == "" || existingSpaceID == requestidentity.LegacySpaceID)
+	return existingSpaceID != "" && existingSpaceID == requestedSpaceID
 }
 
 func (r *repository) GetByCharacterID(spaceID, charID string) (*TtsConfig, error) {
@@ -203,16 +188,15 @@ func (r *repository) GetByCharacterID(spaceID, charID string) (*TtsConfig, error
 		cloneID = strings.TrimSpace(char.CustomVoiceID)
 		cloneVoice, cloneErr := r.GetClonedVoice(spaceID, cloneID)
 		if cloneErr != nil {
-			// Local single-user deployments can have characters created before clone
-			// metadata existed. Preserve that legacy path locally, but cloud mode
-			// must never accept an unowned provider speaker id.
-			if !ttsLocalSingleUserMode() {
-				return nil, fmt.Errorf("角色复刻音色不存在或不属于当前用户")
-			}
-		} else if cloneVoice.TtsConfigID > 0 {
+			return nil, fmt.Errorf("角色复刻音色不存在或不属于当前用户: %w", cloneErr)
+		}
+		if cloneVoice.TtsConfigID <= 0 {
+			return nil, fmt.Errorf("复刻音色缺少 TTS 配置绑定: %w", gorm.ErrInvalidData)
+		}
+		{
 			boundConfig, boundErr := r.GetByID(cloneVoice.TtsConfigID)
 			if boundErr != nil {
-				return nil, fmt.Errorf("复刻音色绑定的 TTS 配置不存在")
+				return nil, fmt.Errorf("复刻音色绑定的 TTS 配置不存在: %w", boundErr)
 			}
 			base = boundConfig
 		}
@@ -300,14 +284,7 @@ func (r *repository) ResolveClonedVoiceConfig(spaceID, speakerID string) (*TtsCo
 		}
 		return cfg, voice, nil
 	}
-	// Legacy metadata did not record its provider config. Preserve old local
-	// installations by falling back to the current active config only for those
-	// records; newly created clone voices always persist TtsConfigID.
-	cfg, cfgErr := r.GetActive()
-	if cfgErr != nil {
-		return nil, voice, cfgErr
-	}
-	return cfg, voice, nil
+	return nil, voice, fmt.Errorf("复刻音色缺少 TTS 配置绑定: %w", gorm.ErrInvalidData)
 }
 
 func (r *repository) UpsertClonedVoice(voice *ClonedVoice) error {

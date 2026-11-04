@@ -5,12 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 
-	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
-	amitialog "log"
 )
 
 type FinalGateIssue struct {
@@ -49,16 +46,10 @@ func FinalGateMetricNames() []string {
 		"orphan_ui_sessions",
 		"duplicate_schedule_runs",
 		"failed_cleanup_resources",
-		"legacy_package_read_calls",
-		"legacy_package_write_calls",
-		"legacy_tool_execute_calls",
-		"legacy_mcp_execute_calls",
 		"duplicate_contribution_registrations",
 		"audit_incomplete_operations",
 		"lifecycle_requires_recovery",
-		"new_package_legacy_read_calls",
 		"orphan_staging_directories",
-		"orphan_installed_directories",
 		"missing_artifact_rows",
 		"artifact_hash_mismatch",
 		"incomplete_package_operations",
@@ -78,30 +69,12 @@ func FinalGateMetricNames() []string {
 	}
 }
 
-var legacyStoreOnce sync.Once
-
-func (p *FinalGateProbe) ensureLegacyStore(ctx context.Context) {
-	legacyStoreOnce.Do(func() {
-		if p.container != nil && p.container.Store != nil {
-			db := p.container.Store.DB()
-			store := NewLegacyCounterStore(db)
-			if err := store.LoadAll(ctx); err != nil {
-				amitialog.Printf("[original-error] %v", err)
-			}
-			globalLegacyCallCounter.SetStore(store)
-			globalLegacyReadCounter.SetStore(store)
-		}
-	})
-}
-
 func (p *FinalGateProbe) Evaluate(ctx context.Context) *FinalGateReport {
 	report := &FinalGateReport{
 		Metrics: make(map[string]int64),
 		Details: make([]FinalGateIssue, 0),
 		Errors:  make([]string, 0),
 	}
-
-	p.ensureLegacyStore(ctx)
 
 	if p.metricsRepo != nil {
 		if _, err := p.metricsRepo.CountAllOpen(ctx); err != nil {
@@ -119,20 +92,6 @@ func (p *FinalGateProbe) Evaluate(ctx context.Context) *FinalGateReport {
 	p.probeLifecycleRecovery(ctx, report)
 	p.probeAuditIncomplete(ctx, report)
 	p.probePackageReleaseGate(ctx, report)
-
-	legacyMetrics := GlobalLegacyCallCounter().FinalGateMetrics()
-	report.Metrics["new_package_legacy_read_calls"] = legacyMetrics["legacy_package_read_calls"]
-	for _, name := range []string{
-		"legacy_tool_execute_calls",
-		"legacy_mcp_execute_calls",
-		"legacy_package_write_calls",
-		"legacy_package_read_calls",
-		"duplicate_contribution_registrations",
-	} {
-		if _, exists := report.Metrics[name]; !exists {
-			report.Metrics[name] = legacyMetrics[name]
-		}
-	}
 
 	for _, name := range FinalGateMetricNames() {
 		if _, ok := report.Metrics[name]; !ok {
@@ -156,12 +115,11 @@ func (p *FinalGateProbe) Evaluate(ctx context.Context) *FinalGateReport {
 
 func (p *FinalGateProbe) probePackageReleaseGate(ctx context.Context, report *FinalGateReport) {
 	names := []string{
-		"orphan_staging_directories", "orphan_installed_directories", "missing_artifact_rows", "artifact_hash_mismatch",
+		"orphan_staging_directories", "missing_artifact_rows", "artifact_hash_mismatch",
 		"incomplete_package_operations", "requires_recovery_operations", "installation_without_files", "files_without_installation",
 		"active_contribution_for_disabled_installation", "unresolved_package_operations", "orphan_artifacts",
 		"orphan_installation_generations", "installation_read_model_mismatches", "unsigned_production_packages",
 		"untrusted_installed_packages", "corrupted_artifacts", "failed_uninstall_restores", "ambiguous_recovery_operations",
-		"legacy_package_write_calls",
 	}
 	for _, name := range names {
 		report.Metrics[name] = -1
@@ -173,7 +131,6 @@ func (p *FinalGateProbe) probePackageReleaseGate(ctx context.Context, report *Fi
 	db := p.container.Store.DB()
 	queries := map[string]string{
 		"incomplete_package_operations":                 `SELECT COUNT(*) FROM extension_package_operations WHERE status NOT IN ('completed', 'failed', 'cancelled', 'rolled_back')`,
-		"legacy_package_write_calls":                    `SELECT COALESCE((SELECT count FROM kernel_legacy_call_counters WHERE metric_name = 'legacy_package_write_calls'), 0)`,
 		"requires_recovery_operations":                  `SELECT COUNT(*) FROM extension_package_operations WHERE status = 'requires_recovery'`,
 		"unresolved_package_operations":                 `SELECT COUNT(*) FROM extension_package_operations WHERE status NOT IN ('completed', 'failed', 'cancelled', 'rolled_back')`,
 		"missing_artifact_rows":                         `SELECT COUNT(*) FROM extension_installations i LEFT JOIN extension_package_artifacts a ON a.artifact_id = json_extract(i.installation_json, '$.packageId') WHERE COALESCE(json_extract(i.installation_json, '$.packageId'), '') <> '' AND a.artifact_id IS NULL AND ` + nonBuiltinInstallationSQL,
@@ -296,21 +253,9 @@ func (p *FinalGateProbe) probePackageReleaseGate(ctx context.Context, report *Fi
 	})
 	if walkErr != nil && !os.IsNotExist(walkErr) {
 		report.Metrics["files_without_installation"] = -1
-		report.Metrics["orphan_installed_directories"] = -1
 		report.Errors = append(report.Errors, fmt.Sprintf("files_without_installation: scan failed: %v", walkErr))
 	} else {
 		report.Metrics["files_without_installation"] = filesWithoutInstallation
-		legacyInstalledRoot := filepath.Join(p.container.PackageArtifactStore.root, "installed")
-		var legacyInstalled int64
-		if err := filepath.WalkDir(legacyInstalledRoot, func(path string, entry os.DirEntry, walkErr error) error {
-			if walkErr == nil && !entry.IsDir() && entry.Name() == amitiax.ManifestFile {
-				legacyInstalled++
-			}
-			return walkErr
-		}); err != nil {
-			amitialog.Printf("[original-error] %v", err)
-		}
-		report.Metrics["orphan_installed_directories"] = legacyInstalled
 		report.Metrics["orphan_installation_generations"] = filesWithoutInstallation
 	}
 	rows, queryErr := db.QueryContext(ctx, `SELECT artifact_id FROM extension_package_artifacts WHERE deleted_at = ''`)

@@ -42,7 +42,6 @@ func (s *service) ListConversations(q ConversationQuery) (*ConversationListRespo
 
 func (s *service) ListConversationsForSpace(q ConversationQuery, spaceID string) (*ConversationListResponse, error) {
 	q.SpaceID = normalizeConversationOwner(spaceID)
-	q.IncludeLegacyDefault = chatLocalSingleUserMode()
 	return s.ListConversations(q)
 }
 
@@ -321,11 +320,7 @@ func (s *service) GetStatsForSpace(spaceID string) (*ChatStatsResponse, error) {
 	msgQuery := s.db.Table("messages AS m").Joins("JOIN conversations AS c ON c.id = m.conversation_id").
 		Where("m.deleted_at IS NULL AND c.deleted_at IS NULL AND date(m.created_at) = date('now', 'localtime')")
 	owner := normalizeConversationOwner(spaceID)
-	if chatLocalSingleUserMode() {
-		msgQuery = msgQuery.Where("c.space_id = ? OR c.space_id = '' OR c.space_id IS NULL OR c.space_id = ?", owner, requestidentity.LegacySpaceID)
-	} else {
-		msgQuery = msgQuery.Where("c.space_id = ?", owner)
-	}
+	msgQuery = msgQuery.Where("c.space_id = ?", owner)
 	var todayMessages int64
 	if err := msgQuery.Count(&todayMessages).Error; err != nil {
 		return nil, err

@@ -24,7 +24,7 @@ func (p *meshLocalDataPort) managedChatFeedback(ctx context.Context, scope coord
 			target = &records[index]
 		}
 	}
-	feedbackScope := feedback.Scope{SpaceID: p.legacySpaceID, OwnerID: p.ownerID, CoreID: scope.CoreID, RoleID: scope.RoleID}
+	feedbackScope := feedback.Scope{SpaceID: p.ownerID, OwnerID: p.ownerID, CoreID: scope.CoreID, RoleID: scope.RoleID}
 	repo := feedback.NewScopedRepository(p.services.DB)
 	if request.Operation == "feedback-stats" {
 		return repo.Stats(ctx, feedbackScope, keys)

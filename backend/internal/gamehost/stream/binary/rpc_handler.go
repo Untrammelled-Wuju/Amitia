@@ -34,7 +34,7 @@ const (
 )
 
 type NegotiatedFeatureChecker interface {
-	HasNegotiatedCapability(connectionID string, feature domain.Capability) bool
+	HasNegotiatedCapability(connectionID string, feature domain.HostFeature) bool
 }
 
 type BinaryResourceAdmission interface {
@@ -225,7 +225,7 @@ func (s *BinaryTransferService) Handle(ctx context.Context, request rpc.RPCReque
 	if strings.TrimSpace(request.ConnectionID) == "" || request.PluginID == "" || request.RuntimeID == "" || request.ServiceID == "" {
 		return binaryRPCError(request.ID, domain.ErrInvalidArgument, "binary rpc: trusted connection, plugin, runtime and service identity are required"), nil
 	}
-	if !s.featureChecker.HasNegotiatedCapability(request.ConnectionID, domain.CapabilityBinaryStreaming) {
+	if !s.featureChecker.HasNegotiatedCapability(request.ConnectionID, domain.HostFeatureBinaryStreaming) {
 		return binaryRPCError(request.ID, domain.ErrPermissionDenied, "binary_streaming was not negotiated for this service connection"), nil
 	}
 

@@ -15,5 +15,4 @@ type ApprovalPersistence interface {
 type AgentExecutionObserver interface {
 	BeforeToolExecution(context.Context, capability.ToolInvocationContext, capability.ToolDefinition, []byte) error
 	AfterToolExecution(context.Context, capability.ToolInvocationContext, capability.ToolDefinition, capability.UnifiedToolResult, int64)
-	RecordUnknownOutcome(context.Context, capability.ToolInvocationContext, capability.ToolDefinition, capability.UnifiedToolResult, string) error
 }

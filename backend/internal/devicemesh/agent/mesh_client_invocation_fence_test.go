@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"testing"
 
 	"github.com/u-ai/backend/internal/deviceruntime/protocol"
@@ -13,8 +14,15 @@ type changingSessionDispatcher struct {
 }
 
 func (d *changingSessionDispatcher) Resolve(string) RuntimeInvokeHandler {
+	contextual := d.ResolveContext("")
+	return func(invoke protocol.RuntimeInvokePayload) (*protocol.RuntimeResultPayload, error) {
+		return contextual(context.Background(), invoke)
+	}
+}
+
+func (d *changingSessionDispatcher) ResolveContext(string) CancellableRuntimeInvokeHandler {
 	d.change()
-	return func(protocol.RuntimeInvokePayload) (*protocol.RuntimeResultPayload, error) {
+	return func(context.Context, protocol.RuntimeInvokePayload) (*protocol.RuntimeResultPayload, error) {
 		d.executed = true
 		return &protocol.RuntimeResultPayload{}, nil
 	}

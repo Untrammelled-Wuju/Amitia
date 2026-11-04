@@ -1,18 +1,11 @@
 package protocol
 
-import "slices"
-
 const LatestProtocolVersion = "2025-11-25"
 
-var SupportedProtocolVersions = []string{
-	LatestProtocolVersion,
-	"2025-06-18",
-	"2025-03-26",
-	"2024-11-05",
-}
+var SupportedProtocolVersions = []string{LatestProtocolVersion}
 
 func SupportsVersion(version string) bool {
-	return slices.Contains(SupportedProtocolVersions, version)
+	return version == LatestProtocolVersion
 }
 
 type Implementation struct {

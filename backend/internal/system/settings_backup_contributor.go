@@ -204,7 +204,6 @@ func (c *SettingsBackupContributor) Import(ctx context.Context, req dataportabil
 		DefaultCharacterID: req.DefaultCharacterID,
 		ActivateImported:   req.ActivateImported,
 		IncludeSecrets:     req.Manifest != nil && req.Manifest.IncludesSecrets,
-		AllowLegacySecrets: req.Manifest != nil && req.Manifest.SecretsPolicy == 0 && req.Manifest.Encrypted,
 		IdentityMap:        req.IdentityMap,
 		SecretProvider:     req.SecretProvider,
 	}
@@ -240,7 +239,7 @@ func (c *SettingsBackupContributor) RestoreSettings(ctx context.Context, in data
 			if rec.Key == "" {
 				return fmt.Errorf("设置备份缺少配置键")
 			}
-			if isSettingsKeySensitive(rec.Key) && !opts.IncludeSecrets && !opts.AllowLegacySecrets {
+			if isSettingsKeySensitive(rec.Key) && !opts.IncludeSecrets {
 				return fmt.Errorf("敏感设置 %s 未获得迁移授权", rec.Key)
 			}
 			if _, err := store.Upsert(rec.Key, rec.Value); err != nil {

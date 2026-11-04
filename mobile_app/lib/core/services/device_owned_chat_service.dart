@@ -681,9 +681,6 @@ class DeviceOwnedChatService {
         ? _historyCursors[key] ?? <String, String>{}
         : <String, String>{};
     final kind = conversationId.isEmpty ? 'conversation' : 'message';
-    final legacyKind = conversationId.isEmpty
-        ? 'legacyConversation'
-        : 'legacyMessage';
     final result = await _api.get<Map<String, dynamic>>(
       '/api/device-mesh/v1/business/conversations${conversationId.isEmpty ? '' : '/${Uri.encodeComponent(origin?['id'] ?? conversationId)}'}',
       queryParameters: {
@@ -724,9 +721,7 @@ class DeviceOwnedChatService {
     final next = <String, String>{};
     for (final source in [
       ['cursor', 'snapshot', kind],
-      ['legacyCursor', 'snapshot', legacyKind],
       ['historicalCursor', 'historicalSnapshot', kind],
-      ['historicalLegacyCursor', 'historicalSnapshot', legacyKind],
     ]) {
       if (older && !cursors.containsKey(source[0])) continue;
       final snapshot = result[source[1]];
@@ -806,10 +801,8 @@ class DeviceOwnedChatService {
     required String characterId,
     String conversationId = '',
     String cursor = '',
-    String legacyCursor = '',
     String historicalRoleId = '',
     String historicalCursor = '',
-    String historicalLegacyCursor = '',
     String memoryView = '',
   }) async {
     if (!enabled) throw StateError('设备数据服务尚未就绪');
@@ -821,10 +814,8 @@ class DeviceOwnedChatService {
         'characterId': selectRole(characterId),
         'conversationId': conversationId,
         'cursor': cursor,
-        'legacyCursor': legacyCursor,
         'historicalRoleId': historicalRoleId,
         'historicalCursor': historicalCursor,
-        'historicalLegacyCursor': historicalLegacyCursor,
         if (memoryView.isNotEmpty) 'memoryView': memoryView,
       },
     );
@@ -926,8 +917,8 @@ class DeviceOwnedChatService {
     if (resource == null) {
       throw StateError('该记录不在当前数据来源中，请在原设备管理历史数据');
     }
-    if (resource['readOnly'] == true || resource['origin'] == 'legacy') {
-      throw StateError('旧系统记录只读，请在当前数据所有者中创建新记录');
+    if (resource['readOnly'] == true) {
+      throw StateError('该记录只读');
     }
     final resourceId = resource['id'].toString();
     if (expectedOwnerId != null && resource['ownerId'] != expectedOwnerId) {
@@ -1336,7 +1327,6 @@ class DeviceOwnedChatService {
           'editable':
               name == 'snapshot' &&
               row['ownerId'] == result['executionScope']['resourceOwnerId'] &&
-              row['origin'] != 'legacy' &&
               row['readOnly'] != true,
         };
         _summaryViews[conversationId] = value;
@@ -1528,11 +1518,8 @@ class DeviceOwnedChatService {
             (row) => {
               ...row['body'] as Map,
               'origin': row['origin'],
-              'readOnly': row['readOnly'] == true || row['origin'] == 'legacy',
-              'sourceRevision':
-                  row['readOnly'] == true || row['origin'] == 'legacy'
-                  ? null
-                  : row['revision'],
+              'readOnly': row['readOnly'] == true,
+              'sourceRevision': row['readOnly'] == true ? null : row['revision'],
             },
           );
       for (final row in rows) {

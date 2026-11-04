@@ -143,7 +143,6 @@ func (c *BackupContributor) Import(ctx context.Context, req dataportability.Impo
 		}
 		for _, incident := range archive.Incidents {
 			incident.SpaceID, incident.OwnerID, incident.CoreID = scope.SpaceID, scope.OwnerID, scope.CoreID
-			incident.LegacyEventID = ""
 			var existing Incident
 			lookup := tx.Where("id=?", incident.ID).Take(&existing)
 			if lookup.Error == nil {

@@ -20,7 +20,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func TestLegacySyncRemoteAuthorityAndLocalContinuity(t *testing.T) {
+func TestRemoteSyncAuthorityAndLocalContinuity(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
@@ -100,7 +100,7 @@ func TestLegacySyncRemoteAuthorityAndLocalContinuity(t *testing.T) {
 			{"GET", "/api/v1/sync/gap?cursor=999", ""},
 		} {
 			rec := request(remote, route.method, route.path, route.body, "", "")
-			if rec.Code != 403 || !strings.Contains(rec.Body.String(), "legacy_sync_remote_disabled") {
+			if rec.Code != 403 || !strings.Contains(rec.Body.String(), "remote_sync_disabled") {
 				t.Fatalf("%s %s %d %s", stage, route.path, rec.Code, rec.Body.String())
 			}
 		}

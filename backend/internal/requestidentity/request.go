@@ -8,10 +8,7 @@ import (
 	"github.com/u-ai/backend/internal/spaceidentity"
 )
 
-// LegacySpaceID is only a migration/read-compatibility sentinel for records
-// created before the Space identity cutover. Runtime ownership must never be
-// persisted with this value.
-const LegacySpaceID = "default"
+const fallbackSpaceID = "local-space"
 
 // ResolveGin returns the Space bound to the authenticated request. Request
 // bodies, query parameters and headers are deliberately not accepted as an
@@ -32,11 +29,14 @@ func ResolveGin(c interface{}) string {
 }
 
 func CanonicalSpaceID() string {
-	return strings.TrimSpace(spaceidentity.DefaultSpaceID())
+	if id := strings.TrimSpace(spaceidentity.DefaultSpaceID()); id != "" {
+		return id
+	}
+	return fallbackSpaceID
 }
 
 func NormalizeSpaceID(spaceID string) string {
-	if v := strings.TrimSpace(spaceID); v != "" && v != LegacySpaceID {
+	if v := strings.TrimSpace(spaceID); v != "" {
 		return v
 	}
 	return CanonicalSpaceID()

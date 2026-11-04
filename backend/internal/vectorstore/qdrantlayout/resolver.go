@@ -91,7 +91,6 @@ func (r *resolver) Resolve(ctx context.Context, env qdrantenv.Environment) (Layo
 		DataRoot:         dataRoot,
 		StorageDir:       filepath.Join(dataRoot, "storage"),
 		SnapshotsDir:     snapshotsDir,
-		MigrationDir:     filepath.Join(dataRoot, "migration"),
 	}
 
 	if err := layout.Validate(); err != nil {

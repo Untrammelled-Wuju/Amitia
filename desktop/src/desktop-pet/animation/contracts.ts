@@ -413,7 +413,6 @@ export const FRAME_DURATION_MIN_MS = 16;
 export const FRAME_DURATION_MAX_MS = 10000;
 export const FPS_MIN = 1;
 export const FPS_MAX = 120;
-export const LEGACY_FRAME_DURATION_MS = 100;
 
 export const CLOCK_LARGE_GAP_THRESHOLD_MS = 5000;
 

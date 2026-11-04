@@ -11,11 +11,11 @@ import (
 )
 
 func TestPrepareNetworkLaunchWithoutEnforcementReturnsDirectPlan(t *testing.T) {
-	plan, err := prepareNetworkLaunch(ServiceNetworkPolicy{
+	plan, err := prepareNetworkLaunchWithStateRoot(ServiceNetworkPolicy{
 		Mode:          "unrestricted",
 		Enforce:       false,
 		AllowOutbound: true,
-	}, "/tmp/runtime", []string{"--x"}, "/tmp/work", "/tmp/temp")
+	}, "/tmp/runtime", []string{"--x"}, "/tmp/work", "/tmp/temp", "")
 	if err != nil {
 		t.Fatalf("prepareNetworkLaunch() error = %v", err)
 	}
@@ -57,21 +57,21 @@ func TestValidateNetworkPolicySupportRejectsRestrictedAmbientOutbound(t *testing
 }
 
 func TestPrepareNetworkLaunchRejectsNonLoopbackInbound(t *testing.T) {
-	_, err := prepareNetworkLaunch(ServiceNetworkPolicy{
+	_, err := prepareNetworkLaunchWithStateRoot(ServiceNetworkPolicy{
 		Enforce:       true,
 		AllowInbound:  true,
 		AllowOutbound: true,
-	}, "/tmp/runtime", nil, "", "")
+	}, "/tmp/runtime", nil, "", "", "")
 	if !errors.Is(err, ErrUnauthorizedNetwork) {
 		t.Fatalf("prepareNetworkLaunch() error = %v, want ErrUnauthorizedNetwork", err)
 	}
 }
 
 func TestPrepareNetworkLaunchRejectsAuditWithoutAuditBackend(t *testing.T) {
-	_, err := prepareNetworkLaunch(ServiceNetworkPolicy{
+	_, err := prepareNetworkLaunchWithStateRoot(ServiceNetworkPolicy{
 		Enforce:  true,
 		AuditAll: true,
-	}, "/tmp/runtime", nil, "", "")
+	}, "/tmp/runtime", nil, "", "", "")
 	if !errors.Is(err, ErrNetworkSandboxUnavailable) {
 		t.Fatalf("prepareNetworkLaunch() error = %v, want ErrNetworkSandboxUnavailable", err)
 	}
@@ -269,11 +269,11 @@ func TestPrepareNetworkLaunchLinuxUnrestrictedRequiresConcreteSandboxBackends(t 
 	}
 	bwrap := firstTrustedLauncher("/usr/bin/bwrap", "/bin/bwrap")
 	slirp := firstTrustedLauncher("/usr/bin/slirp4netns", "/bin/slirp4netns")
-	plan, err := prepareNetworkLaunch(ServiceNetworkPolicy{
+	plan, err := prepareNetworkLaunchWithStateRoot(ServiceNetworkPolicy{
 		Mode:          "unrestricted",
 		Enforce:       true,
 		AllowOutbound: true,
-	}, "/bin/true", nil, "/tmp", "/tmp")
+	}, "/bin/true", nil, "/tmp", "/tmp", "/tmp")
 	if bwrap == "" || slirp == "" {
 		if !errors.Is(err, ErrNetworkSandboxUnavailable) {
 			t.Fatalf("missing linux backend error = %v, want ErrNetworkSandboxUnavailable", err)

@@ -49,7 +49,7 @@ func DomainConflict(kinds []ContributionKind) bool {
 	hasGame := false
 	hasDesktopPet := false
 	for _, k := range kinds {
-		switch NormalizeContributionKind(k) {
+		switch k {
 		case ContributionKindGamePlugin:
 			hasGame = true
 		case ContributionKindPetPlugin:

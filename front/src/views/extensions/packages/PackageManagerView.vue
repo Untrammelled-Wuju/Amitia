@@ -411,12 +411,13 @@
           <el-table :data="detail.contributions" size="small" border>
             <el-table-column prop="contributionId" label="ID" width="180" />
             <el-table-column prop="kind" label="类型" width="120" />
+            <el-table-column prop="adapter" label="执行器" width="110" />
             <el-table-column prop="moduleId" label="模块ID" width="140" />
             <el-table-column prop="title" label="名称" />
             <el-table-column label="操作" width="100">
               <template #default="{ row }">
                 <el-button
-                  v-if="row.kind === 'ui_page'"
+                  v-if="row.adapter === 'ui'"
                   size="small"
                   type="primary"
                   @click="openExtPage(row.contributionId)"
@@ -585,7 +586,6 @@ const allTabs = [
   { key: "schedules", label: "调度中心" },
   { key: "desktop", label: "桌面贡献中心" },
   { key: "dev-console", label: "开发者诊断控制台" },
-  { key: "migrations", label: "迁移与灰度中心" },
   { key: "dev-mode", label: "开发模式中心" },
 ];
 
@@ -598,7 +598,6 @@ const kernelComponentMap: Record<string, () => Promise<any>> = {
   "schedules": () => import("@/views/kernel/ScheduleCenterView.vue"),
   "desktop": () => import("@/views/kernel/DesktopCenterView.vue"),
   "dev-console": () => import("@/views/kernel/DeveloperConsoleView.vue"),
-  "migrations": () => import("@/views/kernel/MigrationCenterView.vue"),
   "dev-mode": () => import("@/views/kernel/DevModeView.vue"),
 };
 

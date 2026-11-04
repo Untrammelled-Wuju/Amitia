@@ -648,31 +648,6 @@ func TestExecutionHookAttempts(t *testing.T) {
 	}
 }
 
-func TestMigrationMappingsCoverage(t *testing.T) {
-	mappings := DefaultMigrationMappings()
-	if len(mappings) == 0 {
-		t.Error("expected non-empty migration mappings")
-	}
-
-	expectedTables := []string{
-		"mcp_operations", "workflow_runs",
-		"extension_runs", "package_operations", "agent_skill_activations",
-	}
-
-	for _, expected := range expectedTables {
-		found := false
-		for _, m := range mappings {
-			if m.OldTable == expected {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("expected migration mapping for table %q", expected)
-		}
-	}
-}
-
 func TestErrorCodeToCategory(t *testing.T) {
 	if cat := ErrorCodeToCategory("invalid_input"); cat != "validation" {
 		t.Errorf("expected 'validation', got %q", cat)

@@ -330,32 +330,9 @@ func (c *Compiler) Compile(def WorkflowDefinition, opts CompileOptions) (*Compil
 	return compiled, nil
 }
 
-func (c *Compiler) CompileFromLegacy(def WorkflowDefinition) (*CompiledWorkflowDAG, error) {
-	migrated := make([]WorkflowNode, 0, len(def.Nodes))
-	var prevID string
-	for i, n := range def.Nodes {
-		node := n
-		if node.ID == "" {
-			node.ID = fmt.Sprintf("step-%d", i+1)
-		}
-		if i > 0 && len(node.DependsOn) == 0 && prevID != "" {
-			node.DependsOn = []string{prevID}
-		}
-		migrated = append(migrated, node)
-		prevID = node.ID
-	}
-	def.Nodes = migrated
-	return c.Compile(def, DefaultCompileOptions())
-}
-
 func (c *Compiler) compileRetry(n WorkflowNode) (*WorkflowRetryPolicy, error) {
-	// Keep legacy workflow definitions that used onError.mode=retry working.
 	if n.Retry == nil {
-		rp := DefaultRetryPolicy()
-		if n.Step.OnError.Mode == "retry" {
-			rp.MaxAttempts = 3
-		}
-		return rp, nil
+		return DefaultRetryPolicy(), nil
 	}
 
 	p := *n.Retry

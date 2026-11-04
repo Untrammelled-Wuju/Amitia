@@ -55,11 +55,11 @@ func TestLinuxUnrestrictedNetworkSandboxE2E(t *testing.T) {
 
 	port := listener.Addr().(*net.TCPAddr).Port
 	work := t.TempDir()
-	plan, err := prepareNetworkLaunch(ServiceNetworkPolicy{
+	plan, err := prepareNetworkLaunchWithStateRoot(ServiceNetworkPolicy{
 		Mode:          "unrestricted",
 		Enforce:       true,
 		AllowOutbound: true,
-	}, curl, []string{"--fail", "--silent", "--show-error", "--max-time", "10", fmt.Sprintf("http://10.0.2.2:%d/", port)}, work, work)
+	}, curl, []string{"--fail", "--silent", "--show-error", "--max-time", "10", fmt.Sprintf("http://10.0.2.2:%d/", port)}, work, work, work)
 	if err != nil {
 		t.Fatal(err)
 	}

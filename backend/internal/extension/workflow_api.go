@@ -2037,16 +2037,7 @@ func (api *WorkflowAPI) localRunOwned(ctx context.Context, spaceID, runID string
 	}
 	ownerID := strings.TrimSpace(run.Context.SpaceID)
 	requestedSpaceID := strings.TrimSpace(spaceID)
-	if ownerID != "" {
-		if requestedSpaceID == "" || ownerID != requestedSpaceID {
-			return nil, nil, errors.New("workflow run not found")
-		}
-		return run, executor, nil
-	}
-	// Legacy runs created before the execution context persisted SpaceID must
-	// still resolve through the current definition ownership metadata.
-	def, ok := kc.WorkflowRegistry.Get(run.WorkflowID)
-	if !ok || !workflowOwnedBy(def, requestedSpaceID) {
+	if requestedSpaceID == "" || ownerID != requestedSpaceID {
 		return nil, nil, errors.New("workflow run not found")
 	}
 	return run, executor, nil
@@ -2186,32 +2177,18 @@ func (api *WorkflowAPI) recoverRun(c *gin.Context) {
 		c.JSON(http.StatusConflict, gin.H{"error": "run predates safe checkpoint recovery; rerun the workflow instead"})
 		return
 	}
-	if len(run.Context.DefinitionSnapshot) > 0 {
-		var snapshot workflow.WorkflowDefinition
-		if err := json.Unmarshal(run.Context.DefinitionSnapshot, &snapshot); err != nil {
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
-			return
-		}
-		if snapshot.ID != run.WorkflowID || workflow.ComputeDefinitionHash(snapshot) != run.Context.DefinitionHash {
-			c.JSON(http.StatusConflict, gin.H{"error": "run definition snapshot integrity check failed; checkpoint recovery is unsafe"})
-			return
-		}
-	} else {
-		// Legacy runs without immutable snapshots can only recover when the
-		// currently installed definition still matches exactly.
-		def, exists := api.runtime.Kernel.Container().WorkflowRegistry.Get(run.WorkflowID)
-		if !exists || !workflowOwnedBy(def, spaceID) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "workflow not found"})
-			return
-		}
-		if !def.Enabled {
-			c.JSON(http.StatusConflict, gin.H{"error": "workflow is disabled"})
-			return
-		}
-		if workflow.ComputeDefinitionHash(def) != run.Context.DefinitionHash {
-			c.JSON(http.StatusConflict, gin.H{"error": "workflow definition changed since this legacy run; checkpoint recovery is unsafe, rerun instead"})
-			return
-		}
+	if len(run.Context.DefinitionSnapshot) == 0 {
+		c.JSON(http.StatusConflict, gin.H{"error": "run definition snapshot is required for checkpoint recovery"})
+		return
+	}
+	var snapshot workflow.WorkflowDefinition
+	if err := json.Unmarshal(run.Context.DefinitionSnapshot, &snapshot); err != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		return
+	}
+	if snapshot.ID != run.WorkflowID || workflow.ComputeDefinitionHash(snapshot) != run.Context.DefinitionHash {
+		c.JSON(http.StatusConflict, gin.H{"error": "run definition snapshot integrity check failed; checkpoint recovery is unsafe"})
+		return
 	}
 	store := executor.CheckpointStore()
 	if store == nil {

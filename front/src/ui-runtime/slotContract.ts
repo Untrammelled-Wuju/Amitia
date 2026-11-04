@@ -17,14 +17,6 @@ export type ClientSlotLocaleProps<N> = N extends keyof ClientLocaleNamespaceMap 
   ? { readonly t: ClientTranslate<ClientLocaleKeysOf<N>> }
   : object;
 
-/** Compatibility shared handle. Unlike managed handles this object carries one
- * concrete state instance, so the runtime pins it to one scope key at a time. */
-export interface ClientSlotStoreHandle<State, Actions extends Record<string, (...args: any[]) => any> = Record<string, never>> {
-  readonly state: State;
-  readonly actions: Actions;
-  readonly subscribe?: (listener: () => void) => () => void;
-}
-
 export type ClientSlotActionDecl<State> = Record<string, (draft: State, ...args: any[]) => void>;
 export type ClientSlotBakedActions<
   State,
@@ -342,7 +334,6 @@ export interface ClientSlotRuntimeSpec<K extends ClientKnownSlotId = ClientKnown
   readonly fallbackPolicy?: "none" | "skeleton" | "empty" | "default";
   readonly description?: string;
   readonly contractVersion?: number;
-  readonly multiplicity?: "single" | "multiple" | "ordered_multiple" | "replaceable_single" | "exclusive";
   readonly keys?: readonly ClientSlotEntryKey<K>[];
   readonly inject?: ClientSlotInjected<K>;
 }
@@ -363,8 +354,6 @@ export type ClientSlotRenderOptions<
   EntryKey extends ClientSlotEntryKey<K> = ClientSlotEntryKey<K>,
 > = {
   readonly entryKey?: EntryKey;
-  /** Amitia compatibility alias for entryKey. */
-  readonly key?: EntryKey;
   readonly only?: string;
   readonly fallback?: unknown;
 } & ClientSlotOccurrenceContextOption<K>;
@@ -488,11 +477,9 @@ export type ClientSlotSelectorHook<T> = <Selected = T>(
 ) => ClientReadonlyValue<Selected>;
 
 type ClientStoreState<S> = S extends ClientSlotManagedStoreHandle<infer State, any> ? State
-  : S extends ClientSlotStoreHandle<infer State, any> ? State
-    : S;
+  : S;
 type ClientStoreActions<S> = S extends ClientSlotManagedStoreHandle<infer State, infer Actions> ? ClientSlotBakedActions<State, Actions>
-  : S extends ClientSlotStoreHandle<any, infer Actions> ? Actions
-    : Record<string, (...args: any[]) => any>;
+  : Record<string, (...args: any[]) => any>;
 
 export type ClientSlotStoreProps<S> = {
   useStore<Selected = ClientStoreState<S>>(

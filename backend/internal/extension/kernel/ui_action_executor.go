@@ -199,9 +199,6 @@ func (e *UIActionExecutor) resolveToolModule(ctx context.Context, extensionID, t
 
 var uiActionRenderMetaKeys = []string{"node_id", "form_state", "local_state"}
 
-// normalizeToolInput keeps renderer-scoped metadata out of tool input unless the
-// tool schema declares the property. Legacy clients still send node_id and
-// form_state inside input; both transports are accepted and normalised here.
 func (e *UIActionExecutor) normalizeToolInput(ctx context.Context, toolID string, input, meta json.RawMessage) (json.RawMessage, error) {
 	if len(bytes.TrimSpace(input)) == 0 && len(bytes.TrimSpace(meta)) == 0 {
 		return json.RawMessage(`{}`), nil
@@ -234,9 +231,8 @@ func (e *UIActionExecutor) normalizeToolInput(ctx context.Context, toolID string
 
 	renderMeta := map[string]json.RawMessage{}
 	for _, key := range uiActionRenderMetaKeys {
-		if value, exists := fields[key]; exists {
-			renderMeta[key] = value
-			delete(fields, key)
+		if _, exists := fields[key]; exists {
+			return nil, fmt.Errorf("tool action input %s must use meta", key)
 		}
 		if value, exists := metaFields[key]; exists {
 			renderMeta[key] = value

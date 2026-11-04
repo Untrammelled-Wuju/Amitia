@@ -31,7 +31,7 @@ type HandshakeManager struct {
 
 type HandshakeManagerConfig struct {
 	HostSupportedProtocols []string
-	HostCapabilities       []domain.Capability
+	HostCapabilities       []domain.HostFeature
 	NamespaceAdapter       NamespaceAdapter
 	ChannelAdvertiser      ChannelAdvertiser
 	RuntimeValidator       RuntimeValidator
@@ -116,7 +116,7 @@ func (m *HandshakeManager) GetSnapshot(id string) *HandshakeSnapshot {
 // requested GameHost v1 feature. Runtime handlers use this as the execution
 // gate so a package declaration alone cannot activate a feature that the
 // concrete service connection did not advertise during handshake.
-func (m *HandshakeManager) HasNegotiatedCapability(connectionID string, feature domain.Capability) bool {
+func (m *HandshakeManager) HasNegotiatedCapability(connectionID string, feature domain.HostFeature) bool {
 	if m == nil || connectionID == "" || !m.IsReady(connectionID) {
 		return false
 	}
@@ -237,9 +237,9 @@ func (m *HandshakeManager) process(
 		return nil, err
 	}
 
-	advertised := make([]domain.Capability, 0, len(hello.Capabilities))
+	advertised := make([]domain.HostFeature, 0, len(hello.Capabilities))
 	for _, c := range hello.Capabilities {
-		advertised = append(advertised, domain.Capability(c))
+		advertised = append(advertised, domain.HostFeature(c))
 	}
 
 	descriptorCaps := m.descriptorCaps(peer.PluginID)
@@ -250,7 +250,7 @@ func (m *HandshakeManager) process(
 
 	var allowCustomRPC bool
 	for _, c := range negotiatedCaps {
-		if c == domain.CapabilityCustomRPC {
+		if c == domain.HostFeatureCustomRPC {
 			allowCustomRPC = true
 			break
 		}
@@ -315,7 +315,7 @@ func (m *HandshakeManager) process(
 	}, nil
 }
 
-func validateNegotiatedChannelFeatures(provider DescriptorProvider, pluginID, serviceID string, advertised []ChannelAdvertisement, negotiated []domain.Capability) error {
+func validateNegotiatedChannelFeatures(provider DescriptorProvider, pluginID, serviceID string, advertised []ChannelAdvertisement, negotiated []domain.HostFeature) error {
 	if len(advertised) == 0 {
 		return nil
 	}
@@ -330,7 +330,7 @@ func validateNegotiatedChannelFeatures(provider DescriptorProvider, pluginID, se
 	for _, ch := range declared {
 		byID[string(ch.ID)] = ch.Kind
 	}
-	negotiatedSet := make(map[domain.Capability]struct{}, len(negotiated))
+	negotiatedSet := make(map[domain.HostFeature]struct{}, len(negotiated))
 	for _, feature := range negotiated {
 		negotiatedSet[feature] = struct{}{}
 	}
@@ -339,7 +339,7 @@ func validateNegotiatedChannelFeatures(provider DescriptorProvider, pluginID, se
 		if !ok {
 			continue // declaration membership is rejected by ChannelAdvertiser below
 		}
-		required, known := domain.RequiredCapabilityForChannelKind(kind)
+		required, known := domain.RequiredHostFeatureForChannelKind(kind)
 		if !known {
 			return NewHandshakeError(
 				HandshakeErrorCapabilityMismatch,
@@ -395,9 +395,9 @@ func (m *HandshakeManager) buildSnapshot(
 	hello *HelloRequest,
 	response *HelloResponse,
 ) *HandshakeSnapshot {
-	caps := make([]domain.Capability, 0, len(response.Capabilities))
+	caps := make([]domain.HostFeature, 0, len(response.Capabilities))
 	for _, c := range response.Capabilities {
-		caps = append(caps, domain.Capability(c))
+		caps = append(caps, domain.HostFeature(c))
 	}
 
 	ns := make([]string, len(response.RPCNamespaces))
@@ -459,7 +459,7 @@ func (m *HandshakeManager) ConfirmReady(connID string) bool {
 	return true
 }
 
-func (m *HandshakeManager) descriptorCaps(pluginID domain.PluginID) []domain.Capability {
+func (m *HandshakeManager) descriptorCaps(pluginID domain.PluginID) []domain.HostFeature {
 	// Package declarations are the authorization boundary for host features.
 	// Missing/unreadable declarations must fail closed rather than inheriting the
 	// complete host feature set.
@@ -470,10 +470,10 @@ func (m *HandshakeManager) descriptorCaps(pluginID domain.PluginID) []domain.Cap
 	if err != nil || len(caps) == 0 {
 		return nil
 	}
-	result := make([]domain.Capability, 0, len(caps))
+	result := make([]domain.HostFeature, 0, len(caps))
 	for _, c := range caps {
-		feature := domain.Capability(c)
-		if domain.ValidateCapability(feature) == nil {
+		feature := domain.HostFeature(c)
+		if domain.ValidateHostFeature(feature) == nil {
 			result = append(result, feature)
 		}
 	}

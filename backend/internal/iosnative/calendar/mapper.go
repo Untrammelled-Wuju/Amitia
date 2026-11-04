@@ -12,8 +12,6 @@ func MapAuthorizationLevel(level string) (AuthorizationLevel, bool) {
 		return AuthorizationWriteOnly, true
 	case string(AuthorizationFullAccess):
 		return AuthorizationFullAccess, true
-	case string(AuthorizationLegacyAuthorized):
-		return AuthorizationLegacyAuthorized, true
 	default:
 		return "", false
 	}
@@ -31,8 +29,6 @@ func AuthorizationLevelFromNative(native string) AuthorizationLevel {
 		return AuthorizationWriteOnly
 	case "fullAccess":
 		return AuthorizationFullAccess
-	case "authorized":
-		return AuthorizationLegacyAuthorized
 	default:
 		return AuthorizationNotDetermined
 	}
@@ -40,7 +36,7 @@ func AuthorizationLevelFromNative(native string) AuthorizationLevel {
 
 func CanCreateEvent(level AuthorizationLevel) bool {
 	switch level {
-	case AuthorizationWriteOnly, AuthorizationFullAccess, AuthorizationLegacyAuthorized:
+	case AuthorizationWriteOnly, AuthorizationFullAccess:
 		return true
 	default:
 		return false
@@ -49,7 +45,7 @@ func CanCreateEvent(level AuthorizationLevel) bool {
 
 func CanReadEvents(level AuthorizationLevel) bool {
 	switch level {
-	case AuthorizationFullAccess, AuthorizationLegacyAuthorized:
+	case AuthorizationFullAccess:
 		return true
 	default:
 		return false
@@ -58,7 +54,7 @@ func CanReadEvents(level AuthorizationLevel) bool {
 
 func CanUpdateEvents(level AuthorizationLevel) bool {
 	switch level {
-	case AuthorizationFullAccess, AuthorizationLegacyAuthorized:
+	case AuthorizationFullAccess:
 		return true
 	default:
 		return false
@@ -67,7 +63,7 @@ func CanUpdateEvents(level AuthorizationLevel) bool {
 
 func CanDeleteEvents(level AuthorizationLevel) bool {
 	switch level {
-	case AuthorizationFullAccess, AuthorizationLegacyAuthorized:
+	case AuthorizationFullAccess:
 		return true
 	default:
 		return false
@@ -76,7 +72,7 @@ func CanDeleteEvents(level AuthorizationLevel) bool {
 
 func CanListCalendars(level AuthorizationLevel) bool {
 	switch level {
-	case AuthorizationFullAccess, AuthorizationLegacyAuthorized:
+	case AuthorizationFullAccess:
 		return true
 	default:
 		return false

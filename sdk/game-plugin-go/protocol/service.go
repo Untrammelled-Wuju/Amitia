@@ -25,7 +25,7 @@ type ServiceDescriptor struct {
 
 	DependsOn []ServiceID `json:"dependsOn,omitempty"`
 
-	Capabilities []Capability `json:"capabilities,omitempty"`
+	HostFeatures []HostFeature `json:"hostFeatures,omitempty"`
 
 	Metadata map[string]json.RawMessage `json:"metadata,omitempty"`
 }
@@ -93,15 +93,15 @@ func (s ServiceDescriptor) Validate() error {
 			}
 		}
 	}
-	seenCaps := make(map[Capability]bool)
-	for _, cap := range s.Capabilities {
-		if err := ValidateCapability(cap); err != nil {
+	seenFeatures := make(map[HostFeature]bool)
+	for _, feature := range s.HostFeatures {
+		if err := ValidateHostFeature(feature); err != nil {
 			return err
 		}
-		if seenCaps[cap] {
-			return fmt.Errorf("duplicate capability '%s'", cap)
+		if seenFeatures[feature] {
+			return fmt.Errorf("duplicate host feature '%s'", feature)
 		}
-		seenCaps[cap] = true
+		seenFeatures[feature] = true
 	}
 	return nil
 }

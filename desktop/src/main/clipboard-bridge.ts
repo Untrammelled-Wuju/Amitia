@@ -2,7 +2,7 @@ import { clipboard, type BrowserWindow } from "electron";
 import { getLocalAdminHeaders } from "./backend-session-client";
 import { getDeviceId } from "./pet/runtime-identity";
 import { IPC_CHANNELS } from "../shared/ipc";
-import { getCoreBaseURL } from "./core-endpoint";
+import { getCoreBaseURL, waitForCoreEndpoint } from "./core-endpoint";
 
 const SSE_PATH = "/api/proactive-sse";
 const CLIPBOARD_RESPONSE_PATH = "/api/extensions/ui/clipboard-response";
@@ -83,11 +83,12 @@ return null;
   }
 
   private async postHostSession<T>(
+    baseURL: string,
     path: string,
     headers: Record<string, string>,
     body: Record<string, unknown>,
   ): Promise<T> {
-    const response = await fetch(`${getCoreBaseURL()}${path}`, {
+    const response = await fetch(`${baseURL}${path}`, {
       method: "POST",
       headers: {
         Accept: "application/json",
@@ -102,8 +103,9 @@ return null;
     return await response.json() as T;
   }
 
-  private async registerHostSession(headers: Record<string, string>): Promise<void> {
+  private async registerHostSession(baseURL: string, headers: Record<string, string>): Promise<void> {
     const result = await this.postHostSession<HostSessionResponse>(
+      baseURL,
       HOST_SESSION_PATH,
       headers,
       {
@@ -124,6 +126,7 @@ return null;
     this.heartbeatTimer = setInterval(() => {
       if (this.stopped || !this.hostSessionId) return;
       void this.postHostSession(
+        baseURL,
         HOST_HEARTBEAT_PATH,
         headers,
         { hostClientId: CLIENT_ID, hostSessionId: this.hostSessionId },
@@ -145,9 +148,12 @@ return null;
     const sessionId = this.hostSessionId;
     this.hostSessionId = "";
     if (!sessionId) return;
+    const baseURL = getCoreBaseURL();
+    if (!baseURL) return;
     const headers = await this.getAuthHeaders();
     if (!headers) return;
     await this.postHostSession(
+      baseURL,
       HOST_DISCONNECT_PATH,
       headers,
       { hostClientId: CLIENT_ID, hostSessionId: sessionId },
@@ -159,6 +165,7 @@ return null;
   private async connect(): Promise<void> {
     if (this.stopped) return;
 
+    const endpoint = await waitForCoreEndpoint();
     const headers = await this.getAuthHeaders();
     if (!headers) {
       this.scheduleReconnect();
@@ -169,7 +176,7 @@ return null;
 
     try {
       const response = await fetch(
-        `${getCoreBaseURL()}${SSE_PATH}?clientId=${CLIENT_ID}`,
+        `${endpoint.httpBaseURL}${SSE_PATH}?clientId=${CLIENT_ID}`,
         {
           headers: {
             Accept: "text/event-stream",
@@ -186,7 +193,7 @@ return null;
         return;
       }
 
-      await this.registerHostSession(headers);
+      await this.registerHostSession(endpoint.httpBaseURL, headers);
       console.log("[ClipboardBridge] SSE 连接成功，开始监听 clipboard_request 与 ui_style_command 事件");
 
       const reader = response.body.getReader();

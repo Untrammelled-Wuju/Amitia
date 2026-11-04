@@ -114,29 +114,7 @@ func evidenceCoversLocatorRequirements(evidence []Evidence, required []string) b
 		if _, ok := covered[normalized]; ok {
 			continue
 		}
-		// Parser locators are not fully standardized yet; pageNumber and rowStart
-		// are accepted as equivalent coverage aliases without weakening the value.
-		parts := strings.SplitN(normalized, "=", 2)
-		if len(parts) != 2 {
-			return false
-		}
-		aliases := []string{}
-		switch parts[0] {
-		case "page":
-			aliases = []string{"pagenumber=" + parts[1]}
-		case "row":
-			aliases = []string{"rowstart=" + parts[1], "rowend=" + parts[1]}
-		}
-		matched := false
-		for _, alias := range aliases {
-			if _, ok := covered[alias]; ok {
-				matched = true
-				break
-			}
-		}
-		if !matched {
-			return false
-		}
+		return false
 	}
 	return true
 }

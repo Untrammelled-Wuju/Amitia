@@ -20,7 +20,7 @@ func TestUsageRealTLSOwnerModesAndReset(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := system.NewHandler(system.NewService(app.NewAppContext(core.services.DB, nil), ""), core.services.DB, nil, nil, nil, nil, nil)
+	handler := system.NewHandler(system.NewService(app.NewAppContext(core.services.DB, nil), ""), core.services.DB, nil, nil, nil, nil)
 	system.WithModelUsage(store)(handler)
 	system.WithCanonicalMemory(core.services.OwnedBusiness, core.core)(handler)
 	authMW := security.AuthenticationMiddleware(security.AuthConfig{Mode: "network", SpaceID: core.core, DeviceCredentials: core.services.DeviceMesh.CredentialSvc, DeviceRegistry: core.services.KernelContainer.DeviceRegistry, Coordination: core.services.DeviceMesh.Coordination})

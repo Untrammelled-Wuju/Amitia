@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { resolve, relative } from "node:path";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
@@ -9,32 +9,6 @@ const repoRoot = resolve(__dirname, "../..");
 const runtimeRoot = resolve(repoRoot, "backend/internal/desktoppet/runtime");
 const protocolRoot = resolve(runtimeRoot, "protocol");
 const errors = [];
-
-const FORBIDDEN_LEGACY_RUNTIME_FILES = [
-  "auth.go",
-  "command_store.go",
-  "connection.go",
-  "dispatcher.go",
-  "errors.go",
-  "event_dedup.go",
-  "handler.go",
-  "lifecycle.go",
-  "metrics.go",
-  "notifier.go",
-  "pending.go",
-  "reconciler.go",
-  "registry.go",
-  "router.go",
-  "service.go",
-  "snapshot.go",
-  "state_store.go",
-  "version.go",
-];
-
-const FORBIDDEN_LEGACY_WIRING_FILES = [
-  "backend/internal/desktoppet/behavior/wiring/active_pet_port.go",
-  "backend/internal/desktoppet/behavior/wiring/runtime_action_port.go",
-];
 
 function requireText(relativePath, requiredPatterns, forbiddenPatterns = []) {
   const absolute = resolve(repoRoot, relativePath);
@@ -52,19 +26,6 @@ function requireText(relativePath, requiredPatterns, forbiddenPatterns = []) {
     if (pattern.test(content)) {
       errors.push(`FORBIDDEN pattern ${pattern} found in ${relativePath}`);
     }
-  }
-}
-
-for (const name of FORBIDDEN_LEGACY_RUNTIME_FILES) {
-  const absolute = resolve(runtimeRoot, name);
-  if (existsSync(absolute)) {
-    errors.push(`FORBIDDEN legacy runtime file exists: ${relative(repoRoot, absolute)}`);
-  }
-}
-
-for (const relativePath of FORBIDDEN_LEGACY_WIRING_FILES) {
-  if (existsSync(resolve(repoRoot, relativePath))) {
-    errors.push(`FORBIDDEN legacy behavior adapter exists: ${relativePath}`);
   }
 }
 
@@ -91,7 +52,6 @@ requireText(
     /devicemesh\.NewCloudRuntimeWithHubAndSessions\s*\([\s\S]*?kernelContainer\.DeviceRuntimeSessions/,
     /wiring\.NewV1RuntimeActionAdapter\s*\(/,
     /wiring\.NewV1ActivePetAdapter\s*\(/,
-    /desktoppet\.LegacyWriteCutoverReady\s*\(ctx\.DB\)/,
     /services\.InstallationCoordinator\s*==\s*nil/,
     /RegisterTimeout:\s*time\.Duration\(runtimeConfig\.RegisterTimeoutSec\)\s*\*\s*time\.Second/,
     /SendQueueSize:\s*runtimeConfig\.SendQueueSize/,
@@ -146,65 +106,6 @@ requireText(
     /envelope\.connectionGeneration\s*!==\s*this\.connectionGeneration/,
     /runtime server heartbeat timeout/,
     /runtime envelope exceeds maxMessageBytes/,
-  ],
-);
-
-requireText(
-  "backend/internal/desktoppet/legacy_package_flag.go",
-  [
-    /legacyInstallationWriteDisabled\s+atomic\.Bool/,
-    /legacyEditingWriteDisabled\s+atomic\.Bool/,
-    /func LegacyWriteCutoverReady\(db \*gorm\.DB\) error/,
-  ],
-);
-
-requireText(
-  "backend/internal/desktoppet/migration/repository.go",
-  [
-    /JOIN desktop_pet_migration_operations AS o ON o\.id = w\.operation_id/,
-    /o\.kind = \? AND o\.status IN \?/,
-    /StageLegacyWriteBlocked/,
-    /StageCompleted/,
-  ],
-);
-
-requireText(
-  "backend/internal/desktoppet/migration/runner.go",
-  [
-    /StageWriteCutover, StageLegacyWriteBlocked/,
-    /legacyWriteRefresh == nil/,
-    /if op\.Stage == StageLegacyWriteBlocked \{[\s\S]*?legacyWriteRefresh\(\)[\s\S]*?StageLegacyWriteBlocked, StageCompleted/,
-  ],
-);
-
-requireText(
-  "backend/internal/desktoppet/migration/plans/desktop_pet_v2_cutover.go",
-  [
-    /The durable authority for blocking legacy writes is the migration/,
-  ],
-  [
-    /desktop_pet_migration_flags/,
-    /legacy_writes_blocked/,
-  ],
-);
-
-requireText(
-  "backend/cmd/server/main.go",
-  [/migration\.MarkDesktopPetCanonicalBaselineCutover\(db\)/],
-);
-
-requireText(
-  "backend/cmd/legacy-package-migrate/main.go",
-  [/migration\.MarkDesktopPetCanonicalBaselineCutover\(db\)/],
-);
-
-requireText(
-  "backend/internal/migration/desktop_pet_canonical_baseline.go",
-  [
-    /baseline-desktop-pet-v2/,
-    /desktop_pet_migration_operations/,
-    /desktop_pet_write_cutovers/,
-    /"installation", "editing"/,
   ],
 );
 

@@ -39,8 +39,6 @@ func (h *HTTPHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/dev-console/lifecycle", h.handleLifecycle)
 	mux.HandleFunc("/api/dev-console/logs", h.handleLogs)
 	mux.HandleFunc("/api/dev-console/performance", h.handlePerformance)
-	mux.HandleFunc("/api/dev-console/migration", h.handleMigration)
-	mux.HandleFunc("/api/dev-console/compatibility", h.handleCompatibility)
 	mux.HandleFunc("/api/dev-console/host-api-audits", h.handleHostAPIAudits)
 	mux.HandleFunc("/api/dev-console/stream", h.handleStream)
 	mux.HandleFunc("/api/dev-console/export-diagnostics", h.handleExportDiagnostics)
@@ -191,24 +189,6 @@ func (h *HTTPHandler) handleLogs(w http.ResponseWriter, r *http.Request) {
 func (h *HTTPHandler) handlePerformance(w http.ResponseWriter, r *http.Request) {
 	filter := parseFilters(r)
 	recs, err := h.repository.ListPerformance(r.Context(), filter)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, recs)
-}
-
-func (h *HTTPHandler) handleMigration(w http.ResponseWriter, r *http.Request) {
-	recs, err := h.repository.ListMigration(r.Context())
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, recs)
-}
-
-func (h *HTTPHandler) handleCompatibility(w http.ResponseWriter, r *http.Request) {
-	recs, err := h.repository.ListCompatibility(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return

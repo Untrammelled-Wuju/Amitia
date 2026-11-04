@@ -112,10 +112,17 @@ let durationTimer: ReturnType<typeof setInterval> | undefined;
 
 const orderedItems = computed(() => {
   const items = [...(props.turn.items || [])].sort((left, right) => left.sequence - right.sequence);
+  const callKeys = new Set(
+    items
+      .filter((item) => item.type === "tool_call")
+      .map((item) => String(item.callId || item.id || "").trim())
+      .filter(Boolean),
+  );
   const result: Array<AssistantTurnItem & { type: string; items?: AssistantTurnItem[] }> = [];
   let toolGroup: (AssistantTurnItem & { type: string; items?: AssistantTurnItem[] }) | undefined;
   for (const item of items) {
     if (item.type === "text" && !String(item.content || "").trim()) continue;
+    if (item.type === "tool_result" && !callKeys.has(String(item.callId || item.id || "").trim())) continue;
     if (item.type === "tool_call" || item.type === "tool_result") {
       if (!toolGroup) {
         toolGroup = { ...item, type: "tool_group", items: [] };
@@ -180,7 +187,7 @@ function toolStreamSummary(items?: AssistantTurnItem[]): string {
   const values = items || [];
   const calls = uniqueToolRecords(values.filter((item) => item.type === "tool_call"));
   const results = uniqueToolRecords(values.filter((item) => item.type === "tool_result"));
-  const counted = calls.length > 0 ? calls : results;
+  const counted = calls;
   const failed = counted.filter((item) => statusClass(item.status) === "failed").length;
   if (failed > 0) return `${counted.length} 个工具 · ${failed} 个失败`;
   const running = counted.find((item) => statusClass(item.status) === "running");
@@ -221,11 +228,6 @@ function toolEntries(items?: AssistantTurnItem[]): TimelineToolEntry[] {
     const result = key ? resultsByCall.get(key) : undefined;
     if (key) matched.add(key);
     entries.push({ key: key || call.id, call, result });
-  }
-  for (const result of results) {
-    const key = toolKey(result);
-    if (key && matched.has(key)) continue;
-    entries.push({ key: key || result.id, call: result, result });
   }
   return entries;
 }

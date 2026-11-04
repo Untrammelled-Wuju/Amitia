@@ -22,6 +22,6 @@ func RegisterDeviceChatImportRoutes(r *gin.RouterGroup, ctx *app.AppContext, cha
 		return
 	}
 	svc := NewService(ctx, runtimeprofile.ProfileDeviceAgent)
-	handler := NewHandler(svc, ctx.DB, chatSvc, nil, nil, nil, nil)
+	handler := NewHandler(svc, ctx.DB, chatSvc, nil, nil, nil)
 	registerChatImportRoutes(r, handler)
 }

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/u-ai/backend/internal/extension/kernel/extension_slots"
 )
 
 func makeValidDefinition() *UIContributionDefinition {
@@ -52,6 +54,15 @@ func TestValidateDefinitionInvalidKind(t *testing.T) {
 	def.Kind = "invalid_kind"
 	if err := ValidateDefinition(def); !errors.Is(err, ErrInvalidKind) {
 		t.Fatalf("expected ErrInvalidKind, got %v", err)
+	}
+}
+
+func TestValidateDefinitionAllowsNamespacedKind(t *testing.T) {
+	def := makeValidDefinition()
+	def.Kind = UIContributionKind("com.example.market/page")
+	def.Sandbox.Type = SandboxSchemaRenderer
+	if err := ValidateDefinition(def); err != nil {
+		t.Fatalf("namespaced kind rejected: %v", err)
 	}
 }
 
@@ -159,7 +170,7 @@ func TestUIHostRegisterSlot(t *testing.T) {
 		Version:          1,
 		SupportedKinds:   []UIContributionKind{UIContributionCard},
 		AllowedSandboxes: []UISandboxType{SandboxSchemaRenderer},
-		Multiplicity:     MultiplicityMultiple,
+		DispatchKind:     extension_slots.DispatchList,
 	}
 	if err := h.RegisterSlot(slot); err != nil {
 		t.Fatalf("register: %v", err)
@@ -198,7 +209,7 @@ func TestUIHostRegisterContributionWaitsForSlot(t *testing.T) {
 		Version:          1,
 		SupportedKinds:   []UIContributionKind{UIContributionSchemaPage},
 		AllowedSandboxes: []UISandboxType{SandboxSchemaRenderer},
-		Multiplicity:     MultiplicityOrderedMultiple,
+		DispatchKind:     extension_slots.DispatchList,
 	}); err != nil {
 		t.Fatalf("register restored slot: %v", err)
 	}
@@ -231,14 +242,14 @@ func TestUIHostListBySlot(t *testing.T) {
 	}
 }
 
-func TestUIHostSingleMultiplicityReject(t *testing.T) {
+func TestUIHostSingleDispatchReject(t *testing.T) {
 	h := NewUIHost()
 	slot := &UISlotContract{
 		SlotID:           "exclusive.slot",
 		Version:          1,
 		SupportedKinds:   []UIContributionKind{UIContributionPanel},
 		AllowedSandboxes: []UISandboxType{SandboxSchemaRenderer},
-		Multiplicity:     MultiplicitySingle,
+		DispatchKind:     extension_slots.DispatchSingle,
 	}
 	_ = h.RegisterSlot(slot)
 	def1 := makeValidDefinition()
@@ -253,7 +264,7 @@ func TestUIHostSingleMultiplicityReject(t *testing.T) {
 	def2.Slot.SlotID = "exclusive.slot"
 	def2.Kind = UIContributionPanel
 	if err := h.RegisterContribution(def2); err == nil {
-		t.Fatalf("expected single multiplicity conflict")
+		t.Fatalf("expected single dispatch conflict")
 	}
 }
 

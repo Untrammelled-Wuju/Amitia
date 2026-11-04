@@ -328,10 +328,6 @@ if (typeof window !== "undefined" && window.matchMedia) {
 }
 
 async function loadFromServer() {
-  // Appearance is a device preference on both Electron and Flutter. Keeping
-  // it local avoids mutating a shared Cloud Core app_settings row for every
-  // user connected to the same deployment. The exported name is retained for
-  // App.vue compatibility.
   applyAppearance();
   themeLoaded.value = true;
 }

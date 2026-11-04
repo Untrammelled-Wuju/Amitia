@@ -8,6 +8,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const trustedServiceIDContextKey = "trustedServiceID"
+
 func trustedServiceReference(handler gin.HandlerFunc) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		query, err := url.ParseQuery(c.Request.URL.RawQuery)
@@ -15,35 +17,20 @@ func trustedServiceReference(handler gin.HandlerFunc) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		serviceID := c.Param("serviceId")
-		values, present := query["service_id"]
-		if present {
-			if len(values) != 1 || strings.TrimSpace(values[0]) == "" || serviceID != "" && serviceID != values[0] {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "service_id must be unique, nonempty and match the path"})
-				return
-			}
-			if serviceID == "" {
-				serviceID = values[0]
-				c.Params = append(c.Params, gin.Param{Key: "serviceId", Value: serviceID})
-			}
-		}
-		if strings.TrimSpace(serviceID) == "" {
+		values, exists := query["service_id"]
+		if !exists || len(values) != 1 || strings.TrimSpace(values[0]) == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "service_id required"})
 			return
 		}
+		c.Set(trustedServiceIDContextKey, values[0])
 		handler(c)
 	}
 }
 
-func (api *TrustedServiceAPI) serviceOperationAlias(handler gin.HandlerFunc, legacyID string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if !c.Request.URL.Query().Has("service_id") {
-			c.Params = append(c.Params, gin.Param{Key: "serviceId", Value: legacyID})
-			trustedServiceReference(api.getService)(c)
-			return
-		}
-		trustedServiceReference(handler)(c)
-	}
+func trustedServiceID(c *gin.Context) string {
+	value, _ := c.Get(trustedServiceIDContextKey)
+	serviceID, _ := value.(string)
+	return serviceID
 }
 
 func (api *TrustedServiceAPI) serviceListOrGet(c *gin.Context) {

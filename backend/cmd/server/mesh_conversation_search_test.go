@@ -22,7 +22,7 @@ func TestMeshConversationSearchHTTPUsesMessageContent(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, id := range []string{"matched", "unmatched", "other-role"} {
-		if err := p.services.DB.Create(&chat.Conversation{ID: id, SpaceID: p.legacySpaceID, Title: "普通标题", Channel: "web"}).Error; err != nil {
+		if err := p.services.DB.Create(&chat.Conversation{ID: id, SpaceID: p.ownerID, Title: "普通标题", Channel: "web"}).Error; err != nil {
 			t.Fatal(err)
 		}
 		role, content := "one", "普通消息"

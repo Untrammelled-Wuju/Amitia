@@ -126,9 +126,9 @@ func auditReceiptPreviousHash(ctx context.Context, db *gorm.DB, previous orphanA
 		return "", err
 	}
 	if previous.LastResultJSON == "" {
-		return "", fmt.Errorf("missing legacy orphan audit checkpoint")
+		return "", fmt.Errorf("missing orphan audit checkpoint")
 	}
-	return hashAuditBytes([]byte("legacy:" + previous.ID + ":" + previous.LastResultJSON)), nil
+	return "", fmt.Errorf("orphan audit receipt missing for checkpoint %s page %d", previous.ID, previous.Page)
 }
 
 func auditReceiptAnchoredPrefix(ctx context.Context, db *gorm.DB, tenantID, auditID string, throughPage int) (string, bool, error) {

@@ -8,6 +8,7 @@
         <button type="button" title="Git 变更" aria-label="Git 变更" @click="store.openTab({ kind: 'git', forceNew: true })"><el-icon><GitBranch /></el-icon></button>
         <button type="button" title="打开浏览器" aria-label="打开浏览器" @click="store.openTab({ kind: 'browser', forceNew: true })"><el-icon><BrowserIcon /></el-icon></button>
         <button type="button" title="任务状态" aria-label="任务状态" @click="store.openTab({ kind: 'tasks' })"><el-icon><List /></el-icon></button>
+        <button type="button" title="子智能体" aria-label="子智能体" @click="store.openTab({ kind: 'agents' })"><el-icon><Cpu /></el-icon></button>
         <button type="button" title="交互终端" aria-label="交互终端" @click="store.openTab({ kind: 'terminal', forceNew: true })"><el-icon><TerminalIcon /></el-icon></button>
         <button type="button" title="关闭未固定标签" aria-label="关闭未固定标签" @click="closeUnpinned"><el-icon><Minus /></el-icon></button>
         <button type="button" title="收起工作区" aria-label="收起工作区" @click="store.toggleVisible(false)"><el-icon><Close /></el-icon></button>
@@ -41,7 +42,7 @@
 </template>
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import { Browser as BrowserIcon, Close, CollectionTag, Files, GitBranch, List, Minus, Plus, Terminal as TerminalIcon } from '@/components/icons/element-plus-icons';
+import { Browser as BrowserIcon, Close, CollectionTag, Cpu, Files, GitBranch, List, Minus, Plus, Terminal as TerminalIcon } from '@/components/icons/element-plus-icons';
 import { useWorkbenchStore } from '@/stores/workbench';
 import type { WorkbenchViewKind } from '@/stores/workbench';
 import WorkbenchResourceView from './WorkbenchResourceView.vue';
@@ -56,6 +57,7 @@ const tabIcons: Record<WorkbenchViewKind, object> = {
   browser: BrowserIcon,
   terminal: TerminalIcon,
   tasks: List,
+  agents: Cpu,
 };
 const contextMenu = ref<{ x: number; y: number; tabId: string } | null>(null);
 const contextMenuElement = ref<HTMLElement>();

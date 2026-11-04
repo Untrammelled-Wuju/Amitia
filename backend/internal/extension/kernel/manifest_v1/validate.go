@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+
+	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
 func schemaValueEqual(a, b any) bool {
@@ -41,6 +43,25 @@ func checkSchemaType(value any, t string) bool {
 		return value == nil
 	}
 	return true
+}
+
+func validateContributionSchema(path string, schema map[string]any, spec map[string]any, report *ValidationReport) {
+	compiler := jsonschema.NewCompiler()
+	compiler.DefaultDraft(jsonschema.Draft2020)
+	compiler.UseLoader(jsonschema.SchemeURLLoader{})
+	const resource = "https://amitia.invalid/contribution.schema.json"
+	if err := compiler.AddResource(resource, schema); err != nil {
+		report.AddError(path+".schema", "schema_invalid", err.Error())
+		return
+	}
+	compiled, err := compiler.Compile(resource)
+	if err != nil {
+		report.AddError(path+".schema", "schema_invalid", err.Error())
+		return
+	}
+	if err := compiled.Validate(spec); err != nil {
+		report.AddError(path+".spec", "schema_invalid_instance", err.Error())
+	}
 }
 
 func validateSchemaValue(value any, schema map[string]any, path string, report *ValidationReport) {
@@ -235,13 +256,10 @@ func ParseValidated(data []byte) (Manifest, ValidationReport, error) {
 		return Manifest{}, combined, err
 	}
 
-	normalized, normReport := m.NormalizeCompatibility()
-	combined.Merge(normReport)
-
-	valReport := normalized.Validate()
+	valReport := m.Validate()
 	combined.Merge(valReport)
 
-	return normalized, combined, nil
+	return m, combined, nil
 }
 
 func (m Manifest) ValidateWithSchema() *ValidationReport {

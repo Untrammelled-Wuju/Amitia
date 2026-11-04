@@ -15,8 +15,8 @@ func newTestPluginDescriptor(id domain.PluginID, extensionID string) domain.Plug
 		Name:            "Test Plugin " + string(id),
 		Version:         "1.0.0",
 		ProtocolVersion: "amitia-game-host/1",
-		Capabilities: []domain.Capability{
-			domain.CapabilityCustomRPC,
+		Capabilities: []domain.HostFeature{
+			domain.HostFeatureCustomRPC,
 		},
 		Services: []domain.ServiceDescriptor{
 			{
@@ -234,7 +234,7 @@ func TestRegisterClonesDescriptor(t *testing.T) {
 	r.Register(ctx, desc)
 
 	desc.Metadata["vendor"] = "modified"
-	desc.Capabilities = append(desc.Capabilities, domain.CapabilityHostAPI)
+	desc.Capabilities = append(desc.Capabilities, domain.HostFeatureHostAPI)
 
 	stored, err := r.Get(ctx, "plugin-a")
 	if err != nil {

@@ -29,15 +29,6 @@ func (s *SQLiteProfileStore) Init(ctx context.Context) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("ui_provider: profile store database is nil")
 	}
-	// Keep the v1 table intact so older binaries can still start after rollback.
-	if _, err := s.db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS extension_ui_profile (
-		profile_id TEXT PRIMARY KEY,
-		name TEXT NOT NULL,
-		selections_json TEXT NOT NULL,
-		updated_at INTEGER NOT NULL
-	)`); err != nil {
-		return err
-	}
 	if _, err := s.db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS extension_ui_profiles_v2 (
 		scope_key TEXT PRIMARY KEY,
 		profile_id TEXT NOT NULL,
@@ -56,38 +47,7 @@ func (s *SQLiteProfileStore) Init(ctx context.Context) error {
 		ON extension_ui_profiles_v2(space_id, device_id, platform, runtime_profile, updated_at)`); err != nil {
 		return err
 	}
-	// Pre-Space builds encoded the owner component as `u=` even though the
-	// value already represented the personal data space. Migrate the persisted
-	// primary key once so the storage contract matches the Space identity model.
-	if _, err := s.db.ExecContext(ctx, `UPDATE OR IGNORE extension_ui_profiles_v2
-		SET scope_key = 's=' || substr(scope_key, 3) WHERE scope_key LIKE 'u=%'`); err != nil {
-		return fmt.Errorf("ui_provider: migrate legacy user scope keys: %w", err)
-	}
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM extension_ui_profiles_v2 WHERE scope_key LIKE 'u=%'`); err != nil {
-		return fmt.Errorf("ui_provider: remove legacy user scope keys: %w", err)
-	}
-	return s.migrateLegacyProfile(ctx)
-}
-
-func (s *SQLiteProfileStore) migrateLegacyProfile(ctx context.Context) error {
-	var count int
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM extension_ui_profiles_v2`).Scan(&count); err != nil || count > 0 {
-		return err
-	}
-	var profileID, name, raw string
-	var updatedAt int64
-	err := s.db.QueryRowContext(ctx, `SELECT profile_id, name, selections_json, updated_at
-		FROM extension_ui_profile ORDER BY updated_at DESC LIMIT 1`).Scan(&profileID, &name, &raw, &updatedAt)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	_, err = s.db.ExecContext(ctx, `INSERT OR IGNORE INTO extension_ui_profiles_v2(
-		scope_key, profile_id, name, space_id, device_id, platform, runtime_profile, selections_json, revision, updated_at
-	) VALUES(?, ?, ?, '', '', '', '', ?, 1, ?)`, globalProfileScope().Key(), profileID, name, raw, updatedAt)
-	return err
+	return nil
 }
 
 func (s *SQLiteProfileStore) Load(ctx context.Context) (Profile, bool, error) {

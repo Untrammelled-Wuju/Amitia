@@ -99,9 +99,24 @@ func TestLoadCanonicalProviderConfig(t *testing.T) {
 	}
 }
 
-func TestLoadLegacyQdrantConfig(t *testing.T) {
+func TestRejectRemovedTopLevelProviderConfig(t *testing.T) {
+	for _, key := range []string{"qdrant", "surrealdb"} {
+		t.Run(key, func(t *testing.T) {
+			dir := t.TempDir()
+			configFile := filepath.Join(dir, "config.yml")
+			if err := os.WriteFile(configFile, []byte(key+":\n  host: \"127.0.0.1\"\n"), 0644); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := loadConfig(dir); err == nil {
+				t.Fatalf("top-level %s config must be rejected", key)
+			}
+		})
+	}
+}
+
+func TestCanonicalProviderConfigLoads(t *testing.T) {
 	dir := t.TempDir()
-	yaml := "qdrant:\n  host: \"127.0.0.1\"\n  port: 9999\n  collectionName: \"legacy\"\n  vectorDim: 512\n  limit: 5\n"
+	yaml := "providers:\n  vectorStore:\n    qdrant:\n      host: \"127.0.0.1\"\n      port: 6333\n      vectorDim: 768\n      limit: 10\n  graphStore:\n    surrealdb:\n      host: \"127.0.0.1\"\n      port: 8000\n      namespace: \"current_ns\"\n"
 	configFile := filepath.Join(dir, "config.yml")
 	if err := os.WriteFile(configFile, []byte(yaml), 0644); err != nil {
 		t.Fatal(err)
@@ -111,82 +126,23 @@ func TestLoadLegacyQdrantConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadConfig failed: %v", err)
 	}
-
-	if cfg.Providers.VectorStore.Qdrant.Host != "127.0.0.1" {
-		t.Errorf("Qdrant host = %q", cfg.Providers.VectorStore.Qdrant.Host)
+	if cfg.Providers.VectorStore.Qdrant.Host != "127.0.0.1" || cfg.Providers.VectorStore.Qdrant.Port != 6333 {
+		t.Fatalf("Qdrant config mismatch: %+v", cfg.Providers.VectorStore.Qdrant)
 	}
-	if cfg.Providers.VectorStore.Qdrant.Port != 9999 {
-		t.Errorf("Qdrant port = %d, want 9999", cfg.Providers.VectorStore.Qdrant.Port)
-	}
-	if cfg.Providers.VectorStore.Qdrant.VectorDim != 512 {
-		t.Errorf("Qdrant vectorDim = %d, want 512", cfg.Providers.VectorStore.Qdrant.VectorDim)
+	if cfg.Providers.GraphStore.SurrealDB.Host != "127.0.0.1" || cfg.Providers.GraphStore.SurrealDB.Namespace != "current_ns" {
+		t.Fatalf("SurrealDB config mismatch: %+v", cfg.Providers.GraphStore.SurrealDB)
 	}
 }
 
-func TestLoadLegacySurrealConfig(t *testing.T) {
-	dir := t.TempDir()
-	yaml := "surrealdb:\n  host: \"127.0.0.1\"\n  port: 8888\n  namespace: \"legacy_ns\"\n  database: \"legacy_db\"\n  username: \"user\"\n  password: \"pass\"\n  dataPath: \"/tmp/legacy.db\"\n"
-	configFile := filepath.Join(dir, "config.yml")
-	if err := os.WriteFile(configFile, []byte(yaml), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	cfg, err := loadConfig(dir)
-	if err != nil {
-		t.Fatalf("loadConfig failed: %v", err)
-	}
-
-	if cfg.Providers.GraphStore.SurrealDB.Host != "127.0.0.1" {
-		t.Errorf("SurrealDB host = %q", cfg.Providers.GraphStore.SurrealDB.Host)
-	}
-	if cfg.Providers.GraphStore.SurrealDB.Port != 8888 {
-		t.Errorf("SurrealDB port = %d, want 8888", cfg.Providers.GraphStore.SurrealDB.Port)
-	}
-	if cfg.Providers.GraphStore.SurrealDB.Namespace != "legacy_ns" {
-		t.Errorf("SurrealDB namespace = %q", cfg.Providers.GraphStore.SurrealDB.Namespace)
-	}
-	if cfg.Providers.GraphStore.SurrealDB.Password != "pass" {
-		t.Errorf("SurrealDB password = %q", cfg.Providers.GraphStore.SurrealDB.Password)
-	}
-}
-
-func TestCanonicalProviderConfigOverridesLegacyConfig(t *testing.T) {
-	dir := t.TempDir()
-	yaml := "qdrant:\n  host: \"10.0.0.9\"\n  port: 1111\n  vectorDim: 999\n  limit: 1\nsurrealdb:\n  host: \"10.0.0.9\"\n  port: 1111\n  namespace: \"legacy_ns\"\nproviders:\n  vectorStore:\n    qdrant:\n      host: \"127.0.0.1\"\n      port: 6333\n      vectorDim: 768\n      limit: 10\n  graphStore:\n    surrealdb:\n      host: \"127.0.0.1\"\n      port: 8000\n      namespace: \"new_ns\"\n"
-	configFile := filepath.Join(dir, "config.yml")
-	if err := os.WriteFile(configFile, []byte(yaml), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	cfg, err := loadConfig(dir)
-	if err != nil {
-		t.Fatalf("loadConfig failed: %v", err)
-	}
-
-	if cfg.Providers.VectorStore.Qdrant.Host != "127.0.0.1" {
-		t.Errorf("Qdrant host should use canonical config, got %q", cfg.Providers.VectorStore.Qdrant.Host)
-	}
-	if cfg.Providers.VectorStore.Qdrant.Port != 6333 {
-		t.Errorf("Qdrant port should use canonical config, got %d", cfg.Providers.VectorStore.Qdrant.Port)
-	}
-
-	if cfg.Providers.GraphStore.SurrealDB.Host != "127.0.0.1" {
-		t.Errorf("SurrealDB host should use canonical config, got %q", cfg.Providers.GraphStore.SurrealDB.Host)
-	}
-	if cfg.Providers.GraphStore.SurrealDB.Namespace != "new_ns" {
-		t.Errorf("SurrealDB namespace should use canonical config, got %q", cfg.Providers.GraphStore.SurrealDB.Namespace)
-	}
-}
-
-func TestConfigDoesNotExposeLegacyProviderFields(t *testing.T) {
+func TestConfigKeepsCanonicalProviderStructure(t *testing.T) {
 	v := reflect.TypeOf(Config{})
 	for i := 0; i < v.NumField(); i++ {
 		fieldName := v.Field(i).Name
 		if fieldName == "Qdrant" {
-			t.Error("Config should not expose legacy Qdrant field")
+			t.Error("Config should not expose top-level Qdrant field")
 		}
 		if fieldName == "Surreal" {
-			t.Error("Config should not expose legacy Surreal field")
+			t.Error("Config should not expose top-level Surreal field")
 		}
 	}
 }
@@ -335,7 +291,7 @@ func TestProviderEnvironmentFalseOverridesDefaults(t *testing.T) {
 	}
 }
 
-func TestCanonicalBinaryEnvironmentOverridesLegacy(t *testing.T) {
+func TestProviderBinaryEnvironment(t *testing.T) {
 	dir := t.TempDir()
 	yaml := ""
 	configFile := filepath.Join(dir, "config.yml")
@@ -373,7 +329,7 @@ func TestCanonicalBinaryEnvironmentOverridesLegacy(t *testing.T) {
 	}
 }
 
-func TestLegacyBinaryEnvironmentFallback(t *testing.T) {
+func TestNodeBinaryEnvironment(t *testing.T) {
 	dir := t.TempDir()
 	yaml := ""
 	configFile := filepath.Join(dir, "config.yml")
@@ -646,7 +602,7 @@ func TestLoadConfigUsesRuntimeAppVersion(t *testing.T) {
 	}
 }
 
-func TestPortOneSentinelAllocatesDynamicPorts(t *testing.T) {
+func TestExplicitPortOneIsPreserved(t *testing.T) {
 	dir := t.TempDir()
 	configFile := filepath.Join(dir, "config.yml")
 	if err := os.WriteFile(configFile, []byte("server:\n  port: 1\nproviders:\n  vectorStore:\n    qdrant:\n      port: 1\n  graphStore:\n    surrealdb:\n      port: 1\n"), 0644); err != nil {
@@ -657,13 +613,13 @@ func TestPortOneSentinelAllocatesDynamicPorts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadConfig failed: %v", err)
 	}
-	if cfg.Server.Port != 0 {
-		t.Fatalf("server port = %d, want dynamic sentinel converted to 0", cfg.Server.Port)
+	if cfg.Server.Port != 1 {
+		t.Fatalf("server port = %d, want explicit 1", cfg.Server.Port)
 	}
-	if cfg.Providers.VectorStore.Qdrant.Port != 0 {
-		t.Fatalf("qdrant port = %d, want dynamic sentinel converted to 0", cfg.Providers.VectorStore.Qdrant.Port)
+	if cfg.Providers.VectorStore.Qdrant.Port != 1 {
+		t.Fatalf("qdrant port = %d, want explicit 1", cfg.Providers.VectorStore.Qdrant.Port)
 	}
-	if cfg.Providers.GraphStore.SurrealDB.Port != 0 {
-		t.Fatalf("surrealdb port = %d, want dynamic sentinel converted to 0", cfg.Providers.GraphStore.SurrealDB.Port)
+	if cfg.Providers.GraphStore.SurrealDB.Port != 1 {
+		t.Fatalf("surrealdb port = %d, want explicit 1", cfg.Providers.GraphStore.SurrealDB.Port)
 	}
 }

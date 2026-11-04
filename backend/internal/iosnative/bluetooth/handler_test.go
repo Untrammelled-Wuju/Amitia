@@ -856,7 +856,7 @@ func TestValidateScanRequest(t *testing.T) {
 	}
 
 	err = ValidateScanRequest(BluetoothScanRequest{
-		DurationMs: 5000,
+		DurationMs:   5000,
 		ServiceUUIDs: []string{"invalid-uuid"},
 	})
 	if err == nil {
@@ -884,8 +884,8 @@ func TestValidateConnectRequest(t *testing.T) {
 func TestValidateWriteRequest(t *testing.T) {
 	err := ValidateWriteRequest(BluetoothWriteRequest{
 		CharacteristicRef: "chr-001",
-		Value:            BluetoothValueInput{Encoding: "base64", Base64: "AQID"},
-		Mode:             "with_response",
+		Value:             BluetoothValueInput{Encoding: "base64", Base64: "AQID"},
+		Mode:              "with_response",
 	})
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -893,7 +893,7 @@ func TestValidateWriteRequest(t *testing.T) {
 
 	err = ValidateWriteRequest(BluetoothWriteRequest{
 		CharacteristicRef: "chr-001",
-		Mode:             "invalid",
+		Mode:              "invalid",
 	})
 	if err == nil {
 		t.Error("expected error for invalid mode")
@@ -901,8 +901,8 @@ func TestValidateWriteRequest(t *testing.T) {
 
 	err = ValidateWriteRequest(BluetoothWriteRequest{
 		CharacteristicRef: "chr-001",
-		Value:            BluetoothValueInput{Encoding: "base64"},
-		Mode:             "with_response",
+		Value:             BluetoothValueInput{Encoding: "base64"},
+		Mode:              "with_response",
 	})
 	if err == nil {
 		t.Error("expected error for empty value")

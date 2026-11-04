@@ -20,7 +20,6 @@ func TestLayoutValidate_Valid(t *testing.T) {
 			DataRoot:         "C:\\amitia\\data\\providers\\qdrant",
 			StorageDir:       "C:\\amitia\\data\\providers\\qdrant\\storage",
 			SnapshotsDir:     "C:\\amitia\\data\\providers\\qdrant\\snapshots",
-			MigrationDir:     "C:\\amitia\\data\\providers\\qdrant\\migration",
 		}
 	} else {
 		layout = Layout{
@@ -31,7 +30,6 @@ func TestLayoutValidate_Valid(t *testing.T) {
 			DataRoot:         "/amitia/data/providers/qdrant",
 			StorageDir:       "/amitia/data/providers/qdrant/storage",
 			SnapshotsDir:     "/amitia/data/providers/qdrant/snapshots",
-			MigrationDir:     "/amitia/data/providers/qdrant/migration",
 		}
 	}
 
@@ -60,7 +58,6 @@ func TestLayoutValidate_RelativePaths(t *testing.T) {
 		DataRoot:         "data/providers/qdrant",
 		StorageDir:       "data/providers/qdrant/storage",
 		SnapshotsDir:     "data/providers/qdrant/snapshots",
-		MigrationDir:     "data/providers/qdrant/migration",
 	}
 	err := layout.Validate()
 	if err == nil {
@@ -79,7 +76,6 @@ func TestLayoutValidate_OverlapConfigInDistribution(t *testing.T) {
 			DataRoot:         "C:\\amitia\\data",
 			StorageDir:       "C:\\amitia\\data\\storage",
 			SnapshotsDir:     "C:\\amitia\\data\\snapshots",
-			MigrationDir:     "C:\\amitia\\data\\migration",
 		}
 	} else {
 		layout = Layout{
@@ -90,7 +86,6 @@ func TestLayoutValidate_OverlapConfigInDistribution(t *testing.T) {
 			DataRoot:         "/amitia/data",
 			StorageDir:       "/amitia/data/storage",
 			SnapshotsDir:     "/amitia/data/snapshots",
-			MigrationDir:     "/amitia/data/migration",
 		}
 	}
 	err := layout.Validate()
@@ -113,7 +108,6 @@ func TestLayoutValidate_OverlapDataInDistribution(t *testing.T) {
 			DataRoot:         "C:\\amitia\\data",
 			StorageDir:       "C:\\amitia\\data\\storage",
 			SnapshotsDir:     "C:\\amitia\\data\\snapshots",
-			MigrationDir:     "C:\\amitia\\data\\migration",
 		}
 	} else {
 		layout = Layout{
@@ -124,7 +118,6 @@ func TestLayoutValidate_OverlapDataInDistribution(t *testing.T) {
 			DataRoot:         "/amitia/data",
 			StorageDir:       "/amitia/data/storage",
 			SnapshotsDir:     "/amitia/data/snapshots",
-			MigrationDir:     "/amitia/data/migration",
 		}
 	}
 	err := layout.Validate()
@@ -144,7 +137,6 @@ func TestLayoutValidate_StorageEqualsSnapshots(t *testing.T) {
 			DataRoot:         "C:\\data",
 			StorageDir:       "C:\\data\\storage",
 			SnapshotsDir:     "C:\\data\\storage",
-			MigrationDir:     "C:\\data\\migration",
 		}
 	} else {
 		layout = Layout{
@@ -155,7 +147,6 @@ func TestLayoutValidate_StorageEqualsSnapshots(t *testing.T) {
 			DataRoot:         "/data",
 			StorageDir:       "/data/storage",
 			SnapshotsDir:     "/data/storage",
-			MigrationDir:     "/data/migration",
 		}
 	}
 	err := layout.Validate()
@@ -179,7 +170,6 @@ func TestLayoutValidate_FilesystemRoot(t *testing.T) {
 		DataRoot:         dataRoot,
 		StorageDir:       filepath.Join(dataRoot, "storage"),
 		SnapshotsDir:     filepath.Join(dataRoot, "snapshots"),
-		MigrationDir:     filepath.Join(dataRoot, "migration"),
 	}
 	err := layout.Validate()
 	if err == nil {
@@ -196,7 +186,6 @@ func TestLayoutClone_ReturnsCopy(t *testing.T) {
 		DataRoot:         "/data",
 		StorageDir:       "/data/storage",
 		SnapshotsDir:     "/data/snapshots",
-		MigrationDir:     "/data/migration",
 	}
 	clone := layout.Clone()
 	if clone.DistributionRoot != layout.DistributionRoot {

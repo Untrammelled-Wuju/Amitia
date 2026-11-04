@@ -210,11 +210,11 @@ function effectivePlacement(task: TaskRun): "local" | "cloud" | "device" {
 }
 
 function canPauseTask(task: TaskRun): boolean {
-  return taskPauseControls(task, definitionForTask(task)).pause;
+  return taskPauseControls(task).pause;
 }
 
 function canResumeTask(task: TaskRun): boolean {
-  return taskPauseControls(task, definitionForTask(task)).resume;
+  return taskPauseControls(task).resume;
 }
 
 function canCancelTask(task: TaskRun): boolean {

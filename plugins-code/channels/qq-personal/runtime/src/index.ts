@@ -37,7 +37,7 @@ const eventStore = new ChannelEventStore()
 let lastError = ""
 
 const inboundConfig = {
-  coreUrl: env.AMITIA_CORE_URL || env.CORE_URL || "http://127.0.0.1:18899",
+  coreUrl: env.AMITIA_CORE_URL || "",
   extensionId: env.AMITIA_EXTENSION_ID || "com.amitia/channel-qq-personal",
   moduleId: env.AMITIA_MODULE_ID || "qq-personal-service",
   channelId: "qq_personal",

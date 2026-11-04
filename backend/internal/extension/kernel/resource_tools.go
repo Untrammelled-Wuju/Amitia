@@ -5,6 +5,7 @@ package kernel
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -174,17 +175,17 @@ func buildMaterializeSkillResourceTool() tool.Tool {
 func (f *ToolFacade) handleListSkillResources(ctx context.Context, input json.RawMessage, scope InvocationScope) (ToolDispatchResult, error) {
 	var req ListSkillResourcesInput
 	if err := json.Unmarshal(input, &req); err != nil {
-		return legacyResourceError(fmt.Sprintf("invalid list_skill_resources input: %v", err))
+		return resourceError(fmt.Errorf("invalid list_skill_resources input: %w", err))
 	}
 	if strings.TrimSpace(req.Skill) == "" {
-		return legacyResourceError("skill name is required")
+		return resourceError(errors.New("skill name is required"))
 	}
 	if f.skillResourceHandler == nil {
-		return legacyResourceError("skill resource handler not configured")
+		return resourceError(errors.New("skill resource handler not configured"))
 	}
 	output, err := f.skillResourceHandler.HandleListSkillResources(ctx, req, scope)
 	if err != nil {
-		return legacyResourceError(err.Error())
+		return resourceError(err)
 	}
 	resultJSON, _ := json.Marshal(output)
 	return ToolDispatchResult{
@@ -198,20 +199,20 @@ func (f *ToolFacade) handleListSkillResources(ctx context.Context, input json.Ra
 func (f *ToolFacade) handleReadSkillResource(ctx context.Context, input json.RawMessage, scope InvocationScope) (ToolDispatchResult, error) {
 	var req ReadSkillResourceInput
 	if err := json.Unmarshal(input, &req); err != nil {
-		return legacyResourceError(fmt.Sprintf("invalid read_skill_resource input: %v", err))
+		return resourceError(fmt.Errorf("invalid read_skill_resource input: %w", err))
 	}
 	if strings.TrimSpace(req.Skill) == "" {
-		return legacyResourceError("skill name is required")
+		return resourceError(errors.New("skill name is required"))
 	}
 	if strings.TrimSpace(req.Path) == "" {
-		return legacyResourceError("path is required")
+		return resourceError(errors.New("path is required"))
 	}
 	if f.skillResourceHandler == nil {
-		return legacyResourceError("skill resource handler not configured")
+		return resourceError(errors.New("skill resource handler not configured"))
 	}
 	output, err := f.skillResourceHandler.HandleReadSkillResource(ctx, req, scope)
 	if err != nil {
-		return legacyResourceError(err.Error())
+		return resourceError(err)
 	}
 	resultJSON, _ := json.Marshal(output)
 	return ToolDispatchResult{
@@ -225,20 +226,20 @@ func (f *ToolFacade) handleReadSkillResource(ctx context.Context, input json.Raw
 func (f *ToolFacade) handleMaterializeSkillResource(ctx context.Context, input json.RawMessage, scope InvocationScope) (ToolDispatchResult, error) {
 	var req MaterializeSkillResourceInput
 	if err := json.Unmarshal(input, &req); err != nil {
-		return legacyResourceError(fmt.Sprintf("invalid materialize_skill_resource input: %v", err))
+		return resourceError(fmt.Errorf("invalid materialize_skill_resource input: %w", err))
 	}
 	if strings.TrimSpace(req.Skill) == "" {
-		return legacyResourceError("skill name is required")
+		return resourceError(errors.New("skill name is required"))
 	}
 	if strings.TrimSpace(req.Path) == "" {
-		return legacyResourceError("path is required")
+		return resourceError(errors.New("path is required"))
 	}
 	if f.skillResourceHandler == nil {
-		return legacyResourceError("skill resource handler not configured")
+		return resourceError(errors.New("skill resource handler not configured"))
 	}
 	output, err := f.skillResourceHandler.HandleMaterializeSkillResource(ctx, req, scope)
 	if err != nil {
-		return legacyResourceError(err.Error())
+		return resourceError(err)
 	}
 	resultJSON, _ := json.Marshal(output)
 	return ToolDispatchResult{
@@ -260,10 +261,10 @@ func (f *ToolFacade) resolveResourceCapableSkillNames(ctx context.Context, scope
 	return names, nil
 }
 
-func legacyResourceError(msg string) (ToolDispatchResult, error) {
+func resourceError(err error) (ToolDispatchResult, error) {
 	return ToolDispatchResult{
 		Status:      "FAILED",
-		VisibleText: msg,
-		Error:       &ToolDispatchError{Code: "SKILL_RESOURCE_ERROR", Message: msg},
-	}, fmt.Errorf("%s", msg)
+		VisibleText: err.Error(),
+		Error:       &ToolDispatchError{Code: "SKILL_RESOURCE_ERROR", Message: err.Error()},
+	}, err
 }

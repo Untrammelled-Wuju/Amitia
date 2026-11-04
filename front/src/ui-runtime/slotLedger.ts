@@ -27,8 +27,8 @@ export type UnifiedSlotItem =
     };
 
 export type SlotContractLike =
-  | Pick<SlotSnapshot, "kind" | "multiplicity">
-  | Pick<ClientSlotDefinition, "kind" | "multiplicity">
+  | Pick<SlotSnapshot, "kind">
+  | Pick<ClientSlotDefinition, "kind">
   | null
   | undefined;
 
@@ -39,12 +39,6 @@ export interface UnifiedSlotDispatchOptions {
   clientMatched?: ReadonlyMap<string, unknown>;
 }
 
-/**
- * Merge server/declarative and trusted-client entries under one dispatch model.
- * `kind` is authoritative. `multiplicity` is only consulted for snapshots from
- * pre-kind runtimes, which keeps old plugins usable without weakening the new
- * single/list/keyed/chain semantics.
- */
 export function buildUnifiedSlotItems(
   contract: SlotContractLike,
   server: readonly UIContributionSummary[],
@@ -53,7 +47,7 @@ export function buildUnifiedSlotItems(
 ): UnifiedSlotItem[] {
   const items = toItems(server, client, options.clientMatched);
   const explicitKind = contract?.kind;
-  if (!explicitKind) return dispatchLegacyMultiplicity(contract?.multiplicity, items);
+  if (!explicitKind) return [];
 
   switch (explicitKind) {
     case "single":
@@ -69,7 +63,7 @@ export function buildUnifiedSlotItems(
       // merge both families by shadow priority without a second selector system.
       return pickChainWinner(items);
     default:
-      return dispatchLegacyMultiplicity(contract?.multiplicity, items);
+      return [];
   }
 }
 
@@ -157,20 +151,6 @@ function shadowWinner(items: UnifiedSlotItem[], cell: string): UnifiedSlotItem |
   return first;
 }
 
-function dispatchLegacyMultiplicity(
-  multiplicity: SlotSnapshot["multiplicity"] | ClientSlotDefinition["multiplicity"] | undefined,
-  items: UnifiedSlotItem[],
-): UnifiedSlotItem[] {
-  const legacy = multiplicity ?? "ordered_multiple";
-  if (legacy === "single" || legacy === "exclusive") {
-    return items.sort(compareLegacyStable).slice(0, 1);
-  }
-  if (legacy === "replaceable_single") {
-    return items.sort(compareLegacyReplacement).slice(0, 1);
-  }
-  return items.sort(compareLegacyStable);
-}
-
 function compareShadow(a: UnifiedSlotItem, b: UnifiedSlotItem): number {
   // DSH-style shadow priority: lower number wins. Registration sequence is
   // represented by stable source ordering/key only after priority is unique.
@@ -192,19 +172,6 @@ function compareAssembly(a: UnifiedSlotItem, b: UnifiedSlotItem): number {
   if (a.source === b.source) return a.key.localeCompare(b.key);
   // Server entries are assembled before client entries in the host snapshot.
   return a.source === "server" ? -1 : 1;
-}
-
-function compareLegacyStable(a: UnifiedSlotItem, b: UnifiedSlotItem): number {
-  const ordering = a.ordering - b.ordering;
-  if (ordering !== 0) return ordering;
-  if (a.source === "client" && b.source === "client" && a.client.strict && b.client.strict) {
-    return a.client.sequence - b.client.sequence || a.key.localeCompare(b.key);
-  }
-  return b.priority - a.priority || a.key.localeCompare(b.key);
-}
-
-function compareLegacyReplacement(a: UnifiedSlotItem, b: UnifiedSlotItem): number {
-  return b.priority - a.priority || a.ordering - b.ordering || a.key.localeCompare(b.key);
 }
 
 function normalizeIdentity(value: unknown, fallback: string): string {

@@ -178,7 +178,7 @@ func TestConfigurationBackupSuccessPreservesActiveAndCloneBinding(t *testing.T) 
 	}
 }
 
-func TestLegacyBackupSecretsRequireEncryptedArchive(t *testing.T) {
+func TestBackupSecretsRequireExplicitSecretExport(t *testing.T) {
 	db, svc := configurationDB(t)
 	ctx, finish := configurationScope(t, svc)
 	defer finish()
@@ -189,17 +189,11 @@ func TestLegacyBackupSecretsRequireEncryptedArchive(t *testing.T) {
 	if err := system.NewSettingsBackupContributor(db).RestoreSettings(ctx, settings, dataportability.RestoreOptions{}); err == nil {
 		t.Fatal("legacy unencrypted sensitive setting was accepted")
 	}
-	if err := system.NewSettingsBackupContributor(db).RestoreSettings(ctx, settings, dataportability.RestoreOptions{AllowLegacySecrets: true}); err != nil {
-		t.Fatal(err)
-	}
 
 	models := configurationBackupReader{components: map[string]string{
 		chat.ComponentIDModelConfigs: `{"id":20,"name":"legacy-secret-model","api_type":"openai","model_name":"legacy","provider_config_json":"{\"accessToken\":\"legacy-provider-secret\"}"}`,
 	}}
 	if err := chat.NewModelConfigBackupContributor(db).RestoreModelConfigs(ctx, models, dataportability.RestoreOptions{}); err == nil {
 		t.Fatal("legacy unencrypted model provider secret was accepted")
-	}
-	if err := chat.NewModelConfigBackupContributor(db).RestoreModelConfigs(ctx, models, dataportability.RestoreOptions{AllowLegacySecrets: true}); err != nil {
-		t.Fatal(err)
 	}
 }

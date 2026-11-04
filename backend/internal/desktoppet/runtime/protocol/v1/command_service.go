@@ -29,7 +29,6 @@ const (
 
 type CommandService interface {
 	CreateDurableCommand(spaceID, deviceID, commandType, idempotencyKey, coalesceKey string, deviceSeq int64, payload RevisionPayload) (*RuntimeCommand, error)
-	CreateEphemeralCommand(spaceID, deviceID, commandType, idempotencyKey string, payload []byte) (*RuntimeCommand, error)
 	CreateEphemeralCommandForSession(spaceID, deviceID, runtimeID, sessionID, installationID, commandType, idempotencyKey string, payload []byte) (*RuntimeCommand, error)
 	GetCommand(commandID string) (*RuntimeCommand, error)
 	GetCommandByIdempotencyKey(idempotencyKey string) (*RuntimeCommand, error)
@@ -218,14 +217,6 @@ func (s *commandService) CreateDurableCommand(spaceID, deviceID, commandType, id
 		return result, ErrCommandDuplication
 	}
 	return result, nil
-}
-
-func (s *commandService) CreateEphemeralCommand(spaceID, deviceID, commandType, idempotencyKey string, payload []byte) (*RuntimeCommand, error) {
-	// Ephemeral commands are physical effects owned by one concrete runtime
-	// websocket session. Creating an unbound command would allow a reconnecting
-	// runtime to inherit stale work, so fail closed and require the session-bound
-	// constructor everywhere. Keep this method only for interface compatibility.
-	return nil, errors.New("unbound ephemeral command creation is disabled; use CreateEphemeralCommandForSession")
 }
 
 func (s *commandService) CreateEphemeralCommandForSession(spaceID, deviceID, runtimeID, sessionID, installationID, commandType, idempotencyKey string, payload []byte) (*RuntimeCommand, error) {
@@ -1219,13 +1210,7 @@ func playbackLivenessDeadline(cmd *RuntimeCommand, timeoutSec int) (time.Time, b
 	}
 	startedAt, ok := parseRuntimeCommandTime(cmd.PlaybackStartedAt)
 	if !ok {
-		// Legacy rows may predate command-level playback_started_at persistence.
-		// updated_at is the transition timestamp for playback_started and is a safe
-		// conservative fallback for those rows.
-		startedAt, ok = parseRuntimeCommandTime(cmd.UpdatedAt)
-		if !ok {
-			return time.Time{}, false
-		}
+		return time.Time{}, false
 	}
 
 	grace := time.Duration(timeoutSec) * time.Second

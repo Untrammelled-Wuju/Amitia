@@ -13,7 +13,6 @@ import (
 
 type SlotID string
 
-type SlotMultiplicity string
 type SlotDispatchKind string
 type SlotScope string
 
@@ -21,14 +20,6 @@ const (
 	ScopeRoot         SlotScope = "root"
 	ScopeSessionMaybe SlotScope = "session-maybe"
 	ScopeSession      SlotScope = "session"
-)
-
-const (
-	MultiplicitySingle            SlotMultiplicity = "single"
-	MultiplicityMultiple          SlotMultiplicity = "multiple"
-	MultiplicityOrderedMultiple   SlotMultiplicity = "ordered_multiple"
-	MultiplicityReplaceableSingle SlotMultiplicity = "replaceable_single"
-	MultiplicityExclusive         SlotMultiplicity = "exclusive"
 )
 
 const (
@@ -65,8 +56,7 @@ type SlotDefinition struct {
 	SlotID            SlotID            `json:"slotId"`
 	ContractVersion   int               `json:"contractVersion"`
 	SupportedKinds    []string          `json:"supportedKinds"`
-	DispatchKind      SlotDispatchKind  `json:"kind,omitempty"`
-	Multiplicity      SlotMultiplicity  `json:"multiplicity"`
+	DispatchKind      SlotDispatchKind  `json:"kind"`
 	Layout            SlotLayout        `json:"layout"`
 	ContextSchema     json.RawMessage   `json:"contextSchema,omitempty"`
 	PerformanceBudget PerformanceBudget `json:"performanceBudget"`
@@ -143,17 +133,9 @@ func (r *SlotRegistry) register(ownerExtension string, def *SlotDefinition, dyna
 		return ErrNoSupportedKinds
 	}
 	copyDef := cloneSlotDefinition(def)
-	if copyDef.DispatchKind == "" {
-		copyDef.DispatchKind = dispatchKindFromMultiplicity(copyDef.Multiplicity)
-	}
 	if !validDispatchKind(copyDef.DispatchKind) {
 		return fmt.Errorf("%w: %s", ErrInvalidSlotDispatchKind, copyDef.DispatchKind)
 	}
-	// DispatchKind is the authoritative composition contract. Multiplicity is
-	// retained only as a backwards-compatible projection for older clients.
-	// Normalize incompatible legacy values here so a keyed/chain/list slot can
-	// never be silently collapsed by an old multiplicity branch downstream.
-	copyDef.Multiplicity = compatibleMultiplicity(copyDef.DispatchKind, copyDef.Multiplicity)
 	if dynamic {
 		copyDef.Dynamic = true
 		copyDef.OwnerExtension = ownerExtension
@@ -198,56 +180,6 @@ func validDispatchKind(kind SlotDispatchKind) bool {
 	default:
 		return false
 	}
-}
-
-func dispatchKindFromMultiplicity(m SlotMultiplicity) SlotDispatchKind {
-	switch m {
-	case MultiplicitySingle, MultiplicityReplaceableSingle, MultiplicityExclusive:
-		return DispatchSingle
-	default:
-		return DispatchList
-	}
-}
-
-func multiplicityFromDispatchKind(kind SlotDispatchKind) SlotMultiplicity {
-	switch kind {
-	case DispatchSingle, DispatchChain:
-		// Legacy multiplicity has no chain selector. Rendering one winner is the
-		// safest compatibility projection and avoids rendering every fallback.
-		return MultiplicityReplaceableSingle
-	case DispatchKeyed:
-		return MultiplicityMultiple
-	case DispatchList:
-		return MultiplicityOrderedMultiple
-	default:
-		return MultiplicityOrderedMultiple
-	}
-}
-
-func compatibleMultiplicity(kind SlotDispatchKind, multiplicity SlotMultiplicity) SlotMultiplicity {
-	switch kind {
-	case DispatchSingle:
-		switch multiplicity {
-		case MultiplicitySingle, MultiplicityReplaceableSingle, MultiplicityExclusive:
-			return multiplicity
-		}
-	case DispatchList:
-		switch multiplicity {
-		case MultiplicityMultiple, MultiplicityOrderedMultiple:
-			return multiplicity
-		}
-	case DispatchKeyed:
-		switch multiplicity {
-		case MultiplicityMultiple, MultiplicityOrderedMultiple:
-			return multiplicity
-		}
-	case DispatchChain:
-		switch multiplicity {
-		case MultiplicitySingle, MultiplicityReplaceableSingle, MultiplicityExclusive:
-			return multiplicity
-		}
-	}
-	return multiplicityFromDispatchKind(kind)
 }
 
 func scopeCanContain(parent SlotScope, child SlotScope) bool {
@@ -528,64 +460,64 @@ func DefaultSlots() []*SlotDefinition {
 		UpdateFrequency: 5 * time.Second,
 	}
 	slots := []*SlotDefinition{
-		{SlotID: "root", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "UI 根组合槽位"},
-		{SlotID: "provider.app.shell", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "应用 Shell Provider 组合边界"},
-		{SlotID: "provider.app.navigation", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "应用导航 Provider 组合边界"},
-		{SlotID: "provider.app.workspace", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "应用工作区 Provider 组合边界"},
-		{SlotID: "provider.app.workspace.sidebar", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "应用工作区第二栏 Provider 组合边界"},
-		{SlotID: "provider.route.registry", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page"}, Multiplicity: MultiplicityOrderedMultiple, Layout: LayoutHidden, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "路由注册 Provider 组合边界"},
-		{SlotID: "provider.page.provider", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "页面 Provider 组合边界"},
-		{SlotID: "provider.conversation.shell", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "会话 Shell Provider 组合边界"},
-		{SlotID: "provider.conversation.header", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "会话头部 Provider 组合边界"},
-		{SlotID: "provider.conversation.messages", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "会话消息区 Provider 组合边界"},
-		{SlotID: "provider.conversation.message_renderer", ContractVersion: 1, SupportedKinds: []string{"message_renderer", "panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "消息渲染 Provider 组合边界"},
-		{SlotID: "provider.conversation.sidebar", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "会话侧栏 Provider 组合边界"},
-		{SlotID: "provider.conversation.composer", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "会话输入区 Provider 组合边界"},
-		{SlotID: "provider.conversation.overlay", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "会话浮层 Provider 组合边界"},
-		{SlotID: "provider.character.shell", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "角色 Shell Provider 组合边界"},
-		{SlotID: "provider.character.detail", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "角色详情 Provider 组合边界"},
-		{SlotID: "provider.memory.shell", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "记忆 Shell Provider 组合边界"},
-		{SlotID: "provider.memory.detail", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "记忆详情 Provider 组合边界"},
-		{SlotID: "provider.settings.shell", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "设置 Shell Provider 组合边界"},
-		{SlotID: "provider.settings.section", ContractVersion: 1, SupportedKinds: []string{"settings_section", "panel", "schema_page", "web_page"}, Multiplicity: MultiplicityOrderedMultiple, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "设置分节 Provider 组合边界"},
-		{SlotID: "provider.extension.center", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "扩展中心 Provider 组合边界"},
-		{SlotID: "provider.extension.page", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "扩展页面 Provider 组合边界"},
-		{SlotID: "provider.ui.theme", ContractVersion: 1, SupportedKinds: []string{"panel"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutHidden, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "主题 Provider 组合边界"},
-		{SlotID: "provider.ui.tokens", ContractVersion: 1, SupportedKinds: []string{"panel"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutHidden, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "Token Provider 组合边界"},
-		{SlotID: "provider.ui.icons", ContractVersion: 1, SupportedKinds: []string{"panel"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutHidden, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "图标 Provider 组合边界"},
-		{SlotID: "provider.ui.components", ContractVersion: 1, SupportedKinds: []string{"panel"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutHidden, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "组件 Provider 组合边界"},
-		{SlotID: "extension.center.header.action", ContractVersion: 1, SupportedKinds: []string{"action", "menu_item"}, Multiplicity: MultiplicityOrderedMultiple, Layout: LayoutInline, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "扩展中心顶部操作区"},
-		{SlotID: "extension.center.card.badge", ContractVersion: 1, SupportedKinds: []string{"card", "badge"}, Multiplicity: MultiplicityMultiple, Layout: LayoutGrid, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackEmpty, Description: "扩展中心卡片徽章"},
-		{SlotID: "extension.detail.tab", ContractVersion: 1, SupportedKinds: []string{"schema_page", "web_page"}, Multiplicity: MultiplicityOrderedMultiple, Layout: LayoutTabs, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackEmpty, Description: "扩展详情标签页"},
-		{SlotID: "extension.detail.action", ContractVersion: 1, SupportedKinds: []string{"action"}, Multiplicity: MultiplicityOrderedMultiple, Layout: LayoutInline, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "扩展详情操作区"},
-		{SlotID: "extension.settings.page", ContractVersion: 1, SupportedKinds: []string{"schema_page"}, Multiplicity: MultiplicitySingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "扩展设置主页面"},
-		{SlotID: "extension.settings.section", ContractVersion: 1, SupportedKinds: []string{"schema_page", "panel"}, Multiplicity: MultiplicityOrderedMultiple, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackEmpty, Description: "扩展设置分节"},
-		{SlotID: "chat.header.action", ContractVersion: 1, SupportedKinds: []string{"action", "toolbar_item"}, Multiplicity: MultiplicityOrderedMultiple, Layout: LayoutInline, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "聊天顶部操作"},
-		{SlotID: "chat.sidebar.panel", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page"}, Multiplicity: MultiplicityOrderedMultiple, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackEmpty, Description: "聊天侧栏面板"},
-		{SlotID: "chat.profile_summary.panel", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "聊天用户画像摘要面板"},
-		{SlotID: "chat.memory_context.panel", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "聊天记忆上下文面板"},
-		{SlotID: "chat.message.action", ContractVersion: 1, SupportedKinds: []string{"message_action", "action"}, Multiplicity: MultiplicityOrderedMultiple, Layout: LayoutInline, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "消息操作按钮"},
-		{SlotID: "chat.message.renderer", ContractVersion: 1, SupportedKinds: []string{"message_renderer"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "消息渲染器"},
-		{SlotID: "chat.conversation.node", ContractVersion: 1, SupportedKinds: []string{"message_renderer"}, Multiplicity: MultiplicityOrderedMultiple, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "会话事件投影节点"},
-		{SlotID: "chat.message.custom_renderer", ContractVersion: 1, SupportedKinds: []string{"message_renderer"}, Multiplicity: MultiplicityOrderedMultiple, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "扩展消息类型渲染器"},
-		{SlotID: "chat.message.attachment_renderer", ContractVersion: 1, SupportedKinds: []string{"message_renderer"}, Multiplicity: MultiplicityOrderedMultiple, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "消息附件渲染器"},
-		{SlotID: "chat.message.badge", ContractVersion: 1, SupportedKinds: []string{"badge", "status_item", "card"}, Multiplicity: MultiplicityOrderedMultiple, Layout: LayoutInline, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "消息徽章"},
-		{SlotID: "chat.composer.action", ContractVersion: 1, SupportedKinds: []string{"composer_action", "action"}, Multiplicity: MultiplicityOrderedMultiple, Layout: LayoutInline, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "输入框操作"},
-		{SlotID: "chat.composer.attachment", ContractVersion: 1, SupportedKinds: []string{"action"}, Multiplicity: MultiplicityMultiple, Layout: LayoutInline, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "输入框附件"},
-		{SlotID: "chat.composer.hint", ContractVersion: 1, SupportedKinds: []string{"status_item", "card", "panel"}, Multiplicity: MultiplicityOrderedMultiple, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "输入框提示"},
-		{SlotID: "chat.empty_state.card", ContractVersion: 1, SupportedKinds: []string{"card", "schema_page"}, Multiplicity: MultiplicityMultiple, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackEmpty, Description: "聊天空状态卡片"},
-		{SlotID: "chat.status.item", ContractVersion: 1, SupportedKinds: []string{"status_item"}, Multiplicity: MultiplicityOrderedMultiple, Layout: LayoutInline, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "聊天状态项"},
-		{SlotID: "character.detail.tab", ContractVersion: 1, SupportedKinds: []string{"schema_page", "web_page"}, Multiplicity: MultiplicityOrderedMultiple, Layout: LayoutTabs, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackEmpty, Description: "角色详情标签页"},
-		{SlotID: "character.detail.action", ContractVersion: 1, SupportedKinds: []string{"action"}, Multiplicity: MultiplicityOrderedMultiple, Layout: LayoutInline, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "角色详情操作"},
-		{SlotID: "character.sidebar.card", ContractVersion: 1, SupportedKinds: []string{"card", "panel"}, Multiplicity: MultiplicityMultiple, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackEmpty, Description: "角色侧栏卡片"},
-		{SlotID: "system.status.item", ContractVersion: 1, SupportedKinds: []string{"status_item"}, Multiplicity: MultiplicityMultiple, Layout: LayoutInline, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "系统状态项"},
-		{SlotID: "system.settings.section", ContractVersion: 1, SupportedKinds: []string{"settings_section", "schema_page"}, Multiplicity: MultiplicityOrderedMultiple, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackEmpty, Description: "系统设置分节"},
-		{SlotID: "system.diagnostics.tab", ContractVersion: 1, SupportedKinds: []string{"schema_page", "panel"}, Multiplicity: MultiplicityOrderedMultiple, Layout: LayoutTabs, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackEmpty, Description: "系统诊断标签页"},
-		{SlotID: "desktop.command", ContractVersion: 1, SupportedKinds: []string{"desktop_command"}, Multiplicity: MultiplicityMultiple, Layout: LayoutHidden, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "桌面命令"},
-		{SlotID: "desktop.application_menu.item", ContractVersion: 1, SupportedKinds: []string{"menu_item"}, Multiplicity: MultiplicityOrderedMultiple, Layout: LayoutHidden, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "桌面菜单项"},
-		{SlotID: "desktop.context_menu.item", ContractVersion: 1, SupportedKinds: []string{"menu_item"}, Multiplicity: MultiplicityOrderedMultiple, Layout: LayoutHidden, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "桌面上下文菜单项"},
-		{SlotID: "desktop.tray.item", ContractVersion: 1, SupportedKinds: []string{"menu_item", "action"}, Multiplicity: MultiplicityOrderedMultiple, Layout: LayoutHidden, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "托盘菜单项"},
-		{SlotID: "desktop.window.page", ContractVersion: 1, SupportedKinds: []string{"schema_page", "web_page"}, Multiplicity: MultiplicitySingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "桌面独立窗口页面"},
+		{SlotID: "root", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "UI 根组合槽位"},
+		{SlotID: "provider.app.shell", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "应用 Shell Provider 组合边界"},
+		{SlotID: "provider.app.navigation", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "应用导航 Provider 组合边界"},
+		{SlotID: "provider.app.workspace", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "应用工作区 Provider 组合边界"},
+		{SlotID: "provider.app.workspace.sidebar", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "应用工作区第二栏 Provider 组合边界"},
+		{SlotID: "provider.route.registry", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page"}, Layout: LayoutHidden, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "路由注册 Provider 组合边界"},
+		{SlotID: "provider.page.provider", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "页面 Provider 组合边界"},
+		{SlotID: "provider.conversation.shell", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "会话 Shell Provider 组合边界"},
+		{SlotID: "provider.conversation.header", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "会话头部 Provider 组合边界"},
+		{SlotID: "provider.conversation.messages", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "会话消息区 Provider 组合边界"},
+		{SlotID: "provider.conversation.message_renderer", ContractVersion: 1, SupportedKinds: []string{"message_renderer", "panel", "schema_page", "web_page"}, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "消息渲染 Provider 组合边界"},
+		{SlotID: "provider.conversation.sidebar", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "会话侧栏 Provider 组合边界"},
+		{SlotID: "provider.conversation.composer", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "会话输入区 Provider 组合边界"},
+		{SlotID: "provider.conversation.overlay", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "会话浮层 Provider 组合边界"},
+		{SlotID: "provider.character.shell", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "角色 Shell Provider 组合边界"},
+		{SlotID: "provider.character.detail", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "角色详情 Provider 组合边界"},
+		{SlotID: "provider.memory.shell", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "记忆 Shell Provider 组合边界"},
+		{SlotID: "provider.memory.detail", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "记忆详情 Provider 组合边界"},
+		{SlotID: "provider.settings.shell", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "设置 Shell Provider 组合边界"},
+		{SlotID: "provider.settings.section", ContractVersion: 1, SupportedKinds: []string{"settings_section", "panel", "schema_page", "web_page"}, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "设置分节 Provider 组合边界"},
+		{SlotID: "provider.extension.center", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "扩展中心 Provider 组合边界"},
+		{SlotID: "provider.extension.page", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "扩展页面 Provider 组合边界"},
+		{SlotID: "provider.ui.theme", ContractVersion: 1, SupportedKinds: []string{"panel"}, Layout: LayoutHidden, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "主题 Provider 组合边界"},
+		{SlotID: "provider.ui.tokens", ContractVersion: 1, SupportedKinds: []string{"panel"}, Layout: LayoutHidden, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "Token Provider 组合边界"},
+		{SlotID: "provider.ui.icons", ContractVersion: 1, SupportedKinds: []string{"panel"}, Layout: LayoutHidden, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "图标 Provider 组合边界"},
+		{SlotID: "provider.ui.components", ContractVersion: 1, SupportedKinds: []string{"panel"}, Layout: LayoutHidden, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "组件 Provider 组合边界"},
+		{SlotID: "extension.center.header.action", ContractVersion: 1, SupportedKinds: []string{"action", "menu_item"}, Layout: LayoutInline, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "扩展中心顶部操作区"},
+		{SlotID: "extension.center.card.badge", ContractVersion: 1, SupportedKinds: []string{"card", "badge"}, Layout: LayoutGrid, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackEmpty, Description: "扩展中心卡片徽章"},
+		{SlotID: "extension.detail.tab", ContractVersion: 1, SupportedKinds: []string{"schema_page", "web_page"}, Layout: LayoutTabs, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackEmpty, Description: "扩展详情标签页"},
+		{SlotID: "extension.detail.action", ContractVersion: 1, SupportedKinds: []string{"action"}, Layout: LayoutInline, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "扩展详情操作区"},
+		{SlotID: "extension.settings.page", ContractVersion: 1, SupportedKinds: []string{"schema_page"}, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "扩展设置主页面"},
+		{SlotID: "extension.settings.section", ContractVersion: 1, SupportedKinds: []string{"schema_page", "panel"}, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackEmpty, Description: "扩展设置分节"},
+		{SlotID: "chat.header.action", ContractVersion: 1, SupportedKinds: []string{"action", "toolbar_item"}, Layout: LayoutInline, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "聊天顶部操作"},
+		{SlotID: "chat.sidebar.panel", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page"}, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackEmpty, Description: "聊天侧栏面板"},
+		{SlotID: "chat.profile_summary.panel", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "聊天用户画像摘要面板"},
+		{SlotID: "chat.memory_context.panel", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "聊天记忆上下文面板"},
+		{SlotID: "chat.message.action", ContractVersion: 1, SupportedKinds: []string{"message_action", "action"}, Layout: LayoutInline, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "消息操作按钮"},
+		{SlotID: "chat.message.renderer", ContractVersion: 1, SupportedKinds: []string{"message_renderer"}, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "消息渲染器"},
+		{SlotID: "chat.conversation.node", ContractVersion: 1, SupportedKinds: []string{"message_renderer"}, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "会话事件投影节点"},
+		{SlotID: "chat.message.custom_renderer", ContractVersion: 1, SupportedKinds: []string{"message_renderer"}, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "扩展消息类型渲染器"},
+		{SlotID: "chat.message.attachment_renderer", ContractVersion: 1, SupportedKinds: []string{"message_renderer"}, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "消息附件渲染器"},
+		{SlotID: "chat.message.badge", ContractVersion: 1, SupportedKinds: []string{"badge", "status_item", "card"}, Layout: LayoutInline, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "消息徽章"},
+		{SlotID: "chat.composer.action", ContractVersion: 1, SupportedKinds: []string{"composer_action", "action"}, Layout: LayoutInline, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "输入框操作"},
+		{SlotID: "chat.composer.attachment", ContractVersion: 1, SupportedKinds: []string{"action"}, Layout: LayoutInline, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "输入框附件"},
+		{SlotID: "chat.composer.hint", ContractVersion: 1, SupportedKinds: []string{"status_item", "card", "panel"}, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "输入框提示"},
+		{SlotID: "chat.empty_state.card", ContractVersion: 1, SupportedKinds: []string{"card", "schema_page"}, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackEmpty, Description: "聊天空状态卡片"},
+		{SlotID: "chat.status.item", ContractVersion: 1, SupportedKinds: []string{"status_item"}, Layout: LayoutInline, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "聊天状态项"},
+		{SlotID: "character.detail.tab", ContractVersion: 1, SupportedKinds: []string{"schema_page", "web_page"}, Layout: LayoutTabs, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackEmpty, Description: "角色详情标签页"},
+		{SlotID: "character.detail.action", ContractVersion: 1, SupportedKinds: []string{"action"}, Layout: LayoutInline, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "角色详情操作"},
+		{SlotID: "character.sidebar.card", ContractVersion: 1, SupportedKinds: []string{"card", "panel"}, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackEmpty, Description: "角色侧栏卡片"},
+		{SlotID: "system.status.item", ContractVersion: 1, SupportedKinds: []string{"status_item"}, Layout: LayoutInline, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "系统状态项"},
+		{SlotID: "system.settings.section", ContractVersion: 1, SupportedKinds: []string{"settings_section", "schema_page"}, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackEmpty, Description: "系统设置分节"},
+		{SlotID: "system.diagnostics.tab", ContractVersion: 1, SupportedKinds: []string{"schema_page", "panel"}, Layout: LayoutTabs, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackEmpty, Description: "系统诊断标签页"},
+		{SlotID: "desktop.command", ContractVersion: 1, SupportedKinds: []string{"desktop_command"}, Layout: LayoutHidden, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "桌面命令"},
+		{SlotID: "desktop.application_menu.item", ContractVersion: 1, SupportedKinds: []string{"menu_item"}, Layout: LayoutHidden, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "桌面菜单项"},
+		{SlotID: "desktop.context_menu.item", ContractVersion: 1, SupportedKinds: []string{"menu_item"}, Layout: LayoutHidden, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "桌面上下文菜单项"},
+		{SlotID: "desktop.tray.item", ContractVersion: 1, SupportedKinds: []string{"menu_item", "action"}, Layout: LayoutHidden, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "托盘菜单项"},
+		{SlotID: "desktop.window.page", ContractVersion: 1, SupportedKinds: []string{"schema_page", "web_page"}, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "桌面独立窗口页面"},
 	}
 	parents := map[SlotID]SlotID{
 		"provider.app.shell":                     "root",
@@ -698,7 +630,6 @@ func DefaultSlots() []*SlotDefinition {
 		} else {
 			def.DispatchKind = DispatchList
 		}
-		def.Multiplicity = compatibleMultiplicity(def.DispatchKind, def.Multiplicity)
 		if parent, ok := parents[def.SlotID]; ok {
 			def.ParentSlotID = parent
 		} else if def.SlotID != "root" {
@@ -745,7 +676,6 @@ type SlotSnapshot struct {
 	SupportedKinds    []string               `json:"supportedKinds,omitempty"`
 	DispatchKind      SlotDispatchKind       `json:"kind,omitempty"`
 	Layout            SlotLayout             `json:"layout"`
-	Multiplicity      SlotMultiplicity       `json:"multiplicity"`
 	FallbackPolicy    FallbackPolicy         `json:"fallbackPolicy"`
 	Description       string                 `json:"description,omitempty"`
 	Platform          []string               `json:"platforms,omitempty"`
@@ -814,7 +744,6 @@ func (s *SnapshotService) GetSnapshot(ctx context.Context) (*UIContributionSnaps
 			SupportedKinds:    append([]string(nil), slotDef.SupportedKinds...),
 			DispatchKind:      slotDef.DispatchKind,
 			Layout:            slotDef.Layout,
-			Multiplicity:      slotDef.Multiplicity,
 			FallbackPolicy:    slotDef.FallbackPolicy,
 			Description:       slotDef.Description,
 			Platform:          append([]string(nil), slotDef.Platform...),

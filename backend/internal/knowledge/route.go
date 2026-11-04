@@ -14,9 +14,6 @@ const (
 	RoutingModeDiagnostic = "diagnostic"
 
 	PolicyModeActive        = "active"
-	PolicyModeActiveShadow  = "active_shadow"
-	PolicyModeLegacy        = "legacy"
-	PolicyModeLegacyShadow  = "legacy_shadow"
 	PolicyModeDiagnostic    = "diagnostic"
 	RouteReasonChatIntent   = "chat_document_intent"
 	RouteReasonChatNoIntent = "chat_no_document_intent"
@@ -33,8 +30,6 @@ type RouteDecision struct {
 	RoutingMode            string
 	PolicyMode             string
 	RouteReason            string
-	ShadowLevel            string
-	ShadowReason           string
 	Degraded               bool
 	RouteDegradationReason string
 }
@@ -63,27 +58,6 @@ func ResolveChatRoute(text string, features config.KnowledgeFeatureConfig) Route
 		decision.EffectiveLevel = RetrievalLevelNone
 		decision.RouteReason = RouteReasonChatNoIntent
 	}
-	if !features.RetrievalPolicyEnabled {
-		legacyLevel := RetrievalLevelNone
-		if utf8.RuneCountInString(strings.TrimSpace(text)) >= 2 && utf8.RuneCountInString(strings.TrimSpace(text)) <= 4096 {
-			legacyLevel = RetrievalLevelFast
-		}
-		decision.EffectiveLevel = legacyLevel
-		decision.PolicyMode = PolicyModeLegacy
-		decision.RouteReason = RouteReasonChatIntent
-		if features.RetrievalPolicyShadow {
-			decision.PolicyMode = PolicyModeLegacyShadow
-			if activeLevel == "" {
-				activeLevel = RetrievalLevelNone
-			}
-			decision.ShadowLevel = activeLevel
-			decision.ShadowReason = "new_policy_candidate"
-		}
-	} else if features.RetrievalPolicyShadow {
-		decision.PolicyMode = PolicyModeActiveShadow
-		decision.ShadowLevel = RetrievalLevelFast
-		decision.ShadowReason = "legacy_candidate"
-	}
 	return applyFeatureGates(decision, features)
 }
 
@@ -103,9 +77,6 @@ func ResolveDiagnosticRoute(requestedLevel, plannedLevel string, features config
 		PolicyMode:     PolicyModeDiagnostic,
 		RouteReason:    reason,
 	}
-	if !features.RetrievalPolicyEnabled {
-		decision.PolicyMode = PolicyModeLegacy
-	}
 	return applyFeatureGates(decision, features)
 }
 
@@ -121,11 +92,6 @@ func applyFeatureGates(decision RouteDecision, features config.KnowledgeFeatureC
 			decision.Degraded = true
 			decision.RouteDegradationReason = "canonical_reader_disabled"
 		}
-	}
-	if decision.EffectiveLevel == RetrievalLevelDeep && !features.RetrievalPolicyEnabled {
-		decision.EffectiveLevel = RetrievalLevelFast
-		decision.Degraded = true
-		decision.RouteDegradationReason = "retrieval_policy_disabled"
 	}
 	return decision
 }

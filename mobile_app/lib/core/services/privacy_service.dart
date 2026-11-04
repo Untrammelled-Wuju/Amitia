@@ -79,14 +79,12 @@ class PrivacyService {
     required String targetType,
     required String scope,
     String reason = '',
-    String legacyDeletionId = '',
   }) async {
     final payload = <String, dynamic>{
       'targetId': targetId,
       'targetType': targetType,
       'scope': scope,
       'reason': reason,
-      if (legacyDeletionId.isNotEmpty) 'legacyDeletionId': legacyDeletionId,
     };
     payload['requestId'] = _requestId();
     final result = await _api.post<Map<String, dynamic>>(

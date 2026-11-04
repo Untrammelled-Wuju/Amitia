@@ -53,7 +53,6 @@ type ArtifactManager struct {
 	source          integration.KernelContributionSource
 	generations     integration.InstalledGenerationResolver
 	statePath       string
-	legacyStatePath string
 	targetGrantPath string
 	records         map[string]DeploymentRecord
 	targetGrants    map[string]TargetRootGrant
@@ -71,7 +70,6 @@ func NewArtifactManager(dataRoot string, source integration.KernelContributionSo
 		source:          source,
 		generations:     generations,
 		statePath:       filepath.Join(stateDir, "deployments.json"),
-		legacyStatePath: filepath.Join(dataRoot, "gamehost", "companions", "installations.json"),
 		targetGrantPath: filepath.Join(stateDir, "target-roots.json"),
 		records:         map[string]DeploymentRecord{},
 		targetGrants:    map[string]TargetRootGrant{},
@@ -91,37 +89,21 @@ func recordKey(extensionID, artifactID, targetRoot string) string {
 
 func (m *ArtifactManager) load() error {
 	data, err := os.ReadFile(m.statePath)
-	legacy := false
-	if os.IsNotExist(err) && strings.TrimSpace(m.legacyStatePath) != "" {
-		data, err = os.ReadFile(m.legacyStatePath)
-		legacy = err == nil
-	}
 	if os.IsNotExist(err) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	type persistedRecord struct {
-		DeploymentRecord
-		LegacyGameRoot string `json:"gameRoot,omitempty"`
-	}
-	var persisted []persistedRecord
+	var persisted []DeploymentRecord
 	if err := json.Unmarshal(data, &persisted); err != nil {
 		return fmt.Errorf("artifact: decode state: %w", err)
 	}
-	for _, item := range persisted {
-		r := item.DeploymentRecord
-		if strings.TrimSpace(r.TargetRoot) == "" {
-			r.TargetRoot = item.LegacyGameRoot
-		}
+	for _, r := range persisted {
 		if strings.TrimSpace(r.TargetRoot) == "" {
 			continue
 		}
 		m.records[recordKey(r.ExtensionID, r.ArtifactID, r.TargetRoot)] = r
-	}
-	if legacy {
-		return m.saveLocked()
 	}
 	return nil
 }

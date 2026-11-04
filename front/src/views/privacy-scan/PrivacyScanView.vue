@@ -23,9 +23,6 @@
     <el-card class="lifecycle-card" shadow="never">
       <template #header><strong>数据生命周期删除</strong></template>
       <p class="lifecycle-desc">按原始数据归属删除指定记忆、消息、会话或角色数据。以持有方回执确认读取阻断和清理结果。</p>
-      <el-select v-if="deletionStats.legacyRecords?.length" clearable placeholder="选择需要确认归属的旧删除任务" @change="selectLegacyDeletion">
-        <el-option v-for="item in deletionStats.legacyRecords" :key="item.id" :value="item.id" :label="`${item.targetType} / ${item.targetId} / ${item.scope}`" />
-      </el-select>
       <el-row :gutter="12">
         <el-col :xs="24" :sm="8">
           <el-select v-model="deletionForm.targetType" style="width: 100%" :disabled="deletionBusy">
@@ -94,12 +91,7 @@ const deletionBusy = ref(false);
 const deletionStats = ref<any>({});
 const deletionStatus = ref<any>(null);
 const securityResults = ref<any[]>([]);
-const deletionForm = reactive({ targetId: "", targetType: "memory", scope: "all", reason: "", legacyDeletionId: "" });
-function selectLegacyDeletion(id: string) {
-  const record = deletionStats.value.legacyRecords?.find((item: any) => item.id === id);
-  deletionForm.legacyDeletionId = id || "";
-  if (record) Object.assign(deletionForm, { targetId: record.targetId, targetType: record.targetType, scope: record.scope });
-}
+const deletionForm = reactive({ targetId: "", targetType: "memory", scope: "all", reason: "" });
 
 async function loadDeletionStats() {
   try {
@@ -120,7 +112,7 @@ async function submitDeletion() {
     const intents = await previewDeletion({ ...deletionForm, targetId: deletionForm.targetId.trim() });
     let selected = 0;
     if (intents.length > 1) {
-      const answer = await ElMessageBox.prompt(intents.map((item, index) => `${index + 1}：${item.target?.ownerId} / ${item.target?.roleId} / ${item.target?.legacy ? "历史记录" : "当前记录"}`).join("\n"), "请选择要删除的数据来源", { inputPattern: /^[1-9]\d*$/, inputErrorMessage: "请输入来源序号" });
+      const answer = await ElMessageBox.prompt(intents.map((item, index) => `${index + 1}：${item.target?.ownerId} / ${item.target?.roleId}`).join("\n"), "请选择要删除的数据来源", { inputPattern: /^[1-9]\d*$/, inputErrorMessage: "请输入来源序号" });
       selected = Number(answer.value) - 1;
       if (!intents[selected]) throw new Error("数据来源序号无效");
     }

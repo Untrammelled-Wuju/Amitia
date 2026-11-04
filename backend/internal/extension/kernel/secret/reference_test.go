@@ -15,19 +15,6 @@ func TestParseRef_Canonical(t *testing.T) {
 	}
 }
 
-func TestParseRef_Legacy(t *testing.T) {
-	ref, err := ParseRef("mcp-secret://legacy/old-id")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !ref.Valid() {
-		t.Fatal("expected valid after conversion")
-	}
-	if !ref.IsLegacy() {
-		t.Fatal("expected legacy detection")
-	}
-}
-
 func TestParseRef_Invalid(t *testing.T) {
 	invalid := []string{
 		"",

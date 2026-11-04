@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
+	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_contribution"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_provider"
 )
@@ -29,21 +30,28 @@ func TestBuildUIContributionOpAllowsWebSandboxRuntimeBinding(t *testing.T) {
 			DefinitionHash: "sha256:test",
 		},
 	}
-	defData, err := json.Marshal(definition)
+	definitionData, err := json.Marshal(definition)
 	if err != nil {
+		t.Fatal(err)
+	}
+	definitionMap := map[string]any{}
+	if err := json.Unmarshal(definitionData, &definitionMap); err != nil {
 		t.Fatal(err)
 	}
 	installer := &TypedContributionInstaller{container: &Container{UIHost: ui_contribution.NewUIHost()}}
-	op, err := installer.buildUIContributionOp(context.Background(), domain.ContributionDefinition{
+	contribution := domain.ContributionDefinition{
 		ID:          "minecraft-dashboard",
 		ExtensionID: "com.amitiax/minecraft",
 		ModuleID:    "minecraft-runtime",
-		Kind:        domain.ContributionKindUIPage,
-	}, defData, 1)
+		Kind:        domain.ContributionKind("com.example.market/page"),
+		Adapter:     domain.ContributionAdapterUI,
+		Definition:  definitionMap,
+	}
+	op, err := installer.buildInstallOp(context.Background(), contribution, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if op.kind != domain.ContributionKindUIPage || op.doInstall == nil {
+	if op.kind != contribution.Kind || op.doInstall == nil {
 		t.Fatalf("unexpected install op: %+v", op)
 	}
 }
@@ -79,6 +87,39 @@ func TestBuildUIContributionOpKeepsHostRuntimeGate(t *testing.T) {
 	}, defData, 1)
 	if err == nil || !strings.Contains(err.Error(), "is not registered") {
 		t.Fatalf("host runtime allowlist must stay enforced, got %v", err)
+	}
+}
+
+func TestBuildUIContributionOpAllowsInlineSchema(t *testing.T) {
+	definition := ui_contribution.UIContributionDefinition{
+		ContributionID: "inline-page", ExtensionID: "com.example/inline", ModuleID: "inline-ui",
+		Kind: ui_contribution.UIContributionSchemaPage, ContractVersion: 1,
+		Entry: ui_contribution.UIEntryDefinition{
+			Type: ui_contribution.SandboxSchemaRenderer, ContentHash: "inline-v1",
+		},
+		Schema:  json.RawMessage(`{"schemaVersion":"schema-ui/1","type":"document","children":[{"id":"page","type":"page","children":[{"id":"title","type":"text","props":{"text":"Inline"}}]}]}`),
+		Sandbox: ui_contribution.UISandboxPolicy{Type: ui_contribution.SandboxSchemaRenderer},
+		Integrity: ui_contribution.ContributionIntegrity{
+			DefinitionHash: "inline-v1",
+		},
+	}
+	data, err := json.Marshal(definition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	installer := &TypedContributionInstaller{container: &Container{
+		UIHost: ui_contribution.NewUIHost(), SchemaValidator: schema_ui.NewValidator(),
+		SchemaRegistry: schema_ui.NewSchemaRegistry(schema_ui.NewValidator(), nil),
+	}}
+	op, err := installer.buildUIContributionOp(context.Background(), domain.ContributionDefinition{
+		ID: "inline-page", ExtensionID: "com.example/inline", ModuleID: "inline-ui",
+		Kind: domain.ContributionKind("com.example/inline-page"), Adapter: domain.ContributionAdapterUI,
+	}, data, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if op.kind != domain.ContributionKind("com.example/inline-page") || op.doInstall == nil {
+		t.Fatalf("unexpected inline schema operation: %+v", op)
 	}
 }
 

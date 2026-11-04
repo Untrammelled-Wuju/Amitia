@@ -16,7 +16,6 @@ type Batch struct {
 	PromotedConversationID    string `gorm:"column:promoted_conversation_id;type:text;not null;default:''" json:"promotedConversationId"`
 	PromotedConversationOwner string `gorm:"column:promoted_conversation_owner_id;type:text;not null;default:''" json:"promotedConversationOwnerId"`
 	PromotedCoreID            string `gorm:"column:promoted_core_id;type:text;not null;default:''" json:"promotedCoreId"`
-	LegacyConversationID      string `gorm:"column:legacy_conversation_id;type:text;not null;default:''" json:"legacyConversationId"`
 	ErrorCode                 string `gorm:"column:error_code;type:text;not null;default:''" json:"errorCode"`
 	ErrorMessage              string `gorm:"column:error_message;type:text;not null;default:''" json:"errorMessage"`
 	CreatedAt                 string `gorm:"column:created_at;type:text;not null;default:''" json:"createdAt"`

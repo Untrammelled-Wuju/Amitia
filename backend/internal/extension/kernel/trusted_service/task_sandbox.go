@@ -85,7 +85,7 @@ func PrepareIsolatedTaskNetworkLaunch(executable string, args []string, workDir,
 	if err := ValidateNetworkSandboxPrerequisites(policy); err != nil {
 		return TaskSandboxLaunch{}, err
 	}
-	plan, err := prepareNetworkLaunch(policy, executable, args, workDir, workDir, runtimeRoot, bundleRoot)
+	plan, err := prepareNetworkLaunchWithStateRoot(policy, executable, args, workDir, workDir, runtimeRoot, runtimeRoot, bundleRoot)
 	if err != nil {
 		return TaskSandboxLaunch{}, err
 	}

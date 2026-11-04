@@ -26,19 +26,11 @@ func (api *TrustedServiceAPI) RegisterRoutes(group *gin.RouterGroup) {
 	svc.DELETE("", trustedServiceReference(api.unregisterService))
 	svc.POST("/start", trustedServiceReference(api.startService))
 	svc.POST("/stop", trustedServiceReference(api.stopService))
+	svc.GET("/status", trustedServiceReference(api.getServiceStatus))
+	svc.GET("/health", trustedServiceReference(api.healthCheck))
 	svc.POST("/invoke", trustedServiceReference(api.invokeService))
-	svc.GET("/status", api.serviceOperationAlias(api.getServiceStatus, "status"))
-	svc.GET("/health", api.serviceOperationAlias(api.healthCheck, "health"))
-	svc.GET("/:serviceId", trustedServiceReference(api.getService))
-	svc.DELETE("/:serviceId", trustedServiceReference(api.unregisterService))
-	svc.POST("/:serviceId/start", trustedServiceReference(api.startService))
-	svc.POST("/:serviceId/stop", trustedServiceReference(api.stopService))
-	svc.GET("/:serviceId/status", trustedServiceReference(api.getServiceStatus))
-	svc.GET("/:serviceId/health", trustedServiceReference(api.healthCheck))
-	svc.POST("/:serviceId/invoke", trustedServiceReference(api.invokeService))
 	svc.GET("/quarantine/list", api.listQuarantined)
 	svc.POST("/quarantine/release", trustedServiceReference(api.releaseQuarantine))
-	svc.POST("/quarantine/:serviceId/release", trustedServiceReference(api.releaseQuarantine))
 }
 
 func (api *TrustedServiceAPI) getSupervisor() (*trusted_service.ProcessSupervisor, bool) {
@@ -136,7 +128,7 @@ func (api *TrustedServiceAPI) getService(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "trusted service runtime unavailable"})
 		return
 	}
-	serviceID := c.Param("serviceId")
+	serviceID := trustedServiceID(c)
 	inst, err := supervisor.Get(serviceID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
@@ -151,7 +143,7 @@ func (api *TrustedServiceAPI) unregisterService(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "trusted service runtime unavailable"})
 		return
 	}
-	serviceID := c.Param("serviceId")
+	serviceID := trustedServiceID(c)
 	if err := supervisor.Unregister(serviceID); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
@@ -165,7 +157,7 @@ func (api *TrustedServiceAPI) startService(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "trusted service runtime unavailable"})
 		return
 	}
-	serviceID := c.Param("serviceId")
+	serviceID := trustedServiceID(c)
 	var body struct {
 		InstanceID   string            `json:"instance_id"`
 		Generation   int64             `json:"generation"`
@@ -220,7 +212,7 @@ func (api *TrustedServiceAPI) stopService(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "trusted service runtime unavailable"})
 		return
 	}
-	serviceID := c.Param("serviceId")
+	serviceID := trustedServiceID(c)
 	var body struct {
 		Reason string `json:"reason"`
 		Force  bool   `json:"force"`
@@ -255,7 +247,7 @@ func (api *TrustedServiceAPI) getServiceStatus(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "trusted service runtime unavailable"})
 		return
 	}
-	serviceID := c.Param("serviceId")
+	serviceID := trustedServiceID(c)
 	inst, err := supervisor.Get(serviceID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
@@ -270,7 +262,7 @@ func (api *TrustedServiceAPI) healthCheck(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "trusted service runtime unavailable"})
 		return
 	}
-	serviceID := c.Param("serviceId")
+	serviceID := trustedServiceID(c)
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 	result, err := supervisor.HealthCheck(ctx, serviceID)
@@ -291,7 +283,7 @@ func (api *TrustedServiceAPI) invokeService(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "trusted service runtime unavailable"})
 		return
 	}
-	serviceID := c.Param("serviceId")
+	serviceID := trustedServiceID(c)
 	var body struct {
 		Operation string          `json:"operation"`
 		Input     json.RawMessage `json:"input"`
@@ -370,7 +362,7 @@ func (api *TrustedServiceAPI) releaseQuarantine(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "trusted service runtime unavailable"})
 		return
 	}
-	serviceID := c.Param("serviceId")
+	serviceID := trustedServiceID(c)
 	var body struct {
 		Reason string `json:"reason"`
 	}

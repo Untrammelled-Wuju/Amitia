@@ -75,18 +75,17 @@ func makeUninstallRecoveryOperation(t *testing.T, ctx context.Context, container
 		t.Fatal(err)
 	}
 	op := PackageOperationRecord{
-		OperationID:       opID,
-		TraceID:           "trace-" + opID,
-		SpaceID:           "user-1",
-		ScopeType:         "global",
-		ExtensionID:       extensionID,
-		OperationType:     "uninstall",
-		Status:            "in_progress",
-		CurrentStep:       "quarantine_metadata_restoring",
-		ArtifactID:        artifactID,
-		ConfirmationsJSON: `{"artifactPolicy":"retain"}`,
-		StartedAt:         now,
-		UpdatedAt:         now,
+		OperationID:   opID,
+		TraceID:       "trace-" + opID,
+		SpaceID:       "user-1",
+		ScopeType:     "global",
+		ExtensionID:   extensionID,
+		OperationType: "uninstall",
+		Status:        "in_progress",
+		CurrentStep:   "quarantine_metadata_restoring",
+		ArtifactID:    artifactID,
+		StartedAt:     now,
+		UpdatedAt:     now,
 	}
 	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
 		t.Fatal(err)

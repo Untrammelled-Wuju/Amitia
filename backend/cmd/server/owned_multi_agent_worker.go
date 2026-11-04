@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/agentrun"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/interaction"
@@ -48,6 +49,7 @@ type ownedMultiAgentWorkerRunner struct {
 	engine     ownedWorkerEngine
 	tracker    interaction.InteractionTracker
 	usageStore *mindruntime.ModelUsageStore
+	agentRuns  *agentrun.Service
 	mu         sync.Mutex
 	active     map[string]context.CancelFunc
 	closed     bool
@@ -237,6 +239,9 @@ func (r *ownedMultiAgentWorkerRunner) run(ctx context.Context, cancel context.Ca
 	}
 	roleLabel := firstNonEmptyText(req.WorkerRole, "coding_worker")
 	message = "当前 Worker 角色：" + roleLabel + "。只使用本次任务所需上下文，不读取无关角色私有记忆。\n\n" + message
+	if r.agentRuns != nil {
+		message += "\n\n子智能体会话：" + agentrun.ChildRunID(req.AssignmentID) + "。开始执行和完成阶段应调用 harness_agent_message_read 读取父对话新消息，使用 harness_agent_message_send 向父对话发送问题、进度或最终结果。"
+	}
 	response, runErr := r.engine.RunWorker(ctx, owned, business.Request{SpaceID: owned.SpaceID, DeviceID: owned.InitiatorDeviceID, TargetDeviceID: owned.TargetDeviceID, CoreID: owned.CoreID, RoleID: owned.RoleID, ConversationID: conversationID, RequestID: "ma-" + req.AssignmentID, Message: message, PermissionMode: req.PermissionMode, WorkerRole: roleLabel}, workspaces, req.WorkspaceID)
 	r.settleWorker(ctx, childID, req, response, runErr)
 }

@@ -45,7 +45,6 @@ type Handler struct {
 	db                *gorm.DB
 	importRepo        *importbatch.Repository
 	chatSvc           chat.Service
-	dataLifecycle     *mindruntime.DataLifecycleCoordinator
 	unifiedEntry      *interaction.UnifiedEntry
 	reconciliation    *mindruntime.ReconciliationEngine
 	versionInfo       atomic.Value
@@ -67,11 +66,11 @@ func (f ChannelAvailabilityFunc) Has(channelID string) bool {
 	return f != nil && f(channelID)
 }
 
-func NewHandler(srv Service, db *gorm.DB, chatSvc chat.Service, dataLifecycle *mindruntime.DataLifecycleCoordinator, unifiedEntry *interaction.UnifiedEntry, reconciliation *mindruntime.ReconciliationEngine, memoryConsumer business.MemoryConsumerPort) *Handler {
+func NewHandler(srv Service, db *gorm.DB, chatSvc chat.Service, unifiedEntry *interaction.UnifiedEntry, reconciliation *mindruntime.ReconciliationEngine, memoryConsumer business.MemoryConsumerPort) *Handler {
 	if service, ok := srv.(*service); ok {
 		service.memoryConsumer = memoryConsumer
 	}
-	h := &Handler{service: srv, db: db, importRepo: importbatch.NewRepository(db), chatSvc: chatSvc, memoryConsumer: memoryConsumer, unifiedEntry: unifiedEntry, dataLifecycle: dataLifecycle, reconciliation: reconciliation, shadowState: mindruntime.NewShadowState()}
+	h := &Handler{service: srv, db: db, importRepo: importbatch.NewRepository(db), chatSvc: chatSvc, memoryConsumer: memoryConsumer, unifiedEntry: unifiedEntry, reconciliation: reconciliation, shadowState: mindruntime.NewShadowState()}
 	h.versionInfo.Store(srv.GetVersion())
 	return h
 }

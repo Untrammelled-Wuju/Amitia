@@ -66,7 +66,6 @@ interface SnowLumaInstallPointer {
 
 interface InstallOfficialOptions {
   allowedRoot: string
-  legacyRoot?: string
   version?: string
   platform?: NodeJS.Platform
   arch?: NodeJS.Architecture
@@ -273,13 +272,10 @@ function mergeDirectory(source: string, destination: string): void {
   }
 }
 
-function ensureSharedDirectories(packageRoot: string, sharedRoot: string, legacyRoot: string): void {
+function ensureSharedDirectories(packageRoot: string, sharedRoot: string): void {
   for (const name of ["config", "data", "logs"]) {
     const shared = path.join(sharedRoot, name)
     fs.mkdirSync(shared, { recursive: true, mode: 0o700 })
-    if (legacyRoot && path.resolve(legacyRoot) !== path.resolve(packageRoot)) {
-      mergeDirectory(path.join(legacyRoot, name), shared)
-    }
     const target = path.join(packageRoot, name)
     if (fs.existsSync(target)) mergeDirectory(target, shared)
     fs.rmSync(target, { recursive: true, force: true })
@@ -326,7 +322,7 @@ export class SnowLumaInstaller {
     return pointer.previousInstallDir
   }
 
-  async install(legacyRoot = "", options: Omit<InstallOfficialOptions, "allowedRoot" | "legacyRoot"> = {}): Promise<SnowLumaInstallStatus> {
+  async install(options: Omit<InstallOfficialOptions, "allowedRoot"> = {}): Promise<SnowLumaInstallStatus> {
     if (this.running) return this.installState()
     this.running = true
     const version = options.version || SNOWLUMA_VERSION
@@ -384,7 +380,7 @@ export class SnowLumaInstaller {
       const pointerBefore = readInstallPointer(this.allowedRoot)
       this.status = { ...this.status, phase: "migrating", percent: 97, message: "正在迁移配置与账号数据" }
       options.onProgress?.(this.installState())
-      ensureSharedDirectories(installDir, path.join(root, "shared"), legacyRoot)
+      ensureSharedDirectories(installDir, path.join(root, "shared"))
       writeJsonAtomic(path.join(root, "install.json"), {
         schemaVersion: 1,
         version,

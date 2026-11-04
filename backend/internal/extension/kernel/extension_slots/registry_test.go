@@ -11,7 +11,7 @@ func dynamicTestSlot(id, parent, owner string) *SlotDefinition {
 		SlotID:          SlotID(id),
 		ContractVersion: 1,
 		SupportedKinds:  []string{"panel"},
-		Multiplicity:    MultiplicityOrderedMultiple,
+		DispatchKind:    DispatchList,
 		Layout:          LayoutStack,
 		FallbackPolicy:  FallbackEmpty,
 		ParentSlotID:    SlotID(parent),
@@ -214,9 +214,6 @@ func TestDefaultProviderSlotsFormRootedTree(t *testing.T) {
 	if composer.Scope != ScopeSessionMaybe {
 		t.Fatalf("composer scope = %q, want %q", composer.Scope, ScopeSessionMaybe)
 	}
-	if composer.Multiplicity != MultiplicityReplaceableSingle {
-		t.Fatalf("composer multiplicity = %q, want %q", composer.Multiplicity, MultiplicityReplaceableSingle)
-	}
 	if composer.DispatchKind != DispatchChain {
 		t.Fatalf("composer dispatch kind = %q, want %q", composer.DispatchKind, DispatchChain)
 	}
@@ -278,26 +275,25 @@ func TestSnapshotIncludesSlotContractMetadata(t *testing.T) {
 	}
 }
 
-func TestDefaultDispatchKindOwnsLegacyMultiplicityProjection(t *testing.T) {
+func TestDefaultDispatchContracts(t *testing.T) {
 	r := DefaultSlotRegistry()
 	cases := []struct {
-		slot         string
-		kind         SlotDispatchKind
-		multiplicity SlotMultiplicity
+		slot string
+		kind SlotDispatchKind
 	}{
-		{"provider.conversation.overlay", DispatchList, MultiplicityOrderedMultiple},
-		{"extension.settings.page", DispatchList, MultiplicityOrderedMultiple},
-		{"chat.message.custom_renderer", DispatchChain, MultiplicityReplaceableSingle},
-		{"chat.message.attachment_renderer", DispatchChain, MultiplicityReplaceableSingle},
-		{"desktop.window.page", DispatchKeyed, MultiplicityMultiple},
+		{"provider.conversation.overlay", DispatchList},
+		{"extension.settings.page", DispatchList},
+		{"chat.message.custom_renderer", DispatchChain},
+		{"chat.message.attachment_renderer", DispatchChain},
+		{"desktop.window.page", DispatchKeyed},
 	}
 	for _, tc := range cases {
 		def, err := r.Get(SlotID(tc.slot))
 		if err != nil {
 			t.Fatalf("get %s: %v", tc.slot, err)
 		}
-		if def.DispatchKind != tc.kind || def.Multiplicity != tc.multiplicity {
-			t.Fatalf("%s contract kind/multiplicity = %q/%q, want %q/%q", tc.slot, def.DispatchKind, def.Multiplicity, tc.kind, tc.multiplicity)
+		if def.DispatchKind != tc.kind {
+			t.Fatalf("%s contract kind = %q, want %q", tc.slot, def.DispatchKind, tc.kind)
 		}
 	}
 }
@@ -306,7 +302,6 @@ func TestRegisterValidatesAndDerivesDispatchKind(t *testing.T) {
 	r := DefaultSlotRegistry()
 	def := dynamicTestSlot("dispatch.chain", "chat.sidebar.panel", "dispatch.ext")
 	def.DispatchKind = DispatchChain
-	def.Multiplicity = ""
 	if err := r.RegisterOwned("dispatch.ext", def); err != nil {
 		t.Fatalf("register chain: %v", err)
 	}
@@ -314,8 +309,8 @@ func TestRegisterValidatesAndDerivesDispatchKind(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if registered.DispatchKind != DispatchChain || registered.Multiplicity != MultiplicityReplaceableSingle {
-		t.Fatalf("derived dispatch contract = kind %q multiplicity %q", registered.DispatchKind, registered.Multiplicity)
+	if registered.DispatchKind != DispatchChain {
+		t.Fatalf("dispatch contract kind = %q", registered.DispatchKind)
 	}
 
 	invalid := dynamicTestSlot("dispatch.invalid", "chat.sidebar.panel", "dispatch.ext")

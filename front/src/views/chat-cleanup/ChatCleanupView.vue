@@ -15,8 +15,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 
     <CleanupWorkflow />
 
-    <DataMigrationPanel />
-
     <DataPortabilityBackupPanel @restore="openRestoreDialog" />
 
     <RestoreBackupDialog
@@ -30,7 +28,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script setup lang="ts">
 import { ref } from "vue";
 import CleanupWorkflow from "./components/CleanupWorkflow.vue";
-import DataMigrationPanel from "./components/DataMigrationPanel.vue";
 import DataPortabilityBackupPanel from "./components/DataPortabilityBackupPanel.vue";
 import RestoreBackupDialog from "./components/RestoreBackupDialog.vue";
 import DatabaseHealthCard from "./components/DatabaseHealthCard.vue";

@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 )
 
@@ -97,6 +98,43 @@ func TestExtensionDefinitionValidate(t *testing.T) {
 	}
 	if _, ok := def.FindModule("main"); !ok {
 		t.Errorf("expected to find module main")
+	}
+}
+
+func TestContributionAdapterResolution(t *testing.T) {
+	if got := (ContributionDefinition{Kind: ContributionKindUIPage}).EffectiveAdapter(); got != ContributionAdapterUI {
+		t.Fatalf("legacy ui adapter = %s", got)
+	}
+	if got := (ContributionDefinition{
+		Kind:    ContributionKind("com.example.market/page"),
+		Adapter: ContributionAdapterUI,
+	}).EffectiveAdapter(); got != ContributionAdapterUI {
+		t.Fatalf("custom contribution adapter = %s", got)
+	}
+	if !ContributionAdapterUISlot.Valid() || ContributionAdapter("com.example/adapter").Valid() {
+		t.Fatal("adapter validation returned an unexpected result")
+	}
+}
+
+func TestCustomContributionRequiresAdapterContractAndSchema(t *testing.T) {
+	contribution := ContributionDefinition{
+		ID: "market-page", ModuleID: "main", ExtensionID: "com.example/market",
+		Kind: ContributionKind("com.example.market/page"),
+	}
+	if err := contribution.Validate(); err == nil {
+		t.Fatal("expected custom contribution without adapter to fail")
+	}
+	contribution.Adapter = ContributionAdapterUI
+	if err := contribution.Validate(); err == nil {
+		t.Fatal("expected custom contribution without contract version to fail")
+	}
+	contribution.ContractVersion = 1
+	if err := contribution.Validate(); err == nil {
+		t.Fatal("expected custom contribution without schema to fail")
+	}
+	contribution.Schema = json.RawMessage(`{"type":"object"}`)
+	if err := contribution.Validate(); err != nil {
+		t.Fatalf("valid custom contribution rejected: %v", err)
 	}
 }
 
@@ -250,47 +288,5 @@ func TestVersionIsCompatible(t *testing.T) {
 	}
 	if !v1.IsCompatibleWith(v1) {
 		t.Errorf("1.0.0 should be compatible with itself")
-	}
-}
-
-func TestNormalizeRuntimeTypeService(t *testing.T) {
-	got := NormalizeRuntimeType(RuntimeTypeService)
-	if got != RuntimeTypeService {
-		t.Errorf("expected service, got %s", got)
-	}
-}
-
-func TestNormalizeRuntimeTypeTrusted(t *testing.T) {
-	got := NormalizeRuntimeType(legacyRuntimeTypeTrustedService)
-	if got != RuntimeTypeService {
-		t.Errorf("expected service, got %s", got)
-	}
-}
-
-func TestNormalizeRuntimeTypePlugin(t *testing.T) {
-	got := NormalizeRuntimeType(legacyRuntimeTypePluginService)
-	if got != RuntimeTypeService {
-		t.Errorf("expected service, got %s", got)
-	}
-}
-
-func TestNormalizeRuntimeTypeUnknown(t *testing.T) {
-	got := NormalizeRuntimeType("foobar")
-	if got != "foobar" {
-		t.Errorf("expected foobar unchanged, got %s", got)
-	}
-}
-
-func TestNormalizeRuntimeTypeBuiltin(t *testing.T) {
-	got := NormalizeRuntimeType(RuntimeTypeBuiltin)
-	if got != RuntimeTypeBuiltin {
-		t.Errorf("expected builtin unchanged, got %s", got)
-	}
-}
-
-func TestNormalizeRuntimeTypeJavaScript(t *testing.T) {
-	got := NormalizeRuntimeType(RuntimeTypeJavaScript)
-	if got != RuntimeTypeJavaScript {
-		t.Errorf("expected javascript unchanged, got %s", got)
 	}
 }

@@ -32,14 +32,12 @@ const [
   chatStateBridge,
   playerStateMachine,
   doctor,
-  legacyPlaybackBridge,
   runtimeActionPort,
   runtimeHandler,
   runtimeProtocolEvent,
   runtimeActualState,
   mobileRuntime,
   androidRenderer,
-  runtimeBehaviorMigration,
   migrationBaseline,
 ] = await Promise.all([
   read("backend/cmd/server/runtime_components.go"),
@@ -61,14 +59,12 @@ const [
   read("desktop/src/main/pet/chat-state-bridge.ts"),
   read("desktop/src/desktop-pet/animation/player-state-machine.ts"),
   read("backend/internal/desktoppet/doctor/doctor.go"),
-  read("desktop/src/desktop-pet/runtime/playback-event-bridge.ts"),
   read("backend/internal/desktoppet/behavior/wiring/runtime_v1_action_port.go"),
   read("backend/internal/desktoppet/runtime/protocol/v1/handler.go"),
   read("backend/internal/desktoppet/runtime/protocol/v1/event.go"),
   read("backend/internal/desktoppet/runtime/protocol/v1/actual_state.go"),
   read("mobile_app/lib/features/desktop_pet/runtime/desktop_pet_mobile_runtime.dart"),
   read("mobile_app/android/app/src/main/kotlin/com/amitia/amitia_app/nativeprovider/desktoppet/DesktopPetRendererNativeHandler.kt"),
-  read("backend/internal/migration/desktop_pet_runtime_behavior_finalization.go"),
   read("backend/internal/migration/baseline.sql"),
 ]);
 
@@ -133,11 +129,6 @@ assert(
   "Desktop Pet behavior routing must enumerate authenticated Space devices and must never select by freshest heartbeat",
 );
 assert(
-  runtimeBehaviorMigration.includes('"target_installation_id"') ||
-    runtimeBehaviorMigration.includes("target_installation_id TEXT NOT NULL DEFAULT ''"),
-  "Cloud behavior outbox migration must persist target_installation_id execution fence",
-);
-assert(
   migrationBaseline.includes("target_installation_id TEXT NOT NULL DEFAULT ''") &&
     migrationBaseline.includes("position_x INTEGER NOT NULL DEFAULT 0") &&
     migrationBaseline.includes("window_width INTEGER NOT NULL DEFAULT 0") &&
@@ -176,7 +167,6 @@ assert(
 // Device-local authority and authentication must be explicit.
 assert(
   deviceAgentRouter.includes("RequireAuthMethod(security.AuthMethodDesktopSession)") &&
-    frontendRuntimeAdapter.includes("DESKTOP_PET_DEVICE_LOCAL_ROUTE_PREFIXES") &&
     frontendRuntimeAdapter.includes('"/api/desktop-pet"') &&
     frontendRuntimeAdapter.includes('"/api/desktop-pets"'),
   "desktop-pet device-local routes must use Desktop Session auth and include singular/plural namespaces",
@@ -349,11 +339,6 @@ assert(
     manager.includes('event === "action-cancelled"') &&
     manager.includes('"PLAYBACK_COMMAND_CANCELLED"'),
   "scheduler queue eviction/coalesce must terminalize accepted Runtime v1 commands before playback identity exists",
-);
-assert(
-  legacyPlaybackBridge.includes("test-only") &&
-    legacyPlaybackBridge.includes('process.env.NODE_ENV !== "test"'),
-  "second playback reporting bridge must fail closed outside tests",
 );
 assert(
   runtimeHandler.includes("PlayActionCompletionOnStarted") &&

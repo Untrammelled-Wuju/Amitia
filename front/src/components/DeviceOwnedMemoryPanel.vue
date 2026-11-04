@@ -138,7 +138,7 @@
     </el-dialog>
       </template>
     </div>
-    <el-button v-if="next || nextLegacy" :loading="loading" @click="load(true)">加载更多</el-button>
+    <el-button v-if="next" :loading="loading" @click="load(true)">加载更多</el-button>
     <el-button v-if="!['profile', 'episodic', 'graph'].includes(view) && !(source === 'current' && kind === 'memory' && loadedScope)" :disabled="loading" @click="load(false)">刷新</el-button>
     <el-dialog v-model="transferOpen" title="调整记忆所属分区" width="min(480px, 92vw)" :close-on-click-modal="!transferring" :show-close="!transferring">
       <p>移动这条记录及关联事实、向量和图谱，保留来源和历史。原分区不再保留副本。</p>
@@ -198,7 +198,6 @@ const layers = [
 const kind = ref(props.initialKind || "memory");
 const rows = ref<any[]>([]);
 const next = ref("");
-const nextLegacy = ref("");
 const internalSource = ref("current");
 const source = computed({
   get: () => props.source ?? internalSource.value,
@@ -378,7 +377,6 @@ async function loadAggregate() {
   const ticket = ++generation;
   rows.value = [];
   next.value = "";
-  nextLegacy.value = "";
   error.value = "";
   loading.value = true;
   try {
@@ -427,7 +425,7 @@ async function load(older = false) {
   const currentKind = kind.value;
   if (!older) { projection.value = null; projectionNotice.value = ""; }
   if (!older) loadedScope.value = undefined;
-  if (!older) { rows.value = []; next.value = ""; nextLegacy.value = ""; scope = ""; }
+  if (!older) { rows.value = []; next.value = ""; scope = ""; }
   error.value = "";
   loading.value = true;
   try {
@@ -437,7 +435,7 @@ async function load(older = false) {
       historicalRoles.value = catalog;
     }
     const historical = source.value.startsWith("history:");
-	    const result = await owned.data(currentKind, props.characterId, historical ? "" : props.conversationId, !historical && older ? next.value : "", historical ? { historicalRoleId: source.value.slice(8), historicalCursor: older ? next.value : "", historicalLegacyCursor: older ? nextLegacy.value : "" } : { legacyCursor: older ? nextLegacy.value : "", ...(memoryView.value ? { memoryView: memoryView.value } : {}) });
+	    const result = await owned.data(currentKind, props.characterId, historical ? "" : props.conversationId, !historical && older ? next.value : "", historical ? { historicalRoleId: source.value.slice(8), historicalCursor: older ? next.value : "" } : { ...(memoryView.value ? { memoryView: memoryView.value } : {}) });
     if (ticket !== generation || !props.visible) return;
     const currentScope = JSON.stringify(result.executionScope, (key, value) => ["requestId", "turnId", "executionId"].includes(key) ? undefined : value);
     if (older && scope !== currentScope) throw new Error("服务或数据归属已变化，请刷新后继续查看");
@@ -457,7 +455,6 @@ async function load(older = false) {
     const cursor = snapshot.nextCursors?.[currentKind] || "";
     if (older && cursor && cursor === next.value) throw new Error("分页游标重复，请刷新后重试");
     next.value = cursor;
-    nextLegacy.value = "";
     if (source.value === "current" && !result.executionScope.memoryViewAll && ["vector", "graph"].includes(currentKind)) {
       try {
         const value = await owned.projections(props.characterId, undefined, memoryView.value || undefined);
@@ -613,7 +610,6 @@ function clearAuthority() {
   projection.value = null;
   loadedScope.value = undefined;
   next.value = "";
-  nextLegacy.value = "";
   scope = "";
   loading.value = false;
 }

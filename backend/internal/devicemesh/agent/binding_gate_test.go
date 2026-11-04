@@ -43,12 +43,12 @@ func TestBindingGateBlocksCandidateTaskPauseAndPreservesExecutionBinding(t *test
 func TestCandidateGateAllowsOnlyRolePreflight(t *testing.T) {
 	dispatcher := NewRuntimeDispatcher()
 	calls := 0
-	handler := func(invocation protocol.RuntimeInvokePayload) (*protocol.RuntimeResultPayload, error) {
+	handler := func(_ context.Context, invocation protocol.RuntimeInvokePayload) (*protocol.RuntimeResultPayload, error) {
 		calls++
 		return &protocol.RuntimeResultPayload{InvocationID: invocation.InvocationID}, nil
 	}
-	dispatcher.Register("coordination.data", handler)
-	dispatcher.Register("browser.navigate", handler)
+	dispatcher.RegisterCancellable("coordination.data", handler)
+	dispatcher.RegisterCancellable("browser.navigate", handler)
 	gate := &bindingGate{dispatcher: dispatcher}
 	for _, action := range []string{"roles", "apply", "interrupted", "snapshot"} {
 		input, _ := json.Marshal(map[string]string{"operation": action})

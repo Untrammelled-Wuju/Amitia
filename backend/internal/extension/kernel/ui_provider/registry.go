@@ -867,13 +867,12 @@ type Snapshot struct {
 type Registry struct {
 	mu        sync.RWMutex
 	providers map[string]*ProviderDefinition
-	profile   Profile // legacy/global fallback when no persistent store is attached
 	store     ProfileStore
 	version   uint64
 }
 
 func NewRegistry() *Registry {
-	return &Registry{providers: map[string]*ProviderDefinition{}, profile: Profile{ProfileID: "default", Name: "Default", Selections: map[Capability]string{}, Scope: globalProfileScope()}, version: 1}
+	return &Registry{providers: map[string]*ProviderDefinition{}, version: 1}
 }
 func NewRegistryWithBuiltins() *Registry {
 	r := NewRegistry()
@@ -889,18 +888,12 @@ func (r *Registry) AttachStore(ctx context.Context, store ProfileStore) error {
 	if store == nil {
 		return nil
 	}
-	p, ok, err := store.Load(ctx)
+	_, _, err := store.Load(ctx)
 	if err != nil {
 		return err
 	}
 	r.mu.Lock()
 	r.store = store
-	if ok {
-		if p.Selections == nil {
-			p.Selections = map[Capability]string{}
-		}
-		r.profile = p
-	}
 	r.version++
 	r.mu.Unlock()
 	return nil
@@ -930,11 +923,6 @@ func (r *Registry) Unregister(providerID string) {
 		return
 	}
 	delete(r.providers, providerID)
-	for cap, selected := range r.profile.Selections {
-		if selected == providerID {
-			delete(r.profile.Selections, cap)
-		}
-	}
 	r.version++
 	r.mu.Unlock()
 }
@@ -945,11 +933,6 @@ func (r *Registry) UnregisterExtension(extensionID string) {
 		if p.ExtensionID == extensionID && !p.Builtin {
 			delete(r.providers, id)
 			removed[id] = true
-		}
-	}
-	for cap, selected := range r.profile.Selections {
-		if removed[selected] {
-			delete(r.profile.Selections, cap)
 		}
 	}
 	if len(removed) > 0 {
@@ -1177,12 +1160,9 @@ func compareVersion(a, b string) int {
 func (r *Registry) effectiveProfile(ctx context.Context, rc ResolveContext) (Profile, []Profile, error) {
 	r.mu.RLock()
 	store := r.store
-	legacy := r.profile
 	r.mu.RUnlock()
 	if store == nil {
-		legacy.Selections = cloneSelections(legacy.Selections)
-		legacy.Scope = rc.ProfileScope()
-		return legacy, nil, nil
+		return Profile{}, nil, errors.New("ui_provider: persistent profile store is required")
 	}
 	layers, err := store.LoadLayers(ctx, rc.ProfileScope())
 	if err != nil {
@@ -1345,12 +1325,7 @@ func (r *Registry) SetProfileForContext(ctx context.Context, rc ResolveContext, 
 		profile.Name = profile.ProfileID
 	}
 	if store == nil {
-		r.mu.Lock()
-		profile.Revision = r.profile.Revision + 1
-		r.profile = profile
-		r.version++
-		r.mu.Unlock()
-		return profile, nil
+		return Profile{}, errors.New("ui_provider: persistent profile store is required")
 	}
 	saved, err := store.SaveScoped(ctx, profile, expectedRevision)
 	if err != nil {
@@ -1371,7 +1346,7 @@ func (r *Registry) DeleteProfileScope(ctx context.Context, rc ResolveContext, ki
 	store := r.store
 	r.mu.RUnlock()
 	if store == nil {
-		return nil
+		return errors.New("ui_provider: persistent profile store is required")
 	}
 	if err := store.DeleteScope(ctx, scope, expectedRevision); err != nil {
 		return err
@@ -1409,15 +1384,9 @@ func (r *Registry) ProfileForScope(ctx context.Context, rc ResolveContext, kind 
 	}
 	r.mu.RLock()
 	store := r.store
-	legacy := r.profile
 	r.mu.RUnlock()
 	if store == nil {
-		if kind == ProfileScopeGlobal || kind == "" || kind == ProfileScopeSpace {
-			legacy.Scope = scope
-			legacy.Selections = cloneSelections(legacy.Selections)
-			return legacy, true, nil
-		}
-		return Profile{ProfileID: "default", Name: "Default", Selections: map[Capability]string{}, Scope: scope}, false, nil
+		return Profile{}, false, errors.New("ui_provider: persistent profile store is required")
 	}
 	p, ok, err := store.LoadExact(ctx, scope)
 	if err != nil {

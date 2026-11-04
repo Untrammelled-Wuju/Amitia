@@ -23,8 +23,7 @@ func TestRound30TerminateUsesExistingCgroupBeforeProcessGroup(t *testing.T) {
 		delete(linuxCgroupHandles, handle)
 		linuxCgroupMu.Unlock()
 	}()
-	                                                                       
-	                                                                              
+
 	if err := terminateProcessTree(0, handle); err != nil {
 		t.Fatal(err)
 	}

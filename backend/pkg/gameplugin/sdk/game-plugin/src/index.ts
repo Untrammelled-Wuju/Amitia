@@ -18,7 +18,6 @@ export * from './control';
 export * from './hostapi';
 export * from './network';
 export * from './artifact';
-export * from './security';
 export {
   METHOD_CONTROL_SINK_DISPATCH,
   SinkEffectDispatchPayload,

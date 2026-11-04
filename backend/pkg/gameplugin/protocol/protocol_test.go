@@ -653,7 +653,7 @@ func TestValidateServiceDescriptor(t *testing.T) {
 			svc: ServiceDescriptor{
 				ID:           "service-a",
 				Kind:         ServiceKindProcess,
-				Capabilities: []Capability{"vendor.game.control"},
+				HostFeatures: []HostFeature{"vendor.game.control"},
 			},
 			wantErr: true,
 		},
@@ -690,54 +690,54 @@ func TestRejectDuplicateDependency(t *testing.T) {
 	}
 }
 
-func TestValidateKnownCapabilities(t *testing.T) {
-	knownCaps := []Capability{
-		CapabilityRealtimeControl,
-		CapabilityStateStreaming,
-		CapabilityEventStreaming,
-		CapabilityCustomRPC,
-		CapabilityHostAPI,
-		CapabilitySharedControl,
-		CapabilityMultiService,
-		CapabilityBinaryStreaming,
+func TestValidateKnownHostFeatures(t *testing.T) {
+	knownCaps := []HostFeature{
+		HostFeatureRealtimeControl,
+		HostFeatureStateStreaming,
+		HostFeatureEventStreaming,
+		HostFeatureCustomRPC,
+		HostFeatureHostAPI,
+		HostFeatureSharedControl,
+		HostFeatureMultiService,
+		HostFeatureBinaryStreaming,
 	}
 	for _, cap := range knownCaps {
 		t.Run(string(cap), func(t *testing.T) {
-			if err := ValidateCapability(cap); err != nil {
-				t.Fatalf("ValidateCapability(%q) failed: %v", cap, err)
+			if err := ValidateHostFeature(cap); err != nil {
+				t.Fatalf("ValidateHostFeature(%q) failed: %v", cap, err)
 			}
-			if !IsKnownCapability(cap) {
-				t.Fatalf("IsKnownCapability(%q) should return true", cap)
+			if !IsKnownHostFeature(cap) {
+				t.Fatalf("IsKnownHostFeature(%q) should return true", cap)
 			}
 		})
 	}
 }
 
 func TestRejectGameToolCapabilityAsHostFeature(t *testing.T) {
-	for _, cap := range []Capability{"example.navigation", "vendor.experimental_ai", "vendor.game.logistics", "vendor.other.crafting"} {
-		if err := ValidateCapability(cap); err == nil {
+	for _, cap := range []HostFeature{"example.navigation", "vendor.experimental_ai", "vendor.game.logistics", "vendor.other.crafting"} {
+		if err := ValidateHostFeature(cap); err == nil {
 			t.Fatalf("game/tool capability %q must not validate as a GameHost feature", cap)
 		}
 	}
 }
 
-func TestUnknownCapabilityIsNotKnown(t *testing.T) {
-	if IsKnownCapability("example.navigation") {
-		t.Fatal("IsKnownCapability should return false for custom capability")
+func TestUnknownHostFeatureIsNotKnown(t *testing.T) {
+	if IsKnownHostFeature("example.navigation") {
+		t.Fatal("IsKnownHostFeature should return false for custom capability")
 	}
-	if !IsKnownCapability(CapabilityCustomRPC) {
-		t.Fatal("IsKnownCapability should return true for standard capability")
+	if !IsKnownHostFeature(HostFeatureCustomRPC) {
+		t.Fatal("IsKnownHostFeature should return true for standard host feature")
 	}
 }
 
 func TestValidateChannelDescriptor(t *testing.T) {
 	channels := []ChannelDescriptor{
-		{ID: "event-channel", Kind: ChannelKindEvent},
-		{ID: "state-channel", Kind: ChannelKindState},
-		{ID: "log-channel", Kind: ChannelKindLog},
-		{ID: "metric-channel", Kind: ChannelKindMetric},
-		{ID: "custom-channel", Kind: ChannelKindCustom},
-		{ID: "binary-channel", Kind: ChannelKindBinary},
+		{ID: "event-channel", Kind: ChannelKindEvent, Direction: ChannelDirectionPluginToHost},
+		{ID: "state-channel", Kind: ChannelKindState, Direction: ChannelDirectionPluginToHost},
+		{ID: "log-channel", Kind: ChannelKindLog, Direction: ChannelDirectionPluginToHost},
+		{ID: "metric-channel", Kind: ChannelKindMetric, Direction: ChannelDirectionPluginToHost},
+		{ID: "custom-channel", Kind: ChannelKindCustom, Direction: ChannelDirectionPluginToHost},
+		{ID: "binary-channel", Kind: ChannelKindBinary, Direction: ChannelDirectionPluginToHost},
 	}
 	for i := range channels {
 		t.Run(string(channels[i].Kind), func(t *testing.T) {
@@ -823,9 +823,10 @@ func TestValidateChannelDescriptor(t *testing.T) {
 func TestCustomSchemaID(t *testing.T) {
 	schemaID := "example.game.state/v1"
 	ch := ChannelDescriptor{
-		ID:       "state-ch",
-		Kind:     ChannelKindState,
-		SchemaID: schemaID,
+		ID:        "state-ch",
+		Kind:      ChannelKindState,
+		SchemaID:  schemaID,
+		Direction: ChannelDirectionPluginToHost,
 	}
 	if err := ch.Validate(); err != nil {
 		t.Fatalf("ChannelDescriptor.Validate() failed: %v", err)
@@ -911,7 +912,7 @@ func TestDescriptorRoundTrip(t *testing.T) {
 				Name:         "Agent Service",
 				Kind:         ServiceKindProcess,
 				Required:     true,
-				Capabilities: []Capability{CapabilityCustomRPC, CapabilityStateStreaming},
+				HostFeatures: []HostFeature{HostFeatureCustomRPC, HostFeatureStateStreaming},
 			},
 			{
 				ID:        "game-bridge",
@@ -932,9 +933,9 @@ func TestDescriptorRoundTrip(t *testing.T) {
 				SchemaID: "example.game.state/v1",
 			},
 		},
-		Capabilities: []Capability{
-			CapabilityCustomRPC,
-			CapabilityStateStreaming,
+		HostFeatures: []HostFeature{
+			HostFeatureCustomRPC,
+			HostFeatureStateStreaming,
 			"example.navigation",
 		},
 	}
@@ -955,8 +956,8 @@ func TestDescriptorRoundTrip(t *testing.T) {
 	if len(decoded.Channels) != len(ps.Channels) {
 		t.Fatalf("expected %d channels, got %d", len(ps.Channels), len(decoded.Channels))
 	}
-	if len(decoded.Capabilities) != len(ps.Capabilities) {
-		t.Fatalf("expected %d capabilities, got %d", len(ps.Capabilities), len(decoded.Capabilities))
+	if len(decoded.HostFeatures) != len(ps.HostFeatures) {
+		t.Fatalf("expected %d host features, got %d", len(ps.HostFeatures), len(decoded.HostFeatures))
 	}
 
 	if decoded.Services[0].ID != ps.Services[0].ID {
@@ -965,8 +966,8 @@ func TestDescriptorRoundTrip(t *testing.T) {
 	if decoded.Channels[1].SchemaID != ps.Channels[1].SchemaID {
 		t.Fatalf("expected channel schemaID '%s', got '%s'", ps.Channels[1].SchemaID, decoded.Channels[1].SchemaID)
 	}
-	if decoded.Capabilities[2] != ps.Capabilities[2] {
-		t.Fatalf("expected capability '%s', got '%s'", ps.Capabilities[2], decoded.Capabilities[2])
+	if decoded.HostFeatures[2] != ps.HostFeatures[2] {
+		t.Fatalf("expected host feature '%s', got '%s'", ps.HostFeatures[2], decoded.HostFeatures[2])
 	}
 }
 
@@ -983,22 +984,22 @@ func TestServicesDuplicateValidation(t *testing.T) {
 
 func TestChannelsDuplicateValidation(t *testing.T) {
 	channels := []ChannelDescriptor{
-		{ID: "ch-1", Kind: ChannelKindEvent},
-		{ID: "ch-2", Kind: ChannelKindState},
-		{ID: "ch-1", Kind: ChannelKindLog},
+		{ID: "ch-1", Kind: ChannelKindEvent, Direction: ChannelDirectionPluginToHost},
+		{ID: "ch-2", Kind: ChannelKindState, Direction: ChannelDirectionPluginToHost},
+		{ID: "ch-1", Kind: ChannelKindLog, Direction: ChannelDirectionPluginToHost},
 	}
 	if err := ValidateChannels(channels); err == nil {
 		t.Fatal("expected error for duplicate channel ID, got nil")
 	}
 }
 
-func TestCapabilitiesDuplicateValidation(t *testing.T) {
-	caps := []Capability{
-		CapabilityCustomRPC,
-		CapabilityStateStreaming,
-		CapabilityCustomRPC,
+func TestHostFeaturesDuplicateValidation(t *testing.T) {
+	caps := []HostFeature{
+		HostFeatureCustomRPC,
+		HostFeatureStateStreaming,
+		HostFeatureCustomRPC,
 	}
-	if err := ValidateCapabilities(caps); err == nil {
+	if err := ValidateHostFeatures(caps); err == nil {
 		t.Fatal("expected error for duplicate capability, got nil")
 	}
 }
@@ -1009,9 +1010,9 @@ func TestPluginSchemaValidate(t *testing.T) {
 			{ID: "svc-1", Kind: ServiceKindProcess},
 		},
 		Channels: []ChannelDescriptor{
-			{ID: "ch-1", Kind: ChannelKindEvent},
+			{ID: "ch-1", Kind: ChannelKindEvent, Direction: ChannelDirectionPluginToHost},
 		},
-		Capabilities: []Capability{CapabilityCustomRPC},
+		HostFeatures: []HostFeature{HostFeatureCustomRPC},
 	}
 	if err := ps.Validate(); err != nil {
 		t.Fatalf("PluginSchema.Validate() failed: %v", err)
@@ -1052,8 +1053,8 @@ func TestPluginSchemaFindService(t *testing.T) {
 func TestPluginSchemaFindChannel(t *testing.T) {
 	ps := PluginSchema{
 		Channels: []ChannelDescriptor{
-			{ID: "ch-1", Kind: ChannelKindEvent},
-			{ID: "ch-2", Kind: ChannelKindState},
+			{ID: "ch-1", Kind: ChannelKindEvent, Direction: ChannelDirectionPluginToHost},
+			{ID: "ch-2", Kind: ChannelKindState, Direction: ChannelDirectionPluginToHost},
 		},
 	}
 
@@ -1071,19 +1072,19 @@ func TestPluginSchemaFindChannel(t *testing.T) {
 	}
 }
 
-func TestPluginSchemaHasCapability(t *testing.T) {
+func TestPluginSchemaHasHostFeature(t *testing.T) {
 	ps := PluginSchema{
-		Capabilities: []Capability{CapabilityCustomRPC, CapabilityStateStreaming, CapabilityEventStreaming},
+		HostFeatures: []HostFeature{HostFeatureCustomRPC, HostFeatureStateStreaming, HostFeatureEventStreaming},
 	}
 
-	if !ps.HasCapability(CapabilityCustomRPC) {
-		t.Fatal("should have capability 'custom_rpc'")
+	if !ps.HasHostFeature(HostFeatureCustomRPC) {
+		t.Fatal("should have host feature 'custom_rpc'")
 	}
-	if !ps.HasCapability(CapabilityEventStreaming) {
+	if !ps.HasHostFeature(HostFeatureEventStreaming) {
 		t.Fatal("should have host feature 'event_streaming'")
 	}
-	if ps.HasCapability("vendor.unknown") {
-		t.Fatal("should not have capability 'vendor.unknown'")
+	if ps.HasHostFeature("vendor.unknown") {
+		t.Fatal("should not have host feature 'vendor.unknown'")
 	}
 }
 

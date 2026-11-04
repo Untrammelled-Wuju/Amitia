@@ -581,24 +581,24 @@ function messageContext(
     compactAfter?: boolean;
   },
 ) {
-  const messageType = msg.msgType || msg.msg_type || msg.type || "text";
+  const messageType = msg.msgType || msg.type || "text";
   return {
     messageId: msg.id,
     type: messageType,
     messageType,
-    extensionType: msg.extensionType || msg.extension_type || "",
+    extensionType: msg.extensionType || "",
     role: msg.role,
     status: msg.status,
     content: msg.content || msg.text || "",
-    altText: msg.altText || msg.alt_text || "",
-    imageUrl: msg.imageUrl || msg.image_url || "",
-    videoUrl: msg.videoUrl || msg.video_url || "",
-    audioUrl: msg.audioUrl || msg.audio_url || "",
-    originalAssetReference: msg.originalAssetReference || msg.original_asset_reference || "",
-    fallbackAssetReference: msg.fallbackAssetReference || msg.fallback_asset_reference || "",
-    isAnimated: !!(msg.isAnimated || msg.is_animated),
-    width: msg.width || msg.media_width || 0,
-    height: msg.height || msg.media_height || 0,
+    altText: msg.altText || "",
+    imageUrl: msg.imageUrl || "",
+    videoUrl: msg.videoUrl || "",
+    audioUrl: msg.audioUrl || "",
+    originalAssetReference: msg.originalAssetReference || "",
+    fallbackAssetReference: msg.fallbackAssetReference || "",
+    isAnimated: !!msg.isAnimated,
+    width: msg.width || 0,
+    height: msg.height || 0,
     attachments: msg.attachments || [],
     metadata: msg.metadata || {},
     characterId: messageCharacterId(msg),
@@ -611,7 +611,7 @@ function messageContext(
 }
 
 function messageSemanticTarget(msg: any) {
-  const messageType = String(msg?.msgType || msg?.msg_type || msg?.type || "").toLowerCase();
+  const messageType = String(msg?.msgType || msg?.type || "").toLowerCase();
   if (messageType.includes("tool") || msg?.assistantTurn?.items?.some((item: any) => String(item?.type || "").toLowerCase().includes("tool"))) {
     return "chat.message.tool";
   }
@@ -628,7 +628,7 @@ function messageSlotContext(
     compactAfter?: boolean;
   },
 ) {
-  const messageType = msg.msgType || msg.msg_type || msg.type || "text";
+  const messageType = msg.msgType || msg.type || "text";
   return {
     ...(props.extensionContext ?? {}),
     messageId: msg.id,
@@ -675,7 +675,7 @@ function messageActions(msg: any) {
 }
 
 function messageExtensionSummary(msg: any) {
-  const messageType = msg.msgType || msg.msg_type || msg.type || "text";
+  const messageType = msg.msgType || msg.type || "text";
   return {
     messageId: msg.id,
     type: messageType,
@@ -686,7 +686,7 @@ function messageExtensionSummary(msg: any) {
     status: msg.status || "sent",
     hasText: !!(msg.content || msg.text),
     attachmentTypes: msg.attachments?.map((a: any) => a.type) || [],
-    extensionType: msg.extensionType || msg.extension_type || "",
+    extensionType: msg.extensionType || "",
     content: msg.content || msg.text || "",
     metadata: msg.metadata || {},
   } as const;

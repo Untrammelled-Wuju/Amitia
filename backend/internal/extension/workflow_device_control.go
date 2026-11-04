@@ -317,12 +317,9 @@ func (api *WorkflowAPI) updateDeviceWorkflow(c *gin.Context) {
 	}
 	object["id"] = c.Param("workflowId")
 	expected, err := api.expectedRevision(c, 1)
-	if err != nil && c.Query("expectedRevision") != "" {
+	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
-	}
-	if c.Query("expectedRevision") == "" && c.GetHeader("If-Match") == "" {
-		expected = 0
 	}
 	result, ok := api.invokeDeviceWorkflow(c, WorkflowMeshUpsert, map[string]any{"definition": object, "expectedRevision": expected})
 	if !ok {
@@ -342,14 +339,10 @@ func (api *WorkflowAPI) deleteDeviceWorkflow(c *gin.Context) {
 }
 
 func (api *WorkflowAPI) setDeviceWorkflowEnabled(c *gin.Context, enabled bool) {
-	expected := int64(0)
-	if q := strings.TrimSpace(c.Query("expectedRevision")); q != "" {
-		var err error
-		expected, err = api.expectedRevision(c, 1)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
+	expected, err := api.expectedRevision(c, 1)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
 	result, ok := api.invokeDeviceWorkflow(c, WorkflowMeshSetEnabled, map[string]any{"workflowId": c.Param("workflowId"), "enabled": enabled, "expectedRevision": expected})
 	if !ok {

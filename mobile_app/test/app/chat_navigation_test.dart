@@ -3,6 +3,7 @@ import 'package:amitia_app/app/theme/app_colors.dart';
 import 'package:amitia_app/core/models/character.dart';
 import 'package:amitia_app/core/models/conversation.dart';
 import 'package:amitia_app/core/models/memory.dart';
+import 'package:amitia_app/core/models/project.dart';
 import 'package:amitia_app/core/models/reminder.dart';
 import 'package:amitia_app/core/services/extension_service.dart';
 import 'package:amitia_app/core/services/providers.dart';
@@ -74,6 +75,9 @@ Widget _app(
   return ProviderScope(
     overrides: [
       conversationListProvider.overrideWith((ref) async => conversations),
+      conversationSidebarProvider.overrideWith(
+        (ref) async => const ConversationSidebarDto(),
+      ),
       characterListProvider.overrideWith((ref) async => _characters()),
       currentSpaceProfileProvider.overrideWith((ref) async => null),
       reminderListProvider.overrideWith((ref) async => tasks),
@@ -179,9 +183,7 @@ void main() {
 
     expect(
       tester
-          .widget<AmitiaIcon>(
-            find.byKey(const ValueKey('main-tab-icon-扩展')),
-          )
+          .widget<AmitiaIcon>(find.byKey(const ValueKey('main-tab-icon-扩展')))
           .glyph,
       AmitiaIconGlyph.extensions,
     );
@@ -327,7 +329,7 @@ void main() {
     expect(find.text('世界书目标页'), findsOneWidget);
   });
 
-  testWidgets('消息页加号提供新对话和新群聊', (tester) async {
+  testWidgets('消息页加号提供新对话、新群聊、新团队和新项目', (tester) async {
     await tester.pumpWidget(_app(_router()));
     await tester.pumpAndSettle();
 
@@ -336,6 +338,8 @@ void main() {
     expect(find.byType(AmitiaPopupSurface), findsOneWidget);
     expect(find.text('新对话'), findsOneWidget);
     expect(find.text('新群聊'), findsOneWidget);
+    expect(find.text('新团队'), findsOneWidget);
+    expect(find.text('新项目'), findsOneWidget);
 
     await tester.tap(find.text('新群聊'));
     await tester.pumpAndSettle();

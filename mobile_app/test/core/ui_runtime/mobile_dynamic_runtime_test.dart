@@ -34,8 +34,7 @@ UIContributionSnapshotEntry _entry(
 }
 
 UISlotSnapshotEntry _slot({
-  String? kind,
-  String multiplicity = 'ordered_multiple',
+  String kind = 'list',
   List<String> supportedKinds = const <String>['panel'],
 }) {
   return UISlotSnapshotEntry(
@@ -43,7 +42,6 @@ UISlotSnapshotEntry _slot({
     contractVersion: 1,
     supportedKinds: supportedKinds,
     kind: kind,
-    multiplicity: multiplicity,
     layout: 'stack',
     fallbackPolicy: 'empty',
     declarationEpoch: 0,
@@ -61,7 +59,6 @@ void main() {
         'contractVersion': 2,
         'supportedKinds': ['panel'],
         'kind': 'keyed',
-        'multiplicity': 'ordered_multiple',
         'layout': 'stack',
         'fallbackPolicy': 'empty',
         'contributions': [
@@ -200,12 +197,4 @@ void main() {
     });
   });
 
-  test('legacy replaceable_single keeps historical higher-priority behavior', () {
-    final result = MobileDynamicRuntime.resolveSlot(
-      slot: _slot(kind: null, multiplicity: 'replaceable_single'),
-      server: [_entry('low', priority: 1), _entry('high', priority: 9)],
-      dynamic: const [],
-    );
-    expect(result.single.contributionId, 'high');
-  });
 }

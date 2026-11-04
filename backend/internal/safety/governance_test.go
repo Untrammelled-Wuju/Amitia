@@ -87,68 +87,6 @@ func governanceActorContext(spaceID, deviceID string) context.Context {
 	})
 }
 
-func TestSafetyPolicyAndLegacyIncidentMigration(t *testing.T) {
-	db := governanceTestDB(t)
-	if err := db.Exec(`INSERT INTO app_settings(key,value) VALUES('safety_config',?),('safety_bdi_config',?)`, `{"preventEmotionalBlackmail":false,"violationAction":"audit_only","auditLogRetentionDays":90}`, `{"copingStrategy":{"selected":"reframe","alternatives":[],"selectionReason":"test"}}`).Error; err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Exec(`INSERT INTO safety_events(id,conversation_id,event_type,description,handled,created_at) VALUES('legacy-event','chat','user_reported_unsafe','legacy report',0,'2026-10-23T00:00:00Z')`).Error; err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Exec(`INSERT INTO messages(id,conversation_id,character_id,role,content) VALUES('message','chat','role','assistant','content')`).Error; err != nil {
-		t.Fatal(err)
-	}
-	repository := NewRepository(db)
-	if err := repository.ImportLegacy(t.Context(), []PolicyScope{{SpaceID: "space", OwnerID: "device", CoreID: "space"}, {SpaceID: "space", OwnerID: "space", CoreID: "space"}}); err != nil {
-		t.Fatal(err)
-	}
-	if err := repository.MigrateLegacyEvents(t.Context(), PolicyScope{SpaceID: "space", OwnerID: "device", CoreID: "space"}); err != nil {
-		t.Fatal(err)
-	}
-	policy, err := repository.RuntimePolicy(t.Context(), "space", "device")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if policy.Revision != 1 || policy.Config.PreventEmotionalBlackmail || policy.Config.ViolationAction != "audit_only" || policy.Config.AuditLogRetentionDays != 90 || policy.BDI.CopingStrategy == nil || policy.BDI.CopingStrategy.Selected != "reframe" {
-		t.Fatalf("legacy policy was not migrated: %+v", policy)
-	}
-	var legacySettings, incidents int64
-	if err := db.Table("app_settings").Where("key IN ?", []string{"safety_config", "safety_bdi_config"}).Count(&legacySettings).Error; err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Table("safety_incidents").Count(&incidents).Error; err != nil {
-		t.Fatal(err)
-	}
-	var migrated Incident
-	if err := db.Table("safety_incidents").Where("legacy_event_id='legacy-event'").Take(&migrated).Error; err != nil {
-		t.Fatal(err)
-	}
-	if db.Migrator().HasTable("safety_events") {
-		t.Fatal("legacy safety events table was not removed")
-	}
-	if legacySettings != 0 || incidents != 1 || migrated.OwnerID != "device" || migrated.RoleID != "role" || migrated.ConversationID != "chat" || migrated.Status != "open" {
-		t.Fatalf("legacy migration result settings=%d incidents=%d row=%+v", legacySettings, incidents, migrated)
-	}
-}
-
-func TestSafetyIncidentMigrationWithoutLegacyTableIsIdempotent(t *testing.T) {
-	db := governanceTestDB(t)
-	if err := db.Migrator().DropTable("safety_events"); err != nil {
-		t.Fatal(err)
-	}
-	repository := NewRepository(db)
-	scope := PolicyScope{SpaceID: "space", OwnerID: "device", CoreID: "space"}
-	if err := repository.MigrateLegacyEvents(t.Context(), scope); err != nil {
-		t.Fatal(err)
-	}
-	if err := repository.MigrateLegacyEvents(t.Context(), scope); err != nil {
-		t.Fatal(err)
-	}
-	if db.Migrator().HasTable("safety_events") {
-		t.Fatal("legacy safety events table was recreated")
-	}
-}
-
 func TestSafetyPolicyScopeResolvesAcrossRuntimeModes(t *testing.T) {
 	ctx := governanceActorContext("space", "phone")
 	tests := []struct {

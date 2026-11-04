@@ -19,6 +19,7 @@ import (
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/agent"
 	"github.com/u-ai/backend/internal/agentplatform"
+	"github.com/u-ai/backend/internal/agentrun"
 	"github.com/u-ai/backend/internal/asr"
 	channelinbound "github.com/u-ai/backend/internal/channel/inbound"
 	channelsandbox "github.com/u-ai/backend/internal/channel/sandbox"
@@ -26,10 +27,8 @@ import (
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/delivery"
 	"github.com/u-ai/backend/internal/desktoppet/behavior"
-	"github.com/u-ai/backend/internal/desktoppet/device"
 	"github.com/u-ai/backend/internal/desktoppet/doctor"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
-	"github.com/u-ai/backend/internal/desktoppet/maintenance"
 	"github.com/u-ai/backend/internal/desktoppet/readiness"
 	"github.com/u-ai/backend/internal/desktoppet/release"
 	"github.com/u-ai/backend/internal/desktoppet/release/importer"
@@ -184,7 +183,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			return nil, fmt.Errorf("initialize task maintenance policy: %w", err)
 		}
 	}
-	systemHandler := system.NewHandler(systemSvc, ctx.DB, services.Chat, services.DataLifecycle, services.UnifiedEntry, services.Reconciliation, services.MemoryConsumers)
+	systemHandler := system.NewHandler(systemSvc, ctx.DB, services.Chat, services.UnifiedEntry, services.Reconciliation, services.MemoryConsumers)
 	if services.KernelContainer != nil {
 		systemHandler.SetApprovalBroker(services.KernelContainer.ApprovalBroker)
 	}
@@ -201,14 +200,6 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 	if services.AgentPlatform != nil {
 		if err := services.AgentPlatform.SeedAgentTemplates(context.Background()); err != nil {
 			return nil, fmt.Errorf("initialize agent templates: %w", err)
-		}
-		if err := services.AgentPlatform.SeedMarketplace(context.Background()); err != nil {
-			return nil, fmt.Errorf("initialize plugin marketplace: %w", err)
-		}
-		if pluginDir := localAgentIdentityPluginDir(); pluginDir != "" {
-			if err := services.AgentPlatform.SeedLocalPluginMarketplace(context.Background(), pluginDir); err != nil {
-				return nil, fmt.Errorf("initialize local plugin marketplace: %w", err)
-			}
 		}
 		owner, ownerErr := services.AgentPlatform.EnsureLocalOwner(context.Background(), spaceID, "本地用户")
 		if ownerErr != nil {
@@ -394,12 +385,11 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 					)
 					return
 				}
-				err := services.DeviceRepository.RegisterOrTouch(c.Request.Context(), device.Identity{
-					SpaceID:           actor.SpaceID,
-					DeviceID:          runtimeidentity.DeviceID(request.DeviceID),
-					DesktopInstanceID: request.DesktopInstanceID,
-					Platform:          runtimeidentity.Platform(request.Platform),
-					AppVersion:        request.AppVersion,
+				_, err := services.KernelContainer.DeviceRegistry.EnsureDevice(c.Request.Context(), host_registry.DeviceRecord{
+					SpaceID:    actor.SpaceID,
+					DeviceID:   runtimeidentity.DeviceID(request.DeviceID),
+					Platform:   runtimeidentity.Platform(request.Platform),
+					TrustState: host_registry.DeviceTrustTrusted,
 				})
 				if err != nil {
 					log.Error("failed to register device identity", "error", err)
@@ -427,7 +417,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 					return
 				}
 				runtimeID := strings.TrimSpace(request.RuntimeID)
-				if err := services.DeviceRepository.RequireOwned(c.Request.Context(), string(actor.SpaceID), deviceID); err != nil {
+				if err := services.KernelContainer.DeviceRegistry.RequireTrustedDevice(c.Request.Context(), actor.SpaceID, runtimeidentity.ParseDeviceID(deviceID)); err != nil {
 					c.JSON(http.StatusNotFound, gin.H{"code": 404, "msg": err.Error()})
 					return
 				}
@@ -625,7 +615,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			mcpapi.RegisterRouter(apiGroup, ctx, services.MCPRuntime.API)
 		}
 		if services.Sync != nil && services.Sync.ChangeLog != nil {
-			character.RegisterCharacterRouterWithRecorder(apiGroup, ctx, ownedCharacterPreview{services: services}, services.Sync.ChangeLog)
+			character.RegisterCharacterRouterWithLifecycle(apiGroup, ctx, ownedCharacterPreview{services: services}, services.Sync.ChangeLog, characterAgentLifecycle{platform: services.AgentPlatform})
 		} else {
 			character.RegisterCharacterRouter(apiGroup, ctx, ownedCharacterPreview{services: services})
 		}
@@ -653,6 +643,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		if services.AgentPlatform != nil {
 			agentplatform.RegisterRoutes(apiGroup, services.AgentPlatform, spaceID, agentPlatformOwnerID)
 		}
+		agentrun.RegisterRoutes(apiGroup, services.AgentRuns, spaceID)
 		agent.RegisterAgentRuntimeRunners(ctx, agentToolFacade)
 		channelAccess := system.ChannelAvailabilityFunc(func(channelID string) bool {
 			if services.KernelContainer == nil || services.KernelContainer.ChannelResolver == nil {
@@ -669,7 +660,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		if services.DeviceMesh != nil {
 			systemRouterOptions = append(systemRouterOptions, system.WithSafetyCoordination(services.DeviceMesh.Coordination))
 		}
-		system.RegisterSystemRouter(apiGroup, ctx, systemSvc, services.Chat, services.UnifiedEntry, services.DataLifecycle, services.Reconciliation, services.MemoryConsumers, services.Temporal, services.DataPortability, services.Artifact.Service, channelAccess, systemRouterOptions...)
+		system.RegisterSystemRouter(apiGroup, ctx, systemSvc, services.Chat, services.UnifiedEntry, services.Reconciliation, services.MemoryConsumers, services.Temporal, services.DataPortability, services.Artifact.Service, channelAccess, systemRouterOptions...)
 		tts.RegisterTtsRouter(apiGroup, ctx)
 		asr.RegisterAsrRouter(apiGroup, ctx)
 		registerMeshRealtimePublicRoutes(r, services)
@@ -679,7 +670,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		imageintelligence.RegisterRouter(apiGroup, services.ImageIntelligence)
 		doctor.RegisterRouter(apiGroup, ctx.DB, services.Extension)
 		readiness.RegisterRouter(apiGroup, services.Readiness)
-		system.RegisterHealthRouter(apiGroup, services.CircuitBreakers, services.DataLifecycle, services.Reconciliation)
+		system.RegisterHealthRouter(apiGroup, services.CircuitBreakers, services.Reconciliation)
 		if services.DeviceMesh != nil {
 			safety.RegisterSafetyRouter(apiGroup, ctx.DB, services.DeviceMesh.Coordination)
 		} else {
@@ -1094,10 +1085,6 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		)
 		runtimev1.RegisterUserRoutes(apiGroup, services.DesktopPetRuntimeV1)
 	}
-
-	maintenanceAuthGroup := r.Group("/api")
-	maintenanceAuthGroup.Use(security.AuthenticationMiddleware(newAuthConfig("maintenance")))
-	maintenance.RegisterMaintenanceRouter(maintenanceAuthGroup, services.DesktopPetMaintenanceHandler)
 
 	return r, nil
 }

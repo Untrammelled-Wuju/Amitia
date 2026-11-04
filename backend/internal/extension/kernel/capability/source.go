@@ -10,7 +10,6 @@ const (
 	CapabilitySourceComputerUse CapabilitySource = "computer_use"
 	CapabilitySourceProvider    CapabilitySource = "provider"
 	CapabilitySourceInternal    CapabilitySource = "internal"
-	CapabilitySourceLegacy      CapabilitySource = "legacy"
 )
 
 type CapabilityType string
@@ -35,8 +34,6 @@ func CapabilitySourceToToolSource(s CapabilitySource) ToolSource {
 		return ToolSourceWorkflow
 	case CapabilitySourceInternal:
 		return ToolSourceInternal
-	case CapabilitySourceLegacy:
-		return ToolSourceLegacy
 	default:
 		return ToolSource(string(s))
 	}

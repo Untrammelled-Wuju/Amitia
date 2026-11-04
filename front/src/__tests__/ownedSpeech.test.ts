@@ -30,7 +30,7 @@ describe("Core 角色语音保存与播放", () => {
     Object.values(mocks).forEach((mock) => mock.mockReset());
     mocks.deployment.mockResolvedValue({ mode: "cloud" });
     resultChange = () => {};
-    scope = { authorizationRealm: "mesh", spaceId: "core-b", initiatorDeviceId: "source-a", targetDeviceId: "source-a", coreId: "core-b", providerEpoch: 1, coordinated: false, modeRevision: 1, permissionRevision: 1, targetPermissionRevision: 1, targetProviderEpoch: 1, roleId: "source-role", roleRevision: 1, roleOwnerId: "source-a", resourceOwnerId: "source-a", requestId: "query", turnId: "query-turn", executionId: "query-execution" };
+    scope = { authorizationRealm: "mesh", conversationRoleId: "source-role", spaceId: "core-b", initiatorDeviceId: "source-a", targetDeviceId: "source-a", coreId: "core-b", providerEpoch: 1, coordinated: false, modeRevision: 1, permissionRevision: 1, targetPermissionRevision: 1, targetProviderEpoch: 1, roleId: "source-role", roleRevision: 1, roleOwnerId: "source-a", resourceOwnerId: "source-a", requestId: "query", turnId: "query-turn", executionId: "query-execution" };
     mocks.get.mockImplementation(async (path) => ({ data: path.endsWith("/roles") ? { roles: [{ id: "source-role" }] } : { executionScope: structuredClone(scope) } }));
     mocks.post.mockImplementation(async (_path, payload) => {
       const hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${scope.coreId}\0${scope.initiatorDeviceId}\0${payload.requestId}`))), (value) => value.toString(16).padStart(2, "0")).join("");

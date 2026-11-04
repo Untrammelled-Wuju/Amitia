@@ -71,10 +71,3 @@ func TestStandardInstallTarget(t *testing.T) {
 		t.Fatalf("expected qdrant, got %s", target)
 	}
 }
-
-func TestEmptyRootSkipsLegacyCandidates(t *testing.T) {
-	candidates := legacyCandidates(platform.GuestPlatformWindows, "amd64", "", "")
-	if len(candidates) != 0 {
-		t.Fatalf("expected 0 candidates with empty roots, got %d", len(candidates))
-	}
-}

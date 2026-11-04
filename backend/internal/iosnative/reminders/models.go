@@ -5,11 +5,10 @@ import "time"
 type AuthorizationLevel string
 
 const (
-	AuthorizationNotDetermined    AuthorizationLevel = "not_determined"
-	AuthorizationRestricted       AuthorizationLevel = "restricted"
-	AuthorizationDenied           AuthorizationLevel = "denied"
-	AuthorizationFullAccess       AuthorizationLevel = "full_access"
-	AuthorizationLegacyAuthorized AuthorizationLevel = "legacy_authorized"
+	AuthorizationNotDetermined AuthorizationLevel = "not_determined"
+	AuthorizationRestricted    AuthorizationLevel = "restricted"
+	AuthorizationDenied        AuthorizationLevel = "denied"
+	AuthorizationFullAccess    AuthorizationLevel = "full_access"
 )
 
 type CapabilityState struct {

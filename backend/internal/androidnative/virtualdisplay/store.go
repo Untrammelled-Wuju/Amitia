@@ -6,8 +6,7 @@ import (
 	"time"
 )
 
-// Store tracks multiple live VirtualDisplay instances. Get() remains as a
-// backwards-compatible view of the most recently created active display.
+// Store tracks multiple live VirtualDisplay instances.
 type Store struct {
 	mu      sync.RWMutex
 	records map[VirtualDisplayRef]*VirtualDisplayRecord

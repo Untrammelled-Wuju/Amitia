@@ -16,38 +16,26 @@ class MobileDynamicRuntime {
       for (final rawContribution in contributions.whereType<Map>()) {
         final contribution = rawContribution.cast<String, dynamic>();
         final parentSlotId =
-            (contribution['slotId'] ?? contribution['slot_id'] ?? '')
-                .toString()
-                .trim();
+            (contribution['slotId'] ?? '').toString().trim();
         final children =
             (contribution['children'] as List?) ?? const <dynamic>[];
         for (final rawChild in children.whereType<Map>()) {
           final child = rawChild.cast<String, dynamic>();
-          final childId = (child['slotId'] ?? child['slot_id'] ?? '')
-              .toString()
-              .trim();
+          final childId = (child['slotId'] ?? '').toString().trim();
           if (childId != id) continue;
           return UISlotSnapshotEntry(
             slotId: childId,
             contractVersion:
-                _int(child['contractVersion'] ?? child['contract_version']) ?? 1,
-            supportedKinds: _strings(
-              child['supportedKinds'] ?? child['supported_kinds'],
-            ),
-            kind: _text(child['kind']),
-            multiplicity:
-                (child['multiplicity'] ?? 'ordered_multiple').toString(),
+                _int(child['contractVersion']) ?? 1,
+            supportedKinds: _strings(child['supportedKinds']),
+            kind: _requiredText(child['kind'], 'kind'),
             layout: (child['layout'] ?? 'stack').toString(),
             fallbackPolicy:
-                (child['fallbackPolicy'] ??
-                        child['fallback_policy'] ??
-                        'empty')
+                (child['fallbackPolicy'] ?? 'empty')
                     .toString(),
             ownerExtension: 'client-runtime:${active.packageId}',
             parentSlotId:
-                (child['parentSlotId'] ??
-                        child['parent_slot_id'] ??
-                        parentSlotId)
+                (child['parentSlotId'] ?? parentSlotId)
                     .toString(),
             declarationEpoch: revision,
             scope: (child['scope'] ?? 'session').toString(),
@@ -76,20 +64,12 @@ class MobileDynamicRuntime {
           (active.definition['contributions'] as List?) ?? const <dynamic>[];
       for (final raw in rows.whereType<Map>()) {
         final row = raw.cast<String, dynamic>();
-        final targetSlot = (row['slotId'] ?? row['slot_id'] ?? '')
-            .toString()
-            .trim();
+        final targetSlot = (row['slotId'] ?? '').toString().trim();
         if (targetSlot != slotId) continue;
         final sourceExtensionId =
-            (row['sourceExtensionId'] ?? row['source_extension_id'] ?? '')
-                .toString()
-                .trim();
+            (row['sourceExtensionId'] ?? '').toString().trim();
         final sourceContributionId =
-            (row['sourceContributionId'] ??
-                    row['source_contribution_id'] ??
-                    '')
-                .toString()
-                .trim();
+            (row['sourceContributionId'] ?? '').toString().trim();
         final key = (row['key'] ?? sourceContributionId).toString().trim();
         if (sourceExtensionId.isEmpty ||
             sourceContributionId.isEmpty ||
@@ -101,9 +81,8 @@ class MobileDynamicRuntime {
           sourceExtensionId,
           sourceContributionId,
         );
-        final entryKey =
-            _text(row['entryKey'] ?? row['entry_key']) ?? key;
-        final cellId = _text(row['cellId'] ?? row['cell_id']) ?? key;
+        final entryKey = _text(row['entryKey']) ?? key;
+        final cellId = _text(row['cellId']) ?? key;
         result.add(
           UIContributionSnapshotEntry(
             contributionId: 'client-runtime:$packageId@$version:$key',
@@ -136,7 +115,7 @@ class MobileDynamicRuntime {
         );
       }
     }
-    result.sort(_compareLegacyStable);
+    result.sort(_compareStable);
     return result;
   }
 
@@ -150,19 +129,14 @@ class MobileDynamicRuntime {
       final packageId = active.packageId;
       final version = active.version;
       final rows =
-          (active.definition['conversationNodes'] as List?) ?? const <dynamic>[];
+          (active.definition['conversationNodes'] as List?) ??
+          const <dynamic>[];
       for (final raw in rows.whereType<Map>()) {
         final row = raw.cast<String, dynamic>();
         final sourceExtensionId =
-            (row['sourceExtensionId'] ?? row['source_extension_id'] ?? '')
-                .toString()
-                .trim();
+            (row['sourceExtensionId'] ?? '').toString().trim();
         final sourceContributionId =
-            (row['sourceContributionId'] ??
-                    row['source_contribution_id'] ??
-                    '')
-                .toString()
-                .trim();
+            (row['sourceContributionId'] ?? '').toString().trim();
         final key = (row['key'] ?? sourceContributionId).toString().trim();
         final projection = (row['projection'] as Map?)?.cast<String, dynamic>();
         if (sourceExtensionId.isEmpty ||
@@ -193,7 +167,17 @@ class MobileDynamicRuntime {
             entryPath: source?.entryPath ?? '',
             schemaPath: source?.schemaPath,
             permissions: source?.permissions ?? const <String>[],
-            dataContract: <String, dynamic>{'projection': projection},
+            dataContract: <String, dynamic>{
+              'projection': <String, dynamic>{
+                'event_types': projection['eventTypes'],
+                'start_events': projection['startEvents'],
+                'end_events': projection['endEvents'],
+                'node_type': projection['nodeType'],
+                'key_path': projection['keyPath'],
+                'title_path': projection['titlePath'],
+                'max_events': projection['maxEvents'],
+              },
+            },
             visibility: source?.visibility ?? const <String, dynamic>{},
             ordering: _int(row['ordering']) ?? source?.ordering ?? 0,
             priority: _int(row['priority']) ?? source?.priority ?? 0,
@@ -205,13 +189,12 @@ class MobileDynamicRuntime {
         );
       }
     }
-    result.sort(_compareLegacyStable);
+    result.sort(_compareStable);
     return result;
   }
 
   /// Merges server and client-runtime contributions with the same dispatch
-  /// semantics as the desktop UI runtime. `kind` is authoritative; legacy
-  /// multiplicity is consulted only when the slot does not declare a kind.
+  /// semantics as the desktop UI runtime.
   static List<UIContributionSnapshotEntry> resolveSlot({
     required UISlotSnapshotEntry slot,
     required List<UIContributionSnapshotEntry> server,
@@ -221,17 +204,16 @@ class MobileDynamicRuntime {
     String? listOnly,
   }) {
     final supportedKinds = slot.supportedKinds.toSet();
-    final merged = <UIContributionSnapshotEntry>[
-      ...server,
-      ...dynamic,
-    ].where((entry) {
-      return supportedKinds.isEmpty || supportedKinds.contains(entry.kind);
-    }).toList(growable: false);
+    final merged = <UIContributionSnapshotEntry>[...server, ...dynamic]
+        .where((entry) {
+          return supportedKinds.isEmpty || supportedKinds.contains(entry.kind);
+        })
+        .toList(growable: false);
     if (merged.isEmpty) return const <UIContributionSnapshotEntry>[];
 
-    final kind = slot.kind?.trim();
-    if (kind == null || kind.isEmpty) {
-      return _dispatchLegacyMultiplicity(slot.multiplicity, merged);
+    final kind = slot.kind.trim();
+    if (kind.isEmpty) {
+      return const <UIContributionSnapshotEntry>[];
     }
 
     switch (kind) {
@@ -244,7 +226,7 @@ class MobileDynamicRuntime {
       case 'chain':
         return _dispatchChain(merged, owner);
       default:
-        return _dispatchLegacyMultiplicity(slot.multiplicity, merged);
+        return const <UIContributionSnapshotEntry>[];
     }
   }
 
@@ -276,9 +258,7 @@ class MobileDynamicRuntime {
     if (key.isEmpty) return const <UIContributionSnapshotEntry>[];
     return _pickShadowWinner(
       items
-          .where(
-            (item) => _identity(item.entryKey, item.contributionId) == key,
-          )
+          .where((item) => _identity(item.entryKey, item.contributionId) == key)
           .toList(growable: false),
       'keyed cell $key',
     );
@@ -288,10 +268,12 @@ class MobileDynamicRuntime {
     List<UIContributionSnapshotEntry> items,
     Map<String, dynamic> owner,
   ) {
-    final matched = items.where((item) {
-      if (item.runtimePackageId?.isNotEmpty != true) return true;
-      return _matchesDeclarativeOwner(owner, item.matchRules);
-    }).toList(growable: false);
+    final matched = items
+        .where((item) {
+          if (item.runtimePackageId?.isNotEmpty != true) return true;
+          return _matchesDeclarativeOwner(owner, item.matchRules);
+        })
+        .toList(growable: false);
     if (matched.isEmpty) return const <UIContributionSnapshotEntry>[];
     matched.sort(_compareChain);
     return <UIContributionSnapshotEntry>[matched.first];
@@ -314,7 +296,9 @@ class MobileDynamicRuntime {
     if (items.isEmpty) return null;
     final ordered = [...items]..sort(_compareShadow);
     final first = ordered.first;
-    final tied = ordered.where((item) => item.priority == first.priority).toList();
+    final tied = ordered
+        .where((item) => item.priority == first.priority)
+        .toList();
     if (tied.length > 1) {
       throw StateError(
         'UI slot $cell has multiple entries at strict priority '
@@ -322,23 +306,6 @@ class MobileDynamicRuntime {
       );
     }
     return first;
-  }
-
-  static List<UIContributionSnapshotEntry> _dispatchLegacyMultiplicity(
-    String multiplicity,
-    List<UIContributionSnapshotEntry> items,
-  ) {
-    switch (multiplicity) {
-      case 'single':
-      case 'exclusive':
-        final ordered = [...items]..sort(_compareLegacyStable);
-        return <UIContributionSnapshotEntry>[ordered.first];
-      case 'replaceable_single':
-        final ordered = [...items]..sort(_compareLegacyReplacement);
-        return <UIContributionSnapshotEntry>[ordered.first];
-      default:
-        return [...items]..sort(_compareLegacyStable);
-    }
   }
 
   static UIContributionSnapshotEntry? _findContribution(
@@ -371,13 +338,9 @@ class MobileDynamicRuntime {
           .trim()
           .toLowerCase();
       final targetVersion =
-          (package['targetVersion'] ?? package['target_version'] ?? '')
-              .toString()
-              .trim();
+          (package['targetVersion'] ?? '').toString().trim();
       final currentVersion =
-          (package['activeVersion'] ?? package['active_version'] ?? '')
-              .toString()
-              .trim();
+          (package['activeVersion'] ?? '').toString().trim();
       final activeVersion =
           (transition == 'starting' || transition == 'awaiting_client') &&
               targetVersion.isNotEmpty
@@ -469,6 +432,12 @@ String? _text(dynamic value) {
   return normalized.isEmpty ? null : normalized;
 }
 
+String _requiredText(dynamic value, String field) {
+  final text = (value ?? '').toString().trim();
+  if (text.isEmpty) throw FormatException('UI slot $field is required');
+  return text;
+}
+
 String _identity(String value, String fallback) {
   final normalized = value.trim();
   return normalized.isEmpty ? fallback : normalized;
@@ -517,7 +486,7 @@ int _compareListDisplay(
   return ordering != 0 ? ordering : _compareAssembly(a, b);
 }
 
-int _compareLegacyStable(
+int _compareStable(
   UIContributionSnapshotEntry a,
   UIContributionSnapshotEntry b,
 ) {
@@ -526,14 +495,4 @@ int _compareLegacyStable(
   final priority = b.priority.compareTo(a.priority);
   if (priority != 0) return priority;
   return a.contributionId.compareTo(b.contributionId);
-}
-
-int _compareLegacyReplacement(
-  UIContributionSnapshotEntry a,
-  UIContributionSnapshotEntry b,
-) {
-  final priority = b.priority.compareTo(a.priority);
-  if (priority != 0) return priority;
-  final ordering = a.ordering.compareTo(b.ordering);
-  return ordering != 0 ? ordering : a.contributionId.compareTo(b.contributionId);
 }

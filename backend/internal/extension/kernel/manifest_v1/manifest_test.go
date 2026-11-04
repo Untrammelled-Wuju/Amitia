@@ -172,6 +172,114 @@ func TestValidateDuplicateContribution(t *testing.T) {
 	}
 }
 
+func TestValidateCustomContributionWithAdapter(t *testing.T) {
+	m, _ := Parse([]byte(`{
+		"manifestVersion": 1,
+		"extension": {"id": "com.example/test", "name": {"default": "x"}, "version": "1.0.0"},
+		"publisher": {"id": "p", "displayName": "P"},
+		"compatibility": {"platforms": ["linux"]},
+		"modules": [{
+			"id": "m", "name": {"default": "M"}, "type": "javascript",
+			"contributions": [
+				{
+					"id": "market-page",
+					"kind": "com.example.market/page",
+					"adapter": "ui",
+					"contractVersion": 1,
+					"schema": {"type": "object", "required": ["kind"]},
+					"name": {"default": "Market Page"},
+					"spec": {"kind": "panel"}
+				}
+			]
+		}],
+		"integrity": {"algorithm": "sha256", "contentTreeHash": "x"}
+	}`))
+	report := m.Validate()
+	if report.HasErrors() {
+		t.Fatalf("custom contribution rejected: %v", report.Errors)
+	}
+	def, err := m.ToExtensionDefinition()
+	if err != nil {
+		t.Fatalf("ToExtensionDefinition: %v", err)
+	}
+	contribution := def.Modules[0].Contributions[0]
+	if contribution.Kind != "com.example.market/page" || contribution.EffectiveAdapter() != "ui" {
+		t.Fatalf("custom contribution lost adapter: %+v", contribution)
+	}
+}
+
+func TestValidateCustomContributionRequiresAdapter(t *testing.T) {
+	m, _ := Parse([]byte(`{
+		"manifestVersion": 1,
+		"extension": {"id": "com.example/test", "name": {"default": "x"}, "version": "1.0.0"},
+		"publisher": {"id": "p", "displayName": "P"},
+		"modules": [{
+			"id": "m", "name": {"default": "M"}, "type": "javascript",
+			"contributions": [
+				{"id": "market-page", "kind": "com.example.market/page", "name": {"default": "Market Page"}}
+			]
+		}],
+		"integrity": {"algorithm": "sha256", "contentTreeHash": "x"}
+	}`))
+	report := m.Validate()
+	found := false
+	for _, item := range report.Errors {
+		if item.Code == "adapter_required" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected adapter_required, got %v", report.Errors)
+	}
+}
+
+func TestValidateCustomContributionUsesStandardJSONSchema(t *testing.T) {
+	m, _ := Parse([]byte(`{
+		"manifestVersion": 1,
+		"extension": {"id": "com.example/test", "name": {"default": "x"}, "version": "1.0.0"},
+		"publisher": {"id": "p", "displayName": "P"},
+		"compatibility": {"platforms": ["linux"]},
+		"modules": [{
+			"id": "m", "name": {"default": "M"}, "type": "javascript",
+			"contributions": [
+				{
+					"id": "custom",
+					"kind": "com.example/custom",
+					"adapter": "tool",
+					"contractVersion": 1,
+					"schema": {
+						"type": "object",
+						"properties": {
+							"mode": {"enum": ["search", "install"]},
+							"query": {"type": "string", "minLength": 3}
+						},
+						"required": ["mode"],
+						"allOf": [{
+							"if": {"properties": {"mode": {"const": "search"}}},
+							"then": {"required": ["query"]}
+						}]
+					},
+					"name": {"default": "Custom"},
+					"spec": {"mode": "search"}
+				}
+			]
+		}],
+		"integrity": {"algorithm": "sha256", "contentTreeHash": "x"}
+	}`))
+	report := m.Validate()
+	found := false
+	for _, item := range report.Errors {
+		if item.Code == "schema_invalid_instance" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected standard schema validation error, got %+v", report.Errors)
+	}
+}
+
 func TestToExtensionDefinition(t *testing.T) {
 	m, _ := Parse([]byte(validManifest))
 	def, err := m.ToExtensionDefinition()

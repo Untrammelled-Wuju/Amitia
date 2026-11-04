@@ -118,10 +118,7 @@ func (e *CLIGitEngine) Init(ctx context.Context, path string) error {
 		return fmt.Errorf("%w: %v", ErrRepositoryInvalid, err)
 	}
 	if _, err := e.run(ctx, "", "init", "-b", "main", path); err != nil {
-		// Older Git versions may not support -b. Keep a compatibility fallback.
-		if _, fallbackErr := e.run(ctx, "", "init", path); fallbackErr != nil {
-			return fmt.Errorf("%w: %v", ErrRepositoryInvalid, fallbackErr)
-		}
+		return fmt.Errorf("%w: %v", ErrRepositoryInvalid, err)
 	}
 	return nil
 }

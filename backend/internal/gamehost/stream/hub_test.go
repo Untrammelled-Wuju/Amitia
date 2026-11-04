@@ -104,7 +104,7 @@ func TestGameHub_PublishState(t *testing.T) {
 		PluginID:  "plugin-s",
 		RuntimeID: "runtime-s",
 		ServiceID: "svc-s",
-		Key:        "bot.status",
+		Key:       "bot.status",
 		Payload:   json.RawMessage(`{"status":"online"}`),
 	}
 	snap, err := hub.PublishState(context.Background(), update)

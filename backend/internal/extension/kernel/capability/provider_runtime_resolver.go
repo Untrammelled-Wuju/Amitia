@@ -53,20 +53,6 @@ func (l *ProviderRegistryExecutionLookup) GetInstance(
 	return *inst, true
 }
 
-type LegacyRuntimeExecutionResolver struct{}
-
-func (r *LegacyRuntimeExecutionResolver) ResolveRuntimeExecution(
-	ctx context.Context,
-	tool ToolDefinition,
-	invocation ToolInvocationContext,
-) (RuntimeExecutionRoute, error) {
-	return RuntimeExecutionRoute{
-		Binding:      tool.Runtime,
-		Placement:    ProviderPlacementCore,
-		RemoteDevice: false,
-	}, nil
-}
-
 type ProviderRuntimeExecutionResolver struct {
 	lookup          ProviderExecutionLookup
 	sessionResolver DeviceSessionResolver
@@ -91,7 +77,7 @@ func (r *ProviderRuntimeExecutionResolver) ResolveRuntimeExecution(
 ) (RuntimeExecutionRoute, error) {
 	target := invocation.ExecutionTarget
 	if target.IsZero() || target.ProviderID == "" || target.ProviderInstanceID == "" {
-		return (&LegacyRuntimeExecutionResolver{}).ResolveRuntimeExecution(ctx, tool, invocation)
+		return RuntimeExecutionRoute{}, ErrProviderExecutionTargetInvalid
 	}
 
 	providerID := ParseProviderID(target.ProviderID)

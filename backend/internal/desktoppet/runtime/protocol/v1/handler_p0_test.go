@@ -9,6 +9,7 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
+	"github.com/u-ai/backend/internal/deviceruntime"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
@@ -22,7 +23,19 @@ func newHandlerP0DB(t *testing.T) (*gorm.DB, *Services, *Handler) {
 		t.Fatal(err)
 	}
 	services := NewServices(db)
-	return db, services, NewHandler(services)
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sessionStore := deviceruntime.NewSQLiteSessionStore(sqlDB)
+	if err := sessionStore.EnsureSchema(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	sessions, err := deviceruntime.NewService(sessionStore, deviceruntime.ServiceOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return db, services, NewHandlerWithDeviceRuntime(services, sessions)
 }
 
 func TestHandleHelloRejectsUnsupportedRuntimeContractBeforeSessionAcquire(t *testing.T) {

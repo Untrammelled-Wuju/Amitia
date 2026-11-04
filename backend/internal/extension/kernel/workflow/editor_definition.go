@@ -9,13 +9,10 @@ import (
 const UserWorkflowSchemaVersion = "workflow-v2"
 
 // NormalizeDefinition keeps the editor-friendly explicit edge model and the
-// executor-friendly DependsOn model in sync. Existing v1 definitions without
-// edges remain valid; v2 definitions use edges as the source of truth.
+// executor-friendly DependsOn model in sync.
 func NormalizeDefinition(def WorkflowDefinition) (WorkflowDefinition, error) {
-	var migrateErr error
-	def, migrateErr = MigrateDefinition(def)
-	if migrateErr != nil {
-		return def, migrateErr
+	if def.SchemaVersion != "" && def.SchemaVersion != UserWorkflowSchemaVersion {
+		return def, fmt.Errorf("workflow: unsupported schema version %q (runtime supports %q)", def.SchemaVersion, UserWorkflowSchemaVersion)
 	}
 	// Registry values are returned by value, but slices still share backing arrays.
 	// Clone editor-owned collections before normalizing so enable/update/compile
@@ -54,7 +51,7 @@ func NormalizeDefinition(def WorkflowDefinition) (WorkflowDefinition, error) {
 	}
 
 	// workflow-v2 uses explicit edges as the source of truth even when the
-	// edge list is empty. Legacy definitions have already been migrated above.
+	// edge list is empty.
 	{
 		ids := make(map[string]struct{}, len(def.Nodes))
 		for i := range def.Nodes {
@@ -142,7 +139,7 @@ func containsString(values []string, candidate string) bool {
 }
 
 // MaterializeEdgeConditions converts editor edge predicates into the existing
-// per-node When expression understood by both legacy and compiled executors.
+// per-node When expression understood by the compiled executor.
 // Multiple incoming edge predicates and an existing node predicate are ANDed.
 func MaterializeEdgeConditions(def WorkflowDefinition) (WorkflowDefinition, error) {
 	if len(def.Edges) == 0 {

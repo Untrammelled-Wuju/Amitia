@@ -29,13 +29,11 @@ const (
 	ArtifactReferenceOperation       = "operation"
 	ArtifactReferenceExportLease     = "export_lease"
 	ArtifactReferenceManualRetention = "manual_retention"
-	ArtifactReferenceLegacyMigration = "legacy_migration"
 )
 
 var artifactReferenceTypes = map[string]struct{}{
 	ArtifactReferencePreview: {}, ArtifactReferenceInstallation: {}, ArtifactReferenceRollbackPoint: {},
 	ArtifactReferenceOperation: {}, ArtifactReferenceExportLease: {}, ArtifactReferenceManualRetention: {},
-	ArtifactReferenceLegacyMigration: {},
 }
 
 type PackageArtifactGCResult struct {

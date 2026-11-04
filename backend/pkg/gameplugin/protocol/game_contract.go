@@ -155,7 +155,7 @@ type PluginChannelSpec struct {
 	ServiceID     string            `json:"serviceId,omitempty"`
 	Kind          string            `json:"kind"`
 	SchemaID      string            `json:"schemaId,omitempty"`
-	Direction     ChannelDirection  `json:"direction,omitempty"`
+	Direction     ChannelDirection  `json:"direction"`
 	FrequencyHint *FrequencyHint    `json:"frequencyHint,omitempty"`
 	Metadata      map[string]string `json:"metadata,omitempty"`
 }
@@ -442,6 +442,9 @@ func validateRestrictedNetworkAllowlist(domains, ips []string, ports []int, tran
 	}
 	if len(ports) == 0 {
 		return fmt.Errorf("network.allowedPorts is required for restricted mode")
+	}
+	if len(transports) == 0 {
+		return fmt.Errorf("network.allowedTransports is required for restricted mode")
 	}
 	seenDomains := make(map[string]struct{}, len(domains))
 	for _, raw := range domains {

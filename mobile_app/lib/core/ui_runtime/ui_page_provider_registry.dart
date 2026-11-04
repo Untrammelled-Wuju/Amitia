@@ -59,9 +59,8 @@ abstract final class UIPageProviderRegistry {
       ...((metadata['routes'] as List?) ?? const <dynamic>[]).whereType<String>(),
       ...((metadata['routePatterns'] as List?) ?? const <dynamic>[]).whereType<String>(),
     ].map((e) => e.trim()).where((e) => e.isNotEmpty);
-    final aliases = uiRouteAliases(route);
     if (routeSelectors.any(
-      (pattern) => aliases.any((candidate) => _matchesPattern(candidate, pattern)),
+      (pattern) => _matchesPattern(route, pattern),
     )) {
       return true;
     }

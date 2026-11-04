@@ -480,10 +480,9 @@ async function loadDataSources() {
     await Promise.all(selected.map(async (source: SchemaUIDataSource) => {
       try {
         const sourceInput = asRecord(perSource[source.id]);
-        const fallbackInput = asRecord(props.context?.input);
         dataSourceState[source.id] = await postBridge("ui.data.request", {
           key: source.id,
-          params: Object.keys(sourceInput).length > 0 ? sourceInput : fallbackInput,
+          params: sourceInput,
         });
       } catch (e) {
         if (import.meta.env.DEV) console.warn(`[SchemaUI] data source ${source.id} failed`, e);

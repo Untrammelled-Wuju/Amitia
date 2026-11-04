@@ -18,6 +18,12 @@ void main() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
           calls.add(call.method);
+          if (call.method == 'runtime.getBackendConnection') {
+            return {
+              'status': 'available',
+              'endpoint': {'host': '127.0.0.1', 'port': 43821},
+            };
+          }
           return {'state': 'READY', 'activeProfile': 'device-agent'};
         });
     final controller = MethodChannelEmbeddedRuntimeController();
@@ -25,10 +31,10 @@ void main() {
       await controller.ensureRunning(EmbeddedRuntimeProfile.deviceAgent),
       EmbeddedRuntimeStatus.ready,
     );
-    expect(calls, ['runtime.snapshot']);
+    expect(calls, ['runtime.snapshot', 'runtime.getBackendConnection']);
     expect(
       (await controller.getEndpoint()).httpBaseUri.toString(),
-      'http://127.0.0.1:18899',
+      'http://127.0.0.1:43821',
     );
   });
 

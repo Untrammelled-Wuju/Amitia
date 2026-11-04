@@ -502,7 +502,7 @@ func TestR62JournalRejectsLegacyEmptyExpectedAggregate(t *testing.T) {
 	if err == nil {
 		t.Fatal("existing journal with empty expected aggregate hash must fail")
 	}
-	if !IsPackageErrorCode(err, PackageErrCodeUserDataJournalLegacyEmpty) {
+	if !IsPackageErrorCode(err, PackageErrCodeUserDataJournalRequiredFieldMissing) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -1200,7 +1200,7 @@ func TestR62JournalRejectsLegacyEmptyNamespaceHash(t *testing.T) {
 	if err == nil {
 		t.Fatal("journal with empty namespace hash must fail")
 	}
-	if !IsPackageErrorCode(err, PackageErrCodeUserDataJournalLegacyEmpty) {
+	if !IsPackageErrorCode(err, PackageErrCodeUserDataJournalRequiredFieldMissing) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

@@ -104,7 +104,7 @@ func (c *CanonicalRemoteConnection) performHandshake(ctx context.Context) error 
 	streamTransport := c.transport
 	c.mu.RUnlock()
 
-	transportAdapter := &remoteTransportLegacyAdapter{transport: streamTransport}
+	transportAdapter := &remoteTransportAdapter{transport: streamTransport}
 
 	conn := client.NewConnection(transportAdapter, client.Config{
 		ClientInfo: protocol.Implementation{
@@ -245,28 +245,28 @@ func (c *CanonicalRemoteConnection) healthCheck(ctx context.Context, serverID st
 	return c.Health()
 }
 
-// remoteTransportLegacyAdapter wraps RemoteTransport to implement transport.MCPTransport.
-type remoteTransportLegacyAdapter struct {
+// remoteTransportAdapter wraps RemoteTransport to implement transport.MCPTransport.
+type remoteTransportAdapter struct {
 	transport RemoteTransport
 }
 
-func (a *remoteTransportLegacyAdapter) Start(ctx context.Context) error {
+func (a *remoteTransportAdapter) Start(ctx context.Context) error {
 	return a.transport.Start(ctx)
 }
 
-func (a *remoteTransportLegacyAdapter) Send(ctx context.Context, message protocol.Message) error {
+func (a *remoteTransportAdapter) Send(ctx context.Context, message protocol.Message) error {
 	return a.transport.Send(ctx, message)
 }
 
-func (a *remoteTransportLegacyAdapter) Receive() <-chan protocol.Message {
+func (a *remoteTransportAdapter) Receive() <-chan protocol.Message {
 	return a.transport.Receive()
 }
 
-func (a *remoteTransportLegacyAdapter) Close(ctx context.Context) error {
+func (a *remoteTransportAdapter) Close(ctx context.Context) error {
 	return a.transport.Close(ctx)
 }
 
-func (a *remoteTransportLegacyAdapter) State() transport.State {
+func (a *remoteTransportAdapter) State() transport.State {
 	switch a.transport.State() {
 	case RemoteStateStopped:
 		return transport.StateStopped

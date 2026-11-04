@@ -111,7 +111,7 @@ func (r *Runtime) PreviewPackage(ctx context.Context, request PackagePreviewRequ
 		ContentTreeHash: pkg.Tree.TreeHash, ArtifactHash: computeArtifactHashFromPackage(pkg),
 		SecurityPassed: true, SecurityReport: securityReport, Manifest: pkg.Manifest,
 		ValidationReport: validation, SignatureStatus: "unsigned", TrustDecision: "unsigned",
-		ExpiresAt: time.Now().UTC().Add(30 * time.Minute),
+		Source: request.Source, ExpiresAt: time.Now().UTC().Add(30 * time.Minute),
 	}
 	for _, validationError := range validation.Errors {
 		preview.Issues = append(preview.Issues, PreviewIssue{Category: PreviewNotInstallable, Code: validationError.Code, Message: validationError.Message, Path: validationError.Path})
@@ -158,11 +158,6 @@ func (r *Runtime) PreviewPackage(ctx context.Context, request PackagePreviewRequ
 				preview.TrustDecision = string(identity.TrustLevel)
 			}
 		}
-	} else if pkg.Signatures != nil {
-		preview.SignatureStatus = "legacy_signature"
-		preview.SignerKeyID = pkg.Signatures.KeyID
-		preview.TrustDecision = "rejected"
-		preview.Issues = append(preview.Issues, PreviewIssue{Category: PreviewNotInstallable, Code: "package_signature_required", Message: "Manifest v1 signature is required"})
 	} else {
 		if r.packageUnsignedDevAllowed(request, preview.ExtensionID) {
 			preview.DevOnly = true
@@ -230,7 +225,7 @@ func (r *Runtime) PreviewPackage(ctx context.Context, request PackagePreviewRequ
 	if err != nil {
 		return InstallPreview{}, err
 	}
-	verificationJSON, _ := json.Marshal(map[string]any{"security": securityReport, "signatureStatus": preview.SignatureStatus, "trustDecision": preview.TrustDecision, "policyVersion": packagePolicyVersion, "migrationPreview": preview.MigrationPreview, "migrationPlanHash": preview.MigrationPlanHash})
+	verificationJSON, _ := json.Marshal(map[string]any{"security": securityReport, "signatureStatus": preview.SignatureStatus, "trustDecision": preview.TrustDecision, "source": preview.Source, "policyVersion": packagePolicyVersion, "migrationPreview": preview.MigrationPreview, "migrationPlanHash": preview.MigrationPlanHash})
 	artifact.VerificationReportJSON = string(verificationJSON)
 	if err := r.container.PackageRepository.PutArtifact(ctx, artifact); err != nil {
 		return InstallPreview{}, err

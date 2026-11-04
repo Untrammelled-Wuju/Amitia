@@ -672,7 +672,7 @@ func TestResolverNeverUsesSystemPath(t *testing.T) {
 	}
 }
 
-func TestRuntimePackagePrecedesLegacyBundled(t *testing.T) {
+func TestRuntimePackageResolution(t *testing.T) {
 	cfg := makeConfig(true, "builtin.node-process")
 	runDir := t.TempDir()
 	runtimePkgNode := filepath.Join(runDir, "node", "bin", "node")
@@ -689,28 +689,7 @@ func TestRuntimePackagePrecedesLegacyBundled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if env.Source != SourceRuntimePackage && env.Source != SourceLegacyBundled {
-		t.Errorf("expected runtime-package or legacy-bundled source, got %s (binary=%s)", env.Source, env.NodeBinary)
-	}
-}
-
-func TestLegacyLinuxNodeCandidatesIntegration(t *testing.T) {
-	cfg := makeConfig(true, "builtin.node-process")
-	host := makeFakeHost(platform.GuestPlatformLinux, "amd64", "/run", "/run", nil)
-	legacyBinNode := filepath.Join("/run", "backend", "node", "node")
-	inspector := newFakeInspector(map[string]os.FileInfo{
-		legacyBinNode:                            fakeFileInfo{mode: 0755},
-		filepath.Join("/run", "backend", "node"): fakeFileInfo{mode: 0755, dir: true},
-	})
-	resolver, err := NewResolver(ResolveContext{Config: cfg, Host: host, Inspector: inspector})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	env, err := resolver.Resolve(context.Background())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if env.Source != SourceLegacyBundled {
-		t.Errorf("expected legacy-bundled, got %s", env.Source)
+	if env.Source != SourceRuntimePackage {
+		t.Errorf("expected runtime-package source, got %s (binary=%s)", env.Source, env.NodeBinary)
 	}
 }

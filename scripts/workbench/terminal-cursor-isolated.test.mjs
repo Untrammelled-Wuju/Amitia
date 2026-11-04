@@ -64,15 +64,6 @@ test('unexplained missing bytes are rejected for replay', () => {
   assert.equal(reconcile(old, 9).kind, 'ignore');
 });
 
-test('legacy server snapshots derive byte start without re-encoding Unicode', () => {
-  const legacy = frame('你好!', 13);
-  delete legacy.fromCursor;
-  const first = reconcile(legacy, 13);
-  assert.equal(resultText(first), '你好!');
-  const overlap = reconcile(legacy, 16);
-  assert.deepEqual([...overlap.bytes], [...Buffer.from('你好!').subarray(3)]);
-});
-
 test('malformed cursor, payload and inconsistent boundaries are refused', () => {
   assert.throws(() => reconcile(frame('a', 0, { fromCursor: -1 }), 0), /游标/);
   assert.throws(() => reconcile(frame('a', 0, { fromCursor: 0, cursor: 999 }), 0), /游标/);

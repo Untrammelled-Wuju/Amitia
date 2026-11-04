@@ -20,6 +20,7 @@ type CancellableRuntimeInvokeHandler func(ctx context.Context, invoke protocol.R
 
 type RuntimeDispatcher interface {
 	Resolve(handlerName string) RuntimeInvokeHandler
+	ResolveContext(string) CancellableRuntimeInvokeHandler
 }
 
 type RuntimeContextDispatcher interface {
@@ -55,7 +56,6 @@ type runtimeFenceOwner struct {
 }
 
 type defaultRuntimeDispatcher struct {
-	handlers            map[string]RuntimeInvokeHandler
 	cancellableHandlers map[string]CancellableRuntimeInvokeHandler
 	mu                  sync.Mutex
 	cancels             map[string]context.CancelFunc
@@ -70,7 +70,6 @@ type defaultRuntimeDispatcher struct {
 
 func NewRuntimeDispatcher() *defaultRuntimeDispatcher {
 	return &defaultRuntimeDispatcher{
-		handlers:            make(map[string]RuntimeInvokeHandler),
 		cancellableHandlers: make(map[string]CancellableRuntimeInvokeHandler),
 		cancels:             make(map[string]context.CancelFunc),
 		completed:           make(map[string]cachedRuntimeInvokeResult),
@@ -79,15 +78,6 @@ func NewRuntimeDispatcher() *defaultRuntimeDispatcher {
 		fenceOwners:         make(map[string]runtimeFenceOwner),
 		cancelled:           make(map[string]time.Time),
 	}
-}
-
-func (d *defaultRuntimeDispatcher) Register(handlerName string, handler RuntimeInvokeHandler) {
-	if d == nil || handlerName == "" || handler == nil {
-		return
-	}
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.handlers[handlerName] = handler
 }
 
 func (d *defaultRuntimeDispatcher) RegisterCancellable(handlerName string, handler CancellableRuntimeInvokeHandler) {
@@ -115,10 +105,10 @@ func (d *defaultRuntimeDispatcher) ResolveContext(handlerName string) Cancellabl
 	}
 	d.mu.Lock()
 	generation := d.cancelGeneration
-	cancellable, legacy := d.cancellableHandlers[handlerName], d.handlers[handlerName]
+	cancellable := d.cancellableHandlers[handlerName]
 	d.mu.Unlock()
-	var base CancellableRuntimeInvokeHandler
-	if handler := cancellable; handler != nil {
+	base := CancellableRuntimeInvokeHandler(nil)
+	if cancellable != nil {
 		base = func(ctx context.Context, invoke protocol.RuntimeInvokePayload) (*protocol.RuntimeResultPayload, error) {
 			var cancel context.CancelFunc
 			if invoke.DeadlineMs > 0 {
@@ -140,11 +130,7 @@ func (d *defaultRuntimeDispatcher) ResolveContext(handlerName string) Cancellabl
 				delete(d.cancels, invoke.InvocationID)
 				d.mu.Unlock()
 			}()
-			return handler(ctx, invoke)
-		}
-	} else if legacy != nil {
-		base = func(_ context.Context, invoke protocol.RuntimeInvokePayload) (*protocol.RuntimeResultPayload, error) {
-			return legacy(invoke)
+			return cancellable(ctx, invoke)
 		}
 	}
 	if base == nil {
@@ -353,14 +339,8 @@ func (d *chainedRuntimeDispatcher) ResolveContext(name string) CancellableRuntim
 		if dispatcher == nil {
 			continue
 		}
-		if contextual, ok := dispatcher.(RuntimeContextDispatcher); ok {
-			if handler := contextual.ResolveContext(name); handler != nil {
-				return handler
-			}
-		} else if handler := dispatcher.Resolve(name); handler != nil {
-			return func(_ context.Context, invoke protocol.RuntimeInvokePayload) (*protocol.RuntimeResultPayload, error) {
-				return handler(invoke)
-			}
+		if handler := dispatcher.ResolveContext(name); handler != nil {
+			return handler
 		}
 	}
 	return nil

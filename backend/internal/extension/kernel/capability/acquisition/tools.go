@@ -1,6 +1,6 @@
 package acquisition
 
-// FindCapabilitiesTool 定义 find_capability 工具（ToolDefinition 兼容格式）
+// FindCapabilitiesTool 定义 find_capability 工具。
 const FindCapabilitiesToolID = "find_capability"
 const FindCapabilitiesToolDescription = "Discover installed and local capabilities, GitHub Agent Skills, official MCP Registry servers, and native Amitia plugin packages. Use query for search words and preferredKind for skill, mcp, or extension. Use sourceUri for a verified local skill directory or GitHub skill directory; an MCP requires its actual install descriptor. Inspect source errors and missing configuration; never invent endpoints, credentials, or package identities. Returns ranked candidates with their original source and install descriptor."
 

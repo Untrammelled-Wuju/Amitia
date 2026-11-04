@@ -198,28 +198,6 @@ func (r *resolver) performDetection(ctx context.Context) (Environment, error) {
 		return env, newQdrantBinaryNotInstalled(SourceRuntimePackage)
 	}
 
-	paths := r.host.Paths()
-	for _, candidate := range legacyCandidates(guest, architecture, paths.Root, paths.WorkspaceDir) {
-		info, err := r.inspector.Stat(candidate)
-		if err != nil {
-			continue
-		}
-		valid, _ := isValidBinaryPath(info, guest)
-		if !valid {
-			continue
-		}
-		abs, err := r.inspector.Abs(candidate)
-		if err != nil {
-			abs = candidate
-		}
-		env.BinaryPath = abs
-		env.DistributionRoot = deriveDistributionRoot(abs)
-		env.Source = SourceLegacyBundled
-		env.Installed = true
-		env.Explicit = false
-		return env, nil
-	}
-
 	if runtimeRoot == "" {
 		return Environment{}, newRuntimeRootUnavailable("runtime resource root unavailable")
 	}

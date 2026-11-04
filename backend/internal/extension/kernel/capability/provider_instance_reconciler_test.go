@@ -170,3 +170,9 @@ func TestProviderInstanceReconcilerTreatsPluginJavaScriptAsInProcess(t *testing.
 		t.Fatalf("expected executable plugin javascript instance, got %+v", instances)
 	}
 }
+
+func TestRuntimeTypeFromManifestBackgroundRemoval(t *testing.T) {
+	if got := runtimeTypeFromManifest(domain.RuntimeTypeBackgroundRemoval, domain.ModulePlacementCloud); got != RuntimeTypeBackgroundRemoval {
+		t.Fatalf("runtime type = %q, want %q", got, RuntimeTypeBackgroundRemoval)
+	}
+}

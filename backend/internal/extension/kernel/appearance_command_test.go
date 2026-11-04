@@ -55,7 +55,7 @@ func TestAppearanceOriginAcceptsVerifiedDeviceWithoutAuthSession(t *testing.T) {
 }
 
 func TestAppearanceFailsClosedWithoutAuthenticatedOrigin(t *testing.T) {
-	notifier := NewSSEUIHostNotifier(nil)
+	notifier := NewSSEUIHostNotifier(nil, nil)
 	_, err := notifier.ExecuteAppearanceCommand(context.Background(), "reset", 0, nil)
 	if err == nil || !strings.Contains(err.Error(), "authenticated device") {
 		t.Fatalf("expected unauthorized rejection: %v", err)
@@ -132,7 +132,7 @@ func TestAppearanceCommandRoutesStyleEventToOriginatingDevice(t *testing.T) {
 		DeviceID:      runtimeidentity.DeviceID("device-style"),
 		SessionID:     "session-style",
 	}
-	if err := registry.RegisterHost(context.Background(), &host_registry.HostEntry{
+	if err := registry.RegisterHost(context.Background(), &host_registry.RuntimeEntry{
 		EntryID:       "host-style",
 		Kind:          host_registry.RegistryEntryKindUIHost,
 		SpaceID:       actor.SpaceID,
@@ -149,8 +149,8 @@ func TestAppearanceCommandRoutesStyleEventToOriginatingDevice(t *testing.T) {
 	clientID := "host-style"
 	client := hub.Subscribe(clientID)
 	defer hub.Unsubscribe(clientID)
-	notifier := NewSSEUIHostNotifierWithRegistry(hub, registry)
-	readyHosts, err := registry.ListReadyHosts(context.Background(), actor.SpaceID, host_registry.CapUIStyle)
+	notifier := NewSSEUIHostNotifier(hub, registry)
+	readyHosts, err := registry.ListReadyHosts(context.Background(), actor.SpaceID, host_registry.EndpointFeatureUIStyle)
 	if err != nil || len(readyHosts) != 1 {
 		t.Fatalf("ready ui.style hosts = %d, err = %v", len(readyHosts), err)
 	}
@@ -258,7 +258,7 @@ func TestAppearanceCommandForwardsResetAndInspectChanges(t *testing.T) {
 		DeviceID:      runtimeidentity.DeviceID("device-filter"),
 		SessionID:     "session-filter",
 	}
-	if err := registry.RegisterHost(context.Background(), &host_registry.HostEntry{
+	if err := registry.RegisterHost(context.Background(), &host_registry.RuntimeEntry{
 		EntryID:       "host-filter",
 		Kind:          host_registry.RegistryEntryKindUIHost,
 		SpaceID:       actor.SpaceID,
@@ -275,7 +275,7 @@ func TestAppearanceCommandForwardsResetAndInspectChanges(t *testing.T) {
 	clientID := "host-filter"
 	client := hub.Subscribe(clientID)
 	defer hub.Unsubscribe(clientID)
-	notifier := NewSSEUIHostNotifierWithRegistry(hub, registry)
+	notifier := NewSSEUIHostNotifier(hub, registry)
 
 	cases := []struct {
 		action  string

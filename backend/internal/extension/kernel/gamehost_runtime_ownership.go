@@ -24,7 +24,7 @@ func (r *Runtime) gameHostOwnedRuntimeModules(ctx context.Context, extensionID d
 		return nil, fmt.Errorf("list contributions for game runtime ownership: %w", err)
 	}
 	for _, contribution := range contributions {
-		if contribution.Kind != domain.ContributionKindGamePlugin {
+		if contribution.EffectiveAdapter() != domain.ContributionAdapterGame {
 			continue
 		}
 		moduleIDs, err := gameHostContributionRuntimeModules(contribution)

@@ -362,12 +362,6 @@ class _KnowledgeDiagnosticsPageState
         children: [
           Chip(
             label: Text(
-              value.retrievalPolicyEnabled ? 'POLICY ACTIVE' : 'POLICY LEGACY',
-            ),
-          ),
-          if (value.retrievalPolicyShadow) const Chip(label: Text('SHADOW')),
-          Chip(
-            label: Text(
               value.canonicalReaderEnabled ? 'READER ON' : 'READER OFF',
             ),
           ),
@@ -388,7 +382,7 @@ class _KnowledgeDiagnosticsPageState
       ),
       if (_traces.isNotEmpty)
         Text(
-          '最近 ${_traces.length} 条：actual=${_counts(_traces.map((item) => item.policyMode))} · shadow=${_counts(_traces.where((item) => item.shadowLevel.isNotEmpty).map((item) => item.shadowLevel))}',
+          '最近 ${_traces.length} 条：actual=${_counts(_traces.map((item) => item.policyMode))}',
           style: AppTypography.caption(context),
         ),
     ]);
@@ -552,7 +546,7 @@ class _KnowledgeDiagnosticsPageState
                       '${item.level.toUpperCase()} · ${item.policyMode} · ${item.durationMs}ms',
                     ),
                     subtitle: Text(
-                      '候选 ${item.candidateCount} / 选中 ${item.selectedCount} · ${item.sufficient ? 'sufficient' : 'insufficient'} · ${item.routeReason}${item.shadowLevel.isEmpty ? '' : ' · shadow ${item.shadowLevel}'}',
+                      '候选 ${item.candidateCount} / 选中 ${item.selectedCount} · ${item.sufficient ? 'sufficient' : 'insufficient'} · ${item.routeReason}',
                     ),
                     children: [
                       Container(

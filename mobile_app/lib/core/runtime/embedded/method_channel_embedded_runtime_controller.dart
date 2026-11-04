@@ -67,8 +67,7 @@ class MethodChannelEmbeddedRuntimeController
       }
 
       if (currentStatus == EmbeddedRuntimeStatus.ready) {
-        // READY without a profile is treated as unsafe legacy state. Do not
-        // silently claim it satisfies a profile-specific request.
+        // READY without a profile is invalid for a profile-specific request.
         if (_activeProfile(snapshot) == requestedProfile) {
           _lastEndpoint = await getEndpoint();
           return EmbeddedRuntimeStatus.ready;
@@ -137,8 +136,8 @@ class MethodChannelEmbeddedRuntimeController
       }
       return EmbeddedRuntimeStatus.failed;
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-return EmbeddedRuntimeStatus.failed;
+      print("[original-error] $error\n$stackTrace");
+      return EmbeddedRuntimeStatus.failed;
     }
   }
 
@@ -190,8 +189,8 @@ return EmbeddedRuntimeStatus.failed;
       }
       return EmbeddedRuntimeStatus.failed;
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-return EmbeddedRuntimeStatus.failed;
+      print("[original-error] $error\n$stackTrace");
+      return EmbeddedRuntimeStatus.failed;
     }
   }
 
@@ -212,7 +211,9 @@ return EmbeddedRuntimeStatus.failed;
         'runtime.getBackendConnection',
         <String, Object?>{'expectedRuntimeGeneration': null},
       );
-      final payload = result == null ? <String, dynamic>{} : _stringKeyMap(result);
+      final payload = result == null
+          ? <String, dynamic>{}
+          : _stringKeyMap(result);
       final endpoint = payload['endpoint'];
       if (payload['status'] == 'available' && endpoint is Map) {
         final map = _stringKeyMap(endpoint);
@@ -231,16 +232,10 @@ return EmbeddedRuntimeStatus.failed;
         }
       }
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
-    final endpoint = BackendEndpoint(
-      role: BackendEndpointRole.localRuntime,
-      httpBaseUri: Uri(scheme: 'http', host: '127.0.0.1', port: 18899),
-      websocketBaseUri: Uri(scheme: 'ws', host: '127.0.0.1', port: 18899),
-      isRemote: false,
-    );
-    _lastEndpoint = endpoint;
-    return endpoint;
+      print("[original-error] $error\n$stackTrace");
+      throw StateError('embedded runtime endpoint unavailable: $error');
+    }
+    throw StateError('embedded runtime endpoint is unavailable');
   }
 
   String? _activeProfile(Map<String, dynamic> snapshot) {

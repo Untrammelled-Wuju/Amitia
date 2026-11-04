@@ -2,7 +2,7 @@ import type { UIProviderCapability, UIProviderDefinition, UIProviderResolveConte
 import { resolveHostEnvironment } from "@/composables/useHostEnvironment";
 import { isProviderCompatible } from "./providerRuntime";
 import { providerHasRouteSelectors } from "./providerCollection";
-import { canonicalUISurfaceId, uiRouteAliases } from "./uiSurfaceCatalog";
+import { canonicalUISurfaceId } from "./uiSurfaceCatalog";
 
 function matchesPattern(path: string, pattern: string): boolean {
   const clean = pattern.trim();
@@ -39,9 +39,8 @@ function providerMatchesRoute(provider: UIProviderDefinition, path: string): boo
     .filter((item) => typeof item === "string")
     .map((item) => String(item ?? "").trim())
     .filter(Boolean);
-  const aliases = uiRouteAliases(path);
   if (routeSelectors.length > 0) {
-    return routeSelectors.some((pattern) => aliases.some((candidate) => matchesPattern(candidate, pattern)));
+    return routeSelectors.some((pattern) => matchesPattern(path, pattern));
   }
 
   const surfaces = Array.isArray(metadata.surfaces) ? metadata.surfaces : [];

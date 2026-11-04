@@ -12,6 +12,27 @@
     <div class="new-group-dialog">
       <section>
         <div class="selector-heading">
+          <div><strong>从团队创建</strong><span>仅复制当前成员快照，后续团队变化不会影响群聊</span></div>
+          <el-button size="small" @click="teamCreateVisible = true">创建团队</el-button>
+        </div>
+        <el-select
+          v-model="selectedTeamId"
+          clearable
+          filterable
+          class="project-select"
+          :loading="teamsLoading"
+          :disabled="creating || teamsLoading"
+          placeholder="可选：选择一个持久团队"
+          data-amitia-ui="new-group.team"
+          @change="selectTeam"
+          @clear="clearTeamSelection"
+        >
+          <el-option v-for="team in teams" :key="team.id" :label="team.name" :value="team.id" />
+        </el-select>
+        <span v-if="teamError" class="project-status">{{ teamError }}</span>
+      </section>
+      <section>
+        <div class="selector-heading">
           <div><strong>默认发言角色</strong><span>发送未点名消息时使用此角色身份</span></div>
         </div>
         <div class="role-grid role-grid--single">
@@ -31,7 +52,7 @@
       </section>
       <section>
         <div class="selector-heading">
-          <div><strong>创建到项目</strong><span>可选；不选择时进入默认消息列表</span></div>
+          <div><strong>创建到项目</strong><span>{{ projectRequired ? "项目模式下必须选择创建到项目" : "可选；不选择时进入默认消息列表" }}</span></div>
         </div>
         <el-select
           v-model="selectedProjectId"
@@ -40,7 +61,11 @@
           :disabled="creating || projectsLoading"
           data-amitia-ui="new-group.project"
         >
-          <el-option label="不加入项目（默认消息）" value="__none__" />
+          <el-option
+            :label="projectRequired ? '请选择项目' : '不加入项目（默认消息）'"
+            value="__none__"
+            :disabled="projectRequired"
+          />
           <el-option
             v-for="project in projects"
             :key="project.id"
@@ -49,7 +74,7 @@
           />
         </el-select>
         <span v-if="projectsError" class="project-status">{{ projectsError }}</span>
-        <span v-else-if="!projectsLoading && projects.length === 0" class="project-status">当前角色暂无可选项目，仍可创建到默认消息列表。</span>
+        <span v-else-if="!projectsLoading && projects.length === 0" class="project-status">{{ projectRequired ? "项目模式下必须选择项目，请先创建可用项目。" : "当前角色暂无可选项目，仍可创建到默认消息列表。" }}</span>
       </section>
       <section>
         <div class="selector-heading">
@@ -79,6 +104,7 @@
       <el-button type="primary" :loading="creating" :disabled="!canCreate" @click="create">创建群聊</el-button>
     </template>
   </el-dialog>
+  <TeamCreateDialog v-model:visible="teamCreateVisible" @created="handleTeamCreated" />
 </template>
 
 <script setup lang="ts">
@@ -87,11 +113,19 @@ import { Check } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { useDeviceOwnedConversation, type OwnedProject } from "@/composables/useDeviceOwnedConversation";
 import type { OwnedGroupState } from "@/runtime/device-owned-chat";
+import TeamCreateDialog from "@/components/TeamCreateDialog.vue";
+import {
+  getRoleTeam,
+  listRoleRuntimeProfiles,
+  listRoleTeams,
+} from "@/api/role-runtime";
+import type { AgentProfile, Team } from "@/api/agent-platform";
 
 const props = defineProps<{
   visible: boolean;
   characters: Array<{ id: string; name: string; avatar?: string }>;
   defaultRoleId?: string;
+  projectRequired?: boolean;
 }>();
 const emit = defineEmits<{
   "update:visible": [value: boolean];
@@ -107,9 +141,21 @@ const projects = ref<OwnedProject[]>([]);
 const selectedProjectId = ref("__none__");
 const projectsLoading = ref(false);
 const projectsError = ref("");
+const teams = ref<Team[]>([]);
+const roleProfiles = ref<AgentProfile[]>([]);
+const teamsLoading = ref(false);
+const teamError = ref("");
+const selectedTeamId = ref("");
+const teamDerivedMemberIds = ref(new Set<string>());
+const teamCreateVisible = ref(false);
 let projectsLoadSequence = 0;
 const inviteCharacters = computed(() => props.characters.filter((character) => character.id !== baseRoleId.value));
-const canCreate = computed(() => Boolean(baseRoleId.value && selected.value.size > 0 && selected.value.size < 8));
+const canCreate = computed(() => Boolean(
+  baseRoleId.value &&
+  selected.value.size > 0 &&
+  selected.value.size < 8 &&
+  (!props.projectRequired || selectedProjectId.value !== "__none__")
+));
 
 watch(() => props.visible, (visible) => {
   projectsLoadSequence++;
@@ -124,8 +170,73 @@ watch(() => props.visible, (visible) => {
     : props.characters[0]?.id || "";
   baseRoleId.value = initialRoleId;
   selectedProjectId.value = "__none__";
+  selectedTeamId.value = "";
+  teamDerivedMemberIds.value = new Set();
+  void loadTeams();
   void loadProjects(initialRoleId);
 });
+
+async function loadTeams() {
+  teamsLoading.value = true;
+  teamError.value = "";
+  try {
+    [teams.value, roleProfiles.value] = await Promise.all([
+      listRoleTeams(),
+      listRoleRuntimeProfiles(),
+    ]);
+    roleProfiles.value = roleProfiles.value.filter((role) => role.status !== "disabled");
+  } catch (cause) {
+    teamError.value = `团队加载失败：${cause instanceof Error ? cause.message : String(cause)}`;
+  } finally {
+    teamsLoading.value = false;
+  }
+}
+
+async function selectTeam(teamId: string) {
+  if (!teamId) {
+    clearTeamSelection();
+    return;
+  }
+  teamError.value = "";
+  try {
+    const detail = await getRoleTeam(teamId);
+    const roleByAgentId = new Map(roleProfiles.value.map((role) => [role.id, role]));
+    const leadRole = roleByAgentId.get(String(detail.team?.leadAgentId || ""));
+    const nextBaseRoleId = leadRole && props.characters.some((role) => role.id === leadRole.characterId)
+      ? leadRole.characterId
+      : baseRoleId.value;
+    const nextMembers = new Set<string>();
+    for (const member of detail.members || []) {
+      if (member.memberType !== "agent") continue;
+      const role = roleByAgentId.get(String(member.memberId || ""));
+      if (!role || role.characterId === nextBaseRoleId) continue;
+      if (!props.characters.some((character) => character.id === role.characterId)) continue;
+      nextMembers.add(role.characterId);
+      if (nextMembers.size >= 7) break;
+    }
+    baseRoleId.value = nextBaseRoleId;
+    selected.value = nextMembers;
+    teamDerivedMemberIds.value = new Set(nextMembers);
+    selectedProjectId.value = "__none__";
+    void loadProjects(nextBaseRoleId);
+  } catch (cause) {
+    teamError.value = `团队读取失败：${cause instanceof Error ? cause.message : String(cause)}`;
+  }
+}
+
+function clearTeamSelection() {
+  const next = new Set(selected.value);
+  for (const id of teamDerivedMemberIds.value) next.delete(id);
+  selected.value = next;
+  teamDerivedMemberIds.value = new Set();
+  selectedTeamId.value = "";
+}
+
+function handleTeamCreated(team: Team) {
+  if (!teams.value.some((item) => item.id === team.id)) teams.value = [team, ...teams.value];
+  selectedTeamId.value = team.id;
+  void selectTeam(team.id);
+}
 
 function selectBaseRole(id: string) {
   if (baseRoleId.value === id) return;

@@ -84,6 +84,7 @@ void main() {
     expect(find.text('浏览工作区文件和文档'), findsOneWidget);
     expect(find.text('查看变更、Diff、分支与 Worktree'), findsOneWidget);
     expect(find.text('启动真实 Chromium 会话'), findsOneWidget);
+    expect(find.text('子智能体'), findsOneWidget);
     await tester.tap(find.text('Git'));
     await tester.pumpAndSettle();
     expect(find.text('Git'), findsOneWidget);

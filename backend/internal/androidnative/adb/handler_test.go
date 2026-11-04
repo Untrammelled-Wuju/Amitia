@@ -129,18 +129,18 @@ func TestValidateExecuteRequest(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "empty executable",
-			req:  &ADBExecuteRequest{},
+			name:    "empty executable",
+			req:     &ADBExecuteRequest{},
 			wantErr: true,
 		},
 		{
-			name: "shell executable rejected",
-			req:  &ADBExecuteRequest{Executable: "sh"},
+			name:    "shell executable rejected",
+			req:     &ADBExecuteRequest{Executable: "sh"},
 			wantErr: true,
 		},
 		{
-			name: "bash executable rejected",
-			req:  &ADBExecuteRequest{Executable: "bash"},
+			name:    "bash executable rejected",
+			req:     &ADBExecuteRequest{Executable: "bash"},
 			wantErr: true,
 		},
 		{

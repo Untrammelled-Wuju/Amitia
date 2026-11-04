@@ -40,18 +40,26 @@ func TestSufficiencyRequiresExplicitLocatorCoverage(t *testing.T) {
 	}
 
 	items[0].CoverageKeys = []string{"pageNumber=37"}
+	items[0].Locator = map[string]any{"pageNumber": 37}
+	got = evaluateSufficiency("please check page 37", items, false)
+	if got.Sufficient || got.Reason != "locator_coverage" {
+		t.Fatalf("pageNumber alias must not satisfy page requirement: %#v", got)
+	}
+
+	items[0].CoverageKeys = []string{"page=37"}
+	items[0].Locator = map[string]any{"page": 37}
 	got = evaluateSufficiency("please check page 37", items, false)
 	if !got.Sufficient || got.State != AnswerStateSufficient {
-		t.Fatalf("pageNumber alias should satisfy page requirement: %#v", got)
+		t.Fatalf("canonical page must satisfy page requirement: %#v", got)
 	}
 
 	rows := []Evidence{{
 		ID: "row", SourceID: "sheet-source", FusionScore: 0.05,
-		Locator: map[string]any{"sheet": "Sheet1", "rowStart": 146, "rowEnd": 146},
+		Locator: map[string]any{"sheet": "Sheet1", "row": 146},
 	}}
 	got = evaluateSufficiency("核对第146行", rows, false)
 	if !got.Sufficient {
-		t.Fatalf("rowStart/rowEnd aliases should satisfy row locator: %#v", got)
+		t.Fatalf("canonical row should satisfy row locator: %#v", got)
 	}
 }
 

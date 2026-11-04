@@ -44,7 +44,6 @@ function loadAvatar(): boolean {
   console.error("[original-error]", error);
 return true; }
 }
-export const userMessageGlassStorageKey = "amitia.chat.user-message-glass.desktop.v1";
 export type UserMessageMaterial = "solid" | "frosted" | "water";
 export const userMessageMaterialStorageKey = "amitia.chat.user-message-material.desktop.v1";
 const userMessageMaterial = ref<UserMessageMaterial>(loadMaterial());
@@ -55,7 +54,7 @@ function loadMaterial(): UserMessageMaterial {
   try {
     const saved = localStorage.getItem(userMessageMaterialStorageKey);
     if (saved === "solid" || saved === "frosted" || saved === "water") return saved;
-    return localStorage.getItem(userMessageGlassStorageKey) === "true" ? "frosted" : "solid";
+    return "solid";
   }
   catch (error) {
   console.error("[original-error]", error);

@@ -12,7 +12,7 @@ import (
 )
 
 type mockController struct {
-	stopCalled        atomic.Bool
+	stopCalled         atomic.Bool
 	leaseReleaseCalled atomic.Bool
 }
 

@@ -140,10 +140,9 @@ func (h *ControlHandler) Release(c *gin.Context) {
 	}
 
 	targetMode := strings.TrimSpace(req.TargetMode)
-	if targetMode == "" || targetMode == "observe" {
-		// "observe" was emitted by the legacy Game Center UI. Keep it as a
-		// compatibility alias while returning the canonical domain value.
-		targetMode = "observe_only"
+	if targetMode == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "targetMode is required"})
+		return
 	}
 
 	result, err := h.releaseFn(c.Request.Context(), runtimeID, targetMode, req.ExpectedEpoch)

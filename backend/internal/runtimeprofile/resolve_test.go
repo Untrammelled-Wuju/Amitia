@@ -9,9 +9,8 @@ import (
 
 func TestResolvePrecedence(t *testing.T) {
 	resolution, err := Resolve(ResolveInput{
-		Args:             []string{"--runtime-profile=device-agent"},
-		Env:              map[string]string{envKey: "cloud-core"},
-		LegacyDeployMode: "desktop-local",
+		Args: []string{"--runtime-profile=device-agent"},
+		Env:  map[string]string{envKey: "cloud-core"},
 	})
 	if err != nil {
 		t.Fatalf("Resolve() error = %v", err)
@@ -21,35 +20,13 @@ func TestResolvePrecedence(t *testing.T) {
 	}
 
 	resolution, err = Resolve(ResolveInput{
-		Env:              map[string]string{envKey: "cloud-core"},
-		LegacyDeployMode: "desktop-local",
+		Env: map[string]string{envKey: "cloud-core"},
 	})
 	if err != nil {
 		t.Fatalf("Resolve() error = %v", err)
 	}
 	if resolution.Profile != ProfileCloudCore || resolution.Source != SourceEnv {
 		t.Fatalf("Resolve() = %#v, want cloud-core from env", resolution)
-	}
-}
-
-func TestResolveLegacyDeployModes(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		raw  string
-		want Profile
-	}{
-		{name: "desktop local", raw: "desktop-local", want: ProfileLocal},
-		{name: "cloud web", raw: "cloud-web", want: ProfileCloudCore},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			resolution, err := Resolve(ResolveInput{Env: map[string]string{}, LegacyDeployMode: tc.raw})
-			if err != nil {
-				t.Fatalf("Resolve() error = %v", err)
-			}
-			if resolution.Profile != tc.want || resolution.Source != SourceLegacy {
-				t.Fatalf("Resolve() = %#v, want %s from legacy", resolution, tc.want)
-			}
-		})
 	}
 }
 
@@ -77,7 +54,6 @@ func TestResolveRejectsExplicitInvalidValues(t *testing.T) {
 		{name: "profile alias device", input: ResolveInput{Env: map[string]string{envKey: "device"}}},
 		{name: "profile alias desktop local", input: ResolveInput{Env: map[string]string{envKey: "desktop-local"}}},
 		{name: "empty explicit env", input: ResolveInput{Env: map[string]string{envKey: ""}}},
-		{name: "invalid legacy", input: ResolveInput{Env: map[string]string{}, LegacyDeployMode: "cloud-corex"}},
 	}
 
 	for _, tc := range tests {

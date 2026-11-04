@@ -200,7 +200,7 @@ func TestNormalizePlaybackMode(t *testing.T) {
 		input  string
 		expect string
 	}{
-		{"ping-pong", "ping_pong"},
+		{"ping-pong", "ping-pong"},
 		{"loop", "loop"},
 		{"once", "once"},
 		{"hold", "hold"},

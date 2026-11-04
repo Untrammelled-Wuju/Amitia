@@ -24,8 +24,6 @@ type DiagnosticRepository struct {
 	lifecycle   []LifecycleEventRecord
 	logs        []LogEntry
 	performance []PerformanceRecord
-	migration   []MigrationRecord
-	compat      []CompatibilityRecord
 	maxItems    int
 }
 
@@ -150,21 +148,6 @@ type PerformanceRecord struct {
 	At        time.Time `json:"at"`
 }
 
-type MigrationRecord struct {
-	Stage   string    `json:"stage"`
-	Status  string    `json:"status"`
-	At      time.Time `json:"at"`
-	Details string    `json:"details,omitempty"`
-}
-
-type CompatibilityRecord struct {
-	Extension string `json:"extension"`
-	Required  string `json:"required"`
-	Host      string `json:"host"`
-	OK        bool   `json:"ok"`
-	Reason    string `json:"reason,omitempty"`
-}
-
 var (
 	ErrNotFound = errors.New("developer_console: record not found")
 )
@@ -238,24 +221,6 @@ func (r *DiagnosticRepository) RecordPerformance(rec PerformanceRecord) {
 	r.performance = append(r.performance, rec)
 	if len(r.performance) > r.maxItems {
 		r.performance = r.performance[len(r.performance)-r.maxItems:]
-	}
-}
-
-func (r *DiagnosticRepository) RecordMigration(rec MigrationRecord) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.migration = append(r.migration, rec)
-	if len(r.migration) > r.maxItems {
-		r.migration = r.migration[len(r.migration)-r.maxItems:]
-	}
-}
-
-func (r *DiagnosticRepository) RecordCompatibility(rec CompatibilityRecord) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.compat = append(r.compat, rec)
-	if len(r.compat) > r.maxItems {
-		r.compat = r.compat[len(r.compat)-r.maxItems:]
 	}
 }
 
@@ -428,38 +393,20 @@ func (r *DiagnosticRepository) ListPerformance(ctx context.Context, filter Conso
 	return out, nil
 }
 
-func (r *DiagnosticRepository) ListMigration(ctx context.Context) ([]MigrationRecord, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	out := make([]MigrationRecord, len(r.migration))
-	copy(out, r.migration)
-	return out, nil
-}
-
-func (r *DiagnosticRepository) ListCompatibility(ctx context.Context) ([]CompatibilityRecord, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	out := make([]CompatibilityRecord, len(r.compat))
-	copy(out, r.compat)
-	return out, nil
-}
-
 type DiagnosticExport struct {
-	GeneratedAt   time.Time               `json:"generatedAt"`
-	Invocations   []InvocationRecord      `json:"invocations"`
-	Events        []EventRecord           `json:"events"`
-	Hooks         []HookRecord            `json:"hooks"`
-	Tasks         []TaskRecord            `json:"tasks"`
-	UISessions    []UISessionRecord       `json:"uiSessions"`
-	Storage       []StorageEntryRecord    `json:"storage"`
-	Permissions   []PermissionGrantRecord `json:"permissions"`
-	Scopes        []ScopeRecord           `json:"scopes"`
-	Resources     []ResourceRecord        `json:"resources"`
-	Lifecycle     []LifecycleEventRecord  `json:"lifecycle"`
-	Logs          []LogEntry              `json:"logs"`
-	Performance   []PerformanceRecord     `json:"performance"`
-	Migration     []MigrationRecord       `json:"migration"`
-	Compatibility []CompatibilityRecord   `json:"compatibility"`
+	GeneratedAt time.Time               `json:"generatedAt"`
+	Invocations []InvocationRecord      `json:"invocations"`
+	Events      []EventRecord           `json:"events"`
+	Hooks       []HookRecord            `json:"hooks"`
+	Tasks       []TaskRecord            `json:"tasks"`
+	UISessions  []UISessionRecord       `json:"uiSessions"`
+	Storage     []StorageEntryRecord    `json:"storage"`
+	Permissions []PermissionGrantRecord `json:"permissions"`
+	Scopes      []ScopeRecord           `json:"scopes"`
+	Resources   []ResourceRecord        `json:"resources"`
+	Lifecycle   []LifecycleEventRecord  `json:"lifecycle"`
+	Logs        []LogEntry              `json:"logs"`
+	Performance []PerformanceRecord     `json:"performance"`
 }
 
 func (r *DiagnosticRepository) ExportDiagnostics(ctx context.Context, filter ConsoleFilters) (*DiagnosticExport, error) {
@@ -480,9 +427,6 @@ func (r *DiagnosticRepository) ExportDiagnostics(ctx context.Context, filter Con
 	export.Lifecycle = r.filterLifecycleLocked(filter)
 	export.Logs = r.filterLogsLocked(filter)
 	export.Performance = r.filterPerformanceLocked(filter)
-	export.Migration = append([]MigrationRecord(nil), r.migration...)
-	export.Compatibility = append([]CompatibilityRecord(nil), r.compat...)
-
 	return export, nil
 }
 

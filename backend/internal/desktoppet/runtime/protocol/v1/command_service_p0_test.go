@@ -142,13 +142,6 @@ func TestDurableCommandCreationRejectsNonDurableType(t *testing.T) {
 	}
 }
 
-func TestUnboundEphemeralCommandCreationIsRejected(t *testing.T) {
-	svc := NewCommandService(newCommandServiceTestDB(t))
-	if _, err := svc.CreateEphemeralCommand("u", "d", string(CommandTypeRecenterOnce), "unsafe:1", []byte(`{}`)); err == nil {
-		t.Fatal("unbound ephemeral creation must fail closed")
-	}
-}
-
 func TestSessionBoundEphemeralRejectsUnknownCommandType(t *testing.T) {
 	svc := NewCommandService(newCommandServiceTestDB(t))
 	if _, err := svc.CreateEphemeralCommandForSession(

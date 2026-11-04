@@ -51,49 +51,6 @@ func TestMeshContinuityWorkerUsesActualGuardedLocalPortWithoutRecursion(t *testi
 	}
 }
 
-func TestLegacyContinuityMigratesToOwnerLedgerIdempotently(t *testing.T) {
-	p := setupMeshLocalDataPort(t)
-	db := p.services.KernelContainer.DeviceRegistry.Database()
-	if _, err := db.Exec(`INSERT INTO kernel_devices(device_id,space_id,trust_state,created_at,last_seen_at) VALUES('device-a','core','trusted','now','now')`); err != nil {
-		t.Fatal(err)
-	}
-	service := coordination.NewService(db)
-	engine := business.NewEngine(service, p, continuityTestModel{})
-	for _, table := range []string{"continuity_threads", "continuity_thread_bindings", "continuity_waits", "continuity_thread_events"} {
-		if !p.services.DB.Migrator().HasTable(table) {
-			t.Fatalf("legacy table missing: %s", table)
-		}
-	}
-	now := time.Now().UTC()
-	thread := continuity.Thread{ID: "legacy-thread", SpaceID: "core", CharacterID: "one", Title: "旧持续事项", Goal: "迁移后继续", Status: continuity.ThreadStatusWaiting, Summary: "迁移摘要", CurrentState: "等待依赖", NextAction: "依赖完成后继续", Confidence: 1, Revision: 7, CreatedAt: now, UpdatedAt: now, LastActiveAt: now}
-	if err := p.services.DB.Create(&thread).Error; err != nil {
-		t.Fatal(err)
-	}
-	binding := continuity.ThreadBinding{ID: "legacy-binding", ThreadID: thread.ID, BindingType: "conversation", BindingID: "chat-1", Role: "context", Confidence: 1, Source: "legacy", CreatedAt: now, LastActiveAt: now}
-	wait := continuity.Wait{ID: "legacy-wait", ThreadID: thread.ID, WaitType: continuity.WaitTypeDependency, Status: continuity.WaitStatusWaiting, Description: "等待任务", ConditionJSON: `{"taskRunId":"task-1"}`, AutoResume: true, CreatedAt: now, UpdatedAt: now}
-	event := continuity.ThreadEvent{ID: "legacy-event", ThreadID: thread.ID, EventType: "thread.created", PayloadJSON: `{"summary":"旧事件"}`, IdempotencyKey: "legacy-event", OccurredAt: now}
-	for _, model := range []interface{}{&binding, &wait, &event} {
-		if err := p.services.DB.Create(model).Error; err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := migrateLegacyContinuity(t.Context(), p.services.DB, engine, "core", "device-a", "core"); err != nil {
-		t.Fatal(err)
-	}
-	if err := migrateLegacyContinuity(t.Context(), p.services.DB, engine, "core", "device-a", "core"); err != nil {
-		t.Fatal(err)
-	}
-	request := business.Request{SpaceID: "core", DeviceID: "device-a", CoreID: "core", RoleID: "one", RequestID: "read-migrated"}
-	documents, _, err := engine.ListContinuity(t.Context(), request, true)
-	if err != nil || len(documents) != 1 {
-		t.Fatalf("documents=%+v err=%v", documents, err)
-	}
-	document := documents[0]
-	if document.Thread.ID != thread.ID || document.Thread.Revision != thread.Revision || len(document.Bindings) != 1 || len(document.Waits) != 1 || len(document.Events) != 1 {
-		t.Fatalf("migrated=%+v", document)
-	}
-}
-
 func TestOwnedContinuityRuntimeCreatesBindsAndObservesChat(t *testing.T) {
 	p := setupMeshLocalDataPort(t)
 	db := p.services.KernelContainer.DeviceRegistry.Database()

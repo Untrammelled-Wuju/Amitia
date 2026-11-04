@@ -152,8 +152,6 @@ class KnowledgeService {
         routingMode: routingMode ?? 'chat',
         policyMode: '',
         routeReason: 'no_query',
-        shadowLevel: '',
-        shadowReason: '',
         routeDegraded: false,
         routeDegradationReason: '',
         queryHistory: [],

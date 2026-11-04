@@ -33,10 +33,10 @@ export function toWebSocketBaseURL(httpBaseURL: string): string {
 
 export function resolveBackendTopology(
   config: DeploymentModeConfig,
-  localBaseURL = "http://127.0.0.1:18899",
+  localBaseURL: string,
 ): DesktopBackendTopology {
-  const localBase = localBaseURL.replace(/\/+$/, "");
-  const localWebSocket = toWebSocketBaseURL(localBase);
+  const localBase = localBaseURL.trim().replace(/\/+$/, "");
+  const localWebSocket = localBase ? toWebSocketBaseURL(localBase) : "";
   if (config.mode === "cloud") {
     const normalizedServerURL = normalizeHTTPBaseURL(config.serverURL!);
     return {

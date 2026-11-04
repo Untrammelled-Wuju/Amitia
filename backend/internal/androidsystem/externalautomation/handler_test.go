@@ -9,24 +9,24 @@ import (
 )
 
 type fakeExternalAutomationClient struct {
-	statusResult    CapabilityState
-	statusErr       error
-	resolveAppResult []ResolvedApp
-	resolveAppErr   error
-	openAppResult   ActionResult
-	openAppErr      error
-	resolveURIResult ResolvedURI
-	resolveURIErr   error
-	openURIResult   ActionResult
-	openURIErr      error
-	openSettingsResult ActionResult
-	openSettingsErr error
-	invokeIntentResult ActionResult
-	invokeIntentErr error
-	foregroundResult ForegroundState
-	foregroundErr   error
+	statusResult         CapabilityState
+	statusErr            error
+	resolveAppResult     []ResolvedApp
+	resolveAppErr        error
+	openAppResult        ActionResult
+	openAppErr           error
+	resolveURIResult     ResolvedURI
+	resolveURIErr        error
+	openURIResult        ActionResult
+	openURIErr           error
+	openSettingsResult   ActionResult
+	openSettingsErr      error
+	invokeIntentResult   ActionResult
+	invokeIntentErr      error
+	foregroundResult     ForegroundState
+	foregroundErr        error
 	waitForegroundResult ForegroundState
-	waitForegroundErr   error
+	waitForegroundErr    error
 }
 
 func (f *fakeExternalAutomationClient) Status(ctx context.Context) (CapabilityState, error) {
@@ -68,16 +68,16 @@ func (f *fakeExternalAutomationClient) WaitForeground(ctx context.Context, req W
 func newDefaultFakeClient() *fakeExternalAutomationClient {
 	return &fakeExternalAutomationClient{
 		statusResult: CapabilityState{
-			Supported:           true,
-			CanResolveApps:      true,
-			CanLaunchApps:       true,
-			CanResolveURI:       true,
-			CanOpenURI:          true,
-			CanOpenSettings:     true,
-			CanInvokeIntent:     true,
+			Supported:            true,
+			CanResolveApps:       true,
+			CanLaunchApps:        true,
+			CanResolveURI:        true,
+			CanOpenURI:           true,
+			CanOpenSettings:      true,
+			CanInvokeIntent:      true,
 			CanInspectForeground: true,
-			CanWaitForeground:   true,
-			State:               StateAvailable,
+			CanWaitForeground:    true,
+			State:                StateAvailable,
 		},
 	}
 }

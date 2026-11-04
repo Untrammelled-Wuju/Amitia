@@ -9,7 +9,7 @@ class WorkbenchTerminalSnapshot {
   final bool running;
   final int exitCode;
   final int cursor;
-  final int? fromCursor;
+  final int fromCursor;
   final bool truncated;
   final List<int> data;
 
@@ -20,7 +20,7 @@ class WorkbenchTerminalSnapshot {
     required this.running,
     required this.exitCode,
     required this.cursor,
-    this.fromCursor,
+    required this.fromCursor,
     required this.truncated,
     required this.data,
   });
@@ -40,8 +40,8 @@ class WorkbenchTerminalSnapshot {
     final bytes = base64Decode(content);
     if (bytes.length > 65536) throw const FormatException('终端输出超过限制');
     final rawStart = data['fromCursor'];
-    if (rawStart != null && (rawStart is! int || rawStart < 0 || rawStart > cursor ||
-        cursor - rawStart != bytes.length)) {
+    if (rawStart is! int || rawStart < 0 || rawStart > cursor ||
+        cursor - rawStart != bytes.length) {
       throw const FormatException('终端输出分片游标无效');
     }
     return WorkbenchTerminalSnapshot(
@@ -51,7 +51,7 @@ class WorkbenchTerminalSnapshot {
       running: data['running'] == true,
       exitCode: data['exitCode'] is int ? data['exitCode'] as int : -1,
       cursor: cursor,
-      fromCursor: rawStart is int ? rawStart : null,
+      fromCursor: rawStart,
       truncated: data['truncated'] == true,
       data: bytes,
     );

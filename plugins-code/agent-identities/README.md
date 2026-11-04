@@ -26,7 +26,6 @@ node plugins-code/agent-identities/scripts/sign-packages.mjs plugin/agent-identi
 
 AMITIA_ADMIN_USERNAME=... \
 AMITIA_ADMIN_PASSWORD=... \
-AMITIA_MARKET_PUBLISH=1 \
 node plugins-code/agent-identities/scripts/upload-to-market.mjs plugin/agent-identities
 ```
 

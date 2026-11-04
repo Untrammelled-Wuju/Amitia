@@ -23,7 +23,6 @@ import {
   getCoreBaseURL,
   invalidateCoreEndpoint,
   isCoreEndpointOwnedByProcess,
-  legacyCoreEndpoint,
   readCoreEndpoint,
   removeCoreEndpoint,
   setCoreEndpoint,
@@ -118,87 +117,6 @@ export function ensureCorePrerequisites(profile: BundledCoreProfile): { ok: bool
 
   const validation = validateDeviceAgentPrerequisites(dataDir, getCorePath());
   return { ok: validation.ok, errors: validation.missing };
-}
-
-const CURRENT_CONFIG_VERSION = 2;
-
-const CONFIG_MIGRATIONS: Array<{
-  from: number;
-  to: number;
-  apply: (config: Record<string, unknown>) => void;
-}> = [
-  {
-    from: 1,
-    to: 2,
-    apply: (config: Record<string, unknown>) => {
-      if (!config.security) {
-        config.security = {};
-      }
-      const sec = config.security as Record<string, unknown>;
-      if (!sec.localTokenStorageKey) {
-        sec.localTokenStorageKey = "security/local-token";
-      }
-    },
-  },
-];
-
-function migrateConfig(configPath: string): void {
-  try {
-    const content = fs.readFileSync(configPath, "utf8");
-    const lines = content.split("\n");
-    let configVersion = 1;
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (trimmed.startsWith("config:") || trimmed.startsWith("version:")) {
-        const match = trimmed.match(/version:\s*(\d+)/);
-        if (match) {
-          configVersion = parseInt(match[1], 10);
-          break;
-        }
-      }
-    }
-
-    if (configVersion >= CURRENT_CONFIG_VERSION) {
-      return;
-    }
-
-    let config: Record<string, unknown> = {};
-    try {
-      const yaml = require("yaml");
-      config = yaml.parse(content) || {};
-    } catch (error) {
-  console.error("[original-error]", error);
-config = {};
-    }
-
-    const applicableMigrations = CONFIG_MIGRATIONS.filter(
-      (m) => m.from >= configVersion,
-    );
-    for (const migration of applicableMigrations) {
-      migration.apply(config);
-    }
-
-    const configSection = config.config as Record<string, unknown> | undefined;
-    if (configSection) {
-      configSection.version = CURRENT_CONFIG_VERSION;
-    } else {
-      config.config = { version: CURRENT_CONFIG_VERSION };
-    }
-
-    try {
-      const yaml = require("yaml");
-      const backupPath = `${configPath}.bak`;
-      fs.copyFileSync(configPath, backupPath);
-      const tmpPath = `${configPath}.tmp`;
-      fs.writeFileSync(tmpPath, yaml.stringify(config), { encoding: "utf8" });
-      fs.renameSync(tmpPath, configPath);
-      console.log(`[CoreManager] 配置已迁移至版本 ${CURRENT_CONFIG_VERSION}`);
-    } catch (err) {
-      console.error("[CoreManager] 配置迁移写入失败:", err);
-    }
-  } catch (err) {
-    console.error("[CoreManager] 配置迁移失败:", err);
-  }
 }
 
 type YamlScalarLocation = {
@@ -339,12 +257,10 @@ function ensureDefaultConfig(dataDir: string): void {
   if (!fs.existsSync(destConfig)) {
     fs.copyFileSync(templatePath, destConfig, fs.constants.COPYFILE_EXCL);
     console.log("[CoreManager] 配置文件已创建:", destConfig);
-    migrateConfig(destConfig);
     ensureGeneratedRuntimeSecrets(destConfig);
     return;
   }
   console.log("[CoreManager] 配置文件已存在, 跳过覆盖:", destConfig);
-  migrateConfig(destConfig);
   ensureGeneratedRuntimeSecrets(destConfig);
 }
 
@@ -504,7 +420,6 @@ export function startCore(profile: BundledCoreProfile): void {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     CONFIG_PATH: configPath,
-    AMITIA_RUN_MODE: "desktop",
     AMITIA_RUNTIME_ROOT: dataDir,
     AMITIA_DATA_DIR: dataDir,
     AMITIA_EXTENSION_DEV_MODE: isDevMode() ? "true" : "false",
@@ -822,15 +737,6 @@ export async function waitForCoreReady(profile: BundledCoreProfile, timeoutMs = 
       console.log(`[CoreManager] 健康检查通过, Profile: ${profile}`);
       return;
     }
-    if ((!endpoint || !owned) && Date.now() - startedAt > 3000) {
-      const legacy = legacyCoreEndpoint();
-      if (await httpHealthCheck(`${legacy.httpBaseURL}/livez`, 1000)) {
-        setCoreEndpoint(legacy);
-        console.log(`[CoreManager] 兼容旧版本核心端点: ${legacy.httpBaseURL}`);
-        return;
-      }
-    }
-
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
 
@@ -859,15 +765,6 @@ export async function waitForCoreReadiness(timeoutMs = 60000): Promise<boolean> 
       console.log("[CoreManager] 就绪检查通过");
       return true;
     }
-    if ((!endpoint || !owned) && Date.now() - startedAt > 3000) {
-      const legacy = legacyCoreEndpoint();
-      if (await httpHealthCheck(`${legacy.httpBaseURL}/readyz`, 1000)) {
-        setCoreEndpoint(legacy);
-        console.log(`[CoreManager] 兼容旧版本核心端点: ${legacy.httpBaseURL}`);
-        return true;
-      }
-    }
-
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
 

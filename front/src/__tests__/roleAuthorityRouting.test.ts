@@ -14,6 +14,7 @@ describe("角色路由", () => {
       ? { mode: "cloud", serverURL: "https://core.example" }
       : { mode: "local" });
     Object.defineProperty(window, "amitiaDesktop", { configurable: true, value: {
+      getRuntimeEndpoint: vi.fn().mockResolvedValue({ httpBaseURL: "http://127.0.0.1:43123" }),
       getDeploymentConfig,
       getMeshStatus: vi.fn().mockResolvedValue({ cloudBaseUrl: "https://core.example" }),
       getBackendAuthHeaders: vi.fn().mockResolvedValue({}),

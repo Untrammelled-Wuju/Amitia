@@ -68,7 +68,7 @@ func (p *meshLocalDataPort) commitOwnedChatEffectsLocked(ctx context.Context, sc
 				return nil
 			}
 		}
-		return p.services.RelTimeCoordinator.ForOwner(p.ownerID).FinishRequest(ctx, temporal.RelationshipOwnerSpace(p.legacySpaceID, p.ownerID), scope.RoleID, request.RequestID, "", true, false)
+		return p.services.RelTimeCoordinator.ForOwner(p.ownerID).FinishRequest(ctx, temporal.RelationshipOwnerSpace(p.ownerID, p.ownerID), scope.RoleID, request.RequestID, "", true, false)
 	}
 	requestBody, err := json.Marshal(request)
 	if err != nil {
@@ -139,7 +139,7 @@ func (p *meshLocalDataPort) commitOwnedChatEffectsLocked(ctx context.Context, sc
 	}
 	if !request.IsInternal && p.services.RelTimeCoordinator != nil {
 		proactive := strings.Contains(strings.ToLower(request.Source), "proactive") || strings.Contains(strings.ToLower(request.Source), "active_message")
-		if err := p.services.RelTimeCoordinator.ForOwner(p.ownerID).FinishRequest(ctx, temporal.RelationshipOwnerSpace(p.legacySpaceID, p.ownerID), scope.RoleID, request.RequestID, current.Content, false, proactive); err != nil {
+		if err := p.services.RelTimeCoordinator.ForOwner(p.ownerID).FinishRequest(ctx, temporal.RelationshipOwnerSpace(p.ownerID, p.ownerID), scope.RoleID, request.RequestID, current.Content, false, proactive); err != nil {
 			return err
 		}
 	}
@@ -221,13 +221,5 @@ func (p *meshLocalDataPort) commitOwnedChatEffectsLocked(ctx context.Context, sc
 }
 
 func (p *meshLocalDataPort) ownedMoodPsycheResource(ctx context.Context, scope coordination.ExecutionScope) (*coordination.Resource, error) {
-	resource, err := p.store.Get(ctx, coordination.RuntimeStateKindPsyche, coordination.RoleRuntimeStateID(coordination.RuntimeStateKindPsyche, scope.RoleID))
-	if err != nil || resource != nil {
-		return resource, err
-	}
-	legacy, err := p.store.Get(ctx, coordination.RuntimeStateKindPsyche, coordination.LegacyRuntimeStateID(coordination.RuntimeStateKindPsyche))
-	if err != nil || legacy == nil || legacy.RoleID != scope.RoleID {
-		return nil, err
-	}
-	return legacy, nil
+	return p.store.Get(ctx, coordination.RuntimeStateKindPsyche, coordination.RoleRuntimeStateID(coordination.RuntimeStateKindPsyche, scope.RoleID))
 }

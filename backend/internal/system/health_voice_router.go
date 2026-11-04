@@ -10,7 +10,7 @@ import (
 	"github.com/u-ai/backend/pkg/util"
 )
 
-func RegisterHealthRouter(r *gin.RouterGroup, cbRegistry *mindruntime.CircuitBreakerRegistry, dataLifecycle *mindruntime.DataLifecycleCoordinator, reconciliation *mindruntime.ReconciliationEngine) {
+func RegisterHealthRouter(r *gin.RouterGroup, cbRegistry *mindruntime.CircuitBreakerRegistry, reconciliation *mindruntime.ReconciliationEngine) {
 	r.GET("/health/circuit-breakers", security.SharedCoreAdminOnly(), func(c *gin.Context) {
 		reports := cbRegistry.AllHealthReports()
 		result := make([]gin.H, 0, len(reports))
@@ -34,14 +34,6 @@ func RegisterHealthRouter(r *gin.RouterGroup, cbRegistry *mindruntime.CircuitBre
 		}
 		cb.Reset()
 		util.SuccessMsgResponse(c, "breaker reset", gin.H{"name": name, "state": string(cb.Status())})
-	})
-
-	r.GET("/health/data-lifecycle", security.SharedCoreAdminOnly(), func(c *gin.Context) {
-		stats := dataLifecycle.Stats()
-		stats["source"] = "legacy_archive"
-		stats["retired"] = true
-		stats["currentStatusEndpoint"] = "/api/privacy/deletion/stats"
-		util.SuccessResponse(c, stats)
 	})
 
 	r.GET("/health/reconciliation", security.SharedCoreAdminOnly(), func(c *gin.Context) {

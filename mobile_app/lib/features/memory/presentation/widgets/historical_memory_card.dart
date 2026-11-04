@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../../../app/theme/app_colors.dart';
+import '../../../../app/theme/app_radius.dart';
+import '../../../../app/theme/app_spacing.dart';
+import '../../../../app/theme/app_typography.dart';
 import '../historical_memory_style.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../owned_memory_format.dart';
@@ -41,7 +44,7 @@ class HistoricalMemoryCard extends StatelessWidget {
   Widget _buildMemoryCard(BuildContext context, _HistoricalRecord memory) {
     return HistoricalMemorySurface(
       borderRadius: AppRadius.brMedium,
-      padding: const EdgeInsets.all(AppSpacing.cardPadding),
+      padding: EdgeInsets.all(AppSpacing.cardPadding),
       onTap: onDetail,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -95,7 +98,7 @@ class HistoricalMemoryCard extends StatelessWidget {
     final isSelected = row['id'] == null;
     return HistoricalMemorySurface(
       borderRadius: AppRadius.brMedium,
-      padding: const EdgeInsets.all(AppSpacing.cardPadding),
+      padding: EdgeInsets.all(AppSpacing.cardPadding),
       border: Border.all(
         color: _batchMode && isSelected
             ? context.accentPrimary
@@ -200,7 +203,7 @@ class HistoricalMemoryCard extends StatelessWidget {
     final fact = _getProfileFact(profile);
     return HistoricalMemorySurface(
       borderRadius: AppRadius.brMedium,
-      padding: const EdgeInsets.all(AppSpacing.cardPadding),
+      padding: EdgeInsets.all(AppSpacing.cardPadding),
       onTap: onDetail,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -365,15 +368,15 @@ class HistoricalMemoryCard extends StatelessWidget {
       final date = DateTime.parse(timeStr);
       return '${date.month}/${date.day}';
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-return timeStr;
+      print("[original-error] $error\n$stackTrace");
+      return timeStr;
     }
   }
 
   Widget _buildEpisodicCard(BuildContext context, _HistoricalRecord memory) {
     return HistoricalMemorySurface(
       borderRadius: AppRadius.brMedium,
-      padding: const EdgeInsets.all(AppSpacing.cardPadding),
+      padding: EdgeInsets.all(AppSpacing.cardPadding),
       onTap: onDetail,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -562,7 +565,7 @@ return timeStr;
           Expanded(
             child: HistoricalMemorySurface(
               borderRadius: AppRadius.brMedium,
-              padding: const EdgeInsets.all(AppSpacing.cardPadding),
+              padding: EdgeInsets.all(AppSpacing.cardPadding),
               border: Border.all(
                 color: entry.isImportant
                     ? context.warning.withValues(alpha: 0.3)
@@ -745,8 +748,8 @@ return timeStr;
       if (diff.inDays < 7) return '${diff.inDays}天前';
       return '${time.month}/${time.day}';
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-return timeStr;
+      print("[original-error] $error\n$stackTrace");
+      return timeStr;
     }
   }
 }

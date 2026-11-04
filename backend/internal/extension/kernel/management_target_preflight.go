@@ -56,11 +56,14 @@ func (g *TargetMutationGuard) ValidateArchiveTarget(ctx context.Context, archive
 }
 
 func resolveManagementTarget(contributions []manifest_v1.ContributionMeta) (domain.ManagementTarget, error) {
-	kinds := make([]domain.ContributionKind, 0, len(contributions))
+	adapters := make([]domain.ContributionAdapter, 0, len(contributions))
 	for _, c := range contributions {
-		kinds = append(kinds, domain.ContributionKind(c.Kind))
+		adapters = append(adapters, domain.ResolveContributionAdapter(
+			domain.ContributionKind(c.Kind),
+			domain.ContributionAdapter(c.Adapter),
+		))
 	}
-	extensionDomain, err := domain.ResolveDomainFromKinds(kinds)
+	extensionDomain, err := domain.ResolveDomainFromAdapters(adapters)
 	if err != nil {
 		return "", err
 	}

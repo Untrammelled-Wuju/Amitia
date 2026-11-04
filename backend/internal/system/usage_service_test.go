@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/u-ai/backend/internal/auth"
+	"github.com/u-ai/backend/internal/migration"
 	"github.com/u-ai/backend/internal/mindruntime"
 	"gorm.io/gorm"
 )
@@ -19,14 +20,16 @@ func TestUsageReadsRealCallsAndPreservesMessages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := migration.ApplyBaseline(db); err != nil {
+		t.Fatal(err)
+	}
 	store, err := mindruntime.NewModelUsageStore(db, "core")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Exec("CREATE TABLE messages(id TEXT,tokens INTEGER)").Error; err != nil {
+	if err := db.Exec("INSERT INTO messages(id,conversation_id,role,content,tokens) VALUES('old','conversation','user','preserved',7)").Error; err != nil {
 		t.Fatal(err)
 	}
-	db.Exec("INSERT INTO messages VALUES('old',7)")
 	service := &service{db: db, usageStore: store}
 	id, err := store.Begin(t.Context(), mindruntime.ModelUsageRecord{SpaceID: "core", DeviceID: "phone", Model: "used-model", Provider: "provider", Source: "channel"})
 	if err != nil {
@@ -74,6 +77,9 @@ func TestUsageReadsRealCallsAndPreservesMessages(t *testing.T) {
 
 func TestUsageHTTPDeviceIsolationAndStaleReset(t *testing.T) {
 	db, _ := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "usage.db")), &gorm.Config{})
+	if err := migration.ApplyBaseline(db); err != nil {
+		t.Fatal(err)
+	}
 	store, err := mindruntime.NewModelUsageStore(db, "core")
 	if err != nil {
 		t.Fatal(err)

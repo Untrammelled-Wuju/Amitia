@@ -17,10 +17,11 @@ func TestBuildDescriptor(t *testing.T) {
 			Kind: protocol.ServiceKindProcess,
 		}).
 		WithChannel(protocol.ChannelDescriptor{
-			ID:   "events",
-			Kind: protocol.ChannelKindEvent,
+			ID:        "events",
+			Kind:      protocol.ChannelKindEvent,
+			Direction: protocol.ChannelDirectionPluginToHost,
 		}).
-		WithCapability(protocol.CapabilityCustomRPC).
+		WithHostFeature(protocol.HostFeatureCustomRPC).
 		WithMetadata("custom", metadata).
 		Build()
 
@@ -43,15 +44,15 @@ func TestBuildDescriptor(t *testing.T) {
 	if len(desc.Services) != 1 {
 		t.Fatalf("expected 1 service, got %d", len(desc.Services))
 	}
-	if len(desc.Capabilities) != 1 {
-		t.Fatalf("expected 1 capability, got %d", len(desc.Capabilities))
+	if len(desc.HostFeatures) != 1 {
+		t.Fatalf("expected 1 host feature, got %d", len(desc.HostFeatures))
 	}
 }
 
 func TestBuildDescriptorRejectsDuplicateCapability(t *testing.T) {
 	_, err := NewDescriptor("example.game", "Example Game", "1.0.0").
-		WithCapability(protocol.CapabilityCustomRPC).
-		WithCapability(protocol.CapabilityCustomRPC).
+		WithHostFeature(protocol.HostFeatureCustomRPC).
+		WithHostFeature(protocol.HostFeatureCustomRPC).
 		Build()
 
 	if err == nil {

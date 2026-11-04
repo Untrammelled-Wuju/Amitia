@@ -310,9 +310,6 @@ type StartupReadinessDeps struct {
 	PathGuardReady          func() error
 	InstallationWorkerReady func() error
 	BehaviorWorkerReady     func() error
-	MigrationReady          func() error
-	LegacyChainReady        func() error
-	CanonicalCutoverReady   func() error
 	MeshReady               func() error
 }
 
@@ -351,15 +348,6 @@ func NewFullStartupReadinessService(deps StartupReadinessDeps) (*ReadinessServic
 		return nil, err
 	}
 	if err := register("behavior_worker", true, wrapReadyFunc(deps.BehaviorWorkerReady, "behavior_worker")); err != nil {
-		return nil, err
-	}
-	if err := register("migration_state", true, wrapReadyFunc(deps.MigrationReady, "migration_state")); err != nil {
-		return nil, err
-	}
-	if err := register("legacy_chain", true, wrapReadyFunc(deps.LegacyChainReady, "legacy_chain")); err != nil {
-		return nil, err
-	}
-	if err := register("canonical_cutover", true, wrapReadyFunc(deps.CanonicalCutoverReady, "canonical_cutover")); err != nil {
 		return nil, err
 	}
 	if err := register("mesh", true, wrapReadyFunc(deps.MeshReady, "mesh")); err != nil {

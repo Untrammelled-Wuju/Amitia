@@ -297,16 +297,11 @@ describe("extension navigation registry", () => {
     expect(router.hasRoute("ui-provider:minecraft:routes.minecraft:main")).toBe(true);
   });
 
-  it("serves active task as a built-in route and redirects both legacy aliases", () => {
+  it("serves active task without retired alias routes", () => {
     const activeTask = builtinBusinessRoutes.find((item) => item.path === "/characters/:id/active-task");
     expect(activeTask?.name).toBe("characterActiveTask");
     expect(activeTask?.props).toBeTypeOf("function");
-    const route = builtinBusinessRoutes.find((item) => item.path === "/character/:id/proactive");
-    expect(route?.redirect).toBeTypeOf("function");
-    expect((route?.redirect as (value: { params: { id: string } }) => string)({ params: { id: "role-1" } }))
-      .toBe("/characters/role-1/active-task");
-    const providerAlias = builtinBusinessRoutes.find((item) => item.path === "/characters/:id/proactive");
-    expect((providerAlias?.redirect as (value: { params: { id: string } }) => string)({ params: { id: "role-1" } }))
-      .toBe("/characters/role-1/active-task");
+    expect(builtinBusinessRoutes.some((item) => item.path === "/character/:id/proactive")).toBe(false);
+    expect(builtinBusinessRoutes.some((item) => item.path === "/characters/:id/proactive")).toBe(false);
   });
 });

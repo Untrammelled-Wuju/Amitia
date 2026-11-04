@@ -25,6 +25,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/u-ai/backend/internal/extension/kernel/extension_slots"
 )
 
 // UIHost owns in-process UI contribution slots, definitions, and lifecycle projections.
@@ -121,8 +123,8 @@ func (h *UIHost) RegisterSlot(slot *UISlotContract) error {
 	if slot == nil || slot.SlotID == "" {
 		return errors.New("ui_contribution: invalid slot")
 	}
-	if !slot.Multiplicity.Valid() {
-		return fmt.Errorf("%w: %s", ErrInvalidMultiplicity, slot.Multiplicity)
+	if !validDispatchKind(slot.DispatchKind) {
+		return fmt.Errorf("%w: %s", extension_slots.ErrInvalidSlotDispatchKind, slot.DispatchKind)
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -141,8 +143,8 @@ func (h *UIHost) UpsertSlot(slot *UISlotContract) error {
 	if slot == nil || slot.SlotID == "" {
 		return errors.New("ui_contribution: invalid slot")
 	}
-	if !slot.Multiplicity.Valid() {
-		return fmt.Errorf("%w: %s", ErrInvalidMultiplicity, slot.Multiplicity)
+	if !validDispatchKind(slot.DispatchKind) {
+		return fmt.Errorf("%w: %s", extension_slots.ErrInvalidSlotDispatchKind, slot.DispatchKind)
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -209,11 +211,11 @@ func (h *UIHost) RegisterContribution(def *UIContributionDefinition) error {
 	if err := ValidateAgainstSlot(def, slot); err != nil {
 		return err
 	}
-	if slot.Multiplicity == MultiplicitySingle || slot.Multiplicity == MultiplicityExclusive {
+	if slot.DispatchKind == extension_slots.DispatchSingle {
 		for _, existing := range h.contributions {
 			if existing.Slot.SlotID == def.Slot.SlotID {
 				return fmt.Errorf("ui_contribution: slot %s is %s, already occupied by %s",
-					def.Slot.SlotID, slot.Multiplicity, existing.ContributionID)
+					def.Slot.SlotID, slot.DispatchKind, existing.ContributionID)
 			}
 		}
 	}
@@ -437,7 +439,7 @@ func (h *UIHost) attachPendingForSlotLocked(slotID string) {
 			})
 			continue
 		}
-		if slot.Multiplicity == MultiplicitySingle || slot.Multiplicity == MultiplicityExclusive {
+		if slot.DispatchKind == extension_slots.DispatchSingle {
 			occupied := false
 			for _, existing := range h.contributions {
 				if existing.Slot.SlotID == slotID {

@@ -79,8 +79,11 @@ func TestDecodeRejectsInvalidAndOversizedMessages(t *testing.T) {
 }
 
 func TestSupportedProtocolVersions(t *testing.T) {
-	if !SupportsVersion(LatestProtocolVersion) || !SupportsVersion("2025-06-18") {
-		t.Fatal("expected current stable versions to be supported")
+	if !SupportsVersion(LatestProtocolVersion) {
+		t.Fatal("expected current protocol version to be supported")
+	}
+	if SupportsVersion("2025-06-18") {
+		t.Fatal("old protocol version must be rejected")
 	}
 	if SupportsVersion("2099-01-01") {
 		t.Fatal("unexpected unsupported version")

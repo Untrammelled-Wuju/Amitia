@@ -141,7 +141,6 @@ SPDX-License-Identifier: AGPL-3.0-only
           <span>返回 {{ searchResult.evidence.length }} 条</span>
           <span v-if="searchResult.sufficiencyReason">gate={{ searchResult.sufficiencyReason }}</span>
           <span v-if="searchResult.requestedRetrievalLevel !== searchResult.retrievalLevel">requested={{ searchResult.requestedRetrievalLevel }} → effective={{ searchResult.retrievalLevel }}</span>
-          <span v-if="searchResult.shadowLevel">shadow={{ searchResult.shadowLevel }}</span>
           <span v-if="searchResult.routeDegradationReason">routeGate={{ searchResult.routeDegradationReason }}</span>
         </div>
         <el-alert
@@ -192,13 +191,10 @@ SPDX-License-Identifier: AGPL-3.0-only
       <div v-if="runtimeStatus" class="runtime-status">
         <div class="diagnostic-subtitle">运行时灰度</div>
         <div class="runtime-tags">
-          <el-tag size="small" :type="runtimeStatus.retrievalPolicyEnabled ? 'success' : 'warning'">Policy {{ runtimeStatus.retrievalPolicyEnabled ? 'ACTIVE' : 'LEGACY' }}</el-tag>
-          <el-tag v-if="runtimeStatus.retrievalPolicyShadow" size="small" type="info">SHADOW</el-tag>
           <el-tag size="small" :type="runtimeStatus.canonicalReaderEnabled ? 'success' : 'warning'">Reader {{ runtimeStatus.canonicalReaderEnabled ? 'ON' : 'OFF' }}</el-tag>
           <el-tag size="small" :type="runtimeStatus.agenticInvestigationEnabled ? 'success' : 'warning'">Agentic {{ runtimeStatus.agenticInvestigationEnabled ? 'ON' : 'OFF' }}</el-tag>
         </div>
         <div class="muted">readerWorkers={{ runtimeStatus.readerWorkers }} · trace={{ runtimeStatus.retrievalTraceRetentionHours }}h · benchmark={{ runtimeStatus.benchmarkRetentionHours }}h · cleanupBatch={{ runtimeStatus.diagnosticCleanupBatchSize }} · config={{ shortHash(runtimeStatus.configHash) }}</div>
-        <div v-if="policyDistribution.samples" class="muted">最近 {{ policyDistribution.samples }} 条：actual={{ compactJson(policyDistribution.actual) }}<template v-if="Object.keys(policyDistribution.shadow).length"> · shadow={{ compactJson(policyDistribution.shadow) }}</template></div>
       </div>
       <div v-if="indexOutboxHealth" class="runtime-status">
         <div class="diagnostic-subtitle">向量索引任务健康度</div>
@@ -258,7 +254,6 @@ SPDX-License-Identifier: AGPL-3.0-only
           巡检 {{ orphanRecheck.auditId.slice(0, 8) }} · 第 {{ orphanRecheck.page }} 页二次核验：
           {{ orphanRecheck.status === 'matched' ? '再次扫描的样本摘要与异常计数相符（仍非全库一致性证明）' :
              orphanRecheck.status === 'changed' ? '二次扫描发生变化，禁止据此修复' :
-             orphanRecheck.status === 'legacy_no_digest' ? '历史页缺少观测摘要，无法充分复核' :
              orphanRecheck.status === 'unanchored' ? '审计摘要链不完整，拒绝复核' :
              orphanRecheck.status === 'expired' ? '巡检游标已过期，请重新巡检' :
              orphanRecheck.status === 'collections_changed' ? '集合范围已变化，请重新巡检' : '检查点异常，拒绝复核' }}
@@ -326,7 +321,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           <template #default="{ row }">
             <div class="trace-detail">
               <div><strong>Query Plan</strong> · level={{ row.queryPlan?.level || '-' }} · complexity={{ row.queryPlan?.complexity || '-' }} · timeout={{ row.queryPlan?.timeoutMs || 0 }}ms · candidates={{ row.queryPlan?.candidateLimit || 0 }}</div>
-              <div><strong>Policy</strong> · mode={{ row.policyMode || '-' }} · reason={{ row.routeReason || '-' }}<template v-if="row.shadowLevel || row.shadowReason"> · shadow={{ row.shadowLevel || '-' }} / {{ row.shadowReason || '-' }}</template></div>
+              <div><strong>Policy</strong> · mode={{ row.policyMode || '-' }} · reason={{ row.routeReason || '-' }}</div>
               <div class="muted">queryHash={{ shortHash(row.queryHash) }} · original={{ shortHash(row.queryPlan?.originalHash) }} · effective={{ shortHash(row.queryPlan?.effectiveHash) }} · config={{ shortHash(row.configHash) }}</div>
               <div v-if="row.warnings?.length" class="trace-warnings">{{ row.warnings.join("；") }}</div>
               <div class="trace-columns">
@@ -348,7 +343,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         </el-table-column>
         <el-table-column label="时间" width="170"><template #default="{ row }">{{ formatTime(row.createdAt) }}</template></el-table-column>
         <el-table-column label="级别" width="95"><template #default="{ row }">{{ (row.queryPlan?.level || '-').toUpperCase() }}</template></el-table-column>
-        <el-table-column label="策略" width="125"><template #default="{ row }">{{ row.policyMode || '-' }}<span v-if="row.shadowLevel"> · {{ row.shadowLevel.toUpperCase() }}</span></template></el-table-column>
+        <el-table-column label="策略" width="125"><template #default="{ row }">{{ row.policyMode || '-' }}</template></el-table-column>
         <el-table-column label="耗时" width="100"><template #default="{ row }">{{ row.durationMs }}ms</template></el-table-column>
         <el-table-column label="候选/选中" width="115"><template #default="{ row }">{{ row.candidateCount }}/{{ row.selectedCount }}</template></el-table-column>
         <el-table-column label="状态" min-width="180">
@@ -603,18 +598,6 @@ const acceptTypes = ".txt,.md,.markdown,.csv,.json,.jsonl,.ndjson,.doc,.docx,.xl
 const jobDialogTitle = computed(() => currentJobSource.value ? `知识库任务 · ${currentJobSource.value.logicalName || currentJobSource.value.filename}` : "知识库任务");
 const detailDialogTitle = computed(() => currentDetailSource.value ? `知识源详情 · ${currentDetailSource.value.logicalName || currentDetailSource.value.filename}` : "知识源详情");
 const readDialogTitle = computed(() => readTitle.value || (readEvidence.value ? `原文读取 · ${readEvidence.value.title || readEvidence.value.sourceId}` : "原文读取"));
-const policyDistribution = computed(() => {
-  const actual: Record<string, number> = {};
-  const shadow: Record<string, number> = {};
-  for (const row of retrievalTraces.value) {
-    const actualLevel = String(row.queryPlan?.level || "none").toLowerCase();
-    actual[actualLevel] = (actual[actualLevel] || 0) + 1;
-    const shadowLevel = String(row.shadowLevel || "").toLowerCase();
-    if (shadowLevel) shadow[shadowLevel] = (shadow[shadowLevel] || 0) + 1;
-  }
-  return { samples: retrievalTraces.value.length, actual, shadow };
-});
-
 function pickFile() { fileInput.value?.click(); }
 async function onFilePicked(event: Event) {
   const input = event.target as HTMLInputElement;

@@ -2,7 +2,6 @@ package amitiax
 
 import (
 	"archive/zip"
-	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -31,8 +30,6 @@ const (
 	MigrationsDir        = "migrations/"
 	LicensesDir          = "licenses/"
 	DocsDir              = "docs/"
-	SignaturesDir        = "signatures/"
-	SignatureFile        = "signatures/signature.json"
 	V2SignatureFile      = "META-INF/amitia-signature.json"
 	maxPackageEntryBytes = int64(100 << 20)
 )
@@ -47,14 +44,12 @@ var allowedRootDirs = map[string]bool{
 	"migrations":    true,
 	"licenses":      true,
 	"docs":          true,
-	"signatures":    true,
 	"META-INF":      true,
 }
 
 var CanonicalIntegrityExcludedPaths = map[string]bool{
 	IntegrityFiles:  true,
 	IntegrityTree:   true,
-	SignatureFile:   true,
 	V2SignatureFile: true,
 }
 
@@ -71,10 +66,8 @@ type PackageLayout struct {
 	Migrations      []string
 	Licenses        []string
 	Docs            []string
-	Signatures      []string
 	IntegrityFiles  string
 	IntegrityTree   string
-	SignatureFile   string
 	V2SignatureFile string
 }
 
@@ -98,21 +91,12 @@ type IntegrityTreeDoc struct {
 	GeneratedAt time.Time `json:"generatedAt"`
 }
 
-type SignatureDoc struct {
-	Algorithm   string    `json:"algorithm"`
-	KeyID       string    `json:"keyId"`
-	Signature   []byte    `json:"signature"`
-	SignedAt    time.Time `json:"signedAt"`
-	PublisherID string    `json:"publisherId,omitempty"`
-}
-
 type Package struct {
 	Manifest    manifest_v1.Manifest
 	Layout      PackageLayout
 	Files       []FileEntry
 	Integrity   IntegrityFilesDoc
 	Tree        IntegrityTreeDoc
-	Signatures  *SignatureDoc
 	V2Signature json.RawMessage
 }
 
@@ -178,13 +162,6 @@ func parsePackage(reader *zip.Reader) (*Package, error) {
 				if err := json.Unmarshal(data, &pkg.Tree); err != nil {
 					return nil, fmt.Errorf("%w: parse tree: %v", ErrInvalidStructure, err)
 				}
-			case name == SignatureFile:
-				layout.SignatureFile = name
-				sig := &SignatureDoc{}
-				if err := json.Unmarshal(data, sig); err != nil {
-					return nil, fmt.Errorf("%w: parse signature: %v", ErrInvalidStructure, err)
-				}
-				pkg.Signatures = sig
 			case name == V2SignatureFile:
 				layout.V2SignatureFile = name
 				pkg.V2Signature = make(json.RawMessage, len(data))
@@ -274,8 +251,6 @@ func categorizeEntry(name string, layout *PackageLayout) {
 		layout.Licenses = append(layout.Licenses, name)
 	case "docs":
 		layout.Docs = append(layout.Docs, name)
-	case "signatures":
-		layout.Signatures = append(layout.Signatures, name)
 	}
 }
 
@@ -372,17 +347,6 @@ func ComputeTreeHash(files []FileEntry) string {
 	})
 }
 
-func computeLegacyTreeHash(files []FileEntry) string {
-	return computeTreeHash(files, func(left, right string) bool {
-		leftFolded := strings.ToLower(left)
-		rightFolded := strings.ToLower(right)
-		if leftFolded != rightFolded {
-			return leftFolded < rightFolded
-		}
-		return left < right
-	})
-}
-
 func computeTreeHash(files []FileEntry, less func(left, right string) bool) string {
 	sorted := make([]FileEntry, len(files))
 	copy(sorted, files)
@@ -425,31 +389,7 @@ func VerifyIntegrity(pkg *Package) error {
 	}
 	computedTree := ComputeTreeHash(verifiedFiles)
 	if pkg.Tree.TreeHash != "" && computedTree != pkg.Tree.TreeHash {
-		legacyTree := computeLegacyTreeHash(verifiedFiles)
-		if legacyTree != pkg.Tree.TreeHash {
-			return fmt.Errorf("%w: tree hash mismatch", ErrIntegrityMismatch)
-		}
-	}
-	return nil
-}
-
-func VerifySignature(pkg *Package, publicKey ed25519.PublicKey) error {
-	if pkg == nil || pkg.Signatures == nil {
-		return ErrSignatureMissing
-	}
-	if pkg.Signatures.Algorithm != "ed25519" {
-		return fmt.Errorf("%w: %s", ErrUnsupportedSigAlgorithm, pkg.Signatures.Algorithm)
-	}
-	treeHash := pkg.Tree.TreeHash
-	if treeHash == "" {
-		return fmt.Errorf("%w: content tree hash empty", ErrSignatureInvalid)
-	}
-	if len(publicKey) != ed25519.PublicKeySize {
-		return fmt.Errorf("%w: invalid public key size", ErrSignatureInvalid)
-	}
-	msg := signatureMessage(pkg.Signatures.PublisherID, treeHash)
-	if !ed25519.Verify(publicKey, []byte(msg), pkg.Signatures.Signature) {
-		return ErrSignatureInvalid
+		return fmt.Errorf("%w: tree hash mismatch", ErrIntegrityMismatch)
 	}
 	return nil
 }

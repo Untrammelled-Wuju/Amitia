@@ -113,13 +113,11 @@ func (e *Engine) Query(ctx context.Context, request Request, query coordination.
 			return QueryResult{}, err
 		}
 	}
-	if port, ok := e.data.(coordination.HistoricalDataPort); ok && scope.Coordinated && (conversationRoute.HistoricalID != "" || query.Management && query.HistoricalRoleID != "") && ((query.Cursor == "" && query.LegacyCursor == "") || query.HistoricalCursor != "" || query.HistoricalLegacyCursor != "") {
+	if port, ok := e.data.(coordination.HistoricalDataPort); ok && scope.Coordinated && (conversationRoute.HistoricalID != "" || query.Management && query.HistoricalRoleID != "") && (query.Cursor == "" || query.HistoricalCursor != "") {
 		historicalQuery := query
 		historicalQuery.ConversationID = conversationRoute.HistoricalID
 		historicalQuery.Cursor = query.HistoricalCursor
 		historicalQuery.HistoricalCursor = ""
-		historicalQuery.LegacyCursor = query.HistoricalLegacyCursor
-		historicalQuery.HistoricalLegacyCursor = ""
 		result.HistoricalSnapshot, err = port.HistoricalSnapshot(ctx, scope, historicalQuery)
 		if err != nil {
 			return QueryResult{}, err

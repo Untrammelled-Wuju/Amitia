@@ -20,8 +20,6 @@ const (
 )
 
 const (
-	// An omitted direction remains plugin_to_host for backward compatibility.
-	// Protocol v1 supports explicit host_to_plugin and bidirectional channels.
 	ChannelDirectionPluginToHost  ChannelDirection = "plugin_to_host"
 	ChannelDirectionHostToPlugin  ChannelDirection = "host_to_plugin"
 	ChannelDirectionBidirectional ChannelDirection = "bidirectional"
@@ -39,7 +37,7 @@ type ChannelDescriptor struct {
 	Kind     ChannelKind `json:"kind"`
 	SchemaID string      `json:"schemaId,omitempty"`
 
-	Direction ChannelDirection `json:"direction,omitempty"`
+	Direction ChannelDirection `json:"direction"`
 
 	FrequencyHint *FrequencyHint `json:"frequencyHint,omitempty"`
 
@@ -87,7 +85,7 @@ func ValidateChannelKind(kind ChannelKind) error {
 
 func ValidateChannelDirection(dir ChannelDirection) error {
 	if dir == "" {
-		return nil
+		return fmt.Errorf("channel direction is required")
 	}
 	switch dir {
 	case ChannelDirectionPluginToHost, ChannelDirectionHostToPlugin, ChannelDirectionBidirectional:

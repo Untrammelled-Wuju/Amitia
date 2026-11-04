@@ -573,8 +573,8 @@ func TestR44BuildRollbackAuthorityInputSuccess(t *testing.T) {
 	}
 }
 
-func TestR44StandardConfirmationClaimsFromLegacy(t *testing.T) {
-	legacy := packageConfirmationClaims{
+func TestR44StandardConfirmationClaimsFromPreview(t *testing.T) {
+	preview := packageConfirmationClaims{
 		SessionID:                 "session-r44",
 		ArtifactID:                "artifact-r44",
 		ExtensionID:               "com.example/r44",
@@ -594,18 +594,18 @@ func TestR44StandardConfirmationClaimsFromLegacy(t *testing.T) {
 		ExpiresAt: 2000,
 		Nonce:     "nonce-legacy",
 	}
-	result := standardConfirmationClaimsFromLegacy(string(PackageOperationTypeInstall), legacy)
+	result := standardConfirmationClaimsFromPreview(string(PackageOperationTypeInstall), preview)
 	if result.OperationType != string(PackageOperationTypeInstall) {
 		t.Fatalf("expected install operation type, got %s", result.OperationType)
 	}
-	if result.RequiredConfirmationsHash != legacy.RequiredConfirmationsHash {
-		t.Fatal("requiredConfirmationsHash not preserved from legacy")
+	if result.RequiredConfirmationsHash != preview.RequiredConfirmationsHash {
+		t.Fatal("requiredConfirmationsHash not preserved from preview claims")
 	}
-	if result.DependenciesHash != legacy.DependenciesHash {
-		t.Fatal("dependenciesHash not preserved from legacy")
+	if result.DependenciesHash != preview.DependenciesHash {
+		t.Fatal("dependenciesHash not preserved from preview claims")
 	}
 	if len(result.ConfirmedItems) != 1 || result.ConfirmedItems[0] != "confirm.install" {
-		t.Fatalf("confirmedItems not correctly mapped from legacy: %v", result.ConfirmedItems)
+		t.Fatalf("confirmedItems not correctly mapped from preview claims: %v", result.ConfirmedItems)
 	}
 }
 

@@ -165,6 +165,9 @@ type NativeCompanionMeta struct {
 type ContributionMeta struct {
 	ID                  string              `json:"id"`
 	Kind                string              `json:"kind"`
+	Adapter             string              `json:"adapter,omitempty"`
+	ContractVersion     int                 `json:"contractVersion,omitempty"`
+	Schema              json.RawMessage     `json:"schema,omitempty"`
 	Name                LocalizedText       `json:"name"`
 	Description         LocalizedText       `json:"description,omitempty"`
 	Version             string              `json:"version,omitempty"`
@@ -174,6 +177,13 @@ type ContributionMeta struct {
 	Exposure            *ExposureMeta       `json:"exposure,omitempty"`
 	RuntimeBinding      *RuntimeBindingMeta `json:"runtimeBinding,omitempty"`
 	Dependencies        []Dependency        `json:"dependencies,omitempty"`
+}
+
+func (c ContributionMeta) EffectiveAdapter() domain.ContributionAdapter {
+	return domain.ResolveContributionAdapter(
+		domain.ContributionKind(c.Kind),
+		domain.ContributionAdapter(strings.TrimSpace(c.Adapter)),
+	)
 }
 
 type ExposureMeta struct {
@@ -356,6 +366,8 @@ var (
 	ErrUnknownContributionKind = errors.New("manifest_v1: unknown contribution kind")
 )
 
+var contributionKindPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._/-]{0,127}$`)
+
 func Parse(data []byte) (Manifest, error) {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	if err := rejectDuplicateJSONKeys(decoder); err != nil {
@@ -460,15 +472,6 @@ func (m Manifest) Validate() ValidationReport {
 	}
 
 	moduleIDs := make(map[string]bool)
-	contributionKinds := map[string]bool{
-		"tool": true, "agent_skill": true, "workflow": true,
-		"mcp_server": true,
-		"provider":   true, "hook": true, "event_subscription": true,
-		"schedule": true, "background_task": true,
-		"ui_page": true, "ui_panel": true, "ui_chat": true,
-		"ui_context_action": true, "ui_desktop": true, "ui_provider": true, "ui_slot": true,
-		"gamex": true, "petx": true,
-	}
 	contributionIDs := make(map[string]bool)
 	for i, mod := range m.Modules {
 		path := fmt.Sprintf("modules[%d]", i)
@@ -527,23 +530,45 @@ func (m Manifest) Validate() ValidationReport {
 			contributionIDs[c.ID] = true
 			if c.Kind == "" {
 				report.AddError(cpath+".kind", "missing", "contribution kind required")
-			} else if !contributionKinds[c.Kind] {
-				report.AddError(cpath+".kind", "unknown_kind", fmt.Sprintf("unknown contribution kind: %s", c.Kind))
+			} else if !contributionKindPattern.MatchString(c.Kind) {
+				report.AddError(cpath+".kind", "invalid_kind", fmt.Sprintf("invalid contribution kind: %s", c.Kind))
+			}
+			isCustomKind := domain.ContributionAdapterForKind(domain.ContributionKind(c.Kind)) == ""
+			if isCustomKind && strings.TrimSpace(c.Adapter) == "" {
+				report.AddError(cpath+".adapter", "adapter_required", fmt.Sprintf("custom contribution kind %s requires an adapter", c.Kind))
+			}
+			if isCustomKind && c.ContractVersion <= 0 {
+				report.AddError(cpath+".contractVersion", "contract_version_required", "custom contribution requires a positive contractVersion")
+			}
+			if isCustomKind && len(c.Schema) == 0 {
+				report.AddError(cpath+".schema", "schema_required", "custom contribution requires a JSON schema")
+			}
+			if len(c.Schema) > 0 {
+				var schema map[string]any
+				if err := json.Unmarshal(c.Schema, &schema); err != nil || schema == nil {
+					report.AddError(cpath+".schema", "invalid_schema", "contribution schema must be a JSON object")
+				} else {
+					validateContributionSchema(cpath, schema, c.Spec, &report)
+				}
+			}
+			adapter := c.EffectiveAdapter()
+			if adapter == "" || !adapter.Valid() {
+				report.AddError(cpath+".adapter", "unknown_adapter", fmt.Sprintf("unknown contribution adapter: %s", adapter))
 			}
 			if c.Name.Default == "" {
 				report.AddError(cpath+".name.default", "missing", "contribution name required")
 			}
-			if c.Kind == "gamex" {
+			if adapter == domain.ContributionAdapterGame {
 				if err := validateGamePluginContribution(c.Spec, c.RequiredPermissions, cpath, m.Placement, allModuleIDs, allModuleRuntimes, allModulePlacements); err != nil {
 					report.AddError(cpath+".spec", "invalid_gamex", err.Error())
 				}
 			}
-			if c.Kind == "petx" {
+			if adapter == domain.ContributionAdapterDesktopPet {
 				if err := validateDesktopPetPluginContribution(c.Spec, cpath, moduleIDs); err != nil {
 					report.AddError(cpath+".spec", "invalid_petx", err.Error())
 				}
 			}
-			if c.Kind == "mcp_server" {
+			if adapter == domain.ContributionAdapterMCPServer {
 				if err := validateMCPServerContribution(c.Spec, cpath, mod.Runtime); err != nil {
 					report.AddError(cpath+".spec", "invalid_mcp_server", err.Error())
 				}
@@ -711,8 +736,9 @@ func validateUIPlatformIsolation(m Manifest, report *ValidationReport) {
 		for j, contribution := range mod.Contributions {
 			contributionPath := fmt.Sprintf("modules[%d].contributions[%d]", i, j)
 			spec := contribution.Spec
-			switch contribution.Kind {
-			case "ui_page", "ui_panel", "ui_chat", "ui_context_action", "ui_desktop":
+			adapter := effectiveContributionAdapter(contribution.Kind, contribution.Adapter)
+			switch adapter {
+			case domain.ContributionAdapterUI:
 				platforms := specPlatforms(spec)
 				if len(platforms) == 0 {
 					platforms = normalizedPlatforms(m.Compatibility.Platforms)
@@ -729,7 +755,7 @@ func validateUIPlatformIsolation(m Manifest, report *ValidationReport) {
 				if entry, ok := spec["entry"].(map[string]any); ok {
 					entryArtifact(contribution.ID, family, entry)
 				}
-			case "ui_provider":
+			case domain.ContributionAdapterUIProvider:
 				entries, ok := spec["entries"].(map[string]any)
 				if !ok {
 					continue
@@ -842,8 +868,7 @@ func stringField(value map[string]any, key string) string {
 }
 
 func (m Manifest) ToExtensionDefinition() (domain.ExtensionDefinition, error) {
-	normalized, _ := m.NormalizeCompatibility()
-	report := normalized.Validate()
+	report := m.Validate()
 	if report.HasErrors() {
 		msgs := make([]string, len(report.Errors))
 		for i, e := range report.Errors {
@@ -851,48 +876,48 @@ func (m Manifest) ToExtensionDefinition() (domain.ExtensionDefinition, error) {
 		}
 		return domain.ExtensionDefinition{}, fmt.Errorf("%w: %s", ErrInvalidManifest, strings.Join(msgs, "; "))
 	}
-	version, _ := domain.ParseVersion(normalized.Extension.Version)
+	version, _ := domain.ParseVersion(m.Extension.Version)
 	def := domain.ExtensionDefinition{
-		ID:              domain.ExtensionID(normalized.Extension.ID),
-		Name:            normalized.Extension.Name.ToDomain(),
-		Description:     normalized.Extension.Description.ToDomain(),
+		ID:              domain.ExtensionID(m.Extension.ID),
+		Name:            m.Extension.Name.ToDomain(),
+		Description:     m.Extension.Description.ToDomain(),
 		Version:         version,
-		ManifestVersion: normalized.ManifestVersion,
-		Placement:       domain.ExtensionPlacement(normalized.Placement),
+		ManifestVersion: m.ManifestVersion,
+		Placement:       domain.ExtensionPlacement(m.Placement),
 		Publisher: domain.PublisherReference{
-			PublisherID: normalized.Publisher.ID,
-			DisplayName: normalized.Publisher.DisplayName,
+			PublisherID: m.Publisher.ID,
+			DisplayName: m.Publisher.DisplayName,
 			// Publisher trust is an installation-time security decision. Never
 			// promote a manifest-authored trustLevel into the runtime definition.
 			TrustLevel: "unknown",
 		},
 		Compatibility: domain.ExtensionCompatibility{
-			MinHostVersion: normalized.Compatibility.MinHostVersion,
-			MaxHostVersion: normalized.Compatibility.MaxHostVersion,
-			Platforms:      normalized.Compatibility.Platforms,
-			FeatureFlags:   normalized.Compatibility.FeatureFlags,
+			MinHostVersion: m.Compatibility.MinHostVersion,
+			MaxHostVersion: m.Compatibility.MaxHostVersion,
+			Platforms:      m.Compatibility.Platforms,
+			FeatureFlags:   m.Compatibility.FeatureFlags,
 		},
 		Integrity: domain.ExtensionIntegrity{
-			Algorithm:       normalized.Integrity.Algorithm,
-			ContentTreeHash: normalized.Integrity.ContentTreeHash,
-			FileHashes:      normalized.Integrity.FileHashes,
+			Algorithm:       m.Integrity.Algorithm,
+			ContentTreeHash: m.Integrity.ContentTreeHash,
+			FileHashes:      m.Integrity.FileHashes,
 		},
 		Policies: domain.ExtensionPolicies{
-			AutoUpdate:      normalized.Lifecycle.AutoUpdate,
-			BackgroundTasks: normalized.Lifecycle.BackgroundTasks,
-			NetworkAccess:   normalized.Lifecycle.NetworkAccess,
-			Isolation:       normalized.Lifecycle.Isolation,
-			Sandbox:         normalized.Lifecycle.Sandbox,
+			AutoUpdate:      m.Lifecycle.AutoUpdate,
+			BackgroundTasks: m.Lifecycle.BackgroundTasks,
+			NetworkAccess:   m.Lifecycle.NetworkAccess,
+			Isolation:       m.Lifecycle.Isolation,
+			Sandbox:         m.Lifecycle.Sandbox,
 		},
 	}
-	for _, mod := range normalized.Modules {
-		moduleDef, err := mod.ToDomain(domain.ExtensionID(normalized.Extension.ID))
+	for _, mod := range m.Modules {
+		moduleDef, err := mod.ToDomain(domain.ExtensionID(m.Extension.ID))
 		if err != nil {
 			return domain.ExtensionDefinition{}, err
 		}
 		for idx := range moduleDef.Contributions {
 			c := &moduleDef.Contributions[idx]
-			if c.Kind == domain.ContributionKindUIProvider {
+			if c.EffectiveAdapter() == domain.ContributionAdapterUIProvider {
 				if c.Definition == nil {
 					c.Definition = map[string]any{}
 				}
@@ -924,7 +949,7 @@ func (m Manifest) ToExtensionDefinition() (domain.ExtensionDefinition, error) {
 		}
 		def.Modules = append(def.Modules, moduleDef)
 	}
-	for _, dep := range normalized.Dependencies {
+	for _, dep := range m.Dependencies {
 		def.Dependencies = append(def.Dependencies, domain.DependencyDefinition{
 			Type:     domain.DependencyType(dep.Type),
 			ID:       dep.ID,
@@ -933,7 +958,7 @@ func (m Manifest) ToExtensionDefinition() (domain.ExtensionDefinition, error) {
 			Reason:   dep.Reason,
 		})
 	}
-	for _, sr := range normalized.SecretRefs {
+	for _, sr := range m.SecretRefs {
 		def.SecretRefs = append(def.SecretRefs, domain.SecretRefDefinition{
 			Ref:       sr.Ref,
 			ServiceID: sr.ServiceID,
@@ -1064,6 +1089,9 @@ func (c ContributionMeta) ToDomain(extID domain.ExtensionID, modID domain.Module
 		ModuleID:            modID,
 		ExtensionID:         extID,
 		Kind:                domain.ContributionKind(c.Kind),
+		Adapter:             c.EffectiveAdapter(),
+		ContractVersion:     c.ContractVersion,
+		Schema:              append(json.RawMessage(nil), c.Schema...),
 		Name:                c.Name.ToDomain(),
 		Description:         c.Description.ToDomain(),
 		Version:             c.Version,

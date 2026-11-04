@@ -61,12 +61,13 @@ export interface HostDesktopClipboardRequest {
 }
 
 export interface HostClient {
-	readonly reminders: ScheduledTaskClient;
-	readonly proactiveTasks: ScheduledTaskClient;
+  readonly reminders: ScheduledTaskClient;
+  readonly proactiveTasks: ScheduledTaskClient;
   readonly tools: HostToolClient;
   readonly network: HostNetworkClient;
   readonly messages: HostMessageClient;
   readonly desktop: HostDesktopClient;
+  readonly plugins: HostPluginClient;
   readonly resources?: HostResourceClient;
   readonly vectors?: HostVectorClient;
 }
@@ -86,6 +87,81 @@ export interface HostToolDescriptor {
 
 export interface HostNetworkClient {
   request(request: HostNetworkRequest): Promise<HostNetworkResponse>;
+}
+
+export interface HostPluginPrepareRequest {
+  readonly extensionId: string;
+  readonly version: string;
+  readonly packageUri: string;
+  readonly sha256: string;
+  readonly fileName?: string;
+  readonly source?: HostPluginSource;
+}
+
+export interface HostPluginSource {
+  readonly uri?: string;
+  readonly catalogId?: string;
+  readonly sourceType?: string;
+  readonly publisher?: string;
+  readonly trustLevel?: string;
+  readonly entryId?: string;
+  readonly resolvedUrl?: string;
+}
+
+export interface HostPluginPreview {
+  readonly sessionId: string;
+  readonly extensionId: string;
+  readonly name: string;
+  readonly version: string;
+  readonly publisher: string;
+  readonly installable: boolean;
+  readonly signatureStatus: string;
+  readonly trustDecision: string;
+  readonly source?: HostPluginSource;
+  readonly securityPassed: boolean;
+  readonly requiredConfirmations: readonly string[];
+  readonly requiredPermissions: ReadonlyArray<{
+    readonly name: string;
+    readonly reason?: string;
+    readonly required: boolean;
+    readonly scope?: string;
+  }>;
+  readonly requiredScopes: ReadonlyArray<{
+    readonly contributionId: string;
+    readonly scopes: readonly string[];
+  }>;
+  readonly riskFlags: readonly string[];
+  readonly issues: ReadonlyArray<{
+    readonly category: string;
+    readonly code: string;
+    readonly message: string;
+    readonly path?: string;
+  }>;
+  readonly expiresAt: string;
+  readonly [key: string]: unknown;
+}
+
+export interface HostPluginInstallRequest {
+  readonly extensionId: string;
+  readonly version: string;
+  readonly previewSessionId: string;
+  readonly confirmations: Readonly<Record<string, boolean>>;
+  readonly idempotencyKey?: string;
+}
+
+export interface HostPluginInstallResult {
+  readonly extensionId: string;
+  readonly version: string;
+  readonly operationId: string;
+  readonly installationId: string;
+  readonly packageHash: string;
+  readonly installedAt: string;
+  readonly [key: string]: unknown;
+}
+
+export interface HostPluginClient {
+  prepare(request: HostPluginPrepareRequest): Promise<HostPluginPreview>;
+  install(request: HostPluginInstallRequest): Promise<HostPluginInstallResult>;
 }
 
 export interface HostMessageClient {
@@ -171,8 +247,8 @@ export interface HostBridgeLike {
 }
 
 export class DefaultHostClient implements HostClient {
-	readonly reminders: ScheduledTaskClient;
-	readonly proactiveTasks: ScheduledTaskClient;
+  readonly reminders: ScheduledTaskClient;
+  readonly proactiveTasks: ScheduledTaskClient;
   readonly resources?: HostResourceClient;
   readonly vectors?: HostVectorClient;
 
@@ -189,6 +265,17 @@ export class DefaultHostClient implements HostClient {
   readonly network: HostNetworkClient = {
     request: async (request: HostNetworkRequest): Promise<HostNetworkResponse> => {
       return this.bridge.networkRequest(request);
+    },
+  };
+
+  readonly plugins: HostPluginClient = {
+    prepare: async (request: HostPluginPrepareRequest): Promise<HostPluginPreview> => {
+      if (!this.bridge.call) throw new Error("host plugin package manager is unavailable");
+      return await this.bridge.call("host.plugin.preview", request) as HostPluginPreview;
+    },
+    install: async (request: HostPluginInstallRequest): Promise<HostPluginInstallResult> => {
+      if (!this.bridge.call) throw new Error("host plugin package manager is unavailable");
+      return await this.bridge.call("host.plugin.install", request) as HostPluginInstallResult;
     },
   };
 

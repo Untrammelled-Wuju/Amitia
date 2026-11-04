@@ -51,14 +51,13 @@ func buildUIAgentAppearanceTool() tool.Tool {
 					"expectedRevision": {Type: "integer", Description: "Optional revision returned by inspect. A stale revision is rejected."},
 					"changes": {
 						Type:        "object",
-						Description: "Apply accepts schemaVersion 1 plus legacy global fields or targets, or one scope/target/properties rule. Each target supports id, source, scope {platform,page,surface}, target, states, properties/set. Reset accepts scope, target, states, properties, transactionId and source filters, optionally under reset. Inspect accepts scope, target, limit and includeComputed. Property names are open-ended CSS/Flutter-mappable values; values support string, number, boolean, array and object.",
+						Description: "Apply accepts schemaVersion 1 plus targets or one scope/target/properties rule. Each target supports id, source, scope {platform,page,surface}, target, states and properties. Reset accepts scope, target, states, properties, transactionId and source filters, optionally under reset. Inspect accepts scope, target, limit and includeComputed. Property names are open-ended CSS/Flutter-mappable values; values support string, number, boolean, array and object.",
 					},
 					"targets":         {Type: "array", Description: "Precise style target rules for apply."},
 					"scope":           {Type: "object", Description: "Optional platform, page or surface scope."},
 					"target":          {Type: "string", Description: "Stable page, surface, component or instance target id."},
 					"states":          {Type: "array", Description: "Optional UI states such as default, hover, focus, pressed, disabled, dark or light."},
 					"properties":      {Type: "object", Description: "Style properties for a single target rule."},
-					"set":             {Type: "object", Description: "Alias for properties in a single target rule."},
 					"reset":           {Type: "object", Description: "Precise reset filters for reset."},
 					"source":          {Type: "string", Enum: []string{"ai", "user", "all"}, Description: "Optional rule source filter for reset."},
 					"transactionId":   {Type: "string", Description: "Optional transaction filter for reset."},
@@ -139,15 +138,10 @@ func validateAppearanceChanges(changes map[string]interface{}) error {
 	if len(changes) > appearanceMaxTopLevelProperties {
 		return fmt.Errorf("appearance patch has too many top-level properties")
 	}
-	hasLegacy := false
 	hasTargets := false
 	hasTargetField := false
 	hasPropertiesField := false
-	hasSetField := false
 	for key, value := range changes {
-		if isAppearanceLegacyKey(key) {
-			hasLegacy = true
-		}
 		switch key {
 		case "schemaVersion":
 			n, ok := appearanceNumber(value)
@@ -179,116 +173,32 @@ func validateAppearanceChanges(changes map[string]interface{}) error {
 				return err
 			}
 			hasPropertiesField = true
-		case "set":
-			if err := validateAppearanceStyleProperties(value, "set"); err != nil {
-				return err
-			}
-			hasSetField = true
 		case "source":
 			if err := validateAppearanceRuleSource(value, "source"); err != nil {
 				return err
 			}
 		case "reset":
 			return fmt.Errorf("reset filters are not allowed for apply")
-		case "preset", "themeMode":
-			if s, ok := value.(string); !ok || (s != "system" && s != "light" && s != "dark") {
-				return fmt.Errorf("invalid %s", key)
-			}
-		case "accentColor":
-			if s, ok := value.(string); !ok || !appearanceHexColor.MatchString(s) {
-				return fmt.Errorf("accentColor must be #RRGGBB")
-			}
-		case "fontScale":
-			n, ok := appearanceNumber(value)
-			if !ok || n < .8 || n > 1.4 {
-				return fmt.Errorf("fontScale must be 0.8..1.4")
-			}
-		case "cornerStyle":
-			n, ok := appearanceNumber(value)
-			if !ok || n < 0 || n > 2 || math.Trunc(n) != n {
-				return fmt.Errorf("cornerStyle must be an integer 0..2")
-			}
-		case "dynamicEffect", "reduceAnimation":
-			if _, ok := value.(bool); !ok {
-				return fmt.Errorf("%s must be boolean", key)
-			}
-		case "customPalette":
-			fields, ok := value.(map[string]interface{})
-			if !ok || len(fields) == 0 {
-				return fmt.Errorf("customPalette must be a nonempty object")
-			}
-			for k, v := range fields {
-				switch k {
-				case "enabled":
-					if _, ok := v.(bool); !ok {
-						return fmt.Errorf("customPalette.enabled must be boolean")
-					}
-				case "primary", "secondary", "text":
-					if s, ok := v.(string); !ok || !appearanceHexColor.MatchString(s) {
-						return fmt.Errorf("customPalette.%s must be #RRGGBB", k)
-					}
-				case "textMode":
-					s, ok := v.(string)
-					if !ok || (s != "auto" && s != "dark" && s != "light" && s != "custom") {
-						return fmt.Errorf("invalid customPalette.textMode")
-					}
-				default:
-					return fmt.Errorf("unknown customPalette property %s", k)
-				}
-			}
-		case "palette":
-			if err := validateAppearancePalette(value); err != nil {
-				return err
-			}
-		case "typography":
-			if err := validateAppearanceTypography(value); err != nil {
-				return err
-			}
-		case "layout", "icons", "components":
-			if err := validateAppearanceNumericObject(value, key, 3, 80); err != nil {
-				return err
-			}
-		case "componentVariants":
-			if err := validateAppearanceObject(value, key, 3, 128); err != nil {
-				return err
-			}
-		case "background":
-			if err := validateAppearanceBackground(value); err != nil {
-				return err
-			}
 		default:
 			return fmt.Errorf("unknown appearance property %s", key)
 		}
 	}
 	if hasTargets {
-		if hasTargetField || hasPropertiesField || hasSetField || changes["scope"] != nil || changes["states"] != nil {
+		if hasTargetField || hasPropertiesField || changes["scope"] != nil || changes["states"] != nil {
 			return fmt.Errorf("targets cannot be mixed with a single target rule")
 		}
 		return nil
 	}
-	if hasTargetField || hasPropertiesField || hasSetField || changes["scope"] != nil || changes["states"] != nil {
+	if hasTargetField || hasPropertiesField || changes["scope"] != nil || changes["states"] != nil {
 		if !hasTargetField {
 			return fmt.Errorf("single target rule requires target")
 		}
-		if !hasPropertiesField && !hasSetField {
-			return fmt.Errorf("single target rule requires properties or set")
+		if !hasPropertiesField {
+			return fmt.Errorf("single target rule requires properties")
 		}
 		return nil
 	}
-	if hasLegacy {
-		return nil
-	}
 	return fmt.Errorf("apply needs at least one appearance property or target rule")
-}
-
-func isAppearanceLegacyKey(key string) bool {
-	switch key {
-	case "themeMode", "accentColor", "fontScale", "cornerStyle", "dynamicEffect", "reduceAnimation",
-		"customPalette", "palette", "typography", "layout", "icons", "components", "componentVariants", "background":
-		return true
-	default:
-		return false
-	}
 }
 
 func validateAppearanceTargets(value interface{}) error {

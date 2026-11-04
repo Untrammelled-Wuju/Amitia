@@ -344,7 +344,7 @@ export class SnowLumaRuntimeManager {
     if (this.installer.installState().running) return this.installState()
     void (async () => {
       await this.stop()
-      const result = await this.installer.install(config.snowlumaRoot)
+      const result = await this.installer.install()
       if (result.phase === "failed") {
         this.recordError("native", result.error)
         return

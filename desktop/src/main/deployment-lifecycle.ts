@@ -53,7 +53,7 @@ export class DesktopDeploymentLifecycle {
     this.setExtensionTrayItems = deps.setExtensionTrayItems;
     this.desktopPetManager = deps.desktopPetManager;
     this.currentConfig = { ...initialConfig };
-    this.topology = resolveBackendTopology(initialConfig);
+    this.topology = resolveBackendTopology(initialConfig, getCoreBaseURL());
     this.businessCoreClient = new BusinessCoreClient(this.topology.businessCore.baseURL);
   }
 
@@ -68,7 +68,7 @@ export class DesktopDeploymentLifecycle {
       try {
         const desired = { ...config };
         this.currentConfig = desired;
-        this.topology = resolveBackendTopology(desired);
+        this.topology = resolveBackendTopology(desired, getCoreBaseURL());
 
         if (desired.mode === "local") {
           await this.reconcileLocalMode();

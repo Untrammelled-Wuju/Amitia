@@ -31,17 +31,6 @@ func RoleRuntimeStateID(kind, roleID string) string {
 	}
 }
 
-func LegacyRuntimeStateID(kind string) string {
-	switch kind {
-	case RuntimeStateKindPsyche, RuntimeStateKindNeeds:
-		return "role"
-	case RuntimeStateKindRelationship:
-		return "user_character"
-	default:
-		return ""
-	}
-}
-
 func RuntimeStateKind(kind string) bool {
 	switch kind {
 	case RuntimeStateKindPsyche, RuntimeStateKindRelationship, RuntimeStateKindNeeds:

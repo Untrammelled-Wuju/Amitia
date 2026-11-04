@@ -18,7 +18,7 @@ func bindAuthoritativePublisherTrust(def *domain.ExtensionDefinition, trustLevel
 		module := &def.Modules[moduleIdx]
 		for contributionIdx := range module.Contributions {
 			contribution := &module.Contributions[contributionIdx]
-			if contribution.Kind != domain.ContributionKindUIProvider {
+			if contribution.EffectiveAdapter() != domain.ContributionAdapterUIProvider {
 				continue
 			}
 			if contribution.Definition == nil {

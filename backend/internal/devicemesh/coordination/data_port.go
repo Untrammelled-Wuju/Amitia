@@ -23,29 +23,27 @@ type Role struct {
 }
 
 type DataQuery struct {
-	IncludeDisabled        bool                   `json:"includeDisabled,omitempty"`
-	ChatRuntime            *OwnedChatRuntimeQuery `json:"chatRuntime,omitempty"`
-	GroupVisibilityStart   int64                  `json:"groupVisibilityStart,omitempty"`
-	Management             bool                   `json:"management,omitempty"`
-	RuntimeTurns           bool                   `json:"runtimeTurns,omitempty"`
-	QueuedChats            bool                   `json:"queuedChats,omitempty"`
-	Vector                 []float32              `json:"vector,omitempty"`
-	VectorModel            string                 `json:"vectorModel,omitempty"`
-	Cursor                 string                 `json:"cursor,omitempty"`
-	HistoricalCursor       string                 `json:"historicalCursor,omitempty"`
-	LegacyCursor           string                 `json:"legacyCursor,omitempty"`
-	HistoricalLegacyCursor string                 `json:"historicalLegacyCursor,omitempty"`
-	HistoricalListCursor   string                 `json:"historicalListCursor,omitempty"`
-	ResourceKind           string                 `json:"resourceKind,omitempty"`
-	ResourceID             string                 `json:"resourceId,omitempty"`
-	RequestID              string                 `json:"requestId,omitempty"`
-	ConversationID         string                 `json:"conversationId,omitempty"`
-	Query                  string                 `json:"query,omitempty"`
-	SearchQuery            string                 `json:"searchQuery,omitempty"`
-	Limit                  int                    `json:"limit,omitempty"`
-	HistoricalRoleID       string                 `json:"historicalRoleId,omitempty"`
-	ListConversations      bool                   `json:"listConversations,omitempty"`
-	GroupState             *GroupState            `json:"-"`
+	IncludeDisabled      bool                   `json:"includeDisabled,omitempty"`
+	ChatRuntime          *OwnedChatRuntimeQuery `json:"chatRuntime,omitempty"`
+	GroupVisibilityStart int64                  `json:"groupVisibilityStart,omitempty"`
+	Management           bool                   `json:"management,omitempty"`
+	RuntimeTurns         bool                   `json:"runtimeTurns,omitempty"`
+	QueuedChats          bool                   `json:"queuedChats,omitempty"`
+	Vector               []float32              `json:"vector,omitempty"`
+	VectorModel          string                 `json:"vectorModel,omitempty"`
+	Cursor               string                 `json:"cursor,omitempty"`
+	HistoricalCursor     string                 `json:"historicalCursor,omitempty"`
+	HistoricalListCursor string                 `json:"historicalListCursor,omitempty"`
+	ResourceKind         string                 `json:"resourceKind,omitempty"`
+	ResourceID           string                 `json:"resourceId,omitempty"`
+	RequestID            string                 `json:"requestId,omitempty"`
+	ConversationID       string                 `json:"conversationId,omitempty"`
+	Query                string                 `json:"query,omitempty"`
+	SearchQuery          string                 `json:"searchQuery,omitempty"`
+	Limit                int                    `json:"limit,omitempty"`
+	HistoricalRoleID     string                 `json:"historicalRoleId,omitempty"`
+	ListConversations    bool                   `json:"listConversations,omitempty"`
+	GroupState           *GroupState            `json:"-"`
 }
 
 type RoleCatalogPort interface {
@@ -175,7 +173,7 @@ func ValidateSnapshot(scope ExecutionScope, snapshot DataSnapshot) error {
 		return ErrPendingLimit
 	}
 	for kind, cursor := range snapshot.NextCursors {
-		if (!validKind(kind) && kind != "legacyMessage" && kind != "legacyConversation") || len(cursor) > 4096 {
+		if !validKind(kind) || len(cursor) > 4096 {
 			return ErrWrongOwner
 		}
 	}
@@ -184,9 +182,8 @@ func ValidateSnapshot(scope ExecutionScope, snapshot DataSnapshot) error {
 		key := resource.Kind + "/" + resource.ID
 		validWorldbookRole := resource.Kind == "worldbook" && (resource.RoleID == scope.RoleID || resource.RoleID == GlobalWorldbookRole)
 		validGlobalMemoryRole := !scope.MemoryViewAll && scope.MemoryRoleID != GlobalMemoryRole && resource.RoleID == GlobalMemoryRole && MemoryKind(resource.Kind)
-		legacyReadOnly := resource.Origin == "legacy" && resource.ReadOnly && resource.Revision == 0
 		validGroupRole := snapshot.GroupRoles != nil && GroupConversationKind(resource.Kind) && snapshot.GroupRoles[GroupResourceConversationID(resource)] == resource.RoleID
-		if resource.OwnerID != scope.ResourceOwnerID || resource.RoleID == "" || resource.RoleID != StorageRole(scope, resource.Kind) && !validWorldbookRole && !validGroupRole && !validGlobalMemoryRole && !(scope.MemoryViewAll && MemoryKind(resource.Kind)) || resource.Deleted || !validKind(resource.Kind) || resource.ID == "" || resource.Revision < 1 && !legacyReadOnly || !json.Valid(resource.Body) || seen[key] {
+		if resource.OwnerID != scope.ResourceOwnerID || resource.RoleID == "" || resource.RoleID != StorageRole(scope, resource.Kind) && !validWorldbookRole && !validGroupRole && !validGlobalMemoryRole && !(scope.MemoryViewAll && MemoryKind(resource.Kind)) || resource.Deleted || !validKind(resource.Kind) || resource.ID == "" || resource.Revision < 1 || !json.Valid(resource.Body) || seen[key] {
 			return fmt.Errorf("%w: 无效上下文记录", ErrWrongOwner)
 		}
 		seen[key] = true

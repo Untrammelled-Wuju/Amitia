@@ -13,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"github.com/u-ai/backend/internal/deviceruntime"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -47,13 +48,25 @@ func newRuntimeWSTestServerWithConfig(t *testing.T, configure func(*FacadeConfig
 	if err := db.AutoMigrate(&RuntimeSession{}, &RuntimeCommand{}, &EventRecord{}, &RuntimeActualState{}); err != nil {
 		t.Fatal(err)
 	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sessionStore := deviceruntime.NewSQLiteSessionStore(sqlDB)
+	if err := sessionStore.EnsureSchema(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	sessions, err := deviceruntime.NewService(sessionStore, deviceruntime.ServiceOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	cfg := DefaultFacadeConfig()
 	cfg.Path = "/runtime/ws"
 	cfg.LoopbackOnly = false
 	if configure != nil {
 		configure(cfg)
 	}
-	facade := NewRuntimeFacade(db, cfg)
+	facade := NewRuntimeFacadeWithDeviceRuntime(db, cfg, sessions)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	if err := facade.Start(ctx); err != nil {

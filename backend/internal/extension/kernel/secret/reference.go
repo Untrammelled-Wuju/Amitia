@@ -3,6 +3,7 @@ package secret
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -11,24 +12,17 @@ type SecretRef string
 
 const (
 	schemeCanonical = "secret://"
-	schemeLegacy    = "mcp-secret://"
 )
-
-var legacyPrefixReplacer = strings.NewReplacer("mcp-secret://", "secret://")
 
 func ParseRef(raw string) (SecretRef, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
 		return "", ErrSecretRefInvalid
 	}
-	normalized := trimmed
-	if strings.HasPrefix(normalized, schemeLegacy) {
-		normalized = legacyPrefixReplacer.Replace(normalized)
-	}
-	if !strings.HasPrefix(normalized, schemeCanonical) {
+	if !strings.HasPrefix(trimmed, schemeCanonical) {
 		return "", fmt.Errorf("%w: %s", ErrSecretRefInvalid, raw)
 	}
-	path := strings.TrimPrefix(normalized, schemeCanonical)
+	path := strings.TrimPrefix(trimmed, schemeCanonical)
 	if path == "" || strings.HasPrefix(path, "/") || strings.HasSuffix(path, "/") {
 		return "", fmt.Errorf("%w: %s", ErrSecretRefInvalid, raw)
 	}
@@ -41,9 +35,6 @@ func ParseRef(raw string) (SecretRef, error) {
 
 func (r SecretRef) Valid() bool {
 	s := string(r)
-	if strings.HasPrefix(s, schemeLegacy) {
-		s = legacyPrefixReplacer.Replace(s)
-	}
 	if !strings.HasPrefix(s, schemeCanonical) {
 		return false
 	}
@@ -59,16 +50,8 @@ func (r SecretRef) String() string {
 	return string(r)
 }
 
-func (r SecretRef) IsLegacy() bool {
-	return strings.HasPrefix(string(r), schemeLegacy)
-}
-
 func (r SecretRef) Canonical() SecretRef {
-	s := string(r)
-	if strings.HasPrefix(s, schemeLegacy) {
-		s = legacyPrefixReplacer.Replace(s)
-	}
-	return SecretRef(s)
+	return r
 }
 
 func FingerprintRef(ref SecretRef) string {
@@ -112,9 +95,9 @@ func unmarshalSecretRefJSON(data []byte, raw *string) error {
 	var wrapper struct {
 		Secret string `json:"$secret"`
 	}
-	if err := jsonUnmarshal(data, &wrapper); err != nil {
+	if err := json.Unmarshal(data, &wrapper); err != nil {
 		var s string
-		if err2 := jsonUnmarshal(data, &s); err2 == nil {
+		if err2 := json.Unmarshal(data, &s); err2 == nil {
 			*raw = s
 			return nil
 		}

@@ -38,7 +38,7 @@ func (h *Handler) requireLocalSync(c *gin.Context) bool {
 	if actor != nil && actor.PrincipalType == auth.PrincipalLocalUI && actor.IsLocalTrusted {
 		return true
 	}
-	c.AbortWithStatusJSON(403, gin.H{"code": "legacy_sync_remote_disabled", "message": "绑定设备直接使用 Core 的同一份数据，不支持旧版数据同步"})
+	c.AbortWithStatusJSON(403, gin.H{"code": "remote_sync_disabled", "message": "绑定设备直接使用 Core 的同一份数据，不支持远程同步"})
 	return false
 }
 

@@ -49,6 +49,7 @@ func createServicesRuntimeCharacterSchema(t *testing.T, db *gorm.DB) {
 	t.Helper()
 	if err := db.Exec(`CREATE TABLE characters (
 		id TEXT PRIMARY KEY,
+		space_id TEXT NOT NULL DEFAULT '',
 		name TEXT,
 		identity TEXT,
 		personality TEXT,
@@ -67,9 +68,11 @@ func createServicesRuntimeCharacterSchema(t *testing.T, db *gorm.DB) {
 		self_reference TEXT,
 		gender_expression INTEGER,
 		life_identity TEXT,
+		status TEXT NOT NULL DEFAULT 'enabled',
 		is_default INTEGER,
 		sort_order INTEGER,
-		created_at TEXT
+		created_at TEXT,
+		deleted_at DATETIME
 	)`).Error; err != nil {
 		t.Fatalf("create characters schema: %v", err)
 	}

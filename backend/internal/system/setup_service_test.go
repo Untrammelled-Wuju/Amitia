@@ -33,13 +33,8 @@ func newSetupServiceTest(t *testing.T) *service {
 	return &service{db: db}
 }
 
-func TestSetupAndOnboardingStateCompatibility(t *testing.T) {
+func TestSetupAndOnboardingStateSynchronization(t *testing.T) {
 	svc := newSetupServiceTest(t)
-
-	svc.setAppSetting("setup_completed", "true")
-	if svc.OnboardingStatus()["completed"] != true {
-		t.Fatal("legacy setup state was not recognized")
-	}
 
 	svc.OnboardingReset()
 	svc.OnboardingComplete()

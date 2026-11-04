@@ -11,7 +11,7 @@ import (
 
 type alwaysNegotiatedFeatureChecker struct{}
 
-func (alwaysNegotiatedFeatureChecker) HasNegotiatedCapability(string, domain.Capability) bool {
+func (alwaysNegotiatedFeatureChecker) HasNegotiatedCapability(string, domain.HostFeature) bool {
 	return true
 }
 

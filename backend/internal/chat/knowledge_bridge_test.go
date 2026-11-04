@@ -52,12 +52,6 @@ func TestPhase16RouteRolloutModes(t *testing.T) {
 	if decision.EffectiveLevel != knowledge.RetrievalLevelAgentic {
 		t.Fatalf("new policy ignored explicit file investigation: %q", decision.EffectiveLevel)
 	}
-	features.RetrievalPolicyEnabled = false
-	features.RetrievalPolicyShadow = true
-	decision = knowledge.ResolveChatRoute("请核对PDF第37页的原文", features)
-	if decision.EffectiveLevel != knowledge.RetrievalLevelFast || decision.PolicyMode != knowledge.PolicyModeLegacyShadow || decision.ShadowLevel != knowledge.RetrievalLevelAgentic {
-		t.Fatalf("shadow must not alter active legacy routing: %#v", decision)
-	}
 }
 
 func TestPhase16PreciseReadStaysTenantScoped(t *testing.T) {

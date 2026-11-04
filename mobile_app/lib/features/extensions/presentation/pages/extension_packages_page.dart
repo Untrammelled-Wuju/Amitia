@@ -239,13 +239,6 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
           child: _PackageMenuLabel(icon: Icons.terminal, label: '开发者诊断控制台'),
         ),
         PopupMenuItem(
-          value: 'migrations',
-          child: _PackageMenuLabel(
-            icon: Icons.merge_type_outlined,
-            label: '迁移与灰度中心',
-          ),
-        ),
-        PopupMenuItem(
           value: 'dev-mode',
           child: _PackageMenuLabel(
             icon: Icons.developer_mode_outlined,
@@ -1112,14 +1105,28 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
     }
   }
 
-  Future<void> _showPackageError(String title, Object error, StackTrace stack) async {
+  Future<void> _showPackageError(
+    String title,
+    Object error,
+    StackTrace stack,
+  ) async {
     if (!mounted) return;
     final response = error is DioException ? error.response?.data : null;
-    await showDialog<void>(context: context, builder: (context) => AlertDialog(
-      title: Text(title),
-      content: SingleChildScrollView(child: SelectableText('$error\n${response ?? ''}\n$stack')),
-      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('关闭'))],
-    ));
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: SingleChildScrollView(
+          child: SelectableText('$error\n${response ?? ''}\n$stack'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
   }
 
   Map<String, bool> _buildInstallConfirmations(Map<String, dynamic> preview) {
@@ -1358,8 +1365,15 @@ class _PackagePreviewSheet extends StatelessWidget {
             if (preview['migrationPreview'] is Map) ...[
               const SizedBox(height: 10),
               Text('数据迁移', style: AppTypography.sectionTitle(context)),
-              SelectableText(const JsonEncoder.withIndent('  ').convert(preview['migrationPreview'])),
-              _DetailRow(label: '计划校验值', value: (preview['migrationPlanHash'] ?? '').toString()),
+              SelectableText(
+                const JsonEncoder.withIndent(
+                  '  ',
+                ).convert(preview['migrationPreview']),
+              ),
+              _DetailRow(
+                label: '计划校验值',
+                value: (preview['migrationPlanHash'] ?? '').toString(),
+              ),
             ],
             _DetailRow(
               label: '签名',

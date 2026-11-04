@@ -19,7 +19,7 @@ type PluginDescriptor struct {
 	Version         string
 	ProtocolVersion string
 
-	Capabilities        []Capability
+	Capabilities        []HostFeature
 	RequiredPermissions []string
 	Services            []ServiceDescriptor
 	Channels            []ChannelDescriptor
@@ -64,9 +64,9 @@ func (p PluginDescriptor) Validate() error {
 		return NewHostError(ErrInvalidArgument, "plugin name contains control characters")
 	}
 
-	seenCapabilities := make(map[Capability]struct{})
+	seenCapabilities := make(map[HostFeature]struct{})
 	for _, cap := range p.Capabilities {
-		if err := ValidateCapability(cap); err != nil {
+		if err := ValidateHostFeature(cap); err != nil {
 			return err
 		}
 		if _, exists := seenCapabilities[cap]; exists {
@@ -165,7 +165,7 @@ func (p PluginDescriptor) Clone() PluginDescriptor {
 	}
 
 	if p.Capabilities != nil {
-		cloned.Capabilities = make([]Capability, len(p.Capabilities))
+		cloned.Capabilities = make([]HostFeature, len(p.Capabilities))
 		copy(cloned.Capabilities, p.Capabilities)
 	}
 
@@ -219,7 +219,7 @@ func (p PluginDescriptor) Clone() PluginDescriptor {
 	return cloned
 }
 
-func (p PluginDescriptor) HasCapability(capability Capability) bool {
+func (p PluginDescriptor) HasCapability(capability HostFeature) bool {
 	for _, cap := range p.Capabilities {
 		if cap == capability {
 			return true
@@ -241,7 +241,7 @@ func EqualPluginDescriptor(a, b PluginDescriptor) bool {
 	if len(a.Capabilities) != len(b.Capabilities) {
 		return false
 	}
-	capMap := make(map[Capability]struct{}, len(a.Capabilities))
+	capMap := make(map[HostFeature]struct{}, len(a.Capabilities))
 	for _, cap := range a.Capabilities {
 		capMap[cap] = struct{}{}
 	}

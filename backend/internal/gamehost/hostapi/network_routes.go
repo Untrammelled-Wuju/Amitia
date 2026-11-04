@@ -14,6 +14,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	ghdomain "github.com/u-ai/backend/internal/gamehost/domain"
+	ghruntime "github.com/u-ai/backend/internal/gamehost/runtime"
 	amitialog "log"
 )
 
@@ -33,11 +34,18 @@ type NetworkRouteDeps struct {
 	Supervisor networkDefinitionReader
 }
 
+type routeReplacer interface {
+	ReplaceRoute(route kernelhostapi.Route) error
+}
+
 type networkRouteHost struct {
 	topology    networkRouteTopology
 	supervisor  networkDefinitionReader
 	connections *networkConnectionManager
+	fallback    kernelhostapi.Handler
 }
+
+var errNotGameHostRuntime = errors.New("runtime is not a GameHost service")
 
 // NetworkLifecycle owns the host-side socket handles created by GameHost
 // network routes. It is intentionally separate from plugin process networking:
@@ -147,13 +155,21 @@ func RegisterNetworkRouteWithLifecycle(deps NetworkRouteDeps) (*NetworkLifecycle
 		{kernelhostapi.MethodNetworkWebSocketClose, 10 * time.Second, defaultRate, h.webSocketClose},
 	}
 
-	// Preflight every route before mutating the Gateway so a collision cannot
-	// leave a partially registered transport surface.
+	var fallbackRoute kernelhostapi.Route
+	var fallbackFound bool
 	for _, spec := range routes {
-		if _, exists := deps.Gateway.QueryCapability(context.Background(), spec.method); exists {
-			lifecycle.Shutdown()
-			return nil, fmt.Errorf("gamehost hostapi: refusing to replace existing route %s", spec.method)
+		existing, exists := deps.Gateway.QueryCapability(context.Background(), spec.method)
+		if !exists {
+			continue
 		}
+		if spec.method == kernelhostapi.MethodNetworkRequest {
+			fallbackRoute = existing
+			fallbackFound = true
+			h.fallback = existing.Handler
+			continue
+		}
+		lifecycle.Shutdown()
+		return nil, fmt.Errorf("gamehost hostapi: refusing to replace existing route %s", spec.method)
 	}
 	for _, spec := range routes {
 		route := kernelhostapi.Route{
@@ -167,10 +183,25 @@ func RegisterNetworkRouteWithLifecycle(deps NetworkRouteDeps) (*NetworkLifecycle
 			Timeout:         spec.timeout,
 			Handler:         spec.handler,
 		}
-		if err := deps.Gateway.RegisterRoute(route); err != nil {
-			lifecycle.Shutdown()
-			return nil, fmt.Errorf("gamehost hostapi: register %s: %w", route.Method, err)
+		var err error
+		if spec.method == kernelhostapi.MethodNetworkRequest && fallbackFound {
+			replacer, ok := deps.Gateway.(routeReplacer)
+			if !ok {
+				lifecycle.Shutdown()
+				return nil, fmt.Errorf("gamehost hostapi: replace %s: gateway does not support route replacement", route.Method)
+			}
+			err = replacer.ReplaceRoute(route)
+		} else {
+			err = deps.Gateway.RegisterRoute(route)
 		}
+		if err != nil {
+			lifecycle.Shutdown()
+			return nil, fmt.Errorf("gamehost hostapi: install %s: %w", route.Method, err)
+		}
+	}
+	if fallbackFound && fallbackRoute.Handler == nil {
+		lifecycle.Shutdown()
+		return nil, fmt.Errorf("gamehost hostapi: replace %s: existing route has no fallback handler", kernelhostapi.MethodNetworkRequest)
 	}
 	return lifecycle, nil
 }
@@ -182,7 +213,10 @@ func (h *networkRouteHost) resolveDefinition(identity runtime_supervisor.Runtime
 	runtimeID := ghdomain.RuntimeInstanceID(identity.InstanceID)
 	serviceID, err := h.topology.ResolveServiceIDByModule(runtimeID, string(identity.ModuleID))
 	if err != nil {
-		return nil, fmt.Errorf("%w: runtime is not a GameHost service: %v", kernelhostapi.ErrHostUnavailable, err)
+		if ghruntime.IsTopologyError(err, ghruntime.ErrNotFound) {
+			return nil, fmt.Errorf("%w: %w", errNotGameHostRuntime, err)
+		}
+		return nil, fmt.Errorf("%w: %w", kernelhostapi.ErrHostUnavailable, err)
 	}
 	definitionID, err := h.topology.ResolveDefinitionID(runtimeID, serviceID)
 	if err != nil || definitionID == "" {
@@ -240,9 +274,19 @@ func networkOpenError(err error) error {
 }
 
 func (h *networkRouteHost) networkRequest(ctx context.Context, req kernelhostapi.CallRequest) (kernelhostapi.CallResult, error) {
-	client, err := h.restrictedClient(req.RuntimeIdentity)
+	definition, err := h.resolveDefinition(req.RuntimeIdentity)
+	if errors.Is(err, errNotGameHostRuntime) {
+		if h.fallback != nil {
+			return h.fallback(ctx, req)
+		}
+		return kernelhostapi.CallResult{}, err
+	}
 	if err != nil {
 		return kernelhostapi.CallResult{}, err
+	}
+	client, err := newRestrictedHTTPClient(definition.Network)
+	if err != nil {
+		return kernelhostapi.CallResult{}, fmt.Errorf("%w: %v", kernelhostapi.ErrPermissionDenied, err)
 	}
 	var in NetworkRequestInput
 	if err := decodeStrictJSON(req.Input, &in); err != nil {

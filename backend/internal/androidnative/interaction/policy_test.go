@@ -41,11 +41,11 @@ func TestPolicy_ValidateDurationMS(t *testing.T) {
 	policy := DefaultPolicy()
 
 	tests := []struct {
-		name      string
-		duration  int
-		minMS     int
-		maxMS     int
-		expected  int
+		name     string
+		duration int
+		minMS    int
+		maxMS    int
+		expected int
 	}{
 		{"zero returns min", 0, 100, 1000, 100},
 		{"below min returns min", 50, 100, 1000, 100},

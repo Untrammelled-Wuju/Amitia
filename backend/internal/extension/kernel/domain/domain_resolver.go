@@ -7,8 +7,17 @@ var exclusiveContributionKinds = map[ContributionKind]bool{
 	ContributionKindPetPlugin:  true,
 }
 
+var exclusiveContributionAdapters = map[ContributionAdapter]bool{
+	ContributionAdapterGame:       true,
+	ContributionAdapterDesktopPet: true,
+}
+
 func IsExclusiveContributionKind(kind ContributionKind) bool {
-	return exclusiveContributionKinds[NormalizeContributionKind(kind)]
+	return exclusiveContributionKinds[kind]
+}
+
+func IsExclusiveContributionAdapter(adapter ContributionAdapter) bool {
+	return exclusiveContributionAdapters[adapter]
 }
 
 type DomainClassification struct {
@@ -18,26 +27,34 @@ type DomainClassification struct {
 }
 
 func ResolveExtensionDomain(contributions []ContributionDefinition) (ExtensionDomain, error) {
-	kinds := make([]ContributionKind, 0, len(contributions))
+	adapters := make([]ContributionAdapter, 0, len(contributions))
 	for _, c := range contributions {
-		kinds = append(kinds, c.Kind)
+		adapters = append(adapters, c.EffectiveAdapter())
 	}
-	return ResolveDomainFromKinds(kinds)
+	return ResolveDomainFromAdapters(adapters)
 }
 
 func ResolveDomainFromKinds(kinds []ContributionKind) (ExtensionDomain, error) {
+	adapters := make([]ContributionAdapter, 0, len(kinds))
+	for _, kind := range kinds {
+		adapters = append(adapters, ContributionAdapterForKind(kind))
+	}
+	return ResolveDomainFromAdapters(adapters)
+}
+
+func ResolveDomainFromAdapters(adapters []ContributionAdapter) (ExtensionDomain, error) {
 	hasGame := false
 	hasDesktopPet := false
-	var exclusiveFound []ContributionKind
+	var exclusiveFound []ContributionAdapter
 
-	for _, k := range kinds {
-		switch NormalizeContributionKind(k) {
-		case ContributionKindGamePlugin:
+	for _, adapter := range adapters {
+		switch adapter {
+		case ContributionAdapterGame:
 			hasGame = true
-			exclusiveFound = append(exclusiveFound, k)
-		case ContributionKindPetPlugin:
+			exclusiveFound = append(exclusiveFound, adapter)
+		case ContributionAdapterDesktopPet:
 			hasDesktopPet = true
-			exclusiveFound = append(exclusiveFound, k)
+			exclusiveFound = append(exclusiveFound, adapter)
 		}
 	}
 
@@ -59,7 +76,7 @@ func ClassifyExtension(contributions []ContributionDefinition) (DomainClassifica
 		Domain: domain,
 	}
 	for _, c := range contributions {
-		if IsExclusiveContributionKind(c.Kind) {
+		if IsExclusiveContributionAdapter(c.EffectiveAdapter()) {
 			classification.ExclusiveContributions = append(classification.ExclusiveContributions, c.Kind)
 		}
 	}

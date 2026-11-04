@@ -3,6 +3,7 @@ package builtin
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"sync"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
@@ -44,6 +45,25 @@ func (r *HandlerRegistry) Resolve(handlerName string, extensionID string, module
 	defer r.mu.RUnlock()
 	h, ok := r.handlers[key]
 	return h, ok
+}
+
+func (r *HandlerRegistry) Has(extensionID string, moduleID string, handlerName string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	_, ok := r.handlers[r.key(extensionID, moduleID, handlerName)]
+	return ok
+}
+
+func (r *HandlerRegistry) HasName(handlerName string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	suffix := ":" + handlerName
+	for key := range r.handlers {
+		if strings.HasSuffix(key, suffix) {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *HandlerRegistry) UnregisterByOwner(extensionID domain.ExtensionID) {

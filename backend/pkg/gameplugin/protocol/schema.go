@@ -5,7 +5,7 @@ import "fmt"
 type PluginSchema struct {
 	Services     []ServiceDescriptor `json:"services,omitempty"`
 	Channels     []ChannelDescriptor `json:"channels,omitempty"`
-	Capabilities []Capability        `json:"capabilities,omitempty"`
+	HostFeatures []HostFeature       `json:"hostFeatures,omitempty"`
 }
 
 func (ps PluginSchema) Validate() error {
@@ -15,8 +15,8 @@ func (ps PluginSchema) Validate() error {
 	if err := ValidateChannels(ps.Channels); err != nil {
 		return fmt.Errorf("channels validation failed: %w", err)
 	}
-	if err := ValidateCapabilities(ps.Capabilities); err != nil {
-		return fmt.Errorf("capabilities validation failed: %w", err)
+	if err := ValidateHostFeatures(ps.HostFeatures); err != nil {
+		return fmt.Errorf("hostFeatures validation failed: %w", err)
 	}
 	return nil
 }
@@ -39,9 +39,9 @@ func (ps PluginSchema) FindChannel(id ChannelID) (*ChannelDescriptor, bool) {
 	return nil, false
 }
 
-func (ps PluginSchema) HasCapability(cap Capability) bool {
-	for _, c := range ps.Capabilities {
-		if c == cap {
+func (ps PluginSchema) HasHostFeature(feature HostFeature) bool {
+	for _, current := range ps.HostFeatures {
+		if current == feature {
 			return true
 		}
 	}
@@ -56,6 +56,6 @@ func (ps PluginSchema) ChannelCount() int {
 	return len(ps.Channels)
 }
 
-func (ps PluginSchema) CapabilityCount() int {
-	return len(ps.Capabilities)
+func (ps PluginSchema) HostFeatureCount() int {
+	return len(ps.HostFeatures)
 }

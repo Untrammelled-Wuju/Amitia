@@ -78,13 +78,8 @@ func WithDiagnosticRunner(runner DiagnosticRunner) ObserverOption {
 }
 
 type DiagnosticRunner interface {
-	RunDiagnostics(ctx context.Context, workspaceID string, paths []string) ([]string, []string, error)
-	Supports(platform string) bool
-}
-
-type PlatformDiagnosticRunner interface {
-	DiagnosticRunner
 	RunPlatformDiagnostics(ctx context.Context, platform string, workspaceID string, paths []string) ([]string, []string, error)
+	Supports(platform string) bool
 }
 
 type defaultObserver struct {
@@ -144,11 +139,7 @@ func (o *defaultObserver) Capture(ctx context.Context, sessionID string) (*Obser
 		if o.diagnosticRunner.Supports(session.Target.Platform) {
 			var compileErrors, warnings []string
 			var diagErr error
-			if platformRunner, ok := o.diagnosticRunner.(PlatformDiagnosticRunner); ok {
-				compileErrors, warnings, diagErr = platformRunner.RunPlatformDiagnostics(ctx, session.Target.Platform, session.WorkspaceID, nil)
-			} else {
-				compileErrors, warnings, diagErr = o.diagnosticRunner.RunDiagnostics(ctx, session.WorkspaceID, nil)
-			}
+			compileErrors, warnings, diagErr = o.diagnosticRunner.RunPlatformDiagnostics(ctx, session.Target.Platform, session.WorkspaceID, nil)
 			if diagErr != nil {
 				result.RuntimeErrors = append(result.RuntimeErrors, fmt.Sprintf("diagnostic error: %v", diagErr))
 			}

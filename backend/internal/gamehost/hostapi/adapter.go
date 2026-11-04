@@ -22,7 +22,7 @@ type ServicePermissionChecker interface {
 }
 
 type NegotiatedFeatureChecker interface {
-	HasNegotiatedCapability(connectionID string, feature domain.Capability) bool
+	HasNegotiatedCapability(connectionID string, feature domain.HostFeature) bool
 }
 
 type HostAPIAdapter struct {
@@ -107,7 +107,7 @@ func (a *HostAPIAdapter) Call(ctx context.Context, req Request) (Response, error
 		return Response{}, ErrNotReady
 	}
 	if req.ConnKey != "" {
-		if a.featureGate == nil || !a.featureGate.HasNegotiatedCapability(req.ConnKey, domain.CapabilityHostAPI) {
+		if a.featureGate == nil || !a.featureGate.HasNegotiatedCapability(req.ConnKey, domain.HostFeatureHostAPI) {
 			return Response{}, &Error{Code: CodePermissionDenied, Message: "host_api was not negotiated for this service connection"}
 		}
 	}

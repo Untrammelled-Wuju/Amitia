@@ -6,7 +6,6 @@ const (
 	ModeSpriteSheet GenerationMode = "sprite_sheet"
 	ModeKeyframe    GenerationMode = "keyframe"
 	ModeSingleFrame GenerationMode = "single_frame"
-	ModeLegacyFrame GenerationMode = "legacy_frame"
 )
 
 type ImageSize struct {

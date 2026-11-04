@@ -27,7 +27,6 @@ type meshHistoricalListCursor struct {
 	Permission int64                  `json:"permission"`
 	SearchHash string                 `json:"searchHash,omitempty"`
 	Owned      meshHistoricalPosition `json:"owned"`
-	Legacy     meshHistoricalPosition `json:"legacy"`
 }
 
 func (p *meshLocalDataPort) HistoricalConversationPage(ctx context.Context, scope coordination.ExecutionScope, query coordination.DataQuery) (coordination.HistoricalConversationPage, error) {
@@ -125,34 +124,7 @@ func (p *meshLocalDataPort) HistoricalConversationPage(ctx context.Context, scop
 		}
 		cursor.Owned.Done = count <= limit
 	}
-	if !cursor.Legacy.Done {
-		db := p.services.DB.WithContext(ctx).Where("deleted_at IS NULL AND (space_id=? OR space_id='' OR space_id='default')", p.legacySpaceID)
-		if search != "" {
-			db = db.Where("instr(lower(COALESCE(title,'')),?)>0 OR id IN (SELECT conversation_id FROM messages WHERE deleted_at IS NULL AND instr(lower(content),?)>0)", search, search)
-		}
-		if cursor.Legacy.ID != "" {
-			db = db.Where("updated_at<? OR (updated_at=? AND id<?)", cursor.Legacy.UpdatedAt, cursor.Legacy.UpdatedAt, cursor.Legacy.ID)
-		}
-		var conversations []chat.Conversation
-		if err := db.Order("updated_at DESC,id DESC").Limit(limit + 1).Find(&conversations).Error; err != nil {
-			return result, err
-		}
-		cursor.Legacy.Done = len(conversations) <= limit
-		if len(conversations) > limit {
-			conversations = conversations[:limit]
-		}
-		for _, row := range conversations {
-			raw, err := json.Marshal(row)
-			if err != nil {
-				return result, err
-			}
-			if err := appendRow(raw); err != nil {
-				return result, err
-			}
-			cursor.Legacy.ID, cursor.Legacy.UpdatedAt = row.ID, row.UpdatedAt
-		}
-	}
-	if !cursor.Owned.Done || !cursor.Legacy.Done {
+	if !cursor.Owned.Done {
 		raw, err := json.Marshal(cursor)
 		if err != nil {
 			return result, err

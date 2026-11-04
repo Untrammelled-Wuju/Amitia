@@ -477,7 +477,7 @@ func TestGamePluginRestrictedNetworkRequiresPermission(t *testing.T) {
 				"id": "game",
 				"kind": "gamex",
 				"name": {"default": "Game"},
-				"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime", "network": {"mode": "restricted", "allowedDomains": ["api.example.com"], "allowedPorts": [443]}}
+				"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime", "network": {"mode": "restricted", "allowedTransports": ["https"], "allowedDomains": ["api.example.com"], "allowedPorts": [443]}}
 			}]
 		}],
 		"integrity": {"algorithm": "sha256", "contentTreeHash": "test"}
@@ -492,41 +492,6 @@ func TestGamePluginRestrictedNetworkRequiresPermission(t *testing.T) {
 	m.Modules[0].Contributions[0].RequiredPermissions = []string{"service.network.request"}
 	if report := m.Validate(); report.HasErrors() {
 		t.Fatalf("expected restricted game plugin with network permission to pass, got %v", report.Errors)
-	}
-}
-
-func TestNormalizeGamePluginRuntimeDefaultsToDevice(t *testing.T) {
-	manifest := `{
-		"manifestVersion": 1,
-		"extension": {"id": "com.example/device-default", "name": {"default": "Game"}, "version": "1.0.0"},
-		"publisher": {"id": "com.example", "displayName": "Example"},
-		"modules": [{
-			"id": "runtime",
-			"name": {"default": "Runtime"},
-			"type": "service",
-			"runtime": {"type": "service", "entryPoint": "bin/runtime"},
-			"contributions": [{
-				"id": "game",
-				"kind": "gamex",
-				"name": {"default": "Game"},
-				"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime", "network": {"mode": "none"}}
-			}]
-		}],
-		"integrity": {"algorithm": "sha256", "contentTreeHash": "test"}
-	}`
-	m, err := Parse([]byte(manifest))
-	if err != nil {
-		t.Fatal(err)
-	}
-	normalized, report := m.NormalizeCompatibility()
-	if report.HasErrors() {
-		t.Fatalf("normalize errors: %v", report.Errors)
-	}
-	if normalized.Placement != "device" {
-		t.Fatalf("expected extension placement device, got %q", normalized.Placement)
-	}
-	if got := normalized.Modules[0].Placement; got != "device" {
-		t.Fatalf("expected game runtime placement device, got %q", got)
 	}
 }
 
@@ -562,13 +527,6 @@ func TestGamePluginRuntimeDeclaredLaterIsAllowed(t *testing.T) {
 	}
 	if report := m.Validate(); report.HasErrors() {
 		t.Fatalf("forward runtime reference should be order-independent, got %v", report.Errors)
-	}
-	normalized, report := m.NormalizeCompatibility()
-	if report.HasErrors() {
-		t.Fatalf("normalize errors: %v", report.Errors)
-	}
-	if normalized.Modules[1].Placement != "device" {
-		t.Fatalf("forward-referenced game runtime must normalize to device, got %q", normalized.Modules[1].Placement)
 	}
 }
 

@@ -6,6 +6,7 @@ describe("两级导航映射", () => {
   it("把路由归入对应的一级导航区", () => {
     expect(resolveAppSection("/chat")).toBe("home");
     expect(resolveAppSection("/character/role-1/life-rules")).toBe("character");
+    expect(resolveAppSection("/characters/teams")).toBe("character");
     expect(resolveAppSection("/profiles")).toBe("memory");
     expect(resolveAppSection("/memory-manager")).toBe("memory");
     expect(resolveAppSection("/reminders")).toBe("tasks");
@@ -28,6 +29,7 @@ describe("两级导航映射", () => {
     ]);
     expect(appSection("character")?.entries.map(entry => entry.label)).toEqual([
       "角色管理",
+      "团队",
       "世界书",
     ]);
     expect(appSection("memory")?.entries.map(entry => entry.label)).toEqual([
@@ -43,7 +45,6 @@ describe("两级导航映射", () => {
       "桌宠",
     ]);
     expect(appSection("extensions")?.entries.map(entry => entry.label)).toEqual([
-      "插件市场",
       "扩展包",
       "工作流",
       "MCP 服务",

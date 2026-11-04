@@ -2,7 +2,6 @@ package mcp
 
 import (
 	"context"
-	"encoding/json"
 	"sync"
 )
 
@@ -89,26 +88,4 @@ func (r *CanonicalRemoteRegistry) List() map[string]*CanonicalRemoteConnection {
 		result[k] = v
 	}
 	return result
-}
-
-// ToStdioRegistry returns a compatible interface for CanonicalStdioCaller.
-// This is a temporary adapter during migration.
-func (r *CanonicalRemoteRegistry) ToStdioRegistry() *RemoteRegistryAdapter {
-	return &RemoteRegistryAdapter{registry: r}
-}
-
-type RemoteRegistryAdapter struct {
-	registry *CanonicalRemoteRegistry
-}
-
-func (a *RemoteRegistryAdapter) Get(serverID string) (RemoteConnectionInterface, bool) {
-	conn, ok := a.registry.Get(serverID)
-	if !ok {
-		return nil, false
-	}
-	return conn, true
-}
-
-type RemoteConnectionInterface interface {
-	Call(ctx context.Context, method string, params any) (json.RawMessage, error)
 }

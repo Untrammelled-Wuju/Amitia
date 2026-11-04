@@ -1,6 +1,7 @@
 <template>
   <div class="resource-view">
     <div v-if="tab.kind === 'tasks'"><WorkbenchTasksView :conversation-id="store.conversationId" :character-id="store.characterId" /></div>
+    <div v-else-if="tab.kind === 'agents'"><WorkbenchAgentRunsView /></div>
     <div v-else-if="tab.targetDeviceId && (tab.kind !== 'browser' || !tab.browserRef)" class="muted" role="alert">目标设备资源不支持远程访问，已阻止向本机错误发起请求。</div>
     <template v-else-if="tab.kind === 'files'">
       <div class="toolbar"><select v-model="workspaceUri" aria-label="工作目录" @change="changeWorkspace"><option value="">选择工作区</option><option v-for="mount in mounts" :key="mount.id" :value="mount.rootUri" :disabled="!mount.available">{{ mount.name }}{{ mount.available ? '' : '（不可用）' }}</option></select><button type="button" @click="refresh">刷新</button></div>
@@ -108,6 +109,7 @@ import { useWorkbenchStore, type WorkbenchTab } from '@/stores/workbench';
 import WorkbenchBrowserView from './WorkbenchBrowserView.vue';
 import WorkbenchTerminalView from './WorkbenchTerminalView.vue';
 import WorkbenchTasksView from './WorkbenchTasksView.vue';
+import WorkbenchAgentRunsView from './WorkbenchAgentRunsView.vue';
 import { parseWorkbenchDocumentChunk, type WorkbenchDocumentContent } from './workbench-document-chunks';
 import { needsWorkbenchWorkspaceData } from './workbench-resource-lifecycle';
 

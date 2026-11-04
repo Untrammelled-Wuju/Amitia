@@ -138,11 +138,8 @@ function messageRendererId(message: any) {
 }
 
 function resolvePeerKind(item: Record<string, unknown>): string {
-  const explicit = String(item.peerKind || item.peer_kind || "").trim();
+  const explicit = String(item.peerKind || "").trim();
   if (explicit === "group" || explicit === "private") return explicit;
-  const id = String(item.id || item.resourceId || "");
-  if (id.includes("-group-")) return "group";
-  if (id.includes("-private-")) return "private";
   return "";
 }
 

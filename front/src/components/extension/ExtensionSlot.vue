@@ -250,7 +250,7 @@ defineExpose({ rootEl, focus, setText, clear });
           <ExtensionErrorBoundary
             :slot-id="slotId"
             :contribution-id="item.client.contributionId"
-            :abdicate-on-error="item.client.strict && slotKind !== 'chain'"
+            :abdicate-on-error="slotKind !== 'chain'"
           >
             <ClientSlotContributionHost
               :contribution="item.client"

@@ -7,7 +7,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
-	"github.com/u-ai/backend/internal/migration"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -72,9 +71,6 @@ type ModelUsageStore struct {
 func NewModelUsageStore(db *gorm.DB, spaceID string) (*ModelUsageStore, error) {
 	if db == nil || spaceID == "" {
 		return nil, errors.New("模型计量数据库或空间未就绪")
-	}
-	if err := (migration.Runner{DB: db}).Apply([]migration.Migration{migration.RuntimeModelBudgetMigration()}); err != nil {
-		return nil, err
 	}
 	if err := db.Model(&ModelUsageRecord{}).Where("space_id=? AND status='running' AND (coordination_id IS NULL OR coordination_id='')", spaceID).Updates(map[string]any{"status": "interrupted", "completed_at": time.Now().UTC().Format(time.RFC3339Nano)}).Error; err != nil {
 		return nil, err
@@ -197,7 +193,11 @@ type UsageBucket struct {
 
 func (s *ModelUsageStore) Since(ctx context.Context, filter UsageFilter) (UsageBaseline, error) {
 	var rows []UsageBaseline
-	err := s.db.WithContext(ctx).Where("space_id=? AND (device_id='' OR device_id=?)", filter.SpaceID, filter.DeviceID).Order("sequence DESC,updated_at DESC").Limit(1).Find(&rows).Error
+	query := s.db.WithContext(ctx).Where("space_id=?", filter.SpaceID)
+	if filter.DeviceID != "" {
+		query = query.Where("device_id=?", filter.DeviceID)
+	}
+	err := query.Order("sequence DESC,updated_at DESC").Limit(1).Find(&rows).Error
 	if err != nil {
 		return UsageBaseline{}, err
 	}

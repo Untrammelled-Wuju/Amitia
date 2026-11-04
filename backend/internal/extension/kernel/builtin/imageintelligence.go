@@ -178,7 +178,7 @@ func buildImageIntelligenceContributions(extID domain.ExtensionID, modID domain.
 			Definition: map[string]any{
 				"capabilityId":   "media.image.generate",
 				"modelName":      "media_image_generate",
-				"inputSchema":    `{"type":"object","additionalProperties":false,"required":["prompt"],"properties":{"prompt":{"type":"string","maxLength":4096},"count":{"type":"integer","minimum":1,"maximum":4},"width":{"type":"integer","minimum":256,"maximum":4096},"height":{"type":"integer","minimum":256,"maximum":4096},"quality":{"enum":["standard","hd"]},"mode":{"enum":["single_frame","keyframe","sprite_sheet","legacy_frame"]},"negativePrompt":{"type":"string","maxLength":4096},"seed":{"type":"integer"},"referenceResourceUris":{"type":"array","maxItems":4,"items":{"type":"string","maxLength":4096}}}}`,
+				"inputSchema":    `{"type":"object","additionalProperties":false,"required":["prompt"],"properties":{"prompt":{"type":"string","maxLength":4096},"count":{"type":"integer","minimum":1,"maximum":4},"width":{"type":"integer","minimum":256,"maximum":4096},"height":{"type":"integer","minimum":256,"maximum":4096},"quality":{"enum":["standard","hd"]},"mode":{"enum":["single_frame","keyframe","sprite_sheet"]},"negativePrompt":{"type":"string","maxLength":4096},"seed":{"type":"integer"},"referenceResourceUris":{"type":"array","maxItems":4,"items":{"type":"string","maxLength":4096}}}}`,
 				"outputSchema":   `{"type":"object","properties":{"images":{"type":"array","items":{"type":"object"}}}}`,
 				"riskLevel":      "medium",
 				"sideEffect":     "external",

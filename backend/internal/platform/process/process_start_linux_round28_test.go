@@ -20,7 +20,7 @@ func TestRound28AtomicLinuxCgroupStartsInsideItsGroup(t *testing.T) {
 	cmd.Stdout = &output
 	handle, err := StartProcessTreeWithLimits(cmd, ResourceLimits{MaxProcesses: 32})
 	if err != nil {
-		                                                                
+
 		if cmd.Process != nil {
 			t.Fatalf("failed atomic launch must not leave running worker: %v", err)
 		}

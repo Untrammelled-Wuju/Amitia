@@ -74,7 +74,6 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	operationID := "package-operation-" + uuid.NewString()
 	traceID := "package-trace-" + uuid.NewString()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	confirmationsJSON, _ := json.Marshal(confirmed.claims.Confirmations)
 	claimsJSON, _ := json.Marshal(PackageConfirmationClaims{
 		SchemaVersion:             PackageConfirmationClaimsSchemaVersion,
 		OperationType:             string(PackageOperationTypeUpdate),
@@ -107,11 +106,11 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	updateOp := PackageOperationRecord{OperationID: operationID, TraceID: traceID, SpaceID: request.SpaceID,
 		ScopeType: request.ScopeType, ScopeID: request.ScopeID, ExtensionID: confirmed.session.ExtensionID,
 		TargetVersion: confirmed.session.Version, FromVersion: current.InstalledVersion.String(),
-		OperationType: "update", Status: "created",
+		OperationType: "update", Status: string(PackageOperationPending),
 		CurrentStep: "create_operation", ArtifactID: confirmed.artifact.ArtifactID,
-		PreviewSessionID: confirmed.session.SessionID, ConfirmationsJSON: string(confirmationsJSON),
-		ConfirmationClaimsJSON: string(claimsJSON), SnapshotRequirementHash: confirmed.claims.SnapshotRequirementHash,
-		IdempotencyKey: idempotencyKey, RequestHash: computePackageRequestHash(PackageOperationRecord{
+		PreviewSessionID: confirmed.session.SessionID, ConfirmationClaimsJSON: string(claimsJSON),
+		SnapshotRequirementHash: confirmed.claims.SnapshotRequirementHash,
+		IdempotencyKey:          idempotencyKey, RequestHash: computePackageRequestHash(PackageOperationRecord{
 			OperationType: "update", ExtensionID: confirmed.session.ExtensionID, TargetVersion: confirmed.session.Version,
 			ArtifactID: confirmed.artifact.ArtifactID, PreviewSessionID: confirmed.session.SessionID,
 			ScopeType: request.ScopeType, ScopeID: request.ScopeID,
@@ -201,7 +200,7 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 		return KernelInstallResult{}, r.failPackageUpdateOperation(operationID, "recompute_confirmation_authority", err, nil, guard)
 	}
 
-	standardClaims := standardConfirmationClaimsFromLegacy(string(PackageOperationTypeUpdate), confirmed.claims)
+	standardClaims := standardConfirmationClaimsFromPreview(string(PackageOperationTypeUpdate), confirmed.claims)
 
 	updateEvidence, err := buildPackageConfirmationAuthorityEvidence(operationID, standardClaims, authorityInput)
 	if err != nil {

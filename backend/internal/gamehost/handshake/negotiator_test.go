@@ -52,31 +52,31 @@ func TestProtocolNegotiator_AliasNotAccepted(t *testing.T) {
 }
 
 func TestCapabilityNegotiator_BasicMatch(t *testing.T) {
-	n := handshake.NewCapabilityNegotiator([]domain.Capability{
-		domain.CapabilityCustomRPC,
-		domain.CapabilityEventStreaming,
+	n := handshake.NewCapabilityNegotiator([]domain.HostFeature{
+		domain.HostFeatureCustomRPC,
+		domain.HostFeatureEventStreaming,
 	})
 
 	result, err := n.Negotiate(
-		[]domain.Capability{domain.CapabilityCustomRPC, domain.CapabilityEventStreaming},
-		[]domain.Capability{domain.CapabilityCustomRPC},
+		[]domain.HostFeature{domain.HostFeatureCustomRPC, domain.HostFeatureEventStreaming},
+		[]domain.HostFeature{domain.HostFeatureCustomRPC},
 	)
 	if err != nil {
 		t.Fatalf("capability negotiation failed: %v", err)
 	}
-	if len(result) != 1 || result[0] != domain.CapabilityCustomRPC {
+	if len(result) != 1 || result[0] != domain.HostFeatureCustomRPC {
 		t.Errorf("expected [custom_rpc], got %v", result)
 	}
 }
 
 func TestCapabilityNegotiator_ExceedsDescriptor(t *testing.T) {
-	n := handshake.NewCapabilityNegotiator([]domain.Capability{
-		domain.CapabilityCustomRPC,
+	n := handshake.NewCapabilityNegotiator([]domain.HostFeature{
+		domain.HostFeatureCustomRPC,
 	})
 
 	_, err := n.Negotiate(
-		[]domain.Capability{domain.CapabilityCustomRPC},
-		[]domain.Capability{domain.CapabilityCustomRPC, domain.CapabilityHostAPI},
+		[]domain.HostFeature{domain.HostFeatureCustomRPC},
+		[]domain.HostFeature{domain.HostFeatureCustomRPC, domain.HostFeatureHostAPI},
 	)
 	if err == nil {
 		t.Error("exceeding descriptor capabilities should fail")
@@ -84,24 +84,24 @@ func TestCapabilityNegotiator_ExceedsDescriptor(t *testing.T) {
 }
 
 func TestCapabilityNegotiator_HostUnsupported(t *testing.T) {
-	n := handshake.NewCapabilityNegotiator([]domain.Capability{
-		domain.CapabilityCustomRPC,
+	n := handshake.NewCapabilityNegotiator([]domain.HostFeature{
+		domain.HostFeatureCustomRPC,
 	})
 
 	result, err := n.Negotiate(
-		[]domain.Capability{domain.CapabilityCustomRPC, domain.CapabilityEventStreaming},
-		[]domain.Capability{domain.CapabilityCustomRPC, domain.CapabilityEventStreaming},
+		[]domain.HostFeature{domain.HostFeatureCustomRPC, domain.HostFeatureEventStreaming},
+		[]domain.HostFeature{domain.HostFeatureCustomRPC, domain.HostFeatureEventStreaming},
 	)
 	if err != nil {
 		t.Fatalf("negotiation failed: %v", err)
 	}
-	if len(result) != 1 || result[0] != domain.CapabilityCustomRPC {
+	if len(result) != 1 || result[0] != domain.HostFeatureCustomRPC {
 		t.Errorf("host unsupported capability should be filtered, got %v", result)
 	}
 }
 
 func TestCapabilityNegotiator_Empty(t *testing.T) {
-	n := handshake.NewCapabilityNegotiator([]domain.Capability{domain.CapabilityCustomRPC})
+	n := handshake.NewCapabilityNegotiator([]domain.HostFeature{domain.HostFeatureCustomRPC})
 
 	result, err := n.Negotiate(nil, nil)
 	if err != nil {
@@ -113,12 +113,12 @@ func TestCapabilityNegotiator_Empty(t *testing.T) {
 }
 
 func TestCapabilityNegotiator_NoDuplicate(t *testing.T) {
-	err := handshake.ValidateCapabilitiesNoDuplicate([]domain.Capability{"custom_rpc", "event_streaming"})
+	err := handshake.ValidateCapabilitiesNoDuplicate([]domain.HostFeature{"custom_rpc", "event_streaming"})
 	if err != nil {
 		t.Errorf("no duplicate should not error: %v", err)
 	}
 
-	err = handshake.ValidateCapabilitiesNoDuplicate([]domain.Capability{"custom_rpc", "custom_rpc"})
+	err = handshake.ValidateCapabilitiesNoDuplicate([]domain.HostFeature{"custom_rpc", "custom_rpc"})
 	if err == nil {
 		t.Error("duplicate capability should error")
 	}

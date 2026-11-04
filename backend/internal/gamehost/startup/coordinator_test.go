@@ -35,8 +35,8 @@ func (f *fakeProcessCleanup) ListOrphanCandidates(ctx context.Context) ([]Proces
 }
 
 type fakeTempCleanup struct {
-	candidates     []TempCandidate
-	removedTemps   []domain.RuntimeInstanceID
+	candidates   []TempCandidate
+	removedTemps []domain.RuntimeInstanceID
 }
 
 func (f *fakeTempCleanup) ListStaleTempCandidates(ctx context.Context) ([]TempCandidate, error) {
@@ -77,8 +77,8 @@ func (f *fakeEndpointCleanup) RemoveStaleEndpoint(ctx context.Context, endpointI
 }
 
 type fakeShmCleanup struct {
-	candidates         []SharedMemoryCandidate
-	releasedSharedMem  []string
+	candidates        []SharedMemoryCandidate
+	releasedSharedMem []string
 }
 
 func (f *fakeShmCleanup) ListStaleSharedMemory(ctx context.Context) ([]SharedMemoryCandidate, error) {

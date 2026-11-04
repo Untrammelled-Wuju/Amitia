@@ -233,21 +233,12 @@ func (g *SQLiteOwnershipGuard) RequireQualityEvaluation(ctx context.Context, act
 		return nil, ErrNotFound
 	}
 
-	var owner string
-	var characterID string
-	var revErr error
-	if evalResult.ActionRevisionID != "" {
-		owner, characterID, revErr = g.resolveActionRevisionOwner(ctx, evalResult.ActionRevisionID)
-		if revErr != nil && !errors.Is(revErr, gorm.ErrRecordNotFound) {
-			return nil, revErr
+	owner, characterID, err := g.resolveActionRevisionOwner(ctx, evalResult.ActionRevisionID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
 		}
-	}
-	if (owner == "" || errors.Is(revErr, gorm.ErrRecordNotFound)) && evalResult.ProcessingTaskID != "" {
-		owner, characterID, revErr = g.resolveProcessingTaskOwnerLegacy(ctx, actor, evalResult.ProcessingTaskID)
-		if revErr != nil && !errors.Is(revErr, gorm.ErrRecordNotFound) {
-			return nil, revErr
-		}
-		_ = revErr
+		return nil, err
 	}
 	if owner == "" {
 		return nil, ErrNotFound
@@ -282,29 +273,6 @@ func (g *SQLiteOwnershipGuard) resolveActionRevisionOwner(ctx context.Context, r
 	}
 	if result.SpaceID == "" {
 		return "", "", gorm.ErrRecordNotFound
-	}
-	return result.SpaceID, result.CharacterID, nil
-}
-
-func (g *SQLiteOwnershipGuard) resolveProcessingTaskOwnerLegacy(ctx context.Context, actor *desktoppetAuth.ActorContext, taskID string) (string, string, error) {
-	if taskID == "" {
-		return "", "", gorm.ErrRecordNotFound
-	}
-	var result struct {
-		SpaceID     string `gorm:"column:space_id"`
-		CharacterID string `gorm:"column:character_id"`
-	}
-	if err := g.db.WithContext(ctx).Table("desktop_pet_processing_tasks").
-		Select("space_id, character_id").
-		Where("id = ?", taskID).
-		Take(&result).Error; err != nil {
-		return "", "", err
-	}
-	if result.SpaceID == "" {
-		return "", "", gorm.ErrRecordNotFound
-	}
-	if result.SpaceID != string(actor.SpaceID) && !actor.HasPermission(desktoppetAuth.PermSystemAdmin) {
-		return "", "", ErrForbidden
 	}
 	return result.SpaceID, result.CharacterID, nil
 }

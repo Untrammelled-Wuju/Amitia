@@ -768,9 +768,9 @@ func (r *Renderer) resolveBinding(binding SchemaUIBinding, data map[string]any) 
 	case SourceInput:
 		value, ok = lookup(rootFor("input"), binding.Path)
 	case SourceForm, SourceFormState:
-		value, ok = lookup(rootFor("form", "formState", "form_state"), binding.Path)
+		value, ok = lookup(rootFor("form", "formState"), binding.Path)
 	case SourceState:
-		value, ok = lookup(rootFor("state", "localState", "local_state"), binding.Path)
+		value, ok = lookup(rootFor("state", "localState"), binding.Path)
 	case SourceQuery:
 		value, ok = lookup(rootFor("query"), binding.Path)
 	case SourceRuntime:
@@ -786,17 +786,9 @@ func (r *Renderer) resolveBinding(binding SchemaUIBinding, data map[string]any) 
 			value, ok = lookup(storage, binding.Path)
 		}
 	case SourceRuntimeStatus:
-		value, ok = lookup(rootFor("runtimeStatus", "runtime_status"), binding.Path)
+		value, ok = lookup(rootFor("runtimeStatus"), binding.Path)
 	case SourceResourceList:
-		value, ok = lookup(rootFor("resourceList", "resource_list"), binding.Path)
-	}
-	if !ok {
-		// Preserve schema-ui/1 compatibility: input/form/state/query historically
-		// resolved against a flat render context.
-		switch binding.Source {
-		case SourceInput, SourceForm, SourceFormState, SourceState, SourceQuery:
-			value, ok = lookup(data, binding.Path)
-		}
+		value, ok = lookup(rootFor("resourceList"), binding.Path)
 	}
 	if ok {
 		return value

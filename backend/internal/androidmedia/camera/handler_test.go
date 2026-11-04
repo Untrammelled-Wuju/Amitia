@@ -37,11 +37,11 @@ func TestHandler_Status_Supported(t *testing.T) {
 			}
 			return androidnative.NativeBridgeResponse{
 				Result: map[string]any{
-					"supported":          true,
-					"permissionState":    "granted",
-					"cameraCount":        float64(2),
-					"defaultLens":        "back",
-					"captureAvailable":   true,
+					"supported":        true,
+					"permissionState":  "granted",
+					"cameraCount":      float64(2),
+					"defaultLens":      "back",
+					"captureAvailable": true,
 				},
 			}, nil
 		},
@@ -200,16 +200,16 @@ func TestHandler_Capture_Success(t *testing.T) {
 			}
 			return androidnative.NativeBridgeResponse{
 				Result: map[string]any{
-					"resourceUri":  "amitia://temp/android-media/camera/test.jpg",
-					"mimeType":     "image/jpeg",
-					"width":        float64(1920),
-					"height":       float64(1080),
-					"cameraId":     "0",
-					"lensFacing":   "back",
-					"rotation":     float64(90),
-					"timestampMs":  float64(1234567890),
-					"sizeBytes":    float64(500000),
-					"contentHash":  "sha256:abc123",
+					"resourceUri": "amitia://temp/android-media/camera/test.jpg",
+					"mimeType":    "image/jpeg",
+					"width":       float64(1920),
+					"height":      float64(1080),
+					"cameraId":    "0",
+					"lensFacing":  "back",
+					"rotation":    float64(90),
+					"timestampMs": float64(1234567890),
+					"sizeBytes":   float64(500000),
+					"contentHash": "sha256:abc123",
 				},
 			}, nil
 		},
@@ -347,7 +347,7 @@ func TestStatusHandler_NormalizeBridgeResult(t *testing.T) {
 	handler := NewStatusHandler(NewHandler(nil, DefaultPolicy()))
 
 	raw := map[string]any{
-		"supported": true,
+		"supported":   true,
 		"cameraCount": float64(2),
 	}
 

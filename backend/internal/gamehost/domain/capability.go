@@ -1,12 +1,3 @@
-// Package domain provides GameHost domain types.
-//
-// IMPORTANT: GameHost "Capability" historical terminology has been replaced with "HostFeature".
-// A HostFeature describes a GAME PROTOCOL capability (e.g., realtime_control, IPC streaming),
-// NOT an AI Capability registered in the kernel Capability Provider Registry.
-//
-// HostFeatures should NEVER be registered in the shared kernel capability.ProviderRegistry.
-// True AI Tools/Capabilities from Game Plugins should be published via Extension Kernel
-// providedCapabilities and registered through G11 -> G8.
 package domain
 
 import (
@@ -17,12 +8,6 @@ const (
 	maxHostFeatureLength = 128
 )
 
-// HostFeature describes a protocol/host capability supported by a GameHost plugin.
-// Examples: "realtime_control", "state_streaming", "event_streaming", "custom_rpc"
-//
-// This is NOT an AI logical capability and must NOT be registered in the shared kernel
-// Capability Provider Registry. It declares what kinds of host interaction the plugin
-// protocol supports, not what AI tools it exposes.
 type HostFeature string
 
 const (
@@ -36,22 +21,6 @@ const (
 	HostFeatureBinaryStreaming HostFeature = "binary_streaming"
 )
 
-const (
-	CapabilityRealtimeControl Capability = "realtime_control"
-	CapabilityStateStreaming  Capability = "state_streaming"
-	CapabilityEventStreaming  Capability = "event_streaming"
-	CapabilityCustomRPC       Capability = "custom_rpc"
-	CapabilityHostAPI         Capability = "host_api"
-	CapabilitySharedControl   Capability = "shared_control"
-	CapabilityMultiService    Capability = "multi_service"
-	CapabilityBinaryStreaming Capability = "binary_streaming"
-)
-
-// Capability is a backwards-compatible alias for HostFeature.
-// New code should use HostFeature directly.
-// Deprecated: Use HostFeature instead.
-type Capability = HostFeature
-
 var knownHostFeatures = map[HostFeature]struct{}{
 	HostFeatureRealtimeControl: {},
 	HostFeatureStateStreaming:  {},
@@ -63,19 +32,11 @@ var knownHostFeatures = map[HostFeature]struct{}{
 	HostFeatureBinaryStreaming: {},
 }
 
-// IsKnownHostFeature reports whether the given HostFeature is recognized.
 func IsKnownHostFeature(feature HostFeature) bool {
 	_, ok := knownHostFeatures[feature]
 	return ok
 }
 
-// IsKnownCapability is a backwards-compatible alias for IsKnownHostFeature.
-// Deprecated: Use IsKnownHostFeature instead.
-func IsKnownCapability(capability Capability) bool {
-	return IsKnownHostFeature(HostFeature(capability))
-}
-
-// ValidateHostFeature checks whether a HostFeature string is valid.
 func ValidateHostFeature(feature HostFeature) error {
 	if feature == "" {
 		return NewHostError(ErrInvalidArgument, "host feature must not be empty")
@@ -92,28 +53,10 @@ func ValidateHostFeature(feature HostFeature) error {
 	return nil
 }
 
-// ValidateCapability is a backwards-compatible alias for ValidateHostFeature.
-// Deprecated: Use ValidateHostFeature instead.
-func ValidateCapability(capability Capability) error {
-	return ValidateHostFeature(HostFeature(capability))
-}
-
-// AllKnownHostFeatures returns all registered HostFeature values.
 func AllKnownHostFeatures() []HostFeature {
 	features := make([]HostFeature, 0, len(knownHostFeatures))
 	for f := range knownHostFeatures {
 		features = append(features, f)
 	}
 	return features
-}
-
-// AllKnownCapabilities is a backwards-compatible alias for AllKnownHostFeatures.
-// Deprecated: Use AllKnownHostFeatures instead.
-func AllKnownCapabilities() []Capability {
-	features := AllKnownHostFeatures()
-	caps := make([]Capability, len(features))
-	for i, f := range features {
-		caps[i] = Capability(f)
-	}
-	return caps
 }

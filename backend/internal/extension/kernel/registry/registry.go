@@ -101,7 +101,7 @@ type ContributionDiff struct {
 }
 
 type Adapter interface {
-	Kind() domain.ContributionKind
+	Adapter() domain.ContributionAdapter
 	OnRegister(ctx context.Context, contribution RegisteredContribution) error
 	OnActivate(ctx context.Context, contribution RegisteredContribution) error
 	OnDeactivate(ctx context.Context, contribution RegisteredContribution) error
@@ -121,7 +121,7 @@ type DefaultRegistry struct {
 	byExt     map[domain.ExtensionID][]domain.ContributionID
 	byModule  map[string][]domain.ContributionID
 	byKind    map[domain.ContributionKind][]domain.ContributionID
-	adapters  map[domain.ContributionKind]Adapter
+	adapters  map[domain.ContributionAdapter]Adapter
 	snapshots map[int64]map[domain.ContributionID]RegisteredContribution
 }
 
@@ -131,7 +131,7 @@ func NewDefaultRegistry() *DefaultRegistry {
 		byExt:     make(map[domain.ExtensionID][]domain.ContributionID),
 		byModule:  make(map[string][]domain.ContributionID),
 		byKind:    make(map[domain.ContributionKind][]domain.ContributionID),
-		adapters:  make(map[domain.ContributionKind]Adapter),
+		adapters:  make(map[domain.ContributionAdapter]Adapter),
 		snapshots: make(map[int64]map[domain.ContributionID]RegisteredContribution),
 	}
 }
@@ -139,7 +139,7 @@ func NewDefaultRegistry() *DefaultRegistry {
 func (r *DefaultRegistry) RegisterAdapter(a Adapter) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.adapters[a.Kind()] = a
+	r.adapters[a.Adapter()] = a
 }
 
 func (r *DefaultRegistry) RegisterBatch(ctx context.Context, batch ContributionRegistrationBatch) ContributionRegistrationResult {
@@ -173,7 +173,7 @@ func (r *DefaultRegistry) RegisterBatch(ctx context.Context, batch ContributionR
 		r.entries[def.ID] = entry
 		r.recordSnapshot(batch.Generation, entry)
 		r.indexAdd(def)
-		adapter, ok := r.adapters[def.Kind]
+		adapter, ok := r.adapters[def.EffectiveAdapter()]
 		if ok {
 			if err := adapter.OnRegister(ctx, entry); err != nil {
 				result.Errors = append(result.Errors, ContributionError{ContributionID: def.ID, Code: "adapter_error", Message: err.Error()})
@@ -199,7 +199,7 @@ func (r *DefaultRegistry) ReplaceGeneration(ctx context.Context, request Contrib
 		delete(r.entries, id)
 		r.indexRemove(old.Definition)
 		result.Unregistered = append(result.Unregistered, old)
-		adapter, ok := r.adapters[old.Definition.Kind]
+		adapter, ok := r.adapters[old.Definition.EffectiveAdapter()]
 		if ok {
 			if err := adapter.OnUnregister(ctx, old); err != nil {
 				amitialog.Printf("[original-error] %v", err)
@@ -224,7 +224,7 @@ func (r *DefaultRegistry) ReplaceGeneration(ctx context.Context, request Contrib
 		r.entries[def.ID] = entry
 		r.recordSnapshot(request.NewGeneration, entry)
 		r.indexAdd(def)
-		adapter, ok := r.adapters[def.Kind]
+		adapter, ok := r.adapters[def.EffectiveAdapter()]
 		if ok {
 			if err := adapter.OnRegister(ctx, entry); err != nil {
 				amitialog.Printf("[original-error] %v", err)
@@ -245,7 +245,7 @@ func (r *DefaultRegistry) UnregisterBatch(ctx context.Context, request Contribut
 			result.Errors = append(result.Errors, ContributionError{ContributionID: id, Code: "not_found", Message: "contribution not found"})
 			continue
 		}
-		adapter, ok := r.adapters[entry.Definition.Kind]
+		adapter, ok := r.adapters[entry.Definition.EffectiveAdapter()]
 		if ok {
 			if err := adapter.OnUnregister(ctx, entry); err != nil {
 				amitialog.Printf("[original-error] %v", err)
@@ -308,7 +308,7 @@ func (r *DefaultRegistry) Activate(ctx context.Context, id domain.ContributionID
 	entry.RegistrationState = RegistrationStateActive
 	entry.UpdatedAt = time.Now().UTC()
 	r.entries[id] = entry
-	adapter, hasAdapter := r.adapters[entry.Definition.Kind]
+	adapter, hasAdapter := r.adapters[entry.Definition.EffectiveAdapter()]
 	r.mu.Unlock()
 	if hasAdapter {
 		return adapter.OnActivate(ctx, entry)
@@ -328,7 +328,7 @@ func (r *DefaultRegistry) Deactivate(ctx context.Context, id domain.Contribution
 	entry.RegistrationState = RegistrationStateInactive
 	entry.UpdatedAt = time.Now().UTC()
 	r.entries[id] = entry
-	adapter, hasAdapter := r.adapters[entry.Definition.Kind]
+	adapter, hasAdapter := r.adapters[entry.Definition.EffectiveAdapter()]
 	r.mu.Unlock()
 	if hasAdapter {
 		return adapter.OnDeactivate(ctx, entry)

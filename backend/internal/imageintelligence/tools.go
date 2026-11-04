@@ -152,7 +152,7 @@ func BuildToolDefinitions(handler *ToolHandler) []capability.ToolDefinition {
 			"width": {"type": "integer", "minimum": 256, "maximum": 4096},
 			"height": {"type": "integer", "minimum": 256, "maximum": 4096},
 			"quality": {"enum": ["standard", "hd"]},
-			"mode": {"enum": ["single_frame", "keyframe", "sprite_sheet", "legacy_frame"]},
+			"mode": {"enum": ["single_frame", "keyframe", "sprite_sheet"]},
 			"negativePrompt": {"type": "string", "maxLength": 4096},
 			"seed": {"type": "integer"},
 			"referenceResourceUris": {"type": "array", "maxItems": 4, "items": {"type": "string", "maxLength": 4096}}

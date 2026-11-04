@@ -1,5 +1,6 @@
 export * from "./types";
 export * from "./manifest";
+export * from "./catalog";
 export * from "./errors";
 export * from "./runtime";
 export * from "./tools";
@@ -39,28 +40,9 @@ export {
 } from "./testing";
 
 export const SDK_VERSION = "1.0.0";
-export const SUPPORTED_MANIFEST_VERSION = 2;
-export const SUPPORTED_HOST_API_RANGE = ">=1.0.0 <2.0.0";
-export const SUPPORTED_RUNTIME_RPC_RANGE = ">=1.0.0 <2.0.0";
-export const MIN_AMITIA_VERSION = "0.1.0";
-
-export interface CompatibilityMatrix {
-  readonly sdkVersion: string;
-  readonly supportedManifestVersion: number;
-  readonly supportedHostApiRange: string;
-  readonly supportedRuntimeRpcRange: string;
-  readonly minAmitiaVersion: string;
-}
-
-export function getCompatibilityMatrix(): CompatibilityMatrix {
-  return {
-    sdkVersion: SDK_VERSION,
-    supportedManifestVersion: SUPPORTED_MANIFEST_VERSION,
-    supportedHostApiRange: SUPPORTED_HOST_API_RANGE,
-    supportedRuntimeRpcRange: SUPPORTED_RUNTIME_RPC_RANGE,
-    minAmitiaVersion: MIN_AMITIA_VERSION,
-  };
-}
+export const SUPPORTED_MANIFEST_VERSION = 1;
+export const HOST_API_VERSION = "1.0.0";
+export const RUNTIME_RPC_VERSION = "1.0.0";
 
 export * from "./client-plugin-runtime";
 

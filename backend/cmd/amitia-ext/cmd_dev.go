@@ -16,8 +16,6 @@ import (
 	"time"
 )
 
-const defaultDevHost = "localhost:18899"
-
 type devWorkspaceRegistration struct {
 	WorkspacePath string `json:"workspacePath"`
 	ManifestPath  string `json:"manifestPath,omitempty"`
@@ -49,11 +47,14 @@ func runDev(args []string, output *Output) int {
 	manifestPath := fs.String("manifest", "", "manifest.json 路径（默认为工作区下的 manifest.json）")
 	watch := fs.Bool("watch", true, "启用文件监听")
 	autoReload := fs.Bool("auto-reload", true, "变更后自动重载")
-	host := fs.String("host", defaultDevHost, "Developer Host 地址（host:port）")
+	host := fs.String("host", "", "Developer Host 地址（host:port）")
 	fs.Parse(args)
 
 	if fs.NArg() < 1 {
 		output.fail(ExitConfig, "用法: amitiax dev <workspace-path> [--manifest <path>] [--watch] [--auto-reload] [--host host:port]")
+	}
+	if strings.TrimSpace(*host) == "" {
+		output.fail(ExitConfig, "必须通过 --host 指定 Developer Host 地址")
 	}
 
 	workspacePath, err := filepath.Abs(fs.Arg(0))
@@ -133,7 +134,7 @@ func runDev(args []string, output *Output) int {
 func normalizeHost(host string) string {
 	host = strings.TrimSpace(host)
 	if host == "" {
-		return defaultDevHost
+		return ""
 	}
 	if strings.HasPrefix(host, "http://") {
 		host = strings.TrimPrefix(host, "http://")

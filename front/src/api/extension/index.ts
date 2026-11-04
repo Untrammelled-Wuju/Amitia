@@ -68,7 +68,6 @@ function transformSlotSnapshot(entry: BackendSlotSnapshotEntry): SlotSnapshot {
     supportedKinds: entry.supportedKinds ?? [],
     kind: entry.kind,
     layout: (entry.layout ?? "stack") as SlotSnapshot["layout"],
-    multiplicity: (entry.multiplicity ?? "ordered_multiple") as SlotSnapshot["multiplicity"],
     fallbackPolicy: (entry.fallbackPolicy ?? "empty") as SlotSnapshot["fallbackPolicy"],
     description: entry.description,
     platforms: entry.platform,

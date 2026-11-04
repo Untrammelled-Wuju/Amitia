@@ -21,7 +21,6 @@ func DefaultCompatibilityPipeline() *CompatibilityPipeline {
 	return NewCompatibilityPipeline(
 		NewClaudeCodeProfileAdapter(),
 		NewOpenAIProfileAdapter(),
-		NewClaudeLegacyCommandAdapter(),
 	)
 }
 

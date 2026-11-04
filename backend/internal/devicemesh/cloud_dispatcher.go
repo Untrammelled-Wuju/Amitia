@@ -25,10 +25,20 @@ func NewCloudRuntimeDispatcher(registry *capability.RuntimeAdapterRegistry) *clo
 }
 
 func (d *cloudRuntimeDispatcher) Resolve(_ string) agent.RuntimeInvokeHandler {
-	if d == nil || d.registry == nil {
+	handler := d.ResolveContext("")
+	if handler == nil {
 		return nil
 	}
 	return func(invoke protocol.RuntimeInvokePayload) (*protocol.RuntimeResultPayload, error) {
+		return handler(context.Background(), invoke)
+	}
+}
+
+func (d *cloudRuntimeDispatcher) ResolveContext(_ string) agent.CancellableRuntimeInvokeHandler {
+	if d == nil || d.registry == nil {
+		return nil
+	}
+	return func(base context.Context, invoke protocol.RuntimeInvokePayload) (*protocol.RuntimeResultPayload, error) {
 		binding := capability.RuntimeBinding{
 			RuntimeType: capability.RuntimeType(invoke.RuntimeType),
 			HandlerName: invoke.Handler,
@@ -39,7 +49,10 @@ func (d *cloudRuntimeDispatcher) Resolve(_ string) agent.RuntimeInvokeHandler {
 			return nil, errors.New("runtime adapter not found: " + invoke.RuntimeType)
 		}
 
-		ctx := context.Background()
+		ctx := base
+		if ctx == nil {
+			ctx = context.Background()
+		}
 		var cancel context.CancelFunc
 		if invoke.DeadlineMs > 0 {
 			ctx, cancel = timeoutpolicy.WithTimeout(ctx, time.Duration(invoke.DeadlineMs)*time.Millisecond)

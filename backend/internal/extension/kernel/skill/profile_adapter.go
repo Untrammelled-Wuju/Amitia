@@ -6,15 +6,13 @@ import (
 )
 
 const (
-	ProfileIDAgentSkills         = "agent-skills"
-	ProfileIDClaudeCode          = "claude-code"
-	ProfileIDClaudeCommandLegacy = "claude-command-legacy"
-	ProfileIDOpenAI              = "openai"
+	ProfileIDAgentSkills = "agent-skills"
+	ProfileIDClaudeCode  = "claude-code"
+	ProfileIDOpenAI      = "openai"
 
-	AdapterVersionAgentSkills  = "agent-skills@1"
-	AdapterVersionClaudeCode   = "claude-code@1"
-	AdapterVersionClaudeLegacy = "claude-command-legacy@1"
-	AdapterVersionOpenAI       = "openai@1"
+	AdapterVersionAgentSkills = "agent-skills@1"
+	AdapterVersionClaudeCode  = "claude-code@1"
+	AdapterVersionOpenAI      = "openai@1"
 
 	FeatureStateMapped             = "mapped"
 	FeatureStateMappedWithPolicy   = "mapped_with_policy"

@@ -15,7 +15,7 @@ func InvalidCases() []Case {
 		{"invalid_error_missing_code", "invalid/invalid_error.json", EnvelopeValidator{}},
 		{"duplicate_service", "invalid/duplicate_service.json", ServiceDescriptorValidator{}},
 		{"invalid_channel_kind", "invalid/invalid_channel.json", ChannelDescriptorValidator{}},
-		{"invalid_capability_empty", "invalid/invalid_capability.json", CapabilityValidator{}},
+		{"invalid_host_feature_empty", "invalid/invalid_capability.json", HostFeatureValidator{}},
 	}
 
 	for _, f := range invalidFixtures {

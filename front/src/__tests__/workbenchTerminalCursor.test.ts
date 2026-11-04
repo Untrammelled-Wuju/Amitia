@@ -26,9 +26,4 @@ describe('Workbench 终端跨传输字节级游标恢复', () => {
     const ended = reconcileTerminalStatus(false, -1, { running: false, exitCode: 2 });
     expect(reconcileTerminalStatus(ended.ended, ended.exitCode, { running: true, exitCode: -1 })).toMatchObject({ running: false, exitCode: 2 });
   });
-  it('支持旧端没有 fromCursor 的字节数据', () => {
-    const old = frame('中文', 2);
-    delete old.fromCursor;
-    expect(reconcileTerminalChunk(old, 2).bytes).toHaveLength(6);
-  });
 });

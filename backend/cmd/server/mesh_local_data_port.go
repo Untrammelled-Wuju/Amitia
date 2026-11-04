@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"database/sql"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -11,33 +10,18 @@ import (
 
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/chat"
-	"github.com/u-ai/backend/internal/devicemesh/agent"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
-	"github.com/u-ai/backend/internal/spaceidentity"
 	"github.com/u-ai/backend/internal/tts"
 	"github.com/u-ai/backend/pkg/app"
-	"gorm.io/gorm"
 	amitialog "log"
 )
 
 type meshLocalDataPort struct {
-	services      *AppServices
-	ownerID       string
-	legacySpaceID string
-	roles         character.Repository
-	store         *coordination.OwnershipStore
-}
-
-type meshLegacyCursor struct {
-	Owner        string `json:"owner"`
-	Role         string `json:"role"`
-	Conversation string `json:"conversation"`
-	Kind         string `json:"kind"`
-	ID           string `json:"id"`
-	Sequence     int64  `json:"sequence"`
-	UpdatedAt    string `json:"updatedAt"`
-	SearchHash   string `json:"searchHash,omitempty"`
+	services *AppServices
+	ownerID  string
+	roles    character.Repository
+	store    *coordination.OwnershipStore
 }
 
 func projectGroupResourceForSnapshot(resource coordination.Resource) (coordination.Resource, error) {
@@ -75,31 +59,11 @@ func projectGroupResourceForSnapshot(resource coordination.Resource) (coordinati
 	return resource, nil
 }
 
-func encodeMeshLegacyCursor(cursor meshLegacyCursor) string {
-	encoded, _ := json.Marshal(cursor)
-	return base64.RawURLEncoding.EncodeToString(encoded)
-}
-
 func newMeshLocalDataPort(services *AppServices, dataDir, ownerID string) (*meshLocalDataPort, error) {
 	if services == nil || services.DB == nil || services.KernelContainer == nil || services.KernelContainer.DeviceRegistry == nil || ownerID == "" {
 		return nil, errors.New("设备业务数据服务不可用")
 	}
-	space, err := spaceidentity.Open(dataDir)
-	if err != nil {
-		return nil, err
-	}
-	if services.RelTimeCoordinator != nil {
-		identity, err := agent.NewIdentityStore(dataDir).Load()
-		if err != nil {
-			return nil, err
-		}
-		if identity.DeviceID.String() == ownerID {
-			if err := services.RelTimeCoordinator.MigrateOwner(context.Background(), space.SpaceID(), ownerID); err != nil {
-				return nil, err
-			}
-		}
-	}
-	return &meshLocalDataPort{services: services, ownerID: ownerID, legacySpaceID: space.SpaceID(), roles: character.NewRepository(app.NewAppContext(services.DB, nil)), store: coordination.NewOwnershipStore(services.KernelContainer.DeviceRegistry.Database(), ownerID)}, nil
+	return &meshLocalDataPort{services: services, ownerID: ownerID, roles: character.NewRepository(app.NewAppContext(services.DB, nil)), store: coordination.NewOwnershipStore(services.KernelContainer.DeviceRegistry.Database(), ownerID)}, nil
 }
 
 func (p *meshLocalDataPort) Roles(ctx context.Context, scope coordination.ExecutionScope) ([]coordination.Role, error) {
@@ -218,7 +182,7 @@ func (p *meshLocalDataPort) roleCatalogLocked(ctx context.Context, scope coordin
 	}
 	roles := make([]coordination.Role, 0, len(characters))
 	for _, row := range characters {
-		if row.SpaceID != "" && row.SpaceID != "default" && row.SpaceID != p.legacySpaceID {
+		if row.SpaceID != p.ownerID {
 			continue
 		}
 		if row.Status != "enabled" {
@@ -301,7 +265,6 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 		}
 		query.SearchQuery, query.ResourceKind = search, "conversation"
 	}
-	searchHash := coordination.ConversationSearchHash(search)
 	if err := coordination.ValidateQueryVector(query); err != nil {
 		return coordination.DataSnapshot{}, err
 	}
@@ -340,7 +303,7 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 		if kind == "project" && query.ResourceKind != "project" {
 			continue
 		}
-		if query.Management && query.Cursor == "" && query.LegacyCursor != "" {
+		if query.Management && query.Cursor == "" {
 			continue
 		}
 		if query.ResourceKind != "" && query.ResourceKind != kind {
@@ -600,95 +563,7 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 		}
 		snapshot.Resources = prioritized
 	}
-	if query.Management || query.ResourceKind == "continuity" || (query.Cursor != "" && query.LegacyCursor == "") {
-		return snapshot, coordination.ValidateSnapshot(scope, snapshot)
-	}
-	var legacyConversations, legacyMessages []json.RawMessage
-	var legacySummary json.RawMessage
-	var legacyCursor meshLegacyCursor
-	if query.LegacyCursor != "" {
-		encoded, err := base64.RawURLEncoding.DecodeString(query.LegacyCursor)
-		if len(query.LegacyCursor) > 4096 || err != nil || json.Unmarshal(encoded, &legacyCursor) != nil || legacyCursor.Owner != p.ownerID || legacyCursor.Role != scope.RoleID || legacyCursor.Conversation != query.ConversationID || legacyCursor.Kind != query.ResourceKind || legacyCursor.SearchHash != searchHash || legacyCursor.ID == "" || len(legacyCursor.ID) > 512 {
-			return snapshot, coordination.ErrWrongOwner
-		}
-	}
-	limit := query.Limit
-	if limit <= 0 || limit > 128 {
-		limit = 64
-	}
-	db := p.services.DB.WithContext(ctx)
-	if query.ListConversations {
-		var conversations []chat.Conversation
-		selection := db.Where("deleted_at IS NULL AND (space_id=? OR space_id='' OR space_id='default') AND id IN (SELECT conversation_id FROM messages WHERE character_id=? AND deleted_at IS NULL)", p.legacySpaceID, scope.RoleID)
-		if search != "" {
-			selection = selection.Where("instr(lower(COALESCE(title,'')),?)>0 OR id IN (SELECT conversation_id FROM messages WHERE character_id=? AND deleted_at IS NULL AND instr(lower(content),?)>0)", search, scope.RoleID, search)
-		}
-		if query.LegacyCursor != "" {
-			selection = selection.Where("updated_at<? OR (updated_at=? AND id<?)", legacyCursor.UpdatedAt, legacyCursor.UpdatedAt, legacyCursor.ID)
-		}
-		if err := selection.Order("updated_at DESC,id DESC").Limit(limit + 1).Find(&conversations).Error; err != nil {
-			return snapshot, err
-		}
-		if len(conversations) > limit {
-			last := conversations[limit-1]
-			snapshot.NextCursors["legacyConversation"] = encodeMeshLegacyCursor(meshLegacyCursor{Owner: p.ownerID, Role: scope.RoleID, Kind: "conversation", ID: last.ID, UpdatedAt: last.UpdatedAt, SearchHash: searchHash})
-			conversations = conversations[:limit]
-		}
-		legacyConversations, err = appendMeshJSON(conversations)
-		if err != nil {
-			return snapshot, err
-		}
-	}
-	if query.ConversationID != "" {
-		var conversation chat.Conversation
-		err := db.Where("id=? AND deleted_at IS NULL AND (space_id=? OR space_id='' OR space_id='default')", query.ConversationID, p.legacySpaceID).First(&conversation).Error
-		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-			return snapshot, err
-		}
-		if err == nil {
-			var messages []chat.Message
-			selection := db.Where("conversation_id=? AND character_id=? AND deleted_at IS NULL", query.ConversationID, scope.RoleID)
-			if query.LegacyCursor != "" {
-				selection = selection.Where("sequence<? OR (sequence=? AND id<?)", legacyCursor.Sequence, legacyCursor.Sequence, legacyCursor.ID)
-			}
-			if err := selection.Order("sequence DESC,id DESC").Limit(limit + 1).Find(&messages).Error; err != nil {
-				return snapshot, err
-			}
-			if len(messages) > limit {
-				last := messages[limit-1]
-				snapshot.NextCursors["legacyMessage"] = encodeMeshLegacyCursor(meshLegacyCursor{Owner: p.ownerID, Role: scope.RoleID, Conversation: query.ConversationID, Kind: "message", ID: last.ID, Sequence: last.Sequence})
-				messages = messages[:limit]
-			}
-			for i, j := 0, len(messages)-1; i < j; i, j = i+1, j-1 {
-				messages[i], messages[j] = messages[j], messages[i]
-			}
-			legacyMessages, err = appendMeshJSON(messages)
-			if err != nil {
-				return snapshot, err
-			}
-			var summary chat.ConversationSummary
-			var otherRoles int64
-			if err := db.Model(&chat.Message{}).Where("conversation_id=? AND deleted_at IS NULL AND character_id<>?", query.ConversationID, scope.RoleID).Count(&otherRoles).Error; err != nil {
-				return snapshot, err
-			}
-			if len(messages) > 0 && otherRoles == 0 {
-				err = db.Where("conversation_id=?", query.ConversationID).First(&summary).Error
-				if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-					return snapshot, err
-				}
-				if err == nil {
-					legacySummary, err = json.Marshal(summary)
-					if err != nil {
-						return snapshot, err
-					}
-				}
-			}
-		}
-	}
-	if query.ResourceKind == "message" || query.ResourceKind == "conversation" {
-		if err := p.mergeLegacyChatSnapshot(ctx, &snapshot, scope, query, legacyConversations, legacyMessages, legacySummary); err != nil {
-			return snapshot, err
-		}
+	if query.Management || query.ResourceKind == "continuity" || query.Cursor != "" {
 		return snapshot, coordination.ValidateSnapshot(scope, snapshot)
 	}
 	if !query.Management && query.ResourceKind == "" {
@@ -697,128 +572,7 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 			return snapshot, err
 		}
 	}
-	if err := p.mergeLegacyChatSnapshot(ctx, &snapshot, scope, query, legacyConversations, legacyMessages, legacySummary); err != nil {
-		return snapshot, err
-	}
 	return snapshot, coordination.ValidateSnapshot(scope, snapshot)
-}
-
-func (p *meshLocalDataPort) mergeLegacyChatSnapshot(ctx context.Context, snapshot *coordination.DataSnapshot, scope coordination.ExecutionScope, query coordination.DataQuery, legacyConversations, legacyMessages []json.RawMessage, legacySummary json.RawMessage) error {
-	if snapshot == nil || snapshot.OwnerID != p.ownerID {
-		return coordination.ErrWrongOwner
-	}
-	appendLegacy := func(kind, id, updatedAt string, raw json.RawMessage) error {
-		if id == "" || len(id) > 512 || !json.Valid(raw) {
-			return coordination.ErrWrongOwner
-		}
-		existing, err := p.store.Get(ctx, kind, id)
-		if err != nil {
-			return err
-		}
-		if existing != nil && existing.RoleID == scope.RoleID {
-			return nil
-		}
-		var document map[string]any
-		if err := json.Unmarshal(raw, &document); err != nil {
-			return err
-		}
-		document["id"] = id
-		document["ownerId"] = p.ownerID
-		document["roleId"] = scope.RoleID
-		document["origin"] = "legacy"
-		document["readOnly"] = true
-		if kind == "message" || kind == "conversation" {
-			document["characterId"] = scope.RoleID
-		}
-		encoded, err := json.Marshal(document)
-		if err != nil {
-			return err
-		}
-		snapshot.Resources = append(snapshot.Resources, coordination.Resource{
-			OwnerID:   p.ownerID,
-			Kind:      kind,
-			ID:        id,
-			RoleID:    scope.RoleID,
-			SourceID:  "legacy",
-			Revision:  0,
-			UpdatedAt: updatedAt,
-			Origin:    "legacy",
-			ReadOnly:  true,
-			Body:      encoded,
-		})
-		return nil
-	}
-	for _, raw := range legacyConversations {
-		var row struct {
-			ID        string `json:"id"`
-			UpdatedAt string `json:"updatedAt"`
-		}
-		if err := json.Unmarshal(raw, &row); err != nil {
-			return err
-		}
-		if err := appendLegacy("conversation", row.ID, row.UpdatedAt, raw); err != nil {
-			return err
-		}
-	}
-	for _, raw := range legacyMessages {
-		var row struct {
-			ID        string `json:"id"`
-			UpdatedAt string `json:"updatedAt"`
-		}
-		if err := json.Unmarshal(raw, &row); err != nil {
-			return err
-		}
-		if err := appendLegacy("message", row.ID, row.UpdatedAt, raw); err != nil {
-			return err
-		}
-	}
-	if len(legacySummary) > 0 && query.ConversationID != "" {
-		var document map[string]any
-		if err := json.Unmarshal(legacySummary, &document); err != nil {
-			return err
-		}
-		summaryID := query.ConversationID + "/summary"
-		existing, err := p.store.Get(ctx, "summary", summaryID)
-		if err != nil {
-			return err
-		}
-		if existing == nil || existing.RoleID != scope.RoleID {
-			summaryText := ""
-			for _, key := range []string{"summaryText", "summary_text", "text"} {
-				if value, ok := document[key].(string); ok && strings.TrimSpace(value) != "" {
-					summaryText = strings.TrimSpace(value)
-					break
-				}
-			}
-			body := map[string]any{
-				"id":              summaryID,
-				"conversationId":  query.ConversationID,
-				"ownerId":         p.ownerID,
-				"roleId":          scope.RoleID,
-				"origin":          "legacy",
-				"readOnly":        true,
-				"content":         map[string]any{"summary": summaryText},
-				"summaryText":     summaryText,
-				"legacySummaryId": document["id"],
-			}
-			encoded, err := json.Marshal(body)
-			if err != nil {
-				return err
-			}
-			snapshot.Resources = append(snapshot.Resources, coordination.Resource{
-				OwnerID:  p.ownerID,
-				Kind:     "summary",
-				ID:       summaryID,
-				RoleID:   scope.RoleID,
-				SourceID: "legacy",
-				Revision: 0,
-				Origin:   "legacy",
-				ReadOnly: true,
-				Body:     encoded,
-			})
-		}
-	}
-	return nil
 }
 
 func (p *meshLocalDataPort) listAllWorldbookResources(ctx context.Context, partition string, query coordination.DataQuery) ([]coordination.Resource, error) {
@@ -893,29 +647,6 @@ func (p *meshLocalDataPort) HistoricalConversations(ctx context.Context, scope c
 	if err != nil {
 		return nil, err
 	}
-	var conversations []chat.Conversation
-	if err := p.services.DB.WithContext(ctx).Where("deleted_at IS NULL AND (space_id=? OR space_id='' OR space_id='default')", p.legacySpaceID).Order("updated_at DESC").Limit(128).Find(&conversations).Error; err != nil {
-		return nil, err
-	}
-	for _, conversation := range conversations {
-		if seen[conversation.ID] {
-			continue
-		}
-		encoded, err := json.Marshal(conversation)
-		if err != nil {
-			return nil, err
-		}
-		var value map[string]any
-		if err := json.Unmarshal(encoded, &value); err != nil {
-			return nil, err
-		}
-		value["ownerId"] = p.ownerID
-		encoded, err = json.Marshal(value)
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, encoded)
-	}
 	return chat.EnrichConversationActivityBodies(p.services.DB, result)
 }
 
@@ -947,40 +678,7 @@ func (p *meshLocalDataPort) HistoricalSnapshot(ctx context.Context, scope coordi
 		return nil, err
 	}
 	if errors.Is(err, sql.ErrNoRows) {
-		var conversation chat.Conversation
-		err = p.services.DB.WithContext(ctx).Where("id=? AND deleted_at IS NULL AND (space_id=? OR space_id='' OR space_id='default')", query.ConversationID, p.legacySpaceID).First(&conversation).Error
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			if query.HistoricalRoleID != "" {
-				query.ConversationID = ""
-				return p.HistoricalSnapshot(ctx, scope, query)
-			}
-			return nil, nil
-		}
-		if err != nil {
-			return nil, err
-		}
-		var roleIDs []string
-		if err := p.services.DB.WithContext(ctx).Model(&chat.Message{}).Where("conversation_id=? AND deleted_at IS NULL AND character_id<>''", query.ConversationID).Distinct("character_id").Limit(3).Pluck("character_id", &roleIDs).Error; err != nil {
-			return nil, err
-		}
-		if len(roleIDs) == 0 {
-			return nil, nil
-		}
-		storedRole = query.HistoricalRoleID
-		if storedRole == "" {
-			if len(roleIDs) != 1 {
-				return nil, coordination.ErrRoleSelection
-			}
-			storedRole = roleIDs[0]
-		} else {
-			found := false
-			for _, id := range roleIDs {
-				found = found || id == storedRole
-			}
-			if !found {
-				return nil, coordination.ErrRoleRequired
-			}
-		}
+		return nil, nil
 	}
 	if query.HistoricalRoleID != "" && query.HistoricalRoleID != storedRole {
 		return nil, coordination.ErrRoleRequired

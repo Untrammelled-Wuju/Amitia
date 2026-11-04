@@ -96,7 +96,6 @@ type CanaryPolicy struct {
 	MaxDuration     time.Duration      `json:"max_duration"`
 	HealthPolicy    CanaryHealthPolicy `json:"health_policy"`
 	AbortPolicy     CanaryAbortPolicy  `json:"abort_policy"`
-	WriteStrategy   string             `json:"write_strategy"`
 }
 
 type CanaryStatus string
@@ -248,22 +247,6 @@ var DefaultShadowConstraint = ShadowConstraint{
 		"network_write", "payment", "desktop_action",
 		"schedule", "event_side_effect", "trusted_service_listen",
 	},
-}
-
-type DualWritePolicy struct {
-	RequiredIdempotent   bool   `json:"required_idempotent"`
-	RecordBothSides      bool   `json:"record_both_sides"`
-	ValidateConsistency  bool   `json:"validate_consistency"`
-	CompensationStrategy string `json:"compensation_strategy"`
-	ConflictResolution   string `json:"conflict_resolution"`
-	ExternalSideEffect   bool   `json:"external_side_effect"`
-}
-
-type ReadCompatibility struct {
-	OldReadsNewData bool `json:"old_reads_new_data"`
-	NewReadsOldData bool `json:"new_reads_old_data"`
-	SharedSchema    bool `json:"shared_schema"`
-	VersionMarkerOK bool `json:"version_marker_ok"`
 }
 
 type InvocationContext struct {

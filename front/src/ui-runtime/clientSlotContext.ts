@@ -4,8 +4,6 @@ export interface ClientContributionRuntimeContext<TStore = unknown, TInjected ex
   readonly pluginId: string;
   readonly slotId: string;
   readonly contributionId: string;
-  /** Raw resources are exposed only for legacy contributions. Strict DSH-style
-   * entries receive useStore/actions/injected bindings as component props. */
   readonly store?: TStore;
   readonly injected?: Readonly<TInjected>;
   readonly parent: ClientContributionRuntimeContext | null;

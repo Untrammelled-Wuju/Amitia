@@ -32,7 +32,7 @@ describe("DSH parity runtime contracts", () => {
         slotId: "test.slot",
         contractVersion: 1,
         supportedKinds: ["panel"],
-        multiplicity: "ordered_multiple" as const,
+        kind: "list" as const,
         layout: "stack" as const,
         fallbackPolicy: "empty" as const,
         declarationEpoch: epoch,
@@ -56,27 +56,30 @@ describe("DSH parity runtime contracts", () => {
 
   it("owns contribution store and business injection for the contribution lifetime", async () => {
     const runtime = new BrowserClientPluginRuntime();
-    await runtime.slots.declare({ slotId: "typed.store.slot", contractVersion: 1, supportedKinds: ["panel"] });
+    await runtime.slots.declare({ slotId: "typed.store.slot", contractVersion: 1, supportedKinds: ["panel"], kind: "single" });
     let disposed = 0;
 
     runtime.define({
       id: "store-plugin",
       setup(ctx) {
         ctx.services.provide("demo.greeting", "hello");
-        ctx.slots.registerLegacy("typed.store.slot", "view", {} as any, {
+        ctx.slots.registerDynamic({
+          name: "typed.store.slot",
+          key: "view",
           store: () => clientSlotStoreResource({ count: 7 }, () => { disposed += 1; }),
           inject: ({ store, services }) => ({
             count: (store as { count: number }).count,
             greeting: services.get<string>("demo.greeting"),
           }),
-        });
+        }, {} as any);
       },
     });
 
     await runtime.run("store-plugin");
     const contribution = runtime.slots.listContributions("typed.store.slot")[0];
-    expect(contribution?.store).toEqual({ count: 7 });
-    expect(contribution?.injected).toEqual({ count: 7, greeting: "hello" });
+    const instance = runtime.slots.acquireContributionInstance(contribution!.contributionId);
+    expect(instance.getSnapshot()).toEqual({ count: 7 });
+    expect(instance.injected).toEqual({ count: 7, greeting: "hello" });
 
     await runtime.stop("store-plugin");
     expect(runtime.slots.listContributions("typed.store.slot")).toHaveLength(0);
@@ -91,7 +94,6 @@ describe("DSH parity runtime contracts", () => {
       supportedKinds: ["panel"],
       scope: "session",
       kind: "single",
-      multiplicity: "single",
     });
     const created: string[] = [];
     const disposed: string[] = [];
@@ -107,9 +109,9 @@ describe("DSH parity runtime contracts", () => {
 
     const contribution = slots.listContributions("typed.session.slot")[0]!;
     const a = slots.acquireContributionInstance(contribution.contributionId, "session-a");
-    created.push(String((a.store as { sessionId?: string }).sessionId));
+    created.push(String((a.getSnapshot() as { sessionId?: string }).sessionId));
     const b = slots.acquireContributionInstance(contribution.contributionId, "session-b");
-    created.push(String((b.store as { sessionId?: string }).sessionId));
+    created.push(String((b.getSnapshot() as { sessionId?: string }).sessionId));
 
     expect(a).not.toBe(b);
     expect(created).toEqual(["session-a", "session-b"]);
@@ -123,62 +125,20 @@ describe("DSH parity runtime contracts", () => {
     expect(disposed).toEqual(["session-a", "session-b"]);
   });
 
-  it("preserves keyed dispatch for legacy entries without owner knowledge of installed entries", async () => {
-    const slots = new BrowserSlotRuntime();
-    await slots.declare({
-      slotId: "typed.keyed.slot",
-      contractVersion: 1,
-      supportedKinds: ["panel"],
-      kind: "keyed",
-      multiplicity: "multiple",
-    });
-    slots.registerLegacy("a", "typed.keyed.slot", "a", {} as any, { entryKey: "alpha" });
-    slots.registerLegacy("b", "typed.keyed.slot", "b", {} as any, { entryKey: "beta" });
-    expect(slots.dispatchContributions("typed.keyed.slot", {}, "beta").map((item) => item.contribution.pluginId)).toEqual(["b"]);
-    expect(slots.dispatchContributions("typed.keyed.slot", {}, "missing")).toEqual([]);
-  });
-
-  it("preserves legacy chain ordering with a matched payload", async () => {
-    const slots = new BrowserSlotRuntime();
-    await slots.declare({
-      slotId: "typed.chain.slot",
-      contractVersion: 1,
-      supportedKinds: ["renderer"],
-      kind: "chain",
-      multiplicity: "replaceable_single",
-    });
-    slots.registerLegacy("high", "typed.chain.slot", "high", {} as any, {
-      priority: 100,
-      select: () => null,
-    });
-    slots.registerLegacy("match", "typed.chain.slot", "match", {} as any, {
-      priority: 50,
-      select: (owner) => owner.kind === "demo" ? { renderer: "match" } : null,
-    });
-    slots.registerLegacy("fallback", "typed.chain.slot", "fallback", {} as any, {
-      priority: 1,
-      select: () => ({ renderer: "fallback" }),
-    });
-    const resolved = slots.dispatchContributions("typed.chain.slot", { kind: "demo" });
-    expect(resolved).toHaveLength(1);
-    expect(resolved[0]?.contribution.pluginId).toBe("match");
-    expect(resolved[0]?.matched).toEqual({ renderer: "match" });
-  });
-
   it("implements strict DSH list/keyed/chain dispatch semantics", async () => {
     const slots = new BrowserSlotRuntime();
-    await slots.declare({ slotId: "strict.list", contractVersion: 1, supportedKinds: ["panel"], kind: "list", multiplicity: "ordered_multiple" });
+    await slots.declare({ slotId: "strict.list", contractVersion: 1, supportedKinds: ["panel"], kind: "list" });
     (slots.registerEntry as any)("list-high", { name: "strict.list", key: "high", id: "cell", priority: 10 }, {} as any);
     (slots.registerEntry as any)("list-low", { name: "strict.list", key: "low", id: "cell", priority: 1 }, {} as any);
     expect(slots.dispatchContributions("strict.list").map((item) => item.contribution.pluginId)).toEqual(["list-low"]);
     expect(() => (slots.registerEntry as any)("list-conflict", { name: "strict.list", key: "conflict", id: "cell", priority: 1 }, {} as any)).toThrow(/strict priority/);
 
-    await slots.declare({ slotId: "strict.keyed", contractVersion: 1, supportedKinds: ["panel"], kind: "keyed", multiplicity: "ordered_multiple" });
+    await slots.declare({ slotId: "strict.keyed", contractVersion: 1, supportedKinds: ["panel"], kind: "keyed" });
     (slots.registerEntry as any)("key-high", { name: "strict.keyed", key: "high", entryKey: "alpha", priority: 8 }, {} as any);
     (slots.registerEntry as any)("key-low", { name: "strict.keyed", key: "low", entryKey: "alpha", priority: 2 }, {} as any);
     expect(slots.dispatchContributions("strict.keyed", {}, "alpha")[0]?.contribution.pluginId).toBe("key-low");
 
-    await slots.declare({ slotId: "strict.chain", contractVersion: 1, supportedKinds: ["renderer"], kind: "chain", multiplicity: "ordered_multiple" });
+    await slots.declare({ slotId: "strict.chain", contractVersion: 1, supportedKinds: ["renderer"], kind: "chain" });
     (slots.registerEntry as any)("chain-decline", { name: "strict.chain", key: "decline", priority: 1, select: () => null }, {} as any);
     (slots.registerEntry as any)("chain-match", { name: "strict.chain", key: "match", priority: 5, select: () => ({ route: "matched" }) }, {} as any);
     (slots.registerEntry as any)("chain-late", { name: "strict.chain", key: "late", priority: 100, select: () => ({ route: "late" }) }, {} as any);
@@ -194,7 +154,6 @@ describe("DSH parity runtime contracts", () => {
       contractVersion: 1,
       supportedKinds: ["panel"],
       kind: "single",
-      multiplicity: "single",
     });
     const dispose = (slots.registerEntry as any)("parent-plugin", {
       name: "typed.parent.slot",
@@ -213,7 +172,7 @@ describe("DSH parity runtime contracts", () => {
 
   it("recursively collapses child entries, stores, and grandchildren with the declaring parent", async () => {
     const slots = new BrowserSlotRuntime();
-    await slots.declare({ slotId: "cascade.parent", contractVersion: 1, supportedKinds: ["panel"], kind: "single", multiplicity: "single" });
+    await slots.declare({ slotId: "cascade.parent", contractVersion: 1, supportedKinds: ["panel"], kind: "single" });
     const disposeParent = (slots.registerEntry as any)("parent", {
       name: "cascade.parent",
       key: "parent",
@@ -241,8 +200,8 @@ describe("DSH parity runtime contracts", () => {
   it("keeps lifecycle observation separate from business injection", async () => {
     const slots = new BrowserSlotRuntime();
     let observed = 0;
-    await slots.observe("late.slot", () => { observed += 1; });
-    await slots.declare({ slotId: "late.slot", contractVersion: 1, supportedKinds: ["panel"] });
+    await slots.inject("late.slot", () => { observed += 1; });
+    await slots.declare({ slotId: "late.slot", contractVersion: 1, supportedKinds: ["panel"], kind: "single" });
     expect(observed).toBe(1);
   });
 
@@ -359,14 +318,14 @@ describe("DSH parity runtime contracts", () => {
       slotId: "chat.message.renderer",
       component: {} as any,
       ordering: 0,
-      priority: 20,
+      priority: 5,
     }] as any[];
-    const resolved = buildUnifiedSlotItems({ multiplicity: "replaceable_single" }, server, client);
+    const resolved = buildUnifiedSlotItems({ kind: "single" }, server, client);
     expect(resolved).toHaveLength(1);
     expect(resolved[0]?.source).toBe("client");
   });
 
-  it("treats kind as authoritative over incompatible legacy multiplicity", () => {
+  it("dispatches from the explicit kind", () => {
     const server = ["a", "b"].map((id, index) => ({
       contributionId: `server-${id}`,
       extensionId: "server",
@@ -384,7 +343,7 @@ describe("DSH parity runtime contracts", () => {
       enabled: true,
       runtimeReady: true,
     }));
-    const resolved = buildUnifiedSlotItems({ kind: "list", multiplicity: "replaceable_single" }, server, []);
+    const resolved = buildUnifiedSlotItems({ kind: "list" }, server, []);
     expect(resolved).toHaveLength(2);
   });
 
@@ -407,13 +366,13 @@ describe("DSH parity runtime contracts", () => {
       runtimeReady: true,
     }];
     expect(buildUnifiedSlotItems(
-      { kind: "keyed", multiplicity: "single" },
+      { kind: "keyed" },
       server,
       [],
       { dispatchKey: "diagnostics" },
     )).toHaveLength(1);
     expect(buildUnifiedSlotItems(
-      { kind: "keyed", multiplicity: "single" },
+      { kind: "keyed" },
       server,
       [],
       { dispatchKey: "other" },
@@ -428,7 +387,6 @@ describe("DSH parity runtime contracts", () => {
       ordering: 0,
       priority: 10,
       sequence: 1,
-      strict: true,
       active: true,
       abdicated: false,
       childSlotIds: new Set<string>(),
@@ -440,14 +398,14 @@ describe("DSH parity runtime contracts", () => {
       childActivations: [],
     }];
     const chainServer = [{ ...server[0]!, slotId: "chat.message.custom_renderer", priority: 3, entryKey: undefined }];
-    const chain = buildUnifiedSlotItems({ kind: "chain", multiplicity: "ordered_multiple" }, chainServer, client as any);
+    const chain = buildUnifiedSlotItems({ kind: "chain" }, chainServer, client as any);
     expect(chain).toHaveLength(1);
     expect(chain[0]?.source).toBe("server");
   });
 
   it("rolls back iterable slot injection setup in reverse order", async () => {
     const slots = new BrowserSlotRuntime();
-    await slots.declare({ slotId: "transaction.slot", contractVersion: 1, supportedKinds: ["panel"] });
+    await slots.declare({ slotId: "transaction.slot", contractVersion: 1, supportedKinds: ["panel"], kind: "single" });
     const cleanup: string[] = [];
     await expect(slots.inject("transaction.slot", () => (function* () {
       yield () => { cleanup.push("first"); };
@@ -485,7 +443,7 @@ describe("DSH parity runtime contracts", () => {
 
   it("binds child slot declaration and authorization to the parent client contribution", async () => {
     const slots = new BrowserSlotRuntime();
-    await slots.declare({ slotId: "parent.slot", contractVersion: 1, supportedKinds: ["panel"] });
+    await slots.declare({ slotId: "parent.slot", contractVersion: 1, supportedKinds: ["panel"], kind: "single" });
     let childActivations = 0;
     let childCleanups = 0;
     await slots.inject("parent.child", () => {
@@ -493,7 +451,7 @@ describe("DSH parity runtime contracts", () => {
       return () => { childCleanups += 1; };
     });
     const dispose = slots.register("plugin", "parent.slot", "parent-view", {} as any, {
-      children: [{ slotId: "parent.child", contractVersion: 1, supportedKinds: ["action"] }],
+      children: [{ slotId: "parent.child", contractVersion: 1, supportedKinds: ["action"], kind: "list" }],
     });
     await Promise.resolve();
     expect(slots.getDefinition("parent.child")?.parentSlotId).toBe("parent.slot");

@@ -228,14 +228,10 @@ func (r *RetrievalRuntime) Search(ctx context.Context, tenantID string, req Sear
 	resp.RoutingMode = routeDecision.RoutingMode
 	resp.PolicyMode = routeDecision.PolicyMode
 	resp.RouteReason = routeDecision.RouteReason
-	resp.ShadowLevel = routeDecision.ShadowLevel
-	resp.ShadowReason = routeDecision.ShadowReason
 	resp.RouteDegraded = routeDecision.Degraded
 	resp.RouteDegradationReason = routeDecision.RouteDegradationReason
 	resp.TracePolicyMode = routeDecision.PolicyMode
 	resp.TraceRouteReason = routeDecision.RouteReason
-	resp.TraceShadowLevel = routeDecision.ShadowLevel
-	resp.TraceShadowReason = routeDecision.ShadowReason
 	resp.QueryHistory = append([]string(nil), plan.QueryHistory...)
 	resp.TraceBudgetMs = plan.Timeout.Milliseconds()
 	resp.TraceCandidateLimit = plan.CandidateLimit
@@ -658,12 +654,12 @@ func (r *Repository) RecordRetrievalTrace(tenantID, query string, candidateCount
 	return r.db.Exec(`INSERT INTO retrieval_traces
         (id, tenant_id, request_id, query_hash, sources_json, candidate_count, selected_count, sufficient, duration_ms, error_code,
          temporal_mode, as_of, degraded, ambiguous, warnings_json, candidate_trace_json, evidence_trace_json, query_plan_json,
-         config_hash, slo_target_ms, slo_exceeded, policy_mode, route_reason, shadow_level, shadow_reason, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         config_hash, slo_target_ms, slo_exceeded, policy_mode, route_reason, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		traceID, tenantID, traceID, hex.EncodeToString(sum[:]), string(sources), candidateCount, len(result.Evidence), boolToInt(result.Sufficient),
 		duration.Milliseconds(), strings.TrimSpace(errorCode), mode, asOf, boolToInt(result.Degraded), boolToInt(result.Ambiguous),
 		string(warnings), string(candidateTrace), string(evidenceTrace), string(queryPlanTrace), strings.TrimSpace(result.TraceConfigHash), result.TraceSLOTargetMs, boolToInt(sloExceeded),
-		strings.TrimSpace(result.TracePolicyMode), strings.TrimSpace(result.TraceRouteReason), strings.TrimSpace(result.TraceShadowLevel), strings.TrimSpace(result.TraceShadowReason), time.Now().UTC()).Error
+		strings.TrimSpace(result.TracePolicyMode), strings.TrimSpace(result.TraceRouteReason), time.Now().UTC()).Error
 }
 
 type retrievalTraceRow struct {
@@ -688,8 +684,6 @@ type retrievalTraceRow struct {
 	SLOExceeded        int        `gorm:"column:slo_exceeded"`
 	PolicyMode         string     `gorm:"column:policy_mode"`
 	RouteReason        string     `gorm:"column:route_reason"`
-	ShadowLevel        string     `gorm:"column:shadow_level"`
-	ShadowReason       string     `gorm:"column:shadow_reason"`
 	CreatedAt          time.Time  `gorm:"column:created_at"`
 }
 
@@ -710,7 +704,7 @@ func (r *Repository) ListRetrievalTraces(tenantID string, limit int) ([]Retrieva
 	var rows []retrievalTraceRow
 	if err := r.db.Raw(`SELECT id, request_id, query_hash, candidate_count, selected_count, sufficient, duration_ms, error_code,
 		temporal_mode, as_of, degraded, ambiguous, warnings_json, candidate_trace_json, evidence_trace_json, query_plan_json,
-		config_hash, slo_target_ms, slo_exceeded, policy_mode, route_reason, shadow_level, shadow_reason, created_at
+		config_hash, slo_target_ms, slo_exceeded, policy_mode, route_reason, created_at
 		FROM retrieval_traces
 		WHERE tenant_id = ?
 		ORDER BY created_at DESC
@@ -725,7 +719,7 @@ func (r *Repository) ListRetrievalTraces(tenantID string, limit int) ([]Retrieva
 			DurationMs: row.DurationMs, ErrorCode: strings.TrimSpace(row.ErrorCode), TemporalMode: row.TemporalMode, AsOf: row.AsOf,
 			Degraded: row.Degraded != 0, Ambiguous: row.Ambiguous != 0, ConfigHash: row.ConfigHash,
 			SLOTargetMs: row.SLOTargetMs, SLOExceeded: row.SLOExceeded != 0,
-			PolicyMode: row.PolicyMode, RouteReason: row.RouteReason, ShadowLevel: row.ShadowLevel, ShadowReason: row.ShadowReason, CreatedAt: row.CreatedAt,
+			PolicyMode: row.PolicyMode, RouteReason: row.RouteReason, CreatedAt: row.CreatedAt,
 			Warnings: []string{}, Candidates: []RetrievalCandidateTrace{}, Evidence: []RetrievalEvidenceTrace{},
 			QueryPlan: RetrievalQueryPlanTrace{QueryHistory: []string{}},
 		}

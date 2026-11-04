@@ -2,14 +2,10 @@ import { normalizeCitationSnapshot, normalizeCitationURL } from "@/conversation/
 import type {
   AgentTaskBlock,
   AIMessageData,
-  AudioBlock,
   CitationSource,
-  FileBlock,
-  ImageBlock,
   MessageState,
   RichBlock,
   ToolBlock,
-  VideoBlock,
 } from "./types";
 
 function firstString(source: Record<string, any>, keys: string[]): string {
@@ -30,92 +26,64 @@ function normalizeRole(role: unknown): AIMessageData["role"] {
 }
 
 export function normalizeMessageState(message: Record<string, any>): MessageState {
-  const raw = String(message.state ?? message.status ?? "").toLowerCase();
+  const raw = String(message.state ?? "").toLowerCase();
   if (["queued", "pending"].includes(raw)) return "queued";
-  if (["streaming", "sending", "generating", "collecting", "processing"].includes(raw)) {
-    return "streaming";
-  }
+  if (raw === "streaming") return "streaming";
   if (raw === "interrupted") return "interrupted";
   if (["failed", "error"].includes(raw)) return "failed";
-  if (message.typingStart && message.typingDone !== true) return "streaming";
   return "completed";
 }
 
 function normalizeStatus(value: unknown): ToolBlock["status"] {
   const raw = String(value ?? "").toLowerCase();
-  if (["queued", "pending"].includes(raw)) return "queued";
-  if (["running", "streaming", "sending"].includes(raw)) return "running";
+  if (raw === "queued") return "queued";
+  if (raw === "running") return "running";
   if (["failed", "error"].includes(raw)) return "failed";
   if (raw === "interrupted") return "interrupted";
   return "success";
 }
 
-function parseJsonValue(value: unknown): unknown {
-  if (typeof value !== "string") return value;
-  const trimmed = value.trim();
-  if (!trimmed || (!trimmed.startsWith("{") && !trimmed.startsWith("["))) return value;
-  try {
-    return JSON.parse(trimmed);
-  } catch (error) {
-  console.error("[original-error]", error);
-return value;
-  }
-}
-
-function firstArtifactUri(value: unknown): string {
-  const text = typeof value === "string" ? value : "";
-  return /amitia:\/\/artifacts\/[A-Za-z0-9._-]+/i.exec(text)?.[0] || "";
-}
-
-function fileNameFromContent(value: unknown): string {
-  const text = typeof value === "string" ? value : "";
-  const firstLine = text.split(/\r?\n/, 1)[0]?.trim() || "";
-  return firstLine.startsWith("[文件]")
-    ? firstLine.slice("[文件]".length).trim()
-    : "";
-}
-
 function normalizeBlock(raw: Record<string, any>, index: number): RichBlock {
-  const type = String(raw.kind ?? raw.type ?? raw.blockType ?? "").toLowerCase();
-  const id = firstString(raw, ["id", "blockId"]) || `block-${index}`;
+  const type = String(raw.kind ?? "").toLowerCase();
+  const id = firstString(raw, ["id"]) || `block-${index}`;
   if (type.includes("tool")) {
     return {
       kind: "tool",
       id,
-      name: firstString(raw, ["name", "toolName", "title"]) || "工具调用",
-      arguments: raw.arguments ?? raw.args ?? raw.input,
-      result: raw.result ?? raw.output ?? raw.content,
-      duration: Number(raw.duration ?? raw.durationMs ?? 0) || undefined,
-      error: firstString(raw, ["error", "errorCode", "errorMessage"]) || undefined,
-      status: normalizeStatus(raw.status ?? raw.state),
+      name: firstString(raw, ["name"]) || "工具调用",
+      arguments: raw.arguments,
+      result: raw.result,
+      duration: Number(raw.duration ?? 0) || undefined,
+      error: firstString(raw, ["error"]) || undefined,
+      status: normalizeStatus(raw.status),
     };
   }
-  if (type.includes("file") || type.includes("attachment")) {
+  if (type.includes("file")) {
     return {
       kind: "file",
       id,
-      name: firstString(raw, ["name", "fileName", "title"]) || "未命名文件",
-      mimeType: firstString(raw, ["mimeType", "mime"]) || undefined,
-      size: Number(raw.size ?? raw.sizeBytes ?? raw.fileSize ?? 0) || undefined,
-      url: firstString(raw, ["url", "resourceUri", "href"]) || undefined,
-      downloadUrl: firstString(raw, ["downloadUrl", "originalAssetReference", "fallbackUrl"]) || undefined,
+      name: firstString(raw, ["name"]) || "未命名文件",
+      mimeType: firstString(raw, ["mimeType"]) || undefined,
+      size: Number(raw.size ?? 0) || undefined,
+      url: firstString(raw, ["url"]) || undefined,
+      downloadUrl: firstString(raw, ["downloadUrl"]) || undefined,
       status: String(raw.status ?? "ready").toLowerCase() === "failed"
         ? "failed"
         : String(raw.status ?? "ready").toLowerCase() === "loading"
           ? "loading"
           : "ready",
-      error: firstString(raw, ["error", "errorMessage"]) || undefined,
+      error: firstString(raw, ["error"]) || undefined,
     };
   }
   if (type.includes("image")) {
     return {
       kind: "image",
       id,
-      url: firstString(raw, ["url", "imageUrl", "src"]),
-      downloadUrl: firstString(raw, ["downloadUrl", "originalAssetReference", "fallbackUrl"]) || undefined,
-      alt: firstString(raw, ["alt", "altText", "title"]) || undefined,
-      mimeType: firstString(raw, ["mimeType", "mime"]) || undefined,
-      animated: Boolean(raw.animated ?? raw.isAnimated),
+      url: firstString(raw, ["url"]),
+      downloadUrl: firstString(raw, ["downloadUrl"]) || undefined,
+      alt: firstString(raw, ["alt"]) || undefined,
+      mimeType: firstString(raw, ["mimeType"]) || undefined,
+      animated: Boolean(raw.animated),
       width: Number(raw.width ?? 0) || undefined,
       height: Number(raw.height ?? 0) || undefined,
       status: "loading",
@@ -125,10 +93,10 @@ function normalizeBlock(raw: Record<string, any>, index: number): RichBlock {
     return {
       kind: "audio",
       id,
-      url: firstString(raw, ["url", "audioUrl", "src"]),
-      downloadUrl: firstString(raw, ["downloadUrl", "originalAssetReference", "fallbackUrl"]) || undefined,
-      title: firstString(raw, ["title", "fileName", "name"]) || "语音",
-      duration: Number(raw.duration ?? raw.durationMs ?? 0) || undefined,
+      url: firstString(raw, ["url"]),
+      downloadUrl: firstString(raw, ["downloadUrl"]) || undefined,
+      title: firstString(raw, ["title"]) || "语音",
+      duration: Number(raw.duration ?? 0) || undefined,
       status: "loading",
     };
   }
@@ -136,11 +104,11 @@ function normalizeBlock(raw: Record<string, any>, index: number): RichBlock {
     return {
       kind: "video",
       id,
-      url: firstString(raw, ["url", "videoUrl", "src"]),
-      downloadUrl: firstString(raw, ["downloadUrl", "originalAssetReference", "fallbackUrl"]) || undefined,
-      title: firstString(raw, ["title", "fileName", "name"]) || "视频",
-      poster: firstString(raw, ["poster", "posterUrl"]) || undefined,
-      duration: Number(raw.duration ?? raw.durationMs ?? 0) || undefined,
+      url: firstString(raw, ["url"]),
+      downloadUrl: firstString(raw, ["downloadUrl"]) || undefined,
+      title: firstString(raw, ["title"]) || "视频",
+      poster: firstString(raw, ["poster"]) || undefined,
+      duration: Number(raw.duration ?? 0) || undefined,
       status: "loading",
     };
   }
@@ -148,50 +116,50 @@ function normalizeBlock(raw: Record<string, any>, index: number): RichBlock {
     return {
       kind: "artifact",
       id,
-      artifactKind: firstString(raw, ["artifactKind", "artifactType", "kindName"]) || "document",
-      title: firstString(raw, ["title", "name"]) || "Artifact",
-      mimeType: firstString(raw, ["mimeType", "mime"]) || undefined,
+      artifactKind: firstString(raw, ["artifactKind"]) || "document",
+      title: firstString(raw, ["title"]) || "Artifact",
+      mimeType: firstString(raw, ["mimeType"]) || undefined,
       content: typeof raw.content === "string" ? raw.content : undefined,
       fileId: firstString(raw, ["fileId"]) || undefined,
-      url: firstString(raw, ["url", "href"]) || undefined,
-      downloadUrl: firstString(raw, ["downloadUrl", "originalAssetReference", "fallbackUrl"]) || undefined,
-      size: Number(raw.size ?? raw.sizeBytes ?? 0) || undefined,
+      url: firstString(raw, ["url"]) || undefined,
+      downloadUrl: firstString(raw, ["downloadUrl"]) || undefined,
+      size: Number(raw.size ?? 0) || undefined,
     };
   }
   if (type.includes("agent") || type.includes("task") || type.includes("workflow")) {
     const steps = Array.isArray(raw.steps)
       ? raw.steps.map((step: any, stepIndex: number) => ({
           id: String(step?.id ?? `step-${stepIndex}`),
-          title: firstString(step ?? {}, ["title", "name", "label"]) || `Step ${stepIndex + 1}`,
-          status: normalizeStatus(step?.status ?? step?.state) === "success"
+          title: firstString(step ?? {}, ["title"]) || `Step ${stepIndex + 1}`,
+          status: normalizeStatus(step?.status) === "success"
             ? "done" as const
-            : normalizeStatus(step?.status ?? step?.state) === "failed"
+            : normalizeStatus(step?.status) === "failed"
               ? "failed" as const
-              : normalizeStatus(step?.status ?? step?.state) === "running"
+              : normalizeStatus(step?.status) === "running"
                 ? "running" as const
                 : "pending" as const,
-          meta: firstString(step ?? {}, ["meta", "statusLabel", "duration"]) || undefined,
+          meta: firstString(step ?? {}, ["meta"]) || undefined,
         }))
       : [];
-    const status = normalizeStatus(raw.status ?? raw.state);
+    const status = normalizeStatus(raw.status);
     return {
       kind: "agent-task",
       id,
-      title: firstString(raw, ["title", "name", "taskTitle"]) || "Agent Task",
+      title: firstString(raw, ["title"]) || "Agent Task",
       status: status === "success" ? "done" : status === "failed" ? "failed" : status === "running" ? "running" : "pending",
       steps,
-      progress: Number(raw.progress ?? raw.percentage ?? 0) || undefined,
-      elapsed: firstString(raw, ["elapsed", "elapsedTime"]) || undefined,
-      error: firstString(raw, ["error", "errorMessage"]) || undefined,
+      progress: Number(raw.progress ?? 0) || undefined,
+      elapsed: firstString(raw, ["elapsed"]) || undefined,
+      error: firstString(raw, ["error"]) || undefined,
     } satisfies AgentTaskBlock;
   }
-  if (type.includes("extension") || firstString(raw, ["rendererId"])) {
+  if (type.includes("extension")) {
     return {
       kind: "extension",
       id,
       rendererId: firstString(raw, ["rendererId"]) || "unknown.renderer",
       version: Number(raw.version ?? 1),
-      payload: raw.payload ?? raw.data,
+      payload: raw.payload,
     };
   }
   return {
@@ -202,97 +170,12 @@ function normalizeBlock(raw: Record<string, any>, index: number): RichBlock {
   };
 }
 
-function legacyBlocks(message: Record<string, any>): RichBlock[] {
-  if (Array.isArray(message.blocks)) {
-    return message.blocks
-      .filter((item: unknown): item is Record<string, any> => !!item && typeof item === "object")
-      .map(normalizeBlock);
-  }
+function messageBlocks(message: Record<string, any>): RichBlock[] {
   const blocks: RichBlock[] = [];
-  const type = String(message.msgType ?? message.messageType ?? message.type ?? "text").toLowerCase();
-  const commonId = String(message.id ?? `legacy-${Date.now()}`);
-  if (type === "tool_call" || type === "toolcall" || type === "tool") {
-    blocks.push({
-      kind: "tool",
-      id: `${commonId}-tool`,
-      name: firstString(message, ["toolName", "name", "title"]) || "工具调用",
-      arguments: parseJsonValue(message.toolArguments ?? message.arguments),
-      result: parseJsonValue(message.toolResult ?? message.result ?? message.content),
-      duration: Number(message.duration ?? message.durationMs ?? 0) || undefined,
-      error: firstString(message, ["error", "errorMessage"]) || undefined,
-      status: normalizeStatus(message.status),
-    });
-  }
-  if (type === "agent_task" || type === "agenttask" || type === "agent-task") {
-    blocks.push(normalizeBlock({ ...message, kind: "agent-task" }, 0));
-  }
-  if (type === "file") {
-    const downloadUrl =
-      firstString(message, ["originalAssetReference", "fallbackAssetReference", "downloadUrl"]) || undefined;
-    blocks.push({
-      kind: "file",
-      id: `${commonId}-file`,
-      name:
-        firstString(message, ["fileName", "name", "altText"]) ||
-        fileNameFromContent(message.content) ||
-        "未命名文件",
-      mimeType: firstString(message, ["mimeType", "mime"]) || undefined,
-      size: Number(message.fileSizeBytes ?? message.sizeBytes ?? message.fileSize ?? 0) || undefined,
-      url:
-        firstString(message, ["resourceUri", "url", "href"]) ||
-        firstArtifactUri(message.content) ||
-        downloadUrl ||
-        undefined,
-      downloadUrl,
-      status: String(message.status ?? "").toLowerCase() === "failed" ? "failed" : "ready",
-      error: firstString(message, ["error", "errorMessage"]) || undefined,
-    } satisfies FileBlock);
-  }
-  if (type === "image" || firstString(message, ["imageUrl"])) {
-    const imageUrl = firstString(message, type === "image" ? ["imageUrl", "image_url", "resourceUri", "mediaUrl"] : ["imageUrl", "image_url"]);
-    if (imageUrl) {
-      blocks.push({
-        kind: "image",
-        id: `${commonId}-image`,
-        url: imageUrl,
-        downloadUrl: firstString(message, ["originalAssetReference", "fallbackAssetReference", "downloadUrl"]) || undefined,
-        alt: firstString(message, ["altText", "alt"]) || undefined,
-        mimeType: firstString(message, ["mimeType", "mime"]) || undefined,
-        animated: Boolean(message.isAnimated ?? message.is_animated),
-        width: Number(message.width ?? message.media_width ?? 0) || undefined,
-        height: Number(message.height ?? message.media_height ?? 0) || undefined,
-        status: "loading",
-      } satisfies ImageBlock);
-    }
-  }
-  if (type === "audio" || type === "voice" || firstString(message, ["audioUrl"])) {
-    const audioUrl = firstString(message, ["audioUrl", "audio_url", "resourceUri", "mediaUrl"]);
-    if (audioUrl) {
-      blocks.push({
-        kind: "audio",
-        id: `${commonId}-audio`,
-        url: audioUrl,
-        downloadUrl: firstString(message, ["originalAssetReference", "fallbackAssetReference", "downloadUrl"]) || undefined,
-        title: firstString(message, ["fileName", "name"]) || "语音",
-        duration: Number(message.audioDuration ?? 0) || undefined,
-        status: "loading",
-      } satisfies AudioBlock);
-    }
-  }
-  if (type === "video" || firstString(message, ["videoUrl"])) {
-    const videoUrl = firstString(message, ["videoUrl", "video_url", "resourceUri", "mediaUrl"]);
-    if (videoUrl) {
-      blocks.push({
-        kind: "video",
-        id: `${commonId}-video`,
-        url: videoUrl,
-        downloadUrl: firstString(message, ["originalAssetReference", "fallbackAssetReference", "downloadUrl"]) || undefined,
-        title: firstString(message, ["fileName", "name"]) || "视频",
-        poster: firstString(message, ["poster", "posterUrl"]) || undefined,
-        duration: Number(message.videoDuration ?? 0) || undefined,
-        status: "loading",
-      } satisfies VideoBlock);
-    }
+  if (Array.isArray(message.blocks)) {
+    blocks.push(...message.blocks
+      .filter((item: unknown): item is Record<string, any> => !!item && typeof item === "object")
+      .map(normalizeBlock));
   }
   if (Array.isArray(message.attachments)) {
     for (const attachment of message.attachments) {
@@ -307,7 +190,7 @@ function legacyBlocks(message: Record<string, any>): RichBlock[] {
 function normalizeSources(message: Record<string, any>): CitationSource[] {
   const raw = Array.isArray(message.citationSnapshot)
     ? normalizeCitationSnapshot(message.citationSnapshot)
-    : (message.sources ?? message.citations);
+    : [];
   if (!Array.isArray(raw)) return [];
   return raw
     .filter((item: unknown): item is Record<string, any> => !!item && typeof item === "object")
@@ -326,32 +209,15 @@ export function normalizeAIMessage(
 ): AIMessageData {
   const message = input ?? {};
   const role = normalizeRole(message.role);
-  const type = String(message.msgType ?? message.messageType ?? message.type ?? "text").toLowerCase();
-  let markdown = typeof message.content === "string" ? message.content : String(message.text ?? "");
-  if ((type === "image" && markdown === "[图片]") || (type === "video" && markdown === "[视频]")) {
-    markdown = "";
-  }
-  if (["tool_call", "toolcall", "tool", "agent_task", "agenttask", "agent-task"].includes(type)) {
-    markdown = "";
-  }
-  const reasoningContent = firstString(message, ["reasoningContent", "reasoning_content"]);
-  const rawThinking = message.thinking;
-  const thinkingContent =
-    rawThinking && typeof rawThinking === "object"
-      ? firstString(rawThinking, ["content", "text"])
-      : reasoningContent;
-  const thinkingDuration = Number(rawThinking?.duration ?? message.reasoningDuration ?? 0);
+  const markdown = typeof message.content === "string" ? message.content : "";
+  const thinkingContent = firstString(message, ["reasoningContent"]);
   const reasoningDurationMs = Number(message.reasoningDurationMs ?? 0);
   const thinkingDurationSeconds =
-    Number.isFinite(thinkingDuration) && thinkingDuration > 0
-      ? thinkingDuration
-      : Number.isFinite(reasoningDurationMs) && reasoningDurationMs > 0
-        ? reasoningDurationMs / 1000
-        : undefined;
+    Number.isFinite(reasoningDurationMs) && reasoningDurationMs > 0 ? reasoningDurationMs / 1000 : undefined;
   const state = normalizeMessageState(message);
   return {
     id: String(message.id ?? `message-${Date.now()}`),
-    conversationId: firstString(message, ["conversationId", "conversation_id"]) || undefined,
+    conversationId: firstString(message, ["conversationId"]) || undefined,
     role,
     character: character
       ? {
@@ -368,7 +234,7 @@ export function normalizeAIMessage(
           duration: thinkingDurationSeconds,
         }
       : undefined,
-    blocks: legacyBlocks(message),
+    blocks: messageBlocks(message),
     sources: normalizeSources(message),
     state,
     createdAt: Date.parse(String(message.createdAt ?? "")) || Number(message.createdAt) || Date.now(),

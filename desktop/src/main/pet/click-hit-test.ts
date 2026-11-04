@@ -92,30 +92,6 @@ export class ClickHitTester {
     }
   }
 
-  /** @deprecated 请改用 isHitNormalized 传入 0-1 归一化坐标。 */
-  isHit(x: number, y: number): boolean {
-    const frame = this.currentFrame;
-    if (!frame) return false;
-    const ix = Math.floor(x);
-    const iy = Math.floor(y);
-    if (ix < 0 || iy < 0 || ix >= frame.width || iy >= frame.height) {
-      return false;
-    }
-    const box = this.getBoundingBoxPixels();
-    if (
-      box.maxX < box.minX ||
-      box.maxY < box.minY ||
-      ix < box.minX ||
-      ix > box.maxX ||
-      iy < box.minY ||
-      iy > box.maxY
-    ) {
-      return false;
-    }
-    const idx = iy * frame.width + ix;
-    return frame.alphaData[idx] >= this.alphaThreshold;
-  }
-
   isHitNormalized(x01: number, y01: number): boolean {
     const frame = this.currentFrame;
     if (!frame) return false;

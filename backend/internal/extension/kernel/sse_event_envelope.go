@@ -60,14 +60,6 @@ func NewSSEEventEnvelope(eventType string, extensionID string, payload map[strin
 	}
 }
 
-// NewEventEnvelope is a backwards-compatible alias for NewSSEEventEnvelope.
-// New code should use NewSSEEventEnvelope directly.
-//
-// Deprecated: Use NewSSEEventEnvelope instead.
-func NewEventEnvelope(eventType string, extensionID string, payload map[string]interface{}, ttl time.Duration) SSEEventEnvelope {
-	return NewSSEEventEnvelope(eventType, extensionID, payload, ttl)
-}
-
 func (e SSEEventEnvelope) ToMap() map[string]interface{} {
 	m := map[string]interface{}{
 		"eventType":   e.EventType,

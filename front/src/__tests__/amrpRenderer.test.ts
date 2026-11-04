@@ -3,16 +3,19 @@ import { aimMessagePlainText, normalizeAIMessage } from "@/conversation/renderin
 import { renderMarkdownSegment, splitMarkdownSegments } from "@/conversation/rendering/markdown/markdownEngine";
 
 describe("AMRP renderer", () => {
-  it("normalizes legacy rich message fields", () => {
+  it("normalizes current rich message fields", () => {
     const message = normalizeAIMessage({
       id: "m1",
       role: "assistant",
-      content: "结果如下",
-      msgType: "tool_call",
-      toolName: "read_file",
-      toolArguments: { path: "src/App.vue" },
-      toolResult: { ok: true },
-      status: "success",
+      content: "",
+      blocks: [{
+        kind: "tool",
+        id: "tool-1",
+        name: "read_file",
+        arguments: { path: "src/App.vue" },
+        result: { ok: true },
+        status: "success",
+      }],
       createdAt: "2026-09-20T00:00:00.000Z",
     });
 

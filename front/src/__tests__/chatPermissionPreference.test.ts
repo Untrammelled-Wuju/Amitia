@@ -24,15 +24,4 @@ describe("chat permission preference", () => {
     expect(loadChatPermissionMode()).toBe("full_access");
   });
 
-  it("migrates the legacy model settings draft permission", () => {
-    localStorage.setItem(
-      "amitia.chat.model-settings.draft.v1",
-      JSON.stringify({ permissionMode: "full_access" }),
-    );
-
-    expect(loadChatPermissionMode()).toBe("full_access");
-    expect(localStorage.getItem(CHAT_PERMISSION_MODE_STORAGE_KEY)).toBe(
-      "full_access",
-    );
-  });
 });

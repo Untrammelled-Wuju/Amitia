@@ -68,6 +68,20 @@ func (g *DefaultGateway) RegisterRoute(route Route) error {
 	return nil
 }
 
+func (g *DefaultGateway) ReplaceRoute(route Route) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	versions, ok := g.routes[route.Method]
+	if !ok {
+		return fmt.Errorf("%w: %s v%d", ErrRouteNotFound, route.Method, route.Version)
+	}
+	if _, exists := versions[route.Version]; !exists {
+		return fmt.Errorf("%w: %s v%d", ErrRouteNotFound, route.Method, route.Version)
+	}
+	versions[route.Version] = route
+	return nil
+}
+
 func (g *DefaultGateway) OpenSession(_ context.Context, identity runtime_supervisor.RuntimeIdentity, allowedVersions map[Method]int) (Session, error) {
 	if identity.InstanceID == "" {
 		return Session{}, fmt.Errorf("%w: missing instance id", ErrIdentityInvalid)

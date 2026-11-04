@@ -18,15 +18,15 @@ func TestG20_ProductionComposition_Identity(t *testing.T) {
 
 	// G18: 所有安全核心组件必须非空
 	coreComponents := map[string]interface{}{
-		"AuthorityManager":    c.AuthorityManager,
-		"OutputGate":          c.OutputGate,
-		"TakeoverService":     c.TakeoverService,
-		"AuditSink":           c.AuthorityAudit,
-		"StreamManager":       c.StreamManager,
-		"HandshakeManager":    c.HandshakeManager,
+		"AuthorityManager":     c.AuthorityManager,
+		"OutputGate":           c.OutputGate,
+		"TakeoverService":      c.TakeoverService,
+		"AuditSink":            c.AuthorityAudit,
+		"StreamManager":        c.StreamManager,
+		"HandshakeManager":     c.HandshakeManager,
 		"BinaryObjectRegistry": c.BinaryObjectRegistry,
-		"RecoveryCoordinator": c.RecoveryCoordinator,
-		"StartupRecovery":     c.StartupRecovery,
+		"RecoveryCoordinator":  c.RecoveryCoordinator,
+		"StartupRecovery":      c.StartupRecovery,
 	}
 	for name, comp := range coreComponents {
 		if comp == nil {

@@ -431,7 +431,6 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 			Supervisor:         opts.TrustedSupervisor,
 			DefinitionMapper:   service_definition.NewDefinitionMapper(),
 			SecretRegistrar:    secretLifecycle,
-			ExtensionRoot:      opts.DataRoot,
 			NodeResolver:       opts.NodeResolver,
 			GenerationResolver: opts.GenerationResolver,
 			ChannelReconciler:  channel.NewReconciler(channelReg, channel.NewMapper()),

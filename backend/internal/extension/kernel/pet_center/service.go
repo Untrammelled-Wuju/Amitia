@@ -92,7 +92,7 @@ func (s *DesktopPetPluginManagementService) List(ctx context.Context, page, page
 		}
 		hasPetPlugin := false
 		for _, c := range contribs {
-			if c.Kind == domain.ContributionKindPetPlugin {
+			if c.EffectiveAdapter() == domain.ContributionAdapterDesktopPet {
 				hasPetPlugin = true
 				break
 			}
@@ -101,7 +101,7 @@ func (s *DesktopPetPluginManagementService) List(ctx context.Context, page, page
 			continue
 		}
 		for _, c := range contribs {
-			if c.Kind != domain.ContributionKindPetPlugin {
+			if c.EffectiveAdapter() != domain.ContributionAdapterDesktopPet {
 				continue
 			}
 			if search != "" && !matchesPluginSearch(c, inst, search) {
@@ -146,7 +146,7 @@ func (s *DesktopPetPluginManagementService) Get(ctx context.Context, pluginID st
 		}
 		hasPetPlugin := false
 		for _, c := range contribs {
-			if c.Kind == domain.ContributionKindPetPlugin {
+			if c.EffectiveAdapter() == domain.ContributionAdapterDesktopPet {
 				hasPetPlugin = true
 				break
 			}
@@ -155,7 +155,7 @@ func (s *DesktopPetPluginManagementService) Get(ctx context.Context, pluginID st
 			continue
 		}
 		for _, c := range contribs {
-			if c.Kind != domain.ContributionKindPetPlugin {
+			if c.EffectiveAdapter() != domain.ContributionAdapterDesktopPet {
 				continue
 			}
 			if string(c.ID) != pluginID {
@@ -182,7 +182,7 @@ func (s *DesktopPetPluginManagementService) GetByExtensionID(ctx context.Context
 	found := false
 	var results []DesktopPetPluginDetail
 	for _, c := range contribs {
-		if c.Kind == domain.ContributionKindPetPlugin {
+		if c.EffectiveAdapter() == domain.ContributionAdapterDesktopPet {
 			found = true
 			detail, err := s.buildDetail(ctx, inst, c)
 			if err != nil {
@@ -337,7 +337,7 @@ func (s *DesktopPetPluginManagementService) requireDesktopPetPlugin(ctx context.
 		return err
 	}
 	for _, c := range contribs {
-		if c.Kind == domain.ContributionKindPetPlugin {
+		if c.EffectiveAdapter() == domain.ContributionAdapterDesktopPet {
 			return nil
 		}
 	}

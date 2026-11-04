@@ -103,7 +103,6 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 	operationID := "package-operation-" + uuid.NewString()
 	traceID := "package-trace-" + uuid.NewString()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	confirmationsJSON, _ := json.Marshal(claims.Confirmations)
 	claimsJSON, _ := json.Marshal(PackageConfirmationClaims{
 		SchemaVersion:             PackageConfirmationClaimsSchemaVersion,
 		OperationType:             string(PackageOperationTypeInstall),
@@ -135,11 +134,11 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 	})
 	op := PackageOperationRecord{OperationID: operationID, TraceID: traceID, SpaceID: request.SpaceID,
 		ScopeType: request.ScopeType, ScopeID: request.ScopeID, ExtensionID: session.ExtensionID,
-		TargetVersion: session.Version, OperationType: "install", Status: "created",
+		TargetVersion: session.Version, OperationType: "install", Status: string(PackageOperationPending),
 		CurrentStep: "create_operation", ArtifactID: artifact.ArtifactID,
-		PreviewSessionID: session.SessionID, ConfirmationsJSON: string(confirmationsJSON),
-		ConfirmationClaimsJSON: string(claimsJSON), SnapshotRequirementHash: claims.SnapshotRequirementHash,
-		IdempotencyKey: idempotencyKey, RequestHash: computePackageRequestHash(PackageOperationRecord{
+		PreviewSessionID: session.SessionID, ConfirmationClaimsJSON: string(claimsJSON),
+		SnapshotRequirementHash: claims.SnapshotRequirementHash,
+		IdempotencyKey:          idempotencyKey, RequestHash: computePackageRequestHash(PackageOperationRecord{
 			OperationType: "install", ExtensionID: session.ExtensionID, TargetVersion: session.Version,
 			ArtifactID: artifact.ArtifactID, PreviewSessionID: session.SessionID,
 			ScopeType: request.ScopeType, ScopeID: request.ScopeID,
@@ -229,7 +228,7 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 		return KernelInstallResult{}, err
 	}
 
-	standardClaims := standardConfirmationClaimsFromLegacy(string(PackageOperationTypeInstall), claims)
+	standardClaims := standardConfirmationClaimsFromPreview(string(PackageOperationTypeInstall), claims)
 
 	installEvidence, err := buildPackageConfirmationAuthorityEvidence(operationID, standardClaims, authorityInput)
 	if err != nil {

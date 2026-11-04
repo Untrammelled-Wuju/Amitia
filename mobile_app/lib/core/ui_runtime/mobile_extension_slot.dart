@@ -24,6 +24,7 @@ class MobileExtensionSlot extends ConsumerWidget {
     this.extensionId,
     this.dispatchKey,
     this.dispatchOnly,
+    this.excludedContributionIds = const <String>{},
     this.context = const {},
     this.actions = const {},
     this.fallback,
@@ -38,6 +39,7 @@ class MobileExtensionSlot extends ConsumerWidget {
   final String? extensionId;
   final String? dispatchKey;
   final String? dispatchOnly;
+  final Set<String> excludedContributionIds;
   final Map<String, dynamic> context;
   final Map<String, FutureOr<dynamic> Function(dynamic input)> actions;
   final Widget? fallback;
@@ -242,6 +244,15 @@ class MobileExtensionSlot extends ConsumerWidget {
             (item) =>
                 item.contributionId == contributionId ||
                 item.sourceContributionId == contributionId,
+          )
+          .toList(growable: false);
+    }
+    if (excludedContributionIds.isNotEmpty) {
+      contributions = contributions
+          .where(
+            (item) =>
+                !excludedContributionIds.contains(item.contributionId) &&
+                !excludedContributionIds.contains(item.sourceContributionId),
           )
           .toList(growable: false);
     }

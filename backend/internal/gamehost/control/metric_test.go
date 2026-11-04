@@ -10,7 +10,8 @@ import (
 
 type noopMetricsSink struct{}
 
-func (noopMetricsSink) RecordOutputDecision(runtimeID domain.RuntimeInstanceID, kind ControlOutputKind, reason OutputDecisionReason, allowed bool) {}
+func (noopMetricsSink) RecordOutputDecision(runtimeID domain.RuntimeInstanceID, kind ControlOutputKind, reason OutputDecisionReason, allowed bool) {
+}
 
 func TestPluginOutputGate_MetricsRecordAllow(t *testing.T) {
 	topo := NewFakeTopology()

@@ -32,13 +32,13 @@ describe("v1 消息身份", () => {
     expect(getMessageUIKey(live)).toBe("turn:turn-1");
   });
 
-  it("实时持久消息字段只做字段名归一化，不承担 Turn 关联", () => {
+  it("实时持久消息只接受当前字段并映射 messageId", () => {
     const normalized = normalizeRealtimeMessage({
       messageId: "msg-1",
-      conversation_id: "conv-1",
-      request_id: "request-1",
+      conversationId: "conv-1",
+      requestId: "request-1",
       role: "assistant",
-      created_at: "2026-09-21 10:00:00",
+      createdAt: "2026-09-21 10:00:00",
     });
     expect(normalized).toMatchObject({
       id: "msg-1",
@@ -48,5 +48,24 @@ describe("v1 消息身份", () => {
       createdAt: "2026-09-21 10:00:00",
     });
     expect(normalized.clientMessageId).toBeUndefined();
+  });
+
+  it("拒绝旧 snake_case 实时字段", () => {
+    const normalized = normalizeRealtimeMessage({
+      messageId: "msg-1",
+      conversation_id: "conv-1",
+      created_at: "2026-09-21 10:00:00",
+    });
+    expect(normalized).toMatchObject({ id: "msg-1" });
+    expect(normalized.conversationId).toBeUndefined();
+    expect(normalized.createdAt).toBeUndefined();
+  });
+
+  it("拒绝缺少 messageId 的旧实时消息", () => {
+    const normalized = normalizeRealtimeMessage({
+      id: "legacy-id",
+      role: "assistant",
+    });
+    expect(normalized.id).toBeUndefined();
   });
 });

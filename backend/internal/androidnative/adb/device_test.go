@@ -112,12 +112,12 @@ ABC123	device
 
 func TestMapDeviceState(t *testing.T) {
 	tests := map[string]string{
-		"device":        DeviceStateDevice,
-		"offline":       DeviceStateOffline,
-		"unauthorized":  DeviceStateUnauthorized,
+		"device":         DeviceStateDevice,
+		"offline":        DeviceStateOffline,
+		"unauthorized":   DeviceStateUnauthorized,
 		"no permissions": DeviceStateNoPermissions,
-		"unknown":       DeviceStateUnknown,
-		"":              DeviceStateUnknown,
+		"unknown":        DeviceStateUnknown,
+		"":               DeviceStateUnknown,
 	}
 	for raw, expected := range tests {
 		actual := mapDeviceState(raw)
@@ -129,8 +129,8 @@ func TestMapDeviceState(t *testing.T) {
 
 func TestIsValidSerial(t *testing.T) {
 	tests := map[string]bool{
-		"ABC-123_456": true,
-		"":             false,
+		"ABC-123_456":      true,
+		"":                 false,
 		"192.168.1.1:5555": true,
 	}
 	for serial, expected := range tests {

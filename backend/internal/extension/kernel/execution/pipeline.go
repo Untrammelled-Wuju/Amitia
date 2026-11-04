@@ -580,39 +580,9 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 	durationMS := p.TimeoutCtrl.Now().Sub(startTime).Milliseconds()
 	if p.AgentObserver != nil {
 		p.AgentObserver.AfterToolExecution(timeoutCtx, inv, tool, result, durationMS)
-		if reason := unknownOutcomeReason(tool, result, dispatched); reason != "" {
-			if err := p.AgentObserver.RecordUnknownOutcome(timeoutCtx, inv, tool, result, reason); err != nil {
-				amitialog.Printf("[original-error] %v", err)
-			}
-		}
 	}
 
 	return p.finalizeCancellation(timeoutCtx, inv, result), nil
-}
-
-func unknownOutcomeReason(tool capability.ToolDefinition, result capability.UnifiedToolResult, dispatched bool) string {
-	if !dispatched {
-		return ""
-	}
-	if result.Error != nil {
-		code := strings.ToLower(result.Error.Code)
-		message := strings.ToLower(result.Error.Message)
-		for _, marker := range []string{"outcome_unknown", "indeterminate", "unconfirmed", "unknown_result", "outcome unknown"} {
-			if strings.Contains(code, marker) || strings.Contains(message, marker) {
-				return result.Error.Error()
-			}
-		}
-	}
-	if result.Status != capability.ToolResultStatusCancelled && result.Status != capability.ToolResultStatusTimedOut {
-		return ""
-	}
-	if len(result.SideEffects) > 0 || tool.HasSideEffects || tool.SideEffect == capability.SideEffectExternal || tool.SideEffect == capability.SideEffectWrite || tool.SideEffect == capability.SideEffectSystem || tool.SideEffect == capability.SideEffectFinancial || tool.SideEffect == capability.SideEffectDestructive {
-		if result.Error != nil {
-			return result.Error.Error()
-		}
-		return string(result.Status)
-	}
-	return ""
 }
 
 func (p *ExecutionPipeline) dispatchAttempt(

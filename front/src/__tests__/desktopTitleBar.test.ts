@@ -1,7 +1,7 @@
 import { mount } from "@vue/test-utils";
 import { createPinia } from "pinia";
 import { createMemoryHistory, createRouter } from "vue-router";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import DesktopTitleBar from "../components/DesktopTitleBar.vue";
 import indexHtmlSource from "../../index.html?raw";
 import appSource from "../App.vue?raw";
@@ -9,6 +9,19 @@ import backgroundSource from "../components/ApplicationBackground.vue?raw";
 import appShellSource from "../components/BuiltinAppShell.vue?raw";
 import titleBarSource from "../components/DesktopTitleBar.vue?raw";
 import elementOverridesSource from "../styles/element-overrides.css?raw";
+
+const searchModal = vi.hoisted(() => ({ open: vi.fn() }));
+vi.mock("../components/SearchModal.vue", async () => {
+  const { defineComponent, h } = await import("vue");
+  return {
+    default: defineComponent({
+      setup(_, { expose }) {
+        expose({ open: searchModal.open, close: vi.fn() });
+        return () => h("div", { "data-test": "global-search" });
+      },
+    }),
+  };
+});
 
 function installDesktopApi(platform: string) {
   (window as any).amitiaDesktop = {};
@@ -36,6 +49,7 @@ async function renderTitleBar(path = "/chat") {
 }
 
 afterEach(() => {
+  searchModal.open.mockClear();
   delete (window as any).amitiaDesktop;
   delete (window as any).electronWindowApi;
   document.querySelectorAll(".el-overlay, .search-overlay").forEach((element) => element.remove());
@@ -91,10 +105,22 @@ describe("跨端窗口导航控件", () => {
     try {
       expect(wrapper.classes()).toContain("is-web");
       expect(wrapper.find(".sidebar-toggle-btn").exists()).toBe(true);
-      expect(wrapper.findAll(".nav-icon-btn")).toHaveLength(2);
+      expect(wrapper.findAll(".nav-icon-btn")).toHaveLength(3);
+      expect(wrapper.findAll(".nav-icon-btn").map((item) => item.attributes("aria-label"))).toEqual(["后退", "前进", "全局搜索"]);
+      expect(wrapper.find('[aria-label="全局搜索"]').exists()).toBe(true);
       expect(wrapper.find(".window-actions").exists()).toBe(false);
       expect(wrapper.classes()).toContain("is-chat-page");
       expect(wrapper.find("#window-chat-slot").exists()).toBe(true);
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it("顶部搜索按钮触发全局搜索", async () => {
+    const wrapper = await renderTitleBar();
+    try {
+      await wrapper.get('[aria-label="全局搜索"]').trigger("click");
+      expect(searchModal.open).toHaveBeenCalledOnce();
     } finally {
       wrapper.unmount();
     }

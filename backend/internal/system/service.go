@@ -30,7 +30,6 @@ type Service interface {
 	UpdateTimeoutSettings(timeoutpolicy.Settings) error
 	AppConfig() map[string]interface{}
 	CheckDBIntegrity() map[string]interface{}
-	CheckStorageMigrations() map[string]interface{}
 	CheckUpdate() map[string]interface{}
 	CleanupTemp() map[string]interface{}
 	ConfigSettings() map[string]interface{}
@@ -66,7 +65,6 @@ type Service interface {
 	GetSecurityAccessStatus() map[string]interface{}
 	GetSecurityStatus() map[string]interface{}
 	GetStorageInfo() map[string]interface{}
-	GetStorageMigrations() map[string]interface{}
 	GetTheme() map[string]interface{}
 	GetThemePresets() map[string]interface{}
 	GetUpdateConfig() map[string]interface{}

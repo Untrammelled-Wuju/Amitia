@@ -8,9 +8,6 @@ describe("Extension Center Baseline", () => {
       const route = router.resolve("/extensions")
       expect(route.name).toBe("extensionCenter")
       expect(builtinRoutesSource).toContain(
-        'component: () => import("@/views/extensions/ExtensionCenterView.vue")',
-      )
-      expect(builtinRoutesSource).not.toContain(
         'path: "/extensions", name: "extensionCenter", component: () => import("@/views/SectionPlaceholderView.vue")',
       )
     })
@@ -38,21 +35,19 @@ describe("Extension Center Baseline", () => {
       expect(router.resolve("/creative-workshop/character-cards").name).toBe("characterCardWorkshop")
     })
 
-    it("redirects legacy workflow routes to extension center", async () => {
+    it("does not redirect retired workflow routes", async () => {
       const router = (await import("@/router")).default
-      const legacyList = router.resolve("/creative-workshop/workflows").matched.at(-1)
-      const legacyBuilder = router.resolve("/creative-workshop/workflows/test-workflow-id").matched.at(-1)
-      expect(typeof legacyList?.redirect).toBe("function")
-      expect(typeof legacyBuilder?.redirect).toBe("function")
+      expect(router.resolve("/creative-workshop/workflows").name).toBe("catchAll")
+      expect(router.resolve("/creative-workshop/workflows/test-workflow-id").name).toBe("catchAll")
     })
 
-    it("removes legacy skill list route", async () => {
+    it("removes retired skill list route", async () => {
       const router = (await import("@/router")).default
       const route = router.resolve("/extensions/skills")
       expect(route.name).not.toBe("extensionSkills")
     })
 
-    it("removes legacy skill detail route", async () => {
+    it("removes retired skill detail route", async () => {
       const router = (await import("@/router")).default
       const route = router.resolve("/extensions/skills/test-skill-id")
       expect(route.name).not.toBe("extensionSkillDetail")
@@ -64,25 +59,25 @@ describe("Extension Center Baseline", () => {
       expect(route.name).toBe("extensionAgentSkills")
     })
 
-    it("removes legacy workshop route", async () => {
+    it("removes retired workshop route", async () => {
       const router = (await import("@/router")).default
       const route = router.resolve("/extensions/workshop")
       expect(route.name).not.toBe("extensionWorkshop")
     })
 
-    it("removes legacy creative workshop skill route", async () => {
+    it("removes retired creative workshop skill route", async () => {
       const router = (await import("@/router")).default
       const route = router.resolve("/creative-workshop/skills")
       expect(route.name).not.toBe("extensionWorkshop")
     })
 
-    it("removes legacy workshop session route", async () => {
+    it("removes retired workshop session route", async () => {
       const router = (await import("@/router")).default
       const route = router.resolve("/extensions/workshop/test-session-id")
       expect(route.name).not.toBe("extensionWorkshopSession")
     })
 
-    it("removes legacy run history route", async () => {
+    it("removes retired run history route", async () => {
       const router = (await import("@/router")).default
       const route = router.resolve("/extensions/runs")
       expect(route.name).not.toBe("extensionRuns")

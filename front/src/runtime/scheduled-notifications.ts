@@ -1,4 +1,4 @@
-import { clearLegacyReplyPreferences, legacyReplyPreferences, notificationRegistrationPayload } from "./device-notifications";
+import { notificationRegistrationPayload } from "./device-notifications";
 
 export interface ScheduledBrowserEnvelope {
   requestId: string;
@@ -20,15 +20,12 @@ export async function registerScheduledDesktopEndpoint(deviceId: string, permitt
 
 async function registerScheduledEndpoint(platform: 'web' | 'desktop', deviceId: string, permitted: boolean, register: (input: Record<string, unknown>) => Promise<unknown>): Promise<void> {
   if (!deviceId) throw new Error('浏览器通知缺少设备身份');
-  const legacy = legacyReplyPreferences();
   let response = await register(notificationRegistrationPayload(deviceId, platform, {
-    ...legacy,
     ...(permitted ? {} : { pushEnabled: false, systemNotificationsEnabled: false }),
   }));
   for (let index = 0; index < 2 && response && typeof response === 'object' && 'data' in response; index++) response = (response as { data: unknown }).data;
   const endpoint = response as { id?: string; deviceId?: string; platform?: string } | null;
   if (!endpoint?.id || endpoint.deviceId !== deviceId || endpoint.platform !== platform) throw new Error('通知通道未确认保存');
-  if (Object.keys(legacy).length > 0) clearLegacyReplyPreferences();
 }
 
 export async function deliverScheduledBrowserNotification(envelope: ScheduledBrowserEnvelope, delivery: ScheduledBrowserDelivery): Promise<void> {

@@ -9,7 +9,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 )
 
@@ -27,7 +26,7 @@ func (p *meshLocalDataPort) managedPrivacyMessages(ctx context.Context, scope co
 	imported := map[string]bool{}
 	for _, row := range records {
 		if row.Kind == "conversation" {
-			imported[fmtPrivacyKey(row.Legacy, row.ID)] = chatManagementString(row.Body, "source") == "import"
+			imported[fmtPrivacyKey(row.ID)] = chatManagementString(row.Body, "source") == "import"
 		}
 	}
 	fingerprint := chatManagementFingerprint(records)
@@ -43,13 +42,13 @@ func (p *meshLocalDataPort) managedPrivacyMessages(ctx context.Context, scope co
 		if err != nil {
 			return nil, err
 		}
-		item := coordination.PrivacyMessage{ID: row.ID, RoleID: row.RoleID, OwnerID: p.ownerID, Legacy: row.Legacy, Revision: row.Revision, Fingerprint: privacyRecordFingerprint(row), Imported: chatManagementString(row.Body, "source") == "import" || imported[fmtPrivacyKey(row.Legacy, chatManagementString(row.Body, "conversationId"))], Body: raw, Scope: scope}
+		item := coordination.PrivacyMessage{ID: row.ID, RoleID: row.RoleID, OwnerID: p.ownerID, Revision: row.Revision, Fingerprint: privacyRecordFingerprint(row), Imported: chatManagementString(row.Body, "source") == "import" || imported[fmtPrivacyKey(chatManagementString(row.Body, "conversationId"))], Body: raw, Scope: scope}
 		if request.Operation == "privacy/messages" {
 			items = append(items, item)
 			continue
 		}
 		expected := request.PrivacyMessage
-		if expected == nil || expected.ID != item.ID || expected.Legacy != item.Legacy {
+		if expected == nil || expected.ID != item.ID {
 			continue
 		}
 		if expected.OwnerID != p.ownerID || expected.RoleID != row.RoleID || expected.Revision != item.Revision || expected.Fingerprint != item.Fingerprint {
@@ -61,34 +60,24 @@ func (p *meshLocalDataPort) managedPrivacyMessages(ctx context.Context, scope co
 		if err := coordination.ValidateCurrent(ctx); err != nil {
 			return nil, err
 		}
-		if row.Legacy {
-			result := p.services.DB.WithContext(ctx).Model(&chat.Message{}).Where("id=? AND character_id=? AND conversation_id=? AND revision=? AND content=? AND deleted_at IS NULL", row.ID, row.RoleID, chatManagementString(row.Body, "conversationId"), row.Revision, chatManagementString(row.Body, "content")).Updates(map[string]any{"content": "[已脱敏]", "reasoning_content": "", "safety_level": "masked", "revision": row.Revision + 1})
-			if result.Error != nil {
-				return nil, result.Error
-			}
-			if result.RowsAffected != 1 {
-				return nil, coordination.ErrResourceVersion
-			}
-		} else {
-			stored, err := p.store.Get(ctx, "message", row.ID)
-			if err != nil {
-				return nil, err
-			}
-			if stored == nil || stored.Revision != row.Revision {
-				return nil, coordination.ErrResourceVersion
-			}
-			row.Body = nil
-			if err := json.Unmarshal(stored.Body, &row.Body); err != nil {
-				return nil, err
-			}
-			row.Body["content"], row.Body["reasoningContent"], row.Body["safetyLevel"] = "[已脱敏]", "", "masked"
-			row.Body["updatedAt"] = time.Now().UTC().Format(time.RFC3339Nano)
-			raw, _ = json.Marshal(row.Body)
-			local := scope
-			local.ResourceOwnerID, local.RoleOwnerID, local.RoleID, local.RequestID = p.ownerID, p.ownerID, row.RoleID, request.RequestID
-			if _, err := p.store.Apply(ctx, coordination.Commit{Scope: local, Mutations: []coordination.Mutation{{Kind: "message", ID: row.ID, RoleID: row.RoleID, ExpectedRevision: row.Revision, Body: raw}}}); err != nil {
-				return nil, err
-			}
+		stored, err := p.store.Get(ctx, "message", row.ID)
+		if err != nil {
+			return nil, err
+		}
+		if stored == nil || stored.Revision != row.Revision {
+			return nil, coordination.ErrResourceVersion
+		}
+		row.Body = nil
+		if err := json.Unmarshal(stored.Body, &row.Body); err != nil {
+			return nil, err
+		}
+		row.Body["content"], row.Body["reasoningContent"], row.Body["safetyLevel"] = "[已脱敏]", "", "masked"
+		row.Body["updatedAt"] = time.Now().UTC().Format(time.RFC3339Nano)
+		raw, _ = json.Marshal(row.Body)
+		local := scope
+		local.ResourceOwnerID, local.RoleOwnerID, local.RoleID, local.RequestID = p.ownerID, p.ownerID, row.RoleID, request.RequestID
+		if _, err := p.store.Apply(ctx, coordination.Commit{Scope: local, Mutations: []coordination.Mutation{{Kind: "message", ID: row.ID, RoleID: row.RoleID, ExpectedRevision: row.Revision, Body: raw}}}); err != nil {
+			return nil, err
 		}
 		return map[string]any{"masked": true, "maskedCount": 1, "ownerId": p.ownerID}, nil
 	}
@@ -101,10 +90,7 @@ func (p *meshLocalDataPort) managedPrivacyMessages(ctx context.Context, scope co
 	return map[string]any{"items": items[start:end], "hasMore": end < len(items), "snapshotFingerprint": fingerprint}, nil
 }
 
-func fmtPrivacyKey(legacy bool, id string) string {
-	if legacy {
-		return "legacy/" + id
-	}
+func fmtPrivacyKey(id string) string {
 	return "owned/" + id
 }
 
@@ -127,13 +113,6 @@ func (p *meshLocalDataPort) privacyChatRecords(ctx context.Context) ([]ownedChat
 	if err != nil {
 		return nil, err
 	}
-	var legacyRoles []string
-	if err := p.services.DB.WithContext(ctx).Table("messages AS m").Distinct("m.character_id").Joins("JOIN conversations c ON c.id=m.conversation_id").Where("m.deleted_at IS NULL AND c.deleted_at IS NULL AND (c.space_id=? OR c.space_id='' OR c.space_id='default')", p.legacySpaceID).Pluck("m.character_id", &legacyRoles).Error; err != nil {
-		return nil, err
-	}
-	for _, role := range legacyRoles {
-		roles[role] = true
-	}
 	records := []ownedChatManagementRecord{}
 	for role := range roles {
 		rows, err := p.chatManagementRecords(ctx, role)
@@ -149,9 +128,6 @@ func (p *meshLocalDataPort) privacyChatRecords(ctx context.Context) ([]ownedChat
 		left, right := records[i], records[j]
 		if left.RoleID != right.RoleID {
 			return left.RoleID < right.RoleID
-		}
-		if left.Legacy != right.Legacy {
-			return left.Legacy
 		}
 		if left.Kind != right.Kind {
 			return left.Kind < right.Kind

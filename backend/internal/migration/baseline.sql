@@ -1,11 +1,7 @@
-CREATE TABLE IF NOT EXISTS schema_migrations (
-    version TEXT PRIMARY KEY,
-    name TEXT NOT NULL DEFAULT '',
-    checksum TEXT NOT NULL DEFAULT '',
-    status TEXT NOT NULL DEFAULT 'pending',
-    error_message TEXT NOT NULL DEFAULT '',
-    started_at TEXT NOT NULL DEFAULT '',
-    finished_at TEXT NOT NULL DEFAULT ''
+CREATE TABLE IF NOT EXISTS core_schema_baseline (
+    singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+    schema_version INTEGER NOT NULL,
+    created_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS security_audit_events (
@@ -171,6 +167,10 @@ CREATE TABLE IF NOT EXISTS conversations (
     revision INTEGER NOT NULL DEFAULT 1,
     deleted_at DATETIME
 );
+CREATE INDEX IF NOT EXISTS idx_conversations_project_updated ON conversations(project_id, updated_at);
+CREATE INDEX IF NOT EXISTS idx_conversations_sidebar_pinned ON conversations(space_id, pinned_at, updated_at);
+CREATE INDEX IF NOT EXISTS idx_conversations_sidebar_archived ON conversations(space_id, archived_at, updated_at);
+CREATE INDEX IF NOT EXISTS idx_conversations_workspace ON conversations(workspace_id);
 
 CREATE TABLE IF NOT EXISTS projects (
     id TEXT PRIMARY KEY,
@@ -186,6 +186,7 @@ CREATE TABLE IF NOT EXISTS projects (
     UNIQUE(space_id, workspace_id)
 );
 CREATE INDEX IF NOT EXISTS idx_projects_space_updated ON projects(space_id, updated_at);
+CREATE INDEX IF NOT EXISTS idx_projects_sidebar_pinned ON projects(space_id, pinned_at, updated_at);
 
 CREATE TABLE IF NOT EXISTS messages (
     id TEXT PRIMARY KEY,
@@ -226,6 +227,7 @@ CREATE TABLE IF NOT EXISTS messages (
     revision INTEGER NOT NULL DEFAULT 1,
     deleted_at DATETIME
 );
+CREATE INDEX IF NOT EXISTS idx_messages_character_id ON messages(character_id);
 
 CREATE TABLE IF NOT EXISTS chat_import_batches (
     id TEXT PRIMARY KEY,
@@ -243,7 +245,6 @@ CREATE TABLE IF NOT EXISTS chat_import_batches (
     promoted_conversation_id TEXT NOT NULL DEFAULT '',
     promoted_conversation_owner_id TEXT NOT NULL DEFAULT '',
     promoted_core_id TEXT NOT NULL DEFAULT '',
-    legacy_conversation_id TEXT NOT NULL DEFAULT '',
     error_code TEXT NOT NULL DEFAULT '',
     error_message TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT '',
@@ -375,6 +376,9 @@ CREATE TABLE IF NOT EXISTS assistant_turn_items (
 
 CREATE INDEX IF NOT EXISTS idx_assistant_turns_conversation ON assistant_turns(conversation_id, sequence);
 CREATE INDEX IF NOT EXISTS idx_assistant_turns_request ON assistant_turns(request_id);
+CREATE INDEX IF NOT EXISTS idx_assistant_turns_execution ON assistant_turns(execution_id);
+CREATE INDEX IF NOT EXISTS idx_assistant_turns_parent ON assistant_turns(parent_turn_id);
+CREATE INDEX IF NOT EXISTS idx_assistant_turns_agent ON assistant_turns(agent_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_assistant_turns_conv_request_unique
     ON assistant_turns(conversation_id, request_id)
     WHERE request_id <> '';
@@ -483,19 +487,7 @@ CREATE TABLE IF NOT EXISTS asr_configs (
     updated_at TEXT DEFAULT ''
 );
 
-CREATE TABLE IF NOT EXISTS emotion_states (
-    space_id TEXT NOT NULL DEFAULT '',
-    character_id TEXT NOT NULL DEFAULT '',
-    user_affect_json TEXT NOT NULL DEFAULT '{}',
-    relationship_emotion_json TEXT NOT NULL DEFAULT '{}',
-    signals_json TEXT NOT NULL DEFAULT '{}',
-    baseline_json TEXT NOT NULL DEFAULT '{}',
-    version INTEGER NOT NULL DEFAULT 0,
-    updated_at DATETIME NOT NULL,
-    PRIMARY KEY (space_id, character_id)
-);
 
-CREATE INDEX IF NOT EXISTS idx_emotion_states_character ON emotion_states(character_id);
 
 CREATE TABLE IF NOT EXISTS vision_configs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -509,19 +501,6 @@ CREATE TABLE IF NOT EXISTS vision_configs (
     updated_at TEXT DEFAULT ''
 );
 
-CREATE TABLE IF NOT EXISTS role_profiles (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    character_id TEXT DEFAULT '',
-    role_name TEXT DEFAULT '',
-    gender TEXT DEFAULT 'UNSPECIFIED',
-    gender_label TEXT DEFAULT '',
-    pronoun TEXT DEFAULT 'TA',
-    self_reference TEXT DEFAULT '我',
-    user_addressing_style TEXT DEFAULT '',
-    gender_expression INTEGER DEFAULT 30,
-    created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT ''
-);
 
 CREATE TABLE IF NOT EXISTS memories (
     id TEXT PRIMARY KEY,
@@ -591,57 +570,9 @@ CREATE TABLE IF NOT EXISTS memory_events (
     event_reason TEXT NOT NULL DEFAULT ''
 );
 
-CREATE TABLE IF NOT EXISTS memory_candidates (
-    id TEXT PRIMARY KEY,
-    space_id TEXT NOT NULL DEFAULT '',
-    key TEXT NOT NULL DEFAULT '',
-    value TEXT NOT NULL DEFAULT '',
-    memory_type TEXT DEFAULT 'custom',
-    memory_subtype TEXT NOT NULL DEFAULT '',
-    importance INTEGER DEFAULT 5,
-    retention_level INTEGER NOT NULL DEFAULT 0,
-    memory_strength REAL NOT NULL DEFAULT 0,
-    strength_updated_at TEXT,
-    last_reinforced_at TEXT,
-    reinforce_count INTEGER NOT NULL DEFAULT 0,
-    decay_state TEXT NOT NULL DEFAULT '',
-    pinned INTEGER NOT NULL DEFAULT 0,
-    archived_at TEXT,
-    scope TEXT NOT NULL DEFAULT 'character',
-    source_text TEXT DEFAULT '',
-    conversation_id TEXT DEFAULT '',
-    character_id TEXT DEFAULT '',
-    created_at TEXT DEFAULT '',
-    sensitivity_level TEXT DEFAULT 'internal',
-    allow_proactive_mention INTEGER DEFAULT 1,
-    requires_confirmation INTEGER DEFAULT 0,
-    candidate_kind TEXT NOT NULL DEFAULT 'extracted',
-    confidence REAL NOT NULL DEFAULT 0,
-    target_memory_id TEXT NOT NULL DEFAULT '',
-    proposed_action TEXT NOT NULL DEFAULT '',
-    source_memory_ids_json TEXT NOT NULL DEFAULT '',
-    source_versions_json TEXT NOT NULL DEFAULT '',
-    derivation_key TEXT NOT NULL DEFAULT '',
-    reason TEXT NOT NULL DEFAULT ''
-);
 
-CREATE INDEX IF NOT EXISTS idx_memory_candidates_user ON memory_candidates(space_id, created_at);
 
-CREATE TABLE IF NOT EXISTS memory_derivations (
-    id TEXT PRIMARY KEY,
-    output_memory_id TEXT NOT NULL,
-    input_memory_id TEXT NOT NULL,
-    input_version INTEGER NOT NULL,
-    input_snapshot_hash TEXT NOT NULL DEFAULT '',
-    derivation_kind TEXT NOT NULL,
-    ordinal INTEGER NOT NULL DEFAULT 0,
-    operation_id TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL,
-    UNIQUE(output_memory_id, input_memory_id, input_version, derivation_kind)
-);
 
-CREATE INDEX IF NOT EXISTS idx_memory_derivations_output ON memory_derivations(output_memory_id);
-CREATE INDEX IF NOT EXISTS idx_memory_derivations_input ON memory_derivations(input_memory_id);
 CREATE INDEX IF NOT EXISTS idx_memory_events_operation ON memory_events(operation_id);
 
 CREATE INDEX IF NOT EXISTS idx_memories_user_character ON memories(space_id, character_id);
@@ -655,10 +586,6 @@ CREATE INDEX IF NOT EXISTS idx_memories_derivation_key ON memories(derivation_ke
 CREATE INDEX IF NOT EXISTS idx_memories_retention_state ON memories(character_id, decay_state, retention_level);
 CREATE INDEX IF NOT EXISTS idx_memories_subtype ON memories(character_id, memory_subtype);
 
-CREATE TABLE IF NOT EXISTS memory_embeddings (
-    memory_id TEXT PRIMARY KEY,
-    created_at TEXT DEFAULT ''
-);
 
 CREATE TABLE IF NOT EXISTS episodic_memories (
     id TEXT PRIMARY KEY,
@@ -801,7 +728,6 @@ CREATE TABLE IF NOT EXISTS safety_incidents (
     policy_revision INTEGER NOT NULL DEFAULT 0,
     revision INTEGER NOT NULL DEFAULT 1,
     details_json TEXT NOT NULL DEFAULT '{}',
-    legacy_event_id TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT '',
     updated_at TEXT NOT NULL DEFAULT '',
     resolved_at TEXT NOT NULL DEFAULT '',
@@ -812,7 +738,6 @@ CREATE INDEX IF NOT EXISTS idx_safety_incidents_scope ON safety_incidents(space_
 CREATE INDEX IF NOT EXISTS idx_safety_incidents_conversation ON safety_incidents(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_safety_incidents_message ON safety_incidents(message_id);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_safety_incidents_feedback ON safety_incidents(feedback_id) WHERE feedback_id IS NOT NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS uq_safety_incidents_legacy ON safety_incidents(legacy_event_id) WHERE legacy_event_id <> '';
 
 CREATE TABLE IF NOT EXISTS moods (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -823,16 +748,6 @@ CREATE TABLE IF NOT EXISTS moods (
     created_at TEXT DEFAULT ''
 );
 
-CREATE TABLE IF NOT EXISTS need_states (
-    id TEXT PRIMARY KEY,
-    character_id TEXT NOT NULL DEFAULT '',
-    need_key TEXT NOT NULL DEFAULT '',
-    current_value REAL DEFAULT 0,
-    baseline REAL DEFAULT 0,
-    trend REAL DEFAULT 0,
-    saturated INTEGER DEFAULT 0,
-    updated_at TEXT DEFAULT ''
-);
 
 CREATE TABLE IF NOT EXISTS app_settings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -866,7 +781,6 @@ CREATE TABLE IF NOT EXISTS retrieval_logs (
     request_id TEXT NOT NULL DEFAULT '',
     channel TEXT NOT NULL DEFAULT '',
     retrieval_version TEXT NOT NULL DEFAULT '',
-    legacy INTEGER NOT NULL DEFAULT 0,
     query_text TEXT NOT NULL DEFAULT '',
     retrieved_memory_ids TEXT DEFAULT '[]',
     scoring_details TEXT DEFAULT '{}',
@@ -916,44 +830,6 @@ CREATE TABLE IF NOT EXISTS mcp_duplicate_tool_registrations (
 
 CREATE INDEX IF NOT EXISTS idx_mcp_dup_unresolved ON mcp_duplicate_tool_registrations(resolved, server_id);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_action_definitions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    action_key TEXT NOT NULL UNIQUE,
-    name TEXT NOT NULL DEFAULT '',
-    description TEXT DEFAULT '',
-    category_key TEXT NOT NULL DEFAULT '',
-    category_name TEXT NOT NULL DEFAULT '',
-    supports_default_idle INTEGER NOT NULL DEFAULT 0,
-    recommended INTEGER NOT NULL DEFAULT 0,
-    enabled INTEGER NOT NULL DEFAULT 1,
-    sort_order INTEGER NOT NULL DEFAULT 0,
-    definition_version INTEGER NOT NULL DEFAULT 1,
-    default_frame_count INTEGER NOT NULL DEFAULT 8,
-    estimated_generation_count INTEGER NOT NULL DEFAULT 1,
-    source_type TEXT NOT NULL DEFAULT 'builtin',
-    schema_version INTEGER NOT NULL DEFAULT 1,
-    catalog_version INTEGER NOT NULL DEFAULT 1,
-    default_fps INTEGER NOT NULL DEFAULT 10,
-    playback_mode TEXT NOT NULL DEFAULT 'once',
-    return_policy TEXT NOT NULL DEFAULT 'previous',
-    return_action_key TEXT NOT NULL DEFAULT '',
-    interruptible INTEGER NOT NULL DEFAULT 1,
-    interrupt_after_ms INTEGER NOT NULL DEFAULT 0,
-    minimum_play_ms INTEGER NOT NULL DEFAULT 0,
-    maximum_play_ms INTEGER NOT NULL DEFAULT 0,
-    priority INTEGER NOT NULL DEFAULT 0,
-    cooldown_ms INTEGER NOT NULL DEFAULT 0,
-    mutex_group TEXT NOT NULL DEFAULT '',
-    queue_policy TEXT NOT NULL DEFAULT 'replace',
-    dedup_window_ms INTEGER NOT NULL DEFAULT 0,
-    anchor_profile TEXT NOT NULL DEFAULT 'feet_center',
-    semantic_tags_json TEXT NOT NULL DEFAULT '[]',
-    generation_spec_version INTEGER NOT NULL DEFAULT 1,
-    spec_json TEXT NOT NULL DEFAULT '{}',
-    spec_hash TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT ''
-);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_generation_tasks (
     id TEXT PRIMARY KEY,
@@ -1015,156 +891,11 @@ CREATE INDEX IF NOT EXISTS idx_dpgt_char ON desktop_pet_generation_tasks(charact
 CREATE INDEX IF NOT EXISTS idx_dpgt_status ON desktop_pet_generation_tasks(status);
 CREATE INDEX IF NOT EXISTS idx_dpgt_created ON desktop_pet_generation_tasks(created_at);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_generation_task_actions (
-    id TEXT PRIMARY KEY,
-    task_id TEXT NOT NULL DEFAULT '',
-    action_definition_id INTEGER NOT NULL DEFAULT 0,
-    action_key TEXT NOT NULL DEFAULT '',
-    action_name_snapshot TEXT DEFAULT '',
-    action_description_snapshot TEXT DEFAULT '',
-    category_key_snapshot TEXT DEFAULT '',
-    category_name_snapshot TEXT DEFAULT '',
-    definition_version INTEGER NOT NULL DEFAULT 1,
-    supports_default_idle INTEGER NOT NULL DEFAULT 0,
-    sort_order INTEGER NOT NULL DEFAULT 0,
-    frame_count INTEGER NOT NULL DEFAULT 8,
-    estimated_generation_count INTEGER NOT NULL DEFAULT 1,
-    status TEXT NOT NULL DEFAULT 'pending',
-    progress INTEGER NOT NULL DEFAULT 0,
-    error_code TEXT DEFAULT '',
-    error_message TEXT DEFAULT '',
-    created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '',
-    started_at TEXT DEFAULT '',
-    completed_at TEXT DEFAULT '',
-    attempt_number INTEGER NOT NULL DEFAULT 1,
-    generation_spec_version TEXT DEFAULT '',
-    current_attempt INTEGER NOT NULL DEFAULT 1,
-    row_version INTEGER NOT NULL DEFAULT 0,
-    current_stage TEXT NOT NULL DEFAULT 'created',
-    status_reason TEXT NOT NULL DEFAULT '',
-    failure_stage TEXT NOT NULL DEFAULT '',
-    last_transition_at TEXT NOT NULL DEFAULT '',
-    execution_id TEXT NOT NULL DEFAULT '',
-    worker_id TEXT NOT NULL DEFAULT '',
-    action_spec_schema_version INTEGER NOT NULL DEFAULT 1,
-    action_spec_version INTEGER NOT NULL DEFAULT 1,
-    action_spec_json TEXT NOT NULL DEFAULT '',
-    action_spec_hash TEXT NOT NULL DEFAULT '',
-    playback_mode_snapshot TEXT NOT NULL DEFAULT '',
-    default_fps_snapshot INTEGER NOT NULL DEFAULT 0,
-    return_policy_snapshot TEXT NOT NULL DEFAULT '',
-    return_action_key_snapshot TEXT NOT NULL DEFAULT '',
-    interruptible_snapshot INTEGER NOT NULL DEFAULT 1,
-    priority_snapshot INTEGER NOT NULL DEFAULT 0,
-    cooldown_ms_snapshot INTEGER NOT NULL DEFAULT 0,
-    mutex_group_snapshot TEXT NOT NULL DEFAULT '',
-    anchor_profile_snapshot TEXT NOT NULL DEFAULT '',
-    generation_mode TEXT NOT NULL DEFAULT 'legacy_frame',
-    generation_plan_json TEXT NOT NULL DEFAULT '{}',
-    generation_plan_hash TEXT NOT NULL DEFAULT '',
-    prompt_template_version TEXT NOT NULL DEFAULT '',
-    active_attempt_id TEXT NOT NULL DEFAULT '',
-    active_attempt_number INTEGER NOT NULL DEFAULT 0,
-    planned_segment_count INTEGER NOT NULL DEFAULT 0,
-    planned_primary_request_count INTEGER NOT NULL DEFAULT 0,
-    planned_max_provider_call_count INTEGER NOT NULL DEFAULT 0,
-    next_attempt_number INTEGER NOT NULL DEFAULT 1,
-    actual_submission_count INTEGER NOT NULL DEFAULT 0,
-    actual_provider_job_count INTEGER NOT NULL DEFAULT 0,
-    actual_success_count INTEGER NOT NULL DEFAULT 0,
-    actual_failed_count INTEGER NOT NULL DEFAULT 0,
-    actual_input_units INTEGER NOT NULL DEFAULT 0,
-    actual_output_units INTEGER NOT NULL DEFAULT 0,
-    estimated_cost REAL NOT NULL DEFAULT 0,
-    actual_cost REAL NOT NULL DEFAULT 0,
-    currency TEXT NOT NULL DEFAULT 'CNY',
-    pricing_version TEXT NOT NULL DEFAULT '',
-    planned_call_count INTEGER NOT NULL DEFAULT 0
-);
 
-CREATE INDEX IF NOT EXISTS idx_dpgta_task ON desktop_pet_generation_task_actions(task_id);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dpgta_task_action ON desktop_pet_generation_task_actions(task_id, action_key);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_generation_frames (
-    id TEXT PRIMARY KEY,
-    task_id TEXT NOT NULL DEFAULT '',
-    task_action_id TEXT NOT NULL DEFAULT '',
-    execution_id TEXT DEFAULT '',
-    frame_index INTEGER NOT NULL DEFAULT 0,
-    frame_phase TEXT DEFAULT '',
-    status TEXT NOT NULL DEFAULT 'pending',
-    attempt_number INTEGER NOT NULL DEFAULT 1,
-    generation_attempt INTEGER NOT NULL DEFAULT 0,
-    provider_attempt INTEGER NOT NULL DEFAULT 0,
-    prompt_snapshot TEXT DEFAULT '',
-    negative_prompt_snapshot TEXT DEFAULT '',
-    provider TEXT DEFAULT '',
-    model TEXT DEFAULT '',
-    provider_request_id TEXT DEFAULT '',
-    provider_operation_id TEXT DEFAULT '',
-    source_image_path TEXT DEFAULT '',
-    previous_frame_path TEXT DEFAULT '',
-    result_image_path TEXT DEFAULT '',
-    result_mime_type TEXT DEFAULT '',
-    result_width INTEGER DEFAULT 0,
-    result_height INTEGER DEFAULT 0,
-    result_size INTEGER DEFAULT 0,
-    result_hash TEXT DEFAULT '',
-    provider_seed TEXT DEFAULT '',
-    error_code TEXT DEFAULT '',
-    error_message TEXT DEFAULT '',
-    created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '',
-    started_at TEXT DEFAULT '',
-    completed_at TEXT DEFAULT '',
-    row_version INTEGER NOT NULL DEFAULT 0,
-    current_stage TEXT NOT NULL DEFAULT 'created',
-    status_reason TEXT NOT NULL DEFAULT '',
-    failure_stage TEXT NOT NULL DEFAULT '',
-    last_transition_at TEXT NOT NULL DEFAULT ''
-);
 
-CREATE INDEX IF NOT EXISTS idx_dpgf_task ON desktop_pet_generation_frames(task_id);
-CREATE INDEX IF NOT EXISTS idx_dpgf_action ON desktop_pet_generation_frames(task_action_id);
-CREATE INDEX IF NOT EXISTS idx_dpgf_exec ON desktop_pet_generation_frames(execution_id);
-CREATE INDEX IF NOT EXISTS idx_dpgf_status ON desktop_pet_generation_frames(status);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dpgf_action_gen_frame ON desktop_pet_generation_frames(task_action_id, generation_attempt, frame_index);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_generation_call_logs (
-    id TEXT PRIMARY KEY,
-    task_id TEXT NOT NULL DEFAULT '',
-    task_action_id TEXT DEFAULT '',
-    frame_id TEXT DEFAULT '',
-    execution_id TEXT DEFAULT '',
-    provider TEXT DEFAULT '',
-    model TEXT DEFAULT '',
-    provider_request_id TEXT DEFAULT '',
-    request_started_at TEXT DEFAULT '',
-    request_completed_at TEXT DEFAULT '',
-    request_status TEXT DEFAULT '',
-    attempt_number INTEGER NOT NULL DEFAULT 0,
-    usage TEXT DEFAULT '',
-    error_code TEXT DEFAULT '',
-    error_message TEXT DEFAULT '',
-    created_at TEXT DEFAULT '',
-    attempt_id TEXT NOT NULL DEFAULT '',
-    artifact_id TEXT NOT NULL DEFAULT '',
-    call_type TEXT NOT NULL DEFAULT 'primary',
-    call_attempt_index INTEGER NOT NULL DEFAULT 0,
-    idempotency_key_hash TEXT NOT NULL DEFAULT '',
-    request_hash TEXT NOT NULL DEFAULT '',
-    submission_state TEXT NOT NULL DEFAULT '',
-    retry_class TEXT NOT NULL DEFAULT '',
-    http_status INTEGER NOT NULL DEFAULT 0,
-    usage_json TEXT NOT NULL DEFAULT '{}',
-    estimated_cost_json TEXT NOT NULL DEFAULT '{}',
-    actual_cost_json TEXT NOT NULL DEFAULT '{}',
-    response_receipt_json TEXT NOT NULL DEFAULT '{}'
-);
 
-CREATE INDEX IF NOT EXISTS idx_dpgcl_task ON desktop_pet_generation_call_logs(task_id);
-CREATE INDEX IF NOT EXISTS idx_dpgcl_exec ON desktop_pet_generation_call_logs(execution_id);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_processing_tasks (
     id TEXT PRIMARY KEY,
@@ -1213,173 +944,13 @@ CREATE INDEX IF NOT EXISTS idx_dppt_version ON desktop_pet_processing_tasks(proc
 CREATE INDEX IF NOT EXISTS idx_dppt_exec ON desktop_pet_processing_tasks(execution_id);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_dppt_gen_version ON desktop_pet_processing_tasks(generation_task_id, processing_version);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_processing_actions (
-    id TEXT PRIMARY KEY,
-    processing_task_id TEXT NOT NULL DEFAULT '',
-    generation_task_action_id TEXT NOT NULL DEFAULT '',
-    action_key TEXT NOT NULL DEFAULT '',
-    action_name_snapshot TEXT DEFAULT '',
-    source_attempt_number INTEGER NOT NULL DEFAULT 1,
-    status TEXT NOT NULL DEFAULT 'pending',
-    progress INTEGER NOT NULL DEFAULT 0,
-    source_frame_count INTEGER NOT NULL DEFAULT 0,
-    processed_frame_count INTEGER NOT NULL DEFAULT 0,
-    loop_type TEXT DEFAULT 'once',
-    fps INTEGER NOT NULL DEFAULT 10,
-    frame_duration_ms INTEGER NOT NULL DEFAULT 100,
-    anchor_type TEXT DEFAULT 'feet_center',
-    anchor_x REAL NOT NULL DEFAULT 0.5,
-    anchor_y REAL NOT NULL DEFAULT 0.92,
-    bounding_box TEXT DEFAULT '',
-    excluded INTEGER NOT NULL DEFAULT 0,
-    processing_attempt INTEGER NOT NULL DEFAULT 1,
-    last_successful_attempt INTEGER NOT NULL DEFAULT 0,
-    active_execution_id TEXT NOT NULL DEFAULT '',
-    row_version INTEGER NOT NULL DEFAULT 0,
-    error_code TEXT DEFAULT '',
-    error_message TEXT DEFAULT '',
-    created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '',
-    started_at TEXT DEFAULT '',
-    completed_at TEXT DEFAULT '',
-    current_stage TEXT NOT NULL DEFAULT 'created',
-    status_reason TEXT NOT NULL DEFAULT '',
-    failure_stage TEXT NOT NULL DEFAULT '',
-    last_transition_at TEXT NOT NULL DEFAULT '',
-    execution_id TEXT NOT NULL DEFAULT '',
-    worker_id TEXT NOT NULL DEFAULT '',
-    attempt_number INTEGER NOT NULL DEFAULT 1,
-    action_spec_schema_version INTEGER NOT NULL DEFAULT 1,
-    action_spec_version INTEGER NOT NULL DEFAULT 1,
-    action_spec_hash TEXT NOT NULL DEFAULT '',
-    return_policy TEXT NOT NULL DEFAULT '',
-    return_action_key TEXT NOT NULL DEFAULT '',
-    interruptible INTEGER NOT NULL DEFAULT 1,
-    interrupt_after_ms INTEGER NOT NULL DEFAULT 0,
-    minimum_play_ms INTEGER NOT NULL DEFAULT 0,
-    maximum_play_ms INTEGER NOT NULL DEFAULT 0,
-    priority INTEGER NOT NULL DEFAULT 0,
-    cooldown_ms INTEGER NOT NULL DEFAULT 0,
-    mutex_group TEXT NOT NULL DEFAULT '',
-    queue_policy TEXT NOT NULL DEFAULT 'replace',
-    dedup_window_ms INTEGER NOT NULL DEFAULT 0,
-    anchor_profile TEXT NOT NULL DEFAULT 'feet_center',
-    playback_mode TEXT NOT NULL DEFAULT '',
-    active_revision_id TEXT NOT NULL DEFAULT '',
-    next_revision_number INTEGER NOT NULL DEFAULT 1,
-    source_attempt_id TEXT NOT NULL DEFAULT '',
-    source_candidate_index INTEGER NOT NULL DEFAULT 0,
-    processing_profile_snapshot TEXT NOT NULL DEFAULT '{}'
-);
 
-CREATE INDEX IF NOT EXISTS idx_dppa_task ON desktop_pet_processing_actions(processing_task_id);
-CREATE INDEX IF NOT EXISTS idx_dppa_action ON desktop_pet_processing_actions(action_key);
-CREATE INDEX IF NOT EXISTS idx_dppa_status ON desktop_pet_processing_actions(status);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dppa_task_action ON desktop_pet_processing_actions(processing_task_id, action_key);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_processing_action_attempts (
-    id TEXT PRIMARY KEY,
-    processing_action_id TEXT NOT NULL DEFAULT '',
-    processing_task_id TEXT NOT NULL DEFAULT '',
-    action_key TEXT NOT NULL DEFAULT '',
-    attempt_number INTEGER NOT NULL DEFAULT 1,
-    source_generation_attempt INTEGER NOT NULL DEFAULT 1,
-    source_generation_attempt_id TEXT NOT NULL DEFAULT '',
-    source_generation_artifact_id TEXT NOT NULL DEFAULT '',
-    source_manifest_id TEXT NOT NULL DEFAULT '',
-    source_artifact_content_hash TEXT NOT NULL DEFAULT '',
-    execution_id TEXT NOT NULL DEFAULT '',
-    status TEXT NOT NULL DEFAULT 'pending',
-    progress INTEGER NOT NULL DEFAULT 0,
-    error_code TEXT NOT NULL DEFAULT '',
-    error_message TEXT NOT NULL DEFAULT '',
-    started_at TEXT NOT NULL DEFAULT '',
-    completed_at TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT '',
-    updated_at TEXT NOT NULL DEFAULT ''
-);
 
-CREATE INDEX IF NOT EXISTS idx_dppaa_task ON desktop_pet_processing_action_attempts(processing_task_id);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dppaa_action_attempt ON desktop_pet_processing_action_attempts(processing_action_id, attempt_number);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_processed_frames (
-    id TEXT PRIMARY KEY,
-    processing_action_id TEXT NOT NULL DEFAULT '',
-    source_frame_id TEXT NOT NULL DEFAULT '',
-    frame_index INTEGER NOT NULL DEFAULT 0,
-    status TEXT NOT NULL DEFAULT 'pending',
-    source_path TEXT DEFAULT '',
-    processed_path TEXT DEFAULT '',
-    width INTEGER DEFAULT 0,
-    height INTEGER DEFAULT 0,
-    content_hash TEXT DEFAULT '',
-    subject_box TEXT DEFAULT '',
-    anchor_x REAL DEFAULT 0,
-    anchor_y REAL DEFAULT 0,
-    alpha_coverage REAL DEFAULT 0,
-    quality_flags TEXT DEFAULT '',
-    processing_attempt_id TEXT NOT NULL DEFAULT '',
-    processing_attempt_number INTEGER NOT NULL DEFAULT 1,
-    execution_id TEXT NOT NULL DEFAULT '',
-    error_code TEXT DEFAULT '',
-    error_message TEXT DEFAULT '',
-    created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '',
-    row_version INTEGER NOT NULL DEFAULT 0,
-    current_stage TEXT NOT NULL DEFAULT 'created',
-    status_reason TEXT NOT NULL DEFAULT '',
-    failure_stage TEXT NOT NULL DEFAULT '',
-    last_transition_at TEXT NOT NULL DEFAULT '',
-    started_at TEXT NOT NULL DEFAULT '',
-    completed_at TEXT NOT NULL DEFAULT '',
-    revision_id TEXT NOT NULL DEFAULT '',
-    mask_path TEXT NOT NULL DEFAULT '',
-    transform_chain_id TEXT NOT NULL DEFAULT '',
-    measurement_id TEXT NOT NULL DEFAULT '',
-    source_artifact_id TEXT NOT NULL DEFAULT '',
-    source_cell_index INTEGER
-);
 
-CREATE INDEX IF NOT EXISTS idx_dppf_action ON desktop_pet_processed_frames(processing_action_id);
-CREATE INDEX IF NOT EXISTS idx_dppf_index ON desktop_pet_processed_frames(frame_index);
-CREATE INDEX IF NOT EXISTS idx_dppf_status ON desktop_pet_processed_frames(status);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dppf_attempt_frame ON desktop_pet_processed_frames(processing_attempt_id, frame_index);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_packages (
-    id TEXT PRIMARY KEY,
-    space_id TEXT NOT NULL DEFAULT '',
-    character_id TEXT NOT NULL DEFAULT '',
-    generation_task_id TEXT NOT NULL DEFAULT '',
-    processing_task_id TEXT NOT NULL DEFAULT '',
-    name TEXT NOT NULL DEFAULT '',
-    version INTEGER NOT NULL DEFAULT 1,
-    status TEXT NOT NULL DEFAULT 'draft',
-    default_action_key TEXT NOT NULL DEFAULT '',
-    canvas_width INTEGER NOT NULL DEFAULT 512,
-    canvas_height INTEGER NOT NULL DEFAULT 512,
-    package_path TEXT DEFAULT '',
-    manifest_path TEXT DEFAULT '',
-    preview_path TEXT DEFAULT '',
-    action_count INTEGER NOT NULL DEFAULT 0,
-    package_hash TEXT DEFAULT '',
-    included_actions TEXT DEFAULT '[]',
-    created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '',
-    row_version INTEGER NOT NULL DEFAULT 0,
-    current_stage TEXT NOT NULL DEFAULT 'created',
-    status_reason TEXT NOT NULL DEFAULT '',
-    failure_stage TEXT NOT NULL DEFAULT '',
-    last_transition_at TEXT NOT NULL DEFAULT '',
-    error_code TEXT NOT NULL DEFAULT '',
-    error_message TEXT NOT NULL DEFAULT '',
-    migrated_release_id TEXT NOT NULL DEFAULT ''
-);
 
-CREATE INDEX IF NOT EXISTS idx_dppkg_user ON desktop_pet_packages(space_id);
-CREATE INDEX IF NOT EXISTS idx_dppkg_gen ON desktop_pet_packages(generation_task_id);
-CREATE INDEX IF NOT EXISTS idx_dppkg_proc ON desktop_pet_packages(processing_task_id);
-CREATE INDEX IF NOT EXISTS idx_dppkg_status ON desktop_pet_packages(status);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_dppkg_proc_version ON desktop_pet_packages(processing_task_id, version);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_installations (
     id TEXT PRIMARY KEY,
@@ -1412,7 +983,6 @@ CREATE TABLE IF NOT EXISTS desktop_pet_installations (
     integrity_root TEXT NOT NULL DEFAULT '',
     last_error_code TEXT NOT NULL DEFAULT '',
     last_error_message TEXT NOT NULL DEFAULT '',
-    legacy_package_id TEXT NOT NULL DEFAULT '',
     device_id TEXT NOT NULL DEFAULT '',
     preview_artifact_path TEXT NOT NULL DEFAULT '',
     default_action_release_id TEXT NOT NULL DEFAULT '',
@@ -1436,7 +1006,6 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_settings (
     id TEXT PRIMARY KEY,
     installation_id TEXT NOT NULL DEFAULT '',
     always_on_top INTEGER NOT NULL DEFAULT 1,
-    launch_on_startup INTEGER NOT NULL DEFAULT 0,
     scale REAL NOT NULL DEFAULT 1.0,
     position_x INTEGER NOT NULL DEFAULT 0,
     position_y INTEGER NOT NULL DEFAULT 0,
@@ -1480,55 +1049,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_clients (
     updated_at TEXT DEFAULT ''
 );
 
-CREATE TABLE IF NOT EXISTS desktop_pet_runtime_commands (
-  id TEXT PRIMARY KEY,
-  runtime_id TEXT NOT NULL DEFAULT '',
-  space_id TEXT NOT NULL DEFAULT '',
-  installation_id TEXT NOT NULL DEFAULT '',
-  pet_instance_id TEXT NOT NULL DEFAULT '',
-  name TEXT NOT NULL DEFAULT '',
-  payload_json TEXT NOT NULL DEFAULT '{}',
-  durability TEXT NOT NULL DEFAULT 'durable',
-  coalesce_key TEXT NOT NULL DEFAULT '',
-  idempotency_key TEXT NOT NULL DEFAULT '',
-  desired_revision INTEGER NOT NULL DEFAULT 0,
-  status TEXT NOT NULL DEFAULT 'pending',
-  attempt_count INTEGER NOT NULL DEFAULT 0,
-  max_attempts INTEGER NOT NULL DEFAULT 5,
-  next_attempt_at TEXT NOT NULL DEFAULT '',
-  deadline_at TEXT NOT NULL DEFAULT '',
-  last_session_id TEXT NOT NULL DEFAULT '',
-  last_error_code TEXT NOT NULL DEFAULT '',
-  last_error_message TEXT NOT NULL DEFAULT '',
-  result_json TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '',
-  completed_at TEXT NOT NULL DEFAULT ''
-);
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_dprcmd_idempotency ON desktop_pet_runtime_commands(runtime_id, idempotency_key);
-CREATE INDEX IF NOT EXISTS idx_dprcmd_dispatch ON desktop_pet_runtime_commands(runtime_id, status, next_attempt_at);
-CREATE INDEX IF NOT EXISTS idx_dprcmd_coalesce ON desktop_pet_runtime_commands(runtime_id, coalesce_key, desired_revision);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_runtime_actual_states (
-  runtime_id TEXT NOT NULL,
-  installation_id TEXT NOT NULL DEFAULT '',
-  pet_instance_id TEXT NOT NULL DEFAULT '',
-  session_id TEXT NOT NULL DEFAULT '',
-  desired_revision INTEGER NOT NULL DEFAULT 0,
-  applied_settings_revision INTEGER NOT NULL DEFAULT 0,
-  visible INTEGER NOT NULL DEFAULT 0,
-  current_action_key TEXT NOT NULL DEFAULT '',
-  position_x INTEGER NOT NULL DEFAULT 0,
-  position_y INTEGER NOT NULL DEFAULT 0,
-  screen_id TEXT NOT NULL DEFAULT '',
-  scale REAL NOT NULL DEFAULT 1.0,
-  health TEXT NOT NULL DEFAULT 'unknown',
-  state_json TEXT NOT NULL DEFAULT '{}',
-  observed_at TEXT NOT NULL DEFAULT '',
-    updated_at TEXT DEFAULT '',
-  PRIMARY KEY(runtime_id, installation_id)
-);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_behavior_contexts (
     space_id TEXT NOT NULL DEFAULT '',
@@ -1687,8 +1209,6 @@ CREATE TABLE IF NOT EXISTS desktop_pet_package_releases (
     quality_gate_snapshot_id TEXT NOT NULL DEFAULT '',
     manifest_json TEXT NOT NULL DEFAULT '{}',
     published_at TEXT NOT NULL DEFAULT '',
-    legacy_package_id TEXT NOT NULL DEFAULT '',
-    legacy_version INTEGER NOT NULL DEFAULT 0,
     active_revision_set_hash TEXT NOT NULL DEFAULT '',
     quality_gate_id TEXT NOT NULL DEFAULT '',
     quality_gate_hash TEXT NOT NULL DEFAULT '',
@@ -1704,7 +1224,6 @@ CREATE INDEX IF NOT EXISTS idx_dprel_pet ON desktop_pet_package_releases(pet_id)
 CREATE INDEX IF NOT EXISTS idx_dprel_owner ON desktop_pet_package_releases(owner_space_id);
 CREATE INDEX IF NOT EXISTS idx_dprel_status ON desktop_pet_package_releases(status);
 CREATE INDEX IF NOT EXISTS idx_dprel_content_hash ON desktop_pet_package_releases(content_root_hash);
-CREATE INDEX IF NOT EXISTS idx_dprel_legacy ON desktop_pet_package_releases(legacy_package_id);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_dprel_pet_seq ON desktop_pet_package_releases(pet_id, release_sequence);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_release_files (
@@ -1722,34 +1241,6 @@ CREATE TABLE IF NOT EXISTS desktop_pet_release_files (
 );
 CREATE INDEX IF NOT EXISTS idx_dprf_release ON desktop_pet_release_files(release_id);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_package_operations (
-    id TEXT PRIMARY KEY,
-    operation_type TEXT NOT NULL DEFAULT '',
-    space_id TEXT NOT NULL DEFAULT '',
-    pet_id TEXT NOT NULL DEFAULT '',
-    release_id TEXT NOT NULL DEFAULT '',
-    idempotency_key TEXT NOT NULL DEFAULT '',
-    stage TEXT NOT NULL DEFAULT 'prepare',
-    status TEXT NOT NULL DEFAULT 'pending',
-    input_hash TEXT NOT NULL DEFAULT '',
-    staging_path_key TEXT NOT NULL DEFAULT '',
-    published_path_key TEXT NOT NULL DEFAULT '',
-    error_code TEXT NOT NULL DEFAULT '',
-    error_message TEXT NOT NULL DEFAULT '',
-    retry_count INTEGER NOT NULL DEFAULT 0,
-    result_json TEXT NOT NULL DEFAULT '{}',
-    lease_owner TEXT NOT NULL DEFAULT '',
-    lease_expires_at TEXT NOT NULL DEFAULT '',
-    heartbeat_at TEXT NOT NULL DEFAULT '',
-    snapshot_id TEXT NOT NULL DEFAULT '',
-    started_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '',
-    completed_at TEXT NOT NULL DEFAULT '',
-    UNIQUE(space_id, idempotency_key, operation_type)
-);
-CREATE INDEX IF NOT EXISTS idx_dppkgop_user ON desktop_pet_package_operations(space_id);
-CREATE INDEX IF NOT EXISTS idx_dppkgop_status ON desktop_pet_package_operations(status);
-CREATE INDEX IF NOT EXISTS idx_dppkgop_release ON desktop_pet_package_operations(release_id);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_release_build_snapshots (
     id TEXT PRIMARY KEY,
@@ -1846,39 +1337,6 @@ CREATE INDEX IF NOT EXISTS idx_drpj_release ON desktop_pet_release_publish_journ
 CREATE INDEX IF NOT EXISTS idx_drpj_stage ON desktop_pet_release_publish_journals(stage);
 CREATE INDEX IF NOT EXISTS idx_drpj_kind_stage ON desktop_pet_release_publish_journals(operation_kind, stage);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_legacy_package_mappings (
-    id TEXT PRIMARY KEY,
-    legacy_package_id TEXT NOT NULL DEFAULT '',
-    migrated_pet_id TEXT NOT NULL DEFAULT '',
-    migrated_release_id TEXT NOT NULL DEFAULT '',
-    migration_status TEXT NOT NULL DEFAULT 'pending',
-    source_content_hash TEXT NOT NULL DEFAULT '',
-    owner_space_id TEXT NOT NULL DEFAULT '',
-    source_manifest_hash TEXT NOT NULL DEFAULT '',
-    migration_operation_id TEXT NOT NULL DEFAULT '',
-    error_message TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT '',
-    updated_at TEXT NOT NULL DEFAULT '',
-    UNIQUE(legacy_package_id)
-);
-CREATE INDEX IF NOT EXISTS idx_dlpm_status ON desktop_pet_legacy_package_mappings(migration_status);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dlpm_owner_legacy ON desktop_pet_legacy_package_mappings(owner_space_id, legacy_package_id);
-
-CREATE TABLE IF NOT EXISTS desktop_pet_legacy_package_migration_operations (
-    id TEXT PRIMARY KEY,
-    legacy_package_id TEXT NOT NULL DEFAULT '',
-    space_id TEXT NOT NULL DEFAULT '',
-    state TEXT NOT NULL DEFAULT 'pending',
-    staging_path TEXT NOT NULL DEFAULT '',
-    error_code TEXT NOT NULL DEFAULT '',
-    error_message TEXT NOT NULL DEFAULT '',
-    started_at TEXT NOT NULL DEFAULT '',
-    updated_at TEXT NOT NULL DEFAULT '',
-    completed_at TEXT NOT NULL DEFAULT ''
-);
-CREATE INDEX IF NOT EXISTS idx_dlpmo_legacy ON desktop_pet_legacy_package_migration_operations(legacy_package_id);
-CREATE INDEX IF NOT EXISTS idx_dlpmo_state ON desktop_pet_legacy_package_migration_operations(state);
-
 CREATE TABLE IF NOT EXISTS desktop_pet_installation_operations (
 id TEXT PRIMARY KEY,
 operation_type TEXT NOT NULL DEFAULT '',
@@ -1914,55 +1372,8 @@ CREATE INDEX IF NOT EXISTS idx_dpinstop_device ON desktop_pet_installation_opera
 CREATE INDEX IF NOT EXISTS idx_dpinstop_lease ON desktop_pet_installation_operations(lease_owner, lease_expires_at);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_dpinstop_idempotency_unique ON desktop_pet_installation_operations(space_id, device_id, operation_type, idempotency_key) WHERE idempotency_key <> '';
 
-CREATE TABLE IF NOT EXISTS desktop_pet_active_bindings (
-    space_id TEXT PRIMARY KEY,
-    device_id TEXT NOT NULL DEFAULT '',
-    installation_id TEXT NOT NULL DEFAULT '',
-    pet_id TEXT NOT NULL DEFAULT '',
-    release_id TEXT NOT NULL DEFAULT '',
-    binding_revision INTEGER NOT NULL DEFAULT 0,
-    bound_reason TEXT NOT NULL DEFAULT 'install',
-    bound_at TEXT NOT NULL DEFAULT '',
-    desired_state TEXT NOT NULL DEFAULT 'disabled',
-    runtime_sync_state TEXT NOT NULL DEFAULT 'pending',
-    desired_updated_at TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT ''
-);
-CREATE INDEX IF NOT EXISTS idx_dpab_installation ON desktop_pet_active_bindings(installation_id);
-CREATE INDEX IF NOT EXISTS idx_dpab_user_device ON desktop_pet_active_bindings(space_id, device_id);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_installation_release_history (
-    id TEXT PRIMARY KEY,
-    installation_id TEXT NOT NULL DEFAULT '',
-    release_id TEXT NOT NULL DEFAULT '',
-    pet_id TEXT NOT NULL DEFAULT '',
-    version TEXT NOT NULL DEFAULT '',
-    activated_at TEXT NOT NULL DEFAULT '',
-    deactivated_at TEXT NOT NULL DEFAULT '',
-    deactivation_reason TEXT NOT NULL DEFAULT '',
-    is_current INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT ''
-);
-CREATE INDEX IF NOT EXISTS idx_dpirh_installation ON desktop_pet_installation_release_history(installation_id);
-CREATE INDEX IF NOT EXISTS idx_dpirh_current ON desktop_pet_installation_release_history(installation_id, is_current);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_package_validation_reports (
-    id TEXT PRIMARY KEY,
-    release_id TEXT NOT NULL DEFAULT '',
-    operation_id TEXT NOT NULL DEFAULT '',
-    source TEXT NOT NULL DEFAULT 'build',
-    verdict TEXT NOT NULL DEFAULT 'pending',
-    findings_json TEXT NOT NULL DEFAULT '[]',
-    file_count INTEGER NOT NULL DEFAULT 0,
-    error_count INTEGER NOT NULL DEFAULT 0,
-    warning_count INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT ''
-);
-CREATE INDEX IF NOT EXISTS idx_dpvr_release ON desktop_pet_package_validation_reports(release_id);
-CREATE INDEX IF NOT EXISTS idx_dpvr_operation ON desktop_pet_package_validation_reports(operation_id);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_action_revisions (
   id TEXT PRIMARY KEY,
@@ -2032,82 +1443,10 @@ CREATE INDEX IF NOT EXISTS idx_dpar_source_type ON desktop_pet_action_revisions(
 CREATE UNIQUE INDEX IF NOT EXISTS uq_dpar_processing_baseline_source ON desktop_pet_action_revisions(source_processing_revision_id) WHERE source_type = 'processing_baseline' AND source_processing_revision_id <> '';
 CREATE INDEX IF NOT EXISTS idx_dpar_stream_rev ON desktop_pet_action_revisions(action_stream_id, revision_number);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_action_active_revisions (
-  processing_task_id TEXT NOT NULL DEFAULT '',
-  character_id TEXT NOT NULL DEFAULT '',
-  action_key TEXT NOT NULL DEFAULT '',
-  revision_id TEXT NOT NULL DEFAULT '',
-  binding_version INTEGER NOT NULL DEFAULT 0,
-  activated_by TEXT NOT NULL DEFAULT '',
-  reason TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT '',
-    updated_at TEXT NOT NULL DEFAULT '',
-  space_id TEXT NOT NULL DEFAULT '',
-  active_action_revision_id TEXT NOT NULL DEFAULT '',
-  binding_revision INTEGER NOT NULL DEFAULT 0,
-  bound_reason TEXT NOT NULL DEFAULT '',
-  bound_by TEXT NOT NULL DEFAULT '',
-  bound_at TEXT NOT NULL DEFAULT '',
-  PRIMARY KEY(processing_task_id, action_key)
-);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_frame_assets (
-  id TEXT PRIMARY KEY,
-  character_id TEXT NOT NULL DEFAULT '',
-  content_hash TEXT NOT NULL DEFAULT '',
-  storage_path TEXT NOT NULL DEFAULT '',
-  mime_type TEXT NOT NULL DEFAULT '',
-  width INTEGER NOT NULL DEFAULT 0,
-  height INTEGER NOT NULL DEFAULT 0,
-  byte_size INTEGER NOT NULL DEFAULT 0,
-  alpha_mode TEXT NOT NULL DEFAULT '',
-  color_space TEXT NOT NULL DEFAULT '',
-  source_type TEXT NOT NULL DEFAULT '',
-  source_ref_id TEXT NOT NULL DEFAULT '',
-  original_hash TEXT NOT NULL DEFAULT '',
-  created_by TEXT NOT NULL DEFAULT '',
-  status TEXT NOT NULL DEFAULT 'staging',
-    created_at TEXT NOT NULL DEFAULT '',
-  space_id TEXT NOT NULL DEFAULT '',
-  storage_key TEXT NOT NULL DEFAULT '',
-  source_processing_revision_id TEXT NOT NULL DEFAULT '',
-  source_processing_artifact_id TEXT NOT NULL DEFAULT ''
-);
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dfa_hash ON desktop_pet_frame_assets(content_hash, mime_type);
-CREATE INDEX IF NOT EXISTS idx_dfa_source ON desktop_pet_frame_assets(source_type, source_ref_id);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dfa_source_artifact ON desktop_pet_frame_assets(source_type, source_processing_artifact_id);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_action_revision_frames (
-  id TEXT PRIMARY KEY,
-  revision_id TEXT NOT NULL DEFAULT '',
-  frame_id TEXT NOT NULL DEFAULT '',
-  asset_id TEXT NOT NULL DEFAULT '',
-  logical_index INTEGER NOT NULL DEFAULT 0,
-  duration_ms INTEGER NOT NULL DEFAULT 100,
-  source_frame_id TEXT NOT NULL DEFAULT '',
-  source_revision_id TEXT NOT NULL DEFAULT '',
-  source_attempt_id TEXT NOT NULL DEFAULT '',
-  anchor_x REAL NOT NULL DEFAULT 0.5,
-  anchor_y REAL NOT NULL DEFAULT 0.9,
-  anchor_space TEXT NOT NULL DEFAULT 'normalized_canvas',
-  offset_x REAL NOT NULL DEFAULT 0,
-  offset_y REAL NOT NULL DEFAULT 0,
-  mask_asset_id TEXT NOT NULL DEFAULT '',
-  transform_json TEXT NOT NULL DEFAULT '{}',
-  metadata_json TEXT NOT NULL DEFAULT '{}',
-  copied_from_frame_id TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT '',
-  source_processing_frame_artifact_id TEXT NOT NULL DEFAULT '',
-  source_processing_revision_id TEXT NOT NULL DEFAULT '',
-  source_processing_attempt_id TEXT NOT NULL DEFAULT '',
-  transform_hash TEXT NOT NULL DEFAULT '',
-  measurement_hash TEXT NOT NULL DEFAULT ''
-);
 
-CREATE INDEX IF NOT EXISTS idx_dparf_revision ON desktop_pet_action_revision_frames(revision_id);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dparf_rev_index ON desktop_pet_action_revision_frames(revision_id, logical_index);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dparf_rev_frame_id ON desktop_pet_action_revision_frames(revision_id, frame_id);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_edit_sessions (
   id TEXT PRIMARY KEY,
@@ -2139,36 +1478,9 @@ CREATE INDEX IF NOT EXISTS idx_des_character ON desktop_pet_edit_sessions(charac
 CREATE INDEX IF NOT EXISTS idx_des_task_action ON desktop_pet_edit_sessions(processing_task_id, action_key);
 CREATE INDEX IF NOT EXISTS idx_des_status ON desktop_pet_edit_sessions(status);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_edit_operations (
-  id TEXT PRIMARY KEY,
-  session_id TEXT NOT NULL DEFAULT '',
-  sequence INTEGER NOT NULL DEFAULT 0,
-  operation_type TEXT NOT NULL DEFAULT '',
-  payload_json TEXT NOT NULL DEFAULT '{}',
-  inverse_json TEXT NOT NULL DEFAULT '{}',
-  idempotency_key TEXT NOT NULL DEFAULT '',
-  base_version INTEGER NOT NULL DEFAULT 0,
-  result_version INTEGER NOT NULL DEFAULT 0,
-  status TEXT NOT NULL DEFAULT 'applied',
-  created_by TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT ''
-);
 
-CREATE INDEX IF NOT EXISTS idx_deo_session ON desktop_pet_edit_operations(session_id);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_deo_session_seq ON desktop_pet_edit_operations(session_id, sequence);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_deo_idempotency ON desktop_pet_edit_operations(session_id, idempotency_key);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_edit_checkpoints (
-  id TEXT PRIMARY KEY,
-  session_id TEXT NOT NULL DEFAULT '',
-  sequence INTEGER NOT NULL DEFAULT 0,
-  manifest_json TEXT NOT NULL DEFAULT '{}',
-  manifest_hash TEXT NOT NULL DEFAULT '',
-  frame_count INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL DEFAULT ''
-);
 
-CREATE INDEX IF NOT EXISTS idx_dec_session ON desktop_pet_edit_checkpoints(session_id);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_regeneration_jobs (
   id TEXT PRIMARY KEY,
@@ -2272,460 +1584,49 @@ CREATE INDEX IF NOT EXISTS idx_dec_status_quality ON desktop_pet_edit_candidates
 CREATE INDEX IF NOT EXISTS idx_dec_user ON desktop_pet_edit_candidates(space_id);
 CREATE INDEX IF NOT EXISTS idx_dec_candidate_rev ON desktop_pet_edit_candidates(candidate_revision_id);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_regeneration_journals (
-  id TEXT PRIMARY KEY,
-  job_id TEXT NOT NULL DEFAULT '',
-  state TEXT NOT NULL DEFAULT '',
-  attempt_id TEXT NOT NULL DEFAULT '',
-  provider_receipt_id TEXT NOT NULL DEFAULT '',
-  artifact_id TEXT NOT NULL DEFAULT '',
-  processing_revision_id TEXT NOT NULL DEFAULT '',
-  candidate_revision_id TEXT NOT NULL DEFAULT '',
-  quality_evaluation_id TEXT NOT NULL DEFAULT '',
-  error_message TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT ''
-);
 
-CREATE INDEX IF NOT EXISTS idx_drj_journal_job ON desktop_pet_regeneration_journals(job_id);
-CREATE INDEX IF NOT EXISTS idx_drj_journal_state ON desktop_pet_regeneration_journals(state);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_candidate_revision_metadata (
-  id TEXT PRIMARY KEY,
-  candidate_revision_id TEXT NOT NULL DEFAULT '',
-  source_type TEXT NOT NULL DEFAULT '',
-  parent_action_revision_id TEXT NOT NULL DEFAULT '',
-  parent_content_hash TEXT NOT NULL DEFAULT '',
-  base_binding_revision INTEGER NOT NULL DEFAULT 0,
-  regeneration_job_id TEXT NOT NULL DEFAULT '',
-  content_hash TEXT NOT NULL DEFAULT '',
-  frame_set_hash TEXT NOT NULL DEFAULT '',
-  action_config_hash TEXT NOT NULL DEFAULT '',
-  status TEXT NOT NULL DEFAULT 'candidate_committing',
-    created_at TEXT NOT NULL DEFAULT '',
-    updated_at TEXT NOT NULL DEFAULT ''
-);
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dcrm_candidate ON desktop_pet_candidate_revision_metadata(candidate_revision_id);
-CREATE INDEX IF NOT EXISTS idx_dcrm_job ON desktop_pet_candidate_revision_metadata(regeneration_job_id);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_edit_draft_snapshots (
-  id TEXT PRIMARY KEY,
-  session_id TEXT NOT NULL DEFAULT '',
-  session_version INTEGER NOT NULL DEFAULT 0,
-  space_id TEXT NOT NULL DEFAULT '',
-  character_id TEXT NOT NULL DEFAULT '',
-  action_stream_id TEXT NOT NULL DEFAULT '',
-  action_key TEXT NOT NULL DEFAULT '',
-  base_revision_id TEXT NOT NULL DEFAULT '',
-  base_content_hash TEXT NOT NULL DEFAULT '',
-  base_binding_revision INTEGER NOT NULL DEFAULT 0,
-  action_config_snapshot_json TEXT NOT NULL DEFAULT '{}',
-  action_config_hash TEXT NOT NULL DEFAULT '',
-  frames_json TEXT NOT NULL DEFAULT '[]',
-  frame_set_hash TEXT NOT NULL DEFAULT '',
-  snapshot_hash TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT ''
-);
 
-CREATE INDEX IF NOT EXISTS idx_deds_session ON desktop_pet_edit_draft_snapshots(session_id);
-CREATE INDEX IF NOT EXISTS idx_deds_hash ON desktop_pet_edit_draft_snapshots(snapshot_hash);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_deds_session_version ON desktop_pet_edit_draft_snapshots(session_id, session_version);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_regeneration_job_input_snapshots (
-  job_id TEXT PRIMARY KEY,
-  session_id TEXT NOT NULL DEFAULT '',
-  draft_snapshot_id TEXT NOT NULL DEFAULT '',
-  draft_snapshot_hash TEXT NOT NULL DEFAULT '',
-  request_json TEXT NOT NULL DEFAULT '{}',
-  request_hash TEXT NOT NULL DEFAULT '',
-  base_revision_id TEXT NOT NULL DEFAULT '',
-  base_content_hash TEXT NOT NULL DEFAULT '',
-  base_binding_revision INTEGER NOT NULL DEFAULT 0,
-  target_frame_id TEXT NOT NULL DEFAULT '',
-  target_frame_content_hash TEXT NOT NULL DEFAULT '',
-  generation_profile_id TEXT NOT NULL DEFAULT '',
-  processing_profile_id TEXT NOT NULL DEFAULT '',
-  quality_profile_id TEXT NOT NULL DEFAULT '',
-  cost_estimate_json TEXT NOT NULL DEFAULT '{}',
-  cost_estimate_hash TEXT NOT NULL DEFAULT '',
-  cost_confirmation_id TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT ''
-);
 
-CREATE INDEX IF NOT EXISTS idx_dris_session ON desktop_pet_regeneration_job_input_snapshots(session_id);
-CREATE INDEX IF NOT EXISTS idx_dris_draft ON desktop_pet_regeneration_job_input_snapshots(draft_snapshot_id);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_candidate_acceptance_operations (
-  id TEXT PRIMARY KEY,
-  candidate_id TEXT NOT NULL DEFAULT '',
-  session_id TEXT NOT NULL DEFAULT '',
-  space_id TEXT NOT NULL DEFAULT '',
-  action TEXT NOT NULL DEFAULT '',
-  idempotency_key TEXT NOT NULL DEFAULT '',
-  status TEXT NOT NULL DEFAULT 'pending',
-  error_message TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT '',
-  updated_at TEXT NOT NULL DEFAULT '',
-  completed_at TEXT NOT NULL DEFAULT ''
-);
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dcao_candidate_idem ON desktop_pet_candidate_acceptance_operations(candidate_id, idempotency_key);
-CREATE INDEX IF NOT EXISTS idx_dcao_session ON desktop_pet_candidate_acceptance_operations(session_id);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_editing_event_outbox (
-  id TEXT PRIMARY KEY,
-  event_id TEXT NOT NULL DEFAULT '',
-  event_type TEXT NOT NULL DEFAULT '',
-  aggregate_type TEXT NOT NULL DEFAULT 'editing_job',
-  aggregate_id TEXT NOT NULL DEFAULT '',
-  space_id TEXT NOT NULL DEFAULT '',
-  payload_json TEXT NOT NULL DEFAULT '{}',
-  payload_hash TEXT NOT NULL DEFAULT '',
-  status TEXT NOT NULL DEFAULT 'pending',
-  attempt_count INTEGER NOT NULL DEFAULT 0,
-    available_at TEXT NOT NULL DEFAULT '',
-  last_error TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT '',
-  published_at TEXT NOT NULL DEFAULT ''
-);
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_deeo_event ON desktop_pet_editing_event_outbox(event_id);
-CREATE INDEX IF NOT EXISTS idx_deeo_status ON desktop_pet_editing_event_outbox(status, available_at);
-CREATE INDEX IF NOT EXISTS idx_deeo_user ON desktop_pet_editing_event_outbox(space_id);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_edit_audit_logs (
-  id TEXT PRIMARY KEY,
-  event_type TEXT NOT NULL DEFAULT '',
-  space_id TEXT NOT NULL DEFAULT '',
-  character_id TEXT NOT NULL DEFAULT '',
-  action_key TEXT NOT NULL DEFAULT '',
-  edit_session_id TEXT NOT NULL DEFAULT '',
-  job_id TEXT NOT NULL DEFAULT '',
-  base_revision_id TEXT NOT NULL DEFAULT '',
-  candidate_revision_id TEXT NOT NULL DEFAULT '',
-  previous_active_revision_id TEXT NOT NULL DEFAULT '',
-  new_active_revision_id TEXT NOT NULL DEFAULT '',
-  reason TEXT NOT NULL DEFAULT '',
-    occurred_at TEXT NOT NULL DEFAULT ''
-);
 
-CREATE INDEX IF NOT EXISTS idx_deal_session ON desktop_pet_edit_audit_logs(edit_session_id);
-CREATE INDEX IF NOT EXISTS idx_deal_event ON desktop_pet_edit_audit_logs(event_type);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_mask_patches (
-  id TEXT PRIMARY KEY,
-  session_id TEXT NOT NULL DEFAULT '',
-  frame_id TEXT NOT NULL DEFAULT '',
-  source_asset_hash TEXT NOT NULL DEFAULT '',
-  result_asset_id TEXT NOT NULL DEFAULT '',
-  patch_type TEXT NOT NULL DEFAULT '',
-  brush_data_path TEXT NOT NULL DEFAULT '',
-  brush_size INTEGER NOT NULL DEFAULT 0,
-  brush_hardness REAL NOT NULL DEFAULT 0,
-  brush_opacity REAL NOT NULL DEFAULT 1,
-  coordinate_space TEXT NOT NULL DEFAULT 'normalized_canvas',
-  canvas_width INTEGER NOT NULL DEFAULT 0,
-  canvas_height INTEGER NOT NULL DEFAULT 0,
-  algorithm_version TEXT NOT NULL DEFAULT '',
-  operation_seq INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL DEFAULT ''
-);
 
-CREATE INDEX IF NOT EXISTS idx_dmp_session_frame ON desktop_pet_mask_patches(session_id, frame_id);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_publish_journal (
-  id TEXT PRIMARY KEY,
-  revision_id TEXT NOT NULL DEFAULT '',
-  session_id TEXT NOT NULL DEFAULT '',
-  action TEXT NOT NULL DEFAULT '',
-  status TEXT NOT NULL DEFAULT 'pending',
-  tmp_dir_path TEXT NOT NULL DEFAULT '',
-  final_dir_path TEXT NOT NULL DEFAULT '',
-  manifest_path TEXT NOT NULL DEFAULT '',
-  error_message TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT '',
-  completed_at TEXT NOT NULL DEFAULT ''
-);
 
-CREATE INDEX IF NOT EXISTS idx_dpj_revision ON desktop_pet_publish_journal(revision_id);
-CREATE INDEX IF NOT EXISTS idx_dpj_status ON desktop_pet_publish_journal(status);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_edit_idempotency (
-  id TEXT PRIMARY KEY,
-  space_id TEXT NOT NULL DEFAULT '',
-  session_id TEXT NOT NULL DEFAULT '',
-  idempotency_key TEXT NOT NULL DEFAULT '',
-  endpoint TEXT NOT NULL DEFAULT '',
-  result_json TEXT NOT NULL DEFAULT '{}',
-  status TEXT NOT NULL DEFAULT 'pending',
-    created_at TEXT NOT NULL DEFAULT ''
-);
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dei_user_session_key ON desktop_pet_edit_idempotency(space_id, session_id, idempotency_key);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_processing_revisions (
-  id TEXT PRIMARY KEY,
-  processing_task_id TEXT NOT NULL DEFAULT '',
-  processing_action_id TEXT NOT NULL DEFAULT '',
-  processing_attempt_id TEXT NOT NULL DEFAULT '',
-  revision_number INTEGER NOT NULL DEFAULT 1,
-  source_attempt_id TEXT NOT NULL DEFAULT '',
-  source_candidate_index INTEGER NOT NULL DEFAULT 0,
-  source_manifest_id TEXT NOT NULL DEFAULT '',
-  source_generation_attempt_id TEXT NOT NULL DEFAULT '',
-  source_generation_artifact_id TEXT NOT NULL DEFAULT '',
-  source_artifact_content_hash TEXT NOT NULL DEFAULT '',
-  status TEXT NOT NULL DEFAULT 'preparing',
-  config_snapshot TEXT NOT NULL DEFAULT '{}',
-  config_hash TEXT NOT NULL DEFAULT '',
-  pipeline_version TEXT NOT NULL DEFAULT '',
-  frame_count INTEGER NOT NULL DEFAULT 0,
-  root_relative_path TEXT NOT NULL DEFAULT '',
-  root_storage_key TEXT NOT NULL DEFAULT '',
-  revision_hash TEXT NOT NULL DEFAULT '',
-  content_root_hash TEXT NOT NULL DEFAULT '',
-  commit_id TEXT NOT NULL DEFAULT '',
-  active INTEGER NOT NULL DEFAULT 0,
-  error_code TEXT NOT NULL DEFAULT '',
-  error_message TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT '',
-  published_at TEXT NOT NULL DEFAULT '',
-  committed_at TEXT NOT NULL DEFAULT '',
-    updated_at TEXT NOT NULL DEFAULT '',
-  activated_at TEXT NOT NULL DEFAULT ''
-);
 
-CREATE INDEX IF NOT EXISTS idx_dppr_task ON desktop_pet_processing_revisions(processing_task_id);
-CREATE INDEX IF NOT EXISTS idx_dppr_action ON desktop_pet_processing_revisions(processing_action_id);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dppr_action_revision ON desktop_pet_processing_revisions(processing_action_id, revision_number);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_processing_artifacts (
-  id TEXT PRIMARY KEY,
-  revision_id TEXT NOT NULL DEFAULT '',
-  frame_index INTEGER,
-  artifact_kind TEXT NOT NULL DEFAULT '',
-  stage TEXT NOT NULL DEFAULT '',
-  relative_path TEXT NOT NULL DEFAULT '',
-  mime_type TEXT NOT NULL DEFAULT '',
-  width INTEGER NOT NULL DEFAULT 0,
-  height INTEGER NOT NULL DEFAULT 0,
-  byte_size INTEGER NOT NULL DEFAULT 0,
-  content_hash TEXT NOT NULL DEFAULT '',
-  source_artifact_id TEXT NOT NULL DEFAULT '',
-  source_cell_index INTEGER,
-  metadata_json TEXT NOT NULL DEFAULT '{}',
-    created_at TEXT NOT NULL DEFAULT ''
-);
 
-CREATE INDEX IF NOT EXISTS idx_dppa_revision ON desktop_pet_processing_artifacts(revision_id);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dppa_rev_kind_frame ON desktop_pet_processing_artifacts(revision_id, artifact_kind, frame_index);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_processing_transforms (
-  id TEXT PRIMARY KEY,
-  revision_id TEXT NOT NULL DEFAULT '',
-  frame_index INTEGER NOT NULL DEFAULT 0,
-  sequence_number INTEGER NOT NULL DEFAULT 0,
-  from_space TEXT NOT NULL DEFAULT '',
-  to_space TEXT NOT NULL DEFAULT '',
-  transform_type TEXT NOT NULL DEFAULT '',
-  matrix_json TEXT NOT NULL DEFAULT '[]',
-  parameters_json TEXT NOT NULL DEFAULT '{}',
-  algorithm_version TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT ''
-);
 
-CREATE INDEX IF NOT EXISTS idx_dppt_revision ON desktop_pet_processing_transforms(revision_id);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dppt_rev_frame_seq ON desktop_pet_processing_transforms(revision_id, frame_index, sequence_number);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_frame_measurements (
-  id TEXT PRIMARY KEY,
-  revision_id TEXT NOT NULL DEFAULT '',
-  frame_index INTEGER NOT NULL DEFAULT 0,
-  measurement_schema_version INTEGER NOT NULL DEFAULT 1,
-  subject_box_json TEXT NOT NULL DEFAULT '{}',
-  source_anchor_json TEXT NOT NULL DEFAULT '{}',
-  target_anchor_json TEXT NOT NULL DEFAULT '{}',
-  alpha_coverage REAL NOT NULL DEFAULT 0,
-  component_count INTEGER NOT NULL DEFAULT 0,
-  edge_contact_json TEXT NOT NULL DEFAULT '{}',
-  clipping_json TEXT NOT NULL DEFAULT '{}',
-  trajectory_json TEXT NOT NULL DEFAULT '{}',
-  measurement_json TEXT NOT NULL DEFAULT '{}',
-    created_at TEXT NOT NULL DEFAULT '',
-    updated_at TEXT NOT NULL DEFAULT ''
-);
 
-CREATE INDEX IF NOT EXISTS idx_dpfm_revision ON desktop_pet_frame_measurements(revision_id);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dpfm_rev_frame ON desktop_pet_frame_measurements(revision_id, frame_index);
 
-ALTER TABLE desktop_pet_processing_action_attempts ADD COLUMN lease_owner TEXT NOT NULL DEFAULT '';
-ALTER TABLE desktop_pet_processing_action_attempts ADD COLUMN lease_expires_at TEXT NOT NULL DEFAULT '';
-ALTER TABLE desktop_pet_processing_action_attempts ADD COLUMN heartbeat_at TEXT NOT NULL DEFAULT '';
-ALTER TABLE desktop_pet_processing_action_attempts ADD COLUMN commit_id TEXT NOT NULL DEFAULT '';
 
-ALTER TABLE desktop_pet_processing_actions ADD COLUMN pending_retry_request_id TEXT NOT NULL DEFAULT '';
-ALTER TABLE desktop_pet_processing_actions ADD COLUMN processing_warnings TEXT NOT NULL DEFAULT '';
-ALTER TABLE desktop_pet_processing_actions ADD COLUMN warning_count INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE desktop_pet_processing_actions ADD COLUMN action_spec_snapshot TEXT NOT NULL DEFAULT '{}';
 
-CREATE TABLE IF NOT EXISTS desktop_pet_processing_commit_journals (
-  id TEXT PRIMARY KEY,
-  commit_id TEXT NOT NULL DEFAULT '',
-  processing_attempt_id TEXT NOT NULL DEFAULT '',
-  processing_revision_id TEXT NOT NULL DEFAULT '',
-  source_manifest_id TEXT NOT NULL DEFAULT '',
-  status TEXT NOT NULL DEFAULT 'created',
-  staging_path TEXT NOT NULL DEFAULT '',
-  final_path TEXT NOT NULL DEFAULT '',
-  content_root_hash TEXT NOT NULL DEFAULT '',
-  pipeline_result_hash TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT '',
-    updated_at TEXT NOT NULL DEFAULT '',
-  last_error TEXT NOT NULL DEFAULT ''
-);
 
-CREATE INDEX IF NOT EXISTS idx_dppcj_commit ON desktop_pet_processing_commit_journals(commit_id);
-CREATE INDEX IF NOT EXISTS idx_dppcj_attempt ON desktop_pet_processing_commit_journals(processing_attempt_id);
-CREATE INDEX IF NOT EXISTS idx_dppcj_status ON desktop_pet_processing_commit_journals(status);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_processing_event_outbox (
-  id TEXT PRIMARY KEY,
-  event_type TEXT NOT NULL DEFAULT '',
-  aggregate_id TEXT NOT NULL DEFAULT '',
-  payload TEXT NOT NULL DEFAULT '{}',
-  status TEXT NOT NULL DEFAULT 'pending',
-    created_at TEXT NOT NULL DEFAULT '',
-  published_at TEXT NOT NULL DEFAULT '',
-  error TEXT NOT NULL DEFAULT '',
-  retry_count INTEGER NOT NULL DEFAULT 0
-);
 
-CREATE INDEX IF NOT EXISTS idx_dppeo_status ON desktop_pet_processing_event_outbox(status);
-CREATE INDEX IF NOT EXISTS idx_dppeo_aggregate ON desktop_pet_processing_event_outbox(aggregate_id);
-CREATE INDEX IF NOT EXISTS idx_dppeo_created ON desktop_pet_processing_event_outbox(created_at);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_processing_source_manifests (
-  id TEXT PRIMARY KEY,
-  schema_version INTEGER NOT NULL DEFAULT 1,
-  space_id TEXT NOT NULL DEFAULT '',
-  character_id TEXT NOT NULL DEFAULT '',
-  processing_task_id TEXT NOT NULL DEFAULT '',
-  processing_action_id TEXT NOT NULL DEFAULT '',
-  generation_task_id TEXT NOT NULL DEFAULT '',
-  generation_action_id TEXT NOT NULL DEFAULT '',
-  action_key TEXT NOT NULL DEFAULT '',
-  generation_mode TEXT NOT NULL DEFAULT '',
-  generation_attempt_id TEXT NOT NULL DEFAULT '',
-  active_artifact_binding_revision INTEGER NOT NULL DEFAULT 0,
-  source_artifact_id TEXT NOT NULL DEFAULT '',
-  artifact_role TEXT NOT NULL DEFAULT 'primary',
-  artifact_kind TEXT NOT NULL DEFAULT '',
-  artifact_content_hash TEXT NOT NULL DEFAULT '',
-  artifact_storage_key TEXT NOT NULL DEFAULT '',
-  artifact_relative_path TEXT NOT NULL DEFAULT '',
-  artifact_width INTEGER NOT NULL DEFAULT 0,
-  artifact_height INTEGER NOT NULL DEFAULT 0,
-  artifact_mime_type TEXT NOT NULL DEFAULT '',
-  artifact_bytes INTEGER NOT NULL DEFAULT 0,
-  candidate_index INTEGER NOT NULL DEFAULT 0,
-  reference_asset_id TEXT NOT NULL DEFAULT '',
-  reference_asset_content_hash TEXT NOT NULL DEFAULT '',
-  generation_plan_id TEXT NOT NULL DEFAULT '',
-  generation_plan_hash TEXT NOT NULL DEFAULT '',
-  prompt_document_id TEXT NOT NULL DEFAULT '',
-  prompt_content_hash TEXT NOT NULL DEFAULT '',
-  expected_frame_count INTEGER NOT NULL DEFAULT 0,
-  sprite_sheet_layout_json TEXT NOT NULL DEFAULT '{}',
-  keyframes_json TEXT NOT NULL DEFAULT '[]',
-  legacy_frames_json TEXT NOT NULL DEFAULT '[]',
-  frames_json TEXT NOT NULL DEFAULT '[]',
-  action_spec_snapshot_json TEXT NOT NULL DEFAULT '{}',
-  action_spec_hash TEXT NOT NULL DEFAULT '',
-  source_config_hash TEXT NOT NULL DEFAULT '',
-  manifest_hash TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT ''
-);
 
-CREATE INDEX IF NOT EXISTS idx_dppsm_task ON desktop_pet_processing_source_manifests(processing_task_id);
-CREATE INDEX IF NOT EXISTS idx_dppsm_gen_action ON desktop_pet_processing_source_manifests(generation_action_id);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dppsm_processing_action ON desktop_pet_processing_source_manifests(processing_action_id);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_processing_publish_journals (
-  id TEXT PRIMARY KEY,
-  revision_id TEXT NOT NULL DEFAULT '',
-  processing_task_id TEXT NOT NULL DEFAULT '',
-  processing_action_id TEXT NOT NULL DEFAULT '',
-  action_key TEXT NOT NULL DEFAULT '',
-  commit_id TEXT NOT NULL DEFAULT '',
-  stage TEXT NOT NULL DEFAULT 'preparing',
-  journal_status TEXT NOT NULL DEFAULT 'prepared',
-  staging_path TEXT NOT NULL DEFAULT '',
-  final_path TEXT NOT NULL DEFAULT '',
-  content_root_hash TEXT NOT NULL DEFAULT '',
-  detail TEXT NOT NULL DEFAULT '',
-  error_message TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT '',
-    updated_at TEXT NOT NULL DEFAULT '',
-  completed_at TEXT NOT NULL DEFAULT ''
-);
 
-CREATE INDEX IF NOT EXISTS idx_dppj_revision ON desktop_pet_processing_publish_journals(revision_id);
-CREATE INDEX IF NOT EXISTS idx_dppj_action ON desktop_pet_processing_publish_journals(processing_action_id);
-CREATE INDEX IF NOT EXISTS idx_dppj_status ON desktop_pet_processing_publish_journals(journal_status);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_processing_revision_active_bindings (
-  processing_action_id TEXT PRIMARY KEY,
-  active_revision_id TEXT NOT NULL DEFAULT '',
-  binding_revision INTEGER NOT NULL DEFAULT 0,
-  bound_at TEXT NOT NULL DEFAULT '',
-  bound_reason TEXT NOT NULL DEFAULT '',
-  superseded_revision_id TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT '',
-    updated_at TEXT NOT NULL DEFAULT ''
-);
 
-CREATE INDEX IF NOT EXISTS idx_dprab_revision ON desktop_pet_processing_revision_active_bindings(active_revision_id);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_processing_workspace_leases (
-  id TEXT PRIMARY KEY,
-  processing_task_id TEXT NOT NULL DEFAULT '',
-  processing_action_id TEXT NOT NULL DEFAULT '',
-  processing_attempt_id TEXT NOT NULL DEFAULT '',
-  commit_id TEXT NOT NULL DEFAULT '',
-  workspace_root TEXT NOT NULL DEFAULT '',
-  lease_owner TEXT NOT NULL DEFAULT '',
-  lease_expires_at TEXT NOT NULL DEFAULT '',
-  heartbeat_at TEXT NOT NULL DEFAULT '',
-  status TEXT NOT NULL DEFAULT 'active',
-  cleanup_reason TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT '',
-    updated_at TEXT NOT NULL DEFAULT ''
-);
 
-CREATE INDEX IF NOT EXISTS idx_dpwl_task ON desktop_pet_processing_workspace_leases(processing_task_id);
-CREATE INDEX IF NOT EXISTS idx_dpwl_attempt ON desktop_pet_processing_workspace_leases(processing_attempt_id);
-CREATE INDEX IF NOT EXISTS idx_dpwl_status ON desktop_pet_processing_workspace_leases(status);
-CREATE INDEX IF NOT EXISTS idx_dpwl_lease_expires ON desktop_pet_processing_workspace_leases(lease_expires_at);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_processing_retry_requests (
-  id TEXT PRIMARY KEY,
-  processing_task_id TEXT NOT NULL DEFAULT '',
-  processing_action_id TEXT NOT NULL DEFAULT '',
-  action_key TEXT NOT NULL DEFAULT '',
-  requested_by TEXT NOT NULL DEFAULT '',
-  request_reason TEXT NOT NULL DEFAULT '',
-  status TEXT NOT NULL DEFAULT 'queued',
-  allocated_attempt_id TEXT NOT NULL DEFAULT '',
-  error_code TEXT NOT NULL DEFAULT '',
-  error_message TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT '',
-    updated_at TEXT NOT NULL DEFAULT '',
-  completed_at TEXT NOT NULL DEFAULT ''
-);
 
-CREATE INDEX IF NOT EXISTS idx_dprr_task ON desktop_pet_processing_retry_requests(processing_task_id);
-CREATE INDEX IF NOT EXISTS idx_dprr_action ON desktop_pet_processing_retry_requests(processing_action_id);
-CREATE INDEX IF NOT EXISTS idx_dprr_status ON desktop_pet_processing_retry_requests(status);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_quality_evaluations (
   id TEXT PRIMARY KEY,
@@ -2774,298 +1675,23 @@ CREATE INDEX IF NOT EXISTS idx_dpqe_task ON desktop_pet_quality_evaluations(proc
 CREATE INDEX IF NOT EXISTS idx_dpqe_action ON desktop_pet_quality_evaluations(processing_action_id);
 CREATE INDEX IF NOT EXISTS idx_dpqe_status ON desktop_pet_quality_evaluations(execution_status);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_quality_findings (
-  id TEXT PRIMARY KEY,
-  evaluation_id TEXT NOT NULL,
-  rule_code TEXT NOT NULL,
-  rule_version INTEGER NOT NULL,
-  dimension_key TEXT NOT NULL,
-  severity TEXT NOT NULL,
-  hard_gate INTEGER NOT NULL DEFAULT 0,
-  frame_indexes_json TEXT NOT NULL DEFAULT '[]',
-  frame_pairs_json TEXT NOT NULL DEFAULT '[]',
-  regions_json TEXT NOT NULL DEFAULT '[]',
-  metric_name TEXT DEFAULT '',
-  observed_value REAL,
-  threshold_value REAL,
-  comparison TEXT DEFAULT '',
-  confidence REAL NOT NULL DEFAULT 0,
-  message_key TEXT NOT NULL,
-  message TEXT NOT NULL,
-  suggested_action TEXT DEFAULT '',
-  evidence_ref TEXT DEFAULT '',
-  sort_key TEXT NOT NULL,
-    created_at TEXT DEFAULT ''
-);
-CREATE INDEX IF NOT EXISTS idx_dpqf_eval ON desktop_pet_quality_findings(evaluation_id);
-CREATE INDEX IF NOT EXISTS idx_dpqf_rule ON desktop_pet_quality_findings(rule_code);
-CREATE INDEX IF NOT EXISTS idx_dpqf_severity ON desktop_pet_quality_findings(severity);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_quality_dimension_scores (
-  id TEXT PRIMARY KEY,
-  evaluation_id TEXT NOT NULL,
-  dimension_key TEXT NOT NULL,
-  applicability TEXT NOT NULL,
-  score REAL,
-  confidence REAL NOT NULL DEFAULT 0,
-  weight REAL NOT NULL DEFAULT 0,
-  details_json TEXT NOT NULL DEFAULT '{}',
-    created_at TEXT DEFAULT '',
-  UNIQUE(evaluation_id, dimension_key)
-);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_quality_gate_results (
-  id TEXT PRIMARY KEY,
-  processing_task_id TEXT NOT NULL,
-  gate_status TEXT NOT NULL,
-  required_action_count INTEGER NOT NULL DEFAULT 0,
-  accepted_action_count INTEGER NOT NULL DEFAULT 0,
-  warning_action_count INTEGER NOT NULL DEFAULT 0,
-  review_action_count INTEGER NOT NULL DEFAULT 0,
-  rejected_action_count INTEGER NOT NULL DEFAULT 0,
-  failed_evaluation_count INTEGER NOT NULL DEFAULT 0,
-  snapshot_json TEXT NOT NULL,
-  snapshot_hash TEXT NOT NULL,
-  active_revision_set_hash TEXT NOT NULL DEFAULT '',
-  evaluation_set_hash TEXT NOT NULL DEFAULT '',
-  ruleset_version TEXT NOT NULL DEFAULT '',
-  invalidated_at TEXT NOT NULL DEFAULT '',
-  profile_id TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT ''
-);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dpqg_task_snapshot ON desktop_pet_quality_gate_results(processing_task_id, snapshot_hash);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_action_generation_attempts (
-    id TEXT PRIMARY KEY,
-    task_id TEXT NOT NULL DEFAULT '',
-    task_action_id TEXT NOT NULL DEFAULT '',
-    attempt_number INTEGER NOT NULL DEFAULT 1,
-    parent_attempt_id TEXT NOT NULL DEFAULT '',
-    mode TEXT NOT NULL DEFAULT 'sprite_sheet',
-    reason TEXT NOT NULL DEFAULT '',
-    status TEXT NOT NULL DEFAULT 'pending',
-    provider TEXT NOT NULL DEFAULT '',
-    model TEXT NOT NULL DEFAULT '',
-    config_id INTEGER NOT NULL DEFAULT 0,
-    config_revision TEXT NOT NULL DEFAULT '',
-    capability_hash TEXT NOT NULL DEFAULT '',
-    reference_asset_id TEXT NOT NULL DEFAULT '',
-    plan_json TEXT NOT NULL DEFAULT '{}',
-    prompt_document_json TEXT NOT NULL DEFAULT '{}',
-    prompt_snapshot TEXT NOT NULL DEFAULT '',
-    prompt_hash TEXT NOT NULL DEFAULT '',
-    negative_prompt_snapshot TEXT NOT NULL DEFAULT '',
-    seed_policy TEXT NOT NULL DEFAULT 'auto',
-    seed_value INTEGER,
-    output_count INTEGER NOT NULL DEFAULT 1,
-    execution_id TEXT NOT NULL DEFAULT '',
-    worker_id TEXT NOT NULL DEFAULT '',
-    lease TEXT NOT NULL DEFAULT '',
-    provider_request_id TEXT NOT NULL DEFAULT '',
-    provider_operation_id TEXT NOT NULL DEFAULT '',
-    submitted_at TEXT NOT NULL DEFAULT '',
-    completed_at TEXT NOT NULL DEFAULT '',
-    error_code TEXT NOT NULL DEFAULT '',
-    error_message TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT '',
-    updated_at TEXT NOT NULL DEFAULT '',
-    active_succeeded_attempt_id TEXT NOT NULL DEFAULT '',
-    active_primary_artifact_id TEXT NOT NULL DEFAULT '',
-    artifact_role TEXT NOT NULL DEFAULT 'primary',
-    cancel_reason TEXT NOT NULL DEFAULT '',
-    cancel_requested_at TEXT NOT NULL DEFAULT '',
-    cancelled_at TEXT NOT NULL DEFAULT '',
-    request_hash TEXT NOT NULL DEFAULT '',
-    action_spec_hash TEXT NOT NULL DEFAULT '',
-    provider_config_hash TEXT NOT NULL DEFAULT '',
-    prompt_document_id TEXT NOT NULL DEFAULT '',
-    prompt_content_hash TEXT NOT NULL DEFAULT '',
-    negative_prompt_hash TEXT NOT NULL DEFAULT '',
-    actual_cost REAL NOT NULL DEFAULT 0,
-    actual_input_units INTEGER NOT NULL DEFAULT 0,
-    actual_output_units INTEGER NOT NULL DEFAULT 0,
-    lease_owner TEXT NOT NULL DEFAULT '',
-    lease_expires_at TEXT NOT NULL DEFAULT '',
-    heartbeat_at TEXT NOT NULL DEFAULT '',
-    retry_after_hint INTEGER NOT NULL DEFAULT 0,
-    poll_count INTEGER NOT NULL DEFAULT 0,
-    UNIQUE(task_action_id, attempt_number)
-);
 
-CREATE INDEX IF NOT EXISTS idx_gen_attempts_task_id ON desktop_pet_action_generation_attempts(task_id);
-CREATE INDEX IF NOT EXISTS idx_gen_attempts_action_id ON desktop_pet_action_generation_attempts(task_action_id);
-CREATE INDEX IF NOT EXISTS idx_gen_attempts_status ON desktop_pet_action_generation_attempts(status);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_generation_artifacts (
-    id TEXT PRIMARY KEY,
-    task_id TEXT NOT NULL DEFAULT '',
-    task_action_id TEXT NOT NULL DEFAULT '',
-    attempt_id TEXT NOT NULL DEFAULT '',
-    artifact_type TEXT NOT NULL DEFAULT 'sprite_sheet_raw',
-    segment_index INTEGER NOT NULL DEFAULT 0,
-    candidate_index INTEGER NOT NULL DEFAULT 0,
-    is_primary INTEGER NOT NULL DEFAULT 0,
-    status TEXT NOT NULL DEFAULT 'pending',
-    relative_path TEXT NOT NULL DEFAULT '',
-    mime TEXT NOT NULL DEFAULT '',
-    width INTEGER NOT NULL DEFAULT 0,
-    height INTEGER NOT NULL DEFAULT 0,
-    size INTEGER NOT NULL DEFAULT 0,
-    hash TEXT NOT NULL DEFAULT '',
-    provider_request_id TEXT NOT NULL DEFAULT '',
-    provider_operation_id TEXT NOT NULL DEFAULT '',
-    layout_json TEXT NOT NULL DEFAULT '{}',
-    metadata_json TEXT NOT NULL DEFAULT '{}',
-    created_at TEXT NOT NULL DEFAULT '',
-    updated_at TEXT NOT NULL DEFAULT '',
-    artifact_role TEXT NOT NULL DEFAULT 'primary',
-    storage_key TEXT NOT NULL DEFAULT '',
-    content_hash TEXT NOT NULL DEFAULT '',
-    source_reference_asset_id TEXT NOT NULL DEFAULT '',
-    source_prompt_hash TEXT NOT NULL DEFAULT '',
-    storage_backend TEXT NOT NULL DEFAULT 'local',
-    UNIQUE(attempt_id, artifact_type, segment_index, candidate_index)
-);
 
-CREATE INDEX IF NOT EXISTS idx_gen_artifacts_task_id ON desktop_pet_generation_artifacts(task_id);
-CREATE INDEX IF NOT EXISTS idx_gen_artifacts_attempt_id ON desktop_pet_generation_artifacts(attempt_id);
-CREATE INDEX IF NOT EXISTS idx_gen_artifacts_action_id ON desktop_pet_generation_artifacts(task_action_id);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_reference_assets (
-    id TEXT PRIMARY KEY,
-    task_id TEXT NOT NULL DEFAULT '',
-    character_id TEXT NOT NULL DEFAULT '',
-    source_path TEXT NOT NULL DEFAULT '',
-    source_hash TEXT NOT NULL DEFAULT '',
-    source_mime TEXT NOT NULL DEFAULT '',
-    source_width INTEGER NOT NULL DEFAULT 0,
-    source_height INTEGER NOT NULL DEFAULT 0,
-    normalized_path TEXT NOT NULL DEFAULT '',
-    normalized_hash TEXT NOT NULL DEFAULT '',
-    normalized_mime TEXT NOT NULL DEFAULT '',
-    normalized_width INTEGER NOT NULL DEFAULT 0,
-    normalized_height INTEGER NOT NULL DEFAULT 0,
-    config_hash TEXT NOT NULL DEFAULT '',
-    content_hash TEXT NOT NULL DEFAULT '',
-    normalizer_version TEXT NOT NULL DEFAULT '',
-    subject_box TEXT NOT NULL DEFAULT '{}',
-    anchor TEXT NOT NULL DEFAULT '{}',
-    coordinate_space TEXT NOT NULL DEFAULT '',
-    space_id TEXT NOT NULL DEFAULT '',
-    source_artifact_id TEXT NOT NULL DEFAULT '',
-    storage_path TEXT NOT NULL DEFAULT '',
-    status TEXT NOT NULL DEFAULT 'staging',
-    source_bytes INTEGER NOT NULL DEFAULT 0,
-    normalized_bytes INTEGER NOT NULL DEFAULT 0,
-    normalizer_profile_id TEXT NOT NULL DEFAULT '',
-    normalizer_profile_version TEXT NOT NULL DEFAULT '',
-    normalizer_config_hash TEXT NOT NULL DEFAULT '',
-    normalized_artifact_id TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT ''
-);
 
-CREATE INDEX IF NOT EXISTS idx_ref_assets_task_id ON desktop_pet_reference_assets(task_id);
-CREATE INDEX IF NOT EXISTS idx_ref_assets_source_hash ON desktop_pet_reference_assets(source_hash);
-CREATE INDEX IF NOT EXISTS idx_ref_assets_content_hash ON desktop_pet_reference_assets(content_hash);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_generation_action_active_bindings (
-    generation_action_id TEXT PRIMARY KEY,
-    active_attempt_id TEXT NOT NULL DEFAULT '',
-    active_primary_artifact_id TEXT NOT NULL DEFAULT '',
-    artifact_content_hash TEXT NOT NULL DEFAULT '',
-    binding_revision INTEGER NOT NULL DEFAULT 0,
-    bound_at TEXT NOT NULL DEFAULT '',
-    bound_reason TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT '',
-    updated_at TEXT NOT NULL DEFAULT ''
-);
 
-CREATE INDEX IF NOT EXISTS idx_active_bindings_attempt ON desktop_pet_generation_action_active_bindings(active_attempt_id);
-CREATE INDEX IF NOT EXISTS idx_active_bindings_artifact ON desktop_pet_generation_action_active_bindings(active_primary_artifact_id);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_generation_provider_receipts (
-    id TEXT PRIMARY KEY,
-    attempt_id TEXT NOT NULL DEFAULT '',
-    provider_id TEXT NOT NULL DEFAULT '',
-    model TEXT NOT NULL DEFAULT '',
-    idempotency_key TEXT NOT NULL DEFAULT '',
-    provider_request_id TEXT NOT NULL DEFAULT '',
-    provider_task_id TEXT NOT NULL DEFAULT '',
-    submitted_at TEXT NOT NULL DEFAULT '',
-    first_polled_at TEXT NOT NULL DEFAULT '',
-    completed_at TEXT NOT NULL DEFAULT '',
-    request_hash TEXT NOT NULL DEFAULT '',
-    response_hash TEXT NOT NULL DEFAULT '',
-    provider_status TEXT NOT NULL DEFAULT '',
-    raw_metadata_json TEXT NOT NULL DEFAULT '{}',
-    created_at TEXT NOT NULL DEFAULT '',
-    updated_at TEXT NOT NULL DEFAULT ''
-);
 
-CREATE INDEX IF NOT EXISTS idx_provider_receipts_attempt ON desktop_pet_generation_provider_receipts(attempt_id);
-CREATE INDEX IF NOT EXISTS idx_provider_receipts_request ON desktop_pet_generation_provider_receipts(provider_request_id);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_provider_receipts_idempotency ON desktop_pet_generation_provider_receipts(idempotency_key) WHERE idempotency_key != '';
 
-CREATE TABLE IF NOT EXISTS desktop_pet_generation_artifact_publish_journal (
-    id TEXT PRIMARY KEY,
-    artifact_id TEXT NOT NULL DEFAULT '',
-    attempt_id TEXT NOT NULL DEFAULT '',
-    task_id TEXT NOT NULL DEFAULT '',
-    task_action_id TEXT NOT NULL DEFAULT '',
-    staging_path TEXT NOT NULL DEFAULT '',
-    final_path TEXT NOT NULL DEFAULT '',
-    content_hash TEXT NOT NULL DEFAULT '',
-    storage_key TEXT NOT NULL DEFAULT '',
-    journal_status TEXT NOT NULL DEFAULT 'staging',
-    error_message TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT '',
-    updated_at TEXT NOT NULL DEFAULT '',
-    completed_at TEXT NOT NULL DEFAULT ''
-);
 
-CREATE INDEX IF NOT EXISTS idx_publish_journal_artifact ON desktop_pet_generation_artifact_publish_journal(artifact_id);
-CREATE INDEX IF NOT EXISTS idx_publish_journal_status ON desktop_pet_generation_artifact_publish_journal(journal_status);
-CREATE INDEX IF NOT EXISTS idx_publish_journal_attempt ON desktop_pet_generation_artifact_publish_journal(attempt_id);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_data_repair_audit (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    migration_version TEXT NOT NULL DEFAULT '',
-    entity_type TEXT NOT NULL DEFAULT '',
-    entity_id TEXT NOT NULL DEFAULT '',
-    group_key TEXT NOT NULL DEFAULT '',
-    decision TEXT NOT NULL DEFAULT '',
-    kept_id TEXT NOT NULL DEFAULT '',
-    removed_ids TEXT NOT NULL DEFAULT '[]',
-    details TEXT NOT NULL DEFAULT '{}',
-    created_at TEXT NOT NULL DEFAULT ''
-);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_state_transitions (
-    id TEXT PRIMARY KEY,
-    entity_type TEXT NOT NULL,
-    entity_id TEXT NOT NULL,
-    parent_task_id TEXT NOT NULL DEFAULT '',
-    execution_id TEXT NOT NULL DEFAULT '',
-    attempt_id TEXT NOT NULL DEFAULT '',
-    from_status TEXT NOT NULL,
-    to_status TEXT NOT NULL,
-    from_stage TEXT NOT NULL DEFAULT '',
-    to_stage TEXT NOT NULL DEFAULT '',
-    reason_code TEXT NOT NULL,
-    error_code TEXT NOT NULL DEFAULT '',
-    error_message TEXT NOT NULL DEFAULT '',
-    failure_stage TEXT NOT NULL DEFAULT '',
-    actor_type TEXT NOT NULL,
-    actor_id TEXT NOT NULL DEFAULT '',
-    previous_version INTEGER NOT NULL DEFAULT 0,
-    current_version INTEGER NOT NULL DEFAULT 0,
-    metadata_json TEXT NOT NULL DEFAULT '{}',
-    created_at TEXT NOT NULL
-);
 
-CREATE INDEX IF NOT EXISTS idx_dp_transition_entity ON desktop_pet_state_transitions(entity_type, entity_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_dp_transition_parent ON desktop_pet_state_transitions(parent_task_id, created_at);
 
 
 -- ====== 自动同步：迁移中缺失的表定义 ======
@@ -3105,59 +1731,6 @@ CREATE TABLE IF NOT EXISTS dead_letter_records (
 				last_error TEXT DEFAULT '',
 				created_at TEXT DEFAULT '',
 				updated_at TEXT DEFAULT ''
-			);
-
--- 来源: consolidation_auto_migrate.go
-CREATE TABLE IF NOT EXISTS deletion_tombstones (
-				id TEXT PRIMARY KEY,
-				target_id TEXT DEFAULT '',
-				target_type TEXT DEFAULT '',
-				scope TEXT DEFAULT '',
-				status TEXT DEFAULT '',
-				items_count INTEGER DEFAULT 0,
-				cleaned_count INTEGER DEFAULT 0,
-				failed_count INTEGER DEFAULT 0,
-				requested_at DATETIME,
-				blocked_until DATETIME,
-				completed_at DATETIME,
-				retrieval_blocked INTEGER DEFAULT 0
-			);
-
--- 来源: consolidation_auto_migrate.go
-CREATE TABLE IF NOT EXISTS data_lifecycle_outbox_cleanup_items (
-				id TEXT PRIMARY KEY,
-				storage TEXT DEFAULT '',
-				target_id TEXT DEFAULT '',
-				target_kind TEXT DEFAULT '',
-				status TEXT DEFAULT '',
-				attempts INTEGER DEFAULT 0,
-				max_attempts INTEGER DEFAULT 5,
-				next_retry_at DATETIME,
-				lease_owner TEXT DEFAULT '',
-				lease_token TEXT DEFAULT '',
-				leased_until DATETIME,
-				last_error TEXT DEFAULT '',
-				cleaned_at DATETIME
-			);
-
--- 来源: consolidation_auto_migrate.go
-CREATE TABLE IF NOT EXISTS data_lifecycle_recalculation_tasks (
-				id TEXT PRIMARY KEY,
-				trigger_type TEXT DEFAULT '',
-				target_id TEXT DEFAULT '',
-				affected_zone TEXT DEFAULT '',
-				priority INTEGER DEFAULT 0,
-				created_at DATETIME,
-				status TEXT DEFAULT '',
-				description TEXT DEFAULT '',
-				attempts INTEGER DEFAULT 0,
-				max_attempts INTEGER DEFAULT 3,
-				next_retry_at DATETIME,
-				lease_owner TEXT DEFAULT '',
-				lease_token TEXT DEFAULT '',
-				leased_until DATETIME,
-				last_error TEXT DEFAULT '',
-				completed_at DATETIME
 			);
 
 -- 来源: consolidation_auto_migrate.go
@@ -3202,7 +1775,6 @@ archived_at TEXT NOT NULL DEFAULT ''
     disabled_at TEXT NOT NULL DEFAULT ''
 );
 
---- 来源: extensions.go
 CREATE TABLE IF NOT EXISTS extension_versions (
 id TEXT PRIMARY KEY,
 extension_id TEXT NOT NULL,
@@ -3231,62 +1803,12 @@ UNIQUE(extension_id, version)
 );
 
 -- 来源: extensions.go
-CREATE TABLE IF NOT EXISTS extension_capability_grants (
-id TEXT PRIMARY KEY,
-extension_id TEXT NOT NULL,
-capability TEXT NOT NULL,
-decision TEXT NOT NULL DEFAULT 'deny',
-scope_type TEXT NOT NULL DEFAULT 'global',
-scope_id TEXT NOT NULL DEFAULT '',
-expires_at TEXT NOT NULL DEFAULT '',
-consumed_at TEXT NOT NULL DEFAULT '',
-created_at TEXT NOT NULL DEFAULT '',
-updated_at TEXT NOT NULL DEFAULT '',
-UNIQUE(extension_id, capability, scope_type, scope_id)
-);
 
 -- 来源: extensions.go
-CREATE TABLE IF NOT EXISTS extension_configs (
-id TEXT PRIMARY KEY,
-extension_id TEXT NOT NULL,
-scope_type TEXT NOT NULL DEFAULT 'global',
-scope_id TEXT NOT NULL DEFAULT '',
-config_json TEXT NOT NULL DEFAULT '{}',
-config_version INTEGER NOT NULL DEFAULT 1,
-created_at TEXT NOT NULL DEFAULT '',
-updated_at TEXT NOT NULL DEFAULT '',
-    archived_at TEXT NOT NULL DEFAULT '',
-UNIQUE(extension_id, scope_type, scope_id)
-);
 
 -- 来源: extensions.go
-CREATE TABLE IF NOT EXISTS extension_runs (
-run_id TEXT PRIMARY KEY,
-extension_id TEXT NOT NULL,
-extension_version TEXT NOT NULL DEFAULT '',
-skill_id TEXT NOT NULL,
-space_id TEXT NOT NULL DEFAULT '',
-character_id TEXT NOT NULL DEFAULT '',
-conversation_id TEXT NOT NULL DEFAULT '',
-channel TEXT NOT NULL DEFAULT '',
-trigger TEXT NOT NULL DEFAULT '',
-status TEXT NOT NULL DEFAULT 'pending',
-input_summary TEXT NOT NULL DEFAULT '{}',
-output_summary TEXT NOT NULL DEFAULT '{}',
-side_effects_json TEXT NOT NULL DEFAULT '[]',
-idempotency_key TEXT NOT NULL DEFAULT '',
-started_at TEXT NOT NULL DEFAULT '',
-finished_at TEXT NOT NULL DEFAULT '',
-duration_ms INTEGER NOT NULL DEFAULT 0,
-error_code TEXT NOT NULL DEFAULT '',
-error_detail TEXT NOT NULL DEFAULT '',
-trace_id TEXT NOT NULL DEFAULT '',
-created_at TEXT NOT NULL DEFAULT '',
-UNIQUE(skill_id, character_id, conversation_id, idempotency_key)
-);
 
 -- 来源: extension_agent_skills.go
---- 来源: extension_owned_resources.go
 CREATE TABLE IF NOT EXISTS extension_owned_resources (
 id TEXT PRIMARY KEY,
 extension_id TEXT NOT NULL,
@@ -3324,51 +1846,10 @@ updated_at TEXT NOT NULL
 );
 
 -- 来源: extension_packages.go
-CREATE TABLE IF NOT EXISTS extension_package_installations (
-id TEXT PRIMARY KEY,
-extension_id TEXT NOT NULL DEFAULT '',
-extension_version TEXT NOT NULL DEFAULT '',
-operation TEXT NOT NULL,
-source TEXT NOT NULL DEFAULT '',
-package_hash TEXT NOT NULL DEFAULT '',
-signature_status TEXT NOT NULL DEFAULT '',
-signer_fingerprint TEXT NOT NULL DEFAULT '',
-previous_version TEXT NOT NULL DEFAULT '',
-target_version TEXT NOT NULL DEFAULT '',
-space_id TEXT NOT NULL,
-scope_type TEXT NOT NULL,
-scope_id TEXT NOT NULL DEFAULT '',
-status TEXT NOT NULL,
-error_code TEXT NOT NULL DEFAULT '',
-trace_id TEXT NOT NULL,
-created_at TEXT NOT NULL,
-completed_at TEXT NOT NULL DEFAULT ''
-);
 
 -- 来源: extension_packages.go
-CREATE TABLE IF NOT EXISTS extension_package_signers (
-id TEXT PRIMARY KEY,
-fingerprint TEXT NOT NULL UNIQUE,
-public_key TEXT NOT NULL,
-algorithm TEXT NOT NULL,
-display_name TEXT NOT NULL DEFAULT '',
-trusted INTEGER NOT NULL DEFAULT 0,
-trusted_at TEXT NOT NULL DEFAULT '',
-revoked_at TEXT NOT NULL DEFAULT '',
-created_at TEXT NOT NULL,
-updated_at TEXT NOT NULL
-);
 
 -- 来源: extension_packages.go
-CREATE TABLE IF NOT EXISTS extension_version_dependencies (
-extension_id TEXT NOT NULL,
-extension_version TEXT NOT NULL,
-dependency_id TEXT NOT NULL,
-version_constraint TEXT NOT NULL DEFAULT '',
-required INTEGER NOT NULL DEFAULT 1,
-created_at TEXT NOT NULL,
-UNIQUE(extension_id, extension_version, dependency_id)
-);
 
 -- 来源: extension_packages.go
 CREATE TABLE IF NOT EXISTS extension_package_exports (
@@ -3416,111 +1897,12 @@ UNIQUE(extension_id, scope_type, scope_id)
 );
 
 -- 来源: extension_workshop.go
-CREATE TABLE IF NOT EXISTS extension_workshop_sessions (
-id TEXT PRIMARY KEY,
-space_id TEXT NOT NULL,
-character_id TEXT NOT NULL DEFAULT '',
-status TEXT NOT NULL DEFAULT 'draft',
-requirement TEXT NOT NULL,
-current_revision INTEGER NOT NULL DEFAULT 0,
-current_draft_id TEXT NOT NULL DEFAULT '',
-validation_summary TEXT NOT NULL DEFAULT '{}',
-risk_summary TEXT NOT NULL DEFAULT '{}',
-test_summary TEXT NOT NULL DEFAULT '{}',
-installed_skill_id TEXT NOT NULL DEFAULT '',
-installed_version TEXT NOT NULL DEFAULT '',
-permission_confirmation_json TEXT NOT NULL DEFAULT '{}',
-permission_revision INTEGER NOT NULL DEFAULT 0,
-permission_checksum TEXT NOT NULL DEFAULT '',
-test_permission_confirmation_json TEXT NOT NULL DEFAULT '{}',
-test_permission_revision INTEGER NOT NULL DEFAULT 0,
-test_permission_checksum TEXT NOT NULL DEFAULT '',
-lock_version INTEGER NOT NULL DEFAULT 1,
-created_at TEXT NOT NULL,
-updated_at TEXT NOT NULL,
-archived_at TEXT NOT NULL DEFAULT ''
-);
 
 -- 来源: extension_workshop.go
-CREATE TABLE IF NOT EXISTS extension_workshop_revisions (
-id TEXT PRIMARY KEY,
-session_id TEXT NOT NULL,
-revision INTEGER NOT NULL,
-raw_model_output TEXT NOT NULL DEFAULT '{}',
-plan_json TEXT NOT NULL DEFAULT '{}',
-raw_draft_json TEXT NOT NULL,
-normalized_draft_json TEXT NOT NULL,
-manifest_json TEXT NOT NULL,
-input_schema_json TEXT NOT NULL,
-output_schema_json TEXT NOT NULL,
-config_schema_json TEXT NOT NULL DEFAULT '{}',
-workflow_json TEXT NOT NULL,
-compiled_workflow_json TEXT NOT NULL,
-capability_analysis_json TEXT NOT NULL DEFAULT '{}',
-risk_analysis_json TEXT NOT NULL DEFAULT '{}',
-validation_result_json TEXT NOT NULL DEFAULT '{}',
-workflow_checksum TEXT NOT NULL,
-model_provider TEXT NOT NULL DEFAULT '',
-model_name TEXT NOT NULL DEFAULT '',
-model_input_summary_json TEXT NOT NULL DEFAULT '{}',
-model_output_summary_json TEXT NOT NULL DEFAULT '{}',
-created_at TEXT NOT NULL,
-UNIQUE(session_id, revision)
-);
 
 -- 来源: extension_workshop.go
-CREATE TABLE IF NOT EXISTS extension_workshop_test_runs (
-id TEXT PRIMARY KEY,
-test_run_id TEXT NOT NULL UNIQUE,
-space_id TEXT NOT NULL,
-character_id TEXT NOT NULL DEFAULT '',
-session_id TEXT NOT NULL,
-revision INTEGER NOT NULL,
-workflow_checksum TEXT NOT NULL,
-mode TEXT NOT NULL,
-status TEXT NOT NULL,
-input_summary TEXT NOT NULL DEFAULT '{}',
-output_summary TEXT NOT NULL DEFAULT '{}',
-step_results_json TEXT NOT NULL DEFAULT '[]',
-assertion_results_json TEXT NOT NULL DEFAULT '[]',
-side_effects_json TEXT NOT NULL DEFAULT '[]',
-capabilities_json TEXT NOT NULL DEFAULT '[]',
-warnings_json TEXT NOT NULL DEFAULT '[]',
-error_code TEXT NOT NULL DEFAULT '',
-error_detail TEXT NOT NULL DEFAULT '',
-trace_id TEXT NOT NULL DEFAULT '',
-started_at TEXT NOT NULL,
-finished_at TEXT NOT NULL,
-duration_ms INTEGER NOT NULL DEFAULT 0,
-created_at TEXT NOT NULL
-);
 
 -- 来源: extension_workshop.go
-CREATE TABLE IF NOT EXISTS extension_artifacts (
-id TEXT PRIMARY KEY,
-artifact_id TEXT NOT NULL UNIQUE,
-extension_id TEXT NOT NULL,
-extension_version TEXT NOT NULL,
-source TEXT NOT NULL DEFAULT 'workshop',
-session_id TEXT NOT NULL,
-revision INTEGER NOT NULL,
-manifest_json TEXT NOT NULL,
-workflow_json TEXT NOT NULL,
-schemas_json TEXT NOT NULL,
-compiled_workflow_json TEXT NOT NULL,
-tests_json TEXT NOT NULL DEFAULT '[]',
-readme_text TEXT NOT NULL DEFAULT '',
-checksum TEXT NOT NULL,
-size_bytes INTEGER NOT NULL,
-created_at TEXT NOT NULL,
-archived_at TEXT NOT NULL DEFAULT '',
-    artifact_kind TEXT NOT NULL DEFAULT 'workflow',
-    content_blob BLOB,
-    resource_index_json TEXT NOT NULL DEFAULT '[]',
-    artifact_status TEXT NOT NULL DEFAULT 'active',
-    operation_id TEXT NOT NULL DEFAULT '',
-UNIQUE(extension_id, extension_version)
-);
 
 -- 来源: interaction_records_create.go
 CREATE TABLE IF NOT EXISTS interaction_records (
@@ -3561,10 +1943,10 @@ CREATE TABLE IF NOT EXISTS interaction_records (
 				result_message_ids TEXT DEFAULT '',
 				delivery_intent_ids TEXT DEFAULT '',
 				correlation_id TEXT DEFAULT '',
-				causation_id TEXT DEFAULT ''
+				causation_id TEXT DEFAULT '',
+				recovery_descriptor_json TEXT DEFAULT ''
 			);
 
-ALTER TABLE interaction_records ADD COLUMN thread_id TEXT NOT NULL DEFAULT '';
 
 CREATE INDEX IF NOT EXISTS idx_interaction_records_thread_id ON interaction_records(thread_id);
 
@@ -3592,46 +1974,10 @@ delivery_sequence INTEGER NOT NULL DEFAULT 0
 );
 
 -- 来源: plugin_runtime.go
-CREATE TABLE IF NOT EXISTS extension_states (
-id TEXT PRIMARY KEY,
-extension_id TEXT NOT NULL,
-scope_type TEXT NOT NULL DEFAULT 'global',
-scope_id TEXT NOT NULL DEFAULT '',
-schema_version TEXT NOT NULL,
-revision INTEGER NOT NULL DEFAULT 1,
-state_json TEXT NOT NULL DEFAULT '{}',
-created_at TEXT NOT NULL DEFAULT '',
-updated_at TEXT NOT NULL DEFAULT '',
-UNIQUE(extension_id, scope_type, scope_id)
-);
 
 -- 来源: plugin_runtime.go
-CREATE TABLE IF NOT EXISTS extension_state_revisions (
-id TEXT PRIMARY KEY,
-extension_id TEXT NOT NULL,
-scope_type TEXT NOT NULL,
-scope_id TEXT NOT NULL DEFAULT '',
-schema_version TEXT NOT NULL,
-revision INTEGER NOT NULL,
-state_json TEXT NOT NULL DEFAULT '{}',
-created_at TEXT NOT NULL DEFAULT '',
-UNIQUE(extension_id, scope_type, scope_id, revision)
-);
 
 -- 来源: plugin_runtime.go
-CREATE TABLE IF NOT EXISTS extension_events (
-id TEXT PRIMARY KEY,
-event_id TEXT NOT NULL UNIQUE,
-source TEXT NOT NULL,
-type TEXT NOT NULL,
-subject TEXT NOT NULL DEFAULT '',
-data_json TEXT NOT NULL DEFAULT '{}',
-trace_id TEXT NOT NULL DEFAULT '',
-correlation_id TEXT NOT NULL DEFAULT '',
-causation_id TEXT NOT NULL DEFAULT '',
-depth INTEGER NOT NULL DEFAULT 0,
-created_at TEXT NOT NULL DEFAULT ''
-);
 
 -- 来源: plugin_runtime.go
 CREATE TABLE IF NOT EXISTS extension_event_deliveries (
@@ -3650,53 +1996,10 @@ UNIQUE(event_id, plugin_id)
 );
 
 -- 来源: plugin_runtime.go
-CREATE TABLE IF NOT EXISTS extension_schedules (
-id TEXT PRIMARY KEY,
-plugin_id TEXT NOT NULL,
-schedule_id TEXT NOT NULL,
-scope_type TEXT NOT NULL DEFAULT 'global',
-scope_id TEXT NOT NULL DEFAULT '',
-schedule_type TEXT NOT NULL,
-expression TEXT NOT NULL,
-timezone TEXT NOT NULL DEFAULT 'UTC',
-payload_json TEXT NOT NULL DEFAULT '{}',
-enabled INTEGER NOT NULL DEFAULT 1,
-next_run_at TEXT NOT NULL DEFAULT '',
-last_run_at TEXT NOT NULL DEFAULT '',
-last_status TEXT NOT NULL DEFAULT '',
-created_at TEXT NOT NULL DEFAULT '',
-updated_at TEXT NOT NULL DEFAULT '',
-UNIQUE(plugin_id, schedule_id, scope_type, scope_id)
-);
 
 -- 来源: plugin_runtime.go
-CREATE TABLE IF NOT EXISTS extension_plugin_runs (
-run_id TEXT PRIMARY KEY,
-plugin_id TEXT NOT NULL,
-plugin_version TEXT NOT NULL,
-hook TEXT NOT NULL,
-character_id TEXT NOT NULL DEFAULT '',
-conversation_id TEXT NOT NULL DEFAULT '',
-channel TEXT NOT NULL DEFAULT '',
-status TEXT NOT NULL,
-duration_ms INTEGER NOT NULL DEFAULT 0,
-error_code TEXT NOT NULL DEFAULT '',
-trace_id TEXT NOT NULL DEFAULT '',
-circuit_state TEXT NOT NULL DEFAULT 'closed',
-created_at TEXT NOT NULL DEFAULT ''
-);
 
 -- 来源: plugin_runtime.go
-CREATE TABLE IF NOT EXISTS extension_audits (
-id TEXT PRIMARY KEY,
-extension_id TEXT NOT NULL,
-action TEXT NOT NULL,
-scope_type TEXT NOT NULL DEFAULT 'global',
-scope_id TEXT NOT NULL DEFAULT '',
-detail_json TEXT NOT NULL DEFAULT '{}',
-trace_id TEXT NOT NULL DEFAULT '',
-created_at TEXT NOT NULL DEFAULT ''
-);
 
 -- 来源: qdrant_collections.go
 CREATE TABLE IF NOT EXISTS qdrant_collection_versions (
@@ -3972,90 +2275,9 @@ max_mention_sentences INTEGER NOT NULL DEFAULT 1,
 updated_at_utc TEXT NOT NULL DEFAULT ''
 );
 
---- 来源: backup.go + backup_tables_upgrade.go
-CREATE TABLE IF NOT EXISTS backup_records (
-id TEXT PRIMARY KEY,
-backup_path TEXT NOT NULL DEFAULT '',
-backup_size INTEGER DEFAULT 0,
-checksum TEXT DEFAULT '',
-status TEXT NOT NULL DEFAULT 'pending',
-started_at TEXT DEFAULT '',
-finished_at TEXT DEFAULT '',
-error_message TEXT DEFAULT '',
-purpose TEXT DEFAULT 'user',
-format_version INTEGER DEFAULT 1,
-profile TEXT DEFAULT 'full',
-scope TEXT DEFAULT 'all',
-encrypted INTEGER DEFAULT 0,
-manifest_checksum TEXT DEFAULT '',
-app_version TEXT DEFAULT '',
-schema_fingerprint TEXT DEFAULT ''
-);
-ALTER TABLE backup_records ADD COLUMN purpose TEXT DEFAULT 'user';
-ALTER TABLE backup_records ADD COLUMN format_version INTEGER DEFAULT 1;
-ALTER TABLE backup_records ADD COLUMN profile TEXT DEFAULT 'full';
-ALTER TABLE backup_records ADD COLUMN scope TEXT DEFAULT 'all';
-ALTER TABLE backup_records ADD COLUMN encrypted INTEGER DEFAULT 0;
-ALTER TABLE backup_records ADD COLUMN manifest_checksum TEXT DEFAULT '';
-ALTER TABLE backup_records ADD COLUMN app_version TEXT DEFAULT '';
-ALTER TABLE backup_records ADD COLUMN schema_fingerprint TEXT DEFAULT '';
-CREATE INDEX IF NOT EXISTS idx_backup_records_purpose ON backup_records(purpose);
-CREATE INDEX IF NOT EXISTS idx_backup_records_created ON backup_records(started_at);
 
---- 来源: backup.go + backup_tables_upgrade.go
-CREATE TABLE IF NOT EXISTS backup_contents (
-id TEXT PRIMARY KEY,
-backup_id TEXT NOT NULL DEFAULT '',
-table_name TEXT NOT NULL DEFAULT '',
-row_count INTEGER DEFAULT 0,
-checksum TEXT DEFAULT '',
-component_id TEXT DEFAULT '',
-kind TEXT DEFAULT '',
-logical_name TEXT DEFAULT '',
-size_bytes INTEGER DEFAULT 0,
-item_count INTEGER DEFAULT 0,
-required INTEGER DEFAULT 1,
-source_of_truth INTEGER DEFAULT 0,
-rebuildable INTEGER DEFAULT 0
-);
-ALTER TABLE backup_contents ADD COLUMN component_id TEXT DEFAULT '';
-ALTER TABLE backup_contents ADD COLUMN kind TEXT DEFAULT '';
-ALTER TABLE backup_contents ADD COLUMN logical_name TEXT DEFAULT '';
-ALTER TABLE backup_contents ADD COLUMN size_bytes INTEGER DEFAULT 0;
-ALTER TABLE backup_contents ADD COLUMN item_count INTEGER DEFAULT 0;
-ALTER TABLE backup_contents ADD COLUMN required INTEGER DEFAULT 1;
-ALTER TABLE backup_contents ADD COLUMN source_of_truth INTEGER DEFAULT 0;
-ALTER TABLE backup_contents ADD COLUMN rebuildable INTEGER DEFAULT 0;
-CREATE INDEX IF NOT EXISTS idx_backup_contents_backup_id ON backup_contents(backup_id);
-CREATE INDEX IF NOT EXISTS idx_backup_contents_component ON backup_contents(component_id);
 
---- 来源: legacy_data_migration.go
-CREATE TABLE IF NOT EXISTS migration_checkpoints (
-id TEXT PRIMARY KEY,
-check_type TEXT NOT NULL DEFAULT '',
-scope TEXT NOT NULL DEFAULT '',
-status TEXT NOT NULL DEFAULT 'pending',
-total_count INTEGER DEFAULT 0,
-migrated_count INTEGER DEFAULT 0,
-error_count INTEGER DEFAULT 0,
-started_at TEXT DEFAULT '',
-finished_at TEXT DEFAULT '',
-description TEXT DEFAULT ''
-);
 
---- 来源: message_sequence_checkpoint.go
-CREATE TABLE IF NOT EXISTS message_sequence_checkpoints (
-id TEXT PRIMARY KEY,
-character_id TEXT NOT NULL DEFAULT '',
-conversation_id TEXT NOT NULL DEFAULT '',
-last_sequence INTEGER DEFAULT 0,
-last_message_id TEXT NOT NULL DEFAULT '',
-processed_count INTEGER DEFAULT 0,
-status TEXT NOT NULL DEFAULT 'active',
-updated_at TEXT DEFAULT ''
-);
-
---- 来源: migrations.go
 CREATE TABLE IF NOT EXISTS psyche_states (
 character_id TEXT PRIMARY KEY,
 version TEXT DEFAULT '',
@@ -4068,7 +2290,6 @@ created_at TEXT DEFAULT '',
 updated_at TEXT DEFAULT ''
 );
 
---- 来源: migrations.go
 CREATE TABLE IF NOT EXISTS psyche_events (
 id TEXT PRIMARY KEY,
 character_id TEXT NOT NULL DEFAULT '',
@@ -4077,7 +2298,6 @@ event_data TEXT DEFAULT '{}',
 created_at TEXT DEFAULT ''
 );
 
---- 来源: migrations.go
 CREATE TABLE IF NOT EXISTS psyche_snapshots (
 id TEXT PRIMARY KEY,
 character_id TEXT NOT NULL DEFAULT '',
@@ -4085,7 +2305,6 @@ snapshot_data TEXT DEFAULT '{}',
 created_at TEXT DEFAULT ''
 );
 
---- 来源: migrations.go
 CREATE TABLE IF NOT EXISTS relationship_states (
 id TEXT PRIMARY KEY,
 space_id TEXT NOT NULL DEFAULT '',
@@ -4097,7 +2316,6 @@ created_at TEXT DEFAULT '',
 updated_at TEXT DEFAULT ''
 );
 
---- 来源: migrations.go
 CREATE TABLE IF NOT EXISTS relationship_events (
 id TEXT PRIMARY KEY,
 character_id TEXT NOT NULL DEFAULT '',
@@ -4106,21 +2324,7 @@ event_data TEXT DEFAULT '{}',
 created_at TEXT DEFAULT ''
 );
 
---- 来源: tombstone_rebuild.go
-CREATE TABLE IF NOT EXISTS tombstone_rebuild_tracker (
-id TEXT PRIMARY KEY,
-target_id TEXT NOT NULL DEFAULT '',
-target_type TEXT NOT NULL DEFAULT '',
-rebuild_type TEXT NOT NULL DEFAULT 'full',
-status TEXT NOT NULL DEFAULT 'pending',
-attempts INTEGER DEFAULT 0,
-last_error TEXT DEFAULT '',
-started_at TEXT DEFAULT '',
-finished_at TEXT DEFAULT '',
-created_at TEXT DEFAULT ''
-);
 
---- 来源: mcp_client.go
 CREATE TABLE IF NOT EXISTS mcp_servers (
 id TEXT PRIMARY KEY,
 name TEXT NOT NULL,
@@ -4156,7 +2360,6 @@ created_at TEXT NOT NULL DEFAULT '',
 updated_at TEXT NOT NULL DEFAULT ''
 );
 
---- 来源: mcp_client.go
 CREATE TABLE IF NOT EXISTS mcp_server_scope_bindings (
 id TEXT PRIMARY KEY,
 server_id TEXT NOT NULL,
@@ -4168,7 +2371,6 @@ updated_at TEXT NOT NULL DEFAULT '',
 UNIQUE(server_id, scope_type, scope_id)
 );
 
---- 来源: mcp_client.go
 CREATE TABLE IF NOT EXISTS mcp_server_credentials (
 id TEXT PRIMARY KEY,
 server_id TEXT NOT NULL,
@@ -4180,7 +2382,6 @@ created_at TEXT NOT NULL DEFAULT '',
 updated_at TEXT NOT NULL DEFAULT ''
 );
 
---- 来源: mcp_client.go
 CREATE TABLE IF NOT EXISTS mcp_server_capabilities (
 id TEXT PRIMARY KEY,
 server_id TEXT NOT NULL,
@@ -4192,7 +2393,6 @@ updated_at TEXT NOT NULL DEFAULT '',
 UNIQUE(server_id, capability)
 );
 
---- 来源: mcp_client.go
 CREATE TABLE IF NOT EXISTS mcp_tools (
 id TEXT PRIMARY KEY,
 server_id TEXT NOT NULL,
@@ -4213,7 +2413,6 @@ updated_at TEXT NOT NULL DEFAULT '',
 UNIQUE(server_id, remote_name)
 );
 
---- 来源: mcp_client.go
 CREATE TABLE IF NOT EXISTS mcp_resources (
 id TEXT PRIMARY KEY,
 server_id TEXT NOT NULL,
@@ -4229,7 +2428,6 @@ updated_at TEXT NOT NULL DEFAULT '',
 UNIQUE(server_id, uri)
 );
 
---- 来源: mcp_client.go
 CREATE TABLE IF NOT EXISTS mcp_resource_templates (
 id TEXT PRIMARY KEY,
 server_id TEXT NOT NULL,
@@ -4245,7 +2443,6 @@ updated_at TEXT NOT NULL DEFAULT '',
 UNIQUE(server_id, uri_template)
 );
 
---- 来源: mcp_client.go
 CREATE TABLE IF NOT EXISTS mcp_prompts (
 id TEXT PRIMARY KEY,
 server_id TEXT NOT NULL,
@@ -4260,7 +2457,6 @@ updated_at TEXT NOT NULL DEFAULT '',
 UNIQUE(server_id, remote_name)
 );
 
---- 来源: mcp_client.go
 CREATE TABLE IF NOT EXISTS mcp_dependency_links (
 id TEXT PRIMARY KEY,
 agent_skill_extension_id TEXT NOT NULL,
@@ -4274,7 +2470,6 @@ updated_at TEXT NOT NULL DEFAULT '',
 UNIQUE(agent_skill_extension_id, server_id, dependency_name)
 );
 
---- 来源: mcp_client.go
 CREATE TABLE IF NOT EXISTS mcp_operations (
 id TEXT PRIMARY KEY,
 type TEXT NOT NULL,
@@ -4291,7 +2486,6 @@ created_at TEXT NOT NULL DEFAULT '',
 updated_at TEXT NOT NULL DEFAULT ''
 );
 
---- 来源: mcp_client.go
 CREATE TABLE IF NOT EXISTS mcp_oauth_sessions (
 id TEXT PRIMARY KEY,
 server_id TEXT NOT NULL,
@@ -4305,7 +2499,6 @@ created_at TEXT NOT NULL DEFAULT '',
 updated_at TEXT NOT NULL DEFAULT ''
 );
 
---- 来源: mcp_client.go
 CREATE TABLE IF NOT EXISTS mcp_tasks (
 id TEXT PRIMARY KEY,
 server_id TEXT NOT NULL,
@@ -4322,7 +2515,6 @@ updated_at TEXT NOT NULL DEFAULT '',
 UNIQUE(server_id, remote_task_id)
 );
 
---- 来源: mcp_client.go
 CREATE TABLE IF NOT EXISTS mcp_audit_logs (
 id TEXT PRIMARY KEY,
 server_id TEXT NOT NULL,
@@ -4340,78 +2532,11 @@ summary_json TEXT NOT NULL DEFAULT '{}',
 created_at TEXT NOT NULL DEFAULT ''
 );
 
-CREATE TABLE IF NOT EXISTS desktop_pet_active_quality_evaluation_bindings (
-  id TEXT PRIMARY KEY,
-  action_revision_id TEXT NOT NULL,
-  profile_id TEXT NOT NULL DEFAULT '',
-  active_evaluation_id TEXT NOT NULL,
-  binding_revision INTEGER NOT NULL DEFAULT 1,
-  bound_at TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT ''
-);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dpaqeb_revision_profile ON desktop_pet_active_quality_evaluation_bindings(action_revision_id, profile_id);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_quality_commit_journals (
-  id TEXT PRIMARY KEY,
-  evaluation_id TEXT NOT NULL,
-  commit_hash TEXT NOT NULL DEFAULT '',
-  status TEXT NOT NULL DEFAULT 'pending',
-  steps_completed TEXT NOT NULL DEFAULT '',
-  error_message TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT '',
-  completed_at TEXT DEFAULT ''
-);
-CREATE INDEX IF NOT EXISTS idx_dpqcj_eval ON desktop_pet_quality_commit_journals(evaluation_id);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_quality_review_decisions (
-  id TEXT PRIMARY KEY,
-  evaluation_id TEXT NOT NULL,
-  action_revision_id TEXT NOT NULL,
-  decision TEXT NOT NULL,
-  reason TEXT NOT NULL DEFAULT '',
-  reviewer TEXT NOT NULL DEFAULT '',
-  reviewed_at TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT ''
-);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dpqrd_eval ON desktop_pet_quality_review_decisions(evaluation_id);
-CREATE INDEX IF NOT EXISTS idx_dpqrd_revision ON desktop_pet_quality_review_decisions(action_revision_id);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_quality_measurement_cache (
-  id TEXT PRIMARY KEY,
-  frame_artifact_id TEXT NOT NULL,
-  content_hash TEXT NOT NULL,
-  measurement_version TEXT NOT NULL DEFAULT '',
-  width INTEGER NOT NULL DEFAULT 0,
-  height INTEGER NOT NULL DEFAULT 0,
-  has_alpha_channel INTEGER NOT NULL DEFAULT 0,
-  alpha_coverage REAL NOT NULL DEFAULT 0,
-  fully_transparent_ratio REAL NOT NULL DEFAULT 0,
-  semi_transparent_ratio REAL NOT NULL DEFAULT 0,
-  opaque_ratio REAL NOT NULL DEFAULT 0,
-  subject_box_x REAL NOT NULL DEFAULT 0,
-  subject_box_y REAL NOT NULL DEFAULT 0,
-  subject_box_width REAL NOT NULL DEFAULT 0,
-  subject_box_height REAL NOT NULL DEFAULT 0,
-  decodable INTEGER NOT NULL DEFAULT 0,
-  mime_type TEXT NOT NULL DEFAULT '',
-  pixel_hash TEXT NOT NULL DEFAULT '',
-  measurements_json TEXT NOT NULL DEFAULT '{}',
-  created_at TEXT DEFAULT ''
-);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dpqmc_artifact_hash_ver ON desktop_pet_quality_measurement_cache(frame_artifact_id, content_hash, measurement_version);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_quality_outbox_events (
-  id TEXT PRIMARY KEY,
-  event_type TEXT NOT NULL,
-  payload_json TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pending',
-    created_at TEXT DEFAULT '',
-  published_at TEXT DEFAULT ''
-);
-CREATE INDEX IF NOT EXISTS idx_dpqoe_status ON desktop_pet_quality_outbox_events(status);
 
---- 来源: desktop_pet_runtime_protocol_v2.go
 CREATE TABLE IF NOT EXISTS desktop_pet_runtime_sessions (
   id TEXT DEFAULT '',
   runtime_instance_id TEXT PRIMARY KEY,
@@ -4439,47 +2564,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_sessions (
   updated_at TEXT NOT NULL DEFAULT ''
 );
 
---- 来源: desktop_pet_runtime_protocol_v2.go
-CREATE TABLE IF NOT EXISTS desktop_pet_runtime_command_acks (
-  ack_id TEXT PRIMARY KEY,
-  command_id TEXT NOT NULL DEFAULT '',
-  runtime_instance_id TEXT NOT NULL DEFAULT '',
-  command_sequence INTEGER NOT NULL DEFAULT 0,
-  status TEXT NOT NULL DEFAULT '',
-  reject_reason TEXT NOT NULL DEFAULT '',
-  received_at TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT '',
-  UNIQUE(runtime_instance_id, command_id)
-);
 
---- 来源: desktop_pet_runtime_protocol_v2.go
-CREATE TABLE IF NOT EXISTS desktop_pet_runtime_event_inbox (
-  inbox_id TEXT PRIMARY KEY,
-  event_id TEXT NOT NULL DEFAULT '',
-  runtime_instance_id TEXT NOT NULL DEFAULT '',
-  event_sequence INTEGER NOT NULL DEFAULT 0,
-  event_type TEXT NOT NULL DEFAULT '',
-  payload_hash TEXT NOT NULL DEFAULT '',
-  processed_at TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT '',
-  UNIQUE(runtime_instance_id, event_id),
-  UNIQUE(runtime_instance_id, event_sequence)
-);
 
---- 来源: desktop_pet_runtime_protocol_v2.go
-CREATE TABLE IF NOT EXISTS desktop_pet_runtime_protocol_errors (
-  error_id TEXT PRIMARY KEY,
-  runtime_instance_id TEXT NOT NULL DEFAULT '',
-  error_code TEXT NOT NULL DEFAULT '',
-  error_message TEXT NOT NULL DEFAULT '',
-  component TEXT NOT NULL DEFAULT '',
-  recoverable INTEGER NOT NULL DEFAULT 0,
-  command_id TEXT NOT NULL DEFAULT '',
-  playback_id TEXT NOT NULL DEFAULT '',
-  action_key TEXT NOT NULL DEFAULT '',
-  occurred_at TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT ''
-);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_runtime_desired_states (
     id TEXT PRIMARY KEY,
@@ -4557,131 +2643,9 @@ CREATE TABLE IF NOT EXISTS desktop_pet_installation_switch_journals (
 );
 CREATE INDEX IF NOT EXISTS idx_dpisj_operation ON desktop_pet_installation_switch_journals(operation_id);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_legacy_installation_mappings (
-    id TEXT PRIMARY KEY,
-    legacy_installation_id TEXT NOT NULL DEFAULT '',
-    new_installation_id TEXT NOT NULL DEFAULT '',
-    space_id TEXT NOT NULL DEFAULT '',
-    legacy_package_id TEXT NOT NULL DEFAULT '',
-    pet_id TEXT NOT NULL DEFAULT '',
-    release_id TEXT NOT NULL DEFAULT '',
-    migration_status TEXT NOT NULL DEFAULT 'pending',
-    source_content_hash TEXT NOT NULL DEFAULT '',
-    error_code TEXT NOT NULL DEFAULT '',
-    error_message TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '',
-    UNIQUE(legacy_installation_id)
-);
-CREATE INDEX IF NOT EXISTS idx_dplim_legacy ON desktop_pet_legacy_installation_mappings(legacy_installation_id);
-CREATE INDEX IF NOT EXISTS idx_dplim_user ON desktop_pet_legacy_installation_mappings(space_id);
-CREATE INDEX IF NOT EXISTS idx_dplim_status ON desktop_pet_legacy_installation_mappings(migration_status);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_generation_task_plans (
-    id TEXT PRIMARY KEY,
-    task_id TEXT NOT NULL DEFAULT '',
-    schema_version INTEGER NOT NULL DEFAULT 1,
-    plan_hash TEXT NOT NULL DEFAULT '',
-    provider TEXT NOT NULL DEFAULT '',
-    model TEXT NOT NULL DEFAULT '',
-    config_id INTEGER NOT NULL DEFAULT 0,
-    config_revision TEXT NOT NULL DEFAULT '',
-    capability_snapshot_json TEXT NOT NULL DEFAULT '{}',
-    capability_snapshot_hash TEXT NOT NULL DEFAULT '',
-    reference_asset_id TEXT NOT NULL DEFAULT '',
-    cost_estimate_json TEXT NOT NULL DEFAULT '{}',
-    planned_primary_request_count INTEGER NOT NULL DEFAULT 0,
-    planned_max_provider_call_count INTEGER NOT NULL DEFAULT 0,
-    plan_json TEXT NOT NULL DEFAULT '{}',
-    frozen_at TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT '',
-    updated_at TEXT NOT NULL DEFAULT ''
-);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_task_plans_task_id ON desktop_pet_generation_task_plans(task_id);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_generation_action_plans (
-    id TEXT PRIMARY KEY,
-    task_plan_id TEXT NOT NULL DEFAULT '',
-    task_id TEXT NOT NULL DEFAULT '',
-    task_action_id TEXT NOT NULL DEFAULT '',
-    action_key TEXT NOT NULL DEFAULT '',
-    schema_version INTEGER NOT NULL DEFAULT 1,
-    plan_hash TEXT NOT NULL DEFAULT '',
-    mode TEXT NOT NULL DEFAULT '',
-    provider TEXT NOT NULL DEFAULT '',
-    model TEXT NOT NULL DEFAULT '',
-    config_id INTEGER NOT NULL DEFAULT 0,
-    config_revision TEXT NOT NULL DEFAULT '',
-    capability_hash TEXT NOT NULL DEFAULT '',
-    reference_asset_id TEXT NOT NULL DEFAULT '',
-    layout_json TEXT NOT NULL DEFAULT '{}',
-    layout_hash TEXT NOT NULL DEFAULT '',
-    prompt_snapshot TEXT NOT NULL DEFAULT '',
-    prompt_hash TEXT NOT NULL DEFAULT '',
-    negative_prompt_snapshot TEXT NOT NULL DEFAULT '',
-    negative_prompt_hash TEXT NOT NULL DEFAULT '',
-    seed_policy TEXT NOT NULL DEFAULT '',
-    seed_value INTEGER,
-    output_count INTEGER NOT NULL DEFAULT 1,
-    target_frame_count INTEGER NOT NULL DEFAULT 0,
-    planned_segment_count INTEGER NOT NULL DEFAULT 0,
-    planned_primary_request_count INTEGER NOT NULL DEFAULT 0,
-    planned_max_provider_call_count INTEGER NOT NULL DEFAULT 0,
-    planned_call_count INTEGER NOT NULL DEFAULT 0,
-    sheet_width INTEGER NOT NULL DEFAULT 0,
-    sheet_height INTEGER NOT NULL DEFAULT 0,
-    cell_width INTEGER NOT NULL DEFAULT 0,
-    cell_height INTEGER NOT NULL DEFAULT 0,
-    fallback_mode TEXT NOT NULL DEFAULT '',
-    action_spec_version TEXT NOT NULL DEFAULT '',
-    action_catalog_hash TEXT NOT NULL DEFAULT '',
-    provider_config_hash TEXT NOT NULL DEFAULT '',
-    safety_policy_version TEXT NOT NULL DEFAULT '',
-    output_format TEXT NOT NULL DEFAULT '',
-    plan_json TEXT NOT NULL DEFAULT '{}',
-    frozen_at TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT '',
-    updated_at TEXT NOT NULL DEFAULT ''
-);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_action_plans_task_action_id ON desktop_pet_generation_action_plans(task_action_id);
-CREATE INDEX IF NOT EXISTS idx_action_plans_task_plan_id ON desktop_pet_generation_action_plans(task_plan_id);
-CREATE INDEX IF NOT EXISTS idx_action_plans_task_id ON desktop_pet_generation_action_plans(task_id);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_reference_asset_publish_journals (
-    id TEXT PRIMARY KEY,
-    reference_asset_id TEXT NOT NULL DEFAULT '',
-    staging_path TEXT NOT NULL DEFAULT '',
-    final_path TEXT NOT NULL DEFAULT '',
-    source_storage_key TEXT NOT NULL DEFAULT '',
-    normalized_storage_key TEXT NOT NULL DEFAULT '',
-    content_hash TEXT NOT NULL DEFAULT '',
-    journal_status TEXT NOT NULL DEFAULT 'staging',
-    error_message TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT '',
-    updated_at TEXT NOT NULL DEFAULT '',
-    completed_at TEXT NOT NULL DEFAULT ''
-);
-CREATE INDEX IF NOT EXISTS idx_ref_asset_publish_journals_reference_asset_id ON desktop_pet_reference_asset_publish_journals(reference_asset_id);
-
-CREATE TABLE IF NOT EXISTS desktop_pet_generation_outbox (
-    id TEXT PRIMARY KEY,
-    task_id TEXT NOT NULL DEFAULT '',
-    task_action_id TEXT NOT NULL DEFAULT '',
-    attempt_id TEXT NOT NULL DEFAULT '',
-    event_type TEXT NOT NULL DEFAULT '',
-    payload_json TEXT NOT NULL DEFAULT '{}',
-    status TEXT NOT NULL DEFAULT 'pending',
-    retry_count INTEGER NOT NULL DEFAULT 0,
-    max_retries INTEGER NOT NULL DEFAULT 3,
-    next_retry_at TEXT NOT NULL DEFAULT '',
-    processed_at TEXT NOT NULL DEFAULT '',
-    error_message TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT '',
-    updated_at TEXT NOT NULL DEFAULT ''
-);
-CREATE INDEX IF NOT EXISTS idx_generation_outbox_status ON desktop_pet_generation_outbox(status);
-CREATE INDEX IF NOT EXISTS idx_generation_outbox_task_action_id ON desktop_pet_generation_outbox(task_action_id);
-CREATE INDEX IF NOT EXISTS idx_generation_outbox_attempt_id ON desktop_pet_generation_outbox(attempt_id);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_action_streams (
   id TEXT PRIMARY KEY,
@@ -4696,341 +2660,23 @@ CREATE TABLE IF NOT EXISTS desktop_pet_action_streams (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_das_stream_key ON desktop_pet_action_streams(stream_key);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_revision_bridge_journals (
-  id TEXT PRIMARY KEY,
-  processing_revision_id TEXT NOT NULL DEFAULT '',
-  processing_action_id TEXT NOT NULL DEFAULT '',
-  action_revision_id TEXT NOT NULL DEFAULT '',
-  target_action_key TEXT NOT NULL DEFAULT '',
-  status TEXT NOT NULL DEFAULT 'processing_published',
-  last_error TEXT NOT NULL DEFAULT '',
-  retry_count INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL DEFAULT '',
-    updated_at TEXT NOT NULL DEFAULT '',
-  event_id TEXT NOT NULL DEFAULT '',
-  space_id TEXT NOT NULL DEFAULT '',
-  character_id TEXT NOT NULL DEFAULT '',
-  action_key TEXT NOT NULL DEFAULT '',
-  payload_json TEXT NOT NULL DEFAULT '',
-  payload_hash TEXT NOT NULL DEFAULT '',
-  lease_owner TEXT NOT NULL DEFAULT '',
-  lease_expires_at TEXT NOT NULL DEFAULT '',
-  processed_at TEXT NOT NULL DEFAULT ''
-);
-CREATE INDEX IF NOT EXISTS idx_drbj_status ON desktop_pet_revision_bridge_journals(status);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_drbj_proc_rev ON desktop_pet_revision_bridge_journals(processing_revision_id);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_active_action_revision_bindings (
-  id TEXT PRIMARY KEY,
-  space_id TEXT NOT NULL DEFAULT '',
-  character_id TEXT NOT NULL DEFAULT '',
-  action_key TEXT NOT NULL DEFAULT '',
-  active_action_revision_id TEXT NOT NULL DEFAULT '',
-  binding_revision INTEGER NOT NULL DEFAULT 0,
-  bound_reason TEXT NOT NULL DEFAULT '',
-  bound_by TEXT NOT NULL DEFAULT '',
-  bound_at TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT '',
-    updated_at TEXT NOT NULL DEFAULT '',
-  action_stream_id TEXT NOT NULL DEFAULT ''
-);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_daarb_action_stream_id ON desktop_pet_active_action_revision_bindings(action_stream_id);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_action_revision_binding_history (
-  id TEXT PRIMARY KEY,
-  action_stream_id TEXT NOT NULL DEFAULT '',
-  binding_revision INTEGER NOT NULL DEFAULT 0,
-  previous_revision_id TEXT NOT NULL DEFAULT '',
-  new_revision_id TEXT NOT NULL DEFAULT '',
-  reason TEXT NOT NULL DEFAULT '',
-  actor TEXT NOT NULL DEFAULT '',
-    occurred_at TEXT NOT NULL DEFAULT '',
-  correlation_id TEXT NOT NULL DEFAULT ''
-);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_darbh_stream_rev ON desktop_pet_action_revision_binding_history(action_stream_id, binding_revision);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_action_revision_bridge_inbox (
-  id TEXT PRIMARY KEY,
-  event_id TEXT NOT NULL DEFAULT '',
-  processing_revision_id TEXT NOT NULL DEFAULT '',
-  payload_json TEXT NOT NULL DEFAULT '',
-  payload_hash TEXT NOT NULL DEFAULT '',
-  status TEXT NOT NULL DEFAULT 'received',
-  attempt_count INTEGER NOT NULL DEFAULT 0,
-  lease_owner TEXT NOT NULL DEFAULT '',
-  lease_expires_at TEXT NOT NULL DEFAULT '',
-  last_error TEXT NOT NULL DEFAULT '',
-    received_at TEXT NOT NULL DEFAULT '',
-  processed_at TEXT NOT NULL DEFAULT ''
-);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_darbi_event_id ON desktop_pet_action_revision_bridge_inbox(event_id);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_darbi_proc_rev ON desktop_pet_action_revision_bridge_inbox(processing_revision_id);
-CREATE INDEX IF NOT EXISTS idx_darbi_status ON desktop_pet_action_revision_bridge_inbox(status);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_action_revision_event_outbox (
-  id TEXT PRIMARY KEY,
-  event_id TEXT NOT NULL DEFAULT '',
-  event_type TEXT NOT NULL DEFAULT '',
-  aggregate_type TEXT NOT NULL DEFAULT 'action_revision',
-  aggregate_id TEXT NOT NULL DEFAULT '',
-  aggregate_sequence INTEGER NOT NULL DEFAULT 0,
-  sequence INTEGER NOT NULL DEFAULT 0,
-  action_stream_id TEXT NOT NULL DEFAULT '',
-  action_revision_id TEXT NOT NULL DEFAULT '',
-  previous_revision_id TEXT NOT NULL DEFAULT '',
-  processing_revision_id TEXT NOT NULL DEFAULT '',
-  payload_json TEXT NOT NULL DEFAULT '',
-  payload_hash TEXT NOT NULL DEFAULT '',
-  status TEXT NOT NULL DEFAULT 'pending',
-  attempt_count INTEGER NOT NULL DEFAULT 0,
-    available_at TEXT NOT NULL DEFAULT '',
-  last_error TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT '',
-  published_at TEXT NOT NULL DEFAULT ''
-);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dareo_event_id ON desktop_pet_action_revision_event_outbox(event_id);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dareo_agg_seq_type ON desktop_pet_action_revision_event_outbox(aggregate_id, aggregate_sequence, event_type);
-CREATE INDEX IF NOT EXISTS idx_dareo_status ON desktop_pet_action_revision_event_outbox(status);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_legacy_revision_mappings (
-  id TEXT PRIMARY KEY,
-  legacy_revision_id TEXT NOT NULL DEFAULT '',
-  new_action_revision_id TEXT NOT NULL DEFAULT '',
-  action_stream_id TEXT NOT NULL DEFAULT '',
-  legacy_revision_number INTEGER NOT NULL DEFAULT 0,
-    migrated_at TEXT NOT NULL DEFAULT ''
-);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dlrm_legacy_rev ON desktop_pet_legacy_revision_mappings(legacy_revision_id);
-
-CREATE TABLE IF NOT EXISTS desktop_pet_legacy_binding_mappings (
-  id TEXT PRIMARY KEY,
-  legacy_processing_task_id TEXT NOT NULL DEFAULT '',
-  legacy_action_key TEXT NOT NULL DEFAULT '',
-  legacy_revision_id TEXT NOT NULL DEFAULT '',
-  new_binding_id TEXT NOT NULL DEFAULT '',
-  action_stream_id TEXT NOT NULL DEFAULT '',
-    migrated_at TEXT NOT NULL DEFAULT ''
-);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dlbm_legacy ON desktop_pet_legacy_binding_mappings(legacy_processing_task_id, legacy_action_key);
-
-CREATE TABLE IF NOT EXISTS desktop_pet_quality_evaluation_request_inbox (
-  id TEXT PRIMARY KEY,
-  event_id TEXT NOT NULL DEFAULT '',
-  action_revision_id TEXT NOT NULL DEFAULT '',
-  action_content_hash TEXT NOT NULL DEFAULT '',
-  profile_id TEXT NOT NULL DEFAULT '',
-  profile_version TEXT NOT NULL DEFAULT '',
-  rule_set_version TEXT NOT NULL DEFAULT '',
-  idempotency_key TEXT NOT NULL DEFAULT '',
-  payload_hash TEXT NOT NULL DEFAULT '',
-  status TEXT NOT NULL DEFAULT 'received',
-  attempt_count INTEGER NOT NULL DEFAULT 0,
-  lease_owner TEXT NOT NULL DEFAULT '',
-  lease_expires_at TEXT NOT NULL DEFAULT '',
-  last_error TEXT NOT NULL DEFAULT '',
-  received_at TEXT NOT NULL DEFAULT '',
-  processed_at TEXT NOT NULL DEFAULT '',
-  updated_at TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT ''
-);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dpeqri_event ON desktop_pet_quality_evaluation_request_inbox(event_id);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dpeqri_idem ON desktop_pet_quality_evaluation_request_inbox(idempotency_key);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_dpqe_idempotency_nonempty ON desktop_pet_quality_evaluations(idempotency_key) WHERE idempotency_key <> '';
 
-CREATE TABLE IF NOT EXISTS desktop_pet_quality_input_snapshots (
-  id TEXT PRIMARY KEY,
-  space_id TEXT NOT NULL DEFAULT '',
-  character_id TEXT NOT NULL DEFAULT '',
-  action_stream_id TEXT NOT NULL DEFAULT '',
-  action_revision_id TEXT NOT NULL DEFAULT '',
-  action_content_hash TEXT NOT NULL DEFAULT '',
-  frame_set_hash TEXT NOT NULL DEFAULT '',
-  binding_revision INTEGER NOT NULL DEFAULT 0,
-  processing_revision_id TEXT NOT NULL DEFAULT '',
-  action_key TEXT NOT NULL DEFAULT '',
-  action_config_hash TEXT NOT NULL DEFAULT '',
-  action_spec_hash TEXT NOT NULL DEFAULT '',
-  playback_mode TEXT NOT NULL DEFAULT '',
-  fps INTEGER NOT NULL DEFAULT 0,
-  expected_frame_count INTEGER NOT NULL DEFAULT 0,
-  frame_inputs_json TEXT NOT NULL DEFAULT '[]',
-  snapshot_hash TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT ''
-);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dpqis_snap ON desktop_pet_quality_input_snapshots(action_revision_id, snapshot_hash);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_quality_measurement_sets (
-  id TEXT PRIMARY KEY,
-  action_revision_id TEXT NOT NULL DEFAULT '',
-  action_content_hash TEXT NOT NULL DEFAULT '',
-  frame_set_hash TEXT NOT NULL DEFAULT '',
-  measurement_version TEXT NOT NULL DEFAULT '',
-  measurement_profile_hash TEXT NOT NULL DEFAULT '',
-  frame_count INTEGER NOT NULL DEFAULT 0,
-  canvas_width INTEGER NOT NULL DEFAULT 0,
-  canvas_height INTEGER NOT NULL DEFAULT 0,
-  measurement_set_hash TEXT NOT NULL DEFAULT '',
-  status TEXT NOT NULL DEFAULT 'building',
-    created_at TEXT DEFAULT ''
-);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dpqms_set ON desktop_pet_quality_measurement_sets(action_revision_id, measurement_set_hash);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_quality_frame_measurements (
-  id TEXT PRIMARY KEY,
-  measurement_set_id TEXT NOT NULL DEFAULT '',
-  frame_artifact_id TEXT NOT NULL DEFAULT '',
-  frame_index INTEGER NOT NULL DEFAULT 0,
-  file_hash TEXT NOT NULL DEFAULT '',
-  pixel_hash TEXT NOT NULL DEFAULT '',
-  width INTEGER NOT NULL DEFAULT 0,
-  height INTEGER NOT NULL DEFAULT 0,
-  mime_type TEXT NOT NULL DEFAULT '',
-  file_bytes INTEGER NOT NULL DEFAULT 0,
-  has_alpha_channel INTEGER NOT NULL DEFAULT 0,
-  alpha_coverage REAL NOT NULL DEFAULT 0,
-  fully_transparent_ratio REAL NOT NULL DEFAULT 0,
-  semi_transparent_ratio REAL NOT NULL DEFAULT 0,
-  opaque_ratio REAL NOT NULL DEFAULT 0,
-  decodable INTEGER NOT NULL DEFAULT 0,
-  subject_box_json TEXT NOT NULL DEFAULT '{}',
-  transform_hash TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT ''
-);
-CREATE INDEX IF NOT EXISTS idx_dpqfm_set ON desktop_pet_quality_frame_measurements(measurement_set_id);
-CREATE INDEX IF NOT EXISTS idx_dpqfm_frame ON desktop_pet_quality_frame_measurements(frame_artifact_id);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_quality_sequence_measurements (
-  id TEXT PRIMARY KEY,
-  measurement_set_id TEXT NOT NULL DEFAULT '',
-  frame_index INTEGER NOT NULL DEFAULT 0,
-  subject_area_ratio REAL NOT NULL DEFAULT 0,
-  connected_component_count INTEGER NOT NULL DEFAULT 0,
-  largest_component_ratio REAL NOT NULL DEFAULT 0,
-  border_foreground_coverage REAL NOT NULL DEFAULT 0,
-  edge_contact_json TEXT NOT NULL DEFAULT '[]',
-  centroid_x REAL NOT NULL DEFAULT 0,
-  centroid_y REAL NOT NULL DEFAULT 0,
-    created_at TEXT DEFAULT ''
-);
-CREATE INDEX IF NOT EXISTS idx_dpqsm_set ON desktop_pet_quality_sequence_measurements(measurement_set_id);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_quality_report_artifacts (
-  id TEXT PRIMARY KEY,
-  evaluation_id TEXT NOT NULL DEFAULT '',
-  storage_key TEXT NOT NULL DEFAULT '',
-  content_hash TEXT NOT NULL DEFAULT '',
-  byte_size INTEGER NOT NULL DEFAULT 0,
-  schema_version TEXT NOT NULL DEFAULT '',
-  status TEXT NOT NULL DEFAULT 'staging',
-    created_at TEXT DEFAULT ''
-);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dpqra_eval ON desktop_pet_quality_report_artifacts(evaluation_id);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_active_quality_binding_history (
-  id TEXT PRIMARY KEY,
-  action_revision_id TEXT NOT NULL DEFAULT '',
-  profile_hash TEXT NOT NULL DEFAULT '',
-  binding_revision INTEGER NOT NULL DEFAULT 0,
-  previous_evaluation_id TEXT NOT NULL DEFAULT '',
-  new_evaluation_id TEXT NOT NULL DEFAULT '',
-  reason TEXT NOT NULL DEFAULT '',
-  actor TEXT NOT NULL DEFAULT '',
-  occurred_at TEXT NOT NULL DEFAULT ''
-);
-CREATE INDEX IF NOT EXISTS idx_dpaqbh_rev ON desktop_pet_active_quality_binding_history(action_revision_id);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_quality_gate_snapshots (
-  id TEXT PRIMARY KEY,
-  space_id TEXT NOT NULL DEFAULT '',
-  character_id TEXT NOT NULL DEFAULT '',
-  processing_task_id TEXT NOT NULL DEFAULT '',
-  active_revision_set_hash TEXT NOT NULL DEFAULT '',
-  evaluation_set_hash TEXT NOT NULL DEFAULT '',
-  gate_profile_id TEXT NOT NULL DEFAULT '',
-  gate_profile_version TEXT NOT NULL DEFAULT '',
-  rule_set_version TEXT NOT NULL DEFAULT '',
-  rule_set_content_hash TEXT NOT NULL DEFAULT '',
-  gate_status TEXT NOT NULL DEFAULT '',
-  required_action_keys_json TEXT NOT NULL DEFAULT '[]',
-  included_action_keys_json TEXT NOT NULL DEFAULT '[]',
-  excluded_action_keys_json TEXT NOT NULL DEFAULT '[]',
-  action_verdicts_json TEXT NOT NULL DEFAULT '[]',
-  required_action_count INTEGER NOT NULL DEFAULT 0,
-  accepted_action_count INTEGER NOT NULL DEFAULT 0,
-  warning_action_count INTEGER NOT NULL DEFAULT 0,
-  review_action_count INTEGER NOT NULL DEFAULT 0,
-  rejected_action_count INTEGER NOT NULL DEFAULT 0,
-  failed_evaluation_count INTEGER NOT NULL DEFAULT 0,
-  snapshot_hash TEXT NOT NULL DEFAULT '',
-  gate_hash TEXT NOT NULL DEFAULT '',
-  invalidated_at TEXT NOT NULL DEFAULT '',
-  invalidation_reason TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT ''
-);
-CREATE INDEX IF NOT EXISTS idx_dpqgs_task ON desktop_pet_quality_gate_snapshots(processing_task_id);
-CREATE INDEX IF NOT EXISTS idx_dpqgs_rsh ON desktop_pet_quality_gate_snapshots(active_revision_set_hash);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_active_quality_gate_bindings (
-  id TEXT PRIMARY KEY,
-  processing_task_id TEXT NOT NULL DEFAULT '',
-  gate_profile_hash TEXT NOT NULL DEFAULT '',
-  active_gate_id TEXT NOT NULL DEFAULT '',
-  active_revision_set_hash TEXT NOT NULL DEFAULT '',
-  evaluation_set_hash TEXT NOT NULL DEFAULT '',
-  binding_revision INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT ''
-);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dpaqgbind ON desktop_pet_active_quality_gate_bindings(processing_task_id, gate_profile_hash);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_quality_gate_rebuild_requests (
-  id TEXT PRIMARY KEY,
-  processing_task_id TEXT NOT NULL DEFAULT '',
-  source_event_type TEXT NOT NULL DEFAULT '',
-  source_event_id TEXT NOT NULL DEFAULT '',
-  reason TEXT NOT NULL DEFAULT '',
-  status TEXT NOT NULL DEFAULT 'pending',
-    created_at TEXT DEFAULT ''
-);
-CREATE INDEX IF NOT EXISTS idx_dpqgrr_task ON desktop_pet_quality_gate_rebuild_requests(processing_task_id);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_quality_outbox_events_v2 (
-  id TEXT PRIMARY KEY,
-  event_id TEXT NOT NULL DEFAULT '',
-  event_type TEXT NOT NULL DEFAULT '',
-  aggregate_id TEXT NOT NULL DEFAULT '',
-  aggregate_sequence INTEGER NOT NULL DEFAULT 0,
-  payload_json TEXT NOT NULL DEFAULT '',
-  payload_hash TEXT NOT NULL DEFAULT '',
-  status TEXT NOT NULL DEFAULT 'pending',
-  attempt_count INTEGER NOT NULL DEFAULT 0,
-    available_at TEXT NOT NULL DEFAULT '',
-  last_error TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT '',
-  published_at TEXT NOT NULL DEFAULT ''
-);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dpqoev2_event ON desktop_pet_quality_outbox_events_v2(event_id);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dpqoev2_agg ON desktop_pet_quality_outbox_events_v2(aggregate_id, aggregate_sequence, event_type);
 
-CREATE TABLE IF NOT EXISTS desktop_pet_quality_commit_journals_v2 (
-  id TEXT PRIMARY KEY,
-  commit_hash TEXT NOT NULL DEFAULT '',
-  evaluation_id TEXT NOT NULL DEFAULT '',
-  action_revision_id TEXT NOT NULL DEFAULT '',
-  action_content_hash TEXT NOT NULL DEFAULT '',
-  status TEXT NOT NULL DEFAULT 'created',
-  steps_json TEXT NOT NULL DEFAULT '',
-  report_staging_key TEXT NOT NULL DEFAULT '',
-  report_final_key TEXT NOT NULL DEFAULT '',
-  report_hash TEXT NOT NULL DEFAULT '',
-  result_hash TEXT NOT NULL DEFAULT '',
-  last_error TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '',
-  completed_at TEXT NOT NULL DEFAULT ''
-);
-CREATE INDEX IF NOT EXISTS idx_dpqcjv2_eval ON desktop_pet_quality_commit_journals_v2(evaluation_id);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dpqcjv2_hash ON desktop_pet_quality_commit_journals_v2(commit_hash);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_release_validation_reports (
   id TEXT PRIMARY KEY,
@@ -5202,7 +2848,6 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_desired_state_outbox (
 CREATE INDEX IF NOT EXISTS idx_drdso_user_device_status ON desktop_pet_runtime_desired_state_outbox(space_id, device_id, status);
 CREATE INDEX IF NOT EXISTS idx_drdso_available ON desktop_pet_runtime_desired_state_outbox(status, available_at);
 
---- 来源: desktop_pet_runtime_v2_tables.go ---
 CREATE TABLE IF NOT EXISTS desktop_pet_runtime_sessions (
   id TEXT PRIMARY KEY,
   space_id TEXT NOT NULL DEFAULT '',
@@ -5228,7 +2873,6 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_sessions (
 CREATE INDEX IF NOT EXISTS idx_rtsessv2_user_device ON desktop_pet_runtime_sessions(space_id, device_id);
 CREATE INDEX IF NOT EXISTS idx_rtsessv2_user_device_runtime_status ON desktop_pet_runtime_sessions(space_id, device_id, runtime_id, status);
 
---- 来源: desktop_pet_runtime_v2_tables.go ---
 CREATE TABLE IF NOT EXISTS desktop_pet_runtime_commands_v2 (
   id TEXT PRIMARY KEY,
   space_id TEXT NOT NULL DEFAULT '',
@@ -5279,7 +2923,6 @@ CREATE INDEX IF NOT EXISTS idx_rtcv2_status ON desktop_pet_runtime_commands_v2(s
 CREATE INDEX IF NOT EXISTS idx_rtcv2_device_seq ON desktop_pet_runtime_commands_v2(space_id, device_id, device_sequence);
 CREATE INDEX IF NOT EXISTS idx_rtcv2_user_device_runtime_status ON desktop_pet_runtime_commands_v2(space_id, device_id, runtime_id, status);
 
---- 来源: desktop_pet_import_stagings.go ---
 CREATE TABLE IF NOT EXISTS desktop_pet_import_stagings (
   id TEXT PRIMARY KEY,
   owner_space_id TEXT NOT NULL,
@@ -5306,65 +2949,6 @@ CREATE TABLE IF NOT EXISTS desktop_pet_import_stagings (
 );
 CREATE INDEX IF NOT EXISTS idx_dpis_owner_status ON desktop_pet_import_stagings(owner_space_id, status);
 
---- 来源: desktop_pet_migration_control.go ---
-CREATE TABLE IF NOT EXISTS desktop_pet_migration_operations (
-  id TEXT PRIMARY KEY,
-  kind TEXT NOT NULL,
-  status TEXT NOT NULL,
-  started_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  completed_at TEXT NOT NULL DEFAULT '',
-  error TEXT NOT NULL DEFAULT '',
-  metadata TEXT NOT NULL DEFAULT '{}'
-);
-CREATE TABLE IF NOT EXISTS desktop_pet_migration_checkpoints (
-  id TEXT PRIMARY KEY,
-  operation_id TEXT NOT NULL,
-  step_name TEXT NOT NULL,
-  last_primary_key TEXT NOT NULL DEFAULT '',
-  processed_count INTEGER NOT NULL DEFAULT 0,
-  input_hash TEXT NOT NULL DEFAULT '',
-  output_hash TEXT NOT NULL DEFAULT '',
-  conflict_count INTEGER NOT NULL DEFAULT 0,
-  updated_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS desktop_pet_migration_conflicts (
-  id TEXT PRIMARY KEY,
-  operation_id TEXT NOT NULL,
-  entity_kind TEXT NOT NULL,
-  entity_id TEXT NOT NULL,
-  conflict_reason TEXT NOT NULL,
-  detected_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS desktop_pet_migration_locks (
-  lock_name TEXT PRIMARY KEY,
-  owner_instance_id TEXT NOT NULL,
-  lease_expires_at TEXT NOT NULL,
-  heartbeat_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS desktop_pet_read_cutovers (
-  id TEXT PRIMARY KEY,
-  operation_id TEXT NOT NULL,
-  step_name TEXT NOT NULL,
-  cutover_at TEXT NOT NULL,
-  verified INTEGER NOT NULL DEFAULT 0
-);
-CREATE TABLE IF NOT EXISTS desktop_pet_write_cutovers (
-  id TEXT PRIMARY KEY,
-  operation_id TEXT NOT NULL,
-  step_name TEXT NOT NULL,
-  cutover_at TEXT NOT NULL,
-  verified INTEGER NOT NULL DEFAULT 0
-);
-CREATE INDEX IF NOT EXISTS idx_dpmc_operation ON desktop_pet_migration_checkpoints(operation_id);
-CREATE INDEX IF NOT EXISTS idx_dpmc_conflict_op ON desktop_pet_migration_conflicts(operation_id);
-CREATE INDEX IF NOT EXISTS idx_dpmc_lock_expiry ON desktop_pet_migration_locks(lease_expires_at);
-CREATE INDEX IF NOT EXISTS idx_dprc_operation ON desktop_pet_read_cutovers(operation_id);
-CREATE INDEX IF NOT EXISTS idx_dpmc_write_op ON desktop_pet_write_cutovers(operation_id);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_dprc_operation_step_unique ON desktop_pet_read_cutovers(operation_id, step_name);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_dpwc_operation_step_unique ON desktop_pet_write_cutovers(operation_id, step_name);
-
---- 来源: desktop_pet_runtime_v2_tables.go ---
 CREATE TABLE IF NOT EXISTS desktop_pet_runtime_command_attempts (
   attempt_id TEXT PRIMARY KEY,
   command_id TEXT NOT NULL DEFAULT '',
@@ -5383,7 +2967,6 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_command_attempts (
 );
 CREATE INDEX IF NOT EXISTS idx_rtca_command ON desktop_pet_runtime_command_attempts(command_id);
 
---- 来源: desktop_pet_runtime_v2_tables.go ---
 CREATE TABLE IF NOT EXISTS desktop_pet_runtime_command_results (
   id TEXT PRIMARY KEY,
   command_id TEXT NOT NULL DEFAULT '',
@@ -5404,7 +2987,6 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_command_results (
 CREATE INDEX IF NOT EXISTS idx_rtcr_command ON desktop_pet_runtime_command_results(command_id);
 CREATE INDEX IF NOT EXISTS idx_rtcr_runtime ON desktop_pet_runtime_command_results(runtime_id);
 
---- 来源: desktop_pet_runtime_v2_tables.go ---
 CREATE TABLE IF NOT EXISTS desktop_pet_runtime_device_command_sequences (
   space_id TEXT NOT NULL DEFAULT '',
   device_id TEXT NOT NULL DEFAULT '',
@@ -5415,7 +2997,6 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_device_command_sequences (
   PRIMARY KEY(space_id, device_id)
 );
 
---- 来源: desktop_pet_runtime_v2_tables.go ---
 CREATE TABLE IF NOT EXISTS desktop_pet_runtime_event_records (
   id TEXT PRIMARY KEY,
   event_type TEXT NOT NULL DEFAULT '',
@@ -5434,7 +3015,6 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_event_records (
 CREATE INDEX IF NOT EXISTS idx_rter_session_seq ON desktop_pet_runtime_event_records(runtime_session_id, sequence);
 CREATE INDEX IF NOT EXISTS idx_rter_session_delivered ON desktop_pet_runtime_event_records(runtime_session_id, delivered, sequence);
 
---- 来源: desktop_pet_runtime_v2_tables.go ---
 CREATE TABLE IF NOT EXISTS desktop_pet_runtime_actual_states_v2 (
   space_id TEXT NOT NULL DEFAULT '',
   device_id TEXT NOT NULL DEFAULT '',
@@ -5453,6 +3033,12 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_actual_states_v2 (
   renderer_status TEXT NOT NULL DEFAULT '',
   playback_status TEXT NOT NULL DEFAULT '',
   visible INTEGER NOT NULL DEFAULT 0,
+  position_x INTEGER NOT NULL DEFAULT 0,
+  position_y INTEGER NOT NULL DEFAULT 0,
+  screen_id TEXT NOT NULL DEFAULT '',
+  window_width INTEGER NOT NULL DEFAULT 0,
+  window_height INTEGER NOT NULL DEFAULT 0,
+  scale REAL NOT NULL DEFAULT 1,
   stable_action_key TEXT NOT NULL DEFAULT '',
   current_action_key TEXT NOT NULL DEFAULT '',
   playback_instance_id TEXT NOT NULL DEFAULT '',
@@ -5465,7 +3051,6 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_actual_states_v2 (
 );
 CREATE INDEX IF NOT EXISTS idx_rtasv2_user_device ON desktop_pet_runtime_actual_states_v2(space_id, device_id);
 
---- 来源: desktop_pet_runtime_v2_tables.go ---
 CREATE TABLE IF NOT EXISTS desktop_pet_runtime_domain_event_outbox (
   id TEXT PRIMARY KEY,
   event_type TEXT NOT NULL DEFAULT '',
@@ -5482,7 +3067,6 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_domain_event_outbox (
 );
 CREATE INDEX IF NOT EXISTS idx_dteo_status ON desktop_pet_runtime_domain_event_outbox(status, inserted_at);
 
---- 来源: desktop_pet_runtime_v2_tables.go ---
 CREATE TABLE IF NOT EXISTS desktop_pet_runtime_command_dedup (
   id TEXT PRIMARY KEY,
   space_id TEXT NOT NULL DEFAULT '',
@@ -5495,7 +3079,6 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_command_dedup (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_rtcdd_user_device_idem ON desktop_pet_runtime_command_dedup(space_id, device_id, idempotency_key);
 
---- 来源: desktop_pet_runtime_v2_tables.go ---
 CREATE TABLE IF NOT EXISTS desktop_pet_runtime_reconcile_leases (
   reconciler_id TEXT PRIMARY KEY,
   last_heartbeat_at TEXT NOT NULL DEFAULT '',
@@ -5518,7 +3101,6 @@ CREATE TABLE IF NOT EXISTS desktop_pet_installation_trash_entries (
 CREATE INDEX IF NOT EXISTS idx_dptein_installation ON desktop_pet_installation_trash_entries(installation_id);
 CREATE INDEX IF NOT EXISTS idx_dptein_retain ON desktop_pet_installation_trash_entries(retain_until);
 
---- 来源: resource_snapshot_store.go ---
 CREATE TABLE IF NOT EXISTS extension_package_resource_quarantine (
     quarantine_id TEXT NOT NULL,
     operation_id TEXT NOT NULL,
@@ -5539,7 +3121,6 @@ CREATE TABLE IF NOT EXISTS extension_package_resource_quarantine (
 );
 CREATE INDEX IF NOT EXISTS idx_ext_pkg_resource_quarantine_ns_hash ON extension_package_resource_quarantine(extension_id, namespace_hash, state);
 
---- 来源: user_data_snapshot_store.go ---
 CREATE TABLE IF NOT EXISTS extension_package_user_data_restore_journal (
     journal_id TEXT NOT NULL,
     operation_id TEXT NOT NULL,
@@ -5566,7 +3147,6 @@ CREATE TABLE IF NOT EXISTS extension_package_user_data_restore_journal (
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_dpinst_user_device_pet ON desktop_pet_installations(space_id, device_id, pet_id);
 
---- 来源: desktop_session.go ---
 CREATE TABLE IF NOT EXISTS desktop_pet_local_sessions (
     id TEXT PRIMARY KEY,
     space_id TEXT NOT NULL DEFAULT '',
@@ -5614,21 +3194,6 @@ CREATE INDEX IF NOT EXISTS idx_dptrj_stage ON desktop_pet_token_rotation_journal
 
 
 
-CREATE TABLE IF NOT EXISTS desktop_pet_devices (
-    id TEXT PRIMARY KEY,
-    space_id TEXT NOT NULL,
-    device_id TEXT NOT NULL,
-    desktop_instance_id TEXT NOT NULL,
-    platform TEXT NOT NULL DEFAULT '',
-    app_version TEXT NOT NULL DEFAULT '',
-    status TEXT NOT NULL DEFAULT 'active',
-    first_seen_at TEXT NOT NULL,
-    last_seen_at TEXT NOT NULL,
-    revoked_at TEXT NOT NULL DEFAULT '',
-    UNIQUE(space_id, device_id)
-);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_dpd_user_device ON desktop_pet_devices(space_id, device_id);
-CREATE INDEX IF NOT EXISTS idx_dpd_status ON desktop_pet_devices(status);
 
 CREATE TABLE IF NOT EXISTS workspace_mounts (
     id TEXT PRIMARY KEY,
@@ -5645,7 +3210,6 @@ CREATE TABLE IF NOT EXISTS workspace_mounts (
     last_used_at DATETIME
 );
 
---- 来源: model_config_protocol.go ---
 CREATE TABLE IF NOT EXISTS message_attachments (
     id TEXT PRIMARY KEY,
     message_id TEXT NOT NULL DEFAULT '',
@@ -5663,21 +3227,6 @@ CREATE TABLE IF NOT EXISTS message_attachments (
 );
 CREATE INDEX IF NOT EXISTS idx_message_attachments_message_id ON message_attachments(message_id);
 
-CREATE TABLE IF NOT EXISTS voice_profiles (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL DEFAULT '',
-    asr_config_id INTEGER DEFAULT 0,
-    tts_config_id INTEGER DEFAULT 0,
-    realtime_provider_id TEXT DEFAULT '',
-    wake_config_id TEXT DEFAULT '',
-    vad_preset TEXT DEFAULT 'default',
-    interrupt_policy TEXT DEFAULT 'immediate',
-    privacy_mode TEXT DEFAULT 'standard',
-    is_default INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT ''
-);
-CREATE INDEX IF NOT EXISTS idx_voice_profiles_is_default ON voice_profiles(is_default);
 
 CREATE TABLE IF NOT EXISTS wake_configs (
     id TEXT PRIMARY KEY,
@@ -5692,22 +3241,6 @@ CREATE TABLE IF NOT EXISTS wake_configs (
     updated_at TEXT DEFAULT ''
 );
 
---- 来源: production_cutover.go ---
-CREATE TABLE IF NOT EXISTS production_cutover_state (
-	operation_id TEXT PRIMARY KEY,
-	phase TEXT NOT NULL DEFAULT '',
-	status TEXT NOT NULL DEFAULT '',
-	phase_status TEXT NOT NULL DEFAULT '',
-	snapshot_id TEXT NOT NULL DEFAULT '',
-	error_message TEXT NOT NULL DEFAULT '',
-	started_at TEXT NOT NULL,
-	updated_at TEXT NOT NULL,
-	completed_at TEXT NOT NULL DEFAULT '',
-	canonical_generation INTEGER NOT NULL DEFAULT 0,
-	plan_version INTEGER NOT NULL DEFAULT 1
-);
-
---- 来源: device_runtime_session.go ---
 CREATE TABLE IF NOT EXISTS kernel_device_runtime_sessions (
     runtime_session_id TEXT PRIMARY KEY,
     space_id TEXT NOT NULL,
@@ -5735,7 +3268,6 @@ CREATE INDEX IF NOT EXISTS idx_kernel_device_runtime_sessions_identity ON kernel
 CREATE INDEX IF NOT EXISTS idx_kernel_device_runtime_sessions_status ON kernel_device_runtime_sessions(status);
 CREATE INDEX IF NOT EXISTS idx_kernel_device_runtime_sessions_heartbeat ON kernel_device_runtime_sessions(last_heartbeat_at);
 
---- 来源: artifact/migration.go ---
 CREATE TABLE IF NOT EXISTS artifacts (
     artifact_id TEXT PRIMARY KEY,
     owner_space_id TEXT NOT NULL,
@@ -5838,30 +3370,9 @@ CREATE INDEX IF NOT EXISTS idx_execution_resumes_root ON execution_resumes(root_
 CREATE INDEX IF NOT EXISTS idx_execution_resumes_acq_txn ON execution_resumes(acquisition_transaction_id);
 
 
-CREATE TABLE IF NOT EXISTS desktop_pet_action_revision_events (
-  id TEXT PRIMARY KEY,
-  event_type TEXT NOT NULL DEFAULT '',
-  aggregate_id TEXT NOT NULL DEFAULT '',
-  sequence INTEGER NOT NULL DEFAULT 0,
-  payload_json TEXT NOT NULL DEFAULT '{}',
-  created_at TEXT NOT NULL DEFAULT ''
-);
-CREATE INDEX IF NOT EXISTS idx_dpare_aggregate_sequence ON desktop_pet_action_revision_events(aggregate_id, sequence);
 
 
-CREATE TABLE IF NOT EXISTS desktop_pet_bridge_request_snapshots (
-  journal_id TEXT PRIMARY KEY,
-  request_json TEXT NOT NULL DEFAULT '{}',
-  created_at TEXT NOT NULL DEFAULT ''
-);
 
---- 来源: desktop_pet_runtime_behavior_finalization.go ---
-ALTER TABLE desktop_pet_runtime_actual_states_v2 ADD COLUMN position_x INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE desktop_pet_runtime_actual_states_v2 ADD COLUMN position_y INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE desktop_pet_runtime_actual_states_v2 ADD COLUMN screen_id TEXT NOT NULL DEFAULT '';
-ALTER TABLE desktop_pet_runtime_actual_states_v2 ADD COLUMN window_width INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE desktop_pet_runtime_actual_states_v2 ADD COLUMN window_height INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE desktop_pet_runtime_actual_states_v2 ADD COLUMN scale REAL NOT NULL DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS desktop_pet_owner_mappings (
   cloud_space_id TEXT NOT NULL DEFAULT '',
@@ -5916,7 +3427,6 @@ CREATE INDEX IF NOT EXISTS idx_dpbmo_device ON desktop_pet_behavior_mesh_outbox(
 CREATE INDEX IF NOT EXISTS idx_characters_user_updated ON characters(space_id, updated_at);
 CREATE INDEX IF NOT EXISTS idx_characters_user_active ON characters(space_id, is_active, is_default);
 
---- 来源: sandbox_environment.go ---
 CREATE TABLE IF NOT EXISTS sandbox_environment_variables (
     scope_id TEXT NOT NULL,
     name TEXT NOT NULL,
@@ -5932,7 +3442,6 @@ CREATE TABLE IF NOT EXISTS model_scenario_routes (
     model_config_id INTEGER NOT NULL DEFAULT 0
 );
 
---- 来源: continuity_thread_runtime.go ---
 CREATE TABLE IF NOT EXISTS continuity_threads (
     id TEXT PRIMARY KEY,
     space_id TEXT NOT NULL,
@@ -6246,18 +3755,6 @@ CREATE INDEX IF NOT EXISTS idx_retrieval_traces_tenant_config_created ON retriev
 CREATE INDEX IF NOT EXISTS idx_retrieval_traces_tenant_slo_created ON retrieval_traces(tenant_id, slo_exceeded, created_at);
 CREATE INDEX IF NOT EXISTS idx_retrieval_traces_tenant_policy_created ON retrieval_traces(tenant_id, policy_mode, created_at);
 
--- Quarantine unowned WorldBook rules without altering the authoritative world_book schema.
-CREATE TABLE IF NOT EXISTS world_book_orphans (
- id TEXT PRIMARY KEY, space_id TEXT NOT NULL DEFAULT '', legacy_id TEXT NOT NULL,
- match_type TEXT NOT NULL DEFAULT 'keyword', match_pattern TEXT NOT NULL DEFAULT '',
- match_scope TEXT NOT NULL DEFAULT 'full_context', inject_content TEXT NOT NULL DEFAULT '',
- priority INTEGER NOT NULL DEFAULT 0, hit_count INTEGER NOT NULL DEFAULT 0,
- config_json TEXT NOT NULL DEFAULT '{}', migrated_to TEXT NOT NULL DEFAULT '',
- status TEXT NOT NULL DEFAULT 'orphan', created_at TEXT NOT NULL DEFAULT '',
- updated_at TEXT NOT NULL DEFAULT ''
-);
-CREATE INDEX IF NOT EXISTS idx_world_book_orphan_space_status ON world_book_orphans(space_id,status);
-
 CREATE TABLE IF NOT EXISTS knowledge_vector_audit_sessions (
     id TEXT PRIMARY KEY,
     tenant_id TEXT NOT NULL,
@@ -6388,16 +3885,6 @@ CREATE TABLE IF NOT EXISTS kernel_security_audit_outbox (
     last_error TEXT NOT NULL DEFAULT ''
 );
 
-CREATE TABLE IF NOT EXISTS extension_agent_skill_cutover (
-    id INTEGER PRIMARY KEY CHECK (id = 1),
-    status TEXT NOT NULL DEFAULT 'pending',
-    migrated_skills INTEGER NOT NULL DEFAULT 0,
-    migrated_activations INTEGER NOT NULL DEFAULT 0,
-    last_error TEXT NOT NULL DEFAULT '',
-    started_at TEXT NOT NULL DEFAULT '',
-    completed_at TEXT NOT NULL DEFAULT ''
-);
-
 CREATE TABLE IF NOT EXISTS runtime_model_usage (
     sequence INTEGER PRIMARY KEY AUTOINCREMENT,
     id TEXT NOT NULL,
@@ -6471,6 +3958,608 @@ CREATE TABLE IF NOT EXISTS channel_sandbox_policies (
     updated_at TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (space_id, channel_id)
 );
+
+CREATE TABLE IF NOT EXISTS agent_profiles (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    character_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    archetype TEXT NOT NULL DEFAULT 'companion',
+    status TEXT NOT NULL DEFAULT 'draft',
+    owner_id TEXT NOT NULL DEFAULT '',
+    team_id TEXT NOT NULL DEFAULT '',
+    current_revision_id TEXT NOT NULL DEFAULT '',
+    current_release_id TEXT NOT NULL DEFAULT '',
+    revision INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    deleted_at DATETIME
+);
+CREATE INDEX IF NOT EXISTS idx_agent_profiles_deleted_at ON agent_profiles(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_agent_profiles_team_id ON agent_profiles(team_id);
+CREATE INDEX IF NOT EXISTS idx_agent_profiles_owner_id ON agent_profiles(owner_id);
+CREATE INDEX IF NOT EXISTS idx_agent_profiles_character_id ON agent_profiles(character_id);
+CREATE INDEX IF NOT EXISTS idx_agent_profiles_space_id ON agent_profiles(space_id);
+
+CREATE TABLE IF NOT EXISTS agent_runs (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    conversation_id TEXT NOT NULL,
+    parent_run_id TEXT NOT NULL DEFAULT '',
+    coordination_id TEXT NOT NULL DEFAULT '',
+    assignment_id TEXT NOT NULL DEFAULT '',
+    parent_interaction_id TEXT NOT NULL DEFAULT '',
+    child_interaction_id TEXT NOT NULL DEFAULT '',
+    character_id TEXT NOT NULL DEFAULT '',
+    worker_role TEXT NOT NULL DEFAULT '',
+    objective TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'planning',
+    depth INTEGER NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_agent_runs_updated_at ON agent_runs(updated_at);
+CREATE INDEX IF NOT EXISTS idx_agent_runs_status ON agent_runs(status);
+CREATE INDEX IF NOT EXISTS idx_agent_runs_character_id ON agent_runs(character_id);
+CREATE INDEX IF NOT EXISTS idx_agent_runs_child_interaction ON agent_runs(child_interaction_id);
+CREATE INDEX IF NOT EXISTS idx_agent_runs_parent_interaction ON agent_runs(parent_interaction_id);
+CREATE INDEX IF NOT EXISTS idx_agent_runs_assignment_id ON agent_runs(assignment_id);
+CREATE INDEX IF NOT EXISTS idx_agent_runs_coordination_id ON agent_runs(coordination_id);
+CREATE INDEX IF NOT EXISTS idx_agent_runs_parent_run_id ON agent_runs(parent_run_id);
+CREATE INDEX IF NOT EXISTS idx_agent_run_conversation ON agent_runs(space_id, conversation_id);
+
+CREATE TABLE IF NOT EXISTS agent_run_messages (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    conversation_id TEXT NOT NULL,
+    sender_run_id TEXT NOT NULL,
+    recipient_run_id TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'instruction',
+    content TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    correlation_id TEXT NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL,
+    read_at DATETIME
+);
+CREATE INDEX IF NOT EXISTS idx_agent_run_messages_created_at ON agent_run_messages(created_at);
+CREATE INDEX IF NOT EXISTS idx_agent_run_messages_correlation_id ON agent_run_messages(correlation_id);
+CREATE INDEX IF NOT EXISTS idx_agent_run_messages_status ON agent_run_messages(status);
+CREATE INDEX IF NOT EXISTS idx_agent_run_messages_kind ON agent_run_messages(kind);
+CREATE INDEX IF NOT EXISTS idx_agent_run_messages_sender_run_id ON agent_run_messages(sender_run_id);
+CREATE INDEX IF NOT EXISTS idx_agent_run_messages_conversation ON agent_run_messages(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_agent_run_message_run ON agent_run_messages(space_id, recipient_run_id);
+
+CREATE TABLE IF NOT EXISTS agent_revisions (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL,
+    revision INTEGER NOT NULL,
+    config_json TEXT NOT NULL,
+    config_hash TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'draft',
+    change_note TEXT NOT NULL DEFAULT '',
+    created_by TEXT NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL,
+    published_at DATETIME,
+    test_run_id TEXT NOT NULL DEFAULT '',
+    test_status TEXT NOT NULL DEFAULT 'not_run',
+    test_evidence TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_agent_revisions_agent_id ON agent_revisions(agent_id);
+CREATE INDEX IF NOT EXISTS idx_agent_revisions_space_id ON agent_revisions(space_id);
+
+CREATE TABLE IF NOT EXISTS agent_releases (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL,
+    revision_id TEXT NOT NULL,
+    version TEXT NOT NULL,
+    release_notes TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'published',
+    evaluation_run_id TEXT NOT NULL DEFAULT '',
+    created_by TEXT NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL,
+    superseded_at DATETIME
+);
+CREATE INDEX IF NOT EXISTS idx_agent_releases_revision_id ON agent_releases(revision_id);
+CREATE INDEX IF NOT EXISTS idx_agent_releases_agent_id ON agent_releases(agent_id);
+CREATE INDEX IF NOT EXISTS idx_agent_releases_space_id ON agent_releases(space_id);
+
+CREATE TABLE IF NOT EXISTS agent_templates (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL DEFAULT 'general',
+    archetype TEXT NOT NULL DEFAULT 'companion',
+    description TEXT NOT NULL DEFAULT '',
+    config_json TEXT NOT NULL,
+    publisher_id TEXT NOT NULL DEFAULT 'com.amitia',
+    trust_level TEXT NOT NULL DEFAULT 'official',
+    builtin INTEGER NOT NULL DEFAULT 0,
+    schema_version INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_agent_templates_category ON agent_templates(category);
+
+CREATE TABLE IF NOT EXISTS platform_users (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    email TEXT NOT NULL DEFAULT '',
+    auth_hash TEXT NOT NULL DEFAULT '',
+    avatar TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'active',
+    is_local_owner INTEGER NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    revoked_at DATETIME
+);
+CREATE INDEX IF NOT EXISTS idx_platform_users_email ON platform_users(email);
+CREATE INDEX IF NOT EXISTS idx_platform_users_space_id ON platform_users(space_id);
+
+CREATE TABLE IF NOT EXISTS platform_sessions (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    token_hash TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active',
+    expires_at DATETIME NOT NULL,
+    created_at DATETIME NOT NULL,
+    revoked_at DATETIME
+);
+CREATE INDEX IF NOT EXISTS idx_platform_sessions_expires_at ON platform_sessions(expires_at);
+CREATE INDEX IF NOT EXISTS idx_platform_sessions_status ON platform_sessions(status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_platform_sessions_token_hash ON platform_sessions(token_hash);
+CREATE INDEX IF NOT EXISTS idx_platform_sessions_user_id ON platform_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_platform_sessions_space_id ON platform_sessions(space_id);
+
+CREATE TABLE IF NOT EXISTS platform_memberships (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    team_id TEXT NOT NULL DEFAULT '',
+    role TEXT NOT NULL DEFAULT 'member',
+    status TEXT NOT NULL DEFAULT 'active',
+    permissions TEXT NOT NULL DEFAULT '[]',
+    revision INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_platform_memberships_team_id ON platform_memberships(team_id);
+CREATE INDEX IF NOT EXISTS idx_platform_memberships_user_id ON platform_memberships(user_id);
+CREATE INDEX IF NOT EXISTS idx_platform_memberships_space_id ON platform_memberships(space_id);
+
+CREATE TABLE IF NOT EXISTS platform_invitations (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    team_id TEXT NOT NULL DEFAULT '',
+    inviter_id TEXT NOT NULL,
+    email TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'member',
+    token_hash TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    expires_at DATETIME NOT NULL,
+    accepted_at DATETIME,
+    created_at DATETIME NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_platform_invitations_token_hash ON platform_invitations(token_hash);
+CREATE INDEX IF NOT EXISTS idx_platform_invitations_email ON platform_invitations(email);
+CREATE INDEX IF NOT EXISTS idx_platform_invitations_team_id ON platform_invitations(team_id);
+CREATE INDEX IF NOT EXISTS idx_platform_invitations_space_id ON platform_invitations(space_id);
+
+CREATE TABLE IF NOT EXISTS teams (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    owner_id TEXT NOT NULL DEFAULT '',
+    lead_agent_id TEXT NOT NULL DEFAULT '',
+    workspace_id TEXT NOT NULL DEFAULT '',
+    workspace_root_uri TEXT NOT NULL DEFAULT '',
+    shared_memory INTEGER NOT NULL DEFAULT 0,
+    shared_workspace INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'active',
+    revision INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    deleted_at DATETIME
+);
+CREATE INDEX IF NOT EXISTS idx_teams_deleted_at ON teams(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_teams_owner_id ON teams(owner_id);
+CREATE INDEX IF NOT EXISTS idx_teams_space_id ON teams(space_id);
+
+CREATE TABLE IF NOT EXISTS team_templates (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    shared_memory INTEGER NOT NULL DEFAULT 1,
+    shared_workspace INTEGER NOT NULL DEFAULT 1,
+    routing_policy_json TEXT NOT NULL DEFAULT '{}',
+    builtin INTEGER NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS team_members (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    team_id TEXT NOT NULL,
+    member_type TEXT NOT NULL,
+    member_id TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'member',
+    responder_mode TEXT NOT NULL DEFAULT 'mention_or_lead',
+    capabilities TEXT NOT NULL DEFAULT '[]',
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_team_members_member_id ON team_members(member_id);
+CREATE INDEX IF NOT EXISTS idx_team_members_team_id ON team_members(team_id);
+CREATE INDEX IF NOT EXISTS idx_team_members_space_id ON team_members(space_id);
+
+CREATE TABLE IF NOT EXISTS team_contexts (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    team_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    key TEXT NOT NULL DEFAULT '',
+    content TEXT NOT NULL,
+    content_hash TEXT NOT NULL,
+    visibility TEXT NOT NULL DEFAULT 'team',
+    revision INTEGER NOT NULL DEFAULT 1,
+    created_by TEXT NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_team_contexts_kind ON team_contexts(kind);
+CREATE INDEX IF NOT EXISTS idx_team_contexts_team_id ON team_contexts(team_id);
+CREATE INDEX IF NOT EXISTS idx_team_contexts_space_id ON team_contexts(space_id);
+
+CREATE TABLE IF NOT EXISTS team_handoffs (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    team_id TEXT NOT NULL,
+    task_id TEXT NOT NULL,
+    from_agent_id TEXT NOT NULL,
+    to_agent_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    summary TEXT NOT NULL DEFAULT '',
+    context_json TEXT NOT NULL DEFAULT '{}',
+    evidence_ref TEXT NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL,
+    accepted_at DATETIME,
+    completed_at DATETIME
+);
+CREATE INDEX IF NOT EXISTS idx_team_handoffs_to_agent_id ON team_handoffs(to_agent_id);
+CREATE INDEX IF NOT EXISTS idx_team_handoffs_from_agent_id ON team_handoffs(from_agent_id);
+CREATE INDEX IF NOT EXISTS idx_team_handoffs_task_id ON team_handoffs(task_id);
+CREATE INDEX IF NOT EXISTS idx_team_handoffs_team_id ON team_handoffs(team_id);
+CREATE INDEX IF NOT EXISTS idx_team_handoffs_space_id ON team_handoffs(space_id);
+
+CREATE TABLE IF NOT EXISTS approval_records (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL DEFAULT '',
+    team_id TEXT NOT NULL DEFAULT '',
+    conversation_id TEXT NOT NULL DEFAULT '',
+    turn_id TEXT NOT NULL DEFAULT '',
+    tool_call_id TEXT NOT NULL DEFAULT '',
+    tool_name TEXT NOT NULL,
+    action_summary TEXT NOT NULL DEFAULT '',
+    resource_summary TEXT NOT NULL DEFAULT '',
+    arguments_json TEXT NOT NULL DEFAULT '{}',
+    evidence_json TEXT NOT NULL DEFAULT '{}',
+    scope_json TEXT NOT NULL DEFAULT '{}',
+    risk_level TEXT NOT NULL DEFAULT 'medium',
+    reversible INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'pending',
+    allow_once INTEGER NOT NULL DEFAULT 1,
+    session_grant INTEGER NOT NULL DEFAULT 0,
+    timed_grant_until DATETIME,
+    request_hash TEXT NOT NULL,
+    requested_by TEXT NOT NULL DEFAULT '',
+    decided_by TEXT NOT NULL DEFAULT '',
+    decision_reason TEXT NOT NULL DEFAULT '',
+    expires_at DATETIME NOT NULL,
+    decided_at DATETIME,
+    resumed_at DATETIME,
+    revision INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_approval_records_expires_at ON approval_records(expires_at);
+CREATE INDEX IF NOT EXISTS idx_approval_records_status ON approval_records(status);
+CREATE INDEX IF NOT EXISTS idx_approval_records_tool_call_id ON approval_records(tool_call_id);
+CREATE INDEX IF NOT EXISTS idx_approval_records_conversation_id ON approval_records(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_approval_records_team_id ON approval_records(team_id);
+CREATE INDEX IF NOT EXISTS idx_approval_records_agent_id ON approval_records(agent_id);
+CREATE INDEX IF NOT EXISTS idx_approval_records_space_id ON approval_records(space_id);
+
+CREATE TABLE IF NOT EXISTS approval_decisions (
+    id TEXT PRIMARY KEY,
+    approval_id TEXT NOT NULL,
+    decision TEXT NOT NULL,
+    grant_mode TEXT NOT NULL DEFAULT 'once',
+    reason TEXT NOT NULL DEFAULT '',
+    actor_id TEXT NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_approval_decisions_approval_id ON approval_decisions(approval_id);
+
+CREATE TABLE IF NOT EXISTS resource_leases (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    resource_type TEXT NOT NULL,
+    resource_id TEXT NOT NULL,
+    holder_agent_id TEXT NOT NULL,
+    task_id TEXT NOT NULL DEFAULT '',
+    mode TEXT NOT NULL DEFAULT 'exclusive',
+    fingerprint TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'active',
+    expires_at DATETIME NOT NULL,
+    created_at DATETIME NOT NULL,
+    released_at DATETIME
+);
+CREATE INDEX IF NOT EXISTS idx_resource_leases_status ON resource_leases(status);
+CREATE INDEX IF NOT EXISTS idx_resource_leases_holder_agent_id ON resource_leases(holder_agent_id);
+CREATE INDEX IF NOT EXISTS idx_resource_leases_resource_id ON resource_leases(resource_id);
+CREATE INDEX IF NOT EXISTS idx_resource_leases_resource_type ON resource_leases(resource_type);
+CREATE INDEX IF NOT EXISTS idx_resource_leases_space_id ON resource_leases(space_id);
+
+CREATE TABLE IF NOT EXISTS idempotent_operations (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL,
+    idempotency_key TEXT NOT NULL,
+    scope_key TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'running',
+    result_json TEXT NOT NULL DEFAULT '',
+    original_error TEXT NOT NULL DEFAULT '',
+    revision INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    completed_at DATETIME
+);
+CREATE INDEX IF NOT EXISTS idx_idempotent_operations_status ON idempotent_operations(status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_idempotent_scope ON idempotent_operations(idempotency_key, scope_key);
+CREATE INDEX IF NOT EXISTS idx_idempotent_operations_agent_id ON idempotent_operations(agent_id);
+CREATE INDEX IF NOT EXISTS idx_idempotent_operations_space_id ON idempotent_operations(space_id);
+
+CREATE TABLE IF NOT EXISTS runtime_instances (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    provider_ref TEXT NOT NULL DEFAULT '',
+    image TEXT NOT NULL DEFAULT '',
+    state TEXT NOT NULL DEFAULT 'created',
+    root_path TEXT NOT NULL DEFAULT '',
+    workspace_id TEXT NOT NULL DEFAULT '',
+    workspace_root_uri TEXT NOT NULL DEFAULT '',
+    endpoint TEXT NOT NULL DEFAULT '',
+    cpu_quota REAL NOT NULL DEFAULT 1,
+    memory_bytes INTEGER NOT NULL DEFAULT 1073741824,
+    disk_bytes INTEGER NOT NULL DEFAULT 10737418240,
+    process_limit INTEGER NOT NULL DEFAULT 64,
+    idle_timeout_seconds INTEGER NOT NULL DEFAULT 1800,
+    snapshot_id TEXT NOT NULL DEFAULT '',
+    last_error TEXT NOT NULL DEFAULT '',
+    revision INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    started_at DATETIME,
+    stopped_at DATETIME
+);
+CREATE INDEX IF NOT EXISTS idx_runtime_instances_workspace_id ON runtime_instances(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_runtime_instances_state ON runtime_instances(state);
+CREATE INDEX IF NOT EXISTS idx_runtime_instances_agent_id ON runtime_instances(agent_id);
+CREATE INDEX IF NOT EXISTS idx_runtime_instances_space_id ON runtime_instances(space_id);
+
+CREATE TABLE IF NOT EXISTS runtime_snapshots (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL,
+    runtime_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    path TEXT NOT NULL DEFAULT '',
+    manifest_json TEXT NOT NULL DEFAULT '{}',
+    content_hash TEXT NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_runtime_snapshots_runtime_id ON runtime_snapshots(runtime_id);
+CREATE INDEX IF NOT EXISTS idx_runtime_snapshots_agent_id ON runtime_snapshots(agent_id);
+CREATE INDEX IF NOT EXISTS idx_runtime_snapshots_space_id ON runtime_snapshots(space_id);
+
+CREATE TABLE IF NOT EXISTS host_control_sessions (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL,
+    platform TEXT NOT NULL,
+    capabilities TEXT NOT NULL DEFAULT '[]',
+    permission_json TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'pending',
+    approved_by TEXT NOT NULL DEFAULT '',
+    expires_at DATETIME NOT NULL,
+    created_at DATETIME NOT NULL,
+    ended_at DATETIME
+);
+CREATE INDEX IF NOT EXISTS idx_host_control_sessions_status ON host_control_sessions(status);
+CREATE INDEX IF NOT EXISTS idx_host_control_sessions_agent_id ON host_control_sessions(agent_id);
+CREATE INDEX IF NOT EXISTS idx_host_control_sessions_space_id ON host_control_sessions(space_id);
+
+CREATE TABLE IF NOT EXISTS evaluation_suites (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL DEFAULT '',
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    config_json TEXT NOT NULL DEFAULT '{}',
+    gate_policy_json TEXT NOT NULL DEFAULT '{}',
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_evaluation_suites_agent_id ON evaluation_suites(agent_id);
+CREATE INDEX IF NOT EXISTS idx_evaluation_suites_space_id ON evaluation_suites(space_id);
+
+CREATE TABLE IF NOT EXISTS evaluation_cases (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    suite_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    input_json TEXT NOT NULL DEFAULT '{}',
+    expected_json TEXT NOT NULL DEFAULT '{}',
+    category TEXT NOT NULL DEFAULT 'general',
+    safety_critical INTEGER NOT NULL DEFAULT 0,
+    weight REAL NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_evaluation_cases_suite_id ON evaluation_cases(suite_id);
+CREATE INDEX IF NOT EXISTS idx_evaluation_cases_space_id ON evaluation_cases(space_id);
+
+CREATE TABLE IF NOT EXISTS evaluation_runs (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL,
+    revision_id TEXT NOT NULL,
+    suite_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'running',
+    task_success_rate REAL NOT NULL DEFAULT 0,
+    tool_accuracy REAL NOT NULL DEFAULT 0,
+    safety_violations INTEGER NOT NULL DEFAULT 0,
+    false_success_rate REAL NOT NULL DEFAULT 0,
+    recovery_rate REAL NOT NULL DEFAULT 0,
+    memory_leak_count INTEGER NOT NULL DEFAULT 0,
+    total_tokens INTEGER NOT NULL DEFAULT 0,
+    total_cost_micro_usd INTEGER NOT NULL DEFAULT 0,
+    average_latency_ms INTEGER NOT NULL DEFAULT 0,
+    gate_status TEXT NOT NULL DEFAULT 'pending',
+    gate_reason TEXT NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL,
+    completed_at DATETIME
+);
+CREATE INDEX IF NOT EXISTS idx_evaluation_runs_status ON evaluation_runs(status);
+CREATE INDEX IF NOT EXISTS idx_evaluation_runs_suite_id ON evaluation_runs(suite_id);
+CREATE INDEX IF NOT EXISTS idx_evaluation_runs_revision_id ON evaluation_runs(revision_id);
+CREATE INDEX IF NOT EXISTS idx_evaluation_runs_agent_id ON evaluation_runs(agent_id);
+CREATE INDEX IF NOT EXISTS idx_evaluation_runs_space_id ON evaluation_runs(space_id);
+
+CREATE TABLE IF NOT EXISTS evaluation_results (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    run_id TEXT NOT NULL,
+    case_id TEXT NOT NULL,
+    passed INTEGER NOT NULL DEFAULT 0,
+    score REAL NOT NULL DEFAULT 0,
+    latency_ms INTEGER NOT NULL DEFAULT 0,
+    tokens INTEGER NOT NULL DEFAULT 0,
+    cost_micro_usd INTEGER NOT NULL DEFAULT 0,
+    tool_trace_json TEXT NOT NULL DEFAULT '[]',
+    failure_json TEXT NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_evaluation_results_case_id ON evaluation_results(case_id);
+CREATE INDEX IF NOT EXISTS idx_evaluation_results_run_id ON evaluation_results(run_id);
+CREATE INDEX IF NOT EXISTS idx_evaluation_results_space_id ON evaluation_results(space_id);
+
+CREATE TABLE IF NOT EXISTS activity_events (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    actor_id TEXT NOT NULL DEFAULT '',
+    actor_type TEXT NOT NULL DEFAULT '',
+    agent_id TEXT NOT NULL DEFAULT '',
+    team_id TEXT NOT NULL DEFAULT '',
+    runtime_id TEXT NOT NULL DEFAULT '',
+    conversation_id TEXT NOT NULL DEFAULT '',
+    kind TEXT NOT NULL,
+    state TEXT NOT NULL,
+    title TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    waiting_reason TEXT NOT NULL DEFAULT '',
+    cost_micro_usd INTEGER NOT NULL DEFAULT 0,
+    duration_ms INTEGER NOT NULL DEFAULT 0,
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    occurred_at DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_activity_events_occurred_at ON activity_events(occurred_at);
+CREATE INDEX IF NOT EXISTS idx_activity_events_state ON activity_events(state);
+CREATE INDEX IF NOT EXISTS idx_activity_events_kind ON activity_events(kind);
+CREATE INDEX IF NOT EXISTS idx_activity_events_conversation_id ON activity_events(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_activity_events_runtime_id ON activity_events(runtime_id);
+CREATE INDEX IF NOT EXISTS idx_activity_events_team_id ON activity_events(team_id);
+CREATE INDEX IF NOT EXISTS idx_activity_events_agent_id ON activity_events(agent_id);
+CREATE INDEX IF NOT EXISTS idx_activity_events_actor_id ON activity_events(actor_id);
+CREATE INDEX IF NOT EXISTS idx_activity_events_space_id ON activity_events(space_id);
+
+CREATE TABLE IF NOT EXISTS agent_autonomy_policies (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL,
+    level INTEGER NOT NULL DEFAULT 1,
+    watch_only INTEGER NOT NULL DEFAULT 1,
+    auto_low_risk INTEGER NOT NULL DEFAULT 0,
+    external_approval INTEGER NOT NULL DEFAULT 1,
+    max_actions_per_day INTEGER NOT NULL DEFAULT 20,
+    max_cost_micro_usd INTEGER NOT NULL DEFAULT 0,
+    quiet_hours TEXT NOT NULL DEFAULT '',
+    escalation_target TEXT NOT NULL DEFAULT '',
+    triggers_json TEXT NOT NULL DEFAULT '[]',
+    kill_switch INTEGER NOT NULL DEFAULT 0,
+    revision INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_autonomy_policies_agent_id ON agent_autonomy_policies(agent_id);
+CREATE INDEX IF NOT EXISTS idx_agent_autonomy_policies_space_id ON agent_autonomy_policies(space_id);
+
+CREATE TABLE IF NOT EXISTS a2a_agent_cards (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    url TEXT NOT NULL,
+    version TEXT NOT NULL DEFAULT '1.0.0',
+    skills_json TEXT NOT NULL DEFAULT '[]',
+    security_json TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_a2a_agent_cards_status ON a2a_agent_cards(status);
+CREATE INDEX IF NOT EXISTS idx_a2a_agent_cards_agent_id ON a2a_agent_cards(agent_id);
+CREATE INDEX IF NOT EXISTS idx_a2a_agent_cards_space_id ON a2a_agent_cards(space_id);
+
+CREATE TABLE IF NOT EXISTS a2a_tasks (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL,
+    remote_agent_url TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'submitted',
+    input_json TEXT NOT NULL DEFAULT '{}',
+    output_json TEXT NOT NULL DEFAULT '',
+    original_error TEXT NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    completed_at DATETIME
+);
+CREATE INDEX IF NOT EXISTS idx_a2a_tasks_status ON a2a_tasks(status);
+CREATE INDEX IF NOT EXISTS idx_a2a_tasks_agent_id ON a2a_tasks(agent_id);
+CREATE INDEX IF NOT EXISTS idx_a2a_tasks_space_id ON a2a_tasks(space_id);
+
+CREATE TABLE IF NOT EXISTS a2_a_replay_records (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    sender_agent_id TEXT NOT NULL,
+    nonce TEXT NOT NULL,
+    signature_hash TEXT NOT NULL,
+    expires_at DATETIME NOT NULL,
+    created_at DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_a2_a_replay_records_expires_at ON a2_a_replay_records(expires_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_a2_a_replay_records_nonce ON a2_a_replay_records(nonce);
+CREATE INDEX IF NOT EXISTS idx_a2_a_replay_records_sender_agent_id ON a2_a_replay_records(sender_agent_id);
+CREATE INDEX IF NOT EXISTS idx_a2_a_replay_records_space_id ON a2_a_replay_records(space_id);
 
 CREATE TABLE IF NOT EXISTS agent_access_policies (
     id TEXT PRIMARY KEY,
