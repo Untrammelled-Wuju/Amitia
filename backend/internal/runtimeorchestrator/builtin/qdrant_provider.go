@@ -406,8 +406,14 @@ func (p *qdrantProvider) Ready(ctx context.Context) error {
 		return runtimeorchestrator.DescriptorFailure("", "qdrant client not initialized")
 	}
 
-	if p.coordinator != nil && !p.coordinator.IsReady() {
-		return runtimeorchestrator.DescriptorFailure("", "qdrant coordinator reports not ready")
+	if p.coordinator != nil {
+		snapshot := p.coordinator.CheckReady(ctx)
+		if !snapshot.State.IsReady() {
+			if snapshot.LastError != nil {
+				return runtimeorchestrator.DescriptorFailure("", snapshot.LastError.Error())
+			}
+			return runtimeorchestrator.DescriptorFailure("", "qdrant coordinator reports "+snapshot.State.String())
+		}
 	}
 
 	return nil

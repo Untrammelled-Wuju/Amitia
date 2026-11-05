@@ -82,6 +82,9 @@ func checkpointNextEffects(payload json.RawMessage) ([]checkpointPlannedEffect, 
 		return nil, nil
 	}
 	raw, hasPlan := object["nextEffects"]
+	if _, legacy := object["nextEffectIds"]; legacy {
+		return nil, NewTaskError(ErrTaskCheckpointIncompatible, "检查点包含已废弃的后续效果字段")
+	}
 	if !hasPlan {
 		return nil, nil
 	}

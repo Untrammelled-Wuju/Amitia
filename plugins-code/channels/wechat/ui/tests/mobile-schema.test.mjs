@@ -39,7 +39,7 @@ test("shows the QR image from the connect response and hides it after login", ()
   assert.ok(qr);
   assert.equal(qr.bindings[0].sourcePath, "connectResult.data.qrImageUrl");
   assert.deepEqual(qr.visibleWhen, [
-    { field: "connectResult.data.qrImageUrl", operator: "not_null" },
+    { field: "connectResult.data.qrImageUrl", operator: "!=", value: "" },
     { field: "status.status", operator: "!=", value: "connected" },
   ]);
   const connect = nodes(schema).find((node) => node.id === "wechat-mobile-connect");

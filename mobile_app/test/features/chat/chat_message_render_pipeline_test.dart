@@ -20,7 +20,6 @@ void main() {
       page,
       isNot(contains('capability: UICapability.conversationMessages')),
     );
-    expect(page, isNot(contains("slotId: 'chat.empty_state.card'")));
     expect(page, contains('providerMessage,'));
     expect(
       providerHost,

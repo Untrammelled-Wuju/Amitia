@@ -381,8 +381,7 @@ func newMCPTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runner := mcpmigration.Runner{DB: db, SkipBackup: true}
-	if err := runner.Apply([]mcpmigration.Migration{mcpmigration.MCPClientMigration(), mcpmigration.MCPOwnedBindingsMigration()}); err != nil {
+	if err := mcpmigration.ApplyBaseline(db); err != nil {
 		t.Fatal(err)
 	}
 	return db

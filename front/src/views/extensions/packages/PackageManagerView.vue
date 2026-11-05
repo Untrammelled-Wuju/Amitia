@@ -169,7 +169,7 @@
     </section>
 
     <section v-show="!['install', 'installed'].includes(tab)" class="panel kernel-view-panel">
-      <Suspense>
+      <Suspense v-if="currentKernelComponent">
         <component :is="currentKernelComponent" />
         <template #fallback>
           <div class="kernel-loading">
@@ -178,6 +178,10 @@
           </div>
         </template>
       </Suspense>
+      <div v-else class="kernel-loading">
+        <el-icon class="loading-icon" :size="24"><Loading /></el-icon>
+        <span>加载中...</span>
+      </div>
     </section>
 
     <el-dialog

@@ -18,6 +18,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/dev_mode"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/migration"
+	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 )
 
 func newPackagePipelineRuntime(t *testing.T) (*Runtime, *Container) {
@@ -28,6 +29,11 @@ func newPackagePipelineRuntime(t *testing.T) (*Runtime, *Container) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	supervisor := runtime_supervisor.NewDefaultSupervisor()
+	if err := supervisor.RegisterFactory(runtime_supervisor.NewFakeFactory(domain.RuntimeTypeJavaScript, runtime_supervisor.NewFakeRuntime())); err != nil {
+		t.Fatal(err)
+	}
+	container.RuntimeSupervisor = supervisor
 	t.Cleanup(func() { _ = container.Close() })
 	runtime, err := NewRuntime(filepath.Join(root, "extensions"))
 	if err != nil {
@@ -52,7 +58,7 @@ func createPackagePipelineArchiveWithMigrations(t *testing.T, version string, de
 		"extension":       extension,
 		"publisher":       map[string]any{"id": "com.example", "displayName": "Example"},
 		"compatibility":   map[string]any{},
-		"modules":         []any{map[string]any{"id": "main", "name": map[string]any{"default": "Main"}, "type": "javascript", "version": version, "runtime": map[string]any{"type": "javascript", "entryPoint": "index.js"}, "contributions": []any{map[string]any{"id": "pipeline-tool", "kind": "tool", "name": map[string]any{"default": "Pipeline Tool"}, "version": version}}}},
+		"modules":         []any{map[string]any{"id": "main", "name": map[string]any{"default": "Main"}, "type": "javascript", "version": version, "runtime": map[string]any{"type": "javascript", "entryPoint": "index.js"}, "contributions": []any{map[string]any{"id": "pipeline-tool", "kind": "tool", "name": map[string]any{"default": "Pipeline Tool"}, "version": version, "spec": map[string]any{"inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}}}}}},
 		"integrity":       map[string]any{"algorithm": "sha256", "contentTreeHash": ""},
 	}
 	manifestRaw, err := json.Marshal(manifest)

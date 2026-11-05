@@ -49,3 +49,16 @@ func TestRegisterPermissionDefinitionsNeverCreatesSparseDefinitions(t *testing.T
 		}
 	}
 }
+
+func TestPluginManagementPermissionsRequireGlobalScope(t *testing.T) {
+	for _, method := range []Method{MethodPluginPreview, MethodPluginInstall, MethodPluginUninstall, MethodPluginList} {
+		requirements := RoutePermissionForMethod(method)
+		if len(requirements) != 1 || requirements[0].Scope != permission.ScopeGlobal {
+			t.Fatalf("%s scope requirements = %+v", method, requirements)
+		}
+	}
+	requirements := RoutePermissionForMethod(MethodStateGet)
+	if len(requirements) != 1 || requirements[0].Scope != "" {
+		t.Fatalf("state.get scope requirements = %+v", requirements)
+	}
+}

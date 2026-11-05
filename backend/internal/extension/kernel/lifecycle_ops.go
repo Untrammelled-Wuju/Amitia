@@ -48,6 +48,10 @@ type enableTransaction struct {
 }
 
 func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
+	return r.enable(ctx, extensionID, false)
+}
+
+func (r *Runtime) enable(ctx context.Context, extensionID string, force bool) error {
 	if r.container == nil {
 		return errors.New("kernel: container not attached")
 	}
@@ -60,6 +64,9 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 	inst, err := r.container.InstallationRepository.GetInstallation(ctx, extID)
 	if err != nil {
 		return fmt.Errorf("kernel: get installation: %w", err)
+	}
+	if inst.EnablementState == domain.EnablementEnabled && !force {
+		return nil
 	}
 	if inst.Metadata == nil {
 		inst.Metadata = map[string]any{}

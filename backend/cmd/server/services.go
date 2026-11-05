@@ -197,6 +197,7 @@ type RuntimeOrchestrator interface {
 	StartPhase(ctx context.Context, phase runtimeorchestrator.ComponentPhase) error
 	StopAll(ctx context.Context) error
 	Snapshot() runtimeorchestrator.RuntimeSnapshot
+	RefreshHealth(ctx context.Context) runtimeorchestrator.RuntimeSnapshot
 	GraphService() graph.Service
 	SetGraphService(svc graph.Service)
 }
@@ -473,6 +474,18 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	kernelContainer.ChannelSandbox = newChannelSandboxPolicySource(channelsandbox.NewService(ctx.DB, channelSandboxDataDir()))
 	kernelChatAppender.resourceLinks = kernelContainer.ResourceLinks
 	extensionRuntime.Kernel.SetContainer(kernelContainer)
+	bundledPluginsDir := strings.TrimSpace(os.Getenv("AMITIA_BUNDLED_PLUGINS_DIR"))
+	if bundledPluginsDir == "" && config.AppCfg != nil && config.AppCfg.Storage.DataDir != "" {
+		bundledPluginsDir = filepath.Join(config.AppCfg.Storage.DataDir, "bundled-plugins")
+		if _, statErr := os.Stat(bundledPluginsDir); errors.Is(statErr, os.ErrNotExist) {
+			if runtimeRoot := strings.TrimSpace(os.Getenv("AMITIA_RUNTIME_ROOT")); runtimeRoot != "" {
+				bundledPluginsDir = filepath.Join(runtimeRoot, "bundled-plugins")
+			}
+		}
+	}
+	if err := kernel.ProvisionBundledPlugins(context.Background(), extensionRuntime.Kernel, bundledPluginsDir, spaceidentity.DefaultSpaceID()); err != nil {
+		return nil, fmt.Errorf("provision bundled plugins: %w", err)
+	}
 	wireConversationEventDurableStore(kernelContainer.EventService)
 	mcpRuntime, mcpRuntimeErr = mcpservice.NewRuntime(
 		ctx.DB,

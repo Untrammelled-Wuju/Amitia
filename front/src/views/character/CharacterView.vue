@@ -155,7 +155,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           </div>
         </el-form-item>
         <el-form-item label="名称"
-          ><el-input v-model="form.name"
+          ><el-input v-model="form.name" maxlength="128" show-word-limit
         /></el-form-item>
         <el-form-item label="描述"
           ><el-input v-model="form.description" type="textarea" :rows="2"

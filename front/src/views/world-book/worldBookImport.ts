@@ -101,7 +101,7 @@ function validateWorldBookImportItem(raw: unknown, index: number): WorldBookImpo
       new RegExp(matchPattern);
     } catch (error) {
   console.error("[original-error]", error);
-return invalid(error instanceof Error ? error.message : String(error));
+return invalid(`正则表达式无效: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
   return {

@@ -86,6 +86,7 @@ RuntimeBridgeSnapshot _makeSnapshot({
   required RuntimeBridgeState state,
   int generation = 1,
   bool runtimeInstalled = false,
+  bool embeddedPackageMatches = true,
   RuntimeBridgeError? error,
 }) {
   return RuntimeBridgeSnapshot(
@@ -94,6 +95,7 @@ RuntimeBridgeSnapshot _makeSnapshot({
     generation: generation,
     runtimeInstalled: runtimeInstalled,
     runtimeAvailable: state == RuntimeBridgeState.ready,
+    embeddedPackageMatches: embeddedPackageMatches,
     lastError: error,
   );
 }
@@ -208,6 +210,23 @@ void main() {
       await Future.delayed(const Duration(milliseconds: 200));
 
       expect(bridge.startCallCount, equals(0));
+      expect(bridge.installCallCount, equals(0));
+      await bootstrap.dispose();
+    });
+
+    test('installed package hash mismatch triggers reconcile', () async {
+      final bridge = FakeRuntimeBridge(
+        initial: _makeSnapshot(
+          state: RuntimeBridgeState.stopped,
+          runtimeInstalled: true,
+          embeddedPackageMatches: false,
+        ),
+      );
+      final bootstrap = DefaultRuntimeBootstrap(bridge: bridge);
+
+      await bootstrap.initialize();
+
+      expect(bridge.installCallCount, equals(1));
       await bootstrap.dispose();
     });
 

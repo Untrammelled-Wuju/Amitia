@@ -1,8 +1,8 @@
 package com.amitia.amitia_app.runtime.startup
 
 import com.amitia.amitia_app.runtime.connection.BackendEndpointPolicy
-import com.amitia.amitia_app.runtime.internal.RuntimeClock
-import com.amitia.amitia_app.runtime.internal.SystemRuntimeClock
+import com.amitia.amitia_app.runtime.internal.RuntimeMonotonicClock
+import com.amitia.amitia_app.runtime.internal.SystemRuntimeMonotonicClock
 import com.amitia.amitia_app.runtime.proot.ProotSession
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
@@ -23,7 +23,7 @@ internal interface RuntimeStartupDetector {
 
 internal class DefaultRuntimeStartupDetector(
     private val healthProbe: RuntimeHealthProbe = HttpRuntimeHealthProbe(),
-    private val clock: RuntimeClock = SystemRuntimeClock,
+    private val monotonicClock: RuntimeMonotonicClock = SystemRuntimeMonotonicClock,
     private val totalStartupTimeoutMs: Long = DEFAULT_STARTUP_TIMEOUT_MS,
     private val initialProbeIntervalMs: Long = DEFAULT_INITIAL_PROBE_INTERVAL_MS,
     private val maxProbeIntervalMs: Long = DEFAULT_MAX_PROBE_INTERVAL_MS,
@@ -70,8 +70,8 @@ internal class DefaultRuntimeStartupDetector(
     }
 
     private fun executeDetectionLoop(request: RuntimeStartupRequest): RuntimeStartupResult {
-        val startEpochMs = clock.nowEpochMillis()
-        val deadlineEpochMs = startEpochMs + totalStartupTimeoutMs
+        val startNanos = monotonicClock.nowNanos()
+        val deadlineNanos = startNanos + totalStartupTimeoutMs * NANOS_PER_MILLISECOND
         var probeIntervalMs = initialProbeIntervalMs
         var probeCount = 0
         var lastProbeFailure: String? = null
@@ -81,9 +81,9 @@ internal class DefaultRuntimeStartupDetector(
                 return RuntimeStartupResult.Cancelled(request.generation)
             }
 
-            val now = clock.nowEpochMillis()
-            if (now >= deadlineEpochMs || probeCount >= maxProbeCount) {
-                val elapsed = now - startEpochMs
+            val nowNanos = monotonicClock.nowNanos()
+            if (nowNanos >= deadlineNanos || probeCount >= maxProbeCount) {
+                val elapsed = elapsedMillisSince(startNanos)
                 return RuntimeStartupResult.Failed(
                     request.generation,
                     RuntimeStartupError.Timeout(
@@ -97,45 +97,53 @@ internal class DefaultRuntimeStartupDetector(
 
             if (!request.session.isAlive()) {
                 val exitCode = request.session.awaitExit(0)
-                val elapsed = clock.nowEpochMillis() - startEpochMs
+                val elapsed = elapsedMillisSince(startNanos)
                 return RuntimeStartupResult.Failed(
                     request.generation,
                     RuntimeStartupError.ProotExited(exitCode, elapsed)
                 )
             }
 
-            val probeResult = runSingleProbe(request, probeCount, startEpochMs)
+            val probeResult = runSingleProbe(request, probeCount, startNanos)
             probeCount++
 
             when (probeResult) {
                 is SingleProbeOutcome.Ready -> {
-                    val elapsed = clock.nowEpochMillis() - startEpochMs
+                    val elapsed = elapsedMillisSince(startNanos)
                     return RuntimeStartupResult.Ready(request.generation, elapsed, probeCount)
                 }
                 is SingleProbeOutcome.Continue -> {
                     probeResult.diagnostic?.let { lastProbeFailure = it }
                 }
                 is SingleProbeOutcome.ProtocolFailure -> {
-                    val elapsed = clock.nowEpochMillis() - startEpochMs
+                    val elapsed = elapsedMillisSince(startNanos)
                     return RuntimeStartupResult.Failed(
                         request.generation,
                         RuntimeStartupError.InvalidResponse(probeResult.reason, elapsed)
                     )
                 }
                 is SingleProbeOutcome.Fatal -> {
-                    val elapsed = clock.nowEpochMillis() - startEpochMs
+                    val elapsed = elapsedMillisSince(startNanos)
                     return RuntimeStartupResult.Failed(request.generation, probeResult.error)
                 }
             }
 
-            val sleepTargetMs = clock.nowEpochMillis() + probeIntervalMs
-            while (clock.nowEpochMillis() < sleepTargetMs) {
+            val sleepTargetNanos =
+                monotonicClock.nowNanos() + probeIntervalMs * NANOS_PER_MILLISECOND
+            while (true) {
                 if (cancelledFlag.get()) {
                     return RuntimeStartupResult.Cancelled(request.generation)
                 }
                 if (!request.session.isAlive()) break
+                val remainingNanos =
+                    (sleepTargetNanos - monotonicClock.nowNanos()).coerceAtLeast(0L)
+                if (remainingNanos == 0L) break
+                val sleepMillis = minOf(
+                    POLL_GRANULARITY_MS,
+                    remainingNanos / NANOS_PER_MILLISECOND
+                ).coerceAtLeast(0L)
                 try {
-                    Thread.sleep(minOf(POLL_GRANULARITY_MS, sleepTargetMs - clock.nowEpochMillis()))
+                    Thread.sleep(sleepMillis)
                 } catch (originalError139: InterruptedException) {
                   originalError139.printStackTrace()
 
@@ -159,13 +167,13 @@ internal class DefaultRuntimeStartupDetector(
         data class Fatal(val error: RuntimeStartupError) : SingleProbeOutcome()
     }
 
-    private fun runSingleProbe(request: RuntimeStartupRequest, probeIndex: Int, startEpochMs: Long): SingleProbeOutcome {
+    private fun runSingleProbe(request: RuntimeStartupRequest, probeIndex: Int, startNanos: Long): SingleProbeOutcome {
         val endpoint = resolveProbeEndpoint(request)
             ?: return SingleProbeOutcome.Continue("runtime endpoint not published yet")
         val result = healthProbe.checkReadiness(endpoint)
         when (result) {
             is RuntimeHealthProbeResult.Success -> {
-                return interpretReadinessResponse(result, request, startEpochMs)
+                return interpretReadinessResponse(result, request, startNanos)
             }
             is RuntimeHealthProbeResult.Failure -> {
                 return when (result.error) {
@@ -188,6 +196,11 @@ internal class DefaultRuntimeStartupDetector(
                 }
             }
         }
+    }
+
+    private fun elapsedMillisSince(startNanos: Long): Long {
+        return ((monotonicClock.nowNanos() - startNanos).coerceAtLeast(0L)) /
+            NANOS_PER_MILLISECOND
     }
 
     private fun resolveProbeEndpoint(request: RuntimeStartupRequest): BackendEndpointPolicy? {
@@ -223,7 +236,7 @@ internal class DefaultRuntimeStartupDetector(
     private fun interpretReadinessResponse(
         result: RuntimeHealthProbeResult.Success,
         request: RuntimeStartupRequest,
-        startEpochMs: Long
+        startNanos: Long
     ): SingleProbeOutcome {
         return when (result.statusCode) {
             200 -> {
@@ -231,7 +244,7 @@ internal class DefaultRuntimeStartupDetector(
                 if (status == "ready") {
                     if (!request.session.isAlive()) {
                         SingleProbeOutcome.Fatal(
-                            RuntimeStartupError.ProotExited(request.session.awaitExit(0), clock.nowEpochMillis() - startEpochMs)
+                            RuntimeStartupError.ProotExited(request.session.awaitExit(0), elapsedMillisSince(startNanos))
                         )
                     } else {
                         SingleProbeOutcome.Ready
@@ -239,7 +252,7 @@ internal class DefaultRuntimeStartupDetector(
                 } else if (status == "degraded") {
                     if (!request.session.isAlive()) {
                         SingleProbeOutcome.Fatal(
-                            RuntimeStartupError.ProotExited(request.session.awaitExit(0), clock.nowEpochMillis() - startEpochMs)
+                            RuntimeStartupError.ProotExited(request.session.awaitExit(0), elapsedMillisSince(startNanos))
                         )
                     } else {
                         SingleProbeOutcome.Ready
@@ -294,6 +307,7 @@ internal class DefaultRuntimeStartupDetector(
 
     private companion object {
         const val POLL_GRANULARITY_MS = 50L
+        const val NANOS_PER_MILLISECOND = 1_000_000L
         const val DEFAULT_STARTUP_TIMEOUT_MS = 90_000L
         const val DEFAULT_INITIAL_PROBE_INTERVAL_MS = 100L
         const val DEFAULT_MAX_PROBE_INTERVAL_MS = 1_000L

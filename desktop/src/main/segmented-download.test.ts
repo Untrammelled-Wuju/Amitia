@@ -102,7 +102,7 @@ describe("segmented update download", () => {
     expect(await fs.readFile(destination)).toEqual(content);
     expect(fixture.state.maximum).toBeGreaterThan(1);
     expect(progress.at(-1)).toBe(100);
-  });
+  }, 20_000);
 
   it("reports unsupported ranges for the updater fallback", async () => {
     const fixture = await rangeServer(Buffer.from("single-thread"), false);

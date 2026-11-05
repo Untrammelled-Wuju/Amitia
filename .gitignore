@@ -131,3 +131,4 @@ backend/testdata/extensions/**/dist-candidate-*/
 /mobile_app/android/scripts/__pycache__/
 
 Plugin/Emote/keys/
+/.amitia-secrets/

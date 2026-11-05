@@ -217,15 +217,10 @@ class _MarkdownBody extends StatelessWidget {
 }
 
 class AmitiaCitationSyntax extends md.InlineSyntax {
-  AmitiaCitationSyntax() : super(r'\[((?:K)?\d+)\]');
+  AmitiaCitationSyntax() : super(r'(?<!!)\[((?:K)?\d+)\](?![(\[:])');
 
   @override
   bool onMatch(md.InlineParser parser, Match match) {
-    final next = match.end < parser.source.length ? parser.source[match.end] : '';
-    if (next == '(' || next == '[' || next == ':' ||
-        (match.start > 0 && parser.source[match.start - 1] == '!')) {
-      return false;
-    }
     parser.addNode(md.Element.text('citation', match.group(1) ?? ''));
     return true;
   }
@@ -310,6 +305,9 @@ class _AmitiaMarkdownImage extends StatelessWidget {
   }
 
   Widget _image() {
-    return ConversationMediaImage(url: uri.toString(), alt: alt.isEmpty ? '图片加载失败' : alt);
+    return ConversationMediaImage(
+      url: uri.toString(),
+      alt: alt.isEmpty ? '图片加载失败' : alt,
+    );
   }
 }

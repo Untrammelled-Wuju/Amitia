@@ -125,6 +125,60 @@ func publicRuntimeCapabilities(services *AppServices) gin.H {
 	}
 }
 
+type runtimeReadinessSource interface {
+	Snapshot() runtimeorchestrator.RuntimeSnapshot
+}
+
+func writeRuntimeReadiness(c *gin.Context, orchestrator runtimeReadinessSource) {
+	if orchestrator == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"code": http.StatusServiceUnavailable,
+			"msg":  "blocked",
+			"data": gin.H{"status": "blocked", "reason": "orchestrator not initialized"},
+		})
+		return
+	}
+	snapshot := orchestrator.Snapshot()
+	if live, ok := orchestrator.(interface {
+		RefreshHealth(context.Context) runtimeorchestrator.RuntimeSnapshot
+	}); ok {
+		snapshot = live.RefreshHealth(c.Request.Context())
+	}
+	overallStatus := "ready"
+	if snapshot.IsBlocked() {
+		overallStatus = "blocked"
+	} else if snapshot.State == runtimeorchestrator.OrchestratorDegraded || snapshot.DegradedCount > 0 {
+		overallStatus = "degraded"
+	}
+	failingComponents := make([]gin.H, 0)
+	for id, component := range snapshot.Components {
+		if component.State != runtimeorchestrator.StateDegraded && component.State != runtimeorchestrator.StateFailed {
+			continue
+		}
+		failingComponents = append(failingComponents, gin.H{
+			"id":       id,
+			"state":    component.State,
+			"required": component.Required,
+			"error":    component.LastError,
+		})
+	}
+	result := gin.H{
+		"status":        overallStatus,
+		"state":         snapshot.State,
+		"blockingCount": snapshot.BlockingCount,
+		"degradedCount": snapshot.DegradedCount,
+		"readyCount":    snapshot.ReadyCount,
+		"failedCount":   snapshot.FailedCount,
+		"components":    failingComponents,
+		"timestamp":     snapshot.Timestamp,
+	}
+	httpStatus := http.StatusOK
+	if snapshot.IsBlocked() {
+		httpStatus = http.StatusServiceUnavailable
+	}
+	c.JSON(httpStatus, gin.H{"code": httpStatus, "msg": overallStatus, "data": result})
+}
+
 func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeBootstrap) (*gin.Engine, error) {
 	if config.AppCfg.Server.Mode == "release" {
 		gin.SetMode(gin.ReleaseMode)
@@ -150,31 +204,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 	})
 
 	r.GET("/readyz", func(c *gin.Context) {
-		if services.RuntimeOrchestrator == nil {
-			c.JSON(503, gin.H{"code": 503, "msg": "blocked", "data": gin.H{"status": "blocked", "reason": "orchestrator not initialized"}})
-			return
-		}
-		snap := services.RuntimeOrchestrator.Snapshot()
-		overallStatus := "ready"
-		if snap.IsBlocked() {
-			overallStatus = "blocked"
-		} else if snap.State == runtimeorchestrator.OrchestratorDegraded {
-			overallStatus = "degraded"
-		}
-		result := gin.H{
-			"status":        overallStatus,
-			"state":         snap.State,
-			"blockingCount": snap.BlockingCount,
-			"degradedCount": snap.DegradedCount,
-			"readyCount":    snap.ReadyCount,
-			"failedCount":   snap.FailedCount,
-			"timestamp":     snap.Timestamp,
-		}
-		httpStatus := 200
-		if snap.IsBlocked() {
-			httpStatus = 503
-		}
-		c.JSON(httpStatus, gin.H{"code": httpStatus, "msg": overallStatus, "data": result})
+		writeRuntimeReadiness(c, services.RuntimeOrchestrator)
 	})
 
 	systemSvc := system.NewService(ctx, services.RuntimeProfile)
@@ -649,7 +679,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			return services.KernelContainer.ChannelResolver.Has(channelID)
 		})
 		var systemRouterOptions []system.SystemRouterOption
-		systemRouterOptions = append(systemRouterOptions, system.WithCanonicalMemory(services.OwnedBusiness, spaceID), system.WithModelUsage(services.ModelUsage))
+		systemRouterOptions = append(systemRouterOptions, system.WithCanonicalMemory(services.OwnedBusiness, spaceID), system.WithModelUsage(services.ModelUsage), system.WithRuntimeReadiness(services.RuntimeOrchestrator))
 		systemRouterOptions = append(systemRouterOptions, system.WithMemoryConsumers(services.MemoryConsumers))
 		if services.KernelContainer != nil {
 			systemRouterOptions = append(systemRouterOptions, system.WithApprovalBroker(services.KernelContainer.ApprovalBroker))

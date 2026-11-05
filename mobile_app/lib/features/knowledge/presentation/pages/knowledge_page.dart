@@ -10,6 +10,7 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/models/knowledge.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/widgets/amitia_popup_menu.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import 'knowledge_diagnostics_page.dart';
@@ -271,7 +272,7 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
                         ),
                         trailing: active
                             ? const Chip(label: Text('活动'))
-                            : PopupMenuButton<String>(
+                            : AmitiaPopupMenuButton<String>(
                                 tooltip: '版本操作',
                                 onSelected: (value) {
                                   Navigator.pop(context);
@@ -1203,7 +1204,7 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
                   ),
                 ),
                 _StatusChip(status: source.status),
-                PopupMenuButton<String>(
+                AmitiaPopupMenuButton<String>(
                   tooltip: '知识源操作',
                   onSelected: (value) {
                     switch (value) {

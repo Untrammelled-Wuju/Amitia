@@ -22,6 +22,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
 	"github.com/u-ai/backend/internal/extension/kernel/trust"
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
+	"github.com/u-ai/backend/internal/extension/platformcompat"
 )
 
 const packagePolicyVersion = "2026-09-04-v5"
@@ -415,7 +416,7 @@ func (r *Runtime) evaluatePackageCompatibilityAndDependenciesWithHostValidator(c
 	appendPackageHostCompatibilityIssues(pkg.Manifest, preview)
 	appendGamePluginNetworkCompatibilityIssuesWithHostValidator(pkg.Manifest, preview, validateHost)
 
-	platform := normalizePackagePlatform(runtime.GOOS)
+	platform := platformcompat.Normalize(runtime.GOOS)
 	hostVersion := currentPackageHostVersion()
 	for _, mod := range pkg.Manifest.Modules {
 		supported := packageModuleSupported(mod, platform, hostVersion)

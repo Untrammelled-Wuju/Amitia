@@ -21,6 +21,8 @@ import com.amitia.amitia_app.runtime.abi.RuntimeAbiGate
 import com.amitia.amitia_app.runtime.abi.RuntimeAbiStatus
 import com.amitia.amitia_app.runtime.connection.BackendEndpointPolicy
 import com.amitia.amitia_app.runtime.connection.embeddedAndroidBackendPolicy
+import com.amitia.amitia_app.runtime.install.InstallReceiptResult
+import com.amitia.amitia_app.runtime.install.InstallReceiptStore
 import com.amitia.amitia_app.runtime.install.InstalledRuntimeVerifier
 import com.amitia.amitia_app.runtime.install.RuntimeHostLayout
 import com.amitia.amitia_app.runtime.install.RuntimeInstallResult
@@ -61,6 +63,7 @@ internal class DefaultRuntimeController(
     private val abiGate: RuntimeAbiGate? = null,
     private val bootstrapper: RuntimeBootstrapper? = null,
     private val installedVerifier: InstalledRuntimeVerifier? = null,
+    private val installReceiptStore: InstallReceiptStore? = null,
     private val hostLayout: RuntimeHostLayout? = null,
     private val idGenerator: RuntimeIdGenerator = UuidRuntimeIdGenerator,
     private val startupDetector: RuntimeStartupDetector = DefaultRuntimeStartupDetector(),
@@ -903,7 +906,15 @@ internal class DefaultRuntimeController(
         val layout = hostLayout ?: return null
         val versionDir = layout.runtimeVersionRoot(version)
         val result = try {
-            verifier.verify(versionDir)
+            val receipt = installReceiptStore?.load(version)
+            if (receipt is InstallReceiptResult.Success) {
+                verifier.verifyForStart(
+                    versionDir,
+                    receipt.receipt.runtimeRootTreeSha256
+                )
+            } else {
+                verifier.verify(versionDir)
+            }
         } catch (error: Throwable) {
             val runtimeError = RuntimeError(
                 code = RuntimeErrorCode.VERIFY_FAILED,

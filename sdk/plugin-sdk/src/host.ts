@@ -162,6 +162,32 @@ export interface HostPluginInstallResult {
 export interface HostPluginClient {
   prepare(request: HostPluginPrepareRequest): Promise<HostPluginPreview>;
   install(request: HostPluginInstallRequest): Promise<HostPluginInstallResult>;
+  uninstall(request: HostPluginUninstallRequest): Promise<HostPluginOperationResult>;
+  list(): Promise<HostPluginInventory>;
+}
+
+export interface HostPluginUninstallRequest {
+  readonly extensionId: string;
+  readonly idempotencyKey?: string;
+}
+
+export interface HostPluginOperationResult {
+  readonly operationId: string;
+  readonly extensionId: string;
+  readonly operationType: string;
+  readonly [key: string]: unknown;
+}
+
+export interface HostPluginInstallation {
+  readonly extensionId: string;
+  readonly version: string;
+  readonly installationState: string;
+  readonly enabled: boolean;
+  readonly systemManaged: boolean;
+}
+
+export interface HostPluginInventory {
+  readonly plugins: HostPluginInstallation[];
 }
 
 export interface HostMessageClient {
@@ -276,6 +302,14 @@ export class DefaultHostClient implements HostClient {
     install: async (request: HostPluginInstallRequest): Promise<HostPluginInstallResult> => {
       if (!this.bridge.call) throw new Error("host plugin package manager is unavailable");
       return await this.bridge.call("host.plugin.install", request) as HostPluginInstallResult;
+    },
+    uninstall: async (request: HostPluginUninstallRequest): Promise<HostPluginOperationResult> => {
+      if (!this.bridge.call) throw new Error("host plugin package manager is unavailable");
+      return await this.bridge.call("host.plugin.uninstall", request) as HostPluginOperationResult;
+    },
+    list: async (): Promise<HostPluginInventory> => {
+      if (!this.bridge.call) throw new Error("host plugin package manager is unavailable");
+      return await this.bridge.call("host.plugin.list", {}) as HostPluginInventory;
     },
   };
 

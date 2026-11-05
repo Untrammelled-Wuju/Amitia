@@ -21,6 +21,7 @@ $pubspec = Join-Path $mobile 'pubspec.yaml'
 $localProperties = Join-Path $mobile 'android\local.properties'
 $runtimeOutput = Join-Path $root 'runtime\out\runtime-package\android-arm64\amitia-runtime-current-android-arm64.zip'
 $runtimeValidator = Join-Path $root 'runtime\build\runtime-package\android-arm64\validate.py'
+$pluginMarketPackage = Join-Path $root 'plugin\plugin-market\amitia-plugin-market-1.0.1.amitiax'
 $surrealDbVersion = '2.3.8'
 
 function Invoke-Checked([string]$file, [string[]]$arguments, [string]$directory) {
@@ -145,7 +146,7 @@ function Build-Runtime {
     $generatedBase = Join-Path $root 'runtime\out\runtime-package\android-arm64\amitia-runtime-1.0.0-android-arm64.zip'
     $embeddedBase = Join-Path $mobile 'android\app\src\main\assets\runtime-package\amitia-runtime-1.0.0.zip'
     $base = if (Test-Path -LiteralPath $generatedBase -PathType Leaf) { $generatedBase } else { $embeddedBase }
-    foreach ($item in @($builder, $base)) {
+    foreach ($item in @($builder, $base, $pluginMarketPackage)) {
         if (-not (Test-Path -LiteralPath $item -PathType Leaf)) { throw "缺少构建依赖: $item" }
     }
 
@@ -177,6 +178,7 @@ function Build-Runtime {
             '--base-package', $base,
             '--backend', $server,
             '--surrealdb', $surreal,
+            '--plugin-market-package', $pluginMarketPackage,
             '--surrealdb-version', $surrealDbVersion,
             '--source-commit', $sourceCommit,
             '--output', $runtimeOutput

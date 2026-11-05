@@ -2016,6 +2016,35 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 			},
 		},
 		{
+			method:          host_api.MethodPluginList,
+			riskLevel:       host_api.RiskLow,
+			sideEffectLevel: host_api.SideEffectReadOnly,
+			timeout:         30 * time.Second,
+			handler: func(ctx context.Context, _ host_api.CallRequest) (host_api.CallResult, error) {
+				if deps.PluginPackages == nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "plugin package manager not configured"},
+					}, nil
+				}
+				result, err := deps.PluginPackages.List(ctx)
+				if err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+					}, nil
+				}
+				output, err := json.Marshal(result)
+				if err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+					}, nil
+				}
+				return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
+			},
+		},
+		{
 			method:          host_api.MethodPluginInstall,
 			riskLevel:       host_api.RiskHigh,
 			sideEffectLevel: host_api.SideEffectExternal,
@@ -2053,6 +2082,54 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 					SpaceID: req.SpaceID, ExtensionID: input.ExtensionID, Version: input.Version,
 					PreviewSessionID: input.PreviewSessionID, Confirmations: input.Confirmations,
 					IdempotencyKey: input.IdempotencyKey,
+				})
+				if err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+					}, nil
+				}
+				output, err := json.Marshal(result)
+				if err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+					}, nil
+				}
+				return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
+			},
+		},
+		{
+			method:          host_api.MethodPluginUninstall,
+			riskLevel:       host_api.RiskHigh,
+			sideEffectLevel: host_api.SideEffectExternal,
+			timeout:         30 * time.Minute,
+			handler: func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+				if deps.PluginPackages == nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "plugin package manager not configured"},
+					}, nil
+				}
+				var input struct {
+					ExtensionID    string `json:"extensionId"`
+					IdempotencyKey string `json:"idempotencyKey,omitempty"`
+				}
+				if err := json.Unmarshal(req.Input, &input); err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()},
+					}, nil
+				}
+				input.ExtensionID = strings.TrimSpace(input.ExtensionID)
+				if input.ExtensionID == "" {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: "extensionId is required"},
+					}, nil
+				}
+				result, err := deps.PluginPackages.Uninstall(ctx, UninstallHostPluginPackageRequest{
+					SpaceID: req.SpaceID, ExtensionID: input.ExtensionID, IdempotencyKey: input.IdempotencyKey,
 				})
 				if err != nil {
 					return host_api.CallResult{

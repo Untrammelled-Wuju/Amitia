@@ -21,10 +21,11 @@ describe('Round 61 Workbench durable dependency projection', () => {
     expect(result.tasks[0].assignments[0].dependencies).toEqual([]);
     expect(result.tasks[0].assignments[1].dependencies).toEqual(['first']);
   });
-  it('rejects absent dependencies', () => {
+  it('projects historical tasks without dependencies as an empty dependency list', () => {
     const data = response();
     delete (data.tasks[0].assignments[0] as { dependencies?: string[] }).dependencies;
-    expect(() => parseWorkbenchTaskList(data, 'conversation')).toThrow('依赖');
+    const result = parseWorkbenchTaskList(data, 'conversation');
+    expect(result.tasks[0].assignments[0].dependencies).toEqual([]);
   });
   it.each(['missing', 'self', 'cycle', 'duplicate'] as const)('rejects an invalid %s dependency', kind => {
     const data = response();

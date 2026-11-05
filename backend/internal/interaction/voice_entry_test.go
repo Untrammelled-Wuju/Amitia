@@ -36,6 +36,7 @@ func TestVoiceEntryFinalTurnUsesUnifiedEntryAndPreservesVoiceEnvelope(t *testing
 
 	result, err := entry.HandleTurn(context.Background(), &VoiceTurnRequest{
 		SessionID:      "session-voice",
+		SpaceID:        "user-bound",
 		TurnID:         "turn-voice",
 		Text:           "hello by voice",
 		IsFinal:        true,

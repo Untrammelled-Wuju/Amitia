@@ -105,6 +105,9 @@ func (e *UIActionExecutor) executeTool(ctx context.Context, execCtx UIActionExec
 		return nil, err
 	}
 	if targetModule := e.resolveToolModule(ctx, execCtx.ExtensionID, toolID, execCtx.ModuleID); targetModule != "" && targetModule != execCtx.ModuleID {
+		if err := e.ensureToolModuleScope(ctx, execCtx.ExtensionID, targetModule); err != nil {
+			return nil, err
+		}
 		if e.deriveSnapshots == nil {
 			return nil, fmt.Errorf("action %s requires a snapshot deriver for module %s", action.ActionID, targetModule)
 		}
@@ -182,6 +185,19 @@ func (e *UIActionExecutor) ensureToolScope(ctx context.Context, extensionID, too
 	}
 	if err := ensureScopeBinding(ctx, e.scopeManager, scope.SubjectTool, toolID, scope.NewExtensionScope(extensionID)); err != nil {
 		return fmt.Errorf("bind tool scope %s: %w", toolID, err)
+	}
+	return nil
+}
+
+func (e *UIActionExecutor) ensureToolModuleScope(ctx context.Context, extensionID, moduleID string) error {
+	if e.scopeManager == nil || extensionID == "" || moduleID == "" {
+		return nil
+	}
+	if err := ensureScopeBinding(ctx, e.scopeManager, scope.SubjectExtension, extensionID, scope.NewExtensionScope(extensionID)); err != nil {
+		return fmt.Errorf("bind extension scope %s: %w", extensionID, err)
+	}
+	if err := ensureScopeBinding(ctx, e.scopeManager, scope.SubjectModule, moduleID, scope.NewModuleScope(extensionID, moduleID)); err != nil {
+		return fmt.Errorf("bind tool module scope %s: %w", moduleID, err)
 	}
 	return nil
 }

@@ -23,7 +23,22 @@ func newInstallationPermissionPolicy(repo sqlite.PermissionRepository) func(cont
 			return permission.DecisionDeny, true
 		}
 		granted, err := repo.IsGranted(ctx, domain.ExtensionID(extensionID), requirement.PermissionID)
-		if err != nil || !granted {
+		if err != nil {
+			return permission.DecisionDeny, true
+		}
+		if !granted && strings.HasPrefix(extensionID, "com.amitia.builtin.") {
+			requirements, err := repo.ListRequirements(ctx, domain.ExtensionID(extensionID))
+			if err != nil {
+				return permission.DecisionDeny, true
+			}
+			for _, installed := range requirements {
+				if installed.PermissionName == requirement.PermissionID {
+					return permission.DecisionDeny, true
+				}
+			}
+			return "", false
+		}
+		if !granted {
 			return permission.DecisionDeny, true
 		}
 		return permission.DecisionAllow, true
@@ -32,23 +47,15 @@ func newInstallationPermissionPolicy(repo sqlite.PermissionRepository) func(cont
 
 func installationPermissionExtensionID(subject permission.PermissionSubject) string {
 	switch subject.Type {
-	case permission.SubjectExtension, permission.SubjectModule, permission.SubjectRuntime:
+	case permission.SubjectExtension, permission.SubjectModule, permission.SubjectRuntime, permission.SubjectTool:
 	default:
 		return ""
 	}
 	if strings.TrimSpace(subject.ExtensionID) != "" {
-		extensionID := strings.TrimSpace(subject.ExtensionID)
-		if strings.HasPrefix(extensionID, "com.amitia.builtin.") {
-			return ""
-		}
-		return extensionID
+		return strings.TrimSpace(subject.ExtensionID)
 	}
 	if subject.Type == permission.SubjectExtension {
-		extensionID := strings.TrimSpace(subject.ID)
-		if strings.HasPrefix(extensionID, "com.amitia.builtin.") {
-			return ""
-		}
-		return extensionID
+		return strings.TrimSpace(subject.ID)
 	}
 	return ""
 }

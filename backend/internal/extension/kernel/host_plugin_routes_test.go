@@ -11,8 +11,9 @@ import (
 )
 
 type fakeHostPluginPackageManager struct {
-	prepareRequest PrepareHostPluginPackageRequest
-	installRequest InstallHostPluginPackageRequest
+	prepareRequest   PrepareHostPluginPackageRequest
+	installRequest   InstallHostPluginPackageRequest
+	uninstallRequest UninstallHostPluginPackageRequest
 }
 
 func (f *fakeHostPluginPackageManager) Prepare(_ context.Context, request PrepareHostPluginPackageRequest) (InstallPreview, error) {
@@ -26,6 +27,15 @@ func (f *fakeHostPluginPackageManager) Prepare(_ context.Context, request Prepar
 func (f *fakeHostPluginPackageManager) Install(_ context.Context, request InstallHostPluginPackageRequest) (KernelInstallResult, error) {
 	f.installRequest = request
 	return KernelInstallResult{ExtensionID: request.ExtensionID, Version: request.Version, OperationID: "operation-1"}, nil
+}
+
+func (f *fakeHostPluginPackageManager) Uninstall(_ context.Context, request UninstallHostPluginPackageRequest) (PackageOperationRecord, error) {
+	f.uninstallRequest = request
+	return PackageOperationRecord{OperationID: "uninstall-1", ExtensionID: request.ExtensionID, OperationType: "uninstall"}, nil
+}
+
+func (f *fakeHostPluginPackageManager) List(_ context.Context) (HostPluginInventory, error) {
+	return HostPluginInventory{Plugins: []HostPluginInstallation{{ExtensionID: "com.example/tools", Version: "1.0.0", InstallationState: "installed", Enabled: true}}}, nil
 }
 
 func TestHostPluginPackageRoutesUseGenericManager(t *testing.T) {
@@ -62,5 +72,21 @@ func TestHostPluginPackageRoutesUseGenericManager(t *testing.T) {
 	}
 	if !manager.installRequest.Confirmations["confirm.scripts"] {
 		t.Fatalf("explicit confirmations were not forwarded: %+v", manager.installRequest)
+	}
+	uninstallResult := gateway.Call(context.Background(), host_api.CallRequest{
+		CallID: "uninstall", RuntimeIdentity: identity, Method: host_api.MethodPluginUninstall, Version: 1,
+		Input: json.RawMessage(`{"extensionId":"com.example/tools","idempotencyKey":"uninstall-key"}`),
+	})
+	if uninstallResult.Status != host_api.StatusSuccess {
+		t.Fatalf("uninstall failed: %s %+v", uninstallResult.Status, uninstallResult.Error)
+	}
+	if manager.uninstallRequest.ExtensionID != "com.example/tools" || manager.uninstallRequest.IdempotencyKey != "uninstall-key" {
+		t.Fatalf("uninstall request was not forwarded: %+v", manager.uninstallRequest)
+	}
+	listResult := gateway.Call(context.Background(), host_api.CallRequest{
+		CallID: "list", RuntimeIdentity: identity, Method: host_api.MethodPluginList, Version: 1,
+	})
+	if listResult.Status != host_api.StatusSuccess {
+		t.Fatalf("list failed: %s %+v", listResult.Status, listResult.Error)
 	}
 }

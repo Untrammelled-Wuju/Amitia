@@ -102,6 +102,7 @@ function createMockWindow(
     once: ReturnType<typeof vi.fn>;
     off: ReturnType<typeof vi.fn>;
     setAudioMuted: ReturnType<typeof vi.fn>;
+    setWindowOpenHandler: ReturnType<typeof vi.fn>;
   };
 } {
   const state: MockWindowState = {
@@ -180,6 +181,7 @@ function createMockWindow(
         const idx = arr.indexOf(cb);
         if (idx >= 0) arr.splice(idx, 1);
       }),
+      setWindowOpenHandler: vi.fn(() => vi.fn()),
       setAudioMuted: vi.fn(),
     },
     ...state,
@@ -634,7 +636,7 @@ describe("DesktopPetWindowAdapter", () => {
     windowMock.position.x = 2000;
     windowMock.position.y = 100;
 
-    expect(adapter.getDpiScale()).toBe(1);
+    expect(adapter.getDpiScale()).toBe(2);
   });
 
   it("listScreens 返回所有显示器信息", async () => {

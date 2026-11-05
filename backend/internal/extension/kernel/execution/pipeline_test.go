@@ -17,6 +17,12 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/scope"
 )
 
+type testRuntimeExecutionResolver struct{}
+
+func (testRuntimeExecutionResolver) ResolveRuntimeExecution(_ context.Context, tool capability.ToolDefinition, _ capability.ToolInvocationContext) (capability.RuntimeExecutionRoute, error) {
+	return capability.RuntimeExecutionRoute{Binding: tool.Runtime}, nil
+}
+
 var (
 	_testAuditStore  *observability.MemoryStore
 	_testAuditWriter observability.RecordWriter
@@ -142,7 +148,7 @@ func buildPipelineForTest(adapter capability.RuntimeAdapter, storage Idempotency
 		TimeoutCtrl:         NewTimeoutController(5 * time.Second),
 		CancellationCtrl:    NewCancellationController(),
 		DepthGuard:          NewDepthGuard(),
-		Dispatcher:          NewRuntimeDispatcher(adapterRegistry),
+		Dispatcher:          NewRuntimeDispatcher(adapterRegistry, testRuntimeExecutionResolver{}),
 		ResultValidator:     NewResultValidator(),
 		Sanitizer:           NewSanitizer(),
 		SideEffectRec:       NewSideEffectRecorder(),

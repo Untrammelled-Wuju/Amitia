@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/runtimeprofile"
 )
 
@@ -32,6 +33,8 @@ type PrepareHostPluginPackageRequest struct {
 type HostPluginPackageManagerPort interface {
 	Prepare(context.Context, PrepareHostPluginPackageRequest) (InstallPreview, error)
 	Install(context.Context, InstallHostPluginPackageRequest) (KernelInstallResult, error)
+	Uninstall(context.Context, UninstallHostPluginPackageRequest) (PackageOperationRecord, error)
+	List(context.Context) (HostPluginInventory, error)
 }
 
 type InstallHostPluginPackageRequest struct {
@@ -41,6 +44,24 @@ type InstallHostPluginPackageRequest struct {
 	PreviewSessionID string
 	Confirmations    map[string]bool
 	IdempotencyKey   string
+}
+
+type UninstallHostPluginPackageRequest struct {
+	SpaceID        string
+	ExtensionID    string
+	IdempotencyKey string
+}
+
+type HostPluginInstallation struct {
+	ExtensionID       string `json:"extensionId"`
+	Version           string `json:"version"`
+	InstallationState string `json:"installationState"`
+	Enabled           bool   `json:"enabled"`
+	SystemManaged     bool   `json:"systemManaged"`
+}
+
+type HostPluginInventory struct {
+	Plugins []HostPluginInstallation `json:"plugins"`
 }
 
 type HostPluginPackageManager struct {
@@ -202,17 +223,32 @@ func (m *HostPluginPackageManager) Install(ctx context.Context, request InstallH
 	if err != nil {
 		return KernelInstallResult{}, fmt.Errorf("confirm plugin package preview: %w", err)
 	}
+	_, installedErr := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(session.ExtensionID))
+	if installedErr != nil && !errors.Is(installedErr, domain.ErrInvalidExtensionID) {
+		return KernelInstallResult{}, fmt.Errorf("read installed plugin state: %w", installedErr)
+	}
 	idempotencyKey := strings.TrimSpace(request.IdempotencyKey)
 	if idempotencyKey == "" {
 		idempotencyKey = "host-plugin-install:" + request.SpaceID + ":" + sessionID
 	}
-	result, err := m.runtime.ExecutePackageInstall(ctx, PackageInstallRequest{
+	installRequest := PackageInstallRequest{
 		SessionID: sessionID, SpaceID: request.SpaceID, ScopeType: "global",
 		Confirmations: request.Confirmations, ConfirmationToken: confirmation.ConfirmationToken,
 		ExpectedExtensionID: request.ExtensionID, IdempotencyKey: idempotencyKey,
-	})
+	}
+	var result KernelInstallResult
+	if installedErr == nil {
+		result, err = m.runtime.ExecutePackageUpdate(ctx, installRequest)
+	} else {
+		result, err = m.runtime.ExecutePackageInstall(ctx, installRequest)
+	}
 	if err != nil {
 		return KernelInstallResult{}, fmt.Errorf("install plugin package: %w", err)
+	}
+	if installedErr != nil {
+		if err := m.runtime.Enable(ctx, session.ExtensionID); err != nil {
+			return KernelInstallResult{}, fmt.Errorf("enable plugin package: %w", err)
+		}
 	}
 	return result, nil
 }

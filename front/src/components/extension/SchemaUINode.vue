@@ -23,6 +23,7 @@ import {
   type SchemaUINode,
   type SchemaUIActionBinding,
   type SchemaUIBinding,
+  type SchemaUIItemAction,
 } from "./schema-ui-utils";
 
 defineOptions({ name: "SchemaUINode" });
@@ -43,6 +44,7 @@ const emit = defineEmits<{
 }>();
 
 const busyNodeIds = inject<Set<string> | undefined>("schema-ui-busy-node-ids", undefined);
+const localActionHandler = inject<((payload: { action: SchemaUIActionBinding; node: SchemaUINode; item?: Record<string, unknown> }) => void) | undefined>("schema-ui-local-action", undefined);
 
 const uiStore = useExtensionUIStore();
 const router = getCurrentInstance()?.appContext.config.globalProperties.$router as Router | undefined;
@@ -140,6 +142,22 @@ function updateModelValue(v: unknown) {
   modelValue.value = { value: v };
 }
 
+function updateDialogModel(value: unknown) {
+  updateModelValue(value);
+  const binding = formBinding.value;
+  if (value !== false || !binding || binding.source !== "state") return;
+  localActionHandler?.({
+    action: {
+      action_id: "close-dialog",
+      target: "local",
+      statePath: binding.path,
+      input: {},
+      value: false,
+    },
+    node: props.node,
+  });
+}
+
 const markdownHtml = computed(() =>
   markdownToHtml(toText(mergedProps.value.content ?? mergedProps.value.text ?? ""))
 );
@@ -221,9 +239,19 @@ const extensionSlotSurfaceRole = computed(() => {
     : "main";
 });
 
-const permissionList = computed<string[]>(() => {
+const permissionList = computed<Array<{ name: string; reason: string }>>(() => {
   const perms = mergedProps.value.permissions ?? mergedProps.value.items;
-  return toStringArray(perms);
+  if (!Array.isArray(perms)) return [];
+  return perms.map((item) => {
+    if (typeof item === "string") return { name: item.trim(), reason: "" };
+    const value = item && typeof item === "object" && !Array.isArray(item)
+      ? item as Record<string, unknown>
+      : {};
+    return {
+      name: toText(value.name ?? value.permissionName ?? value.id).trim(),
+      reason: toText(value.reason ?? value.description ?? value.detail).trim(),
+    };
+  }).filter((item) => item.name);
 });
 
 const runtimeStatusInfo = computed(() => ({
@@ -322,6 +350,77 @@ function galleryItemPlaceholder(item: Record<string, unknown>) {
   return mergedProps.value.placeholder ?? "无预览";
 }
 
+function galleryItemDisabled(item: Record<string, unknown>) {
+  const field = toText(mergedProps.value.disabledField).trim();
+  if (!field) return false;
+  const value = item[field];
+  return value === true || toText(value).toLowerCase() === "true";
+}
+
+function galleryItemField(item: Record<string, unknown>, field: unknown, fallback = "") {
+  const key = toText(field).trim();
+  return key ? toText(item[key]) : fallback;
+}
+
+const platformLabels: Record<string, string> = {
+  all: "全部平台",
+  windows: "Windows",
+  win32: "Windows",
+  macos: "macOS",
+  darwin: "macOS",
+  linux: "Linux",
+  android: "Android",
+  ios: "iOS",
+  web: "Web",
+};
+
+function normalizePlatformLabel(value: unknown) {
+  const label = toText(value).replace(/^支持\s*/, "").trim();
+  return platformLabels[label.toLocaleLowerCase()] ?? label;
+}
+
+function galleryItemPlatforms(item: Record<string, unknown>, field: unknown): string[] {
+  const supported = item.supportedPlatforms;
+  const values = Array.isArray(supported)
+    ? supported.length > 0 ? supported : ["all"]
+    : galleryItemField(item, field).split(/[、,，/|]+/);
+  return Array.from(new Set(values.map(normalizePlatformLabel).filter(Boolean)));
+}
+
+function galleryItemActions(): SchemaUIItemAction[] {
+  const raw = mergedProps.value.itemActions;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((item): item is SchemaUIItemAction =>
+    Boolean(item && typeof item === "object" && toText((item as SchemaUIItemAction).label).trim())
+  );
+}
+
+function itemActionContext(item: Record<string, unknown>): Record<string, unknown> {
+  return { ...props.context, ...item, item };
+}
+
+function itemActionVisible(action: SchemaUIItemAction, item: Record<string, unknown>) {
+  return evaluateVisibility(action.visibleWhen, itemActionContext(item));
+}
+
+function galleryItemStatusVisible(item: Record<string, unknown>) {
+  const conditions = mergedProps.value.statusVisibleWhen;
+  return !Array.isArray(conditions) || conditions.length === 0
+    || evaluateVisibility(conditions, itemActionContext(item));
+}
+
+function itemActionDisabled(action: SchemaUIItemAction, item: Record<string, unknown>) {
+  const conditions = action.disabledWhen;
+  return disabled.value
+    || mergedProps.value.disabled === true
+    || (Boolean(conditions?.length) && evaluateVisibility(conditions, itemActionContext(item)));
+}
+
+function itemActionLabel(action: SchemaUIItemAction, item: Record<string, unknown>) {
+  if (!action.label.startsWith("$")) return action.label;
+  return toText(resolveActionInput(action.label, props.formState, props.context, item)) || action.label;
+}
+
 const resourceLinkActive = computed(() => {
   const href = toText(mergedProps.value.href).trim();
   const route = toText(props.context.route).trim();
@@ -379,6 +478,17 @@ function onGalleryItemClick(item: Record<string, unknown>) {
       },
     });
   }
+}
+
+function onGalleryItemAction(action: SchemaUIItemAction, item: Record<string, unknown>, event: Event) {
+  event.stopPropagation();
+  if (itemActionDisabled(action, item)) return;
+  emit("action", {
+    action,
+    node: props.node,
+    item,
+    followUpActions: action.followUpActions,
+  });
 }
 
 function openFilePicker() {
@@ -473,7 +583,7 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
       align-center
       destroy-on-close
       :data-node-id="node.id"
-      @update:model-value="updateModelValue"
+      @update:model-value="updateDialogModel"
     >
       <SchemaUINode
         v-for="child in children"
@@ -523,6 +633,7 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     <div
       v-else-if="nodeType === 'stack'"
       class="schema-ui-stack schema-ui-node"
+      :class="{ 'schema-ui-node--sticky': mergedProps.sticky === true }"
       :data-amitia-ui="semanticTarget"
       :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
@@ -904,6 +1015,7 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
       v-else-if="nodeType === 'gallery'"
       class="schema-ui-gallery schema-ui-node"
       :class="{
+        'schema-ui-gallery--cards': mergedProps.variant === 'cards',
         'schema-ui-gallery--assets': mergedProps.variant === 'assets',
         'schema-ui-gallery--collections': mergedProps.variant === 'collections',
         'schema-ui-gallery--groups': mergedProps.variant === 'groups',
@@ -914,37 +1026,87 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
       :data-node-id="node.id"
       :style="{ gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${toNumber(mergedProps.minItemWidth, 148)}px), 1fr))` }"
     >
-      <div v-if="mergedProps.showCount === true" class="schema-ui-gallery__count">{{ galleryItems.length }} 张图片</div>
-      <button
+      <div v-if="mergedProps.showCount === true" class="schema-ui-gallery__count">{{ galleryItems.length }} 个插件</div>
+      <div
         v-for="(item, index) in galleryItems"
         :key="toText(item.id ?? item.value ?? index)"
-        type="button"
         class="schema-ui-gallery__item"
-        :class="{ 'is-selected': mergedProps.selectedId === item.id }"
-        :disabled="disabled || mergedProps.disabled === true"
-        @click="onGalleryItemClick(item)"
+        :class="{ 'schema-ui-gallery__item--card': mergedProps.variant === 'cards', 'is-selected': mergedProps.selectedId === item.id, 'is-disabled': mergedProps.variant !== 'cards' && galleryItemDisabled(item) }"
+        :role="galleryItemActions().length === 0 ? 'button' : undefined"
+        :tabindex="galleryItemActions().length === 0 && !galleryItemDisabled(item) ? 0 : undefined"
+        :disabled="mergedProps.variant !== 'cards' ? (disabled || mergedProps.disabled === true || galleryItemDisabled(item) ? true : undefined) : undefined"
+        @click="galleryItemActions().length === 0 && !galleryItemDisabled(item) ? onGalleryItemClick(item) : undefined"
+        @keydown.enter="galleryItemActions().length === 0 && !galleryItemDisabled(item) ? onGalleryItemClick(item) : undefined"
       >
-        <div v-if="mergedProps.variant === 'collections'" class="schema-ui-gallery__cover">
-          <template v-for="index in 4" :key="index">
-            <SchemaUIImage v-if="Array.isArray(item.covers) && item.covers[index - 1]" :src="toText(item.covers[index - 1])" alt="" />
-            <span v-else class="schema-ui-gallery__cover-empty"></span>
-          </template>
-        </div>
-        <SchemaUIImage
-          v-else-if="toText(item[toText(mergedProps.imageField) || 'image'] ?? item.thumbnailUrl ?? item.assetUrl)"
-          class="schema-ui-gallery__image"
-          :src="toText(item[toText(mergedProps.imageField) || 'image'] ?? item.thumbnailUrl ?? item.assetUrl)"
-          :alt="toText(item[toText(mergedProps.titleField) || 'title'] ?? item.name ?? item.label)"
-          loading="lazy"
-        />
-        <div v-else class="schema-ui-gallery__placeholder">{{ galleryItemPlaceholder(item) }}</div>
-        <span v-if="mergedProps.showTitle !== false" class="schema-ui-gallery__title">
-          {{ item[toText(mergedProps.titleField) || "title"] ?? item.name ?? item.label ?? item.id }}
-        </span>
-        <span v-if="mergedProps.showSubtitle !== false && (item[toText(mergedProps.subtitleField) || 'subtitle'] ?? item.meaning ?? item.description)" class="schema-ui-gallery__subtitle">
-          {{ item[toText(mergedProps.subtitleField) || "subtitle"] ?? item.meaning ?? item.description }}
-        </span>
-      </button>
+        <template v-if="mergedProps.variant === 'cards'">
+          <div class="schema-ui-gallery__card-head">
+            <div class="schema-ui-gallery__card-icon">
+              {{ galleryItemField(item, mergedProps.titleField, "插").slice(0, 1) }}
+            </div>
+            <div class="schema-ui-gallery__card-heading">
+              <span class="schema-ui-gallery__title">
+                {{ galleryItemField(item, mergedProps.titleField, "未命名插件") }}
+              </span>
+              <span class="schema-ui-gallery__card-summary">
+                {{ galleryItemField(item, mergedProps.summaryField, galleryItemField(item, mergedProps.subtitleField)) }}
+              </span>
+            </div>
+          </div>
+          <div class="schema-ui-gallery__card-meta">
+            <el-tag v-if="galleryItemStatusVisible(item)" size="small" effect="plain">{{ galleryItemField(item, mergedProps.statusField, "可安装") }}</el-tag>
+            <el-tag
+              v-for="platform in galleryItemPlatforms(item, mergedProps.platformField)"
+              :key="platform"
+              class="schema-ui-gallery__platform-tag"
+              size="small"
+              type="info"
+              effect="plain"
+            >
+              {{ platform }}
+            </el-tag>
+          </div>
+          <div class="schema-ui-gallery__card-footer">
+            <span class="schema-ui-gallery__publisher">
+              {{ galleryItemField(item, mergedProps.publisherField, "未知发布者") }}
+            </span>
+            <div class="schema-ui-gallery__card-actions">
+              <el-button
+                v-for="action in galleryItemActions().filter((entry) => itemActionVisible(entry, item))"
+                :key="action.id ?? action.action_id"
+                size="small"
+                :type="(action.type as any) || 'default'"
+                :plain="action.plain === true"
+                :disabled="itemActionDisabled(action, item)"
+                @click="onGalleryItemAction(action, item, $event)"
+              >
+                {{ itemActionLabel(action, item) }}
+              </el-button>
+            </div>
+          </div>
+        </template>
+        <template v-else>
+          <div v-if="mergedProps.variant === 'collections'" class="schema-ui-gallery__cover">
+            <template v-for="coverIndex in 4" :key="coverIndex">
+              <SchemaUIImage v-if="Array.isArray(item.covers) && item.covers[coverIndex - 1]" :src="toText(item.covers[coverIndex - 1])" alt="" />
+              <span v-else class="schema-ui-gallery__cover-empty"></span>
+            </template>
+          </div>
+          <SchemaUIImage
+            v-else-if="toText(item[toText(mergedProps.imageField) || 'image'] ?? item.thumbnailUrl ?? item.assetUrl)"
+            class="schema-ui-gallery__image"
+            :src="toText(item[toText(mergedProps.imageField) || 'image'] ?? item.thumbnailUrl ?? item.assetUrl)"
+            :alt="toText(item[toText(mergedProps.titleField) || 'title'] ?? item.name ?? item.label)"
+            loading="lazy"
+          />
+          <div v-else class="schema-ui-gallery__placeholder">{{ galleryItemPlaceholder(item) }}</div>
+          <span v-if="mergedProps.showTitle !== false" class="schema-ui-gallery__title">
+            {{ item[toText(mergedProps.titleField) || "title"] ?? item.name ?? item.label ?? item.id }}
+          </span>
+          <span v-if="mergedProps.showSubtitle !== false && (item[toText(mergedProps.subtitleField) || 'subtitle'] ?? item.meaning ?? item.description)" class="schema-ui-gallery__subtitle">
+            {{ item[toText(mergedProps.subtitleField) || "subtitle"] ?? item.meaning ?? item.description }}
+          </span>
+        </template>
+      </div>
       <div v-if="galleryItems.length === 0" class="schema-ui-gallery__empty">
         {{ mergedProps.emptyText ?? "暂无数据" }}
       </div>
@@ -1095,7 +1257,11 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
       </div>
       <ul v-if="permissionList.length > 0" class="schema-ui-permission-summary__list">
         <li v-for="(p, idx) in permissionList" :key="idx" class="schema-ui-permission-summary__item">
-          <span class="schema-ui-permission-summary__dot"></span>{{ p }}
+          <span class="schema-ui-permission-summary__dot"></span>
+          <span class="schema-ui-permission-summary__content">
+            <span class="schema-ui-permission-summary__name">{{ p.name }}</span>
+            <span v-if="p.reason" class="schema-ui-permission-summary__reason">{{ p.reason }}</span>
+          </span>
         </li>
       </ul>
       <div v-else class="schema-ui-permission-summary__empty">无权限声明</div>
@@ -1212,6 +1378,14 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
+}
+.schema-ui-node--sticky {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  padding: 8px 0 12px;
+  background: var(--amitia-bg-surface, var(--amitia-color-surface, var(--tp-page, transparent)));
+  backdrop-filter: blur(14px);
 }
 .schema-ui-page {
   display: flex;
@@ -1470,10 +1644,103 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
   border-color: var(--amitia-color-accent, rgba(90, 120, 255, 0.7));
 }
 
+.schema-ui-gallery__item:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.schema-ui-gallery__item:disabled:hover {
+  border-color: var(--amitia-color-border, rgba(127, 127, 127, 0.22));
+  background: var(--amitia-color-surface, transparent);
+}
+
 .schema-ui-gallery--assets,
 .schema-ui-gallery--collections {
   gap: 20px;
   align-items: start;
+}
+.schema-ui-gallery--cards {
+  gap: 14px;
+  align-items: stretch;
+}
+.schema-ui-gallery--cards .schema-ui-gallery__item--card {
+  min-height: 190px;
+  padding: 16px;
+  gap: 13px;
+  align-self: stretch;
+  border: 0;
+  border-radius: 14px;
+  background: var(--amitia-bg-surface-elevated, var(--amitia-color-surface-elevated, rgba(127, 127, 127, 0.06)));
+  cursor: default;
+}
+.schema-ui-gallery--cards .schema-ui-gallery__item--card:hover {
+  background: var(--amitia-bg-surface-elevated, var(--amitia-color-surface-elevated, rgba(127, 127, 127, 0.08)));
+}
+.schema-ui-gallery__card-head {
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+}
+.schema-ui-gallery__card-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ac-color-primary) 16%, transparent);
+  color: var(--ac-color-primary);
+  font-size: 18px;
+  font-weight: 700;
+}
+.schema-ui-gallery__card-heading {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+}
+.schema-ui-gallery--cards .schema-ui-gallery__title {
+  overflow: visible;
+  font-size: 15px;
+  line-height: 1.35;
+  text-overflow: clip;
+  white-space: normal;
+}
+.schema-ui-gallery__card-summary {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.schema-ui-gallery__card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.schema-ui-gallery__card-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  margin-top: auto;
+}
+.schema-ui-gallery__publisher {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.schema-ui-gallery__card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-left: auto;
 }
 .schema-ui-gallery--assets .schema-ui-gallery__item,
 .schema-ui-gallery--collections .schema-ui-gallery__item {
@@ -1529,6 +1796,76 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
   font-size: 10px;
   font-weight: 500;
   text-align: center;
+}
+
+.schema-ui-grid[data-node-id="plugin-market-category-bar"] {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  padding: 0 0 6px;
+  border-bottom: 1px solid var(--surface-border, var(--amitia-border, rgba(127, 127, 127, 0.2)));
+  overflow: hidden;
+}
+.schema-ui-grid[data-node-id="plugin-market-category-bar"] > .schema-ui-button {
+  flex: 0 0 auto;
+  height: 42px;
+  padding: 0 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-secondary);
+}
+.schema-ui-grid[data-node-id="plugin-market-category-bar"] > .schema-ui-button:hover,
+.schema-ui-grid[data-node-id="plugin-market-category-bar"] > .schema-ui-button:focus-visible {
+  border-bottom-color: var(--ac-color-primary);
+  background: transparent;
+  color: var(--text-primary);
+}
+.schema-ui-gallery[data-node-id="plugin-market-categories"] {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 0;
+  width: auto;
+  min-width: 0;
+  padding: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+.schema-ui-gallery[data-node-id="plugin-market-categories"] .schema-ui-gallery__item {
+  width: auto;
+  height: 42px;
+  flex: 0 0 auto;
+  justify-content: center;
+  gap: 0;
+  padding: 0 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  text-align: center;
+}
+.schema-ui-gallery[data-node-id="plugin-market-categories"] .schema-ui-gallery__item:hover,
+.schema-ui-gallery[data-node-id="plugin-market-categories"] .schema-ui-gallery__item:focus-visible {
+  border-bottom-color: var(--ac-color-primary);
+  background: transparent;
+  color: var(--text-primary);
+}
+.schema-ui-gallery[data-node-id="plugin-market-categories"] .schema-ui-gallery__placeholder {
+  display: none;
+}
+.schema-ui-gallery[data-node-id="plugin-market-categories"] .schema-ui-gallery__title {
+  width: auto;
+  font-size: var(--ac-font-size-sm, 13px);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.schema-ui-gallery[data-node-id="plugin-market-categories"] .schema-ui-gallery__item:focus-visible,
+.schema-ui-grid[data-node-id="plugin-market-category-bar"] > .schema-ui-button:focus-visible {
+  outline: 2px solid var(--ac-color-primary);
+  outline-offset: -2px;
 }
 
 .schema-ui-gallery--stickers {
@@ -1673,7 +2010,7 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
 }
 .schema-ui-permission-summary__item {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
   font-size: 12px;
   color: var(--amitia-color-text, inherit);
@@ -1681,9 +2018,24 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
 .schema-ui-permission-summary__dot {
   width: 6px;
   height: 6px;
+  margin-top: 6px;
   border-radius: 50%;
   background: var(--amitia-color-accent, var(--tp-primary));
   flex-shrink: 0;
+}
+.schema-ui-permission-summary__content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+.schema-ui-permission-summary__name {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-weight: 600;
+}
+.schema-ui-permission-summary__reason {
+  line-height: 1.45;
+  color: var(--amitia-color-text-secondary, rgba(127, 127, 127, 0.8));
 }
 .schema-ui-permission-summary__empty {
   font-size: 12px;

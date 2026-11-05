@@ -16,6 +16,7 @@ import (
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
 	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/internal/scriptruntime/nodeenv"
+	"github.com/u-ai/backend/internal/vectorstore/qdranthealth"
 	"github.com/u-ai/backend/log"
 	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
 	surrealdbDB "github.com/u-ai/backend/pkg/database/surrealdb"
@@ -136,7 +137,12 @@ func (b *runtimeBootstrap) buildPlatformProviders() error {
 func (b *runtimeBootstrap) RegisterInfrastructure(sqlDB *sql.DB) error {
 	vectorCfg := config.AppCfg.Providers.VectorStore
 	graphCfg := config.AppCfg.Providers.GraphStore
-	vectorProvider := &vectorStoreProviderAdapter{host: b.host, enabled: vectorCfg.Enabled, required: vectorCfg.Required}
+	vectorProvider := &vectorStoreProviderAdapter{
+		host:     b.host,
+		enabled:  vectorCfg.Enabled,
+		required: vectorCfg.Required,
+		qdrant:   vectorCfg.Qdrant,
+	}
 	graphProvider := &graphStoreProviderAdapter{
 		host:     b.host,
 		enabled:  graphCfg.Enabled,
@@ -191,6 +197,10 @@ func (b *runtimeBootstrap) Snapshot() runtimeorchestrator.RuntimeSnapshot {
 	return b.orchestrator.Snapshot()
 }
 
+func (b *runtimeBootstrap) RefreshHealth(ctx context.Context) runtimeorchestrator.RuntimeSnapshot {
+	return b.orchestrator.RefreshHealth(ctx)
+}
+
 func (b *runtimeBootstrap) GraphService() graph.Service {
 	b.graphMu.RLock()
 	defer b.graphMu.RUnlock()
@@ -237,6 +247,7 @@ type vectorStoreProviderAdapter struct {
 	host     runtimehost.RuntimeHost
 	enabled  bool
 	required bool
+	qdrant   config.QdrantConfig
 }
 
 func (a *vectorStoreProviderAdapter) Descriptor() runtimeorchestrator.ComponentDescriptor {
@@ -279,7 +290,18 @@ func (a *vectorStoreProviderAdapter) Ready(ctx context.Context) error {
 	if qdrantDB.Client == nil {
 		return fmt.Errorf("qdrant client not initialized")
 	}
-	return nil
+	check := qdranthealth.NewHealthCheck(
+		qdranthealth.NewTarget(a.qdrant.Host, a.qdrant.Port),
+		qdranthealth.DesktopPolicy(),
+	)
+	snapshot := check.CheckReady(ctx)
+	if snapshot.IsHealthy() {
+		return nil
+	}
+	if snapshot.LastError != nil {
+		return fmt.Errorf("qdrant readiness probe: %w", snapshot.LastError)
+	}
+	return fmt.Errorf("qdrant readiness probe state: %s", snapshot.State.String())
 }
 
 func (a *vectorStoreProviderAdapter) Stop(ctx context.Context) error {
@@ -299,6 +321,11 @@ type graphStoreProviderAdapter struct {
 	unsubscribe func()
 	reconnectMu sync.Mutex
 	stopped     bool
+	client      graphHealthClient
+}
+
+type graphHealthClient interface {
+	Health(context.Context) error
 }
 
 func (a *graphStoreProviderAdapter) Descriptor() runtimeorchestrator.ComponentDescriptor {
@@ -402,18 +429,27 @@ func (a *graphStoreProviderAdapter) reconnectGraphService() error {
 	if a.switchable == nil {
 		a.switchable = graph.NewSwitchableService(next)
 		a.graphSvc = a.switchable
+		a.client = client
 		if a.onReady != nil {
 			a.onReady(a.graphSvc)
 		}
 		return nil
 	}
 	a.switchable.Swap(next)
+	a.client = client
 	return nil
 }
 
 func (a *graphStoreProviderAdapter) Ready(ctx context.Context) error {
-	if a.graphSvc == nil {
+	a.reconnectMu.Lock()
+	defer a.reconnectMu.Unlock()
+	if a.graphSvc == nil || a.client == nil {
 		return fmt.Errorf("graph service not ready")
+	}
+	healthContext, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	if err := a.client.Health(healthContext); err != nil {
+		return fmt.Errorf("surrealdb readiness probe: %w", err)
 	}
 	return nil
 }
@@ -431,6 +467,7 @@ func (a *graphStoreProviderAdapter) Stop(ctx context.Context) error {
 	if a.switchable != nil {
 		a.switchable.Close()
 	}
+	a.client = nil
 	a.reconnectMu.Unlock()
 
 	return a.host.Processes().Stop(ctx, runtimehost.ProcessIDSurrealDB)

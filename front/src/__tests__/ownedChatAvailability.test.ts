@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { OwnedChatStateChangedError, pollOwnedChat } from "../runtime/owned-chat-poll";
 
-const mocks = vi.hoisted(() => ({ get: vi.fn(), transition: vi.fn(), stream: vi.fn(), mode: { value: "cloud" as "local" | "cloud" } }));
-vi.mock("../composables/useApi", () => ({ apiClient: { get: mocks.get } }));
+const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), transition: vi.fn(), stream: vi.fn(), mode: { value: "cloud" as "local" | "cloud" } }));
+vi.mock("../composables/useApi", () => ({ apiClient: { get: mocks.get, post: mocks.post } }));
 vi.mock("../runtime/runtime-adapter", () => ({ getDeploymentConfig: async () => ({ mode: mocks.mode.value, serverURL: mocks.mode.value === "cloud" ? "https://core" : undefined }), getNativeProviderTransition: mocks.transition }));
 vi.mock("../runtime/device-owned-chat", () => ({ streamOwnedChat: mocks.stream }));
 
@@ -17,6 +17,7 @@ describe("云端可用性恢复与中断通知", () => {
     localStorage.clear();
     mocks.mode.value = "cloud";
     mocks.transition.mockResolvedValue(null);
+    mocks.post.mockResolvedValue({ data: {} });
     mocks.get.mockImplementation(async (path: string) => ({ data: path.endsWith("/coordination/me")
       ? { coreId: "C", coordinationAvailable: true, policy: { coordinated: true, providerEpoch: 1, modeRevision: 1, permissionRevision: 1 } }
       : { roles: [{ id: "role", name: "角色", revision: 1 }], roleOwnerId: "C" } }));

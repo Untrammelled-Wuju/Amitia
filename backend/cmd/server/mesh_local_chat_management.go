@@ -243,7 +243,7 @@ func (p *meshLocalDataPort) manageChatForRole(ctx context.Context, scope coordin
 		if strings.TrimSpace(request.ImportBatchID) == "" || strings.TrimSpace(request.ConversationID) == "" {
 			return nil, errors.New("导入批次和正式会话不能为空")
 		}
-		if err := importbatch.NewRepository(p.services.DB).MarkPromoted(ctx, p.ownerID, request.ImportBatchID, role, request.ConversationID, scope.ResourceOwnerID, scope.CoreID); err != nil {
+		if err := importbatch.NewRepository(p.services.DB).MarkPromoted(ctx, p.spaceID, request.ImportBatchID, role, request.ConversationID, scope.ResourceOwnerID, scope.CoreID); err != nil {
 			return nil, err
 		}
 		return map[string]any{"promoted": true, "conversationId": request.ConversationID}, nil
@@ -465,7 +465,7 @@ func (p *meshLocalDataPort) manageImportBatch(ctx context.Context, scope coordin
 	if batchID == "" || request.RequestID == "" {
 		return nil, errors.New("导入会话和请求编号不能为空")
 	}
-	batch, items, err := importbatch.NewRepository(p.services.DB).Get(ctx, p.ownerID, batchID)
+	batch, items, err := importbatch.NewRepository(p.services.DB).Get(ctx, p.spaceID, batchID)
 	if err != nil {
 		return nil, err
 	}

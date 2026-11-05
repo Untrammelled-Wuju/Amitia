@@ -153,7 +153,7 @@ def add_bytes(archive, name, data, mode=0o644, uid=0):
     archive.addfile(info, io.BytesIO(data))
 
 
-def prepare(alpine_path, node_path, core_path, sources_path, version, output_path, manifest_path, qdrant_path):
+def prepare(alpine_path, node_path, core_path, sources_path, version, output_path, manifest_path, qdrant_path, plugin_market_path):
     core = pathlib.Path(core_path).read_bytes()
     verify_elf(core)
     node_files = []
@@ -217,11 +217,16 @@ def prepare(alpine_path, node_path, core_path, sources_path, version, output_pat
     if qdrant_binary is None:
         raise ValueError("Qdrant binary missing")
     verify_elf(qdrant_binary)
+    plugin_market_file = pathlib.Path(plugin_market_path)
+    plugin_market = plugin_market_file.read_bytes()
+    if not plugin_market_file.name.endswith(".amitiax") or not plugin_market:
+        raise ValueError("plugin market package missing")
+    plugin_market_relative = "opt/amitia/bundled-plugins/plugin-market/" + plugin_market_file.name
     replacements = {"etc/apk/repositories", "etc/passwd", "etc/group"}
     fixed = {"var/lib/amitia": (0, 0o700), "home/amitia": (1000, 0o750), "home/amitia/workspace": (1000, 0o750)}
     for name in ("config", "data", "cache", "log", "run", "temp", "workspace", "home"):
         fixed["var/lib/amitia/" + name] = (0, 0o700)
-    for name in ("var", "var/lib", "home", "dev", "dev/pts", "proc", "sys", "run", "root", "opt", "opt/amitia", "opt/amitia/core", "opt/amitia/qdrant"):
+    for name in ("var", "var/lib", "home", "dev", "dev/pts", "proc", "sys", "run", "root", "opt", "opt/amitia", "opt/amitia/core", "opt/amitia/qdrant", "opt/amitia/bundled-plugins", "opt/amitia/bundled-plugins/plugin-market"):
         fixed.setdefault(name, (0, 0o755))
     fixed["tmp"] = (0, 0o1777)
     text = {}
@@ -294,6 +299,7 @@ def prepare(alpine_path, node_path, core_path, sources_path, version, output_pat
         release = ".".join(version.split(".")[:2])
         add_bytes(archive, "etc/apk/repositories", (f"https://dl-cdn.alpinelinux.org/alpine/v{release}/main\nhttps://dl-cdn.alpinelinux.org/alpine/v{release}/community\n").encode())
         add_bytes(archive, CORE_PATH[1:], core, 0o755)
+        add_bytes(archive, plugin_market_relative, plugin_market)
         for item, data in node_files:
             archive.addfile(item, io.BytesIO(data) if data is not None else None)
         for item, data in qdrant_files:
@@ -301,7 +307,8 @@ def prepare(alpine_path, node_path, core_path, sources_path, version, output_pat
     source_data = pathlib.Path(sources_path).read_bytes()
     manifest = {"schemaVersion": 1, "format": "ish_fakefs", "formatVersion": "1", "distribution": "alpine", "version": version, "architecture": "aarch64", "guestArch": "arm64", "sourceType": "bundled", "core": {"path": CORE_PATH, "sha256": digest(core), "size": len(core)}, "node": {"path": NODE_PATH, "sha256": digest(node_binary), "size": len(node_binary)}, "sourceManifest": {"file": "core-source-inputs.json", "sha256": digest(source_data)}}
     manifest["qdrant"] = {"path": QDRANT_PATH, "sha256": digest(qdrant_binary), "size": len(qdrant_binary)}
-    manifest["runtimeInputs"] = {"alpineSha256": digest(pathlib.Path(alpine_path).read_bytes()), "nodeArchiveSha256": digest(pathlib.Path(node_path).read_bytes()), "qdrantArchiveSha256": digest(pathlib.Path(qdrant_path).read_bytes())}
+    manifest["runtimeInputs"] = {"alpineSha256": digest(pathlib.Path(alpine_path).read_bytes()), "nodeArchiveSha256": digest(pathlib.Path(node_path).read_bytes()), "qdrantArchiveSha256": digest(pathlib.Path(qdrant_path).read_bytes()), "pluginMarketSha256": digest(plugin_market)}
+    manifest["bundledPlugins"] = [{"path": "/" + plugin_market_relative, "sha256": digest(plugin_market), "size": len(plugin_market)}]
     manifest["sourceManifest"]["size"] = len(source_data)
     manifest["runtimeLibraries"] = [{"path": "/" + path, "sha256": digest(library_bytes(path)), "size": len(library_bytes(path)), "hostStoredPath": "/" + path, "hostStoredSha256": digest(stored_libraries[path] if stored_libraries[path] is not None else library_bytes(path)), "hostStoredSize": len(stored_libraries[path] if stored_libraries[path] is not None else library_bytes(path))} for path in sorted(libraries)]
     pathlib.Path(manifest_path).write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")

@@ -13,7 +13,7 @@ func (e *Engine) HistoricalRoles(ctx context.Context, request Request) ([]coordi
 	}
 	defer finish()
 	if !scope.Coordinated {
-		return nil, scope, coordination.ErrWrongOwner
+		return []coordination.HistoricalRole{}, scope, nil
 	}
 	if scope.TargetDeviceID == scope.CoreID {
 		return []coordination.HistoricalRole{}, scope, nil

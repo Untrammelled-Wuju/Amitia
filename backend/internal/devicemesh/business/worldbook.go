@@ -8,6 +8,7 @@ import (
 	"errors"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -52,6 +53,14 @@ type WorldbookMutation struct {
 	ExpectedRevision int64                        `json:"expectedRevision,omitempty"`
 }
 
+type WorldbookImport struct {
+	ExpectedScope  *coordination.ExecutionScope `json:"expectedExecutionScope"`
+	RequestID      string                       `json:"requestId"`
+	RoleID         string                       `json:"characterId"`
+	TargetDeviceID string                       `json:"targetDeviceId,omitempty"`
+	Rules          []WorldbookRule              `json:"rules"`
+}
+
 type WorldbookRuleView struct {
 	WorldbookRule
 	OwnerID  string `json:"ownerId"`
@@ -61,6 +70,13 @@ type WorldbookRuleView struct {
 
 type WorldbookMutationResponse struct {
 	Rule            *WorldbookRuleView           `json:"rule,omitempty"`
+	Scope           coordination.ExecutionScope  `json:"executionScope"`
+	Saved           bool                         `json:"saved"`
+	Acknowledgement coordination.Acknowledgement `json:"acknowledgement"`
+}
+
+type WorldbookImportResponse struct {
+	Rules           []WorldbookRuleView          `json:"rules"`
 	Scope           coordination.ExecutionScope  `json:"executionScope"`
 	Saved           bool                         `json:"saved"`
 	Acknowledgement coordination.Acknowledgement `json:"acknowledgement"`
@@ -339,6 +355,128 @@ func (e *Engine) ManageWorldbook(ctx context.Context, request Request, input Wor
 		return WorldbookMutationResponse{}, errors.New("世界书尚未获得数据所有者保存确认")
 	}
 	response.Acknowledgement = ack
+	return response, nil
+}
+
+func (e *Engine) ImportWorldbook(ctx context.Context, request Request, input WorldbookImport) (WorldbookImportResponse, error) {
+	if input.RequestID == "" || len(input.RequestID) > 128 || input.ExpectedScope == nil || strings.TrimSpace(input.RoleID) == "" ||
+		len(input.Rules) == 0 || len(input.Rules) > 64 {
+		return WorldbookImportResponse{}, errors.New("世界书批量导入参数无效")
+	}
+	rules := make([]WorldbookRule, len(input.Rules))
+	for index, raw := range input.Rules {
+		rule, err := normalizeWorldbookRule(raw, input.RoleID)
+		if err != nil {
+			return WorldbookImportResponse{}, err
+		}
+		rules[index] = rule
+	}
+	if len(body(rules)) > 8<<20 {
+		return WorldbookImportResponse{}, errors.New("世界书批量导入内容超过上限")
+	}
+	request.TargetDeviceID = input.TargetDeviceID
+	request.RoleID = input.RoleID
+	request.RequestID = input.RequestID
+	request.ExpectedScope = input.ExpectedScope
+	mutation := WorldbookMutation{
+		ExpectedScope:  input.ExpectedScope,
+		RequestID:      input.RequestID,
+		RoleID:         input.RoleID,
+		TargetDeviceID: input.TargetDeviceID,
+		Rule:           WorldbookRule{Scope: "role"},
+	}
+	ctx, scope, finish, err := e.worldbookScope(ctx, request, mutation)
+	if err != nil {
+		return WorldbookImportResponse{}, err
+	}
+	defer finish()
+	port, ok := e.data.(coordination.ResourcePort)
+	if !ok {
+		return WorldbookImportResponse{}, errors.New("数据来源不支持世界书管理")
+	}
+	unlock := e.lock(scope.SpaceID + "\x00" + scope.ResourceOwnerID + "\x00worldbook-import\x00" + input.RequestID)
+	defer unlock()
+	fingerprint := sha256.Sum256(body(struct {
+		Scope coordination.ExecutionScope
+		Input WorldbookImport
+	}{scope, input}))
+	fingerprintHash := hex.EncodeToString(fingerprint[:])
+	receiptID := "worldbook/" + input.RequestID
+	if pending, _, err := e.pendingMutation(ctx, scope, receiptID, fingerprintHash); err != nil {
+		return WorldbookImportResponse{}, err
+	} else if pending != nil {
+		if _, err := e.commit(ctx, *pending); err != nil {
+			return WorldbookImportResponse{}, err
+		}
+	}
+	if receipt, err := port.Resource(ctx, scope, "checkpoint", receiptID); err != nil {
+		return WorldbookImportResponse{}, err
+	} else if receipt != nil {
+		var saved struct {
+			Hash     string                  `json:"hash"`
+			Response WorldbookImportResponse `json:"response"`
+		}
+		if receipt.Deleted || json.Unmarshal(receipt.Body, &saved) != nil || saved.Hash != fingerprintHash || saved.Response.Acknowledgement.OwnerID != scope.ResourceOwnerID {
+			return WorldbookImportResponse{}, coordination.ErrRequestConflict
+		}
+		if err := e.coordination.Validate(ctx, scope); err != nil {
+			return WorldbookImportResponse{}, err
+		}
+		return saved.Response, nil
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	views := make([]WorldbookRuleView, 0, len(rules))
+	mutations := make([]coordination.Mutation, 0, len(rules)+1)
+	versions := make(map[string]int64, len(rules)+1)
+	authorities := make([]coordination.ExecutionScope, 0, 2)
+	seenRoles := map[string]bool{scope.WorldbookRoleID: true}
+	for index, rule := range rules {
+		identity := sha256.Sum256([]byte(scope.CoreID + "\x00" + scope.InitiatorDeviceID + "\x00" + scope.ResourceOwnerID + "\x00" + input.RequestID + "\x00" + strconv.Itoa(index)))
+		rule.ID = "worldbook-" + hex.EncodeToString(identity[:16])
+		rule.CreatedAt = now
+		rule.UpdatedAt = now
+		ruleScope := scope
+		coordination.ResolveWorldbookScope(&ruleScope, rule.Scope == "global")
+		if !seenRoles[ruleScope.WorldbookRoleID] {
+			seenRoles[ruleScope.WorldbookRoleID] = true
+			authorities = append(authorities, ruleScope)
+		}
+		storageRole := coordination.StorageRole(ruleScope, "worldbook")
+		views = append(views, WorldbookRuleView{WorldbookRule: rule, OwnerID: scope.ResourceOwnerID, RoleID: storageRole, Revision: 1})
+		mutations = append(mutations, coordination.Mutation{Kind: "worldbook", ID: rule.ID, RoleID: storageRole, ExpectedRevision: 0, Body: body(rule)})
+		versions["worldbook/"+rule.ID] = 1
+	}
+	versions["checkpoint/"+receiptID] = 1
+	response := WorldbookImportResponse{
+		Scope: scope,
+		Saved: true,
+		Rules: views,
+		Acknowledgement: coordination.Acknowledgement{
+			RequestID: scope.RequestID,
+			OwnerID:   scope.ResourceOwnerID,
+			Versions:  versions,
+		},
+	}
+	mutations = append(mutations, coordination.Mutation{Kind: "checkpoint", ID: receiptID, RoleID: scope.RoleID, Body: body(map[string]any{"hash": fingerprintHash, "response": response})})
+	commit := coordination.Commit{Scope: scope, AdditionalAuthorities: authorities, Mutations: mutations}
+	ack, err := e.commit(ctx, commit)
+	if err != nil {
+		if !errors.Is(err, coordination.ErrResourceVersion) && !errors.Is(err, coordination.ErrRequestConflict) && !errors.Is(err, coordination.ErrScopeExpired) {
+			if queueErr := e.coordination.Enqueue(ctx, commit); queueErr != nil {
+				return WorldbookImportResponse{}, errors.Join(err, queueErr)
+			}
+		}
+		return WorldbookImportResponse{}, err
+	}
+	if ack.OwnerID != scope.ResourceOwnerID || ack.RequestID != scope.RequestID {
+		return WorldbookImportResponse{}, errors.New("世界书批量导入尚未获得数据所有者保存确认")
+	}
+	for key, revision := range versions {
+		if ack.Versions[key] != revision {
+			return WorldbookImportResponse{}, errors.New("世界书批量导入确认版本不一致")
+		}
+	}
 	return response, nil
 }
 

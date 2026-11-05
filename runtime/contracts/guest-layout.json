@@ -20,6 +20,7 @@
         "qdrant",
         "plugin-host",
         "task-host",
+        "bundled-plugins",
         "scripts",
         "manifest",
         "licenses"

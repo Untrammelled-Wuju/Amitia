@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/agentrun"
@@ -15,9 +16,11 @@ import (
 const agentRunListTool = "harness_agent_run_list"
 const agentRunSendMessageTool = "harness_agent_message_send"
 const agentRunReadMessagesTool = "harness_agent_message_read"
+const agentRunAcknowledgeMessagesTool = "harness_agent_message_acknowledge"
 
 func isAgentRunMessageTool(name string) bool {
-	return name == agentRunListTool || name == agentRunSendMessageTool || name == agentRunReadMessagesTool
+	return name == agentRunListTool || name == agentRunSendMessageTool ||
+		name == agentRunReadMessagesTool || name == agentRunAcknowledgeMessagesTool
 }
 
 func (m *chatMultiAgentRuntime) agentRunTools(ctx context.Context, scope chat.SkillScope) []tool.Tool {
@@ -40,8 +43,13 @@ func (m *chatMultiAgentRuntime) agentRunTools(ctx context.Context, scope chat.Sk
 		}},
 		{Type: "function", Function: tool.Function{
 			Name:        agentRunReadMessagesTool,
-			Description: "Read and acknowledge new durable messages sent to the current parent or child agent run.",
-			Parameters:  multiAgentToolParameters(`{"type":"object","properties":{},"additionalProperties":false}`),
+			Description: "Claim unacknowledged durable messages for the current parent or child agent run. The returned lease token must be supplied to harness_agent_message_acknowledge after processing.",
+			Parameters:  multiAgentToolParameters(`{"type":"object","properties":{"lease_seconds":{"type":"integer","minimum":1,"maximum":300},"limit":{"type":"integer","minimum":1,"maximum":100}},"additionalProperties":false}`),
+		}},
+		{Type: "function", Function: tool.Function{
+			Name:        agentRunAcknowledgeMessagesTool,
+			Description: "Acknowledge successfully processed messages using the lease token returned by harness_agent_message_read. Unacknowledged messages are redelivered after lease expiry.",
+			Parameters:  multiAgentToolParameters(`{"type":"object","properties":{"lease_token":{"type":"string","minLength":1,"maxLength":180},"message_ids":{"type":"array","minItems":1,"maxItems":100,"items":{"type":"string","minLength":1,"maxLength":180}}},"required":["lease_token","message_ids"],"additionalProperties":false}`),
 		}},
 	}
 }
@@ -118,11 +126,38 @@ func (m *chatMultiAgentRuntime) executeAgentRunMessageTool(ctx context.Context, 
 		}
 		return multiAgentToolSuccess(message)
 	case agentRunReadMessagesTool:
-		messages, err := m.agentRuns.Inbox(ctx, current.SpaceID, current.ID, true)
+		var args struct {
+			LeaseSeconds int `json:"lease_seconds"`
+			Limit        int `json:"limit"`
+		}
+		if err := json.Unmarshal(input, &args); err != nil {
+			return multiAgentToolFailure("INVALID_INPUT", err)
+		}
+		claim, err := m.agentRuns.Claim(
+			ctx,
+			current.SpaceID,
+			current.ID,
+			current.ID,
+			time.Duration(args.LeaseSeconds)*time.Second,
+			args.Limit,
+		)
 		if err != nil {
 			return multiAgentToolFailure("AGENT_MESSAGE_READ_FAILED", err)
 		}
-		return multiAgentToolSuccess(map[string]any{"runId": current.ID, "messages": messages})
+		return multiAgentToolSuccess(claim)
+	case agentRunAcknowledgeMessagesTool:
+		var args struct {
+			LeaseToken string   `json:"lease_token"`
+			MessageIDs []string `json:"message_ids"`
+		}
+		if err := json.Unmarshal(input, &args); err != nil {
+			return multiAgentToolFailure("INVALID_INPUT", err)
+		}
+		count, err := m.agentRuns.Acknowledge(ctx, current.SpaceID, current.ID, args.LeaseToken, args.MessageIDs)
+		if err != nil {
+			return multiAgentToolFailure("AGENT_MESSAGE_ACKNOWLEDGE_FAILED", err)
+		}
+		return multiAgentToolSuccess(map[string]any{"acknowledgedCount": count})
 	default:
 		return multiAgentToolFailure("UNKNOWN_TOOL", fmt.Errorf("unknown agent run message tool"))
 	}

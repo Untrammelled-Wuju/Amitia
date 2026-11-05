@@ -3,72 +3,73 @@ import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  get: vi.fn(),
-  put: vi.fn(),
+  conversations: vi.fn(),
+  edit: vi.fn(),
+  projects: vi.fn(),
+  refresh: vi.fn(),
 }));
 
-vi.mock("@/composables/useApi", () => ({
-  apiClient: {
-    get: mocks.get,
-    put: mocks.put,
-  },
-  useApi: () => ({
-    get: async (url: string, params?: unknown) => {
-      const response = await mocks.get(url, { params });
-      return response.data;
-    },
-  }),
-}));
+vi.mock("@/composables/useDeviceOwnedConversation", async () => {
+  const { ref } = await import("vue");
+  return {
+    useDeviceOwnedConversation: () => ({
+      enabled: ref(true),
+      roles: ref([{ id: "role-1", name: "角色", revision: 1 }]),
+      coreId: ref("core-1"),
+      roleOwnerId: ref("owner-1"),
+      notice: ref(""),
+      policy: ref({ selectedRole: "role-1", providerEpoch: 1, coordinated: false, modeRevision: 1, permissionRevision: 1 }),
+      refresh: mocks.refresh,
+      selectInitialRole: () => "role-1",
+      projects: mocks.projects,
+      conversations: mocks.conversations,
+      edit: mocks.edit,
+      allMessages: vi.fn(async () => []),
+    }),
+  };
+});
 
 import ChatLogsView from "@/views/chat-logs/ChatLogsView.vue";
 import { useChatStore } from "@/stores/chat";
 
+function mountArchive() {
+  const pinia = createPinia();
+  setActivePinia(pinia);
+  return mount(ChatLogsView, {
+    global: {
+      plugins: [pinia],
+      components: {
+        ElButton: { template: "<button><slot /></button>" },
+        ElEmpty: { template: "<div><slot /></div>" },
+        ElIcon: { template: "<span><slot /></span>" },
+        ElInput: { template: "<div />" },
+        ElOption: { template: "<div />" },
+        ElSelect: { template: "<div><slot /></div>" },
+      },
+      directives: { loading: {} },
+      stubs: {
+        ArchiveConversationIcon: true,
+        ChatBubble: true,
+      },
+    },
+  });
+}
+
 describe("chat logs archive", () => {
   beforeEach(() => {
-    mocks.get.mockReset();
-    mocks.put.mockReset();
+    mocks.conversations.mockReset();
+    mocks.edit.mockReset();
+    mocks.projects.mockReset();
+    mocks.refresh.mockReset();
+    mocks.refresh.mockResolvedValue(true);
+    mocks.edit.mockResolvedValue({});
+    mocks.projects.mockResolvedValue({ projects: [] });
   });
 
   it("shows a newly archived conversation without a manual refresh", async () => {
     const archivedItems: Array<Record<string, unknown>> = [];
-    mocks.get.mockImplementation((url: string) => {
-      if (url === "/api/web-chat/sidebar") {
-        return Promise.resolve({ data: { pinned: [], recent: [], projects: [] } });
-      }
-      if (url === "/api/characters") {
-        return Promise.resolve({ data: [] });
-      }
-      if (url === "/api/web-chat/conversations") {
-        return Promise.resolve({ data: { items: archivedItems } });
-      }
-      throw new Error(`unexpected GET ${url}`);
-    });
-    mocks.put.mockResolvedValue({ data: {} });
-
-    const pinia = createPinia();
-    setActivePinia(pinia);
-    const store = useChatStore();
-    const wrapper = mount(ChatLogsView, {
-      global: {
-        plugins: [pinia],
-        components: {
-          ElButton: { template: "<button><slot /></button>" },
-          ElEmpty: { template: "<div><slot /></div>" },
-          ElIcon: { template: "<span><slot /></span>" },
-          ElInput: { template: "<div />" },
-          ElOption: { template: "<div />" },
-          ElSelect: { template: "<div><slot /></div>" },
-        },
-        directives: {
-          loading: {},
-        },
-        stubs: {
-          ArchiveConversationIcon: true,
-          ChatBubble: true,
-        },
-      },
-    });
-
+    mocks.conversations.mockImplementation(async () => archivedItems);
+    const wrapper = mountArchive();
     await flushPromises();
     expect(wrapper.text()).not.toContain("新归档会话");
 
@@ -78,14 +79,15 @@ describe("chat logs archive", () => {
       messageCount: 1,
       archivedAt: "2026-09-19T00:00:00Z",
     });
-    await store.archiveConversation("archived-1");
+    await useChatStore().archiveConversation("archived-1");
     await flushPromises();
 
+    expect(mocks.edit).toHaveBeenCalledWith("conversation", "archived-1", { archived: true });
     expect(wrapper.text()).toContain("新归档会话");
   });
 
   it("orders archived conversations by archived time", async () => {
-    const archivedItems = [
+    mocks.conversations.mockResolvedValue([
       {
         id: "older",
         title: "较早归档",
@@ -98,43 +100,8 @@ describe("chat logs archive", () => {
         messageCount: 99,
         archivedAt: "2026-09-19 11:00:00",
       },
-    ];
-    mocks.get.mockImplementation((url: string) => {
-      if (url === "/api/web-chat/sidebar") {
-        return Promise.resolve({ data: { pinned: [], recent: [], projects: [] } });
-      }
-      if (url === "/api/characters") {
-        return Promise.resolve({ data: [] });
-      }
-      if (url === "/api/web-chat/conversations") {
-        return Promise.resolve({ data: { items: archivedItems } });
-      }
-      throw new Error(`unexpected GET ${url}`);
-    });
-
-    const pinia = createPinia();
-    setActivePinia(pinia);
-    const wrapper = mount(ChatLogsView, {
-      global: {
-        plugins: [pinia],
-        components: {
-          ElButton: { template: "<button><slot /></button>" },
-          ElEmpty: { template: "<div><slot /></div>" },
-          ElIcon: { template: "<span><slot /></span>" },
-          ElInput: { template: "<div />" },
-          ElOption: { template: "<div />" },
-          ElSelect: { template: "<div><slot /></div>" },
-        },
-        directives: {
-          loading: {},
-        },
-        stubs: {
-          ArchiveConversationIcon: true,
-          ChatBubble: true,
-        },
-      },
-    });
-
+    ]);
+    const wrapper = mountArchive();
     await flushPromises();
     const rows = wrapper.findAll(".archive-item");
 

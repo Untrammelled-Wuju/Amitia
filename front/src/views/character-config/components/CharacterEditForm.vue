@@ -11,7 +11,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       <el-form label-position="top" class="char-form">
         <div class="form-grid">
           <el-form-item label="名称">
-            <el-input v-model="nameModel" placeholder="角色名称" />
+            <el-input v-model="nameModel" maxlength="128" show-word-limit placeholder="角色名称" />
           </el-form-item>
 
           <el-form-item label="头像">

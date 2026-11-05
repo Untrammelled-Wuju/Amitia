@@ -57,7 +57,7 @@ export function inspectPackage(packagePath: string): PackageInspection {
   const treeDocument = JSON.parse(treeData.toString("utf8")) as { treeHash: string };
   const verified: IntegrityEntry[] = [];
   for (const [name, data] of entries) {
-    if (name === "integrity/files.json" || name === "integrity/content-tree.json") continue;
+    if (name === "integrity/files.json" || name === "integrity/content-tree.json" || name === "META-INF/amitia-signature.json") continue;
     const expected = filesDocument.files[name];
     if (!expected) throw new Error(`${name} is missing from integrity metadata`);
     if (expected.size !== data.length) throw new Error(`${name} size mismatch`);

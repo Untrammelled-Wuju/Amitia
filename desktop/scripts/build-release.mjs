@@ -19,6 +19,9 @@ const buildRuntimeHostsPath = resolve(__dirname, "build-runtime-hosts.mjs");
 const generateReleaseReportPath = resolve(__dirname, "generate-release-report.mjs");
 const prepareRuntimeAssetsPath = resolve(__dirname, "prepare-release-runtime-assets.mjs");
 const verifyPackagedRuntimeAssetsPath = resolve(__dirname, "verify-packaged-runtime-assets.mjs");
+const buildMarketplacePluginsPath = resolve(__dirname, "../../scripts/build-marketplace-plugins.mjs");
+const verifyPluginMarketPackagePath = resolve(__dirname, "../../plugins-code/plugin-market/scripts/verify-package.mjs");
+const testPluginMarketRuntimePath = resolve(__dirname, "../../plugins-code/plugin-market/scripts/test-runtime.mjs");
 const compressionLevel = process.env.ELECTRON_BUILDER_COMPRESSION_LEVEL || "5";
 
 function run(command, args, options = {}) {
@@ -110,6 +113,13 @@ async function main() {
 
   console.log("[build-release] building shared runtime hosts...");
   run(process.execPath, [buildRuntimeHostsPath]);
+
+  console.log("[build-release] building bundled plugin market...");
+  run(process.execPath, [buildMarketplacePluginsPath, "--build"], {
+    env: { ...process.env, AMITIA_PLUGIN_FILTER: "com.amitia/plugin-market" },
+  });
+  run(process.execPath, [testPluginMarketRuntimePath]);
+  run(process.execPath, [verifyPluginMarketPackagePath]);
 
   console.log("[build-release] building AmitiaCore from the frozen source...");
   run(process.execPath, [buildAmitiaCorePath], {

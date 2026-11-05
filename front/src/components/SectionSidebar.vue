@@ -5,9 +5,9 @@
     </header>
 
     <div class="section-sidebar-scroll">
-      <nav v-if="section?.entries.length" class="section-entry-list" :aria-label="`${title}功能`">
+      <nav v-if="sectionEntries.length" class="section-entry-list" :aria-label="`${title}功能`">
         <RouterLink
-          v-for="entry in section.entries"
+          v-for="entry in sectionEntries"
           :key="entry.route"
           :to="entry.route"
           class="section-entry"
@@ -54,6 +54,8 @@ import { useRoute, useRouter } from "vue-router";
 import { Plus, Refresh } from "@element-plus/icons-vue";
 import { appSection, type AppSectionId } from "@/navigation/appSections";
 import { useApi } from "@/composables/useApi";
+import { useExtensionUIStore } from "@/stores/extensionUI";
+import { collectExtensionSectionEntries } from "@/ui-runtime/providerRoutes";
 
 interface GamePlugin {
   extensionId: string;
@@ -67,8 +69,14 @@ const props = defineProps<{ sectionId: AppSectionId }>();
 const route = useRoute();
 const router = useRouter();
 const api = useApi();
+const extensionUIStore = useExtensionUIStore();
 const section = computed(() => appSection(props.sectionId as Exclude<AppSectionId, "home" | "channels" | "account" | "settings">));
 const title = computed(() => section.value?.label ?? sectionTitle(props.sectionId));
+const sectionEntries = computed(() => [
+  ...(section.value?.entries ?? []),
+  ...collectExtensionSectionEntries(extensionUIStore, props.sectionId)
+    .map((item) => ({ route: item.route, label: item.label })),
+]);
 const gamePlugins = ref<GamePlugin[]>([]);
 const gameLoading = ref(false);
 

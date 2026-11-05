@@ -2378,6 +2378,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
         node.props?['subtitleField']?.toString().trim().isNotEmpty == true
         ? node.props!['subtitleField'].toString().trim()
         : 'subtitle';
+    final disabledField = node.props?['disabledField']?.toString().trim() ?? '';
     final minItemWidth = _dimension(node.props?['minItemWidth'], 148);
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -2415,7 +2416,12 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
                 item['meaning'] ??
                 item['description'] ??
                 '';
-            final disabled = _isNodeDisabled(node) || node.actions.isEmpty;
+            final itemDisabled =
+                disabledField.isNotEmpty &&
+                (item[disabledField] == true ||
+                    item[disabledField]?.toString().toLowerCase() == 'true');
+            final disabled =
+                _isNodeDisabled(node) || node.actions.isEmpty || itemDisabled;
             return InkWell(
               borderRadius: AppRadius.brMedium,
               onTap: disabled
@@ -2425,14 +2431,16 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
                       nodeId: node.id,
                       item: item,
                     ),
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  borderRadius: AppRadius.brMedium,
-                  border: Border.all(color: context.borderPrimary),
-                  color: context.surfacePrimary,
-                ),
-                child: Column(
+              child: Opacity(
+                opacity: itemDisabled ? 0.55 : 1,
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    borderRadius: AppRadius.brMedium,
+                    border: Border.all(color: context.borderPrimary),
+                    color: context.surfacePrimary,
+                  ),
+                  child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Expanded(
@@ -2472,7 +2480,8 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
                         style: AppTypography.caption(context),
                       ),
                     ],
-                  ],
+                    ],
+                  ),
                 ),
               ),
             );

@@ -2,27 +2,43 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 
 const mocks = vi.hoisted(() => ({
-  get: vi.fn(),
-  post: vi.fn(),
-  put: vi.fn(),
+  conversations: vi.fn(),
+  edit: vi.fn(),
+  projects: vi.fn(),
+  refresh: vi.fn(),
 }));
 
-vi.mock("@/composables/useApi", () => ({
-  apiClient: {
-    get: mocks.get,
-    post: mocks.post,
-    put: mocks.put,
-  },
-}));
+vi.mock("@/composables/useDeviceOwnedConversation", async () => {
+  const { ref } = await import("vue");
+  return {
+    useDeviceOwnedConversation: () => ({
+      enabled: ref(true),
+      roles: ref([{ id: "role-1", name: "角色", revision: 1 }]),
+      coreId: ref("core-1"),
+      roleOwnerId: ref("owner-1"),
+      notice: ref(""),
+      policy: ref({ selectedRole: "role-1", providerEpoch: 1, coordinated: false, modeRevision: 1, permissionRevision: 1 }),
+      refresh: mocks.refresh,
+      selectInitialRole: () => "role-1",
+      conversations: mocks.conversations,
+      projects: mocks.projects,
+      edit: mocks.edit,
+    }),
+  };
+});
 
 import { useChatStore } from "@/stores/chat";
 
 describe("chat store", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
-    mocks.get.mockReset();
-    mocks.post.mockReset();
-    mocks.put.mockReset();
+    mocks.conversations.mockReset();
+    mocks.edit.mockReset();
+    mocks.projects.mockReset();
+    mocks.refresh.mockReset();
+    mocks.refresh.mockResolvedValue(true);
+    mocks.edit.mockResolvedValue({});
+    mocks.projects.mockResolvedValue({ projects: [] });
   });
 
   it("refreshes the sidebar after restoring an archived conversation", async () => {
@@ -31,49 +47,27 @@ describe("chat store", () => {
       projectId: "",
       title: "Restored",
       channel: "web",
-      source: "web",
+      source: "device-mesh",
       messageCount: 0,
       createdAt: "2026-09-19T00:00:00Z",
       updatedAt: "2026-09-19T00:00:00Z",
     };
-    mocks.put.mockResolvedValueOnce({ data: { id: conversation.id } });
-    mocks.get.mockResolvedValueOnce({
-      data: {
-        pinned: [],
-        recent: [conversation],
-        projects: [],
-      },
-    });
+    mocks.conversations.mockResolvedValue([conversation]);
 
     const store = useChatStore();
     await store.restoreConversation(conversation.id);
 
-    expect(mocks.put).toHaveBeenCalledWith(
-      `/api/web-chat/conversations/${conversation.id}`,
-      { archived: false },
-    );
-    expect(mocks.get).toHaveBeenCalledWith("/api/web-chat/sidebar");
+    expect(mocks.edit).toHaveBeenCalledWith("conversation", conversation.id, { archived: false });
     expect(store.sidebar.recent).toEqual([conversation]);
     expect(store.archivedRevision).toBe(1);
   });
 
   it("signals the archive page after archiving a conversation", async () => {
-    mocks.put.mockResolvedValueOnce({ data: { id: "conversation-2" } });
-    mocks.get.mockResolvedValueOnce({
-      data: {
-        pinned: [],
-        recent: [],
-        projects: [],
-      },
-    });
-
+    mocks.conversations.mockResolvedValue([]);
     const store = useChatStore();
     await store.archiveConversation("conversation-2");
 
-    expect(mocks.put).toHaveBeenCalledWith(
-      "/api/web-chat/conversations/conversation-2",
-      { archived: true },
-    );
+    expect(mocks.edit).toHaveBeenCalledWith("conversation", "conversation-2", { archived: true });
     expect(store.archivedRevision).toBe(1);
   });
 
@@ -83,7 +77,7 @@ describe("chat store", () => {
       projectId: "",
       title: "Unread",
       channel: "web",
-      source: "web",
+      source: "device-mesh",
       messageCount: 2,
       isGenerating: false,
       hasUnread: true,
@@ -92,17 +86,13 @@ describe("chat store", () => {
       createdAt: "2026-09-19T00:00:00Z",
       updatedAt: "2026-09-19T00:00:00Z",
     };
-    mocks.post.mockResolvedValueOnce({ data: { conversationId: conversation.id } });
-
+    mocks.conversations.mockResolvedValue([conversation]);
     const store = useChatStore();
-    store.sidebar.recent = [conversation];
+    await store.fetchSidebar();
     await store.markConversationRead(conversation.id, 2);
 
-    expect(mocks.post).toHaveBeenCalledWith(
-      `/api/web-chat/conversations/${conversation.id}/read`,
-    );
-    expect(conversation.hasUnread).toBe(false);
-    expect(conversation.lastReadTurnSequence).toBe(2);
-    expect(store.sidebar.recent).toEqual([conversation]);
+    expect(mocks.edit).toHaveBeenCalledWith("conversation", conversation.id, { lastReadTurnSequence: 2 });
+    expect(store.sidebar.recent[0].hasUnread).toBe(false);
+    expect(store.sidebar.recent[0].lastReadTurnSequence).toBe(2);
   });
 });

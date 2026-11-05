@@ -71,7 +71,9 @@ class DefaultRuntimeBootstrap implements RuntimeBootstrap {
     _handleRuntimeSnapshot(current);
 
     if (_disposed) return;
-    if (_policy.autoInstallRuntime) {
+    if (_policy.autoInstallRuntime &&
+        (current.state == RuntimeBridgeState.notInstalled ||
+            (current.runtimeInstalled && !current.embeddedPackageMatches))) {
       final installed = await _requestReconcileEmbedded();
 
       if (_disposed || !installed) return;

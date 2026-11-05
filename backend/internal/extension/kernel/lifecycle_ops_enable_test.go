@@ -136,6 +136,24 @@ func TestEnable_SucceedsWhenAllStepsOK(t *testing.T) {
 	}
 }
 
+func TestEnableIsIdempotentWhenAlreadyEnabled(t *testing.T) {
+	ctx := context.Background()
+	extID := "com.amitia.test/enable-idempotent"
+	rt, container, _ := setupEnableTestRuntime(t, ctx, extID, runtime_supervisor.NewFakeRuntime())
+	defer container.Close()
+	installation, err := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(extID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	installation.EnablementState = domain.EnablementEnabled
+	if err := container.InstallationRepository.PutInstallation(ctx, installation); err != nil {
+		t.Fatal(err)
+	}
+	if err := rt.Enable(ctx, extID); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestEnable_RollsBackOnRuntimeStartFailure(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping in short mode")

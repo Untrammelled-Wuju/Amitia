@@ -138,6 +138,8 @@ class _UpdateServerAdapter implements HttpClientAdapter {
         'mandatory': false,
         'rolloutPercentage': 100,
         'publishedAt': '2026-09-16T00:00:00Z',
+        'updateTitle': '稳定性与体验更新',
+        'highlights': <String>['修复已知问题', '优化使用体验'],
         'apk': <String, dynamic>{
           'url': 'https://example.com/app.apk',
           'size': 1234,

@@ -1,6 +1,7 @@
 package character
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/u-ai/backend/pkg/app"
@@ -50,5 +51,37 @@ func TestCharacterMutationSynchronizesRoleAgent(t *testing.T) {
 	}
 	if spy.archived != 1 || spy.lastID != created.ID {
 		t.Fatalf("delete did not archive role agent: %+v", spy)
+	}
+}
+
+func TestCharacterNameBoundaryAndDefaultRoleDeletion(t *testing.T) {
+	db := newTestDB(t)
+	ctx := app.NewAppContext(db, nil)
+	service := NewService(NewRepository(ctx), ctx).(*service)
+
+	first, err := service.CreateForSpace(&CreateCharacterRequest{Name: "第一个角色"}, "space-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := service.CreateForSpace(&CreateCharacterRequest{Name: "第二个角色"}, "space-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.DeleteForSpace(first.ID, "space-test"); err != nil {
+		t.Fatal(err)
+	}
+	replacement, err := service.GetByIDForSpace(second.ID, "space-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replacement.IsDefault != 1 {
+		t.Fatal("default role was not promoted after deletion")
+	}
+	tooLong := strings.Repeat("角", 129)
+	if _, err := service.CreateForSpace(&CreateCharacterRequest{Name: tooLong}, "space-test"); err == nil {
+		t.Fatal("accepted a character name over 128 characters")
+	}
+	if _, err := service.UpdateForSpace(second.ID, &UpdateCharacterRequest{Name: &tooLong}, "space-test"); err == nil {
+		t.Fatal("updated a character name over 128 characters")
 	}
 }

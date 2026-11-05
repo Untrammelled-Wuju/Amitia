@@ -856,7 +856,7 @@ func (h *HTTPHandler) handleSchema(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "schema_not_found", "schema contribution does not belong to extension")
 		return
 	}
-	if def.Entry.Type != ui_contribution.SandboxSchemaRenderer || def.Sandbox.Type != ui_contribution.SandboxSchemaRenderer || strings.TrimSpace(def.Entry.SchemaPath) == "" {
+	if def.Entry.Type != ui_contribution.SandboxSchemaRenderer || def.Sandbox.Type != ui_contribution.SandboxSchemaRenderer {
 		writeError(w, http.StatusNotFound, "schema_not_found", "contribution does not declare a schema renderer")
 		return
 	}

@@ -3,6 +3,8 @@
 package system
 
 import (
+	"context"
+
 	"github.com/u-ai/backend/config"
 
 	"github.com/gin-gonic/gin"
@@ -13,6 +15,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/mindruntime"
+	"github.com/u-ai/backend/internal/runtimeorchestrator"
 	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/internal/system/dataportability"
 	"github.com/u-ai/backend/internal/temporal"
@@ -21,6 +24,18 @@ import (
 )
 
 type SystemRouterOption func(*Handler)
+
+type RuntimeReadinessSource interface {
+	RefreshHealth(context.Context) runtimeorchestrator.RuntimeSnapshot
+}
+
+func WithRuntimeReadiness(orchestrator RuntimeReadinessSource) SystemRouterOption {
+	return func(handler *Handler) {
+		if orchestrator != nil {
+			handler.runtimeReadiness = orchestrator.RefreshHealth
+		}
+	}
+}
 
 func WithApprovalBroker(broker *execution.ApprovalBroker) SystemRouterOption {
 	return func(handler *Handler) {

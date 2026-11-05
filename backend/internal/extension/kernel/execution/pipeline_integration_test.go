@@ -184,7 +184,7 @@ func integPipeline(t *testing.T, adapter *spyingAdapter, idem IdempotencyStorage
 		TimeoutCtrl:             NewTimeoutController(5 * time.Second),
 		CancellationCtrl:        NewCancellationController(),
 		DepthGuard:              NewDepthGuard(),
-		Dispatcher:              NewRuntimeDispatcher(adapterRegistry),
+		Dispatcher:              NewRuntimeDispatcher(adapterRegistry, testRuntimeExecutionResolver{}),
 		ResultValidator:         NewResultValidator(),
 		Sanitizer:               NewSanitizer(),
 		SideEffectRec:           NewSideEffectRecorder(),

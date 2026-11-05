@@ -4018,13 +4018,22 @@ CREATE TABLE IF NOT EXISTS agent_run_messages (
     kind TEXT NOT NULL DEFAULT 'instruction',
     content TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending',
+    delivery_state TEXT NOT NULL DEFAULT 'pending',
+    lease_owner TEXT NOT NULL DEFAULT '',
+    lease_token TEXT NOT NULL DEFAULT '',
+    lease_expires_at DATETIME,
+    delivery_attempts INTEGER NOT NULL DEFAULT 0,
     correlation_id TEXT NOT NULL DEFAULT '',
     created_at DATETIME NOT NULL,
-    read_at DATETIME
+    read_at DATETIME,
+    acknowledged_at DATETIME
 );
 CREATE INDEX IF NOT EXISTS idx_agent_run_messages_created_at ON agent_run_messages(created_at);
 CREATE INDEX IF NOT EXISTS idx_agent_run_messages_correlation_id ON agent_run_messages(correlation_id);
 CREATE INDEX IF NOT EXISTS idx_agent_run_messages_status ON agent_run_messages(status);
+CREATE INDEX IF NOT EXISTS idx_agent_run_messages_delivery_state ON agent_run_messages(delivery_state);
+CREATE INDEX IF NOT EXISTS idx_agent_run_messages_lease_expires_at ON agent_run_messages(lease_expires_at);
+CREATE INDEX IF NOT EXISTS idx_agent_run_messages_lease_token ON agent_run_messages(lease_token);
 CREATE INDEX IF NOT EXISTS idx_agent_run_messages_kind ON agent_run_messages(kind);
 CREATE INDEX IF NOT EXISTS idx_agent_run_messages_sender_run_id ON agent_run_messages(sender_run_id);
 CREATE INDEX IF NOT EXISTS idx_agent_run_messages_conversation ON agent_run_messages(conversation_id);

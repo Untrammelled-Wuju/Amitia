@@ -116,18 +116,25 @@ func TestMultiAgentRestoredPendingWorkersDispatchOnlyOnce(t *testing.T) {
 	}
 	var wg sync.WaitGroup
 	var failed atomic.Bool
+	var failureMu sync.Mutex
+	var firstFailure error
 	for i := 0; i < 12; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			if err := restored.Reconcile(ctx, id); err != nil {
 				failed.Store(true)
+				failureMu.Lock()
+				if firstFailure == nil {
+					firstFailure = err
+				}
+				failureMu.Unlock()
 			}
 		}()
 	}
 	wg.Wait()
 	if failed.Load() {
-		t.Fatal("concurrent reconciliation returned an error")
+		t.Fatalf("concurrent reconciliation returned an error: %v", firstFailure)
 	}
 	if len(workers.started) != 2 {
 		t.Fatalf("concurrent recovery spawned %d workers instead of 2", len(workers.started))

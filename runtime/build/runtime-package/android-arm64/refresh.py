@@ -49,6 +49,7 @@ def main():
     parser.add_argument("--backend", required=True)
     parser.add_argument("--plugin-host", required=True)
     parser.add_argument("--task-host")
+    parser.add_argument("--plugin-market-package", required=True)
     parser.add_argument("--surrealdb", required=True)
     parser.add_argument("--surrealdb-version", default="2.3.8")
     parser.add_argument("--source-commit", required=True)
@@ -62,12 +63,15 @@ def main():
         raise RuntimeError("source commit must be a 40-character git revision")
     plugin_host = Path(args.plugin_host).resolve()
     task_host = Path(args.task_host).resolve() if args.task_host else None
+    plugin_market_package = Path(args.plugin_market_package).resolve()
     required = [base_package, Path(args.backend), Path(args.surrealdb)]
     missing = [str(path) for path in required if not path.is_file()]
     if not plugin_host.is_dir():
         missing.append(str(plugin_host))
     if task_host is not None and not task_host.is_dir():
         missing.append(str(task_host))
+    if not plugin_market_package.is_file():
+        missing.append(str(plugin_market_package))
     if missing:
         raise RuntimeError("missing input: " + ", ".join(missing))
 
@@ -109,6 +113,7 @@ def main():
                 shutil.rmtree(task_host_target)
             shutil.copytree(task_host / "dist", task_host_target / "dist")
             copy_file(task_host / "package.json", task_host_target / "package.json")
+        copy_file(plugin_market_package, runtime_root / "bundled-plugins" / "plugin-market" / plugin_market_package.name)
 
         for relative in [
             "backend/amitia-server",

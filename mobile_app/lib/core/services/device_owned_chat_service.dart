@@ -721,7 +721,9 @@ class DeviceOwnedChatService {
     final next = <String, String>{};
     for (final source in [
       ['cursor', 'snapshot', kind],
+      ['legacyCursor', 'snapshot', 'legacyMessage'],
       ['historicalCursor', 'historicalSnapshot', kind],
+      ['historicalLegacyCursor', 'historicalSnapshot', 'legacyMessage'],
     ]) {
       if (older && !cursors.containsKey(source[0])) continue;
       final snapshot = result[source[1]];
@@ -1519,7 +1521,9 @@ class DeviceOwnedChatService {
               ...row['body'] as Map,
               'origin': row['origin'],
               'readOnly': row['readOnly'] == true,
-              'sourceRevision': row['readOnly'] == true ? null : row['revision'],
+              'sourceRevision': row['readOnly'] == true
+                  ? null
+                  : row['revision'],
             },
           );
       for (final row in rows) {

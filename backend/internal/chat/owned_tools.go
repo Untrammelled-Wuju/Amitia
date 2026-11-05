@@ -350,5 +350,6 @@ func ownedParentOnlyNativeTaskTool(name string) bool {
 }
 
 func isAgentRunMessageToolName(name string) bool {
-	return name == "harness_agent_run_list" || name == "harness_agent_message_send" || name == "harness_agent_message_read"
+	return name == "harness_agent_run_list" || name == "harness_agent_message_send" ||
+		name == "harness_agent_message_read" || name == "harness_agent_message_acknowledge"
 }

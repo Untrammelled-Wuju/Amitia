@@ -74,13 +74,18 @@ internal class RuntimeBridgeHandler(
         )
         val manifest = manifestStore?.read()
         val runtimeInstalled = manifest is RuntimeManifestResult.Success
+        val installedManifest = (manifest as? RuntimeManifestResult.Success)?.manifest
+        val expectedPackageSha256 = TrustedRuntimePackageSource.expectedPackageSha256()
+        val embeddedPackageMatches = installedManifest?.packageSha256
+            ?.equals(expectedPackageSha256, ignoreCase = true) == true
         val runtimeAvailable = snapshot.state == RuntimeState.READY ||
                 snapshot.state == RuntimeState.DEGRADED
         val mapped = RuntimeBridgeSnapshotMapper.toBridgeSnapshot(
             snapshot = snapshot,
-            manifest = (manifest as? RuntimeManifestResult.Success)?.manifest,
+            manifest = installedManifest,
             runtimeInstalled = runtimeInstalled,
             runtimeAvailable = runtimeAvailable,
+            embeddedPackageMatches = embeddedPackageMatches,
         )
         result.success(mapped)
     }

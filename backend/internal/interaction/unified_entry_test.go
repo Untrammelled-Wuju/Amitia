@@ -2,6 +2,7 @@ package interaction
 
 import (
 	"context"
+	"fmt"
 	"github.com/u-ai/backend/internal/temporal"
 	"sync"
 	"testing"
@@ -11,6 +12,15 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
+
+func openInteractionTestDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s-%d?mode=memory&cache=shared", t.Name(), time.Now().UnixNano())), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return db
+}
 
 type canonicalTestExecutor struct {
 	entry    *UnifiedEntry
@@ -75,10 +85,7 @@ func TestUnifiedEntryHasNoLegacyProcessorFallback(t *testing.T) {
 }
 
 func TestUnifiedEntryObservesInferredGroupRequestWithoutExecuting(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := openInteractionTestDB(t)
 	if err := db.AutoMigrate(&agentpermission.SourcePolicy{}, &agentpermission.DecisionRecord{}); err != nil {
 		t.Fatal(err)
 	}
@@ -109,10 +116,7 @@ func TestUnifiedEntryObservesInferredGroupRequestWithoutExecuting(t *testing.T) 
 }
 
 func TestUnifiedEntryAllowsExplicitRequestAndAppliesPermissionCeiling(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := openInteractionTestDB(t)
 	if err := db.AutoMigrate(&agentpermission.SourcePolicy{}, &agentpermission.DecisionRecord{}); err != nil {
 		t.Fatal(err)
 	}

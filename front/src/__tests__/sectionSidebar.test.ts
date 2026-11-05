@@ -1,4 +1,5 @@
 import { flushPromises, mount } from "@vue/test-utils";
+import { createPinia } from "pinia";
 import { createMemoryHistory, createRouter } from "vue-router";
 import ElementPlus from "element-plus";
 import { describe, expect, it, vi } from "vitest";
@@ -21,7 +22,7 @@ async function render(sectionId: "character" | "memory" | "tasks" | "game" | "wo
   await router.isReady();
   const wrapper = mount(SectionSidebar, {
     props: { sectionId },
-    global: { plugins: [router, ElementPlus] },
+    global: { plugins: [createPinia(), router, ElementPlus] },
   });
   await flushPromises();
   return { wrapper, router };

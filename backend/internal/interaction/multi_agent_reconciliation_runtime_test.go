@@ -11,11 +11,14 @@ import (
 func newReconciliationCoordinator(t *testing.T, strategy CoordinationStrategy) (*MultiAgentCoordinator, *fakeTracker, *fakeWorkerRunner, string) {
 	t.Helper()
 	tracker := newFakeTracker()
-	if err := tracker.Create(context.Background(), &InteractionRecord{ID: "parent-reconcile", Status: InteractionStatusProcessing}); err != nil {
+	if err := tracker.Create(context.Background(), &InteractionRecord{
+		ID: "parent-reconcile", Status: InteractionStatusProcessing,
+		Scope: InteractionScope{SpaceID: "space-a", CharacterID: "parent-character", ConversationID: "parent-conversation", RequestID: "parent-request"},
+	}); err != nil {
 		t.Fatal(err)
 	}
 	goals := decision.NewGoalRegistry()
-	if err := goals.Register(decision.Goal{ID: "goal-reconcile", Revision: 1, Status: decision.GoalStatusActive}); err != nil {
+	if err := goals.Register(decision.Goal{ID: "goal-reconcile", Revision: 1, Status: decision.GoalStatusActive, SpaceID: "space-a", ConversationID: "parent-conversation", CharacterID: "parent-character"}); err != nil {
 		t.Fatal(err)
 	}
 	workers := &fakeWorkerRunner{}

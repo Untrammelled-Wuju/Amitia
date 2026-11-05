@@ -13,11 +13,11 @@ func newRound41Coordination(t *testing.T, runner AgentWorkerRunner) (*MultiAgent
 	t.Helper()
 	ctx := context.Background()
 	tracker := NewInMemoryTracker()
-	if err := tracker.Create(ctx, &InteractionRecord{ID: "round41-parent", Status: InteractionStatusProcessing}); err != nil {
+	if err := tracker.Create(ctx, &InteractionRecord{ID: "round41-parent", Status: InteractionStatusProcessing, Scope: InteractionScope{SpaceID: "space-41", CharacterID: "parent-char", ConversationID: "parent-conversation"}}); err != nil {
 		t.Fatal(err)
 	}
 	goals := decision.NewGoalRegistry()
-	if err := goals.Register(decision.Goal{ID: "round41-goal", Revision: 1, Status: decision.GoalStatusActive}); err != nil {
+	if err := goals.Register(decision.Goal{ID: "round41-goal", Revision: 1, Status: decision.GoalStatusActive, SpaceID: "space-41", CharacterID: "parent-char", ConversationID: "parent-conversation"}); err != nil {
 		t.Fatal(err)
 	}
 	coord := NewMultiAgentCoordinator(tracker, goals, nil, runner, nil, DefaultMultiAgentPolicy())
@@ -114,11 +114,11 @@ func (r *round41UncertainRunner) StartWorker(context.Context, WorkerRunRequest) 
 func TestRound41AmbiguousDispatchRemainsWaitingWithoutAutomaticReplay(t *testing.T) {
 	ctx := context.Background()
 	tracker := NewInMemoryTracker()
-	if err := tracker.Create(ctx, &InteractionRecord{ID: "uncertain-parent", Status: InteractionStatusProcessing}); err != nil {
+	if err := tracker.Create(ctx, &InteractionRecord{ID: "uncertain-parent", Status: InteractionStatusProcessing, Scope: InteractionScope{SpaceID: "space-41", CharacterID: "parent-char", ConversationID: "parent-conversation"}}); err != nil {
 		t.Fatal(err)
 	}
 	goals := decision.NewGoalRegistry()
-	if err := goals.Register(decision.Goal{ID: "uncertain-goal", Revision: 1, Status: decision.GoalStatusActive}); err != nil {
+	if err := goals.Register(decision.Goal{ID: "uncertain-goal", Revision: 1, Status: decision.GoalStatusActive, SpaceID: "space-41", CharacterID: "parent-char", ConversationID: "parent-conversation"}); err != nil {
 		t.Fatal(err)
 	}
 	runner := &round41UncertainRunner{}

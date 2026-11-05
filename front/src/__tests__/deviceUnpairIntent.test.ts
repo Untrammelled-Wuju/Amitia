@@ -65,6 +65,7 @@ describe("解绑冻结原设备管理权限", () => {
   it("桌面解绑经已认证Source代理读取policy和撤销，不裸访问Cloud", async () => {
     const deprovision = vi.fn();
     window.amitiaDesktop = {
+      getRuntimeEndpoint: async () => ({ httpBaseURL: "http://127.0.0.1:18899" }),
       getDeploymentConfig: async () => ({ mode: "cloud", serverURL: "https://core-b.test" }),
       getMeshStatus: async () => ({ cloudBaseUrl: "https://core-b.test" }),
       getMeshIdentity: async () => ({ deviceId: "device-a" }),

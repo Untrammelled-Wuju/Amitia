@@ -259,12 +259,13 @@ class AmitiaSwitchTile extends StatelessWidget {
           : WidgetStatePropertyAll<Color?>(style.color('overlayColor')),
       shape: shape,
     );
+    final material = Material(type: MaterialType.transparency, child: tile);
     final opacity = style.number('opacity');
     return opacity == null
-        ? tile
+        ? material
         : Opacity(
             opacity: opacity.toDouble().clamp(0.0, 1.0).toDouble(),
-            child: tile,
+            child: material,
           );
   }
 }

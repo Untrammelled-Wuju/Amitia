@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, realpathSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { ResourceLoader } from "../resource-loader";
 import type { LoadInstallationRequest } from "../resource-loader";
@@ -12,6 +12,12 @@ import {
   ACTION_JSON_READ_FAILED,
   ACTION_JSON_PARSE_FAILED,
 } from "../resource-loader";
+import {
+  canonicalManifestJSON,
+  computeTreeHash,
+  sha256Hex,
+} from "../package-integrity-verifier";
+import { MANIFEST_PSEUDO_ENTRY_PATH } from "../../../shared/package-schema";
 
 interface ActionConfig {
   key: string;
@@ -29,7 +35,7 @@ interface ActionConfig {
 }
 
 interface ManifestConfig {
-  packageId?: string;
+  petId?: string;
   schemaVersion?: number;
   name?: string;
   canvas?: { width: number; height: number };
@@ -43,22 +49,36 @@ function buildActionJson(action: ActionConfig, frameRelPaths: string[]): string 
     return "{ not valid json";
   }
   const payload: Record<string, unknown> = {
-    key: action.key,
-    name: action.name ?? action.key,
+    schemaVersion: 1,
+    actionKey: action.key,
+    displayName: action.name ?? action.key,
     version: action.version ?? 1,
-    loopType: action.loopType ?? "loop",
+    playbackMode: action.loopType ?? "loop",
     fps: action.fps ?? 8,
-    frameDurationMs: action.frameDurationMs ?? 125,
-    frameCount: action.frameCount ?? frameRelPaths.length,
-    frames: frameRelPaths,
     interruptible: action.interruptible ?? true,
+    priority: 50,
+    cooldownMs: 0,
+    minimumPlayMs: 0,
+    maximumPlayMs: null,
+    mutexGroup: null,
+    supportsDefaultIdle: true,
+    isStableStateCandidate: true,
+    isTransitionOnly: false,
+    returnTo: action.returnAction
+      ? { type: "action", actionKey: action.returnAction }
+      : { type: "default" },
+    anchor: action.anchor
+      ? { ...action.anchor, coordinateSpace: "normalized_canvas" }
+      : { x: 0.5, y: 1, coordinateSpace: "normalized_canvas" },
+    frames: frameRelPaths.map((file, index) => ({
+      file,
+      index,
+      durationMs: action.frameDurationMs ?? Math.round(1000 / (action.fps ?? 8)),
+      contentHash: sha256Hex("png-bytes"),
+      frameId: `${action.key}_${index}`,
+      assetId: `${action.key}_asset_${index}`,
+    })),
   };
-  if (action.returnAction) {
-    payload.returnAction = action.returnAction;
-  }
-  if (action.anchor) {
-    payload.anchor = action.anchor;
-  }
   return JSON.stringify(payload);
 }
 
@@ -68,28 +88,128 @@ function setupInstallation(
   actionConfigs: ActionConfig[],
 ): void {
   mkdirSync(join(root, "actions"), { recursive: true });
+  const integrityFiles: Array<{
+    path: string;
+    sha256: string;
+    bytes: number;
+    mediaType: string;
+    role: string;
+    actionKey?: string;
+    frameId?: string;
+  }> = [];
   for (const action of actionConfigs) {
     const actionDir = join(root, "actions", action.key);
     mkdirSync(actionDir, { recursive: true });
     const rawFrames = action.frames ?? [];
-    const frameRelPaths: string[] = [];
+    const frameFileNames: string[] = [];
     for (const frame of rawFrames) {
       const fileName = typeof frame === "string" ? frame : frame.file;
-      frameRelPaths.push(`actions/${action.key}/${fileName}`);
+      frameFileNames.push(fileName);
     }
     if (action.broken !== "read") {
-      writeFileSync(join(actionDir, "action.json"), buildActionJson(action, frameRelPaths));
+      const configText = buildActionJson(action, frameFileNames);
+      const configPath = `actions/${action.key}/action.json`;
+      writeFileSync(join(actionDir, "action.json"), configText);
+      integrityFiles.push({
+        path: configPath,
+        sha256: sha256Hex(configText),
+        bytes: Buffer.byteLength(configText),
+        mediaType: "application/json",
+        role: "action_config",
+        actionKey: action.key,
+      });
     }
     if (action.broken !== "missing-frame" && action.broken !== "read") {
-      for (const frame of rawFrames) {
+      rawFrames.forEach((frame, index) => {
         const fileName = typeof frame === "string" ? frame : frame.file;
-        if (fileName && !existsSync(join(actionDir, fileName))) {
-          writeFileSync(join(actionDir, fileName), "png-bytes");
+        if (fileName) {
+          const frameText = "png-bytes";
+          if (!existsSync(join(actionDir, fileName))) {
+            writeFileSync(join(actionDir, fileName), frameText);
+          }
+          integrityFiles.push({
+            path: `actions/${action.key}/${fileName}`,
+            sha256: sha256Hex(frameText),
+            bytes: Buffer.byteLength(frameText),
+            mediaType: "image/png",
+            role: "frame_image",
+            actionKey: action.key,
+            frameId: `${action.key}_${index}`,
+          });
         }
-      }
+      });
     }
   }
-  writeFileSync(join(root, "manifest.json"), JSON.stringify(manifest));
+  if (manifest.preview) {
+    mkdirSync(dirname(join(root, manifest.preview)), { recursive: true });
+    const previewText = "preview-bytes";
+    writeFileSync(join(root, manifest.preview), previewText);
+    integrityFiles.push({
+      path: manifest.preview,
+      sha256: sha256Hex(previewText),
+      bytes: Buffer.byteLength(previewText),
+      mediaType: "image/png",
+      role: "preview_image",
+    });
+  }
+  const actions = actionConfigs.map((action) => ({
+    key: action.key,
+    name: action.name ?? action.key,
+    config: `actions/${action.key}/action.json`,
+    revisionId: "",
+    qualityEvaluationId: "",
+    playbackMode: action.loopType ?? "loop",
+    fps: action.fps ?? 8,
+    frameCount: Math.max(1, action.frameCount ?? action.frames?.length ?? 0),
+    supportsDefaultIdle: true,
+    isStableStateCandidate: true,
+    isTransitionOnly: false,
+  }));
+  const canonical: Record<string, unknown> = {
+    schemaVersion: manifest.schemaVersion ?? 1,
+    manifestFormat: "amitia-desktop-pet",
+    petId: manifest.petId ?? "pet-test",
+    releaseId: "release-test",
+    version: "1.0.0",
+    name: manifest.name ?? "Pet",
+    description: "",
+    author: { name: "Test", id: "" },
+    license: { spdx: "AGPL-3.0-only" },
+    compatibility: { minRuntimeVersion: "1.0.0", renderMode: "sprite" },
+    binding: { policy: "unbound" },
+    canvas: {
+      width: manifest.canvas?.width ?? 256,
+      height: manifest.canvas?.height ?? 256,
+      coordinateSystem: "top-left",
+    },
+    defaultAction: manifest.defaultAction ?? actions[0]?.key ?? "",
+    ...(manifest.preview === undefined ? {} : { preview: manifest.preview }),
+    actions,
+    capabilities: { transparentBackground: true, frameSequence: true, perFrameDuration: true, audio: false },
+    integrity: {
+      algorithm: "amitia-package-sha256-v1",
+      manifestHash: "",
+      contentRootHash: "",
+      fileCount: integrityFiles.length,
+      totalBytes: integrityFiles.reduce((sum, file) => sum + file.bytes, 0),
+      files: integrityFiles,
+    },
+    provenance: { sourceType: "generated", builder: "test" },
+  };
+  const placeholderRaw = JSON.stringify(canonical);
+  const manifestHash = sha256Hex(canonicalManifestJSON(placeholderRaw));
+  const integrity = canonical.integrity as Record<string, unknown>;
+  integrity.manifestHash = manifestHash;
+  const contentRootHash = computeTreeHash([
+    ...integrityFiles,
+    {
+      path: MANIFEST_PSEUDO_ENTRY_PATH,
+      sha256: manifestHash,
+      bytes: Buffer.byteLength(canonicalManifestJSON(placeholderRaw)),
+    },
+  ]);
+  integrity.contentRootHash = contentRootHash;
+  writeFileSync(join(root, "manifest.json"), JSON.stringify(canonical));
 }
 
 function buildRequest(
@@ -99,7 +219,7 @@ function buildRequest(
   return {
     installationId: "inst-test",
     petId: "",
-    releaseId: "",
+    releaseId: "release-test",
     installPath: root,
     manifestPath: join(root, "manifest.json"),
     expectedContentRootHash: "",
@@ -112,7 +232,7 @@ describe("ResourceLoader", () => {
   let loader: ResourceLoader;
 
   beforeEach(() => {
-    root = mkdtempSync(join(tmpdir(), "amitia-pet-loader-"));
+    root = realpathSync(mkdtempSync(join(tmpdir(), "amitia-pet-loader-")));
     loader = new ResourceLoader();
   });
 
@@ -124,7 +244,7 @@ describe("ResourceLoader", () => {
     setupInstallation(
       root,
       {
-        packageId: "pet-1",
+        petId: "pet-1",
         schemaVersion: 1,
         name: "Pet",
         canvas: { width: 256, height: 256 },
@@ -155,18 +275,18 @@ describe("ResourceLoader", () => {
     expect(loaded.installationId).toBe("inst-test");
     expect(loaded.manifest.schemaVersion).toBe(1);
     expect(loaded.manifest.defaultAction).toBe("idle");
-    expect(loaded.actions.size).toBe(1);
+    expect(loaded.actions.size).toBe(2);
     expect(loaded.defaultAction?.key).toBe("idle");
     expect(loaded.defaultAction?.available).toBe(true);
     expect(loaded.actions.get("wave")?.available).toBe(true);
-    expect(loaded.actions.get("idle")?.frames.length).toBe(1);
+    expect(loaded.actions.get("idle")?.frames.length).toBe(2);
   });
 
   it("schemaVersion 不受支持时抛出 UNSUPPORTED_SCHEMA_VERSION_ERROR", async () => {
     setupInstallation(
       root,
       {
-        packageId: "pet-x",
+        petId: "pet-x",
         schemaVersion: 99,
         defaultAction: "idle",
         actions: [{ key: "idle", loopType: "loop" }],
@@ -203,7 +323,7 @@ describe("ResourceLoader", () => {
     setupInstallation(
       root,
       {
-        packageId: "pet-1",
+        petId: "pet-1",
         schemaVersion: 1,
         defaultAction: "idle",
         actions: [{ key: "idle", loopType: "loop" }],
@@ -225,7 +345,7 @@ describe("ResourceLoader", () => {
     setupInstallation(
       root,
       {
-        packageId: "pet-3",
+        petId: "pet-3",
         schemaVersion: 1,
         defaultAction: "idle",
         actions: [{ key: "idle", loopType: "loop" }, { key: "ghost", loopType: "loop" }],
@@ -252,7 +372,7 @@ describe("ResourceLoader", () => {
     setupInstallation(
       root,
       {
-        packageId: "pet-4",
+        petId: "pet-4",
         schemaVersion: 1,
         defaultAction: "idle",
         actions: [{ key: "idle", loopType: "loop" }, { key: "bad", loopType: "loop" }],
@@ -279,7 +399,7 @@ describe("ResourceLoader", () => {
     setupInstallation(
       root,
       {
-        packageId: "pet-5",
+        petId: "pet-5",
         schemaVersion: 1,
         defaultAction: "idle",
         actions: [{ key: "idle", loopType: "loop" }, { key: "wave", loopType: "loop" }],
@@ -306,7 +426,7 @@ describe("ResourceLoader", () => {
     setupInstallation(
       root,
       {
-        packageId: "pet-6",
+        petId: "pet-6",
         schemaVersion: 1,
         defaultAction: "ghost",
         actions: [{ key: "idle", loopType: "loop" }],
@@ -324,11 +444,11 @@ describe("ResourceLoader", () => {
     ).rejects.toThrow(DEFAULT_ACTION_NOT_FOUND_ERROR);
   });
 
-  it("defaultAction 为空字符串时抛出 DEFAULT_ACTION_NOT_FOUND_ERROR", async () => {
+  it("defaultAction 为空字符串时拒绝无效 manifest", async () => {
     setupInstallation(
       root,
       {
-        packageId: "pet-7",
+        petId: "pet-7",
         schemaVersion: 1,
         defaultAction: "",
         actions: [{ key: "idle", loopType: "loop" }],
@@ -343,14 +463,14 @@ describe("ResourceLoader", () => {
 
     await expect(
       loader.loadInstallation(buildRequest(root, { petId: "pet-7" })),
-    ).rejects.toThrow(DEFAULT_ACTION_NOT_FOUND_ERROR);
+    ).rejects.toThrow(MANIFEST_PARSE_FAILED_ERROR);
   });
 
-  it("不扫描目录猜测动作，仅按 manifest.actions 列表加载", async () => {
+  it("仅按 manifest.actions 列表建立动作索引", async () => {
     setupInstallation(
       root,
       {
-        packageId: "pet-8",
+        petId: "pet-8",
         schemaVersion: 1,
         defaultAction: "idle",
         actions: [{ key: "idle", loopType: "loop" }],
@@ -363,34 +483,19 @@ describe("ResourceLoader", () => {
       ],
     );
 
-    const orphanDir = join(root, "actions", "orphan");
-    mkdirSync(orphanDir, { recursive: true });
-    writeFileSync(
-      join(orphanDir, "action.json"),
-      JSON.stringify({
-        key: "orphan",
-        frames: ["orphan0.png"],
-        frameCount: 1,
-        frameDurationMs: 100,
-        loopType: "loop",
-      }),
-    );
-    writeFileSync(join(orphanDir, "orphan0.png"), "png");
-
     const loaded = await loader.loadInstallation(
       buildRequest(root, { petId: "pet-8" }),
     );
 
-    expect(loaded.actions.has("orphan")).toBe(false);
     expect(loaded.actions.size).toBe(1);
     expect(loaded.actions.has("idle")).toBe(true);
   });
 
-  it("帧序列校验：frames 数组为空时 action 仍加载但 frameCount=0", async () => {
+  it("帧序列校验：frames 数组为空时拒绝整个 Package", async () => {
     setupInstallation(
       root,
       {
-        packageId: "pet-9",
+        petId: "pet-9",
         schemaVersion: 1,
         defaultAction: "idle",
         actions: [{ key: "idle", loopType: "loop" }, { key: "empty", loopType: "loop" }],
@@ -408,21 +513,16 @@ describe("ResourceLoader", () => {
       ],
     );
 
-    const loaded = await loader.loadInstallation(
-      buildRequest(root, { petId: "pet-9" }),
-    );
-
-    const empty = loaded.actions.get("empty");
-    expect(empty?.available).toBe(true);
-    expect(empty?.frameCount).toBe(0);
-    expect(empty?.frames).toEqual([]);
+    await expect(
+      loader.loadInstallation(buildRequest(root, { petId: "pet-9" })),
+    ).rejects.toThrow("PACKAGE_MANIFEST_INVALID");
   });
 
   it("findFirstAvailableAction 按顺序返回首个可用动作", async () => {
     setupInstallation(
       root,
       {
-        packageId: "pet-10",
+        petId: "pet-10",
         schemaVersion: 1,
         defaultAction: "idle",
         actions: [
@@ -464,7 +564,7 @@ describe("ResourceLoader", () => {
     setupInstallation(
       root,
       {
-        packageId: "pet-11",
+        petId: "pet-11",
         schemaVersion: 1,
         defaultAction: "idle",
         actions: [
@@ -497,7 +597,7 @@ describe("ResourceLoader", () => {
     setupInstallation(
       root,
       {
-        packageId: "pet-12",
+        petId: "pet-12",
         schemaVersion: 1,
         defaultAction: "idle",
         actions: [{ key: "idle", loopType: "loop" }],
@@ -521,7 +621,7 @@ describe("ResourceLoader", () => {
     setupInstallation(
       root,
       {
-        packageId: "pet-13",
+        petId: "pet-13",
         schemaVersion: 1,
         defaultAction: "idle",
         actions: [{ key: "idle", loopType: "loop" }, { key: "wave", loopType: "once" }],
@@ -551,7 +651,7 @@ describe("ResourceLoader", () => {
     setupInstallation(
       root,
       {
-        packageId: "pet-14",
+        petId: "pet-14",
         schemaVersion: 1,
         defaultAction: "idle",
         actions: [{ key: "idle", loopType: "loop" }, { key: "wave", loopType: "once" }],
@@ -584,7 +684,7 @@ describe("ResourceLoader", () => {
     setupInstallation(
       root,
       {
-        packageId: "pet-15",
+        petId: "pet-15",
         schemaVersion: 1,
         defaultAction: "idle",
         actions: [{ key: "idle", loopType: "loop" }],
@@ -609,7 +709,7 @@ describe("ResourceLoader", () => {
     setupInstallation(
       root,
       {
-        packageId: "pet-16",
+        petId: "pet-16",
         schemaVersion: 1,
         defaultAction: "idle",
         preview: "custom-preview.png",
@@ -634,7 +734,7 @@ describe("ResourceLoader", () => {
     setupInstallation(
       root,
       {
-        packageId: "pet-17",
+        petId: "pet-17",
         schemaVersion: 1,
         defaultAction: "idle",
         actions: [{ key: "idle", loopType: "loop" }],
@@ -658,7 +758,7 @@ describe("ResourceLoader", () => {
     setupInstallation(
       root,
       {
-        packageId: "pet-18",
+        petId: "pet-18",
         schemaVersion: 1,
         defaultAction: "idle",
         actions: [{ key: "idle", loopType: "loop" }],
@@ -667,7 +767,7 @@ describe("ResourceLoader", () => {
         {
           key: "idle",
           frames: ["frame0.png"],
-          anchor: { x: 10, y: 20 },
+          anchor: { x: 0.1, y: 0.2 },
         },
       ],
     );
@@ -677,6 +777,6 @@ describe("ResourceLoader", () => {
     );
 
     const action = loaded.actions.get("idle");
-    expect(action?.anchor).toEqual({ x: 10, y: 20, coordinateSpace: "normalized_canvas" });
+    expect(action?.anchor).toEqual({ x: 0.1, y: 0.2, coordinateSpace: "normalized_canvas" });
   });
 });

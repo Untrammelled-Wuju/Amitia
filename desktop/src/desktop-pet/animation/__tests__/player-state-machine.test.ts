@@ -172,7 +172,7 @@ describe("playerReducer", () => {
         snapshot: makePackageSnapshot(),
         generation: 1,
       });
-      expect(next.phase).toBe("recovering");
+      expect(next.phase).toBe("loading_default");
       expect(next.packageId).toBe("test-pkg");
       expect(next.packageRevision).toBe(1);
       expect(next.defaultActionKey).toBe("idle");
@@ -286,8 +286,10 @@ describe("playerReducer", () => {
         generation: 1,
       });
       expect(fromPlaying.phase).toBe("loading_action");
-      expect(fromPlaying.currentCommandId).toBe(command.commandId);
-      expect(fromPlaying.currentPlaybackInstanceId).toBe(pbi);
+      expect(fromPlaying.currentCommandId).toBe(playing.currentCommandId);
+      expect(fromPlaying.currentPlaybackInstanceId).toBe(playing.currentPlaybackInstanceId);
+      expect(fromPlaying.pendingCommandId).toBe(command.commandId);
+      expect(fromPlaying.pendingPlaybackInstanceId).toBe(pbi);
       expect(fromPlaying.playbackRate).toBe(command.playbackRate);
       expect(fromPlaying.lastError).toBeUndefined();
 
@@ -316,7 +318,7 @@ describe("playerReducer", () => {
       expect(fromHolding.phase).toBe("loading_action");
     });
 
-    it("is ignored from other phases", () => {
+    it("updates the pending command while loading and is ignored from other phases", () => {
       const uninitialized = createInitialState();
       expect(
         playerReducer(uninitialized, {
@@ -348,14 +350,18 @@ describe("playerReducer", () => {
         playbackInstanceId: "pbi",
         generation: 1,
       });
-      expect(
-        playerReducer(loadingAction, {
-          type: "PLAY_ACCEPTED",
-          command: makeCommand(),
-          playbackInstanceId: "pbi2",
-          generation: 1,
-        }),
-      ).toBe(loadingAction);
+      const replacementCommand = makeCommand();
+      const loadingReplacement = playerReducer(loadingAction, {
+        type: "PLAY_ACCEPTED",
+        command: replacementCommand,
+        playbackInstanceId: "pbi2",
+        generation: 1,
+      });
+      expect(loadingReplacement.phase).toBe("loading_action");
+      expect(loadingReplacement.pendingCommandId).toBe(
+        replacementCommand.commandId,
+      );
+      expect(loadingReplacement.pendingPlaybackInstanceId).toBe("pbi2");
 
       const paused = playerReducer(playing, { type: "PAUSE", now: 100 });
       expect(
@@ -722,7 +728,7 @@ describe("playerReducer", () => {
         lastStableCycleIndex: 2,
       };
       const next = playerReducer(playing, { type: "RECOVER", snapshot: recovery });
-      expect(next.phase).toBe("loading_default");
+      expect(next.phase).toBe("recovering");
       expect(next.packageId).toBe("test-pkg");
       expect(next.packageRevision).toBe(1);
       expect(next.defaultActionKey).toBe("idle");

@@ -18,6 +18,7 @@ import '../../../../core/backend_transport/errors/backend_transport_error.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_message.dart';
 import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/widgets/amitia_popup_menu.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../shared/models/models.dart';
 import '../../../conversation/rendering/assistant_identity.dart';
@@ -66,8 +67,8 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
       if (!mounted) return;
       setState(() => _projects = sidebar.projects);
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+      print("[original-error] $error\n$stackTrace");
+    }
   }
 
   void _scheduleSearch() {
@@ -104,10 +105,12 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
                   ),
                 ),
             ],
-            onChanged: _batchBusy ? null : (value) {
-              setState(() => _projectFilter = value ?? '');
-              unawaited(_load());
-            },
+            onChanged: _batchBusy
+                ? null
+                : (value) {
+                    setState(() => _projectFilter = value ?? '');
+                    unawaited(_load());
+                  },
           ),
           SizedBox(height: AppSpacing.sm),
           TextField(
@@ -146,7 +149,9 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
       if (!mounted || ticket != _loadRequest) return;
       setState(() {
         _conversations = conversations;
-        _selected.removeWhere((id) => !conversations.any((row) => row.id == id));
+        _selected.removeWhere(
+          (id) => !conversations.any((row) => row.id == id),
+        );
       });
     } catch (error) {
       if (!mounted || ticket != _loadRequest) return;
@@ -191,40 +196,76 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
   Future<void> _batchAction({required bool delete}) async {
     if (_batchBusy || _selected.isEmpty) return;
     if (delete) {
-      final confirmed = await showAmitiaConfirmDialog(context, title: '永久删除', message: '确定永久删除选中的 ${_selected.length} 个对话及消息吗？记忆会保留，此操作无法撤销。', confirmLabel: '永久删除', isDestructive: true);
+      final confirmed = await showAmitiaConfirmDialog(
+        context,
+        title: '永久删除',
+        message: '确定永久删除选中的 ${_selected.length} 个对话及消息吗？记忆会保留，此操作无法撤销。',
+        confirmLabel: '永久删除',
+        isDestructive: true,
+      );
       if (confirmed != true || !mounted) return;
     }
     _loadRequest++;
-    setState(() { _batchBusy = true; _loading = false; });
+    setState(() {
+      _batchBusy = true;
+      _loading = false;
+    });
     final failures = <String>[];
     final succeeded = <String>[];
     final service = ref.read(chatServiceProvider);
-    for (final conversation in _conversations.where((row) => _selected.contains(row.id)).toList()) {
+    for (final conversation
+        in _conversations.where((row) => _selected.contains(row.id)).toList()) {
       try {
         if (delete) {
-          await service.deleteConversation(conversation.id, characterId: conversation.characterId);
+          await service.deleteConversation(
+            conversation.id,
+            characterId: conversation.characterId,
+          );
         } else {
-          await service.restoreArchivedConversation(conversation.id, characterId: conversation.characterId);
+          await service.restoreArchivedConversation(
+            conversation.id,
+            characterId: conversation.characterId,
+          );
         }
         succeeded.add(conversation.id);
       } catch (error, stackTrace) {
         reportOriginalError(error, stackTrace, source: 'archive-batch');
-        failures.add('${_conversationTitle(conversation)}: ${_batchErrorText(error, stackTrace)}');
+        failures.add(
+          '${_conversationTitle(conversation)}: ${_batchErrorText(error, stackTrace)}',
+        );
       }
     }
     if (!mounted) return;
     setState(() {
       _batchBusy = false;
       _selected.removeAll(succeeded);
-      _conversations = _conversations.where((row) => !succeeded.contains(row.id)).toList();
+      _conversations = _conversations
+          .where((row) => !succeeded.contains(row.id))
+          .toList();
     });
     ref.invalidate(conversationListProvider);
     ref.invalidate(conversationSidebarProvider);
     ref.read(conversationCollectionRevisionProvider.notifier).state++;
     if (failures.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已完成 ${succeeded.length} 项')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('已完成 ${succeeded.length} 项')));
     } else {
-      await showDialog<void>(context: context, builder: (context) => AlertDialog(title: Text('已完成 ${succeeded.length} 项，失败 ${failures.length} 项'), content: SingleChildScrollView(child: SelectableText(failures.join('\n\n'))), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('关闭'))]));
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('已完成 ${succeeded.length} 项，失败 ${failures.length} 项'),
+          content: SingleChildScrollView(
+            child: SelectableText(failures.join('\n\n')),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('关闭'),
+            ),
+          ],
+        ),
+      );
     }
   }
 
@@ -235,9 +276,12 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
     while (current != null && seen.add(current)) {
       parts.add('$current');
       parts.add(originalErrorText(current));
-      if (current is ServiceApiException) parts.add('code: ${current.code}\ndetail: ${current.detail}');
+      if (current is ServiceApiException)
+        parts.add('code: ${current.code}\ndetail: ${current.detail}');
       if (current is DioException) {
-        parts.add('response: ${current.response?.data}\nstack: ${current.stackTrace}');
+        parts.add(
+          'response: ${current.response?.data}\nstack: ${current.stackTrace}',
+        );
         current = current.error;
       } else if (current is BackendTransportError) {
         current = current.cause;
@@ -251,7 +295,9 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
 
   void _toggleSelected(String id) {
     if (_batchBusy) return;
-    setState(() { if (!_selected.remove(id)) _selected.add(id); });
+    setState(() {
+      if (!_selected.remove(id)) _selected.add(id);
+    });
   }
 
   @override
@@ -261,120 +307,189 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
     });
     return PopScope(
       canPop: !_selecting,
-      onPopInvokedWithResult: (didPop, result) { if (!didPop && _selecting && !_batchBusy) setState(() { _selecting = false; _selected.clear(); }); },
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _selecting && !_batchBusy)
+          setState(() {
+            _selecting = false;
+            _selected.clear();
+          });
+      },
       child: AmitiaScaffold(
-      appBar: AmitiaAppBar(title: '归档对话', showBackButton: true),
-      body: Column(
-        children: [
-          _buildFilters(context),
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-            child: Wrap(spacing: 4, children: [
-              TextButton(onPressed: _batchBusy ? null : () => setState(() { _selecting = !_selecting; _selected.clear(); }), child: Text(_selecting ? '取消多选' : '多选')),
-              if (_selecting) ...[
-                TextButton(onPressed: _batchBusy || _conversations.isEmpty ? null : () => setState(() { if (_conversations.every((row) => _selected.contains(row.id))) { _selected.clear(); } else { _selected.addAll(_conversations.map((row) => row.id)); } }), child: Text(_conversations.isNotEmpty && _conversations.every((row) => _selected.contains(row.id)) ? '取消全选' : '全选')),
-                TextButton(onPressed: _batchBusy || _selected.isEmpty ? null : () => _batchAction(delete: false), child: const Text('撤销')),
-                TextButton(onPressed: _batchBusy || _selected.isEmpty ? null : () => _batchAction(delete: true), child: const Text('删除（永久）')),
-              ],
-            ]),
-          ),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: _load,
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _error.isNotEmpty
-                  ? Center(child: Text(_error))
-                  : _conversations.isEmpty
-                  ? Center(
+        appBar: AmitiaAppBar(title: '归档对话', showBackButton: true),
+        body: Column(
+          children: [
+            _buildFilters(context),
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+              child: Wrap(
+                spacing: 4,
+                children: [
+                  TextButton(
+                    onPressed: _batchBusy
+                        ? null
+                        : () => setState(() {
+                            _selecting = !_selecting;
+                            _selected.clear();
+                          }),
+                    child: Text(_selecting ? '取消多选' : '多选'),
+                  ),
+                  if (_selecting) ...[
+                    TextButton(
+                      onPressed: _batchBusy || _conversations.isEmpty
+                          ? null
+                          : () => setState(() {
+                              if (_conversations.every(
+                                (row) => _selected.contains(row.id),
+                              )) {
+                                _selected.clear();
+                              } else {
+                                _selected.addAll(
+                                  _conversations.map((row) => row.id),
+                                );
+                              }
+                            }),
                       child: Text(
-                        _projectFilter.isNotEmpty ||
-                                _searchController.text.trim().isNotEmpty
-                            ? '没有匹配的归档对话'
-                            : '暂无归档对话',
+                        _conversations.isNotEmpty &&
+                                _conversations.every(
+                                  (row) => _selected.contains(row.id),
+                                )
+                            ? '取消全选'
+                            : '全选',
                       ),
-                    )
-                  : ListView.separated(
-                      padding: EdgeInsets.all(AppSpacing.pagePadding),
-                      itemCount: _conversations.length,
-                      separatorBuilder: (_, _) =>
-                          SizedBox(height: AppSpacing.sm),
-                      itemBuilder: (context, index) {
-                        final conversation = _conversations[index];
-                        return Material(
-                          color: context.surfacePrimary,
-                          borderRadius: BorderRadius.circular(12),
-                          child: InkWell(
+                    ),
+                    TextButton(
+                      onPressed: _batchBusy || _selected.isEmpty
+                          ? null
+                          : () => _batchAction(delete: false),
+                      child: const Text('撤销'),
+                    ),
+                    TextButton(
+                      onPressed: _batchBusy || _selected.isEmpty
+                          ? null
+                          : () => _batchAction(delete: true),
+                      child: const Text('删除（永久）'),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: _load,
+                child: _loading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _error.isNotEmpty
+                    ? Center(child: Text(_error))
+                    : _conversations.isEmpty
+                    ? Center(
+                        child: Text(
+                          _projectFilter.isNotEmpty ||
+                                  _searchController.text.trim().isNotEmpty
+                              ? '没有匹配的归档对话'
+                              : '暂无归档对话',
+                        ),
+                      )
+                    : ListView.separated(
+                        padding: EdgeInsets.all(AppSpacing.pagePadding),
+                        itemCount: _conversations.length,
+                        separatorBuilder: (_, _) =>
+                            SizedBox(height: AppSpacing.sm),
+                        itemBuilder: (context, index) {
+                          final conversation = _conversations[index];
+                          return Material(
+                            color: context.surfacePrimary,
                             borderRadius: BorderRadius.circular(12),
-                            onTap: _batchBusy ? null : () => _selecting ? _toggleSelected(conversation.id) : Navigator.of(context).push(
-                              amitiaSlideRoute<void>(
-                                builder: (_) => ArchivedConversationDetailPage(
-                                  conversation: conversation,
-                                  projectName: _projectName(
-                                    conversation.projectId,
-                                  ),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(12),
+                              onTap: _batchBusy
+                                  ? null
+                                  : () => _selecting
+                                        ? _toggleSelected(conversation.id)
+                                        : Navigator.of(context).push(
+                                            amitiaSlideRoute<void>(
+                                              builder: (_) =>
+                                                  ArchivedConversationDetailPage(
+                                                    conversation: conversation,
+                                                    projectName: _projectName(
+                                                      conversation.projectId,
+                                                    ),
+                                                  ),
+                                            ),
+                                          ),
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  14,
+                                  10,
+                                  6,
+                                  10,
+                                ),
+                                child: Row(
+                                  children: [
+                                    if (_selecting)
+                                      IgnorePointer(
+                                        child: Checkbox(
+                                          value: _selected.contains(
+                                            conversation.id,
+                                          ),
+                                          onChanged: (_) {},
+                                        ),
+                                      ),
+                                    Icon(
+                                      Icons.inventory_2_outlined,
+                                      color: context.textTertiary,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            _conversationTitle(conversation),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: AppTypography.cardTitle(
+                                              context,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 3),
+                                          Text(
+                                            '${_formatTime(conversation.archivedAt)} · ${conversation.messageCount} 条消息',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: AppTypography.label(context),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    if (!_selecting)
+                                      TextButton(
+                                        onPressed: _restoringId.isEmpty
+                                            ? () => _restore(conversation)
+                                            : null,
+                                        child: _restoringId == conversation.id
+                                            ? const SizedBox(
+                                                width: 16,
+                                                height: 16,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                      strokeWidth: 2,
+                                                    ),
+                                              )
+                                            : const Text('撤销'),
+                                      ),
+                                  ],
                                 ),
                               ),
                             ),
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
-                              child: Row(
-                                children: [
-                                  if (_selecting) IgnorePointer(child: Checkbox(value: _selected.contains(conversation.id), onChanged: (_) {})),
-                                  Icon(
-                                    Icons.inventory_2_outlined,
-                                    color: context.textTertiary,
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          _conversationTitle(conversation),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: AppTypography.cardTitle(
-                                            context,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 3),
-                                        Text(
-                                          '${_formatTime(conversation.archivedAt)} · ${conversation.messageCount} 条消息',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: AppTypography.label(context),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  if (!_selecting) TextButton(
-                                    onPressed: _restoringId.isEmpty
-                                        ? () => _restore(conversation)
-                                        : null,
-                                    child: _restoringId == conversation.id
-                                        ? const SizedBox(
-                                            width: 16,
-                                            height: 16,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                            ),
-                                          )
-                                        : const Text('撤销'),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
+                          );
+                        },
+                      ),
+              ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
       ),
     );
   }
@@ -455,9 +570,9 @@ class _ArchivedConversationDetailPageState
         if (!mounted || revision != service.owned.revision) return;
         await Clipboard.setData(ClipboardData(text: text));
         if (!mounted || revision != service.owned.revision) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('对话已复制到剪贴板')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('对话已复制到剪贴板')));
       }
     } catch (error) {
       if (!mounted) return;
@@ -520,7 +635,7 @@ class _ArchivedConversationDetailPageState
               ),
             )
           else
-            PopupMenuButton<String>(
+            AmitiaPopupMenuButton<String>(
               tooltip: '对话操作',
               enabled: !_loading && _error.isEmpty,
               onSelected: _processAction,

@@ -6,7 +6,6 @@ func AllBuiltinRegistrations() []func(c *Catalog) error {
 		func(c *Catalog) error { return c.Register(BuildBrowserExtension("1.0.0")) },
 		func(c *Catalog) error { return c.Register(BuildWorkspaceExtension("1.0.0")) },
 		func(c *Catalog) error { return c.Register(BuildUIAgentExtension("1.0.0")) },
-		func(c *Catalog) error { return c.Register(BuildPluginMarketExtension("1.0.0")) },
 		func(c *Catalog) error { return c.Register(BuildTTSExtension("1.0.0")) },
 		func(c *Catalog) error { return c.Register(BuildASRExtension("1.0.0")) },
 		func(c *Catalog) error { return c.Register(BuildMediaExtension("1.0.0")) },

@@ -14,7 +14,7 @@ import (
 
 func configurationAdministratorRouter(db *gorm.DB) *gin.Engine {
 	router := gin.New()
-	handler := system.NewHandler(system.NewService(&app.AppContext{DB: db}, ""), db, nil, nil, nil, nil, nil)
+	handler := system.NewHandler(system.NewService(&app.AppContext{DB: db}, ""), db, nil, nil, nil, nil)
 	router.PUT("/audit", handler.UpdateAuditSettings)
 	router.PUT("/security", handler.UpdateSecurityAccessConfig)
 	router.PUT("/long-running", handler.UpdateTaskMaintenanceConfig)

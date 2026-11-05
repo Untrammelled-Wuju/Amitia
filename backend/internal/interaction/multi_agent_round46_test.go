@@ -25,11 +25,11 @@ func round46RecoverySetup(t *testing.T) (*MultiAgentCoordinator, *InMemoryTracke
 	t.Helper()
 	ctx := context.Background()
 	tracker := NewInMemoryTracker()
-	if err := tracker.Create(ctx, &InteractionRecord{ID: "round46-parent", Status: InteractionStatusProcessing}); err != nil {
+	if err := tracker.Create(ctx, &InteractionRecord{ID: "round46-parent", Status: InteractionStatusProcessing, Scope: InteractionScope{SpaceID: "space-46", CharacterID: "parent-char", ConversationID: "parent-conversation"}}); err != nil {
 		t.Fatal(err)
 	}
 	goals := decision.NewGoalRegistry()
-	if err := goals.Register(decision.Goal{ID: "round46-goal", Revision: 1, Status: decision.GoalStatusActive}); err != nil {
+	if err := goals.Register(decision.Goal{ID: "round46-goal", Revision: 1, Status: decision.GoalStatusActive, SpaceID: "space-46", CharacterID: "parent-char", ConversationID: "parent-conversation"}); err != nil {
 		t.Fatal(err)
 	}
 	runner := &round46ReservedRunner{}
@@ -117,7 +117,14 @@ func TestRound46ActiveParentStillPermitsAuthorizedReservationRecovery(t *testing
 	}
 	ac := recovered.coordinations[id]
 	childID := ac.assignments[0].ChildInteractionID
-	if err := tracker.Create(ctx, &InteractionRecord{ID: childID, Status: InteractionStatusReceived}); err != nil {
+	if err := tracker.Create(ctx, &InteractionRecord{
+		ID: childID, Status: InteractionStatusReceived,
+		Scope: InteractionScope{
+			SpaceID: "space-46", CharacterID: ac.assignments[0].WorkerRef.CharacterID,
+			ConversationID: workerConversationID(WorkerRunRequest{AssignmentID: ac.assignments[0].ID}),
+			Source:         "multi_agent", RequestID: "ma-" + ac.assignments[0].ID,
+		},
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := recovered.resumeReservedWorker(ctx, ac, *ac.assignments[0]); err != nil {

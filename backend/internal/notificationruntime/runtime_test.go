@@ -84,6 +84,32 @@ func TestNativeDataCapabilitiesFailClosedForOppoVivo(t *testing.T) {
 	}
 }
 
+func TestPushProvidersFailClosedWithoutCredentials(t *testing.T) {
+	fcm := (&FCMProvider{}).Send(t.Context(), DeviceEndpoint{FCMToken: "token"}, PushEnvelope{})
+	if fcm.Accepted || fcm.ErrorCode != "auth_failed" || fcm.ErrorMessage == "" {
+		t.Fatalf("FCM without credentials did not fail closed: %+v", fcm)
+	}
+	apns := (&APNSProvider{}).Send(t.Context(), DeviceEndpoint{APNSToken: "token"}, PushEnvelope{})
+	if apns.Accepted || apns.ErrorCode != "auth_failed" || apns.ErrorMessage == "" {
+		t.Fatalf("APNs without credentials did not fail closed: %+v", apns)
+	}
+	gateway := (&PushGateway{}).Send(t.Context(), DeviceEndpoint{Platform: "unsupported"}, PushEnvelope{})
+	if gateway.Accepted || gateway.ErrorCode != "platform_unsupported" {
+		t.Fatalf("unsupported push platform did not fail closed: %+v", gateway)
+	}
+}
+
+func TestNotificationCleanupEnvelopeClassification(t *testing.T) {
+	for _, eventType := range []string{"call.ended", "run.end", "run.dismiss", "liveactivity.end"} {
+		if !isNotificationCleanupEnvelope(PushEnvelope{Type: eventType}) {
+			t.Fatalf("cleanup event %q was not recognized", eventType)
+		}
+	}
+	if isNotificationCleanupEnvelope(PushEnvelope{Type: "message.new"}) {
+		t.Fatal("normal message was classified as cleanup")
+	}
+}
+
 func TestExecutionLocalizationAndPrivateFallback(t *testing.T) {
 	state := ExecutionState{
 		Title:   "Amitia 正在执行",

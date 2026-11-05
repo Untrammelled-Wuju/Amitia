@@ -8,8 +8,6 @@ import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversa
 import type { OwnedExecutionScope } from "@/runtime/device-owned-chat";
 import { ownedProjectReference } from "@/runtime/owned-project-reference";
 
-class SidebarStaleError extends Error {}
-
 export function conversationChannel(value: Record<string, unknown>): string {
   const explicit = String(value.channel ?? value.channelId ?? "").trim();
   if (explicit && explicit !== "web") return explicit;
@@ -144,7 +142,7 @@ export const useChatStore = defineStore("chat", () => {
       if (!role) { sidebar.value={pinned:[],recent:[],projects:[],removedProjects:[]};return; }
       const conversations=await owned.conversations(role);
       const projectPage = await owned.projects(role, historicalProjectRole.value);
-      if (generation !== sidebarGeneration) throw new SidebarStaleError("服务已变化，旧项目列表已丢弃");
+      if (generation !== sidebarGeneration) return;
       projectIntent.value = projectPage.executionScope;
       historicalProjectRoles.value = projectPage.historicalRoles;
       historicalProjectRole.value = projectPage.selectedHistoricalRole;
@@ -168,14 +166,7 @@ export const useChatStore = defineStore("chat", () => {
 
   async function fetchSidebar() {
     if (sidebarFetch) return sidebarFetch;
-    const task = (async () => {
-      try {
-        await loadSidebar();
-      } catch (error) {
-        if (!(error instanceof SidebarStaleError)) throw error;
-        await loadSidebar();
-      }
-    })();
+    const task = loadSidebar();
     const wrapped = task.finally(() => {
       if (sidebarFetch === wrapped) sidebarFetch = null;
     });

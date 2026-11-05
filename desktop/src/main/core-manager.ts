@@ -315,7 +315,27 @@ function ensureCoreBinaries(dataDir: string): void {
       console.error("[CoreManager] 二进制资源不存在:", sources.join(", "));
     }
   }
+  ensureBundledPlugins(dataDir);
   syncRuntimeHostAssets(dataDir, getBundledRuntimeRoot());
+}
+
+function ensureBundledPlugins(dataDir: string): void {
+  const source = isDevMode()
+    ? path.resolve(getInstallDir(), "..", "plugin", "plugin-market")
+    : path.join(getCoreResourcesPath(), "bundled-plugins");
+  if (!fs.existsSync(source)) {
+    throw new Error(`默认插件目录不存在: ${source}`);
+  }
+  const hasPackage = fs.readdirSync(source, { recursive: true })
+    .some((entry) => typeof entry === "string" && entry.endsWith(".amitiax"));
+  if (!hasPackage) {
+    throw new Error(`默认插件目录中没有 .amitiax 包: ${source}`);
+  }
+  const destination = path.join(dataDir, "bundled-plugins");
+  fs.rmSync(destination, { recursive: true, force: true });
+  fs.mkdirSync(path.dirname(destination), { recursive: true });
+  fs.cpSync(source, destination, { recursive: true });
+  console.log("[CoreManager] 默认插件已同步:", source, "->", destination);
 }
 
 function getBundledRuntimeRoot(): string {

@@ -61,7 +61,6 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
-	"github.com/u-ai/backend/internal/extension/kernel/pluginmarket"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	"github.com/u-ai/backend/internal/extension/kernel/schedule"
 	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
@@ -1193,16 +1192,6 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 
 	builtinCatalog := builtin.NewCatalog()
 	builtinHandlerRegistry := builtin.NewHandlerRegistry()
-	pluginMarketCatalogURL := strings.TrimSpace(os.Getenv("AMITIA_PLUGIN_MARKET_CATALOG_URL"))
-	if pluginMarketCatalogURL == "" {
-		pluginMarketCatalogURL = pluginmarket.DefaultCatalogURL
-	}
-	builtinHandlerRegistry.Register(
-		domain.ExtensionID(pluginmarket.ExtensionID),
-		domain.ModuleID(pluginmarket.RuntimeModuleID),
-		pluginmarket.HandlerName,
-		pluginmarket.New(hostAPIGateway, pluginMarketCatalogURL),
-	)
 	builtinBootstrapper := builtin.NewBootstrapper(builtinCatalog, defRepo, instRepo)
 	builtinBootstrapper.SetModuleRepository(moduleRepo)
 	builtinBootstrapper.SetContributionRepository(contribRepo)
@@ -1225,6 +1214,10 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 
 	initCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	if err := builtinBootstrapper.RetireRemoved(initCtx); err != nil {
+		cancel()
+		return nil, fmt.Errorf("retire removed builtin extensions: %w", err)
+	}
 	if err := builtinBootstrapper.Reconcile(initCtx); err != nil {
 		cancel()
 		return nil, fmt.Errorf("builtin reconcile failed: %w", err)
@@ -1737,6 +1730,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		return nil
 	})
 	uiContribRepo := sqlite.NewSQLiteUIContributionRepository(store.DB())
+	if err := reconcileBuiltinUIContributions(ctx, builtinCatalog, uiContribRepo); err != nil {
+		return nil, fmt.Errorf("kernel: reconcile builtin ui contributions: %w", err)
+	}
 	savedContribs, _ := uiContribRepo.ListAll(ctx)
 	slotRegistry := extension_slots.DefaultSlotRegistry()
 	pageRegistry := extension_page_host.NewPageRegistry()

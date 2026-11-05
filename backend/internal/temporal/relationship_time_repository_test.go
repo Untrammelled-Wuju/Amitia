@@ -8,9 +8,35 @@ import (
 
 	"github.com/glebarez/sqlite"
 	"github.com/google/uuid"
-	"github.com/u-ai/backend/internal/migration"
 	"gorm.io/gorm"
 )
+
+func migrateRelationshipTimeTestSchema(t *testing.T, db *gorm.DB) {
+	t.Helper()
+	if err := db.AutoMigrate(
+		&GlobalPresenceState{},
+		&RelationshipPresenceState{},
+		&CadenceSample{},
+		&ReunionEpisode{},
+		&InteractionReceipt{},
+		&TemporalEffectLedgerEntry{},
+		&RelationshipTimeSettings{},
+	); err != nil {
+		t.Fatal(err)
+	}
+	for _, statement := range []string{
+		"CREATE UNIQUE INDEX IF NOT EXISTS idx_temporal_relationship_presence_scope ON temporal_relationship_presence_states(space_id, character_id)",
+		"CREATE UNIQUE INDEX IF NOT EXISTS idx_temporal_cadence_interaction ON temporal_cadence_samples(interaction_id, sample_kind)",
+		"CREATE UNIQUE INDEX IF NOT EXISTS idx_temporal_reunion_idempotency ON temporal_reunion_episodes(idempotency_key)",
+		"CREATE UNIQUE INDEX IF NOT EXISTS idx_temporal_receipt_request ON temporal_interaction_receipts(space_id, request_id)",
+		"CREATE UNIQUE INDEX IF NOT EXISTS idx_temporal_receipt_interaction ON temporal_interaction_receipts(interaction_id)",
+		"CREATE UNIQUE INDEX IF NOT EXISTS idx_temporal_effect_key ON temporal_effect_ledger(effect_key)",
+	} {
+		if err := db.Exec(statement).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+}
 
 func newRelationshipTimeTestRepository(t *testing.T, now time.Time) (*RelationshipTimeRepository, *gorm.DB, *FakeClock) {
 	t.Helper()
@@ -18,22 +44,7 @@ func newRelationshipTimeTestRepository(t *testing.T, now time.Time) (*Relationsh
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Exec(`CREATE TABLE relationship_states (
-id TEXT PRIMARY KEY,
-character_id TEXT NOT NULL DEFAULT '',
-relation_type TEXT NOT NULL DEFAULT '',
-relation_data TEXT DEFAULT '{}',
-created_at TEXT DEFAULT '',
-updated_at TEXT DEFAULT '',
-space_id TEXT NOT NULL DEFAULT 'default',
-channel TEXT NOT NULL DEFAULT ''
-)`).Error; err != nil {
-		t.Fatal(err)
-	}
-	runner := migration.Runner{DB: db, SkipBackup: true}
-	if err := runner.Apply([]migration.Migration{migration.TemporalRelationshipTimeMigration()}); err != nil {
-		t.Fatal(err)
-	}
+	migrateRelationshipTimeTestSchema(t, db)
 	clock := NewFakeClock(now)
 	return NewRelationshipTimeRepository(db, clock), db, clock
 }
@@ -72,11 +83,12 @@ func TestRelationshipTimeMigrationCreatesSchemaAndIndexes(t *testing.T) {
 	}
 }
 
-func TestRelationshipTimeMigrationCopiesLatestCanonicalRelationship(t *testing.T) {
+func TestRelationshipTimeDoesNotImportLegacyRelationshipRows(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:"+uuid.NewString()+"?mode=memory&cache=shared"), &gorm.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
+	migrateRelationshipTimeTestSchema(t, db)
 	if err := db.Exec(`CREATE TABLE relationship_states (
 id TEXT PRIMARY KEY,
 character_id TEXT NOT NULL DEFAULT '',
@@ -102,22 +114,18 @@ channel TEXT NOT NULL DEFAULT ''
 			t.Fatal(err)
 		}
 	}
-	runner := migration.Runner{DB: db, SkipBackup: true}
-	if err := runner.Apply([]migration.Migration{migration.TemporalRelationshipTimeMigration()}); err != nil {
+	var imported int64
+	if err := db.Table("relationship_states").Where("space_id = 'user-a' AND character_id = 'character-a' AND channel = '*' AND relation_type = 'user_character'").Count(&imported).Error; err != nil {
 		t.Fatal(err)
 	}
-	var canonical struct {
-		RelationData string `gorm:"column:relation_data"`
-		Channel      string `gorm:"column:channel"`
-		RelationType string `gorm:"column:relation_type"`
+	if imported != 0 {
+		t.Fatal("legacy relationship rows were silently imported")
 	}
-	if err := db.Table("relationship_states").Where("space_id = 'user-a' AND character_id = 'character-a' AND channel = '*' AND relation_type = 'user_character'").First(&canonical).Error; err != nil {
+	first := RelationshipPresenceState{ID: "canonical", SpaceID: "user-a", CharacterID: "character-a"}
+	if err := db.Create(&first).Error; err != nil {
 		t.Fatal(err)
 	}
-	if canonical.RelationData != `{"version":"latest"}` || canonical.Channel != CanonicalRelationshipChannel || canonical.RelationType != CanonicalRelationshipType {
-		t.Fatalf("unexpected canonical relationship %#v", canonical)
-	}
-	if err := db.Exec("INSERT INTO relationship_states (id, space_id, character_id, relation_type, relation_data, channel) VALUES ('duplicate', 'user-a', 'character-a', 'user_character', '{}', '*')").Error; err == nil {
+	if err := db.Create(&RelationshipPresenceState{ID: "duplicate", SpaceID: "user-a", CharacterID: "character-a"}).Error; err == nil {
 		t.Fatal("canonical unique index accepted duplicate scope")
 	}
 	var legacyCount int64

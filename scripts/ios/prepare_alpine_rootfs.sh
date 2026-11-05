@@ -11,6 +11,7 @@ NODE_ARCHIVE=""
 NODE_SHA256=""
 QDRANT_ARCHIVE=""
 QDRANT_SHA256=""
+PLUGIN_MARKET_PACKAGE=""
 FAKEFSIFY_BIN=""
 GO_BIN="${AMITIA_GO_BIN:-go}"
 KEEP_WORK=0
@@ -23,6 +24,7 @@ while [[ $# -gt 0 ]]; do
         --node-sha256) NODE_SHA256="$2"; shift 2 ;;
         --qdrant-archive) QDRANT_ARCHIVE="$2"; shift 2 ;;
         --qdrant-sha256) QDRANT_SHA256="$2"; shift 2 ;;
+        --plugin-market-package) PLUGIN_MARKET_PACKAGE="$2"; shift 2 ;;
         --fakefsify) FAKEFSIFY_BIN="$2"; shift 2 ;;
         --go) GO_BIN="$2"; shift 2 ;;
         --output) OUTPUT_DIR="$2"; shift 2 ;;
@@ -35,7 +37,7 @@ if [ "$(uname)" != "Darwin" ]; then
     echo "[prepare_rootfs] ERROR: Requires macOS" >&2
     exit 1
 fi
-if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || [[ ! "$ALPINE_SHA256" =~ ^[a-fA-F0-9]{64}$ ]] || [[ ! "$NODE_SHA256" =~ ^[a-fA-F0-9]{64}$ ]] || [[ ! "$QDRANT_SHA256" =~ ^[a-fA-F0-9]{64}$ ]] || [ ! -f "$NODE_ARCHIVE" ] || [ ! -f "$QDRANT_ARCHIVE" ]; then
+if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || [[ ! "$ALPINE_SHA256" =~ ^[a-fA-F0-9]{64}$ ]] || [[ ! "$NODE_SHA256" =~ ^[a-fA-F0-9]{64}$ ]] || [[ ! "$QDRANT_SHA256" =~ ^[a-fA-F0-9]{64}$ ]] || [ ! -f "$NODE_ARCHIVE" ] || [ ! -f "$QDRANT_ARCHIVE" ] || [ ! -f "$PLUGIN_MARKET_PACKAGE" ]; then
     echo "[prepare_rootfs] ERROR: valid Alpine, ARM64 musl Node and ARM64 static/musl Qdrant archive/hash required" >&2
     exit 1
 fi
@@ -49,6 +51,7 @@ mkdir -p "$OUTPUT_DIR"
 OUTPUT_DIR="$(cd "$OUTPUT_DIR" && pwd)"
 NODE_ARCHIVE="$(cd "$(dirname "$NODE_ARCHIVE")" && pwd)/$(basename "$NODE_ARCHIVE")"
 QDRANT_ARCHIVE="$(cd "$(dirname "$QDRANT_ARCHIVE")" && pwd)/$(basename "$QDRANT_ARCHIVE")"
+PLUGIN_MARKET_PACKAGE="$(cd "$(dirname "$PLUGIN_MARKET_PACKAGE")" && pwd)/$(basename "$PLUGIN_MARKET_PACKAGE")"
 ROOTFS_ZIP="$OUTPUT_DIR/alpine-rootfs.zip"
 RELEASE_MANIFEST="$OUTPUT_DIR/rootfs-release.json"
 WORK="$(mktemp -d)"
@@ -81,7 +84,7 @@ python3 "$SCRIPT_DIR/rootfs_inputs.py" sources "$WORK/packages.json" "$ROOT_DIR/
 "$GO_BIN" list -deps -json ./cmd/server > "$WORK/packages-after.json"
 python3 "$SCRIPT_DIR/rootfs_inputs.py" sources "$WORK/packages-after.json" "$ROOT_DIR/backend" "$WORK/core-source-inputs-after.json"
 cmp "$WORK/core-source-inputs.json" "$WORK/core-source-inputs-after.json" || { echo "[prepare_rootfs] Source changed during build" >&2; exit 1; }
-python3 "$SCRIPT_DIR/rootfs_inputs.py" prepare "$MINIROOTFS_FILE" "$NODE_ARCHIVE" "$WORK/AmitiaCore" "$WORK/core-source-inputs.json" "$VERSION" "$WORK/guest-input.tar.gz" "$WORK/rootfs.manifest.json" "$QDRANT_ARCHIVE"
+python3 "$SCRIPT_DIR/rootfs_inputs.py" prepare "$MINIROOTFS_FILE" "$NODE_ARCHIVE" "$WORK/AmitiaCore" "$WORK/core-source-inputs.json" "$VERSION" "$WORK/guest-input.tar.gz" "$WORK/rootfs.manifest.json" "$QDRANT_ARCHIVE" "$PLUGIN_MARKET_PACKAGE"
 "$FAKEFSIFY_BIN" "$WORK/guest-input.tar.gz" "$WORK/fakefs-out"
 python3 "$SCRIPT_DIR/rootfs_inputs.py" package "$WORK/fakefs-out" "$WORK/rootfs.manifest.json" "$WORK/core-source-inputs.json" "$ROOTFS_ZIP" "$RELEASE_MANIFEST"
 echo "[prepare_rootfs] Complete: $ROOTFS_ZIP"

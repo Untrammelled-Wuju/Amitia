@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/u-ai/backend/internal/dbtransaction"
+	"sort"
 	"strings"
 	"time"
 )
@@ -110,6 +111,23 @@ func (s *OwnershipStore) Apply(ctx context.Context, commit Commit) (Acknowledgem
 	return s.apply(ctx, commit, nil)
 }
 
+func mutationStorageRoles(commit Commit, kind string) map[string]bool {
+	roles := map[string]bool{StorageRole(commit.Scope, kind): true}
+	for _, authority := range commit.AdditionalAuthorities {
+		roles[StorageRole(authority, kind)] = true
+	}
+	return roles
+}
+
+func roleSummary(roles map[string]bool) string {
+	values := make([]string, 0, len(roles))
+	for role := range roles {
+		values = append(values, role)
+	}
+	sort.Strings(values)
+	return strings.Join(values, ",")
+}
+
 func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*sql.Tx) error) (Acknowledgement, error) {
 	scope := commit.Scope
 	if scope.ResourceOwnerID != s.ownerID || scope.RequestID == "" || scope.RoleID == "" || len(commit.Mutations) == 0 || len(commit.Mutations) > 256 {
@@ -207,12 +225,13 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 		if mutation.KeepConversationMemories && (mutation.Kind != "conversation" || !mutation.Deleted) {
 			return Acknowledgement{}, ErrWrongOwner
 		}
-		expectedRole := StorageRole(scope, mutation.Kind)
+		storedRoles := mutationStorageRoles(commit, mutation.Kind)
+		expectedRoles := storedRoles
 		if commit.MemoryTransfer != nil {
-			expectedRole = commit.MemoryTransfer.ToRoleID
+			expectedRoles = map[string]bool{commit.MemoryTransfer.ToRoleID: true}
 		}
-		if !validKind(mutation.Kind) || mutation.ID == "" || mutation.RoleID != expectedRole || !json.Valid(mutation.Body) || mutation.ExpectedRevision < RevisionCurrent {
-			return Acknowledgement{}, fmt.Errorf("%w: mutation[%d] kind=%q id=%q role=%q expected=%q revision=%d validBody=%t", ErrWrongOwner, index, mutation.Kind, mutation.ID, mutation.RoleID, expectedRole, mutation.ExpectedRevision, json.Valid(mutation.Body))
+		if !validKind(mutation.Kind) || mutation.ID == "" || !expectedRoles[mutation.RoleID] || !json.Valid(mutation.Body) || mutation.ExpectedRevision < RevisionCurrent {
+			return Acknowledgement{}, fmt.Errorf("%w: mutation[%d] kind=%q id=%q role=%q expected=%q revision=%d validBody=%t", ErrWrongOwner, index, mutation.Kind, mutation.ID, mutation.RoleID, roleSummary(expectedRoles), mutation.ExpectedRevision, json.Valid(mutation.Body))
 		}
 		key := mutation.Kind + "/" + mutation.ID
 		if _, exists := ack.Versions[key]; exists {
@@ -225,8 +244,8 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return Acknowledgement{}, err
 		}
-		if err == nil && storedRole != StorageRole(scope, mutation.Kind) {
-			return Acknowledgement{}, fmt.Errorf("%w: stored mutation[%d] kind=%q id=%q role=%q expected=%q", ErrWrongOwner, index, mutation.Kind, mutation.ID, storedRole, StorageRole(scope, mutation.Kind))
+		if err == nil && !storedRoles[storedRole] {
+			return Acknowledgement{}, fmt.Errorf("%w: stored mutation[%d] kind=%q id=%q role=%q expected=%q", ErrWrongOwner, index, mutation.Kind, mutation.ID, storedRole, roleSummary(storedRoles))
 		}
 		if mutation.ExpectedRevision == RevisionCurrent {
 			baseRequestID := strings.SplitN(scope.RequestID, "|", 2)[0]

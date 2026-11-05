@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync, rmSync, mkdirSync } from "node:fs";
+import { copyFileSync, existsSync, readFileSync, writeFileSync, rmSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -21,6 +21,10 @@ const hostGoarch = process.env.AMITIA_CORE_GOARCH
         : "amd64");
 const coreBinaryName = hostGoos === "windows" ? "AmitiaCore.exe" : "AmitiaCore";
 const outputPath = resolve(coreDir, coreBinaryName);
+const targetPlatform = hostGoos === "windows" ? "windows" : hostGoos === "darwin" ? "macos" : "linux";
+const targetArch = hostGoarch === "arm64" ? "arm64" : "x64";
+const targetDir = resolve(coreDir, `${targetPlatform}-${targetArch}`);
+const targetPath = resolve(targetDir, coreBinaryName);
 const stampPath = resolve(coreDir, ".amitiacore-build.json");
 
 function sha256File(filePath) {
@@ -75,6 +79,8 @@ async function main() {
   if (!existsSync(outputPath)) {
     throw new Error(`${coreBinaryName} was not produced`);
   }
+  mkdirSync(targetDir, { recursive: true });
+  copyFileSync(outputPath, targetPath);
 
   const sourceGateAfter = await computeFreezeSourceGateHash(repositoryRoot);
   if (sourceGateAfter !== sourceGateBefore) {

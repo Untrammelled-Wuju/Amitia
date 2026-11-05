@@ -7,6 +7,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../core/widgets/amitia_popup_menu.dart';
 import '../../../toolbox/presentation/pages/toolbox_file_browser_page.dart';
 import '../../../toolbox/presentation/pages/toolbox_workspace_page.dart';
 import 'workbench_document_view.dart';
@@ -824,7 +825,7 @@ class _WorkbenchPageState extends ConsumerState<WorkbenchPage> {
               onPressed: widget.onExpand,
               icon: const Icon(Icons.open_in_full, size: 19),
             ),
-          PopupMenuButton<String>(
+          AmitiaPopupMenuButton<String>(
             tooltip: '更多',
             icon: const Icon(Icons.more_horiz, size: 20),
             onSelected: (value) {

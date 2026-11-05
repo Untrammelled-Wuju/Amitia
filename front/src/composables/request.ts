@@ -42,6 +42,10 @@ export interface RequestError {
   raw?: any;
 }
 
+export function isSuccessfulResponseCode(code: number): boolean {
+  return code >= 200 && code < 300;
+}
+
 const recentDisplayedErrors = new Map<string, number>();
 
 export function classifyError(
@@ -253,7 +257,7 @@ request.interceptors.response.use(
     readOperationTimeoutHeaders(response.config.baseURL || "", response.headers);
     const body = response.data as ApiResponse;
     if (body && typeof body.code === "number") {
-      if (body.code === 200) {
+      if (isSuccessfulResponseCode(body.code)) {
         return body.data ?? body;
       }
       const err = classifyError(body, null);

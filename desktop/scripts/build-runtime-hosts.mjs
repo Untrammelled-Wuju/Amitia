@@ -1,5 +1,5 @@
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { cpSync, existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
@@ -31,5 +31,28 @@ for (const host of ["plugin-host", "task-host"]) {
   if (result.error) throw result.error;
   if (result.status !== 0) {
     throw new Error(`${host} build failed with exit code ${result.status}`);
+  }
+  const sourceDist = resolve(repositoryRoot, "runtime", host, "dist");
+  const targetDist = resolve(repositoryRoot, "AmitiaData", host, "dist");
+  const suffix = `${process.pid}-${Date.now()}`;
+  const tempDist = `${targetDist}.tmp-${suffix}`;
+  const backupDist = `${targetDist}.backup-${suffix}`;
+  rmSync(tempDist, { recursive: true, force: true });
+  rmSync(backupDist, { recursive: true, force: true });
+  mkdirSync(tempDist, { recursive: true });
+  cpSync(sourceDist, tempDist, { recursive: true });
+  let previousMoved = false;
+  try {
+    if (existsSync(targetDist)) {
+      renameSync(targetDist, backupDist);
+      previousMoved = true;
+    }
+    renameSync(tempDist, targetDist);
+  } catch (error) {
+    if (previousMoved && !existsSync(targetDist) && existsSync(backupDist)) renameSync(backupDist, targetDist);
+    throw error;
+  } finally {
+    rmSync(tempDist, { recursive: true, force: true });
+    if (existsSync(targetDist)) rmSync(backupDist, { recursive: true, force: true });
   }
 }

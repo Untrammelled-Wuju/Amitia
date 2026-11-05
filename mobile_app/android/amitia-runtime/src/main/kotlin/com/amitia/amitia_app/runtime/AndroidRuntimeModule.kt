@@ -11,6 +11,7 @@ import com.amitia.amitia_app.runtime.connection.internal.DefaultBackendConnectio
 import com.amitia.amitia_app.runtime.install.ActiveRuntimeManager
 import com.amitia.amitia_app.runtime.install.ActiveRuntimeResult
 import com.amitia.amitia_app.runtime.install.DefaultInstalledRuntimeVerifier
+import com.amitia.amitia_app.runtime.install.DefaultInstallReceiptStore
 import com.amitia.amitia_app.runtime.install.RuntimeInstaller
 import com.amitia.amitia_app.runtime.install.internal.DefaultActiveRuntimeManager
 import com.amitia.amitia_app.runtime.install.internal.DefaultPackageVerifier
@@ -138,6 +139,7 @@ object AndroidRuntimeModule {
 
         val treeHasher = com.amitia.amitia_app.runtime.manifest.internal.InstalledTreeHasher
         val installedVerifier = DefaultInstalledRuntimeVerifier(treeHasher::computeTreeSha256)
+        val installReceiptStore = DefaultInstallReceiptStore(layout)
 
         val bootstrapper = DefaultRuntimeBootstrapper(
             manifestStore = manifestStore,
@@ -154,6 +156,7 @@ object AndroidRuntimeModule {
             abiGate = abiGate,
             bootstrapper = bootstrapper,
             installedVerifier = installedVerifier,
+            installReceiptStore = installReceiptStore,
             hostLayout = layout,
             recoveryPolicy = recoveryPolicy,
             recoveryScheduler = recoveryScheduler,

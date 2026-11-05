@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, onErrorCaptured, provide } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
+import { requestSchemaActionConfirmation, type SchemaActionConfirmationHandle } from "./schema-action-confirmation";
 import type { UIContributionSummary } from "@/stores/extensionUI";
 import { useExtensionUIStore } from "@/stores/extensionUI";
 import { apiClient } from "@/composables/useApi";
@@ -56,6 +57,7 @@ const localContextOverride = reactive<Record<string, unknown>>({});
 const dataSourceState = reactive<Record<string, unknown>>({});
 const busyNodeIds = reactive(new Set<string>());
 provide("schema-ui-busy-node-ids", busyNodeIds);
+provide("schema-ui-local-action", (payload: { action: SchemaUIActionBinding; node: SchemaUINodeType; item?: Record<string, unknown>; followUpActions?: SchemaUIActionBinding[] }) => invokeAction(payload, false));
 
 const sessionScopeKey = computed(() =>
   `${props.contribution.contributionId}:${props.contribution.generation}:${props.context?.characterId || ""}:${props.context?.conversationId || ""}`
@@ -253,11 +255,6 @@ let schemaLoadToken = 0;
 
 async function loadSchema() {
   const token = ++schemaLoadToken;
-  if (!props.contribution.schemaPath && !props.contribution.entryPath) {
-    loading.value = false;
-    error.value = "该贡献未提供 schema 路径";
-    return;
-  }
   loading.value = true;
   error.value = null;
   capturedError.value = null;
@@ -499,24 +496,33 @@ async function invokeAction(payload: { action: SchemaUIActionBinding; node: Sche
     ElMessage.warning("操作缺少 action_id");
     return;
   }
+  let confirmation: SchemaActionConfirmationHandle | null = null;
   if (action.confirmation) {
-    try {
-      await ElMessageBox.confirm(action.confirmation, "确认操作", {
-        type: "warning",
-        confirmButtonText: "确定",
-        cancelButtonText: "取消",
-      });
-    } catch (error) {
-  console.error("[original-error]", error);
-return;
-    }
+    confirmation = await requestSchemaActionConfirmation(
+      action.confirmation,
+      action.loadingText || "处理中",
+      (message, title, options) => ElMessageBox.confirm(message, title, options),
+    );
+    if (!confirmation) return;
   }
   actionLoading[action.action_id] = true;
   const nodeId = typeof node?.id === "string" ? node.id : "";
   if (nodeId) busyNodeIds.add(nodeId);
   let actionSucceeded = false;
   try {
-    const resolvedInput = asRecord(resolveActionInput(action.input ?? {}, formState, mergedContext.value, item));
+    const rawResolvedInput = resolveActionInput(action.input ?? {}, formState, mergedContext.value, item);
+    if ((action.target ?? action.target_type) === "local") {
+      const localValue = action.value !== undefined ? action.value : rawResolvedInput;
+      if (action.statePath) {
+        setPath(localContextOverride, action.statePath, localValue);
+      }
+      if (action.formPath) {
+        setPath(formState, action.formPath, localValue);
+      }
+      actionSucceeded = true;
+      return;
+    }
+    const resolvedInput = asRecord(rawResolvedInput);
     const actionPayload = asRecord(resolvedInput.payload);
     const actionScope = asRecord(actionPayload.scope);
     const characterId = String(actionPayload.characterId || actionScope.characterId || contextCharacterId.value || "").trim();
@@ -595,7 +601,7 @@ return;
         const failureMessage = findActionFailure(data);
         if (failureMessage) {
           ElMessage.error(formatActionMessage(failureMessage));
-        } else if (typeof data.message === "string" && data.message) {
+        } else if (!action.successMessage && typeof data.message === "string" && data.message) {
           ElMessage.success(data.message);
         }
       }
@@ -618,6 +624,12 @@ return;
   } finally {
     actionLoading[action.action_id] = false;
     if (nodeId) busyNodeIds.delete(nodeId);
+    if (confirmation) {
+      confirmation.done();
+    }
+    if (actionSucceeded && action.successMessage) {
+      ElMessage.success(action.successMessage);
+    }
     for (const next of actionSucceeded ? followUpActions ?? [] : []) {
       try {
         await invokeAction({ action: next, node }, reportFailure);

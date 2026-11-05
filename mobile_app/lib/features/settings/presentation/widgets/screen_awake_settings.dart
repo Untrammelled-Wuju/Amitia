@@ -31,8 +31,8 @@ class _ScreenAwakeSettingsState extends ConsumerState<ScreenAwakeSettings> {
         _loaded = true;
       });
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-if (mounted) setState(() => _loaded = false);
+      print("[original-error] $error\n$stackTrace");
+      if (mounted) setState(() => _loaded = false);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -46,11 +46,24 @@ if (mounted) setState(() => _loaded = false);
           .setEnabled(enabled);
       if (mounted) setState(() => _enabled = saved);
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.toString())));
+      print("[original-error] $error\n$stackTrace");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('屏幕常亮设置保存失败，请重试'),
+                const SizedBox(height: 4),
+                Text(
+                  error.toString(),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _busy = false);

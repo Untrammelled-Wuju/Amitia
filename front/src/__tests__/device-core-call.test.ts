@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
 import { defineComponent } from "vue";
+import { resetRuntimeConnectionCache } from "../runtime/runtime-adapter";
 
 const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), stream: vi.fn() }));
 vi.mock("../composables/useApi", () => ({ useApi: () => mocks }));
@@ -20,8 +21,16 @@ const stubs = {
 
 describe("device Core calls", () => {
   beforeEach(() => {
+    resetRuntimeConnectionCache();
     mocks.get.mockReset(); mocks.post.mockReset(); mocks.put.mockReset(); mocks.stream.mockReset();
-    mocks.get.mockImplementation(async (path: string) => path.endsWith("/roles") ? { roles: [{ id: "target-role", name: "目标角色", revision: 3 }], roleOwnerId: "target", executionScope: { coreId: "core-b", targetDeviceId: "target", resourceOwnerId: "target" } } : { coreId: "core-b", coordinationAvailable: true });
+    mocks.get.mockImplementation(async (path: string) => path.endsWith("/roles")
+      ? { roles: [{ id: "target-role", name: "目标角色", revision: 3 }], roleOwnerId: "target", executionScope: { coreId: "core-b", targetDeviceId: "target", resourceOwnerId: "target" } }
+      : {
+          coreId: "core-b",
+          canAdminister: true,
+          coordinationAvailable: true,
+          policy: { deviceId: "caller", coordinated: true, administrator: true, providerEpoch: 1, modeRevision: 2, permissionRevision: 3 },
+        });
   });
 
   it("calls the selected device through Core and waits for owner save confirmation", async () => {
@@ -73,13 +82,29 @@ describe("device Core calls", () => {
   });
 
   it("revokes exactly the caller capability and displayed grant revision", async () => {
-    mocks.get.mockImplementation(async (path: string) => path.endsWith("/grants") ? { grants: [{ callerId: "caller", targetId: "target", capability: "ai.chat", allowed: true, revision: 4 }] } : { coreId: "core-b" });
+    mocks.get.mockImplementation(async (path: string) => path.endsWith("/grants")
+      ? { grants: [{ callerId: "caller", targetId: "target", capability: "ai.chat", allowed: true, revision: 4 }] }
+      : {
+          coreId: "core-b",
+          canAdminister: true,
+          coordinationAvailable: true,
+          policy: { deviceId: "caller", coordinated: true, administrator: true, providerEpoch: 1, modeRevision: 2, permissionRevision: 3 },
+        });
     mocks.put.mockResolvedValue({});
     const wrapper = mount(DeviceCapabilityGrants, { props: { visible: true, deviceId: "target", devices: [{ deviceId: "caller", label: "调用设备", trustState: "trusted" }] }, global: { stubs, directives: { loading: () => {} } } });
     await flushPromises();
     await wrapper.findAll("button").find(button => button.text() === "撤销")!.trigger("click");
     await flushPromises();
-    expect(mocks.put).toHaveBeenCalledWith("/api/device-mesh/v1/business/devices/target/grants", { callerId: "caller", capability: "ai.chat", allowed: false, expectedRevision: 4, expectedCoreId: "core-b" });
+    expect(mocks.put).toHaveBeenCalledWith(
+      "/api/device-mesh/v1/business/devices/target/grants",
+      { callerId: "caller", capability: "ai.chat", allowed: false, expectedRevision: 4, expectedCoreId: "core-b" },
+      expect.objectContaining({
+        headers: {
+          "X-Amitia-Expected-Core-ID": "core-b",
+          "X-Amitia-Expected-Configuration-Policy": "1:2:3",
+        },
+      }),
+    );
     wrapper.unmount();
   });
 });

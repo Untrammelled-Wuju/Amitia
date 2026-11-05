@@ -221,6 +221,50 @@ func (o *RuntimeOrchestrator) ReportComponentState(id ComponentID, state Compone
 	return nil
 }
 
+func (o *RuntimeOrchestrator) RefreshHealth(ctx context.Context) RuntimeSnapshot {
+	type probe struct {
+		id        ComponentID
+		component ManagedComponent
+	}
+	o.mu.RLock()
+	if o.state == OrchestratorStopping || o.state == OrchestratorStopped {
+		o.mu.RUnlock()
+		return o.Snapshot()
+	}
+	probes := make([]probe, 0, len(o.components))
+	for id, component := range o.components {
+		st := o.statuses[id]
+		if st == nil || !st.started || st.stopped || !st.status.Enabled {
+			continue
+		}
+		probes = append(probes, probe{id: id, component: component})
+	}
+	o.mu.RUnlock()
+
+	for _, item := range probes {
+		err := item.component.Ready(ctx)
+		o.mu.Lock()
+		st := o.statuses[item.id]
+		if st != nil {
+			if err != nil {
+				st.status.LastError = err.Error()
+				if st.status.Required {
+					st.status.State = StateFailed
+					o.state = OrchestratorBlocked
+				} else {
+					st.status.State = StateDegraded
+				}
+			} else if st.status.State == StateDegraded || st.status.State == StateFailed {
+				st.status.State = StateReady
+				st.status.LastError = ""
+			}
+			o.updateOverallLocked()
+		}
+		o.mu.Unlock()
+	}
+	return o.Snapshot()
+}
+
 func (o *RuntimeOrchestrator) RestartComponent(ctx context.Context, id ComponentID) error {
 	o.mu.Lock()
 	if o.state == OrchestratorStopping || o.state == OrchestratorStopped || o.state == OrchestratorBlocked {
@@ -241,7 +285,7 @@ func (o *RuntimeOrchestrator) RestartComponent(ctx context.Context, id Component
 		return wrapComponentErr(ErrComponentDisabled, id, "", "component is disabled")
 	}
 
-	if !o.checkDepsReady(id) {
+	if !o.checkDepsReadyLocked(id) {
 		o.mu.Unlock()
 		return wrapComponentErr(ErrDependencyNotReady, id, "", "dependencies not ready")
 	}
@@ -252,7 +296,12 @@ func (o *RuntimeOrchestrator) RestartComponent(ctx context.Context, id Component
 	if isRestartable {
 		if err := restartable.Restart(ctx); err != nil {
 			o.mu.Lock()
-			st.status.State = StateDegraded
+			if desc.Required {
+				st.status.State = StateFailed
+				o.state = OrchestratorBlocked
+			} else {
+				st.status.State = StateDegraded
+			}
 			st.status.LastError = err.Error()
 			o.updateOverallLocked()
 			o.mu.Unlock()
@@ -285,7 +334,12 @@ func (o *RuntimeOrchestrator) RestartComponent(ctx context.Context, id Component
 		readyErr := comp.Ready(ctx)
 		if readyErr != nil {
 			o.mu.Lock()
-			st.status.State = StateDegraded
+			if desc.Required {
+				st.status.State = StateFailed
+				o.state = OrchestratorBlocked
+			} else {
+				st.status.State = StateDegraded
+			}
 			st.status.LastError = readyErr.Error()
 			o.updateOverallLocked()
 			o.mu.Unlock()
@@ -550,6 +604,10 @@ func (r *phaseRuntime) execute(ctx context.Context) error {
 func (o *RuntimeOrchestrator) checkDepsReady(id ComponentID) bool {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
+	return o.checkDepsReadyLocked(id)
+}
+
+func (o *RuntimeOrchestrator) checkDepsReadyLocked(id ComponentID) bool {
 	desc := o.components[id].Descriptor()
 	for _, dep := range desc.Dependencies {
 		st, ok := o.statuses[dep]
@@ -592,18 +650,20 @@ func (o *RuntimeOrchestrator) updateOverallLocked() {
 	if o.state == OrchestratorBlocked || o.state == OrchestratorStopping || o.state == OrchestratorStopped {
 		return
 	}
-	hasReady, hasDegraded, hasStarting := false, false, false
+	hasReady, hasRequiredDegraded, hasStarting := false, false, false
 	for _, st := range o.statuses {
 		switch st.status.State {
 		case StateReady:
 			hasReady = true
 		case StateDegraded:
-			hasDegraded = true
+			if st.status.Required {
+				hasRequiredDegraded = true
+			}
 		case StateStarting:
 			hasStarting = true
 		}
 	}
-	if hasDegraded {
+	if hasRequiredDegraded {
 		o.state = OrchestratorDegraded
 	} else if hasReady && !hasStarting {
 		o.state = OrchestratorReady

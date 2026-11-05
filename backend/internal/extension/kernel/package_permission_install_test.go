@@ -54,6 +54,83 @@ func TestInstallationPermissionPolicyUsesInstallGrant(t *testing.T) {
 	}
 }
 
+func TestInstallationPermissionPolicyUsesBuiltInInstallGrant(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	root := t.TempDir()
+	container, err := NewContainerBuilder().
+		WithDBPath(filepath.Join(root, "kernel.db")).
+		WithExtensionRoot(filepath.Join(root, "extensions")).
+		Build(ctx)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	defer container.Close()
+
+	extID := domain.ExtensionID("com.amitia.builtin.test-permission")
+	if err := container.PermissionRepository.PutRequirement(ctx, sqlite.PermissionRequirement{
+		ExtensionID:    extID,
+		PermissionName: "tool.invoke",
+		Required:       true,
+		Scope:          string(permission.ScopeExtension),
+	}); err != nil {
+		t.Fatalf("PutRequirement: %v", err)
+	}
+	if err := container.PermissionRepository.PutGrant(ctx, sqlite.PermissionGrant{
+		ExtensionID:    extID,
+		PermissionName: "tool.invoke",
+		State:          "granted",
+	}); err != nil {
+		t.Fatalf("PutGrant: %v", err)
+	}
+	granted, err := container.PermissionRepository.IsGranted(ctx, extID, "tool.invoke")
+	if err != nil {
+		t.Fatalf("IsGranted: %v", err)
+	}
+	if !granted {
+		t.Fatal("built-in tool.invoke grant was not persisted")
+	}
+	request := permission.PermissionEvaluationRequest{
+		Subject: permission.SubjectForTool(string(extID), "tool.invoke"),
+		Requirements: []permission.PermissionRequirement{{
+			PermissionID: "tool.invoke",
+			Scope:        permission.ScopeForExtension(string(extID)),
+		}},
+	}
+	result := container.PermissionBroker.Evaluate(ctx, request)
+	if result.Decision != permission.DecisionAllow {
+		t.Fatalf("expected built-in install grant to allow, got %s missing=%v", result.Decision, result.Missing)
+	}
+}
+
+func TestInstallationPermissionPolicySkipsUndeclaredBuiltInToolPermission(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	root := t.TempDir()
+	container, err := NewContainerBuilder().
+		WithDBPath(filepath.Join(root, "kernel.db")).
+		WithExtensionRoot(filepath.Join(root, "extensions")).
+		Build(ctx)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	defer container.Close()
+
+	extID := domain.ExtensionID("com.amitia.builtin.workspace")
+	request := permission.PermissionEvaluationRequest{
+		Subject:      permission.SubjectForTool(string(extID), "workspace_write"),
+		ApprovalMode: string(permission.ApprovalFullControl),
+		Requirements: []permission.PermissionRequirement{{
+			PermissionID: "workspace.write",
+			Scope:        permission.ScopeGlobalOnly(),
+		}},
+	}
+	result := container.PermissionBroker.Evaluate(ctx, request)
+	if result.Decision != permission.DecisionAllow {
+		t.Fatalf("undeclared built-in tool permission should use normal policy, got %s reasons=%v", result.Decision, result.Reasons)
+	}
+}
+
 func TestInstallationPermissionPolicyOverridesPerUseAndPreservesRevokedGrant(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()

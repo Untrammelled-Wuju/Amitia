@@ -140,7 +140,7 @@ func AllRegisteredMethods() []string {
 		// Data
 		string(MethodCharacterRead), string(MethodCharacterList), string(MethodConversationRead), string(MethodMemoryQuery),
 		// Provider / Tool / Runtime / mediated network
-		string(MethodProviderInvoke), string(MethodToolExecute), string(MethodPluginPreview), string(MethodPluginInstall), string(MethodRuntimeHealth), string(MethodNetworkRequest),
+		string(MethodProviderInvoke), string(MethodToolExecute), string(MethodPluginPreview), string(MethodPluginInstall), string(MethodPluginUninstall), string(MethodPluginList), string(MethodRuntimeHealth), string(MethodNetworkRequest),
 		string(MethodConversationMessageSend),
 		string(MethodConversationMessageAppend),
 		string(MethodVectorUpsert), string(MethodVectorSearch), string(MethodVectorDelete),

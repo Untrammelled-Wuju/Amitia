@@ -4,8 +4,60 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DATA_DIR="$ROOT/AmitiaData"
 LOG_DIR="$DATA_DIR/logs"
+RUN_DIR="$DATA_DIR/run"
+START_LOCK_DIR="$RUN_DIR/start.lock"
+START_LOCK_HELD=0
+RUN_MODE="${1:-${AMITIA_RUN_MODE:-detached}}"
 
-mkdir -p "$DATA_DIR/qdrant" "$DATA_DIR/surrealdb" "$DATA_DIR/node" "$LOG_DIR"
+case "$RUN_MODE" in
+  detached|--foreground) ;;
+  *)
+    echo "不支持的模式: $RUN_MODE" >&2
+    exit 2
+    ;;
+esac
+
+mkdir -p "$DATA_DIR/qdrant" "$DATA_DIR/surrealdb" "$DATA_DIR/node" "$LOG_DIR" "$RUN_DIR"
+
+release_start_lock() {
+  if [ "$START_LOCK_HELD" = "1" ]; then
+    rm -f "$START_LOCK_DIR/pid"
+    rmdir "$START_LOCK_DIR" >/dev/null 2>&1 || true
+    START_LOCK_HELD=0
+  fi
+}
+
+acquire_start_lock() {
+  local owner=""
+  if mkdir "$START_LOCK_DIR" 2>/dev/null; then
+    printf '%s\n' "$$" > "$START_LOCK_DIR/pid"
+    START_LOCK_HELD=1
+    return
+  fi
+  if [ -f "$START_LOCK_DIR/pid" ]; then
+    owner="$(tr -d '[:space:]' < "$START_LOCK_DIR/pid")"
+  fi
+  if [ -n "$owner" ] && kill -0 "$owner" 2>/dev/null; then
+    owner_command="$(ps -p "$owner" -o command= 2>/dev/null || true)"
+    case "$owner_command" in
+      *start-all-services.sh*)
+        echo "项目启动任务正在运行，PID=$owner" >&2
+        exit 1
+        ;;
+    esac
+  fi
+  rm -f "$START_LOCK_DIR/pid"
+  rmdir "$START_LOCK_DIR" >/dev/null 2>&1 || {
+    echo "无法清理失效的项目启动锁: $START_LOCK_DIR" >&2
+    exit 1
+  }
+  mkdir "$START_LOCK_DIR"
+  printf '%s\n' "$$" > "$START_LOCK_DIR/pid"
+  START_LOCK_HELD=1
+}
+
+trap release_start_lock EXIT
+acquire_start_lock
 
 case "$(uname -s)" in
   Darwin) HOST_OS=macos ;;
@@ -67,8 +119,12 @@ stop_project_processes() {
   if [ -f "$LOG_DIR/desktop.pid" ]; then
     terminate_tree "$(tr -d '[:space:]' < "$LOG_DIR/desktop.pid")"
   fi
+  pkill -f "$ROOT/desktop/node_modules/.*/electron/dist/Electron.app/Contents/MacOS/Electron" >/dev/null 2>&1 || true
+  pkill -f "$ROOT/desktop/node_modules/.*/vite/bin/vite.js" >/dev/null 2>&1 || true
   pkill -f "$ROOT/desktop/resources/core/AmitiaCore" >/dev/null 2>&1 || true
   pkill -f "$ROOT/desktop/resources/core/$TARGET/AmitiaCore" >/dev/null 2>&1 || true
+  pkill -f "$ROOT/AmitiaData/plugin-host" >/dev/null 2>&1 || true
+  pkill -f "$ROOT/AmitiaData/extensions-v2/installations" >/dev/null 2>&1 || true
   pkill -f "$ROOT/AmitiaData/qdrant/qdrant" >/dev/null 2>&1 || true
   pkill -f "$ROOT/AmitiaData/surrealdb/surreal" >/dev/null 2>&1 || true
 }
@@ -83,6 +139,7 @@ command -v pnpm >/dev/null 2>&1 || { echo "未找到 pnpm，请先启用 corepac
 
 echo "[1/5] 清理旧进程"
 stop_project_processes
+rm -f "$RUN_DIR/endpoint.json"
 sleep 1
 
 echo "[2/5] 准备核心 ($TARGET)"
@@ -138,19 +195,41 @@ export AMITIA_CONFIG_DIR="$DATA_DIR/config"
 export AMITIA_WORKSPACE_DIR="$ROOT"
 export AMITIA_DATA_DIR="$DATA_DIR"
 export AMITIA_EXTENSION_DEV_MODE=true
+export AMITIA_NODE_BIN="$DATA_DIR/node/bin/node"
 
-nohup pnpm --dir "$ROOT/desktop" dev > "$LOG_DIR/desktop.log" 2>&1 &
-echo "$!" > "$LOG_DIR/desktop.pid"
-disown >/dev/null 2>&1 || true
+foreground_mode=0
+if [ "$RUN_MODE" = "--foreground" ]; then
+  foreground_mode=1
+  echo "$$" > "$LOG_DIR/desktop.pid"
+  pnpm --dir "$ROOT/desktop" dev &
+  desktop_pid="$!"
+else
+  nohup pnpm --dir "$ROOT/desktop" dev > "$LOG_DIR/desktop.log" 2>&1 &
+  echo "$!" > "$LOG_DIR/desktop.pid"
+  desktop_pid="$!"
+  disown >/dev/null 2>&1 || true
+fi
 
 for _ in $(seq 1 90); do
+  if ! kill -0 "$desktop_pid" 2>/dev/null; then
+    echo "桌面端进程已退出:" >&2
+    tail -n 40 "$LOG_DIR/desktop.log" >&2 || true
+    exit 1
+  fi
   core_port=""
+  core_pid=""
   if [ -f "$DATA_DIR/run/endpoint.json" ]; then
     core_port="$(node -e 'const fs=require("fs");const value=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));process.stdout.write(String(value.port||""))' "$DATA_DIR/run/endpoint.json" 2>/dev/null || true)"
+    core_pid="$(node -e 'const fs=require("fs");const value=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));process.stdout.write(String(value.pid||""))' "$DATA_DIR/run/endpoint.json" 2>/dev/null || true)"
   fi
-  if [ -n "$core_port" ] && curl -fsS "http://127.0.0.1:${core_port}/api/health" >/dev/null 2>&1; then
+  if [ -n "$core_port" ] && [ -n "$core_pid" ] && kill -0 "$core_pid" 2>/dev/null && curl -fsS "http://127.0.0.1:${core_port}/api/health" >/dev/null 2>&1; then
+    release_start_lock
     echo "服务已就绪: http://127.0.0.1:${core_port}"
     echo "日志: $LOG_DIR/desktop.log"
+    if [ "$foreground_mode" = "1" ]; then
+      wait "$desktop_pid"
+      exit $?
+    fi
     exit 0
   fi
   sleep 1
@@ -158,4 +237,5 @@ done
 
 echo "启动超时，最近日志:" >&2
 tail -n 40 "$LOG_DIR/desktop.log" >&2 || true
+terminate_tree "$desktop_pid"
 exit 1

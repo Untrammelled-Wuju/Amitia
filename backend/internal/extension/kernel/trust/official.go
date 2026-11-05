@@ -2,5 +2,5 @@ package trust
 
 const (
 	OfficialPublisherID               = "com.amitia"
-	DefaultOfficialPublisherPublicKey = "5f735999368bbe4d574b0ab0b7e0d30495df45023fae0680a4d9d1723bb4dec2"
+	DefaultOfficialPublisherPublicKey = "d1a32a9733be20056ddb205a9476413da08a2f696c14dc627f07be5376b41526"
 )

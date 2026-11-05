@@ -59,7 +59,7 @@ SPDX-License-Identifier: AGPL-3.0-only
     </div>
 
     <div class="sections">
-      <RoleGenderSection v-model:genderForm="genderForm" />
+      <RoleGenderSection :gender-form="genderForm" />
 
       <PersonalitySlidersSection
         v-model="form.personalityConfig"

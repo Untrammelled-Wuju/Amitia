@@ -22,6 +22,7 @@ export interface ProviderRouteDefinition {
 
 const PROVIDER_ROUTE_PREFIX = "ui-provider:";
 const registeredRouteNames = new Set<string>();
+const ALLOWED_EXTENSION_ROUTE_PATHS = new Set<string>(["/extensions/market"]);
 
 const BOOTSTRAP_ROUTE_PREFIXES = [
   "/onboarding",
@@ -74,6 +75,7 @@ const PROTECTED_ROUTE_NAMESPACES = new Set<string>([
 
 /** Extension routes may not occupy a built-in top-level route namespace. */
 export function shadowsProtectedRoute(path: string): boolean {
+  if (ALLOWED_EXTENSION_ROUTE_PATHS.has(String(path || "").trim())) return false;
   const namespace = rootNamespace(path);
   return namespace !== null && PROTECTED_ROUTE_NAMESPACES.has(namespace);
 }
@@ -152,6 +154,55 @@ export function collectEffectiveProviderRoutes(store: ExtensionUIStore): Provide
     routes.push(route);
   }
   return routes;
+}
+
+export interface ExtensionSectionEntry {
+  id: string;
+  section: string;
+  route: string;
+  label: string;
+  description?: string;
+  order: number;
+  extensionId: string;
+  registryProviderId: string;
+}
+
+export function collectExtensionSectionEntries(
+  store: ExtensionUIStore,
+  section: string,
+): ExtensionSectionEntry[] {
+  const effectiveRoutes = collectEffectiveProviderRoutes(store);
+  const result: ExtensionSectionEntry[] = [];
+  const seen = new Set<string>();
+  for (const provider of collectRegistryProviders(store, "route.registry")) {
+    const rawEntries = provider.metadata?.sectionEntries;
+    if (!Array.isArray(rawEntries)) continue;
+    for (const value of rawEntries) {
+      if (!value || typeof value !== "object") continue;
+      const row = value as Record<string, unknown>;
+      const id = String(row.id ?? "").trim();
+      const rowSection = String(row.section ?? "").trim();
+      const route = String(row.route ?? "").trim();
+      const label = String(row.label ?? "").trim();
+      if (!id || rowSection !== section || !route || !label || seen.has(route)) continue;
+      const effective = effectiveRoutes.find(
+        (item) => item.registryProviderId === provider.providerId && item.path === route,
+      );
+      if (!effective) continue;
+      seen.add(route);
+      result.push({
+        id,
+        section: rowSection,
+        route,
+        label,
+        description: String(row.description ?? "").trim() || effective.title,
+        order: finiteNumber(row.order, effective.priority),
+        extensionId: provider.extensionId,
+        registryProviderId: provider.providerId,
+      });
+    }
+  }
+  return result.sort((left, right) => left.order - right.order || left.label.localeCompare(right.label));
 }
 
 export function effectiveProviderRouteKeys(store: ExtensionUIStore): Set<string> {

@@ -2,6 +2,7 @@ package interaction
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,19 +16,31 @@ type fakeClock struct {
 func (f fakeClock) Now() time.Time { return f.now }
 
 type fakeWorkerRunner struct {
+	mu      sync.Mutex
 	started []WorkerRunRequest
 	tracker *fakeTracker
 }
 
 func (r *fakeWorkerRunner) StartWorker(ctx context.Context, req WorkerRunRequest) (string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.started = append(r.started, req)
 	if r.tracker != nil {
-		r.tracker.records["child-"+req.AssignmentID] = &InteractionRecord{ID: "child-" + req.AssignmentID, Status: InteractionStatusProcessing}
+		r.tracker.mu.Lock()
+		r.tracker.records["child-"+req.AssignmentID] = &InteractionRecord{
+			ID: "child-" + req.AssignmentID, Status: InteractionStatusProcessing,
+			Scope: InteractionScope{
+				SpaceID: req.SpaceID, CharacterID: req.CharacterID, ConversationID: workerConversationID(req),
+				Source: req.Source, RequestID: "ma-" + req.AssignmentID,
+			},
+		}
+		r.tracker.mu.Unlock()
 	}
 	return "child-" + req.AssignmentID, nil
 }
 
 type fakeTracker struct {
+	mu          sync.Mutex
 	records     map[string]*InteractionRecord
 	rangeCalled int
 }
@@ -37,16 +50,41 @@ func newFakeTracker() *fakeTracker {
 }
 
 func (t *fakeTracker) Create(ctx context.Context, record *InteractionRecord) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	t.records[record.ID] = record
 	return nil
 }
 
 func (t *fakeTracker) Get(ctx context.Context, id string) (*InteractionRecord, bool, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	r, ok := t.records[id]
+	if ok && r != nil && r.Scope.SpaceID == "" {
+		for _, parent := range t.records {
+			if parent == nil || parent.RecoveryDescriptor == nil || parent.RecoveryDescriptor.MultiAgent == nil {
+				continue
+			}
+			parentScope := parent.Scope.Normalize()
+			for _, assignment := range parent.RecoveryDescriptor.MultiAgent.AssignmentRefs {
+				if assignment.ChildInteractionID != id {
+					continue
+				}
+				r.Scope = InteractionScope{
+					SpaceID: parentScope.SpaceID, CharacterID: assignment.CharacterID,
+					ConversationID: workerConversationID(WorkerRunRequest{AssignmentID: assignment.AssignmentID}),
+					Source:         "multi_agent", RequestID: "ma-" + assignment.AssignmentID,
+				}
+				return r, true, nil
+			}
+		}
+	}
 	return r, ok, nil
 }
 
 func (t *fakeTracker) GetByRequestID(ctx context.Context, spaceID string, requestID string) (*InteractionRecord, bool, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	for _, r := range t.records {
 		if r.Scope.SpaceID == spaceID && r.Scope.ConversationID != "" {
 			return r, true, nil
@@ -56,6 +94,8 @@ func (t *fakeTracker) GetByRequestID(ctx context.Context, spaceID string, reques
 }
 
 func (t *fakeTracker) ListActive(ctx context.Context, scope InteractionScope) ([]*InteractionRecord, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	result := make([]*InteractionRecord, 0)
 	for _, r := range t.records {
 		result = append(result, r)
@@ -68,6 +108,8 @@ func (t *fakeTracker) ListByScope(ctx context.Context, scope InteractionScope) (
 }
 
 func (t *fakeTracker) UpdateMetadata(ctx context.Context, id string, update InteractionMetadataUpdate) (*InteractionRecord, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if r, ok := t.records[id]; ok {
 		if update.RecoveryDescriptor != nil {
 			r.RecoveryDescriptor = update.RecoveryDescriptor
@@ -79,6 +121,8 @@ func (t *fakeTracker) UpdateMetadata(ctx context.Context, id string, update Inte
 }
 
 func (t *fakeTracker) TransitionCAS(ctx context.Context, id string, expectedVersion int64, target InteractionStatus) (*InteractionRecord, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	r, ok := t.records[id]
 	if !ok {
 		return nil, ErrInteractionNotFound
@@ -98,6 +142,8 @@ func (t *fakeTracker) MarkSuperseded(ctx context.Context, targetID string, super
 }
 
 func (t *fakeTracker) Complete(ctx context.Context, id string, expectedVersion int64, resultRef string) (*InteractionRecord, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	r, ok := t.records[id]
 	if !ok {
 		return nil, ErrInteractionNotFound
@@ -111,6 +157,8 @@ func (t *fakeTracker) Complete(ctx context.Context, id string, expectedVersion i
 }
 
 func (t *fakeTracker) Fail(ctx context.Context, id string, expectedVersion int64, code string, message string) (*InteractionRecord, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	r, ok := t.records[id]
 	if !ok {
 		return nil, ErrInteractionNotFound
@@ -124,6 +172,8 @@ func (t *fakeTracker) Fail(ctx context.Context, id string, expectedVersion int64
 }
 
 func (t *fakeTracker) Archive(ctx context.Context, id string, expectedVersion int64) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	r, ok := t.records[id]
 	if !ok {
 		return ErrInteractionNotFound
@@ -139,8 +189,14 @@ func (t *fakeTracker) AcquireCommitToken(ctx context.Context, id string, expecte
 }
 
 func (t *fakeTracker) Range(ctx context.Context, fn func(record *InteractionRecord) bool) error {
+	t.mu.Lock()
 	t.rangeCalled++
-	for _, r := range t.records {
+	records := make([]*InteractionRecord, 0, len(t.records))
+	for _, record := range t.records {
+		records = append(records, record)
+	}
+	t.mu.Unlock()
+	for _, r := range records {
 		if !fn(r) {
 			break
 		}

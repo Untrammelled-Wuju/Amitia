@@ -12,15 +12,9 @@ func TestDefaultRegistryContainsAllConfiguredProviders(t *testing.T) {
 			t.Fatalf("provider is not registered: %s", name)
 		}
 	}
-	for alias, expected := range map[string]string{
-		"dall-e":       "openai",
-		"dashscope":    "tongyi",
-		"stability_ai": "stability",
-		"zhipu":        "cogview",
-	} {
-		descriptor, ok := registry.Describe(alias)
-		if !ok || descriptor.Name != expected {
-			t.Fatalf("alias %s resolved to %#v", alias, descriptor)
+	for _, alias := range []string{"dall-e", "dashscope", "stability_ai", "zhipu"} {
+		if descriptor, ok := registry.Describe(alias); ok {
+			t.Fatalf("legacy alias %s remained registered: %#v", alias, descriptor)
 		}
 	}
 }

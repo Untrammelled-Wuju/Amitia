@@ -11,6 +11,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/runtimeprofile"
 )
 
@@ -56,8 +57,66 @@ func TestHostPluginPackageManagerPrepareAndInstall(t *testing.T) {
 	if result.ExtensionID != preview.ExtensionID || result.OperationID == "" {
 		t.Fatalf("unexpected install result: %+v", result)
 	}
-	if _, err := container.InstallationRepository.GetInstallation(ctx, "com.example/pipeline"); err != nil {
+	installation, err := container.InstallationRepository.GetInstallation(ctx, "com.example/pipeline")
+	if err != nil {
 		t.Fatal(err)
+	}
+	if installation.EnablementState != domain.EnablementEnabled {
+		t.Fatalf("installed plugin enablement = %s, want enabled", installation.EnablementState)
+	}
+}
+
+func TestHostPluginPackageManagerUsesUpdateTransactionForInstalledPlugin(t *testing.T) {
+	t.Setenv("AMITIA_EXTENSION_DEV_MODE", "true")
+	ctx := context.Background()
+	runtime, container := newPackagePipelineRuntime(t)
+	manager := NewHostPluginPackageManager(runtime, runtimeprofile.ProfileLocal)
+	installVersion := func(version, key string) KernelInstallResult {
+		path := createPackagePipelineArchive(t, version)
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sum := sha256.Sum256(body)
+		preview, err := manager.Prepare(ctx, PrepareHostPluginPackageRequest{
+			SpaceID: "user-1", ExtensionID: "com.example/pipeline", Version: version,
+			PackageURI: (&url.URL{Scheme: "file", Path: path}).String(),
+			SHA256:     hex.EncodeToString(sum[:]), FileName: "pipeline.amitiax",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		confirmations := make(map[string]bool, len(preview.RequiredConfirmations))
+		for _, item := range preview.RequiredConfirmations {
+			confirmations[item] = true
+		}
+		result, err := manager.Install(ctx, InstallHostPluginPackageRequest{
+			SpaceID: "user-1", ExtensionID: preview.ExtensionID, Version: preview.Version,
+			PreviewSessionID: preview.SessionID, Confirmations: confirmations, IdempotencyKey: key,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return result
+	}
+	if result := installVersion("1.0.0", "host-plugin-install"); result.Operation != "install" {
+		t.Fatalf("initial operation = %q, want install", result.Operation)
+	}
+	if err := runtime.Disable(ctx, "com.example/pipeline"); err != nil {
+		t.Fatal(err)
+	}
+	if result := installVersion("2.0.0", "host-plugin-update"); result.Operation != "update" {
+		t.Fatalf("installed plugin operation = %q, want update", result.Operation)
+	}
+	installation, err := container.InstallationRepository.GetInstallation(ctx, "com.example/pipeline")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if installation.InstalledVersion.String() != "2.0.0" {
+		t.Fatalf("installed version = %s, want 2.0.0", installation.InstalledVersion.String())
+	}
+	if installation.EnablementState != domain.EnablementDisabled {
+		t.Fatalf("updated plugin enablement = %s, want disabled", installation.EnablementState)
 	}
 }
 

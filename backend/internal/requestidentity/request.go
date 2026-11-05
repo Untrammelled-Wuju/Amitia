@@ -36,7 +36,7 @@ func CanonicalSpaceID() string {
 }
 
 func NormalizeSpaceID(spaceID string) string {
-	if v := strings.TrimSpace(spaceID); v != "" {
+	if v := strings.TrimSpace(spaceID); v != "" && v != "default" {
 		return v
 	}
 	return CanonicalSpaceID()

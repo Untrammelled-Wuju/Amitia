@@ -21,8 +21,8 @@ class _CustomThemeSettingsState extends ConsumerState<CustomThemeSettings> {
           .read(appearancePreferencesProvider.notifier)
           .setCustomPalette(value);
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-if (mounted) {
+      print("[original-error] $error\n$stackTrace");
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(error.toString())));
@@ -73,21 +73,26 @@ if (mounted) {
             ('副色', 'secondary', palette.secondary),
             ('文字颜色', 'text', palette.text),
           ])
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(field.$1),
-              subtitle: Text(_hex(field.$3)),
-              trailing: Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: field.$3,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: context.borderPrimary),
+            Material(
+              color: Colors.transparent,
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(field.$1),
+                subtitle: Text(_hex(field.$3)),
+                trailing: Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: field.$3,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: context.borderPrimary),
+                  ),
                 ),
+                enabled: enabled,
+                onTap: enabled
+                    ? () => _pick(field.$1, field.$3, field.$2)
+                    : null,
               ),
-              enabled: enabled,
-              onTap: enabled ? () => _pick(field.$1, field.$3, field.$2) : null,
             ),
           const SizedBox(height: 8),
           const Text('文字颜色模式'),

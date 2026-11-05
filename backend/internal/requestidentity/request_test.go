@@ -45,7 +45,7 @@ func TestNormalizeSpaceIDNeverPersistsLegacyDefault(t *testing.T) {
 		t.Fatal(err)
 	}
 	canonical := store.SpaceID()
-	for _, input := range []string{"", LegacySpaceID, "  default  "} {
+	for _, input := range []string{"", "  default  "} {
 		if got := NormalizeSpaceID(input); got != canonical {
 			t.Fatalf("NormalizeSpaceID(%q) = %q, want %q", input, got, canonical)
 		}

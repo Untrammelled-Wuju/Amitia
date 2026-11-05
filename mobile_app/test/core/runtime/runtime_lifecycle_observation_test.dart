@@ -67,7 +67,10 @@ class FakeBackendTopologyResolver implements BackendTopologyResolver {
   FakeBackendTopologyResolver(this._topology);
 
   @override
-  MobileBackendTopology resolve(MobileDeploymentConfig config) {
+  MobileBackendTopology resolve(
+    MobileDeploymentConfig config, {
+    Uri? localEndpoint,
+  }) {
     return _topology;
   }
 }
@@ -264,6 +267,7 @@ void main() {
       final statuses = <MobileBackendStatus>[];
       final sub = lifecycle.statusStream.listen(statuses.add);
 
+      embedded.setStatus(EmbeddedRuntimeStatus.ready);
       probe.setResult(BackendConnectivityResult.unreachable);
 
       await lifecycle.reconcile(

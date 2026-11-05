@@ -38,6 +38,32 @@ func registerMeshWorldbookRouter(mesh *gin.RouterGroup, services *AppServices, c
 		}
 		c.JSON(http.StatusOK, gin.H{"code": 200, "data": result})
 	})
+	mesh.POST("/worldbook/import", func(c *gin.Context) {
+		actor := security.GetActor(c)
+		if actor == nil || actor.DeviceID == "" {
+			c.AbortWithStatus(http.StatusUnauthorized)
+			return
+		}
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 9<<20)
+		var input business.WorldbookImport
+		if c.ShouldBindJSON(&input) != nil || input.ExpectedScope == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "世界书批量导入参数无效或缺少原服务范围"})
+			return
+		}
+		if _, err := uuid.Parse(input.RequestID); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+			return
+		}
+		result, err := services.OwnedBusiness.ImportWorldbook(c.Request.Context(), business.Request{
+			SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID,
+			TargetDeviceID: input.TargetDeviceID, RoleID: input.RoleID, RequestID: input.RequestID,
+		}, input)
+		if err != nil {
+			writeWorldbookError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"code": 200, "data": result})
+	})
 	mesh.POST("/worldbook/match", func(c *gin.Context) {
 		actor := security.GetActor(c)
 		if actor == nil || actor.DeviceID == "" {

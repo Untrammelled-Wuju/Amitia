@@ -22,7 +22,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         </el-button>
         <el-button size="small" @click="openImportDialog">JSON导入</el-button>
         <el-button size="small" @click="exportRules">JSON导出</el-button>
-        <el-button size="small" type="primary" @click="showAddForm = true"
+        <el-button size="small" type="primary" :disabled="mutationLoading" @click="showAddForm = true"
           >新增规则</el-button
         >
         </div>
@@ -77,7 +77,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           <div class="match-content">{{ r.entry.injectContent }}</div>
           <div
             class="match-hit-text"
-            v-html="highlightMatch(r.hitText, r.entry.matchPattern)"
+            v-html="highlightWorldBookMatch(r.hitText, r.entry.matchPattern)"
           ></div>
         </div>
       </div>
@@ -143,7 +143,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       </el-form>
       <template #footer>
         <el-button @click="showAddForm = false">取消</el-button>
-        <el-button type="primary" @click="handleCreate">创建</el-button>
+        <el-button type="primary" :loading="mutationLoading" :disabled="mutationLoading" @click="handleCreate">创建</el-button>
       </template>
     </el-dialog>
 
@@ -303,7 +303,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           "
           >取消</el-button
         >
-        <el-button type="primary" @click="handleUpdate">保存</el-button>
+        <el-button type="primary" :loading="mutationLoading" :disabled="mutationLoading" @click="handleUpdate">保存</el-button>
       </template>
     </el-dialog>
 
@@ -324,8 +324,8 @@ SPDX-License-Identifier: AGPL-3.0-only
         <div class="rule-pattern">匹配: {{ rule.matchPattern }}</div>
         <div class="rule-content">注入: {{ rule.injectContent }}</div>
         <div class="rule-actions">
-          <el-button size="small" @click="startEdit(rule)">编辑</el-button>
-          <el-button size="small" type="danger" @click="handleDelete(rule.id)"
+          <el-button size="small" :disabled="mutationLoading" @click="startEdit(rule)">编辑</el-button>
+          <el-button size="small" type="danger" :disabled="mutationLoading" @click="handleDelete(rule.id)"
             >删除</el-button
           >
         </div>
@@ -359,6 +359,7 @@ import {
   parseWorldBookImport,
   type WorldBookImportRow,
 } from "./worldBookImport";
+import { highlightWorldBookMatch } from "./worldBookHighlight";
 
 const {
   access,
@@ -393,6 +394,11 @@ const testPanelOpen = ref(false);
 const testText = ref("");
 const testResults = ref<any[]>([]);
 const tested = ref(false);
+const mutationLoading = ref(false);
+watch(rules, () => {
+  testResults.value = [];
+  tested.value = false;
+}, { deep: true });
 const showAddForm = ref(false);
 watch(showAddForm, (open) => { if (open) editorContext.value = loadedContext.value; });
 const editVisible = ref(false);
@@ -450,14 +456,20 @@ async function runTest() {
 }
 
 async function handleCreate() {
-  await createRule(form, editorContext.value);
-  showAddForm.value = false;
-  form.matchType = "keyword";
-  form.scope = "role";
-  form.matchPattern = "";
-  form.matchScope = "full_context";
-  form.injectContent = "";
-  form.priority = 0;
+  if (mutationLoading.value) return;
+  mutationLoading.value = true;
+  try {
+    await createRule(form, editorContext.value);
+    showAddForm.value = false;
+    form.matchType = "keyword";
+    form.scope = "role";
+    form.matchPattern = "";
+    form.matchScope = "full_context";
+    form.injectContent = "";
+    form.priority = 0;
+  } finally {
+    mutationLoading.value = false;
+  }
 }
 
 function startEdit(rule: any) {
@@ -473,12 +485,19 @@ function startEdit(rule: any) {
 }
 
 async function handleUpdate() {
-  await updateRule(editingEntry.value.id, { ...editForm }, editorContext.value);
-  editVisible.value = false;
-  editingEntry.value = null;
+  if (mutationLoading.value) return;
+  mutationLoading.value = true;
+  try {
+    await updateRule(editingEntry.value.id, { ...editForm }, editorContext.value);
+    editVisible.value = false;
+    editingEntry.value = null;
+  } finally {
+    mutationLoading.value = false;
+  }
 }
 
 async function handleDelete(id: string) {
+  if (mutationLoading.value) return;
   const context = loadedContext.value;
   try {
     await ElMessageBox.confirm("确定删除这条规则？", "删除确认", {
@@ -486,22 +505,17 @@ async function handleDelete(id: string) {
       cancelButtonText: "取消",
       type: "warning",
     });
+    mutationLoading.value = true;
     await deleteRule(id, context);
   } catch (error) {
   console.error("[original-error]", error);
+} finally {
+    mutationLoading.value = false;
 }
 }
 
 function changePage(p: number) {
   fetchRules({ page: p, matchType: filterType.value || undefined });
-}
-
-function highlightMatch(text: string, pattern: string): string {
-  if (!text || !pattern) return text;
-  return text.replace(
-    new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"),
-    "<mark>$&</mark>",
-  );
 }
 
 function openImportDialog() {

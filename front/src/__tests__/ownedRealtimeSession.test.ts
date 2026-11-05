@@ -43,7 +43,7 @@ describe("Owned 单连接通话原权限及保存确认", () => {
   beforeEach(() => {
     vi.stubGlobal("crypto", webcrypto);
     vi.stubGlobal("WebSocket", Socket);
-    scope = { authorizationRealm: "mesh", spaceId: "b", initiatorDeviceId: "a", targetDeviceId: "a", coreId: "b", providerEpoch: 1, coordinated: false, modeRevision: 1, permissionRevision: 1, targetPermissionRevision: 1, targetProviderEpoch: 1, roleId: "role", roleRevision: 1, roleOwnerId: "a", resourceOwnerId: "a", requestId: "query", turnId: "q", executionId: "q" };
+    scope = { authorizationRealm: "mesh", conversationRoleId: "role", spaceId: "b", initiatorDeviceId: "a", targetDeviceId: "a", coreId: "b", providerEpoch: 1, coordinated: false, modeRevision: 1, permissionRevision: 1, targetPermissionRevision: 1, targetProviderEpoch: 1, roleId: "role", roleRevision: 1, roleOwnerId: "a", resourceOwnerId: "a", requestId: "query", turnId: "q", executionId: "q" };
     mocks.post.mockImplementation(async (_path, payload) => ({ data: { ticket: "once", wsPath: "/api/device-mesh/v1/business/realtime/session", executionScope: payload.expectedExecutionScope } }));
     mocks.ws.mockImplementation(async (path) => `ws://127.0.0.1:18899/internal/device-mesh/provider${path}`);
   });

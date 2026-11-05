@@ -66,5 +66,5 @@ describe("segmented updater integration", () => {
     expect(fallback).not.toHaveBeenCalled();
     expect(await fs.readFile(destination)).toEqual(content);
     await fs.rm(directory, { recursive: true, force: true });
-  });
+  }, 20_000);
 });

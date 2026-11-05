@@ -5,12 +5,14 @@ import (
 	"strings"
 
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
+	"github.com/u-ai/backend/internal/extension/platformcompat"
 )
 
 var semVerPattern = regexp.MustCompile(`^(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z-.]+)?(?:\+[0-9A-Za-z-.]+)?$`)
 
 var knownPlatforms = map[string]bool{
 	"darwin":  true,
+	"macos":   true,
 	"windows": true,
 	"linux":   true,
 	"android": true,
@@ -34,7 +36,7 @@ const maxProvidedCapabilities = 256
 const maxProviderLabels = 64
 
 func normalizePlatform(v string) string {
-	return strings.ToLower(strings.TrimSpace(v))
+	return platformcompat.Normalize(v)
 }
 
 func normalizeArchitecture(v string) string {

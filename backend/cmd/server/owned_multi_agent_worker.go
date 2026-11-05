@@ -240,7 +240,7 @@ func (r *ownedMultiAgentWorkerRunner) run(ctx context.Context, cancel context.Ca
 	roleLabel := firstNonEmptyText(req.WorkerRole, "coding_worker")
 	message = "当前 Worker 角色：" + roleLabel + "。只使用本次任务所需上下文，不读取无关角色私有记忆。\n\n" + message
 	if r.agentRuns != nil {
-		message += "\n\n子智能体会话：" + agentrun.ChildRunID(req.AssignmentID) + "。开始执行和完成阶段应调用 harness_agent_message_read 读取父对话新消息，使用 harness_agent_message_send 向父对话发送问题、进度或最终结果。"
+		message += "\n\n子智能体会话：" + agentrun.ChildRunID(req.AssignmentID) + "。开始执行和完成阶段应调用 harness_agent_message_read 领取父对话新消息，处理完成后使用 harness_agent_message_acknowledge 和返回的租约令牌确认消息，使用 harness_agent_message_send 向父对话发送问题、进度或最终结果。未确认消息会在租约到期后重新投递。"
 	}
 	response, runErr := r.engine.RunWorker(ctx, owned, business.Request{SpaceID: owned.SpaceID, DeviceID: owned.InitiatorDeviceID, TargetDeviceID: owned.TargetDeviceID, CoreID: owned.CoreID, RoleID: owned.RoleID, ConversationID: conversationID, RequestID: "ma-" + req.AssignmentID, Message: message, PermissionMode: req.PermissionMode, WorkerRole: roleLabel}, workspaces, req.WorkspaceID)
 	r.settleWorker(ctx, childID, req, response, runErr)

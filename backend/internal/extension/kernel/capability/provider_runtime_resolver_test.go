@@ -103,3 +103,20 @@ func TestProviderRuntimeExecutionResolverExecutesInProcessDeviceRuntimeWithoutRe
 		t.Fatalf("in-process device runtime was routed as remote: %+v", route)
 	}
 }
+
+func TestProviderRuntimeExecutionResolverExecutesDirectJavaScriptToolWithoutProviderTarget(t *testing.T) {
+	resolver := NewProviderRuntimeExecutionResolver(nil)
+	route, err := resolver.ResolveRuntimeExecution(context.Background(), ToolDefinition{
+		ID:           "com.example/plugin/command",
+		CapabilityID: "com.example/plugin/command",
+		Runtime:      RuntimeBinding{RuntimeType: RuntimeTypeJavaScript, HandlerName: "command"},
+	}, ToolInvocationContext{
+		SpaceID: "realm",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if route.RemoteDevice || route.Binding.RuntimeType != RuntimeTypeJavaScript || route.Binding.HandlerName != "command" || route.SpaceID != "realm" {
+		t.Fatalf("direct JavaScript route mismatch: %+v", route)
+	}
+}

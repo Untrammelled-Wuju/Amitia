@@ -4,9 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/glebarez/sqlite"
 	"github.com/u-ai/backend/internal/conversationstream"
-	"gorm.io/gorm"
 )
 
 func TestResolveMetadataUsesOwnedRuntimePayload(t *testing.T) {

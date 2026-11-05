@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/character/card"
@@ -161,6 +162,10 @@ func (s *service) Create(req *CreateCharacterRequest) (*Character, error) {
 func (s *service) CreateForSpace(req *CreateCharacterRequest, spaceID string) (*Character, error) {
 	unlock := LockRoleSource(s.db)
 	defer unlock()
+	name, err := normalizeCharacterName(req.Name, true)
+	if err != nil {
+		return nil, err
+	}
 	reasoningEnabled := -1
 	if req.ReasoningEnabled != nil {
 		reasoningEnabled = *req.ReasoningEnabled
@@ -169,7 +174,7 @@ func (s *service) CreateForSpace(req *CreateCharacterRequest, spaceID string) (*
 		return nil, err
 	}
 	c := &Character{
-		ID: uuid.New().String(), SpaceID: normalizeCharacterOwner(spaceID), Name: req.Name, Identity: req.Identity,
+		ID: uuid.New().String(), SpaceID: normalizeCharacterOwner(spaceID), Name: name, Identity: req.Identity,
 		Personality: req.Personality, SpeakingStyle: req.SpeakingStyle,
 		Avatar:            req.Avatar,
 		RelationshipStyle: req.RelationshipStyle, CharacterBase: req.CharacterBase,
@@ -187,9 +192,6 @@ func (s *service) CreateForSpace(req *CreateCharacterRequest, spaceID string) (*
 		VoiceType:         req.VoiceType, VoiceSpeed: req.VoiceSpeed, VoicePitch: req.VoicePitch,
 		VoiceVolume: req.VoiceVolume, CustomVoiceID: req.CustomVoiceID, VoiceMode: req.VoiceMode,
 		Emotion: req.Emotion, EmotionScale: req.EmotionScale, SilenceDuration: req.SilenceDuration,
-	}
-	if c.Name == "" {
-		c.Name = "新角色"
 	}
 	if c.Gender == "" {
 		c.Gender = "UNSPECIFIED"
@@ -241,7 +243,7 @@ func (s *service) CreateForSpace(req *CreateCharacterRequest, spaceID string) (*
 	}
 
 	var createErr error
-	err := s.db.Transaction(func(tx *gorm.DB) error {
+	err = s.db.Transaction(func(tx *gorm.DB) error {
 		if c.IsDefault == 1 {
 			var previousDefaults []Character
 			if err := s.characterOwnerQuery(tx.Where("is_default = 1 AND deleted_at IS NULL"), spaceID).Find(&previousDefaults).Error; err != nil {
@@ -322,7 +324,11 @@ func (s *service) UpdateForSpace(id string, req *UpdateCharacterRequest, spaceID
 		updates["reasoning_enabled"] = *req.ReasoningEnabled
 	}
 	if req.Name != nil {
-		updates["name"] = *req.Name
+		name, err := normalizeCharacterName(*req.Name, false)
+		if err != nil {
+			return nil, err
+		}
+		updates["name"] = name
 	}
 	if req.Identity != nil {
 		updates["identity"] = *req.Identity
@@ -493,6 +499,20 @@ func (s *service) UpdateForSpace(id string, req *UpdateCharacterRequest, spaceID
 	return &result, nil
 }
 
+func normalizeCharacterName(value string, allowDefault bool) (string, error) {
+	name := strings.TrimSpace(value)
+	if name == "" {
+		if allowDefault {
+			return "新角色", nil
+		}
+		return "", errors.New("角色名称不能为空")
+	}
+	if !utf8.ValidString(name) || utf8.RuneCountInString(name) > 128 || strings.ContainsAny(name, "\x00\r\n") {
+		return "", errors.New("角色名称不能超过 128 个字符或包含非法字符")
+	}
+	return name, nil
+}
+
 func (s *service) validateCharacterModelSettings(modelConfigID int, reasoningEffort string, reasoningEnabled int) error {
 	if modelConfigID < 0 {
 		return errors.New("角色模型配置编号无效")
@@ -543,6 +563,35 @@ func (s *service) DeleteForSpace(id string, spaceID string) error {
 		current.DeletedAt = new(string)
 		if err := s.archiveRoleAgent(tx, &current); err != nil {
 			return err
+		}
+		if current.IsDefault == 1 {
+			var replacement Character
+			replacementErr := s.characterOwnerQuery(tx.Where("id <> ? AND deleted_at IS NULL", id), spaceID).Order("sort_order ASC, created_at ASC, id ASC").First(&replacement).Error
+			if replacementErr != nil && !errors.Is(replacementErr, gorm.ErrRecordNotFound) {
+				return fmt.Errorf("选择默认角色失败: %w", replacementErr)
+			}
+			if errors.Is(replacementErr, gorm.ErrRecordNotFound) {
+				replacement.ID = ""
+			}
+			if replacement.ID != "" {
+				replacementRevision := replacement.Revision + 1
+				update := tx.Model(&Character{}).Where("id = ? AND revision = ? AND deleted_at IS NULL", replacement.ID, replacement.Revision).Updates(map[string]interface{}{
+					"is_default": 1,
+					"revision":   replacementRevision,
+					"updated_at": time.Now().Format("2006-01-02 15:04:05"),
+				})
+				if update.Error != nil {
+					return update.Error
+				}
+				if update.RowsAffected == 0 {
+					return fmt.Errorf("默认角色版本冲突")
+				}
+				replacement.IsDefault = 1
+				replacement.Revision = replacementRevision
+				if err := s.recordCharacterChangeTx(tx, &replacement, sync.OpUpdate, spaceID); err != nil {
+					return err
+				}
+			}
 		}
 		if s.changeRecorder != nil {
 			payload, marshalErr := json.Marshal(map[string]string{"id": id})

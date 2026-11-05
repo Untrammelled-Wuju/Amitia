@@ -53,12 +53,12 @@ func TestRound39CancelledChildRemainsIndeterminateUntilDurableTerminalProof(t *t
 func TestRound39RecoveredStaleCoordinatorCannotOverwriteFreshSnapshot(t *testing.T) {
 	ctx := context.Background()
 	tracker := NewInMemoryTracker()
-	parent := &InteractionRecord{ID: "round39-parent", Status: InteractionStatusProcessing}
+	parent := &InteractionRecord{ID: "round39-parent", Status: InteractionStatusProcessing, Scope: InteractionScope{SpaceID: "space-39", CharacterID: "parent-char", ConversationID: "parent-conversation"}}
 	if err := tracker.Create(ctx, parent); err != nil {
 		t.Fatal(err)
 	}
 	goals := decision.NewGoalRegistry()
-	if err := goals.Register(decision.Goal{ID: "round39-goal", Revision: 1, Status: decision.GoalStatusActive}); err != nil {
+	if err := goals.Register(decision.Goal{ID: "round39-goal", Revision: 1, Status: decision.GoalStatusActive, SpaceID: "space-39", CharacterID: "parent-char", ConversationID: "parent-conversation"}); err != nil {
 		t.Fatal(err)
 	}
 	first := NewMultiAgentCoordinator(tracker, goals, nil, &fakeWorkerRunner{}, nil, DefaultMultiAgentPolicy())

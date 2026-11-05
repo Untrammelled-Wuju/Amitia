@@ -6,7 +6,11 @@ vi.mock("electron", () => ({
     getVersion: vi.fn(() => "26.2.0-beta.2"),
     setLoginItemSettings: vi.fn(),
   },
-  BrowserWindow: class {},
+  BrowserWindow: class {
+    static getAllWindows() {
+      return [];
+    }
+  },
   ipcMain: {
     on: vi.fn(),
     off: vi.fn(),
@@ -795,6 +799,7 @@ describe("DesktopPetManager installation switching", () => {
       state: string;
       activeInstallationId: string | null;
       ensureInitialized: () => Promise<void>;
+      ensureInitializedWithinMutation: () => Promise<void>;
       disableInternal: (notifyBackend: boolean) => Promise<void>;
       enableInstallationInternal: (
         installationId: string,
@@ -805,6 +810,7 @@ describe("DesktopPetManager installation switching", () => {
     internal.state = "enabled";
     internal.activeInstallationId = "pet-old";
     internal.ensureInitialized = vi.fn(async () => undefined);
+    internal.ensureInitializedWithinMutation = vi.fn(async () => undefined);
     internal.disableInternal = disableInternal;
     internal.enableInstallationInternal = enableInstallationInternal;
 

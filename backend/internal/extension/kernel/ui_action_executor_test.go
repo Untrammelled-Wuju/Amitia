@@ -91,6 +91,25 @@ func TestUIActionExecutorResolvesToolOwningModuleWithinExtension(t *testing.T) {
 	}
 }
 
+func TestUIActionExecutorEnsuresToolOwningModuleScope(t *testing.T) {
+	ctx := context.Background()
+	store := scope.NewMemoryScopeStore()
+	manager := scope.NewScopeManager(store, scope.NewScopeEvaluator(store, nil))
+	executor := &UIActionExecutor{scopeManager: manager}
+	if err := executor.ensureToolModuleScope(ctx, "com.amitia/plugin-market", "plugin-market-runtime"); err != nil {
+		t.Fatal(err)
+	}
+	decision := manager.Evaluate(ctx, scope.ScopeEvaluationRequest{
+		SubjectType: scope.SubjectModule,
+		SubjectID:   "plugin-market-runtime",
+		ExtensionID: "com.amitia/plugin-market",
+		ModuleID:    "plugin-market-runtime",
+	})
+	if !decision.Allowed {
+		t.Fatalf("expected tool module scope to be allowed, got %+v", decision.Reasons)
+	}
+}
+
 func TestUIActionSnapshotDeriverSwitchesModuleWithinExtension(t *testing.T) {
 	ctx := context.Background()
 	scopeStore := scope.NewMemoryScopeStore()

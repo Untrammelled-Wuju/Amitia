@@ -28,6 +28,10 @@ internal sealed interface InstalledRuntimeVerificationResult {
 
 internal interface InstalledRuntimeVerifier {
     fun verify(runtimeRootDir: File): InstalledRuntimeVerificationResult
+    fun verifyForStart(
+        runtimeRootDir: File,
+        runtimeRootTreeSha256: String,
+    ): InstalledRuntimeVerificationResult = verify(runtimeRootDir)
     fun computeTreeSha256(rootDir: File): String
 }
 
@@ -65,6 +69,27 @@ internal class DefaultInstalledRuntimeVerifier(
     )
 
     override fun verify(runtimeRootDir: File): InstalledRuntimeVerificationResult {
+        verifyStructure(runtimeRootDir)?.let { return it }
+        val treeSha = computeTreeSha256(runtimeRootDir)
+        return success(runtimeRootDir, treeSha)
+    }
+
+    override fun verifyForStart(
+        runtimeRootDir: File,
+        runtimeRootTreeSha256: String,
+    ): InstalledRuntimeVerificationResult {
+        verifyStructure(runtimeRootDir)?.let { return it }
+        val treeSha = runtimeRootTreeSha256.trim().lowercase()
+        if (treeSha.length != 64 || treeSha.any { it !in "0123456789abcdef" }) {
+            return InstalledRuntimeVerificationResult.Failure(
+                RuntimeInstallErrorCode.RUNTIME_VERIFY_FAILED,
+                "install receipt contains an invalid runtime tree hash"
+            )
+        }
+        return success(runtimeRootDir, treeSha)
+    }
+
+    private fun verifyStructure(runtimeRootDir: File): InstalledRuntimeVerificationResult.Failure? {
         if (!runtimeRootDir.exists() || !runtimeRootDir.isDirectory) {
             return InstalledRuntimeVerificationResult.Failure(
                 RuntimeInstallErrorCode.RUNTIME_VERIFY_FAILED,
@@ -115,9 +140,13 @@ internal class DefaultInstalledRuntimeVerifier(
                 "runtime root contains mutable directories: $mutableDirs"
             )
         }
+        return null
+    }
 
-        val treeSha = computeTreeSha256(runtimeRootDir)
-
+    private fun success(
+        runtimeRootDir: File,
+        runtimeRootTreeSha256: String,
+    ): InstalledRuntimeVerificationResult.Success {
         return InstalledRuntimeVerificationResult.Success(
             InstalledRuntimeVerification(
                 valid = true,
@@ -132,7 +161,7 @@ internal class DefaultInstalledRuntimeVerifier(
                 guestLayoutPresent = true,
                 mountContractPresent = true,
                 hasInvalidMutableDirs = false,
-                runtimeRootTreeSha256 = treeSha,
+                runtimeRootTreeSha256 = runtimeRootTreeSha256,
             )
         )
     }

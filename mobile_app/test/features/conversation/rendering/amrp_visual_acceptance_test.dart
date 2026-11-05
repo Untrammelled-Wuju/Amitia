@@ -13,21 +13,31 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   setUpAll(() async {
-    final fontData = File('C:/Windows/Fonts/simhei.ttf').readAsBytesSync();
-    final loader = FontLoader('AmitiaTest')
-      ..addFont(Future.value(ByteData.sublistView(fontData)));
-    await loader.load();
-    final monoData = File('C:/Windows/Fonts/consola.ttf').readAsBytesSync();
-    final monoLoader = FontLoader('monospace')
-      ..addFont(Future.value(ByteData.sublistView(monoData)));
-    await monoLoader.load();
-    final iconData = File(
-      'C:/Code/flutter/SDK/flutter_windows_3.38.7-stable/flutter/bin/cache/'
-      'artifacts/material_fonts/materialicons-regular.otf',
-    ).readAsBytesSync();
-    final iconLoader = FontLoader('MaterialIcons')
-      ..addFont(Future.value(ByteData.sublistView(iconData)));
-    await iconLoader.load();
+    final flutterRoot = Platform.environment['FLUTTER_ROOT'];
+    final materialDir = flutterRoot == null
+        ? ''
+        : '$flutterRoot/bin/cache/artifacts/material_fonts/';
+    final cjkFont = _existingFont([
+      if (Platform.isWindows)
+        '${Platform.environment['WINDIR'] ?? 'C:/Windows'}/Fonts/simhei.ttf',
+      if (Platform.isMacOS) '/System/Library/Fonts/STHeiti Light.ttc',
+      if (Platform.isLinux)
+        '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
+    ]);
+    final monoFont = _existingFont([
+      if (Platform.isWindows)
+        '${Platform.environment['WINDIR'] ?? 'C:/Windows'}/Fonts/consola.ttf',
+      if (Platform.isMacOS) '/System/Library/Fonts/SFNSMono.ttf',
+      if (Platform.isLinux)
+        '/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf',
+    ]);
+    final materialIcons = _existingFont([
+      '${materialDir}MaterialIcons-Regular.otf',
+      '${materialDir}materialicons-regular.otf',
+    ]);
+    await _loadFont('AmitiaTest', cjkFont);
+    await _loadFont('monospace', monoFont);
+    await _loadFont('MaterialIcons', materialIcons);
   });
 
   final viewports = <(int, int)>[
@@ -168,6 +178,21 @@ void main() {
       );
     }
   }
+}
+
+File? _existingFont(List<String> paths) {
+  for (final path in paths) {
+    final file = File(path);
+    if (file.existsSync()) return file;
+  }
+  return null;
+}
+
+Future<void> _loadFont(String family, File? file) async {
+  if (file == null) return;
+  final loader = FontLoader(family)
+    ..addFont(Future.value(ByteData.sublistView(file.readAsBytesSync())));
+  await loader.load();
 }
 
 ChatMessage _message() {

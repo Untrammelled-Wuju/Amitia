@@ -2,7 +2,7 @@ package com.amitia.amitia_app.runtime.startup
 
 import com.amitia.amitia_app.runtime.connection.BackendEndpointPolicy
 import com.amitia.amitia_app.runtime.connection.embeddedAndroidBackendPolicy
-import com.amitia.amitia_app.runtime.internal.SystemRuntimeClock
+import com.amitia.amitia_app.runtime.internal.RuntimeMonotonicClock
 import com.amitia.amitia_app.runtime.proot.ProotSession
 import com.amitia.amitia_app.runtime.proot.ProotTerminationResult
 import org.junit.Assert.assertEquals
@@ -11,6 +11,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 import java.nio.file.Files
+import java.util.ArrayDeque
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -437,7 +438,7 @@ class RuntimeStartupDetectorTest {
             webSocketScheme = "ws"
         )
         val probe = createFakeReadinessProbe(emptyList())
-        val detector = DefaultRuntimeStartupDetector(healthProbe = probe, clock = SystemRuntimeClock)
+        val detector = DefaultRuntimeStartupDetector(healthProbe = probe)
         val request = RuntimeStartupRequest(
             generation = 1L,
             session = session,
@@ -595,6 +596,40 @@ class RuntimeStartupDetectorTest {
             "Expected InvalidResponse but was ${failed.error}",
             failed.error is RuntimeStartupError.InvalidResponse
         )
+    }
+
+    @Test
+    fun monotonicClockJumpPastSleepTarget_doesNotThrowNegativeSleepAndReturnsReady() {
+        val session = createAlwaysAliveSession()
+        val probe = createFakeReadinessProbe(
+            listOf(
+                RuntimeHealthProbeResult.Failure(RuntimeHealthProbeError.ConnectionRefused),
+                RuntimeHealthProbeResult.Success(200, validReadyResponse())
+            )
+        )
+        val scriptedNanos = ArrayDeque(
+            listOf(0L, 0L, 0L, 22_000_000L, 22_000_000L)
+        )
+        val clock = RuntimeMonotonicClock {
+            scriptedNanos.pollFirst() ?: 22_000_000L
+        }
+        val detector = DefaultRuntimeStartupDetector(
+            healthProbe = probe,
+            monotonicClock = clock,
+            totalStartupTimeoutMs = 100L,
+            initialProbeIntervalMs = 10L,
+            maxProbeIntervalMs = 50L
+        )
+        val request = RuntimeStartupRequest(
+            generation = 1L,
+            session = session,
+            endpoint = validEndpoint,
+            startAttemptId = "attempt-monotonic-jump"
+        )
+        val result = detector.awaitStartup(request)
+        assertTrue("Expected Ready but was $result", result is RuntimeStartupResult.Ready)
+        val ready = result as RuntimeStartupResult.Ready
+        assertEquals(22L, ready.elapsedMs)
     }
 
     @Test

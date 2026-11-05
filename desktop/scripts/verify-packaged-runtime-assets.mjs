@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { computeFreezeSourceGateHash } from "../../scripts/lib/freeze-scope.mjs";
@@ -51,6 +51,20 @@ async function main() {
     if (sha256File(packagedPath) !== entry.sha256) {
       throw new Error(`packaged runtime asset SHA mismatch: ${entry.path}`);
     }
+  }
+
+  const pluginDir = resolve(unpackedDir, "resources", "bundled-plugins", "plugin-market");
+  const pluginPackages = existsSync(pluginDir)
+    ? readdirSync(pluginDir).filter((name) => name.endsWith(".amitiax"))
+    : [];
+  if (pluginPackages.length !== 1) {
+    throw new Error(`packaged plugin market package count must be 1, got ${pluginPackages.length}`);
+  }
+  const packagedPlugin = resolve(pluginDir, pluginPackages[0]);
+  const sourcePlugin = resolve(repositoryRoot, "plugin", "plugin-market", pluginPackages[0]);
+  if (!existsSync(sourcePlugin)) throw new Error(`source plugin market package missing: ${pluginPackages[0]}`);
+  if (sha256File(packagedPlugin) !== sha256File(sourcePlugin)) {
+    throw new Error("packaged plugin market package SHA mismatch");
   }
 
   console.log(`[packaged-runtime] PASS: ${manifest.entries.length} packaged runtime assets match staged hashes`);

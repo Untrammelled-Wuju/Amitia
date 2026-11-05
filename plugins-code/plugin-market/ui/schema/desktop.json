@@ -1,0 +1,657 @@
+{
+  "schemaVersion": "schema-ui/1",
+  "type": "document",
+  "title": "插件市场",
+  "lifecycle": {
+    "onMount": [
+      {
+        "action_id": "command",
+        "target": "tool",
+        "input": {
+          "action": "catalog",
+          "platform": "$context.platform"
+        },
+        "statePath": "market"
+      }
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "command",
+      "target": "tool"
+    },
+    {
+      "actionId": "open-details",
+      "target": "local"
+    },
+    {
+      "actionId": "reset-confirmation",
+      "target": "local"
+    },
+    {
+      "actionId": "open-review",
+      "target": "local"
+    },
+    {
+      "actionId": "close-details",
+      "target": "local"
+    },
+    {
+      "actionId": "close-review",
+      "target": "local"
+    },
+    {
+      "actionId": "close-review-after-install",
+      "target": "local"
+    }
+  ],
+  "children": [
+    {
+      "id": "plugin-market-page",
+      "type": "page",
+      "children": [
+        {
+          "id": "plugin-market-toolbar",
+          "type": "stack",
+          "props": {
+            "sticky": true,
+            "gap": "10px"
+          },
+          "children": [
+            {
+              "id": "plugin-market-search",
+              "type": "grid",
+              "props": {
+                "columnsTemplate": "minmax(0, 1fr) auto",
+                "gap": "10px"
+              },
+              "children": [
+                {
+                  "id": "plugin-market-query",
+                  "type": "field",
+                  "props": {
+                    "label": "搜索",
+                    "placeholder": "名称、扩展 ID、发布者或能力"
+                  },
+                  "bindings": [
+                    {
+                      "path": "pluginQuery",
+                      "source": "form",
+                      "default": ""
+                    }
+                  ]
+                },
+                {
+                  "id": "plugin-market-refresh",
+                  "type": "button",
+                  "props": {
+                    "text": "搜索",
+                    "type": "primary"
+                  },
+                  "actions": [
+                    {
+                      "action_id": "command",
+                      "target": "tool",
+                      "input": {
+                        "action": "catalog",
+                        "q": "$form.pluginQuery",
+                        "platform": "$context.platform"
+                      },
+                      "statePath": "market"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "plugin-market-category-bar",
+              "type": "grid",
+              "props": {
+                "columnsTemplate": "auto minmax(0, 1fr)",
+                "gap": "8px"
+              },
+              "children": [
+                {
+                  "id": "plugin-market-all-categories",
+                  "type": "button",
+                  "props": {
+                    "text": "全部分类",
+                    "type": "default"
+                  },
+                  "actions": [
+                    {
+                      "action_id": "command",
+                      "target": "tool",
+                      "input": {
+                        "action": "catalog",
+                        "q": "$form.pluginQuery",
+                        "platform": "$context.platform"
+                      },
+                      "statePath": "market"
+                    }
+                  ]
+                },
+                {
+                  "id": "plugin-market-categories",
+                  "type": "gallery",
+                  "props": {
+                    "variant": "groups",
+                    "titleField": "name",
+                    "minItemWidth": 72,
+                    "emptyText": "管理端尚未配置插件分类",
+                    "showSubtitle": false,
+                    "showCount": false
+                  },
+                  "bindings": [
+                    {
+                      "path": "items",
+                      "source": "state",
+                      "sourcePath": "market.categories"
+                    }
+                  ],
+                  "actions": [
+                    {
+                      "action_id": "command",
+                      "target": "tool",
+                      "input": {
+                        "action": "catalog",
+                        "q": "$form.pluginQuery",
+                        "category": "$item.slug",
+                        "platform": "$context.platform"
+                      },
+                      "statePath": "market"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "plugin-market-list",
+          "type": "gallery",
+          "props": {
+            "variant": "cards",
+            "titleField": "displayName",
+            "subtitleField": "summary",
+            "summaryField": "summary",
+            "statusField": "actionLabel",
+            "statusVisibleWhen": [
+              {
+                "field": "platformSupported",
+                "operator": "==",
+                "value": false
+              }
+            ],
+            "platformField": "platformSummary",
+            "publisherField": "publisher",
+            "minItemWidth": 290,
+            "emptyText": "没有匹配的插件",
+            "showSubtitle": true,
+            "showCount": false,
+            "disabledField": "actionDisabled",
+            "itemActions": [
+              {
+                "id": "install",
+                "action_id": "command",
+                "label": "$item.actionLabel",
+                "type": "primary",
+                "plain": true,
+                "target": "tool",
+                "visibleWhen": [
+                  {
+                    "field": "installable",
+                    "operator": "==",
+                    "value": true
+                  }
+                ],
+                "disabledWhen": [
+                  {
+                    "field": "actionDisabled",
+                    "operator": "==",
+                    "value": true
+                  }
+                ],
+                "input": {
+                  "action": "prepare",
+                  "extensionId": "$item.extensionId",
+                  "version": "$item.latestVersion",
+                  "packageUri": "$item.packageUri",
+                  "sha256": "$item.sha256",
+                  "fileName": "$item.fileName",
+                  "publisher": "$item.publisher",
+                  "trustLevel": "$item.trustLevel",
+                  "entryId": "$item.extensionId",
+                  "source": {
+                    "catalogId": "plugin-market",
+                    "sourceType": "market",
+                    "publisher": "$item.publisher",
+                    "trustLevel": "$item.trustLevel",
+                    "entryId": "$item.extensionId"
+                  }
+                },
+                "statePath": "review",
+                "followUpActions": [
+                  {
+                    "action_id": "reset-confirmation",
+                    "target": "local",
+                    "formPath": "installConfirmed",
+                    "value": false
+                  },
+                  {
+                    "action_id": "open-review",
+                    "target": "local",
+                    "statePath": "review.open",
+                    "value": true
+                  }
+                ]
+              },
+              {
+                "id": "uninstall",
+                "action_id": "command",
+                "label": "卸载",
+                "type": "danger",
+                "plain": true,
+                "confirmation": "确定要卸载该插件吗？卸载后相关运行状态和本地配置将被清理。",
+                "loadingText": "卸载中",
+                "successMessage": "卸载完成",
+                "target": "tool",
+                "visibleWhen": [
+                  {
+                    "field": "installed",
+                    "operator": "==",
+                    "value": true
+                  }
+                ],
+                "input": {
+                  "action": "uninstall",
+                  "extensionId": "$item.extensionId",
+                  "confirmed": true
+                },
+                "followUpActions": [
+                  {
+                    "action_id": "command",
+                    "target": "tool",
+                    "input": {
+                      "action": "catalog",
+                      "platform": "$context.platform"
+                    },
+                    "statePath": "market"
+                  }
+                ]
+              },
+              {
+                "id": "details",
+                "action_id": "open-details",
+                "label": "详情",
+                "type": "default",
+                "target": "local",
+                "statePath": "detail",
+                "input": {
+                  "open": true,
+                  "extensionId": "$item.extensionId",
+                  "displayName": "$item.displayName",
+                  "summary": "$item.summary",
+                  "description": "$item.description",
+                  "latestVersion": "$item.latestVersion",
+                  "installedVersion": "$item.installedVersion",
+                  "categoryName": "$item.categoryName",
+                  "publisher": "$item.publisher",
+                  "trustLevel": "$item.trustLevel",
+                  "signatures": "$item.signatures",
+                  "platformSummary": "$item.platformSummary",
+                  "platformItems": "$item.platformItems",
+                  "releaseNotes": "$item.releaseNotes",
+                  "detailItems": "$item.detailItems"
+                }
+              }
+            ]
+          },
+          "bindings": [
+            {
+              "path": "items",
+              "source": "state",
+              "sourcePath": "market.listings"
+            }
+          ]
+        },
+        {
+          "id": "plugin-market-detail-dialog",
+          "type": "section",
+          "props": {
+            "presentation": "dialog",
+            "title": "插件详情",
+            "width": 640
+          },
+          "bindings": [
+            {
+              "path": "detail.open",
+              "source": "state",
+              "default": false
+            }
+          ],
+          "visibleWhen": [
+            {
+              "field": "detail.extensionId",
+              "operator": "!=",
+              "value": ""
+            }
+          ],
+          "children": [
+            {
+              "id": "plugin-market-detail-heading",
+              "type": "text",
+              "props": {
+                "variant": "title"
+              },
+              "bindings": [
+                {
+                  "path": "text",
+                  "source": "state",
+                  "sourcePath": "detail.displayName"
+                }
+              ]
+            },
+            {
+              "id": "plugin-market-detail-summary",
+              "type": "text",
+              "bindings": [
+                {
+                  "path": "text",
+                  "source": "state",
+                  "sourcePath": "detail.summary"
+                }
+              ]
+            },
+            {
+              "id": "plugin-market-detail-items",
+              "type": "key_value",
+              "props": {
+                "title": "基本信息",
+                "columns": 2
+              },
+              "bindings": [
+                {
+                  "path": "items",
+                  "source": "state",
+                  "sourcePath": "detail.detailItems"
+                }
+              ]
+            },
+            {
+              "id": "plugin-market-detail-platforms",
+              "type": "key_value",
+              "props": {
+                "title": "平台支持",
+                "columns": 1
+              },
+              "bindings": [
+                {
+                  "path": "items",
+                  "source": "state",
+                  "sourcePath": "detail.platformItems"
+                }
+              ]
+            },
+            {
+              "id": "plugin-market-detail-description-heading",
+              "type": "text",
+              "props": {
+                "text": "插件说明",
+                "variant": "title"
+              }
+            },
+            {
+              "id": "plugin-market-detail-description-text",
+              "type": "markdown",
+              "props": {
+                "content": ""
+              },
+              "bindings": [
+                {
+                  "path": "content",
+                  "source": "state",
+                  "sourcePath": "detail.description"
+                }
+              ]
+            },
+            {
+              "id": "plugin-market-detail-release-notes-heading",
+              "type": "text",
+              "props": {
+                "text": "更新说明",
+                "variant": "title"
+              }
+            },
+            {
+              "id": "plugin-market-detail-release-notes-text",
+              "type": "markdown",
+              "props": {
+                "content": ""
+              },
+              "bindings": [
+                {
+                  "path": "content",
+                  "source": "state",
+                  "sourcePath": "detail.releaseNotes"
+                }
+              ]
+            },
+            {
+              "id": "plugin-market-detail-close",
+              "type": "button",
+              "props": {
+                "text": "关闭",
+                "type": "default"
+              },
+              "actions": [
+                {
+                  "action_id": "close-details",
+                  "target": "local",
+                  "statePath": "detail.open",
+                  "value": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "plugin-market-review",
+          "type": "section",
+          "props": {
+            "presentation": "dialog",
+            "title": "安装审查",
+            "width": 700
+          },
+          "bindings": [
+            {
+              "path": "review.open",
+              "source": "state",
+              "default": false
+            }
+          ],
+          "visibleWhen": [
+            {
+              "field": "review.sessionId",
+              "operator": "!=",
+              "value": ""
+            }
+          ],
+          "children": [
+            {
+              "id": "plugin-market-review-summary",
+              "type": "key_value",
+              "props": {
+                "title": "插件信息",
+                "columns": 2
+              },
+              "bindings": [
+                {
+                  "path": "items",
+                  "source": "state",
+                  "sourcePath": "review.summary"
+                }
+              ]
+            },
+            {
+              "id": "plugin-market-review-risk",
+              "type": "alert",
+              "props": {
+                "type": "warning",
+                "title": "风险与确认项",
+                "description": "请完整阅读后再确认安装。"
+              },
+              "bindings": [
+                {
+                  "path": "props.description",
+                  "source": "state",
+                  "sourcePath": "review.confirmationsText"
+                }
+              ]
+            },
+            {
+              "id": "plugin-market-review-issues",
+              "type": "alert",
+              "props": {
+                "type": "error",
+                "title": "安装问题"
+              },
+              "bindings": [
+                {
+                  "path": "props.description",
+                  "source": "state",
+                  "sourcePath": "review.issuesText"
+                }
+              ],
+              "visibleWhen": [
+                {
+                  "field": "review.issuesText",
+                  "operator": "!=",
+                  "value": ""
+                }
+              ]
+            },
+            {
+              "id": "plugin-market-permissions",
+              "type": "permission_summary",
+              "props": {
+                "title": "插件所需权限"
+              },
+              "bindings": [
+                {
+                  "path": "permissions",
+                  "source": "state",
+                  "sourcePath": "review.permissions"
+                }
+              ]
+            },
+            {
+              "id": "plugin-market-confirm",
+              "type": "switch",
+              "props": {
+                "activeText": "我已阅读并接受上述权限、风险和确认项"
+              },
+              "bindings": [
+                {
+                  "path": "installConfirmed",
+                  "source": "form",
+                  "default": false
+                }
+              ]
+            },
+            {
+              "id": "plugin-market-review-actions",
+              "type": "row",
+              "props": {
+                "justify": "flex-end",
+                "gap": "8px"
+              },
+              "children": [
+                {
+                  "id": "plugin-market-review-cancel",
+                  "type": "button",
+                  "props": {
+                    "text": "取消",
+                    "type": "default"
+                  },
+                  "actions": [
+                    {
+                      "action_id": "close-review",
+                      "target": "local",
+                      "statePath": "review.open",
+                      "value": false
+                    }
+                  ]
+                },
+                {
+                  "id": "plugin-market-install",
+                  "type": "button",
+                  "props": {
+                    "text": "确认安装",
+                    "type": "danger"
+                  },
+                  "bindings": [
+                    {
+                      "path": "text",
+                      "source": "state",
+                      "sourcePath": "review.operationLabel"
+                    }
+                  ],
+                  "disabledWhen": [
+                    {
+                      "field": "formState.installConfirmed",
+                      "operator": "==",
+                      "value": false
+                    }
+                  ],
+                  "actions": [
+                    {
+                      "action_id": "command",
+                      "target": "tool",
+                      "input": {
+                        "action": "install",
+                        "extensionId": "$state.review.extensionId",
+                        "version": "$state.review.version",
+                        "sessionId": "$state.review.sessionId",
+                        "requiredConfirmations": "$state.review.requiredConfirmations",
+                        "confirmed": "$form.installConfirmed"
+                      },
+                      "statePath": "installResult",
+                      "followUpActions": [
+                        {
+                          "action_id": "close-review-after-install",
+                          "target": "local",
+                          "statePath": "review.open",
+                          "value": false
+                        },
+                        {
+                          "action_id": "command",
+                          "target": "tool",
+                          "input": {
+                            "action": "catalog",
+                            "platform": "$context.platform"
+                          },
+                          "statePath": "market"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "theme": {
+    "mode": "auto"
+  },
+  "performanceBudget": {
+    "maxRenderTimeMs": 160,
+    "maxLayoutCount": 120,
+    "maxNodeCount": 140,
+    "maxDataFetchCount": 0,
+    "maxActionCount": 32
+  }
+}

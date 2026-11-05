@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -100,7 +101,7 @@ func (h *Handler) Create(c *gin.Context) {
 	}
 	var request CreateReminderRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
-		fail(c, errors.New("任务参数无效"))
+		fail(c, fmt.Errorf("任务参数无效: %w", err))
 		return
 	}
 	item, err := h.service.Create(ctx, caller, request, "manual")
@@ -122,7 +123,7 @@ func (h *Handler) Update(c *gin.Context) {
 		Generation int64 `json:"generation"`
 	}
 	if err := c.ShouldBindJSON(&payload); err != nil {
-		fail(c, errors.New("任务参数无效"))
+		fail(c, fmt.Errorf("任务参数无效: %w", err))
 		return
 	}
 	item, err := h.service.Update(ctx, caller, c.Param("id"), payload.Generation, payload.CreateReminderRequest)
@@ -144,7 +145,7 @@ func (h *Handler) Change(c *gin.Context) {
 		Action     string `json:"action"`
 	}
 	if err := c.ShouldBindJSON(&payload); err != nil {
-		fail(c, errors.New("操作须提供任务版本"))
+		fail(c, fmt.Errorf("操作须提供任务版本: %w", err))
 		return
 	}
 	if c.Request.Method == "DELETE" {
@@ -168,7 +169,7 @@ func (h *Handler) Toggle(c *gin.Context) {
 		Generation int64 `json:"generation"`
 	}
 	if err := c.ShouldBindJSON(&payload); err != nil {
-		fail(c, errors.New("操作须提供任务版本"))
+		fail(c, fmt.Errorf("操作须提供任务版本: %w", err))
 		return
 	}
 	item, err := h.service.Find(ctx, caller, c.Param("id"))
@@ -214,7 +215,7 @@ func (h *Handler) Trigger(c *gin.Context) {
 		Generation int64 `json:"generation"`
 	}
 	if err := c.ShouldBindJSON(&payload); err != nil {
-		fail(c, errors.New("操作须提供任务版本"))
+		fail(c, fmt.Errorf("操作须提供任务版本: %w", err))
 		return
 	}
 	trigger, err := h.service.TriggerNow(ctx, caller, c.Param("id"), payload.Generation)
@@ -330,8 +331,8 @@ func (h *Handler) SetCleanupConfig(c *gin.Context) {
 	var payload struct {
 		CleanupDays string `json:"cleanupDays"`
 	}
-	if json.NewDecoder(c.Request.Body).Decode(&payload) != nil {
-		fail(c, errors.New("清理配置参数无效"))
+	if err := json.NewDecoder(c.Request.Body).Decode(&payload); err != nil {
+		fail(c, fmt.Errorf("清理配置参数无效: %w", err))
 		return
 	}
 	if err := h.service.SetCleanupDays(ctx, caller, payload.CleanupDays); err != nil {

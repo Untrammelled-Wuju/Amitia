@@ -18,6 +18,7 @@
     "node",
     "qdrant",
     "plugin-host",
+    "bundled-plugins",
     "task-host",
     "scripts",
     "manifest"

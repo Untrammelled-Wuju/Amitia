@@ -31,6 +31,6 @@ describe("引导页模型配置保存", () => {
   it("产品路由不再包含账号登录入口", () => {
     expect(routerSource).not.toContain('path: "/login"');
     expect(routerSource).not.toContain("/api/public/auth/login");
-    expect(routerSource).toContain('return next("/onboarding")');
+    expect(routerSource).toContain('return "/onboarding"');
   });
 });

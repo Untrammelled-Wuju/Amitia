@@ -17,6 +17,8 @@ const (
 	MethodToolExecute               Method = "host.tool.execute"
 	MethodPluginPreview             Method = "host.plugin.preview"
 	MethodPluginInstall             Method = "host.plugin.install"
+	MethodPluginUninstall           Method = "host.plugin.uninstall"
+	MethodPluginList                Method = "host.plugin.list"
 	MethodStateGet                  Method = "host.state.get"
 	MethodStateCAS                  Method = "host.state.cas"
 	MethodStateDelete               Method = "host.state.delete"
@@ -103,6 +105,7 @@ type RateLimit struct {
 type PermissionRequirement struct {
 	Name     string
 	Resource string
+	Scope    permission.ScopeType
 }
 
 type CallRequest struct {

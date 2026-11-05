@@ -9,7 +9,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       <div class="gender-item">
         <label class="gender-label">角色性别</label>
         <el-select
-          v-model="genderForm.gender"
+          v-model="gender"
           placeholder="选择性别"
           size="default"
           style="width: 100%"
@@ -26,11 +26,11 @@ SPDX-License-Identifier: AGPL-3.0-only
       <div class="gender-item">
         <label class="gender-label">角色代词</label>
         <el-select
-          v-model="genderForm.pronoun"
+          v-model="pronoun"
           placeholder="选择代词"
           size="default"
           style="width: 100%"
-          :disabled="genderForm.gender !== 'CUSTOM'"
+          :disabled="gender !== 'CUSTOM'"
         >
           <el-option
             v-for="opt in PRONOUN_OPTIONS"
@@ -41,19 +41,19 @@ SPDX-License-Identifier: AGPL-3.0-only
         </el-select>
         <span class="gender-hint">在对话中引用角色时使用的代词</span>
       </div>
-      <div class="gender-item" v-if="genderForm.gender === 'CUSTOM'">
+      <div class="gender-item" v-if="gender === 'CUSTOM'">
         <label class="gender-label">自定义性别标签</label>
         <el-input
-          v-model="genderForm.genderLabel"
+          v-model="genderLabel"
           placeholder='例如"伙伴""守护者"'
           size="default"
         />
         <span class="gender-hint">CUSTOM 模式下可自由定义性别标签</span>
       </div>
-      <div class="gender-item" v-if="genderForm.gender === 'CUSTOM'">
+      <div class="gender-item" v-if="gender === 'CUSTOM'">
         <label class="gender-label">自定义代词</label>
         <el-input
-          v-model="genderForm.pronoun"
+          v-model="pronoun"
           placeholder='例如"TA""它"'
           size="default"
         />
@@ -62,7 +62,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       <div class="gender-item">
         <label class="gender-label">用户称呼风格</label>
         <el-select
-          v-model="genderForm.userAddressingStyle"
+          v-model="userAddressingStyle"
           placeholder="选择风格"
           size="default"
           style="width: 100%"
@@ -80,13 +80,13 @@ SPDX-License-Identifier: AGPL-3.0-only
       <div class="gender-item">
         <label class="gender-label">
           性别表达强度
-          <span class="gender-value">{{ genderForm.genderExpression }}</span>
+          <span class="gender-value">{{ genderExpression }}</span>
         </label>
         <div class="sr-body">
           <span class="sr-left">中性</span>
           <div class="sr-slider-wrap">
             <el-slider
-              v-model="genderForm.genderExpression"
+              v-model="genderExpression"
               :min="0"
               :max="100"
               :step="1"
@@ -104,7 +104,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { watch } from "vue";
+import { computed, watch } from "vue";
 import {
   GENDER_OPTIONS,
   PRONOUN_OPTIONS,
@@ -113,6 +113,36 @@ import {
 } from "../../../composables/useRoleProfile";
 
 let genderForm = defineModel<any>("genderForm", { required: true });
+const gender = computed({
+  get: () => genderForm.value.gender,
+  set: (value) => {
+    genderForm.value.gender = value;
+  },
+});
+const pronoun = computed({
+  get: () => genderForm.value.pronoun,
+  set: (value) => {
+    genderForm.value.pronoun = value;
+  },
+});
+const genderLabel = computed({
+  get: () => genderForm.value.genderLabel,
+  set: (value) => {
+    genderForm.value.genderLabel = value;
+  },
+});
+const userAddressingStyle = computed({
+  get: () => genderForm.value.userAddressingStyle,
+  set: (value) => {
+    genderForm.value.userAddressingStyle = value;
+  },
+});
+const genderExpression = computed({
+  get: () => genderForm.value.genderExpression,
+  set: (value) => {
+    genderForm.value.genderExpression = value;
+  },
+});
 
 watch(
   () => genderForm.value.gender,

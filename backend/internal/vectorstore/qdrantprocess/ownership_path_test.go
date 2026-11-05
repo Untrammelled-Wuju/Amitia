@@ -4,7 +4,6 @@ package qdrantprocess
 
 import (
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/u-ai/backend/internal/runtimehost"
@@ -24,12 +23,13 @@ func (h *testPathHost) Descriptor() platform.RuntimeDescriptor {
 }
 
 func TestResolveOwnershipRoot_Valid(t *testing.T) {
-	host := &testPathHost{paths: util.RuntimePaths{TempDir: "C:\\Temp\\amitia"}}
+	tempDir := t.TempDir()
+	host := &testPathHost{paths: util.RuntimePaths{TempDir: tempDir}}
 	root, err := ResolveOwnershipRoot(host)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.HasSuffix(root, filepath.Join("process", "qdrant")) {
+	if root != filepath.Join(tempDir, "process", "qdrant") {
 		t.Fatalf("unexpected root: %s", root)
 	}
 }

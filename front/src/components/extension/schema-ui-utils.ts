@@ -53,8 +53,22 @@ export interface SchemaUIActionBinding {
   target?: string;
   target_type?: string;
   input?: Record<string, unknown>;
+  value?: unknown;
   confirmation?: string;
+  loadingText?: string;
+  successMessage?: string;
   statePath?: string;
+  formPath?: string;
+}
+
+export interface SchemaUIItemAction extends SchemaUIActionBinding {
+  id?: string;
+  label: string;
+  type?: string;
+  plain?: boolean;
+  visibleWhen?: UICondition[];
+  disabledWhen?: UICondition[];
+  followUpActions?: SchemaUIActionBinding[];
 }
 
 export interface SchemaUINode {

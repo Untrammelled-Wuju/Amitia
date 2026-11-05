@@ -10,6 +10,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
+	"github.com/u-ai/backend/internal/extension/platformcompat"
 )
 
 func (r *Runtime) PreviewInstall(ctx context.Context, archivePath string) (InstallPreview, error) {
@@ -100,7 +101,7 @@ func (r *Runtime) PreviewInstall(ctx context.Context, archivePath string) (Insta
 		})
 	}
 
-	platform := normalizePackagePlatform(runtime.GOOS)
+	platform := platformcompat.Normalize(runtime.GOOS)
 	hostVersion := currentPackageHostVersion()
 	for _, mod := range manifest.Modules {
 		supported := packageModuleSupported(mod, platform, hostVersion)

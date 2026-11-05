@@ -26,7 +26,7 @@ function normalizeRole(role: unknown): AIMessageData["role"] {
 }
 
 export function normalizeMessageState(message: Record<string, any>): MessageState {
-  const raw = String(message.state ?? "").toLowerCase();
+  const raw = String(message.state ?? message.status ?? "").toLowerCase();
   if (["queued", "pending"].includes(raw)) return "queued";
   if (raw === "streaming") return "streaming";
   if (raw === "interrupted") return "interrupted";

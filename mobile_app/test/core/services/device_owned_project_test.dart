@@ -163,6 +163,15 @@ class _ProjectApi implements BackendServiceApi {
     final request = Map<String, dynamic>.from(data as Map);
     requests.add(request);
     final owner = coordinated ? core : 'a';
+    if (path.endsWith('/chat-runtime/snapshot')) {
+      return {
+            'conversationId': 'chat',
+            'executionScope': {...scope(), 'requestId': request['requestId']},
+            'messages': [],
+            'turns': [],
+          }
+          as T;
+    }
     if (request['kind'] == 'conversation') {
       if (failMove) throw StateError('归组拒绝');
       return {

@@ -33,6 +33,7 @@ func TestScopeResolverResolvesBoundPeer(t *testing.T) {
 	}})
 
 	result, err := resolver.Resolve(context.Background(), ScopeResolveInput{
+		SpaceID:   "user-1",
 		Channel:   " qq ",
 		PeerID:    " peer-1 ",
 		RequestID: " req-1 ",
@@ -66,6 +67,7 @@ func TestScopeResolverPreservesEntrySourceWhenBindingHasSource(t *testing.T) {
 	}})
 
 	result, err := resolver.Resolve(context.Background(), ScopeResolveInput{
+		SpaceID: "user-1",
 		Channel: "wechat",
 		PeerID:  "peer-1",
 		Source:  "wechat",

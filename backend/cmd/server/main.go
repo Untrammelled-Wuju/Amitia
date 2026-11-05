@@ -60,6 +60,13 @@ func isDynamicListenAddr(addr string) bool {
 	return err == nil && port == "0"
 }
 
+func normalizeRuntimeListenPort(port int) int {
+	if port == 1 {
+		return 0
+	}
+	return port
+}
+
 func applyDynamicProviderPorts(policy runtimeprofile.Policy) error {
 	if policy.VectorStore && config.AppCfg.Providers.VectorStore.Enabled && config.AppCfg.Providers.VectorStore.Qdrant.Port == 0 {
 		port, err := runtimeport.AllocateLoopbackPair()
@@ -158,6 +165,7 @@ func main() {
 	}
 	profile := profileResolution.Profile
 	policy := runtimeprofile.PolicyFor(profile)
+	config.AppCfg.Server.Port = normalizeRuntimeListenPort(config.AppCfg.Server.Port)
 	if err := applyDynamicProviderPorts(policy); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)

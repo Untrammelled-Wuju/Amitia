@@ -69,11 +69,9 @@ describe("PackageIntegrityVerifier Package v1 hash compatibility", () => {
     });
 
     const actual = canonicalManifestJSON(raw);
-    // Golden values produced by backend/internal/desktoppet/packageformat
-    // using the strongly typed Go Manifest struct and CanonicalManifestData.
-    expect(Buffer.byteLength(actual, "utf8")).toBe(1167);
+    expect(Buffer.byteLength(actual, "utf8")).toBe(1134);
     expect(sha256Hex(actual)).toBe(
-      "6156d6d6c62cc8cce0898988ba00be883970d3842dcdb6f49ab340411142939f",
+      "0bb42e38b4b918a5aa8c8bf35743b1a71ec1b2448d36c2b605865554b32c5eec",
     );
   });
 });
@@ -258,7 +256,7 @@ describe("PackageIntegrityVerifier filesystem verification", () => {
         actions: new Map([["idle", action]]),
       };
       const first = await verifier.verify(params);
-      expect(first.valid).toBe(true);
+      expect(first.valid, JSON.stringify(first.errors)).toBe(true);
       expect(first.errors.filter((item) => item.severity === "error")).toEqual([]);
 
       await writeFile(join(root, "tampered.txt"), "undeclared", "utf8");

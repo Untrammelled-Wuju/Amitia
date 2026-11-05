@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("electron", () => ({
   screen: {
@@ -29,6 +29,13 @@ function makeWindow(x = 100, y = 100) {
 }
 
 describe("DesktopPetWorldController", () => {
+  beforeEach(() => {
+    vi.mocked(screen.getDisplayNearestPoint).mockReturnValue({
+      id: 1,
+      workArea: { x: 0, y: 0, width: 1200, height: 800 },
+    } as never);
+  });
+
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();

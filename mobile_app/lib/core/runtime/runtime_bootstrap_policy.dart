@@ -4,6 +4,6 @@ class RuntimeBootstrapPolicy {
 
   const RuntimeBootstrapPolicy({
     this.autoInstallRuntime = true,
-    this.installTimeout = const Duration(seconds: 120),
+    this.installTimeout = const Duration(minutes: 10),
   });
 }

@@ -97,7 +97,7 @@ func (r *Runtime) restoreExtensionAfterPackageSwap(ctx context.Context, extID do
 	if !wasEnabled {
 		return nil
 	}
-	if err := r.Enable(ctx, string(extID)); err != nil {
+	if err := r.enable(ctx, string(extID), true); err != nil {
 		return fmt.Errorf("kernel: activate %s after package swap: %w", extID, err)
 	}
 	return nil

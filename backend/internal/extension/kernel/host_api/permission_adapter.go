@@ -42,9 +42,13 @@ func (c *BrokerPermissionChecker) Check(ctx context.Context, identity runtime_su
 		if r.Name == "" {
 			return fmt.Errorf("%w: empty permission name", ErrPermissionDenied)
 		}
+		scope := permission.ScopeForExtension(subject.ExtensionID)
+		if r.Scope == permission.ScopeGlobal {
+			scope = permission.ScopeGlobalOnly()
+		}
 		permReqs = append(permReqs, permission.PermissionRequirement{
 			PermissionID: r.Name,
-			Scope:        permission.ScopeForExtension(subject.ExtensionID),
+			Scope:        scope,
 		})
 	}
 

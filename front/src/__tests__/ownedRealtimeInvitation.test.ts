@@ -6,7 +6,7 @@ const { webcrypto } = await import(cryptoModule);
 const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
 vi.mock("../composables/useApi", () => ({ apiClient: mocks }));
 const call = "aa464513-bdb4-4306-9bde-0c7c0397b7bf";
-const scope = { spaceId: "space", coreId: "core", initiatorDeviceId: "device", targetDeviceId: "device", roleId: "role", roleRevision: 1, roleOwnerId: "device", resourceOwnerId: "device", authorizationRealm: "device", providerEpoch: 1, targetProviderEpoch: 1, modeRevision: 1, permissionRevision: 1, targetPermissionRevision: 1, coordinated: false, requestId: "invite", turnId: "", executionId: "" };
+const scope = { spaceId: "space", coreId: "core", initiatorDeviceId: "device", targetDeviceId: "device", roleId: "role", roleRevision: 1, roleOwnerId: "device", resourceOwnerId: "device", conversationRoleId: "role", authorizationRealm: "device", providerEpoch: 1, targetProviderEpoch: 1, modeRevision: 1, permissionRevision: 1, targetPermissionRevision: 1, coordinated: false, requestId: "invite", turnId: "", executionId: "" };
 const invitation = () => ({ id: call, characterId: "role", recipientDeviceId: "device", conversationId: "conversation", executionScope: { ...scope }, status: "pending", revision: 1, expiresAt: new Date(Date.now() + 45000).toISOString(), nonce: "a".repeat(43) });
 
 describe("原所有者来电接听", () => {

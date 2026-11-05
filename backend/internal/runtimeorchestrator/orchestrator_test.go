@@ -56,8 +56,75 @@ func (f *fakeComponent) Stop(ctx context.Context) error {
 func (f *fakeComponent) wasStarted() bool { return atomic.LoadInt32(&f.started) == 1 }
 func (f *fakeComponent) wasStopped() bool { return atomic.LoadInt32(&f.stopped) == 1 }
 
+type fakeRestartable struct {
+	*fakeComponent
+	restartCalls int32
+	restartErr   error
+}
+
+func (f *fakeRestartable) Restart(ctx context.Context) error {
+	atomic.AddInt32(&f.restartCalls, 1)
+	return f.restartErr
+}
+
 func newTestOrchestrator() *RuntimeOrchestrator {
 	return New(platform.RuntimeDescriptor{})
+}
+
+func TestRestartableRequiredFailureBlocksAndOptionalFailureStaysReady(t *testing.T) {
+	t.Run("required", func(t *testing.T) {
+		orch := newTestOrchestrator()
+		component := &fakeRestartable{
+			fakeComponent: &fakeComponent{ComponentDescriptor: ComponentDescriptor{
+				ID: "restart.required", Phase: PhaseInfrastructure, Enabled: true, Required: true,
+			}},
+			restartErr: errors.New("required restart failed"),
+		}
+		if err := orch.Register(component); err != nil {
+			t.Fatal(err)
+		}
+		if err := orch.StartPhase(t.Context(), PhaseInfrastructure); err != nil {
+			t.Fatal(err)
+		}
+		if err := orch.RestartComponent(t.Context(), component.ID); !errors.Is(err, ErrRestartFailed) {
+			t.Fatalf("required restart error=%v, want ErrRestartFailed", err)
+		}
+		snapshot := orch.Snapshot()
+		if snapshot.State != OrchestratorBlocked || snapshot.Components[component.ID].State != StateFailed ||
+			snapshot.BlockingCount != 1 {
+			t.Fatalf("required restart did not block: %+v", snapshot)
+		}
+	})
+
+	t.Run("optional", func(t *testing.T) {
+		orch := newTestOrchestrator()
+		required := &fakeComponent{ComponentDescriptor: ComponentDescriptor{
+			ID: "restart.core", Phase: PhaseInfrastructure, Enabled: true, Required: true,
+		}}
+		optional := &fakeRestartable{
+			fakeComponent: &fakeComponent{ComponentDescriptor: ComponentDescriptor{
+				ID: "restart.optional", Phase: PhaseInfrastructure, Enabled: true, Required: false,
+			}},
+			restartErr: errors.New("optional restart failed"),
+		}
+		if err := orch.Register(required); err != nil {
+			t.Fatal(err)
+		}
+		if err := orch.Register(optional); err != nil {
+			t.Fatal(err)
+		}
+		if err := orch.StartPhase(t.Context(), PhaseInfrastructure); err != nil {
+			t.Fatal(err)
+		}
+		if err := orch.RestartComponent(t.Context(), optional.ID); !errors.Is(err, ErrRestartFailed) {
+			t.Fatalf("optional restart error=%v, want ErrRestartFailed", err)
+		}
+		snapshot := orch.Snapshot()
+		if snapshot.State != OrchestratorReady || snapshot.Components[optional.ID].State != StateDegraded ||
+			snapshot.BlockingCount != 0 {
+			t.Fatalf("optional restart should remain non-blocking: %+v", snapshot)
+		}
+	})
 }
 
 func TestOrchestratorStartsComponentsInDependencyOrder(t *testing.T) {
@@ -300,8 +367,19 @@ func TestOptionalComponentFailureDegradesAndContinues(t *testing.T) {
 	if stA.State != StateReady {
 		t.Fatalf("opt.a state=%s, want ready", stA.State)
 	}
-	if !snap.IsReady() {
-		t.Fatalf("orchestrator should be ready with optional degraded")
+	if snap.State != OrchestratorReady {
+		t.Fatalf("orchestrator state=%s, want ready with optional degraded", snap.State)
+	}
+	if snap.DegradedCount != 1 || snap.BlockingCount != 0 {
+		t.Fatalf("optional degradation counts=%d/%d, want 1/0", snap.DegradedCount, snap.BlockingCount)
+	}
+
+	if err := orch.ReportComponentState("opt.a", StateDegraded, errors.New("required unavailable")); err != nil {
+		t.Fatal(err)
+	}
+	snap = orch.Snapshot()
+	if snap.State != OrchestratorDegraded || snap.BlockingCount != 1 {
+		t.Fatalf("required degradation state=%s blocking=%d, want degraded/1", snap.State, snap.BlockingCount)
 	}
 }
 

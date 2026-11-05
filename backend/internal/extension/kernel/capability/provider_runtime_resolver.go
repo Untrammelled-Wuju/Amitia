@@ -76,6 +76,12 @@ func (r *ProviderRuntimeExecutionResolver) ResolveRuntimeExecution(
 	invocation ToolInvocationContext,
 ) (RuntimeExecutionRoute, error) {
 	target := invocation.ExecutionTarget
+	if target.IsZero() && (tool.Runtime.RuntimeType == RuntimeTypeJavaScript || tool.Runtime.RuntimeType == RuntimeTypePluginJS) {
+		return RuntimeExecutionRoute{
+			Binding: tool.Runtime,
+			SpaceID: runtimeidentity.ParseSpaceID(invocation.SpaceID),
+		}, nil
+	}
 	if target.IsZero() || target.ProviderID == "" || target.ProviderInstanceID == "" {
 		return RuntimeExecutionRoute{}, ErrProviderExecutionTargetInvalid
 	}

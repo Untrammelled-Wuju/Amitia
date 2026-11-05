@@ -179,8 +179,9 @@ type MultiAgentCoordinator struct {
 	ownedExecution  func(context.Context, coordination.ExecutionScope, func(context.Context) error) error
 	durableObserver func(context.Context, string, MultiAgentRecoveryRef) error
 
-	mu            sync.Mutex
-	coordinations map[string]*activeCoordination
+	mu             sync.Mutex
+	coordinations  map[string]*activeCoordination
+	reconcileLocks sync.Map
 }
 
 type activeCoordination struct {
@@ -894,33 +895,59 @@ func (c *MultiAgentCoordinator) deriveCoordinationOutcome(ac *activeCoordination
 }
 
 func (c *MultiAgentCoordinator) Reconcile(ctx context.Context, coordinationID string) error {
-	c.mu.Lock()
-	ac := c.coordinations[coordinationID]
-	c.mu.Unlock()
-	if ac == nil {
+	lockValue, _ := c.reconcileLocks.LoadOrStore(coordinationID, &sync.Mutex{})
+	reconcileLock := lockValue.(*sync.Mutex)
+	reconcileLock.Lock()
+	defer reconcileLock.Unlock()
+	var lastConflict error
+	for attempt := 0; attempt < 8; attempt++ {
+		c.mu.Lock()
+		ac := c.coordinations[coordinationID]
+		c.mu.Unlock()
+		if ac == nil {
+			return nil
+		}
+		fresh, err := c.refreshCoordinationIfStale(ctx, ac)
+		if err != nil {
+			return err
+		}
+		ac = fresh
+		if ac.cancelRequested {
+			return c.Cancel(ctx, coordinationID)
+		}
+		if cancelled, err := c.parentCancellationRequested(ctx, ac); err != nil {
+			return err
+		} else if cancelled {
+			return c.Cancel(ctx, coordinationID)
+		}
+		err = c.withOwnedExecution(ctx, ac, func(ctx context.Context) error { return c.reconcileAuthorized(ctx, coordinationID) })
+		if err != nil {
+			if errors.Is(err, ErrInteractionCASConflict) {
+				lastConflict = err
+				if ctxErr := ctx.Err(); ctxErr != nil {
+					return errors.Join(err, ctxErr)
+				}
+				continue
+			}
+			return c.stopRevokedOwnedCoordination(ctx, ac, err)
+		}
+		if ac.ownedScope != nil {
+			err = FinalizeOwnedParent(ctx, c.tracker, ac.parentInteractionID)
+			if err == nil {
+				return nil
+			}
+			if errors.Is(err, ErrInteractionCASConflict) {
+				lastConflict = err
+				if ctxErr := ctx.Err(); ctxErr != nil {
+					return errors.Join(err, ctxErr)
+				}
+				continue
+			}
+			return err
+		}
 		return nil
 	}
-	fresh, err := c.refreshCoordinationIfStale(ctx, ac)
-	if err != nil {
-		return err
-	}
-	ac = fresh
-	if ac.cancelRequested {
-		return c.Cancel(ctx, coordinationID)
-	}
-	if cancelled, err := c.parentCancellationRequested(ctx, ac); err != nil {
-		return err
-	} else if cancelled {
-		return c.Cancel(ctx, coordinationID)
-	}
-	err = c.withOwnedExecution(ctx, ac, func(ctx context.Context) error { return c.reconcileAuthorized(ctx, coordinationID) })
-	if err != nil {
-		return c.stopRevokedOwnedCoordination(ctx, ac, err)
-	}
-	if err == nil && ac.ownedScope != nil {
-		return FinalizeOwnedParent(ctx, c.tracker, ac.parentInteractionID)
-	}
-	return err
+	return lastConflict
 }
 
 func (c *MultiAgentCoordinator) reconcileAuthorized(ctx context.Context, coordinationID string) error {

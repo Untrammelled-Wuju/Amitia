@@ -11,6 +11,7 @@ object RuntimeBridgeSnapshotMapper {
         manifest: RuntimeManifest?,
         runtimeInstalled: Boolean,
         runtimeAvailable: Boolean,
+        embeddedPackageMatches: Boolean? = null,
     ): Map<String, Any?> {
         val result = LinkedHashMap<String, Any?>()
         result["schemaVersion"] = RuntimeBridgeContract.SCHEMA_VERSION
@@ -21,6 +22,9 @@ object RuntimeBridgeSnapshotMapper {
         result["activeProfile"] = snapshot.activeProfile
         result["lastError"] = snapshot.lastError?.let { mapError(it) }
         result["manifest"] = manifest?.let { mapManifest(it) }
+        if (embeddedPackageMatches != null) {
+            result["embeddedPackageMatches"] = embeddedPackageMatches
+        }
         return result
     }
 

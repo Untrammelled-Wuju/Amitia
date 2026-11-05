@@ -6,7 +6,12 @@ import {
   collectExtensionNavigationItems,
   resolveBuiltinNavigationItems,
 } from "@/ui-runtime/navigationRegistry";
-import { collectEffectiveProviderRoutes, shadowsProtectedRoute, syncProviderRoutes } from "@/ui-runtime/providerRoutes";
+import {
+  collectEffectiveProviderRoutes,
+  collectExtensionSectionEntries,
+  shadowsProtectedRoute,
+  syncProviderRoutes,
+} from "@/ui-runtime/providerRoutes";
 import { builtinBusinessRoutes } from "@/router/builtinRoutes";
 
 function provider(input: Partial<UIProviderDefinition> & Pick<UIProviderDefinition, "providerId" | "extensionId" | "capability">): UIProviderDefinition {
@@ -189,11 +194,51 @@ describe("extension navigation registry", () => {
     expect(shadowsProtectedRoute("/chat/plugin-page")).toBe(true);
     expect(shadowsProtectedRoute("/game-center/plugin-page")).toBe(true);
     expect(shadowsProtectedRoute("/creative-workshop/plugin-page")).toBe(true);
+    expect(shadowsProtectedRoute("/extensions/market")).toBe(false);
+    expect(shadowsProtectedRoute("/extensions/unsafe")).toBe(true);
     expect(shadowsProtectedRoute("/games/minecraft")).toBe(false);
     expect(collectEffectiveProviderRoutes(store([
       routeRegistry("bad", "routes.bad", "/:pathMatch(.*)*", "page.bad", 100),
       pageProvider("bad", "page.bad"),
     ]))).toEqual([]);
+  });
+
+  it("renders plugin market only as an extension center section entry", () => {
+    const providers = [
+      pageProvider("com.amitia/plugin-market", "plugin-market-page-provider"),
+      provider({
+        providerId: "plugin-market-routes",
+        extensionId: "com.amitia/plugin-market",
+        capability: "route.registry",
+        priority: 260,
+        metadata: {
+          routes: [{
+            id: "plugin-market",
+            path: "/extensions/market",
+            providerId: "plugin-market-page-provider",
+            capability: "page.provider",
+            title: "插件市场",
+            priority: 260,
+          }],
+          sectionEntries: [{
+            id: "plugin-market",
+            section: "extensions",
+            label: "插件市场",
+            route: "/extensions/market",
+            order: 10,
+          }],
+        },
+      }),
+    ];
+    const sectionEntries = collectExtensionSectionEntries(store(providers), "extensions");
+    expect(sectionEntries).toEqual([
+      expect.objectContaining({
+        route: "/extensions/market",
+        label: "插件市场",
+        extensionId: "com.amitia/plugin-market",
+      }),
+    ]);
+    expect(collectExtensionNavigationItems(store(providers))).toEqual([]);
   });
 
   it("keeps extension pages in the existing character navigation group", () => {

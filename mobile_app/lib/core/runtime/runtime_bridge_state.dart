@@ -20,17 +20,19 @@ enum RuntimeBridgeState {
       case 'STARTING':
         return RuntimeBridgeState.starting;
       case 'READY':
+      case 'DEGRADED':
         return RuntimeBridgeState.ready;
       case 'STOPPING':
         return RuntimeBridgeState.stopping;
+      case 'INSTALLED':
+        return RuntimeBridgeState.stopped;
+      case 'VERIFYING':
+      case 'REPAIRING':
+        return RuntimeBridgeState.installing;
       case 'FAILED':
       case 'CORRUPTED':
         return RuntimeBridgeState.failed;
       case 'UNKNOWN':
-      case 'INSTALLED':
-      case 'VERIFYING':
-      case 'DEGRADED':
-      case 'REPAIRING':
       default:
         return RuntimeBridgeState.unavailable;
     }

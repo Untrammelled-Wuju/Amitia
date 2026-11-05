@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import type { LoadedInstallation, RuntimeAction } from "../resource-loader";
 import type {
   DesktopPetPlayerPort,
@@ -153,7 +153,21 @@ describe("DesktopPetActionScheduler", () => {
   let scheduler: DesktopPetActionScheduler;
 
   beforeEach(() => {
-    raf = installManualRaf();
+    vi.useFakeTimers();
+    vi.setSystemTime(1_800_000_000_000);
+    const manualRaf = installManualRaf();
+    raf = {
+      nextTick: (deltaMs) => {
+        manualRaf.nextTick(deltaMs);
+        vi.setSystemTime(Date.now() + deltaMs);
+      },
+      advance: (totalMs, intervalMs) => {
+        manualRaf.advance(totalMs, intervalMs);
+        vi.setSystemTime(Date.now() + totalMs);
+      },
+      getTime: manualRaf.getTime,
+      restore: manualRaf.restore,
+    };
     player = new SchedulerTestPlayer();
     spy = makeSpy();
     scheduler = new DesktopPetActionScheduler(player, {
@@ -171,6 +185,7 @@ describe("DesktopPetActionScheduler", () => {
     scheduler.dispose();
     player.stop();
     raf.restore();
+    vi.useRealTimers();
   });
 
   function attachAndAdvance(): ReturnType<typeof makeLoadedInstallation> {
@@ -236,7 +251,6 @@ describe("DesktopPetActionScheduler", () => {
         metadata: { minimumPlayMs: "0", interruptAfterMs: "0" },
       }),
     )).toBe("played");
-
     expect(scheduler.submit(
       makeRequest({
         actionKey: next.key,
@@ -297,6 +311,11 @@ describe("DesktopPetActionScheduler", () => {
         interrupt: true,
       }),
     )).toBe("played");
+    scheduler.notifyActionStarted(
+      current.key,
+      "pb-default-timing",
+      `test-command-${current.key}`,
+    );
 
     expect(scheduler.submit(
       makeRequest({
@@ -396,6 +415,11 @@ describe("DesktopPetActionScheduler", () => {
         priority: ActionPriorities.DRAG,
         interrupt: true,
       }),
+    );
+    scheduler.notifyActionStarted(
+      "dragged",
+      "pb-dragged",
+      "test-command-dragged",
     );
 
     scheduler.submit(
@@ -564,6 +588,11 @@ describe("DesktopPetActionScheduler", () => {
       }),
     );
     expect(r1).toBe("played");
+    scheduler.notifyActionStarted(
+      "hovered",
+      "pb-hovered",
+      "test-command-hovered",
+    );
 
     const r2 = scheduler.submit(
       makeRequest({
@@ -577,6 +606,11 @@ describe("DesktopPetActionScheduler", () => {
 
     raf.nextTick(200);
     raf.nextTick(3500);
+    scheduler.notifyActionCompleted(
+      "hovered",
+      "pb-hovered",
+      "test-command-hovered",
+    );
 
     const r3 = scheduler.submit(
       makeRequest({
@@ -640,9 +674,19 @@ describe("DesktopPetActionScheduler", () => {
         interrupt: true,
       }),
     );
+    scheduler.notifyActionStarted(
+      "clicked",
+      "pb-clicked-cooldown",
+      "test-command-clicked",
+    );
 
     raf.nextTick(200);
     raf.nextTick(600);
+    scheduler.notifyActionCompleted(
+      "clicked",
+      "pb-clicked-cooldown",
+      "test-command-clicked",
+    );
 
     const r3 = scheduler.submit(
       makeRequest({
@@ -1070,6 +1114,11 @@ describe("DesktopPetActionScheduler", () => {
         interrupt: true,
       }),
     );
+    scheduler.notifyActionStarted(
+      "dragged",
+      "pb-action-completed",
+      "test-command-dragged",
+    );
 
     scheduler.submit(
       makeRequest({
@@ -1083,8 +1132,11 @@ describe("DesktopPetActionScheduler", () => {
 
     expect(scheduler.getQueue().length).toBe(1);
 
-    raf.nextTick(200);
-    raf.nextTick(200);
+    scheduler.notifyActionCompleted(
+      "dragged",
+      "pb-action-completed",
+      "test-command-dragged",
+    );
 
     const completedEvents = spy.events.filter(
       (e) => e.event === "action-completed",
@@ -1106,11 +1158,23 @@ describe("DesktopPetActionScheduler", () => {
     const loaded = makeLoadedInstallation();
     loaded.actions.set(
       "first",
-      makeRuntimeAction({ key: "first", loopType: "loop", interruptible: true }),
+      makeRuntimeAction({
+        key: "first",
+        loopType: "loop",
+        interruptible: true,
+        minimumPlayMs: 0,
+        interruptAfterMs: 0,
+      }),
     );
     loaded.actions.set(
       "second",
-      makeRuntimeAction({ key: "second", loopType: "loop", interruptible: true }),
+      makeRuntimeAction({
+        key: "second",
+        loopType: "loop",
+        interruptible: true,
+        minimumPlayMs: 0,
+        interruptAfterMs: 0,
+      }),
     );
 
     identityScheduler.attachLoaded(loaded);
@@ -1146,7 +1210,13 @@ describe("DesktopPetActionScheduler", () => {
     for (const key of ["first", "second", "third"]) {
       loaded.actions.set(
         key,
-        makeRuntimeAction({ key, loopType: "loop", interruptible: true }),
+        makeRuntimeAction({
+          key,
+          loopType: "loop",
+          interruptible: true,
+          minimumPlayMs: 0,
+          interruptAfterMs: 0,
+        }),
       );
     }
 

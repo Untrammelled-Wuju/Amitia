@@ -366,26 +366,16 @@ class AgentEventReducer {
           terminalStatus == 'interrupted' &&
           (errorCode == 'interrupted' || errorCode == 'task_interrupted') &&
           (cause.isEmpty || cause == '当前回复已主动停止');
+      final content =
+          (payload['userMessage'] ??
+                  payload['message'] ??
+                  payload['error'] ??
+                  '')
+              .toString()
+              .trim();
       final hasTerminalError =
-          terminalStatus != 'completed' &&
-          !explicitStop &&
-          const <String>[
-            'userMessage',
-            'internalMessage',
-            'message',
-            'error',
-            'detail',
-            'cause',
-            'rawError',
-            'errorCode',
-          ].any((key) => (payload[key] ?? '').toString().trim().isNotEmpty);
+          terminalStatus == 'failed' && !explicitStop && content.isNotEmpty;
       if (hasTerminalError) {
-        final content =
-            (payload['userMessage'] ??
-                    payload['message'] ??
-                    payload['error'] ??
-                    '')
-                .toString();
         final errorIndex = items.indexWhere((item) => item.type == 'error');
         if (errorIndex >= 0) {
           final current = items[errorIndex];

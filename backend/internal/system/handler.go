@@ -21,6 +21,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/mindruntime"
+	"github.com/u-ai/backend/internal/runtimeorchestrator"
 	"github.com/u-ai/backend/internal/tts"
 	"gorm.io/gorm"
 )
@@ -54,6 +55,7 @@ type Handler struct {
 	shadowState       mindruntime.ShadowState
 	approvalBroker    *execution.ApprovalBroker
 	coordination      *coordination.Service
+	runtimeReadiness  func(context.Context) runtimeorchestrator.RuntimeSnapshot
 }
 
 type ChannelAvailability interface {

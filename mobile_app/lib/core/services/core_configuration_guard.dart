@@ -82,11 +82,9 @@ class CoreConfigurationGuard {
           data['canAdminister'] is! bool) {
         throw StateError('无法确认云端配置权限，请恢复 Core 连接后重试');
       }
-      if (policy['coordinated'] != true) {
-        throw StateError('云端统筹 Core 尚未完成数据归属初始化');
-      }
-      canConfigure = data['canAdminister'] == true;
-      policyRevision = _revision(policy);
+      canConfigure =
+          policy['coordinated'] == true && data['canAdminister'] == true;
+      policyRevision = policy['coordinated'] == true ? _revision(policy) : null;
     }
     if (!stillCurrent()) {
       throw StateError('Core 已切换，请重新加载模型配置');

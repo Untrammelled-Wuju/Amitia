@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -23,6 +24,8 @@ func RegisterRoutes(group *gin.RouterGroup, service *Service, spaceID string) {
 	runs.GET("/:id", handler.get)
 	runs.GET("/:id/messages", handler.messages)
 	runs.POST("/:id/messages", handler.send)
+	runs.POST("/:id/messages/claim", handler.claim)
+	runs.POST("/:id/messages/acknowledge", handler.acknowledge)
 }
 
 func (h *HTTPHandler) respond(c *gin.Context, data any, err error) {
@@ -63,4 +66,32 @@ func (h *HTTPHandler) send(c *gin.Context) {
 	}
 	message, err := h.service.SendFromUser(c.Request.Context(), h.spaceID, c.Param("id"), input.Content)
 	h.respond(c, message, err)
+}
+
+func (h *HTTPHandler) claim(c *gin.Context) {
+	var input struct {
+		Owner        string `json:"owner"`
+		LeaseSeconds int    `json:"leaseSeconds"`
+		Limit        int    `json:"limit"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error(), "error": err})
+		return
+	}
+	leaseDuration := time.Duration(input.LeaseSeconds) * time.Second
+	claim, err := h.service.Claim(c.Request.Context(), h.spaceID, c.Param("id"), input.Owner, leaseDuration, input.Limit)
+	h.respond(c, claim, err)
+}
+
+func (h *HTTPHandler) acknowledge(c *gin.Context) {
+	var input struct {
+		LeaseToken string   `json:"leaseToken"`
+		MessageIDs []string `json:"messageIds"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error(), "error": err})
+		return
+	}
+	count, err := h.service.Acknowledge(c.Request.Context(), h.spaceID, c.Param("id"), input.LeaseToken, input.MessageIDs)
+	h.respond(c, gin.H{"acknowledgedCount": count}, err)
 }

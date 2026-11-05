@@ -2,7 +2,10 @@ import 'mobile_deployment_mode.dart';
 import 'backend_topology.dart';
 
 abstract interface class BackendTopologyResolver {
-  MobileBackendTopology resolve(MobileDeploymentConfig config);
+  MobileBackendTopology resolve(
+    MobileDeploymentConfig config, {
+    Uri? localEndpoint,
+  });
 }
 
 class DefaultBackendTopologyResolver implements BackendTopologyResolver {
@@ -11,17 +14,20 @@ class DefaultBackendTopologyResolver implements BackendTopologyResolver {
   const DefaultBackendTopologyResolver({this.localEndpointProvider});
 
   @override
-  MobileBackendTopology resolve(MobileDeploymentConfig config) {
+  MobileBackendTopology resolve(
+    MobileDeploymentConfig config, {
+    Uri? localEndpoint,
+  }) {
     switch (config.mode) {
       case MobileDeploymentMode.local:
-        return _resolveLocal(config);
+        return _resolveLocal(localEndpoint);
       case MobileDeploymentMode.cloud:
-        return _resolveCloud(config);
+        return _resolveCloud(config, localEndpoint);
     }
   }
 
-  MobileBackendTopology _resolveLocal(MobileDeploymentConfig config) {
-    final localEp = localEndpointProvider?.call();
+  MobileBackendTopology _resolveLocal(Uri? explicitLocalEndpoint) {
+    final localEp = explicitLocalEndpoint ?? localEndpointProvider?.call();
     if (localEp == null) {
       throw DeploymentConfigValidationError(
         'local mode requires an embedded runtime endpoint',
@@ -44,7 +50,10 @@ class DefaultBackendTopologyResolver implements BackendTopologyResolver {
     );
   }
 
-  MobileBackendTopology _resolveCloud(MobileDeploymentConfig config) {
+  MobileBackendTopology _resolveCloud(
+    MobileDeploymentConfig config,
+    Uri? explicitLocalEndpoint,
+  ) {
     final raw = config.remoteCoreUri;
     if (raw == null || raw.trim().isEmpty) {
       throw DeploymentConfigValidationError(
@@ -59,7 +68,7 @@ class DefaultBackendTopologyResolver implements BackendTopologyResolver {
       websocketBaseUri: wsUri,
       isRemote: true,
     );
-    final localEp = localEndpointProvider?.call();
+    final localEp = explicitLocalEndpoint ?? localEndpointProvider?.call();
     if (localEp == null) {
       throw DeploymentConfigValidationError(
         'cloud mode requires an embedded runtime endpoint',

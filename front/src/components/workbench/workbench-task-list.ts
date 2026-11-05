@@ -65,6 +65,7 @@ function assignment(value: unknown): WorkbenchTaskAssignment {
     status,
     role: text(data.role, 100),
     dependencies: (() => {
+      if (data.dependencies === undefined) return [];
       if (!Array.isArray(data.dependencies) || data.dependencies.length > 8) throw new Error('子任务依赖无效');
       return data.dependencies.map(value => text(value, 160));
     })(),

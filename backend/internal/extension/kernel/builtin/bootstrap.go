@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
@@ -70,6 +71,49 @@ func (b *Bootstrapper) Reconcile(ctx context.Context) error {
 			log.Printf("[builtin-bootstrap] reconcile %s failed: %v", def.Extension.ID, err)
 			return fmt.Errorf("reconcile builtin %s: %w", def.Extension.ID, err)
 		}
+	}
+	return nil
+}
+
+func (b *Bootstrapper) RetireRemoved(ctx context.Context) error {
+	if b.catalog == nil || b.installations == nil || b.definitions == nil {
+		return nil
+	}
+	active := make(map[domain.ExtensionID]struct{})
+	for _, definition := range b.catalog.List() {
+		active[definition.Extension.ID] = struct{}{}
+	}
+	installations, err := b.installations.ListInstallations(ctx)
+	if err != nil {
+		return fmt.Errorf("list installed builtins: %w", err)
+	}
+	for _, installation := range installations {
+		extensionID := installation.ExtensionID
+		if !strings.HasPrefix(string(extensionID), PrefixBuiltin) {
+			continue
+		}
+		if _, ok := active[extensionID]; ok {
+			continue
+		}
+		if b.contributions != nil {
+			if err := b.contributions.DeleteContributions(ctx, extensionID); err != nil {
+				return fmt.Errorf("delete retired builtin contributions %s: %w", extensionID, err)
+			}
+		}
+		if b.modules != nil {
+			if err := b.modules.DeleteModules(ctx, extensionID); err != nil {
+				return fmt.Errorf("delete retired builtin modules %s: %w", extensionID, err)
+			}
+		}
+		if err := b.installations.DeleteInstallation(ctx, extensionID); err != nil {
+			return fmt.Errorf("delete retired builtin installation %s: %w", extensionID, err)
+		}
+		if installation.InstalledVersion.Major != 0 || installation.InstalledVersion.Minor != 0 || installation.InstalledVersion.Patch != 0 {
+			if err := b.definitions.DeleteExtension(ctx, extensionID, installation.InstalledVersion); err != nil {
+				return fmt.Errorf("delete retired builtin definition %s: %w", extensionID, err)
+			}
+		}
+		log.Printf("[builtin-bootstrap] retired %s", extensionID)
 	}
 	return nil
 }

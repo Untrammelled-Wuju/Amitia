@@ -8,6 +8,7 @@ class RuntimeBridgeSnapshot {
   final int generation;
   final bool runtimeInstalled;
   final bool runtimeAvailable;
+  final bool embeddedPackageMatches;
   final String? activeProfile;
   final RuntimeBridgeError? lastError;
   final RuntimeManifestSummary? manifest;
@@ -18,6 +19,7 @@ class RuntimeBridgeSnapshot {
     required this.generation,
     required this.runtimeInstalled,
     required this.runtimeAvailable,
+    this.embeddedPackageMatches = true,
     this.activeProfile,
     this.lastError,
     this.manifest,
@@ -30,6 +32,7 @@ class RuntimeBridgeSnapshot {
       generation: map['generation'] as int? ?? 0,
       runtimeInstalled: map['runtimeInstalled'] as bool? ?? false,
       runtimeAvailable: map['runtimeAvailable'] as bool? ?? false,
+      embeddedPackageMatches: map['embeddedPackageMatches'] as bool? ?? true,
       activeProfile: _normalizedOptionalString(map['activeProfile']),
       lastError: RuntimeBridgeError.tryFromMap(
         map['lastError'] is Map
@@ -57,6 +60,7 @@ class RuntimeBridgeSnapshot {
       generation: 0,
       runtimeInstalled: false,
       runtimeAvailable: false,
+      embeddedPackageMatches: false,
       activeProfile: null,
     );
   }
@@ -70,6 +74,7 @@ class RuntimeBridgeSnapshot {
           generation == other.generation &&
           runtimeInstalled == other.runtimeInstalled &&
           runtimeAvailable == other.runtimeAvailable &&
+          embeddedPackageMatches == other.embeddedPackageMatches &&
           activeProfile == other.activeProfile &&
           lastError == other.lastError &&
           manifest == other.manifest;
@@ -81,6 +86,7 @@ class RuntimeBridgeSnapshot {
       generation.hashCode ^
       runtimeInstalled.hashCode ^
       runtimeAvailable.hashCode ^
+      embeddedPackageMatches.hashCode ^
       activeProfile.hashCode ^
       lastError.hashCode ^
       manifest.hashCode;

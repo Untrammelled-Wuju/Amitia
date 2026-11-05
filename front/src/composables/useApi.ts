@@ -15,7 +15,14 @@ import {
 } from "@/runtime/runtime-adapter";
 import { getDeviceTimezone } from "@/utils/requestEnvelope";
 import { resolveUIHostDeviceId } from "@/ui-runtime/deviceIdentity";
-import { applyDesktopSessionRetry, classifyError, displayError, isDesktopSessionAuthFailure, type RetriableDesktopRequestConfig } from "./request";
+import {
+  applyDesktopSessionRetry,
+  classifyError,
+  displayError,
+  isDesktopSessionAuthFailure,
+  isSuccessfulResponseCode,
+  type RetriableDesktopRequestConfig,
+} from "./request";
 import { signWebAuthenticatedFetch } from "@/runtime/web-device-mesh";
 import { recordClientError } from "@/runtime/client-error-tracker";
 
@@ -131,7 +138,7 @@ apiClient.interceptors.response.use(
     readOperationTimeoutHeaders(response.config.baseURL || "", response.headers);
     const body = response.data as ApiResponse;
     if (body && typeof body.code === "number") {
-      if (body.code === 200) {
+      if (isSuccessfulResponseCode(body.code)) {
         response.data = body.data ?? (body as any);
         return response;
       }

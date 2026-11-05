@@ -39,7 +39,7 @@ func configurationProviderRouter(db *gorm.DB) *gin.Engine {
 		router.POST("/"+provider.name+"/:id/activate", provider.activate)
 	}
 	appctx := &app.AppContext{DB: db}
-	settings := system.NewHandler(system.NewService(appctx, ""), db, nil, nil, nil, nil, nil)
+	settings := system.NewHandler(system.NewService(appctx, ""), db, nil, nil, nil, nil)
 	router.PUT("/config", settings.UpdateConfig)
 	router.PUT("/theme", settings.UpdateTheme)
 	router.PUT("/mood", settings.MoodDetectionConfig)

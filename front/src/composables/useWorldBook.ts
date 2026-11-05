@@ -161,12 +161,13 @@ export function useWorldBook() {
       const pageSize = Math.max(1, Math.min(100, filters.pageSize || 20));
       const pageNo = Math.max(1, filters.page || 1);
       const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
+      const effectivePage = Math.min(pageNo, pages);
       currentScope = scope;
       currentRole = role;
       loadedContext.value = authorityStamp(scope);
-      rules.value = filtered.slice((pageNo - 1) * pageSize, pageNo * pageSize);
+      rules.value = filtered.slice((effectivePage - 1) * pageSize, effectivePage * pageSize);
       total.value = filtered.length;
-      page.value = Math.min(pageNo, pages);
+      page.value = effectivePage;
       totalPages.value = pages;
     } catch (error) {
       rules.value = [];
@@ -243,11 +244,67 @@ export function useWorldBook() {
     await manage("create", data, expected);
   }
 
-  async function createRules(items: Partial<WorldBookEntry>[], expected = loadedContext.value) {
-    for (const item of items) {
-      const scope = item.scope || (String(item.characterId || "").trim() ? "role" : "global");
-      await createRule({ ...item, scope }, expected);
+  async function importRules(items: Partial<WorldBookEntry>[], expected = loadedContext.value) {
+    if (!items.length) throw new Error("没有可导入的世界书规则");
+    if (items.length > 64) throw new Error("单次最多导入 64 条世界书规则");
+    const scope = await requireScope(expected);
+    const requestId = crypto.randomUUID();
+    const rules = items.map((item) => {
+      const ruleScope = item.scope || (String(item.characterId || "").trim() ? "role" : "global");
+      return {
+        id: "",
+        scope: ruleScope,
+        characterId: ruleScope === "global" ? "" : scope.roleId,
+        matchType: item.matchType || "keyword",
+        matchPattern: item.matchPattern || "",
+        matchScope: item.matchScope || "full_context",
+        injectContent: item.injectContent || "",
+        priority: Number(item.priority || 0),
+        hitCount: Number(item.hitCount || 0),
+        enabled: item.enabled !== false,
+        secondaryKeys: item.secondaryKeys || [],
+        caseSensitive: item.caseSensitive,
+        selective: item.selective,
+        constant: item.constant,
+        insertionOrder: item.insertionOrder || 0,
+        position: item.position,
+        extensions: item.extensions || {},
+        characterBookEntryName: item.characterBookEntryName || "",
+        characterBookEntryId: item.characterBookEntryId,
+        sourceCardHash: item.sourceCardHash || "",
+        sourceEntryIndex: item.sourceEntryIndex || 0,
+        createdAt: "",
+        updatedAt: "",
+      };
+    });
+    const response = await apiClient.post<any>("/api/device-mesh/v1/business/worldbook/import", {
+      requestId,
+      characterId: scope.roleId,
+      targetDeviceId: scope.targetDeviceId,
+      expectedExecutionScope: scope,
+      rules,
+    });
+    const data = response?.data ?? response;
+    if (!data?.saved || data.executionScope?.requestId !== requestId ||
+        authorityStamp(data.executionScope) !== authorityStamp({ ...scope, requestId: data.executionScope.requestId } as OwnedExecutionScope) ||
+        data.acknowledgement?.ownerId !== scope.resourceOwnerId ||
+        data.acknowledgement?.requestId !== requestId ||
+        data.acknowledgement?.versions?.[`checkpoint/worldbook/${requestId}`] !== 1 ||
+        !Array.isArray(data.rules) || data.rules.length !== rules.length) {
+      throw new Error("世界书批量导入尚未获得数据所有者保存确认");
     }
+    for (const rule of data.rules) {
+      if (!rule?.id || rule.ownerId !== scope.resourceOwnerId || rule.revision < 1 ||
+          data.acknowledgement?.versions?.[`worldbook/${rule.id}`] !== rule.revision) {
+        throw new Error("世界书批量导入回执无效");
+      }
+    }
+    await fetchRules();
+    return data.rules as WorldBookEntry[];
+  }
+
+  async function createRules(items: Partial<WorldBookEntry>[], expected = loadedContext.value) {
+    await importRules(items, expected);
   }
 
   async function updateRule(id: string, data: Partial<WorldBookEntry>, expected = loadedContext.value) {

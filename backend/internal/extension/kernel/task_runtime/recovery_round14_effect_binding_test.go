@@ -96,19 +96,11 @@ func TestRound14CheckpointPlanLegacyCannotAuthorizeNewSideEffects(t *testing.T) 
 	run.Input = nil
 	payload := json.RawMessage(`{"cursor":1,"nextEffectIds":["legacy.write"]}`)
 	cp := &TaskCheckpoint{CheckpointID: ownedStableCheckpointID(run, 1), TaskRunID: run.TaskRunID, Version: 1, Payload: payload, PayloadHash: hashBytes(payload), InputHash: run.InputHash, DefinitionHash: def.DefinitionHash, CreatedAt: time.Now().UTC()}
-	if err := (AcknowledgedTaskCheckpointPort{Data: data}).SaveCheckpoint(ctx, run, cp); err != nil {
-		t.Fatal(err)
+	if err := (AcknowledgedTaskCheckpointPort{Data: data}).SaveCheckpoint(ctx, run, cp); !IsTaskErrorCode(err, ErrTaskCheckpointIncompatible) {
+		t.Fatalf("legacy checkpoint plan was accepted: %v", err)
 	}
-	run.CheckpointID = &cp.CheckpointID
-	run.Generation, run.ExecutionAttemptID = 2, "resumed"
-	called := false
-	port := AcknowledgedTaskHostPort{Data: data, Executor: taskHostExecutorFunc(func(_ context.Context, _ *TaskRun, _ *TaskDefinition, _, _ string, _ TaskHostNativeCall) (json.RawMessage, error) {
-		called = true
-		return json.RawMessage(`{"result":true}`), nil
-	})}
-	args := json.RawMessage(fmt.Sprintf(`{"task_run_id":%q,"effect_id":"legacy.write","tool_id":"native.write","input":{}}`, run.TaskRunID))
-	if _, err := port.Call(ctx, run, def, "rpc", "task.host.executeTool", args); !IsTaskErrorCode(err, ErrTaskExecutionAttemptInvalid) || called {
-		t.Fatalf("legacy id-only checkpoint authorized a new effect: %v", err)
+	if _, exists := data.resources["checkpoint/task/checkpoint/"+cp.CheckpointID]; exists {
+		t.Fatal("legacy checkpoint plan was persisted")
 	}
 }
 

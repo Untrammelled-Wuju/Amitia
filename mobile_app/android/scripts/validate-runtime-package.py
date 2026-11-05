@@ -75,6 +75,7 @@ REQUIRED_METADATA = {
 }
 
 FORBIDDEN_RUNTIME_DIRS = {"config", "data", "cache", "logs", "run", "workspaces"}
+BUNDLED_PLUGIN_MARKET_PREFIX = "bundled-plugins/plugin-market/amitia-plugin-market-"
 
 REQUIRED_ROOTFS_EXECUTABLES = {"usr/bin/true"}
 REQUIRED_ROOTFS_FILES = {
@@ -262,6 +263,8 @@ def validate(package_path: str) -> dict[str, object]:
         missing_runtime_files = sorted(REQUIRED_RUNTIME_FILES - runtime_names)
         if missing_runtime_files:
             errors.append("missing runtime files: " + ", ".join(missing_runtime_files))
+        if not any(name.startswith(BUNDLED_PLUGIN_MARKET_PREFIX) and name.endswith(".amitiax") for name in runtime_names):
+            errors.append("missing bundled plugin market package")
         if errors:
             raise RuntimeError("; ".join(errors))
 

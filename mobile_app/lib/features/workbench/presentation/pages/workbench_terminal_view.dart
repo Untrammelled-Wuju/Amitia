@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
+import '../../../../core/widgets/amitia_popup_menu.dart';
 import '../../runtime/workbench_terminal_client.dart';
 import '../../runtime/workbench_terminal_output.dart';
 
@@ -487,7 +488,7 @@ class _WorkbenchTerminalViewState extends ConsumerState<WorkbenchTerminalView>
                       },
                       icon: const Icon(Icons.refresh, color: Colors.white70),
                     ),
-                  PopupMenuButton<String>(
+                  AmitiaPopupMenuButton<String>(
                     tooltip: '终端操作',
                     icon: const Icon(Icons.more_horiz, color: Colors.white70),
                     onSelected: (value) {

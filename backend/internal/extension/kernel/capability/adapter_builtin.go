@@ -64,6 +64,7 @@ func (a *BuiltinRuntimeAdapter) Execute(
 	return UnifiedToolResult{
 		InvocationID: invocation.InvocationID,
 		Status:       ToolResultStatusSuccess,
+		Structured:   append(json.RawMessage(nil), output...),
 		Content: []ToolContent{
 			{Type: ToolContentText, Text: string(output)},
 		},

@@ -139,6 +139,9 @@ export const useExtensionUIStore = defineStore("extensionUI", () => {
   const sessions = ref<Map<string, SlotSession>>(new Map());
   const layoutPrefs = ref<Record<string, LayoutPreference>>({});
   let refreshTask: Promise<void> | null = null;
+  let refreshRevision = 0;
+  let appliedRefreshRevision = 0;
+  let refreshQueued = false;
 
   const slotsById = computed(() => {
     const map = new Map<string, SlotSnapshot>();
@@ -323,9 +326,14 @@ export const useExtensionUIStore = defineStore("extensionUI", () => {
   }
 
   async function refreshSnapshot(force = false): Promise<void> {
-    if (loading.value) return refreshTask ?? undefined;
+    if (force) refreshRevision += 1;
+    if (loading.value) {
+      if (force) refreshQueued = true;
+      return refreshTask ?? undefined;
+    }
     if (!force && snapshot.value && Date.now() - lastFetchAt.value < 30_000) return;
     loading.value = true;
+    const requestedRevision = refreshRevision;
     const task = (async () => {
       const platform = resolveHostEnvironment().platform;
       const deviceId = await resolveUIHostDeviceId();
@@ -368,8 +376,13 @@ export const useExtensionUIStore = defineStore("extensionUI", () => {
           recoverable: true,
         });
       } finally {
+        appliedRefreshRevision = Math.max(appliedRefreshRevision, requestedRevision);
         loading.value = false;
         refreshTask = null;
+      }
+      if (refreshQueued || refreshRevision > appliedRefreshRevision) {
+        refreshQueued = false;
+        await refreshSnapshot(true);
       }
     })();
     refreshTask = task;

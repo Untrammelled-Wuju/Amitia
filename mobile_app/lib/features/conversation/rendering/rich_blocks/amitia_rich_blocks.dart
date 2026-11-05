@@ -12,6 +12,7 @@ import '../../../../core/artifact/artifact_providers.dart';
 import '../../../../core/artifact/artifact_service.dart';
 import '../../../../core/ui_runtime/mobile_style_runtime.dart';
 import '../../../../core/widgets/conversation_media_image.dart';
+import '../../../../core/widgets/amitia_popup_menu.dart';
 import '../../../../core/services/owned_audio_source.dart';
 import '../amitia_message_theme.dart';
 import '../amrp.dart';
@@ -347,8 +348,8 @@ class _AmitiaToolBlockState extends State<AmitiaToolBlock> {
     try {
       return encoder.convert(value);
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-return value.toString();
+      print("[original-error] $error\n$stackTrace");
+      return value.toString();
     }
   }
 
@@ -806,8 +807,8 @@ class _ResolvedImageState extends State<_ResolvedImage> {
               errorBuilder: (_, _, _) => _ImageFailure(alt: widget.image.alt),
             );
           } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-return _ImageFailure(alt: widget.image.alt);
+            print("[original-error] $error\n$stackTrace");
+            return _ImageFailure(alt: widget.image.alt);
           }
         }
         if (uri.scheme == 'http' || uri.scheme == 'https') {
@@ -1018,7 +1019,7 @@ class _AmitiaAudioBlockState extends State<AmitiaAudioBlock> {
                     },
                   ),
                 ),
-                PopupMenuButton<double>(
+                AmitiaPopupMenuButton<double>(
                   initialValue: _speed,
                   tooltip: '播放速度',
                   onSelected: (value) {
@@ -1863,8 +1864,8 @@ class AmitiaFallbackBlock extends StatelessWidget {
     try {
       return encoder.convert(value);
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-return value.toString();
+      print("[original-error] $error\n$stackTrace");
+      return value.toString();
     }
   }
 }

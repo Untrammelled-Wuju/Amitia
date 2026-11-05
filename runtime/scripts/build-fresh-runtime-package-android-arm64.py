@@ -222,6 +222,7 @@ def main():
     parser.add_argument("--node-executable", required=True)
     parser.add_argument("--qdrant-archive", required=True)
     parser.add_argument("--surrealdb", required=True)
+    parser.add_argument("--plugin-market-package", required=True)
     parser.add_argument("--llama-runtime-dir")
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--output", required=True)
@@ -238,6 +239,7 @@ def main():
     libatomic_deb = Path(args.libatomic_deb).resolve()
     libgomp_deb = Path(args.libgomp_deb).resolve()
     node_executable = Path(args.node_executable).resolve()
+    plugin_market_package = Path(args.plugin_market_package).resolve()
     llama_runtime_dir = Path(args.llama_runtime_dir).resolve() if args.llama_runtime_dir else project / "desktop/resources/release-runtime/llama"
     node_lock = json.loads((project / "runtime/artifacts/node/linux-arm64/node-runtime-lock.json").read_text(encoding="utf-8"))
     rootfs_lock = json.loads((project / "runtime/artifacts/ubuntu-rootfs/linux-arm64/ubuntu-rootfs-lock.json").read_text(encoding="utf-8"))
@@ -247,6 +249,8 @@ def main():
         raise ValueError("locked Node, rootfs, libatomic or libgomp archive hash mismatch")
     if not node_executable.is_file():
         raise ValueError("Node executable is unavailable")
+    if not plugin_market_package.is_file() or plugin_market_package.suffix != ".amitiax":
+        raise ValueError("plugin market package is unavailable")
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="amitia-runtime-fresh-", dir=output.parent) as temporary:
         stage = Path(temporary)
@@ -258,6 +262,7 @@ def main():
         for host in ("plugin-host", "task-host"):
             shutil.copytree(project / "runtime" / host / "dist", program / host / "dist")
             copy(project / "runtime" / host / "package.json", program / host / "package.json")
+        copy(plugin_market_package, program / "bundled-plugins" / "plugin-market" / plugin_market_package.name)
         for script in ("amitia-node-prepare.sh", "amitia-node-probe.sh"):
             copy(project / "runtime/scripts/node" / script, program / "scripts/node" / script)
         if not (llama_runtime_dir / "llama-server").is_file():

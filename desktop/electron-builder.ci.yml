@@ -13,6 +13,10 @@ extraResources:
     filter:
       - "**/*"
       - "!.release-runtime-assets.json"
+  - from: ../plugin/plugin-market
+    to: bundled-plugins/plugin-market
+    filter:
+      - "*.amitiax"
   - from: ../runtime/plugin-host/dist
     to: runtime/plugin-host/dist
   - from: ../runtime/task-host/dist

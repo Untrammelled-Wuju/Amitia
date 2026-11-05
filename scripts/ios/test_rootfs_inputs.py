@@ -73,7 +73,8 @@ class RootfsInputsTests(unittest.TestCase):
                     MODULE.add_bytes(archive, "qdrant", qdrant_binary, 0o755)
             (root / "core").write_bytes(elf())
             (root / "sources").write_bytes(b"{}")
-            MODULE.prepare(root / "alpine.tar.gz", root / "node.tar.gz", root / "core", root / "sources", "3.21.0", root / "guest.tar.gz", root / "manifest", root / "qdrant.tar.gz")
+            (root / "amitia-plugin-market-1.0.0.amitiax").write_bytes(b"plugin market")
+            MODULE.prepare(root / "alpine.tar.gz", root / "node.tar.gz", root / "core", root / "sources", "3.21.0", root / "guest.tar.gz", root / "manifest", root / "qdrant.tar.gz", root / "amitia-plugin-market-1.0.0.amitiax")
 
     def test_missing_qdrant_and_wrong_arch_refuse_package(self):
         node = elf(b"/lib/ld-musl-aarch64.so.1")
@@ -118,17 +119,21 @@ class RootfsInputsTests(unittest.TestCase):
                 MODULE.add_bytes(archive, "qdrant", elf(), 0o755)
             (root / "core").write_bytes(elf())
             (root / "sources").write_bytes(b'{"inputs":[]}\n')
-            MODULE.prepare(root / "alpine.tar.gz", root / "node.tar.gz", root / "core", root / "sources", "3.21.0", root / "guest.tar.gz", root / "manifest", root / "qdrant.tar.gz")
+            plugin_market = root / "amitia-plugin-market-1.0.0.amitiax"
+            plugin_market.write_bytes(b"plugin market")
+            MODULE.prepare(root / "alpine.tar.gz", root / "node.tar.gz", root / "core", root / "sources", "3.21.0", root / "guest.tar.gz", root / "manifest", root / "qdrant.tar.gz", plugin_market)
             with tarfile.open(root / "guest.tar.gz") as archive:
                 self.assertEqual(archive.getmember("home/amitia").uid, 1000)
                 self.assertEqual(archive.getmember("var/lib/amitia/data").mode, 0o700)
                 self.assertEqual(archive.getmember("var/lib/amitia/data").uid, 0)
                 self.assertIn(b"v3.21/main", archive.extractfile("etc/apk/repositories").read())
                 self.assertEqual(archive.extractfile(MODULE.CORE_PATH[1:]).read(), elf())
+                self.assertEqual(archive.extractfile("opt/amitia/bundled-plugins/plugin-market/amitia-plugin-market-1.0.0.amitiax").read(), b"plugin market")
             manifest = json.loads((root / "manifest").read_text())
             self.assertEqual(manifest["guestArch"], "arm64")
             self.assertNotIn("packageSha256", manifest)
             self.assertEqual(manifest["qdrant"]["path"], MODULE.QDRANT_PATH)
+            self.assertEqual(manifest["bundledPlugins"][0]["path"], "/opt/amitia/bundled-plugins/plugin-market/amitia-plugin-market-1.0.0.amitiax")
             stored = next(item for item in manifest["runtimeLibraries"] if item["path"] == "/lib/libc.musl-aarch64.so.1")
             self.assertEqual(stored["hostStoredSha256"], MODULE.digest(b"ld-musl-aarch64.so.1"))
             self.assertEqual(stored["sha256"], MODULE.digest(elf()))

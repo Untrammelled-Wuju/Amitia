@@ -9,8 +9,9 @@ import {
 
 describe("storage policy", () => {
   it("places data beside the installation directory", () => {
-    expect(resolveSiblingDataDir("D:\\a\\Amitia")).toBe(
-      path.resolve("D:\\a\\AmitiaData"),
+    const installDir = path.resolve("a", "Amitia");
+    expect(resolveSiblingDataDir(installDir)).toBe(
+      path.resolve("a", "AmitiaData"),
     );
   });
 

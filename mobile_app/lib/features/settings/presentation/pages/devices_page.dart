@@ -14,6 +14,7 @@ import '../../../../core/services/device_management_intent.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 import '../../../../core/runtime/backend/mobile_backend_providers.dart';
 import '../../../../core/widgets/amitia_button.dart';
+import '../../../../core/widgets/amitia_popup_menu.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import 'device_core_call_page.dart';
 import 'device_capability_grants_page.dart';
@@ -574,7 +575,7 @@ class _DeviceTileState extends State<_DeviceTile> {
                   ],
                 ),
               ),
-              PopupMenuButton<String>(
+              AmitiaPopupMenuButton<String>(
                 tooltip: '设备操作',
                 onSelected: (action) {
                   switch (action) {

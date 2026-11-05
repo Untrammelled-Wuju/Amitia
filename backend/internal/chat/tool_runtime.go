@@ -200,6 +200,7 @@ func structuredToolResult(toolName string) bool {
 		"harness_agent_run_list",
 		"harness_agent_message_send",
 		"harness_agent_message_read",
+		"harness_agent_message_acknowledge",
 		"execute_host_command",
 		"execute_terminal",
 		"execute_in_terminal_session_streaming",

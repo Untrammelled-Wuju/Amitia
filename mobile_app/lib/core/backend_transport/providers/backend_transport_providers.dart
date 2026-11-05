@@ -55,10 +55,35 @@ BusinessBackendUnavailable _businessUnavailable(RuntimeStatusSnapshot status) {
   );
 }
 
+Future<bool> _waitForAvailabilityInterval(
+  Future<void> disposed,
+  Duration duration,
+) {
+  final result = Completer<bool>();
+  late Timer timer;
+  var completed = false;
+  void complete(bool shouldContinue) {
+    if (completed) return;
+    completed = true;
+    result.complete(shouldContinue);
+  }
+
+  timer = Timer(duration, () => complete(true));
+  disposed.then((_) {
+    timer.cancel();
+    complete(false);
+  });
+  return result.future;
+}
+
 Future<void> _waitForBusinessBackend(Ref ref) async {
-  final deadline = DateTime.now().add(_backendAvailabilityWaitTimeout);
+  final disposed = Completer<void>();
+  ref.onDispose(() {
+    if (!disposed.isCompleted) disposed.complete();
+  });
+  final elapsed = Stopwatch()..start();
   var status = ref.read(runtimeStatusCurrentProvider);
-  while (DateTime.now().isBefore(deadline)) {
+  while (elapsed.elapsed < _backendAvailabilityWaitTimeout) {
     status = ref.read(runtimeStatusCurrentProvider);
     if (_isBusinessApiUsable(
       ref,
@@ -70,21 +95,35 @@ Future<void> _waitForBusinessBackend(Ref ref) async {
     if (status.phase == RuntimeStatusPhase.failed) {
       throw _businessUnavailable(status);
     }
-    await Future<void>.delayed(_backendAvailabilityPollInterval);
+    if (!await _waitForAvailabilityInterval(
+      disposed.future,
+      _backendAvailabilityPollInterval,
+    )) {
+      throw _businessUnavailable(status);
+    }
   }
   throw _businessUnavailable(status);
 }
 
 Future<void> _waitForDeviceLocalBackend(Ref ref) async {
-  final deadline = DateTime.now().add(_backendAvailabilityWaitTimeout);
+  final disposed = Completer<void>();
+  ref.onDispose(() {
+    if (!disposed.isCompleted) disposed.complete();
+  });
+  final elapsed = Stopwatch()..start();
   var status = ref.read(runtimeStatusCurrentProvider);
-  while (DateTime.now().isBefore(deadline)) {
+  while (elapsed.elapsed < _backendAvailabilityWaitTimeout) {
     status = ref.read(runtimeStatusCurrentProvider);
     if (ref.read(rawDeviceLocalBackendServiceApiProvider) != null) return;
     if (status.phase == RuntimeStatusPhase.failed) {
       throw _businessUnavailable(status);
     }
-    await Future<void>.delayed(_backendAvailabilityPollInterval);
+    if (!await _waitForAvailabilityInterval(
+      disposed.future,
+      _backendAvailabilityPollInterval,
+    )) {
+      throw _businessUnavailable(status);
+    }
   }
   throw _businessUnavailable(status);
 }
@@ -411,9 +450,9 @@ final rawBackendServiceApiProvider = Provider<BackendServiceApi?>((ref) {
 
 final backendServiceProvider = Provider<BackendServiceApi>((ref) {
   final logService = ref.read(debugLogServiceProvider);
-  DateTime? lastUnavailableAt;
+  Stopwatch? lastUnavailableElapsed;
   String? lastUnavailableKey;
-  DateTime? lastDeviceUnavailableAt;
+  Stopwatch? lastDeviceUnavailableElapsed;
   String? lastDeviceUnavailableKey;
 
   final businessApi = DynamicBackendServiceApiProxy(
@@ -429,18 +468,17 @@ final backendServiceProvider = Provider<BackendServiceApi>((ref) {
           api.generation == status.generation;
     },
     onUnavailable: (error) {
-      final now = DateTime.now();
       final primary = error.primaryError;
       final key =
           '${error.phase.name}:${error.generation}:${primary?.code ?? 'BUSINESS_UNAVAILABLE'}:'
           '${primary?.message ?? ''}:${primary?.details ?? const <String, String>{}}';
       if (lastUnavailableKey == key &&
-          lastUnavailableAt != null &&
-          now.difference(lastUnavailableAt!) < const Duration(seconds: 30)) {
+          lastUnavailableElapsed != null &&
+          lastUnavailableElapsed!.elapsed < const Duration(seconds: 30)) {
         return;
       }
       lastUnavailableKey = key;
-      lastUnavailableAt = now;
+      lastUnavailableElapsed = Stopwatch()..start();
       logService.addBackendLog(
         error.toString(),
         primary == null ? DebugLogLevel.debug : DebugLogLevel.error,
@@ -454,19 +492,17 @@ final backendServiceProvider = Provider<BackendServiceApi>((ref) {
     currentStatus: () => ref.read(runtimeStatusCurrentProvider),
     canUseApi: (_, api) => api != null,
     onUnavailable: (error) {
-      final now = DateTime.now();
       final primary = error.primaryError;
       final key =
           '${error.phase.name}:${error.generation}:${primary?.code ?? 'BUSINESS_UNAVAILABLE'}:'
           '${primary?.message ?? ''}:${primary?.details ?? const <String, String>{}}';
       if (lastDeviceUnavailableKey == key &&
-          lastDeviceUnavailableAt != null &&
-          now.difference(lastDeviceUnavailableAt!) <
-              const Duration(seconds: 30)) {
+          lastDeviceUnavailableElapsed != null &&
+          lastDeviceUnavailableElapsed!.elapsed < const Duration(seconds: 30)) {
         return;
       }
       lastDeviceUnavailableKey = key;
-      lastDeviceUnavailableAt = now;
+      lastDeviceUnavailableElapsed = Stopwatch()..start();
       logService.addBackendLog(
         'DeviceLocalBackendUnavailable\n$error',
         primary == null ? DebugLogLevel.debug : DebugLogLevel.error,
@@ -478,6 +514,8 @@ final backendServiceProvider = Provider<BackendServiceApi>((ref) {
   return RoutedBackendServiceApiProxy(
     businessApi: businessApi,
     deviceLocalApi: deviceLocalApi,
-    isCloudDeployment: () => ref.read(mobileDeploymentConfigProvider).mode == MobileDeploymentMode.cloud,
+    isCloudDeployment: () =>
+        ref.read(mobileDeploymentConfigProvider).mode ==
+        MobileDeploymentMode.cloud,
   );
 });

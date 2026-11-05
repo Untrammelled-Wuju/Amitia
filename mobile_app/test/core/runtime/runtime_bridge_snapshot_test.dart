@@ -13,6 +13,7 @@ void main() {
         'generation': 12,
         'runtimeInstalled': true,
         'runtimeAvailable': true,
+        'embeddedPackageMatches': false,
         'lastError': null,
         'manifest': null,
       };
@@ -22,6 +23,7 @@ void main() {
       expect(snapshot.generation, 12);
       expect(snapshot.runtimeInstalled, true);
       expect(snapshot.runtimeAvailable, true);
+      expect(snapshot.embeddedPackageMatches, false);
       expect(snapshot.lastError, isNull);
     });
 
@@ -77,6 +79,7 @@ void main() {
       expect(snapshot.generation, 0);
       expect(snapshot.runtimeInstalled, false);
       expect(snapshot.runtimeAvailable, false);
+      expect(snapshot.embeddedPackageMatches, false);
       expect(snapshot.lastError, isNull);
       expect(snapshot.manifest, isNull);
     });
@@ -111,6 +114,31 @@ void main() {
       expect(
         RuntimeBridgeState.fromNative('INSTALLING'),
         RuntimeBridgeState.installing,
+      );
+    });
+
+    test('fromNative maps INSTALLED to stopped', () {
+      expect(
+        RuntimeBridgeState.fromNative('INSTALLED'),
+        RuntimeBridgeState.stopped,
+      );
+    });
+
+    test('fromNative maps VERIFYING and REPAIRING to installing', () {
+      expect(
+        RuntimeBridgeState.fromNative('VERIFYING'),
+        RuntimeBridgeState.installing,
+      );
+      expect(
+        RuntimeBridgeState.fromNative('REPAIRING'),
+        RuntimeBridgeState.installing,
+      );
+    });
+
+    test('fromNative maps DEGRADED to ready', () {
+      expect(
+        RuntimeBridgeState.fromNative('DEGRADED'),
+        RuntimeBridgeState.ready,
       );
     });
 

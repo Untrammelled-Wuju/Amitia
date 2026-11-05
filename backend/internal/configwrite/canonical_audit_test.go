@@ -45,7 +45,7 @@ func TestConfigurationAuditAdministratorUsesCanonicalCoreRowsAndCurrentSpace(t *
 		c.Request = c.Request.WithContext(auth.WithActor(c.Request.Context(), actor))
 		c.Next()
 	})
-	h := system.NewHandler(system.NewService(&app.AppContext{DB: db}, ""), db, nil, nil, nil, nil, nil)
+	h := system.NewHandler(system.NewService(&app.AppContext{DB: db}, ""), db, nil, nil, nil, nil)
 	router.GET("/audit", h.AuditLogs)
 	router.GET("/stats", h.AuditStats)
 	router.DELETE("/audit", h.ClearAuditLogs)

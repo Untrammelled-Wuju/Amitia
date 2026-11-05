@@ -159,10 +159,10 @@ class MethodChannelEmbeddedRuntimeController
   }
 
   Future<Map<String, dynamic>> _waitForStopped(int capturedGeneration) async {
-    final deadline = DateTime.now().add(_profileSwitchTimeout);
+    final elapsed = Stopwatch()..start();
     var last = await _readSnapshot();
     while (capturedGeneration == _startGeneration &&
-        DateTime.now().isBefore(deadline)) {
+        elapsed.elapsed < _profileSwitchTimeout) {
       final status = _mapSnapshotStatus(last);
       if (status == EmbeddedRuntimeStatus.stopped ||
           status == EmbeddedRuntimeStatus.failed ||

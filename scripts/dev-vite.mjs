@@ -1,5 +1,4 @@
 import { spawn } from "node:child_process";
-import { createServer } from "node:net";
 
 const [viteBin, cwd, ...extraArgs] = process.argv.slice(2);
 if (!viteBin || !cwd) {
@@ -7,20 +6,11 @@ if (!viteBin || !cwd) {
   process.exit(2);
 }
 
-const port = await new Promise((resolve, reject) => {
-  const server = createServer();
-  server.unref();
-  server.once("error", reject);
-  server.listen(0, "127.0.0.1", () => {
-    const address = server.address();
-    const value = typeof address === "object" && address ? address.port : 0;
-    server.close((error) => {
-      if (error) reject(error);
-      else if (value > 0) resolve(value);
-      else reject(new Error("unable to allocate dev server port"));
-    });
-  });
-});
+const port = Number(process.env.AMITIA_WEB_PORT || 5178);
+if (!Number.isSafeInteger(port) || port < 1 || port > 65535 || port === 3000) {
+  console.error("项目前端端口必须是 1-65535 之间且不能使用 3000");
+  process.exit(2);
+}
 
 const child = spawn(
   process.execPath,

@@ -85,3 +85,13 @@ func (c *Client) Close() {
 func (c *Client) DB() *surrealdb.DB {
 	return c.db
 }
+
+func (c *Client) Health(ctx context.Context) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.db == nil {
+		return fmt.Errorf("surrealdb client is not initialized")
+	}
+	_, err := surrealdb.Query[any](ctx, c.db, "RETURN 1", nil)
+	return err
+}

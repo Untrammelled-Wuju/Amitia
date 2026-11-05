@@ -90,11 +90,12 @@ export function resolvePackagePathUnderRoot(
 export function relativePackagePathFromRoot(root: string, fullPath: string): string {
   if (!isAbsolute(fullPath)) throw new Error(`PACKAGE_TARGET_NOT_ABSOLUTE: ${fullPath}`);
 
+  const lexicalRoot = resolve(root);
   const realRoot = resolveRealPackageRoot(root);
   const lexicalTarget = resolve(fullPath);
-  assertPathInsideRoot(realRoot, lexicalTarget);
+  assertPathInsideRoot(lexicalRoot, lexicalTarget);
 
-  const rel = relative(realRoot, lexicalTarget).split(sep).join("/");
+  const rel = relative(lexicalRoot, lexicalTarget).split(sep).join("/");
   const canonical = normalizePackagePath(rel);
   const resolvedTarget = inspectPackagePathComponents(realRoot, canonical, true);
   const realRequestedTarget = realpathSync(lexicalTarget);

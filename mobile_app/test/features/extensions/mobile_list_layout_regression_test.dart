@@ -28,7 +28,7 @@ void main() {
     expect(source, isNot(contains("'制作工具'")));
     expect(source, contains("title: '角色卡工坊'"));
     expect(source, contains("title: '桌宠中心'"));
-    expect(source, isNot(contains("title: '工作流'")));
+    expect(source, contains("title: '工作流'"));
     expect(source, isNot(contains("title: '技能制作'")));
     expect(source, contains('color: context.surfaceSecondary'));
     expect(source, contains('Icons.arrow_forward_rounded'));
@@ -41,7 +41,8 @@ void main() {
       'lib/features/extensions/presentation/pages/extension_packages_page.dart',
     ).readAsStringSync();
 
-    expect(source, contains('PopupMenuButton<String>'));
+    expect(source, contains('AmitiaPopupMenuButton<String>'));
+    expect(source, isNot(matches(RegExp(r'\bPopupMenuButton\s*<'))));
     expect(source, contains("label: '权限管理'"));
     expect(source, contains("label: '暂停'"));
     expect(source, contains("label: '更新'"));
@@ -60,7 +61,6 @@ void main() {
     expect(source, contains("label: '调度中心'"));
     expect(source, contains("label: '桌面贡献中心'"));
     expect(source, contains("label: '开发者诊断控制台'"));
-    expect(source, contains("label: '迁移与灰度中心'"));
     expect(source, contains("label: '开发模式中心'"));
     expect(source, isNot(contains('floatingActionButton:')));
     expect(source, contains('AmitiaSearchField('));

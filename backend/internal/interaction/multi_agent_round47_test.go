@@ -73,7 +73,14 @@ func TestRound47SnapshotIncludesVerifiedTerminalChildResult(t *testing.T) {
 	original, replica, tracker, id := round47RecoveryReplica(t)
 	live := original.coordinations[id]
 	childID := live.assignments[0].ChildInteractionID
-	if err := tracker.Create(ctx, &InteractionRecord{ID: childID, Status: InteractionStatusCompleted, ResultRef: "verified-result"}); err != nil {
+	if err := tracker.Create(ctx, &InteractionRecord{
+		ID: childID, Status: InteractionStatusCompleted, ResultRef: "verified-result",
+		Scope: InteractionScope{
+			SpaceID: "space-46", CharacterID: live.assignments[0].WorkerRef.CharacterID,
+			ConversationID: workerConversationID(WorkerRunRequest{AssignmentID: live.assignments[0].ID}),
+			Source:         "multi_agent", RequestID: "ma-" + live.assignments[0].ID,
+		},
+	}); err != nil {
 		t.Fatal(err)
 	}
 	live.assignments[0].Status = AssignmentSucceeded

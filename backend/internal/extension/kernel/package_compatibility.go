@@ -12,6 +12,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
+	"github.com/u-ai/backend/internal/extension/platformcompat"
 	gamehostnetworkpolicy "github.com/u-ai/backend/internal/gamehost/networkpolicy"
 	gameprotocol "github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
@@ -20,32 +21,8 @@ func currentPackageHostVersion() string {
 	return config.AppVersion()
 }
 
-func normalizePackagePlatform(value string) string {
-	normalized := strings.ToLower(strings.TrimSpace(value))
-	switch {
-	case normalized == "windows" || strings.HasPrefix(normalized, "windows-"):
-		return "windows"
-	case normalized == "darwin" || strings.HasPrefix(normalized, "darwin-"):
-		return "darwin"
-	case normalized == "linux" || strings.HasPrefix(normalized, "linux-"):
-		return "linux"
-	default:
-		return normalized
-	}
-}
-
 func packagePlatformMatches(values []string, platform string) bool {
-	if len(values) == 0 {
-		return true
-	}
-	target := normalizePackagePlatform(platform)
-	for _, value := range values {
-		normalized := normalizePackagePlatform(value)
-		if normalized == "all" || normalized == "*" || normalized == target {
-			return true
-		}
-	}
-	return false
+	return platformcompat.Supports(values, platform)
 }
 
 func packageVersionMatches(actual, required string) bool {

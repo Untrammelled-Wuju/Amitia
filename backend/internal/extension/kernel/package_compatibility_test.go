@@ -43,10 +43,10 @@ func TestPackagePlatformUsesCanonicalValues(t *testing.T) {
 		platform string
 		want     bool
 	}{
-		{[]string{"macos"}, "darwin", false},
-		{[]string{"darwin"}, "macos", false},
-		{[]string{"win32"}, "windows", false},
-		{[]string{"windows"}, "win32", false},
+		{[]string{"macos"}, "darwin", true},
+		{[]string{"darwin"}, "macos", true},
+		{[]string{"win32"}, "windows", true},
+		{[]string{"windows"}, "win32", true},
 		{[]string{"linux"}, "linux", true},
 		{[]string{"darwin"}, "darwin", true},
 		{[]string{"windows"}, "windows", true},

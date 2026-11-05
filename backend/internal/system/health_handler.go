@@ -5,6 +5,7 @@ package system
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/interaction"
+	"github.com/u-ai/backend/internal/runtimeorchestrator"
 	"github.com/u-ai/backend/pkg/util"
 )
 
@@ -45,6 +46,25 @@ func (h *Handler) Health(c *gin.Context) {
 	if h.unifiedEntry == nil || backpressure == interaction.BackpressureShedding {
 		ready = false
 	}
+	if h.runtimeReadiness != nil {
+		snapshot := h.runtimeReadiness(c.Request.Context())
+		components := make([]map[string]interface{}, 0)
+		for id, component := range snapshot.Components {
+			if component.State != runtimeorchestrator.StateDegraded && component.State != runtimeorchestrator.StateFailed {
+				continue
+			}
+			components = append(components, map[string]interface{}{
+				"id": id, "state": component.State, "required": component.Required, "error": component.LastError,
+			})
+		}
+		checks["runtime"] = map[string]interface{}{
+			"state": snapshot.State, "readyCount": snapshot.ReadyCount, "degradedCount": snapshot.DegradedCount,
+			"failedCount": snapshot.FailedCount, "blockingCount": snapshot.BlockingCount, "components": components,
+		}
+		if runtimeSnapshotUnavailable(snapshot) {
+			ready = false
+		}
+	}
 	health["ready"] = ready
 	health["health"] = ready
 	health["checks"] = checks
@@ -53,6 +73,10 @@ func (h *Handler) Health(c *gin.Context) {
 		return
 	}
 	util.SuccessResponse(c, health)
+}
+
+func runtimeSnapshotUnavailable(snapshot runtimeorchestrator.RuntimeSnapshot) bool {
+	return snapshot.IsBlocked() || snapshot.BlockingCount > 0 || snapshot.FailedCount > 0
 }
 
 func (h *Handler) Diagnostics(c *gin.Context) { util.SuccessResponse(c, h.service.Diagnostics()) }

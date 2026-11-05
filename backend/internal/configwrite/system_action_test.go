@@ -17,7 +17,7 @@ import (
 
 func configurationActionRouter(db *gorm.DB) *gin.Engine {
 	router := gin.New()
-	h := system.NewHandler(system.NewService(&app.AppContext{DB: db}, ""), db, nil, nil, nil, nil, nil)
+	h := system.NewHandler(system.NewService(&app.AppContext{DB: db}, ""), db, nil, nil, nil, nil)
 	router.DELETE("/audit", h.ClearAuditLogs)
 	router.DELETE("/usage", h.UsageClear)
 	router.DELETE("/logs", h.LogsDelete)
@@ -51,7 +51,7 @@ func TestSafetyIncidentAPIsUseOwnerScopeAndRevision(t *testing.T) {
 		c.Request = c.Request.WithContext(auth.WithActor(c.Request.Context(), actor))
 		c.Next()
 	})
-	h := system.NewHandler(system.NewService(&app.AppContext{DB: db}, ""), db, nil, nil, nil, nil, nil)
+	h := system.NewHandler(system.NewService(&app.AppContext{DB: db}, ""), db, nil, nil, nil, nil)
 	router.GET("/safety", h.SafetyEvents)
 	router.PUT("/safety/:id/handle", h.HandleSafetyEvent)
 	router.DELETE("/safety", h.DeleteSafetyEvents)

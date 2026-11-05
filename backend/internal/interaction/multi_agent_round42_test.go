@@ -11,11 +11,11 @@ import (
 func TestRound42UnknownDispatchCannotBeAcknowledgedAsCancelled(t *testing.T) {
 	ctx := context.Background()
 	tracker := NewInMemoryTracker()
-	if err := tracker.Create(ctx, &InteractionRecord{ID: "round42-parent", Status: InteractionStatusProcessing}); err != nil {
+	if err := tracker.Create(ctx, &InteractionRecord{ID: "round42-parent", Status: InteractionStatusProcessing, Scope: InteractionScope{SpaceID: "space-42", CharacterID: "parent-char", ConversationID: "parent-conversation"}}); err != nil {
 		t.Fatal(err)
 	}
 	goals := decision.NewGoalRegistry()
-	if err := goals.Register(decision.Goal{ID: "round42-goal", Revision: 1, Status: decision.GoalStatusActive}); err != nil {
+	if err := goals.Register(decision.Goal{ID: "round42-goal", Revision: 1, Status: decision.GoalStatusActive, SpaceID: "space-42", CharacterID: "parent-char", ConversationID: "parent-conversation"}); err != nil {
 		t.Fatal(err)
 	}
 	runner := &round41UncertainRunner{}

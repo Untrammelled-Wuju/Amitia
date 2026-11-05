@@ -173,6 +173,39 @@ class DefaultInstalledRuntimeVerifierTest {
         assertEquals("fixed-tree-hash-for-test", verification.runtimeRootTreeSha256)
     }
 
+    @Test
+    fun verifyForStart_usesInstallReceiptWithoutHashingInstalledTree() {
+        val runtimeRoot = tempFolder.newFolder("runtime-start-receipt")
+        createMinimalRuntimeStructure(runtimeRoot)
+        val expectedTreeSha = "a".repeat(64)
+        val verifier = DefaultInstalledRuntimeVerifier(
+            treeHasher = { throw AssertionError("full tree hash must not run for start") }
+        )
+
+        val result = verifier.verifyForStart(runtimeRoot, expectedTreeSha)
+
+        assertTrue(result is InstalledRuntimeVerificationResult.Success)
+        assertEquals(
+            expectedTreeSha,
+            (result as InstalledRuntimeVerificationResult.Success)
+                .verification.runtimeRootTreeSha256
+        )
+    }
+
+    @Test
+    fun verifyForStart_rejectsInvalidReceiptTreeHash() {
+        val runtimeRoot = tempFolder.newFolder("runtime-start-invalid-receipt")
+        createMinimalRuntimeStructure(runtimeRoot)
+
+        val result = createVerifier().verifyForStart(runtimeRoot, "invalid")
+
+        assertTrue(result is InstalledRuntimeVerificationResult.Failure)
+        assertTrue(
+            (result as InstalledRuntimeVerificationResult.Failure)
+                .message.contains("invalid runtime tree hash")
+        )
+    }
+
     private fun createMinimalRuntimeStructure(
         root: File,
         includeBackend: Boolean = true,

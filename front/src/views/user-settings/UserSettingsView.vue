@@ -208,7 +208,7 @@ onMounted(loadAll);
 <style scoped>
 .space-settings { width: min(100%, 1040px); min-width: 0; display: grid; gap: 20px; }
 .section-heading p { margin: 7px 0 0; color: var(--text-secondary); font-size: 13px; line-height: 1.6; }
-.profile-overview { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 24px; padding: 28px; border-radius: 24px; background: #2C2C2E; }
+.profile-overview { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 24px; padding: 28px; border-radius: 24px; background: var(--tp-profile-bg); }
 .avatar-preview { position: relative; width: 104px; height: 104px; flex: 0 0 auto; display: grid; place-items: center; overflow: hidden; padding: 0; cursor: pointer; border: 0; border-radius: 28px; background: color-mix(in srgb, var(--workbench-bg) 72%, var(--ac-color-primary)); color: var(--text-secondary); }
 .avatar-preview:hover { background: color-mix(in srgb, var(--workbench-bg) 62%, var(--ac-color-primary)); }
 .avatar-preview img { width: 100%; height: 100%; object-fit: cover; }

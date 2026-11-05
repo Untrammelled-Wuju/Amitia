@@ -367,7 +367,10 @@ export function useConversationRuntime(
     publishApprovalState({ action: "reset", conversationId: conversationId.value });
     for (const approval of snapshot.approvals || []) publishApprovalState({ action: "requested", ...approval });
     const previousGroupMessages = groupSending?.value ? persistedMessages.value.filter((message) => message.groupRoundId && message.deliveryId || message.role === "user" && message.status === "sending") : [];
-    const snapshotMessages = (snapshot.messages || []).map((message) => normalizeRealtimeMessage(message));
+    const snapshotMessages = (snapshot.messages || []).map((message) => normalizeRealtimeMessage({
+      ...message,
+      messageId: message?.messageId || message?.id,
+    }));
     const snapshotIds = new Set(snapshotMessages.map((message) => String(message.id || "")));
     const sameDelivery = (a: any, b: any) => Boolean(a.deliveryId && b.deliveryId && a.deliveryId === b.deliveryId && a.groupRoundId && a.groupRoundId === b.groupRoundId);
     persistedMessages.value = [...snapshotMessages.map((message) => {

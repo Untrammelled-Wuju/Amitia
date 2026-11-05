@@ -110,7 +110,8 @@
           "visibleWhen": [
             {
               "field": "status.message",
-              "operator": "not_null"
+              "operator": "!=",
+              "value": ""
             },
             {
               "field": "status.status",
@@ -138,7 +139,8 @@
           "visibleWhen": [
             {
               "field": "status.lastError",
-              "operator": "not_null"
+              "operator": "!=",
+              "value": ""
             }
           ]
         },
@@ -161,7 +163,8 @@
           "visibleWhen": [
             {
               "field": "connectResult.data.qrImageUrl",
-              "operator": "not_null"
+              "operator": "!=",
+              "value": ""
             },
             {
               "field": "status.status",
