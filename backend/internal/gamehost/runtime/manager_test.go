@@ -2,7 +2,9 @@ package runtime
 
 import (
 	"context"
+	"strconv"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -10,12 +12,11 @@ import (
 )
 
 type deterministicIDGenerator struct {
-	counter int
+	counter atomic.Int64
 }
 
 func (g *deterministicIDGenerator) NewRuntimeID() domain.RuntimeInstanceID {
-	g.counter++
-	return domain.RuntimeInstanceID("rt_test_" + string(rune('0'+g.counter)))
+	return domain.RuntimeInstanceID("rt_test_" + strconv.FormatInt(g.counter.Add(1), 10))
 }
 
 func fixedClock() time.Time {

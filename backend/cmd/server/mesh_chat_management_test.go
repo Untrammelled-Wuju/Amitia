@@ -1,12 +1,74 @@
 package main
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	"github.com/u-ai/backend/internal/system/dataportability"
 )
+
+type chatCleanupBackupTestContributor struct {
+	db      *sql.DB
+	ownerID string
+}
+
+func (chatCleanupBackupTestContributor) ID() string             { return "chat-cleanup-qa" }
+func (chatCleanupBackupTestContributor) Name() string           { return "Chat cleanup QA" }
+func (chatCleanupBackupTestContributor) Dependencies() []string { return nil }
+func (chatCleanupBackupTestContributor) ComponentIDs() []string {
+	return []string{"owned.resources"}
+}
+func (chatCleanupBackupTestContributor) Plan(context.Context, dataportability.BackupRequest) ([]dataportability.BackupComponentPlan, error) {
+	return []dataportability.BackupComponentPlan{{ID: "owned.resources", LogicalName: "owned.resources", Kind: dataportability.KindDataset, Required: true}}, nil
+}
+func (c chatCleanupBackupTestContributor) Export(ctx context.Context, _ dataportability.BackupRequest, out dataportability.BackupWriter) error {
+	rows, err := c.db.QueryContext(ctx, `SELECT kind,resource_id,role_id,revision,deleted,body,updated_at FROM kernel_device_owned_resources WHERE owner_id=? ORDER BY kind,resource_id`, c.ownerID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	writer, err := out.CreateComponent("owned.resources", "owned.resources", dataportability.KindDataset)
+	if err != nil {
+		return err
+	}
+	encoder := json.NewEncoder(writer)
+	for rows.Next() {
+		var kind, id, role, body, updated string
+		var revision int64
+		var deleted bool
+		if err := rows.Scan(&kind, &id, &role, &revision, &deleted, &body, &updated); err != nil {
+			return err
+		}
+		if err := encoder.Encode(map[string]any{"kind": kind, "id": id, "roleId": role, "revision": revision, "deleted": deleted, "body": json.RawMessage(body), "updatedAt": updated}); err != nil {
+			return err
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	return writer.Close()
+}
+func (chatCleanupBackupTestContributor) PreviewImport(context.Context, dataportability.ImportPreviewRequest, dataportability.BackupReader) ([]dataportability.ImportComponentPreview, error) {
+	return nil, nil
+}
+func (chatCleanupBackupTestContributor) Import(context.Context, dataportability.ImportRequest, dataportability.BackupReader) error {
+	return nil
+}
+
+func installChatCleanupBackup(t *testing.T, p *meshLocalDataPort) {
+	t.Helper()
+	dataDir := t.TempDir()
+	coordinator := dataportability.NewCoordinator(dataDir, "test", "test", "baseline-v1", dataportability.NewStagingManager(dataDir))
+	if err := coordinator.RegisterContributors(chatCleanupBackupTestContributor{db: p.services.KernelContainer.DeviceRegistry.Database(), ownerID: p.ownerID}); err != nil {
+		t.Fatal(err)
+	}
+	p.services.DataPortability = coordinator
+}
 
 func seedOwnedChatManagement(t *testing.T, p *meshLocalDataPort, kind, id, role string, body string) {
 	t.Helper()
@@ -48,6 +110,7 @@ func TestOwnedChatCleanupPreservesMemoriesAndDeletesCurrentHistory(t *testing.T)
 	for _, include := range []bool{false, true} {
 		t.Run(map[bool]string{false: "keep-memory", true: "delete-memory"}[include], func(t *testing.T) {
 			p := setupMeshLocalDataPort(t)
+			installChatCleanupBackup(t, p)
 			scope := coordination.ExecutionScope{TargetDeviceID: p.ownerID, CoreID: "core", ResourceOwnerID: p.ownerID, RoleOwnerID: p.ownerID, RoleID: "one", RoleRevision: 3, RequestID: "cleanup"}
 			seedOwnedChatManagement(t, p, "conversation", "owned", "one", `{"title":"Owned"}`)
 			seedOwnedChatManagement(t, p, "message", "owned-message", "one", `{"conversationId":"owned","role":"user","content":"hello"}`)
@@ -57,9 +120,26 @@ func TestOwnedChatCleanupPreservesMemoriesAndDeletesCurrentHistory(t *testing.T)
 			if err != nil {
 				t.Fatal(err)
 			}
+			if preview["estimatedSize"].(int64) <= 0 {
+				t.Fatalf("cleanup preview missing data estimate: %v", preview)
+			}
 			request := coordination.ChatManagementRequest{Operation: "cleanup/confirm", ConversationOwnerID: p.ownerID, PreviewID: preview["previewId"].(string), ConfirmText: "确认清理"}
-			if _, err := p.ManageChat(t.Context(), scope, request); err != nil {
+			result, err := p.ManageChat(t.Context(), scope, request)
+			if err != nil {
 				t.Fatal(err)
+			}
+			backupPath, ok := result["backupPath"].(string)
+			if !ok || backupPath == "" {
+				t.Fatalf("cleanup did not report backup: %v", result)
+			}
+			if _, err := os.Stat(backupPath); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := p.services.DataPortability.RestorePreview(t.Context(), backupPath); err != nil {
+				t.Fatal(err)
+			}
+			if result["cleanedFormatted"] == "" {
+				t.Fatalf("cleanup result missing logical data size: %v", result)
 			}
 			for _, id := range []string{"memory", "owned-memory"} {
 				resource, err := p.store.Get(t.Context(), "memory", id)
@@ -96,6 +176,29 @@ func TestOwnedChatCleanupRejectsChangedPreviewAndRole(t *testing.T) {
 	seedOwnedChatManagement(t, p, "message", "late", "one", `{"conversationId":"owned","role":"user","content":"late"}`)
 	if _, err := p.ManageChat(t.Context(), scope, request); err == nil {
 		t.Fatal("changed conversation deleted")
+	}
+}
+
+func TestOwnedChatCleanupAllowsEmptySelectionAndCreatesBackup(t *testing.T) {
+	p := setupMeshLocalDataPort(t)
+	installChatCleanupBackup(t, p)
+	scope := coordination.ExecutionScope{TargetDeviceID: p.ownerID, CoreID: "core", ResourceOwnerID: p.ownerID, RoleOwnerID: p.ownerID, RoleID: "one", RoleRevision: 3, RequestID: "cleanup-empty"}
+	preview, err := p.ManageChat(t.Context(), scope, coordination.ChatManagementRequest{Operation: "cleanup/preview", ConversationOwnerID: p.ownerID, OlderThanDays: 36500})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview["conversationCount"] != 0 || preview["messageCount"] != 0 {
+		t.Fatalf("unexpected empty selection: %v", preview)
+	}
+	result, err := p.ManageChat(t.Context(), scope, coordination.ChatManagementRequest{Operation: "cleanup/confirm", ConversationOwnerID: p.ownerID, PreviewID: preview["previewId"].(string), ConfirmText: "确认清理"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result["conversationCount"] != 0 || result["backupPath"] == "" {
+		t.Fatalf("empty cleanup failed: %v", result)
+	}
+	if _, err := os.Stat(result["backupPath"].(string)); err != nil {
+		t.Fatal(err)
 	}
 }
 

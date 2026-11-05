@@ -2,6 +2,7 @@ package temporal
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -220,5 +221,81 @@ func TestCustomDaypartAndSouthernSeason(t *testing.T) {
 	snapshot := civilSnapshot(local.UTC(), location, `{"morning":{"start":"06:00","end":"10:00"}}`, "south")
 	if snapshot.Daypart != "morning" || snapshot.Season != "winter" {
 		t.Fatalf("unexpected civil snapshot %#v", snapshot)
+	}
+}
+
+func TestTemporalProfileRejectsInvalidPersistedValues(t *testing.T) {
+	service, _ := temporalTestService(t, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	invalidMode := "invalid_mode"
+	invalidWeek := 99
+	invalidHemisphere := "sideways"
+	invalidDaypart := "{broken"
+	invalidQuietHours := `{"enabled":true,"start":"25:99","end":"07:00"}`
+	cases := []ProfilePatch{
+		{TimezoneMode: &invalidMode},
+		{WeekStart: &invalidWeek},
+		{Hemisphere: &invalidHemisphere},
+		{DaypartConfigJSON: &invalidDaypart},
+		{QuietHoursJSON: &invalidQuietHours},
+	}
+	for index, patch := range cases {
+		if _, err := service.PatchProfile(t.Context(), OwnerSpace, defaultSpaceOwnerID(), patch); !errors.Is(err, ErrInvalidConfig) {
+			t.Fatalf("case %d accepted invalid profile: %v", index, err)
+		}
+	}
+	profile, err := service.GetProfile(t.Context(), OwnerSpace, defaultSpaceOwnerID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if profile.TimezoneMode != TimezoneFollowDevice || profile.WeekStart != 1 || profile.Hemisphere != "unknown" {
+		t.Fatalf("invalid profile leaked into storage: %#v", profile)
+	}
+}
+
+func TestTemporalAnchorRejectsInvalidValuesAndMissingDelete(t *testing.T) {
+	service, _ := temporalTestService(t, time.Date(2026, 7, 18, 0, 0, 0, 0, time.UTC))
+	base := Anchor{AnchorType: "custom", Title: "有效锚点", TimeKind: "annual_date", LocalDate: "07-18", LocalTime: "09:00", Timezone: "Asia/Shanghai", Status: "active", Importance: 50, Confidence: 100}
+	cases := []struct {
+		name   string
+		mutate func(*Anchor)
+	}{
+		{"anchor type", func(anchor *Anchor) { anchor.AnchorType = "invalid" }},
+		{"time kind", func(anchor *Anchor) { anchor.TimeKind = "invalid" }},
+		{"date", func(anchor *Anchor) { anchor.LocalDate = "2026-02-31" }},
+		{"time", func(anchor *Anchor) { anchor.LocalTime = "24:00" }},
+		{"status", func(anchor *Anchor) { anchor.Status = "invalid" }},
+		{"negative window", func(anchor *Anchor) { anchor.PreWindowSeconds = -1 }},
+		{"rrule", func(anchor *Anchor) {
+			anchor.TimeKind = "recurring"
+			anchor.LocalDate = "2026-07-18"
+			anchor.RRule = "FREQ=DAILY;INTERVAL=zero"
+		}},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			anchor := base
+			test.mutate(&anchor)
+			if _, err := service.SaveAnchor(t.Context(), defaultSpaceOwnerID(), "", anchor); !errors.Is(err, ErrInvalidConfig) {
+				t.Fatalf("invalid anchor accepted: %v", err)
+			}
+		})
+	}
+	anchor, err := service.SaveAnchor(t.Context(), defaultSpaceOwnerID(), "", base)
+	if err != nil || anchor.ID == "" {
+		t.Fatalf("valid anchor rejected: %#v %v", anchor, err)
+	}
+	if err := service.DeleteAnchor(t.Context(), defaultSpaceOwnerID(), "", "missing-anchor"); !errors.Is(err, ErrAnchorNotFound) {
+		t.Fatalf("missing anchor delete error: %v", err)
+	}
+}
+
+func TestTemporalListLimitPreservesParseErrorAndRejectsZero(t *testing.T) {
+	for _, raw := range []string{"abc", "0", "-1", "501"} {
+		if _, err := parseTemporalLimit(raw, 500); !errors.Is(err, ErrInvalidLimit) || !strings.Contains(err.Error(), raw) && raw == "abc" {
+			t.Fatalf("limit %q error: %v", raw, err)
+		}
+	}
+	if limit, err := parseTemporalLimit("100", 500); err != nil || limit != 100 {
+		t.Fatalf("valid limit: %d %v", limit, err)
 	}
 }

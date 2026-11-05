@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -15,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/chat/importbatch"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	"github.com/u-ai/backend/internal/system/dataportability"
 	"gorm.io/gorm"
 )
 
@@ -99,6 +101,9 @@ func canonicalChatManagementRecords(records []ownedChatManagementRecord) []owned
 }
 
 func chatManagementFingerprint(records []ownedChatManagementRecord) string {
+	if records == nil {
+		records = []ownedChatManagementRecord{}
+	}
 	raw, _ := json.Marshal(records)
 	digest := sha256.Sum256(raw)
 	return hex.EncodeToString(digest[:])
@@ -191,6 +196,17 @@ func chatManagementCounts(records []ownedChatManagementRecord, includeMemories b
 		}
 	}
 	return map[string]any{"conversationCount": conversations, "messageCount": messages, "memoryCount": memories, "conversationIds": ids}
+}
+
+func chatManagementEstimatedBytes(records []ownedChatManagementRecord) int64 {
+	var total int64
+	for _, row := range records {
+		encoded, err := json.Marshal(row.Body)
+		if err == nil {
+			total += int64(len(encoded))
+		}
+	}
+	return total
 }
 
 func (p *meshLocalDataPort) ManageChat(ctx context.Context, scope coordination.ExecutionScope, request coordination.ChatManagementRequest) (map[string]any, error) {
@@ -304,6 +320,8 @@ func (p *meshLocalDataPort) manageChatForRole(ctx context.Context, scope coordin
 		result := chatManagementCounts(selected, request.IncludeMemories)
 		result["previewId"] = id
 		result["expiresAt"] = expires.Format(time.RFC3339)
+		result["estimatedSize"] = chatManagementEstimatedBytes(selected)
+		result["estimatedSizeFormatted"] = formatChatManagementBytes(chatManagementEstimatedBytes(selected))
 		return result, nil
 	case "cleanup/confirm":
 		if strings.TrimSpace(request.ConfirmText) != "确认清理" {
@@ -324,20 +342,40 @@ func (p *meshLocalDataPort) manageChatForRole(ctx context.Context, scope coordin
 				ids = append(ids, row.ID)
 			}
 		}
-		current, err := chatManagementSelected(records, coordination.ChatManagementRequest{ConversationIDs: ids}, time.Now())
-		if err != nil {
-			return nil, err
-		}
-		if len(ids) == 0 {
-			current = nil
+		current := []ownedChatManagementRecord{}
+		if len(ids) > 0 {
+			current, err = chatManagementSelected(records, coordination.ChatManagementRequest{ConversationIDs: ids}, time.Now())
+			if err != nil {
+				return nil, err
+			}
 		}
 		if chatManagementFingerprint(current) != plan.Fingerprint {
 			return nil, errors.New("预览后会话数据已变化，请重新预览")
 		}
+		if p.services.DataPortability == nil {
+			return nil, errors.New("清理前备份服务不可用，已取消清理")
+		}
+		backup, err := p.services.DataPortability.CreateBackup(ctx, dataportability.BackupRequest{
+			Scope:   dataportability.ScopeAll,
+			Profile: dataportability.ProfileFull,
+			Purpose: dataportability.PurposeUser,
+		}, filepath.Join(p.services.DataPortability.DataDir, "app.db"), nil)
+		if err != nil {
+			return nil, fmt.Errorf("清理前备份失败: %w", err)
+		}
+		if _, err := p.services.DataPortability.RestorePreview(ctx, backup.Path); err != nil {
+			return nil, fmt.Errorf("清理前备份完整性校验失败: %w", err)
+		}
 		if err := p.deleteManagedChat(ctx, scope, role, plan); err != nil {
 			return nil, err
 		}
-		return chatManagementCounts(plan.Records, plan.IncludeMemories), nil
+		result := chatManagementCounts(plan.Records, plan.IncludeMemories)
+		result["backupId"] = backup.BackupID
+		result["backupPath"] = backup.Path
+		result["backupSize"] = backup.SizeBytes
+		result["cleanedBytes"] = chatManagementEstimatedBytes(plan.Records)
+		result["cleanedFormatted"] = formatChatManagementBytes(chatManagementEstimatedBytes(plan.Records))
+		return result, nil
 	case "cleanup/vacuum":
 		before, err := p.chatManagementDatabaseSize(ctx)
 		if err != nil {
@@ -454,6 +492,24 @@ func (p *meshLocalDataPort) manageChatForRole(ctx context.Context, scope coordin
 		return p.managedChatContext(ctx, scope, role, request, selected), nil
 	default:
 		return nil, errors.New("聊天管理操作无效")
+	}
+}
+
+func formatChatManagementBytes(size int64) string {
+	const (
+		kb = int64(1024)
+		mb = kb * 1024
+		gb = mb * 1024
+	)
+	switch {
+	case size >= gb:
+		return fmt.Sprintf("%.2f GB", float64(size)/float64(gb))
+	case size >= mb:
+		return fmt.Sprintf("%.2f MB", float64(size)/float64(mb))
+	case size >= kb:
+		return fmt.Sprintf("%.2f KB", float64(size)/float64(kb))
+	default:
+		return fmt.Sprintf("%d B", size)
 	}
 }
 

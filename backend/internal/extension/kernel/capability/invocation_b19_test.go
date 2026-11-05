@@ -167,9 +167,8 @@ func TestB19NewToolTimedOutResultHasCorrectCode(t *testing.T) {
 
 func TestB19ResultFromContextError(t *testing.T) {
 	t.Run("deadline exceeded", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
 		defer cancel()
-		time.Sleep(5 * time.Millisecond)
 		result := ResultFromContextError("inv-1", ctx.Err())
 		if result.Status != ToolResultStatusTimedOut {
 			t.Fatalf("expected timed_out status, got: %s", result.Status)

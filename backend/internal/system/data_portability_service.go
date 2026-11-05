@@ -346,19 +346,38 @@ func (s *service) ListDataPortabilityBackups() (map[string]interface{}, error) {
 	}
 	backups := make([]map[string]interface{}, 0)
 	for _, entry := range entries {
-		if entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
+		if entry.IsDir() || strings.HasPrefix(entry.Name(), ".") || !dataportability.IsValidBackupFileName(entry.Name()) {
 			continue
 		}
 		info, err := entry.Info()
 		if err != nil {
 			continue
 		}
-		backups = append(backups, map[string]interface{}{
+		path := filepath.Join(dir, entry.Name())
+		encrypted := dataportability.IsEncryptedFile(path)
+		backup := map[string]interface{}{
 			"name":      entry.Name(),
 			"size":      info.Size(),
 			"createdAt": info.ModTime().Format(time.DateTime),
-			"encrypted": strings.HasSuffix(entry.Name(), ".enc"),
-		})
+			"encrypted": encrypted,
+		}
+		if encrypted {
+			if !strings.HasSuffix(entry.Name(), ".enc") || info.Size() <= int64(len("AMITIAE1")) {
+				continue
+			}
+		} else {
+			if strings.HasSuffix(entry.Name(), ".enc") {
+				continue
+			}
+			manifest, err := s.coordinator.RestorePreview(context.Background(), path)
+			if err != nil {
+				continue
+			}
+			backup["backupId"] = manifest.BackupID
+			backup["appVersion"] = manifest.AppVersion
+			backup["createdAt"] = manifest.CreatedAt
+		}
+		backups = append(backups, backup)
 	}
 	sort.Slice(backups, func(i, j int) bool {
 		return fmt.Sprint(backups[i]["createdAt"]) > fmt.Sprint(backups[j]["createdAt"])

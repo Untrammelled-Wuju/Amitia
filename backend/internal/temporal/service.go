@@ -21,6 +21,8 @@ var (
 	ErrInvalidOwner    = errors.New("invalid temporal profile owner")
 	ErrAnchorNotFound  = errors.New("temporal anchor not found")
 	ErrScopeMismatch   = errors.New("temporal scope mismatch")
+	ErrInvalidConfig   = errors.New("invalid temporal configuration")
+	ErrInvalidLimit    = errors.New("invalid temporal query limit")
 )
 
 type ScheduleProvider interface {
@@ -162,8 +164,9 @@ func (s *Service) SaveProfile(ctx context.Context, ownerType, ownerID string, in
 	if input.Source == "" {
 		input.Source = "explicit"
 	}
-	input.Confidence = clampInt(input.Confidence, 0, 100)
-	input.AwarenessLevel = clampInt(input.AwarenessLevel, 0, 100)
+	if err := validateTemporalProfile(&input); err != nil {
+		return nil, err
+	}
 	if err := s.repo.SaveProfile(&input); err != nil {
 		return nil, err
 	}
@@ -349,6 +352,12 @@ func (s *Service) ListAnchors(ctx context.Context, query AnchorQuery) ([]Anchor,
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	if query.Limit < 0 || query.Limit > 500 {
+		return nil, fmt.Errorf("%w: limit 必须在 1 到 500 之间", ErrInvalidLimit)
+	}
+	if query.Status != "" && !validAnchorStatus(query.Status) {
+		return nil, fmt.Errorf("%w: 状态 %q 无效", ErrInvalidConfig, query.Status)
+	}
 	query.SpaceID = normalizeSpaceID(query.SpaceID)
 	return s.repo.ListAnchors(query)
 }
@@ -406,15 +415,23 @@ func (s *Service) SaveAnchor(ctx context.Context, spaceID, characterID string, a
 			anchor.Status = "active"
 		}
 	}
+	if anchor.Status == "active" && anchor.RequiresConfirmation {
+		anchor.Status = "candidate"
+		anchor.AllowProactiveMention = false
+	}
 	if anchor.Timezone == "" {
 		anchor.Timezone = DefaultTimezone
 	}
 	if _, err := loadLocation(anchor.Timezone); err != nil {
 		return nil, err
 	}
-	anchor.Importance = clampInt(anchor.Importance, 0, 100)
-	anchor.Confidence = clampInt(anchor.Confidence, 0, 100)
+	if err := validateTemporalAnchor(&anchor); err != nil {
+		return nil, err
+	}
 	anchor.NextOccurrenceAtUTC = nextAnchorOccurrence(anchor, now)
+	if anchor.TimeKind == "recurring" && anchor.Status == "active" && anchor.NextOccurrenceAtUTC == nil {
+		return nil, fmt.Errorf("%w: RRULE 在十年内没有可执行日期", ErrInvalidConfig)
+	}
 	if err := s.repo.SaveAnchor(&anchor); err != nil {
 		return nil, err
 	}
@@ -451,6 +468,9 @@ func (s *Service) DeleteAnchor(ctx context.Context, spaceID, characterID, id str
 func (s *Service) ListEvents(ctx context.Context, spaceID, characterID string, limit int) ([]Event, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
+	}
+	if limit < 0 || limit > 500 {
+		return nil, fmt.Errorf("%w: limit 必须在 1 到 500 之间", ErrInvalidLimit)
 	}
 	return s.repo.ListEvents(normalizeSpaceID(spaceID), characterID, limit)
 }

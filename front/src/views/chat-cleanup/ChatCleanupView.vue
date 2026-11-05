@@ -7,7 +7,7 @@ SPDX-License-Identifier: AGPL-3.0-only
     <div class="page-header">
       <h2>聊天记录清理</h2>
       <p class="page-desc">
-        管理聊天数据的存储空间，清理旧数据以释放数据库空间
+        当前角色聊天统计与清理；确认前会创建全部数据完整备份
       </p>
     </div>
 

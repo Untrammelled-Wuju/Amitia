@@ -129,6 +129,11 @@ func (s *Service) RestoreTaskArchive(ctx context.Context, caller Caller, req dat
 		}
 		disabled := false
 		request.Enabled = &disabled
+		request = normalizeCreateRequest(request)
+		hash, err := requestHash(origin, request)
+		if err != nil {
+			return err
+		}
 		item, def, err := s.build(ctx, origin, request, id, archived.Source, true)
 		if err != nil {
 			return err
@@ -163,7 +168,7 @@ func (s *Service) RestoreTaskArchive(ctx context.Context, caller Caller, req dat
 		def.Target.InputTemplate, err = json.Marshal(struct {
 			*Reminder
 			CreateHash string `json:"createHash"`
-		}{item, requestHash(origin, request)})
+		}{item, hash})
 		if err != nil {
 			return err
 		}

@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -43,6 +44,14 @@ func TestServerCapabilityDefaultsDisabledAndUpserts(t *testing.T) {
 	records, err := repository.ListServerCapabilities(context.Background(), server.ID)
 	if err != nil || len(records) != 1 || records[0].Enabled != 0 || records[0].Configuration != `{"maxTokens":512}` {
 		t.Fatalf("unexpected records: %#v err=%v", records, err)
+	}
+}
+
+func TestCreateServerMapsDuplicateIdentityToConflictCode(t *testing.T) {
+	repository, _ := capabilityTestRepository(t)
+	_, err := repository.CreateServer(context.Background(), ServerInput{Name: "duplicate", Transport: "streamable_http", Endpoint: "https://example.com/mcp", AuthType: "none"})
+	if err == nil || !strings.HasPrefix(err.Error(), "MCP_SERVER_ALREADY_EXISTS:") || !strings.Contains(err.Error(), "UNIQUE constraint failed") {
+		t.Fatalf("unexpected duplicate error: %v", err)
 	}
 }
 

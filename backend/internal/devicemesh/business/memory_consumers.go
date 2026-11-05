@@ -20,6 +20,16 @@ type MemoryConsumerPort interface {
 	Change(context.Context, MemoryConsumerEntry, map[string]json.RawMessage, bool, string) (coordination.Acknowledgement, error)
 }
 
+type OwnedStorageStats struct {
+	ConversationCount int64
+	MessageCount      int64
+	DatabaseBytes     int64
+}
+
+type OwnedStorageStatsPort interface {
+	OwnedStorageStats(context.Context) (OwnedStorageStats, error)
+}
+
 type MemoryConsumerReader func(context.Context, string, int) ([]MemoryConsumerEntry, error)
 
 type MemoryDeletionPort interface {

@@ -28,6 +28,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         </div>
       </template>
     </ExtensionPageHeader>
+    <pre v-if="operationError && !showAddForm && !editVisible && !importDialogVisible" class="worldbook-error" role="alert" aria-label="世界书原始错误" tabindex="0">{{ operationError }}</pre>
     <el-alert v-if="!canConfigure" title="云端统筹模式的世界书由 Core 管理，只有获授权的 Core 管理员可以查看和配置。" type="info" :closable="false" show-icon />
     <template v-if="canConfigure && loadedContext">
     <div class="filter-bar">
@@ -58,6 +59,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         size="small"
         type="primary"
         @click="runTest"
+        :loading="testing"
         :disabled="!testText.trim()"
         style="margin-top: 8px"
         >测试匹配</el-button
@@ -98,6 +100,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       @closed="showAddForm = false"
     >
       <el-form label-width="80px">
+        <pre v-if="operationError" class="worldbook-error" role="alert" aria-label="世界书原始错误" tabindex="0">{{ operationError }}</pre>
         <el-form-item label="作用域">
           <el-select v-model="form.scope" style="width: 100%">
             <el-option label="当前角色" value="role" />
@@ -156,6 +159,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       @closed="resetImportState"
     >
       <div class="json-import-content">
+        <pre v-if="operationError" class="worldbook-error" role="alert" aria-label="世界书原始错误" tabindex="0">{{ operationError }}</pre>
         <div
           class="json-import-drop-zone"
           :class="{ 'has-file': !!importFile }"
@@ -256,6 +260,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       @closed="editingEntry = null"
     >
       <el-form label-width="80px">
+        <pre v-if="operationError" class="worldbook-error" role="alert" aria-label="世界书原始错误" tabindex="0">{{ operationError }}</pre>
         <el-form-item label="作用域">
           <el-select v-model="editForm.scope" style="width: 100%">
             <el-option label="当前角色" value="role" />
@@ -360,6 +365,13 @@ import {
   type WorldBookImportRow,
 } from "./worldBookImport";
 import { highlightWorldBookMatch } from "./worldBookHighlight";
+import { originalErrorText } from "@/runtime/original-error";
+
+const operationError = ref("");
+
+function reportError(error: unknown) {
+  operationError.value = originalErrorText(error);
+}
 
 const {
   access,
@@ -385,7 +397,7 @@ watch(loadedContext, (current) => {
     showAddForm.value = false;
     editVisible.value = false;
     importDialogVisible.value = false;
-    testResults.value = [];
+    invalidateTestState();
   }
 });
 
@@ -394,11 +406,22 @@ const testPanelOpen = ref(false);
 const testText = ref("");
 const testResults = ref<any[]>([]);
 const tested = ref(false);
+const testing = ref(false);
+let testRequestVersion = 0;
 const mutationLoading = ref(false);
-watch(rules, () => {
-  testResults.value = [];
+function invalidateTestState() {
+  testRequestVersion += 1;
+  testing.value = false;
   tested.value = false;
+  testResults.value = [];
+}
+watch(rules, () => {
+  invalidateTestState();
 }, { deep: true });
+watch(testText, invalidateTestState);
+watch(testPanelOpen, (open) => {
+  if (!open) invalidateTestState();
+});
 const showAddForm = ref(false);
 watch(showAddForm, (open) => { if (open) editorContext.value = loadedContext.value; });
 const editVisible = ref(false);
@@ -443,20 +466,45 @@ const editForm = reactive({
 });
 
 onMounted(() => {
-  fetchRules();
+  loadRules();
 });
 
+async function loadRules(filters?: Parameters<typeof fetchRules>[0]) {
+  operationError.value = "";
+  try {
+    await fetchRules(filters);
+  } catch (error) {
+    reportError(error);
+  }
+}
+
 function onFilterChange() {
-  fetchRules({ matchType: filterType.value || undefined });
+  loadRules({ matchType: filterType.value || undefined });
 }
 
 async function runTest() {
-  tested.value = true;
-  testResults.value = (await testMatch(testText.value))?.matches || [];
+  const version = ++testRequestVersion;
+  const text = testText.value;
+  operationError.value = "";
+  tested.value = false;
+  testResults.value = [];
+  testing.value = true;
+  try {
+    const matches = (await testMatch(text))?.matches || [];
+    if (version !== testRequestVersion || text !== testText.value) return;
+    testResults.value = matches;
+    tested.value = true;
+  } catch (error) {
+    if (version !== testRequestVersion || text !== testText.value) return;
+    reportError(error);
+  } finally {
+    if (version === testRequestVersion) testing.value = false;
+  }
 }
 
 async function handleCreate() {
   if (mutationLoading.value) return;
+  operationError.value = "";
   mutationLoading.value = true;
   try {
     await createRule(form, editorContext.value);
@@ -467,6 +515,8 @@ async function handleCreate() {
     form.matchScope = "full_context";
     form.injectContent = "";
     form.priority = 0;
+  } catch (error) {
+    reportError(error);
   } finally {
     mutationLoading.value = false;
   }
@@ -486,11 +536,14 @@ function startEdit(rule: any) {
 
 async function handleUpdate() {
   if (mutationLoading.value) return;
+  operationError.value = "";
   mutationLoading.value = true;
   try {
     await updateRule(editingEntry.value.id, { ...editForm }, editorContext.value);
     editVisible.value = false;
     editingEntry.value = null;
+  } catch (error) {
+    reportError(error);
   } finally {
     mutationLoading.value = false;
   }
@@ -505,17 +558,24 @@ async function handleDelete(id: string) {
       cancelButtonText: "取消",
       type: "warning",
     });
+  } catch (error) {
+    if (error !== "cancel" && error !== "close") reportError(error);
+    return;
+  }
+  if (mutationLoading.value) return;
+  operationError.value = "";
+  try {
     mutationLoading.value = true;
     await deleteRule(id, context);
   } catch (error) {
-  console.error("[original-error]", error);
-} finally {
+    reportError(error);
+  } finally {
     mutationLoading.value = false;
-}
+  }
 }
 
 function changePage(p: number) {
-  fetchRules({ page: p, matchType: filterType.value || undefined });
+  loadRules({ page: p, matchType: filterType.value || undefined });
 }
 
 function openImportDialog() {
@@ -529,6 +589,7 @@ function resetImportState() {
   importParsing.value = false;
   importLoading.value = false;
   importParseError.value = "";
+  operationError.value = "";
   importRows.value = [];
   if (importInput.value) importInput.value.value = "";
 }
@@ -562,8 +623,8 @@ async function loadImportFile(file: File) {
     const text = await file.text();
     importRows.value = parseWorldBookImport(text);
   } catch (error: any) {
-    importParseError.value = error?.message || "JSON 解析失败";
-    ElMessage.error(String(error?.message || error));
+    importParseError.value = originalErrorText(error);
+    reportError(error);
   } finally {
     importParsing.value = false;
   }
@@ -575,12 +636,13 @@ async function confirmImport() {
     .filter((row) => row.valid && row.item)
     .map((row) => row.item as Partial<WorldBookEntry>);
   importLoading.value = true;
+  operationError.value = "";
   try {
     await createRules(items, editorContext.value);
     ElMessage.success(`导入完成：成功 ${items.length} 条`);
     importDialogVisible.value = false;
   } catch (error: any) {
-    ElMessage.error(String(error?.message || error));
+    reportError(error);
   } finally {
     importLoading.value = false;
   }
@@ -591,12 +653,13 @@ async function copyImportExample() {
     await navigator.clipboard.writeText(importExampleJson);
     ElMessage.success("示例 JSON 已复制");
   } catch (error) {
-  console.error("[original-error]", error);
-ElMessage.error(error instanceof Error ? error.message : String(error));
+    reportError(error);
   }
 }
 
 async function exportRules() {
+  operationError.value = "";
+  try {
   const context = loadedContext.value;
   await access.requireAccess(context);
   const data = rules.value.map((r) => ({
@@ -616,10 +679,21 @@ async function exportRules() {
   a.download = "world_book.json";
   a.click();
   URL.revokeObjectURL(url);
+  } catch (error) {
+    reportError(error);
+  }
 }
 </script>
 
 <style scoped>
+.worldbook-error {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+  color: var(--el-color-danger);
+  max-height: 240px;
+  overflow: auto;
+}
 .worldbook-page {
   max-width: 100%;
 }

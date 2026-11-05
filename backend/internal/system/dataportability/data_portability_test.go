@@ -20,6 +20,25 @@ import (
 	"gorm.io/gorm"
 )
 
+type failingBackupContributor struct{}
+
+func (failingBackupContributor) ID() string             { return "qa-failing" }
+func (failingBackupContributor) Name() string           { return "QA failing" }
+func (failingBackupContributor) Dependencies() []string { return nil }
+func (failingBackupContributor) ComponentIDs() []string { return []string{"qa.failing"} }
+func (failingBackupContributor) Plan(context.Context, dataportability.BackupRequest) ([]dataportability.BackupComponentPlan, error) {
+	return []dataportability.BackupComponentPlan{{ID: "qa.failing", LogicalName: "qa.failing", Kind: dataportability.KindDataset, Required: true}}, nil
+}
+func (failingBackupContributor) Export(context.Context, dataportability.BackupRequest, dataportability.BackupWriter) error {
+	return errors.New("QA intentional backup failure")
+}
+func (failingBackupContributor) PreviewImport(context.Context, dataportability.ImportPreviewRequest, dataportability.BackupReader) ([]dataportability.ImportComponentPreview, error) {
+	return nil, nil
+}
+func (failingBackupContributor) Import(context.Context, dataportability.ImportRequest, dataportability.BackupReader) error {
+	return nil
+}
+
 func newPortabilityFixture(t *testing.T) (*gorm.DB, *dataportability.Coordinator, string) {
 	t.Helper()
 	dataDir := t.TempDir()
@@ -81,6 +100,29 @@ func seedPortabilityFixture(t *testing.T, db *gorm.DB) {
 	if err := db.Exec(`INSERT INTO kernel_device_owned_resources(owner_id,kind,resource_id,role_id,revision,deleted,body,updated_at) VALUES(?,?,?,?,?,?,?,?)`,
 		"owner", "psyche", "psyche-a", "role-a", 1, 0, `{"mood":"calm"}`, "2026-10-23T12:00:00Z").Error; err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestFailedBackupDoesNotPublishPartialArchive(t *testing.T) {
+	dataDir := t.TempDir()
+	coord := dataportability.NewCoordinator(dataDir, "test", "test", "migrations-v1-1", dataportability.NewStagingManager(dataDir))
+	if err := coord.RegisterContributors(failingBackupContributor{}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := coord.CreateBackup(context.Background(), dataportability.BackupRequest{
+		Scope:   dataportability.ScopeAll,
+		Profile: dataportability.ProfilePortable,
+		Purpose: dataportability.PurposeMigration,
+	}, "", nil)
+	if err == nil || !strings.Contains(err.Error(), "QA intentional backup failure") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	entries, readErr := os.ReadDir(filepath.Join(dataDir, "backups"))
+	if readErr != nil && !errors.Is(readErr, os.ErrNotExist) {
+		t.Fatal(readErr)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("failed backup published %d files", len(entries))
 	}
 }
 

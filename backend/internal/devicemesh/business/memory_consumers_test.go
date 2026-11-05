@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +12,56 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/system/dataportability"
 )
+
+type multiRoleArchiveDataPort struct {
+	testDataPort
+	roles []coordination.Role
+}
+
+func (p multiRoleArchiveDataPort) Roles(context.Context, coordination.ExecutionScope) ([]coordination.Role, error) {
+	return append([]coordination.Role(nil), p.roles...), nil
+}
+
+func (p multiRoleArchiveDataPort) Snapshot(ctx context.Context, scope coordination.ExecutionScope, query coordination.DataQuery) (coordination.DataSnapshot, error) {
+	for _, role := range p.roles {
+		if role.ID == scope.RoleID {
+			base := p.testDataPort
+			base.role = role
+			return base.Snapshot(ctx, scope, query)
+		}
+	}
+	return coordination.DataSnapshot{}, coordination.ErrRoleRequired
+}
+
+func TestOwnedMemoryArchiveWithoutSelectedRoleExportsEveryRole(t *testing.T) {
+	e, db, _, _ := engineHarness(t)
+	base, ok := e.data.(testDataPort)
+	if !ok {
+		t.Fatalf("unexpected data port %T", e.data)
+	}
+	e.data = multiRoleArchiveDataPort{
+		testDataPort: base,
+		roles: []coordination.Role{
+			base.role,
+			{ID: "role-two", Revision: 1, Profile: json.RawMessage(`{"characterId":"role-two"}`)},
+		},
+	}
+	for _, role := range []string{"role", "role-two"} {
+		if _, err := db.Exec(`INSERT INTO kernel_device_owned_resources(owner_id,kind,resource_id,role_id,revision,deleted,body,updated_at) VALUES('a','memory',?,?,1,0,?,'2026-11-05T00:00:00Z')`, "memory-"+role, role, fmt.Sprintf(`{"key":"%s","content":{"value":"%s"}}`, role, role)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	archive, err := e.ExportMemoryArchive(t.Context(), Request{SpaceID: "core", DeviceID: "a", CoreID: "core", RequestID: "archive-all"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if archive.Format != "amitia-owned-memory-v1" {
+		t.Fatalf("unexpected archive %#v", archive)
+	}
+	if len(archive.Entries) != 2 {
+		t.Fatalf("archive exported %d of 2 role memories", len(archive.Entries))
+	}
+}
 
 func TestOwnedMemoryConsumersArchiveRestorePreservesLifecycleAndIndexes(t *testing.T) {
 	e, _, _, _ := engineHarness(t)

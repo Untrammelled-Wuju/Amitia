@@ -16,15 +16,17 @@ type ArchiveWriter struct {
 	file      *os.File
 	zipWriter *zip.Writer
 	entries   map[string]bool
+	err       error
 }
 
 func NewArchiveWriter(path string) *ArchiveWriter {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		amitialog.Printf("[original-error] %v", err)
+		return &ArchiveWriter{entries: make(map[string]bool), err: err}
 	}
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
-		return &ArchiveWriter{entries: make(map[string]bool)}
+		return &ArchiveWriter{entries: make(map[string]bool), err: err}
 	}
 	return &ArchiveWriter{
 		file:      f,
@@ -34,6 +36,9 @@ func NewArchiveWriter(path string) *ArchiveWriter {
 }
 
 func (a *ArchiveWriter) CreateComponent(id, logicalName string, kind ComponentKind) (io.WriteCloser, error) {
+	if a.err != nil {
+		return nil, a.err
+	}
 	if a.zipWriter == nil {
 		return nil, ErrBackupComponentFailed
 	}
@@ -50,6 +55,9 @@ func (a *ArchiveWriter) CreateComponent(id, logicalName string, kind ComponentKi
 }
 
 func (a *ArchiveWriter) WriteManifest(data []byte) error {
+	if a.err != nil {
+		return a.err
+	}
 	if a.zipWriter == nil {
 		return ErrBackupComponentFailed
 	}
@@ -65,6 +73,9 @@ func (a *ArchiveWriter) WriteManifest(data []byte) error {
 }
 
 func (a *ArchiveWriter) CopyFile(destDir, name, srcPath string) error {
+	if a.err != nil {
+		return a.err
+	}
 	if a.zipWriter == nil {
 		return ErrBackupComponentFailed
 	}
@@ -87,6 +98,9 @@ func (a *ArchiveWriter) CopyFile(destDir, name, srcPath string) error {
 }
 
 func (a *ArchiveWriter) Finalize() error {
+	if a.err != nil {
+		return a.err
+	}
 	if a.zipWriter == nil {
 		return nil
 	}
@@ -94,6 +108,10 @@ func (a *ArchiveWriter) Finalize() error {
 		return err
 	}
 	if a.file != nil {
+		if err := a.file.Sync(); err != nil {
+			a.file.Close()
+			return err
+		}
 		return a.file.Close()
 	}
 	return nil

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -92,6 +93,44 @@ func (r *canonicalChatMemoryRuntime) Recall(ctx context.Context, spaceID, role, 
 
 type ownedMemoryConsumers struct {
 	runtime *canonicalChatMemoryRuntime
+	storage *sql.DB
+}
+
+func (p *ownedMemoryConsumers) OwnedStorageStats(ctx context.Context) (business.OwnedStorageStats, error) {
+	if p.storage == nil {
+		return business.OwnedStorageStats{}, errors.New("Kernel 存储统计入口不可用")
+	}
+	rows, err := p.storage.QueryContext(ctx, `SELECT kind,COUNT(*) FROM kernel_device_owned_resources WHERE deleted=0 AND kind IN ('conversation','message') GROUP BY kind`)
+	if err != nil {
+		return business.OwnedStorageStats{}, err
+	}
+	defer rows.Close()
+	stats := business.OwnedStorageStats{}
+	for rows.Next() {
+		var kind string
+		var count int64
+		if err := rows.Scan(&kind, &count); err != nil {
+			return business.OwnedStorageStats{}, err
+		}
+		switch kind {
+		case "conversation":
+			stats.ConversationCount = count
+		case "message":
+			stats.MessageCount = count
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return business.OwnedStorageStats{}, err
+	}
+	var pages, pageSize int64
+	if err := p.storage.QueryRowContext(ctx, "PRAGMA page_count").Scan(&pages); err != nil {
+		return business.OwnedStorageStats{}, err
+	}
+	if err := p.storage.QueryRowContext(ctx, "PRAGMA page_size").Scan(&pageSize); err != nil {
+		return business.OwnedStorageStats{}, err
+	}
+	stats.DatabaseBytes = pages * pageSize
+	return stats, nil
 }
 
 func (p *ownedMemoryConsumers) DeleteRelatedMemories(ctx context.Context, targetType, targetID string) ([]business.MemoryDeletionStatus, error) {

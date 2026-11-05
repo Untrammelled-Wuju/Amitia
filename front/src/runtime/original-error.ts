@@ -59,3 +59,23 @@ export function originalErrorDetail(error: unknown): string | undefined {
   }
   return undefined;
 }
+
+export function originalErrorText(error: unknown): string {
+  const seen = new WeakSet<object>();
+  try {
+    return JSON.stringify(error, (_key, value) => {
+      if (typeof value === "bigint") return String(value);
+      if (value && typeof value === "object") {
+        if (seen.has(value)) return "[Circular reference]";
+        seen.add(value);
+        if (value instanceof Error) {
+          return Object.fromEntries([...new Set(["name", ...Object.getOwnPropertyNames(value)])]
+            .map(key => [key, (value as unknown as Record<string, unknown>)[key]]));
+        }
+      }
+      return value;
+    }, 2) ?? String(error);
+  } catch (serializationError) {
+    return `${String(error)}\n${error instanceof Error ? error.stack || "" : ""}\n${String(serializationError)}\n${serializationError instanceof Error ? serializationError.stack || "" : ""}`;
+  }
+}

@@ -6,13 +6,14 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/extension/kernel/schedule"
-	amitialog "log"
 )
 
 const UserReminder = "user_reminder"
@@ -35,10 +36,20 @@ type Dependencies struct {
 	Channels      func(context.Context, Caller) ([]string, error)
 }
 
-type Service struct{ deps Dependencies }
+type pendingCreate struct {
+	done chan struct{}
+	item *Reminder
+	err  error
+}
+
+type Service struct {
+	deps        Dependencies
+	createMu    sync.Mutex
+	createCalls map[string]*pendingCreate
+}
 
 func NewService(deps Dependencies) *Service {
-	s := &Service{deps: deps}
+	s := &Service{deps: deps, createCalls: make(map[string]*pendingCreate)}
 	if deps.Scheduler != nil {
 		deps.Scheduler.GetExecutor().RegisterTargetAdapter(schedule.NewHostWorkloadAdapter(s.Execute))
 	}
@@ -182,13 +193,49 @@ func (s *Service) list(ctx context.Context, caller Caller, kind string, cancelle
 	return items, nil
 }
 
-func requestHash(caller Caller, request CreateReminderRequest) string {
-	encoded, _ := json.Marshal(struct {
+func requestHash(caller Caller, request CreateReminderRequest) (string, error) {
+	encoded, err := json.Marshal(struct {
 		Caller  Caller
 		Request CreateReminderRequest
 	}{caller, request})
+	if err != nil {
+		return "", fmt.Errorf("计算任务请求摘要失败: %w", err)
+	}
 	hash := sha256.Sum256(encoded)
-	return hex.EncodeToString(hash[:])
+	return hex.EncodeToString(hash[:]), nil
+}
+
+func normalizeCreateRequest(request CreateReminderRequest) CreateReminderRequest {
+	if request.Kind == "" {
+		request.Kind = UserReminder
+	}
+	if request.Timezone == "" {
+		request.Timezone = "Asia/Shanghai"
+	}
+	return request
+}
+
+func (s *Service) existingCreate(ctx context.Context, caller Caller, id, hash string) (*Reminder, bool, error) {
+	if existing, _, err := s.deps.Scheduler.GetSchedule(ctx, id); err == nil {
+		item, err := decode(existing)
+		if err != nil {
+			return nil, false, err
+		}
+		var stored struct {
+			CreateHash string `json:"createHash"`
+		}
+		if err := json.Unmarshal(existing.Target.InputTemplate, &stored); err != nil {
+			return nil, false, fmt.Errorf("读取任务幂等摘要失败: %w", err)
+		}
+		if stored.CreateHash != hash {
+			return nil, true, schedule.ErrIdempotencyConflict
+		}
+		result, err := s.Find(ctx, caller, item.ID)
+		return result, true, err
+	} else if !errors.Is(err, schedule.ErrScheduleNotFound) {
+		return nil, false, err
+	}
+	return nil, false, nil
 }
 
 func (s *Service) Create(ctx context.Context, caller Caller, request CreateReminderRequest, source string) (*Reminder, error) {
@@ -201,24 +248,39 @@ func (s *Service) Create(ctx context.Context, caller Caller, request CreateRemin
 	if request.RequestID == "" || len(request.RequestID) > 128 {
 		return nil, errors.New("创建任务必须提供有效请求编号")
 	}
-	id := "reminder-" + uuid.NewSHA1(uuid.NameSpaceOID, []byte(caller.SpaceID+"\x00"+caller.DeviceID+"\x00"+caller.PluginID+"\x00"+caller.ModuleID+"\x00"+request.RequestID)).String()
-	if existing, _, err := s.deps.Scheduler.GetSchedule(ctx, id); err == nil {
-		item, err := decode(existing)
-		if err != nil {
-			return nil, err
-		}
-		var stored struct {
-			CreateHash string `json:"createHash"`
-		}
-		if err := json.Unmarshal(existing.Target.InputTemplate, &stored); err != nil {
-			amitialog.Printf("[original-error] %v", err)
-		}
-		if stored.CreateHash != requestHash(caller, request) {
-			return nil, schedule.ErrIdempotencyConflict
-		}
-		return s.Find(ctx, caller, item.ID)
-	} else if !errors.Is(err, schedule.ErrScheduleNotFound) {
+	request = normalizeCreateRequest(request)
+	hash, err := requestHash(caller, request)
+	if err != nil {
 		return nil, err
+	}
+	id := "reminder-" + uuid.NewSHA1(uuid.NameSpaceOID, []byte(caller.SpaceID+"\x00"+caller.DeviceID+"\x00"+caller.PluginID+"\x00"+caller.ModuleID+"\x00"+request.RequestID)).String()
+	key := id + "\x00" + hash
+	s.createMu.Lock()
+	if pending := s.createCalls[key]; pending != nil {
+		s.createMu.Unlock()
+		select {
+		case <-pending.done:
+			return pending.item, pending.err
+		case <-ctx.Done():
+			return nil, fmt.Errorf("等待任务创建结果失败: %w", ctx.Err())
+		}
+	}
+	pending := &pendingCreate{done: make(chan struct{})}
+	s.createCalls[key] = pending
+	s.createMu.Unlock()
+	item, createErr := s.createOnce(ctx, caller, request, id, hash, source)
+	pending.item = item
+	pending.err = createErr
+	s.createMu.Lock()
+	delete(s.createCalls, key)
+	s.createMu.Unlock()
+	close(pending.done)
+	return item, createErr
+}
+
+func (s *Service) createOnce(ctx context.Context, caller Caller, request CreateReminderRequest, id, hash, source string) (*Reminder, error) {
+	if item, found, err := s.existingCreate(ctx, caller, id, hash); found {
+		return item, err
 	}
 	item, def, err := s.build(ctx, caller, request, id, source, false)
 	if err != nil {
@@ -227,18 +289,46 @@ func (s *Service) Create(ctx context.Context, caller Caller, request CreateRemin
 	encoded, err := json.Marshal(struct {
 		*Reminder
 		CreateHash string `json:"createHash"`
-	}{item, requestHash(caller, request)})
+	}{item, hash})
 	if err != nil {
 		return nil, err
 	}
 	def.Target.InputTemplate = encoded
 	if err := s.deps.Scheduler.InstallHostDefinition(ctx, def); err != nil {
 		if errors.Is(err, schedule.ErrIdempotencyConflict) {
-			return s.Create(ctx, caller, request, source)
+			return s.waitForCreateResult(ctx, caller, id, hash, err)
 		}
 		return nil, err
 	}
 	return s.Find(ctx, caller, id)
+}
+
+func (s *Service) waitForCreateResult(ctx context.Context, caller Caller, id, hash string, conflict error) (*Reminder, error) {
+	for attempt := 0; attempt < 50; attempt++ {
+		item, found, err := s.existingCreate(ctx, caller, id, hash)
+		if found {
+			return item, err
+		}
+		if err != nil {
+			return nil, err
+		}
+		if attempt == 49 {
+			break
+		}
+		timer := time.NewTimer(5 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			return nil, fmt.Errorf("等待任务创建结果失败: %w", ctx.Err())
+		case <-timer.C:
+		}
+	}
+	return nil, fmt.Errorf("任务调度定义安装冲突且未读取到幂等结果: %w", conflict)
 }
 
 func (s *Service) build(ctx context.Context, caller Caller, request CreateReminderRequest, id, source string, updating bool) (*Reminder, *schedule.ScheduleContributionDefinition, error) {

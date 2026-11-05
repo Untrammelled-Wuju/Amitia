@@ -49,11 +49,13 @@ beforeEach(() => {
   state.createRule.mockResolvedValue(undefined);
   state.createRules.mockClear();
   state.updateRule.mockClear();
+  state.updateRule.mockResolvedValue(undefined);
   state.deleteRule.mockClear();
   state.deleteRule.mockImplementation(async () => {
     state.rules.value = [];
   });
   state.testMatch.mockClear();
+  state.testMatch.mockImplementation(async () => ({ matches: [{ entry: state.rules.value[0], hitText: "QA-XSS-UI" }] }));
 });
 
 afterEach(() => {
@@ -132,4 +134,128 @@ it("ignores a repeated create click while the first mutation is pending", async 
   expect(state.createRule).toHaveBeenCalledTimes(1);
   resolveCreate();
   await flushPromises();
+});
+
+it("keeps failed creation inside the form, preserves raw errors and allows retry", async () => {
+  const cause = new Error("cause-QA-1105");
+  const failure = Object.assign(new Error("invalid-worldbook-QA", { cause }), {
+    detail: "detail-QA-1105", internalMessage: "internal-QA-1105",
+    reason: "reason-QA-1105", raw: { error: "raw-QA-1105", msg: "msg-QA-1105" },
+  });
+  state.createRule.mockRejectedValueOnce(failure);
+  const escaped: unknown[] = [];
+  const wrapper = mount(WorldBookView, {
+    global: {
+      plugins: [ElementPlus],
+      config: { errorHandler: error => { escaped.push(error); } },
+      stubs: { ExtensionPageHeader: { template: '<section><slot name="actions" /><slot /></section>' } },
+    },
+  });
+  await flushPromises();
+  await wrapper.findAll("button").find(button => button.text() === "新增规则")!.trigger("click");
+  await flushPromises();
+  await wrapper.find('input[placeholder="正则表达式/精确文本/关键词(逗号分隔)"]').setValue("QA-RETRY");
+  await wrapper.findAll("button").find(button => button.text() === "创建")!.trigger("click");
+  await flushPromises();
+  expect(state.createRule).toHaveBeenCalledTimes(1);
+  expect(escaped).toEqual([]);
+  const detail = wrapper.find('[aria-label="世界书原始错误"]').text();
+  for (const value of [failure.message, cause.message, failure.detail, failure.internalMessage, failure.reason, failure.raw.error, failure.raw.msg]) {
+    expect(detail).toContain(value);
+  }
+  expect(detail).toContain("stack");
+  expect((wrapper.find('input[placeholder="正则表达式/精确文本/关键词(逗号分隔)"]').element as HTMLInputElement).value).toBe("QA-RETRY");
+  await wrapper.findAll("button").find(button => button.text() === "创建")!.trigger("click");
+  await flushPromises();
+  expect(state.createRule).toHaveBeenCalledTimes(2);
+  expect(wrapper.find('[aria-label="世界书原始错误"]').exists()).toBe(false);
+  wrapper.unmount();
+});
+
+it.each(["update", "delete", "match", "load"])("keeps %s failures visible without escaping to the application boundary", async action => {
+  const failure = new Error(`QA-${action}-failure`, { cause: new Error(`QA-${action}-cause`) });
+  const escaped: unknown[] = [];
+  if (action === "update") state.updateRule.mockRejectedValueOnce(failure);
+  if (action === "delete") {
+    vi.spyOn(ElMessageBox, "confirm").mockResolvedValue("confirm" as never);
+    state.deleteRule.mockRejectedValueOnce(failure);
+  }
+  if (action === "match") state.testMatch.mockRejectedValueOnce(failure);
+  if (action === "load") state.fetchRules.mockRejectedValueOnce(failure);
+  const wrapper = mount(WorldBookView, {
+    global: {
+      plugins: [ElementPlus],
+      config: { errorHandler: error => { escaped.push(error); } },
+      stubs: { ExtensionPageHeader: { template: '<section><slot name="actions" /><slot /></section>' } },
+    },
+  });
+  await flushPromises();
+  if (action === "update") {
+    await wrapper.findAll("button").find(button => button.text() === "编辑")!.trigger("click");
+    await flushPromises();
+    await wrapper.findAll("button").find(button => button.text() === "保存")!.trigger("click");
+  }
+  if (action === "delete") await wrapper.findAll("button").find(button => button.text() === "删除")!.trigger("click");
+  if (action === "match") {
+    await wrapper.findAll("button").find(button => button.text() === "在线测试")!.trigger("click");
+    await wrapper.find("textarea").setValue("QA-XSS-UI");
+    await wrapper.findAll("button").find(button => button.text() === "测试匹配")!.trigger("click");
+  }
+  await flushPromises();
+  expect(escaped).toEqual([]);
+  const detail = wrapper.find('[aria-label="世界书原始错误"]').text();
+  expect(detail).toContain(failure.message);
+  expect(detail).toContain(`QA-${action}-cause`);
+  expect(detail).toContain("stack");
+  expect(wrapper.text()).toContain("QA-XSS-UI");
+  if (action === "match") expect(wrapper.text()).not.toContain("无规则命中");
+  wrapper.unmount();
+});
+
+it("treats deletion cancellation as a user action without calling the API", async () => {
+  vi.spyOn(ElMessageBox, "confirm").mockRejectedValue("cancel");
+  const wrapper = mount(WorldBookView, {
+    global: { plugins: [ElementPlus], stubs: { ExtensionPageHeader: true } },
+  });
+  await flushPromises();
+  await wrapper.findAll("button").find(button => button.text() === "删除")!.trigger("click");
+  await flushPromises();
+  expect(state.deleteRule).not.toHaveBeenCalled();
+  expect(wrapper.find('[aria-label="世界书原始错误"]').exists()).toBe(false);
+  expect(wrapper.text()).toContain("QA-XSS-UI");
+  wrapper.unmount();
+});
+
+it("ignores a match response after the user changes the test text", async () => {
+  let resolveMatch!: (value: any) => void;
+  state.testMatch.mockImplementationOnce(() => new Promise(resolve => {
+    resolveMatch = resolve;
+  }));
+  const wrapper = mount(WorldBookView, {
+    global: {
+      plugins: [ElementPlus],
+      stubs: {
+        ExtensionPageHeader: {
+          template: "<section><slot name=\"actions\" /><slot /></section>",
+        },
+      },
+    },
+  });
+  await flushPromises();
+
+  await wrapper.findAll("button").find(button => button.text() === "在线测试")!.trigger("click");
+  const textarea = wrapper.find("textarea");
+  await textarea.setValue("第一段文本");
+  await wrapper.findAll("button").find(button => button.text() === "测试匹配")!.trigger("click");
+  await flushPromises();
+  await textarea.setValue("完全不同的第二段文本");
+  resolveMatch({
+    matches: [{ entry: state.rules.value[0], hitText: "第一段文本" }],
+  });
+  await flushPromises();
+
+  expect(state.testMatch).toHaveBeenCalledTimes(1);
+  expect(wrapper.text()).not.toContain("命中规则 (1)");
+  expect(wrapper.text()).not.toContain("无规则命中");
+  wrapper.unmount();
 });

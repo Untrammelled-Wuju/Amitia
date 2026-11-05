@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -28,6 +29,22 @@ type BackupResult struct {
 
 func GenerateBackupID() string {
 	return "backup-" + uuid.NewString()
+}
+
+func IsValidBackupFileName(name string) bool {
+	if filepath.Base(name) != name {
+		return false
+	}
+	value := strings.TrimSuffix(name, ".enc")
+	if !strings.HasSuffix(value, ".amitia-backup") {
+		return false
+	}
+	id := strings.TrimSuffix(value, ".amitia-backup")
+	if !strings.HasPrefix(id, "backup-") {
+		return false
+	}
+	_, err := uuid.Parse(strings.TrimPrefix(id, "backup-"))
+	return err == nil
 }
 
 func (c *Coordinator) CreateBackup(ctx context.Context, req BackupRequest, dbPath string, runner SnapshotRunner) (*BackupResult, error) {
@@ -74,7 +91,23 @@ func (c *Coordinator) CreateBackup(ctx context.Context, req BackupRequest, dbPat
 	}
 
 	archivePath := filepath.Join(backupDir, opID+".amitia-backup")
-	writer := NewArchiveWriter(archivePath)
+	partialPath := filepath.Join(backupDir, "."+opID+".amitia-backup.partial")
+	encryptedPartialPath := ""
+	published := false
+	defer func() {
+		if published {
+			return
+		}
+		for _, path := range []string{partialPath, encryptedPartialPath, archivePath} {
+			if path == "" {
+				continue
+			}
+			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+				amitialog.Printf("[original-error] %v", err)
+			}
+		}
+	}()
+	writer := NewArchiveWriter(partialPath)
 	defer writer.Close()
 
 	componentIDs := make(map[string]bool)
@@ -146,36 +179,41 @@ func (c *Coordinator) CreateBackup(ctx context.Context, req BackupRequest, dbPat
 		return nil, c.failBackup(opID, err)
 	}
 
-	pkgPath := archivePath
+	pkgPath := partialPath
 	if req.Passphrase != "" {
-		encryptedPath := archivePath + ".enc"
-		if err := EncryptFile(archivePath, encryptedPath, req.Passphrase); err != nil {
-			if err := os.Remove(encryptedPath); err != nil {
+		encryptedPartialPath = filepath.Join(backupDir, "."+opID+".amitia-backup.enc.partial")
+		if err := EncryptFile(partialPath, encryptedPartialPath, req.Passphrase); err != nil {
+			if err := os.Remove(encryptedPartialPath); err != nil && !os.IsNotExist(err) {
 				amitialog.Printf("[original-error] %v", err)
 			}
 			return nil, c.failBackup(opID, fmt.Errorf("%w: %v", ErrBackupEncryptionFailed, err))
 		}
-		if err := os.Remove(archivePath); err != nil {
-			if err := os.Remove(encryptedPath); err != nil {
+		if err := os.Remove(partialPath); err != nil {
+			if err := os.Remove(encryptedPartialPath); err != nil && !os.IsNotExist(err) {
 				amitialog.Printf("[original-error] %v", err)
 			}
 			return nil, c.failBackup(opID, err)
 		}
-		pkgPath = encryptedPath
+		archivePath += ".enc"
+		pkgPath = encryptedPartialPath
 	}
-
-	op.Status = "completed"
-	op.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	if err := os.Rename(pkgPath, archivePath); err != nil {
+		return nil, c.failBackup(opID, err)
+	}
+	pkgPath = archivePath
 
 	info, err := os.Stat(pkgPath)
 	if err != nil {
-		return nil, err
+		return nil, c.failBackup(opID, err)
 	}
 
 	checksum, err := fileSHA256(pkgPath)
 	if err != nil {
-		return nil, err
+		return nil, c.failBackup(opID, err)
 	}
+	op.Status = "completed"
+	op.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	published = true
 
 	return &BackupResult{
 		BackupID:  opID,

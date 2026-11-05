@@ -135,9 +135,20 @@ func (r *Repository) CreateServer(ctx context.Context, input ServerInput) (Serve
 		return Server{}, fmt.Errorf("MCP_SERVER_CONFIGURATION_INVALID: name")
 	}
 	if err := r.db.WithContext(ctx).Create(&record).Error; err != nil {
+		if isUniqueServerIdentityError(err) {
+			return Server{}, fmt.Errorf("MCP_SERVER_ALREADY_EXISTS: normalized identity %s: %w", identity, err)
+		}
 		return Server{}, err
 	}
 	return record, nil
+}
+
+func isUniqueServerIdentityError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "unique constraint") || strings.Contains(message, "duplicate key") || strings.Contains(message, "unique failed")
 }
 
 func (r *Repository) UpdateServer(ctx context.Context, id string, input ServerInput) (Server, error) {
@@ -165,6 +176,9 @@ func (r *Repository) UpdateServer(ctx context.Context, id string, input ServerIn
 		updates["owner_kind"] = existing.OwnerKind
 	}
 	if err := r.db.WithContext(ctx).Model(&Server{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+		if isUniqueServerIdentityError(err) {
+			return Server{}, fmt.Errorf("MCP_SERVER_ALREADY_EXISTS: normalized identity %s: %w", identity, err)
+		}
 		return Server{}, err
 	}
 	return r.GetServer(ctx, id)

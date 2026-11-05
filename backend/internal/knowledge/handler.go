@@ -440,8 +440,8 @@ func (h *Handler) CreateRecoveryReview(c *gin.Context) {
 		RecheckID  string `json:"recheckId" binding:"required"`
 		RequestKey string `json:"requestKey" binding:"required"`
 	}
-	if c.ShouldBindJSON(&body) != nil {
-		c.AbortWithStatus(http.StatusBadRequest)
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
 		return
 	}
 	result, err := h.service.CreateRecoveryReview(c.Request.Context(), requestidentity.ResolveGin(c), c.Param("id"), body.RecheckID, body.RequestKey, actorHash)
@@ -477,8 +477,12 @@ func (h *Handler) ListRecoveryReviews(c *gin.Context) {
 		return
 	}
 	limit, err := strconv.Atoi(strings.TrimSpace(c.DefaultQuery("limit", "10")))
-	if err != nil || limit < 1 || limit > 30 {
-		c.AbortWithStatus(http.StatusBadRequest)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
+		return
+	}
+	if limit < 1 || limit > 30 {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "limit must be between 1 and 30: " + strconv.Itoa(limit)})
 		return
 	}
 	items, err := h.service.ListRecoveryReviews(c.Request.Context(), requestidentity.ResolveGin(c), c.Param("id"), limit)
@@ -499,7 +503,7 @@ func writeRecoveryReviewError(c *gin.Context, err error) {
 		return
 	}
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		c.AbortWithStatus(http.StatusNotFound)
+		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"code": 404, "msg": err.Error()})
 		return
 	}
 	c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})

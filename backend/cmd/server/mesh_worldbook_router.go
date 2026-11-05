@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -20,7 +21,11 @@ func registerMeshWorldbookRouter(mesh *gin.RouterGroup, services *AppServices, c
 		}
 		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 320<<10)
 		var input business.WorldbookMutation
-		if c.ShouldBindJSON(&input) != nil || input.ExpectedScope == nil {
+		if err := c.ShouldBindJSON(&input); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"message": fmt.Errorf("世界书保存参数无效: %w", err).Error()})
+			return
+		}
+		if input.ExpectedScope == nil {
 			c.JSON(http.StatusBadRequest, gin.H{"message": "世界书保存参数无效或缺少原服务范围"})
 			return
 		}
@@ -46,7 +51,11 @@ func registerMeshWorldbookRouter(mesh *gin.RouterGroup, services *AppServices, c
 		}
 		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 9<<20)
 		var input business.WorldbookImport
-		if c.ShouldBindJSON(&input) != nil || input.ExpectedScope == nil {
+		if err := c.ShouldBindJSON(&input); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"message": fmt.Errorf("世界书批量导入参数无效: %w", err).Error()})
+			return
+		}
+		if input.ExpectedScope == nil {
 			c.JSON(http.StatusBadRequest, gin.H{"message": "世界书批量导入参数无效或缺少原服务范围"})
 			return
 		}
@@ -78,7 +87,11 @@ func registerMeshWorldbookRouter(mesh *gin.RouterGroup, services *AppServices, c
 			ExpectedScope  *coordination.ExecutionScope `json:"expectedExecutionScope"`
 			Text           string                       `json:"text"`
 		}
-		if c.ShouldBindJSON(&input) != nil || input.ExpectedScope == nil {
+		if err := c.ShouldBindJSON(&input); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"message": fmt.Errorf("世界书匹配参数无效: %w", err).Error()})
+			return
+		}
+		if input.ExpectedScope == nil {
 			c.JSON(http.StatusBadRequest, gin.H{"message": "世界书匹配参数无效"})
 			return
 		}

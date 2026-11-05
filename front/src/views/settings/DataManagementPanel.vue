@@ -8,10 +8,10 @@ SPDX-License-Identifier: AGPL-3.0-only
       <template #header><span>存储概览</span></template>
       <div v-if="storageLoading" class="storage-loading"><el-icon class="is-loading" size="20"><Loading /></el-icon></div>
       <el-descriptions v-else :column="2" border size="small">
-        <el-descriptions-item label="数据库大小">{{ storageInfo.dbSize || "—" }}</el-descriptions-item>
-        <el-descriptions-item label="消息总数">{{ storageInfo.messageCount ?? "—" }}</el-descriptions-item>
-        <el-descriptions-item label="对话数">{{ storageInfo.conversationCount ?? "—" }}</el-descriptions-item>
-        <el-descriptions-item label="记忆数">{{ storageInfo.memoryCount ?? "—" }}</el-descriptions-item>
+        <el-descriptions-item label="数据库大小（App + Kernel）">{{ storageInfo.dbSize || "—" }}</el-descriptions-item>
+        <el-descriptions-item label="消息总数（全部角色）">{{ storageInfo.messageCount ?? "—" }}</el-descriptions-item>
+        <el-descriptions-item label="对话数（全部角色）">{{ storageInfo.conversationCount ?? "—" }}</el-descriptions-item>
+        <el-descriptions-item label="记忆数（全部角色）">{{ storageInfo.memoryCount ?? "—" }}</el-descriptions-item>
       </el-descriptions>
       <div class="data-actions">
         <el-button @click="goStorage"><el-icon><FolderOpened /></el-icon>备份与灾难恢复</el-button>

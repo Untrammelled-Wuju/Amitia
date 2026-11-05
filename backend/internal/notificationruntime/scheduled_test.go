@@ -5,9 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
 	"github.com/u-ai/backend/pkg/sse"
-	"gorm.io/gorm"
 )
 
 func TestScheduledDesktopNotificationUsesDeviceChannel(t *testing.T) {
@@ -37,7 +35,7 @@ func TestScheduledDesktopNotificationUsesDeviceChannel(t *testing.T) {
 }
 
 func TestScheduledNotificationAcknowledgementIsScopedAndMonotonic(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	db, err := openNotificationTestDB(t)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +78,7 @@ func TestScheduledNotificationAcknowledgementIsScopedAndMonotonic(t *testing.T) 
 }
 
 func TestTestDevicePushPersistsDisplayReceipt(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	db, err := openNotificationTestDB(t)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +134,7 @@ func TestTestDevicePushPersistsDisplayReceipt(t *testing.T) {
 }
 
 func TestAttentionNotificationIsIdempotentAndSuppressedInForeground(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	db, err := openNotificationTestDB(t)
 	if err != nil {
 		t.Fatal(err)
 	}

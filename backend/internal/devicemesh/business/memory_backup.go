@@ -140,6 +140,13 @@ func (c *MemoryBackupContributor) Import(ctx context.Context, req dataportabilit
 }
 
 func (e *Engine) ExportMemoryArchive(ctx context.Context, request Request, role string) (MemoryArchive, error) {
+	if role == "" && request.RoleID == "" {
+		var err error
+		request, err = e.PrivacyRequestRole(ctx, request)
+		if err != nil {
+			return MemoryArchive{}, err
+		}
+	}
 	ctx, scope, finish, err := e.memoryManagementScope(ctx, request, false)
 	if err != nil {
 		return MemoryArchive{}, err

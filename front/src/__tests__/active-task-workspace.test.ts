@@ -99,6 +99,7 @@ describe("主动任务工作台", () => {
     });
     await openWorkspace();
     expect(wrapper.text()).toContain("暂时无法读取任务");
+    expect(wrapper.text()).toContain("连接暂不可用");
     expect(wrapper.text()).not.toContain("为下一次陪伴安排时间");
   });
 
@@ -165,5 +166,29 @@ describe("主动任务工作台", () => {
     const dialog = document.querySelector(".task-editor")!;
     expect(dialog.textContent).toContain("Cron 表达式");
     expect(dialog.textContent).toContain("未回复时自动降频");
+  });
+
+  it("停用任务使用中文状态并包含在停用筛选中", async () => {
+    const read = api.get.getMockImplementation()!;
+    api.get.mockImplementation(async (path: string, options?: { params?: { kind?: string } }) => {
+      if (path === "/api/reminders") {
+        const rows = await read(path, options);
+        return [{ ...(rows as any[])[0], state: "created", enabled: 0, localRemindAt: "", remindAt: "" }];
+      }
+      return read(path, options);
+    });
+    await openWorkspace();
+    expect(wrapper.text()).toContain("已停用");
+    expect(wrapper.text()).not.toContain("created");
+
+    await wrapper.get(".task-title").trigger("click");
+    await flushPromises();
+    expect(document.body.textContent).toContain("2099-01-01 22:00:00");
+    document.body.querySelector(".el-drawer__close-btn")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    const stateFilter = wrapper.findAllComponents({ name: "ElSelect" })[1];
+    stateFilter.vm.$emit("update:modelValue", "disabled");
+    await flushPromises();
+    expect(wrapper.get(".task-title").text()).toBe("每晚晚安");
   });
 });

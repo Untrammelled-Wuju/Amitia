@@ -94,8 +94,11 @@ export function useWorldBook() {
   const totalPages = ref(1);
   let currentScope: OwnedExecutionScope | null = null;
   let currentRole = "";
+  let requestVersion = 0;
 
   watch(() => [owned.enabled.value, owned.coreId.value, owned.roleOwnerId.value], () => {
+    requestVersion += 1;
+    loading.value = false;
     rules.value = [];
     total.value = 0;
     loadedContext.value = "";
@@ -146,10 +149,13 @@ export function useWorldBook() {
     page?: number;
     pageSize?: number;
   } = {}) {
+    const version = ++requestVersion;
     loading.value = true;
     try {
       const role = await resolveAccess();
+      if (version !== requestVersion) return;
       const result = await owned.data("worldbook", role);
+      if (version !== requestVersion) return;
       const scope = result.executionScope;
       if (!scope || scope.coreId !== owned.coreId.value || scope.roleId !== role || result.snapshot?.ownerId !== scope.resourceOwnerId) {
         throw new Error("世界书所属设备、Core 或角色无效");
@@ -170,13 +176,15 @@ export function useWorldBook() {
       page.value = effectivePage;
       totalPages.value = pages;
     } catch (error) {
-      rules.value = [];
-      total.value = 0;
-      loadedContext.value = "";
-      currentScope = null;
+      if (version === requestVersion) {
+        rules.value = [];
+        total.value = 0;
+        loadedContext.value = "";
+        currentScope = null;
+      }
       throw error;
     } finally {
-      loading.value = false;
+      if (version === requestVersion) loading.value = false;
     }
   }
 

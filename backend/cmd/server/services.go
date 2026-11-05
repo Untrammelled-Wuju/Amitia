@@ -1214,6 +1214,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		memoryRuntime := &canonicalChatMemoryRuntime{engine: services.OwnedBusiness, spaceID: localSpace.SpaceID(), deviceID: deviceMeshRuntime.LocalDeviceID, begin: inferenceAuthority}
 		services.LocalSpaceID, services.LocalDeviceID = localSpace.SpaceID(), deviceMeshRuntime.LocalDeviceID
 		memoryConsumers.runtime, reflectionMemoryAdapter.runtime = memoryRuntime, memoryRuntime
+		memoryConsumers.storage = services.KernelContainer.DeviceRegistry.Database()
 		if setter, ok := services.Chat.(interface{ SetOwnedToolRuntime(chat.OwnedToolRuntime) }); ok {
 			setter.SetOwnedToolRuntime(&meshOwnedToolRuntime{services: services, native: nativeMultiAgent})
 		}

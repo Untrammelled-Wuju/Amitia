@@ -5,9 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
 	"github.com/u-ai/backend/internal/conversationstream"
-	"gorm.io/gorm"
 )
 
 func TestPreviewForMode(t *testing.T) {
@@ -150,7 +148,7 @@ func TestStableVendorNotifyID(t *testing.T) {
 }
 
 func TestRepositoryDisablesOnlyInvalidProviderToken(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file:notification-runtime-test?mode=memory&cache=shared"), &gorm.Config{})
+	db, err := openNotificationTestDB(t)
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
@@ -245,7 +243,7 @@ func TestAndroidChannelForEnvelope(t *testing.T) {
 }
 
 func TestLiveActivityRepositoryIsSpaceScoped(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	db, err := openNotificationTestDB(t)
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
@@ -277,7 +275,7 @@ func TestLiveActivityRepositoryIsSpaceScoped(t *testing.T) {
 }
 
 func TestRestoreActiveRunsUsesPersistedTimestampFormat(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	db, err := openNotificationTestDB(t)
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
@@ -344,7 +342,7 @@ func TestRestoreActiveRunsUsesPersistedTimestampFormat(t *testing.T) {
 }
 
 func TestLiveActivityTokenPreservesConversationOnTokenRefresh(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	db, err := openNotificationTestDB(t)
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
@@ -389,7 +387,7 @@ func TestLiveActivityTokenPreservesConversationOnTokenRefresh(t *testing.T) {
 }
 
 func TestEndedLiveActivityCannotBeRevivedByLateToken(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	db, err := openNotificationTestDB(t)
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
@@ -438,7 +436,7 @@ func TestEndedLiveActivityCannotBeRevivedByLateToken(t *testing.T) {
 }
 
 func TestRevokeDeviceStopsPendingNotificationState(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	db, err := openNotificationTestDB(t)
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
@@ -560,7 +558,7 @@ func TestCollapseKeyKeepsDistinctMessages(t *testing.T) {
 }
 
 func TestRecentLiveActivityStartSurvivesRuntimeRestart(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	db, err := openNotificationTestDB(t)
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
@@ -610,7 +608,7 @@ func TestRecentLiveActivityStartSurvivesRuntimeRestart(t *testing.T) {
 }
 
 func TestCreateOutboxConflictReusesPersistedIdentity(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	db, err := openNotificationTestDB(t)
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}

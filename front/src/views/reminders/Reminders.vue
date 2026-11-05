@@ -167,6 +167,7 @@ SPDX-License-Identifier: AGPL-3.0-only
               ><div v-if="listError" class="task-empty">
                 <h3>暂时无法读取任务</h3>
                 <p>请检查连接后重新加载，已有任务不会被修改。</p>
+                <pre class="task-error-detail" role="alert" aria-label="任务列表原始错误">{{ listError }}</pre>
                 <el-button @click="fetchReminders">重新加载</el-button>
               </div>
               <div v-else class="task-empty">
@@ -249,7 +250,7 @@ SPDX-License-Identifier: AGPL-3.0-only
             selectedTask.conversationTitle || selectedTask.conversationId || "任务专属对话"
           }}</el-descriptions-item
           ><el-descriptions-item label="执行时间">{{
-            selectedTask.localRemindAt || selectedTask.remindAt || "—"
+            selectedTask.localRemindAt || selectedTask.remindAt || selectedTask.localAnchorAt || "—"
           }}</el-descriptions-item
           ><el-descriptions-item label="时区">{{ selectedTask.timezone }}</el-descriptions-item
           ><el-descriptions-item label="重复规则"
@@ -599,6 +600,7 @@ import { request } from "../../composables/request";
 import { useDeviceOwnedConversation } from "../../composables/useDeviceOwnedConversation";
 import type { ReminderGroup } from "../../types";
 import { randomUUID } from "../../runtime/secure-random";
+import { originalErrorText } from "../../runtime/original-error";
 import ProspectivePanel from "./components/ProspectivePanel.vue";
 import TriggerHistoryPanel from "./components/TriggerHistoryPanel.vue";
 import PendingActionPanel from "./components/PendingActionPanel.vue";
@@ -690,6 +692,7 @@ function taskLabel(row: Reminder): string {
     (
       {
         enabled: "待执行",
+        created: "已停用",
         disabled: "已停用",
         expired: "已结束",
         uninstalled: "已取消",
@@ -827,9 +830,9 @@ const filteredReminders = computed(() => {
           new Date(r.remindAt) >= now,
       );
     case "completed":
-      return list.filter((r) => r.state === "expired");
+      return list.filter((r) => ["expired", "uninstalled", "cancelled"].includes(r.state));
     case "disabled":
-      return list.filter((r) => r.state === "disabled" || r.paused);
+      return list.filter((r) => r.paused || !r.enabled || ["created", "disabled"].includes(r.state));
     default:
       return list;
   }
@@ -932,7 +935,7 @@ async function fetchReminders() {
     const raw = res;
     reminders.value = raw.map(saved);
   } catch (error: any) {
-    listError.value = error?.message || "任务列表加载失败";
+    listError.value = originalErrorText(error);
   } finally {
     loading.value = false;
   }
@@ -953,7 +956,7 @@ async function fetchStatus() {
   } catch (error: any) {
     statusLoaded.value = false;
     schedulerRunning.value = false;
-    ElMessage.error(error?.message || "无法读取调度状态");
+    ElMessage.error(originalErrorText(error));
   }
 }
 
@@ -1478,6 +1481,21 @@ onUnmounted(() => {
   color: var(--tp-text-secondary);
   font-size: 14px;
   margin: 0 0 16px;
+}
+.task-error-detail {
+  width: min(760px, 100%);
+  max-height: 220px;
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  overflow: auto;
+  border-radius: var(--ac-radius-sm);
+  background: var(--tp-panel-soft);
+  color: var(--tp-danger);
+  font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  text-align: left;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
 }
 .history-retention {
   color: var(--tp-text-secondary);

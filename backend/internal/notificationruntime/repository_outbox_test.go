@@ -3,20 +3,15 @@ package notificationruntime
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 )
 
 func newNotificationTestRepository(t *testing.T) *Repository {
 	t.Helper()
-	db, err := gorm.Open(
-		sqlite.Open(fmt.Sprintf("file:notification-runtime-%d?mode=memory&cache=shared", time.Now().UnixNano())),
-		&gorm.Config{},
-	)
+	db, err := openNotificationTestDB(t)
 	if err != nil {
 		t.Fatal(err)
 	}

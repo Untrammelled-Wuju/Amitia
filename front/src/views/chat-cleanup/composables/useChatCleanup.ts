@@ -50,6 +50,7 @@ export function useChatCleanup() {
     if (confirmText.value !== "确认清理" || !previewResult.value?.previewId)
       return;
     confirmLoading.value = true;
+    cleanupResult.value = null;
     try {
       const d = await ownedManagementRequest("cleanup/confirm", {
         previewId: previewResult.value.previewId,
@@ -59,12 +60,14 @@ export function useChatCleanup() {
         expectedExecutionScope: previewResult.value.executionScope,
       }, "post");
       cleanupResult.value = d;
-      ElMessage.success("清理完成");
+      ElMessage.success("清理完成，完整备份已通过完整性校验");
     } catch (err: any) {
       ElMessage.error(
         "清理失败: " + (err.response?.data?.message || err.message),
       );
     } finally {
+      previewResult.value = null;
+      confirmText.value = "";
       confirmLoading.value = false;
     }
   }

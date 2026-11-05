@@ -36,12 +36,28 @@ func (s *service) GetStorageInfo() map[string]interface{} {
 		"path":              dir,
 		"dbSize":            formatStorageBytes(dbSize),
 		"dbSizeBytes":       dbSize,
-		"messageCount":      s.storageTableCount("messages"),
-		"conversationCount": s.storageTableCount("conversations"),
+		"messageCount":      int64(0),
+		"conversationCount": int64(0),
+		"scope":             "all-roles",
 	}
 	if s.memoryConsumer == nil {
 		result["memoryError"] = "统一记忆统计入口不可用"
 		return result
+	}
+	if storage, ok := s.memoryConsumer.(business.OwnedStorageStatsPort); ok {
+		stats, err := storage.OwnedStorageStats(context.Background())
+		if err != nil {
+			result["ownedStorageError"] = err.Error()
+		} else {
+			result["messageCount"] = stats.MessageCount
+			result["conversationCount"] = stats.ConversationCount
+			dbSize += stats.DatabaseBytes
+			result["dbSize"] = formatStorageBytes(dbSize)
+			result["dbSizeBytes"] = dbSize
+			result["kernelDbSizeBytes"] = stats.DatabaseBytes
+		}
+	} else {
+		result["ownedStorageError"] = "统一存储统计入口不可用"
 	}
 	entries, err := s.memoryConsumer.Read(context.Background(), "", "memory", true)
 	if err != nil {

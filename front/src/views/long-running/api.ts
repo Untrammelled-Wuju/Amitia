@@ -50,7 +50,7 @@ export async function saveConfigApi(data: TaskMaintenanceConfig, context: string
 }
 
 export function cleanupTempApi(context: string) {
-  return post<{ deleted: number; freedBytes: number }>(
+  return post<{ cleaned: boolean; processedFiles: number; removedLines: number; bytesFreed: number }>(
     "/api/runtime/cleanup-temp", undefined, coreConfigurationRequestConfig(context),
   );
 }
@@ -62,7 +62,7 @@ export function rotateLogsApi(context: string) {
 }
 
 export function checkDbIntegrityApi(context: string) {
-  return post<{ ok: boolean; errors: string[] }>(
+  return post<{ ok: boolean; errors: string[]; status: string; issues: Array<{ type: string; message: string }> }>(
     "/api/runtime/check-db-integrity", undefined, coreConfigurationRequestConfig(context),
   );
 }

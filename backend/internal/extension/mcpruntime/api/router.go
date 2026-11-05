@@ -121,8 +121,8 @@ func (h *Handler) getServer(c *gin.Context) {
 
 func (h *Handler) createServer(c *gin.Context) {
 	var request serverRequest
-	if c.ShouldBindJSON(&request) != nil {
-		problem(c, http.StatusBadRequest, "MCP_SERVER_CONFIGURATION_INVALID", "配置格式无效")
+	if err := c.ShouldBindJSON(&request); err != nil {
+		problem(c, http.StatusBadRequest, "MCP_SERVER_CONFIGURATION_INVALID", "配置格式无效: "+err.Error())
 		return
 	}
 	record, err := h.services.Repository.CreateServer(c, request.ServerInput)
@@ -162,8 +162,8 @@ func (h *Handler) updateServer(c *gin.Context) {
 		return
 	}
 	var request serverRequest
-	if c.ShouldBindJSON(&request) != nil {
-		problem(c, http.StatusBadRequest, "MCP_SERVER_CONFIGURATION_INVALID", "配置格式无效")
+	if err := c.ShouldBindJSON(&request); err != nil {
+		problem(c, http.StatusBadRequest, "MCP_SERVER_CONFIGURATION_INVALID", "配置格式无效: "+err.Error())
 		return
 	}
 	record, err := h.services.Repository.UpdateServer(c, c.Param("id"), request.ServerInput)
@@ -300,8 +300,8 @@ func (h *Handler) readResource(c *gin.Context) {
 	var request struct {
 		URI string `json:"uri"`
 	}
-	if c.ShouldBindJSON(&request) != nil {
-		problem(c, http.StatusBadRequest, "MCP_RESOURCE_NOT_FOUND", "资源参数无效")
+	if err := c.ShouldBindJSON(&request); err != nil {
+		problem(c, http.StatusBadRequest, "MCP_RESOURCE_NOT_FOUND", "资源参数无效: "+err.Error())
 		return
 	}
 	result, err := h.services.Features.ReadResource(c, c.Param("id"), request.URI)
@@ -311,8 +311,12 @@ func (h *Handler) subscribeResource(c *gin.Context) {
 	var request struct {
 		URI string `json:"uri"`
 	}
-	if c.ShouldBindJSON(&request) != nil || strings.TrimSpace(request.URI) == "" {
-		problem(c, http.StatusBadRequest, "MCP_RESOURCE_NOT_FOUND", "资源参数无效")
+	if err := c.ShouldBindJSON(&request); err != nil {
+		problem(c, http.StatusBadRequest, "MCP_RESOURCE_NOT_FOUND", "资源参数无效: "+err.Error())
+		return
+	}
+	if strings.TrimSpace(request.URI) == "" {
+		problem(c, http.StatusBadRequest, "MCP_RESOURCE_NOT_FOUND", "资源参数无效: uri 不能为空")
 		return
 	}
 	err := h.services.Features.Subscribe(c, c.Param("id"), request.URI)
@@ -322,8 +326,12 @@ func (h *Handler) unsubscribeResource(c *gin.Context) {
 	var request struct {
 		URI string `json:"uri"`
 	}
-	if c.ShouldBindJSON(&request) != nil || strings.TrimSpace(request.URI) == "" {
-		problem(c, http.StatusBadRequest, "MCP_RESOURCE_NOT_FOUND", "资源参数无效")
+	if err := c.ShouldBindJSON(&request); err != nil {
+		problem(c, http.StatusBadRequest, "MCP_RESOURCE_NOT_FOUND", "资源参数无效: "+err.Error())
+		return
+	}
+	if strings.TrimSpace(request.URI) == "" {
+		problem(c, http.StatusBadRequest, "MCP_RESOURCE_NOT_FOUND", "资源参数无效: uri 不能为空")
 		return
 	}
 	err := h.services.Features.Unsubscribe(c, c.Param("id"), request.URI)
@@ -334,8 +342,8 @@ func (h *Handler) getPrompt(c *gin.Context) {
 		Name      string            `json:"name"`
 		Arguments map[string]string `json:"arguments"`
 	}
-	if c.ShouldBindJSON(&request) != nil {
-		problem(c, http.StatusBadRequest, "MCP_PROMPT_NOT_FOUND", "Prompt 参数无效")
+	if err := c.ShouldBindJSON(&request); err != nil {
+		problem(c, http.StatusBadRequest, "MCP_PROMPT_NOT_FOUND", "Prompt 参数无效: "+err.Error())
 		return
 	}
 	result, err := h.services.Features.GetPrompt(c, c.Param("id"), request.Name, request.Arguments)
@@ -347,8 +355,8 @@ func (h *Handler) complete(c *gin.Context) {
 		Argument         map[string]string `json:"argument"`
 		ContextArguments map[string]string `json:"contextArguments"`
 	}
-	if c.ShouldBindJSON(&request) != nil {
-		problem(c, http.StatusBadRequest, "MCP_COMPLETION_INVALID", "补全参数无效")
+	if err := c.ShouldBindJSON(&request); err != nil {
+		problem(c, http.StatusBadRequest, "MCP_COMPLETION_INVALID", "补全参数无效: "+err.Error())
 		return
 	}
 	result, err := h.services.Features.Complete(c, c.Param("id"), request.Reference, request.Argument, request.ContextArguments)
@@ -373,8 +381,8 @@ func (h *Handler) toolScope(c *gin.Context) {
 	var request struct {
 		Enabled bool `json:"enabled"`
 	}
-	if c.ShouldBindJSON(&request) != nil {
-		problem(c, http.StatusBadRequest, "MCP_SERVER_CONFIGURATION_INVALID", "作用域无效")
+	if err := c.ShouldBindJSON(&request); err != nil {
+		problem(c, http.StatusBadRequest, "MCP_SERVER_CONFIGURATION_INVALID", "作用域无效: "+err.Error())
 		return
 	}
 	err = h.services.Repository.SetToolEnabled(c, tool.ID, request.Enabled)
@@ -394,8 +402,8 @@ func (h *Handler) capability(c *gin.Context) {
 		Enabled       bool            `json:"enabled"`
 		Configuration json.RawMessage `json:"configuration"`
 	}
-	if c.ShouldBindJSON(&request) != nil {
-		problem(c, http.StatusBadRequest, "MCP_SERVER_CONFIGURATION_INVALID", "能力配置无效")
+	if err := c.ShouldBindJSON(&request); err != nil {
+		problem(c, http.StatusBadRequest, "MCP_SERVER_CONFIGURATION_INVALID", "能力配置无效: "+err.Error())
 		return
 	}
 	capability := strings.ToLower(strings.TrimSpace(c.Param("capability")))
@@ -405,8 +413,12 @@ func (h *Handler) capability(c *gin.Context) {
 			TimeoutSeconds int `json:"timeoutSeconds"`
 			MaxConcurrent  int `json:"maxConcurrent"`
 		}
-		if json.Unmarshal(request.Configuration, &config) != nil || config.MaxTokens < 1 || config.MaxTokens > 8192 || config.TimeoutSeconds < 1 || config.TimeoutSeconds > 300 || config.MaxConcurrent < 1 || config.MaxConcurrent > 4 {
-			problem(c, http.StatusBadRequest, "MCP_SERVER_CONFIGURATION_INVALID", "Sampling 限额无效")
+		if err := json.Unmarshal(request.Configuration, &config); err != nil {
+			problem(c, http.StatusBadRequest, "MCP_SERVER_CONFIGURATION_INVALID", "Sampling 配置解析失败: "+err.Error())
+			return
+		}
+		if config.MaxTokens < 1 || config.MaxTokens > 8192 || config.TimeoutSeconds < 1 || config.TimeoutSeconds > 300 || config.MaxConcurrent < 1 || config.MaxConcurrent > 4 {
+			problem(c, http.StatusBadRequest, "MCP_SERVER_CONFIGURATION_INVALID", fmt.Sprintf("Sampling 限额无效: %+v", config))
 			return
 		}
 	}
@@ -415,8 +427,12 @@ func (h *Handler) capability(c *gin.Context) {
 			MaxConcurrent int `json:"maxConcurrent"`
 			MaxTTLSeconds int `json:"maxTTLSeconds"`
 		}
-		if json.Unmarshal(request.Configuration, &config) != nil || config.MaxConcurrent < 1 || config.MaxConcurrent > 20 || config.MaxTTLSeconds < 60 || config.MaxTTLSeconds > 604800 {
-			problem(c, http.StatusBadRequest, "MCP_SERVER_CONFIGURATION_INVALID", "Tasks 限额无效")
+		if err := json.Unmarshal(request.Configuration, &config); err != nil {
+			problem(c, http.StatusBadRequest, "MCP_SERVER_CONFIGURATION_INVALID", "Tasks 配置解析失败: "+err.Error())
+			return
+		}
+		if config.MaxConcurrent < 1 || config.MaxConcurrent > 20 || config.MaxTTLSeconds < 60 || config.MaxTTLSeconds > 604800 {
+			problem(c, http.StatusBadRequest, "MCP_SERVER_CONFIGURATION_INVALID", fmt.Sprintf("Tasks 限额无效: %+v", config))
 			return
 		}
 	}
@@ -478,8 +494,8 @@ func (h *Handler) oauthStart(c *gin.Context) {
 		ClientSecret string   `json:"clientSecret"`
 		Scopes       []string `json:"scopes"`
 	}
-	if c.ShouldBindJSON(&request) != nil {
-		problem(c, http.StatusBadRequest, "MCP_OAUTH_DISCOVERY_FAILED", "授权配置无效")
+	if err := c.ShouldBindJSON(&request); err != nil {
+		problem(c, http.StatusBadRequest, "MCP_OAUTH_DISCOVERY_FAILED", "授权配置无效: "+err.Error())
 		return
 	}
 	if strings.TrimSpace(request.RedirectURI) == "" {
@@ -548,8 +564,8 @@ func (h *Handler) oauthRevoke(c *gin.Context) {
 }
 func (h *Handler) dependencyPreview(c *gin.Context) {
 	var request dependency.PreviewRequest
-	if c.ShouldBindJSON(&request) != nil {
-		problem(c, http.StatusBadRequest, "MCP_DEPENDENCY_PLAN_INVALID", "依赖声明无效")
+	if err := c.ShouldBindJSON(&request); err != nil {
+		problem(c, http.StatusBadRequest, "MCP_DEPENDENCY_PLAN_INVALID", "依赖声明无效: "+err.Error())
 		return
 	}
 	result, err := h.services.Dependencies.Preview(c, request)
@@ -557,8 +573,8 @@ func (h *Handler) dependencyPreview(c *gin.Context) {
 }
 func (h *Handler) dependencyInstall(c *gin.Context) {
 	var request dependency.InstallRequest
-	if c.ShouldBindJSON(&request) != nil {
-		problem(c, http.StatusBadRequest, "MCP_DEPENDENCY_PLAN_INVALID", "安装计划无效")
+	if err := c.ShouldBindJSON(&request); err != nil {
+		problem(c, http.StatusBadRequest, "MCP_DEPENDENCY_PLAN_INVALID", "安装计划无效: "+err.Error())
 		return
 	}
 	result, err := h.services.Dependencies.Install(c, request)
@@ -626,8 +642,8 @@ func (h *Handler) resolveInteraction(c *gin.Context) {
 		return
 	}
 	var decision host.InteractionDecision
-	if c.ShouldBindJSON(&decision) != nil {
-		problem(c, http.StatusBadRequest, "MCP_INTERACTION_INVALID", "处理结果无效")
+	if err := c.ShouldBindJSON(&decision); err != nil {
+		problem(c, http.StatusBadRequest, "MCP_INTERACTION_INVALID", "处理结果无效: "+err.Error())
 		return
 	}
 	err := h.services.Interactions.Resolve(c.Param("id"), decision)

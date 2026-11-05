@@ -71,6 +71,7 @@ import { ref, onMounted } from "vue";
 import { useCoreConfigurationAccess } from "@/composables/useCoreConfigurationAccess";
 import { cleanupTempApi, rotateLogsApi, checkDbIntegrityApi } from "../api";
 import { fmtBytes } from "../utils";
+import { originalErrorText } from "@/runtime/original-error";
 
 const emit = defineEmits<{
   actionCompleted: [];
@@ -97,15 +98,20 @@ async function runCleanup() {
     const context = await access.requireAccess(loadedContext);
     const result = await cleanupTempApi(context);
     await access.requireAccess(context);
+    if (result.cleaned !== true || !Number.isInteger(result.processedFiles) || result.processedFiles < 0 ||
+        !Number.isInteger(result.removedLines) || result.removedLines < 0 ||
+        !Number.isFinite(result.bytesFreed) || result.bytesFreed < 0) {
+      throw new Error(`临时文件清理响应无效: ${JSON.stringify(result)}`);
+    }
     actionResult.value = {
-      message: `清理完成: 删除 ${result.deleted} 个文件`,
+      message: `清理完成: 处理 ${result.processedFiles} 个文件`,
       type: "success",
-      detail: `释放空间: ${fmtBytes(result.freedBytes)}`,
+      detail: `清理日志行: ${result.removedLines}；释放空间: ${fmtBytes(result.bytesFreed)}`,
     };
     emit("actionCompleted");
   } catch (error) {
   console.error("[original-error]", error);
-actionResult.value = { message: "清理失败", type: "error" };
+actionResult.value = { message: "清理失败", type: "error", detail: originalErrorText(error) };
   } finally {
     cleanupLoading.value = false;
   }
@@ -145,18 +151,22 @@ async function runDbCheck() {
     const context = await access.requireAccess(loadedContext);
     const result = await checkDbIntegrityApi(context);
     await access.requireAccess(context);
+    if (typeof result.ok !== "boolean" || !["ok", "degraded"].includes(result.status) ||
+        !Array.isArray(result.errors) || result.errors.some(value => typeof value !== "string")) {
+      throw new Error(`数据库完整性检查响应无效: ${JSON.stringify(result)}`);
+    }
     actionResult.value = {
       message:
         result.ok && result.errors.length === 0
           ? "数据库完整性检查通过"
           : `发现 ${result.errors.length} 个问题`,
-      type: result.ok ? "success" : "warning",
+      type: result.ok ? "success" : "error",
       detail: result.errors.length > 0 ? result.errors.join("; ") : undefined,
     };
     emit("actionCompleted");
   } catch (error) {
   console.error("[original-error]", error);
-actionResult.value = { message: "数据库检查失败", type: "error" };
+actionResult.value = { message: "数据库检查失败", type: "error", detail: originalErrorText(error) };
   } finally {
     dbCheckLoading.value = false;
   }

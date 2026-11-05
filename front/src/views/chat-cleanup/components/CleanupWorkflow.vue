@@ -105,9 +105,9 @@ SPDX-License-Identifier: AGPL-3.0-only
           <div class="preview-stat-value">{{ previewResult.messageCount }}</div>
         </div>
         <div class="preview-stat">
-          <div class="preview-stat-label">估算释放空间</div>
+          <div class="preview-stat-label">预计清理数据量</div>
           <div class="preview-stat-value">
-            {{ previewResult.estimatedSize }}
+            {{ previewResult.estimatedSizeFormatted }}
           </div>
         </div>
         <div v-if="previewResult.memoryCount > 0" class="preview-stat warn">
@@ -117,7 +117,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       </div>
       <el-alert
         type="warning"
-        title="清理前将自动备份数据库至 data/backups/ 目录"
+        title="清理前将创建完整备份并校验，校验失败时不会删除任何数据"
         :closable="false"
         show-icon
         style="margin-bottom: 12px"
@@ -133,7 +133,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         </div>
         <el-button
           type="danger"
-          :disabled="confirmText !== '确认清理'"
+          :disabled="confirmText !== '确认清理' || confirmLoading"
           :loading="confirmLoading"
           @click="executeCleanup"
           class="confirm-btn"
@@ -149,8 +149,8 @@ SPDX-License-Identifier: AGPL-3.0-only
       </template>
       <div class="cleanup-report">
         <div class="report-item highlight">
-          <span class="report-label">释放空间：</span>
-          <span class="report-value">{{ cleanupResult.freedFormatted }}</span>
+          <span class="report-label">已清理数据量：</span>
+          <span class="report-value">{{ cleanupResult.cleanedFormatted }}</span>
         </div>
         <div class="report-item">
           <span class="report-label">清理会话数：</span>

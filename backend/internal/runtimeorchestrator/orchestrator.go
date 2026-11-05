@@ -647,12 +647,17 @@ func (o *RuntimeOrchestrator) rollback(failedID ComponentID) {
 }
 
 func (o *RuntimeOrchestrator) updateOverallLocked() {
-	if o.state == OrchestratorBlocked || o.state == OrchestratorStopping || o.state == OrchestratorStopped {
+	if o.state == OrchestratorStopping || o.state == OrchestratorStopped {
 		return
 	}
 	hasReady, hasRequiredDegraded, hasStarting := false, false, false
 	for _, st := range o.statuses {
 		switch st.status.State {
+		case StateFailed:
+			if st.status.Required {
+				o.state = OrchestratorBlocked
+				return
+			}
 		case StateReady:
 			hasReady = true
 		case StateDegraded:

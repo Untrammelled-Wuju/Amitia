@@ -82,7 +82,11 @@ func (h *Handler) GenerateCard(c *gin.Context) {
 		Messages []generationMessage    `json:"messages"`
 		Draft    map[string]interface{} `json:"draft"`
 	}
-	if c.ShouldBindJSON(&input) != nil || len(input.Messages) == 0 || len(input.Messages) > 32 || input.Messages[len(input.Messages)-1].Role != "user" {
+	if err := c.ShouldBindJSON(&input); err != nil {
+		util.ErrorResponse(c, response.InvalidParams, fmt.Errorf("生成对话解析失败: %w", err).Error(), nil)
+		return
+	}
+	if len(input.Messages) == 0 || len(input.Messages) > 32 || input.Messages[len(input.Messages)-1].Role != "user" {
 		util.ErrorResponse(c, response.InvalidParams, "请提供有效的生成对话，最多保留 32 条消息", nil)
 		return
 	}

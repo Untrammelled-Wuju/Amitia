@@ -20,6 +20,15 @@ func phase31Repository(t *testing.T) *Repository {
 	if err != nil {
 		t.Fatal(err)
 	}
+	connection, err := db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := connection.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	if err := db.Exec(`CREATE TABLE knowledge_vector_audit_sessions (
         id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, collections_hash TEXT NOT NULL,
         page_limit INTEGER NOT NULL, page INTEGER NOT NULL, next_cursor TEXT NOT NULL,

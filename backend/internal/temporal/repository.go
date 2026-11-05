@@ -119,6 +119,17 @@ func (r *SQLiteRepository) ListDueAnchors(now time.Time, limit int) ([]Anchor, e
 
 func (r *SQLiteRepository) DeleteAnchor(id, spaceID, characterID string) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
+		query := tx.Where("id = ? AND space_id = ?", id, spaceID)
+		if characterID != "" {
+			query = query.Where("character_id = ?", characterID)
+		}
+		var count int64
+		if err := query.Model(&Anchor{}).Count(&count).Error; err != nil {
+			return err
+		}
+		if count == 0 {
+			return ErrAnchorNotFound
+		}
 		if err := tx.Where("anchor_id = ?", id).Delete(&Event{}).Error; err != nil {
 			return err
 		}
@@ -126,7 +137,14 @@ func (r *SQLiteRepository) DeleteAnchor(id, spaceID, characterID string) error {
 		if characterID != "" {
 			db = db.Where("character_id = ?", characterID)
 		}
-		return db.Delete(&Anchor{}).Error
+		result := db.Delete(&Anchor{})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return ErrAnchorNotFound
+		}
+		return nil
 	})
 }
 

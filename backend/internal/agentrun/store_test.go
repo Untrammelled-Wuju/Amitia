@@ -3,7 +3,7 @@ package agentrun
 import (
 	"context"
 	"errors"
-	"fmt"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -15,10 +15,19 @@ import (
 
 func testService(t *testing.T) *Service {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "agentrun.db")), &gorm.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
+	connection, err := db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := connection.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	if err := migration.ApplyBaseline(db); err != nil {
 		t.Fatal(err)
 	}

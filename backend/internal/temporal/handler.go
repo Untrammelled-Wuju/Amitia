@@ -2,6 +2,7 @@ package temporal
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"runtime"
 	"strconv"
@@ -84,7 +85,11 @@ func (h *Handler) ListAnchors(c *gin.Context) {
 	if !h.requireCharacterOwner(c, characterID) {
 		return
 	}
-	limit, _ := strconv.Atoi(c.Query("limit"))
+	limit, err := parseTemporalLimit(c.Query("limit"), 500)
+	if err != nil {
+		h.respond(c, nil, err)
+		return
+	}
 	anchors, err := h.service.ListAnchors(c.Request.Context(), AnchorQuery{SpaceID: apiSpaceID(c), CharacterID: characterID, Status: strings.TrimSpace(c.Query("status")), Limit: limit})
 	h.respond(c, anchors, err)
 }
@@ -141,7 +146,11 @@ func (h *Handler) ListEvents(c *gin.Context) {
 	if !h.requireCharacterOwner(c, characterID) {
 		return
 	}
-	limit, _ := strconv.Atoi(c.Query("limit"))
+	limit, err := parseTemporalLimit(c.Query("limit"), 500)
+	if err != nil {
+		h.respond(c, nil, err)
+		return
+	}
 	events, err := h.service.ListEvents(c.Request.Context(), apiSpaceID(c), characterID, limit)
 	h.respond(c, events, err)
 }
@@ -206,7 +215,7 @@ func (h *Handler) respond(c *gin.Context, data interface{}, err error) {
 	}
 	status := http.StatusInternalServerError
 	switch {
-	case errors.Is(err, ErrInvalidTimezone):
+	case errors.Is(err, ErrInvalidTimezone), errors.Is(err, ErrInvalidConfig), errors.Is(err, ErrInvalidLimit):
 		status = http.StatusBadRequest
 	case errors.Is(err, ErrInvalidOwner), errors.Is(err, ErrScopeMismatch):
 		status = http.StatusBadRequest
@@ -214,6 +223,21 @@ func (h *Handler) respond(c *gin.Context, data interface{}, err error) {
 		status = http.StatusNotFound
 	}
 	c.JSON(status, gin.H{"code": status, "msg": err.Error()})
+}
+
+func parseTemporalLimit(raw string, maximum int) (int, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, nil
+	}
+	limit, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("%w: %v", ErrInvalidLimit, err)
+	}
+	if limit < 1 || limit > maximum {
+		return 0, fmt.Errorf("%w: limit 必须在 1 到 %d 之间", ErrInvalidLimit, maximum)
+	}
+	return limit, nil
 }
 
 func apiSpaceID(c *gin.Context) string {
