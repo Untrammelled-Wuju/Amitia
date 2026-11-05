@@ -55,12 +55,11 @@ export function parseRuntimeCapabilitiesPayload(payload: unknown): RuntimeCapabi
     ? data.runtimeProfile.trim().toLowerCase()
     : "unknown";
   const profileKnown = ["local", "cloud-core", "device-agent"].includes(runtimeProfile);
-  const localCapabilities = runtimeProfile === "local";
 
   return {
     runtimeProfile,
     capabilities: {
-      gameMode: localCapabilities && asBoolean(rawCapabilities.gameMode),
+      gameMode: profileKnown && asBoolean(rawCapabilities.gameMode),
       devicePluginRuntime: profileKnown && asBoolean(rawCapabilities.devicePluginRuntime),
       deviceExecutionPlane: profileKnown && asBoolean(rawCapabilities.deviceExecutionPlane),
       localUIEndpoints: profileKnown && asBoolean(rawCapabilities.localUIEndpoints),

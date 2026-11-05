@@ -41,7 +41,7 @@ describe("runtime capabilities", () => {
     });
   });
 
-  it("never enables Game Mode for cloud-core even if a malformed server advertises it", () => {
+  it("trusts an explicit Game Mode capability from a known cloud-core runtime", () => {
     const snapshot = parseRuntimeCapabilitiesPayload({
       data: {
         runtimeProfile: "cloud-core",
@@ -54,7 +54,7 @@ describe("runtime capabilities", () => {
       },
     });
 
-    expect(snapshot.capabilities.gameMode).toBe(false);
+    expect(snapshot.capabilities.gameMode).toBe(true);
   });
 
   it("fails closed for an unknown runtime profile", () => {

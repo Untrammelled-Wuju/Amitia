@@ -74,6 +74,7 @@ const backendInstallationHandler = await read("backend/internal/desktoppet/insta
 const backendInstallationRepository = await read("backend/internal/desktoppet/installation/repository.go");
 const configStore = await read("desktop/src/main/config-store.ts");
 const desktopIndex = await read("desktop/src/main/index.ts");
+const coreManager = await read("desktop/src/main/core-manager.ts");
 const ipcHandlers = await read("desktop/src/main/ipc-handlers.ts");
 const tray = await read("desktop/src/main/tray.ts");
 const runtimeCommandService = await read("backend/internal/desktoppet/runtime/protocol/v1/command_service.go");
@@ -88,15 +89,11 @@ const animationPlayerStateTests = await read("desktop/src/desktop-pet/animation/
 const runtimeSessionService = await read("backend/internal/deviceruntime/session_service.go");
 const runtimeRecovery = await read("backend/internal/desktoppet/installation/recovery/runtime_recovery.go");
 const switchRecovery = await read("backend/internal/desktoppet/installation/recovery/switch_recovery.go");
-const desiredStateForwardFix = await read("backend/internal/migration/desktop_pet_desired_state_schema_forward_fix.go");
-const runtimeBehaviorFinalizationMigration = await read("backend/internal/migration/desktop_pet_runtime_behavior_finalization.go");
-const migrations = await read("backend/internal/migration/migrations.go");
 const migrationBaseline = await read("backend/internal/migration/baseline.sql");
 const behaviorReducer = await read("backend/internal/desktoppet/behavior/reducer.go");
 const behaviorModel = await read("backend/internal/desktoppet/behavior/model.go");
 const behaviorPersistenceModels = await read("backend/internal/desktoppet/behavior/persistence/models.go");
 const behaviorPersistenceRepository = await read("backend/internal/desktoppet/behavior/persistence/repository.go");
-const behaviorSystemMigration = await read("backend/internal/migration/desktop_pet_behavior_system.go");
 const behaviorSchema = await read("backend/internal/desktoppet/behavior/schema.go");
 const behaviorPlaybackAdapter = await read("backend/internal/desktoppet/behavior/adapters/playback.go");
 const behaviorEnvelope = await read("backend/internal/desktoppet/behavior/events/envelope.go");
@@ -277,8 +274,10 @@ assert(
 );
 assert(
   backendInstallationRepository.includes('Where("id = ? AND space_id = ?", installationID, spaceID)') &&
-    backendInstallationRepository.includes(`Where("device_id = ? OR device_id = ''", deviceID)`) &&
-    backendInstallationRepository.includes("UpdateRuntimeSettingsCAS"),
+    backendInstallationRepository.includes('Where("device_id = ?", deviceID)') &&
+    backendInstallationRepository.includes('Where("id = ? AND space_id = ? AND device_id = ?", installationID, spaceID, deviceID)') &&
+    backendInstallationRepository.includes("UpdateRuntimeSettingsCAS") &&
+    !backendInstallationRepository.includes(`device_id = ''`),
   "runtime settings repository must enforce installation Space/device ownership before read or CAS update",
 );
 assert(
@@ -287,24 +286,17 @@ assert(
   "Electron runtime must consume the authoritative desired revision advertised by hello_ack",
 );
 assert(
-  desiredStateForwardFix.includes("desktop_pet_device_desired_revision_counters") &&
-    desiredStateForwardFix.includes("MAX(desired_revision)") &&
-    desiredStateForwardFix.includes("superseded_by_desired_state_schema_forward_fix") &&
-    migrations.includes("DesktopPetDesiredStateSchemaForwardFixMigration()") &&
+  migrationBaseline.includes("desktop_pet_device_desired_revision_counters") &&
+    migrationBaseline.includes("desired_revision INTEGER NOT NULL DEFAULT 0") &&
+    migrationBaseline.includes("desktop_pet_runtime_desired_states") &&
     migrationBaseline.includes("settings_snapshot_json TEXT NOT NULL DEFAULT ''") &&
     migrationBaseline.includes("uq_dprds_user_device"),
-  "desired-state schema migration must preserve revision monotonicity, suppress stale outbox rows, and match the canonical baseline",
+  "the current schema baseline must own desired-state revision monotonicity and uniqueness",
 );
 
 assert(
-  runtimeBehaviorFinalizationMigration.includes('Version: "202608300002"') &&
-    runtimeBehaviorFinalizationMigration.includes('"desktop_pet_runtime_actual_states_v2", "position_x"') &&
-    runtimeBehaviorFinalizationMigration.includes("desktop_pet_behavior_mesh_outbox") &&
-    runtimeBehaviorFinalizationMigration.includes("payload_hash TEXT NOT NULL DEFAULT ''") &&
-    runtimeBehaviorFinalizationMigration.includes("target_installation_id TEXT NOT NULL DEFAULT ''") &&
-    migrations.includes("DesktopPetRuntimeBehaviorFinalizationMigration()") &&
-    migrationBaseline.includes("ALTER TABLE desktop_pet_runtime_actual_states_v2 ADD COLUMN position_x") &&
-    migrationBaseline.includes("ALTER TABLE desktop_pet_runtime_actual_states_v2 ADD COLUMN scale") &&
+  migrationBaseline.includes("position_x INTEGER NOT NULL DEFAULT 0") &&
+    migrationBaseline.includes("scale REAL NOT NULL DEFAULT 1.0") &&
     migrationBaseline.includes("CREATE TABLE IF NOT EXISTS desktop_pet_behavior_mesh_affinities") &&
     migrationBaseline.includes("CREATE TABLE IF NOT EXISTS desktop_pet_behavior_mesh_outbox") &&
     migrationBaseline.includes("PRIMARY KEY(cloud_space_id, event_id)") &&
@@ -318,6 +310,11 @@ assert(
 assert(
   manager.includes("restoreOnAppStart: boolean"),
   "RuntimeSettingsInfo must expose restoreOnAppStart",
+);
+assert(
+  coreManager.includes('path.join(dataDir, host, "dist")') &&
+    !coreManager.includes('path.join(dataDir, "runtime", host, "dist")'),
+  "desktop runtime hosts must be materialized at the Runtime Package root",
 );
 assert(
   manager.includes("private async applyDesiredStateCommand("),
@@ -603,11 +600,8 @@ assert(
     behaviorModel.includes("MaxRecentEventKeys = 128") &&
     behaviorPersistenceModels.includes('gorm:"column:recent_event_keys_json"') &&
     behaviorPersistenceRepository.includes('"recent_event_keys_json"') &&
-    behaviorSystemMigration.includes("DesktopPetBehaviorReducerDedupMigration") &&
-    behaviorSystemMigration.includes('recent_event_keys_json') &&
-    migrations.includes("DesktopPetBehaviorReducerDedupMigration()") &&
     migrationBaseline.includes("recent_event_keys_json TEXT NOT NULL DEFAULT '[]'"),
-  "behavior reducer dedup must be real, bounded, persisted, and forward-migrated for ephemeral events",
+  "behavior reducer dedup must be real, bounded, persisted, and owned by the current schema baseline",
 );
 
 assert(

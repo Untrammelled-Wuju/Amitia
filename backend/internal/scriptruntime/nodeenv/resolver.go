@@ -203,6 +203,9 @@ func (r *nodeEnvResolver) detectNode(ctx context.Context, env *Environment, prov
 		return r.resolveNodeFromExplicitPath(env, resolved)
 	}
 
+	if err := r.installBundledNode(ctx, env.Guest, paths.Root); err != nil {
+		return fmt.Errorf("nodeenv: install bundled node: %w", err)
+	}
 	if err := r.resolveNodeFromRuntimePackage(ctx, env, paths); err == nil {
 		return nil
 	} else {

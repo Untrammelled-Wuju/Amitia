@@ -281,7 +281,7 @@ export async function prepareReleaseRuntimeAssets() {
   const coreName = platform === "windows" ? "AmitiaCore.exe" : "AmitiaCore";
   const coreSource = join(coreRoot, coreName);
   assertRegularNonEmptyFile(coreSource, "AmitiaCore");
-  const coreDestination = join(stageRoot, "core", coreName);
+  const coreDestination = join(stageRoot, "core", target, coreName);
   mkdirSync(resolve(coreDestination, ".."), { recursive: true });
   copyFileSync(coreSource, coreDestination);
 

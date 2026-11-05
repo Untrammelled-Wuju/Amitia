@@ -45,7 +45,7 @@ assert(
   "unknown or mismatched command types must not be classified or persisted as Runtime-v1 work",
 );
 assert(
-  commandService.includes("unbound ephemeral command creation is disabled") &&
+  !commandService.includes("CreateEphemeralCommand(") &&
     commandService.includes("CreateEphemeralCommandForSession") &&
     commandService.includes("ExpiresAt:") &&
     commandService.includes("invalid play_action expiresAt") &&

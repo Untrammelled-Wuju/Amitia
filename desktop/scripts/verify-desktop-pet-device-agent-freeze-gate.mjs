@@ -132,7 +132,7 @@ assert(
   migrationBaseline.includes("target_installation_id TEXT NOT NULL DEFAULT ''") &&
     migrationBaseline.includes("position_x INTEGER NOT NULL DEFAULT 0") &&
     migrationBaseline.includes("window_width INTEGER NOT NULL DEFAULT 0") &&
-    migrationBaseline.includes("scale REAL NOT NULL DEFAULT 0"),
+    migrationBaseline.includes("scale REAL NOT NULL DEFAULT 1"),
   "baseline schema must include behavior target fencing and Runtime V1 physical-state columns",
 );
 

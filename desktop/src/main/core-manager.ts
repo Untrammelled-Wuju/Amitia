@@ -348,7 +348,7 @@ function getBundledRuntimeRoot(): string {
 export function syncRuntimeHostAssets(dataDir: string, runtimeRoot: string): void {
   for (const host of ["plugin-host", "task-host"]) {
     const source = path.join(runtimeRoot, host, "dist");
-    const destination = path.join(dataDir, "runtime", host, "dist");
+    const destination = path.join(dataDir, host, "dist");
     if (!fs.existsSync(path.join(source, "index.js"))) {
       console.error("[CoreManager] 运行时宿主资源不存在:", source);
       continue;

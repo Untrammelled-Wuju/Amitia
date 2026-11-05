@@ -136,13 +136,20 @@ func (b *ApprovalBroker) Await(ctx context.Context, request ApprovalRequest, tim
 		if found {
 			return true, nil
 		}
-		if err := persistence.SaveApprovalRequest(ctx, request); err != nil {
-			return false, err
-		}
 	}
 	entry := &pendingApproval{value: request, decision: make(chan bool, 1)}
 	b.mu.Lock()
 	b.pending[request.ID] = entry
+	b.mu.Unlock()
+	if persistence != nil {
+		if err := persistence.SaveApprovalRequest(ctx, request); err != nil {
+			b.mu.Lock()
+			delete(b.pending, request.ID)
+			b.mu.Unlock()
+			return false, err
+		}
+	}
+	b.mu.Lock()
 	onRequested := b.onRequested
 	requestedObservers := append([]func(ApprovalRequest) error(nil), b.requestedObservers...)
 	b.mu.Unlock()

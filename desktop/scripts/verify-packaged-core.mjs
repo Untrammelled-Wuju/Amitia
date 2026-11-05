@@ -35,9 +35,12 @@ async function main() {
   }
 
   const coreName = stamp.CORE_GOOS === "windows" ? "AmitiaCore.exe" : "AmitiaCore";
+  const platform = stamp.CORE_GOOS === "windows" ? "windows" : stamp.CORE_GOOS === "darwin" ? "macos" : "linux";
+  const arch = stamp.CORE_GOARCH === "arm64" ? "arm64" : "x64";
+  const target = `${platform}-${arch}`;
   const candidatePaths = [
-    resolve(unpackedDir, "resources/core", coreName),
-    resolve(unpackedDir, "app.asar.unpacked/resources/core", coreName),
+    resolve(unpackedDir, "resources/core", target, coreName),
+    resolve(unpackedDir, "app.asar.unpacked/resources/core", target, coreName),
   ];
   const corePath = candidatePaths.find((candidate) => existsSync(candidate));
   if (!corePath) {

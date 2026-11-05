@@ -1,6 +1,7 @@
 package nodeenv
 
 import (
+	"archive/zip"
 	"context"
 	"errors"
 	"os"
@@ -201,6 +202,53 @@ func TestAndroidProotUsesLinuxGuestCandidates(t *testing.T) {
 	}
 	if filepath.Base(env.NodeBinary) != "node" {
 		t.Errorf("expected linux node binary 'node', got %q", filepath.Base(env.NodeBinary))
+	}
+}
+
+func TestResolverExtractsBundledNodeBeforeRuntimePackageResolution(t *testing.T) {
+	root := t.TempDir()
+	nodeDir := filepath.Join(root, "node")
+	if err := os.MkdirAll(nodeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	archivePath := filepath.Join(nodeDir, "node.zip")
+	archiveFile, err := os.Create(archivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	archive := zip.NewWriter(archiveFile)
+	header := &zip.FileHeader{Name: "bin/node", Method: zip.Deflate}
+	header.SetMode(0o755)
+	entry, err := archive.CreateHeader(header)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := entry.Write([]byte("#!/bin/sh\n")); err != nil {
+		t.Fatal(err)
+	}
+	if err := archive.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := archiveFile.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := makeConfig(true, "builtin.node-process")
+	host := makeFakeHost(platform.GuestPlatformLinux, "arm64", root, root, nil)
+	resolver, err := NewResolver(ResolveContext{Config: cfg, Host: host})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	env, err := resolver.Resolve(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	expected := filepath.Join(root, "node", "bin", "node")
+	if env.NodeBinary != expected {
+		t.Fatalf("expected extracted node %q, got %q", expected, env.NodeBinary)
+	}
+	if info, err := os.Stat(expected); err != nil || info.Mode()&0o111 == 0 {
+		t.Fatalf("extracted node is missing or not executable: info=%v err=%v", info, err)
 	}
 }
 
