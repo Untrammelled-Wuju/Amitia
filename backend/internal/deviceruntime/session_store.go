@@ -20,6 +20,13 @@ type SessionStore interface {
 		runtimeID runtimeidentity.RuntimeID,
 	) (RuntimeSession, error)
 
+	NextConnectionGeneration(
+		ctx context.Context,
+		spaceID runtimeidentity.SpaceID,
+		deviceID runtimeidentity.DeviceID,
+		runtimeID runtimeidentity.RuntimeID,
+	) (int64, error)
+
 	Update(ctx context.Context, session RuntimeSession) error
 
 	ListActive(ctx context.Context) ([]RuntimeSession, error)

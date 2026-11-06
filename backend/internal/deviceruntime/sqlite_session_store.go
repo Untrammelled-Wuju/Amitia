@@ -138,6 +138,28 @@ func (s *SQLiteSessionStore) GetActiveByRuntime(
 	return scanRuntimeSession(row)
 }
 
+func (s *SQLiteSessionStore) NextConnectionGeneration(
+	ctx context.Context,
+	spaceID runtimeidentity.SpaceID,
+	deviceID runtimeidentity.DeviceID,
+	runtimeID runtimeidentity.RuntimeID,
+) (int64, error) {
+	var generation int64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COALESCE(MAX(connection_generation), 0) + 1
+		FROM kernel_device_runtime_sessions
+		WHERE space_id = ? AND device_id = ? AND runtime_id = ?`,
+		spaceID.String(), deviceID.String(), runtimeID.String(),
+	).Scan(&generation)
+	if err != nil {
+		return 0, err
+	}
+	if generation < 1 {
+		return 1, nil
+	}
+	return generation, nil
+}
+
 func (s *SQLiteSessionStore) Update(ctx context.Context, session RuntimeSession) error {
 	capsJSON, err := json.Marshal(session.Capabilities)
 	if err != nil {
@@ -570,6 +592,28 @@ func (t *SQLiteSessionStoreTx) GetActiveByRuntime(
 		string(protocol.SessionStatusReady), string(protocol.SessionStatusDegraded),
 	)
 	return scanRuntimeSession(row)
+}
+
+func (t *SQLiteSessionStoreTx) NextConnectionGeneration(
+	ctx context.Context,
+	spaceID runtimeidentity.SpaceID,
+	deviceID runtimeidentity.DeviceID,
+	runtimeID runtimeidentity.RuntimeID,
+) (int64, error) {
+	var generation int64
+	err := t.tx.QueryRowContext(ctx,
+		`SELECT COALESCE(MAX(connection_generation), 0) + 1
+		FROM kernel_device_runtime_sessions
+		WHERE space_id = ? AND device_id = ? AND runtime_id = ?`,
+		spaceID.String(), deviceID.String(), runtimeID.String(),
+	).Scan(&generation)
+	if err != nil {
+		return 0, err
+	}
+	if generation < 1 {
+		return 1, nil
+	}
+	return generation, nil
 }
 
 func (t *SQLiteSessionStoreTx) Update(ctx context.Context, session RuntimeSession) error {

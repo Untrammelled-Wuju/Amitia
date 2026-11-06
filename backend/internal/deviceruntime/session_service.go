@@ -261,6 +261,13 @@ func (s *Service) createNewSession(
 	txOn bool,
 ) (AcquireResult, error) {
 	sessionID := s.idFactory()
+	generation, err := s.store.NextConnectionGeneration(ctx, req.Identity.SpaceID, req.Identity.DeviceID, req.Identity.RuntimeID)
+	if err != nil {
+		return AcquireResult{}, err
+	}
+	if generation < 1 {
+		generation = 1
+	}
 
 	cursor := req.Cursor
 	if cursor.LastAppliedStateRevision < 0 {
@@ -280,7 +287,7 @@ func (s *Service) createNewSession(
 		RuntimeID:                    req.Identity.RuntimeID,
 		Platform:                     req.Platform,
 		Status:                       protocol.SessionStatusRegistering,
-		ConnectionGeneration:         1,
+		ConnectionGeneration:         generation,
 		Revision:                     1,
 		RuntimeVersion:               req.RuntimeVersion,
 		RuntimeContractVersion:       req.RuntimeContractVersion,

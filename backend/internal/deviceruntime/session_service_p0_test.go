@@ -29,6 +29,12 @@ func (s *p0SessionStore) GetActiveByRuntime(_ context.Context, spaceID runtimeid
 	}
 	return s.active, nil
 }
+func (s *p0SessionStore) NextConnectionGeneration(_ context.Context, spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) (int64, error) {
+	if s.active.SpaceID != spaceID || s.active.DeviceID != deviceID || s.active.RuntimeID != runtimeID {
+		return 1, nil
+	}
+	return s.active.ConnectionGeneration + 1, nil
+}
 func (s *p0SessionStore) Update(_ context.Context, session RuntimeSession) error {
 	s.active = session
 	return nil
@@ -122,5 +128,32 @@ func TestAcquireClientCursorAheadForcesFullResumeAndStillFencesOldGeneration(t *
 	}
 	if store.active.ConnectionGeneration != 5 {
 		t.Fatalf("store was not replaced for reconnect: generation=%d", store.active.ConnectionGeneration)
+	}
+}
+
+func TestAcquireAfterClosedSessionAdvancesFencingGeneration(t *testing.T) {
+	store := &p0SessionStore{active: RuntimeSession{
+		ID:                   "closed-session",
+		SpaceID:              "user-1",
+		DeviceID:             "device-1",
+		RuntimeID:            "runtime-1",
+		Status:               protocol.SessionStatusClosed,
+		ConnectionGeneration: 4,
+	}}
+	service, err := NewService(store, ServiceOptions{
+		SessionIDFactory: func() runtimeidentity.RuntimeSessionID { return "new-session" },
+	})
+	if err != nil {
+		t.Fatalf("new service: %v", err)
+	}
+	result, err := service.Acquire(context.Background(), AcquireRequest{
+		Identity: protocol.SessionIdentity{SpaceID: "user-1", DeviceID: "device-1", RuntimeID: "runtime-1"},
+		Platform: runtimeidentity.PlatformDarwin,
+	})
+	if err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	if result.Session.ConnectionGeneration != 5 || result.Session.ID != "new-session" {
+		t.Fatalf("new session reused a closed fencing generation: %+v", result.Session)
 	}
 }
