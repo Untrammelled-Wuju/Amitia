@@ -469,6 +469,9 @@ func (h *TaskProcessHost) runProcess(ctx context.Context, input, checkpoint json
 		protocolErr = scanner.Err()
 	}
 	if protocolErr != nil {
+		if err := stdoutReader.Close(); err != nil {
+			protocolErr = errors.Join(protocolErr, err)
+		}
 		stop()
 		if err := process.TerminateProcessTree(cmd.Process.Pid, tree); err != nil {
 			amitialog.Printf("[original-error] %v", err)
