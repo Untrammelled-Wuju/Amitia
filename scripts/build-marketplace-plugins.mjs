@@ -14,6 +14,8 @@ const goBinary = process.env.GO_BIN || "go"
 const nodeBinary = process.execPath
 const amitiaExt = join(tmpdir(), `amitia-ext-marketplace-${process.pid}`)
 const filter = (process.env.AMITIA_PLUGIN_FILTER || "").trim()
+const sourceDateEpoch = process.env.SOURCE_DATE_EPOCH || spawnSync("git", ["show", "-s", "--format=%ct", "HEAD"], { cwd: root, encoding: "utf8" }).stdout.trim()
+const signatureCreatedAt = new Date(Number(sourceDateEpoch) * 1000).toISOString()
 
 function run(command, args, cwd = root) {
   const result = spawnSync(command, args, { cwd, stdio: "inherit", env: process.env })
@@ -128,7 +130,7 @@ function main() {
       if (!existsSync(item.path)) throw new Error(`built plugin package not found: ${item.path}`)
       const inspection = inspectPackage(item.path)
       const sbom = writeSBOM(item.path, inspection.manifest, inspection.treeHash)
-      run(amitiaExt, ["sign", item.path, "--key", keyPath, "--publisher", "com.amitia", "--channel", "stable"])
+      run(amitiaExt, ["sign", item.path, "--key", keyPath, "--publisher", "com.amitia", "--channel", "stable", "--created-at", signatureCreatedAt])
       run(amitiaExt, ["verify", item.path, "--pubkey", publicKeyPath, "--publisher", "com.amitia"])
       output.push({
         extensionId: inspection.manifest.extension.id,

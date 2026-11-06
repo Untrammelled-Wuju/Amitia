@@ -160,9 +160,14 @@ type PackageSignatureInput struct {
 	ArtifactHash      string
 	CompatibilityHash string
 	Channel           string
+	CreatedAt         time.Time
 }
 
 func (ps *PackageSigner) SignPackage(input PackageSignatureInput) (SignatureDocument, SignaturePayload, error) {
+	createdAt := input.CreatedAt.UTC()
+	if createdAt.IsZero() {
+		createdAt = time.Now().UTC()
+	}
 	payload := SignaturePayload{
 		ExtensionID:       input.ExtensionID,
 		Version:           input.Version,
@@ -172,7 +177,7 @@ func (ps *PackageSigner) SignPackage(input PackageSignatureInput) (SignatureDocu
 		PackageHash:       input.ArtifactHash,
 		PublisherID:       ps.signer.PublisherID(),
 		KeyID:             ps.signer.KeyID(),
-		CreatedAt:         time.Now().UTC(),
+		CreatedAt:         createdAt,
 		CompatibilityHash: input.CompatibilityHash,
 		Channel:           input.Channel,
 	}

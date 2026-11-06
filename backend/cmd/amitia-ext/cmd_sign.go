@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/trust"
@@ -19,6 +20,7 @@ func runSign(args []string, output *Output) int {
 	keyID := fs.String("key-id", "", "密钥 ID（留空则从公钥自动计算 sha256 指纹）")
 	publisher := fs.String("publisher", "", "发布者 ID")
 	channel := fs.String("channel", "", "发布通道")
+	createdAtText := fs.String("created-at", "", "签名创建时间（RFC3339，留空则使用当前时间）")
 	fs.Parse(args)
 
 	if fs.NArg() < 1 {
@@ -54,6 +56,14 @@ func runSign(args []string, output *Output) int {
 
 	signer := trust.NewSigner(*publisher, resolvedKeyID, privKey)
 	packageSigner := trust.NewPackageSigner(signer)
+	var createdAt time.Time
+	if strings.TrimSpace(*createdAtText) != "" {
+		parsed, parseErr := time.Parse(time.RFC3339Nano, strings.TrimSpace(*createdAtText))
+		if parseErr != nil {
+			output.fail(ExitConfig, fmt.Sprintf("解析 --created-at 失败: %v", parseErr))
+		}
+		createdAt = parsed.UTC()
+	}
 
 	doc, payload, err := packageSigner.SignPackage(trust.PackageSignatureInput{
 		ExtensionID:     pkg.Manifest.Extension.ID,
@@ -63,6 +73,7 @@ func runSign(args []string, output *Output) int {
 		ContentTreeHash: pkg.Tree.TreeHash,
 		ArtifactHash:    artifactHash,
 		Channel:         *channel,
+		CreatedAt:       createdAt,
 	})
 	if err != nil {
 		output.fail(ExitSig, fmt.Sprintf("签名失败: %v", err))
