@@ -15,13 +15,11 @@ import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.io.FileNotFoundException
-import java.io.File
 import java.security.KeyFactory
 import java.security.MessageDigest
 import java.security.Signature
 import java.security.spec.X509EncodedKeySpec
 import java.util.concurrent.Executors
-import java.util.concurrent.ThreadLocalRandom
 
 class AppUpdatePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     companion object {
@@ -72,6 +70,7 @@ class AppUpdatePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
             "getInstalledInfo" -> result.success(installedInfo())
             "verifyManifest" -> verifyManifest(call, result)
             "download" -> download(call, result)
+            "getCurrentDownload" -> getCurrentDownload(call, result)
             "getDownloadStatus" -> getDownloadStatus(call, result)
             "install" -> install(call, result)
             "getPendingInstallResult" -> result.success(consumeInstallResult())
@@ -111,7 +110,11 @@ class AppUpdatePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
             val verified = verifier.verify(Base64.decode(signatureBase64, Base64.DEFAULT))
             result.success(verified)
         } catch (error: Throwable) {
-            result.error("MANIFEST_SIGNATURE_INVALID", error.message ?: "manifest signature verification failed", null)
+            result.error(
+                "MANIFEST_SIGNATURE_INVALID",
+                error.message ?: "manifest signature verification failed",
+                errorDetails(error),
+            )
         }
     }
 
@@ -119,6 +122,7 @@ class AppUpdatePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         try {
             val url = call.argument<String>("url").orEmpty()
             val fileNameRaw = call.argument<String>("fileName").orEmpty()
+            val title = call.argument<String>("title").orEmpty()
             val expectedSize = call.argument<Number>("expectedSize")?.toLong() ?: -1L
             val expectedSha256 = call.argument<String>("expectedSha256").orEmpty().lowercase()
             val fileName = fileNameRaw.replace(Regex("[^A-Za-z0-9._-]"), "_")
@@ -134,31 +138,65 @@ class AppUpdatePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 result.error("DOWNLOAD_INSECURE_URL", "update downloads require https", null)
                 return
             }
-            val downloadId = System.currentTimeMillis() * 1000 +
-                ThreadLocalRandom.current().nextLong(0, 1000)
-            val directory = appContext.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS)
-                ?: File(appContext.filesDir, "downloads")
-            directory.mkdirs()
-            AppUpdateDownloadStore.initialize(
-                appContext,
-                downloadId,
-                url,
-                fileName,
-                expectedSize,
-                expectedSha256,
-                File(directory, fileName).absolutePath,
+            val downloader = AppUpdateSystemDownloader(appContext)
+            val active = AppUpdateDownloadRegistry.active(appContext)
+            if (active != null && active.matches(url, expectedSize, expectedSha256)) {
+                val activeStatus = downloader.status(active.downloadId)
+                val activeCode = activeStatus["statusCode"] as Int
+                if (activeCode in setOf(1, 2, 4, 8)) {
+                    result.success(active.downloadId)
+                    return
+                }
+            }
+            if (active != null) {
+                downloader.remove(active.downloadId)
+                AppUpdateDownloadRegistry.clear(appContext)
+            }
+            val outputFileName = uniqueFileName(fileName)
+            val downloadId = downloader.enqueue(
+                url = url,
+                fileName = outputFileName,
+                title = title.ifEmpty { "Amitia 应用更新" },
             )
-            SegmentedApkDownloadService.start(
+            AppUpdateDownloadRegistry.save(
                 appContext,
                 downloadId,
                 url,
-                fileName,
+                outputFileName,
                 expectedSize,
                 expectedSha256,
             )
             result.success(downloadId)
         } catch (error: Throwable) {
-            result.error("DOWNLOAD_START_FAILED", error.message ?: "download could not be started", null)
+            result.error(
+                "DOWNLOAD_START_FAILED",
+                error.message ?: "download could not be started",
+                errorDetails(error),
+            )
+        }
+    }
+
+    private fun getCurrentDownload(call: MethodCall, result: MethodChannel.Result) {
+        try {
+            val url = call.argument<String>("url").orEmpty()
+            val expectedSize = call.argument<Number>("expectedSize")?.toLong() ?: -1L
+            val expectedSha256 = call.argument<String>("expectedSha256").orEmpty().lowercase()
+            val active = AppUpdateDownloadRegistry.active(appContext)
+            if (active == null || !active.matches(url, expectedSize, expectedSha256)) {
+                result.success(emptyMap<String, Any?>())
+                return
+            }
+            val status = AppUpdateSystemDownloader(appContext).status(active.downloadId)
+            if ((status["statusCode"] as Int) == -1) {
+                AppUpdateDownloadRegistry.clear(appContext)
+            }
+            result.success(status)
+        } catch (error: Throwable) {
+            result.error(
+                "DOWNLOAD_STATUS_FAILED",
+                error.message ?: "download status is unavailable",
+                errorDetails(error),
+            )
         }
     }
 
@@ -169,9 +207,13 @@ class AppUpdatePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 result.error("DOWNLOAD_INVALID_REQUEST", "downloadId is required", null)
                 return
             }
-            result.success(AppUpdateDownloadStore.status(appContext, downloadId))
+            result.success(AppUpdateSystemDownloader(appContext).status(downloadId))
         } catch (error: Throwable) {
-            result.error("DOWNLOAD_STATUS_FAILED", error.message ?: "download status is unavailable", null)
+            result.error(
+                "DOWNLOAD_STATUS_FAILED",
+                error.message ?: "download status is unavailable",
+                errorDetails(error),
+            )
         }
     }
 
@@ -233,7 +275,8 @@ class AppUpdatePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                     PendingIntent.FLAG_UPDATE_CURRENT or pendingIntentMutabilityFlag(),
                 )
                 session.commit(pendingIntent.intentSender)
-                AppUpdateDownloadStore.localFile(appContext, downloadId)?.delete()
+                AppUpdateSystemDownloader(appContext).remove(downloadId)
+                AppUpdateDownloadRegistry.clear(appContext)
             } catch (error: Throwable) {
                 runCatching { session.abandon() }
                 throw error
@@ -245,14 +288,16 @@ class AppUpdatePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     }
 
     private fun downloadedUri(downloadId: Long): Uri? {
-        val status = AppUpdateDownloadStore.status(appContext, downloadId)
+        val downloader = AppUpdateSystemDownloader(appContext)
+        val status = downloader.status(downloadId)
         if ((status["statusCode"] as? Int) != 8) {
             throw IllegalStateException("update download is not complete")
         }
-        val file = AppUpdateDownloadStore.localFile(appContext, downloadId)
-            ?: throw IllegalStateException("downloaded update file is unavailable")
-        if (!file.isFile) throw FileNotFoundException("downloaded update file is unavailable")
-        return Uri.fromFile(file)
+        val localUri = downloader.downloadedUri(downloadId)
+        if (localUri.isEmpty()) {
+            throw FileNotFoundException("downloaded update file is unavailable")
+        }
+        return Uri.parse(localUri)
     }
 
     private fun openInstallPermissionSettings(result: MethodChannel.Result) {
@@ -269,7 +314,11 @@ class AppUpdatePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
             appContext.startActivity(intent)
             result.success(true)
         } catch (error: Throwable) {
-            result.error("INSTALL_SETTINGS_FAILED", error.message ?: "install settings could not be opened", null)
+            result.error(
+                "INSTALL_SETTINGS_FAILED",
+                error.message ?: "install settings could not be opened",
+                errorDetails(error),
+            )
         }
     }
 
@@ -310,11 +359,24 @@ class AppUpdatePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 mainHandler.post { result.success(value) }
             } catch (error: Throwable) {
                 mainHandler.post {
-                    result.error("APP_UPDATE_ERROR", error.message ?: "app update failed", null)
+                    result.error(
+                        "APP_UPDATE_ERROR",
+                        error.message ?: "app update failed",
+                        errorDetails(error),
+                    )
                 }
             }
         }
     }
+
+    private fun errorDetails(error: Throwable): Map<String, Any?> =
+        mapOf(
+            "error" to error.toString(),
+            "message" to error.message,
+            "cause" to error.cause?.toString(),
+            "causeMessage" to error.cause?.message,
+            "stackTrace" to error.stackTraceToString(),
+        )
 
     private fun pendingIntentMutabilityFlag(): Int {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -322,6 +384,12 @@ class AppUpdatePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         } else {
             0
         }
+    }
+
+    private fun uniqueFileName(fileName: String): String {
+        val extension = fileName.substringAfterLast('.', "apk")
+        val baseName = fileName.substringBeforeLast('.', fileName)
+        return "${baseName}-${System.currentTimeMillis()}.$extension"
     }
 
 }

@@ -26,6 +26,9 @@ APK 使用不可变版本目录：
 /amitia/android/releases/<versionCode>/<apk-name>
 ```
 
+Android 客户端通过系统 `DownloadManager` 下载 APK。应用只查询系统下载
+状态、校验 APK 并启动系统安装程序，不自行维持前台下载服务。
+
 ## 签名密钥
 
 私钥和口令文件只保存在本机，并已被 `.gitignore` 排除：

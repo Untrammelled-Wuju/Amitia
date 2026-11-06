@@ -28,6 +28,18 @@ void main() {
               return true;
             case 'download':
               return 42;
+            case 'getCurrentDownload':
+              return <String, Object>{
+                'downloadId': 42,
+                'statusCode': 8,
+                'status': 'successful',
+                'downloadedBytes': 1234,
+                'totalBytes': 1234,
+                'reasonCode': 0,
+                'reason': '',
+                'localUri': 'content://downloads/42',
+                'message': '',
+              };
             case 'install':
               return null;
             case 'getPendingInstallResult':
@@ -69,6 +81,10 @@ void main() {
       'https://example.com/app.apk',
     );
     expect(
+      (downloadCall.arguments as Map<Object?, Object?>)['title'],
+      'Amitia 1.0.1 更新',
+    );
+    expect(
       (downloadCall.arguments as Map<Object?, Object?>)['expectedSize'],
       1234,
     );
@@ -78,6 +94,11 @@ void main() {
     );
     final installCall = calls.firstWhere((call) => call.method == 'install');
     expect((installCall.arguments as Map<Object?, Object?>)['downloadId'], 42);
+
+    final current = await service.getCurrentDownload(result.available!);
+    expect(current?.downloadId, 42);
+    expect(current?.successful, isTrue);
+    expect(current?.progress, 1);
     service.dispose();
   });
 

@@ -85,10 +85,15 @@ void main() {
 
   test('parses install result and download progress', () {
     final status = AppUpdateDownloadStatus.fromMap(<Object?, Object?>{
+      'downloadId': 42,
       'statusCode': 8,
       'status': 'successful',
       'downloadedBytes': 50,
       'totalBytes': 100,
+      'reasonCode': 0,
+      'reason': '',
+      'localUri': 'content://downloads/42',
+      'message': '',
     });
     final result = AppUpdateInstallResult.fromMap(<Object?, Object?>{
       'statusCode': 0,
@@ -100,6 +105,8 @@ void main() {
 
     expect(status.successful, isTrue);
     expect(status.progress, 0.5);
+    expect(status.downloadId, 42);
+    expect(status.localUri, 'content://downloads/42');
     expect(result.successful, isTrue);
   });
 }

@@ -48,12 +48,29 @@ class AppUpdateDownloadController extends ChangeNotifier {
     _notify();
     try {
       downloadId = await _service.download(update);
-      _timer?.cancel();
-      _timer = Timer.periodic(
-        const Duration(seconds: 1),
-        (_) => unawaited(_poll()),
-      );
+      _startPolling();
       await _poll();
+    } catch (error) {
+      _fail(error.toString());
+    }
+  }
+
+  Future<void> restore() async {
+    if (downloading || completed) return;
+    try {
+      final status = await _service.getCurrentDownload(update);
+      if (_disposed || status == null) return;
+      downloadId = status.downloadId;
+      _applyStatus(status);
+      if (status.successful) {
+        _complete();
+      } else if (status.failed) {
+        _fail(status.errorDetail);
+      } else {
+        downloading = true;
+        _startPolling();
+        _notify();
+      }
     } catch (error) {
       _fail(error.toString());
     }
@@ -66,21 +83,11 @@ class AppUpdateDownloadController extends ChangeNotifier {
     _polling = true;
     try {
       final status = await _service.getDownloadStatus(id);
-      downloadedBytes = status.downloadedBytes;
-      totalBytes = status.totalBytes > 0 ? status.totalBytes : update.apk.size;
-      reasonCode = status.reasonCode;
+      _applyStatus(status);
       if (status.successful) {
-        _timer?.cancel();
-        _timer = null;
-        downloading = false;
-        completed = true;
-        _notify();
-        if (!_terminal.isCompleted) _terminal.complete(true);
+        _complete();
       } else if (status.failed) {
-        _fail(
-          '下载失败：status=${status.status}, statusCode=${status.statusCode}, '
-          'reasonCode=${status.reasonCode}',
-        );
+        _fail(status.errorDetail);
       } else {
         _notify();
       }
@@ -89,6 +96,29 @@ class AppUpdateDownloadController extends ChangeNotifier {
     } finally {
       _polling = false;
     }
+  }
+
+  void _startPolling() {
+    _timer?.cancel();
+    _timer = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => unawaited(_poll()),
+    );
+  }
+
+  void _applyStatus(AppUpdateDownloadStatus status) {
+    downloadedBytes = status.downloadedBytes;
+    totalBytes = status.totalBytes > 0 ? status.totalBytes : update.apk.size;
+    reasonCode = status.reasonCode;
+  }
+
+  void _complete() {
+    _timer?.cancel();
+    _timer = null;
+    downloading = false;
+    completed = true;
+    _notify();
+    if (!_terminal.isCompleted) _terminal.complete(true);
   }
 
   void _fail(String message) {
@@ -138,6 +168,7 @@ class _AppUpdatePromptSheetState extends State<AppUpdatePromptSheet> {
   void initState() {
     super.initState();
     widget.controller.addListener(_handleControllerChange);
+    unawaited(widget.controller.restore());
   }
 
   @override
@@ -304,9 +335,9 @@ class _AppUpdatePromptSheetState extends State<AppUpdatePromptSheet> {
             Text(
               _versionText(update.versionName),
               key: const ValueKey('app-update-latest-version'),
-              style: AppTypography.caption(context).copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+              style: AppTypography.caption(
+                context,
+              ).copyWith(fontWeight: FontWeight.w600),
             ),
           ],
         ),

@@ -138,35 +138,48 @@ class AppUpdateCheckResult {
 }
 
 class AppUpdateDownloadStatus {
+  final int downloadId;
   final int statusCode;
   final String status;
   final int downloadedBytes;
   final int totalBytes;
   final int reasonCode;
+  final String reason;
   final String? localUri;
+  final String message;
 
   const AppUpdateDownloadStatus({
+    required this.downloadId,
     required this.statusCode,
     required this.status,
     required this.downloadedBytes,
     required this.totalBytes,
     required this.reasonCode,
+    required this.reason,
     required this.localUri,
+    required this.message,
   });
 
   factory AppUpdateDownloadStatus.fromMap(Map<Object?, Object?> value) {
     return AppUpdateDownloadStatus(
+      downloadId: _asInt(value['downloadId']),
       statusCode: _asInt(value['statusCode']),
       status: (value['status'] ?? '').toString(),
       downloadedBytes: _asInt(value['downloadedBytes']),
       totalBytes: _asInt(value['totalBytes']),
       reasonCode: _asInt(value['reasonCode']),
+      reason: (value['reason'] ?? '').toString(),
       localUri: value['localUri']?.toString(),
+      message: (value['message'] ?? '').toString(),
     );
   }
 
   bool get successful => statusCode == 8;
   bool get failed => statusCode == 16 || statusCode < 0;
+  String get errorDetail => message.isNotEmpty
+      ? message
+      : 'DownloadManager statusCode=$statusCode reasonCode=$reasonCode '
+            'reason=$reason';
 
   double get progress {
     if (totalBytes <= 0) return 0;

@@ -173,6 +173,7 @@ class AppUpdateService {
         .invokeMethod<int>('download', <String, Object>{
           'url': manifest.apk.url,
           'fileName': fileName,
+          'title': 'Amitia ${manifest.versionName} 更新',
           'expectedSize': manifest.apk.size,
           'expectedSha256': manifest.apk.sha256,
         });
@@ -180,6 +181,21 @@ class AppUpdateService {
       throw StateError('下载任务创建失败');
     }
     return downloadId;
+  }
+
+  Future<AppUpdateDownloadStatus?> getCurrentDownload(
+    AppUpdateManifest manifest,
+  ) async {
+    final value = await _channel.invokeMethod<Map<Object?, Object?>>(
+      'getCurrentDownload',
+      <String, Object>{
+        'url': manifest.apk.url,
+        'expectedSize': manifest.apk.size,
+        'expectedSha256': manifest.apk.sha256,
+      },
+    );
+    if (value == null || value.isEmpty) return null;
+    return AppUpdateDownloadStatus.fromMap(value);
   }
 
   Future<AppUpdateDownloadStatus> getDownloadStatus(int downloadId) async {

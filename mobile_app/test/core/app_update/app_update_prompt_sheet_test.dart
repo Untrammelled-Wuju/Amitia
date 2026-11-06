@@ -12,10 +12,7 @@ void main() {
   ) async {
     await tester.binding.setSurfaceSize(const Size(390, 844));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    final service = AppUpdateService(
-      dio: Dio(),
-      baseUrl: 'https://updates.test',
-    );
+    final service = _NoCurrentDownloadUpdateService();
     final update = _manifest();
     final controller = AppUpdateDownloadController(
       service: service,
@@ -78,6 +75,22 @@ void main() {
     expect(controller.downloadId, 7);
     expect(controller.progress, 1);
   });
+
+  test('download controller restores the active system download', () async {
+    final service = _RestoredUpdateService();
+    final update = _manifest();
+    final controller = AppUpdateDownloadController(
+      service: service,
+      update: update,
+    );
+    addTearDown(controller.dispose);
+
+    await controller.restore();
+
+    expect(controller.completed, isTrue);
+    expect(controller.downloadId, 9);
+    expect(controller.progress, 1);
+  });
 }
 
 AppUpdateManifest _manifest() {
@@ -112,14 +125,53 @@ class _SuccessfulUpdateService extends AppUpdateService {
   Future<int> download(AppUpdateManifest manifest) async => 7;
 
   @override
+  Future<AppUpdateDownloadStatus?> getCurrentDownload(
+    AppUpdateManifest manifest,
+  ) async => null;
+
+  @override
   Future<AppUpdateDownloadStatus> getDownloadStatus(int downloadId) async {
     return const AppUpdateDownloadStatus(
+      downloadId: 7,
       statusCode: 8,
       status: 'successful',
       downloadedBytes: 1024,
       totalBytes: 1024,
       reasonCode: 0,
+      reason: '',
       localUri: '/tmp/update.apk',
+      message: '',
     );
+  }
+}
+
+class _NoCurrentDownloadUpdateService extends AppUpdateService {
+  _NoCurrentDownloadUpdateService()
+    : super(dio: Dio(), baseUrl: 'https://updates.test');
+
+  @override
+  Future<AppUpdateDownloadStatus?> getCurrentDownload(
+    AppUpdateManifest manifest,
+  ) async => null;
+}
+
+class _RestoredUpdateService extends AppUpdateService {
+  _RestoredUpdateService() : super(dio: Dio(), baseUrl: 'https://updates.test');
+
+  @override
+  Future<AppUpdateDownloadStatus?> getCurrentDownload(
+    AppUpdateManifest manifest,
+  ) async {
+    return AppUpdateDownloadStatus.fromMap(<Object?, Object?>{
+      'downloadId': 9,
+      'statusCode': 8,
+      'status': 'successful',
+      'downloadedBytes': 1024,
+      'totalBytes': 1024,
+      'reasonCode': 0,
+      'reason': '',
+      'localUri': 'content://downloads/9',
+      'message': '',
+    });
   }
 }

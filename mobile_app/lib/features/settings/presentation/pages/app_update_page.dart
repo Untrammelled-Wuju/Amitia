@@ -56,8 +56,8 @@ class _AppUpdatePageState extends ConsumerState<AppUpdatePage> {
         setState(() => _installedApp = installed);
       }
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+      print("[original-error] $error\n$stackTrace");
+    }
     final includeTest = await AppUpdatePreferences.loadIncludeTest(
       defaultValue:
           installed != null && isAppPrereleaseVersion(installed.versionName),
@@ -317,6 +317,9 @@ class _AppUpdatePageState extends ConsumerState<AppUpdatePage> {
           _appMessage = '发现新版本 v${result.available!.versionName}';
         }
       });
+      if (result.available != null) {
+        await _restoreAppDownload(result.available!);
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -351,6 +354,36 @@ class _AppUpdatePageState extends ConsumerState<AppUpdatePage> {
         _appDownloading = false;
         _appError = '下载启动失败：$error';
       });
+    }
+  }
+
+  Future<void> _restoreAppDownload(AppUpdateManifest update) async {
+    final status = await ref
+        .read(appUpdateServiceProvider)
+        .getCurrentDownload(update);
+    if (!mounted || status == null) return;
+    setState(() {
+      _downloadId = status.downloadId;
+      _downloadedBytes = status.downloadedBytes;
+      _totalBytes = status.totalBytes > 0 ? status.totalBytes : update.apk.size;
+      if (status.successful) {
+        _appDownloading = false;
+        _downloadReady = true;
+        _appMessage = '下载完成，可继续安装 v${update.versionName}';
+        _appError = null;
+      } else if (status.failed) {
+        _appDownloading = false;
+        _downloadReady = false;
+        _appError = status.errorDetail;
+      } else {
+        _appDownloading = true;
+        _downloadReady = false;
+        _appMessage = '系统正在下载 v${update.versionName}';
+        _appError = null;
+      }
+    });
+    if (!status.successful && !status.failed) {
+      _startDownloadPolling();
     }
   }
 
@@ -395,7 +428,7 @@ class _AppUpdatePageState extends ConsumerState<AppUpdatePage> {
           setState(() {
             _appDownloading = false;
             _downloadReady = false;
-            _appError = '下载失败，请检查网络后重试';
+            _appError = status.errorDetail;
           });
         }
       }
@@ -452,8 +485,8 @@ class _AppUpdatePageState extends ConsumerState<AppUpdatePage> {
           });
           return;
         } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-return;
+          print("[original-error] $error\n$stackTrace");
+          return;
         }
       }
       setState(() {
@@ -500,8 +533,8 @@ return;
         });
       }
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-return;
+      print("[original-error] $error\n$stackTrace");
+      return;
     }
   }
 
