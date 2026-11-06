@@ -31,6 +31,12 @@ const OutboxSchema = `CREATE TABLE IF NOT EXISTS kernel_device_owned_outbox (
 	attempts INTEGER NOT NULL DEFAULT 0, next_attempt_at TEXT NOT NULL,
 	PRIMARY KEY(owner_id,request_id))`
 
+const outboxTimestampLayout = "2006-01-02T15:04:05.000000000Z07:00"
+
+func outboxTimestamp(value time.Time) string {
+	return value.UTC().Format(outboxTimestampLayout)
+}
+
 var ErrResourceVersion = errors.New("数据版本已变化，请重新加载")
 var ErrRequestConflict = errors.New("同一请求编号不能用于不同数据")
 var ErrWrongOwner = errors.New("禁止将设备专属数据保存到其他设备")
@@ -820,7 +826,7 @@ func (s *Service) Enqueue(ctx context.Context, commit Commit) error {
 	if count >= 128 || size+int64(len(payload)) > 32<<20 {
 		return ErrPendingLimit
 	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	now := outboxTimestamp(time.Now())
 	if _, err := tx.ExecContext(ctx, `INSERT INTO kernel_device_owned_outbox(request_id,owner_id,scope,payload,payload_hash,created_at,next_attempt_at) VALUES(?,?,?,?,?,?,?)`, commit.Scope.RequestID, commit.Scope.ResourceOwnerID, scope, payload, payloadHash(payload), now, now); err != nil {
 		return err
 	}
@@ -828,7 +834,7 @@ func (s *Service) Enqueue(ctx context.Context, commit Commit) error {
 }
 
 func (s *Service) Pending(ctx context.Context, owner string) ([]PendingCommit, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT payload,payload_hash,attempts FROM kernel_device_owned_outbox WHERE owner_id=? AND next_attempt_at<=? ORDER BY created_at,request_id LIMIT 32`, owner, time.Now().UTC().Format(time.RFC3339Nano))
+	rows, err := s.db.QueryContext(ctx, `SELECT payload,payload_hash,attempts FROM kernel_device_owned_outbox WHERE owner_id=? AND next_attempt_at<=? ORDER BY created_at,request_id LIMIT 32`, owner, outboxTimestamp(time.Now()))
 	if err != nil {
 		return nil, err
 	}
@@ -849,7 +855,7 @@ func (s *Service) Pending(ctx context.Context, owner string) ([]PendingCommit, e
 }
 
 func (s *Service) PendingOwners(ctx context.Context) ([]string, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT owner_id FROM kernel_device_owned_outbox WHERE next_attempt_at<=? ORDER BY owner_id LIMIT 128`, time.Now().UTC().Format(time.RFC3339Nano))
+	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT owner_id FROM kernel_device_owned_outbox WHERE next_attempt_at<=? ORDER BY owner_id LIMIT 128`, outboxTimestamp(time.Now()))
 	if err != nil {
 		return nil, err
 	}
@@ -877,7 +883,7 @@ func (s *Service) RetryLater(ctx context.Context, pending PendingCommit) error {
 	if delay > 5*time.Minute {
 		delay = 5 * time.Minute
 	}
-	_, err := s.db.ExecContext(ctx, `UPDATE kernel_device_owned_outbox SET attempts=attempts+1,next_attempt_at=? WHERE owner_id=? AND request_id=? AND payload_hash=?`, time.Now().UTC().Add(delay).Format(time.RFC3339Nano), pending.Commit.Scope.ResourceOwnerID, pending.Commit.Scope.RequestID, pending.Hash)
+	_, err := s.db.ExecContext(ctx, `UPDATE kernel_device_owned_outbox SET attempts=attempts+1,next_attempt_at=? WHERE owner_id=? AND request_id=? AND payload_hash=?`, outboxTimestamp(time.Now().Add(delay)), pending.Commit.Scope.ResourceOwnerID, pending.Commit.Scope.RequestID, pending.Hash)
 	return err
 }
 

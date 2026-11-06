@@ -296,6 +296,26 @@ func TestPendingSaveRequiresMatchingAcknowledgementAndIsPurged(t *testing.T) {
 	}
 }
 
+func TestPendingSaveTimestampsHaveFixedWidthOrdering(t *testing.T) {
+	db, svc := setup(t)
+	if err := svc.Enqueue(t.Context(), ownedCommit("fixed-width-pending")); err != nil {
+		t.Fatal(err)
+	}
+	var createdAt, nextAttemptAt string
+	if err := db.QueryRow(`SELECT created_at,next_attempt_at FROM kernel_device_owned_outbox WHERE owner_id='a' AND request_id='fixed-width-pending'`).Scan(&createdAt, &nextAttemptAt); err != nil {
+		t.Fatal(err)
+	}
+	if len(createdAt) != len("2006-01-02T15:04:05.000000000Z") || len(nextAttemptAt) != len(createdAt) {
+		t.Fatalf("timestamps are not fixed-width: %q %q", createdAt, nextAttemptAt)
+	}
+	if _, err := time.Parse("2006-01-02T15:04:05.000000000Z07:00", createdAt); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := time.Parse("2006-01-02T15:04:05.000000000Z07:00", nextAttemptAt); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestCommittedAcknowledgementIsReadByExactRequestWithoutRequeueing(t *testing.T) {
 	db, svc := setup(t)
 	commit := ownedCommit("committed-request")
