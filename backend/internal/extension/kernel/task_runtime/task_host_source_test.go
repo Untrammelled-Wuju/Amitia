@@ -42,7 +42,7 @@ func actualSourceTaskHost(t *testing.T, handler string) *TaskProcessHost {
 		t.Fatal(err)
 	}
 	host.config.EntryPath = filepath.Join(host.config.WorkDir, "task-handler.cjs")
-	host.config.Generation = 9
+	host.config.Generation = 1
 	if err := os.WriteFile(host.config.EntryPath, []byte(handler), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -76,24 +76,24 @@ func TestTaskProcessActualHostVerifiesGoBundlePinAndImportedBytes(t *testing.T) 
 			ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 			defer cancel()
 			var completed atomic.Int32
-			var status string
+			var status, message string
 			var body json.RawMessage
-			if err := host.Start(ctx, json.RawMessage(`{}`), nil, nil, 1, 1, ProcessCallbacks{OnFinished: func(state string, output json.RawMessage, _, _, _ string) {
-				status, body = state, append(json.RawMessage(nil), output...)
+			if err := host.Start(ctx, json.RawMessage(`{}`), nil, nil, 1, 1, ProcessCallbacks{OnFinished: func(state string, output json.RawMessage, _, _, finishMessage string) {
+				status, body, message = state, append(json.RawMessage(nil), output...), finishMessage
 				completed.Add(1)
 			}}); err != nil {
 				t.Fatal(err)
 			}
 			code, err := host.Wait()
 			if err != nil || code != 0 || completed.Load() != 1 {
-				t.Fatalf("actual bundle host failed: %d %v %s", code, err, status)
+				t.Fatalf("actual bundle host failed: %d %v %s %s", code, err, status, message)
 			}
 			if changed {
 				if status != "failed" {
 					t.Fatalf("changed dependency executed: %s %s", status, body)
 				}
 			} else if status != "succeeded" || !strings.Contains(string(body), "original") {
-				t.Fatalf("Go and Node bundle pins disagree: %s %s", status, body)
+				t.Fatalf("Go and Node bundle pins disagree: %s %s %s", status, message, body)
 			}
 		})
 	}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -15,6 +16,9 @@ import (
 )
 
 func TestOwnedSourceTaskNativeDispatchChecksSourcePermissionAndExactOwnerAck(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("设备任务强隔离仅 Windows 可用")
+	}
 	for _, scenario := range []string{"valid", "permission-denied", "owner-unconfirmed", "cancelled", "bad-result-hash"} {
 		t.Run(scenario, func(t *testing.T) {
 			host := actualSourceTaskHost(t, `module.exports=async(input,ctx)=>{const value=await ctx.host.executeTool('native.echo',{text:'<>&中文',n:1.2e3});await ctx.host.emitEvent('extension.extension.updated',{text:value.text});return {success:true,output:{value,capabilities:ctx.host.capabilities}};};`)

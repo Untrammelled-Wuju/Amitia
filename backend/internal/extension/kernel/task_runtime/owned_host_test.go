@@ -27,7 +27,7 @@ func TestActualSourceTaskNativeHostUsesAcknowledgedOwnerBridge(t *testing.T) {
 	run.TaskRunID, run.TaskDefinitionID = host.config.TaskRunID, definition.TaskID
 	run.Input = json.RawMessage(`{}`)
 	run.DefinitionFingerprint, _ = taskDefinitionFingerprint(definition)
-	run.InputHash, run.Generation, run.ExecutionAttemptID = hashBytes(run.Input), host.config.Generation, "attempt"
+	run.InputHash, run.Generation, run.ExecutionAttemptID, run.Attempt = hashBytes(run.Input), host.config.Generation, "attempt", 1
 	ctx, cancel := context.WithTimeout(coordination.WithScope(t.Context(), authority), 5*time.Second)
 	defer cancel()
 	data := &taskInputData{}
@@ -45,6 +45,7 @@ func TestActualSourceTaskNativeHostUsesAcknowledgedOwnerBridge(t *testing.T) {
 	})}
 	var output json.RawMessage
 	var finishStatus string
+	var finishMessage string
 	if err := host.Start(ctx, json.RawMessage(`{}`), nil, nil, 1, 1, ProcessCallbacks{
 		OnRequest: func(current context.Context, id, method string, params json.RawMessage) (json.RawMessage, error) {
 			confirmation, err := port.Call(current, run, definition, id, method, params)
@@ -57,15 +58,16 @@ func TestActualSourceTaskNativeHostUsesAcknowledgedOwnerBridge(t *testing.T) {
 			}
 			return json.RawMessage(ack.ResultBytes), nil
 		},
-		OnFinished: func(status string, result json.RawMessage, _, _, _ string) {
+		OnFinished: func(status string, result json.RawMessage, _, _, message string) {
 			finishStatus = status
+			finishMessage = message
 			output = append(json.RawMessage(nil), result...)
 		},
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if code, err := host.Wait(); err != nil || code != 0 || finishStatus != "succeeded" || executions != 2 {
-		t.Fatalf("actual source native bridge failed: %d %v %s %s calls=%d", code, err, finishStatus, output, executions)
+		t.Fatalf("actual source native bridge failed: %d %v %s %s %s calls=%d", code, err, finishStatus, finishMessage, output, executions)
 	}
 	var decoded struct {
 		Result struct {

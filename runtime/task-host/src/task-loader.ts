@@ -1,6 +1,6 @@
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createHash } from "node:crypto";
-import { closeSync, fstatSync, lstatSync, openSync, readSync, readdirSync } from "node:fs";
+import { closeSync, fstatSync, lstatSync, openSync, readSync, readdirSync, realpathSync } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import * as nodeModule from "node:module";
 import type { TaskHandler } from "@amitia/plugin-sdk/tasks";
@@ -76,10 +76,13 @@ function bundleManifest(root: string, expectedHash: string): Map<string, string>
 export async function loadTaskHandler(entryPath: string, expectedHash: string, bundleRoot = "", bundleHash = ""): Promise<TaskHandler> {
   const hash = expectedHash.replace(/^sha256:/, "").toLowerCase();
   if (!/^[a-f0-9]{64}$/.test(hash)) throw new Error("任务入口缺少有效的源码完整性校验");
-  if (lstatSync(entryPath).isSymbolicLink()) throw new Error("任务入口不允许符号链接");
-  const fileUrl = pathToFileURL(resolve(entryPath)).href;
+  const entry = resolve(entryPath);
+  if (lstatSync(entry).isSymbolicLink()) throw new Error("任务入口不允许符号链接");
+  const fileUrl = pathToFileURL(realpathSync(entry)).href;
   if (Boolean(bundleRoot) !== Boolean(bundleHash)) throw new Error("任务插件缺少完整文件树身份");
-  const root = bundleRoot ? resolve(bundleRoot) : "";
+  const rootInput = bundleRoot ? resolve(bundleRoot) : "";
+  if (rootInput && lstatSync(rootInput).isSymbolicLink()) throw new Error("任务插件文件树不允许符号链接");
+  const root = rootInput ? realpathSync(rootInput) : "";
   const manifest = root ? bundleManifest(root, bundleHash) : null;
   const verifiedModule = (url: string): Buffer | null => {
     if (!manifest || url.startsWith("node:")) return null;

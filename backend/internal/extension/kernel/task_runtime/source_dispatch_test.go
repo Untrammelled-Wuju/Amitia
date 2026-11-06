@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -38,6 +39,9 @@ func (r sourceHostResolver) Resolve(context.Context, script_host.Kind) (script_h
 }
 
 func TestOwnedSourceTaskRunsActualHostWithoutCreatingAnotherTaskQueue(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("设备任务强隔离仅 Windows 可用")
+	}
 	for _, scenario := range []string{"valid", "device_owner", "checkpoint", "resume", "wrong_cursor", "progress", "progress_unconfirmed", "large_result", "foreign_definition", "foreign_connection", "input_changed", "off", "unconfirmed", "installed_changed", "pause", "pause_unconfirmed", "permissions_missing", "permissions_denied", "permissions_allowed", "permissions_revoked", "catalog_alias", "catalog_alias_foreign", "approval_allowed", "approval_revoked", "approval_replay", "lease_denied", "approval_capacity"} {
 		t.Run(scenario, func(t *testing.T) {
 			handler := `module.exports=async(input,ctx)=>{ await ctx.storage.set('value',input.value); const value=await ctx.storage.get('value'); return {success:true,output:{value}}; };`
