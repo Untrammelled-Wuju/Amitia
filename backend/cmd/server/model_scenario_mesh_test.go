@@ -46,7 +46,7 @@ func TestModelScenarioRealTLSCoreConfigurationAndModeSwitch(t *testing.T) {
 	if err := db.Exec("DELETE FROM model_configs").Error; err != nil {
 		t.Fatal(err)
 	}
-	for _, cfg := range []chat.ModelConfig{{ID: 1, Name: "default", ModelName: "default", IsActive: 1}, {ID: 2, Name: "assigned", ModelName: "cloud-assigned"}} {
+	for _, cfg := range []chat.ModelConfig{{ID: 1, Name: "default", ModelName: "default", IsActive: 1}, {ID: 2, Name: "assigned", ModelName: "cloud-assigned", IsActive: 1}} {
 		cfg.APIType, cfg.Protocol, cfg.BaseURL, cfg.MaxTokens = "openai-compatible", "openai_chat", provider.URL, 128
 		if err := db.Create(&cfg).Error; err != nil {
 			t.Fatal(err)
@@ -55,9 +55,16 @@ func TestModelScenarioRealTLSCoreConfigurationAndModeSwitch(t *testing.T) {
 	ctx := app.NewAppContext(db, nil)
 	model := chat.NewService(chat.NewRepository(ctx), ctx, nil, nil, nil)
 	b.services.OwnedBusiness = business.NewEngine(b.services.DeviceMesh.Coordination, b.services.DeviceMesh, model.(business.Model))
-	auth := security.AuthenticationMiddleware(security.AuthConfig{Mode: "network", SpaceID: b.core, DeviceCredentials: b.services.DeviceMesh.CredentialSvc, DeviceRegistry: b.services.KernelContainer.DeviceRegistry, Coordination: b.services.DeviceMesh.Coordination})
+	auth := security.AuthenticationMiddleware(security.AuthConfig{Mode: "network", SpaceID: b.core, LocalDeviceID: b.device.DeviceID, DeviceCredentials: b.services.DeviceMesh.CredentialSvc, DeviceRegistry: b.services.KernelContainer.DeviceRegistry, Coordination: b.services.DeviceMesh.Coordination})
 	chat.RegisterModelRouter(b.router.Group("/api", auth), model)
 	b.request(t, a, http.MethodGet, "/api/model/routes", nil, http.StatusForbidden)
+	provisionFixtureSelfCredential(t, b)
+	centerPolicy, err := b.services.DeviceMesh.Coordination.Get(t.Context(), b.core, b.device.DeviceID.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	centerHeaders := map[string]string{security.ExpectedCoreHeader: b.core, security.ExpectedConfigurationPolicyHeader: fmt.Sprintf("%d:%d:%d", centerPolicy.ProviderEpoch, centerPolicy.ModeRevision, centerPolicy.PermissionRevision)}
+	b.request(t, b, http.MethodGet, "/api/model/routes", nil, http.StatusOK, centerHeaders)
 	policy, err := b.services.DeviceMesh.Coordination.Get(t.Context(), b.core, a.device.DeviceID.String())
 	if err != nil {
 		t.Fatal(err)
@@ -78,7 +85,7 @@ func TestModelScenarioRealTLSCoreConfigurationAndModeSwitch(t *testing.T) {
 	if err := json.Unmarshal(body, &result); err != nil {
 		t.Fatal(err)
 	}
-	if !result.Data.Saved || result.Data.Generation.Text != "cloud-assigned" || result.Data.Scope.ResourceOwnerID != b.core {
+	if !result.Data.Saved || result.Data.Generation.Text != "cloud-assigned" || result.Data.Scope.ResourceOwnerID != a.device.DeviceID.String() || result.Data.Scope.RoleOwnerID != b.core {
 		t.Fatalf("wrong cloud mode result: %s", body)
 	}
 }

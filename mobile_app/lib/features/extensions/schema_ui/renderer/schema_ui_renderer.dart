@@ -79,6 +79,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     _localState = Map<String, dynamic>.from(
       widget.initialContext?['localState'] ?? {},
     );
+    _seedFormDefaults();
     final initialStorage = widget.initialContext?['storage'];
     if (initialStorage is Map) {
       _storageState.addAll(initialStorage.cast<String, dynamic>());
@@ -99,6 +100,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
         oldWidget.contributionId != widget.contributionId) {
       _lifecycleMountKey = '';
       _refreshTimer?.cancel();
+      _seedFormDefaults();
       _registerStyleTargets();
       widget.dataSourceLoader?.invalidate(
         widget.extensionId,
@@ -339,6 +341,8 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       input: <String, dynamic>{
         ..._resolvedActionInput(action.input, item: item, files: files),
         'files': ?files,
+      },
+      meta: <String, dynamic>{
         if (nodeId.isNotEmpty) 'node_id': nodeId,
         'form_state': Map<String, dynamic>.from(_formState),
         'local_state': Map<String, dynamic>.from(_localState),
@@ -413,6 +417,26 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     setState(() {
       _setPath(_formState, path, value);
     });
+  }
+
+  void _seedFormDefaults() {
+    void collect(SchemaUINode node) {
+      for (final binding in node.bindings) {
+        if (_isEditableBinding(binding) &&
+            binding.path.trim().isNotEmpty &&
+            binding.defaultValue != null &&
+            _lookupPath(_formState, binding.path.trim()) == null) {
+          _setPath(_formState, binding.path.trim(), binding.defaultValue);
+        }
+      }
+      for (final child in node.children) {
+        collect(child);
+      }
+    }
+
+    for (final node in widget.document.children) {
+      collect(node);
+    }
   }
 
   Map<String, dynamic> _resolvedActionInput(
@@ -2441,45 +2465,45 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
                     color: context.surfacePrimary,
                   ),
                   child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(
-                      child: ClipRRect(
-                        borderRadius: AppRadius.brSmall,
-                        child: image?.toString().trim().isNotEmpty == true
-                            ? _schemaImage(
-                                context,
-                                image.toString(),
-                                fit: BoxFit.contain,
-                                alt: title.toString(),
-                              )
-                            : ColoredBox(
-                                color: context.surfaceSecondary,
-                                child: Center(
-                                  child: Icon(
-                                    Icons.image_outlined,
-                                    color: context.textTertiary,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: AppRadius.brSmall,
+                          child: image?.toString().trim().isNotEmpty == true
+                              ? _schemaImage(
+                                  context,
+                                  image.toString(),
+                                  fit: BoxFit.contain,
+                                  alt: title.toString(),
+                                )
+                              : ColoredBox(
+                                  color: context.surfaceSecondary,
+                                  child: Center(
+                                    child: Icon(
+                                      Icons.image_outlined,
+                                      color: context.textTertiary,
+                                    ),
                                   ),
                                 ),
-                              ),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      title.toString(),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTypography.label(context),
-                    ),
-                    if (subtitle.toString().trim().isNotEmpty) ...[
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 6),
                       Text(
-                        subtitle.toString(),
-                        maxLines: 2,
+                        title.toString(),
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: AppTypography.caption(context),
+                        style: AppTypography.label(context),
                       ),
-                    ],
+                      if (subtitle.toString().trim().isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitle.toString(),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.caption(context),
+                        ),
+                      ],
                     ],
                   ),
                 ),

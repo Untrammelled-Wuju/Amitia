@@ -71,6 +71,9 @@ func (h *LocalHandler) providerRequest(ctx context.Context, credential *StoredCr
 func (h *LocalHandler) PrepareSuccessor(ctx context.Context, target string) (*Successor, error) {
 	h.successorMu.Lock()
 	defer h.successorMu.Unlock()
+	if !h.AgentMode() {
+		return nil, &BindingError{Status: 409, Code: "mesh.agent_mode_required", Message: "当前 Runtime 是统筹中心节点，不参与远程服务切换"}
+	}
 	if target == "" || len(target) > 512 {
 		return nil, errors.New("设备身份无效")
 	}
@@ -154,6 +157,9 @@ func (h *LocalHandler) followProviderOnce(ctx context.Context, run func(context.
 }
 
 func (h *LocalHandler) FollowSuccessor(ctx context.Context) error {
+	if !h.AgentMode() {
+		return nil
+	}
 	return h.followProviderOnce(ctx, h.followSuccessor)
 }
 
@@ -282,7 +288,7 @@ func (h *LocalHandler) followSuccessor(ctx context.Context) error {
 	}
 	defer response.Body.Close()
 	if response.StatusCode == http.StatusAccepted {
-		return errors.New("等待新服务提供者批准，当前云端对话已暂停")
+		return errors.New("等待新统筹中心批准，当前对话已暂停")
 	}
 	var accepted struct {
 		Ticket   string `json:"ticket"`

@@ -91,9 +91,10 @@ type ProcessComponentConfig struct {
 }
 
 type ServerConfig struct {
-	Port int    `mapstructure:"port"`
-	Host string `mapstructure:"host"`
-	Mode string `mapstructure:"mode"`
+	Port    int    `mapstructure:"port"`
+	LANPort int    `mapstructure:"lanPort"`
+	Host    string `mapstructure:"host"`
+	Mode    string `mapstructure:"mode"`
 }
 
 func (c *ServerConfig) Addr() string {
@@ -384,6 +385,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("knowledge.slo.windowMinutes", knowledgeDefaults.SLO.WindowMinutes)
 	v.SetDefault("knowledge.slo.minSamples", knowledgeDefaults.SLO.MinSamples)
 	v.SetDefault("server.port", 0)
+	v.SetDefault("server.lanPort", 54796)
 	v.SetDefault("server.host", "127.0.0.1")
 	v.SetDefault("server.mode", "debug")
 	v.SetDefault("storage.dataDir", "../data")
@@ -507,6 +509,7 @@ var runtimeEnvEntries = []runtimeEnvEntry{
 	{key: "runtime.mode", environments: []string{"AMITIA_RUNTIME_MODE"}},
 	{key: "server.host", environments: []string{"AMITIA_SERVER_HOST"}},
 	{key: "server.port", environments: []string{"AMITIA_SERVER_PORT"}},
+	{key: "server.lanPort", environments: []string{"AMITIA_SERVER_LAN_PORT"}},
 	{key: "server.mode", environments: []string{"AMITIA_SERVER_MODE"}},
 	{key: "storage.dataDir", environments: []string{"AMITIA_DATA_DIR"}},
 	{key: "app.deployMode", environments: []string{"AMITIA_DEPLOY_MODE"}},
@@ -595,6 +598,9 @@ func validateConfig(cfg *Config) error {
 	}
 	if cfg.Server.Port < 0 || cfg.Server.Port > 65535 {
 		return fmt.Errorf("server.port 超有效范围: %d", cfg.Server.Port)
+	}
+	if cfg.Server.LANPort < 1 || cfg.Server.LANPort > 65535 || cfg.Server.LANPort == 3000 {
+		return fmt.Errorf("server.lanPort 超有效范围或被项目保留: %d", cfg.Server.LANPort)
 	}
 	if err := validateComponentURI(cfg.Components.TaskHost.EntryURI); err != nil {
 		return fmt.Errorf("taskHost.entryUri: %w", err)

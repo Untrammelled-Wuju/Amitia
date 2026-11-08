@@ -8,6 +8,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../domain/game_center_dto.dart';
+import '../../domain/game_runtime_operations.dart';
 import '../controllers/game_center_controller.dart';
 import '../controllers/game_center_providers.dart';
 
@@ -15,11 +16,7 @@ class RuntimeDetailPage extends ConsumerStatefulWidget {
   final String runtimeId;
   final String? pluginId;
 
-  const RuntimeDetailPage({
-    super.key,
-    required this.runtimeId,
-    this.pluginId,
-  });
+  const RuntimeDetailPage({super.key, required this.runtimeId, this.pluginId});
 
   @override
   ConsumerState<RuntimeDetailPage> createState() => _RuntimeDetailPageState();
@@ -110,7 +107,11 @@ class _RuntimeDetailPageState extends ConsumerState<RuntimeDetailPage> {
     );
   }
 
-  Widget _buildStatusSection(BuildContext context, GameRuntimeDetail detail, GameCenterState state) {
+  Widget _buildStatusSection(
+    BuildContext context,
+    GameRuntimeDetail detail,
+    GameCenterState state,
+  ) {
     final health = state.runtimeHealth;
     return Card(
       child: Padding(
@@ -122,21 +123,44 @@ class _RuntimeDetailPageState extends ConsumerState<RuntimeDetailPage> {
             SizedBox(height: AppSpacing.sm),
             _buildInfoRow(context, 'Runtime ID', detail.runtimeId),
             _buildInfoRow(context, '状态', _stateLabel(detail.runtimeState)),
-            if (detail.desiredState != null) _buildInfoRow(context, '期望状态', detail.desiredState!),
+            if (detail.desiredState != null)
+              _buildInfoRow(context, '期望状态', detail.desiredState!),
             _buildInfoRow(
               context,
               '健康',
-              _healthLabel(health?.status ?? detail.healthSummary?.status ?? ''),
+              _healthLabel(
+                health?.status ?? detail.healthSummary?.status ?? '',
+              ),
             ),
             if (health?.lastHeartbeat != null)
-              _buildInfoRow(context, '健康更新时间', health!.lastHeartbeat!.toLocal().toString()),
+              _buildInfoRow(
+                context,
+                '健康更新时间',
+                health!.lastHeartbeat!.toLocal().toString(),
+              ),
             if (detail.controlAuthority != null) ...[
-              _buildInfoRow(context, '控制模式', _modeLabel(detail.controlAuthority!.mode)),
-              _buildInfoRow(context, 'Epoch', '${detail.controlAuthority!.epoch}'),
+              _buildInfoRow(
+                context,
+                '控制模式',
+                _modeLabel(detail.controlAuthority!.mode),
+              ),
+              _buildInfoRow(
+                context,
+                'Epoch',
+                '${detail.controlAuthority!.epoch}',
+              ),
             ],
             if (detail.process != null) ...[
-              _buildInfoRow(context, '进程', detail.process!.running ? '运行中' : '未运行'),
-              _buildInfoRow(context, '进程代数', '${detail.process!.processGeneration}'),
+              _buildInfoRow(
+                context,
+                '进程',
+                detail.process!.running ? '运行中' : '未运行',
+              ),
+              _buildInfoRow(
+                context,
+                '进程代数',
+                '${detail.process!.processGeneration}',
+              ),
               _buildInfoRow(context, '重启次数', '${detail.process!.restartCount}'),
             ],
           ],
@@ -162,12 +186,22 @@ class _RuntimeDetailPageState extends ConsumerState<RuntimeDetailPage> {
           children: [
             Text('控制权', style: AppTypography.sectionTitle(context)),
             SizedBox(height: AppSpacing.sm),
-            Text('当前模式: ${_modeLabel(mode)}', style: AppTypography.body(context)),
+            Text(
+              '当前模式: ${_modeLabel(mode)}',
+              style: AppTypography.body(context),
+            ),
             if (detail.controlAuthority?.updatedAt != null)
-              Text('更新时间: ${detail.controlAuthority!.updatedAt!.toLocal()}', style: AppTypography.caption(context)),
+              Text(
+                '更新时间: ${detail.controlAuthority!.updatedAt!.toLocal()}',
+                style: AppTypography.caption(context),
+              ),
             SizedBox(height: AppSpacing.sm),
             if (hasOp)
-              const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+              const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
             else
               Wrap(
                 spacing: AppSpacing.sm,
@@ -216,7 +250,11 @@ class _RuntimeDetailPageState extends ConsumerState<RuntimeDetailPage> {
     );
   }
 
-  Widget _buildConnectionSection(BuildContext context, GameRuntimeDetail detail, GameCenterState state) {
+  Widget _buildConnectionSection(
+    BuildContext context,
+    GameRuntimeDetail detail,
+    GameCenterState state,
+  ) {
     final handshake = state.handshake;
     return Card(
       child: Padding(
@@ -227,31 +265,66 @@ class _RuntimeDetailPageState extends ConsumerState<RuntimeDetailPage> {
             Text('连接与握手', style: AppTypography.sectionTitle(context)),
             SizedBox(height: AppSpacing.sm),
             if (detail.connection != null) ...[
-              _buildInfoRow(context, '连接状态', detail.connection!.connected ? '已连接' : '未连接'),
+              _buildInfoRow(
+                context,
+                '连接状态',
+                detail.connection!.connected ? '已连接' : '未连接',
+              ),
               if (detail.connection!.protocolVersion != null)
-                _buildInfoRow(context, '协议版本', detail.connection!.protocolVersion!),
+                _buildInfoRow(
+                  context,
+                  '协议版本',
+                  detail.connection!.protocolVersion!,
+                ),
               if (detail.connection!.peerGeneration != null)
-                _buildInfoRow(context, 'Peer 代数', '${detail.connection!.peerGeneration}'),
+                _buildInfoRow(
+                  context,
+                  'Peer 代数',
+                  '${detail.connection!.peerGeneration}',
+                ),
               if (detail.connection!.lastHeartbeatAt != null)
-                _buildInfoRow(context, '最后心跳', detail.connection!.lastHeartbeatAt!.toLocal().toString()),
+                _buildInfoRow(
+                  context,
+                  '最后心跳',
+                  detail.connection!.lastHeartbeatAt!.toLocal().toString(),
+                ),
             ],
             if (detail.handshake != null) ...[
               _buildInfoRow(context, '握手状态', detail.handshake!.handshakeState),
-              _buildInfoRow(context, 'Ready', detail.handshake!.ready ? '是' : '否'),
-              if (detail.handshake!.protocol != null) _buildInfoRow(context, '协议', detail.handshake!.protocol!),
+              _buildInfoRow(
+                context,
+                'Ready',
+                detail.handshake!.ready ? '是' : '否',
+              ),
+              if (detail.handshake!.protocol != null)
+                _buildInfoRow(context, '协议', detail.handshake!.protocol!),
               if (detail.handshake!.sdkName != null)
-                _buildInfoRow(context, 'SDK', '${detail.handshake!.sdkName} ${detail.handshake!.sdkVersion ?? ''}'.trim()),
+                _buildInfoRow(
+                  context,
+                  'SDK',
+                  '${detail.handshake!.sdkName} ${detail.handshake!.sdkVersion ?? ''}'
+                      .trim(),
+                ),
             ],
             if (handshake != null)
-              _buildInfoRow(context, '独立握手检查', handshake.accepted ? '通过' : (handshake.error ?? '未通过')),
+              _buildInfoRow(
+                context,
+                '独立握手检查',
+                handshake.accepted ? '通过' : (handshake.error ?? '未通过'),
+              ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildServicesSection(BuildContext context, GameRuntimeDetail detail, GameCenterState state) {
-    final live = state.runtimeServices?.services ?? const <GameServiceSummary>[];
+  Widget _buildServicesSection(
+    BuildContext context,
+    GameRuntimeDetail detail,
+    GameCenterState state,
+  ) {
+    final live =
+        state.runtimeServices?.services ?? const <GameServiceSummary>[];
     final services = detail.services;
     return Card(
       child: Padding(
@@ -261,9 +334,18 @@ class _RuntimeDetailPageState extends ConsumerState<RuntimeDetailPage> {
           children: [
             Row(
               children: [
-                Expanded(child: Text('服务 (${services.length})', style: AppTypography.sectionTitle(context))),
+                Expanded(
+                  child: Text(
+                    '服务 (${services.length})',
+                    style: AppTypography.sectionTitle(context),
+                  ),
+                ),
                 if (state.runtimeServicesLoading)
-                  const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
               ],
             ),
             SizedBox(height: AppSpacing.sm),
@@ -272,17 +354,26 @@ class _RuntimeDetailPageState extends ConsumerState<RuntimeDetailPage> {
             else if (services.isNotEmpty)
               ...services.map((svc) => _serviceRow(context, svc))
             else
-              ...live.map((svc) => ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(svc.serviceId, style: AppTypography.bodySmall(context)),
-                    subtitle: Text('状态: ${svc.state} | 健康: ${_healthLabel(svc.health)}', style: AppTypography.caption(context)),
-                    trailing: _developerAccess
-                        ? TextButton(
-                            onPressed: () => _showRpcDialog(context, svc.serviceId),
-                            child: const Text('RPC'),
-                          )
-                        : null,
-                  )),
+              ...live.map(
+                (svc) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    svc.serviceId,
+                    style: AppTypography.bodySmall(context),
+                  ),
+                  subtitle: Text(
+                    '状态: ${svc.state} | 健康: ${_healthLabel(svc.health)}',
+                    style: AppTypography.caption(context),
+                  ),
+                  trailing: _developerAccess
+                      ? TextButton(
+                          onPressed: () =>
+                              _showRpcDialog(context, svc.serviceId),
+                          child: const Text('RPC'),
+                        )
+                      : null,
+                ),
+              ),
           ],
         ),
       ),
@@ -304,7 +395,10 @@ class _RuntimeDetailPageState extends ConsumerState<RuntimeDetailPage> {
                   style: AppTypography.caption(context),
                 ),
                 if (svc.definitionId.isNotEmpty)
-                  Text('定义: ${svc.definitionId}', style: AppTypography.caption(context)),
+                  Text(
+                    '定义: ${svc.definitionId}',
+                    style: AppTypography.caption(context),
+                  ),
               ],
             ),
           ),
@@ -314,7 +408,10 @@ class _RuntimeDetailPageState extends ConsumerState<RuntimeDetailPage> {
           ),
           if (_developerAccess) ...[
             const SizedBox(width: 8),
-            TextButton(onPressed: () => _showRpcDialog(context, svc.serviceId), child: const Text('RPC')),
+            TextButton(
+              onPressed: () => _showRpcDialog(context, svc.serviceId),
+              child: const Text('RPC'),
+            ),
           ],
         ],
       ),
@@ -327,9 +424,7 @@ class _RuntimeDetailPageState extends ConsumerState<RuntimeDetailPage> {
     bool hasOp,
     GameCenterController controller,
   ) {
-    final runtimeState = detail.runtimeState.toLowerCase();
-    final isRunning = runtimeState == 'running' || runtimeState == 'starting';
-    final isStopped = runtimeState == 'stopped' || runtimeState == 'failed';
+    final operations = availableGameRuntimeOperations(detail.runtimeState);
 
     return Card(
       child: Padding(
@@ -340,47 +435,68 @@ class _RuntimeDetailPageState extends ConsumerState<RuntimeDetailPage> {
             Text('运行操作', style: AppTypography.sectionTitle(context)),
             SizedBox(height: AppSpacing.sm),
             if (hasOp)
-              const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+              const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
             else
               Wrap(
                 spacing: AppSpacing.sm,
                 runSpacing: AppSpacing.sm,
                 children: [
-                  if (isStopped)
+                  if (operations.contains(GameRuntimeOperation.start))
                     AmitiaButton(
                       label: '启动',
                       isSecondary: true,
                       height: 36,
                       onPressed: () async {
-                        await controller.startRuntime(widget.runtimeId);
-                        await _loadAll();
+                        await _runRuntimeOperation(
+                          () => controller.startRuntime(widget.runtimeId),
+                        );
                       },
                     ),
-                  if (isRunning)
+                  if (operations.contains(GameRuntimeOperation.stop))
                     AmitiaButton(
                       label: '停止',
                       isSecondary: true,
                       height: 36,
                       onPressed: () async {
-                        await controller.stopRuntime(widget.runtimeId);
-                        await _loadAll();
+                        await _runRuntimeOperation(
+                          () => controller.stopRuntime(widget.runtimeId),
+                        );
                       },
                     ),
-                  AmitiaButton(
-                    label: '重启',
-                    isSecondary: true,
-                    height: 36,
-                    onPressed: () async {
-                      await controller.restartRuntime(widget.runtimeId);
-                      await _loadAll();
-                    },
-                  ),
+                  if (operations.contains(GameRuntimeOperation.restart))
+                    AmitiaButton(
+                      label: '重启',
+                      isSecondary: true,
+                      height: 36,
+                      onPressed: () async {
+                        await _runRuntimeOperation(
+                          () => controller.restartRuntime(widget.runtimeId),
+                        );
+                      },
+                    ),
                 ],
               ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _runRuntimeOperation(Future<bool> Function() operation) async {
+    final success = await operation();
+    if (!mounted) return;
+    if (success) {
+      await _loadAll();
+      return;
+    }
+    final error = ref.read(gameCenterControllerProvider).runtimeError;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(error ?? '运行实例操作失败')));
   }
 
   Future<void> _showRpcDialog(BuildContext context, String serviceId) async {
@@ -403,23 +519,39 @@ class _RuntimeDetailPageState extends ConsumerState<RuntimeDetailPage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  AmitiaTextField(controller: methodController, hintText: 'RPC method'),
+                  AmitiaTextField(
+                    controller: methodController,
+                    hintText: 'RPC method',
+                  ),
                   const SizedBox(height: 12),
-                  AmitiaTextField(controller: payloadController, maxLines: 6, hintText: 'JSON payload'),
+                  AmitiaTextField(
+                    controller: payloadController,
+                    maxLines: 6,
+                    hintText: 'JSON payload',
+                  ),
                   const SizedBox(height: 12),
-                  AmitiaTextField(controller: timeoutController, hintText: 'Timeout ms'),
+                  AmitiaTextField(
+                    controller: timeoutController,
+                    hintText: 'Timeout ms',
+                  ),
                   if (result.isNotEmpty) ...[
                     const SizedBox(height: 16),
                     Text('返回结果', style: AppTypography.label(context)),
                     const SizedBox(height: 6),
-                    SelectableText(result, style: AppTypography.caption(context)),
+                    SelectableText(
+                      result,
+                      style: AppTypography.caption(context),
+                    ),
                   ],
                 ],
               ),
             ),
           ),
           actions: [
-            TextButton(onPressed: loading ? null : () => Navigator.pop(dialogContext), child: const Text('关闭')),
+            TextButton(
+              onPressed: loading ? null : () => Navigator.pop(dialogContext),
+              child: const Text('关闭'),
+            ),
             TextButton(
               onPressed: loading
                   ? null
@@ -431,20 +563,28 @@ class _RuntimeDetailPageState extends ConsumerState<RuntimeDetailPage> {
                         final raw = payloadController.text.trim();
                         payload = raw.isEmpty ? null : jsonDecode(raw);
                       } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-setLocal(() => result = 'Payload 不是合法 JSON');
+                        print("[original-error] $error\n$stackTrace");
+                        setLocal(() => result = 'Payload 不是合法 JSON');
                         return;
                       }
                       setLocal(() => loading = true);
                       try {
-                        final response = await ref.read(gameCenterApiProvider).invokeServiceRpc(
+                        final response = await ref
+                            .read(gameCenterApiProvider)
+                            .invokeServiceRpc(
                               widget.runtimeId,
                               serviceId,
                               method: method,
                               payload: payload,
-                              timeoutMs: int.tryParse(timeoutController.text.trim()) ?? 30000,
+                              timeoutMs:
+                                  int.tryParse(timeoutController.text.trim()) ??
+                                  30000,
                             );
-                        setLocal(() => result = const JsonEncoder.withIndent('  ').convert(response));
+                        setLocal(
+                          () => result = const JsonEncoder.withIndent(
+                            '  ',
+                          ).convert(response),
+                        );
                       } catch (e) {
                         setLocal(() => result = '调用失败: $e');
                       } finally {
@@ -452,7 +592,11 @@ setLocal(() => result = 'Payload 不是合法 JSON');
                       }
                     },
               child: loading
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
                   : const Text('调用'),
             ),
           ],
@@ -470,8 +614,16 @@ setLocal(() => result = 'Payload 不是合法 JSON');
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(width: 92, child: Text(label, style: AppTypography.caption(context))),
-          Expanded(child: Text(value.isEmpty ? '-' : value, style: AppTypography.bodySmall(context))),
+          SizedBox(
+            width: 92,
+            child: Text(label, style: AppTypography.caption(context)),
+          ),
+          Expanded(
+            child: Text(
+              value.isEmpty ? '-' : value,
+              style: AppTypography.bodySmall(context),
+            ),
+          ),
         ],
       ),
     );
@@ -526,7 +678,10 @@ setLocal(() => result = 'Payload 不是合法 JSON');
     }
   }
 
-  void _confirmEmergencyStop(BuildContext context, GameCenterController controller) {
+  void _confirmEmergencyStop(
+    BuildContext context,
+    GameCenterController controller,
+  ) {
     showAmitiaConfirmDialog(
       context,
       title: '紧急停止',

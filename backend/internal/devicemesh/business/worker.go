@@ -30,7 +30,7 @@ func (e *Engine) withExecutionScope(ctx context.Context, expected coordination.E
 			return err
 		}
 	}
-	ctx, scope, finish, err := e.coordination.Begin(ctx, expected.SpaceID, expected.InitiatorDeviceID, expected.TargetDeviceID, expected.CoreID, expected.RoleID, expected.RequestID)
+	ctx, scope, finish, err := e.coordination.BeginWithOwners(ctx, expected.SpaceID, expected.InitiatorDeviceID, expected.TargetDeviceID, expected.CoreID, expected.RoleID, expected.RequestID, expected.ResourceOwnerID, expected.RoleOwnerID)
 	if err != nil {
 		return err
 	}

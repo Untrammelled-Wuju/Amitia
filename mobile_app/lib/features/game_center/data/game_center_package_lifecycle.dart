@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -48,7 +50,10 @@ class GameCenterPackageLifecycleClient {
         throw StateError('后端未返回扩展包预览');
       }
       final preview = Map<String, dynamic>.from(raw['preview'] as Map);
-      _validateGamePreview(preview, expectedExtensionId: expectedExtensionId);
+      validateGamePackagePreview(
+        preview,
+        expectedExtensionId: expectedExtensionId,
+      );
       return preview;
     } finally {
       dio?.close(force: true);
@@ -59,7 +64,10 @@ class GameCenterPackageLifecycleClient {
     Map<String, dynamic> preview, {
     String expectedExtensionId = '',
   }) async {
-    _validateGamePreview(preview, expectedExtensionId: expectedExtensionId);
+    validateGamePackagePreview(
+      preview,
+      expectedExtensionId: expectedExtensionId,
+    );
     final sessionId = (preview['sessionId'] ?? '').toString().trim();
     if (sessionId.isEmpty) throw StateError('预览会话无效');
 
@@ -115,12 +123,13 @@ class GameCenterPackageLifecycleClient {
 
   Future<Map<String, dynamic>> previewUninstall(String extensionId) async {
     final id = extensionId.trim();
-    if (id.isEmpty)
+    if (id.isEmpty) {
       throw ArgumentError.value(
         extensionId,
         'extensionId',
         'must not be empty',
       );
+    }
     Dio? dio;
     try {
       dio = await _dio();
@@ -141,12 +150,13 @@ class GameCenterPackageLifecycleClient {
     Map<String, dynamic> preview,
   ) async {
     final id = extensionId.trim();
-    if (id.isEmpty)
+    if (id.isEmpty) {
       throw ArgumentError.value(
         extensionId,
         'extensionId',
         'must not be empty',
       );
+    }
     if (preview['uninstallable'] == false) throw StateError('后端判定当前游戏扩展不可卸载');
 
     final confirmations = <String, bool>{};
@@ -218,33 +228,11 @@ class GameCenterPackageLifecycleClient {
     if (preview['upgradeDiff'] is Map) {
       final diff = preview['upgradeDiff'] as Map;
       if (diff['signerChanged'] == true) result['confirm.signer_change'] = true;
-      if (diff['configMigrationRequired'] == true)
+      if (diff['configMigrationRequired'] == true) {
         result['confirm.config_migration'] = true;
-    }
-    return result;
-  }
-
-  void _validateGamePreview(
-    Map<String, dynamic> preview, {
-    required String expectedExtensionId,
-  }) {
-    final target = (preview['managementTarget'] ?? '').toString();
-    final kinds = ((preview['contributionKinds'] as List?) ?? const [])
-        .map((e) => e.toString())
-        .toSet();
-    if (target != 'game_center' && !kinds.contains('gamex')) {
-      throw StateError('该扩展包不是游戏扩展，已阻止从游戏中心安装');
-    }
-    if (preview['installable'] == false || preview['compatible'] == false) {
-      throw StateError('该游戏扩展当前不可安装或与当前 Amitia 不兼容');
-    }
-    final expected = expectedExtensionId.trim();
-    if (expected.isNotEmpty) {
-      final actual = (preview['id'] ?? '').toString().trim();
-      if (actual != expected) {
-        throw StateError('更新包 ID 不匹配：需要 $expected，实际为 $actual');
       }
     }
+    return result;
   }
 
   dynamic _unwrapData(dynamic raw) {
@@ -270,5 +258,31 @@ class GameCenterPackageLifecycleClient {
       await Future<void>.delayed(const Duration(milliseconds: 500));
     }
     throw StateError('扩展包操作等待超时，请刷新游戏中心检查最终状态');
+  }
+}
+
+void validateGamePackagePreview(
+  Map<String, dynamic> preview, {
+  required String expectedExtensionId,
+}) {
+  final target = (preview['managementTarget'] ?? '').toString();
+  final kinds = ((preview['contributionKinds'] as List?) ?? const [])
+      .map((e) => e.toString())
+      .toSet();
+  if (target != 'game_center' && !kinds.contains('gamex')) {
+    throw StateError('该扩展包不是游戏扩展，已阻止从游戏中心安装');
+  }
+  if (preview['installable'] == false || preview['compatible'] == false) {
+    throw StateError(
+      '该游戏扩展当前不可安装或与当前 Amitia 不兼容；原始预览错误: '
+      '${jsonEncode(preview)}',
+    );
+  }
+  final expected = expectedExtensionId.trim();
+  if (expected.isNotEmpty) {
+    final actual = (preview['id'] ?? '').toString().trim();
+    if (actual != expected) {
+      throw StateError('更新包 ID 不匹配：需要 $expected，实际为 $actual');
+    }
   }
 }

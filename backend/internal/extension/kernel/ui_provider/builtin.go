@@ -1,7 +1,7 @@
 package ui_provider
 
 func builtin(providerID string, capability Capability) ProviderDefinition {
-	return ProviderDefinition{
+	def := ProviderDefinition{
 		ProviderID:  providerID,
 		ExtensionID: "builtin.amitia.ui",
 		ModuleID:    "builtin-ui",
@@ -14,6 +14,10 @@ func builtin(providerID string, capability Capability) ProviderDefinition {
 		Enabled:     true,
 		Builtin:     true,
 	}
+	if capability == CapabilityAppWorkspaceSidebar {
+		def.Metadata = map[string]any{"containerId": "default-workspace"}
+	}
+	return def
 }
 
 func BuiltinProviders() []ProviderDefinition {

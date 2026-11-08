@@ -115,7 +115,7 @@ List<SettingsCategory> buildSettingsCategories({
       title: '设备与运行',
       items: [
         SettingItem(
-          title: '我的设备',
+          title: '运行模式',
           icon: Icons.devices_outlined,
           route: AppRoutes.settingsDevices,
         ),

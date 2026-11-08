@@ -2,7 +2,8 @@ package lan
 
 import (
 	"context"
-	"crypto"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -13,15 +14,18 @@ import (
 	"errors"
 	"fmt"
 	"github.com/u-ai/backend/internal/ioshostbridge"
+	"github.com/u-ai/backend/internal/secretstore"
 	amitialog "log"
 	"math/big"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -30,6 +34,8 @@ type Endpoint struct {
 	Fingerprint string `json:"fingerprint"`
 	CoreID      string `json:"coreId"`
 }
+
+var tlsKeyLocks sync.Map
 
 func PrivateAddresses() ([]net.IP, error) {
 	bridge, err := ioshostbridge.FromEnvironment()
@@ -113,8 +119,8 @@ func validatedHostAddresses(addresses []string) ([]net.IP, error) {
 	return result, nil
 }
 
-func Certificate(signer crypto.Signer, coreID string, addresses []net.IP, now time.Time) (tls.Certificate, string, error) {
-	if signer == nil || strings.TrimSpace(coreID) == "" || len(addresses) == 0 {
+func Certificate(privateKey *ecdsa.PrivateKey, coreID string, addresses []net.IP, now time.Time) (tls.Certificate, string, error) {
+	if privateKey == nil || privateKey.D == nil || privateKey.Curve != elliptic.P256() || strings.TrimSpace(coreID) == "" || len(addresses) == 0 {
 		return tls.Certificate{}, "", errors.New("局域网证书缺少设备身份或地址")
 	}
 	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
@@ -122,7 +128,7 @@ func Certificate(signer crypto.Signer, coreID string, addresses []net.IP, now ti
 		return tls.Certificate{}, "", err
 	}
 	template := &x509.Certificate{SerialNumber: serial, Subject: pkix.Name{CommonName: coreID}, NotBefore: now.Add(-5 * time.Minute), NotAfter: now.Add(90 * 24 * time.Hour), IPAddresses: addresses, KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}, BasicConstraintsValid: true}
-	der, err := x509.CreateCertificate(rand.Reader, template, template, signer.Public(), signer)
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &privateKey.PublicKey, privateKey)
 	if err != nil {
 		return tls.Certificate{}, "", err
 	}
@@ -131,7 +137,7 @@ func Certificate(signer crypto.Signer, coreID string, addresses []net.IP, now ti
 		return tls.Certificate{}, "", err
 	}
 	hash := sha256.Sum256(leaf.RawSubjectPublicKeyInfo)
-	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: signer, Leaf: leaf}, hex.EncodeToString(hash[:]), nil
+	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: privateKey, Leaf: leaf}, hex.EncodeToString(hash[:]), nil
 }
 
 func PinnedTLS(endpoint Endpoint) (*tls.Config, error) {
@@ -172,11 +178,15 @@ type Server struct {
 
 func (s *Server) Errors() <-chan error { return s.errors }
 
-func Start(handler http.Handler, signer crypto.Signer, coreID string, port int, addresses []net.IP) (*Server, error) {
+func Start(handler http.Handler, dataDir string, coreID string, port int, addresses []net.IP) (*Server, error) {
 	if port < 1 || port > 65535 || port == 3000 || handler == nil {
 		return nil, errors.New("局域网服务配置无效")
 	}
-	certificate, fingerprint, err := Certificate(signer, coreID, addresses, time.Now())
+	privateKey, err := loadOrCreateTLSKey(dataDir)
+	if err != nil {
+		return nil, err
+	}
+	certificate, fingerprint, err := Certificate(privateKey, coreID, addresses, time.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -203,6 +213,49 @@ func Start(handler http.Handler, signer crypto.Signer, coreID string, port int, 
 		}()
 	}
 	return result, nil
+}
+
+func loadOrCreateTLSKey(dataDir string) (*ecdsa.PrivateKey, error) {
+	dataDir = filepath.Clean(strings.TrimSpace(dataDir))
+	if dataDir == "" || dataDir == "." {
+		return nil, errors.New("局域网 TLS 密钥缺少数据目录")
+	}
+	path := filepath.Join(dataDir, "device-mesh", "lan-tls-key")
+	lockValue, _ := tlsKeyLocks.LoadOrStore(path, &sync.Mutex{})
+	lock := lockValue.(*sync.Mutex)
+	lock.Lock()
+	defer lock.Unlock()
+
+	encoded, err := secretstore.Read(path)
+	if errors.Is(err, os.ErrNotExist) {
+		privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if err != nil {
+			return nil, err
+		}
+		encoded, err = x509.MarshalPKCS8PrivateKey(privateKey)
+		if err != nil {
+			return nil, err
+		}
+		if err := secretstore.Write(path, encoded); err != nil {
+			return nil, err
+		}
+		return privateKey, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := os.Chmod(path, 0600); err != nil && !errors.Is(err, os.ErrPermission) {
+		return nil, err
+	}
+	parsed, err := x509.ParsePKCS8PrivateKey(encoded)
+	if err != nil {
+		return nil, err
+	}
+	privateKey, ok := parsed.(*ecdsa.PrivateKey)
+	if !ok || privateKey.D == nil || privateKey.Curve != elliptic.P256() {
+		return nil, errors.New("局域网 TLS 私钥无效")
+	}
+	return privateKey, nil
 }
 
 func (s *Server) Close(ctx context.Context) error {

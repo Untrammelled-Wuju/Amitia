@@ -7,6 +7,7 @@ import (
 	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"time"
 
+	"github.com/u-ai/backend/internal/devicemesh/capabilities"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/devicemesh/server"
 	"github.com/u-ai/backend/internal/deviceruntime"
@@ -86,6 +87,7 @@ func (p *MeshDeviceRuntimeInvocationPort) Execute(ctx context.Context, request D
 		InvocationID:         request.Invocation.InvocationID,
 		RuntimeType:          string(route.Binding.RuntimeType),
 		Handler:              route.Binding.HandlerName,
+		RequiredCapability:   capabilities.ForHandler(string(route.Binding.RuntimeType), route.Binding.HandlerName),
 		Input:                input,
 		ProviderID:           route.Binding.ProviderID,
 		SpaceID:              route.SpaceID,

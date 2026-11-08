@@ -214,7 +214,7 @@ func (p *meshLocalDataPort) ManageChat(ctx context.Context, scope coordination.E
 		return nil, coordination.ErrWrongOwner
 	}
 	historical := scope.Coordinated && p.ownerID == scope.TargetDeviceID && p.ownerID != scope.ResourceOwnerID
-	if !historical && (scope.ResourceOwnerID != p.ownerID || scope.RoleOwnerID != p.ownerID) {
+	if !historical && (scope.ResourceOwnerID != p.ownerID || (scope.RoleOwnerID != p.ownerID && scope.RoleOwnerID != scope.CoreID)) {
 		return nil, coordination.ErrWrongOwner
 	}
 	role := scope.RoleID

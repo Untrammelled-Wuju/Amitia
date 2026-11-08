@@ -252,6 +252,52 @@ func TestPackageArtifactGarbageCollectionAndVerification(t *testing.T) {
 	}
 }
 
+func TestPackageArtifactReimportRevivesGarbageCollectedIdentity(t *testing.T) {
+	repository, store := packageArtifactTestRepository(t)
+	content := []byte("rebuildable archive")
+	artifact := putPackageArtifactForTest(t, repository, store, content, time.Now().Add(-48*time.Hour))
+	lifecycle := NewPackageArtifactLifecycle(repository, store)
+	result, err := lifecycle.CollectGarbage(context.Background(), time.Now(), 0, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Deleted) != 1 || result.Deleted[0] != artifact.ArtifactID {
+		t.Fatalf("artifact was not garbage collected: %#v", result)
+	}
+	if _, err := repository.GetArtifactByIdentity(context.Background(), artifact.ExtensionID, artifact.Version, artifact.ArchiveHash); err == nil {
+		t.Fatal("garbage-collected artifact remained addressable")
+	}
+
+	restored, err := store.PutArchive(context.Background(), bytes.NewReader(content), int64(len(content)+1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restored.ArtifactID != artifact.ArtifactID || restored.ArchiveHash != artifact.ArchiveHash {
+		t.Fatalf("content-identical rebuild changed artifact identity: %#v %#v", restored, artifact)
+	}
+	restored.ExtensionID = artifact.ExtensionID
+	restored.Version = artifact.Version
+	restored.ManifestHash = artifact.ManifestHash
+	restored.ContentTreeHash = artifact.ContentTreeHash
+	restored.ArtifactHash = artifact.ArtifactHash
+	restored.SignatureStatus = artifact.SignatureStatus
+	restored.TrustDecision = artifact.TrustDecision
+	restored.CreatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	restored.VerifiedAt = restored.CreatedAt
+	restored.LastVerifiedAt = restored.CreatedAt
+	restored.VerificationStatus = "valid"
+	if err := repository.PutArtifact(context.Background(), restored); err != nil {
+		t.Fatal(err)
+	}
+	reused, err := repository.GetArtifactByIdentity(context.Background(), restored.ExtensionID, restored.Version, restored.ArchiveHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reused.ArtifactID != artifact.ArtifactID || reused.DeletedAt != "" || reused.RetentionState != "active" {
+		t.Fatalf("reimported artifact retained its GC tombstone: %#v", reused)
+	}
+}
+
 func TestPackageArtifactGarbageCollectionFailureIsObservable(t *testing.T) {
 	repository, store := packageArtifactTestRepository(t)
 	artifact := putPackageArtifactForTest(t, repository, store, []byte("gc failure archive"), time.Now().Add(-48*time.Hour))

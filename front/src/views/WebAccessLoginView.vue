@@ -7,7 +7,7 @@ SPDX-License-Identifier: AGPL-3.0-only
     <main class="login-card" aria-labelledby="web-access-title">
       <div class="login-mark">A</div>
       <h1 id="web-access-title">访问云端</h1>
-      <p>请输入此 Cloud Core 的 Web 访问密码。</p>
+      <p>请输入此统筹中心的 Web 访问密码。</p>
 
       <form class="login-form" @submit.prevent="submit">
         <input

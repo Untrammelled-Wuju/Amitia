@@ -95,7 +95,16 @@ def verify_elf(path):
             raise ValueError(f"invalid ELF binary: {path}")
 
 
-def compress_rootfs(source, destination, library_archives=None, node_executable=None):
+def compress_rootfs(
+    source,
+    destination,
+    library_archives=None,
+    node_executable=None,
+    ca_certificates_archive=None,
+):
+    ca_bundle_path = "etc/ssl/certs/ca-certificates.crt"
+    ca_certificate_prefix = "usr/share/ca-certificates/mozilla/"
+    ca_archive_prefixes = ("usr/share/ca-certificates/", "etc/ssl/certs/")
     required_dirs = (
         "opt/amitia",
         "etc/amitia",
@@ -108,10 +117,13 @@ def compress_rootfs(source, destination, library_archives=None, node_executable=
     )
     capture = tempfile.TemporaryDirectory(prefix="amitia-rootfs-library-")
     library_tars = []
+    ca_certificates_tar = None
     try:
         library_archives = library_archives or []
         if library_archives and node_executable is None:
             raise ValueError("node executable is required for library archives")
+        if ca_certificates_archive is None or node_executable is None:
+            raise ValueError("CA certificates archive and node executable are required")
         for index, library_archive in enumerate(library_archives):
             if node_executable is None:
                 raise ValueError("node executable is required for library archives")
@@ -127,10 +139,26 @@ def compress_rootfs(source, destination, library_archives=None, node_executable=
             ], check=True, capture_output=True)
             library_tars.append(tarfile.open(decompressed, "r:"))
 
+        ca_compressed = Path(capture.name) / "ca-certificates-data.tar.zst"
+        ca_decompressed = Path(capture.name) / "ca-certificates-data.tar"
+        read_ar_member(ca_certificates_archive, "data.tar.zst", ca_compressed)
+        subprocess.run([
+            str(node_executable),
+            "-e",
+            "const fs=require('fs'),z=require('zlib');fs.writeFileSync(process.argv[2],z.zstdDecompressSync(fs.readFileSync(process.argv[1])))",
+            str(ca_compressed),
+            str(ca_decompressed),
+        ], check=True, capture_output=True)
+        ca_certificates_tar = tarfile.open(ca_decompressed, "r:")
+
         with tarfile.open(source, "r:gz") as archive, tarfile.open(destination, "w:xz", preset=3) as output:
             existing = set()
+            ca_bundle_parts = []
             for member in archive:
-                existing.add(member.name.rstrip("/"))
+                normalized = member.name[2:] if member.name.startswith("./") else member.name
+                existing.add(normalized.rstrip("/"))
+                if normalized == ca_bundle_path:
+                    continue
                 stream = archive.extractfile(member) if member.isfile() else None
                 output.addfile(member, stream)
             for name in required_dirs:
@@ -139,11 +167,6 @@ def compress_rootfs(source, destination, library_archives=None, node_executable=
                     member.type = tarfile.DIRTYPE
                     member.mode = 0o755
                     output.addfile(member)
-            if "etc/ssl/certs/ca-certificates.crt" not in existing:
-                member = tarfile.TarInfo("etc/ssl/certs/ca-certificates.crt")
-                member.mode = 0o644
-                member.size = 0
-                output.addfile(member, io.BytesIO())
             required_library_members = {
                 "usr/lib/aarch64-linux-gnu/libatomic.so.1",
                 "usr/lib/aarch64-linux-gnu/libatomic.so.1.2.0",
@@ -170,9 +193,43 @@ def compress_rootfs(source, destination, library_archives=None, node_executable=
             missing = required_library_members - existing - added
             if missing:
                 raise ValueError("missing rootfs libraries: " + ", ".join(sorted(missing)))
+            for member in ca_certificates_tar:
+                name = member.name[2:] if member.name.startswith("./") else member.name
+                if name == ca_bundle_path or not name.startswith(ca_archive_prefixes):
+                    continue
+                stream = ca_certificates_tar.extractfile(member) if member.isfile() else None
+                data = stream.read() if stream is not None else None
+                if (
+                    data is not None
+                    and name.startswith(ca_certificate_prefix)
+                    and name.endswith(".crt")
+                    and b"-----BEGIN CERTIFICATE-----" in data
+                ):
+                    ca_bundle_parts.append(data.strip())
+                if name in existing:
+                    continue
+                info = tarfile.TarInfo(name)
+                info.mode = member.mode
+                info.type = member.type
+                info.linkname = member.linkname
+                if data is not None:
+                    info.size = len(data)
+                    output.addfile(info, io.BytesIO(data))
+                else:
+                    output.addfile(info)
+                existing.add(name)
+            if not ca_bundle_parts:
+                raise ValueError("CA certificates archive contains no Mozilla root certificates")
+            ca_bundle = b"\n".join(ca_bundle_parts) + b"\n"
+            info = tarfile.TarInfo(ca_bundle_path)
+            info.mode = 0o644
+            info.size = len(ca_bundle)
+            output.addfile(info, io.BytesIO(ca_bundle))
     finally:
         for library_tar in library_tars:
             library_tar.close()
+        if ca_certificates_tar is not None:
+            ca_certificates_tar.close()
         capture.cleanup()
 
 
@@ -219,6 +276,7 @@ def main():
     parser.add_argument("--rootfs-archive", required=True)
     parser.add_argument("--libatomic-deb", required=True)
     parser.add_argument("--libgomp-deb", required=True)
+    parser.add_argument("--ca-certificates-deb", required=True)
     parser.add_argument("--node-executable", required=True)
     parser.add_argument("--qdrant-archive", required=True)
     parser.add_argument("--surrealdb", required=True)
@@ -238,6 +296,7 @@ def main():
     rootfs_archive = Path(args.rootfs_archive).resolve()
     libatomic_deb = Path(args.libatomic_deb).resolve()
     libgomp_deb = Path(args.libgomp_deb).resolve()
+    ca_certificates_deb = Path(args.ca_certificates_deb).resolve()
     node_executable = Path(args.node_executable).resolve()
     plugin_market_package = Path(args.plugin_market_package).resolve()
     llama_runtime_dir = Path(args.llama_runtime_dir).resolve() if args.llama_runtime_dir else project / "desktop/resources/release-runtime/llama"
@@ -245,8 +304,9 @@ def main():
     rootfs_lock = json.loads((project / "runtime/artifacts/ubuntu-rootfs/linux-arm64/ubuntu-rootfs-lock.json").read_text(encoding="utf-8"))
     libatomic_lock = json.loads((project / "runtime/artifacts/ubuntu-rootfs/linux-arm64/libatomic1-lock.json").read_text(encoding="utf-8"))
     libgomp_lock = json.loads((project / "runtime/artifacts/ubuntu-rootfs/linux-arm64/libgomp1-lock.json").read_text(encoding="utf-8"))
-    if digest(node_archive) != node_lock["sha256"] or digest(rootfs_archive) != rootfs_lock["sha256"] or digest(libatomic_deb) != libatomic_lock["sha256"] or digest(libgomp_deb) != libgomp_lock["sha256"]:
-        raise ValueError("locked Node, rootfs, libatomic or libgomp archive hash mismatch")
+    ca_certificates_lock = json.loads((project / "runtime/artifacts/ubuntu-rootfs/linux-arm64/ca-certificates-lock.json").read_text(encoding="utf-8"))
+    if digest(node_archive) != node_lock["sha256"] or digest(rootfs_archive) != rootfs_lock["sha256"] or digest(libatomic_deb) != libatomic_lock["sha256"] or digest(libgomp_deb) != libgomp_lock["sha256"] or digest(ca_certificates_deb) != ca_certificates_lock["sha256"]:
+        raise ValueError("locked Node, rootfs, libatomic, libgomp or CA certificates archive hash mismatch")
     if not node_executable.is_file():
         raise ValueError("Node executable is unavailable")
     if not plugin_market_package.is_file() or plugin_market_package.suffix != ".amitiax":
@@ -277,7 +337,13 @@ def main():
         payload.mkdir()
         rootfs_tar = payload / "rootfs.tar.xz"
         runtime_tar = payload / "runtime.tar.xz"
-        compress_rootfs(rootfs_archive, rootfs_tar, [libatomic_deb, libgomp_deb], node_executable)
+        compress_rootfs(
+            rootfs_archive,
+            rootfs_tar,
+            [libatomic_deb, libgomp_deb],
+            node_executable,
+            ca_certificates_deb,
+        )
         create_runtime_tar(program, runtime_tar)
 
         metadata = stage / "metadata"

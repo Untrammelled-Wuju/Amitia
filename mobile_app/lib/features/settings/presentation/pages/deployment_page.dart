@@ -16,6 +16,25 @@ import '../../../../core/runtime/backend/mobile_deployment_mode.dart';
 import '../../../../core/runtime/backend/mobile_backend_lifecycle.dart';
 import '../../../../core/runtime/backend/mobile_backend_providers.dart';
 import '../../../../core/runtime/backend/backend_topology_resolver.dart';
+import '../../../../core/services/providers.dart';
+
+bool deploymentSelectionRequiresChange(
+  MobileDeploymentConfig current,
+  MobileDeploymentMode selected,
+  String? remoteUri,
+) {
+  if (selected != current.mode) return true;
+  if (selected != MobileDeploymentMode.cloud) return false;
+  final currentUri = current.remoteCoreUri?.trim() ?? '';
+  final requestedUri = remoteUri?.trim() ?? '';
+  if (currentUri.isEmpty || requestedUri.isEmpty) return false;
+  try {
+    return normalizeRemoteCoreUri(currentUri).origin !=
+        normalizeRemoteCoreUri(requestedUri).origin;
+  } catch (_) {
+    return false;
+  }
+}
 
 class DeploymentPage extends ConsumerStatefulWidget {
   const DeploymentPage({super.key});
@@ -27,15 +46,13 @@ class DeploymentPage extends ConsumerStatefulWidget {
 class _DeploymentPageState extends ConsumerState<DeploymentPage> {
   bool _loading = true;
   bool _testState = false;
+  bool _discoveringPairing = false;
+  MobileDeploymentMode _selectedMode = MobileDeploymentMode.local;
   final _remoteUriController = TextEditingController();
 
   static const _modes = <(MobileDeploymentMode, IconData, String)>[
-    (MobileDeploymentMode.local, Icons.dns_outlined, '项目服务、数据和设备能力全部在当前设备运行'),
-    (
-      MobileDeploymentMode.cloud,
-      Icons.cloud_outlined,
-      '连接 Cloud Core，统一管理多设备数据与任务',
-    ),
+    (MobileDeploymentMode.local, Icons.dns_outlined, '当前设备保存统筹数据和模型配置，并管理其他设备'),
+    (MobileDeploymentMode.cloud, Icons.cloud_outlined, '当前设备加入另一台设备提供的统筹中心'),
   ];
 
   @override
@@ -55,6 +72,7 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
     await ref.read(mobileDeploymentConfigProvider.notifier).init();
     final config = ref.read(mobileDeploymentConfigProvider);
     _remoteUriController.text = config.remoteCoreUri ?? '';
+    _selectedMode = config.mode;
     if (mounted) {
       setState(() => _loading = false);
     }
@@ -63,7 +81,6 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
   @override
   Widget build(BuildContext context) {
     final connectionAsync = ref.watch(backendConnectionProvider);
-    final currentConfig = ref.watch(mobileDeploymentConfigProvider);
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '运行模式',
@@ -75,7 +92,7 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
           : ListView(
               padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
               children: [
-                _SectionLabel(text: '选择运行模式'),
+                _SectionLabel(text: '选择统筹中心'),
                 SizedBox(height: AppSpacing.sm),
                 ..._modes.map(
                   (m) => Padding(
@@ -88,51 +105,85 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
                       mode: m.$1,
                       icon: m.$2,
                       description: m.$3,
-                      isSelected: m.$1 == currentConfig.mode,
-                      onTap: () => _confirmSwitch(m.$1),
+                      isSelected: m.$1 == _selectedMode,
+                      onTap: () {
+                        if (m.$1 == MobileDeploymentMode.cloud) {
+                          setState(
+                            () => _selectedMode = MobileDeploymentMode.cloud,
+                          );
+                          return;
+                        }
+                        _confirmSwitch(MobileDeploymentMode.local);
+                      },
                     ),
                   ),
                 ),
-                SizedBox(height: AppSpacing.sm),
-                _SectionLabel(text: '远程核心地址'),
-                SizedBox(height: AppSpacing.sm),
-                Padding(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: AppSpacing.pagePadding,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      TextField(
-                        controller: _remoteUriController,
-                        keyboardType: TextInputType.url,
-                        autocorrect: false,
-                        decoration: InputDecoration(
-                          hintText: 'cloud.example.com 或 192.168.1.10:端口',
-                          helperText:
-                              currentConfig.mode == MobileDeploymentMode.cloud
-                              ? '云端业务请求将连接此 Cloud Core；设备 Runtime 仍保留在本机'
-                              : '必须先连接 Cloud Core 并完成设备配对，才能切换',
-                          border: OutlineInputBorder(
-                            borderRadius: AppRadius.brSmall,
-                          ),
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: AppSpacing.md,
-                            vertical: AppSpacing.sm,
+                if (_selectedMode == MobileDeploymentMode.cloud) ...[
+                  SizedBox(height: AppSpacing.sm),
+                  _SectionLabel(text: '统筹中心地址'),
+                  SizedBox(height: AppSpacing.sm),
+                  Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: AppSpacing.pagePadding,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        TextField(
+                          controller: _remoteUriController,
+                          keyboardType: TextInputType.url,
+                          autocorrect: false,
+                          decoration: InputDecoration(
+                            hintText: '统筹中心地址或 192.168.1.10:端口',
+                            helperText: '连接后使用该中心的数据和模型；设备 Runtime 仍保留在本机',
+                            border: OutlineInputBorder(
+                              borderRadius: AppRadius.brSmall,
+                            ),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: AppSpacing.md,
+                              vertical: AppSpacing.sm,
+                            ),
                           ),
                         ),
-                      ),
-                      SizedBox(height: AppSpacing.sm),
-                      AmitiaButton(
-                        label: '连接并配对',
-                        icon: Icons.link,
-                        isFullWidth: true,
-                        isSecondary: true,
-                        onPressed: _openCloudPairing,
-                      ),
-                    ],
+                        SizedBox(height: AppSpacing.sm),
+                        AmitiaButton(
+                          label: _discoveringPairing ? '检查中心身份...' : '输入地址并配对',
+                          icon: Icons.link,
+                          isFullWidth: true,
+                          isSecondary: true,
+                          onPressed: _discoveringPairing
+                              ? null
+                              : () =>
+                                    _confirmSwitch(MobileDeploymentMode.cloud),
+                        ),
+                        SizedBox(height: AppSpacing.sm),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: AmitiaButton(
+                                label: '扫码',
+                                icon: Icons.qr_code_scanner,
+                                isSecondary: true,
+                                onPressed: () =>
+                                    _openCloudPairing(action: 'scan'),
+                              ),
+                            ),
+                            SizedBox(width: AppSpacing.sm),
+                            Expanded(
+                              child: AmitiaButton(
+                                label: '使用二维码图片',
+                                icon: Icons.image_outlined,
+                                isSecondary: true,
+                                onPressed: () =>
+                                    _openCloudPairing(action: 'image'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
+                ],
                 SizedBox(height: AppSpacing.sm),
                 _SectionLabel(text: '当前配置'),
                 SizedBox(height: AppSpacing.sm),
@@ -159,6 +210,7 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
     AsyncValue<BackendConnectionAvailability> connectionAsync,
   ) {
     final statusAsync = ref.watch(mobileBackendStatusProvider);
+    final deployment = ref.read(mobileDeploymentConfigProvider);
     return Container(
       margin: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       padding: EdgeInsets.all(AppSpacing.cardPadding),
@@ -170,13 +222,25 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
       child: Column(
         children: [
           _InfoRow(
-            label: '当前模式',
+            label: '当前中心',
             value: _modeDisplayName(
               ref.read(mobileDeploymentConfigProvider).mode,
             ),
           ),
           connectionAsync.when(
             data: (avail) {
+              final remoteUri = deployment.remoteCoreUri?.trim() ?? '';
+              if (deployment.mode == MobileDeploymentMode.cloud &&
+                  remoteUri.isNotEmpty) {
+                try {
+                  return _InfoRow(
+                    label: '统筹中心地址',
+                    value: normalizeRemoteCoreUri(remoteUri).toString(),
+                  );
+                } on DeploymentConfigValidationError {
+                  return _InfoRow(label: '统筹中心地址', value: remoteUri);
+                }
+              }
               if (avail is BackendConnectionAvailable) {
                 final uri = BackendUriBuilder().httpBase(avail.config);
                 return _InfoRow(label: '后端地址', value: uri.toString());
@@ -200,9 +264,9 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
   String _modeDisplayName(MobileDeploymentMode mode) {
     switch (mode) {
       case MobileDeploymentMode.local:
-        return '本地模式';
+        return '以本机作为统筹中心';
       case MobileDeploymentMode.cloud:
-        return '云端统筹模式';
+        return '使用远程统筹中心';
     }
   }
 
@@ -227,7 +291,7 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
       if (showError && mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('请输入远程核心地址')));
+        ).showSnackBar(const SnackBar(content: Text('请输入统筹中心地址')));
       }
       return null;
     }
@@ -237,37 +301,79 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
       if (showError && mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('远程核心地址无效：${error.message}')));
+        ).showSnackBar(SnackBar(content: Text('统筹中心地址无效：${error.message}')));
       }
       return null;
     } catch (error) {
       if (showError && mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('远程核心地址无效：$error')));
+        ).showSnackBar(SnackBar(content: Text('统筹中心地址无效：$error')));
       }
       return null;
     }
   }
 
-  void _confirmSwitch(MobileDeploymentMode newMode) {
+  Future<void> _confirmSwitch(MobileDeploymentMode newMode) async {
+    if (_discoveringPairing) return;
     final current = ref.read(mobileDeploymentConfigProvider);
-    if (newMode == current.mode) return;
-
     final remoteUri = newMode == MobileDeploymentMode.cloud
         ? _normalizedRemoteUri()
         : current.remoteCoreUri;
+    if (!deploymentSelectionRequiresChange(current, newMode, remoteUri)) {
+      if (newMode == MobileDeploymentMode.cloud &&
+          remoteUri != null &&
+          (current.remoteCoreUri?.trim() ?? '').isNotEmpty) {
+        _show('当前已使用该统筹中心地址');
+      }
+      return;
+    }
     if (newMode == MobileDeploymentMode.cloud) {
       if (remoteUri == null) {
-        _show('请先填写 Cloud Core 地址');
+        _show('请先填写统筹中心地址');
         return;
       }
+      setState(() => _discoveringPairing = true);
+      Map<String, dynamic> discovery;
+      try {
+        discovery = await ref
+            .read(onboardingServiceProvider)
+            .discoverPairingAt(remoteUri);
+      } catch (error) {
+        if (mounted) _show('检查统筹中心身份失败：$error');
+        return;
+      } finally {
+        if (mounted) setState(() => _discoveringPairing = false);
+      }
+      if (!mounted) return;
+      final coreId = (discovery['spaceId'] ?? '').toString().trim();
+      if (coreId.isEmpty) {
+        _show('统筹中心身份缺失');
+        return;
+      }
+      final fingerprint = (discovery['fingerprint'] ?? '').toString().trim();
+      var existingCoreId = '';
+      if (current.mode == MobileDeploymentMode.cloud) {
+        final localService = ref.read(deviceMeshLocalServiceProvider);
+        if (localService != null) {
+          try {
+            final status = await localService.status();
+            existingCoreId = (status['coreId'] ?? '').toString().trim();
+          } catch (error, stackTrace) {
+            print("[original-error] $error\n$stackTrace");
+          }
+        }
+      }
+      if (!mounted) return;
       showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('云端统筹需要完成设备配对'),
-          content: const Text(
-            '填写地址只会定位 Cloud Core。下一步必须验证 Core 身份、输入首设备设置码或一次性配对 Offer，并在 DeviceCredential 保存成功后才能切换。',
+          title: const Text('确认加入统筹中心'),
+          content: Text(
+            '中心地址\n$remoteUri\n\n'
+            '中心标识\n$coreId\n\n'
+            '${fingerprint.isEmpty ? '中心证书由系统信任。' : '中心证书指纹\n$fingerprint'}\n\n'
+            '二维码只是自动填入相同信息。发起后仍需由统筹中心确认。',
           ),
           actions: [
             TextButton(
@@ -275,11 +381,24 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
               child: const Text('取消'),
             ),
             TextButton(
-              onPressed: () {
+              onPressed: () async {
                 Navigator.pop(ctx);
-                _openCloudPairing(uri: remoteUri);
+                if (existingCoreId == coreId) {
+                  await _updateKnownCenterEndpoint(
+                    remoteUri: remoteUri,
+                    fingerprint: fingerprint,
+                    coreId: coreId,
+                  );
+                } else {
+                  _openCloudPairing(
+                    uri: remoteUri,
+                    action: 'address',
+                    fingerprint: fingerprint,
+                    coreId: coreId,
+                  );
+                }
               },
-              child: const Text('去配对'),
+              child: const Text('发起配对'),
             ),
           ],
         ),
@@ -291,7 +410,7 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
-        title: Text('切换运行模式', style: AppTypography.cardTitle(context)),
+        title: Text('切换统筹中心', style: AppTypography.cardTitle(context)),
         content: Text(
           '确定要切换为「${_modeDisplayName(newMode)}」吗？业务连接会重新建立，当前运行数据不迁移。',
           style: AppTypography.body(context),
@@ -313,14 +432,49 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
     );
   }
 
-  void _openCloudPairing({String? uri}) {
-    final cloudUri = uri ?? _normalizedRemoteUri();
-    if (cloudUri == null) {
-      _show('请先填写 Cloud Core 地址');
+  Future<void> _updateKnownCenterEndpoint({
+    required String remoteUri,
+    required String fingerprint,
+    required String coreId,
+  }) async {
+    final service = ref.read(deviceMeshLocalServiceProvider);
+    if (service == null) {
+      _show('本机 Runtime 当前不可用，无法更新统筹中心地址');
       return;
     }
+    try {
+      await service.updateEndpoint(
+        cloudBaseUrl: remoteUri,
+        fingerprint: fingerprint,
+        coreId: coreId,
+      );
+      await _applyModeChange(MobileDeploymentMode.cloud, remoteUri: remoteUri);
+      _show('统筹中心地址已更新');
+    } catch (error) {
+      _show('更新统筹中心地址失败：$error');
+    }
+  }
+
+  void _openCloudPairing({
+    String? uri,
+    String? action,
+    String? fingerprint,
+    String? coreId,
+  }) {
+    var cloudUri = uri?.trim() ?? '';
+    if (cloudUri.isEmpty && (action == null || action.isEmpty)) {
+      cloudUri = _normalizedRemoteUri() ?? '';
+      if (cloudUri.isEmpty) return;
+    }
+    final query = <String, String>{
+      if (cloudUri.isNotEmpty) 'endpoint': cloudUri,
+      if (action != null && action.isNotEmpty) 'action': action,
+      if (fingerprint != null && fingerprint.isNotEmpty)
+        'fingerprint': fingerprint,
+      if (coreId != null && coreId.isNotEmpty) 'coreId': coreId,
+    };
     context.push(
-      '${AppRoutes.settingsDeviceAdd}?endpoint=${Uri.encodeQueryComponent(cloudUri)}',
+      Uri(path: AppRoutes.settingsDeviceAdd, queryParameters: query).toString(),
     );
   }
 
@@ -347,21 +501,26 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
       await ref.read(mobileDeploymentConfigProvider.notifier).update(newConfig);
       ref.invalidate(backendConnectionProvider);
       await ref.read(mobileBackendLifecycleProvider).reconcile(newConfig);
+      ref.invalidate(mobileBackendStatusProvider);
+      await ref.read(mobileBackendStatusProvider.future);
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-await ref.read(mobileDeploymentConfigProvider.notifier).update(config);
+      print("[original-error] $error\n$stackTrace");
+      await ref.read(mobileDeploymentConfigProvider.notifier).update(config);
       ref.invalidate(backendConnectionProvider);
       try {
         await ref.read(mobileBackendLifecycleProvider).reconcile(config);
       } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+        print("[original-error] $error\n$stackTrace");
+      }
       rethrow;
     } finally {
       notificationCoordinator.resumeRegistrationAfterDeploymentTransition();
     }
     if (!mounted) return;
-    setState(() => _testState = false);
+    setState(() {
+      _testState = false;
+      _selectedMode = newMode;
+    });
     _remoteUriController.text = newConfig.remoteCoreUri ?? '';
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -373,9 +532,16 @@ await ref.read(mobileDeploymentConfigProvider.notifier).update(config);
 
   Future<void> _checkRuntimeStatus() async {
     setState(() => _testState = true);
-    await ref.read(backendConnectionProvider.future);
-    await Future.delayed(const Duration(milliseconds: 300));
-    if (mounted) setState(() => _testState = false);
+    try {
+      final config = ref.read(mobileDeploymentConfigProvider);
+      await ref.read(mobileBackendLifecycleProvider).reconcile(config);
+      ref.invalidate(mobileBackendStatusProvider);
+      await ref.read(mobileBackendStatusProvider.future);
+      ref.invalidate(backendConnectionProvider);
+      await ref.read(backendConnectionProvider.future);
+    } finally {
+      if (mounted) setState(() => _testState = false);
+    }
   }
 }
 
@@ -433,7 +599,9 @@ class _ModeCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    mode.storageValue,
+                    mode == MobileDeploymentMode.local
+                        ? '以本机作为统筹中心'
+                        : '使用远程统筹中心',
                     style: AppTypography.cardTitle(context),
                   ),
                   const SizedBox(height: 2),

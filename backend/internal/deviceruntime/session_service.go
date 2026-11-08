@@ -241,7 +241,7 @@ func (s *Service) reconnectExisting(
 		}
 	}
 
-	resume := protocol.ResumeDecision{Mode: protocol.ResumeModeResumeOrFull}
+	resume := protocol.ResumeDecision{Mode: protocol.ResumeModeResume}
 	if forceFullResume {
 		resume = protocol.ResumeDecision{Mode: protocol.ResumeModeFull, Reason: "client_cursor_ahead"}
 	}
@@ -431,6 +431,19 @@ func (s *Service) Heartbeat(
 	session.LastHeartbeatAt = now
 	session.ExpiresAt = expiresAt
 	session.UpdatedAt = now
+
+	presenceErr := s.presence.Heartbeat(ctx, PresenceSnapshot{
+		SpaceID:              session.SpaceID,
+		DeviceID:             session.DeviceID,
+		RuntimeID:            session.RuntimeID,
+		RuntimeSessionID:     session.ID,
+		Platform:             session.Platform,
+		ConnectionGeneration: session.ConnectionGeneration,
+		At:                   now,
+	}, now)
+	if presenceErr != nil {
+		return session, fmt.Errorf("%w: %v", ErrPresenceProjectionFailed, presenceErr)
+	}
 
 	return session, nil
 }

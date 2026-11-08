@@ -42,7 +42,7 @@ func (e *Engine) reviewQuote(ctx context.Context, scope coordination.ExecutionSc
 	if reference == nil {
 		return nil, nil, nil
 	}
-	if reference.ExpectedScope == nil || summaryAuthority(*reference.ExpectedScope) != summaryAuthority(scope) {
+	if reference.ExpectedScope == nil || !quoteScopeMatchesPage(*reference.ExpectedScope, scope) {
 		return nil, nil, coordination.ErrScopeExpired
 	}
 	for _, id := range []string{reference.OwnerID, reference.RoleID, reference.ConversationID, reference.MessageID} {
@@ -90,4 +90,18 @@ func (e *Engine) reviewQuote(ctx context.Context, scope coordination.ExecutionSc
 		return quote, dependencies, nil
 	}
 	return nil, nil, errors.New("引用消息不存在、已删除或不属于当前授权会话")
+}
+
+func quoteScopeMatchesPage(expected, current coordination.ExecutionScope) bool {
+	expected = summaryAuthority(expected)
+	if expected.SpaceID != current.SpaceID || expected.CoreID != current.CoreID ||
+		expected.AuthorizationRealm != current.AuthorizationRealm ||
+		expected.InitiatorDeviceID != current.InitiatorDeviceID ||
+		expected.TargetDeviceID != current.TargetDeviceID ||
+		expected.ResourceOwnerID != current.TargetDeviceID ||
+		expected.RoleOwnerID != current.TargetDeviceID && expected.RoleOwnerID != current.CoreID ||
+		expected.RoleID != current.RoleID {
+		return false
+	}
+	return true
 }

@@ -320,7 +320,7 @@ func (r *WorkflowDefinitionRepository) ApplyWorkflowSyncEvent(ctx context.Contex
 		return result, err
 	}
 	defer func() {
-		if err := tx.Rollback(); err != nil {
+		if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
 			amitialog.Printf("[original-error] %v", err)
 		}
 	}()

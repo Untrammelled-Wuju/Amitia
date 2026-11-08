@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/devicemesh/agent"
+	"github.com/u-ai/backend/internal/devicemesh/executionjournal"
 	protocol "github.com/u-ai/backend/internal/deviceruntime/protocol"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
@@ -650,10 +651,10 @@ func (api *WorkflowAPI) meshRun(ctx context.Context, invoke protocol.RuntimeInvo
 	}
 	def, inst, err := api.meshOwned(ctx, invoke.SpaceID.String(), request.WorkflowID)
 	if err != nil {
-		return nil, err
+		return nil, executionjournal.Reject(err)
 	}
 	if !def.Enabled {
-		return nil, errors.New("workflow is disabled")
+		return nil, executionjournal.Reject(errors.New("workflow is disabled"))
 	}
 	if len(request.Input) == 0 {
 		request.Input = json.RawMessage(`{}`)
@@ -661,7 +662,7 @@ func (api *WorkflowAPI) meshRun(ctx context.Context, invoke protocol.RuntimeInvo
 	_, executor, _ := api.kernelContainer()
 	execution := request.Context
 	if execution.SpaceID != "" && strings.TrimSpace(execution.SpaceID) != invoke.SpaceID.String() {
-		return nil, errors.New("remote workflow context owner mismatch")
+		return nil, executionjournal.Reject(errors.New("remote workflow context owner mismatch"))
 	}
 	execution.SpaceID = invoke.SpaceID.String()
 	execution.WorkflowID = def.ID
@@ -709,13 +710,13 @@ func (api *WorkflowAPI) prepareMeshRun(ctx context.Context, invoke protocol.Runt
 	}
 	def, inst, err := api.meshOwned(ctx, invoke.SpaceID.String(), request.WorkflowID)
 	if err != nil {
-		return workflow.WorkflowDefinition{}, nil, request, workflow.ExecutionContext{}, nil, err
+		return workflow.WorkflowDefinition{}, nil, request, workflow.ExecutionContext{}, nil, executionjournal.Reject(err)
 	}
 	if !def.Enabled {
-		return workflow.WorkflowDefinition{}, nil, request, workflow.ExecutionContext{}, nil, errors.New("workflow is disabled")
+		return workflow.WorkflowDefinition{}, nil, request, workflow.ExecutionContext{}, nil, executionjournal.Reject(errors.New("workflow is disabled"))
 	}
 	if err := workflow.ValidateDAG(def.Nodes); err != nil {
-		return workflow.WorkflowDefinition{}, nil, request, workflow.ExecutionContext{}, nil, err
+		return workflow.WorkflowDefinition{}, nil, request, workflow.ExecutionContext{}, nil, executionjournal.Reject(err)
 	}
 	if len(request.Input) == 0 {
 		request.Input = json.RawMessage(`{}`)
@@ -727,7 +728,7 @@ func (api *WorkflowAPI) prepareMeshRun(ctx context.Context, invoke protocol.Runt
 	execution := request.Context
 	spaceID := strings.TrimSpace(invoke.SpaceID.String())
 	if execution.SpaceID != "" && strings.TrimSpace(execution.SpaceID) != spaceID {
-		return workflow.WorkflowDefinition{}, nil, request, workflow.ExecutionContext{}, nil, errors.New("remote workflow context owner mismatch")
+		return workflow.WorkflowDefinition{}, nil, request, workflow.ExecutionContext{}, nil, executionjournal.Reject(errors.New("remote workflow context owner mismatch"))
 	}
 	execution.SpaceID = spaceID
 	execution.WorkflowID = def.ID

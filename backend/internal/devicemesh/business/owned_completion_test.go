@@ -133,11 +133,15 @@ func TestOwnedConversationPreviewTracksBothSides(t *testing.T) {
 
 type phaseTitleModel struct {
 	*testModel
-	titles int
+	titles   int
+	titleErr error
 }
 
 func (m *phaseTitleModel) PlanOwnedTitle(context.Context, Inference, Generation) (string, error) {
 	m.titles++
+	if m.titleErr != nil {
+		return "", m.titleErr
+	}
 	return "测试对话", nil
 }
 
@@ -168,6 +172,18 @@ func TestStreamingReplyCompletesBeforeDurablePostProcessing(t *testing.T) {
 	if strings.Join(events, ",") != "started,delta,delta,reasoning-completed,output-completed" {
 		t.Fatalf("events=%v", events)
 	}
+	var savedCheckpoint checkpoint
+	var savedCheckpointBody []byte
+	if err := db.QueryRow(`SELECT body FROM kernel_device_owned_resources WHERE kind='checkpoint' AND resource_id='turn/phases'`).Scan(&savedCheckpointBody); err == nil {
+		if err := json.Unmarshal(savedCheckpointBody, &savedCheckpoint); err != nil {
+			t.Fatal(err)
+		}
+		if savedCheckpoint.Runtime == nil || savedCheckpoint.Runtime.Status != "completed" {
+			t.Fatalf("saved runtime status = %+v, want completed", savedCheckpoint.Runtime)
+		}
+	} else {
+		t.Fatal(err)
+	}
 	if _, err := db.Exec(`UPDATE kernel_device_memory_jobs SET next_attempt_at=0`); err != nil {
 		t.Fatal(err)
 	}
@@ -178,5 +194,39 @@ func TestStreamingReplyCompletesBeforeDurablePostProcessing(t *testing.T) {
 	resumed, err := engine.ResumeMemory(t.Context(), jobs[0])
 	if err != nil || resumed.MemoryStatus != "saved" || titles.titles != 1 || model.extractions.Load() != 1 {
 		t.Fatalf("resumed=%+v titles=%d error=%v", resumed, titles.titles, err)
+	}
+}
+
+func TestStreamingMemoryContinuesWhenTitlePostProcessingFails(t *testing.T) {
+	engine, db, coordinator, model := engineHarness(t)
+	titles := &phaseTitleModel{testModel: model, titleErr: errors.New("标题模型返回无效 JSON")}
+	engine.model = titles
+	model.generate = func(context.Context, Inference) (Generation, error) {
+		return Generation{Text: "reply"}, nil
+	}
+	response, err := engine.RunEvents(t.Context(), Request{SpaceID: "core", DeviceID: "a", CoreID: "core", RoleID: "role", ConversationID: "conversation", RequestID: "title-failure", Message: "你好"}, func(Event) error { return nil })
+	if err != nil || !response.Saved || response.MemoryStatus != "pending" {
+		t.Fatalf("response=%+v error=%v", response, err)
+	}
+	if _, err := db.Exec(`UPDATE kernel_device_memory_jobs SET next_attempt_at=0`); err != nil {
+		t.Fatal(err)
+	}
+	jobs, err := coordinator.PendingMemoryJobs(t.Context())
+	if err != nil || len(jobs) != 1 {
+		t.Fatalf("jobs=%v error=%v", jobs, err)
+	}
+	resumed, err := engine.ResumeMemory(t.Context(), jobs[0])
+	if err != nil {
+		t.Fatalf("ResumeMemory() error = %v", err)
+	}
+	if resumed.MemoryStatus != "saved" || model.extractions.Load() != 1 {
+		t.Fatalf("memory did not complete after title failure: %+v extractions=%d", resumed, model.extractions.Load())
+	}
+	if len(resumed.PostProcessingIssues) != 1 || resumed.PostProcessingIssues[0].Stage != "title" || resumed.PostProcessingIssues[0].Message != "标题模型返回无效 JSON" {
+		t.Fatalf("title issue was not preserved: %+v", resumed.PostProcessingIssues)
+	}
+	jobs, err = coordinator.PendingMemoryJobs(t.Context())
+	if err != nil || len(jobs) != 0 {
+		t.Fatalf("completed job remained queued: jobs=%v error=%v", jobs, err)
 	}
 }

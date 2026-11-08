@@ -12,7 +12,7 @@ import '../../backend_transport/connectivity/backend_connectivity_probe.dart';
 export '../embedded/embedded_runtime_controller.dart'
     show EmbeddedRuntimeStatus;
 
-const Duration _embeddedRuntimeStartupTimeout = Duration(seconds: 100);
+const Duration _embeddedRuntimeStartupTimeout = Duration(minutes: 5);
 const Duration _embeddedRuntimePollInterval = Duration(milliseconds: 250);
 
 enum RuntimeDeploymentState { unavailable, starting, ready, stopping, failed }
@@ -91,6 +91,12 @@ class MobileBackendStatus {
       generation.hashCode;
 }
 
+bool shouldShowMobileBackendUnavailableBanner(MobileBackendStatus? status) {
+  return status != null &&
+      status.mode == MobileDeploymentMode.cloud &&
+      status.businessCore.state == RuntimeDeploymentState.failed;
+}
+
 abstract interface class RemoteCoreProbe {
   Future<BackendConnectivityResult> probe(Uri baseUri, {Duration timeout});
 }
@@ -146,6 +152,8 @@ abstract interface class MobileBackendLifecycle {
   Stream<MobileBackendStatus> get statusStream;
   MobileBackendStatus get currentStatus;
   Future<void> reconcile(MobileDeploymentConfig config);
+  void pauseAutomaticReconciliation();
+  void resumeAutomaticReconciliation();
   Future<void> shutdown();
 }
 
@@ -153,22 +161,29 @@ class DefaultMobileBackendLifecycle implements MobileBackendLifecycle {
   final BackendTopologyResolver _resolver;
   final EmbeddedRuntimeController _embeddedRuntime;
   final RemoteCoreProbe _remoteProbe;
+  final Duration _monitorInterval;
 
   final StreamController<MobileBackendStatus> _statusController =
       StreamController<MobileBackendStatus>.broadcast();
 
   MobileBackendStatus _currentStatus = MobileBackendStatus.initial();
+  MobileDeploymentConfig? _monitoredConfig;
+  Timer? _monitorTimer;
   int _generation = 0;
   Future<void> _reconcileChain = Future.value();
+  bool _monitorRefreshInFlight = false;
+  bool _automaticReconciliationPaused = false;
   bool _disposed = false;
 
   DefaultMobileBackendLifecycle({
     required BackendTopologyResolver resolver,
     required EmbeddedRuntimeController embeddedRuntime,
     required RemoteCoreProbe remoteProbe,
+    Duration monitorInterval = const Duration(seconds: 10),
   }) : _resolver = resolver,
        _embeddedRuntime = embeddedRuntime,
-       _remoteProbe = remoteProbe;
+       _remoteProbe = remoteProbe,
+       _monitorInterval = monitorInterval;
 
   @override
   Stream<MobileBackendStatus> get statusStream => _statusController.stream;
@@ -178,12 +193,53 @@ class DefaultMobileBackendLifecycle implements MobileBackendLifecycle {
 
   @override
   Future<void> reconcile(MobileDeploymentConfig config) async {
+    _automaticReconciliationPaused = false;
+    await _enqueueReconcile(config);
+  }
+
+  Future<void> _enqueueReconcile(MobileDeploymentConfig config) async {
+    _monitoredConfig = config;
+    _scheduleMonitor();
     final capturedGeneration = ++_generation;
     _reconcileChain = _reconcileChain.then((_) async {
       if (_disposed || capturedGeneration != _generation) return;
       await _performReconcile(config, capturedGeneration);
     });
     await _reconcileChain;
+  }
+
+  @override
+  void pauseAutomaticReconciliation() {
+    _automaticReconciliationPaused = true;
+    _generation++;
+  }
+
+  @override
+  void resumeAutomaticReconciliation() {
+    _automaticReconciliationPaused = false;
+  }
+
+  void _scheduleMonitor() {
+    if (_disposed ||
+        _monitorTimer != null ||
+        _monitorInterval <= Duration.zero) {
+      return;
+    }
+    _monitorTimer = Timer.periodic(_monitorInterval, (_) {
+      final config = _monitoredConfig;
+      if (_disposed ||
+          _automaticReconciliationPaused ||
+          config == null ||
+          _monitorRefreshInFlight) {
+        return;
+      }
+      _monitorRefreshInFlight = true;
+      unawaited(
+        _enqueueReconcile(config).whenComplete(() {
+          _monitorRefreshInFlight = false;
+        }),
+      );
+    });
   }
 
   Future<void> _performReconcile(
@@ -459,6 +515,9 @@ class DefaultMobileBackendLifecycle implements MobileBackendLifecycle {
   Future<void> shutdown() async {
     _disposed = true;
     _generation++;
+    _monitorTimer?.cancel();
+    _monitorTimer = null;
+    _monitoredConfig = null;
     await _embeddedRuntime.stop();
     await _statusController.close();
   }

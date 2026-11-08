@@ -4,9 +4,13 @@ import { useApi } from "@/composables/useApi";
 import {
   getDeploymentConfig,
   getRuntimeConnection,
+  resolveApiUrl,
 } from "@/runtime/runtime-adapter";
 import { getWebDeviceCredential, getWebDeviceMeshIdentity } from "@/runtime/web-device-mesh";
 import { useDeviceManagementIntent, deviceManagementRequestConfig, type DeviceManagementIntent } from "@/composables/useDeviceManagementIntent";
+import { createAuthenticatedFetchInit } from "@/runtime/request-auth";
+import { consumeSSEBody } from "@/runtime/sse-stream";
+import { isDeviceBound, isDeviceOnline } from "@/runtime/device-presence";
 
 type Runtime = { runtimeId: string; presence: string; runtimeSessionId?: string };
 type Policy = { deviceId: string; coordinated: boolean; administrator: boolean; modeRevision: number; permissionRevision: number; providerEpoch: number; selectedRole: string };
@@ -22,12 +26,15 @@ export function useDeviceManagement() {
   const devices = ref<Device[]>([]);
   const grantDevice = ref<Device | null>(null);
   const grantsOpen = ref(false);
-  const callDevice = ref<Device | null>(null);
-  const callOpen = ref(false);
   type PairingApproval = { requestId: string; deviceId: string; platform: string; label: string; revision: number };
   const approvals = ref<PairingApproval[]>([]);
   let disposed = false;
-  let approvalTimer: ReturnType<typeof setInterval> | undefined;
+  let approvalAbort: AbortController | undefined;
+  let approvalReconnectTimer: ReturnType<typeof setTimeout> | undefined;
+  let approvalReconnectAttempt = 0;
+  let catalogAbort: AbortController | undefined;
+  let catalogReconnectTimer: ReturnType<typeof setTimeout> | undefined;
+  let catalogReconnectAttempt = 0;
   const syncStatus = ref<Record<string, Record<string, any>>>({});
   const localIdentity = ref<LocalIdentity | null>(null);
   const localMeshStatus = ref<Record<string, any>>({});
@@ -46,6 +53,7 @@ export function useDeviceManagement() {
     canAdminister.value = false;
     coreConsoleDeviceId.value = "";
     error.value = "Core或原设备管理权限已变化，请刷新";
+    stopApprovalStream();
   });
 
   async function originalManagement(target?: string, administrator = false) {
@@ -58,7 +66,9 @@ export function useDeviceManagement() {
   }
   const localMeshState = computed(() => String(localMeshStatus.value?.state || "unknown").toLowerCase());
   const localMeshBound = computed(() => !["", "unknown", "unprovisioned"].includes(localMeshState.value));
-  const onlineDeviceCount = computed(() => devices.value.filter((device) => device.trustState !== "revoked" && device.presence === "online").length);
+  const ownDeviceId = computed(() => String(localIdentity.value?.deviceId || currentPolicy.value?.deviceId || ""));
+  const boundDevices = computed(() => devices.value.filter((device) => isDeviceBound(device) && device.deviceId !== ownDeviceId.value));
+  const onlineDeviceCount = computed(() => boundDevices.value.filter(isDeviceOnline).length);
 
 
   async function refresh() {
@@ -79,7 +89,11 @@ export function useDeviceManagement() {
       coreConsoleDeviceId.value = state.coreConsoleDeviceId || "";
       coordinationAvailable.value = state.coordinationAvailable === true;
       await refreshPairingApprovals();
-      await Promise.all(devices.value.map((device) => loadSync(device.deviceId, false)));
+      if (canAdminister.value) void startApprovalStream();
+      else stopApprovalStream();
+      if (canAdminister.value) void startCatalogStream();
+      else stopCatalogStream();
+      await Promise.all(boundDevices.value.map((device) => loadSync(device.deviceId, false)));
     } catch (err: any) {
       error.value = err?.message || "设备列表加载失败";
     } finally {
@@ -103,9 +117,103 @@ export function useDeviceManagement() {
       await api.put(`/api/device-mesh/v1/pairing/approvals/${encodeURIComponent(request.requestId)}`, { allow, expectedRevision: request.revision }, deviceManagementRequestConfig(intent));
       await management.validate(intent);
       await refreshPairingApprovals();
+      if (allow) await refresh();
       ElMessage.success(allow ? "已批准该设备配对" : "已拒绝该设备配对");
     } catch (error: any) { ElMessage.error(error?.message || "配对审批失败"); }
     finally { busy.value = ""; }
+  }
+
+  function stopApprovalStream() {
+    approvalAbort?.abort();
+    approvalAbort = undefined;
+    if (approvalReconnectTimer) {
+      clearTimeout(approvalReconnectTimer);
+      approvalReconnectTimer = undefined;
+    }
+  }
+
+  function stopCatalogStream() {
+    catalogAbort?.abort();
+    catalogAbort = undefined;
+    if (catalogReconnectTimer) {
+      clearTimeout(catalogReconnectTimer);
+      catalogReconnectTimer = undefined;
+    }
+  }
+
+  function scheduleCatalogReconnect() {
+    if (disposed || !canAdminister.value || catalogReconnectTimer) return;
+    const delay = Math.min(30_000, 1000 * 2 ** catalogReconnectAttempt++);
+    catalogReconnectTimer = setTimeout(() => {
+      catalogReconnectTimer = undefined;
+      void startCatalogStream();
+    }, delay);
+  }
+
+  async function startCatalogStream() {
+    if (disposed || !canAdminister.value || catalogAbort) return;
+    const controller = new AbortController();
+    catalogAbort = controller;
+    try {
+      const path = "/api/device-mesh/v1/business/devices/events";
+      const response = await fetch(await resolveApiUrl(path), await createAuthenticatedFetchInit(path, {
+        headers: { Accept: "text/event-stream", "Cache-Control": "no-store" },
+        signal: controller.signal,
+      }));
+      if (!response.ok || !response.body || !response.headers.get("Content-Type")?.includes("text/event-stream")) {
+        throw new Error(await response.text() || `设备能力目录事件流连接失败: HTTP ${response.status}`);
+      }
+      catalogReconnectAttempt = 0;
+      await consumeSSEBody(response.body, controller.signal, (event) => {
+        if (event.event !== "device_capabilities") return;
+        window.dispatchEvent(new CustomEvent("amitia:device-capabilities-changed", {
+          detail: JSON.parse(event.data),
+        }));
+      });
+      if (!controller.signal.aborted) scheduleCatalogReconnect();
+    } catch (error) {
+      if (!controller.signal.aborted) console.error("[original-error]", error);
+      scheduleCatalogReconnect();
+    } finally {
+      if (catalogAbort === controller) catalogAbort = undefined;
+    }
+  }
+
+  function scheduleApprovalReconnect() {
+    if (disposed || !canAdminister.value || approvalReconnectTimer) return;
+    const delay = Math.min(30_000, 1000 * 2 ** approvalReconnectAttempt++);
+    approvalReconnectTimer = setTimeout(() => {
+      approvalReconnectTimer = undefined;
+      void startApprovalStream();
+    }, delay);
+  }
+
+  async function startApprovalStream() {
+    if (disposed || !canAdminister.value || approvalAbort) return;
+    const controller = new AbortController();
+    approvalAbort = controller;
+    try {
+      const path = "/api/device-mesh/v1/pairing/approvals/stream";
+      const response = await fetch(await resolveApiUrl(path), await createAuthenticatedFetchInit(path, {
+        headers: { Accept: "text/event-stream", "Cache-Control": "no-store" },
+        signal: controller.signal,
+      }));
+      if (!response.ok || !response.body || !response.headers.get("Content-Type")?.includes("text/event-stream")) {
+        throw new Error(await response.text() || `配对审批事件流连接失败: HTTP ${response.status}`);
+      }
+      approvalReconnectAttempt = 0;
+      await consumeSSEBody(response.body, controller.signal, (event) => {
+        if (event.event !== "pairing_approvals") return;
+        const payload = JSON.parse(event.data) as { requests?: PairingApproval[] };
+        approvals.value = payload.requests || [];
+      });
+      if (!controller.signal.aborted) scheduleApprovalReconnect();
+    } catch (error) {
+      if (!controller.signal.aborted) console.error("[original-error]", error);
+      scheduleApprovalReconnect();
+    } finally {
+      if (approvalAbort === controller) approvalAbort = undefined;
+    }
   }
 
   async function loadCurrentDevice() {
@@ -114,22 +222,25 @@ export function useDeviceManagement() {
       const deployment = await getDeploymentConfig();
       deploymentMode.value = deployment.mode || "local";
       if (desktopAvailable.value) {
-        const [identity, status] = await Promise.all([
-          window.amitiaDesktop?.getMeshIdentity?.(),
-          window.amitiaDesktop?.getMeshStatus?.(),
-        ]);
+        const identity = await window.amitiaDesktop?.getMeshIdentity?.();
         localIdentity.value = identity || null;
-        localMeshStatus.value = status || {};
+        localMeshStatus.value = deploymentMode.value === "local"
+          ? { state: "ready", deviceId: identity?.deviceId, runtimeId: identity?.runtimeId }
+          : (await window.amitiaDesktop?.getMeshStatus?.()) || {};
         return;
       }
 
       const connection = await getRuntimeConnection();
       const identity = getWebDeviceMeshIdentity();
-      const credential = getWebDeviceCredential(connection.apiBaseURL);
       localIdentity.value = identity;
-      localMeshStatus.value = credential
-        ? { state: "connected", cloudBaseUrl: credential.cloudBaseURL, deviceId: credential.deviceId, runtimeId: credential.runtimeId }
-        : { state: "unprovisioned", deviceId: identity.deviceId, runtimeId: identity.runtimeId };
+      if (deploymentMode.value === "local") {
+        localMeshStatus.value = { state: "ready", deviceId: identity.deviceId, runtimeId: identity.runtimeId };
+      } else {
+        const credential = getWebDeviceCredential(connection.apiBaseURL);
+        localMeshStatus.value = credential
+          ? { state: "connected", cloudBaseUrl: credential.cloudBaseURL, deviceId: credential.deviceId, runtimeId: credential.runtimeId }
+          : { state: "unprovisioned", deviceId: identity.deviceId, runtimeId: identity.runtimeId };
+      }
     } catch (err: any) {
       localIdentity.value = null;
       localMeshStatus.value = {};
@@ -225,7 +336,7 @@ return;
     const revision = device.coordination.permissionRevision;
     const grant = !device.coordination.administrator;
     try {
-      await ElMessageBox.confirm(grant ? `「${device.label || device.deviceId}」将可以完整配置当前 Core 并查询 Core 数据。` : '撤销后该设备将立即失去 Core 管理权限。', grant ? '授予云端管理员' : '撤销云端管理员', { type: 'warning', confirmButtonText: '确认', cancelButtonText: '取消' });
+      await ElMessageBox.confirm(grant ? `「${device.label || device.deviceId}」将可以完整配置当前统筹中心并查询中心数据。` : '撤销后该设备将立即失去中心管理权限。', grant ? '授予中心管理员' : '撤销中心管理员', { type: 'warning', confirmButtonText: '确认', cancelButtonText: '取消' });
     } catch (error) {
   console.error("[original-error]", error);
 return; }
@@ -243,18 +354,12 @@ return; }
 
   onMounted(async () => {
     await refreshAll();
-    if (disposed) return;
-    let refreshing = false;
-    approvalTimer = setInterval(async () => {
-      if (disposed || refreshing || !canAdminister.value) return;
-      refreshing = true;
-      try { await refreshPairingApprovals(); } catch (error) {
-  console.error("[original-error]", error);
-}
-      finally { refreshing = false; }
-    }, 2000);
+    if (!disposed && canAdminister.value) {
+      void startApprovalStream();
+      void startCatalogStream();
+    }
   });
-  onUnmounted(() => { disposed = true; if (approvalTimer) clearInterval(approvalTimer); });
+  onUnmounted(() => { disposed = true; stopApprovalStream(); stopCatalogStream(); });
 
   return {
     loading,
@@ -262,10 +367,9 @@ return; }
     error,
     localError,
     devices,
+    boundDevices,
     grantDevice,
     grantsOpen,
-    callDevice,
-    callOpen,
     approvals,
     localIdentity,
     deploymentMode,

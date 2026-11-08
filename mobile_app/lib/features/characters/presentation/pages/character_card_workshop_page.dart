@@ -13,6 +13,7 @@ import '../../../../core/services/providers.dart';
 import '../../../../core/services/role_authority.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import '../../../../core/widgets/shared_core_read_only_banner.dart';
 import '../widgets/character_generation_chat.dart';
 import '../widgets/character_personality_editor.dart';
 
@@ -122,6 +123,8 @@ class _CharacterCardWorkshopPageState
   @override
   Widget build(BuildContext context) {
     final charactersAsync = ref.watch(characterListProvider);
+    final accessAsync = ref.watch(sharedCoreDataAccessProvider);
+    final canWrite = accessAsync.valueOrNull?.write ?? false;
     return PopScope(
       canPop: !_saving && !(_creating && _editing),
       onPopInvokedWithResult: (didPop, result) {
@@ -144,7 +147,7 @@ class _CharacterCardWorkshopPageState
               AmitiaIconButton(
                 icon: Icons.file_upload_outlined,
                 tooltip: '导入角色卡',
-                onPressed: _importing || _saving || _loading
+                onPressed: !canWrite || _importing || _saving || _loading
                     ? null
                     : _importCard,
               ),
@@ -160,30 +163,44 @@ class _CharacterCardWorkshopPageState
         ),
         body: SafeArea(
           top: false,
-          child: IgnorePointer(
-            ignoring: _saving,
-            child: charactersAsync.when(
-              loading: () => const AmitiaLoadingState(message: '正在加载角色...'),
-              error: (err, _) => AmitiaErrorState(
-                message: '角色加载失败：$err',
-                onRetry: () => ref.invalidate(characterListProvider),
+          child: Column(
+            children: [
+              if (accessAsync.valueOrNull?.readOnly == true)
+                SharedCoreReadOnlyBanner(access: accessAsync.valueOrNull!),
+              Expanded(
+                child: IgnorePointer(
+                  ignoring: _saving,
+                  child: charactersAsync.when(
+                    loading: () =>
+                        const AmitiaLoadingState(message: '正在加载角色...'),
+                    error: (err, _) => AmitiaErrorState(
+                      message: '角色加载失败：$err',
+                      onRetry: () => ref.invalidate(characterListProvider),
+                    ),
+                    data: (characters) =>
+                        _buildBody(context, characters, canWrite),
+                  ),
+                ),
               ),
-              data: (characters) => _buildBody(context, characters),
-            ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _buildBody(BuildContext context, List<CharacterDto> characters) {
+  Widget _buildBody(
+    BuildContext context,
+    List<CharacterDto> characters,
+    bool canWrite,
+  ) {
     if (!_inEditor && characters.isEmpty) {
       return AmitiaEmptyState(
         icon: Icons.badge_outlined,
         title: '还没有角色卡',
         subtitle: '创建角色卡，通过对话生成后手动调整',
-        actionText: '创建角色卡',
-        onAction: () => _openEditor(),
+        actionText: canWrite ? '创建角色卡' : null,
+        onAction: canWrite ? () => _openEditor() : null,
       );
     }
     final selected = characters
@@ -230,7 +247,7 @@ class _CharacterCardWorkshopPageState
       children: [
         if (!_inEditor) ...[
           OutlinedButton.icon(
-            onPressed: () => _openEditor(),
+            onPressed: canWrite ? () => _openEditor() : null,
             icon: const Icon(Icons.add),
             label: const Text('创建角色卡'),
           ),
@@ -239,7 +256,7 @@ class _CharacterCardWorkshopPageState
               title: Text(character.name),
               subtitle: Text(character.identity),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () => _openEditor(character: character),
+              onTap: canWrite ? () => _openEditor(character: character) : null,
             ),
         ],
         SizedBox(height: AppSpacing.lg),
@@ -274,7 +291,7 @@ class _CharacterCardWorkshopPageState
             maxLines: field.key == 'boundaryRules' ? 4 : 1,
           ),
         OutlinedButton.icon(
-          onPressed: _saving ? null : _pickAvatar,
+          onPressed: _saving || !_canWrite ? null : _pickAvatar,
           icon: const Icon(Icons.add_photo_alternate_outlined),
           label: Text(_pendingAvatarPath == null ? '上传角色头像' : '已选择头像，保存时上传'),
         ),
@@ -295,7 +312,7 @@ class _CharacterCardWorkshopPageState
         CheckboxListTile(
           title: const Text('设为当前启用角色'),
           value: _isActive,
-          onChanged: character?.isActive == 1 || _saving
+          onChanged: character?.isActive == 1 || _saving || !_canWrite
               ? null
               : (value) => setState(() => _isActive = value ?? false),
         ),
@@ -304,11 +321,14 @@ class _CharacterCardWorkshopPageState
           label: _saving ? '保存中...' : '保存角色卡',
           icon: Icons.save_outlined,
           isFullWidth: true,
-          onPressed: _saving ? null : () => _saveCard(character),
+          onPressed: _saving || !_canWrite ? null : () => _saveCard(character),
         ),
       ],
     );
   }
+
+  bool get _canWrite =>
+      ref.read(sharedCoreDataAccessProvider).valueOrNull?.write ?? false;
 
   Widget _field(
     String label,

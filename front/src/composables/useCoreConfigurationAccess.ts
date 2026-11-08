@@ -18,11 +18,10 @@ export function useCoreConfigurationAccess() {
   const canConfigure = ref(false);
   const checking = ref(true);
   const contextKey = ref("");
-  const explanation = "云端统筹模式的模型由 Core 统一管理。请在 Core 控制页面修改，或由 Core 授予当前设备管理员权限。";
+  const explanation = "模型由统筹中心统一管理。只有获得中心管理员权限的设备可以修改。";
   let generation = 0;
   let refreshNumber = 0;
   let pending: { generation: number; promise: Promise<string> } | undefined;
-  let timer: ReturnType<typeof setInterval> | undefined;
 
   function refresh(): Promise<string> {
     if (pending?.generation === generation) return pending.promise;
@@ -81,13 +80,15 @@ if (generation === currentGeneration && request === refreshNumber) {
     void refresh();
     window.addEventListener("amitia:runtime-connection-changed", invalidate);
     window.addEventListener("amitia:execution-scope-changed", invalidate);
-    timer = setInterval(() => { void refresh(); }, 2000);
+    window.addEventListener("focus", invalidate);
+    document.addEventListener("visibilitychange", invalidate);
   });
   onUnmounted(() => {
     generation++;
     window.removeEventListener("amitia:runtime-connection-changed", invalidate);
     window.removeEventListener("amitia:execution-scope-changed", invalidate);
-    if (timer) clearInterval(timer);
+    window.removeEventListener("focus", invalidate);
+    document.removeEventListener("visibilitychange", invalidate);
   });
   return { canConfigure, checking, contextKey, explanation, refresh, requireAccess };
 }

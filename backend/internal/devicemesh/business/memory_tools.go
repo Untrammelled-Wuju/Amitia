@@ -311,7 +311,16 @@ func (e *Engine) queryMemoryTool(ctx context.Context, request Request, name stri
 	if exact {
 		mode = "keyword"
 	}
-	page, err := e.SearchOwnedMemories(ctx, request, MemoryManagementQuery{ContextUsable: true, IncludeDormant: true, Query: query, Mode: mode, ExactTitle: exact, Limit: memoryToolInt(args, "limit", 10, 1, 50), Types: memoryToolStrings(args, "types"), Layers: memoryToolStrings(args, "layers"), MinimumImportance: memoryToolInt(args, "min_importance", 0, 0, 10), Time: memoryTimeFilterArgs(args)})
+	managementQuery := MemoryManagementQuery{ContextUsable: true, IncludeDormant: true, Query: query, Mode: mode, ExactTitle: exact, Limit: memoryToolInt(args, "limit", 10, 1, 50), Types: memoryToolStrings(args, "types"), Layers: memoryToolStrings(args, "layers"), MinimumImportance: memoryToolInt(args, "min_importance", 0, 0, 10), Time: memoryTimeFilterArgs(args)}
+	page, err := e.SearchOwnedMemories(ctx, request, managementQuery)
+	semanticFallback := false
+	semanticError := ""
+	if err != nil && mode == "hybrid" && errors.Is(err, ErrMemorySemanticUnavailable) {
+		semanticFallback = true
+		semanticError = err.Error()
+		managementQuery.Mode = "keyword"
+		page, err = e.SearchOwnedMemories(ctx, request, managementQuery)
+	}
 	if err != nil {
 		return MemoryToolResponse{}, err
 	}
@@ -322,7 +331,14 @@ func (e *Engine) queryMemoryTool(ctx context.Context, request Request, name stri
 		}
 	}
 	if !exact {
-		return MemoryToolResponse{Text: string(body(selected)), Resources: selected, Metadata: map[string]interface{}{"count": len(selected), "scores": page.Scores}}, nil
+		text := string(body(selected))
+		metadata := map[string]interface{}{"count": len(selected), "scores": page.Scores}
+		if semanticFallback {
+			text = string(body(map[string]interface{}{"results": selected, "semanticFallback": true, "semanticError": semanticError}))
+			metadata["semanticFallback"] = true
+			metadata["semanticError"] = semanticError
+		}
+		return MemoryToolResponse{Text: text, Resources: selected, Metadata: metadata}, nil
 	}
 	if len(selected) == 0 {
 		return MemoryToolResponse{Text: "未找到该标题的记忆", Metadata: map[string]interface{}{"count": 0}}, nil

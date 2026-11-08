@@ -558,6 +558,30 @@ func (h *PageHost) RegisterPage(ctx context.Context, def *ExtensionPageDefinitio
 	return h.registry.Register(ctx, def)
 }
 
+func (h *PageHost) EnsurePage(ctx context.Context, def *ExtensionPageDefinition) error {
+	if def == nil {
+		return ErrInvalidPageDefinition
+	}
+	existing, err := h.registry.Resolve(ctx, def.extensionID, def.PageSpec.PageID)
+	if err == nil {
+		if existing.contributionID != def.contributionID ||
+			existing.extensionID != def.extensionID ||
+			existing.moduleID != def.moduleID ||
+			existing.generation != def.generation ||
+			existing.contractVersion != def.contractVersion ||
+			existing.PageSpec.EntryKind != def.PageSpec.EntryKind ||
+			existing.PageSpec.EntryPath != def.PageSpec.EntryPath ||
+			existing.PageSpec.SchemaPath != def.PageSpec.SchemaPath {
+			return fmt.Errorf("%w: %s#%s", ErrPageExists, def.extensionID, def.PageSpec.PageID)
+		}
+		return nil
+	}
+	if !errors.Is(err, ErrPageNotFound) {
+		return err
+	}
+	return h.registry.Register(ctx, def)
+}
+
 func (h *PageHost) UnregisterPage(ctx context.Context, contributionID ContributionID) error {
 	return h.registry.Unregister(ctx, contributionID)
 }

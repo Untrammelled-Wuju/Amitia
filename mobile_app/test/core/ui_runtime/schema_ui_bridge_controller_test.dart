@@ -18,6 +18,7 @@ class _FakeExtensionService extends ExtensionService {
   final List<String> conversations = <String>[];
   final List<String> invokedActions = <String>[];
   final List<Map<String, dynamic>> inputs = <Map<String, dynamic>>[];
+  final List<Map<String, dynamic>?> metas = <Map<String, dynamic>?>[];
 
   @override
   Future<Map<String, dynamic>> createSchemaUISession({
@@ -48,10 +49,12 @@ class _FakeExtensionService extends ExtensionService {
     required String nonce,
     required String token,
     Map<String, dynamic> input = const <String, dynamic>{},
+    Map<String, dynamic>? meta,
   }) async {
     invokeCount++;
     invokedActions.add('$sessionId:$actionId:$contractVersion');
     inputs.add(Map<String, dynamic>.from(input));
+    metas.add(meta == null ? null : Map<String, dynamic>.from(meta));
     return <String, dynamic>{'ok': true, 'message': 'done'};
   }
 
@@ -65,6 +68,7 @@ ActionInvocation _invocation(String id) => ActionInvocation(
   actionId: id,
   target: 'invoke_capability',
   input: const <String, dynamic>{'value': 1},
+  meta: const <String, dynamic>{'node_id': 'button'},
   extensionId: 'ext.test',
   contributionId: 'contribution.test',
   ownerIdentity: const <String, dynamic>{},
@@ -113,6 +117,10 @@ void main() {
 
     expect(service.createCount, 1);
     expect(service.invokeCount, 2);
+    expect(service.metas, [
+      {'node_id': 'button'},
+      {'node_id': 'button'},
+    ]);
     expect(service.invokedActions, [
       'session-1:remote.one:3',
       'session-1:remote.two:3',

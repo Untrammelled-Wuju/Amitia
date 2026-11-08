@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	"github.com/u-ai/backend/internal/devicemesh/gamemode"
 	"github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
@@ -74,6 +76,22 @@ func ownedToolScope(inference business.Inference, call string) kernel.Invocation
 	return invocation
 }
 
+func (r *meshOwnedToolRuntime) executionScope(ctx context.Context, inference business.Inference, call string) (kernel.InvocationScope, error) {
+	scope := ownedToolScope(inference, call)
+	if r == nil || r.services == nil || r.services.GameMode == nil || scope.ExecContext == nil {
+		return scope, nil
+	}
+	session, err := r.services.GameMode.Get(ctx, inference.Scope.SpaceID)
+	if err != nil {
+		return scope, fmt.Errorf("read game mode for owned tool scope: %w", err)
+	}
+	if session.DeviceID == "" || (session.State != gamemode.StateActive && session.State != gamemode.StatePaused) {
+		return scope, nil
+	}
+	scope.ExecContext.Metadata["gameHostDeviceId"] = session.DeviceID
+	return scope, nil
+}
+
 func (r *meshOwnedToolRuntime) definition(ctx context.Context, inference business.Inference, name string) (capability.ToolDefinition, error) {
 	if err := coordination.ValidateCurrent(ctx); err != nil {
 		return capability.ToolDefinition{}, err
@@ -116,6 +134,17 @@ func (r *meshOwnedToolRuntime) authorizeDefinition(ctx context.Context, inferenc
 	if err := mesh.Coordination.RequireCapability(ctx, inference.Scope.SpaceID, inference.Scope.InitiatorDeviceID, inference.Scope.TargetDeviceID, capabilityID); err != nil {
 		return capability.ToolDefinition{}, err
 	}
+	if definition.Runtime.RuntimeType == capability.RuntimeTypeGameHost {
+		session, err := r.services.GameMode.Get(ctx, inference.Scope.SpaceID)
+		if err != nil {
+			return capability.ToolDefinition{}, err
+		}
+		if session.DeviceID != "" && (session.State == gamemode.StateActive || session.State == gamemode.StatePaused) {
+			if err := mesh.Coordination.RequireCapability(ctx, inference.Scope.SpaceID, inference.Scope.InitiatorDeviceID, session.DeviceID, "game.execute"); err != nil {
+				return capability.ToolDefinition{}, fmt.Errorf("game host device %s: %w", session.DeviceID, err)
+			}
+		}
+	}
 	if !inference.Scope.Coordinated && (definition.Runtime.RuntimeType == capability.RuntimeTypeInternal || definition.Runtime.RuntimeType == capability.RuntimeTypeTask || definition.Runtime.RuntimeType == capability.RuntimeTypeWorkflow) {
 		aware, _ := definition.Metadata["deviceMeshOwnershipAware"].(bool)
 		if !aware {
@@ -129,7 +158,11 @@ func (r *meshOwnedToolRuntime) Tools(ctx context.Context, inference business.Inf
 	if r.services == nil || r.services.KernelContainer == nil || r.services.KernelContainer.ToolFacade == nil {
 		return nil, errors.New("Core 能力调用端口未就绪")
 	}
-	available, err := r.services.KernelContainer.ToolFacade.ModelTools(ctx, ownedToolScope(inference, ""))
+	invocationScope, err := r.executionScope(ctx, inference, "")
+	if err != nil {
+		return nil, err
+	}
+	available, err := r.services.KernelContainer.ToolFacade.ModelTools(ctx, invocationScope)
 	if err != nil {
 		return nil, err
 	}
@@ -335,7 +368,19 @@ func (r *meshOwnedToolRuntime) executeDefinition(ctx context.Context, inference 
 			return r.saveOwnedToolResult(current, inference.Scope, key, fingerprint, result, inference.ConversationID)
 		})
 	}
-	result, _, executionErr := r.services.KernelContainer.ToolFacade.ExecuteModelToolStream(ctx, definition.ID, input, ownedToolScope(inference, call), key, ownedToolProgressSink{inference: inference, call: call, name: definition.ModelName})
+	ctx = kernel.WithValidatedConversationAuthority(
+		ctx,
+		inference.ConversationID,
+		inference.Scope.SpaceID,
+		inference.Scope.RoleID,
+		inference.Scope.ResourceOwnerID,
+		inference.Scope.CoreID,
+	)
+	invocationScope, err := r.executionScope(ctx, inference, call)
+	if err != nil {
+		return chat.ToolResult{}, err
+	}
+	result, _, executionErr := r.services.KernelContainer.ToolFacade.ExecuteModelToolStream(ctx, definition.ID, input, invocationScope, key, ownedToolProgressSink{inference: inference, call: call, name: definition.ModelName})
 	if executionErr != nil {
 		return chat.ToolResult{}, executionErr
 	}

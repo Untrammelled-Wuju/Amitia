@@ -63,6 +63,9 @@ export function readCoreEndpoint(dataDir: string): CoreEndpoint | null {
     const raw = fs.readFileSync(coreEndpointPath(dataDir), "utf8");
     return parseCoreEndpoint(JSON.parse(raw));
   } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return null;
+    }
   console.error("[original-error]", error);
 return null;
   }

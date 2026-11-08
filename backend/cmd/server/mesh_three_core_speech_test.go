@@ -61,8 +61,8 @@ func TestThreeRealCoreSpeechUsesCurrentRoleAndOwnerAndCancelsOnProviderSwitch(t 
 			VoiceType string `json:"voiceType"`
 		} `json:"voice"`
 	}
-	if json.Unmarshal(input.Role.Profile, &deviceProfile) != nil || input.Role.Name != a.core+" 的角色" || deviceProfile.Voice.VoiceType != a.core+"-preset" {
-		t.Fatal("OFF语音未携带Source独立角色和声学快照")
+	if json.Unmarshal(input.Role.Profile, &deviceProfile) != nil || input.Role.Name != b.core+" 的角色" || deviceProfile.Voice.VoiceType != b.core+"-preset" {
+		t.Fatal("OFF语音未携带当前Core角色和声学快照")
 	}
 	assertThreeCorePrivateCopies(t, b, a.device.DeviceID.String())
 	policy, err := b.services.DeviceMesh.Coordination.Get(t.Context(), b.core, a.device.DeviceID.String())

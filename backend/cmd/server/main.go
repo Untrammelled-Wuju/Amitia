@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/platform/process"
 	"github.com/u-ai/backend/internal/runtimeendpoint"
 	"github.com/u-ai/backend/internal/runtimeport"
 	"github.com/u-ai/backend/internal/runtimeprofile"
@@ -131,6 +132,13 @@ func writeRuntimeEndpoint(paths util.RuntimePaths, listenAddr string) (runtimeen
 var triggerShutdown context.CancelFunc
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == process.ParentBoundChildFlag {
+		if err := process.RunParentBoundChild(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	if len(os.Args) == 2 && os.Args[1] == "--version" {
 		os.Exit(handleVersion())
 	}
@@ -337,7 +345,7 @@ func main() {
 		agenttool.SetOwnedMemoryRuntime(services.MemoryConsumers)
 		agenttool.SetTemporalService(services.Temporal)
 		temporalScheduler := temporal.NewScheduler(services.Temporal)
-		_ = temporalScheduler
+		temporalScheduler.Start(appCtx)
 		defer temporalScheduler.Stop()
 	}
 
@@ -382,7 +390,6 @@ func main() {
 
 	srv := newHTTPServer(serverAddr, appCtx)
 	serverErr := make(chan error, 1)
-	listenPort := actualPort
 
 	if policy.FullHTTPAPI {
 		r, errSetup := setupRouter(ctx, services, bootstrap)
@@ -395,8 +402,14 @@ func main() {
 			os.Exit(1)
 		}
 		srv.Handler = r
-		if err := startMeshLAN(appCtx, services, r, listenPort); err != nil {
-			log.Warn("局域网加密服务启动失败: ", err)
+		if err := startMeshLAN(appCtx, services, r, config.AppCfg.Server.LANPort); err != nil {
+			if err := listener.Close(); err != nil {
+				amitialog.Printf("[original-error] %v", err)
+			}
+			log.Error("局域网加密服务启动失败: ", err)
+			fmt.Fprintf(os.Stderr, "局域网加密服务启动失败: %v\n", err)
+			cleanup()
+			os.Exit(1)
 		}
 		if err := startCoreWorkers(appCtx, services, srv); err != nil {
 			log.Error("核心Worker启动失败:", err)

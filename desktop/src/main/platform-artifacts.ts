@@ -107,13 +107,15 @@ export function databaseSourceCandidates(
   extraRoots: string[] = [],
 ): string[] {
   const target = runtimeTarget(platform, arch);
+  const platformRoot = path.join(resourcesRoot, "databases", target);
   const roots = dedupe([
-    path.join(resourcesRoot, "databases", target),
+    platformRoot,
     path.join(resourcesRoot, kind),
     ...extraRoots.map((root) => path.join(root, kind)),
   ]);
   const names = databaseArchiveNames(kind, platform, arch);
-  const candidates: string[] = [];
+  const archivePrefix = kind === "surrealdb" ? "surreal" : kind;
+  const candidates = [path.join(platformRoot, kind, `${archivePrefix}-${target}.zip`)];
   for (const root of roots) {
     for (const name of names) candidates.push(path.join(root, name));
   }

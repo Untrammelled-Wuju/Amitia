@@ -507,6 +507,7 @@ class DeviceOwnedChatService {
   final _historyCursors = <String, Map<String, String>>{};
   final _historyScopes = <String, String>{};
   final _historyRequests = <String, Object>{};
+  final _queryFlights = <String, Future<Map<String, dynamic>>>{};
   final _conversationLoads = <String, Future<List<ConversationDto>>>{};
   bool _providerStateLoaded = false;
 
@@ -582,6 +583,7 @@ class DeviceOwnedChatService {
       stopLocal('云端服务地址已变化，当前回复已中断；连接就绪后再继续发送。');
     _binding = binding;
     await _loadProviderState();
+    if (_activeRequests.isEmpty) notice = '';
     final current = await _api.get<Map<String, dynamic>>(
       '/api/device-mesh/v1/coordination/me',
     );
@@ -590,8 +592,10 @@ class DeviceOwnedChatService {
       throw StateError('设备服务状态无效');
     final nextPolicy = Map<String, dynamic>.from(current['policy'] as Map);
     final nextCore = (current['coreId'] ?? '').toString();
-    if ((enabled && _stamp(coreId, policy) != _stamp(nextCore, nextPolicy)) ||
-        (coreId.isNotEmpty && coreId != nextCore)) {
+    final activeProviderState = enabled || _activeRequests.isNotEmpty;
+    if (activeProviderState &&
+        (_stamp(coreId, policy) != _stamp(nextCore, nextPolicy) ||
+            (coreId.isNotEmpty && coreId != nextCore))) {
       stopLocal(
         coreId != nextCore
             ? '云端服务提供者已从「$coreId」切换为「$nextCore」，当前回复已中断。'
@@ -657,6 +661,39 @@ class DeviceOwnedChatService {
   String _localRequestId() =>
       'group-${DateTime.now().microsecondsSinceEpoch}-${Random().nextInt(1 << 32)}';
 
+  Future<Map<String, dynamic>> _loadChatExecutionScope({
+    required String role,
+    String? conversationId,
+  }) async {
+    final response = conversationId != null && conversationId.isNotEmpty
+        ? await query(conversationId, characterId: role)
+        : await _api.get<Map<String, dynamic>>(
+            '/api/device-mesh/v1/business/roles',
+          );
+    var scope = response?['executionScope'];
+    if (scope is Map) {
+      final selected = (response?['roles'] as List? ?? [])
+          .whereType<Map>()
+          .where((item) => item['id'] == role)
+          .firstOrNull;
+      final revision = selected?['revision'];
+      if (selected != null && revision is int && revision > 0) {
+        scope = {
+          ...Map<String, dynamic>.from(scope),
+          'roleId': role,
+          'roleRevision': revision,
+        };
+      }
+    }
+    if (scope is! Map ||
+        scope['coreId'] != coreId ||
+        scope['roleId'] != role ||
+        _preSendScopeFields.any((key) => scope[key] == null)) {
+      throw StateError('发送前无法确认当前角色、权限与数据归属');
+    }
+    return Map<String, dynamic>.from(scope);
+  }
+
   String _historyKey(
     String conversationId,
     String role, [
@@ -669,17 +706,47 @@ class DeviceOwnedChatService {
     bool older = false,
     String keyword = '',
   }) async {
+    final role = selectRole(characterId);
+    final key = _historyKey(conversationId, role, keyword);
+    final cursors = older
+        ? _historyCursors[key] ?? <String, String>{}
+        : <String, String>{};
+    final flightKey = jsonEncode([key, older, cursors]);
+    final active = _queryFlights[flightKey];
+    if (active != null) return active;
+    late final Future<Map<String, dynamic>> pending;
+    pending =
+        _queryOnce(
+          conversationId,
+          characterId: characterId,
+          older: older,
+          keyword: keyword,
+        ).whenComplete(() {
+          if (identical(_queryFlights[flightKey], pending))
+            _queryFlights.remove(flightKey);
+        });
+    _queryFlights[flightKey] = pending;
+    return pending;
+  }
+
+  Future<Map<String, dynamic>> _queryOnce(
+    String conversationId, {
+    String? characterId,
+    bool older = false,
+    String keyword = '',
+  }) async {
     final origin = parseConversationReference(conversationId);
     final role = selectRole(characterId);
     final captured = revision;
     final key = _historyKey(conversationId, role, keyword);
-    final ticket = Object();
-    _historyRequests[key] = ticket;
-    if (_historyRequests.length > 128)
-      _historyRequests.remove(_historyRequests.keys.first);
     final cursors = older
         ? _historyCursors[key] ?? <String, String>{}
         : <String, String>{};
+    final requestKey = jsonEncode([key, older, cursors]);
+    final ticket = Object();
+    _historyRequests[requestKey] = ticket;
+    if (_historyRequests.length > 128)
+      _historyRequests.remove(_historyRequests.keys.first);
     final kind = conversationId.isEmpty ? 'conversation' : 'message';
     final result = await _api.get<Map<String, dynamic>>(
       '/api/device-mesh/v1/business/conversations${conversationId.isEmpty ? '' : '/${Uri.encodeComponent(origin?['id'] ?? conversationId)}'}',
@@ -693,7 +760,7 @@ class DeviceOwnedChatService {
     );
     if (captured != revision ||
         result == null ||
-        !identical(_historyRequests[key], ticket))
+        !identical(_historyRequests[requestKey], ticket))
       throw StateError('服务状态已变化，旧上下文已丢弃');
     final scope = result['executionScope'];
     if (scope is! Map) throw StateError('聊天历史缺少数据归属信息');
@@ -885,7 +952,7 @@ class DeviceOwnedChatService {
         ? parseConversationReference(id)
         : null;
     final role = selectRole(characterId ?? resource?['roleId']?.toString());
-    if (kind == 'conversation' || resource == null) {
+    if (resource == null) {
       if (origin != null && kind != 'conversation') {
         throw StateError('请先加载该记录并确认当前数据来源后再修改');
       }
@@ -1001,23 +1068,34 @@ class DeviceOwnedChatService {
     final role = selectRole(
       characterId.isNotEmpty ? characterId : body['characterId']?.toString(),
     );
-    final view = await data('working', characterId: role);
-    final current = Map<String, dynamic>.from(view['executionScope'] as Map);
-    final expected = body['expectedExecutionScope'] is Map
-        ? Map<String, dynamic>.from(body['expectedExecutionScope'] as Map)
-        : current;
-    if (_authorityStamp(expected) != _authorityStamp(current)) {
-      throw StateError('服务或数据归属已变化，请重新预览后操作');
-    }
     final origin = parseConversationReference(
       body['conversationId']?.toString() ?? '',
     );
+    final supplied = body['expectedExecutionScope'] is Map
+        ? Map<String, dynamic>.from(body['expectedExecutionScope'] as Map)
+        : null;
+    String conversation = (body['conversationId'] ?? '').toString().trim();
+    Map<String, dynamic>? current;
+    if (conversation.isNotEmpty) {
+      final view = await query(conversation, characterId: role);
+      current = Map<String, dynamic>.from(view['executionScope'] as Map);
+    } else if (supplied == null) {
+      final view = await data('working', characterId: role);
+      current = Map<String, dynamic>.from(view['executionScope'] as Map);
+    }
+    final expected = supplied ?? current;
+    if (expected == null) throw StateError('无法确认当前操作的数据归属');
+    if (current != null &&
+        _authorityStamp(expected) != _authorityStamp(current)) {
+      throw StateError('服务或数据归属已变化，请重新预览后操作');
+    }
     final payload = <String, dynamic>{
       'requestId':
           'chat-control-${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32)}',
       ...body,
       if (origin != null) 'conversationId': origin['id'],
       if (origin != null) 'conversationOwnerId': origin['ownerId'],
+      if (origin != null) 'conversationOrigin': origin,
       'targetDeviceId': expected['targetDeviceId'],
       'characterId': role,
       'expectedExecutionScope': expected,
@@ -1064,6 +1142,7 @@ class DeviceOwnedChatService {
             'events-${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32)}',
         'conversationId': origin?['id'] ?? conversationId,
         if (origin != null) 'conversationOwnerId': origin['ownerId'],
+        if (origin != null) 'conversationOrigin': origin,
         'characterId': role,
         'targetDeviceId': expected['targetDeviceId'],
         'expectedExecutionScope': expected,
@@ -2037,13 +2116,11 @@ class DeviceOwnedChatService {
     _activeRequests[requestId] = token;
     try {
       final role = selectRole(characterId);
-      final view = await data('memory', characterId: role);
-      final expectedScope = Map<String, dynamic>.from(
-        view['executionScope'] as Map,
+      final expectedScope = await _loadChatExecutionScope(
+        role: role,
+        conversationId: conversationId,
       );
-      if (_preSendScopeFields.any((key) => expectedScope[key] == null) ||
-          captured != revision ||
-          token.isCancelled) {
+      if (captured != revision || token.isCancelled) {
         throw StateError('发送前无法确认当前角色、权限与数据归属');
       }
       if (quote != null &&
@@ -2159,6 +2236,7 @@ class DeviceOwnedChatService {
     _summaryViews.clear();
     _historyScopes.clear();
     _historyRequests.clear();
+    _queryFlights.clear();
     _conversationLoads.clear();
     for (final entry in _activeRequests.entries) {
       try {

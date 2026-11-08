@@ -9,6 +9,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeFalse
 import org.junit.Test
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -344,6 +345,46 @@ class DefaultProotSessionTest {
     }
 
     @Test
+    fun terminateAndConfirmExit_killsTermIgnoringTree() {
+        val process = execProcess("trap '' TERM; sleep 30 & wait")
+        val session = DefaultProotSession("test-stop-tree", process, ProotObserver {}, testGeneration)
+        session.activate()
+        Thread.sleep(200)
+
+        val result = session.terminateAndConfirmExit(100, 3000)
+
+        assertTrue(result is com.amitia.amitia_app.runtime.proot.ProotTerminationResult.ConfirmedExited)
+        session.close()
+    }
+
+    @Test
+    fun terminateAndConfirmExit_killsDescendantsAfterRootExits() {
+        assumeFalse(isWindows)
+        val childPidFile = java.nio.file.Files.createTempFile("amitia-proot-child", ".pid").toFile()
+        val process = execProcess(
+            "trap 'exit 0' TERM; (trap '' TERM; sleep 30) & echo \$! > '${childPidFile.absolutePath}'; wait"
+        )
+        val session = DefaultProotSession("test-stop-orphan", process, ProotObserver {}, testGeneration)
+        try {
+            session.activate()
+            assertTrue("child pid was not published", waitUntil(3000) {
+                childPidFile.isFile && childPidFile.readText().trim().toIntOrNull() != null
+            })
+            val childPid = childPidFile.readText().trim().toInt()
+            assertTrue("child process should be alive before stop", isPidAlive(childPid))
+
+            val result = session.terminateAndConfirmExit(100, 3000)
+
+            assertTrue(result is com.amitia.amitia_app.runtime.proot.ProotTerminationResult.ConfirmedExited)
+            assertTrue("descendant survived after root exit", waitUntil(3000) { !isPidAlive(childPid) })
+        } finally {
+            childPidFile.delete()
+            session.close()
+            process.destroyForcibly()
+        }
+    }
+
+    @Test
     fun exitProperty_availableAfterExit() {
         val process = execProcess("exit 77")
         val session = DefaultProotSession("test-exit-prop", process, ProotObserver {}, testGeneration)
@@ -437,5 +478,22 @@ class DefaultProotSessionTest {
             if (exit != null) it.incrementAndGet()
         }.get())
         session.close()
+    }
+
+    private fun waitUntil(timeoutMillis: Long, condition: () -> Boolean): Boolean {
+        val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis)
+        while (System.nanoTime() < deadline) {
+            if (condition()) return true
+            Thread.sleep(20)
+        }
+        return condition()
+    }
+
+    private fun isPidAlive(pid: Int): Boolean {
+        val result = ProcessBuilder("kill", "-0", pid.toString())
+            .redirectErrorStream(true)
+            .start()
+        result.inputStream.close()
+        return result.waitFor() == 0
     }
 }

@@ -1,9 +1,9 @@
 <template>
   <div class="ob-stage-inner ob-flow-stage-inner">
-    <div class="kicker">选择运行模式</div>
-    <h2 class="ob-title">选择 Amitia 的运行模式</h2>
+    <div class="kicker">选择统筹中心</div>
+    <h2 class="ob-title">选择 Amitia 的统筹中心</h2>
     <p class="ob-sub-title">
-      本地模式不限制模型或扩展能力；云端统筹模式统一管理多设备数据。
+      本机可以作为统筹中心，也可以连接另一台设备提供的统筹中心。
     </p>
     <div class="ob-deploy-container">
       <div class="ob-deploy-options">
@@ -15,9 +15,9 @@
         >
           <div class="ob-deploy-icon">⌂</div>
           <div class="ob-deploy-info">
-            <div class="ob-deploy-title">本地模式</div>
+            <div class="ob-deploy-title">以本机作为统筹中心</div>
             <div class="ob-deploy-desc">
-              项目服务、数据和设备能力全部在当前设备运行
+              当前设备保存统筹数据和模型配置，并管理其他设备
             </div>
           </div>
         </button>
@@ -50,16 +50,16 @@
             </svg>
           </div>
           <div class="ob-deploy-info">
-            <div class="ob-deploy-title">云端统筹模式</div>
+            <div class="ob-deploy-title">使用远程统筹中心</div>
             <div class="ob-deploy-desc">
-              验证 Cloud Core 并完成设备配对后，统一管理角色、数据和跨设备任务
+              连接另一台设备提供的统筹中心并完成设备配对
             </div>
           </div>
         </button>
       </div>
       <div v-if="deployMode === 'remote'" class="ob-remote-config">
         <label class="ob-input-label">
-          远程地址
+          统筹中心地址
           <input
             class="ob-field"
             :class="{ 'ob-field-warn': urlWarn }"
@@ -126,7 +126,7 @@ function handleNext() {
   if (props.deployMode === "remote") {
     if (!props.serverURL.trim()) {
       urlWarn.value = true;
-      urlWarnMsg.value = "请输入远程地址";
+      urlWarnMsg.value = "请输入统筹中心地址";
       return;
     }
     if (props.remoteStatusText !== "连接成功") {

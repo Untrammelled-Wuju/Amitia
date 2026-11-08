@@ -43,8 +43,18 @@ class _Api extends Fake implements BackendServiceApi {
       data = <dynamic>[];
     } else if (path.endsWith('/routes')) {
       data = <dynamic>[
-        {'scenario': 'chat', 'label': '聊天对话', 'description': '显式选择优先', 'modelConfigId': 0},
-        {'scenario': 'summary', 'label': '会话摘要', 'description': '会话与记忆摘要', 'modelConfigId': 0},
+        {
+          'scenario': 'chat',
+          'label': '聊天对话',
+          'description': '显式选择优先',
+          'modelConfigId': 0,
+        },
+        {
+          'scenario': 'summary',
+          'label': '会话摘要',
+          'description': '会话与记忆摘要',
+          'modelConfigId': 0,
+        },
       ];
     } else {
       configReads++;
@@ -83,31 +93,39 @@ void main() {
     _Api api, {
     bool cloud = false,
   }) async {
-    final container = ProviderContainer(overrides: [
-      rawBackendServiceApiProvider.overrideWithValue(api),
-      deviceMeshServiceProvider.overrideWithValue(DeviceMeshService(api)),
-      modelConfigServiceProvider.overrideWithValue(ModelConfigService(api)),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        rawBackendServiceApiProvider.overrideWithValue(api),
+        deviceMeshServiceProvider.overrideWithValue(DeviceMeshService(api)),
+        modelConfigServiceProvider.overrideWithValue(ModelConfigService(api)),
+      ],
+    );
     addTearDown(container.dispose);
     if (cloud) {
-      await container.read(mobileDeploymentConfigProvider.notifier).update(
-        const MobileDeploymentConfig(
-          mode: MobileDeploymentMode.cloud,
-          remoteCoreUri: 'https://core-b.example',
-        ),
-      );
+      await container
+          .read(mobileDeploymentConfigProvider.notifier)
+          .update(
+            const MobileDeploymentConfig(
+              mode: MobileDeploymentMode.cloud,
+              remoteCoreUri: 'https://core-b.example',
+            ),
+          );
     }
-    final router = GoRouter(routes: [
-      GoRoute(
-        path: '/',
-        builder: (_, __) => const ModelConfigPage(modelType: 'text'),
-      ),
-    ]);
+    final router = GoRouter(
+      routes: [
+        GoRoute(
+          path: '/',
+          builder: (_, __) => const ModelConfigPage(modelType: 'text'),
+        ),
+      ],
+    );
     addTearDown(router.dispose);
-    await tester.pumpWidget(UncontrolledProviderScope(
-      container: container,
-      child: MaterialApp.router(routerConfig: router),
-    ));
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
     await tester.pumpAndSettle();
     return container;
   }
@@ -116,11 +134,15 @@ void main() {
     final api = _Api();
     await render(tester, api, cloud: true);
     expect(api.configReads, 0);
-    expect(find.textContaining('获授权的 Core 管理员'), findsOneWidget);
+    expect(find.textContaining('获授权的中心管理员设备'), findsOneWidget);
     expect(
-      tester.widget<IconButton>(find.byWidgetPredicate(
-        (widget) => widget is IconButton && widget.tooltip == '新建',
-      )).onPressed,
+      tester
+          .widget<IconButton>(
+            find.byWidgetPredicate(
+              (widget) => widget is IconButton && widget.tooltip == '新建',
+            ),
+          )
+          .onPressed,
       isNull,
     );
     expect(api.writes, 0);
@@ -146,12 +168,14 @@ void main() {
     await tester.tap(find.text('编辑'));
     await tester.pumpAndSettle();
     expect(find.text('保存'), findsOneWidget);
-    await container.read(mobileDeploymentConfigProvider.notifier).update(
-      const MobileDeploymentConfig(
-        mode: MobileDeploymentMode.cloud,
-        remoteCoreUri: 'https://core-b.example',
-      ),
-    );
+    await container
+        .read(mobileDeploymentConfigProvider.notifier)
+        .update(
+          const MobileDeploymentConfig(
+            mode: MobileDeploymentMode.cloud,
+            remoteCoreUri: 'https://core-b.example',
+          ),
+        );
     final save = find.text('保存');
     await tester.ensureVisible(save);
     await tester.pumpAndSettle();

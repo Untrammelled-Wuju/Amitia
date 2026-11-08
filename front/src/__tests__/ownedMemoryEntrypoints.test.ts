@@ -15,6 +15,15 @@ vi.mock("../views/continuity/api", () => ({ listContinuityThreads: mocks.listThr
 vi.mock("../composables/useDeviceOwnedConversation", () => ({ useDeviceOwnedConversation: () => mocks.owned }));
 vi.mock("vue-echarts", () => ({ default: { name: "VChart", props: ["option"], template: '<div data-graph-canvas />' } }));
 vi.mock("../composables/useApi", () => ({ apiClient: {}, useApi: () => ({ get: mocks.legacy, post: mocks.legacy, put: mocks.legacy, del: mocks.legacy }) }));
+vi.mock("../composables/useCoreDataAccess", () => ({
+  useCoreDataAccess: () => ({
+    access: { value: { read: true, write: true, reason: "", coreId: "core" } },
+    checking: { value: false },
+    error: { value: "" },
+    refresh: async () => ({ read: true, write: true, reason: "", coreId: "core" }),
+    requireWrite: async () => ({ read: true, write: true, reason: "", coreId: "core" }),
+  }),
+}));
 vi.mock("../runtime/runtime-adapter", () => ({ getDeploymentConfig: mocks.deployment }));
 vi.mock("element-plus", async () => ({ ...await vi.importActual<any>("element-plus"), ElMessageBox: { confirm: mocks.confirm, prompt: mocks.prompt } }));
 const router = createRouter({
@@ -98,22 +107,22 @@ describe("网页六层记忆的数据归属入口", () => {
     expect(wrapper.text()).toContain("原始内容");
   });
 
-  it("服务断线恢复且权限版本未变化时重新加载一次，后续轮询保留数据", async () => {
-    vi.useFakeTimers();
+  it("服务断线恢复由连接事件触发一次重新加载，后续事件仍保留数据", async () => {
     const wrapper = open();
     await flushPromises();
     mocks.refresh.mockRejectedValueOnce(new Error("offline"));
-    await vi.advanceTimersByTimeAsync(3000);
+    window.dispatchEvent(new Event("amitia:owned-runtime-refresh"));
     await flushPromises();
     expect(wrapper.text()).not.toContain("原始内容");
     expect(mocks.data).toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(3000);
+    window.dispatchEvent(new Event("amitia:owned-runtime-refresh"));
     await flushPromises();
     expect(wrapper.text()).toContain("原始内容");
     expect(mocks.data).toHaveBeenCalledTimes(2);
-    await vi.advanceTimersByTimeAsync(6000);
+    window.dispatchEvent(new Event("amitia:owned-runtime-refresh"));
     await flushPromises();
-    expect(mocks.data).toHaveBeenCalledTimes(2);
+    expect(wrapper.text()).toContain("原始内容");
+    expect(mocks.data).toHaveBeenCalledTimes(3);
   });
 
   it("当前 Owner 的记忆操作保留加载时 scope、角色和 CAS", async () => {

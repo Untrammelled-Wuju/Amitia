@@ -32,11 +32,7 @@ func (rt *Runtime) TargetTaskCatalog(ctx context.Context, authority coordination
 	if !owned || current != authority {
 		return page, coordination.ErrWrongOwner
 	}
-	owner := authority.TargetDeviceID
-	if authority.Coordinated {
-		owner = authority.CoreID
-	}
-	if authority.ResourceOwnerID != owner || authority.RoleOwnerID != owner || len(request.Cursor) > 1024 || request.Limit < 0 || request.Limit > 8 {
+	if authority.ResourceOwnerID != authority.TargetDeviceID || authority.RoleOwnerID != authority.CoreID || len(request.Cursor) > 1024 || request.Limit < 0 || request.Limit > 8 {
 		return page, coordination.ErrWrongOwner
 	}
 	if err := rt.validateDataRoute(ctx, authority); err != nil {

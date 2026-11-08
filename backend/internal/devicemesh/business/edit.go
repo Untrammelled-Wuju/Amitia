@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"strings"
 	"time"
@@ -177,9 +178,22 @@ func (e *Engine) Edit(ctx context.Context, authority Request, edit EditRequest) 
 	if !edit.Deleted && !edit.Clear && len(edit.Changes) == 0 {
 		return coordination.Acknowledgement{}, errors.New("没有需要修改的内容")
 	}
-	ctx, scope, finish, err := e.coordination.Begin(ctx, authority.SpaceID, authority.DeviceID, edit.TargetDeviceID, authority.CoreID, edit.RoleID, edit.RequestID)
+	resourceOwner := ""
+	roleOwner := ""
+	targetDeviceID := edit.TargetDeviceID
+	if targetDeviceID == "" {
+		targetDeviceID = authority.DeviceID
+	}
+	if edit.ExpectedScope != nil {
+		resourceOwner = edit.ExpectedScope.ResourceOwnerID
+		roleOwner = edit.ExpectedScope.RoleOwnerID
+		if resourceOwner != targetDeviceID && resourceOwner != authority.CoreID {
+			return coordination.Acknowledgement{}, coordination.ErrScopeExpired
+		}
+	}
+	ctx, scope, finish, err := e.coordination.BeginWithOwners(ctx, authority.SpaceID, authority.DeviceID, targetDeviceID, authority.CoreID, edit.RoleID, edit.RequestID, resourceOwner, roleOwner)
 	if err != nil {
-		return coordination.Acknowledgement{}, err
+		return coordination.Acknowledgement{}, fmt.Errorf("修改数据范围初始化失败: %w", err)
 	}
 	defer finish()
 	if err := e.coordination.RequireCapability(ctx, scope.SpaceID, scope.InitiatorDeviceID, scope.TargetDeviceID, "ai.chat"); err != nil {
@@ -210,7 +224,7 @@ func (e *Engine) Edit(ctx context.Context, authority Request, edit EditRequest) 
 		expected.RequestID, expected.TurnID, expected.ExecutionID = scope.RequestID, scope.TurnID, scope.ExecutionID
 		expected.MemoryViewAll, current.MemoryViewAll = false, false
 		if expected != current {
-			return coordination.Acknowledgement{}, coordination.ErrScopeExpired
+			return coordination.Acknowledgement{}, fmt.Errorf("修改页面的数据范围已变化: expected=%+v current=%+v: %w", expected, current, coordination.ErrScopeExpired)
 		}
 	}
 	ctx = coordination.WithScope(ctx, scope)
@@ -508,7 +522,7 @@ func workspacesPrimaryCandidate(items []ProjectWorkspace) string {
 }
 
 func (e *Engine) ReadResource(ctx context.Context, authority Request, kind, id string) (*coordination.Resource, coordination.ExecutionScope, error) {
-	ctx, scope, finish, err := e.coordination.Begin(ctx, authority.SpaceID, authority.DeviceID, authority.TargetDeviceID, authority.CoreID, authority.RoleID, authority.RequestID)
+	ctx, scope, finish, err := e.beginRequest(ctx, authority, authority.RoleID, authority.RequestID)
 	if err != nil {
 		return nil, scope, err
 	}
@@ -527,6 +541,10 @@ func (e *Engine) ReadResource(ctx context.Context, authority Request, kind, id s
 	scope.RoleID, scope.RoleRevision = role.ID, role.Revision
 	if err := coordination.ResolveMemoryScope(&scope, authority.MemoryView); err != nil {
 		return nil, scope, err
+	}
+	scope.ResourceOwnerID = coordination.DataOwnerID(scope, kind)
+	if scope.ResourceOwnerID == scope.CoreID {
+		scope.RoleOwnerID = scope.CoreID
 	}
 	port, ok := e.data.(coordination.ResourcePort)
 	if !ok {

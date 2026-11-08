@@ -38,3 +38,21 @@ func TestProviderAllowsSinglePlatform(t *testing.T) {
 		t.Fatalf("single-platform provider should pass: %v", err)
 	}
 }
+
+func TestBundledAmitiaProviderDoesNotRequirePublisherTrust(t *testing.T) {
+	definition := ProviderDefinition{
+		ProviderID:  "plugin-market-page-provider",
+		ExtensionID: "com.amitia/plugin-market",
+		Capability:  CapabilityPageProvider,
+		Mode:        ModeReplace,
+		Placement:   PlacementCloud,
+		TrustLevel:  "unknown",
+		Enabled:     true,
+		Entries: map[string]Entry{
+			"mobile": {Type: EntrySchemaRenderer, ContributionID: "plugin-market-mobile-page"},
+		},
+	}
+	if err := definition.Validate(); err != nil {
+		t.Fatalf("bundled Amitia provider should not require publisher trust: %v", err)
+	}
+}

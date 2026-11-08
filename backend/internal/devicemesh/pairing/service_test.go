@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -91,6 +92,50 @@ func TestClaimRejectsSelfAndTrustedDuplicateWithoutConsumingOffer(t *testing.T) 
 	pairingAssertOfferActive(t, db, offer.OfferID)
 }
 
+func TestDefaultOfferTTLIsThirtyMinutes(t *testing.T) {
+	svc, _ := pairingTestService(t)
+	before := time.Now().UTC()
+	offer, _, err := svc.CreateOffer(context.Background(), "issuer", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ttl := offer.ExpiresAt.Sub(before)
+	if ttl < 29*time.Minute || ttl > 31*time.Minute {
+		t.Fatalf("unexpected default offer ttl: %s", ttl)
+	}
+}
+
+func TestLegacyApprovalSchemaFailsWithoutModification(t *testing.T) {
+	_, db := pairingTestService(t)
+	if _, err := db.Exec(`DROP TABLE kernel_device_pairing_approvals`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE kernel_device_pairing_approvals (
+		request_id TEXT PRIMARY KEY, offer_id TEXT NOT NULL UNIQUE, space_id TEXT NOT NULL,
+		device_id TEXT NOT NULL, runtime_id TEXT NOT NULL, platform TEXT NOT NULL, label TEXT NOT NULL,
+		public_key TEXT NOT NULL, state TEXT NOT NULL, revision INTEGER NOT NULL,
+		created_at TEXT NOT NULL, decided_at TEXT)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO kernel_device_pairing_approvals(request_id,offer_id,space_id,device_id,runtime_id,platform,label,public_key,state,revision,created_at)
+		VALUES('request-a','offer-a','space-a','phone-a','runtime-a','android','','key','pending',1,'2026-01-01T00:00:00Z')`); err != nil {
+		t.Fatal(err)
+	}
+	registry := host_registry.NewRegistry(db)
+	bootstrapSvc := bootstrap.NewService(bootstrap.NewRepository(db), 300)
+	if _, err := pairing.NewService(db, t.TempDir(), "space-a", registry, bootstrapSvc); err == nil || !strings.Contains(err.Error(), "offer_id TEXT NOT NULL UNIQUE") {
+		t.Fatalf("legacy schema was not rejected with original structure: %v", err)
+	}
+	var requestID string
+	if err := db.QueryRow(`SELECT request_id FROM kernel_device_pairing_approvals WHERE offer_id='offer-a' AND device_id='phone-a'`).Scan(&requestID); err != nil || requestID != "request-a" {
+		t.Fatalf("legacy approval row changed after rejection: request=%s err=%v", requestID, err)
+	}
+	if _, err := db.Exec(`INSERT INTO kernel_device_pairing_approvals(request_id,offer_id,space_id,device_id,runtime_id,platform,label,public_key,state,revision,created_at)
+		VALUES('request-b','offer-a','space-a','phone-b','runtime-b','android','','key','pending',1,'2026-01-01T00:00:00Z')`); err == nil || !strings.Contains(err.Error(), "UNIQUE constraint failed") {
+		t.Fatalf("legacy schema should remain unchanged and reject multiple devices: %v", err)
+	}
+}
+
 func TestClaimRollsBackDeviceAndOfferWhenTicketCreationFails(t *testing.T) {
 	svc, db := pairingTestService(t)
 	offer, token := pairingTestOffer(t, svc)
@@ -152,8 +197,8 @@ func TestConcurrentClaimsIssueOneTicketForDevice(t *testing.T) {
 	if err := db.QueryRow(`SELECT COUNT(1) FROM kernel_device_pairing_offers WHERE status='consumed'`).Scan(&consumed); err != nil {
 		t.Fatal(err)
 	}
-	if tickets != 1 || consumed != 1 {
-		t.Fatalf("duplicate state: tickets=%d offers=%d", tickets, consumed)
+	if tickets != 1 || consumed != 0 {
+		t.Fatalf("duplicate state: tickets=%d consumedOffers=%d", tickets, consumed)
 	}
 }
 

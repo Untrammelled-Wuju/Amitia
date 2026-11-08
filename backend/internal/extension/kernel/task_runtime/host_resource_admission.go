@@ -21,14 +21,14 @@ func validateCloudHostResourceLimits(profile runtimeprofile.Profile, sandboxed b
 	}
 
 	if support.Processes && limits.MaxProcesses > 0 && limits.MaxProcesses < taskProcessPIDBudget(runtime.GOOS) {
-		return NewTaskError(ErrTaskScopeDenied, fmt.Sprintf("Cloud Core 任务 pids 预算 %d 不足以启动 Node 运行时，至少需要 %d", limits.MaxProcesses, taskProcessPIDBudget(runtime.GOOS)))
+		return NewTaskError(ErrTaskScopeDenied, fmt.Sprintf("统筹中心任务 pids 预算 %d 不足以启动 Node 运行时，至少需要 %d", limits.MaxProcesses, taskProcessPIDBudget(runtime.GOOS)))
 	}
 	missing := cloudHostMissingResourceLimits(limits, support)
 	if len(missing) == 0 || policy == "allow-degraded" {
 		return nil
 	}
 	return NewTaskError(ErrTaskScopeDenied, fmt.Sprintf(
-		"Cloud Core 拒绝在缺少强制资源限制（%s）的宿主上运行任务；请配置可写入的 cgroup v2，或由管理员显式设置 %s=allow-degraded 以接受资源隔离降级风险",
+		"统筹中心拒绝在缺少强制资源限制（%s）的宿主上运行任务；请配置可写入的 cgroup v2，或由管理员显式设置 %s=allow-degraded 以接受资源隔离降级风险",
 		strings.Join(missing, ", "), cloudTaskResourcePolicyEnv,
 	))
 }

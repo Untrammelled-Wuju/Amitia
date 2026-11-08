@@ -31,12 +31,13 @@ type Manager struct {
 	secrets    auth.SecretStore
 	oauth      OAuthTokens
 
-	mu            sync.Mutex
-	reconnecting  map[string]bool
-	suppressed    map[string]bool
-	readyHandlers []func(context.Context, string) error
-	root          context.Context
-	cancel        context.CancelFunc
+	mu             sync.Mutex
+	reconnecting   map[string]bool
+	suppressed     map[string]bool
+	readyHandlers  []func(context.Context, string) error
+	closedHandlers []func(context.Context, string) error
+	root           context.Context
+	cancel         context.CancelFunc
 }
 
 func NewManager(repository *mcp.Repository, stdio *kernelmcp.CanonicalStdioRegistry, remote *kernelmcp.CanonicalRemoteRegistry, secrets auth.SecretStore, oauth OAuthTokens) *Manager {
@@ -60,6 +61,15 @@ func (m *Manager) RegisterReadyHandler(handler func(context.Context, string) err
 	}
 	m.mu.Lock()
 	m.readyHandlers = append(m.readyHandlers, handler)
+	m.mu.Unlock()
+}
+
+func (m *Manager) RegisterDisconnectedHandler(handler func(context.Context, string) error) {
+	if m == nil || handler == nil {
+		return
+	}
+	m.mu.Lock()
+	m.closedHandlers = append(m.closedHandlers, handler)
 	m.mu.Unlock()
 }
 
@@ -205,6 +215,7 @@ func (m *Manager) Connect(ctx context.Context, serverID string) error {
 	go func(id string, done <-chan struct{}) {
 		select {
 		case <-done:
+			m.notifyDisconnected(context.Background(), id)
 			if !m.isSuppressed(id) {
 				m.scheduleReconnect(id)
 			}
@@ -238,7 +249,22 @@ func (m *Manager) Disconnect(ctx context.Context, serverID string) error {
 			firstErr = err
 		}
 	}
+	m.notifyDisconnected(ctx, serverID)
 	return firstErr
+}
+
+func (m *Manager) notifyDisconnected(ctx context.Context, serverID string) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	handlers := append([]func(context.Context, string) error{}, m.closedHandlers...)
+	m.mu.Unlock()
+	for _, handler := range handlers {
+		if err := handler(ctx, serverID); err != nil {
+			amitialog.Printf("[original-error] MCP disconnected handler %s: %v", serverID, err)
+		}
+	}
 }
 
 func (m *Manager) Reconnect(ctx context.Context, serverID string) error {

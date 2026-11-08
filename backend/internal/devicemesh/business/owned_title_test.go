@@ -50,6 +50,32 @@ func TestOwnedTitlePersistsOnlyOnResourceOwner(t *testing.T) {
 	}
 }
 
+func TestOwnedTitleFailureAfterSavedReplyIsReportedAsPostProcessingIssue(t *testing.T) {
+	engine, _, _, model := engineHarness(t)
+	titleFailure := errors.New("标题模型返回无效响应")
+	engine.model = ownedTitleTestModel{
+		testModel: model,
+		plan: func(context.Context, Inference, Generation) (string, error) {
+			return "", titleFailure
+		},
+	}
+	response, err := engine.Run(t.Context(), Request{
+		SpaceID: "core", DeviceID: "a", CoreID: "core",
+		ConversationID: "conversation", RequestID: "title-warning", Message: "介绍项目",
+	})
+	if err != nil {
+		t.Fatalf("saved reply returned a fatal error: %v", err)
+	}
+	if !response.Saved || response.Text != "reply" {
+		t.Fatalf("saved reply was not returned: %+v", response)
+	}
+	if len(response.PostProcessingIssues) != 1 ||
+		response.PostProcessingIssues[0].Stage != "title" ||
+		!strings.Contains(response.PostProcessingIssues[0].Message, titleFailure.Error()) {
+		t.Fatalf("title failure was not preserved as an issue: %+v", response.PostProcessingIssues)
+	}
+}
+
 func TestOwnedTitleDoesNotOverwriteConcurrentRename(t *testing.T) {
 	engine, db, _, model := engineHarness(t)
 	var inference Inference

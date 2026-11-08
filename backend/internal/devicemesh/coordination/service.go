@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	meshaudit "github.com/u-ai/backend/internal/devicemesh/audit"
 	"github.com/u-ai/backend/internal/runtimeidentity"
@@ -161,6 +162,7 @@ type Service struct {
 	active           map[string]map[uint64]context.CancelCauseFunc
 	next             uint64
 	authorityBarrier AuthorityBarrier
+	capabilityEvents capabilityEventHub
 }
 
 func NewService(db *sql.DB) *Service {
@@ -176,7 +178,19 @@ func (s *Service) InitializeCoreConsole(ctx context.Context, space, device strin
 		return err
 	}
 	defer tx.Rollback()
-	result, err := tx.ExecContext(ctx, `INSERT INTO kernel_device_coordination(space_id,device_id,coordinated,administrator) VALUES(?,?,?,1) ON CONFLICT DO NOTHING`, space, device, coordinated)
+	if _, err := tx.ExecContext(ctx, CoreConsoleSchema); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO kernel_device_core_console(space_id,device_id,selected_at) VALUES(?,?,?) ON CONFLICT(space_id,device_id) DO NOTHING`, space, device, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		return err
+	}
+	result, err := tx.ExecContext(ctx, `INSERT INTO kernel_device_coordination(space_id,device_id,coordinated,administrator) VALUES(?,?,?,1)
+ON CONFLICT(space_id,device_id) DO UPDATE SET
+coordinated=excluded.coordinated,
+administrator=1,
+mode_revision=kernel_device_coordination.mode_revision + CASE WHEN kernel_device_coordination.coordinated<>excluded.coordinated THEN 1 ELSE 0 END,
+permission_revision=kernel_device_coordination.permission_revision + CASE WHEN kernel_device_coordination.coordinated<>excluded.coordinated THEN 1 ELSE 0 END
+WHERE kernel_device_coordination.coordinated<>excluded.coordinated OR kernel_device_coordination.administrator<>1`, space, device, coordinated)
 	if err != nil {
 		return err
 	}
@@ -186,11 +200,49 @@ func (s *Service) InitializeCoreConsole(ctx context.Context, space, device strin
 	}
 	if count > 0 {
 		granted := true
-		if err := meshaudit.QueueTx(ctx, tx, space, device, "device_mesh.core_console_initialized", meshaudit.Details{Coordinated: &coordinated, Administrator: &granted, ModeRevision: 1, PermissionRevision: 1, ProviderEpoch: 1}); err != nil {
+		policy := Policy{DeviceID: device, ModeRevision: 1, PermissionRevision: 1, ProviderEpoch: 1}
+		if err := tx.QueryRowContext(ctx, `SELECT coordinated,administrator,mode_revision,permission_revision,provider_epoch FROM kernel_device_coordination WHERE space_id=? AND device_id=?`, space, device).Scan(&policy.Coordinated, &policy.Administrator, &policy.ModeRevision, &policy.PermissionRevision, &policy.ProviderEpoch); err != nil {
+			return err
+		}
+		if err := meshaudit.QueueTx(ctx, tx, space, device, "device_mesh.core_console_initialized", meshaudit.Details{Coordinated: &policy.Coordinated, Administrator: &granted, ModeRevision: policy.ModeRevision, PermissionRevision: policy.PermissionRevision, ProviderEpoch: policy.ProviderEpoch}); err != nil {
 			return err
 		}
 	}
 	return tx.Commit()
+}
+
+func (s *Service) CoordinateTrustedDevices(ctx context.Context, space, core string) error {
+	rows, err := s.db.QueryContext(ctx, `SELECT device_id FROM kernel_devices WHERE space_id=? AND trust_state='trusted' ORDER BY device_id`, space)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	devices := []string{}
+	for rows.Next() {
+		var device string
+		if err := rows.Scan(&device); err != nil {
+			return err
+		}
+		devices = append(devices, device)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	var failures []error
+	for _, device := range devices {
+		policy, err := s.Get(ctx, space, device)
+		if err != nil {
+			failures = append(failures, fmt.Errorf("read coordination policy for %s: %w", device, err))
+			continue
+		}
+		if policy.Coordinated {
+			continue
+		}
+		if _, err := s.InitializeCoordinated(ctx, space, device, policy.ModeRevision, policy.SelectedRole); err != nil {
+			failures = append(failures, fmt.Errorf("coordinate trusted device %s: %w", device, err))
+		}
+	}
+	return errors.Join(failures...)
 }
 
 func (s *Service) Get(ctx context.Context, space, device string) (Policy, error) {
@@ -215,7 +267,7 @@ func (s *Service) InitializeCoordinated(ctx context.Context, space, device strin
 	if previous.ModeRevision != expected {
 		return Policy{}, ErrRevision
 	}
-	if err := s.fenceAuthorityLocked(ctx, space, device, previous.PermissionRevision); err != nil {
+	if err := s.fenceAuthorityLocked(ctx, space, device, previous.PermissionRevision, false); err != nil {
 		return Policy{}, err
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -269,7 +321,7 @@ func (s *Service) GrantAdministrator(ctx context.Context, space, device string, 
 	if grant && !p.Coordinated {
 		return p, ErrAdministratorMode
 	}
-	if err := s.fenceAuthorityLocked(ctx, space, device, p.PermissionRevision); err != nil {
+	if err := s.fenceAuthorityLocked(ctx, space, device, p.PermissionRevision, false); err != nil {
 		return p, err
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -317,7 +369,7 @@ func (s *Service) RevokeDevice(ctx context.Context, space, device string, revoke
 	if err != nil {
 		return err
 	}
-	if err := s.fenceAuthorityLocked(ctx, space, device, policy.PermissionRevision); err != nil {
+	if err := s.fenceAuthorityLocked(ctx, space, device, policy.PermissionRevision, false); err != nil {
 		return err
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -377,6 +429,18 @@ func SelectRole(requested string, available []string) (string, error) {
 }
 
 func (s *Service) Begin(ctx context.Context, space, device, target, core, role, request string) (context.Context, ExecutionScope, func(), error) {
+	return s.begin(ctx, space, device, target, core, role, request, "", "")
+}
+
+func (s *Service) BeginWithResourceOwner(ctx context.Context, space, device, target, core, role, request, resourceOwner string) (context.Context, ExecutionScope, func(), error) {
+	return s.begin(ctx, space, device, target, core, role, request, resourceOwner, "")
+}
+
+func (s *Service) BeginWithOwners(ctx context.Context, space, device, target, core, role, request, resourceOwner, roleOwner string) (context.Context, ExecutionScope, func(), error) {
+	return s.begin(ctx, space, device, target, core, role, request, resourceOwner, roleOwner)
+}
+
+func (s *Service) begin(ctx context.Context, space, device, target, core, role, request, resourceOwner, roleOwner string) (context.Context, ExecutionScope, func(), error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	p, err := s.Get(ctx, space, device)
@@ -394,7 +458,19 @@ func (s *Service) Begin(ctx context.Context, space, device, target, core, role, 
 	if targetPolicy.Coordinated {
 		owner = core
 	}
-	scope := ExecutionScope{SpaceID: space, AuthorizationRealm: core, InitiatorDeviceID: device, TargetDeviceID: target, CoreID: core, ProviderEpoch: p.ProviderEpoch, TargetProviderEpoch: targetPolicy.ProviderEpoch, Coordinated: targetPolicy.Coordinated, ModeRevision: targetPolicy.ModeRevision, PermissionRevision: p.PermissionRevision, TargetPermissionRevision: targetPolicy.PermissionRevision, RoleID: role, RoleOwnerID: owner, ResourceOwnerID: owner, RequestID: request}
+	if roleOwner == "" {
+		roleOwner = core
+	}
+	if roleOwner != owner && roleOwner != core {
+		return ctx, ExecutionScope{}, nil, ErrWrongOwner
+	}
+	if resourceOwner == "" {
+		resourceOwner = owner
+	}
+	if resourceOwner != target && resourceOwner != owner {
+		return ctx, ExecutionScope{}, nil, ErrWrongOwner
+	}
+	scope := ExecutionScope{SpaceID: space, AuthorizationRealm: core, InitiatorDeviceID: device, TargetDeviceID: target, CoreID: core, ProviderEpoch: p.ProviderEpoch, TargetProviderEpoch: targetPolicy.ProviderEpoch, Coordinated: targetPolicy.Coordinated, ModeRevision: targetPolicy.ModeRevision, PermissionRevision: p.PermissionRevision, TargetPermissionRevision: targetPolicy.PermissionRevision, RoleID: role, RoleOwnerID: roleOwner, ResourceOwnerID: resourceOwner, RequestID: request}
 	if err := s.Validate(ctx, scope); err != nil {
 		return ctx, ExecutionScope{}, nil, err
 	}
@@ -466,11 +542,10 @@ func (s *Service) Validate(ctx context.Context, scope ExecutionScope) error {
 	if targetPolicy.ModeRevision != scope.ModeRevision || targetPolicy.Coordinated != scope.Coordinated || (scope.TargetPermissionRevision != 0 && targetPolicy.PermissionRevision != scope.TargetPermissionRevision) || (scope.TargetProviderEpoch != 0 && targetPolicy.ProviderEpoch != scope.TargetProviderEpoch) {
 		return ErrScopeExpired
 	}
-	owner := target
-	if targetPolicy.Coordinated {
-		owner = scope.CoreID
+	if scope.RoleOwnerID != target && scope.RoleOwnerID != scope.CoreID {
+		return ErrWrongOwner
 	}
-	if scope.ResourceOwnerID != owner || scope.RoleOwnerID != owner {
+	if scope.ResourceOwnerID != target && (!targetPolicy.Coordinated || scope.ResourceOwnerID != scope.CoreID) {
 		return ErrWrongOwner
 	}
 	var trusted string

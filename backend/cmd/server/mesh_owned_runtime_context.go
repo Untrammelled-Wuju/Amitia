@@ -12,7 +12,7 @@ import (
 )
 
 func (p *meshLocalDataPort) ownedRuntimeContext(ctx context.Context, scope coordination.ExecutionScope, query coordination.DataQuery) (map[string]json.RawMessage, error) {
-	if scope.ResourceOwnerID != p.ownerID || scope.RoleOwnerID != p.ownerID {
+	if scope.ResourceOwnerID != p.ownerID || (scope.RoleOwnerID != p.ownerID && scope.RoleOwnerID != scope.CoreID) {
 		return nil, coordination.ErrWrongOwner
 	}
 	interactionScope := interaction.InteractionScope{SpaceID: p.ownerID, CharacterID: scope.RoleID, ConversationID: query.ConversationID, Channel: "web", RequestID: scope.RequestID}

@@ -620,7 +620,7 @@ func (s *GameCenterManagementService) countRuntimesForPlugin(pluginID string) in
 	all := s.runtimes.ListRuntimes()
 	count := 0
 	for _, rt := range all {
-		if string(rt.PluginID) == pluginID {
+		if string(rt.PluginID) == pluginID && readiness.IsOperationalRuntimeState(rt.State) {
 			count++
 		}
 	}

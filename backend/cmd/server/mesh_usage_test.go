@@ -89,7 +89,10 @@ func TestUsageRealTLSOwnerModesAndReset(t *testing.T) {
 	}
 	send("coordinated-request")
 	view = read("/api/usage/overview")
-	if view["businessOwnerId"] != core.core || view["messageCount"] != float64(2) {
-		t.Fatalf("coordinated Owner counts missing: %+v", view)
+	if view["businessOwnerId"] != core.core || view["messageCount"] != float64(0) || view["conversationCount"] != float64(0) {
+		t.Fatalf("coordinated center copied device-owned conversation counts: %+v", view)
+	}
+	if err := phone.services.KernelContainer.DeviceRegistry.Database().QueryRowContext(t.Context(), "SELECT COUNT(*) FROM kernel_device_owned_resources WHERE owner_id=? AND kind='message' AND deleted=0", phone.device.DeviceID.String()).Scan(&messages); err != nil || messages != 4 {
+		t.Fatalf("coordinated device messages were not kept locally: %d %v", messages, err)
 	}
 }

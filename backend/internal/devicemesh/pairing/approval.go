@@ -14,10 +14,10 @@ import (
 const ApprovalPolicySchema = `CREATE TABLE IF NOT EXISTS kernel_device_pairing_approval_policy (offer_id TEXT PRIMARY KEY, required INTEGER NOT NULL)`
 const OfferTargetSchema = `CREATE TABLE IF NOT EXISTS kernel_device_pairing_offer_targets (offer_id TEXT PRIMARY KEY, device_id TEXT NOT NULL)`
 const ApprovalSchema = `CREATE TABLE IF NOT EXISTS kernel_device_pairing_approvals (
-	request_id TEXT PRIMARY KEY, offer_id TEXT NOT NULL UNIQUE, space_id TEXT NOT NULL,
+	request_id TEXT PRIMARY KEY, offer_id TEXT NOT NULL, space_id TEXT NOT NULL,
 	device_id TEXT NOT NULL, runtime_id TEXT NOT NULL, platform TEXT NOT NULL, label TEXT NOT NULL,
 	public_key TEXT NOT NULL, state TEXT NOT NULL, revision INTEGER NOT NULL,
-	created_at TEXT NOT NULL, decided_at TEXT)`
+	created_at TEXT NOT NULL, decided_at TEXT, UNIQUE(offer_id, device_id))`
 
 var ErrApprovalDenied = errors.New("服务提供设备拒绝了本次配对")
 var ErrApprovalConflict = errors.New("配对审批状态已改变，请刷新后重试")
@@ -48,7 +48,7 @@ func (s *Service) approvalTx(ctx context.Context, tx *sql.Tx, offerID string, re
 		return nil, errors.New("局域网配对必须验证设备身份")
 	}
 	approval := &Approval{}
-	err = tx.QueryRowContext(ctx, `SELECT request_id,offer_id,device_id,runtime_id,platform,label,public_key,state,revision,created_at FROM kernel_device_pairing_approvals WHERE offer_id=? AND space_id=?`, offerID, s.spaceID.String()).Scan(&approval.RequestID, &approval.OfferID, &approval.DeviceID, &approval.RuntimeID, &approval.Platform, &approval.Label, &approval.PublicKey, &approval.State, &approval.Revision, &approval.CreatedAt)
+	err = tx.QueryRowContext(ctx, `SELECT request_id,offer_id,device_id,runtime_id,platform,label,public_key,state,revision,created_at FROM kernel_device_pairing_approvals WHERE offer_id=? AND space_id=? AND device_id=?`, offerID, s.spaceID.String(), request.DeviceID.String()).Scan(&approval.RequestID, &approval.OfferID, &approval.DeviceID, &approval.RuntimeID, &approval.Platform, &approval.Label, &approval.PublicKey, &approval.State, &approval.Revision, &approval.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		var other int
 		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM kernel_device_pairing_approvals a JOIN kernel_device_pairing_offers o ON o.offer_id=a.offer_id WHERE a.space_id=? AND a.device_id=? AND a.state IN ('pending','approved') AND o.status='active' AND julianday(o.expires_at)>julianday(?)`, s.spaceID.String(), request.DeviceID.String(), now.Format(time.RFC3339Nano)).Scan(&other); err != nil {
@@ -69,6 +69,9 @@ func (s *Service) approvalTx(ctx context.Context, tx *sql.Tx, offerID string, re
 	}
 	if approval.State == "rejected" {
 		return nil, ErrApprovalDenied
+	}
+	if approval.State == "completed" {
+		return nil, ErrAlreadyPaired
 	}
 	if approval.State == "approved" {
 		return nil, nil
@@ -132,5 +135,11 @@ func (s *Service) decideApproval(ctx context.Context, requestID string, expected
 	if err := meshaudit.QueueTx(ctx, tx, s.spaceID.String(), device, eventType, meshaudit.Details{ApprovalID: requestID}); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	if approval, _, err := s.ApprovalState(ctx, requestID); err == nil {
+		s.publishApproval(approval)
+	}
+	return nil
 }

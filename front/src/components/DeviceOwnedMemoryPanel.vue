@@ -23,6 +23,7 @@
         </div>
       </div>
     </div>
+    <el-alert v-if="!canWrite" :title="coreData.access.value.reason || '当前设备只能查看统筹中心记忆'" type="info" :closable="false" show-icon />
     <el-alert v-if="source !== 'current'" title="原设备历史数据可供 Core 调用；请在原设备管理这些历史记录。" type="info" :closable="false" />
     <el-alert v-if="source === 'current' && kind === 'memory'" title="事实、画像和关系长期保留；长期未使用时只降低召回权重并进入休眠。情节记忆可自动归档。休眠和自动归档仍可通过明确检索恢复，手动归档与停用不会自动恢复。" type="info" :closable="false" />
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
@@ -30,14 +31,14 @@
     <div v-if="source === 'current' && !loadedScope?.memoryViewAll && ['vector', 'graph'].includes(kind)" class="projection-status">
       <p v-for="layer in projection?.status?.layers || []" :key="layer.kind">{{ layer.kind === 'vector' ? '向量' : '图谱' }}：已处理 {{ layer.current }}/{{ layer.total }} · 待更新 {{ layer.pending }} · 重试 {{ layer.retrying }}</p>
       <el-alert v-if="projectionNotice" :title="projectionNotice" type="info" :closable="false" />
-      <el-button :disabled="!projection || loading" :loading="rebuilding" @click="rebuild">重建当前范围索引</el-button>
+      <el-button v-if="canWrite" :disabled="!projection || loading" :loading="rebuilding" @click="rebuild">重建当前范围索引</el-button>
     </div>
     <div v-if="search === undefined || ['profile', 'episodic', 'graph'].includes(view)" class="memory-filters page-filters">
       <div v-if="search === undefined" class="filter-field">
         <el-input :id="`${controlId}-page-search`" v-model="searchKeyword" clearable aria-label="搜索记忆" placeholder="搜索标题或内容" class="layer-select" />
       </div>
-      <el-button v-if="view === 'profile' && source === 'current'" :disabled="loading" @click="createProfileOpen = true">新增画像</el-button>
-      <template v-if="view === 'graph' && source === 'current' && rows.length">
+      <el-button v-if="canWrite && view === 'profile' && source === 'current'" :disabled="loading" @click="createProfileOpen = true">新增画像</el-button>
+      <template v-if="canWrite && view === 'graph' && source === 'current' && rows.length">
         <el-select v-model="graphTransferId" class="graph-transfer-select" filterable placeholder="选择要迁移的图谱关系" aria-label="待迁移图谱关系">
           <el-option v-for="row in rows" :key="row.id" :label="ownedMemoryTitle(row)" :value="row.id" />
         </el-select>
@@ -94,10 +95,10 @@
           <el-tag v-if="row.body.allowProactiveMention === false" size="small" type="info">不主动提及</el-tag>
           <el-tag v-if="row.body.expiresAt" size="small" type="info">到期 {{ row.body.expiresAt }}</el-tag>
         </div>
-        <div v-if="source === 'current' && ['memory', 'episodic', 'fact', 'vector', 'profile'].includes(row.kind) && row.executionScope" class="record-actions">
+        <div v-if="canWrite && source === 'current' && ['memory', 'episodic', 'fact', 'vector', 'profile'].includes(row.kind) && row.executionScope" class="record-actions">
           <el-button size="small" :disabled="loading" @click="openTransfer(row)">{{ row.roleId === GLOBAL_MEMORY_ROLE ? '降级为角色记忆' : '提升为全局记忆' }}</el-button>
         </div>
-        <div v-if="['memory', 'summary'].includes(row.kind) && source === 'current' && row.revision > 0" class="record-actions">
+        <div v-if="canWrite && ['memory', 'summary'].includes(row.kind) && source === 'current' && row.revision > 0" class="record-actions">
           <el-button size="small" :disabled="loading" @click="editContent(row)">编辑</el-button>
           <template v-if="row.kind === 'memory'">
             <el-button size="small" :disabled="loading" @click="openLifecycle(row)">保留等级与固定</el-button>
@@ -163,7 +164,7 @@
         <strong>版本 {{ version.revision }}</strong>
         <small>{{ version.createdAt }}</small>
         <p>{{ historyPreview(version.body) }}</p>
-        <el-button size="small" :disabled="loading" @click="restoreHistory(version.revision)">恢复此版本</el-button>
+        <el-button v-if="canWrite" size="small" :disabled="loading" @click="restoreHistory(version.revision)">恢复此版本</el-button>
       </article>
       <el-empty v-if="historyRows.length === 0" description="暂无修改历史" />
     </el-dialog>
@@ -183,10 +184,13 @@ import { GLOBAL_MEMORY_ROLE, memoryStorageRole, memoryRecordScope } from "@/runt
 import { ownedMemoryTitle, ownedMemoryFields, ownedMemoryEditableText, ownedMemoryDecayLabel, ownedMemoryVerificationLabel } from "@/runtime/owned-memory-format";
 import { transferMemoryScope } from "@/composables/useMemoryScopeTransfer";
 import { ownedMemoryViewOptions } from "@/runtime/owned-memory-view-options";
+import { useCoreDataAccess } from "@/composables/useCoreDataAccess";
 
 const props = defineProps<{ visible: boolean; characterId: string; conversationId: string; embedded?: boolean; initialKind?: string; fixedKind?: boolean; requestedMemoryView?: string; mode?: string; kinds?: string[]; source?: string; search?: string }>();
 defineEmits<{ "update:visible": [value: boolean] }>();
 const owned = useDeviceOwnedConversation();
+const coreData = useCoreDataAccess();
+const canWrite = computed(() => coreData.access.value.write);
 const memoryManagement = useOwnedMemoryManagement();
 const controlId = useId();
 const layers = [
@@ -302,7 +306,6 @@ const loadedScope = ref<OwnedExecutionScope>();
 let generation = 0;
 let scope = "";
 let authorityInvalidated = false;
-let providerTimer: ReturnType<typeof setInterval> | undefined;
 
 function content(row: any): string {
   return ownedMemoryEditableText(row);
@@ -614,6 +617,15 @@ function clearAuthority() {
   loading.value = false;
 }
 function reloadScope() { if (props.visible && props.characterId) void load(); }
+async function refreshAuthority() {
+  try {
+    const ready = await owned.refresh();
+    if (ready && props.visible && props.characterId && !loading.value) void load();
+  } catch (error) {
+    clearAuthority();
+    console.error("[original-error]", error);
+  }
+}
 watch([() => props.characterId, owned.coreId, () => owned.policy.value?.providerEpoch, () => owned.policy.value?.modeRevision, () => owned.policy.value?.permissionRevision], clearAuthority, { flush: "sync" });
 watch([() => props.visible, () => props.characterId, () => props.conversationId, kind, source, memoryView, owned.coreId, () => owned.policy.value?.providerEpoch, () => owned.policy.value?.modeRevision, () => owned.policy.value?.permissionRevision], () => {
   generation++;
@@ -621,21 +633,20 @@ watch([() => props.visible, () => props.characterId, () => props.conversationId,
   if (props.visible && props.characterId) void load();
 }, { immediate: true });
 onMounted(() => {
-  window.addEventListener("amitia:runtime-connection-changed", clearAuthority);
-  window.addEventListener("amitia:execution-scope-changed", clearAuthority);
+  window.addEventListener("amitia:runtime-connection-changed", refreshAuthority);
+  window.addEventListener("amitia:execution-scope-changed", refreshAuthority);
   window.addEventListener("amitia:memory-scope-changed", reloadScope);
-  providerTimer = setInterval(() => {
-    if (!props.visible) return;
-    void owned.refresh().then((ready) => {
-      if (ready && props.visible && props.characterId && authorityInvalidated && !loading.value) void load();
-    }).catch(clearAuthority);
-  }, 3000);
+  window.addEventListener("amitia:owned-runtime-refresh", refreshAuthority);
+  window.addEventListener("focus", refreshAuthority);
+  document.addEventListener("visibilitychange", refreshAuthority);
 });
 onUnmounted(() => {
-  if (providerTimer) clearInterval(providerTimer);
-  window.removeEventListener("amitia:runtime-connection-changed", clearAuthority);
-  window.removeEventListener("amitia:execution-scope-changed", clearAuthority);
+  window.removeEventListener("amitia:runtime-connection-changed", refreshAuthority);
+  window.removeEventListener("amitia:execution-scope-changed", refreshAuthority);
   window.removeEventListener("amitia:memory-scope-changed", reloadScope);
+  window.removeEventListener("amitia:owned-runtime-refresh", refreshAuthority);
+  window.removeEventListener("focus", refreshAuthority);
+  document.removeEventListener("visibilitychange", refreshAuthority);
   clearAuthority();
 });
 </script>

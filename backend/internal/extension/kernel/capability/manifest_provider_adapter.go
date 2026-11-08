@@ -37,6 +37,22 @@ func BuildManifestProviderID(extensionID domain.ExtensionID, moduleID domain.Mod
 	return ProviderID("extprov_" + hex.EncodeToString(sum[:]))
 }
 
+func CanonicalGameHostCapabilityID(extensionID, toolID string) CapabilityID {
+	extensionID = strings.Trim(strings.TrimSpace(extensionID), "/")
+	toolID = strings.Trim(strings.TrimSpace(toolID), "/")
+	if extensionID == "" {
+		return ParseCapabilityID(toolID)
+	}
+	if toolID == "" {
+		return ParseCapabilityID(extensionID)
+	}
+	prefix := extensionID + "/"
+	if strings.HasPrefix(toolID, prefix) {
+		return ParseCapabilityID(toolID)
+	}
+	return ParseCapabilityID(prefix + toolID)
+}
+
 func runtimeTypeFromManifest(runtimeType domain.RuntimeType, placement domain.ModulePlacement) RuntimeType {
 	switch runtimeType {
 	case domain.RuntimeTypeBuiltin, domain.RuntimeTypeGo:
@@ -99,7 +115,7 @@ func ProviderDefinitionsFromExtension(def domain.ExtensionDefinition) ([]Capabil
 	seen := make(map[ProviderID]bool)
 
 	for _, mod := range def.Modules {
-		if mod.Provider == nil && len(mod.ProvidedCapabilities) == 0 {
+		if mod.Provider == nil && len(mod.ProvidedCapabilities) == 0 && !moduleHasGameHostTool(mod) {
 			continue
 		}
 
@@ -196,9 +212,100 @@ func ProviderDefinitionsFromExtension(def domain.ExtensionDefinition) ([]Capabil
 
 			results = append(results, providerDef)
 		}
+
+		provided := make(map[CapabilityID]struct{}, len(capabilities))
+		for _, capability := range capabilities {
+			provided[ParseCapabilityID(capability.ID)] = struct{}{}
+		}
+		for _, contribution := range mod.Contributions {
+			if contribution.Kind != domain.ContributionKindTool {
+				continue
+			}
+			runtimeDef, _ := contribution.Definition["runtime"].(map[string]any)
+			runtimeType, _ := runtimeDef["runtimeType"].(string)
+			if !strings.EqualFold(strings.TrimSpace(runtimeType), string(RuntimeTypeGameHost)) {
+				continue
+			}
+			toolID, _ := contribution.Definition["toolId"].(string)
+			toolID = strings.TrimSpace(toolID)
+			if toolID == "" {
+				toolID = string(contribution.ID)
+			}
+			capabilityID := CanonicalGameHostCapabilityID(string(def.ID), toolID)
+			if _, exists := provided[capabilityID]; exists {
+				continue
+			}
+			providerID := BuildManifestProviderID(def.ID, mod.ID, nil, capabilityID)
+			if seen[providerID] {
+				return nil, ManifestProviderError{
+					ExtensionID:  string(def.ID),
+					ModuleID:     string(mod.ID),
+					CapabilityID: capabilityID,
+					Err:          ErrManifestProviderIDCollision,
+				}
+			}
+			seen[providerID] = true
+			binding := runtimeBindingFromManifestModule(mod)
+			binding.RuntimeType = RuntimeTypeGameHost
+			runtimeID, _ := runtimeDef["runtimeId"].(string)
+			binding.RuntimeID = strings.TrimSpace(runtimeID)
+			handlerName, _ := runtimeDef["handlerName"].(string)
+			if strings.TrimSpace(handlerName) != "" {
+				binding.HandlerName = strings.TrimSpace(handlerName)
+				binding.Endpoint = binding.HandlerName
+			}
+			if binding.Metadata == nil {
+				binding.Metadata = make(map[string]any)
+			}
+			for _, key := range []string{"pluginId", "serviceId"} {
+				value, _ := runtimeDef[key].(string)
+				if strings.TrimSpace(value) != "" {
+					binding.Metadata[key] = strings.TrimSpace(value)
+				}
+			}
+			results = append(results, CapabilityProviderDefinition{
+				ID:           providerID,
+				CapabilityID: capabilityID,
+				Kind:         ProviderKindExtension,
+				Placement:    placement,
+				ExtensionID:  string(def.ID),
+				ModuleID:     string(mod.ID),
+				Runtime:      binding,
+				Platforms:    platformsFromModule(mod),
+			})
+			provided[capabilityID] = struct{}{}
+		}
 	}
 
 	return results, nil
+}
+
+func moduleHasGameHostTool(mod domain.ModuleDefinition) bool {
+	for _, contribution := range mod.Contributions {
+		if contribution.Kind != domain.ContributionKindTool {
+			continue
+		}
+		runtimeDef, _ := contribution.Definition["runtime"].(map[string]any)
+		runtimeType, _ := runtimeDef["runtimeType"].(string)
+		if strings.EqualFold(strings.TrimSpace(runtimeType), string(RuntimeTypeGameHost)) {
+			return true
+		}
+	}
+	return false
+}
+
+func platformsFromModule(mod domain.ModuleDefinition) []runtimeidentity.Platform {
+	if mod.Placement != domain.ModulePlacementDevice || mod.DeviceRequirements == nil {
+		return nil
+	}
+	platforms := make([]runtimeidentity.Platform, 0, len(mod.DeviceRequirements.Platforms))
+	for _, value := range mod.DeviceRequirements.Platforms {
+		platform, err := runtimeidentity.ParsePlatform(value)
+		if err == nil {
+			platforms = append(platforms, platform)
+		}
+	}
+	return dedupeAndSortPlatforms(platforms)
 }
 
 func dedupeAndSortPlatforms(items []runtimeidentity.Platform) []runtimeidentity.Platform {

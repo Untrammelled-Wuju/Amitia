@@ -9,6 +9,8 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/behavior"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
 	"github.com/u-ai/backend/internal/desktoppet/installation/binding"
+	devicemeshagent "github.com/u-ai/backend/internal/devicemesh/agent"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 	"gorm.io/gorm"
 )
 
@@ -94,6 +96,9 @@ func TestDesktopPetBehaviorMeshDurableEventPersistsBeforeOfflineDelivery(t *test
 	if totalCount != 2 {
 		t.Fatalf("expected tenant-scoped outbox identity, got %d rows", totalCount)
 	}
+	if delay, pending, err := publisher.nextPendingDelay(t.Context()); err != nil || !pending || delay < time.Second {
+		t.Fatalf("event-driven retry schedule was not derived from persisted availableAt: delay=%v pending=%v err=%v", delay, pending, err)
+	}
 }
 
 func TestResolveDeviceActivePetRequiresCredentialOwnerAndActiveBinding(t *testing.T) {
@@ -166,5 +171,18 @@ func TestResolveDeviceActivePetRequiresCredentialOwnerAndActiveBinding(t *testin
 
 	if _, err := resolveDeviceActivePet(context.Background(), services, "cloud-user", "device-b", "character-a", ""); err == nil {
 		t.Fatal("unmapped device must fail owner resolution")
+	}
+}
+
+func TestCredentialSyncSkipsOptionalDesktopPetMapperWithoutDroppingMandatoryErrors(t *testing.T) {
+	credential := &devicemeshagent.StoredCredential{
+		SpaceID:  runtimeidentity.SpaceID("space-cloud"),
+		DeviceID: runtimeidentity.DeviceID("device-a"),
+	}
+	if err := syncDesktopPetOwnerFromCredential(context.Background(), &AppServices{}, credential); err != nil {
+		t.Fatalf("local Runtime credential binding must not require optional desktop pet mapper: %v", err)
+	}
+	if err := syncDesktopPetOwnerFromCredential(context.Background(), nil, credential); err == nil {
+		t.Fatal("missing service container must preserve the mandatory owner mapping error")
 	}
 }

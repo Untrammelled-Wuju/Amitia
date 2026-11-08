@@ -390,6 +390,15 @@ func prepareNetworkLaunchWithStateRoot(policy ServiceNetworkPolicy, executable s
 	if !policy.Enforce {
 		return directSandboxLaunch(executable, args, workingDir), nil
 	}
+	if nodePermissionIsolationPlan(policy, executable, args, workingDir) {
+		return sandboxLaunchPlan{
+			Path:                  executable,
+			Args:                  append([]string(nil), args...),
+			WorkingDir:            workingDir,
+			FilesystemIsolated:    true,
+			NetworkPolicyEnforced: true,
+		}, nil
+	}
 	mode := normalizedNetworkMode(policy)
 	if err := ValidateNetworkPolicySupport(policy); err != nil {
 		return sandboxLaunchPlan{}, err
@@ -556,6 +565,30 @@ func prepareNetworkLaunchWithStateRoot(policy ServiceNetworkPolicy, executable s
 	}
 
 	return sandboxLaunchPlan{}, fmt.Errorf("%w on %s for mode %s", ErrNetworkSandboxUnavailable, runtime.GOOS, mode)
+}
+
+func nodePermissionIsolationPlan(policy ServiceNetworkPolicy, executable string, args []string, workingDir string) bool {
+	if normalizedNetworkMode(policy) != "none" ||
+		policy.AllowInbound ||
+		policy.AllowOutbound ||
+		policy.LoopbackOnly ||
+		policy.RequireProxy {
+		return false
+	}
+	base := strings.ToLower(filepath.Base(strings.TrimSpace(executable)))
+	if base != "node" && base != "node.exe" {
+		return false
+	}
+	hasPermission := false
+	for _, arg := range args {
+		switch {
+		case arg == "--permission":
+			hasPermission = true
+		case strings.HasPrefix(arg, "--allow-net"):
+			return false
+		}
+	}
+	return hasPermission && strings.TrimSpace(workingDir) != ""
 }
 
 type bubblewrapInfo struct {

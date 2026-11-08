@@ -94,6 +94,29 @@ func TestUnknownRemoteCallSurvivesRestartAndCannotPretendPermissionChanged(t *te
 	}
 }
 
+func TestProviderSwitchClosesOfflineRemoteAuthorityWithoutBlocking(t *testing.T) {
+	db, service := setup(t)
+	ctx, scope, finish, err := service.Begin(t.Context(), "space", "a", "b", "space", "role", "remote")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer finish()
+	if _, err := service.TrackRemoteAuthority(ctx, scope, "session", 1); err != nil {
+		t.Fatal(err)
+	}
+	service.SetAuthorityBarrier(func(context.Context, string, string, int64, []string) error {
+		return errors.Join(coordination.ErrAuthoritySourceOffline, errors.New("devicemesh: target device is offline"))
+	})
+	epoch, changed, err := service.BindProvider(t.Context(), "new-core")
+	if err != nil || !changed || epoch < 2 {
+		t.Fatalf("provider switch blocked by offline old authority: epoch=%d changed=%t err=%v", epoch, changed, err)
+	}
+	var pending int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM kernel_device_remote_authority`).Scan(&pending); err != nil || pending != 0 {
+		t.Fatalf("stale authority retained: pending=%d err=%v", pending, err)
+	}
+}
+
 func TestAuthorityFenceIsMonotonicAndSeparatesCallerTargetAndRealm(t *testing.T) {
 	db, _ := setup(t)
 	scope := coordination.ExecutionScope{SpaceID: "space", InitiatorDeviceID: "a", TargetDeviceID: "b", PermissionRevision: 5, TargetPermissionRevision: 7}
@@ -141,5 +164,54 @@ func TestStalePolicyRequestDoesNotFenceValidCalls(t *testing.T) {
 	}
 	if _, err := service.SetCapabilityGrant(t.Context(), "space", "a", "b", "ai.chat", 99, true); !errors.Is(err, coordination.ErrRevision) {
 		t.Fatal(err)
+	}
+}
+
+func TestRemoteReconciliationDoesNotBlockCapabilitySynchronization(t *testing.T) {
+	db, service := setup(t)
+	ctx, scope, finish, err := service.Begin(t.Context(), "space", "a", "b", "space", "role", "remote")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer finish()
+	if _, err := service.TrackRemoteAuthority(ctx, scope, "old-session", 1); err != nil {
+		t.Fatal(err)
+	}
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	reconciled := make(chan error, 1)
+	go func() {
+		reconciled <- service.ReconcileRemoteAuthority(t.Context(), "space", "b", "new-session", 2, func(context.Context, []string) error {
+			close(entered)
+			<-release
+			return nil
+		})
+	}()
+	<-entered
+	exposure := make(chan error, 1)
+	go func() {
+		_, err := service.SetCapabilityExposure(t.Context(), "space", "a", 1, nil)
+		exposure <- err
+	}()
+	select {
+	case err := <-exposure:
+		if err != nil {
+			close(release)
+			<-reconciled
+			t.Fatal(err)
+		}
+	case <-time.After(250 * time.Millisecond):
+		close(release)
+		<-reconciled
+		<-exposure
+		t.Fatal("旧设备对账网络阻塞了其他设备能力同步")
+	}
+	close(release)
+	if err := <-reconciled; err != nil {
+		t.Fatal(err)
+	}
+	var remaining int
+	if err := db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM kernel_device_remote_authority WHERE space_id='space' AND target_id='b'`).Scan(&remaining); err != nil || remaining != 0 {
+		t.Fatalf("旧远端请求未清理: remaining=%d err=%v", remaining, err)
 	}
 }

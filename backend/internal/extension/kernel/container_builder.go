@@ -1213,13 +1213,12 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		return nil, fmt.Errorf("register builtin extensions: %w", err)
 	}
 
-	initCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	initCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
 	if err := builtinBootstrapper.RetireRemoved(initCtx); err != nil {
-		cancel()
 		return nil, fmt.Errorf("retire removed builtin extensions: %w", err)
 	}
 	if err := builtinBootstrapper.Reconcile(initCtx); err != nil {
-		cancel()
 		return nil, fmt.Errorf("builtin reconcile failed: %w", err)
 	}
 
@@ -1227,7 +1226,6 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	if b.backgroundBootstrapFunc != nil {
 		bgRegistry, err = b.backgroundBootstrapFunc()
 		if err != nil {
-			cancel()
 			return nil, fmt.Errorf("background removal bootstrap failed: %w", err)
 		}
 	}
@@ -1235,10 +1233,8 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		bgRegistry = backgroundremoval.NewRegistry()
 	}
 	if err := bgRegistry.Register(local.NewLocalProvider(), local.LocalCapabilities()); err != nil {
-		cancel()
 		return nil, fmt.Errorf("background removal register local provider failed: %w", err)
 	}
-	cancel()
 
 	providerInvocationService := capability.NewProviderInvocationService(capabilityService, adapterRegistry)
 	kernelProviderInvoker := NewKernelProviderInvoker(providerInvocationService)
@@ -1379,6 +1375,8 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	toolFacade.SetAgentSkillRuntime(agentSkillRuntime)
 	toolFacade.SetCapabilityResolver(capabilityResolver)
 	toolFacade.SetCapabilityService(capabilityService)
+	toolFacade.SetCapabilityProviders(capabilityProviderRegistry)
+	toolFacade.SetScopeManager(scopeManager)
 	toolFacade.SetAcquisitionBridge(acquisitionBridge)
 	capabilityService.SetToolRegistry(toolRegistry)
 	if hookService != nil {
@@ -1471,16 +1469,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		if builtinUtilityTools.CanHandle(handlerName) {
 			return builtinUtilityTools.Dispatch(ctx, handlerName, input, invocation)
 		}
-		execCtx := tool.ToolExecutionContext{
-			Context:        ctx,
-			ConversationID: invocation.ConversationID,
-			CharacterID:    invocation.CharacterID,
-			UserMessage:    invocation.UserMessage,
-			SpaceID:        invocation.SpaceID,
-			Path:           "kernel.builtin",
-			ToolCallID:     invocation.InvocationID,
-			IdempotencyKey: invocation.IdempotencyKey,
-		}
+		execCtx := builtinToolExecutionContext(ctx, invocation)
 		if mode, ok := invocation.Metadata[tool.MetadataKeyPermissionMode].(string); ok {
 			execCtx.PermissionMode = mode
 		}
@@ -2554,4 +2543,20 @@ func (a *kernelArtifactRegistryAdapter) GetArtifactByArchivePath(ctx context.Con
 		ArchivePath:  result.ArchivePath,
 		ManifestHash: result.ManifestHash,
 	}, nil
+}
+
+func builtinToolExecutionContext(ctx context.Context, invocation capability.ToolInvocationContext) tool.ToolExecutionContext {
+	return tool.ToolExecutionContext{
+		Context:        ctx,
+		ConversationID: invocation.ConversationID,
+		CharacterID:    invocation.CharacterID,
+		UserMessage:    invocation.UserMessage,
+		SpaceID:        invocation.SpaceID,
+		Path:           "kernel.builtin",
+		RequestID:      invocation.OperationID,
+		CorrelationID:  invocation.CorrelationID,
+		CausationID:    invocation.CausationID,
+		ToolCallID:     invocation.InvocationID,
+		IdempotencyKey: invocation.IdempotencyKey,
+	}
 }

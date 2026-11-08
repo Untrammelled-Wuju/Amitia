@@ -88,6 +88,8 @@ backend/testdata/extensions/**/dist-candidate-*/
 /U-Ai-*.tar.gz
 
 # Local diagnostics and runtime data
+/.AGENTS.md
+/AGENTS.md
 /.diag-*
 /.vite/
 /_do_push.ps1

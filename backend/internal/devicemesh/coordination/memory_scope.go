@@ -47,6 +47,21 @@ func MemoryKind(kind string) bool {
 	return false
 }
 
+func CoreOwnedKind(kind string) bool {
+	switch kind {
+	case "memory", "working", "profile", "episodic", "fact", "vector", "graph", "summary", "continuity", "worldbook", RuntimeStateKindPsyche, RuntimeStateKindRelationship, RuntimeStateKindNeeds:
+		return true
+	}
+	return false
+}
+
+func DataOwnerID(scope ExecutionScope, kind string) string {
+	if scope.Coordinated && CoreOwnedKind(kind) {
+		return scope.CoreID
+	}
+	return scope.ResourceOwnerID
+}
+
 func StorageRole(scope ExecutionScope, kind string) string {
 	if scope.ConversationRoleID != "" && GroupConversationKind(kind) {
 		return scope.ConversationRoleID

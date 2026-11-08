@@ -131,6 +131,45 @@ func TestAcquireClientCursorAheadForcesFullResumeAndStillFencesOldGeneration(t *
 	}
 }
 
+func TestAcquireActiveSessionReturnsConcreteResumeMode(t *testing.T) {
+	now := time.Now().UTC()
+	store := &p0SessionStore{active: RuntimeSession{
+		ID:                           "session-1",
+		SpaceID:                      "user-1",
+		DeviceID:                     "device-1",
+		RuntimeID:                    "runtime-1",
+		Platform:                     runtimeidentity.PlatformAndroid,
+		Status:                       protocol.SessionStatusReady,
+		ConnectionGeneration:         4,
+		LastAppliedStateRevision:     7,
+		LastProcessedCommandSequence: 8,
+		LastEventSequence:            9,
+		ActualStateHash:              "sha256:server",
+		Revision:                     3,
+		LastHeartbeatAt:              now,
+		ExpiresAt:                    now.Add(time.Hour),
+	}}
+	service, err := NewService(store, ServiceOptions{
+		SessionIDFactory: func() runtimeidentity.RuntimeSessionID { return "unused-new-session" },
+	})
+	if err != nil {
+		t.Fatalf("new service: %v", err)
+	}
+
+	result, err := service.Acquire(context.Background(), AcquireRequest{
+		Identity: protocol.SessionIdentity{SpaceID: "user-1", DeviceID: "device-1", RuntimeID: "runtime-1"},
+		Platform: runtimeidentity.PlatformAndroid,
+		Cursor:   protocol.SessionCursor{LastAppliedStateRevision: 7, LastProcessedCommandSequence: 8, LastEventSequence: 9, ActualStateHash: "sha256:server"},
+		Now:      now.Add(time.Second),
+	})
+	if err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	if result.Resume.Mode != protocol.ResumeModeResume {
+		t.Fatalf("resume mode = %q, want concrete resume", result.Resume.Mode)
+	}
+}
+
 func TestAcquireAfterClosedSessionAdvancesFencingGeneration(t *testing.T) {
 	store := &p0SessionStore{active: RuntimeSession{
 		ID:                   "closed-session",

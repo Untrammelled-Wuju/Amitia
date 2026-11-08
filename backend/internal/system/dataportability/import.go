@@ -3,6 +3,7 @@ package dataportability
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -17,29 +18,30 @@ type ImportPreviewResult struct {
 	RequiresReindex bool                     `json:"requiresReindex"`
 }
 
-func (c *Coordinator) PreviewImport(ctx context.Context, archivePath string) (*ImportPreviewResult, error) {
+func (c *Coordinator) PreviewImport(ctx context.Context, archivePath string) (_ *ImportPreviewResult, resultErr error) {
 	staging, err := c.Staging.CreateStaging()
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		resultErr = errors.Join(resultErr, c.Staging.CleanupStaging(staging))
+	}()
 
 	reader, err := NewArchiveReader(archivePath)
 	if err != nil {
-		c.Staging.CleanupStaging(staging)
 		return nil, err
 	}
 	defer reader.Close()
 
 	manifest, err := reader.ReadManifest()
 	if err != nil {
-		c.Staging.CleanupStaging(staging)
-		return nil, ErrImportPackageInvalid
+		return nil, fmt.Errorf("%w: %w", ErrImportPackageInvalid, err)
 	}
 
 	if manifest.Format != FormatName {
 		return nil, ErrImportFormatUnsupported
 	}
-	if manifest.FormatVersion > FormatVersion {
+	if manifest.FormatVersion != FormatVersion {
 		return nil, ErrImportFormatUnsupported
 	}
 	if manifest.SchemaFingerprint == "" || manifest.SchemaFingerprint != c.SchemaFinger {
@@ -63,8 +65,6 @@ func (c *Coordinator) PreviewImport(ctx context.Context, archivePath string) (*I
 		}
 		previews = append(previews, p...)
 	}
-
-	c.Staging.CleanupStaging(staging)
 
 	return &ImportPreviewResult{
 		Manifest:        manifest,
@@ -101,9 +101,9 @@ func (c *Coordinator) executeImportWithOperation(ctx context.Context, archivePat
 
 	manifest, err := reader.ReadManifest()
 	if err != nil {
-		return nil, nil, ErrImportPackageInvalid
+		return nil, nil, fmt.Errorf("%w: %w", ErrImportPackageInvalid, err)
 	}
-	if manifest.Format != FormatName || manifest.FormatVersion > FormatVersion {
+	if manifest.Format != FormatName || manifest.FormatVersion != FormatVersion {
 		return nil, nil, ErrImportFormatUnsupported
 	}
 	if manifest.SchemaFingerprint == "" || manifest.SchemaFingerprint != c.SchemaFinger {
@@ -153,7 +153,7 @@ func (c *Coordinator) executeImportWithOperation(ctx context.Context, archivePat
 			op.Status = "failed"
 			op.Error = err.Error()
 			op.UpdatedAt = nowRFC3339()
-			return req.IdentityMap, op, ErrImportTransactionFailed
+			return req.IdentityMap, op, fmt.Errorf("%w: contributor %s: %w", ErrImportTransactionFailed, ct.ID(), err)
 		}
 		op.Stats[ct.ID()]++
 	}
@@ -168,6 +168,18 @@ func (c *Coordinator) executeImportWithOperation(ctx context.Context, archivePat
 	_ = now
 
 	return req.IdentityMap, op, nil
+}
+
+func (c *Coordinator) rollbackImport(ctx context.Context, archivePath string) error {
+	recoveryCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Minute)
+	defer cancel()
+	_, _, err := c.executeImportWithOperation(recoveryCtx, archivePath, ImportRequest{
+		CollisionPolicy:  CollisionReplace,
+		CharacterPolicy:  CollisionReplace,
+		ActivateImported: true,
+		Purpose:          PurposePreRestore,
+	})
+	return err
 }
 
 func (c *Coordinator) validateManifestComponents(manifest *BackupManifest) error {

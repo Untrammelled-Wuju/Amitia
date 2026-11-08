@@ -11,11 +11,9 @@ export class ConfigStore {
   constructor(filePath?: string) {
     this.filePath =
       filePath || join(getAmitiaDataDir(), "config", "deployment-config.json");
-    this.autoLaunchPath = join(
-      getAmitiaDataDir(),
-      "config",
-      "auto-launch.json",
-    );
+    this.autoLaunchPath = filePath
+      ? join(dirname(filePath), "auto-launch.json")
+      : join(getAmitiaDataDir(), "config", "auto-launch.json");
   }
 
   async getDeploymentConfig(): Promise<DeploymentModeConfig> {
@@ -23,6 +21,9 @@ export class ConfigStore {
       const raw = await readFile(this.filePath, "utf8");
       return validateDeploymentConfig(JSON.parse(raw));
     } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return { mode: "local" };
+      }
   console.error("[original-error]", error);
 return { mode: "local" };
     }
@@ -43,6 +44,9 @@ return { mode: "local" };
       const data = JSON.parse(raw);
       return data.enabled === true;
     } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return false;
+      }
   console.error("[original-error]", error);
 return false;
     }

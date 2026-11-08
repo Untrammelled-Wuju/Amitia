@@ -1,7 +1,10 @@
 package pet_center
 
 import (
+	"encoding/json"
 	"time"
+
+	"github.com/u-ai/backend/internal/devicemesh/capabilities/behaviorcatalog"
 )
 
 type PluginInstallState string
@@ -80,4 +83,29 @@ type ListResponse struct {
 	Total    int                       `json:"total"`
 	Page     int                       `json:"page"`
 	PageSize int                       `json:"pageSize"`
+}
+
+type BehaviorCatalog struct {
+	ExtensionID     string                     `json:"extensionId"`
+	PluginID        string                     `json:"pluginId"`
+	CatalogRevision string                     `json:"catalogRevision"`
+	Behaviors       []behaviorcatalog.Behavior `json:"behaviors"`
+}
+
+func (c BehaviorCatalog) Find(id string) (behaviorcatalog.Behavior, bool) {
+	for _, behavior := range c.Behaviors {
+		if behavior.ID == id {
+			return behavior, true
+		}
+	}
+	return behaviorcatalog.Behavior{}, false
+}
+
+type BehaviorInvocationResult struct {
+	ExtensionID     string          `json:"extensionId"`
+	PluginID        string          `json:"pluginId"`
+	BehaviorID      string          `json:"behaviorId"`
+	CatalogRevision string          `json:"catalogRevision"`
+	ToolID          string          `json:"toolId"`
+	Result          json.RawMessage `json:"result"`
 }

@@ -87,14 +87,34 @@ class _AmitiaMessageViewState extends ConsumerState<AmitiaMessageView> {
         MessageStatus.error,
       ].contains(widget.message.status);
 
-  String _feedbackIdentity(AmitiaMessageView value) => jsonEncode([
-    value.message.id,
-    value.characterId,
-    value.message.sourceOwnerId,
-    value.message.sourceScope,
-    value.message.sourceRevision,
-    value.message.status.name,
-  ]);
+  String _feedbackIdentity(AmitiaMessageView value) {
+    final scope = value.message.sourceScope;
+    return jsonEncode([
+      value.message.id,
+      value.characterId,
+      value.message.sourceOwnerId,
+      value.message.sourceRevision,
+      value.message.status.name,
+      if (scope != null)
+        ...[
+          'spaceId',
+          'initiatorDeviceId',
+          'targetDeviceId',
+          'coreId',
+          'providerEpoch',
+          'targetProviderEpoch',
+          'coordinated',
+          'modeRevision',
+          'permissionRevision',
+          'targetPermissionRevision',
+          'roleId',
+          'roleRevision',
+          'authorizationRealm',
+          'roleOwnerId',
+          'resourceOwnerId',
+        ].map((key) => scope[key]),
+    ]);
+  }
 
   @override
   void initState() {
@@ -755,6 +775,7 @@ class _AmitiaMessageViewState extends ConsumerState<AmitiaMessageView> {
   }
 
   String _formatTime(DateTime value) {
+    value = value.toLocal();
     final hour = value.hour.toString().padLeft(2, '0');
     final minute = value.minute.toString().padLeft(2, '0');
     return '$hour:$minute';
@@ -1331,6 +1352,9 @@ String _turnStatusLabel(String status) {
   if (value == 'interrupted') {
     return '已中断';
   }
+  if (value == 'needs_reconciliation') {
+    return '待确认恢复';
+  }
   if (const <String>{
     'completed',
     'success',
@@ -1346,6 +1370,17 @@ String _turnStatusLabel(String status) {
 dynamic _decodeTurnJSON(String value) {
   final source = value.trim();
   if (source.isEmpty) return null;
+  final first = source.codeUnitAt(0);
+  final jsonStart =
+      first == 0x7B ||
+      first == 0x5B ||
+      first == 0x22 ||
+      first == 0x2D ||
+      first >= 0x30 && first <= 0x39 ||
+      first == 0x74 ||
+      first == 0x66 ||
+      first == 0x6E;
+  if (!jsonStart) return source;
   try {
     return jsonDecode(source);
   } catch (error, stackTrace) {
@@ -1572,9 +1607,15 @@ class _TurnToolStreamState extends State<_TurnToolStream>
     final failed = counted
         .where((item) => _isFailedToolStatus(item.status))
         .length;
+    final reconciling = counted
+        .where(
+          (item) => item.status.trim().toLowerCase() == 'needs_reconciliation',
+        )
+        .length;
     final running = counted.any((item) => _isTurnStreaming(item.status));
     final total = counted.length;
     if (failed > 0) return '$total 个工具 · $failed 个失败';
+    if (reconciling > 0) return '$total 个工具 · $reconciling 个待确认恢复';
     if (running) {
       final completed = counted
           .where((item) => item.status.trim().toLowerCase() == 'completed')

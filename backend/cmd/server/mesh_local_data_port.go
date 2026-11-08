@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -25,6 +26,10 @@ type meshLocalDataPort struct {
 	spaceID  string
 	roles    character.Repository
 	store    *coordination.OwnershipStore
+}
+
+func (p *meshLocalDataPort) ownsScope(scope coordination.ExecutionScope) bool {
+	return scope.ResourceOwnerID == p.ownerID && (scope.RoleOwnerID == p.ownerID || scope.RoleOwnerID == scope.CoreID)
 }
 
 func projectGroupResourceForSnapshot(resource coordination.Resource) (coordination.Resource, error) {
@@ -97,8 +102,8 @@ func (p *meshLocalDataPort) ListOwnedRoleCatalog(ctx context.Context, scope coor
 }
 
 func (p *meshLocalDataPort) GroupState(ctx context.Context, scope coordination.ExecutionScope, conversationID string) (coordination.GroupState, error) {
-	if strings.TrimSpace(conversationID) == "" || scope.ResourceOwnerID != p.ownerID || scope.RoleOwnerID != p.ownerID || scope.RoleID == "" {
-		return coordination.GroupState{}, coordination.ErrWrongOwner
+	if strings.TrimSpace(conversationID) == "" || !p.ownsScope(scope) || scope.RoleID == "" {
+		return coordination.GroupState{}, fmt.Errorf("会话分组范围无效 resourceOwner=%q roleOwner=%q owner=%q role=%q: %w", scope.ResourceOwnerID, scope.RoleOwnerID, p.ownerID, scope.RoleID, coordination.ErrWrongOwner)
 	}
 	resource, err := p.store.Get(ctx, "conversation", conversationID)
 	if err != nil {
@@ -114,7 +119,7 @@ func (p *meshLocalDataPort) GroupState(ctx context.Context, scope coordination.E
 	state.ConversationID = conversationID
 	state.ConversationRoleID = resource.RoleID
 	state.ConversationRevision = resource.Revision
-	state.RoleOwnerID = p.ownerID
+	state.RoleOwnerID = scope.RoleOwnerID
 	if state.ConversationType == "" {
 		state.ConversationType = "single"
 	}
@@ -140,7 +145,7 @@ func (p *meshLocalDataPort) GroupState(ctx context.Context, scope coordination.E
 }
 
 func (p *meshLocalDataPort) GroupConversations(ctx context.Context, scope coordination.ExecutionScope) ([]coordination.Resource, map[string]string, error) {
-	if scope.ResourceOwnerID != p.ownerID || scope.RoleOwnerID != p.ownerID || scope.RoleID == "" {
+	if !p.ownsScope(scope) || scope.RoleID == "" {
 		return nil, nil, coordination.ErrWrongOwner
 	}
 	rows, err := p.services.KernelContainer.DeviceRegistry.Database().QueryContext(ctx, `SELECT resource_id,role_id,revision,body FROM kernel_device_owned_resources WHERE owner_id=? AND kind='conversation' AND deleted=0 ORDER BY updated_at DESC,resource_id DESC LIMIT 4096`, p.ownerID)
@@ -177,8 +182,8 @@ func (p *meshLocalDataPort) GroupConversations(ctx context.Context, scope coordi
 }
 
 func (p *meshLocalDataPort) roleCatalogLocked(ctx context.Context, scope coordination.ExecutionScope, includeDisabled bool) ([]coordination.Role, error) {
-	if scope.RoleOwnerID != p.ownerID || scope.ResourceOwnerID != p.ownerID {
-		return nil, coordination.ErrWrongOwner
+	if (scope.RoleOwnerID != p.ownerID && scope.RoleOwnerID != scope.CoreID) || scope.ResourceOwnerID == "" {
+		return nil, fmt.Errorf("角色目录所有者不匹配 roleOwner=%q expectedRoleOwner=%q resourceOwner=%q: %w", scope.RoleOwnerID, p.ownerID, scope.ResourceOwnerID, coordination.ErrWrongOwner)
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -230,6 +235,12 @@ func (p *meshLocalDataPort) roleCatalogLocked(ctx context.Context, scope coordin
 }
 
 func (p *meshLocalDataPort) WithSourceRole(ctx context.Context, scope coordination.ExecutionScope, execute func() error) error {
+	if scope.RoleOwnerID == scope.CoreID && scope.CoreID != p.ownerID {
+		if err := coordination.ValidateCurrent(ctx); err != nil {
+			return err
+		}
+		return execute()
+	}
 	unlock := character.LockRuntimeRole(p.services.DB)
 	defer unlock()
 	roles, err := p.rolesLocked(ctx, scope)
@@ -259,6 +270,9 @@ func appendMeshJSON[T any](items []T) ([]json.RawMessage, error) {
 }
 
 func (p *meshLocalDataPort) Snapshot(ctx context.Context, scope coordination.ExecutionScope, query coordination.DataQuery) (coordination.DataSnapshot, error) {
+	if query.Role != nil {
+		return p.snapshotWithRole(ctx, scope, query, *query.Role)
+	}
 	available, err := p.Roles(ctx, scope)
 	if err != nil {
 		return coordination.DataSnapshot{}, err
@@ -273,28 +287,36 @@ func (p *meshLocalDataPort) Snapshot(ctx context.Context, scope coordination.Exe
 	return p.snapshotWithRole(ctx, scope, query, role)
 }
 
+func (p *meshLocalDataPort) SnapshotWithRole(ctx context.Context, scope coordination.ExecutionScope, query coordination.DataQuery, role coordination.Role) (coordination.DataSnapshot, error) {
+	snapshot, err := p.snapshotWithRole(ctx, scope, query, role)
+	if err != nil {
+		return snapshot, fmt.Errorf("按中心角色读取本机快照失败: %w", err)
+	}
+	return snapshot, nil
+}
+
 func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordination.ExecutionScope, query coordination.DataQuery, role coordination.Role) (coordination.DataSnapshot, error) {
 	search, searchErr := coordination.NormalizeConversationSearch(query.SearchQuery)
 	if searchErr != nil {
-		return coordination.DataSnapshot{}, searchErr
+		return coordination.DataSnapshot{}, fmt.Errorf("校验本机快照搜索条件失败: %w", searchErr)
 	}
 	if search != "" {
 		if !query.ListConversations || query.ConversationID != "" || query.ResourceKind != "" && query.ResourceKind != "conversation" {
-			return coordination.DataSnapshot{}, coordination.ErrWrongOwner
+			return coordination.DataSnapshot{}, fmt.Errorf("本机快照搜索范围无效: %w", coordination.ErrWrongOwner)
 		}
 		query.SearchQuery, query.ResourceKind = search, "conversation"
 	}
 	if err := coordination.ValidateQueryVector(query); err != nil {
-		return coordination.DataSnapshot{}, err
+		return coordination.DataSnapshot{}, fmt.Errorf("校验本机快照向量条件失败: %w", err)
 	}
 	var err error
-	if scope.ResourceOwnerID != p.ownerID || scope.RoleOwnerID != p.ownerID || scope.RoleID != role.ID || role.Revision != scope.RoleRevision {
-		return coordination.DataSnapshot{}, coordination.ErrWrongOwner
+	if !p.ownsScope(scope) || scope.RoleID != role.ID || role.Revision != scope.RoleRevision {
+		return coordination.DataSnapshot{}, fmt.Errorf("本机快照范围无效: %w", coordination.ErrWrongOwner)
 	}
 	if query.ConversationID != "" {
 		group, err := p.GroupState(ctx, scope, query.ConversationID)
 		if err != nil {
-			return coordination.DataSnapshot{}, err
+			return coordination.DataSnapshot{}, fmt.Errorf("读取本机会话分组失败 resourceOwner=%q roleOwner=%q owner=%q: %w", scope.ResourceOwnerID, scope.RoleOwnerID, p.ownerID, err)
 		}
 		if group.IsGroup() {
 			scope.ConversationRoleID = group.ConversationRoleID
@@ -308,11 +330,19 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 		}
 	}
 	snapshot := coordination.DataSnapshot{OwnerID: p.ownerID, Role: role, Resources: make([]coordination.Resource, 0), NextCursors: make(map[string]string), Group: query.GroupState, GroupRoles: make(map[string]string)}
+	deviceOnly := scope.Coordinated && scope.ResourceOwnerID != scope.CoreID
+	validationScope := scope
+	if deviceOnly {
+		validationScope.Coordinated = false
+	}
 	if snapshot.Group != nil {
 		snapshot.GroupRoles[snapshot.Group.ConversationID] = snapshot.Group.ConversationRoleID
 	}
 	usableMemories := make(map[string]bool)
 	for _, kind := range []string{"memory", "conversation", "message", "summary", "working", "profile", "episodic", "fact", "vector", "graph", "continuity", business.EmotionSnapshotKind, "checkpoint", "project", "tool-result", "worldbook", "group-round", "group-delivery", "group-invitation", coordination.RuntimeStateKindPsyche, coordination.RuntimeStateKindRelationship, coordination.RuntimeStateKindNeeds} {
+		if deviceOnly && coordination.CoreOwnedKind(kind) {
+			continue
+		}
 		if query.Management && query.RuntimeTurns && query.ResourceKind == "" && kind != "conversation" && kind != "message" && kind != "checkpoint" {
 			continue
 		}
@@ -351,7 +381,7 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 				listed, nextCursor, err = p.store.ListPage(ctx, kind, currentPartition, resourceQuery)
 			}
 			if err != nil {
-				return snapshot, err
+				return snapshot, fmt.Errorf("读取本机 %s/%s 资源失败: %w", kind, currentPartition, err)
 			}
 			if currentPartition == partition && nextCursor != "" {
 				snapshot.NextCursors[kind] = nextCursor
@@ -467,7 +497,7 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 	if query.ListConversations {
 		groupResources, groupRoles, err := p.GroupConversations(ctx, scope)
 		if err != nil {
-			return snapshot, err
+			return snapshot, fmt.Errorf("读取本机会话列表失败: %w", err)
 		}
 		seen := make(map[string]bool)
 		for _, resource := range snapshot.Resources {
@@ -489,7 +519,7 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 	if (query.ResourceKind == "" || query.ResourceKind == "worldbook") && scope.WorldbookRoleID != coordination.GlobalWorldbookRole {
 		resources, err := p.listAllWorldbookResources(ctx, coordination.GlobalWorldbookRole, coordination.DataQuery{ResourceKind: "worldbook"})
 		if err != nil {
-			return snapshot, err
+			return snapshot, fmt.Errorf("读取本机世界书失败: %w", err)
 		}
 		snapshot.Resources = append(snapshot.Resources, resources...)
 	}
@@ -548,7 +578,7 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 			}
 		}
 	}
-	if query.ResourceKind == "" && len(query.Vector) > 0 {
+	if query.ResourceKind == "" && len(query.Vector) > 0 && !deviceOnly {
 		relevant, err := p.semanticSearch(ctx, coordination.StorageRole(scope, "memory"), query)
 		if err != nil {
 			return snapshot, err
@@ -580,15 +610,18 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 		snapshot.Resources = prioritized
 	}
 	if query.Management || query.ResourceKind == "continuity" || query.Cursor != "" {
-		return snapshot, coordination.ValidateSnapshot(scope, snapshot)
+		return snapshot, coordination.ValidateSnapshot(validationScope, snapshot)
 	}
 	if !query.Management && query.ResourceKind == "" {
 		snapshot.RuntimeContext, err = p.ownedRuntimeContext(ctx, scope, query)
 		if err != nil {
-			return snapshot, err
+			return snapshot, fmt.Errorf("读取本机运行时上下文失败: %w", err)
 		}
 	}
-	return snapshot, coordination.ValidateSnapshot(scope, snapshot)
+	if err := coordination.ValidateSnapshot(validationScope, snapshot); err != nil {
+		return snapshot, fmt.Errorf("校验本机数据快照失败: %w", err)
+	}
+	return snapshot, nil
 }
 
 func (p *meshLocalDataPort) listAllWorldbookResources(ctx context.Context, partition string, query coordination.DataQuery) ([]coordination.Resource, error) {
@@ -617,7 +650,7 @@ func (p *meshLocalDataPort) listAllWorldbookResources(ctx context.Context, parti
 }
 
 func (p *meshLocalDataPort) HistoricalConversations(ctx context.Context, scope coordination.ExecutionScope) ([]json.RawMessage, error) {
-	if !scope.Coordinated || scope.TargetDeviceID != p.ownerID || scope.ResourceOwnerID != scope.CoreID || scope.RoleOwnerID != scope.CoreID {
+	if !scope.Coordinated || scope.TargetDeviceID != p.ownerID || scope.ResourceOwnerID != p.ownerID || (scope.RoleOwnerID != p.ownerID && scope.RoleOwnerID != scope.CoreID) {
 		return nil, coordination.ErrWrongOwner
 	}
 	rows, err := p.services.KernelContainer.DeviceRegistry.Database().QueryContext(ctx, `SELECT body FROM kernel_device_owned_resources WHERE owner_id=? AND kind='conversation' AND deleted=0 ORDER BY updated_at DESC,resource_id DESC LIMIT 128`, p.ownerID)
@@ -668,7 +701,7 @@ func (p *meshLocalDataPort) HistoricalConversations(ctx context.Context, scope c
 
 func (p *meshLocalDataPort) HistoricalSnapshot(ctx context.Context, scope coordination.ExecutionScope, query coordination.DataQuery) (*coordination.DataSnapshot, error) {
 	if scope.TargetDeviceID != p.ownerID || !scope.Coordinated || scope.CoreID == "" || query.ConversationID == "" && query.HistoricalRoleID == "" {
-		return nil, coordination.ErrWrongOwner
+		return nil, fmt.Errorf("历史快照范围无效 target=%q owner=%q coordinated=%t: %w", scope.TargetDeviceID, p.ownerID, scope.Coordinated, coordination.ErrWrongOwner)
 	}
 	db := p.services.KernelContainer.DeviceRegistry.Database()
 	var storedRole string
@@ -701,15 +734,17 @@ func (p *meshLocalDataPort) HistoricalSnapshot(ctx context.Context, scope coordi
 	}
 	historical := scope
 	historical.ResourceOwnerID = p.ownerID
-	historical.RoleOwnerID = p.ownerID
+	historical.RoleOwnerID = scope.RoleOwnerID
 	historical.RoleID = storedRole
 	historical.MemoryRoleID = storedRole
 	historical.MemoryViewAll = false
 	role := coordination.Role{ID: storedRole, Name: "设备历史角色", Revision: 1, Profile: json.RawMessage(`{}`)}
 	historical.RoleRevision = role.Revision
-	snapshot, err := p.snapshotWithRole(ctx, historical, query, role)
+	snapshotScope := historical
+	snapshotScope.Coordinated = false
+	snapshot, err := p.snapshotWithRole(ctx, snapshotScope, query, role)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("读取历史角色快照失败 role=%q roleOwner=%q resourceOwner=%q: %w", historical.RoleID, historical.RoleOwnerID, historical.ResourceOwnerID, err)
 	}
 	filtered := make([]coordination.Resource, 0, len(snapshot.Resources))
 	for _, resource := range snapshot.Resources {
@@ -728,34 +763,46 @@ func (p *meshLocalDataPort) SaveInterrupted(ctx context.Context, reply coordinat
 
 func (p *meshLocalDataPort) Commit(ctx context.Context, commit coordination.Commit) (coordination.Acknowledgement, error) {
 	if err := coordination.ValidateCurrent(ctx); err != nil {
-		return coordination.Acknowledgement{}, err
+		return coordination.Acknowledgement{}, fmt.Errorf("校验设备资源写入权限失败: %w", err)
 	}
 	ctx = coordination.WithoutAdditionalGuard(ctx)
 	unlock := character.LockRuntimeRole(p.services.DB)
 	defer unlock()
-	roles, err := p.rolesLocked(ctx, commit.Scope)
-	if err != nil {
-		return coordination.Acknowledgement{}, err
-	}
-	role, err := coordination.ResolveRole(commit.Scope.RoleID, roles)
-	if err != nil {
-		return coordination.Acknowledgement{}, err
-	}
-	if role.Revision != commit.Scope.RoleRevision {
-		return coordination.Acknowledgement{}, coordination.ErrScopeExpired
-	}
-	if commit.MemoryTransfer != nil && commit.MemoryTransfer.ToRoleID != coordination.GlobalMemoryRole {
-		target, err := coordination.ResolveRole(commit.MemoryTransfer.ToRoleID, roles)
-		if err != nil || target.Revision != commit.MemoryTransfer.TargetRoleRevision {
+	if commit.Scope.RoleOwnerID == commit.Scope.CoreID && commit.Scope.CoreID != p.ownerID {
+		if commit.MemoryTransfer != nil && commit.MemoryTransfer.ToRoleID != coordination.GlobalMemoryRole {
+			return coordination.Acknowledgement{}, coordination.ErrWrongOwner
+		}
+	} else {
+		roles, err := p.rolesLocked(ctx, commit.Scope)
+		if err != nil {
+			return coordination.Acknowledgement{}, err
+		}
+		role, err := coordination.ResolveRole(commit.Scope.RoleID, roles)
+		if err != nil {
+			return coordination.Acknowledgement{}, err
+		}
+		if role.Revision != commit.Scope.RoleRevision {
 			return coordination.Acknowledgement{}, coordination.ErrScopeExpired
+		}
+		if commit.MemoryTransfer != nil && commit.MemoryTransfer.ToRoleID != coordination.GlobalMemoryRole {
+			target, err := coordination.ResolveRole(commit.MemoryTransfer.ToRoleID, roles)
+			if err != nil || target.Revision != commit.MemoryTransfer.TargetRoleRevision {
+				return coordination.Acknowledgement{}, coordination.ErrScopeExpired
+			}
 		}
 	}
 	var ack coordination.Acknowledgement
-	err = coordination.CommitCurrent(ctx, func() error {
+	err := coordination.CommitCurrent(ctx, func() error {
 		var err error
 		ack, err = p.store.Apply(ctx, commit)
+		if err != nil {
+			return fmt.Errorf("写入设备资源存储失败: %w", err)
+		}
 		return err
 	})
+	if err != nil {
+		return ack, fmt.Errorf("提交设备资源事务失败: %w", err)
+	}
 	return ack, err
 }
 
@@ -766,8 +813,10 @@ func (p *meshLocalDataPort) Resource(ctx context.Context, scope coordination.Exe
 	if err := coordination.ValidateCurrent(ctx); err != nil {
 		return nil, err
 	}
-	if err := coordination.ValidateRoleRevision(ctx, p, scope); err != nil {
-		return nil, err
+	if !(scope.RoleOwnerID == scope.CoreID && scope.CoreID != p.ownerID) {
+		if err := coordination.ValidateRoleRevision(ctx, p, scope); err != nil {
+			return nil, err
+		}
 	}
 	resource, err := p.store.Get(ctx, kind, id)
 	if err != nil {

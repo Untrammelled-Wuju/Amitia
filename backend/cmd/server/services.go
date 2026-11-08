@@ -57,6 +57,7 @@ import (
 	meshaudit "github.com/u-ai/backend/internal/devicemesh/audit"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	"github.com/u-ai/backend/internal/devicemesh/gamemode"
 	devicemeshserver "github.com/u-ai/backend/internal/devicemesh/server"
 	"github.com/u-ai/backend/internal/embedding"
 	"github.com/u-ai/backend/internal/extension"
@@ -178,6 +179,7 @@ type AppServices struct {
 	MultiAgentCoordinator        *interaction.MultiAgentCoordinator
 	WorkbenchTaskTracker         interaction.InteractionTracker
 	GameCenterService            *management.GameCenterManagementService
+	GameMode                     *gamemode.Service
 	MediaService                 *media.Service
 	WorkspaceRegistry            *workspace.Registry
 	WorkspaceService             *workspace.Service
@@ -254,6 +256,10 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	agentRunService, err := agentrun.NewService(ctx.DB)
 	if err != nil {
 		return nil, err
+	}
+	gameModeService, err := gamemode.NewService(ctx.DB)
+	if err != nil {
+		return nil, fmt.Errorf("initialize game mode service: %w", err)
 	}
 	temporalSvc := temporal.NewService(temporal.NewRepository(ctx.DB), temporal.SystemClock{})
 	memoryConsumers := &ownedMemoryConsumers{}
@@ -461,7 +467,10 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		kernelBuilder.WithRuntimeHost(bootstrap.RuntimeHost())
 		kernelBuilder = applyAndroidLinuxProvider(kernelBuilder, bootstrap.RuntimeHost())
 		kernelBuilder = applyIOSNativeProvider(kernelBuilder, bootstrap.IOSNativeProvider())
-		kernelBuilder, _ = applyAndroidNativeProvider(kernelBuilder, bootstrap, imageIntelligence, resourceResolver, config.AppCfg.Storage.DataDir)
+		kernelBuilder, err = applyAndroidNativeProvider(kernelBuilder, bootstrap, imageIntelligence, resourceResolver, config.AppCfg.Storage.DataDir)
+		if err != nil {
+			return nil, fmt.Errorf("initialize android native provider: %w", err)
+		}
 	}
 
 	kernelBuilder.WithMCPAcquisitionPersistence(mcpAcquisitionPersistence)
@@ -561,6 +570,10 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		if err := kernelContainer.GameHost.Start(context.Background()); err != nil {
 			log.Error("gamehost start failed: ", err)
 			panic("failed to start gamehost")
+		}
+		if err := kernelContainer.ReconcileProviderRuntimeState(context.Background(), capability.RuntimeTypeGameHost); err != nil {
+			log.Error("gamehost provider reconciliation failed: ", err)
+			panic("failed to reconcile gamehost providers")
 		}
 	}
 	if err := extensionRuntime.AttachKernelFacade(extensionRuntime.Kernel); err != nil {
@@ -1074,6 +1087,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		Attention:                    attentionService,
 		AgentPlatform:                agentPlatformService,
 		AgentRuns:                    agentRunService,
+		GameMode:                     gameModeService,
 	}
 	if services.AgentPlatform != nil && services.KernelContainer != nil {
 		runtimeBridge := newAgentPlatformRuntimeBridge(services.AgentPlatform, services.WorkspaceService, services.UnifiedEntry, services.KernelContainer.ApprovalBroker)
@@ -1087,13 +1101,17 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			services.KernelContainer.ExecutionKernel.AgentObserver = runtimeBridge
 		}
 	}
+	if services.KernelContainer != nil && services.KernelContainer.ToolFacade != nil && services.GameMode != nil {
+		services.KernelContainer.ToolFacade.SetGameHostExecutionGuard(&gameModeExecutionGuard{service: services.GameMode})
+	}
 	dataPortability, dataPortabilityErr := buildDataPortabilityCoordinator(dataPortabilityDeps{
-		DataDir:   config.AppCfg.Storage.DataDir,
-		DB:        ctx.DB,
-		KernelDB:  kernelContainer.DeviceRegistry.Database(),
-		Memory:    memoryConsumers,
-		ExtSvc:    extensionRuntime,
-		Workspace: workspaceService,
+		DataDir:       config.AppCfg.Storage.DataDir,
+		DB:            ctx.DB,
+		KernelDB:      kernelContainer.DeviceRegistry.Database(),
+		Memory:        memoryConsumers,
+		ExtSvc:        extensionRuntime,
+		Workspace:     workspaceService,
+		RoleLifecycle: characterAgentLifecycle{platform: services.AgentPlatform},
 	})
 	if dataPortabilityErr != nil {
 		return nil, fmt.Errorf("initialize data portability: %w", dataPortabilityErr)
@@ -1145,6 +1163,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			return nil, deviceDataErr
 		}
 		deviceMeshRuntime.LocalDeviceID = physicalIdentity.DeviceID.String()
+		deviceMeshRuntime.CoreDeviceID = physicalIdentity.DeviceID.String()
 		deviceMeshRuntime.LocalDeviceDataPort = deviceData
 		if err := bindCoreOwnedTaskRuntime(taskOwnershipBinding, deviceMeshRuntime, localSpace.SpaceID()); err != nil {
 			return nil, fmt.Errorf("initialize owned task runtime: %w", err)
@@ -1234,16 +1253,16 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			localRuntimeDispatcher.RegisterCancellable(gameHostManagementInvokeHandler, newGameHostManagementInvokeHandler(services))
 		}
 		deviceDispatcher := devicemeshagent.NewChainedRuntimeDispatcher(localRuntimeDispatcher, dispatcher)
-		if err := deviceMeshRuntime.AttachDeviceAgent(mcpDataDirectory(ctx), devicePlatformFromDescriptor(platform.Get().Descriptor(), goruntime.GOOS), deviceDispatcher, func(cred *devicemeshagent.StoredCredential) error {
+		if err := deviceMeshRuntime.AttachDeviceAgent(mcpDataDirectory(ctx), devicePlatformFromDescriptor(platform.Get().Descriptor(), goruntime.GOOS), deviceDispatcher, runtimeProfile.IsDeviceAgent(), func(cred *devicemeshagent.StoredCredential) error {
 			auditContext := meshaudit.WithActor(context.Background(), meshaudit.Actor{SpaceID: localSpace.SpaceID(), DeviceID: physicalIdentity.DeviceID.String(), PrincipalType: "device_runtime", AuthMethod: "local_provider_authority", Realm: "local"})
-			if cred == nil {
-				_, _, err := deviceMeshRuntime.Coordination.BindProvider(auditContext, localSpace.SpaceID())
+			providerCore := deviceAgentProviderCore(runtimeProfile, localSpace.SpaceID(), cred)
+			if _, _, err := deviceMeshRuntime.Coordination.BindProvider(auditContext, providerCore); err != nil {
 				return err
 			}
-			if _, _, err := deviceMeshRuntime.Coordination.BindProvider(auditContext, cred.SpaceID.String()); err != nil {
-				return err
+			if !runtimeProfile.IsDeviceAgent() {
+				return nil
 			}
-			return bindDesktopPetOwnerFromCredential(context.Background(), services, cred.SpaceID.String(), cred.DeviceID.String())
+			return syncDesktopPetOwnerFromCredential(context.Background(), services, cred)
 		}); err != nil {
 			return nil, fmt.Errorf("initialize hybrid device Agent: %w", err)
 		}
@@ -1275,6 +1294,13 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		if deviceMeshRuntime.Handler != nil && services.ContinuityOwner != nil {
 			deviceMeshRuntime.Handler.AddOnReady(func(spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID) {
 				if err := services.ContinuityOwner.ApplyDeviceReady(context.Background(), spaceID.String(), deviceID.String()); err != nil {
+					amitialog.Printf("[original-error] %v", err)
+				}
+			})
+		}
+		if deviceMeshRuntime.Handler != nil && services.GameMode != nil {
+			deviceMeshRuntime.Handler.AddOnReady(func(spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID) {
+				if err := reconcileGameModeAfterDeviceReady(context.Background(), services, spaceID, deviceID); err != nil {
 					amitialog.Printf("[original-error] %v", err)
 				}
 			})
@@ -1357,6 +1383,13 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		return nil, fmt.Errorf("register safety governance backup: %w", err)
 	}
 	return services, nil
+}
+
+func deviceAgentProviderCore(profile runtimeprofile.Profile, localCore string, credential *devicemeshagent.StoredCredential) string {
+	if profile.IsCore() || credential == nil {
+		return localCore
+	}
+	return credential.SpaceID.String()
 }
 
 func checkDesktopPetMeshReadiness(services *AppServices) error {

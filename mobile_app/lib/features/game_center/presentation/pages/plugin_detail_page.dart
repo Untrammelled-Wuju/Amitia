@@ -1,6 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:file_picker/file_picker.dart';
 import '../../../../app/amitia_page_route.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_spacing.dart';
@@ -10,6 +11,8 @@ import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/ui_runtime/mobile_extension_slot.dart';
 import '../../../../core/ui_runtime/ui_runtime_controller.dart';
 import '../../domain/game_center_dto.dart';
+import '../../domain/game_runtime_operations.dart';
+import '../../data/game_package_picker.dart';
 import '../controllers/game_center_providers.dart';
 import '../controllers/game_center_controller.dart';
 import 'runtime_detail_page.dart';
@@ -55,6 +58,44 @@ class _PluginDetailPageState extends ConsumerState<PluginDetailPage> {
           .selectPlugin(widget.pluginId, extensionId: widget.extensionId),
       ref.read(uiRuntimeProvider.notifier).ensureLoaded(force: refreshUi),
     ]);
+    if (!mounted) return;
+    final controller = ref.read(gameCenterControllerProvider.notifier);
+    final detail = ref.read(gameCenterControllerProvider).pluginDetail;
+    if (detail == null ||
+        detail.pluginId != widget.pluginId ||
+        detail.extensionId != widget.extensionId) {
+      return;
+    }
+    final selectedRuntimeId = detail.runtimes.isEmpty
+        ? ''
+        : detail.runtimes.first.runtimeId;
+    for (final runtime in detail.runtimes) {
+      final operations = availableGameRuntimeOperations(runtime.state);
+      if (!operations.contains(GameRuntimeOperation.start)) continue;
+      final started = await controller.startRuntime(runtime.runtimeId);
+      if (!started) {
+        final error = ref.read(gameCenterControllerProvider).runtimeError;
+        throw StateError(error ?? '启动运行实例失败');
+      }
+    }
+    await controller.selectPlugin(
+      widget.pluginId,
+      extensionId: widget.extensionId,
+    );
+    if (selectedRuntimeId.isEmpty || !mounted) return;
+    final updated = await controller.updateGameMode(
+      nextState: 'active',
+      gameTitle: detail.name,
+      runtimeId: selectedRuntimeId,
+    );
+    if (!updated && mounted) {
+      final error =
+          ref.read(gameCenterControllerProvider).gameModeError ??
+          '更新游戏模式运行实例失败';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error)));
+    }
   }
 
   @override
@@ -171,20 +212,11 @@ class _PluginDetailPageState extends ConsumerState<PluginDetailPage> {
           slotId: 'extension.detail.tab',
           extensionId: detail.extensionId,
           context: slotContext,
-          fallback: Card(
-            child: Padding(
-              padding: EdgeInsets.all(AppSpacing.lg),
-              child: Column(
-                children: [
-                  Icon(Icons.sports_esports_outlined, size: 36),
-                  SizedBox(height: AppSpacing.sm),
-                  Text(
-                    '该游戏扩展暂未提供专属控制界面',
-                    style: AppTypography.body(context),
-                  ),
-                ],
-              ),
-            ),
+          fallback: _PluginBehaviorPanel(
+            pluginId: detail.pluginId,
+            runtimeId: detail.runtimes.isEmpty
+                ? ''
+                : detail.runtimes.first.runtimeId,
           ),
         ),
         SizedBox(height: AppSpacing.sm),
@@ -435,15 +467,10 @@ class _PluginDetailPageState extends ConsumerState<PluginDetailPage> {
     GameCenterController controller,
     GamePluginDetail detail,
   ) async {
-    final result = await FilePicker.platform.pickFiles(
-      allowMultiple: false,
-      type: FileType.custom,
-      allowedExtensions: const ['gamex'],
-    );
-    final path = result?.files.single.path;
-    if (path == null || path.isEmpty) return;
     final lifecycle = ref.read(gameCenterPackageLifecycleProvider);
     try {
+      final path = await pickGamePackagePath();
+      if (path == null) return;
       final preview = await lifecycle.previewPackage(
         path,
         expectedExtensionId: detail.extensionId,
@@ -506,5 +533,306 @@ class _PluginDetailPageState extends ConsumerState<PluginDetailPage> {
         context,
       ).showSnackBar(SnackBar(content: Text('插件卸载失败: $e')));
     }
+  }
+}
+
+class _PluginBehaviorPanel extends ConsumerStatefulWidget {
+  final String pluginId;
+  final String runtimeId;
+
+  const _PluginBehaviorPanel({required this.pluginId, required this.runtimeId});
+
+  @override
+  ConsumerState<_PluginBehaviorPanel> createState() =>
+      _PluginBehaviorPanelState();
+}
+
+class _PluginBehaviorPanelState extends ConsumerState<_PluginBehaviorPanel> {
+  bool _loading = true;
+  String? _error;
+  String _catalogRevision = '';
+  List<Map<String, dynamic>> _behaviors = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(_load);
+  }
+
+  @override
+  void didUpdateWidget(covariant _PluginBehaviorPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.pluginId != widget.pluginId) {
+      Future.microtask(_load);
+    }
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final data = await ref
+          .read(gameCenterApiProvider)
+          .listBehaviors(widget.pluginId);
+      final rows = (data['behaviors'] as List? ?? const [])
+          .whereType<Map>()
+          .map((row) => row.cast<String, dynamic>())
+          .toList(growable: false);
+      if (!mounted) return;
+      setState(() {
+        _catalogRevision = (data['catalogRevision'] ?? '').toString();
+        _behaviors = rows;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  Future<Map<String, dynamic>> _invoke(
+    String behaviorId,
+    Map<String, dynamic> arguments,
+  ) async {
+    if (widget.runtimeId.isEmpty) {
+      throw StateError('游戏插件没有可用运行实例');
+    }
+    return ref
+        .read(gameCenterApiProvider)
+        .invokeBehavior(
+          widget.pluginId,
+          behaviorId,
+          runtimeId: widget.runtimeId,
+          expectedCatalogRevision: _catalogRevision,
+          arguments: arguments,
+        );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return Card(
+        child: Padding(
+          padding: EdgeInsets.all(AppSpacing.lg),
+          child: const Center(child: CircularProgressIndicator()),
+        ),
+      );
+    }
+    if (_error != null) {
+      return Card(
+        child: Padding(
+          padding: EdgeInsets.all(AppSpacing.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('游戏行为加载失败', style: AppTypography.cardTitle(context)),
+              SizedBox(height: AppSpacing.sm),
+              SelectableText(_error!, style: AppTypography.bodySmall(context)),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(onPressed: _load, child: const Text('重试')),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    if (_behaviors.isEmpty) {
+      return Card(
+        child: Padding(
+          padding: EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            children: [
+              Icon(Icons.sports_esports_outlined, size: 36),
+              SizedBox(height: AppSpacing.sm),
+              Text('该游戏扩展暂未提供专属控制界面', style: AppTypography.body(context)),
+            ],
+          ),
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('游戏行为', style: AppTypography.sectionTitle(context)),
+        SizedBox(height: AppSpacing.sm),
+        for (final behavior in _behaviors) ...[
+          _GameBehaviorCard(
+            key: ValueKey(behavior['id']),
+            behavior: behavior,
+            onInvoke: _invoke,
+          ),
+          SizedBox(height: AppSpacing.sm),
+        ],
+      ],
+    );
+  }
+}
+
+class _GameBehaviorCard extends StatefulWidget {
+  final Map<String, dynamic> behavior;
+  final Future<Map<String, dynamic>> Function(
+    String behaviorId,
+    Map<String, dynamic> arguments,
+  )
+  onInvoke;
+
+  const _GameBehaviorCard({
+    super.key,
+    required this.behavior,
+    required this.onInvoke,
+  });
+
+  @override
+  State<_GameBehaviorCard> createState() => _GameBehaviorCardState();
+}
+
+class _GameBehaviorCardState extends State<_GameBehaviorCard> {
+  final Map<String, dynamic> _values = {};
+  bool _loading = false;
+  String? _result;
+  String? _error;
+
+  Map<String, dynamic> get _schema =>
+      ((widget.behavior['inputSchema'] as Map?) ?? const {})
+          .cast<String, dynamic>();
+
+  Map<String, dynamic> get _properties =>
+      ((_schema['properties'] as Map?) ?? const {}).cast<String, dynamic>();
+
+  @override
+  void initState() {
+    super.initState();
+    for (final entry in _properties.entries) {
+      final property = (entry.value as Map?)?.cast<String, dynamic>();
+      final options = property?['enum'];
+      if (options is List && options.isNotEmpty) {
+        _values[entry.key] = options.first;
+      }
+    }
+  }
+
+  Future<void> _run() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+      _result = null;
+    });
+    try {
+      final result = await widget.onInvoke(
+        (widget.behavior['id'] ?? '').toString(),
+        _values,
+      );
+      if (!mounted) return;
+      setState(() {
+        _result = const JsonEncoder.withIndent('  ').convert(result);
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final title = (widget.behavior['name'] ?? widget.behavior['id'] ?? '游戏行为')
+        .toString();
+    final description = (widget.behavior['description'] ?? '').toString();
+    return Card(
+      child: Padding(
+        padding: EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(title, style: AppTypography.cardTitle(context)),
+            if (description.isNotEmpty) ...[
+              SizedBox(height: AppSpacing.xs),
+              Text(description, style: AppTypography.bodySmall(context)),
+            ],
+            for (final entry in _properties.entries) ...[
+              SizedBox(height: AppSpacing.sm),
+              _buildInput(context, entry.key, entry.value),
+            ],
+            SizedBox(height: AppSpacing.md),
+            AmitiaButton(
+              label: _loading ? '执行中...' : '执行',
+              isFullWidth: true,
+              onPressed: _loading ? null : _run,
+            ),
+            if (_error != null) ...[
+              SizedBox(height: AppSpacing.sm),
+              SelectableText(
+                _error!,
+                style: AppTypography.bodySmall(
+                  context,
+                ).copyWith(color: Theme.of(context).colorScheme.error),
+              ),
+            ],
+            if (_result != null) ...[
+              SizedBox(height: AppSpacing.sm),
+              SelectableText(_result!, style: AppTypography.bodySmall(context)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInput(BuildContext context, String key, dynamic rawProperty) {
+    final property = (rawProperty as Map?)?.cast<String, dynamic>() ?? const {};
+    final label = (property['title'] ?? key).toString();
+    final options = property['enum'];
+    if (options is List && options.isNotEmpty) {
+      return DropdownButtonFormField<dynamic>(
+        initialValue: _values[key],
+        decoration: InputDecoration(labelText: label),
+        items: options
+            .map(
+              (value) => DropdownMenuItem<dynamic>(
+                value: value,
+                child: Text(value.toString()),
+              ),
+            )
+            .toList(growable: false),
+        onChanged: (value) => setState(() => _values[key] = value),
+      );
+    }
+    if (property['type'] == 'boolean') {
+      return SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        title: Text(label),
+        value: _values[key] == true,
+        onChanged: (value) => setState(() => _values[key] = value),
+      );
+    }
+    return TextFormField(
+      decoration: InputDecoration(labelText: label),
+      keyboardType:
+          property['type'] == 'integer' || property['type'] == 'number'
+          ? const TextInputType.numberWithOptions(decimal: true)
+          : TextInputType.text,
+      onChanged: (value) {
+        if (value.trim().isEmpty) {
+          _values.remove(key);
+          return;
+        }
+        if (property['type'] == 'integer') {
+          _values[key] = int.tryParse(value);
+        } else if (property['type'] == 'number') {
+          _values[key] = num.tryParse(value);
+        } else {
+          _values[key] = value;
+        }
+      },
+    );
   }
 }

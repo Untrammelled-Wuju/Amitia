@@ -7,6 +7,7 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/services/shared_core_data_access.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 import '../../../../core/services/device_owned_memory_service.dart';
 import '../../../../core/services/owned_memory_scope.dart';
@@ -19,8 +20,12 @@ import 'owned_memory_timeline.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../historical_memory_style.dart';
 import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/widgets/shared_core_read_only_banner.dart';
 import '../owned_memory_format.dart';
 import '../widgets/historical_memory_card.dart';
+
+Map<String, dynamic> copyOwnedMemoryRecord(Map row) =>
+    Map<String, dynamic>.from(row);
 
 class OwnedMemoryPage extends ConsumerStatefulWidget {
   const OwnedMemoryPage({
@@ -669,7 +674,7 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
     bool deleted = false,
     Map<String, dynamic>? changes,
   }) async {
-    row = Map<String, dynamic>.from(jsonDecode(jsonEncode(row)) as Map);
+    row = copyOwnedMemoryRecord(row);
     if (deleted) {
       final accepted = await showDialog<bool>(
         context: context,
@@ -731,9 +736,7 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
   }
 
   Future<void> _editContent(Map row) async {
-    final original = Map<String, dynamic>.from(
-      jsonDecode(jsonEncode(row)) as Map,
-    );
+    final original = copyOwnedMemoryRecord(row);
     final content = original['body']?['content'];
     final field = content is Map
         ? const [
@@ -762,9 +765,7 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
   }
 
   Future<void> _editLifecycle(Map row) async {
-    final original = Map<String, dynamic>.from(
-      jsonDecode(jsonEncode(row)) as Map,
-    );
+    final original = copyOwnedMemoryRecord(row);
     final body = original['body'] as Map;
     var level =
         ((body['effectiveRetentionLevel'] ?? body['retentionLevel']) as num?)
@@ -960,9 +961,7 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
   }
 
   Future<void> _setExpiry(Map row) async {
-    final original = Map<String, dynamic>.from(
-      jsonDecode(jsonEncode(row)) as Map,
-    );
+    final original = copyOwnedMemoryRecord(row);
     final input = await _textInput(
       '到期时间（留空取消，填写日期或 ISO 时间）',
       (row['body']?['expiresAt'] ?? '').toString(),
@@ -993,6 +992,9 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
       ? '角色记忆'
       : _layers[_kind] ?? '记忆';
 
+  bool get _canWrite =>
+      ref.read(sharedCoreDataAccessProvider).valueOrNull?.write ?? false;
+
   IconData get _pageIcon => switch (_kind) {
     'profile' => Icons.person_outline,
     'episodic' => Icons.psychology_outlined,
@@ -1005,6 +1007,17 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
 
   @override
   Widget build(BuildContext context) {
+    final accessAsync = ref.watch(sharedCoreDataAccessProvider);
+    final access =
+        accessAsync.valueOrNull ??
+        SharedCoreDataAccess(
+          read: true,
+          write: false,
+          reason: accessAsync.hasError
+              ? '无法确认统筹中心数据权限：${accessAsync.error}'
+              : '正在确认统筹中心数据权限',
+          coreId: '',
+        );
     final rows = widget.timeline
         ? ownedMemoryTimelineRows(_rows.values)
         : _rows.values.toList();
@@ -1029,6 +1042,7 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
       top: false,
       child: Column(
         children: [
+          if (access.readOnly) SharedCoreReadOnlyBanner(access: access),
           if (widget.embedded) _buildEmbeddedHeader(context, manager),
           if (overview)
             _buildOverviewToolbar(context)
@@ -1118,13 +1132,17 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                         manager: manager,
                         timeline: widget.timeline,
                         onDetail: () => _showRecordDetail(row),
-                        onEdit: current && (row['revision'] as num? ?? 0) > 0
+                        onEdit:
+                            _canWrite &&
+                                current &&
+                                (row['revision'] as num? ?? 0) > 0
                             ? _kind == 'candidate'
                                   ? () => _candidate(row, 'update')
                                   : () => _editContent(row)
                             : null,
                         onDelete:
-                            current &&
+                            _canWrite &&
+                                current &&
                                 const [
                                   'memory',
                                   'summary',
@@ -1154,11 +1172,19 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
       ),
       floatingActionButton: manager && _source == 'current'
           ? FloatingActionButton(
-              onPressed: _loading || _managing || _managementPage == null
+              onPressed:
+                  _loading || _managing || _managementPage == null || !_canWrite
                   ? null
                   : _createMemory,
-              backgroundColor: context.accentPrimary,
-              child: const Icon(Icons.add, color: Colors.white),
+              backgroundColor: _canWrite
+                  ? context.accentPrimary
+                  : context.surfaceSecondary,
+              foregroundColor: _canWrite ? Colors.white : context.textDisabled,
+              elevation: _canWrite ? null : 0,
+              child: Icon(
+                Icons.add,
+                color: _canWrite ? Colors.white : context.textDisabled,
+              ),
             )
           : null,
       body: content,
@@ -1176,7 +1202,9 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
       AmitiaIconButton(
         icon: Icons.add,
         tooltip: '新增画像',
-        onPressed: _loading || _source != 'current' ? null : _openCreateProfile,
+        onPressed: _loading || _source != 'current' || !_canWrite
+            ? null
+            : _openCreateProfile,
       ),
     AmitiaIconButton(
       icon: Icons.tune,
@@ -1244,7 +1272,8 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                 _loading ||
                     _managing ||
                     _source != 'current' ||
-                    _managementPage == null
+                    _managementPage == null ||
+                    !_canWrite
                 ? null
                 : _createMemory,
           ),
@@ -1455,7 +1484,8 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                       _managementPage == null ||
                           _loading ||
                           _managing ||
-                          _source != 'current'
+                          _source != 'current' ||
+                          !_canWrite
                       ? null
                       : _createMemory,
                   child: const Text('新增记忆'),
@@ -1465,7 +1495,8 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                       _managementPage == null ||
                           _loading ||
                           _managing ||
-                          _source != 'current'
+                          _source != 'current' ||
+                          !_canWrite
                       ? null
                       : _generateCandidates,
                   child: const Text('生成候选'),
@@ -1784,7 +1815,7 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton.icon(
-                  onPressed: _loading ? null : _openCreateProfile,
+                  onPressed: _loading || !_canWrite ? null : _openCreateProfile,
                   icon: const Icon(Icons.add),
                   label: const Text('新增画像'),
                 ),
@@ -1798,7 +1829,10 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                   if (_kind != 'memory' || widget.timeline)
                     TextButton(
                       onPressed:
-                          _managementPage == null || _loading || _managing
+                          _managementPage == null ||
+                              _loading ||
+                              _managing ||
+                              !_canWrite
                           ? null
                           : _kind == 'candidate'
                           ? _generateCandidates
@@ -1809,7 +1843,7 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                     Wrap(
                       children: [
                         TextButton(
-                          onPressed: _loading || _managing
+                          onPressed: _loading || _managing || !_canWrite
                               ? null
                               : _generateCandidates,
                           child: const Text('从对话生成候选'),
@@ -1850,15 +1884,17 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                       _pendingMemory!.generation == _generation &&
                       !_managing)
                     TextButton(
-                      onPressed: () {
-                        final pending = _pendingMemory!;
-                        _manage(
-                          pending.original,
-                          pending.input,
-                          candidates: pending.candidates,
-                          operationId: pending.id,
-                        );
-                      },
+                      onPressed: _canWrite
+                          ? () {
+                              final pending = _pendingMemory!;
+                              _manage(
+                                pending.original,
+                                pending.input,
+                                candidates: pending.candidates,
+                                operationId: pending.id,
+                              );
+                            }
+                          : null,
                       child: const Text('使用原请求重试保存'),
                     ),
                 ],
@@ -1874,7 +1910,8 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                 ),
               if (_projectionNotice.isNotEmpty) Text(_projectionNotice),
               TextButton(
-                onPressed: _projection == null || _loading || _rebuilding
+                onPressed:
+                    _projection == null || _loading || _rebuilding || !_canWrite
                     ? null
                     : _rebuild,
                 child: Text(_rebuilding ? '正在提交' : '重建当前范围索引'),
@@ -2053,181 +2090,211 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                     style: AppTypography.caption(context),
                   ),
                 SizedBox(height: AppSpacing.md),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    if (_source == 'current' &&
-                        const [
-                          'memory',
-                          'episodic',
-                          'fact',
-                          'graph',
-                          'vector',
-                        ].contains(_kind) &&
-                        row['executionScope'] is Map)
-                      TextButton(
-                        onPressed: _loading || _managing
-                            ? null
-                            : () => _detailAction(
-                                sheetContext,
-                                () => _transferScope(row),
-                              ),
-                        child: Text(
-                          row['roleId'] == globalMemoryRole
-                              ? '降级为角色记忆'
-                              : '提升为全局记忆',
+                if (_canWrite)
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      if (_source == 'current' &&
+                          const [
+                            'memory',
+                            'episodic',
+                            'fact',
+                            'graph',
+                            'vector',
+                          ].contains(_kind) &&
+                          row['executionScope'] is Map)
+                        TextButton(
+                          onPressed: _loading || _managing
+                              ? null
+                              : () => _detailAction(
+                                  sheetContext,
+                                  () => _transferScope(row),
+                                ),
+                          child: Text(
+                            row['roleId'] == globalMemoryRole
+                                ? '降级为角色记忆'
+                                : '提升为全局记忆',
+                          ),
                         ),
-                      ),
-                    if (_kind == 'candidate' && _source == 'current')
-                      Wrap(
-                        children: [
-                          TextButton(
-                            onPressed: _loading || _managing
-                                ? null
-                                : () => _detailAction(
-                                    sheetContext,
-                                    () => _candidate(row, 'update'),
-                                  ),
-                            child: const Text('编辑'),
-                          ),
-                          TextButton(
-                            onPressed: _loading || _managing
-                                ? null
-                                : () => _detailAction(
-                                    sheetContext,
-                                    () => _candidate(row, 'accept'),
-                                  ),
-                            child: const Text('接受并保存'),
-                          ),
-                          TextButton(
-                            onPressed: _loading || _managing
-                                ? null
-                                : () => _detailAction(
-                                    sheetContext,
-                                    () => _candidate(row, 'reject'),
-                                  ),
-                            child: const Text('拒绝'),
-                          ),
-                        ],
-                      ),
-                    if (const [
-                          'memory',
-                          'summary',
-                          'profile',
-                          'episodic',
-                        ].contains(_kind) &&
-                        _source == 'current' &&
-                        (row['revision'] as num? ?? 0) > 0)
-                      Wrap(
-                        children: [
-                          TextButton(
-                            onPressed: _loading
-                                ? null
-                                : () => _detailAction(
-                                    sheetContext,
-                                    () => _editContent(row),
-                                  ),
-                            child: const Text('编辑'),
-                          ),
-                          if (_kind == 'memory') ...[
+                      if (_kind == 'candidate' && _source == 'current')
+                        Wrap(
+                          children: [
+                            TextButton(
+                              onPressed: _loading || _managing
+                                  ? null
+                                  : () => _detailAction(
+                                      sheetContext,
+                                      () => _candidate(row, 'update'),
+                                    ),
+                              child: const Text('编辑'),
+                            ),
+                            TextButton(
+                              onPressed: _loading || _managing
+                                  ? null
+                                  : () => _detailAction(
+                                      sheetContext,
+                                      () => _candidate(row, 'accept'),
+                                    ),
+                              child: const Text('接受并保存'),
+                            ),
+                            TextButton(
+                              onPressed: _loading || _managing
+                                  ? null
+                                  : () => _detailAction(
+                                      sheetContext,
+                                      () => _candidate(row, 'reject'),
+                                    ),
+                              child: const Text('拒绝'),
+                            ),
+                          ],
+                        ),
+                      if (const [
+                            'memory',
+                            'summary',
+                            'profile',
+                            'episodic',
+                          ].contains(_kind) &&
+                          _source == 'current' &&
+                          (row['revision'] as num? ?? 0) > 0)
+                        Wrap(
+                          children: [
                             TextButton(
                               onPressed: _loading
                                   ? null
                                   : () => _detailAction(
                                       sheetContext,
-                                      () => _editLifecycle(row),
+                                      () => _editContent(row),
                                     ),
-                              child: const Text('保留等级与固定'),
+                              child: const Text('编辑'),
                             ),
-                            TextButton(
-                              onPressed: _loading
-                                  ? null
-                                  : () => _detailAction(
-                                      sheetContext,
-                                      () => _memoryHistory(row),
-                                    ),
-                              child: const Text('历史版本'),
-                            ),
-                            if (_canRestoreLifecycle(row))
+                            if (_kind == 'memory') ...[
                               TextButton(
                                 onPressed: _loading
                                     ? null
                                     : () => _detailAction(
                                         sheetContext,
-                                        () => _restoreLifecycle(row),
+                                        () => _editLifecycle(row),
                                       ),
-                                child: const Text('恢复召回'),
+                                child: const Text('保留等级与固定'),
                               ),
-                            TextButton(
-                              onPressed: _loading
-                                  ? null
-                                  : () => _detailAction(
-                                      sheetContext,
-                                      () => _confirmMemory(row),
-                                    ),
-                              child: const Text('确认正确'),
-                            ),
-                            TextButton(
-                              onPressed: _loading
-                                  ? null
-                                  : () => _detailAction(
-                                      sheetContext,
-                                      () => _markMemoryWrong(row),
-                                    ),
-                              child: const Text('标记有误'),
-                            ),
-                            TextButton(
-                              onPressed: _loading
-                                  ? null
-                                  : () => _detailAction(
-                                      sheetContext,
-                                      () => _retrievalFeedback(row, 'helpful'),
-                                    ),
-                              child: const Text('召回有用'),
-                            ),
-                            TextButton(
-                              onPressed: _loading
-                                  ? null
-                                  : () => _detailAction(
-                                      sheetContext,
-                                      () => _retrievalFeedback(
-                                        row,
-                                        'not_helpful',
+                              TextButton(
+                                onPressed: _loading
+                                    ? null
+                                    : () => _detailAction(
+                                        sheetContext,
+                                        () => _memoryHistory(row),
                                       ),
-                                    ),
-                              child: const Text('召回无用'),
-                            ),
-                            TextButton(
-                              onPressed: _loading
-                                  ? null
-                                  : () => _detailAction(
-                                      sheetContext,
-                                      () => _setExpiry(row),
-                                    ),
-                              child: const Text('到期时间'),
-                            ),
-                            TextButton(
-                              onPressed: _loading
-                                  ? null
-                                  : () => _detailAction(
-                                      sheetContext,
-                                      () => _edit(
-                                        row,
-                                        changes: {
-                                          'archivedAt':
-                                              row['body']?['archivedAt'] == null
-                                              ? DateTime.now()
-                                                    .toUtc()
-                                                    .toIso8601String()
-                                              : null,
-                                        },
+                                child: const Text('历史版本'),
+                              ),
+                              if (_canRestoreLifecycle(row))
+                                TextButton(
+                                  onPressed: _loading
+                                      ? null
+                                      : () => _detailAction(
+                                          sheetContext,
+                                          () => _restoreLifecycle(row),
+                                        ),
+                                  child: const Text('恢复召回'),
+                                ),
+                              TextButton(
+                                onPressed: _loading
+                                    ? null
+                                    : () => _detailAction(
+                                        sheetContext,
+                                        () => _confirmMemory(row),
                                       ),
+                                child: const Text('确认正确'),
+                              ),
+                              TextButton(
+                                onPressed: _loading
+                                    ? null
+                                    : () => _detailAction(
+                                        sheetContext,
+                                        () => _markMemoryWrong(row),
+                                      ),
+                                child: const Text('标记有误'),
+                              ),
+                              TextButton(
+                                onPressed: _loading
+                                    ? null
+                                    : () => _detailAction(
+                                        sheetContext,
+                                        () =>
+                                            _retrievalFeedback(row, 'helpful'),
+                                      ),
+                                child: const Text('召回有用'),
+                              ),
+                              TextButton(
+                                onPressed: _loading
+                                    ? null
+                                    : () => _detailAction(
+                                        sheetContext,
+                                        () => _retrievalFeedback(
+                                          row,
+                                          'not_helpful',
+                                        ),
+                                      ),
+                                child: const Text('召回无用'),
+                              ),
+                              TextButton(
+                                onPressed: _loading
+                                    ? null
+                                    : () => _detailAction(
+                                        sheetContext,
+                                        () => _setExpiry(row),
+                                      ),
+                                child: const Text('到期时间'),
+                              ),
+                              TextButton(
+                                onPressed: _loading
+                                    ? null
+                                    : () => _detailAction(
+                                        sheetContext,
+                                        () => _edit(
+                                          row,
+                                          changes: {
+                                            'archivedAt':
+                                                row['body']?['archivedAt'] ==
+                                                    null
+                                                ? DateTime.now()
+                                                      .toUtc()
+                                                      .toIso8601String()
+                                                : null,
+                                          },
+                                        ),
+                                      ),
+                                child: Text(
+                                  row['body']?['archivedAt'] == null
+                                      ? '归档'
+                                      : '取消归档',
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: _loading
+                                    ? null
+                                    : () => _detailAction(
+                                        sheetContext,
+                                        () => _edit(row),
+                                      ),
+                                child: Text(
+                                  row['body']?['allowContextUse'] == false
+                                      ? '允许用于对话'
+                                      : '停用',
+                                ),
+                              ),
+                            ],
+                            TextButton(
+                              onPressed: _loading
+                                  ? null
+                                  : () => _detailAction(
+                                      sheetContext,
+                                      () => _setProactiveMention(row),
                                     ),
                               child: Text(
-                                row['body']?['archivedAt'] == null
-                                    ? '归档'
-                                    : '取消归档',
+                                row['body']?['allowProactiveMention'] == false
+                                    ? '允许主动提及'
+                                    : '禁止主动提及',
                               ),
                             ),
                             TextButton(
@@ -2235,41 +2302,14 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                                   ? null
                                   : () => _detailAction(
                                       sheetContext,
-                                      () => _edit(row),
+                                      () => _edit(row, deleted: true),
                                     ),
-                              child: Text(
-                                row['body']?['allowContextUse'] == false
-                                    ? '允许用于对话'
-                                    : '停用',
-                              ),
+                              child: const Text('删除'),
                             ),
                           ],
-                          TextButton(
-                            onPressed: _loading
-                                ? null
-                                : () => _detailAction(
-                                    sheetContext,
-                                    () => _setProactiveMention(row),
-                                  ),
-                            child: Text(
-                              row['body']?['allowProactiveMention'] == false
-                                  ? '允许主动提及'
-                                  : '禁止主动提及',
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: _loading
-                                ? null
-                                : () => _detailAction(
-                                    sheetContext,
-                                    () => _edit(row, deleted: true),
-                                  ),
-                            child: const Text('删除'),
-                          ),
-                        ],
-                      ),
-                  ],
-                ),
+                        ),
+                    ],
+                  ),
               ],
             ),
           );

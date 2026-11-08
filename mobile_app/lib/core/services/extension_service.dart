@@ -1,6 +1,55 @@
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:dio/dio.dart';
+
 import '../backend_transport/backend_service_api.dart';
 import '../ui_runtime/ui_client_info.dart';
 import '../ui_runtime/ui_runtime_invalidation.dart';
+
+Stream<Map<String, dynamic>> decodeConversationUIEventStream(
+  Stream<List<int>> source,
+) async* {
+  var buffer = '';
+  const maxBytes = 4 * 1024 * 1024;
+  await for (final chunk in source.transform(utf8.decoder)) {
+    buffer += chunk;
+    if (utf8.encode(buffer).length > maxBytes) {
+      throw StateError('会话事件数据超出接收上限');
+    }
+    while (true) {
+      final boundary = RegExp(r'\r?\n\r?\n').firstMatch(buffer);
+      if (boundary == null) break;
+      final frame = buffer.substring(0, boundary.start);
+      buffer = buffer.substring(boundary.end);
+      var eventType = 'message';
+      final data = <String>[];
+      for (final line in const LineSplitter().convert(frame)) {
+        if (line.startsWith('event:')) {
+          eventType = line.substring(6).trim();
+        } else if (line.startsWith('data:')) {
+          data.add(line.substring(5).trimLeft());
+        }
+      }
+      if (data.isEmpty) continue;
+      final decoded = jsonDecode(data.join('\n'));
+      if (eventType == 'stream_error') {
+        throw StateError('会话事件流返回错误: $decoded');
+      }
+      if (eventType != 'conversation_ui_event') continue;
+      if (decoded is! Map) {
+        throw StateError('会话事件格式无效: $decoded');
+      }
+      final record = Map<String, dynamic>.from(decoded);
+      final sequence = (record['sequence'] as num?)?.toInt() ?? 0;
+      final eventId = (record['eventId'] ?? '').toString().trim();
+      if (sequence <= 0 || eventId.isEmpty || record['payload'] is! Map) {
+        throw StateError('会话事件字段无效: $record');
+      }
+      yield record;
+    }
+  }
+}
 
 class ExtensionCenterCard {
   final String extensionId;
@@ -76,10 +125,9 @@ class ExtensionCenterCard {
       permissions: ((json['permissions'] as List?) ?? const [])
           .map((e) => e.toString())
           .toList(),
-      missingPermissions:
-          ((json['missingPermissions'] as List?) ?? const [])
-              .map((e) => e.toString())
-              .toList(),
+      missingPermissions: ((json['missingPermissions'] as List?) ?? const [])
+          .map((e) => e.toString())
+          .toList(),
       actions: ((json['actions'] as List?) ?? const [])
           .whereType<Map>()
           .map((e) => Map<String, dynamic>.from(e))
@@ -235,6 +283,22 @@ class ExtensionService {
         .whereType<Map>()
         .map((item) => item.cast<String, dynamic>())
         .toList(growable: false);
+  }
+
+  Future<Stream<Map<String, dynamic>>> conversationUIEvents(
+    String conversationId, {
+    required int afterSequence,
+    required CancelToken cancelToken,
+  }) async {
+    final id = conversationId.trim();
+    if (id.isEmpty) return const Stream<Map<String, dynamic>>.empty();
+    final stream = await _api.getStream(
+      '/api/extensions/events/conversation-ui/${Uri.encodeComponent(id)}/stream',
+      queryParameters: {'afterSequence': afterSequence < 0 ? 0 : afterSequence},
+      headers: const {'Accept': 'text/event-stream'},
+      cancelToken: cancelToken,
+    );
+    return decodeConversationUIEventStream(stream);
   }
 
   Future<Map<String, dynamic>> registerUIHostSession({
@@ -517,6 +581,7 @@ class ExtensionService {
     required String nonce,
     required String actionId,
     Map<String, dynamic> input = const <String, dynamic>{},
+    Map<String, dynamic>? meta,
   }) async {
     final result = await invokeSchemaUIBridgeMessage(
       sessionId,
@@ -527,7 +592,11 @@ class ExtensionService {
       generation: generation,
       nonce: nonce,
       method: 'ui.action.invoke',
-      payload: {'action_id': actionId, 'input': input},
+      payload: {
+        'action_id': actionId,
+        'input': input,
+        if (meta != null) 'meta': meta,
+      },
     );
     if (result is Map<String, dynamic>) return result;
     if (result is Map) return result.cast<String, dynamic>();

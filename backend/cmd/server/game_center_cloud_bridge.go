@@ -81,6 +81,22 @@ func registerCloudGameCenterGateway(apiGroup *gin.RouterGroup, services *AppServ
 			c.JSON(http.StatusForbidden, gin.H{"code": 403, "msg": err.Error()})
 			return
 		}
+		if actor.DeviceID != deviceID {
+			if err := services.DeviceMesh.Coordination.RequireCapability(c.Request.Context(), actor.SpaceID.String(), actor.DeviceID.String(), deviceID.String(), "game.execute"); err != nil {
+				c.JSON(http.StatusForbidden, gin.H{"code": "mesh.cross_device_game_forbidden", "msg": err.Error(), "message": err.Error(), "error": err.Error()})
+				return
+			}
+		}
+		if gameCenterBehaviorInvocation(c.Request.Method, c.Request.URL.Path) {
+			if services.GameMode == nil {
+				c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "game mode authority is unavailable", "error": "game mode authority is unavailable"})
+				return
+			}
+			if err := (&gameModeExecutionGuard{service: services.GameMode}).AuthorizeGameHostExecution(c.Request.Context(), actor.SpaceID.String(), deviceID.String(), c.Request.URL.Path); err != nil {
+				c.JSON(http.StatusForbidden, gin.H{"code": "mesh.game_center_lease_forbidden", "msg": err.Error(), "message": err.Error(), "error": err.Error()})
+				return
+			}
+		}
 
 		body, err := io.ReadAll(io.LimitReader(c.Request.Body, maxGameCenterProxyBody+1))
 		if err != nil {
@@ -361,6 +377,12 @@ func registerDeviceGameCenterManagementRoutes(apiGroup *gin.RouterGroup, service
 			container.GameHost.RuntimeManager,
 		)
 		management.RegisterRPCRouter(apiGroup, management.NewRPCHandler(rpcInvoker))
+		behaviorService := management.NewGameBehaviorService(
+			management.NewGameHostPluginRegistry(container.GameHost.PluginRegistry),
+			management.NewGameHostRuntimeManagerAdapter(container.GameHost.RuntimeManager),
+			rpcInvoker,
+		)
+		management.RegisterGameBehaviorRouter(apiGroup, behaviorService)
 		debugHandler := management.NewDebugHandler(container.GameHost, func(ctx context.Context, toolID string, input json.RawMessage, scope management.DebugToolScope) (any, bool) {
 			if container.ToolFacade == nil {
 				return nil, false
@@ -373,4 +395,12 @@ func registerDeviceGameCenterManagementRoutes(apiGroup *gin.RouterGroup, service
 		})
 		management.RegisterDebugRouter(apiGroup, debugHandler)
 	}
+}
+
+func gameCenterBehaviorInvocation(method, path string) bool {
+	if !strings.EqualFold(strings.TrimSpace(method), http.MethodPost) {
+		return false
+	}
+	path = strings.TrimSpace(path)
+	return path == "/api/game-center/behaviors/invoke"
 }

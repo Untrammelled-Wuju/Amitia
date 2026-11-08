@@ -85,4 +85,16 @@ describe("platform-artifacts", () => {
     );
     expect(candidates).toContain(path.join(extraRoot, "surrealdb", "surreal.zip"));
   });
+
+  it.each([
+    ["qdrant", "qdrant-macos-arm64.zip"],
+    ["surrealdb", "surreal-macos-arm64.zip"],
+  ] as const)("从当前平台的仓库目录读取 %s 归档", (kind, archive) => {
+    const target = path.join(sandbox, "databases", "macos-arm64", kind);
+    fs.mkdirSync(target, { recursive: true });
+    const source = path.join(target, archive);
+    fs.writeFileSync(source, "current-platform");
+    expect(firstExisting(databaseSourceCandidates(sandbox, kind, "darwin", "arm64"))).toBe(source);
+    expect(firstExisting(databaseSourceCandidates(sandbox, kind, "darwin", "x64"))).toBeNull();
+  });
 });

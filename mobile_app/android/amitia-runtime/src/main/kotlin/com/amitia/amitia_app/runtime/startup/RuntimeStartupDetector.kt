@@ -308,11 +308,11 @@ internal class DefaultRuntimeStartupDetector(
     private companion object {
         const val POLL_GRANULARITY_MS = 50L
         const val NANOS_PER_MILLISECOND = 1_000_000L
-        const val DEFAULT_STARTUP_TIMEOUT_MS = 90_000L
+        const val DEFAULT_STARTUP_TIMEOUT_MS = 5 * 60_000L
         const val DEFAULT_INITIAL_PROBE_INTERVAL_MS = 100L
         const val DEFAULT_MAX_PROBE_INTERVAL_MS = 1_000L
         const val DEFAULT_PROBE_BACKOFF_MULTIPLIER = 2
-        const val DEFAULT_MAX_PROBE_COUNT = 600
+        const val DEFAULT_MAX_PROBE_COUNT = 1_200
         val ENDPOINT_HOST_PATTERN = Regex("\"host\"\\s*:\\s*\"([^\"]+)\"")
         val ENDPOINT_PORT_PATTERN = Regex("\"port\"\\s*:\\s*(\\d+)")
 

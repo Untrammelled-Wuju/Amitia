@@ -42,7 +42,24 @@ func TestActualTLSAttachmentsStayAtTheirSelectedOwner(t *testing.T) {
 			}
 			ensureCoordinatedForTest(t, b, a, policy.ModeRevision)
 		}
-		view := decodeThreeCoreMemoryResponse[business.MemoryManagementResponse](t, b.request(t, a, http.MethodGet, endpoint+"/memories?characterId=one", nil, 200))
+		var chat struct {
+			ExecutionScope coordination.ExecutionScope `json:"executionScope"`
+			Roles          []coordination.Role         `json:"roles"`
+		}
+		if err := json.Unmarshal(b.request(t, a, http.MethodGet, endpoint+"/roles", nil, 200), &chat); err != nil || chat.ExecutionScope.ResourceOwnerID != a.device.DeviceID.String() {
+			t.Fatalf("device chat scope unavailable: %+v %v", chat, err)
+		}
+		for _, role := range chat.Roles {
+			if role.ID == "one" {
+				chat.ExecutionScope.RoleID = role.ID
+				chat.ExecutionScope.RoleRevision = role.Revision
+				chat.ExecutionScope.MemoryRoleID = role.ID
+				break
+			}
+		}
+		if chat.ExecutionScope.RoleID == "" {
+			t.Fatal("device chat role unavailable")
+		}
 		for _, kind := range []string{"file", "video"} {
 			data, mime := []byte("设备的文件内容"), "text/plain"
 			if kind == "video" {
@@ -51,12 +68,9 @@ func TestActualTLSAttachmentsStayAtTheirSelectedOwner(t *testing.T) {
 			digest := sha256.Sum256(data)
 			item := business.Attachment{Kind: kind, Name: "附件", MIME: mime, Data: base64.StdEncoding.EncodeToString(data), Hash: hex.EncodeToString(digest[:])}
 			requestID := uuid.NewString()
-			payload := map[string]any{"requestId": requestID, "characterId": "one", "message": "请查看附件", "expectedExecutionScope": view.Scope, "attachments": []business.Attachment{item}}
+			payload := map[string]any{"requestId": requestID, "characterId": "one", "message": "请查看附件", "expectedExecutionScope": chat.ExecutionScope, "attachments": []business.Attachment{item}}
 			response := decodeThreeCoreMemoryResponse[business.Response](t, b.request(t, a, http.MethodPost, endpoint+"/messages", payload, 200))
 			owner, holder, other := a.device.DeviceID.String(), a, b
-			if coordinated {
-				owner, holder, other = b.core, b, a
-			}
 			if !response.Saved || response.Scope.ResourceOwnerID != owner {
 				t.Fatal("attachment response has wrong owner or unconfirmed save")
 			}
@@ -82,14 +96,27 @@ func TestActualTLSMemoryManagementPreservesOwnerAndRejectsOldIntent(t *testing.T
 	a, b := newThreeCoreFixture(t, "memory-manager-a", schemas), newThreeCoreFixture(t, "memory-manager-b", schemas)
 	pairThreeCoreFixtures(t, a, b)
 	const endpoint = "/api/device-mesh/v1/business"
+	policy, err := b.services.DeviceMesh.Coordination.Get(t.Context(), b.core, a.device.DeviceID.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ensureCoordinatedForTest(t, b, a, policy.ModeRevision)
+	staleView := decodeThreeCoreMemoryResponse[business.MemoryManagementResponse](t, b.request(t, a, http.MethodGet, endpoint+"/memories?characterId=one", nil, 200))
+	policy, err = b.services.DeviceMesh.Coordination.Get(t.Context(), b.core, a.device.DeviceID.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.services.DeviceMesh.Coordination.GrantAdministrator(t.Context(), b.core, a.device.DeviceID.String(), policy.PermissionRevision, true); err != nil {
+		t.Fatal(err)
+	}
 	view := decodeThreeCoreMemoryResponse[business.MemoryManagementResponse](t, b.request(t, a, http.MethodGet, endpoint+"/memories?characterId=one", nil, 200))
-	if len(view.Resources) != 0 || view.Scope.ResourceOwnerID != a.device.DeviceID.String() {
+	if len(view.Resources) != 0 || view.Scope.ResourceOwnerID != b.core {
 		t.Fatal("memory manager selected another data owner")
 	}
 	requestID := uuid.NewString()
 	payload := map[string]any{"requestId": requestID, "characterId": "one", "expectedExecutionScope": view.Scope, "action": "create", "key": "饮品", "value": "喜欢茶", "memoryType": "preference", "importance": 7}
 	created := decodeThreeCoreMemoryResponse[business.MemoryManagementResponse](t, b.request(t, a, http.MethodPost, endpoint+"/memories/manage", payload, 200))
-	if !created.Saved || created.Acknowledgement.OwnerID != a.device.DeviceID.String() || created.Acknowledgement.Versions["checkpoint/memory-management/"+requestID] != 1 {
+	if !created.Saved || created.Acknowledgement.OwnerID != b.core || created.Acknowledgement.Versions["checkpoint/memory-management/"+requestID] != 1 {
 		t.Fatal("manual memory was not acknowledged by Source")
 	}
 	resourceID := ""
@@ -121,37 +148,16 @@ func TestActualTLSMemoryManagementPreservesOwnerAndRejectsOldIntent(t *testing.T
 		t.Fatal("memory conflict resolution did not use the original revision")
 	}
 	filtered := decodeThreeCoreMemoryResponse[business.MemoryManagementResponse](t, b.request(t, a, http.MethodGet, endpoint+"/memories?characterId=one&query=咖啡&memoryType=preference&mode=keyword&limit=1", nil, 200))
-	if len(filtered.Resources) != 1 || filtered.Resources[0].ID != resourceID || filtered.Resources[0].OwnerID != a.device.DeviceID.String() {
+	if len(filtered.Resources) != 1 || filtered.Resources[0].ID != resourceID || filtered.Resources[0].OwnerID != b.core {
 		t.Fatal("memory search mixed owners or ignored filters")
 	}
 	b.request(t, a, http.MethodGet, endpoint+"/memories?characterId=one&limit=129", nil, 400)
 	b.request(t, a, http.MethodPost, endpoint+"/memories/manage", map[string]any{"requestId": uuid.NewString(), "characterId": "one", "action": "create"}, 400)
+	b.request(t, a, http.MethodPost, endpoint+"/memories/manage", map[string]any{"requestId": uuid.NewString(), "characterId": "one", "expectedExecutionScope": staleView.Scope, "action": "create", "key": "旧请求", "value": "不得保存", "memoryType": "fact"}, 409)
 	assertThreeCorePrivateCopies(t, b, a.device.DeviceID.String())
-	policy, err := b.services.DeviceMesh.Coordination.Get(t.Context(), b.core, a.device.DeviceID.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	ensureCoordinatedForTest(t, b, a, policy.ModeRevision)
-	payload["requestId"], payload["action"], payload["key"] = uuid.NewString(), "create", "新饮品"
-	b.request(t, a, http.MethodPost, endpoint+"/memories/manage", payload, 409)
-	current := decodeThreeCoreMemoryResponse[business.MemoryManagementResponse](t, b.request(t, a, http.MethodGet, endpoint+"/memories?characterId=one", nil, 200))
-	if current.Scope.ResourceOwnerID != b.core || len(current.Resources) != 0 {
-		t.Fatal("coordination migrated device memory")
-	}
-	payload["expectedExecutionScope"] = current.Scope
-	coreMemory := decodeThreeCoreMemoryResponse[business.MemoryManagementResponse](t, b.request(t, a, http.MethodPost, endpoint+"/memories/manage", payload, 200))
-	if !coreMemory.Saved || coreMemory.Acknowledgement.OwnerID != b.core {
-		t.Fatal("coordinated manual memory was not saved at Core")
-	}
-	for _, fixture := range []*threeCoreFixture{a, b} {
-		owner := fixture.core
-		if fixture == a {
-			owner = a.device.DeviceID.String()
-		}
-		rows, err := coordination.NewOwnershipStore(fixture.services.KernelContainer.DeviceRegistry.Database(), owner).List(t.Context(), "memory", "one", false)
-		if err != nil || len(rows) != 1 {
-			t.Fatal("manual memory did not remain in its owner's database")
-		}
+	rows, err := coordination.NewOwnershipStore(b.services.KernelContainer.DeviceRegistry.Database(), b.core).List(t.Context(), "memory", "one", false)
+	if err != nil || len(rows) != 1 {
+		t.Fatal("manual memory did not remain in the Core database")
 	}
 }
 
@@ -167,6 +173,13 @@ func TestActualTLSMemoryCandidatesUseHistoricalSourceAndCurrentCoreOwner(t *test
 		t.Fatal(err)
 	}
 	ensureCoordinatedForTest(t, b, a, policy.ModeRevision)
+	policy, err = b.services.DeviceMesh.Coordination.Get(t.Context(), b.core, a.device.DeviceID.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.services.DeviceMesh.Coordination.GrantAdministrator(t.Context(), b.core, a.device.DeviceID.String(), policy.PermissionRevision, true); err != nil {
+		t.Fatal(err)
+	}
 	view := decodeThreeCoreMemoryResponse[business.MemoryManagementResponse](t, b.request(t, a, http.MethodGet, endpoint+"/memory-candidates?characterId=one", nil, 200))
 	requestID := uuid.NewString()
 	payload := map[string]any{"requestId": requestID, "characterId": "one", "historicalRoleId": "one", "expectedExecutionScope": view.Scope, "action": "generate", "conversationId": conversation.ConversationID, "conversationOrigin": business.ConversationOrigin{OwnerID: a.device.DeviceID.String(), ID: conversation.ConversationID}}

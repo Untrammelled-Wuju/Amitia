@@ -222,7 +222,7 @@ func (h *MutationHandler) RestartRuntime(c *gin.Context) {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": err.Error()})
 			return
 		}
-		if isRuntimeExecutorError(err, "runtime not in startable state") {
+		if isRuntimeExecutorError(err, "runtime not in startable state") || isRuntimeExecutorError(err, "runtime not in restartable state") {
 			c.JSON(http.StatusConflict, gin.H{"code": 409, "msg": err.Error()})
 			return
 		}

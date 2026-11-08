@@ -40,7 +40,7 @@ type SessionLifecyclePort interface {
 
 	Heartbeat(
 		ctx context.Context,
-		sessionID runtimeidentity.RuntimeSessionID,
+		snapshot PresenceSnapshot,
 		at time.Time,
 	) error
 

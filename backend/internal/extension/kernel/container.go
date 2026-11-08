@@ -2,6 +2,7 @@ package kernel
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -516,6 +517,52 @@ func (c *Container) Recover(ctx context.Context) error {
 	}
 	c.assertNoDuplicateOwnerSource(ctx)
 	return nil
+}
+
+func (c *Container) ReconcileProviderRuntimeState(ctx context.Context, runtimeType capability.RuntimeType) error {
+	if c == nil || c.CapabilityProviders == nil || c.AdapterRegistry == nil || runtimeType == "" {
+		return nil
+	}
+	var reconcileErrs []error
+	for _, provider := range c.CapabilityProviders.SnapshotDefinitions() {
+		if provider == nil || provider.Runtime.RuntimeType != runtimeType {
+			continue
+		}
+		adapter, ok := c.AdapterRegistry.Resolve(provider.Runtime)
+		if !ok || adapter == nil || !adapter.Supports(provider.Runtime) {
+			reconcileErrs = append(reconcileErrs, fmt.Errorf("provider %s runtime adapter %s is unavailable", provider.ID, runtimeType))
+			continue
+		}
+		health := adapter.Health(ctx, provider.Runtime)
+		availability := capability.ProviderAvailabilityUnknown
+		if health == capability.HealthReady || health == capability.HealthDegraded {
+			availability = capability.ProviderAvailabilityAvailable
+		}
+		for _, instance := range c.CapabilityProviders.ListInstancesByProvider(provider.ID) {
+			if instance == nil {
+				continue
+			}
+			if instance.Health != health {
+				if c.ProviderLifecycle != nil {
+					if err := c.ProviderLifecycle.UpdateInstanceHealth(instance.ID, health); err != nil {
+						reconcileErrs = append(reconcileErrs, fmt.Errorf("update provider instance %s health: %w", instance.ID, err))
+					}
+				} else if err := c.CapabilityProviders.UpdateInstanceHealth(instance.ID, health); err != nil {
+					reconcileErrs = append(reconcileErrs, fmt.Errorf("update provider instance %s health: %w", instance.ID, err))
+				}
+			}
+			if instance.Availability != availability {
+				if c.ProviderLifecycle != nil {
+					if err := c.ProviderLifecycle.UpdateInstanceAvailability(instance.ID, availability); err != nil {
+						reconcileErrs = append(reconcileErrs, fmt.Errorf("update provider instance %s availability: %w", instance.ID, err))
+					}
+				} else if err := c.CapabilityProviders.UpdateInstanceAvailability(instance.ID, availability); err != nil {
+					reconcileErrs = append(reconcileErrs, fmt.Errorf("update provider instance %s availability: %w", instance.ID, err))
+				}
+			}
+		}
+	}
+	return errors.Join(reconcileErrs...)
 }
 
 func (c *Container) assertNoDuplicateOwnerSource(ctx context.Context) {

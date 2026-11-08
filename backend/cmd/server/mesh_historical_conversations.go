@@ -38,7 +38,7 @@ func (p *meshLocalDataPort) HistoricalConversationPage(ctx context.Context, scop
 	if search != "" && query.ConversationID != "" {
 		return result, coordination.ErrWrongOwner
 	}
-	if !scope.Coordinated || scope.TargetDeviceID != p.ownerID || scope.ResourceOwnerID != scope.CoreID || scope.RoleOwnerID != scope.CoreID || !query.ListConversations {
+	if !scope.Coordinated || scope.TargetDeviceID != p.ownerID || (scope.ResourceOwnerID != p.ownerID && scope.ResourceOwnerID != scope.CoreID) || scope.RoleOwnerID != scope.CoreID || !query.ListConversations {
 		return result, coordination.ErrWrongOwner
 	}
 	stableScope := scope

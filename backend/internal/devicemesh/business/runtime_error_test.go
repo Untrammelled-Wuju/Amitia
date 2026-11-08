@@ -18,6 +18,7 @@ func TestDescribeRuntimeErrorPrioritizesActionableFailures(t *testing.T) {
 		{err: errors.New("tool loop repeated tool failure: browser.agent.run returned browser_agent_failed 3 times"), errorCode: "task_tool_loop_limit", retryable: true},
 		{err: errors.New("read model stream: connection reset by peer"), errorCode: "model_network_error", retryable: true},
 		{err: errors.New("agent context exceeds usable context 128000 after reserving output"), errorCode: "task_context_exceeded", retryable: true},
+		{err: errors.New("没有可用的模型配置，请先在设置中配置并启用模型"), errorCode: "model_not_configured", retryable: false},
 		{err: errors.New("tool exploded"), errorCode: "task_execution_failed", retryable: true},
 	}
 	for _, item := range cases {

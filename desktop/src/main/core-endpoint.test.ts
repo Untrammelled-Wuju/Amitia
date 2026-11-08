@@ -55,6 +55,10 @@ describe("core endpoint lifecycle", () => {
     expect(getCoreEndpoint()).toBeNull();
   });
 
+  it("缺少端点文件时返回 null", () => {
+    expect(readCoreEndpoint(dataDir)).toBeNull();
+  });
+
   it("只接受 PID 与启动时间都匹配的端点", () => {
     const startedAt = new Date().toISOString();
     const endpoint = {

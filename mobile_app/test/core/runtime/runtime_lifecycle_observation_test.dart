@@ -283,6 +283,49 @@ void main() {
       await sub.cancel();
     });
 
+    test(
+      'cloud mode monitor converges ready to failed and back to ready',
+      () async {
+        final embedded = FakeEmbeddedRuntimeController();
+        final probe = FakeBackendConnectivityProbe();
+        final resolver = FakeBackendTopologyResolver(_createCloudTopology());
+        final lifecycle = DefaultMobileBackendLifecycle(
+          resolver: resolver,
+          embeddedRuntime: embedded,
+          remoteProbe: _ConnectivityProbeAdapter(probe),
+          monitorInterval: const Duration(milliseconds: 20),
+        );
+        final statuses = <MobileBackendStatus>[];
+        final sub = lifecycle.statusStream.listen(statuses.add);
+        embedded.setStatus(EmbeddedRuntimeStatus.ready);
+        probe.setResult(BackendConnectivityResult.ready);
+
+        await lifecycle.reconcile(
+          const MobileDeploymentConfig(mode: MobileDeploymentMode.cloud),
+        );
+        expect(lifecycle.currentStatus.state, RuntimeDeploymentState.ready);
+
+        probe.setResult(BackendConnectivityResult.unreachable);
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+        expect(lifecycle.currentStatus.state, RuntimeDeploymentState.failed);
+
+        probe.setResult(BackendConnectivityResult.ready);
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+        expect(lifecycle.currentStatus.state, RuntimeDeploymentState.ready);
+        expect(
+          statuses.map((status) => status.state),
+          containsAllInOrder([
+            RuntimeDeploymentState.ready,
+            RuntimeDeploymentState.failed,
+            RuntimeDeploymentState.ready,
+          ]),
+        );
+
+        await lifecycle.shutdown();
+        await sub.cancel();
+      },
+    );
+
     test('generation increment prevents stale reconcile', () async {
       final embedded = FakeEmbeddedRuntimeController();
       final probe = FakeBackendConnectivityProbe();
@@ -316,6 +359,61 @@ void main() {
       await lifecycle.shutdown();
       await sub.cancel();
     });
+
+    test('manual pause suppresses automatic runtime restart', () async {
+      final embedded = FakeEmbeddedRuntimeController();
+      final probe = FakeBackendConnectivityProbe();
+      final resolver = FakeBackendTopologyResolver(_createLocalTopology());
+      final lifecycle = DefaultMobileBackendLifecycle(
+        resolver: resolver,
+        embeddedRuntime: embedded,
+        remoteProbe: _ConnectivityProbeAdapter(probe),
+        monitorInterval: const Duration(milliseconds: 20),
+      );
+      embedded.setStatus(EmbeddedRuntimeStatus.ready);
+
+      await lifecycle.reconcile(
+        const MobileDeploymentConfig(mode: MobileDeploymentMode.local),
+      );
+      final callsBeforePause = embedded.ensureRunningCallCount;
+      lifecycle.pauseAutomaticReconciliation();
+      embedded.setStatus(EmbeddedRuntimeStatus.stopped);
+
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      expect(embedded.ensureRunningCallCount, callsBeforePause);
+      expect(lifecycle.currentStatus.state, RuntimeDeploymentState.ready);
+
+      await lifecycle.shutdown();
+    });
+
+    test(
+      'explicit reconcile resumes coordination after manual pause',
+      () async {
+        final embedded = FakeEmbeddedRuntimeController();
+        final probe = FakeBackendConnectivityProbe();
+        final resolver = FakeBackendTopologyResolver(_createLocalTopology());
+        final lifecycle = DefaultMobileBackendLifecycle(
+          resolver: resolver,
+          embeddedRuntime: embedded,
+          remoteProbe: _ConnectivityProbeAdapter(probe),
+          monitorInterval: const Duration(milliseconds: 20),
+        );
+
+        lifecycle.pauseAutomaticReconciliation();
+        final callsBeforeResume = embedded.ensureRunningCallCount;
+        embedded.setStatus(EmbeddedRuntimeStatus.ready);
+
+        await lifecycle.reconcile(
+          const MobileDeploymentConfig(mode: MobileDeploymentMode.local),
+        );
+
+        expect(embedded.ensureRunningCallCount, greaterThan(callsBeforeResume));
+        expect(lifecycle.currentStatus.state, RuntimeDeploymentState.ready);
+
+        await lifecycle.shutdown();
+      },
+    );
 
     test('shutdown stops embedded runtime', () async {
       final embedded = FakeEmbeddedRuntimeController();

@@ -182,6 +182,9 @@ func TestRenderer_MobileBalanced_FullStructure(t *testing.T) {
 	if !strings.Contains(result, "optimizer_cpu_budget: 1") {
 		t.Error("optimizer_cpu_budget should be 1 for balanced")
 	}
+	if !strings.Contains(result, "io_uring: disabled") {
+		t.Error("io_uring should be disabled for Android PRoot")
+	}
 	if !strings.Contains(result, "max_optimization_threads: 1") {
 		t.Error("max_optimization_threads should be 1")
 	}
@@ -304,6 +307,7 @@ func TestRenderer_MobileFieldsPresent(t *testing.T) {
 		"performance:",
 		"max_search_threads:",
 		"optimizer_cpu_budget:",
+		"io_uring:",
 		"optimizers:",
 		"default_segment_number:",
 		"indexing_threshold_kb:",

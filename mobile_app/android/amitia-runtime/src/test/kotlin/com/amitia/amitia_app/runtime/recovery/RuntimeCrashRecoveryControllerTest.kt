@@ -83,7 +83,8 @@ class RuntimeCrashRecoveryControllerTest {
             serviceHost = host,
         )
         host.emit(RuntimeServiceHostEvent.UnexpectedTermination(
-            RuntimeServiceTerminationCause.SESSION_EXITED
+            generation = controller.snapshot().generation,
+            cause = RuntimeServiceTerminationCause.SESSION_EXITED
         ))
         assertEquals(RuntimeState.FAILED, controller.snapshot().state)
     }
@@ -97,7 +98,8 @@ class RuntimeCrashRecoveryControllerTest {
             serviceHost = host,
         )
         host.emit(RuntimeServiceHostEvent.UnexpectedTermination(
-            RuntimeServiceTerminationCause.SESSION_EXITED
+            generation = controller.snapshot().generation,
+            cause = RuntimeServiceTerminationCause.SESSION_EXITED
         ))
         assertEquals(RuntimeState.FAILED, controller.snapshot().state)
         val err = controller.snapshot().lastError
@@ -112,7 +114,12 @@ class RuntimeCrashRecoveryControllerTest {
             stateStore = stateStore,
             serviceHost = host,
         )
-        host.emit(RuntimeServiceHostEvent.ExpectedStopped(generation = controller.snapshot().generation))
+        host.emit(
+            RuntimeServiceHostEvent.ExpectedStopped(
+                generation = controller.snapshot().generation,
+                result = com.amitia.amitia_app.runtime.service.ServiceTeardownResult.FullyStopped(1),
+            )
+        )
         assertEquals(RuntimeState.STOPPED, controller.snapshot().state)
         assertNull(controller.snapshot().lastError)
     }

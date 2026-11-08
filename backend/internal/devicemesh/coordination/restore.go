@@ -12,7 +12,14 @@ func (s *Service) Restore(ctx context.Context, expected ExecutionScope, roles Da
 	if roles == nil {
 		return ctx, nil, ErrRoleRequired
 	}
-	current, actual, finish, err := s.Begin(ctx, expected.SpaceID, expected.InitiatorDeviceID, expected.TargetDeviceID, expected.CoreID, expected.RoleID, expected.RequestID)
+	policy, err := s.Get(ctx, expected.SpaceID, expected.TargetDeviceID)
+	if err != nil {
+		return ctx, nil, err
+	}
+	if policy.ModeRevision != expected.ModeRevision || policy.Coordinated != expected.Coordinated {
+		return ctx, nil, ErrScopeExpired
+	}
+	current, actual, finish, err := s.BeginWithOwners(ctx, expected.SpaceID, expected.InitiatorDeviceID, expected.TargetDeviceID, expected.CoreID, expected.RoleID, expected.RequestID, expected.ResourceOwnerID, expected.RoleOwnerID)
 	if err != nil {
 		return ctx, nil, err
 	}

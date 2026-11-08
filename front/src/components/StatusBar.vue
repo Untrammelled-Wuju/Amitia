@@ -66,7 +66,7 @@ const appStore = useAppStore();
 const searchModal = ref<InstanceType<typeof SearchModal> | null>(null);
 
 const deployLabel = computed(() =>
-  props.deployMode === "cloud-web" ? "云端统筹" : "本地模式",
+  props.deployMode === "cloud-web" ? "远程统筹中心" : "本机统筹中心",
 );
 
 </script>

@@ -212,9 +212,19 @@ func (s *Service) RegisterLocalMount(ctx context.Context, name, localRoot string
 					continue
 				}
 				if existing, ok := s.registry.GetMount(WorkspaceID(rec.id)); ok {
+					if existing.ReadOnly != readOnly {
+						updated, updatedOK := s.registry.UpdateLocalMountConfig(existing.ID, readOnly)
+						if !updatedOK {
+							continue
+						}
+						existing = updated
+						if err := s.mountRepo.UpdateReadOnly(string(existing.ID), readOnly); err != nil {
+							return WorkspaceMount{}, fmt.Errorf("update local mount read-only mode: %w", err)
+						}
+					}
 					if touched, ok := s.registry.TouchMount(existing.ID); ok {
 						if err := s.mountRepo.Touch(string(touched.ID), touched.LastUsedAt); err != nil {
-							amitialog.Printf("[original-error] %v", err)
+							return WorkspaceMount{}, fmt.Errorf("touch local mount: %w", err)
 						}
 						return touched, nil
 					}

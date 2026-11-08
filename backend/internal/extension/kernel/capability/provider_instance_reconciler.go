@@ -153,7 +153,7 @@ func (r *providerInstanceReconciler) ActivateExtension(def domain.ExtensionDefin
 
 func usesInProcessAdapter(runtimeType RuntimeType) bool {
 	switch runtimeType {
-	case RuntimeTypeBuiltin, RuntimeTypeWorkspace, RuntimeTypeInternal, RuntimeTypeJavaScript, RuntimeTypePluginJS:
+	case RuntimeTypeBuiltin, RuntimeTypeWorkspace, RuntimeTypeInternal, RuntimeTypeJavaScript, RuntimeTypePluginJS, RuntimeTypeGameHost:
 		return true
 	default:
 		return false

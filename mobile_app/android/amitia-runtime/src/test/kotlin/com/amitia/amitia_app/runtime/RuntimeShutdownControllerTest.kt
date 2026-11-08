@@ -115,26 +115,28 @@ class RuntimeShutdownControllerTest {
 
     private fun createStateStoreWith(targetState: RuntimeState): RuntimeStateStore {
         val store = RuntimeStateStore()
+        store.initialize(RuntimeState.INSTALLED)
+        store.update { it.copy(generation = 1L) }
         val path = when (targetState) {
             RuntimeState.READY -> listOf(
-                RuntimeState.INSTALLED, RuntimeState.STARTING, RuntimeState.READY
+                RuntimeState.STARTING, RuntimeState.READY
             )
             RuntimeState.STARTING -> listOf(
-                RuntimeState.INSTALLED, RuntimeState.STARTING
+                RuntimeState.STARTING
             )
             RuntimeState.STOPPING -> listOf(
-                RuntimeState.INSTALLED, RuntimeState.STARTING, RuntimeState.STOPPING
+                RuntimeState.STARTING, RuntimeState.STOPPING
             )
             RuntimeState.STOPPED -> listOf(
-                RuntimeState.INSTALLED, RuntimeState.STARTING, RuntimeState.STOPPING, RuntimeState.STOPPED
+                RuntimeState.STARTING, RuntimeState.STOPPING, RuntimeState.STOPPED
             )
             RuntimeState.FAILED -> listOf(
-                RuntimeState.INSTALLED, RuntimeState.STARTING, RuntimeState.FAILED
+                RuntimeState.STARTING, RuntimeState.FAILED
             )
             RuntimeState.DEGRADED -> listOf(
-                RuntimeState.INSTALLED, RuntimeState.STARTING, RuntimeState.READY, RuntimeState.DEGRADED
+                RuntimeState.STARTING, RuntimeState.READY, RuntimeState.DEGRADED
             )
-            RuntimeState.INSTALLED -> listOf(RuntimeState.INSTALLED)
+            RuntimeState.INSTALLED -> emptyList()
             else -> listOf()
         }
         for (s in path) {
@@ -200,7 +202,12 @@ class RuntimeShutdownControllerTest {
         assertTrue(r2 is RuntimeOperationResult.Success)
         assertTrue(r3 is RuntimeOperationResult.Success)
         assertEquals(1, host.stopCallCount)
-        host.emit(RuntimeServiceHostEvent.ExpectedStopped(generation = controller.snapshot().generation))
+        host.emit(
+            RuntimeServiceHostEvent.ExpectedStopped(
+                generation = controller.snapshot().generation,
+                result = com.amitia.amitia_app.runtime.service.ServiceTeardownResult.FullyStopped(1),
+            )
+        )
         assertEquals(RuntimeState.STOPPED, controller.snapshot().state)
     }
 
@@ -215,7 +222,12 @@ class RuntimeShutdownControllerTest {
         val result = stopAndCapture(controller)
         assertTrue(result is RuntimeOperationResult.Success)
         assertEquals(RuntimeState.STOPPING, controller.snapshot().state)
-        host.emit(RuntimeServiceHostEvent.ExpectedStopped(generation = controller.snapshot().generation))
+        host.emit(
+            RuntimeServiceHostEvent.ExpectedStopped(
+                generation = controller.snapshot().generation,
+                result = com.amitia.amitia_app.runtime.service.ServiceTeardownResult.FullyStopped(1),
+            )
+        )
         assertEquals(RuntimeState.STOPPED, controller.snapshot().state)
     }
 
@@ -282,9 +294,19 @@ class RuntimeShutdownControllerTest {
         val result = stopAndCapture(controller)
         assertTrue(result is RuntimeOperationResult.Success)
         assertEquals(RuntimeState.STOPPING, controller.snapshot().state)
-        host.emit(RuntimeServiceHostEvent.ExpectedStopped(generation = controller.snapshot().generation))
+        host.emit(
+            RuntimeServiceHostEvent.ExpectedStopped(
+                generation = controller.snapshot().generation,
+                result = com.amitia.amitia_app.runtime.service.ServiceTeardownResult.FullyStopped(1),
+            )
+        )
         assertEquals(RuntimeState.STOPPED, controller.snapshot().state)
-        host.emit(RuntimeServiceHostEvent.ExpectedStopped(generation = controller.snapshot().generation))
+        host.emit(
+            RuntimeServiceHostEvent.ExpectedStopped(
+                generation = controller.snapshot().generation,
+                result = com.amitia.amitia_app.runtime.service.ServiceTeardownResult.FullyStopped(1),
+            )
+        )
         assertEquals(RuntimeState.STOPPED, controller.snapshot().state)
     }
 
@@ -303,6 +325,34 @@ class RuntimeShutdownControllerTest {
             )
         )
         assertEquals(RuntimeState.STOPPED, controller.snapshot().state)
+    }
+
+    @Test
+    fun unconfirmedStop_goesToFailedWithOriginalMessage() {
+        val stateStore = createStateStoreWith(RuntimeState.READY)
+        val host = FakeRuntimeServiceHost()
+        val controller = DefaultRuntimeController(
+            stateStore = stateStore,
+            serviceHost = host,
+        )
+        host.activeSession = FakeProotSession("stuck-session")
+        assertEquals(RuntimeState.STOPPING, stopAndCapture(controller).snapshot.state)
+
+        host.emit(
+            RuntimeServiceHostEvent.UnexpectedTermination(
+                generation = controller.snapshot().generation,
+                cause = com.amitia.amitia_app.runtime.service.RuntimeServiceTerminationCause.STOP_RESULT_FAILED,
+                message = "runtime stop was not confirmed: session=stuck-session process remains alive",
+            )
+        )
+
+        val snapshot = controller.snapshot()
+        assertEquals(RuntimeState.FAILED, snapshot.state)
+        assertEquals(RuntimeErrorCode.STOP_SERVICE_TEARDOWN_FAILED, snapshot.lastError?.code)
+        assertEquals(
+            "runtime stop was not confirmed: session=stuck-session process remains alive",
+            snapshot.lastError?.message,
+        )
     }
 
     @Test
@@ -364,7 +414,7 @@ class RuntimeShutdownControllerTest {
     }
 
     @Test
-    fun stopEarly_invalidatesGeneration() {
+    fun stopEarly_preservesGenerationForTeardownCorrelation() {
         val stateStore = createStateStoreWith(RuntimeState.READY)
         val host = FakeRuntimeServiceHost()
         val controller = DefaultRuntimeController(
@@ -373,11 +423,11 @@ class RuntimeShutdownControllerTest {
         )
         val genBefore = controller.snapshot().generation
         stopAndCapture(controller)
-        assertTrue(controller.snapshot().generation > genBefore)
+        assertEquals(genBefore, controller.snapshot().generation)
     }
 
     @Test
-    fun stop_thenStart_createsNewGeneration() {
+    fun stoppedSnapshot_preservesGenerationUntilNextStart() {
         val stateStore = createStateStoreWith(RuntimeState.READY)
         val host = FakeRuntimeServiceHost()
         val controller = DefaultRuntimeController(
@@ -386,9 +436,14 @@ class RuntimeShutdownControllerTest {
         )
         val genBefore = controller.snapshot().generation
         stopAndCapture(controller)
-        host.emit(RuntimeServiceHostEvent.ExpectedStopped(generation = controller.snapshot().generation))
+        host.emit(
+            RuntimeServiceHostEvent.ExpectedStopped(
+                generation = controller.snapshot().generation,
+                result = com.amitia.amitia_app.runtime.service.ServiceTeardownResult.FullyStopped(1),
+            )
+        )
         assertEquals(RuntimeState.STOPPED, controller.snapshot().state)
-        assertTrue(controller.snapshot().generation > genBefore)
+        assertEquals(genBefore, controller.snapshot().generation)
     }
 
     @Test

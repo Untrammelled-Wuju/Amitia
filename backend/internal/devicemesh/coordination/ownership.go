@@ -198,7 +198,7 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 	for _, dependency := range commit.Dependencies {
 		key := dependency.Kind + "/" + dependency.ID
 		if !validKind(dependency.Kind) || dependency.ID == "" || dependency.Revision < 1 || seenDependencies[key] {
-			return Acknowledgement{}, ErrWrongOwner
+			return Acknowledgement{}, fmt.Errorf("%w: invalid dependency kind=%q id=%q revision=%d duplicate=%t", ErrWrongOwner, dependency.Kind, dependency.ID, dependency.Revision, seenDependencies[key])
 		}
 		seenDependencies[key] = true
 		var revision int64
@@ -229,7 +229,7 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 	keepConversationMemories := map[string]bool{}
 	for index, mutation := range commit.Mutations {
 		if mutation.KeepConversationMemories && (mutation.Kind != "conversation" || !mutation.Deleted) {
-			return Acknowledgement{}, ErrWrongOwner
+			return Acknowledgement{}, fmt.Errorf("%w: keepConversationMemories mutation[%d] kind=%q deleted=%t", ErrWrongOwner, index, mutation.Kind, mutation.Deleted)
 		}
 		storedRoles := mutationStorageRoles(commit, mutation.Kind)
 		expectedRoles := storedRoles
@@ -256,13 +256,13 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 		if mutation.ExpectedRevision == RevisionCurrent {
 			baseRequestID := strings.SplitN(scope.RequestID, "|", 2)[0]
 			if mutation.Kind != "checkpoint" || mutation.ID != "turn/"+baseRequestID || err != nil {
-				return Acknowledgement{}, ErrResourceVersion
+				return Acknowledgement{}, fmt.Errorf("%w: mutation[%d] kind=%q id=%q expects current checkpoint turn/%s exists=%t", ErrResourceVersion, index, mutation.Kind, mutation.ID, baseRequestID, err == nil)
 			}
 		} else if revision != mutation.ExpectedRevision {
-			return Acknowledgement{}, ErrResourceVersion
+			return Acknowledgement{}, fmt.Errorf("%w: mutation[%d] kind=%q id=%q expected=%d actual=%d", ErrResourceVersion, index, mutation.Kind, mutation.ID, mutation.ExpectedRevision, revision)
 		}
 		if storedDeleted && !mutation.Deleted && (mutation.Kind == "memory" || mutation.Kind == "message" || mutation.Kind == "conversation" || mutation.Kind == "checkpoint") {
-			return Acknowledgement{}, ErrResourceVersion
+			return Acknowledgement{}, fmt.Errorf("%w: mutation[%d] kind=%q id=%q resurrects deleted resource", ErrResourceVersion, index, mutation.Kind, mutation.ID)
 		}
 		if !mutation.Deleted && (mutation.Kind == "graph" || mutation.Kind == "vector") {
 			var purged int
@@ -270,7 +270,7 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 				return Acknowledgement{}, err
 			}
 			if purged > 0 {
-				return Acknowledgement{}, ErrResourceVersion
+				return Acknowledgement{}, fmt.Errorf("%w: mutation[%d] kind=%q id=%q was purged by privacy deletion", ErrResourceVersion, index, mutation.Kind, mutation.ID)
 			}
 		}
 		if mutation.Kind == "conversation" && mutation.Deleted {
@@ -286,7 +286,7 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 				ClearRevision int64 `json:"clearRevision"`
 			}
 			if json.Unmarshal(previousBody, &previous) != nil || json.Unmarshal(mutation.Body, &next) != nil {
-				return Acknowledgement{}, ErrWrongOwner
+				return Acknowledgement{}, fmt.Errorf("%w: conversation mutation[%d] id=%q has invalid body", ErrWrongOwner, index, mutation.ID)
 			}
 			if next.ClearRevision != previous.ClearRevision {
 				if next.ClearRevision != revision+1 {
@@ -309,7 +309,7 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 				Content string `json:"content"`
 			}
 			if json.Unmarshal(previousBody, &previous) != nil || json.Unmarshal(mutation.Body, &next) != nil {
-				return Acknowledgement{}, ErrWrongOwner
+				return Acknowledgement{}, fmt.Errorf("%w: message mutation[%d] id=%q has invalid body", ErrWrongOwner, index, mutation.ID)
 			}
 			if mutation.Deleted || previous.Content != next.Content {
 				changedMessages = append(changedMessages, changedMessage{previous.ConversationID, previous.RequestID, mutation.ID, mutation.Deleted})
@@ -317,7 +317,7 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 		}
 		if !mutation.Deleted && (mutation.Kind == "vector" || mutation.Kind == "graph" || mutation.SourceID != "") {
 			if mutation.SourceID == "" {
-				return Acknowledgement{}, ErrWrongOwner
+				return Acknowledgement{}, fmt.Errorf("%w: derived mutation[%d] kind=%q id=%q has no source", ErrWrongOwner, index, mutation.Kind, mutation.ID)
 			}
 			var sourceDeleted bool
 			var sourceRole string
@@ -330,7 +330,7 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 				sourceExpectedRole = commit.MemoryTransfer.ToRoleID
 			}
 			if sourceDeleted || sourceRole != sourceExpectedRole {
-				return Acknowledgement{}, ErrWrongOwner
+				return Acknowledgement{}, fmt.Errorf("%w: derived mutation[%d] source=%q sourceRole=%q expectedRole=%q deleted=%t", ErrWrongOwner, index, mutation.SourceID, sourceRole, sourceExpectedRole, sourceDeleted)
 			}
 		}
 		body := []byte(mutation.Body)
@@ -413,7 +413,7 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 		if changed.request == "" {
 			continue
 		}
-		rows, err := tx.QueryContext(ctx, `SELECT resource_id FROM kernel_device_owned_resources WHERE owner_id=? AND (role_id=? OR json_extract(CAST(body AS TEXT),'$.executionScope.roleId')=?) AND kind='memory' AND deleted=0 AND json_extract(CAST(body AS TEXT),'$.executionScope.requestId')=?`, s.ownerID, scope.RoleID, scope.RoleID, changed.request)
+		rows, err := tx.QueryContext(ctx, `SELECT resource_id FROM kernel_device_owned_resources WHERE owner_id=? AND (role_id=? OR json_extract(CAST(body AS TEXT),'$.executionScope.roleId')=?) AND kind='memory' AND deleted=0 AND json_extract(CAST(body AS TEXT),'$.executionScope.requestId') IN (?,?)`, s.ownerID, scope.RoleID, scope.RoleID, changed.request, changed.request+"|memory")
 		if err != nil {
 			return Acknowledgement{}, err
 		}
@@ -430,7 +430,7 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 			return Acknowledgement{}, err
 		}
 		rows.Close()
-		if _, err := tx.ExecContext(ctx, `UPDATE kernel_device_owned_resources SET deleted=1,body='null',revision=revision+1 WHERE owner_id=? AND (role_id=? OR json_extract(CAST(body AS TEXT),'$.executionScope.roleId')=?) AND kind='memory' AND deleted=0 AND json_extract(CAST(body AS TEXT),'$.executionScope.requestId')=?`, s.ownerID, scope.RoleID, scope.RoleID, changed.request); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE kernel_device_owned_resources SET deleted=1,body='null',revision=revision+1 WHERE owner_id=? AND (role_id=? OR json_extract(CAST(body AS TEXT),'$.executionScope.roleId')=?) AND kind='memory' AND deleted=0 AND json_extract(CAST(body AS TEXT),'$.executionScope.requestId') IN (?,?)`, s.ownerID, scope.RoleID, scope.RoleID, changed.request, changed.request+"|memory"); err != nil {
 			return Acknowledgement{}, err
 		}
 	}
@@ -759,7 +759,7 @@ func (s *Service) CommittedAcknowledgement(ctx context.Context, owner, request s
 func (s *Service) Enqueue(ctx context.Context, commit Commit) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if commit.Scope.Coordinated || commit.Scope.ResourceOwnerID == "" || commit.Scope.RequestID == "" {
+	if commit.Scope.ResourceOwnerID == "" || commit.Scope.RequestID == "" {
 		return ErrWrongOwner
 	}
 	if err := s.ValidateCommitAuthorities(ctx, commit); err != nil {

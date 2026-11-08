@@ -249,17 +249,29 @@ class HttpArtifactService implements ArtifactService {
     if (value.isEmpty) throw ArtifactServiceException('empty_media_url');
     final parsed = Uri.tryParse(value);
     if (parsed == null) throw ArtifactServiceException('invalid_media_url');
-    final contentMatch = RegExp(r'/api/artifacts/v1/([^/?#]+)/content(?:[?#]|$)').firstMatch(value);
-    final artifactId = parseArtifactUri(value) ??
-        (contentMatch == null ? null : Uri.decodeComponent(contentMatch.group(1)!));
+    final contentMatch = RegExp(
+      r'/api/artifacts/v1/([^/?#]+)/content(?:[?#]|$)',
+    ).firstMatch(value);
+    final artifactId =
+        parseArtifactUri(value) ??
+        (contentMatch == null
+            ? null
+            : Uri.decodeComponent(contentMatch.group(1)!));
     if (artifactId != null) {
-      if (embed || Uri.parse(_baseUrl).path.contains('/internal/device-mesh/provider')) {
+      if (embed ||
+          Uri.parse(_baseUrl).path.contains('/internal/device-mesh/provider')) {
         final response = await _dio.get<List<int>>(
           '$_baseUrl/api/artifacts/v1/${Uri.encodeComponent(artifactId)}/content',
           options: Options(responseType: ResponseType.bytes),
         );
-        return Uri.dataFromBytes(response.data ?? const <int>[],
-            mimeType: (response.headers.value('content-type') ?? 'application/octet-stream').split(';').first);
+        return Uri.dataFromBytes(
+          response.data ?? const <int>[],
+          mimeType:
+              (response.headers['content-type']?.first ??
+                      'application/octet-stream')
+                  .split(';')
+                  .first,
+        );
       }
       final response = await _dio.get(
         '$_baseUrl/api/artifacts/v1/${Uri.encodeComponent(artifactId)}/media-ticket',
@@ -276,9 +288,19 @@ class HttpArtifactService implements ArtifactService {
       }
       return Uri.parse(ticketPath).hasScheme
           ? Uri.parse(ticketPath)
-          : Uri.parse('$_baseUrl/${ticketPath.replaceFirst(RegExp(r'^/+'), '')}');
+          : Uri.parse(
+              '$_baseUrl/${ticketPath.replaceFirst(RegExp(r'^/+'), '')}',
+            );
     }
-    if (parsed.hasScheme && const ['http', 'https', 'data', 'file'].contains(parsed.scheme.toLowerCase())) return parsed;
+    if (parsed.hasScheme &&
+        const [
+          'http',
+          'https',
+          'data',
+          'file',
+        ].contains(parsed.scheme.toLowerCase())) {
+      return parsed;
+    }
     if (value.startsWith('/')) {
       return Uri.parse('$_baseUrl$value');
     }
@@ -288,7 +310,9 @@ class HttpArtifactService implements ArtifactService {
   @override
   Future<String> readText(String rawUrl) async {
     final bytes = await _downloadBytes(rawUrl);
-    if (bytes.length > 5 * 1024 * 1024) throw ArtifactServiceException('文件过大，无法预览，请下载查看');
+    if (bytes.length > 5 * 1024 * 1024) {
+      throw ArtifactServiceException('文件过大，无法预览，请下载查看');
+    }
     return utf8.decode(bytes);
   }
 

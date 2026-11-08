@@ -18,6 +18,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/u-ai/backend/internal/devicemesh/capabilities"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/devicemesh/executionjournal"
 	meshprotocol "github.com/u-ai/backend/internal/devicemesh/protocol"
@@ -26,18 +27,19 @@ import (
 )
 
 type MeshClientConfig struct {
-	CloudBaseURL      string
-	Credential        string
-	SpaceID           runtimeidentity.SpaceID
-	Identity          *LocalIdentity
-	Cursor            *SessionCursor
-	OnState           func(AgentState)
-	RuntimeDispatcher RuntimeDispatcher
-	TaskWorker        TaskWorkerIface
-	TLSConfig         *tls.Config
-	SignRequest       func(*http.Request, string) error
-	ExecutionJournal  *executionjournal.Store
-	ExecutionGuard    RuntimeExecutionGuard
+	CloudBaseURL       string
+	Credential         string
+	SpaceID            runtimeidentity.SpaceID
+	Identity           *LocalIdentity
+	Cursor             *SessionCursor
+	OnState            func(AgentState)
+	RuntimeDispatcher  RuntimeDispatcher
+	TaskWorker         TaskWorkerIface
+	TLSConfig          *tls.Config
+	SignRequest        func(*http.Request, string) error
+	ExecutionJournal   *executionjournal.Store
+	ExecutionGuard     RuntimeExecutionGuard
+	CapabilityExposure *CapabilityExposureStore
 }
 
 type TaskWorkerIface interface {
@@ -74,6 +76,8 @@ type MeshClient struct {
 	credentialStore atomic.Pointer[CredentialStore]
 	taskLeaseMu     sync.Mutex
 	taskLeases      map[string]chan protocol.TaskLeaseAckPayload
+	catalogAckMu    sync.Mutex
+	catalogAcks     map[int64]chan protocol.CapabilityCatalogAckPayload
 }
 
 func (c *MeshClient) sessionIdentity() runtimeidentity.RuntimeSessionID {
@@ -110,6 +114,7 @@ func NewMeshClient(conf MeshClientConfig) *MeshClient {
 		backoff:       NewBackoff(),
 		handshakeDone: make(chan struct{}),
 		taskLeases:    make(map[string]chan protocol.TaskLeaseAckPayload),
+		catalogAcks:   make(map[int64]chan protocol.CapabilityCatalogAckPayload),
 	}
 }
 
@@ -119,6 +124,10 @@ func (c *MeshClient) SetCredentialStore(store *CredentialStore) {
 
 func (c *MeshClient) SetTaskWorker(w TaskWorkerIface) {
 	c.conf.TaskWorker = w
+}
+
+func (c *MeshClient) SetCursor(cursor *SessionCursor) {
+	c.conf.Cursor = cursor
 }
 
 func (c *MeshClient) Start() {
@@ -199,8 +208,6 @@ func (c *MeshClient) runLoop() {
 			select {
 			case <-c.stopCh:
 				return
-			case <-time.After(5 * time.Second):
-				continue
 			}
 		}
 
@@ -364,6 +371,14 @@ func (c *MeshClient) sendHello() error {
 		lastSessionID = cursor.RuntimeSessionID
 	}
 
+	exposureRevision, exposedCapabilities := int64(0), []string(nil)
+	if c.conf.CapabilityExposure != nil {
+		var err error
+		exposureRevision, exposedCapabilities, err = c.conf.CapabilityExposure.Enabled()
+		if err != nil {
+			return err
+		}
+	}
 	hello := protocol.HelloPayload{
 		RuntimeVersion:               "1.0.0",
 		RuntimeContractVersion:       meshprotocol.RuntimeContractVersion,
@@ -374,6 +389,8 @@ func (c *MeshClient) sendHello() error {
 		LastProcessedCommandSequence: lastProcessedCmdSeq,
 		LastEventSequence:            lastEventSeq,
 		ActualStateHash:              actualStateHash,
+		CapabilityExposureRevision:   exposureRevision,
+		ExposedCapabilities:          exposedCapabilities,
 	}
 
 	payloadBytes, err := json.Marshal(hello)
@@ -498,6 +515,91 @@ func (c *MeshClient) readLoop(conn *websocket.Conn) error {
 			c.handleTaskCancel(&env)
 		case protocol.MessageTypeTaskPause:
 			c.handleTaskPause(&env)
+		case protocol.MessageTypeCapabilityCatalogAck:
+			c.handleCapabilityCatalogAck(&env)
+		}
+	}
+}
+
+func (c *MeshClient) PublishCapabilityExposure(ctx context.Context) (bool, error) {
+	if c.conf.CapabilityExposure == nil {
+		return false, fmt.Errorf("设备能力开放配置不可用")
+	}
+	revision, exposed, err := c.conf.CapabilityExposure.Enabled()
+	if err != nil {
+		return false, err
+	}
+	if c.State() != StateReady {
+		return false, nil
+	}
+	ack := make(chan protocol.CapabilityCatalogAckPayload, 1)
+	c.catalogAckMu.Lock()
+	if _, exists := c.catalogAcks[revision]; exists {
+		c.catalogAckMu.Unlock()
+		return false, fmt.Errorf("设备能力目录同步正在进行")
+	}
+	c.catalogAcks[revision] = ack
+	c.catalogAckMu.Unlock()
+	defer func() {
+		c.catalogAckMu.Lock()
+		delete(c.catalogAcks, revision)
+		c.catalogAckMu.Unlock()
+	}()
+	payload := protocol.CapabilityCatalogPayload{Revision: revision, Capabilities: exposed, UpdatedAt: time.Now().UTC()}
+	if err := c.sendCapabilityCatalog(payload); err != nil {
+		return false, err
+	}
+	select {
+	case <-ctx.Done():
+		if cause := context.Cause(ctx); cause != nil {
+			return true, cause
+		}
+		return true, ctx.Err()
+	case <-c.stopCh:
+		return true, fmt.Errorf("设备通道已停止")
+	case response := <-ack:
+		if !response.Accepted || response.Revision != revision {
+			return true, fmt.Errorf("统筹中心拒绝设备能力目录: %s", response.Error)
+		}
+		return true, nil
+	}
+}
+
+func (c *MeshClient) sendCapabilityCatalog(payload protocol.CapabilityCatalogPayload) error {
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	env := protocol.Envelope{
+		EnvelopeVersion:      meshprotocol.EnvelopeVersion,
+		Protocol:             meshprotocol.ProtocolName,
+		MessageType:          protocol.MessageTypeCapabilityCatalog,
+		MessageID:            uuid.New().String(),
+		SpaceID:              c.conf.SpaceID,
+		DeviceID:             c.conf.Identity.DeviceID,
+		RuntimeID:            c.conf.Identity.RuntimeID,
+		RuntimeSessionID:     c.sessionIdentity(),
+		ConnectionGeneration: c.sessionGeneration(),
+		PayloadSchemaVersion: 1,
+		PayloadHash:          protocol.ComputePayloadHash(payloadBytes),
+		SentAt:               time.Now().UTC(),
+		Payload:              payloadBytes,
+	}
+	return c.writeEnvelope(env)
+}
+
+func (c *MeshClient) handleCapabilityCatalogAck(env *protocol.Envelope) {
+	var ack protocol.CapabilityCatalogAckPayload
+	if err := json.Unmarshal(env.Payload, &ack); err != nil {
+		return
+	}
+	c.catalogAckMu.Lock()
+	subscriber := c.catalogAcks[ack.Revision]
+	c.catalogAckMu.Unlock()
+	if subscriber != nil {
+		select {
+		case subscriber <- ack:
+		default:
 		}
 	}
 }
@@ -736,6 +838,19 @@ func (c *MeshClient) executeRuntimeInvoke(invoke protocol.RuntimeInvokePayload) 
 	}
 	if invoke.InvocationID == "" || len(invoke.InvocationID) > 512 || invoke.SpaceID != c.conf.SpaceID || invoke.DeviceID != c.conf.Identity.DeviceID || invoke.RuntimeID != c.conf.Identity.RuntimeID || invoke.RuntimeSessionID != c.sessionIdentity() || invoke.ConnectionGeneration != c.sessionGeneration() || c.State() != StateReady {
 		return nil, fmt.Errorf("设备调用身份或会话已失效")
+	}
+	requiredCapability := invoke.RequiredCapability
+	if requiredCapability == "" {
+		requiredCapability = capabilities.ForHandler(invoke.RuntimeType, invoke.Handler)
+	}
+	if c.conf.CapabilityExposure != nil {
+		enabled, err := c.conf.CapabilityExposure.IsEnabled(requiredCapability)
+		if err != nil {
+			return nil, err
+		}
+		if !enabled {
+			return nil, fmt.Errorf("%s 已由本设备关闭", requiredCapability)
+		}
 	}
 
 	if invoke.Handler == executionjournal.TaskInspectionHandler {

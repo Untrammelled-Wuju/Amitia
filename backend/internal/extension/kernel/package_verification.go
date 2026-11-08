@@ -30,8 +30,14 @@ func (r *Runtime) VerifyStoredPackage(ctx context.Context, artifact PackageArtif
 	if computeManifestHash(pkg) != artifact.ManifestHash || pkg.Tree.TreeHash != artifact.ContentTreeHash || computeArtifactHashFromPackage(pkg) != artifact.ArtifactHash {
 		return nil, fmt.Errorf("stored package identity mismatch")
 	}
-	if reason := r.packageTrustBlockReason(ctx, pkg, artifact.ArchiveHash); reason != "" {
-		return nil, fmt.Errorf("package trust policy rejected artifact: %s", reason)
+	trustedBundled := artifact.SignatureStatus == "bundled" && artifact.TrustDecision == "bundled"
+	if !trustedBundled {
+		if reason := r.packageTrustBlockReason(ctx, pkg, artifact.ArchiveHash); reason != "" {
+			return nil, fmt.Errorf("package trust policy rejected artifact: %s", reason)
+		}
+	}
+	if trustedBundled {
+		return pkg, nil
 	}
 	if len(pkg.V2Signature) > 0 {
 		document, err := trust.ParseSignatureDocument(pkg.V2Signature)

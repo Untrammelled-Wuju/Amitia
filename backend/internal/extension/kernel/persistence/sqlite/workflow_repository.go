@@ -82,7 +82,7 @@ func (r *WorkflowDefinitionRepository) Save(ctx context.Context, def workflow.Wo
 		return fmt.Errorf("begin workflow definition save: %w", err)
 	}
 	defer func() {
-		if err := tx.Rollback(); err != nil {
+		if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
 			amitialog.Printf("[original-error] %v", err)
 		}
 	}()
@@ -140,7 +140,7 @@ func (r *WorkflowDefinitionRepository) Delete(ctx context.Context, workflowID st
 		return fmt.Errorf("begin workflow definition delete: %w", err)
 	}
 	defer func() {
-		if err := tx.Rollback(); err != nil {
+		if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
 			amitialog.Printf("[original-error] %v", err)
 		}
 	}()
@@ -259,7 +259,7 @@ func (r *WorkflowDefinitionRepository) saveRevisionWithState(ctx context.Context
 		return nil, fmt.Errorf("begin workflow revision transaction: %w", err)
 	}
 	defer func() {
-		if err := tx.Rollback(); err != nil {
+		if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
 			amitialog.Printf("[original-error] %v", err)
 		}
 	}()
@@ -970,7 +970,7 @@ func (r *WorkflowExecutionRepository) DeleteByWorkflow(ctx context.Context, work
 		return fmt.Errorf("begin workflow execution cleanup: %w", err)
 	}
 	defer func() {
-		if err := tx.Rollback(); err != nil {
+		if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
 			amitialog.Printf("[original-error] %v", err)
 		}
 	}()
@@ -1593,7 +1593,7 @@ func (r *WorkflowExecutionRepository) AcquireExecutionLease(ctx context.Context,
 		return workflow.ExecutionLease{}, fmt.Errorf("begin workflow execution lease: %w", err)
 	}
 	defer func() {
-		if err := tx.Rollback(); err != nil {
+		if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
 			amitialog.Printf("[original-error] %v", err)
 		}
 	}()

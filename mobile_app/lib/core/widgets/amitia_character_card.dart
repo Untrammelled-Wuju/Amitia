@@ -19,6 +19,7 @@ class AmitiaCharacterCard extends StatelessWidget {
     this.characterId = '',
     required this.mood,
     required this.lastActive,
+    this.isCurrent = false,
     this.onTap,
   });
 
@@ -31,6 +32,7 @@ class AmitiaCharacterCard extends StatelessWidget {
   final String characterId;
   final String mood;
   final String lastActive;
+  final bool isCurrent;
   final VoidCallback? onTap;
 
   @override
@@ -39,10 +41,20 @@ class AmitiaCharacterCard extends StatelessWidget {
       int.parse('FF${avatarColor.replaceAll('#', '')}', radix: 16),
     );
     final normalizedStatus = status.toLowerCase();
-    final isOnline =
-        normalizedStatus == '在线' ||
-        normalizedStatus == 'enabled' ||
-        normalizedStatus == 'online';
+    final isExplicitOnline = const {
+      '在线',
+      'online',
+      'active',
+    }.contains(normalizedStatus);
+    final isOnline = isCurrent || isExplicitOnline;
+    final statusLabel = isCurrent
+        ? '使用中'
+        : switch (normalizedStatus) {
+            'enabled' => '已启用',
+            'disabled' => '已停用',
+            'archived' => '已归档',
+            _ => status,
+          };
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -68,6 +80,7 @@ class AmitiaCharacterCard extends StatelessWidget {
                     right: 0,
                     bottom: 0,
                     child: Container(
+                      key: ValueKey('character-online/$characterId'),
                       width: 14,
                       height: 14,
                       decoration: BoxDecoration(
@@ -92,7 +105,7 @@ class AmitiaCharacterCard extends StatelessWidget {
                       Text(name, style: AppTypography.cardTitle(context)),
                       const SizedBox(width: 8),
                       AmitiaStatusBadge(
-                        label: status,
+                        label: statusLabel,
                         type: isOnline ? BadgeType.success : BadgeType.neutral,
                       ),
                     ],

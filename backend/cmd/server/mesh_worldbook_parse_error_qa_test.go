@@ -26,7 +26,7 @@ func TestWorldbookRoutesPreserveOriginalParseErrorsQA(t *testing.T) {
 			t.Run(action+"/"+input.name, func(t *testing.T) {
 				router := gin.New()
 				router.Use(func(c *gin.Context) {
-					c.Set("actorContext", &auth.ActorContext{SpaceID: "qa-space", DeviceID: "qa-device"})
+					c.Set("actorContext", &auth.ActorContext{PrincipalType: auth.PrincipalLocalUI, SpaceID: "qa-space", DeviceID: "qa-device", IsLocalTrusted: true, Permissions: []string{auth.PermSystemAdmin}})
 					c.Next()
 				})
 				registerMeshWorldbookRouter(router.Group("/worldbook-qa"), nil, "qa-core")

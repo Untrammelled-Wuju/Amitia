@@ -461,6 +461,9 @@ func TestServerEnvironmentBinding(t *testing.T) {
 	if cfg.Server.Port != 0 {
 		t.Errorf("default server.port = %d, want 0", cfg.Server.Port)
 	}
+	if cfg.Server.LANPort != 54796 {
+		t.Errorf("default server.lanPort = %d, want 54796", cfg.Server.LANPort)
+	}
 }
 
 func TestServerHostEnvOverride(t *testing.T) {
@@ -502,6 +505,37 @@ func TestServerPortEnvOverride(t *testing.T) {
 
 	if cfg.Server.Port != 18899 {
 		t.Errorf("server.port via env = %d, want 18899", cfg.Server.Port)
+	}
+}
+
+func TestServerLANPortEnvOverride(t *testing.T) {
+	dir := t.TempDir()
+	configFile := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(configFile, []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("AMITIA_SERVER_LAN_PORT", "18898")
+
+	cfg, err := loadConfig(dir)
+	if err != nil {
+		t.Fatalf("loadConfig failed: %v", err)
+	}
+
+	if cfg.Server.LANPort != 18898 {
+		t.Errorf("server.lanPort via env = %d, want 18898", cfg.Server.LANPort)
+	}
+}
+
+func TestServerLANPortRejectsReservedPort(t *testing.T) {
+	dir := t.TempDir()
+	configFile := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(configFile, []byte("server:\n  lanPort: 3000\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := loadConfig(dir); err == nil {
+		t.Fatal("loadConfig accepted reserved server.lanPort 3000")
 	}
 }
 

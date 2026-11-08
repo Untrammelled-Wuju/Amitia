@@ -9,6 +9,7 @@ class MobileCloudDeviceCredential {
   final String spaceId;
   final String deviceId;
   final String runtimeId;
+  final String fingerprint;
   final DateTime expiresAt;
   final String protocol;
   final int envelopeVersion;
@@ -22,6 +23,7 @@ class MobileCloudDeviceCredential {
     required this.spaceId,
     required this.deviceId,
     required this.runtimeId,
+    required this.fingerprint,
     required this.expiresAt,
     required this.protocol,
     required this.envelopeVersion,
@@ -38,6 +40,7 @@ class MobileCloudDeviceCredential {
     'spaceId': spaceId,
     'deviceId': deviceId,
     'runtimeId': runtimeId,
+    'fingerprint': fingerprint,
     'expiresAt': expiresAt.toUtc().toIso8601String(),
     'protocol': protocol,
     'envelopeVersion': envelopeVersion,
@@ -54,7 +57,10 @@ class MobileCloudDeviceCredential {
       spaceId: (json['spaceId'] ?? '').toString().trim(),
       deviceId: (json['deviceId'] ?? '').toString().trim(),
       runtimeId: (json['runtimeId'] ?? '').toString().trim(),
-      expiresAt: expiresAt?.toUtc() ?? DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+      fingerprint: (json['fingerprint'] ?? '').toString().trim(),
+      expiresAt:
+          expiresAt?.toUtc() ??
+          DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
       protocol: (json['protocol'] ?? '').toString().trim(),
       envelopeVersion: (json['envelopeVersion'] as num?)?.toInt() ?? 0,
       schemaVersion: (json['schemaVersion'] ?? '').toString().trim(),
@@ -66,6 +72,7 @@ class MobileCloudDeviceCredential {
         value.spaceId.isEmpty ||
         value.deviceId.isEmpty ||
         value.runtimeId.isEmpty ||
+        value.fingerprint.isEmpty ||
         value.protocol != 'amitia.device-runtime' ||
         value.envelopeVersion != 1 ||
         value.schemaVersion != '1.0.0' ||
@@ -94,8 +101,8 @@ class MobileCloudDeviceCredentialStore {
         Map<String, dynamic>.from(decoded),
       );
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-return null;
+      print("[original-error] $error\n$stackTrace");
+      return null;
     }
   }
 

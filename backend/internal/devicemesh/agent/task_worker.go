@@ -290,7 +290,7 @@ func (w *defaultTaskWorker) taskAuthorityInvocation(dispatch protocol.TaskDispat
 	if len(dispatch.OwnedExecutionScope) > 0 && dispatch.TaskGeneration > 0 {
 		key += fmt.Sprintf("/%d", dispatch.TaskGeneration)
 	}
-	return protocol.RuntimeInvokePayload{InvocationID: dispatch.AttemptID, IdempotencyKey: key, SpaceID: w.client.conf.SpaceID, DeviceID: w.client.conf.Identity.DeviceID, RuntimeID: w.client.conf.Identity.RuntimeID, RuntimeSessionID: dispatch.RuntimeSessionID, ConnectionGeneration: dispatch.ConnectionGeneration, RuntimeType: "task", Handler: dispatch.TaskDefinitionID, Input: input, AuthorityCallID: dispatch.AuthorityCallID, OwnedExecutionScope: dispatch.OwnedExecutionScope}
+	return protocol.RuntimeInvokePayload{InvocationID: dispatch.AttemptID, IdempotencyKey: key, SpaceID: w.client.conf.SpaceID, DeviceID: w.client.conf.Identity.DeviceID, RuntimeID: w.client.conf.Identity.RuntimeID, RuntimeSessionID: dispatch.RuntimeSessionID, ConnectionGeneration: dispatch.ConnectionGeneration, RuntimeType: "task", Handler: dispatch.TaskDefinitionID, RequiredCapability: "task.execute", Input: input, AuthorityCallID: dispatch.AuthorityCallID, OwnedExecutionScope: dispatch.OwnedExecutionScope}
 }
 
 func (w *defaultTaskWorker) validateTaskAuthority(ctx context.Context, dispatch protocol.TaskDispatchPayload) error {

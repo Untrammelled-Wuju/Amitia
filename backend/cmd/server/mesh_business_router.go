@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -56,7 +57,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 			c.JSON(400, gin.H{"message": "持续事项事件参数无效"})
 			return
 		}
-		resolved, err := services.OwnedBusiness.SignalContinuity(c.Request.Context(), business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: payload.TargetDeviceID, RoleID: payload.CharacterID, RequestID: payload.RequestID}, payload.Signal)
+		resolved, err := services.OwnedBusiness.SignalContinuity(c.Request.Context(), business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: payload.TargetDeviceID, RoleOwnerID: coreID, RoleID: payload.CharacterID, RequestID: payload.RequestID}, payload.Signal)
 		if err != nil {
 			c.JSON(409, gin.H{"message": err.Error()})
 			return
@@ -69,7 +70,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 			c.AbortWithStatus(401)
 			return
 		}
-		request := business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: c.Query("targetDeviceId"), RoleID: c.Query("characterId"), RequestID: uuid.NewString()}
+		request := business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: c.Query("targetDeviceId"), RoleOwnerID: coreID, RoleID: c.Query("characterId"), RequestID: uuid.NewString()}
 		if id := c.Query("id"); id != "" {
 			request.MemoryView = c.Query("memoryView")
 			document, _, err := services.OwnedBusiness.Continuity(c.Request.Context(), request, business.ContinuityMutation{ID: id, Action: "read"})
@@ -147,7 +148,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 			c.AbortWithStatus(401)
 			return
 		}
-		request := business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: c.Query("targetDeviceId"), RoleID: c.Query("characterId")}
+		request := business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: actor.DeviceID.String(), ResourceOwnerID: actor.DeviceID.String(), RoleOwnerID: coreID, RoleID: c.Query("characterId")}
 		query := coordination.DataQuery{ConversationID: c.Param("conversationId"), HistoricalRoleID: c.Query("historicalRoleId"), ListConversations: c.Param("conversationId") == "", Limit: 128}
 		search, searchErr := coordination.NormalizeConversationSearch(c.Query("keyword"))
 		if searchErr != nil || search != "" && !query.ListConversations {
@@ -163,6 +164,16 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 			request.ConversationOrigin = &business.ConversationOrigin{OwnerID: owner, ID: query.ConversationID}
 		}
 		query.ResourceKind, query.Cursor, query.HistoricalCursor = c.Query("resourceKind"), c.Query("cursor"), c.Query("historicalCursor")
+		if query.ResourceKind == "worldbook" {
+			policy, policyErr := services.DeviceMesh.Coordination.Get(c.Request.Context(), actor.SpaceID.String(), actor.DeviceID.String())
+			if policyErr != nil {
+				c.JSON(503, gin.H{"message": policyErr.Error()})
+				return
+			}
+			if policy.Coordinated {
+				request.ResourceOwnerID, request.RoleOwnerID = coreID, coreID
+			}
+		}
 		query.HistoricalListCursor = c.Query("historicalListCursor")
 		if len(query.HistoricalListCursor) > 4096 || (query.HistoricalListCursor != "" && (!query.ListConversations || query.ResourceKind != "conversation")) {
 			c.JSON(400, gin.H{"message": "设备历史会话分页参数无效"})
@@ -216,7 +227,11 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 			c.JSON(400, gin.H{"message": "摘要生成缺少页面权限或数据版本"})
 			return
 		}
-		result, err := services.OwnedBusiness.GenerateSummary(c.Request.Context(), business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: input.TargetDeviceID, RoleID: input.RoleID, ConversationID: c.Param("conversationId"), RequestID: input.RequestID, ExpectedScope: input.ExpectedScope, ConversationOrigin: input.Origin}, *input.ExpectedRevision)
+		if input.TargetDeviceID != "" && input.TargetDeviceID != actor.DeviceID.String() {
+			c.JSON(403, gin.H{"message": "会话属于设备本地数据，不能读取其他设备会话摘要"})
+			return
+		}
+		result, err := services.OwnedBusiness.GenerateSummary(c.Request.Context(), business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: actor.DeviceID.String(), ResourceOwnerID: actor.DeviceID.String(), RoleOwnerID: coreID, RoleID: input.RoleID, ConversationID: c.Param("conversationId"), RequestID: input.RequestID, ExpectedScope: input.ExpectedScope, ConversationOrigin: input.Origin}, *input.ExpectedRevision)
 		if err != nil {
 			c.JSON(409, gin.H{"message": err.Error()})
 			return
@@ -241,7 +256,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 			c.JSON(400, gin.H{"message": "记忆分页参数无效"})
 			return
 		}
-		request := business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: c.Query("targetDeviceId"), RoleID: c.Query("characterId")}
+		request := business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: c.Query("targetDeviceId"), RoleOwnerID: coreID, RoleID: c.Query("characterId")}
 		historicalRole := c.Query("historicalRoleId")
 		request.MemoryView = c.Query("memoryView")
 		historicalCursor := c.Query("historicalCursor")
@@ -262,7 +277,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 			c.AbortWithStatus(401)
 			return
 		}
-		roles, scope, err := services.OwnedBusiness.HistoricalRoles(c.Request.Context(), business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: c.Query("targetDeviceId"), RoleID: c.Query("characterId"), RequestID: uuid.NewString()})
+		roles, scope, err := services.OwnedBusiness.HistoricalRoles(c.Request.Context(), business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: actor.DeviceID.String(), ResourceOwnerID: actor.DeviceID.String(), RoleOwnerID: coreID, RoleID: c.Query("characterId"), RequestID: uuid.NewString()})
 		if err != nil {
 			c.JSON(409, gin.H{"message": err.Error()})
 			return
@@ -275,7 +290,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 			c.AbortWithStatus(401)
 			return
 		}
-		request := business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: c.Query("targetDeviceId"), RoleID: c.Query("characterId"), RequestID: uuid.NewString()}
+		request := business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: coreID, RoleID: c.Query("characterId"), RequestID: uuid.NewString()}
 		var expected *coordination.ExecutionScope
 		request.MemoryView = c.Query("memoryView")
 		rebuild := c.Request.Method == http.MethodPost
@@ -290,7 +305,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 				c.JSON(400, gin.H{"message": util.OriginalErrorMessage(err, "投影重建请求缺少原始执行范围")})
 				return
 			}
-			request.RoleID, request.TargetDeviceID, expected = input.RoleID, input.TargetDeviceID, input.ExpectedScope
+			request.RoleID, request.TargetDeviceID, expected = input.RoleID, coreID, input.ExpectedScope
 			request.ExpectedScope = expected
 		}
 		status, scope, err := services.OwnedBusiness.Projections(c.Request.Context(), request, rebuild, expected)
@@ -313,7 +328,16 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 			c.JSON(400, gin.H{"message": "数据查询参数无效"})
 			return
 		}
-		resource, scope, err := services.OwnedBusiness.ReadResource(c.Request.Context(), business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: c.Query("targetDeviceId"), RoleID: c.Query("characterId"), MemoryView: c.Query("memoryView"), RequestID: uuid.NewString()}, kind, id)
+		policy, err := services.DeviceMesh.Coordination.Get(c.Request.Context(), actor.SpaceID.String(), actor.DeviceID.String())
+		if err != nil {
+			c.JSON(503, gin.H{"message": err.Error()})
+			return
+		}
+		roleOwner := actor.DeviceID.String()
+		if policy.Coordinated {
+			roleOwner = coreID
+		}
+		resource, scope, err := services.OwnedBusiness.ReadResource(c.Request.Context(), business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: actor.DeviceID.String(), ResourceOwnerID: actor.DeviceID.String(), RoleOwnerID: roleOwner, RoleID: c.Query("characterId"), MemoryView: c.Query("memoryView"), RequestID: uuid.NewString()}, kind, id)
 		if err != nil {
 			c.JSON(409, gin.H{"message": err.Error()})
 			return
@@ -357,10 +381,67 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 		stopped := services.OwnedBusiness.Interrupt(actor.SpaceID.String(), actor.DeviceID.String(), requestID)
 		c.JSON(200, gin.H{"code": 200, "data": gin.H{"interrupted": stopped, "requestId": requestID}})
 	})
+	mesh.GET("/devices/events", func(c *gin.Context) {
+		actor := security.GetActor(c)
+		if actor == nil || !actor.HasPermission(auth.PermSystemAdmin) {
+			c.AbortWithStatusJSON(403, gin.H{"code": "mesh.administrator_required", "message": "只有统筹中心管理员可以订阅设备能力目录"})
+			return
+		}
+		events, cancel := services.DeviceMesh.Coordination.WatchCapabilityCatalogs()
+		defer cancel()
+		c.Header("Content-Type", "text/event-stream")
+		c.Header("Cache-Control", "no-store")
+		c.Header("Connection", "keep-alive")
+		c.Header("X-Accel-Buffering", "no")
+		c.Status(http.StatusOK)
+		if _, err := c.Writer.WriteString("event: ready\ndata: {}\n\n"); err != nil {
+			return
+		}
+		c.Writer.Flush()
+		heartbeat := time.NewTicker(20 * time.Second)
+		defer heartbeat.Stop()
+		for {
+			select {
+			case <-c.Request.Context().Done():
+				return
+			case event, ok := <-events:
+				if !ok {
+					return
+				}
+				data, err := json.Marshal(event)
+				if err != nil {
+					return
+				}
+				if _, err := c.Writer.WriteString("event: device_capabilities\ndata: " + string(data) + "\n\n"); err != nil {
+					return
+				}
+				c.Writer.Flush()
+			case <-heartbeat.C:
+				if _, err := c.Writer.WriteString(": keepalive\n\n"); err != nil {
+					return
+				}
+				c.Writer.Flush()
+			}
+		}
+	})
+	mesh.GET("/devices/:deviceId/capabilities", func(c *gin.Context) {
+		actor := security.GetActor(c)
+		if actor == nil || !actor.HasPermission(auth.PermSystemAdmin) {
+			c.AbortWithStatusJSON(403, gin.H{"code": "mesh.administrator_required", "message": "只有统筹中心管理员可以查看设备能力目录"})
+			return
+		}
+		catalog, err := services.DeviceMesh.Coordination.CapabilityCatalog(c.Request.Context(), actor.SpaceID.String(), c.Param("deviceId"))
+		if err != nil {
+			c.JSON(503, gin.H{"message": err.Error()})
+			return
+		}
+		c.Header("Cache-Control", "no-store")
+		c.JSON(200, catalog)
+	})
 	mesh.GET("/devices/:deviceId/grants", func(c *gin.Context) {
 		actor := security.GetActor(c)
-		if actor == nil || (actor.DeviceID.String() != c.Param("deviceId") && !actor.HasPermission(auth.PermSystemAdmin)) {
-			c.AbortWithStatusJSON(403, gin.H{"code": "mesh.administrator_required", "message": "只能查看本机授权或使用 Core 管理员权限"})
+		if actor == nil || !actor.HasPermission(auth.PermSystemAdmin) {
+			c.AbortWithStatusJSON(403, gin.H{"code": "mesh.administrator_required", "message": "只有统筹中心管理员可以查看设备调用授权"})
 			return
 		}
 		grants, err := services.DeviceMesh.Coordination.CapabilityGrants(c.Request.Context(), actor.SpaceID.String(), c.Param("deviceId"))
@@ -372,8 +453,8 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 	})
 	mesh.PUT("/devices/:deviceId/grants", func(c *gin.Context) {
 		actor := security.GetActor(c)
-		if actor == nil || (actor.DeviceID.String() != c.Param("deviceId") && !actor.HasPermission(auth.PermSystemAdmin)) {
-			c.AbortWithStatusJSON(403, gin.H{"code": "mesh.administrator_required", "message": "能力授权只能由目标设备或 Core 管理员修改"})
+		if actor == nil || !actor.HasPermission(auth.PermSystemAdmin) {
+			c.AbortWithStatusJSON(403, gin.H{"code": "mesh.administrator_required", "message": "只有统筹中心管理员可以修改设备调用授权"})
 			return
 		}
 		finish, valid := security.BeginDeviceManagementIntent(c, services.DeviceMesh.Coordination)
@@ -410,7 +491,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 			c.AbortWithStatus(http.StatusUnauthorized)
 			return
 		}
-		ctx, scope, finish, err := services.DeviceMesh.Coordination.Begin(c.Request.Context(), actor.SpaceID.String(), actor.DeviceID.String(), c.Query("targetDeviceId"), coreID, "", uuid.NewString())
+		ctx, scope, finish, err := services.DeviceMesh.Coordination.BeginWithOwners(c.Request.Context(), actor.SpaceID.String(), actor.DeviceID.String(), actor.DeviceID.String(), coreID, "", uuid.NewString(), actor.DeviceID.String(), coreID)
 		if err != nil {
 			c.JSON(409, gin.H{"code": "mesh.scope_expired", "message": err.Error()})
 			return
@@ -433,7 +514,19 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 				"reasoningEnabled": role.ReasoningEnabled,
 			})
 		}
-		c.JSON(200, gin.H{"roles": visibleRoles, "roleOwnerId": scope.RoleOwnerID, "providerEpoch": scope.ProviderEpoch, "modeRevision": scope.ModeRevision, "executionScope": scope})
+		chatScope := scope
+		targetPolicy, policyErr := services.DeviceMesh.Coordination.Get(c.Request.Context(), actor.SpaceID.String(), actor.DeviceID.String())
+		if policyErr != nil {
+			c.JSON(503, gin.H{"message": policyErr.Error()})
+			return
+		}
+		chatScope.TargetDeviceID = actor.DeviceID.String()
+		chatScope.ResourceOwnerID = actor.DeviceID.String()
+		chatScope.TargetPermissionRevision = targetPolicy.PermissionRevision
+		chatScope.TargetProviderEpoch = targetPolicy.ProviderEpoch
+		chatScope.ModeRevision = targetPolicy.ModeRevision
+		chatScope.Coordinated = targetPolicy.Coordinated
+		c.JSON(200, gin.H{"roles": visibleRoles, "roleOwnerId": scope.RoleOwnerID, "providerEpoch": scope.ProviderEpoch, "modeRevision": scope.ModeRevision, "executionScope": chatScope})
 	})
 	mesh.POST("/messages", func(c *gin.Context) {
 		actor := security.GetActor(c)
@@ -454,10 +547,13 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 		request.SpaceID = actor.SpaceID.String()
 		request.DeviceID = actor.DeviceID.String()
 		request.CoreID = coreID
-		if request.TargetDeviceID != "" && request.TargetDeviceID != request.DeviceID && request.ExpectedScope == nil {
-			c.JSON(400, gin.H{"code": "mesh.invalid_scope", "message": "跨设备调用缺少目标权限快照，请刷新角色后重试"})
+		if request.TargetDeviceID != "" && request.TargetDeviceID != request.DeviceID {
+			c.JSON(403, gin.H{"code": "mesh.local_data_forbidden", "message": "会话属于设备本地数据，不能通过统筹中心读取或写入其他设备会话"})
 			return
 		}
+		request.TargetDeviceID = request.DeviceID
+		request.ResourceOwnerID = request.DeviceID
+		request.RoleOwnerID = coreID
 		if request.RequestID == "" {
 			request.RequestID = uuid.NewString()
 		}
@@ -531,7 +627,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 		response, err := services.OwnedBusiness.RunEvents(messageContext, request, emit)
 		if err == nil && response.Saved && services.ContinuityOwner != nil && threadID != "" {
 			if observeErr := services.ContinuityOwner.Observe(context.WithoutCancel(c.Request.Context()), owner, response.Scope.RoleID, threadID, continuity.ObservePayload{Version: "v1", ThreadID: threadID, SpaceID: owner.SpaceID, CharacterID: response.Scope.RoleID, ConversationID: response.ConversationID, RequestID: response.RequestID, ExecutionID: response.ExecutionID, UserMessage: request.Message, AssistantReply: response.Text, Source: "owned"}); observeErr != nil {
-				err = fmt.Errorf("回复已保存，持续事项同步失败: %w", observeErr)
+				response.AddPostProcessingIssue("continuity", observeErr)
 			}
 		}
 		if err != nil {

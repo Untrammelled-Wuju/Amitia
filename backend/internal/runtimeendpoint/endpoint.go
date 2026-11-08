@@ -2,7 +2,7 @@ package runtimeendpoint
 
 import (
 	"encoding/json"
-	amitialog "log"
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
@@ -66,8 +66,8 @@ func Write(runDir string, endpoint Endpoint) error {
 	if err := os.WriteFile(temp, append(data, '\n'), 0600); err != nil {
 		return err
 	}
-	if err := os.Remove(path); err != nil {
-		amitialog.Printf("[original-error] %v", err)
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
 	}
 	return os.Rename(temp, path)
 }

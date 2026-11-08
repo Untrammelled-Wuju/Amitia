@@ -634,10 +634,7 @@ func (p *RuntimeGraphProvisioner) buildBootServiceFor(ctx context.Context, kp Ke
 			Sha256:   entrySHA,
 			Required: true,
 		}}
-		info.Arguments = []string{entryPath}
-		if stdruntime.GOOS == "windows" && info.Network.Enforce {
-			info.Arguments = []string{"--preserve-symlinks-main", "--preserve-symlinks", entryPath}
-		}
+		info.Arguments = gamePluginNodeArguments(info.Network, generation.Path, entryPath, stdruntime.GOOS)
 	default:
 		info.ExecutablePath = entryPath
 		if _, err := os.Stat(entryPath); err == nil {
@@ -650,6 +647,21 @@ func (p *RuntimeGraphProvisioner) buildBootServiceFor(ctx context.Context, kp Ke
 		}
 	}
 	return info, nil
+}
+
+func gamePluginNodeArguments(policy trusted_service.ServiceNetworkPolicy, bundleRoot, entryPath, goos string) []string {
+	args := []string{entryPath}
+	if policy.Enforce && strings.EqualFold(strings.TrimSpace(policy.Mode), "none") {
+		args = []string{
+			"--permission",
+			"--allow-fs-read=" + bundleRoot,
+			entryPath,
+		}
+	}
+	if strings.EqualFold(strings.TrimSpace(goos), "windows") && policy.Enforce {
+		args = append([]string{"--preserve-symlinks-main", "--preserve-symlinks"}, args...)
+	}
+	return args
 }
 
 func resolveGamePluginBundlePath(extRoot, extensionID, version, definitionHash string) string {

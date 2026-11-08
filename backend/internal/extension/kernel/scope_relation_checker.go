@@ -17,6 +17,40 @@ type repositoryScopeRelationChecker struct {
 	sessions   *extension_page_host.SessionManager
 }
 
+type validatedConversationAuthority struct {
+	ConversationID string
+	SpaceID        string
+	RoleID         string
+	OwnerID        string
+	CoreID         string
+}
+
+type validatedConversationAuthorityKey struct{}
+
+func WithValidatedConversationAuthority(ctx context.Context, conversationID, spaceID, roleID, ownerID, coreID string) context.Context {
+	if ctx == nil || conversationID == "" || spaceID == "" || roleID == "" || ownerID == "" || coreID == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, validatedConversationAuthorityKey{}, validatedConversationAuthority{
+		ConversationID: conversationID,
+		SpaceID:        spaceID,
+		RoleID:         roleID,
+		OwnerID:        ownerID,
+		CoreID:         coreID,
+	})
+}
+
+func validatedConversation(ctx context.Context, conversationID string) (validatedConversationAuthority, bool) {
+	if ctx == nil || conversationID == "" {
+		return validatedConversationAuthority{}, false
+	}
+	authority, ok := ctx.Value(validatedConversationAuthorityKey{}).(validatedConversationAuthority)
+	if !ok || authority.ConversationID != conversationID {
+		return validatedConversationAuthority{}, false
+	}
+	return authority, true
+}
+
 func newRepositoryScopeRelationChecker(db *sql.DB, relationDB *sql.DB, resources sqlite.ResourceRepository, operations sqlite.OperationRepository) *repositoryScopeRelationChecker {
 	if relationDB == nil {
 		relationDB = db
@@ -27,6 +61,9 @@ func newRepositoryScopeRelationChecker(db *sql.DB, relationDB *sql.DB, resources
 func (c *repositoryScopeRelationChecker) ConversationBelongsToCharacter(ctx context.Context, conversationID, characterID string) bool {
 	if c == nil || conversationID == "" || characterID == "" {
 		return false
+	}
+	if authority, ok := validatedConversation(ctx, conversationID); ok {
+		return authority.RoleID == characterID
 	}
 	return c.conversationExists(ctx, conversationID)
 }
@@ -42,6 +79,9 @@ func (c *repositoryScopeRelationChecker) IsCharacterDeleted(ctx context.Context,
 func (c *repositoryScopeRelationChecker) IsConversationDeleted(ctx context.Context, conversationID string) bool {
 	if c == nil || conversationID == "" {
 		return true
+	}
+	if _, ok := validatedConversation(ctx, conversationID); ok {
+		return false
 	}
 	return !c.conversationExists(ctx, conversationID)
 }

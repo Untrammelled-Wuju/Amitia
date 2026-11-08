@@ -5,17 +5,17 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
   <div class="deployment-panel" data-amitia-ui="settings.section">
     <el-card shadow="never" class="section-card" data-amitia-ui="settings.card">
-      <template #header><span>选择运行模式</span></template>
-      <p class="connection-explanation">本地模式在当前设备运行全部项目服务；云端统筹模式连接 Cloud Core 并统一管理多设备数据。</p>
+      <template #header><span>运行模式</span></template>
+      <p class="connection-explanation">选择当前设备作为统筹中心，或连接另一台设备提供的统筹中心。</p>
 
       <el-radio-group v-model="formMode" class="mode-radio-group">
         <el-radio value="local" border class="mode-radio-card" :disabled="!desktopShell">
-          <div class="mode-label">本地模式</div>
-          <div class="mode-desc">项目服务在本地运行，不限制模型或扩展能力</div>
+          <div class="mode-label">以本机作为统筹中心</div>
+          <div class="mode-desc">当前设备保存统筹数据、模型配置并管理其他设备</div>
         </el-radio>
         <el-radio value="cloud" border class="mode-radio-card">
-          <div class="mode-label">云端统筹模式</div>
-          <div class="mode-desc">连接远程 Core，统一管理角色、数据和跨设备任务</div>
+          <div class="mode-label">使用远程统筹中心</div>
+          <div class="mode-desc">当前设备加入另一台设备提供的统筹中心</div>
         </el-radio>
       </el-radio-group>
 
@@ -26,7 +26,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           :rules="rules"
           ref="formRef"
         >
-          <el-form-item label="服务器地址" prop="serverURL">
+          <el-form-item label="统筹中心地址" prop="serverURL">
             <el-input
               v-model="formData.serverURL"
               data-amitia-ui="settings.input"
@@ -34,33 +34,31 @@ SPDX-License-Identifier: AGPL-3.0-only
               clearable
             />
             <div class="form-tip">
-              输入你部署的 Core 服务器完整地址，包含协议和端口
+              输入另一台设备提供的统筹中心完整地址，包含协议和端口
             </div>
           </el-form-item>
         </el-form>
         <ol class="cloud-requirements">
-          <li>验证 Cloud Core 健康状态、空间身份和运行时兼容性</li>
-          <li>当前设备完成首设备设置码或一次性 Offer 配对</li>
+          <li>验证统筹中心健康状态、空间身份和运行时兼容性</li>
+          <li>当前设备完成首设备设置码或配对二维码验证</li>
           <li>保存 DeviceCredential、切换本机 Device Agent 并验证会话</li>
         </ol>
-        <DevicePairingPanel :serverURL="formData.serverURL" @paired="handleDevicePaired" />
-        <BoundDevicesPanel :key="deviceManagementGeneration" />
+        <DevicePairingPanel mode="cloud" :serverURL="formData.serverURL" @paired="handleRuntimePaired" />
       </div>
-
       <div class="mode-save-row">
         <span class="mode-save-hint">
-          {{ formMode === "cloud" ? "填写地址不会直接切换，必须完成配对和凭证验证。" : "保存后业务连接会重新建立，不迁移当前运行数据。" }}
+          {{ formMode === "cloud" ? "填写地址不会直接切换，必须完成配对和凭证验证。" : "当前设备将成为统筹中心，本机数据位置保持不变。" }}
         </span>
         <el-tag v-if="saveSuccess" type="success" size="small" effect="plain">已保存</el-tag>
         <div v-if="saveError" class="save-error">{{ saveError }}</div>
         <el-button type="primary" data-amitia-ui="settings.button" @click="handleSave" :loading="saving">
-          {{ formMode === "cloud" ? "检查、配对并切换" : "保存本地模式" }}
+          {{ formMode === "cloud" ? "检查、配对并切换" : "保存本机统筹中心" }}
         </el-button>
       </div>
     </el-card>
 
     <el-card v-if="formMode === 'cloud' && cloudSetupURL" shadow="never" class="section-card">
-      <template #header><span>云端统筹设备配对</span></template>
+      <template #header><span>连接远程统筹中心</span></template>
       <StageRuntimeSetup
         deploy-mode="remote"
         :serverURL="cloudSetupURL"
@@ -69,6 +67,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         @health-check-done="completeCloudSetup"
       />
     </el-card>
+    <DeviceCapabilityExposure v-if="desktopShell" />
   </div>
 </template>
 
@@ -84,7 +83,7 @@ import type { DeploymentModeConfig } from "../../runtime/runtime-types";
 import { initializeRuntimeCapabilities, isDesktopShell } from "../../runtime/runtime-capabilities";
 import StageRuntimeSetup from "@/views/onboarding/components/StageRuntimeSetup.vue";
 import DevicePairingPanel from "@/components/DevicePairingPanel.vue";
-import BoundDevicesPanel from "@/components/BoundDevicesPanel.vue";
+import DeviceCapabilityExposure from "@/components/DeviceCapabilityExposure.vue";
 
 const formMode = ref<"local" | "cloud">("local");
 const formData = reactive({ serverURL: "" });
@@ -98,7 +97,6 @@ const cloudSetupURL = ref("");
 const cloudSetupSaving = ref(false);
 const cloudConfigPrepared = ref(false);
 const cloudPreviousConfig = ref<DeploymentModeConfig | null>(null);
-const deviceManagementGeneration = ref(0);
 
 watch(formMode, (value) => {
   if (value === "local") cloudSetupURL.value = "";
@@ -137,15 +135,11 @@ async function loadConfig() {
   }
 }
 
-function handleDevicePaired(baseURL: string) {
-  deviceManagementGeneration.value++;
+function handleRuntimePaired(baseURL: string) {
   formMode.value = "cloud";
   formData.serverURL = baseURL;
   saveSuccess.value = true;
   saveError.value = "";
-  cloudSetupURL.value = "";
-  cloudConfigPrepared.value = false;
-  cloudPreviousConfig.value = null;
 }
 
 async function handleSave() {
@@ -186,7 +180,7 @@ return;
     await saveDeploymentConfig(config);
     await initializeRuntimeCapabilities(true);
     saveSuccess.value = true;
-    ElMessage.success("本地模式已保存，业务连接会重新建立");
+    ElMessage.success("本机统筹中心已保存，业务连接会重新建立");
   } catch (err: any) {
     saveError.value = err?.message || "保存失败";
     ElMessage.error(String(err?.message || err));
@@ -228,12 +222,11 @@ async function completeCloudSetup() {
       await prepareCloudConnection(cloudSetupURL.value);
     }
     saveSuccess.value = true;
-    ElMessage.success("设备已完成云端统筹配对、凭证验证并切换");
+    ElMessage.success("设备已完成远程统筹中心配对、凭证验证并切换");
     formMode.value = "cloud";
     cloudSetupURL.value = "";
     cloudConfigPrepared.value = false;
     cloudPreviousConfig.value = null;
-    deviceManagementGeneration.value++;
   } catch (err: any) {
     saveError.value = err?.message || "保存云端统筹设置失败";
     ElMessage.error(String(err?.message || err));

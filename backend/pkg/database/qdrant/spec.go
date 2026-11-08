@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	amitialog "log"
 	"time"
 
 	"github.com/u-ai/backend/config"
@@ -13,11 +14,23 @@ import (
 	"github.com/u-ai/backend/internal/vectorstore/qdrantconfig"
 	qdrantenv "github.com/u-ai/backend/internal/vectorstore/qdrantenv"
 	"github.com/u-ai/backend/internal/vectorstore/qdrantlayout"
+	"github.com/u-ai/backend/internal/vectorstore/qdrantprofile"
+	"github.com/u-ai/backend/pkg/platform"
 	"github.com/u-ai/backend/pkg/util"
 )
 
-// BuildQdrantProcessSpec prepares the Qdrant ProcessSpec using the runtimehost to resolve binary paths via qdrantenv.
-// It does NOT start Qdrant; the caller (typically a ProcessSupervisor-based adapter) handles execution and lifecycle.
+type qdrantDescriptorProvider struct {
+	host runtimehost.RuntimeHost
+}
+
+func (p qdrantDescriptorProvider) Descriptor() platform.RuntimeDescriptor {
+	return p.host.Descriptor()
+}
+
+func (p qdrantDescriptorProvider) Capabilities() *runtimehost.HostCapabilities {
+	return p.host.Capabilities()
+}
+
 func BuildQdrantProcessSpec(host runtimehost.RuntimeHost) (runtimehost.ProcessSpec, error) {
 	if host == nil {
 		return runtimehost.ProcessSpec{}, fmt.Errorf("BuildQdrantProcessSpec: host is nil")
@@ -81,11 +94,25 @@ func BuildQdrantProcessSpec(host runtimehost.RuntimeHost) (runtimehost.ProcessSp
 		return runtimehost.ProcessSpec{}, fmt.Errorf("ensure qdrant directories: %w", err)
 	}
 
+	profileResolver, err := qdrantprofile.NewResolver(qdrantprofile.ResolveContext{
+		DescriptorProvider: qdrantDescriptorProvider{host: host},
+	})
+	if err != nil {
+		return runtimehost.ProcessSpec{}, fmt.Errorf("create qdrant profile resolver: %w", err)
+	}
+	resolvedProfile, err := profileResolver.Resolve(context.Background(), vectorCfg.Qdrant.ResourceProfile)
+	if err != nil {
+		return runtimehost.ProcessSpec{}, fmt.Errorf("resolve qdrant profile: %w", err)
+	}
+
 	doc := qdrantconfig.Document{
 		HTTPPort:     vectorCfg.Qdrant.Port,
 		GRPCPort:     vectorCfg.Qdrant.Port + 1,
 		StoragePath:  layout.StorageDir,
 		SnapshotPath: layout.SnapshotsDir,
+	}
+	if resolvedProfile.Mobile {
+		doc.ResourceProfile = resolvedProfile.Settings
 	}
 
 	configBytes, err := qdrantconfig.NewRenderer().Render(doc)
@@ -118,6 +145,12 @@ func BuildQdrantProcessSpec(host runtimehost.RuntimeHost) (runtimehost.ProcessSp
 		StopGracePeriod: runtimehost.DefaultStopGracePeriod,
 		HealthProbe:     runtimehost.NewHTTPHealthProbe(healthURL, 5*time.Second),
 		HealthInterval:  runtimehost.DefaultHealthInterval,
+		OnStdout: func(line string) {
+			amitialog.Printf("[qdrant-stdout] %s", line)
+		},
+		OnStderr: func(line string) {
+			amitialog.Printf("[qdrant-stderr] %s", line)
+		},
 		RestartPolicy: runtimehost.RestartPolicy{
 			Mode:        runtimehost.RestartOnFailure,
 			MaxRestarts: 5,

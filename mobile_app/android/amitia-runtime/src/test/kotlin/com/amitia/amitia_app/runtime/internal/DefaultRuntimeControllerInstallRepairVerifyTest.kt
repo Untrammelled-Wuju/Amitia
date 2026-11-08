@@ -13,7 +13,6 @@ import com.amitia.amitia_app.runtime.install.InstalledRuntimeVerification
 import com.amitia.amitia_app.runtime.install.InstalledRuntimeVerificationResult
 import com.amitia.amitia_app.runtime.install.InstalledRuntimeVerifier
 import com.amitia.amitia_app.runtime.install.RuntimeHostLayout
-import com.amitia.amitia_app.runtime.install.RuntimeInstallRequest
 import com.amitia.amitia_app.runtime.install.RuntimeInstallResult
 import com.amitia.amitia_app.runtime.install.RuntimeInstaller
 import com.amitia.amitia_app.runtime.manifest.RuntimeManifest
@@ -79,7 +78,9 @@ class DefaultRuntimeControllerInstallRepairVerifyTest {
     private class FakeInstaller(
         private val result: RuntimeInstallResult,
     ) : RuntimeInstaller {
-        override fun install(request: RuntimeInstallRequest): RuntimeInstallResult = result
+        override fun install(
+            request: com.amitia.amitia_app.runtime.install.RuntimeInstallRequest,
+        ): RuntimeInstallResult = result
     }
 
     private class FakeInstalledVerifier(
@@ -390,7 +391,7 @@ class DefaultRuntimeControllerInstallRepairVerifyTest {
             stateStore = stateStore,
             serviceHost = host,
             installer = FakeInstaller(RuntimeInstallResult.Failure(
-                code = com.amitia.amitia_app.runtime.install.RuntimeInstallErrorCode.REPAIR_FAILED,
+                code = com.amitia.amitia_app.runtime.install.RuntimeInstallErrorCode.INTERNAL_ERROR,
                 message = "repair failed",
                 phase = com.amitia.amitia_app.runtime.install.RuntimeInstallPhase.RUNTIME_EXTRACT,
             )),

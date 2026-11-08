@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -35,12 +36,18 @@ func (h *LocalHandler) checkProviderBusiness(ctx context.Context, credential *St
 			return err
 		}
 		defer response.Body.Close()
-		if response.StatusCode != http.StatusOK {
-			return errors.New("新 Core 的业务接口尚未就绪")
+		encoded, readErr := io.ReadAll(io.LimitReader(response.Body, (256<<10)+1))
+		if readErr != nil {
+			return fmt.Errorf("新 Core 业务状态响应读取失败: %w", readErr)
 		}
-		encoded, err := io.ReadAll(io.LimitReader(response.Body, (256<<10)+1))
-		if err != nil || len(encoded) > 256<<10 || json.Unmarshal(encoded, target) != nil {
-			return errors.New("新 Core 的业务状态响应无效")
+		if len(encoded) > 256<<10 {
+			return fmt.Errorf("新 Core 业务状态响应超过大小限制: %d", len(encoded))
+		}
+		if response.StatusCode != http.StatusOK {
+			return fmt.Errorf("新 Core 的业务接口尚未就绪: %s HTTP %d: %s", path, response.StatusCode, string(encoded))
+		}
+		if err := json.Unmarshal(encoded, target); err != nil {
+			return fmt.Errorf("新 Core 的业务状态响应无效: %w; body=%s", err, string(encoded))
 		}
 		return nil
 	}
@@ -69,11 +76,13 @@ func (h *LocalHandler) checkProviderBusiness(ctx context.Context, credential *St
 	if err := read("/api/device-mesh/v1/business/roles", &roles); err != nil {
 		return err
 	}
-	owner := credential.DeviceID.String()
-	if initial.Policy.Coordinated {
-		owner = credential.SpaceID.String()
+	owner := credential.SpaceID.String()
+	identity, err := h.identity.Load()
+	if err != nil {
+		return err
 	}
-	if roles.Owner != owner || roles.Epoch != initial.Policy.ProviderEpoch || roles.Mode != initial.Policy.ModeRevision || len(roles.Roles) > 1024 {
+	localOwner := identity.DeviceID.String()
+	if roles.Owner != owner && roles.Owner != localOwner || roles.Epoch != initial.Policy.ProviderEpoch || roles.Mode != initial.Policy.ModeRevision || len(roles.Roles) > 1024 {
 		return errors.New("新 Core 的角色来源或数据归属无效")
 	}
 	seen := map[string]bool{}

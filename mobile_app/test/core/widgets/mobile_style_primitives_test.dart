@@ -382,6 +382,31 @@ void main() {
     expect(text.style?.fontSize, 13);
   });
 
+  testWidgets(
+    'AmitiaCodeBlock renders text and unknown fences without failing',
+    (tester) async {
+      for (final language in const <String>['text', 'not-a-language']) {
+        await tester.pumpWidget(
+          styleHost(
+            document: const AmitiaStyleDocument(revision: 1, rules: []),
+            child: Center(
+              child: SizedBox(
+                width: 800,
+                child: AmitiaCodeBlock(
+                  code: 'plain $language output',
+                  language: language,
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('plain $language output'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      }
+    },
+  );
+
   testWidgets('AmitiaFileBlock applies attachment target styles', (
     tester,
   ) async {

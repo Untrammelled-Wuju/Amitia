@@ -163,22 +163,23 @@ export async function provisionWebDevice(baseURL: string, pairing: PairingInput)
     label: `Web ${navigator.platform || navigator.userAgent || "Browser"}`.slice(0, 96),
     offerToken: pairing.offerToken?.trim() || "", setupCode: pairing.setupCode?.trim() || "",
   };
-  const deadline = Date.now() + 120_000;
-  let ticket: { ticket: string; spaceId: string } | undefined;
-  while (Date.now() < deadline) {
-  const proof = await signWebPairingClaim(status.spaceId, body);
-  const claimResponse = await fetch(`${normalized}/api/public/device-mesh/v1/pairing/claim`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json", "X-Amitia-Client-Type": "web" },
-    credentials: "include",
-    body: JSON.stringify({ ...body, proof }),
-  });
-  const response = await readResponse<{ ticket: string; spaceId: string; pending?: boolean }>(claimResponse);
-  if (response.pending) { await new Promise<void>((resolve) => setTimeout(resolve, 1000)); continue; }
-  ticket = response;
-  break;
+  async function claim() {
+    const proof = await signWebPairingClaim(status.spaceId, body);
+    const claimResponse = await fetch(`${normalized}/api/public/device-mesh/v1/pairing/claim`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json", "X-Amitia-Client-Type": "web" },
+      credentials: "include",
+      body: JSON.stringify({ ...body, proof }),
+    });
+    return readResponse<{ ticket?: string; spaceId?: string; pending?: boolean; requestId?: string }>(claimResponse);
   }
-  if (!ticket?.ticket) throw new Error("等待服务提供设备批准配对超时，请再次扫码");
+  let ticket = await claim();
+  if (ticket.pending) {
+    if (!ticket.requestId) throw new Error("统筹中心未返回配对申请编号");
+    await waitForPairingApproval(normalized, ticket.requestId);
+    ticket = await claim();
+  }
+  if (!ticket.ticket || !ticket.spaceId) throw new Error("统筹中心未确认设备配对");
 
   const exchangeUrl = `${normalized}/api/public/device-mesh/v1/bootstrap/exchange`;
   const exchangeResponse = await fetch(exchangeUrl, await signWebRequest(identity.deviceId, ticket.spaceId, exchangeUrl, {
@@ -204,7 +205,7 @@ export async function provisionWebDevice(baseURL: string, pairing: PairingInput)
     runtimeId: string;
     expiresAt: string;
   }>(exchangeResponse);
-  if (!exchanged?.credential) throw new Error("Cloud Core 未返回 Device Credential");
+  if (!exchanged?.credential) throw new Error("统筹中心未返回 Device Credential");
 
   const record: WebDeviceCredentialRecord = {
     cloudBaseURL: normalized,
@@ -220,10 +221,37 @@ export async function provisionWebDevice(baseURL: string, pairing: PairingInput)
   return record;
 }
 
-export async function createWebPairingOffer(baseURL: string, ttlSeconds = 600): Promise<PairingOffer> {
+async function waitForPairingApproval(baseURL: string, requestID: string): Promise<void> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(new Error("等待统筹中心批准配对超时")), 120_000);
+  try {
+    const response = await fetch(`${baseURL}/api/public/device-mesh/v1/pairing/requests/${encodeURIComponent(requestID)}/events`, {
+      headers: { Accept: "text/event-stream", "X-Amitia-Client-Type": "web" },
+      credentials: "include",
+      signal: controller.signal,
+    });
+    if (!response.ok || !response.body || !response.headers.get("Content-Type")?.includes("text/event-stream")) {
+      throw new Error(await response.text() || `等待配对审批失败: HTTP ${response.status}`);
+    }
+    let decision = "";
+    await consumeSSEBody(response.body, controller.signal, (event) => {
+        if (event.event === "pairing_approved") decision = "approved";
+        if (event.event === "pairing_rejected") {
+          const payload = JSON.parse(event.data) as { message?: string };
+          throw new Error(payload.message || "统筹中心拒绝了本次配对");
+        }
+        if (event.event === "pairing_expired") throw new Error("配对申请已过期，请重新生成二维码");
+    });
+    if (decision !== "approved") throw new Error("配对审批事件流在批准前结束");
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export async function createWebPairingOffer(baseURL: string, ttlSeconds = 1800): Promise<PairingOffer> {
   const normalized = normalizeBaseURL(baseURL);
   const auth = getWebDeviceAuthHeaders(normalized);
-  if (!auth.Authorization) throw new Error("当前浏览器尚未配对到 Cloud Core");
+  if (!auth.Authorization) throw new Error("当前浏览器尚未配对到统筹中心");
   const url = `${normalized}/api/device-mesh/v1/pairing/offers`;
   const response = await fetch(url, await signWebAuthenticatedFetch(normalized, url, {
     method: "POST",
@@ -241,4 +269,5 @@ export async function signWebAuthenticatedFetch(baseURL: string, url: string, in
   if (new URL(url).origin !== new URL(baseURL).origin) throw new Error("拒绝向其他服务发送设备凭证");
   return signWebRequest(record.deviceId, record.spaceId, url, init);
 }
+import { consumeSSEBody } from "./sse-stream";
 import { signWebPairingClaim, signWebRequest } from "./web-device-key";

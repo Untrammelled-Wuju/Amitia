@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -75,10 +76,6 @@ func (h *LocalHandler) handlePinnedPairing(c *gin.Context) {
 		return
 	}
 	body := proof.ClaimBody{DeviceID: identity.DeviceID.String(), RuntimeID: identity.RuntimeID.String(), Platform: h.platform.String(), Label: strings.TrimSpace(request.Label), OfferToken: strings.TrimSpace(request.OfferToken), SetupCode: strings.TrimSpace(request.SetupCode)}
-	if body.OfferToken == "" && body.SetupCode == "" {
-		c.JSON(400, gin.H{"message": "缺少配对码"})
-		return
-	}
 	signed := proof.New(identity.PublicKey, request.Endpoint.CoreID, uuid.NewString(), body, time.Now())
 	signed.Signature, err = h.identity.Sign(signed.SigningBytes())
 	if err != nil {
@@ -112,4 +109,65 @@ func (h *LocalHandler) handlePinnedPairing(c *gin.Context) {
 	}
 	c.Header("Cache-Control", "no-store")
 	c.Data(response.StatusCode, "application/json", result)
+}
+
+func (h *LocalHandler) handlePinnedPairingEvents(c *gin.Context) {
+	endpoint := lan.Endpoint{
+		URL:         strings.TrimSpace(c.Query("url")),
+		Fingerprint: strings.TrimSpace(c.Query("fingerprint")),
+		CoreID:      strings.TrimSpace(c.Query("coreId")),
+	}
+	client, err := NewPinnedBootstrapClient(endpoint)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
+	requestID := strings.TrimSpace(c.Param("requestId"))
+	if requestID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "requestId is required"})
+		return
+	}
+	targetURL := strings.TrimRight(endpoint.URL, "/") + "/api/public/device-mesh/v1/pairing/requests/" + url.PathEscape(requestID) + "/events"
+	upstream, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, targetURL, nil)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
+	upstream.Header.Set("Accept", "text/event-stream")
+	client.httpClient.Timeout = 125 * time.Second
+	response, err := client.httpClient.Do(upstream)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"message": err.Error()})
+		return
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK || !strings.Contains(strings.ToLower(response.Header.Get("Content-Type")), "text/event-stream") {
+		body, readErr := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+		c.Data(response.StatusCode, "application/json", body)
+		if readErr != nil {
+			c.Header("X-Amitia-Original-Error", readErr.Error())
+		}
+		return
+	}
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-store")
+	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no")
+	c.Status(http.StatusOK)
+	buffer := make([]byte, 4096)
+	for {
+		count, readErr := response.Body.Read(buffer)
+		if count > 0 {
+			if _, writeErr := c.Writer.Write(buffer[:count]); writeErr != nil {
+				return
+			}
+			c.Writer.Flush()
+		}
+		if readErr != nil {
+			if !errors.Is(readErr, io.EOF) {
+				c.Header("X-Amitia-Original-Error", readErr.Error())
+			}
+			return
+		}
+	}
 }

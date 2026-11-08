@@ -148,6 +148,7 @@ func RegisterCloudRoutes(router gin.IRouter, authMW gin.HandlerFunc, webAccessMW
 	}
 	public.GET("/pairing/status", makePairingStatusHandler(deps))
 	public.POST("/pairing/claim", makePairingClaimHandler(deps))
+	public.GET("/pairing/requests/:requestId/events", makePairingApprovalEventStreamHandler(deps))
 
 	authorized := router.Group("/api/device-mesh/v1")
 	authorized.Use(authMW)
@@ -201,6 +202,7 @@ func RegisterCloudRoutes(router gin.IRouter, authMW gin.HandlerFunc, webAccessMW
 		c.JSON(200, gin.H{"offerToken": token, "expiresAt": offer.ExpiresAt.UTC().Format(time.RFC3339Nano), "approvalRequired": true, "deviceId": request.DeviceID})
 	})
 	authorized.GET("/pairing/approvals", makeApprovalListHandler(deps))
+	authorized.GET("/pairing/approvals/stream", makeApprovalListStreamHandler(deps))
 	authorized.PUT("/pairing/approvals/:requestId", makeApprovalDecisionHandler(deps))
 	authorized.GET("/devices", makeListDevicesHandler(deps))
 	authorized.DELETE("/devices/:deviceId", makeRevokeDeviceHandler(deps))
@@ -410,7 +412,8 @@ func makePairingClaimHandler(deps *RouterDeps) gin.HandlerFunc {
 		}
 		result, err := deps.PairingSvc.Claim(c.Request.Context(), pairing.ClaimRequest{
 			OfferToken: strings.TrimSpace(req.OfferToken), SetupCode: strings.TrimSpace(req.SetupCode),
-			DeviceID: runtimeidentity.ParseDeviceID(req.DeviceID), RuntimeID: runtimeidentity.ParseRuntimeID(req.RuntimeID),
+			IssuerDeviceID: deps.LocalCoreDeviceID,
+			DeviceID:       runtimeidentity.ParseDeviceID(req.DeviceID), RuntimeID: runtimeidentity.ParseRuntimeID(req.RuntimeID),
 			Platform: platform, Label: strings.TrimSpace(req.Label), Proof: req.Proof, Coordinated: deps.Coordinated,
 		})
 		if err != nil {
@@ -422,7 +425,7 @@ func makePairingClaimHandler(deps *RouterDeps) gin.HandlerFunc {
 			return
 		}
 		if result.Pending != nil {
-			c.JSON(202, gin.H{"pending": true, "requestId": result.Pending.RequestID, "message": "等待服务提供设备批准配对"})
+			c.JSON(202, gin.H{"pending": true, "requestId": result.Pending.RequestID, "offerToken": result.PairingToken, "message": "等待服务提供设备批准配对"})
 			return
 		}
 		c.JSON(200, gin.H{
@@ -452,8 +455,8 @@ func pairingErrorResponse(err error) (int, string) {
 		return http.StatusConflict, "pairing.pending"
 	case errors.Is(err, pairing.ErrOfferExpired):
 		return http.StatusGone, "pairing.offer_expired"
-	case errors.Is(err, pairing.ErrOfferConsumed):
-		return http.StatusConflict, "pairing.offer_consumed"
+	case errors.Is(err, pairing.ErrOfferInvalid):
+		return http.StatusConflict, "pairing.offer_invalidated"
 	case errors.Is(err, pairing.ErrOfferNotFound):
 		return http.StatusBadRequest, "pairing.offer_invalid"
 	default:
@@ -568,7 +571,11 @@ func makeListDevicesHandler(deps *RouterDeps) gin.HandlerFunc {
 				dev["lastHeartbeat"] = presence.LastHeartbeat.UTC().Format("2006-01-02T15:04:05.000Z")
 			}
 
-			runtimes, _ := deps.DeviceReg.ListRuntimePresenceByDevice(c.Request.Context(), spaceID, d.DeviceID)
+			runtimes, err := deps.DeviceReg.ListRuntimePresenceByDevice(c.Request.Context(), spaceID, d.DeviceID)
+			if err != nil {
+				c.JSON(503, gin.H{"code": "mesh.presence_unavailable", "message": err.Error()})
+				return
+			}
 			rtList := make([]gin.H, 0, len(runtimes))
 			for _, rt := range runtimes {
 				conn, connected := deps.Hub.GetByRuntime(spaceID, d.DeviceID, rt.RuntimeID)

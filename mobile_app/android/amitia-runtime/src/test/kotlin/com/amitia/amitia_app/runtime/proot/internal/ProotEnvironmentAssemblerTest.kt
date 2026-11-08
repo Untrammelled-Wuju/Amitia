@@ -21,7 +21,13 @@ class ProotEnvironmentAssemblerTest {
     private fun createLayout(): DefaultRuntimeHostLayout {
         val controlBase = tempFolder.newFolder("noBackupFiles")
         val dataBase = tempFolder.newFolder("files")
-        return DefaultRuntimeHostLayout(controlBase, dataBase)
+        return DefaultRuntimeHostLayout(controlBase, dataBase).also { layout ->
+            val bundle = File(layout.rootfsRoot, "etc/ssl/certs/ca-certificates.crt")
+            bundle.parentFile.mkdirs()
+            bundle.writeText(
+                "-----BEGIN CERTIFICATE-----\nAQID\n-----END CERTIFICATE-----\n",
+            )
+        }
     }
 
     private fun createProgramSource(layout: DefaultRuntimeHostLayout): File {
@@ -137,6 +143,25 @@ class ProotEnvironmentAssemblerTest {
     }
 
     @Test
+    fun assemblerUsesPackagedCaBundleWhenAndroidDirectoriesAreUnreadable() {
+        val layout = createLayout()
+        val packagedBundle = File(layout.rootfsRoot, "etc/ssl/certs/ca-certificates.crt")
+        packagedBundle.parentFile.mkdirs()
+        packagedBundle.writeText(
+            "-----BEGIN CERTIFICATE-----\nAQID\n-----END CERTIFICATE-----\n",
+        )
+        val emptyDirectory = tempFolder.newFolder("empty-cacerts")
+        val assembler = ProotEnvironmentAssembler(
+            layout = layout,
+            environmentBuilder = fakeBuilder(),
+            caCertificateDirectories = listOf(emptyDirectory),
+        )
+        assembler.assembleBackendLaunch(createProgramSource(layout))
+        val bundle = File(layout.dataRoot, "security/ca-certificates.crt")
+        assertEquals(packagedBundle.readText(), bundle.readText())
+    }
+
+    @Test
     fun specHasDeterministicBinaryPath() {
         val layout = createLayout()
         val assembler = ProotEnvironmentAssembler(layout = layout, environmentBuilder = fakeBuilder())
@@ -159,7 +184,7 @@ class ProotEnvironmentAssemblerTest {
         val programSource = createProgramSource(layout)
         val spec = assembler.assembleBackendLaunch(programSource)
         val programMount = spec.bindMounts.first { it.guest == GuestLayout.PROGRAM }
-        assertEquals(programSource.absolutePath, programMount.host)
+        assertEquals(programSource.canonicalPath, programMount.host)
         assertTrue(programMount.host.contains("versions/1.0.0/program"))
     }
 

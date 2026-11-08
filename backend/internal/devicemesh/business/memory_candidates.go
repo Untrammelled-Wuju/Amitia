@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -154,7 +155,7 @@ func (e *Engine) ManageOwnedMemoryCandidates(ctx context.Context, request Reques
 	}
 	ctx, scope, finish, err := e.memoryManagementScope(ctx, request, true)
 	if err != nil {
-		return MemoryManagementResponse{}, err
+		return MemoryManagementResponse{}, fmt.Errorf("建立候选记忆权限失败: %w", err)
 	}
 	defer finish()
 	port, ok := e.data.(coordination.ResourcePort)
@@ -171,7 +172,7 @@ func (e *Engine) ManageOwnedMemoryCandidates(ctx context.Context, request Reques
 	}{summaryAuthority(scope), input, request.ConversationOrigin, request.HistoricalRoleID})
 	receiptID := "memory-candidate-operation/" + request.RequestID
 	if pending, _, err := e.pendingMutation(ctx, scope, receiptID, fingerprint); err != nil {
-		return MemoryManagementResponse{}, err
+		return MemoryManagementResponse{}, fmt.Errorf("读取候选记忆待提交记录失败: %w", err)
 	} else if pending != nil {
 		if _, err := e.commit(ctx, *pending); err != nil {
 			return MemoryManagementResponse{}, err
@@ -179,7 +180,7 @@ func (e *Engine) ManageOwnedMemoryCandidates(ctx context.Context, request Reques
 	}
 	receipt, err := port.Resource(ctx, scope, "checkpoint", receiptID)
 	if err != nil {
-		return MemoryManagementResponse{}, err
+		return MemoryManagementResponse{}, fmt.Errorf("读取候选记忆回执失败: %w", err)
 	}
 	if receipt != nil {
 		var saved struct {
@@ -207,7 +208,11 @@ func (e *Engine) ManageOwnedMemoryCandidates(ctx context.Context, request Reques
 		return *saved.Response, nil
 	}
 	if input.Action == "generate" {
-		return e.generateOwnedMemoryCandidates(ctx, scope, request, input, receiptID, fingerprint)
+		response, err := e.generateOwnedMemoryCandidates(ctx, scope, request, input, receiptID, fingerprint)
+		if err != nil {
+			return MemoryManagementResponse{}, fmt.Errorf("生成候选记忆失败: %w", err)
+		}
+		return response, nil
 	}
 	if !strings.HasPrefix(input.ID, "memory-candidate/") || input.ExpectedRevision < 1 {
 		return MemoryManagementResponse{}, errors.New("请先加载原候选记录及其版本")
@@ -355,7 +360,7 @@ func (e *Engine) generateOwnedMemoryCandidates(ctx context.Context, scope coordi
 	}
 	provenanceHash := memoryManagementHash(messages)
 	if len(messages) == 0 || len(messages) > 4096 {
-		return MemoryManagementResponse{}, errors.New("对话消息为空或超过候选提取上限")
+		return MemoryManagementResponse{}, fmt.Errorf("对话消息为空或超过候选提取上限 target=%s resourceOwner=%s coordinated=%t origin=%+v messages=%d", scope.TargetDeviceID, scope.ResourceOwnerID, scope.Coordinated, request.ConversationOrigin, len(messages))
 	}
 	if len(messages) > 128 {
 		messages = messages[len(messages)-128:]

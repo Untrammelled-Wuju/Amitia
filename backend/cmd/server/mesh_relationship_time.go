@@ -46,7 +46,7 @@ func registerMeshRelationshipTimeRouter(mesh *gin.RouterGroup, services *AppServ
 }
 
 func (p *meshLocalDataPort) RelationshipTime(ctx context.Context, scope coordination.ExecutionScope, request coordination.RelationshipTimeRequest) (json.RawMessage, error) {
-	if scope.ResourceOwnerID != p.ownerID || scope.RoleOwnerID != p.ownerID {
+	if scope.ResourceOwnerID != p.ownerID || (scope.RoleOwnerID != p.ownerID && scope.RoleOwnerID != scope.CoreID) {
 		return nil, coordination.ErrWrongOwner
 	}
 	if p.services.RelTimeCoordinator == nil || !temporal.FeatureFlagsFromEnvironment().RelationshipTimeEnabled {

@@ -42,11 +42,27 @@ func (r *registryRepository) SaveEntry(ctx context.Context, entry *RuntimeEntry)
 	if entryID == "" {
 		entryID = RuntimeEntryID(entry.SpaceID, entry.DeviceID, entry.RuntimeID)
 	}
-	_, err = r.db.ExecContext(ctx,
+	hostClientID := entry.HostClientID
+	if hostClientID == "" {
+		hostClientID = entryID
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM kernel_host_registry WHERE entry_id = ? AND host_client_id <> ?`,
+		entryID,
+		hostClientID,
+	); err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx,
 		`INSERT OR REPLACE INTO kernel_host_registry
 		(host_client_id, host_session_id, space_id, platform, device_id, runtime_id, window_id, capabilities, entry_kind, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at, runtime_session_id, connection_generation, entry_id)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		entry.HostClientID,
+		hostClientID,
 		entry.HostSessionID,
 		entry.SpaceID.String(),
 		entry.Platform.String(),
@@ -65,7 +81,10 @@ func (r *registryRepository) SaveEntry(ctx context.Context, entry *RuntimeEntry)
 		entry.ConnectionGeneration,
 		entryID,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (r *registryRepository) GetEntry(ctx context.Context, entryID string) (*RuntimeEntry, error) {

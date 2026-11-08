@@ -98,6 +98,11 @@ internal class AndroidRuntimeServiceHost(
     }
 
     override fun requestStop(targetGeneration: Long): RuntimeServiceResult {
+        val boundEndpoint = serviceConnection.endpoint()
+        if (boundEndpoint != null) {
+            val boundResult = boundEndpoint.requestStop(targetGeneration)
+            if (boundResult is RuntimeServiceResult.Success) return boundResult
+        }
         return RuntimeService.stopHost(context, targetGeneration)
     }
 

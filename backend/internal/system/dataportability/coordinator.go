@@ -47,9 +47,17 @@ type Coordinator struct {
 	diskChecker  DiskSpaceChecker
 
 	mu         sync.RWMutex
+	restoreMu  sync.Mutex
 	backupOps  map[string]*BackupOperation
 	restoreOps map[string]*RestoreOperation
 	importOps  map[string]*ImportOperation
+}
+
+func (c *Coordinator) BeginRestoreOperation() (func(), error) {
+	if !c.restoreMu.TryLock() {
+		return nil, ErrRestoreBusy
+	}
+	return c.restoreMu.Unlock, nil
 }
 
 type DiskSpaceChecker interface {

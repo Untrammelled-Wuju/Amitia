@@ -140,6 +140,19 @@ func TestOwnedMemoryConsumersToolsFilterBeforeLimitAndChunkAnyTitle(t *testing.T
 	}
 }
 
+func TestOwnedMemoryQueryFallsBackToKeywordWhenSemanticUnavailable(t *testing.T) {
+	e, _, _, _ := engineHarness(t)
+	request := Request{SpaceID: "core", DeviceID: "a", CoreID: "core", RoleID: "role", RequestID: "seed"}
+	if _, err := e.MemoryTool(t.Context(), request, "save_memory", map[string]interface{}{"key": "饮品", "value": "喜欢茶"}); err != nil {
+		t.Fatal(err)
+	}
+	request.RequestID = "fallback"
+	result, err := e.MemoryTool(t.Context(), request, "query_memory", map[string]interface{}{"query": "茶"})
+	if err != nil || len(result.Resources) != 1 || result.Metadata["semanticFallback"] != true || !strings.Contains(result.Text, "记忆语义检索不可用") {
+		t.Fatalf("fallback=%+v %v", result, err)
+	}
+}
+
 func TestOwnedMemoryConsumersDuplicateRestoreRemapsManualRelationTargets(t *testing.T) {
 	e, _, _, _ := engineHarness(t)
 	request := Request{SpaceID: "core", DeviceID: "a", CoreID: "core", RoleID: "role", RequestID: "first"}

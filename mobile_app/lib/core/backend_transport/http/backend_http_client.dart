@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart';
 
 import '../../backend_connection/backend_connection_config.dart';
 import '../../backend_connection/backend_uri_builder.dart';
 import '../../native_bridge/device_timezone_cache.dart';
+import '../../security/certificate_pin.dart';
 import '../auth/backend_auth_header.dart';
 import '../errors/backend_transport_error.dart';
 import '../errors/backend_transport_error_code.dart';
@@ -22,21 +25,34 @@ class BackendHttpClient implements BackendHttpTransport {
   bool _closed = false;
   Duration? _operationTimeout;
 
-  BackendHttpClient(this._config, {BackendUriBuilder? uriBuilder, Dio? dio})
-    : _uriBuilder = uriBuilder ?? BackendUriBuilder(),
-      _dio = dio ?? _createDio(_config) {
+  BackendHttpClient(
+    this._config, {
+    BackendUriBuilder? uriBuilder,
+    Dio? dio,
+    Duration? operationTimeout,
+  }) : _uriBuilder = uriBuilder ?? BackendUriBuilder(),
+       _dio = dio ?? _createDio(_config),
+       _operationTimeout = operationTimeout {
     _state = BackendHttpState.available;
   }
 
   static Dio _createDio(BackendConnectionConfig config) {
     final baseUri = BackendUriBuilder().httpBase(config);
-    return Dio(
+    final dio = Dio(
       BaseOptions(
         baseUrl: baseUri.toString(),
         connectTimeout: const Duration(seconds: 5),
         receiveTimeout: const Duration(seconds: 185),
       ),
     );
+    if (config.authStrategy == BackendAuthStrategy.deviceCredential &&
+        config.fingerprint.trim().isNotEmpty) {
+      dio.httpClientAdapter = IOHttpClientAdapter(
+        createHttpClient: () =>
+            createCertificatePinnedHttpClient(config.fingerprint),
+      );
+    }
+    return dio;
   }
 
   @override
@@ -80,6 +96,7 @@ class BackendHttpClient implements BackendHttpTransport {
         headers['X-Amitia-Runtime-ID'] = _config.runtimeId;
     }
 
+    Duration? requestTimeout;
     if (request.headers != null) {
       for (final entry in request.headers!.entries) {
         if (BackendAuthHeader.protectedHeaders.contains(entry.key)) {
@@ -89,6 +106,19 @@ class BackendHttpClient implements BackendHttpTransport {
             path: request.path,
             generation: _config.generation,
           );
+        }
+        if (entry.key.toLowerCase() == 'x-amitia-request-timeout-seconds') {
+          final seconds = int.tryParse(entry.value.trim());
+          if (seconds == null || seconds < 1 || seconds > 300) {
+            throw BackendTransportError(
+              code: BackendTransportErrorCode.configInvalid,
+              method: request.method.value,
+              path: request.path,
+              generation: _config.generation,
+            );
+          }
+          requestTimeout = Duration(seconds: seconds);
+          continue;
         }
         headers[entry.key] = entry.value;
       }
@@ -107,6 +137,9 @@ class BackendHttpClient implements BackendHttpTransport {
     _state = BackendHttpState.available;
 
     try {
+      final effectiveTimeout = request.streamResponse
+          ? Duration.zero
+          : request.timeout ?? requestTimeout ?? _operationTimeout;
       final response = await _dio.requestUri(
         uri,
         data: request.body,
@@ -115,18 +148,16 @@ class BackendHttpClient implements BackendHttpTransport {
           headers: headers,
           validateStatus: (status) =>
               status != null && status >= 200 && status < 300,
-          receiveTimeout: request.streamResponse
-              ? Duration.zero
-              : (_operationTimeout ?? request.timeout),
-          sendTimeout: _operationTimeout,
+          receiveTimeout: effectiveTimeout,
+          sendTimeout: effectiveTimeout,
           responseType: request.streamResponse ? ResponseType.stream : null,
         ),
         cancelToken: request.cancelToken,
       );
 
-      final disabled = response.headers.value('x-amitia-timeout-disabled');
+      final disabled = response.headers['x-amitia-timeout-disabled']?.first;
       final seconds = int.tryParse(
-        response.headers.value('x-amitia-timeout-seconds') ?? '',
+        response.headers['x-amitia-timeout-seconds']?.first ?? '',
       );
       if ((disabled == 'true' || disabled == 'false') &&
           seconds != null &&
@@ -191,6 +222,7 @@ class BackendHttpClient implements BackendHttpTransport {
           );
         case DioExceptionType.badResponse:
           final statusCode = e.response?.statusCode;
+          final responseBody = await _readErrorResponseBody(e.response?.data);
           if (statusCode != null && statusCode >= 500) {
             throw BackendTransportError(
               code: BackendTransportErrorCode.serverError,
@@ -198,6 +230,7 @@ class BackendHttpClient implements BackendHttpTransport {
               path: request.path,
               statusCode: statusCode,
               generation: _config.generation,
+              responseBody: responseBody,
               cause: e,
             );
           }
@@ -207,6 +240,7 @@ class BackendHttpClient implements BackendHttpTransport {
             path: request.path,
             statusCode: statusCode,
             generation: _config.generation,
+            responseBody: responseBody,
             cause: e,
           );
         case DioExceptionType.cancel:
@@ -227,6 +261,22 @@ class BackendHttpClient implements BackendHttpTransport {
           );
       }
     }
+  }
+
+  static Future<Object?> _readErrorResponseBody(Object? data) async {
+    if (data is! ResponseBody) return data;
+    final bytes = <int>[];
+    await for (final chunk in data.stream) {
+      bytes.addAll(chunk);
+    }
+    final text = utf8.decode(bytes, allowMalformed: true);
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is Map || decoded is List) return decoded;
+    } on FormatException {
+      return text;
+    }
+    return text;
   }
 
   static BackendTransportErrorCode _mapClientErrorCode(int? statusCode) {

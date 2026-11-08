@@ -88,6 +88,7 @@ export const builtinBusinessRoutes: RouteRecordRaw[] = [
     { path: "profile", name: "mySpaceProfile", component: () => import("@/views/user-settings/UserSettingsView.vue") },
     { path: "identity", name: "mySpaceIdentity", component: () => import("@/views/user-settings/SpaceIdentityView.vue") },
     { path: "runtime", name: "mySpaceRuntime", component: () => import("@/views/user-settings/MySpaceRuntimeView.vue") },
+    { path: "devices", name: "mySpaceDevices", component: () => import("@/views/user-settings/MySpaceDevicesView.vue") },
   ],
 },
 { path: "/episodic", name: "episodic", component: () => import("@/views/episodic/EpisodicView.vue"), meta: { requiresAuth: true } },

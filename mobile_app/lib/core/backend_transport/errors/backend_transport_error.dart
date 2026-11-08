@@ -6,6 +6,7 @@ class BackendTransportError implements Exception {
   final String? path;
   final int? statusCode;
   final int? generation;
+  final Object? responseBody;
   final Object? cause;
 
   BackendTransportError({
@@ -14,6 +15,7 @@ class BackendTransportError implements Exception {
     this.path,
     this.statusCode,
     this.generation,
+    this.responseBody,
     this.cause,
   });
 
@@ -25,6 +27,7 @@ class BackendTransportError implements Exception {
     if (path != null) buffer.write(', path: $path');
     if (statusCode != null) buffer.write(', statusCode: $statusCode');
     if (generation != null) buffer.write(', generation: $generation');
+    if (responseBody != null) buffer.write(', responseBody: $responseBody');
     if (cause != null) buffer.write(', cause: $cause');
     buffer.write(')');
     return buffer.toString();

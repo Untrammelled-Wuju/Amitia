@@ -3,6 +3,7 @@ package dataportability
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -77,16 +78,24 @@ func (c *Coordinator) StageImport(ctx context.Context, archivePath string) (*Imp
 }
 
 func (c *Coordinator) CommitStagedImport(ctx context.Context, id string, policy CollisionPolicy, activate bool) (*StagedImportResult, error) {
+	release, err := c.BeginRestoreOperation()
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	ticket, err := c.readImportTicket(id)
 	if err != nil {
 		return nil, err
 	}
 	expiresAt, err := time.Parse(time.RFC3339, ticket.ExpiresAt)
 	if err != nil || time.Now().UTC().After(expiresAt) {
-		return nil, ErrImportTicketExpired
+		return nil, errors.Join(ErrImportTicketExpired, c.cleanupImportTicket(ticket))
 	}
 	hash, err := fileSHA256(ticket.ArchivePath)
-	if err != nil || hash != ticket.ArchiveSHA256 {
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrImportTicketChanged, err)
+	}
+	if hash != ticket.ArchiveSHA256 {
 		return nil, ErrImportTicketChanged
 	}
 	if policy != CollisionDuplicate && policy != CollisionSkip && policy != CollisionReplace {
@@ -102,7 +111,7 @@ func (c *Coordinator) CommitStagedImport(ctx context.Context, id string, policy 
 		IncludeSecrets: true,
 	}, "", nil)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrImportTransactionFailed, err)
+		return nil, fmt.Errorf("%w: %w", ErrImportTransactionFailed, err)
 	}
 	_, operation, err := c.executeImportWithOperation(ctx, ticket.ArchivePath, ImportRequest{
 		CollisionPolicy:  policy,
@@ -111,20 +120,11 @@ func (c *Coordinator) CommitStagedImport(ctx context.Context, id string, policy 
 		Purpose:          PurposeUser,
 	})
 	if err != nil {
-		originalError := err.Error()
-		if operation != nil && operation.Error != "" {
-			originalError = operation.Error
-		}
-		_, _, rollbackErr := c.executeImportWithOperation(ctx, snapshot.Path, ImportRequest{
-			CollisionPolicy:  CollisionReplace,
-			CharacterPolicy:  CollisionReplace,
-			ActivateImported: true,
-			Purpose:          PurposePreRestore,
-		})
+		rollbackErr := c.rollbackImport(ctx, snapshot.Path)
 		if rollbackErr != nil {
-			return nil, fmt.Errorf("%w: import=%s rollback=%v", ErrRestoreRollbackFailed, originalError, rollbackErr)
+			return nil, fmt.Errorf("%w: %w", ErrRestoreRollbackFailed, errors.Join(err, rollbackErr))
 		}
-		return nil, fmt.Errorf("%w: %s", err, originalError)
+		return nil, err
 	}
 	stats := make(map[string]int64)
 	if ticket.Preview != nil {
@@ -136,7 +136,7 @@ func (c *Coordinator) CommitStagedImport(ctx context.Context, id string, policy 
 		operation.Stats = stats
 	}
 	if err := c.removeImportTicket(id); err != nil {
-		amitialog.Printf("[original-error] %v", err)
+		return nil, fmt.Errorf("%w: cleanup staged import: %w", ErrImportTransactionFailed, err)
 	}
 	return &StagedImportResult{
 		Operation:       operation,
@@ -147,6 +147,11 @@ func (c *Coordinator) CommitStagedImport(ctx context.Context, id string, policy 
 }
 
 func (c *Coordinator) CancelStagedImport(id string) error {
+	release, err := c.BeginRestoreOperation()
+	if err != nil {
+		return err
+	}
+	defer release()
 	return c.removeImportTicket(id)
 }
 
@@ -188,10 +193,50 @@ func (c *Coordinator) removeImportTicket(id string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.Remove(ticket.ArchivePath); err != nil {
-		amitialog.Printf("[original-error] %v", err)
+	return c.cleanupImportTicket(ticket)
+}
+
+func (c *Coordinator) cleanupImportTicket(ticket *ImportTicket) error {
+	if ticket == nil || !validOperationID(ticket.ID) {
+		return ErrImportTicketNotFound
 	}
-	return os.Remove(filepath.Join(c.DataDir, "imports", ".tickets", id+".json"))
+	expectedPath := filepath.Join(c.DataDir, "imports", ".staged", ticket.ID+".amitia-backup")
+	var pathErr error
+	if ticket.ArchivePath != expectedPath {
+		pathErr = fmt.Errorf("%w: invalid staged archive path %q", ErrImportTicketChanged, ticket.ArchivePath)
+	} else {
+		pathErr = removeOptionalFile(ticket.ArchivePath)
+	}
+	ticketPath := filepath.Join(c.DataDir, "imports", ".tickets", ticket.ID+".json")
+	return errors.Join(pathErr, removeOptionalFile(ticketPath))
+}
+
+func (c *Coordinator) CleanupTransientImports() error {
+	importsDir := filepath.Join(c.DataDir, "imports")
+	var cleanupErr error
+	for _, name := range []string{".tickets", ".staged", ".staging", ".uploads"} {
+		dir := filepath.Join(importsDir, name)
+		entries, err := os.ReadDir(dir)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			cleanupErr = errors.Join(cleanupErr, err)
+			continue
+		}
+		for _, entry := range entries {
+			cleanupErr = errors.Join(cleanupErr, os.RemoveAll(filepath.Join(dir, entry.Name())))
+		}
+	}
+	return cleanupErr
+}
+
+func removeOptionalFile(path string) error {
+	err := os.Remove(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	return err
 }
 
 func validOperationID(id string) bool {

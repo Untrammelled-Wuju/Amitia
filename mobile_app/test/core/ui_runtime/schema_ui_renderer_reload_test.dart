@@ -1,4 +1,5 @@
 import 'package:amitia_app/core/widgets/amitia_misc.dart';
+import 'package:amitia_app/features/extensions/schema_ui/engine/action_dispatcher.dart';
 import 'package:amitia_app/features/extensions/schema_ui/models/schema_ui_types.dart';
 import 'package:amitia_app/features/extensions/schema_ui/renderer/schema_ui_renderer.dart';
 import 'package:flutter/material.dart';
@@ -93,6 +94,75 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(reloadCount, 1);
+  });
+
+  testWidgets('tool action keeps render metadata outside input', (
+    tester,
+  ) async {
+    late ActionInvocation captured;
+    final document = SchemaUIDocument(
+      children: const <SchemaUINode>[
+        SchemaUINode(
+          id: 'direction',
+          type: SchemaUI.nodeSelect,
+          props: <String, dynamic>{
+            'label': 'Direction',
+            'options': <dynamic>[
+              <String, dynamic>{'label': 'Up', 'value': 'up'},
+            ],
+          },
+          bindings: <SchemaUIBinding>[
+            SchemaUIBinding(
+              path: 'direction',
+              source: 'form',
+              defaultValue: 'up',
+            ),
+          ],
+        ),
+        SchemaUINode(
+          id: 'move-button',
+          type: SchemaUI.nodeButton,
+          props: <String, dynamic>{'text': 'Run'},
+          actions: <SchemaUIActionBinding>[
+            SchemaUIActionBinding(
+              actionId: 'move',
+              target: 'tool',
+              input: <String, dynamic>{'direction': r'$form.direction'},
+            ),
+          ],
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SchemaUIRenderer(
+            document: document,
+            extensionId: 'extension.test',
+            contributionId: 'contribution.test',
+            embedded: true,
+            initialContext: <String, dynamic>{
+              'localState': <String, dynamic>{'ready': true},
+            },
+            onActionDispatch: (invocation) async {
+              captured = invocation;
+              return <String, dynamic>{};
+            },
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Run'));
+    await tester.pump();
+
+    expect(captured.input?['direction'], 'up');
+    expect(captured.input?.containsKey('node_id'), isFalse);
+    expect(captured.input?.containsKey('form_state'), isFalse);
+    expect(captured.input?.containsKey('local_state'), isFalse);
+    expect(captured.meta?['node_id'], 'move-button');
+    expect(captured.meta?['form_state'], {'direction': 'up'});
+    expect(captured.meta?['local_state'], {'ready': true});
   });
 
   testWidgets('button_group resolves child button bindings', (tester) async {

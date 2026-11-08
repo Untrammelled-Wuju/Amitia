@@ -93,7 +93,14 @@ func (e *Engine) continuityAuthority(ctx context.Context, request Request) (cont
 	if request.RequestID == "" || len(request.RequestID) > 128 {
 		return ctx, coordination.ExecutionScope{}, func() {}, errors.New("持续事项请求编号无效")
 	}
-	ctx, scope, finish, err := e.coordination.Begin(ctx, request.SpaceID, request.DeviceID, request.TargetDeviceID, request.CoreID, request.RoleID, request.RequestID)
+	resourceOwner, roleOwner := request.ResourceOwnerID, request.RoleOwnerID
+	if request.ExpectedScope != nil {
+		if request.TargetDeviceID == "" {
+			request.TargetDeviceID = request.ExpectedScope.TargetDeviceID
+		}
+	}
+	roleOwner = request.CoreID
+	ctx, scope, finish, err := e.coordination.BeginWithOwners(ctx, request.SpaceID, request.DeviceID, request.TargetDeviceID, request.CoreID, request.RoleID, request.RequestID, resourceOwner, roleOwner)
 	if err != nil {
 		return ctx, scope, func() {}, err
 	}
@@ -154,8 +161,13 @@ func (e *Engine) Continuity(ctx context.Context, request Request, mutation Conti
 		return OwnedContinuity{}, coordination.Acknowledgement{}, err
 	}
 	defer finish()
-	if mutation.ExpectedScope != nil && summaryAuthority(*mutation.ExpectedScope) != summaryAuthority(scope) {
-		return OwnedContinuity{}, coordination.Acknowledgement{}, coordination.ErrScopeExpired
+	if mutation.ExpectedScope != nil {
+		expectedPage := summaryAuthority(*mutation.ExpectedScope)
+		actualPage := summaryAuthority(scope)
+		actualPage.ResourceOwnerID = actualPage.TargetDeviceID
+		if expectedPage != actualPage {
+			return OwnedContinuity{}, coordination.Acknowledgement{}, coordination.ErrScopeExpired
+		}
 	}
 	if mutation.ExpectedCoreID != "" && mutation.ExpectedCoreID != scope.CoreID || mutation.ExpectedOwnerID != "" && mutation.ExpectedOwnerID != scope.ResourceOwnerID || mutation.ExpectedModeRevision > 0 && mutation.ExpectedModeRevision != scope.ModeRevision {
 		return OwnedContinuity{}, coordination.Acknowledgement{}, coordination.ErrScopeExpired

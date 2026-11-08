@@ -25,7 +25,7 @@ func (n NoopPresencePort) Acquire(
 
 func (n NoopPresencePort) Heartbeat(
 	ctx context.Context,
-	sessionID runtimeidentity.RuntimeSessionID,
+	snapshot protocol.PresenceSnapshot,
 	at time.Time,
 ) error {
 	return nil

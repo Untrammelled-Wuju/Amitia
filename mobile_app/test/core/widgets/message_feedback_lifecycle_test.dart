@@ -82,4 +82,46 @@ void main() {
     expect(find.byTooltip('撤销反馈'), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets('反馈不因执行范围中的临时请求编号变化而重复读取', (tester) async {
+    final service = _Feedback();
+    Future<void> show(String requestId) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [feedbackServiceProvider.overrideWithValue(service)],
+          child: MaterialApp(
+            home: Scaffold(
+              body: AmitiaMessageView(
+                key: const ValueKey('reply'),
+                characterId: 'one',
+                message: ChatMessage(
+                  id: 'reply',
+                  role: MessageRole.assistant,
+                  type: MessageType.text,
+                  content: 'hello',
+                  time: DateTime(2026),
+                  status: MessageStatus.sent,
+                  sourceRevision: 1,
+                  sourceOwnerId: 'owner',
+                  sourceScope: {
+                    'roleId': 'one',
+                    'resourceOwnerId': 'owner',
+                    'requestId': requestId,
+                  },
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+    }
+
+    await show('query-1');
+    await show('query-2');
+    expect(service.calls, ['one']);
+    service.pending.single.complete(null);
+    await tester.pump();
+    await tester.pumpWidget(const SizedBox());
+  });
 }

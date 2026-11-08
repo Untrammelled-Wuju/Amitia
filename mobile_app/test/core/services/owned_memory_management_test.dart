@@ -31,6 +31,7 @@ Map<String, dynamic> state([int epoch = 1]) => {
   'coreId': 'core',
   'coordinationAvailable': true,
   'policy': {
+    'deviceId': 'phone',
     'providerEpoch': epoch,
     'modeRevision': 1,
     'permissionRevision': 1,
@@ -78,6 +79,119 @@ Map<String, dynamic> saved({
   },
 };
 void main() {
+  test('权威角色列表为空时最近记忆返回空页', () async {
+    final transport = TaskTransport([
+      state(),
+      {
+        'roles': [],
+        'roleOwnerId': 'phone',
+        'executionScope': {...scope(), 'roleId': ''},
+      },
+      state(),
+    ]);
+    final result = await DeviceOwnedMemoryService(
+      BackendServiceApi(transport, 1),
+      isCurrent: () => true,
+    ).pageMemories();
+    expect(result.items, isEmpty);
+    expect(result.nextCursor, isEmpty);
+    expect(transport.requests.map((request) => request.path), [
+      '/api/device-mesh/v1/coordination/me',
+      '/api/device-mesh/v1/business/roles',
+      '/api/device-mesh/v1/coordination/me',
+    ]);
+  });
+
+  test('旧 Core 的空角色列表不能变成最近记忆空态', () async {
+    final transport = TaskTransport([
+      state(),
+      {
+        'roles': [],
+        'roleOwnerId': 'phone',
+        'executionScope': {...scope(), 'coreId': 'previous-core', 'roleId': ''},
+      },
+      state(),
+    ]);
+    await expectLater(
+      DeviceOwnedMemoryService(
+        BackendServiceApi(transport, 1),
+        isCurrent: () => true,
+      ).pageMemories(),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          '最近记忆的角色列表归属或权限已变化',
+        ),
+      ),
+    );
+  });
+
+  test('有可用角色时最近记忆仍执行授权查询并返回数据', () async {
+    final allScope = {
+      ...scope(),
+      'memoryViewAll': true,
+      'memoryRoleId': 'role',
+    };
+    final transport = TaskTransport([
+      state(),
+      {
+        'roles': [
+          {'id': 'role'},
+        ],
+        'roleOwnerId': 'phone',
+        'executionScope': {...scope(), 'roleId': ''},
+      },
+      state(),
+      state(),
+      {
+        'resources': [resource()],
+        'executionScope': allScope,
+        'nextCursor': '',
+      },
+      state(),
+    ]);
+    final result = await DeviceOwnedMemoryService(
+      BackendServiceApi(transport, 1),
+      isCurrent: () => true,
+    ).pageMemories();
+    expect(result.items.single.id, 'item');
+    expect(transport.requests[4].path, '/api/device-mesh/v1/business/memories');
+    expect(transport.requests[4].queryParameters?['memoryView'], 'all');
+  });
+
+  test('中心角色与设备资源分属不同所有者时最近记忆正常读取', () async {
+    final allScope = {
+      ...scope(),
+      'roleOwnerId': 'core',
+      'memoryViewAll': true,
+      'memoryRoleId': 'role',
+    };
+    final transport = TaskTransport([
+      state(),
+      {
+        'roles': [
+          {'id': 'role'},
+        ],
+        'roleOwnerId': 'core',
+        'executionScope': {...scope(), 'roleId': '', 'roleOwnerId': 'core'},
+      },
+      state(),
+      state(),
+      {
+        'resources': [resource()],
+        'executionScope': allScope,
+        'nextCursor': '',
+      },
+      state(),
+    ]);
+    final result = await DeviceOwnedMemoryService(
+      BackendServiceApi(transport, 1),
+      isCurrent: () => true,
+    ).pageMemories();
+    expect(result.items.single.id, 'item');
+  });
+
   test('统筹开启由 Core 同一份数据保存并确认', () async {
     final coordinatedState = state();
     (coordinatedState['policy'] as Map)['coordinated'] = true;

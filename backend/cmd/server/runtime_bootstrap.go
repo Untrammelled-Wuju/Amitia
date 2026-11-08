@@ -267,6 +267,7 @@ func (a *vectorStoreProviderAdapter) Start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("build qdrant spec: %w", err)
 	}
+	spec.BindToParent = true
 	supervisor := a.host.Processes()
 	if err := supervisor.Register(spec); err != nil {
 		return fmt.Errorf("register qdrant process: %w", err)
@@ -354,6 +355,7 @@ func (a *graphStoreProviderAdapter) Start(ctx context.Context) (err error) {
 	if err != nil {
 		return fmt.Errorf("build surrealdb spec: %w", err)
 	}
+	spec.BindToParent = true
 	supervisor := a.host.Processes()
 	if regErr := supervisor.Register(spec); regErr != nil {
 		return fmt.Errorf("register surrealdb: %w", regErr)

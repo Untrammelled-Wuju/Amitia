@@ -2,10 +2,10 @@ package dataportability
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -27,7 +27,7 @@ func (c *Coordinator) RestorePreview(ctx context.Context, archivePath string) (*
 	defer reader.Close()
 	manifest, err := reader.ReadManifest()
 	if err != nil {
-		return nil, ErrRestoreInvalid
+		return nil, fmt.Errorf("%w: %w", ErrRestoreInvalid, err)
 	}
 	if manifest.Format != FormatName {
 		return nil, ErrRestoreFormatUnsupported
@@ -58,9 +58,12 @@ func (c *Coordinator) CreateRestoreTicket(ctx context.Context, archivePath, back
 	if manifest != nil && manifest.BackupID != "" && manifest.BackupID != previewManifest.BackupID {
 		return nil, ErrRestoreInvalid
 	}
+	if err := c.CancelRestore(); err != nil {
+		return nil, fmt.Errorf("%w: cancel previous preview: %w", ErrRestoreStagingFailed, err)
+	}
 	stagedPath := filepath.Join(c.DataDir, "imports", ".restore", backupID+".amitia-backup")
 	if err := copyArchiveFile(archivePath, stagedPath); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrRestoreStagingFailed, err)
+		return nil, fmt.Errorf("%w: %w", ErrRestoreStagingFailed, err)
 	}
 	hash, err := fileSHA256(stagedPath)
 	if err != nil {
@@ -93,7 +96,10 @@ func (c *Coordinator) ExecuteRestore(ctx context.Context, ticket *DataRestoreTic
 		return nil, ErrRestoreInvalid
 	}
 	hash, err := fileSHA256(ticket.ArchivePath)
-	if err != nil || hash != ticket.ArchiveSHA256 {
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrRestoreIntegrityFailed, err)
+	}
+	if hash != ticket.ArchiveSHA256 {
 		return nil, ErrRestoreIntegrityFailed
 	}
 	manifest, err := c.RestorePreview(ctx, ticket.ArchivePath)
@@ -120,7 +126,7 @@ func (c *Coordinator) ExecuteRestore(ctx context.Context, ticket *DataRestoreTic
 		op.Status = "failed"
 		op.Error = err.Error()
 		op.UpdatedAt = nowRFC3339()
-		return op, fmt.Errorf("%w: %v", ErrRestorePreBackupFailed, err)
+		return op, fmt.Errorf("%w: %w", ErrRestorePreBackupFailed, err)
 	}
 	op.PreRestoreBackup = snapshot.BackupID
 	ticket.PreRestoreBackupID = snapshot.BackupID
@@ -140,17 +146,13 @@ func (c *Coordinator) ExecuteRestore(ctx context.Context, ticket *DataRestoreTic
 	if err != nil {
 		op.Status = "rollback"
 		op.Error = err.Error()
-		_, _, rollbackErr := c.executeImportWithOperation(ctx, snapshot.Path, ImportRequest{
-			CollisionPolicy:  CollisionReplace,
-			CharacterPolicy:  CollisionReplace,
-			ActivateImported: true,
-			Purpose:          PurposePreRestore,
-		})
+		rollbackErr := c.rollbackImport(ctx, snapshot.Path)
 		if rollbackErr != nil {
 			op.Status = "rollback_failed"
-			op.Error = fmt.Errorf("%w: %v", ErrRestoreRollbackFailed, rollbackErr).Error()
+			failure := fmt.Errorf("%w: %w", ErrRestoreRollbackFailed, errors.Join(err, rollbackErr))
+			op.Error = failure.Error()
 			op.UpdatedAt = nowRFC3339()
-			return op, ErrRestoreRollbackFailed
+			return op, failure
 		}
 		op.Status = "rolled_back"
 		op.UpdatedAt = nowRFC3339()
@@ -164,13 +166,7 @@ func (c *Coordinator) ExecuteRestore(ctx context.Context, ticket *DataRestoreTic
 	}
 	op.Status = "completed"
 	op.UpdatedAt = nowRFC3339()
-	if err := c.Staging.ClearRestoreTicket(); err != nil {
-		amitialog.Printf("[original-error] %v", err)
-	}
-	if err := os.Remove(ticket.ArchivePath); err != nil {
-		amitialog.Printf("[original-error] %v", err)
-	}
-	return op, nil
+	return op, c.CancelRestore()
 }
 
 func (c *Coordinator) HasPendingRestore() bool {
@@ -183,10 +179,18 @@ func (c *Coordinator) ConsumeRestoreTicket() (*DataRestoreTicket, error) {
 
 func (c *Coordinator) CancelRestore() error {
 	ticket, err := c.Staging.ReadRestoreTicket()
-	if err == nil && ticket.ArchivePath != "" && strings.HasPrefix(filepath.Clean(ticket.ArchivePath), filepath.Join(c.DataDir, "imports", ".restore")) {
-		if err := os.Remove(ticket.ArchivePath); err != nil {
-			amitialog.Printf("[original-error] %v", err)
-		}
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	expectedPath := filepath.Join(c.DataDir, "imports", ".restore", ticket.BackupID+".amitia-backup")
+	if !validOperationID(ticket.BackupID) || ticket.ArchivePath != expectedPath {
+		return fmt.Errorf("%w: invalid staged archive path %q", ErrRestoreInvalid, ticket.ArchivePath)
+	}
+	if err := os.Remove(ticket.ArchivePath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
 	}
 	return c.Staging.ClearRestoreTicket()
 }

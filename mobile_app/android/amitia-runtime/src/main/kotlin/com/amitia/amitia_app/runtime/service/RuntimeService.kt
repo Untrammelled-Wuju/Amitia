@@ -554,7 +554,18 @@ class RuntimeService : Service() {
         latestStartIdRef.set(startId)
         processOwnershipBarrier.set(ProcessOwnershipState.ACTIVE)
         try {
+            val context = currentSessionContextRef.get()
+            if (context != null && context.generation == generation) {
+                context.startupPhase = RuntimeStartupPhase.DETECTING
+            }
             session.activate()
+            val contextAfterActivate = currentSessionContextRef.get()
+            if (contextAfterActivate != null &&
+                contextAfterActivate.generation == generation &&
+                contextAfterActivate.terminalEvent == null
+            ) {
+                contextAfterActivate.startupPhase = RuntimeStartupPhase.READY
+            }
             updateLifecycleSnapshot()
         } catch (e: Throwable) {
             teardownAfterStartupFailure(
@@ -883,7 +894,39 @@ class RuntimeService : Service() {
                 return
             }
 
-            if (sessionContext.terminalEvent != null) return
+            if (sessionContext.startupPhase == RuntimeStartupPhase.DETECTING) {
+                sessionContext.processPhase = RuntimeProcessPhase.EXITED
+                processOwnershipBarrier.set(ProcessOwnershipState.CONFIRMED_DEAD)
+                teardownAfterStartupFailureBlocking(
+                    generation = sessionContext.generation,
+                    sessionId = sessionContext.session.sessionId,
+                    launchStartId = sessionContext.launchStartId,
+                    cause = RuntimeServiceTerminationCause.SESSION_EXITED,
+                    message = combineWithDiagnosticTail(
+                        "proot session exited before activation completed: exitCode=${exit.exitCode}"
+                    ),
+                    phase = "session_exited_during_activation",
+                )
+                return
+            }
+
+            if (sessionContext.terminalEvent != null) {
+                if (sessionContext.terminalEvent == TerminalEventKind.UNEXPECTED_TERMINATION &&
+                    sessionContext.processPhase == RuntimeProcessPhase.UNKNOWN
+                ) {
+                    sessionContext.processPhase = RuntimeProcessPhase.EXITED
+                    processOwnershipBarrier.set(ProcessOwnershipState.CONFIRMED_DEAD)
+                    val stopId = sessionContext.stopStartId ?: sessionContext.launchStartId
+                    performServiceTeardown(
+                        sessionContext,
+                        stopId,
+                        ServiceTeardownReason.UNEXPECTED_TERMINATION,
+                    )
+                    updateLifecycleSnapshot()
+                    clearSessionState()
+                }
+                return
+            }
 
             sessionContext.processPhase = RuntimeProcessPhase.EXITED
             processOwnershipBarrier.set(ProcessOwnershipState.CONFIRMED_DEAD)
@@ -1146,7 +1189,65 @@ class RuntimeService : Service() {
             val session = currentSessionRef.get()
             if (session != null && session.isAlive()) {
                 session.requestStop()
-                session.stop(GRACEFUL_SHUTDOWN_TIMEOUT_MS)
+                when (val result = session.terminateAndConfirmExit(
+                    gracefulTimeoutMs = GRACEFUL_SHUTDOWN_TIMEOUT_MS,
+                    forceTimeoutMs = FORCE_SHUTDOWN_TIMEOUT_MS,
+                )) {
+                    is ProotTerminationResult.ConfirmedExited -> {
+                        sessionContext.processPhase = RuntimeProcessPhase.EXITED
+                        processOwnershipBarrier.set(ProcessOwnershipState.CONFIRMED_DEAD)
+                        sessionContext.terminalEvent = TerminalEventKind.EXPECTED_STOPPED
+                        val stopId = sessionContext.stopStartId ?: sessionContext.launchStartId
+                        val teardownResult = performServiceTeardown(
+                            sessionContext,
+                            stopId,
+                            ServiceTeardownReason.EXPECTED_STOP,
+                        )
+                        publishTerminalEventForExpectedOrUnexpected(
+                            ctx = sessionContext,
+                            teardownResult = teardownResult,
+                            unexpectedCause = RuntimeServiceTerminationCause.STOP_RESULT_FAILED,
+                            unexpectedMessage = null,
+                        )
+                        return
+                    }
+                    is ProotTerminationResult.StillAlive -> {
+                        sessionContext.processPhase = RuntimeProcessPhase.UNKNOWN
+                        sessionContext.teardownState = TeardownState.FAILED
+                        sessionContext.terminalEvent = TerminalEventKind.UNEXPECTED_TERMINATION
+                        sessionContext.terminalCause = RuntimeServiceTerminationCause.STOP_RESULT_FAILED
+                        sessionContext.terminalMessage =
+                            "runtime stop was not confirmed after graceful=${GRACEFUL_SHUTDOWN_TIMEOUT_MS}ms " +
+                                "and force=${FORCE_SHUTDOWN_TIMEOUT_MS}ms: session=${session.sessionId} process remains alive"
+                        processOwnershipBarrier.set(ProcessOwnershipState.UNOBSERVABLE)
+                        updateLifecycleSnapshot()
+                        notifyHostEvent(
+                            RuntimeServiceHostEvent.UnexpectedTermination(
+                                generation = sessionContext.generation,
+                                cause = RuntimeServiceTerminationCause.STOP_RESULT_FAILED,
+                                message = sessionContext.terminalMessage,
+                            )
+                        )
+                        return
+                    }
+                }
+            } else {
+                sessionContext.processPhase = RuntimeProcessPhase.EXITED
+                processOwnershipBarrier.set(ProcessOwnershipState.CONFIRMED_DEAD)
+                sessionContext.terminalEvent = TerminalEventKind.EXPECTED_STOPPED
+                val stopId = sessionContext.stopStartId ?: sessionContext.launchStartId
+                val teardownResult = performServiceTeardown(
+                    sessionContext,
+                    stopId,
+                    ServiceTeardownReason.EXPECTED_STOP,
+                )
+                publishTerminalEventForExpectedOrUnexpected(
+                    ctx = sessionContext,
+                    teardownResult = teardownResult,
+                    unexpectedCause = RuntimeServiceTerminationCause.STOP_RESULT_FAILED,
+                    unexpectedMessage = null,
+                )
+                return
             }
             updateLifecycleSnapshot()
         }
@@ -1274,6 +1375,20 @@ class RuntimeService : Service() {
     }
 
     internal fun currentProotSession(): ProotSession? = currentSessionRef.get()
+
+    internal fun requestStopFromEndpoint(targetGeneration: Long): RuntimeServiceResult {
+        val startId = currentStartIdRef.get()
+        if (targetGeneration <= 0L || startId <= 0) {
+            return RuntimeServiceResult.Failure(
+                RuntimeServiceError(
+                    code = RuntimeServiceErrorCode.SERVICE_STOP_FAILED,
+                    message = "bound runtime service has no active host start",
+                )
+            )
+        }
+        handleStopHost(targetGeneration, startId)
+        return RuntimeServiceResult.Success
+    }
 
     private enum class ServiceHostState {
         CREATED,

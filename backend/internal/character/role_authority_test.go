@@ -27,7 +27,7 @@ func TestRoleAuthorityRejectsRetargetedCharacterMutation(t *testing.T) {
 		}
 		routers[i] = gin.New()
 		routers[i].Use(func(c *gin.Context) {
-			c.Set("actorContext", &auth.ActorContext{PrincipalType: auth.PrincipalTrustedDevice, SpaceID: runtimeidentity.SpaceID("device-space"), Permissions: []string{auth.PermSystemAdmin}})
+			c.Set("actorContext", &auth.ActorContext{PrincipalType: auth.PrincipalTrustedDevice, SpaceID: runtimeidentity.SpaceID("device-space"), IsLocalTrusted: true, Permissions: []string{auth.PermSystemAdmin}})
 			c.Next()
 		})
 		RegisterCharacterRouter(routers[i].Group("/api"), ctx, nil)

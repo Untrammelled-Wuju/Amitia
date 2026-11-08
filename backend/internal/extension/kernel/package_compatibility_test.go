@@ -132,6 +132,41 @@ func TestPackageGamePluginNetworkPreflightRejectsMissingHostSandboxPrerequisite(
 	}
 }
 
+func TestPackageGamePluginNoneNetworkUsesNodePermissionIsolation(t *testing.T) {
+	manifest := manifest_v1.Manifest{Modules: []manifest_v1.ModuleMeta{{
+		ID:   "runtime",
+		Type: "service",
+		Runtime: &manifest_v1.RuntimeMeta{
+			Type:       "javascript",
+			EntryPoint: "dist/index.js",
+		},
+		Contributions: []manifest_v1.ContributionMeta{{
+			ID:   "game-plugin",
+			Kind: "gamex",
+			Spec: map[string]any{
+				"protocolVersion": "amitia-game-host/1",
+				"runtimeModuleId": "runtime",
+				"services": []any{
+					map[string]any{"id": "runtime-service", "moduleId": "runtime", "kind": "process"},
+				},
+				"network": map[string]any{"mode": "none"},
+			},
+		}},
+	}}}
+	preview := InstallPreview{}
+	hostValidatorCalled := false
+	appendGamePluginNetworkCompatibilityIssuesWithHostValidator(manifest, &preview, func(policy trusted_service.ServiceNetworkPolicy) error {
+		hostValidatorCalled = true
+		return trusted_service.ErrNetworkSandboxUnavailable
+	})
+	if len(preview.Issues) != 0 {
+		t.Fatalf("Node permission isolation should not require bubblewrap: %+v", preview.Issues)
+	}
+	if hostValidatorCalled {
+		t.Fatal("bubblewrap prerequisite validator was called for JavaScript deny-all plugin")
+	}
+}
+
 func TestPackageCompatibilityExecuteRecheckUsesHostSandboxPrerequisites(t *testing.T) {
 	pkg := &amitiax.Package{Manifest: manifest_v1.Manifest{Modules: []manifest_v1.ModuleMeta{{
 		ID:   "runtime",

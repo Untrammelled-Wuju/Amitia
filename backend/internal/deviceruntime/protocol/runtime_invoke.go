@@ -13,6 +13,7 @@ type RuntimeInvokePayload struct {
 	OwnedExecutionScope  json.RawMessage                  `json:"ownedExecutionScope,omitempty"`
 	RuntimeType          string                           `json:"runtimeType"`
 	Handler              string                           `json:"handler"`
+	RequiredCapability   string                           `json:"requiredCapability,omitempty"`
 	Input                json.RawMessage                  `json:"input,omitempty"`
 	ProviderID           string                           `json:"providerId,omitempty"`
 	SpaceID              runtimeidentity.SpaceID          `json:"spaceId"`

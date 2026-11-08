@@ -128,7 +128,13 @@ func appendGamePluginNetworkCompatibilityIssuesWithHostValidator(manifest manife
 			}
 			policy, code, policyErr := packageGamePluginNetworkPolicy(spec.Network, contribution.RequiredPermissions)
 			if policyErr == nil && validateHost != nil && !devMode {
-				if hostErr := validateHost(policy); hostErr != nil {
+				var hostErr error
+				if gamePluginUsesNodePermissionIsolation(manifest, spec) && strings.EqualFold(strings.TrimSpace(policy.Mode), "none") {
+					hostErr = trusted_service.ValidateNetworkPolicySupport(policy)
+				} else {
+					hostErr = validateHost(policy)
+				}
+				if hostErr != nil {
 					code = "gamex_network_sandbox_unavailable"
 					policyErr = fmt.Errorf("game plugin network sandbox prerequisites are unavailable on this host: %w", hostErr)
 				}
@@ -144,6 +150,27 @@ func appendGamePluginNetworkCompatibilityIssuesWithHostValidator(manifest manife
 			})
 		}
 	}
+}
+
+func gamePluginUsesNodePermissionIsolation(manifest manifest_v1.Manifest, spec gameprotocol.PluginHostSpec) bool {
+	if len(spec.Services) == 0 {
+		return false
+	}
+	modules := make(map[string]manifest_v1.ModuleMeta, len(manifest.Modules))
+	for _, module := range manifest.Modules {
+		modules[module.ID] = module
+	}
+	for _, service := range spec.Services {
+		moduleID := strings.TrimSpace(service.ModuleID)
+		if moduleID == "" {
+			moduleID = strings.TrimSpace(service.ID)
+		}
+		module, ok := modules[moduleID]
+		if !ok || module.Runtime == nil || !strings.EqualFold(strings.TrimSpace(module.Runtime.Type), "javascript") {
+			return false
+		}
+	}
+	return true
 }
 
 func appendGamePluginArtifactPackageIssues(pkg *amitiax.Package, preview *InstallPreview) {

@@ -204,7 +204,16 @@ func worldbookScopeAuthority(scope coordination.ExecutionScope) coordination.Exe
 }
 
 func (e *Engine) worldbookScope(ctx context.Context, request Request, input WorldbookMutation) (context.Context, coordination.ExecutionScope, func(), error) {
-	ctx, scope, finish, err := e.coordination.Begin(ctx, request.SpaceID, request.DeviceID, request.TargetDeviceID, request.CoreID, request.RoleID, request.RequestID)
+	var (
+		scope  coordination.ExecutionScope
+		finish func()
+		err    error
+	)
+	if request.ResourceOwnerID != "" || request.RoleOwnerID != "" {
+		ctx, scope, finish, err = e.coordination.BeginWithOwners(ctx, request.SpaceID, request.DeviceID, request.TargetDeviceID, request.CoreID, request.RoleID, request.RequestID, request.ResourceOwnerID, request.RoleOwnerID)
+	} else {
+		ctx, scope, finish, err = e.coordination.Begin(ctx, request.SpaceID, request.DeviceID, request.TargetDeviceID, request.CoreID, request.RoleID, request.RequestID)
+	}
 	if err != nil {
 		return ctx, scope, finish, err
 	}

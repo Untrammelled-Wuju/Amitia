@@ -44,9 +44,6 @@ func TestPrivacyDeletionRealTLSModesAndActualReadBlocking(t *testing.T) {
 			t.Fatalf("unconfirmed deletion: %+v", result)
 		}
 		storeOwner := phone
-		if coordinated {
-			storeOwner = core
-		}
 		row, err := coordination.NewOwnershipStore(storeOwner.services.KernelContainer.DeviceRegistry.Database(), reply.Scope.ResourceOwnerID).Get(t.Context(), "message", id+"/user")
 		if err != nil || row == nil || !row.Deleted || string(row.Body) != "null" {
 			t.Fatalf("message not erased: %+v %v", row, err)

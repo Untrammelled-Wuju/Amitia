@@ -102,6 +102,7 @@ class ProductionCompositionTest {
     fun productionControllerHasNonNullInstaller() {
         val baseDir = tempFolder.newFolder("composition-installer")
         val layout = DefaultRuntimeHostLayout(File(baseDir, "control"), File(baseDir, "data"))
+        val manifestStore = DefaultRuntimeManifestStore(layout.metadataRoot.absolutePath)
         val installer = DefaultRuntimeInstaller(
             layout = layout,
             abiGate = createSupportedAbiGate(),
@@ -110,8 +111,10 @@ class ProductionCompositionTest {
             rootfsManager = com.amitia.amitia_app.runtime.install.DefaultRootfsManager(layout.controlRoot, com.amitia.amitia_app.runtime.install.DefaultSafeArchiveExtractor()),
             runtimeVerifier = com.amitia.amitia_app.runtime.install.DefaultInstalledRuntimeVerifier(treeHasher = { "" }),
             receiptStore = com.amitia.amitia_app.runtime.install.DefaultInstallReceiptStore(layout),
+            manifestStore = manifestStore,
+            manifestBuilder = com.amitia.amitia_app.runtime.manifest.internal.DefaultRuntimeManifestBuilder(layout, "arm64-v8a"),
+            activeRuntimeManager = com.amitia.amitia_app.runtime.install.internal.DefaultActiveRuntimeManager(layout, manifestStore),
         )
-        val manifestStore = DefaultRuntimeManifestStore(layout.metadataRoot.absolutePath)
 
         val controller = createDefaultRuntimeController(baseDir, installer, manifestStore)
 
@@ -147,12 +150,15 @@ class ProductionCompositionTest {
     fun controllerInstallerNotNullAfterInjection() {
         val baseDir = tempFolder.newFolder("installer-injection")
         val layout = DefaultRuntimeHostLayout(File(baseDir, "control"), File(baseDir, "data"))
+        val manifestStore = DefaultRuntimeManifestStore(layout.metadataRoot.absolutePath)
         val installer = DefaultRuntimeInstaller(
             layout = layout,
             abiGate = createSupportedAbiGate(),
             packageVerifier = com.amitia.amitia_app.runtime.install.internal.DefaultPackageVerifier(),
+            manifestStore = manifestStore,
+            manifestBuilder = com.amitia.amitia_app.runtime.manifest.internal.DefaultRuntimeManifestBuilder(layout, "arm64-v8a"),
+            activeRuntimeManager = com.amitia.amitia_app.runtime.install.internal.DefaultActiveRuntimeManager(layout, manifestStore),
         )
-        val manifestStore = DefaultRuntimeManifestStore(layout.metadataRoot.absolutePath)
 
         val controller = createDefaultRuntimeController(baseDir, installer, manifestStore)
 

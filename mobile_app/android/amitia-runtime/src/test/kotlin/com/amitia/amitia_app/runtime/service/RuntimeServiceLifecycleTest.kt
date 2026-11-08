@@ -74,6 +74,7 @@ class RuntimeServiceLifecycleTest {
             putExtra(RuntimeServiceContract.EXTRA_RUNTIME_GENERATION, 1L)
         }, 0, 1)
 
+        awaitLifecycleCondition { service.currentProotSession() != null }
         assertNotNull(service.currentProotSession())
         assertEquals(1, component.launchCount)
         assertEquals(0, events.count { it is RuntimeServiceHostEvent.StartupFailed })
@@ -94,8 +95,11 @@ class RuntimeServiceLifecycleTest {
             putExtra(RuntimeServiceContract.EXTRA_RUNTIME_GENERATION, 1L)
         }, 0, 1)
 
+        awaitLifecycleCondition {
+            events.any { it is RuntimeServiceHostEvent.StartupFailed }
+        }
         val failedEvents = events.filterIsInstance<RuntimeServiceHostEvent.StartupFailed>()
-        assertEquals(1, failedEvents.size())
+        assertEquals(1, failedEvents.size)
         assertEquals(1L, failedEvents[0].generation)
         assertNull(service.currentProotSession())
     }
@@ -115,6 +119,9 @@ class RuntimeServiceLifecycleTest {
             putExtra(RuntimeServiceContract.EXTRA_RUNTIME_GENERATION, 1L)
         }, 0, 1)
 
+        awaitLifecycleCondition {
+            events.any { it is RuntimeServiceHostEvent.StartupFailed }
+        }
         assertEquals(0, component.launchCount)
         assertFalse(events.any { it is RuntimeServiceHostEvent.SessionReady })
         val failure = events.filterIsInstance<RuntimeServiceHostEvent.StartupFailed>().single()
@@ -137,6 +144,9 @@ class RuntimeServiceLifecycleTest {
             putExtra(RuntimeServiceContract.EXTRA_RUNTIME_GENERATION, 1L)
         }, 0, 1)
 
+        awaitLifecycleCondition {
+            events.any { it is RuntimeServiceHostEvent.SessionReady }
+        }
         assertTrue(events.any { it is RuntimeServiceHostEvent.SessionReady })
 
         val lateEvents = CopyOnWriteArrayList<RuntimeServiceHostEvent>()
@@ -144,7 +154,7 @@ class RuntimeServiceLifecycleTest {
         binder.endpoint.addListener(RuntimeServiceHostListener { lateEvents.add(it) })
 
         val lateReadyEvents = lateEvents.filterIsInstance<RuntimeServiceHostEvent.SessionReady>()
-        assertEquals(1, lateReadyEvents.size())
+        assertEquals(1, lateReadyEvents.size)
     }
 
     @Test
@@ -162,6 +172,9 @@ class RuntimeServiceLifecycleTest {
             putExtra(RuntimeServiceContract.EXTRA_RUNTIME_GENERATION, 1L)
         }, 0, 1)
 
+        awaitLifecycleCondition {
+            events.any { it is RuntimeServiceHostEvent.SessionReady }
+        }
         assertTrue(events.any { it is RuntimeServiceHostEvent.SessionReady })
 
         component.session?.requestStop()
@@ -172,7 +185,12 @@ class RuntimeServiceLifecycleTest {
             it is RuntimeServiceHostEvent.ExpectedStopped || it is RuntimeServiceHostEvent.UnexpectedTermination
         }
         assertEquals(1, terminalEvents.size)
-        assertEquals(1L, terminalEvents[0].generation)
+        val generation = when (val event = terminalEvents[0]) {
+            is RuntimeServiceHostEvent.ExpectedStopped -> event.generation
+            is RuntimeServiceHostEvent.UnexpectedTermination -> event.generation
+            else -> 0L
+        }
+        assertEquals(1L, generation)
     }
 
     @Test
@@ -190,6 +208,7 @@ class RuntimeServiceLifecycleTest {
             putExtra(RuntimeServiceContract.EXTRA_RUNTIME_GENERATION, 1L)
         }, 0, 1)
 
+        awaitLifecycleCondition { service.currentProotSession() != null }
         val session1 = service.currentProotSession()
         assertNotNull(session1)
 
@@ -219,10 +238,14 @@ class RuntimeServiceLifecycleTest {
             putExtra(RuntimeServiceContract.EXTRA_RUNTIME_GENERATION, 1L)
         }, 0, 1)
 
+        awaitLifecycleCondition { service.currentProotSession() != null }
         component.simulateWatcherFailure()
 
+        awaitLifecycleCondition {
+            events.any { it is RuntimeServiceHostEvent.UnexpectedTermination }
+        }
         val unexpectedTerminations = events.filterIsInstance<RuntimeServiceHostEvent.UnexpectedTermination>()
-        assertEquals(1, unexpectedTerminations.size())
+        assertEquals(1, unexpectedTerminations.size)
         assertEquals(RuntimeServiceTerminationCause.EXIT_WATCHER_FAILED, unexpectedTerminations[0].cause)
     }
 
@@ -241,11 +264,15 @@ class RuntimeServiceLifecycleTest {
             putExtra(RuntimeServiceContract.EXTRA_RUNTIME_GENERATION, 1L)
         }, 0, 1)
 
+        awaitLifecycleCondition { service.currentProotSession() != null }
         component.simulateWatcherFailure()
         component.simulateExited()
 
+        awaitLifecycleCondition {
+            events.any { it is RuntimeServiceHostEvent.UnexpectedTermination }
+        }
         val unexpectedTerminations = events.filterIsInstance<RuntimeServiceHostEvent.UnexpectedTermination>()
-        assertEquals(1, unexpectedTerminations.size())
+        assertEquals(1, unexpectedTerminations.size)
     }
 
     @Test
@@ -263,12 +290,18 @@ class RuntimeServiceLifecycleTest {
             putExtra(RuntimeServiceContract.EXTRA_RUNTIME_GENERATION, 1L)
         }, 0, 1)
 
+        awaitLifecycleCondition {
+            events.any { it is RuntimeServiceHostEvent.SessionReady }
+        }
         assertTrue(events.any { it is RuntimeServiceHostEvent.SessionReady })
 
         component.session?.let { component.simulateUnexpectedExit() }
 
+        awaitLifecycleCondition {
+            events.any { it is RuntimeServiceHostEvent.UnexpectedTermination }
+        }
         val unexpectedTerminations = events.filterIsInstance<RuntimeServiceHostEvent.UnexpectedTermination>()
-        assertEquals(1, unexpectedTerminations.size())
+        assertEquals(1, unexpectedTerminations.size)
     }
 
     @Test
@@ -286,6 +319,7 @@ class RuntimeServiceLifecycleTest {
             putExtra(RuntimeServiceContract.EXTRA_RUNTIME_GENERATION, 1L)
         }, 0, 1)
 
+        awaitLifecycleCondition { service.currentProotSession() != null }
         assertNotNull(service.currentProotSession())
 
         service.onStartCommand(Intent().apply {
@@ -294,7 +328,7 @@ class RuntimeServiceLifecycleTest {
         }, 0, 2)
 
         val unexpectedTerminations = events.filterIsInstance<RuntimeServiceHostEvent.UnexpectedTermination>()
-        assertEquals(0, unexpectedTerminations.size())
+        assertEquals(0, unexpectedTerminations.size)
     }
 
     @Test
@@ -312,6 +346,7 @@ class RuntimeServiceLifecycleTest {
             putExtra(RuntimeServiceContract.EXTRA_RUNTIME_GENERATION, 1L)
         }, 0, 1)
 
+        awaitLifecycleCondition { service.currentProotSession() != null }
         service.onStartCommand(Intent().apply {
             action = RuntimeServiceContract.ACTION_STOP_HOST
             putExtra(RuntimeServiceContract.EXTRA_TARGET_GENERATION, 1L)
@@ -322,10 +357,83 @@ class RuntimeServiceLifecycleTest {
             putExtra(RuntimeServiceContract.EXTRA_TARGET_GENERATION, 1L)
         }, 0, 3)
 
+        awaitLifecycleCondition {
+            events.any {
+                it is RuntimeServiceHostEvent.ExpectedStopped ||
+                    it is RuntimeServiceHostEvent.UnexpectedTermination
+            }
+        }
         val terminalEvents = events.filter {
             it is RuntimeServiceHostEvent.ExpectedStopped || it is RuntimeServiceHostEvent.UnexpectedTermination
         }
         assertEquals(1, terminalEvents.size)
+    }
+
+    @Test
+    fun l013_confirmedStopWithoutExitEventPublishesExpectedStopped() {
+        val component = ConfirmedStopWithoutExitProotComponent()
+        setAndroidRuntimeModule(
+            prootComponent = component,
+            prootRootfsPath = "/rootfs",
+            assembler = LifecycleProotEnvironmentAssembler(),
+            activeRuntimeManager = LifecycleValidActiveRuntimeManager(),
+        )
+
+        service.onStartCommand(Intent().apply {
+            action = RuntimeServiceContract.ACTION_START_HOST
+            putExtra(RuntimeServiceContract.EXTRA_RUNTIME_GENERATION, 1L)
+        }, 0, 1)
+        service.onStartCommand(Intent().apply {
+            action = RuntimeServiceContract.ACTION_STOP_HOST
+            putExtra(RuntimeServiceContract.EXTRA_TARGET_GENERATION, 1L)
+        }, 0, 2)
+
+        awaitLifecycleCondition {
+            component.session?.stopConfirmationCount == 1 &&
+                events.filterIsInstance<RuntimeServiceHostEvent.ExpectedStopped>().size == 1
+        }
+        assertEquals(1, component.session?.stopConfirmationCount)
+        assertEquals(1, events.filterIsInstance<RuntimeServiceHostEvent.ExpectedStopped>().size)
+        awaitLifecycleCondition { service.currentProotSession() == null }
+        assertNull(service.currentProotSession())
+    }
+
+    @Test
+    fun l013b_unconfirmedStopFailsClosedUntilProcessExit() {
+        val component = UnconfirmedStopProotComponent()
+        setAndroidRuntimeModule(
+            prootComponent = component,
+            prootRootfsPath = "/rootfs",
+            assembler = LifecycleProotEnvironmentAssembler(),
+            activeRuntimeManager = LifecycleValidActiveRuntimeManager(),
+        )
+
+        service.onStartCommand(Intent().apply {
+            action = RuntimeServiceContract.ACTION_START_HOST
+            putExtra(RuntimeServiceContract.EXTRA_RUNTIME_GENERATION, 1L)
+        }, 0, 1)
+        service.onStartCommand(Intent().apply {
+            action = RuntimeServiceContract.ACTION_STOP_HOST
+            putExtra(RuntimeServiceContract.EXTRA_TARGET_GENERATION, 1L)
+        }, 0, 2)
+
+        awaitLifecycleCondition {
+            events.filterIsInstance<RuntimeServiceHostEvent.UnexpectedTermination>().size == 1
+        }
+        val failures = events.filterIsInstance<RuntimeServiceHostEvent.UnexpectedTermination>()
+        assertEquals(1, failures.size)
+        assertEquals(RuntimeServiceTerminationCause.STOP_RESULT_FAILED, failures[0].cause)
+        assertTrue(failures[0].message.orEmpty().contains("process remains alive"))
+        assertNotNull(service.currentProotSession())
+        val snapshot = (service.onBind(null) as RuntimeServiceBinder).endpoint.lifecycleSnapshot()
+        assertEquals(RuntimeProcessPhase.UNKNOWN, snapshot?.processPhase)
+        assertEquals(RuntimeTerminalState.UNEXPECTED_TERMINATION, snapshot?.terminalState)
+
+        component.session?.simulateExit()
+
+        awaitLifecycleCondition { service.currentProotSession() == null }
+        assertNull(service.currentProotSession())
+        assertEquals(1, events.filterIsInstance<RuntimeServiceHostEvent.UnexpectedTermination>().size)
     }
 
     @Test
@@ -419,6 +527,15 @@ class RuntimeServiceLifecycleTest {
             activeRuntimeManager = activeRuntimeManager,
         ).apply()
     }
+
+    private fun awaitLifecycleCondition(condition: () -> Boolean) {
+        val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5)
+        while (System.nanoTime() < deadline) {
+            if (condition()) return
+            Thread.sleep(10)
+        }
+        assertTrue("runtime lifecycle condition was not observed before timeout", condition())
+    }
 }
 
 internal class UnavailableProotComponent : ProotComponent {
@@ -432,12 +549,12 @@ internal class UnavailableProotComponent : ProotComponent {
 
     override fun launch(request: ProotLaunchRequest, observer: ProotObserver, generation: Long): ProotSession {
         launchCount++
-        return LifecycleDeadProotSession(generation)
+        return LifecycleDeadProotSession(generation, observer)
     }
 
     override fun launchProbe(request: ProotLaunchRequest, observer: ProotObserver, generation: Long): ProotSession {
         launchCount++
-        return LifecycleDeadProotSession(generation)
+        return LifecycleDeadProotSession(generation, observer)
     }
 
     override fun currentSession(): ProotSession? = null
@@ -545,6 +662,125 @@ internal class LifecycleProotSession(
     }
 }
 
+internal class ConfirmedStopWithoutExitProotComponent : ProotComponent {
+    var session: ConfirmedStopWithoutExitProotSession? = null
+        private set
+
+    override fun availability() = com.amitia.amitia_app.runtime.proot.ProotAvailability.Available(
+        artifact = com.amitia.amitia_app.runtime.proot.ProotArtifact.create("1.0.0", "a".repeat(64)),
+        absoluteBinaryPath = "/test/proot",
+    )
+
+    override fun launch(request: ProotLaunchRequest, observer: ProotObserver, generation: Long): ProotSession {
+        return ConfirmedStopWithoutExitProotSession(generation, observer).also { session = it }
+    }
+
+    override fun launchProbe(request: ProotLaunchRequest, observer: ProotObserver, generation: Long): ProotSession {
+        return ConfirmedStopWithoutExitProotSession(generation, observer)
+    }
+
+    override fun currentSession(): ProotSession? = session
+    override fun stop(): ProotStopResult = ProotStopResult.Graceful(session?.sessionId ?: "none", 0)
+    override fun close() {}
+}
+
+internal class ConfirmedStopWithoutExitProotSession(
+    private val gen: Long,
+    private val observer: ProotObserver,
+) : ProotSession {
+    override val sessionId: String = "confirmed-stop-$gen"
+    private val alive = java.util.concurrent.atomic.AtomicBoolean(true)
+    var stopConfirmationCount = 0
+        private set
+
+    override fun isAlive(): Boolean = alive.get()
+    override fun awaitExit(timeoutMillis: Long): Int? = null
+    override fun stop(graceMillis: Long): ProotStopResult = ProotStopResult.Failed(
+        sessionId,
+        com.amitia.amitia_app.runtime.proot.ProotErrorCode.PROCESS_STOP_FAILED,
+        "legacy stop must not be used",
+    )
+    override fun close() {
+        alive.set(false)
+    }
+    override fun requestStop() {}
+    override val exit: com.amitia.amitia_app.runtime.proot.ProotExit? = null
+    override fun activate() {
+        observer.onEvent(com.amitia.amitia_app.runtime.proot.ProotEvent.Started(sessionId, System.currentTimeMillis()))
+    }
+    override fun terminateAndConfirmExit(
+        gracefulTimeoutMs: Long,
+        forceTimeoutMs: Long,
+    ): ProotTerminationResult {
+        stopConfirmationCount++
+        alive.set(false)
+        return ProotTerminationResult.ConfirmedExited(0)
+    }
+}
+
+internal class UnconfirmedStopProotComponent : ProotComponent {
+    var session: UnconfirmedStopProotSession? = null
+        private set
+
+    override fun availability() = com.amitia.amitia_app.runtime.proot.ProotAvailability.Available(
+        artifact = com.amitia.amitia_app.runtime.proot.ProotArtifact.create("1.0.0", "a".repeat(64)),
+        absoluteBinaryPath = "/test/proot",
+    )
+
+    override fun launch(request: ProotLaunchRequest, observer: ProotObserver, generation: Long): ProotSession {
+        return UnconfirmedStopProotSession(generation, observer).also { session = it }
+    }
+
+    override fun launchProbe(request: ProotLaunchRequest, observer: ProotObserver, generation: Long): ProotSession {
+        return UnconfirmedStopProotSession(generation, observer)
+    }
+
+    override fun currentSession(): ProotSession? = session
+    override fun stop(): ProotStopResult = ProotStopResult.Graceful(session?.sessionId ?: "none", 0)
+    override fun close() {}
+}
+
+internal class UnconfirmedStopProotSession(
+    private val gen: Long,
+    private val observer: ProotObserver,
+) : ProotSession {
+    override val sessionId: String = "unconfirmed-stop-$gen"
+    private val alive = java.util.concurrent.atomic.AtomicBoolean(true)
+    private val exitRef = java.util.concurrent.atomic.AtomicReference<com.amitia.amitia_app.runtime.proot.ProotExit?>(null)
+
+    override fun isAlive(): Boolean = alive.get()
+    override fun awaitExit(timeoutMillis: Long): Int? = exitRef.get()?.exitCode
+    override fun stop(graceMillis: Long): ProotStopResult = ProotStopResult.Failed(
+        sessionId,
+        com.amitia.amitia_app.runtime.proot.ProotErrorCode.PROCESS_STOP_FAILED,
+        "legacy stop must not be used",
+    )
+    override fun close() {
+        alive.set(false)
+    }
+    override fun requestStop() {}
+    override val exit: com.amitia.amitia_app.runtime.proot.ProotExit? get() = exitRef.get()
+    override fun activate() {
+        observer.onEvent(com.amitia.amitia_app.runtime.proot.ProotEvent.Started(sessionId, System.currentTimeMillis()))
+    }
+    override fun terminateAndConfirmExit(
+        gracefulTimeoutMs: Long,
+        forceTimeoutMs: Long,
+    ): ProotTerminationResult = ProotTerminationResult.StillAlive
+
+    fun simulateExit() {
+        alive.set(false)
+        val value = com.amitia.amitia_app.runtime.proot.ProotExit(
+            generation = gen,
+            sessionId = sessionId,
+            exitCode = 137,
+            stopRequested = true,
+        )
+        exitRef.set(value)
+        observer.onEvent(com.amitia.amitia_app.runtime.proot.ProotEvent.Exited(value))
+    }
+}
+
 internal class ImmediatelyDeadProotComponent : ProotComponent {
     var launchCount = 0
         private set
@@ -556,11 +792,11 @@ internal class ImmediatelyDeadProotComponent : ProotComponent {
 
     override fun launch(request: ProotLaunchRequest, observer: ProotObserver, generation: Long): ProotSession {
         launchCount++
-        return LifecycleDeadProotSession(generation)
+        return LifecycleDeadProotSession(generation, observer)
     }
 
     override fun launchProbe(request: ProotLaunchRequest, observer: ProotObserver, generation: Long): ProotSession {
-        return LifecycleDeadProotSession(generation)
+        return LifecycleDeadProotSession(generation, observer)
     }
 
     override fun currentSession(): ProotSession? = null
@@ -570,7 +806,10 @@ internal class ImmediatelyDeadProotComponent : ProotComponent {
     override fun close() {}
 }
 
-internal class LifecycleDeadProotSession(private val gen: Long) : ProotSession {
+internal class LifecycleDeadProotSession(
+    private val gen: Long,
+    private val observer: ProotObserver,
+) : ProotSession {
     override val sessionId: String = "dead-session-$gen"
     override fun isAlive(): Boolean = false
     override fun awaitExit(timeoutMillis: Long): Int? = 1
@@ -583,7 +822,9 @@ internal class LifecycleDeadProotSession(private val gen: Long) : ProotSession {
         exitCode = 1,
         stopRequested = false,
     )
-    override fun activate() {}
+    override fun activate() {
+        observer.onEvent(com.amitia.amitia_app.runtime.proot.ProotEvent.Exited(exit))
+    }
 
     override fun terminateAndConfirmExit(gracefulTimeoutMs: Long, forceTimeoutMs: Long): ProotTerminationResult {
         return ProotTerminationResult.ConfirmedExited(exit?.exitCode)

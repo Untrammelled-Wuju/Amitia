@@ -117,9 +117,6 @@ func TestOwnedMultiAgentHTTPDelegationAndWorkbenchProjection(t *testing.T) {
 				t.Fatalf("chat did not launch workers: %+v starts=%d", response.Data, len(workers.started))
 			}
 			owner := source.device.DeviceID.String()
-			if coordinated {
-				owner = provider.core
-			}
 			for _, request := range workers.started[before:] {
 				if request.OwnedScope == nil || request.OwnedScope.ResourceOwnerID != owner || request.WorkspaceID != workspace {
 					t.Fatalf("worker lost owned authority: %+v", request)

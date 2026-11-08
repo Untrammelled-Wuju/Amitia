@@ -118,6 +118,50 @@ func TestProvisionedClientReadsHandshakeAndStopsBlockedConnection(t *testing.T) 
 	}
 }
 
+func TestSlowButValidHandshakeBecomesReadyAfterEarlyWaitDeadline(t *testing.T) {
+	upgrader := websocket.Upgrader{}
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		connection, err := upgrader.Upgrade(writer, request, nil)
+		if err != nil {
+			return
+		}
+		defer connection.Close()
+		_, data, err := connection.ReadMessage()
+		if err != nil {
+			return
+		}
+		var hello protocol.Envelope
+		if json.Unmarshal(data, &hello) != nil {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+		payload, _ := json.Marshal(protocol.HelloAckPayload{Accepted: true, SessionID: "slow-session", ResumeMode: protocol.ResumeModeFresh, ServerTime: time.Now()})
+		ack := protocol.Envelope{Protocol: meshprotocol.ProtocolName, EnvelopeVersion: meshprotocol.EnvelopeVersion, MessageType: protocol.MessageTypeHelloAck, SpaceID: hello.SpaceID, DeviceID: hello.DeviceID, RuntimeID: hello.RuntimeID, RuntimeSessionID: "slow-session", ConnectionGeneration: 1, Sequence: 1, PayloadSchemaVersion: 1, Payload: payload, PayloadHash: protocol.ComputePayloadHash(payload)}
+		if connection.WriteJSON(ack) != nil {
+			return
+		}
+		for {
+			if _, _, err := connection.ReadMessage(); err != nil {
+				return
+			}
+		}
+	}))
+	defer server.Close()
+	client := NewMeshClient(MeshClientConfig{CloudBaseURL: server.URL, Credential: "test-device-secret", SpaceID: "core-b", Identity: &LocalIdentity{DeviceID: "device-a", RuntimeID: "runtime-a"}})
+	client.Start()
+	defer client.Stop()
+	shortCtx, shortCancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
+	defer shortCancel()
+	if err := client.WaitReady(shortCtx); err == nil {
+		t.Fatal("过早就绪窗口被错误判定为成功")
+	}
+	longCtx, longCancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer longCancel()
+	if err := client.WaitReady(longCtx); err != nil || client.State() != StateReady {
+		t.Fatalf("延迟握手未进入可用状态: state=%s err=%v", client.State(), err)
+	}
+}
+
 func TestClientRejectsHandshakeFromWrongProvider(t *testing.T) {
 	upgrader := websocket.Upgrader{}
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {

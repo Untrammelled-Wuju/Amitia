@@ -69,28 +69,26 @@ func TestActualTLSProjectAPIPreservesSourceHistoryAndRejectsChangedOwnership(t *
 	payload["requestId"] = "old-device-form"
 	b.request(t, a, http.MethodPost, "/api/device-mesh/v1/business/projects", payload, http.StatusConflict)
 	query = decodeThreeCoreMemoryResponse[projectListing](t, b.request(t, a, http.MethodGet, "/api/device-mesh/v1/business/projects?characterId=one&historicalRoleId=one", nil, 200))
-	if len(query.Projects) != 0 || len(query.HistoricalProjects) != 1 || !query.HistoricalProjects[0].ReadOnly || query.HistoricalProjects[0].OwnerID != a.device.DeviceID.String() {
+	if len(query.Projects) != 1 || query.Projects[0].OwnerID != a.device.DeviceID.String() || query.Projects[0].ReadOnly || len(query.HistoricalProjects) > 1 || len(query.HistoricalProjects) == 1 && (!query.HistoricalProjects[0].ReadOnly || query.HistoricalProjects[0].OwnerID != a.device.DeviceID.String()) {
 		t.Fatal("old device project was migrated or became unavailable")
 	}
-	payload["requestId"], payload["title"], payload["expectedExecutionScope"] = "core-project", "云端分组", query.Scope
-	payload["workspaces"] = []business.ProjectWorkspace{{ID: "workspace-core", DeviceID: query.Scope.TargetDeviceID, Name: "云端分组", Kind: "local", RootURI: "amitia://workspace/@workspace-core/"}}
+	payload["requestId"], payload["title"], payload["expectedExecutionScope"] = "coordinated-device-project", "统筹后设备分组", query.Scope
+	payload["workspaces"] = []business.ProjectWorkspace{{ID: "workspace-core", DeviceID: query.Scope.TargetDeviceID, Name: "统筹后设备分组", Kind: "local", RootURI: "amitia://workspace/@workspace-core/"}}
 	payload["primaryWorkspaceId"] = "workspace-core"
 	current := decodeThreeCoreMemoryResponse[business.ProjectResponse](t, b.request(t, a, http.MethodPost, "/api/device-mesh/v1/business/projects", payload, 200))
-	if current.Acknowledgement.OwnerID != b.core {
-		t.Fatal("coordinated project not stored at Core")
+	if current.Acknowledgement.OwnerID != a.device.DeviceID.String() {
+		t.Fatal("coordinated project did not stay with its device")
 	}
 	query = decodeThreeCoreMemoryResponse[projectListing](t, b.request(t, a, http.MethodGet, "/api/device-mesh/v1/business/projects?characterId=one&historicalRoleId=one", nil, 200))
-	if len(query.Projects) != 1 || query.Projects[0].OwnerID != b.core || len(query.HistoricalProjects) != 1 {
+	if len(query.Projects) != 2 || query.Projects[0].OwnerID != a.device.DeviceID.String() || query.Projects[1].OwnerID != a.device.DeviceID.String() {
 		t.Fatal("project owners were mixed")
 	}
-	for _, fixture := range []*threeCoreFixture{a, b} {
-		owner := fixture.core
-		if fixture == a {
-			owner = a.device.DeviceID.String()
-		}
-		rows, err := coordination.NewOwnershipStore(fixture.services.KernelContainer.DeviceRegistry.Database(), owner).List(t.Context(), "project", "one", false)
-		if err != nil || len(rows) != 1 {
-			t.Fatal("project missing from its original database")
-		}
+	rows, err := coordination.NewOwnershipStore(a.services.KernelContainer.DeviceRegistry.Database(), a.device.DeviceID.String()).List(t.Context(), "project", "one", false)
+	if err != nil || len(rows) != 2 {
+		t.Fatal("device projects missing from local database")
+	}
+	centerRows, err := coordination.NewOwnershipStore(b.services.KernelContainer.DeviceRegistry.Database(), b.core).List(t.Context(), "project", "one", false)
+	if err != nil || len(centerRows) != 0 {
+		t.Fatal("device projects were copied to the coordination center")
 	}
 }

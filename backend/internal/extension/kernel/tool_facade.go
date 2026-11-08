@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/u-ai/backend/internal/agent/tool"
@@ -18,6 +19,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/capability/acquisition"
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
 	"github.com/u-ai/backend/internal/extension/kernel/hook"
+	"github.com/u-ai/backend/internal/extension/kernel/scope"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 	applog "github.com/u-ai/backend/log"
 )
@@ -56,6 +58,14 @@ type ToolFacade struct {
 	counters              *ToolFacadeCounters
 	config                ToolFacadeConfig
 	localDeviceID         runtimeidentity.DeviceID
+	capabilityProviders   *capability.ProviderRegistry
+	scopeManager          scope.ScopeManager
+	mcpSyncMu             sync.Mutex
+	gameHostGuard         GameHostExecutionGuard
+}
+
+type GameHostExecutionGuard interface {
+	AuthorizeGameHostExecution(ctx context.Context, spaceID, targetDeviceID, toolID string) error
 }
 
 func NewToolFacade(toolRegistry *capability.ToolRegistry, executionKernel *execution.ExecutionPipeline, args ...any) *ToolFacade {
@@ -273,6 +283,14 @@ func (f *ToolFacade) SetAcquisitionBridge(bridge *acquisition.AgentCapabilityBri
 
 func (f *ToolFacade) SetCapabilityResolver(resolver capability.CapabilityResolver) {
 	f.capabilityResolver = resolver
+}
+
+func (f *ToolFacade) SetCapabilityProviders(registry *capability.ProviderRegistry) {
+	f.capabilityProviders = registry
+}
+
+func (f *ToolFacade) SetScopeManager(manager scope.ScopeManager) {
+	f.scopeManager = manager
 }
 
 func (f *ToolFacade) SetRecoveryService(svc *acquisition.RecoveryService) {
@@ -842,6 +860,12 @@ func (f *ToolFacade) SetLocalDeviceID(deviceID runtimeidentity.DeviceID) {
 	}
 }
 
+func (f *ToolFacade) SetGameHostExecutionGuard(guard GameHostExecutionGuard) {
+	if f != nil {
+		f.gameHostGuard = guard
+	}
+}
+
 // WorkbenchOriginDeviceID reports the device that owns locally executed
 // browser tools. It is set from the runtime identity, never from an LLM
 // supplied argument. A missing identity must not be replaced by a guess.
@@ -877,6 +901,12 @@ func (f *ToolFacade) resolveExecutionTarget(ctx context.Context, def capability.
 	if scope.ExecContext != nil && scope.ExecContext.RuntimeTarget != nil {
 		targetDeviceID = scope.ExecContext.RuntimeTarget.DeviceID
 	}
+	workspaceTarget := def.ExtensionID == "com.amitia.builtin.workspace"
+	if workspaceTarget {
+		if workspaceDeviceID := workspaceExecutionContextDeviceID(scope.ExecContext); workspaceDeviceID != "" {
+			targetDeviceID = runtimeidentity.DeviceID(workspaceDeviceID)
+		}
+	}
 	targetIsLocal := targetDeviceID != "" && f.localDeviceID != "" && targetDeviceID == f.localDeviceID
 	req := capability.CapabilityResolutionRequest{
 		SpaceID:            runtimeidentity.SpaceID(scope.SpaceID),
@@ -887,16 +917,8 @@ func (f *ToolFacade) resolveExecutionTarget(ctx context.Context, def capability.
 		AllowDevice:        true,
 		PreferredPlacement: capability.ProviderPlacementCore,
 	}
-	if def.ExtensionID == "com.amitia.builtin.workspace" && scope.ExecContext != nil && scope.ExecContext.RuntimeTarget != nil {
-		deviceID := scope.ExecContext.RuntimeTarget.DeviceID
-		if deviceID != "" && !targetIsLocal && strings.EqualFold(strings.TrimSpace(scope.ExecContext.RuntimeTarget.Placement), "device") {
-			req.ModuleID = ""
-			req.RequiredPlacement = capability.ProviderPlacementDevice
-			req.PreferredPlacement = capability.ProviderPlacementDevice
-			req.RequiredDeviceID = runtimeidentity.DeviceID(deviceID)
-			req.PreferredDeviceID = runtimeidentity.DeviceID(deviceID)
-			req.AllowCore = false
-		}
+	if workspaceTarget && targetDeviceID != "" && !targetIsLocal {
+		req.ModuleID = ""
 	}
 	if owned {
 		placement, _ := def.Runtime.Metadata["modulePlacement"].(string)
@@ -907,7 +929,18 @@ func (f *ToolFacade) resolveExecutionTarget(ctx context.Context, def capability.
 				device = true
 			}
 		}
-		if device {
+		gameHostDeviceID := ""
+		if def.Runtime.RuntimeType == capability.RuntimeTypeGameHost && scope.ExecContext.Metadata != nil {
+			gameHostDeviceID, _ = scope.ExecContext.Metadata["gameHostDeviceId"].(string)
+			gameHostDeviceID = strings.TrimSpace(gameHostDeviceID)
+		}
+		if gameHostDeviceID != "" {
+			req.RequiredPlacement = capability.ProviderPlacementDevice
+			req.PreferredPlacement = capability.ProviderPlacementDevice
+			req.RequiredDeviceID = runtimeidentity.DeviceID(gameHostDeviceID)
+			req.PreferredDeviceID = runtimeidentity.DeviceID(gameHostDeviceID)
+			req.AllowCore = false
+		} else if device {
 			if scope.ExecContext.RuntimeTarget == nil || scope.ExecContext.RuntimeTarget.DeviceID == "" {
 				return resolvedExecution{missingCapability: capID, resolutionCode: "CAPABILITY_DEVICE_TARGET_REQUIRED", resolutionDetail: "设备能力缺少明确的目标设备"}
 			}
@@ -928,8 +961,8 @@ func (f *ToolFacade) resolveExecutionTarget(ctx context.Context, def capability.
 			} else {
 				req.RequiredPlacement = capability.ProviderPlacementDevice
 				req.PreferredPlacement = capability.ProviderPlacementDevice
-				req.RequiredDeviceID = scope.ExecContext.RuntimeTarget.DeviceID
-				req.PreferredDeviceID = scope.ExecContext.RuntimeTarget.DeviceID
+				req.RequiredDeviceID = targetDeviceID
+				req.PreferredDeviceID = targetDeviceID
 				req.AllowCore = false
 			}
 		} else if placement == "cloud" {
@@ -972,6 +1005,34 @@ func (f *ToolFacade) resolveExecutionTarget(ctx context.Context, def capability.
 	return resolvedExecution{target: result.ExecutionTarget}
 }
 
+func workspaceExecutionContextDeviceID(execCtx *coreexec.ExecutionContext) string {
+	if execCtx == nil {
+		return ""
+	}
+	primaryID := strings.TrimSpace(execCtx.PrimaryWorkspaceID)
+	if primaryID == "" {
+		primaryID = strings.TrimSpace(execCtx.WorkspaceID)
+	}
+	if len(execCtx.WorkspaceBindings) > 0 {
+		binding := execCtx.WorkspaceBindings[0]
+		for _, candidate := range execCtx.WorkspaceBindings {
+			if primaryID != "" && candidate.ID == primaryID {
+				binding = candidate
+				break
+			}
+		}
+		if deviceID := strings.TrimSpace(binding.DeviceID); deviceID != "" {
+			return deviceID
+		}
+	}
+	if execCtx.Metadata != nil {
+		if deviceID, ok := execCtx.Metadata["workspaceDeviceId"].(string); ok {
+			return strings.TrimSpace(deviceID)
+		}
+	}
+	return ""
+}
+
 func (f *ToolFacade) executeResolvedTool(ctx context.Context, def capability.ToolDefinition, input json.RawMessage, scope InvocationScope, externalCallID string, idempotencyKey string) ToolDispatchResult {
 	if f.executionKernel == nil {
 		return ToolDispatchResult{Status: "FAILED", VisibleText: "execution kernel not configured", Error: &ToolDispatchError{Code: "EXECUTION_KERNEL_UNAVAILABLE"}}
@@ -979,6 +1040,16 @@ func (f *ToolFacade) executeResolvedTool(ctx context.Context, def capability.Too
 	ctx = withInvocationOriginActor(ctx, scope)
 	isBackground := def.Runtime.RuntimeType == capability.RuntimeTypeTask && def.ExecutionPolicy.AllowBackground
 	resolved := f.resolveExecutionTarget(ctx, def, scope)
+	if err := f.authorizeGameHostExecution(ctx, def, scope, resolved); err != nil {
+		return ToolDispatchResult{
+			Status:      "FAILED",
+			VisibleText: err.Error(),
+			Error: &ToolDispatchError{
+				Code:    "GAME_MODE_EXECUTION_DENIED",
+				Message: err.Error(),
+			},
+		}
+	}
 	if resolved.resolverUnavailable {
 		return ToolDispatchResult{
 			Status:      "FAILED",
@@ -1096,6 +1167,26 @@ func (f *ToolFacade) executeResolvedTool(ctx context.Context, def capability.Too
 	}
 	result := f.executionKernel.Execute(ctx, req)
 	return unifiedResultToDispatch(result)
+}
+
+func (f *ToolFacade) authorizeGameHostExecution(ctx context.Context, def capability.ToolDefinition, scope InvocationScope, resolved resolvedExecution) error {
+	if f == nil || f.gameHostGuard == nil || def.Runtime.RuntimeType != capability.RuntimeTypeGameHost || scope.IsInternal {
+		return nil
+	}
+	targetDeviceID := strings.TrimSpace(resolved.target.DeviceID.String())
+	if targetDeviceID == "" {
+		targetDeviceID = strings.TrimSpace(scope.DeviceID)
+	}
+	if targetDeviceID == "" {
+		targetDeviceID = f.localDeviceID.String()
+	}
+	if targetDeviceID == "" {
+		return errors.New("game host execution target device is missing")
+	}
+	if err := f.gameHostGuard.AuthorizeGameHostExecution(ctx, scope.SpaceID, targetDeviceID, string(def.ID)); err != nil {
+		return fmt.Errorf("game host tool %s rejected by game mode authority: %w", def.ID, err)
+	}
+	return nil
 }
 
 func withInvocationOriginActor(ctx context.Context, scope InvocationScope) context.Context {

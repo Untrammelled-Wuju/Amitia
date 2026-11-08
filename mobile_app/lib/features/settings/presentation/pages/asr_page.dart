@@ -70,7 +70,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       if (!mounted || epoch != _loadEpoch) return;
       _configurationIntent = intent;
       if (!intent.canConfigure) {
-        throw StateError('AI 服务由云端 Core 提供，当前设备不能配置语音识别模型');
+        throw StateError('AI 服务由统筹中心提供，当前设备不能配置语音识别模型');
       }
       final service = ref.read(asrServiceProvider);
       final configs = await intent.run(service.configs);

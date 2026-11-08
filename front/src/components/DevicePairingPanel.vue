@@ -1,18 +1,29 @@
 <template>
   <section class="device-pairing-panel" aria-labelledby="pairing-title">
-    <h3 id="pairing-title">连接设备</h3>
-    <p class="pairing-description">扫描其他 Core 的配对码加入，或生成当前 Core 的二维码供其他设备扫码添加。</p>
-    <div class="pairing-actions">
-      <el-button type="primary" :disabled="!localIdentity || joinBusy || offerBusy" @click="scannerOpen = true">扫描配对码</el-button>
-      <el-button v-if="localMeshBound || desktopAvailable" :loading="offerBusy" :disabled="joinBusy" @click="generatePairingOffer">生成配对二维码</el-button>
-      <el-button :loading="joinBusy" :disabled="!localIdentity || offerBusy" @click="joinCurrentDevice()">手动配对</el-button>
+    <div class="pairing-heading">
+      <div>
+        <h3 id="pairing-title">设备操作</h3>
+        <p class="pairing-description">{{ localCenter ? "由子设备扫描当前统筹中心生成的二维码。" : "使用中心设备生成的二维码加入统筹中心。" }}</p>
+      </div>
+      <slot name="actions" />
     </div>
+    <div class="pairing-actions">
+      <template v-if="localCenter">
+        <el-button type="primary" data-amitia-ui="device-pairing.generate" :loading="offerBusy" :disabled="joinBusy" @click="generatePairingOffer">生成二维码</el-button>
+      </template>
+      <template v-else>
+        <el-button type="primary" data-amitia-ui="device-pairing.scan" :disabled="!localIdentity || joinBusy || offerBusy" @click="scannerOpen = true">扫码配对</el-button>
+        <el-button data-amitia-ui="device-pairing.image" :disabled="!localIdentity || joinBusy || offerBusy" @click="choosePairingImage">使用二维码图片</el-button>
+      </template>
+      <el-button data-amitia-ui="device-pairing.manual" :loading="joinBusy || offerBusy" :disabled="localCenter ? joinBusy : !localIdentity || offerBusy" @click="manualPairing">手动配对</el-button>
+    </div>
+    <input ref="pairingImageInput" class="pairing-image-input" type="file" accept="image/*" aria-label="选择配对二维码图片" @change="readPairingImage" />
     <el-alert v-if="localError" :title="localError" type="warning" show-icon :closable="false" />
-    <DevicePairScanner v-model="scannerOpen" @scanned="joinCurrentDevice" />
+    <DevicePairScanner v-if="!localCenter" v-model="scannerOpen" @scanned="joinCurrentDevice" />
     <div v-if="pairingOffer" class="pairing-offer">
-      <h4>一次性设备配对 Offer</h4>
-      <p class="pairing-description">其他设备可扫描下方二维码加入当前 Core。配对信息使用一次或过期后失效。</p>
-      <img v-if="pairingImage" :src="pairingImage" width="320" height="320" alt="一次性设备配对二维码" class="pairing-qr" />
+      <h4>设备配对二维码</h4>
+      <p class="pairing-description">子设备可在有效期内多次扫描该二维码加入当前 Core；每台设备仍需单独确认审批。</p>
+      <img v-if="pairingImage" :src="pairingImage" width="320" height="320" alt="设备配对二维码" class="pairing-qr" />
       <el-button size="small" @click="copyPairingOffer">复制配对信息</el-button>
       <details class="pairing-details">
         <summary>查看原始配对信息</summary>
@@ -25,6 +36,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
+import { BrowserQRCodeReader } from "@zxing/browser";
 import DevicePairScanner from "@/components/DevicePairScanner.vue";
 import { useApi } from "@/composables/useApi";
 import { useDeviceManagementIntent, deviceManagementRequestConfig } from "@/composables/useDeviceManagementIntent";
@@ -37,16 +49,17 @@ import {
   saveDeploymentConfig,
 } from "@/runtime/runtime-adapter";
 import { initializeRuntimeCapabilities } from "@/runtime/runtime-capabilities";
-import { getWebDeviceCredential, getWebDeviceMeshIdentity } from "@/runtime/web-device-mesh";
+import { getWebDeviceMeshIdentity } from "@/runtime/web-device-mesh";
 import type { PairingInput } from "@/runtime/web-device-mesh";
 
-const props = defineProps<{ serverURL: string }>();
+const props = defineProps<{ serverURL: string; mode?: "local" | "cloud" }>();
 const emit = defineEmits<{ paired: [baseURL: string] }>();
 const api = useApi();
+const localCenter = computed(() => props.mode !== "cloud");
 const localIdentity = ref<{ deviceId?: string } | null>(null);
-const localMeshBound = ref(false);
 const localError = ref("");
 const scannerOpen = ref(false);
+const pairingImageInput = ref<HTMLInputElement>();
 const joinBusy = ref(false);
 const offerBusy = ref(false);
 const pairingOffer = ref("");
@@ -62,21 +75,15 @@ async function loadCurrentDevice() {
   localError.value = "";
   try {
     if (desktopAvailable.value) {
-      const [identity, status] = await Promise.all([
-        window.amitiaDesktop?.getMeshIdentity?.(),
-        window.amitiaDesktop?.getMeshStatus?.(),
-      ]);
+      const identity = await window.amitiaDesktop?.getMeshIdentity?.();
       localIdentity.value = identity || null;
-      const state = String(status?.state || "unknown").toLowerCase();
-      localMeshBound.value = !["", "unknown", "unprovisioned"].includes(state);
     } else {
       const connection = await getRuntimeConnection();
       localIdentity.value = getWebDeviceMeshIdentity();
-      localMeshBound.value = Boolean(getWebDeviceCredential(connection.apiBaseURL));
+      void connection;
     }
   } catch (err: any) {
     localIdentity.value = null;
-    localMeshBound.value = false;
     localError.value = err?.message || "无法读取当前设备的 Device Mesh 身份";
   }
 }
@@ -94,6 +101,7 @@ function coreURL(raw: string) {
 }
 
 async function joinCurrentDevice(scanned?: string) {
+  if (localCenter.value) return;
   if (!localIdentity.value || joinBusy.value || offerBusy.value) return;
   joinBusy.value = true;
   try {
@@ -113,7 +121,7 @@ async function joinCurrentDevice(scanned?: string) {
       const status = await getCurrentDevicePairingStatus(baseURL);
       const first = status.firstDeviceSetupRequired === true;
       const prompt = scanned ? { value: scanned } : await ElMessageBox.prompt(
-        first ? "这是 Cloud Core 的第一台可信设备。请输入 Cloud Core 主机本地生成的一次性设置码。" : "粘贴已信任设备生成的 amitia://pair?... 内容或 Offer Token。",
+        first ? "这是统筹中心的第一台可信设备。请输入中心设备本地生成的一次性设置码。" : "粘贴已信任设备生成的 amitia://pair?... 内容或 Offer Token。",
         first ? "首设备配对" : "设备配对",
         {
           confirmButtonText: "配对",
@@ -129,14 +137,14 @@ async function joinCurrentDevice(scanned?: string) {
       } else if (raw.startsWith("amitia://")) {
         const offer = pairingURI(raw);
         const endpoint = offer.searchParams.get("endpoint");
-        if (endpoint && new URL(endpoint).origin !== new URL(baseURL).origin) throw new Error("配对 Offer 属于另一个 Cloud Core");
+        if (endpoint && new URL(endpoint).origin !== new URL(baseURL).origin) throw new Error("配对 Offer 属于另一个统筹中心");
         pairing = { offerToken: offer.searchParams.get("offer") || "" };
       } else {
         pairing = { offerToken: raw };
       }
       if (!first && !pairing.offerToken) throw new Error("配对 Offer 无效");
     }
-    if (scanned) await ElMessageBox.confirm(`确认连接 Cloud Core（${baseURL}）完成配对？`, "确认服务提供者", { confirmButtonText: "配对", cancelButtonText: "取消" });
+    if (scanned) await ElMessageBox.confirm(`确认连接统筹中心（${baseURL}）完成配对？`, "确认服务提供者", { confirmButtonText: "配对", cancelButtonText: "取消" });
     if (disposed) return;
     await provisionCurrentDeviceMesh(baseURL, pairing);
     if (disposed) return;
@@ -146,7 +154,7 @@ async function joinCurrentDevice(scanned?: string) {
     pairingImage.value = "";
     await loadCurrentDevice();
     emit("paired", baseURL);
-    ElMessage.success("已配对并使用该设备的 Core 服务");
+    ElMessage.success("已配对并使用该统筹中心");
   } catch (err: any) {
     if (err !== "cancel" && err !== "close") ElMessage.error(err?.message || "当前设备加入 Device Mesh 失败");
   } finally {
@@ -155,6 +163,7 @@ async function joinCurrentDevice(scanned?: string) {
 }
 
 async function generatePairingOffer() {
+  if (!localCenter.value) return;
   if (offerBusy.value || joinBusy.value) return;
   offerBusy.value = true;
   let intent: Awaited<ReturnType<typeof management.capture>> | null = null;
@@ -172,11 +181,11 @@ async function generatePairingOffer() {
       }
     }
     const connection = await getRuntimeConnection();
-    const offer = await createCurrentDevicePairingOffer(connection.apiBaseURL, 600);
+    const offer = await createCurrentDevicePairingOffer(connection.apiBaseURL, 1800);
     pairingOffer.value = String(offer.qrPayload || offer.offerToken || "").trim();
     pairingImage.value = String(offer.qrImage || "");
-    if (!pairingOffer.value) throw new Error("Cloud Core 未返回配对 Offer");
-    ElMessage.success("一次性配对 Offer 已生成");
+    if (!pairingOffer.value) throw new Error("统筹中心未返回配对 Offer");
+    ElMessage.success("30 分钟有效的设备配对二维码已生成");
   } catch (err: any) {
     if (err !== "cancel" && err !== "close") ElMessage.error(err?.message || "生成配对 Offer 失败");
   } finally {
@@ -192,6 +201,35 @@ async function copyPairingOffer() {
   ElMessage.success("配对 Offer 已复制");
 }
 
+function choosePairingImage() {
+  if (localCenter.value) return;
+  pairingImageInput.value?.click();
+}
+
+async function readPairingImage(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file || localCenter.value) return;
+  const url = URL.createObjectURL(file);
+  try {
+    const result = await new BrowserQRCodeReader().decodeFromImageUrl(url);
+    await joinCurrentDevice(result.getText());
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : String(error));
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+async function manualPairing() {
+  if (localCenter.value) {
+    await generatePairingOffer();
+    return;
+  }
+  await joinCurrentDevice();
+}
+
 onMounted(loadCurrentDevice);
 onBeforeUnmount(() => { disposed = true; });
 </script>
@@ -199,9 +237,11 @@ onBeforeUnmount(() => { disposed = true; });
 <style scoped>
 .device-pairing-panel { margin-top: 20px; min-width: 0; }
 .device-pairing-panel h3 { margin: 0; font-size: 16px; font-weight: 600; }
+.pairing-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .pairing-description { color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
 .pairing-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .pairing-actions .el-button { margin-left: 0; }
+.pairing-image-input { display: none; }
 .pairing-offer { margin-top: 20px; }
 .pairing-offer h4 { margin: 0; font-size: 14px; }
 .pairing-qr { display: block; max-width: 100%; height: auto; margin: 12px auto; }

@@ -219,6 +219,7 @@ func (s *defaultProcessSupervisor) Start(ctx context.Context, id ProcessID) erro
 			OnStdout:       spec.OnStdout,
 			OnStderr:       spec.OnStderr,
 			OnScannerError: spec.OnStreamError,
+			BindToParent:   spec.BindToParent,
 		})
 		if startErr != nil {
 			s.failStart(id, generation, startErr)

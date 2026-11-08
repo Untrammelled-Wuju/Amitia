@@ -2,6 +2,9 @@ package com.amitia.amitia_app.runtime.internal
 
 import com.amitia.amitia_app.runtime.install.ActiveRuntimeManager
 import com.amitia.amitia_app.runtime.install.ActiveRuntimeResult
+import com.amitia.amitia_app.runtime.install.InstalledRuntimeVerification
+import com.amitia.amitia_app.runtime.install.InstalledRuntimeVerificationResult
+import com.amitia.amitia_app.runtime.install.InstalledRuntimeVerifier
 import com.amitia.amitia_app.runtime.install.RuntimeHostLayout
 import com.amitia.amitia_app.runtime.manifest.RuntimeManifest
 import com.amitia.amitia_app.runtime.manifest.RuntimeManifestResult
@@ -397,7 +400,7 @@ class DefaultRuntimeBootstrapperTest {
             manifestStore = FakeManifestStore(
                 RuntimeManifestResult.Failure(
                     com.amitia.amitia_app.runtime.manifest.RuntimeManifestError(
-                        code = com.amitia.amitia_app.runtime.manifest.RuntimeManifestErrorCode.MANIFEST_CORRUPT,
+                        code = com.amitia.amitia_app.runtime.manifest.RuntimeManifestErrorCode.MANIFEST_INVALID_JSON,
                         manifestMessage = "manifest corrupt",
                     )
                 )
@@ -423,7 +426,10 @@ class DefaultRuntimeBootstrapperTest {
         val bootstrapper = DefaultRuntimeBootstrapper(
             manifestStore = FakeManifestStore(manifestNotFoundResult()),
             activeRuntimeManager = FakeActiveRuntimeManager(
-                ActiveRuntimeResult.Failure("active corrupt")
+                ActiveRuntimeResult.Failure(
+                    com.amitia.amitia_app.runtime.install.RuntimeInstallErrorCode.ACTIVE_RUNTIME_METADATA_INVALID,
+                    "active corrupt",
+                )
             ),
             hostLayout = FakeHostLayout(),
             installedRuntimeVerifier = verifier,

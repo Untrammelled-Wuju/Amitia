@@ -56,6 +56,46 @@ func TestAdministratorRequiresCoordinatedPolicyAndPersistsExplicitGrant(t *testi
 	}
 }
 
+func TestCoordinateTrustedDevicesNormalizesExistingCenterMembersWithoutGrantingAdmin(t *testing.T) {
+	db, svc := setup(t)
+	if _, err := db.Exec(`INSERT INTO kernel_devices(device_id,space_id,trust_state,created_at,last_seen_at) VALUES('core','space','trusted','now','now')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO kernel_devices(device_id,space_id,trust_state,created_at,last_seen_at) VALUES('revoked','space','revoked','now','now')`); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.InitializeCoreConsole(t.Context(), "space", "core", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.InitializeCoreConsole(t.Context(), "space", "core", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.CoordinateTrustedDevices(t.Context(), "space", "core"); err != nil {
+		t.Fatal(err)
+	}
+	for _, device := range []string{"a", "b"} {
+		policy, err := svc.Get(t.Context(), "space", device)
+		if err != nil || !policy.Coordinated || policy.Administrator || policy.ModeRevision != 2 {
+			t.Fatalf("%s not normalized safely: %+v %v", device, policy, err)
+		}
+	}
+	revoked, err := svc.Get(t.Context(), "space", "revoked")
+	if err != nil || revoked.Coordinated || revoked.ModeRevision != 1 {
+		t.Fatalf("revoked device changed: %+v %v", revoked, err)
+	}
+	if err := svc.CoordinateTrustedDevices(t.Context(), "space", "core"); err != nil {
+		t.Fatal(err)
+	}
+	corePolicy, err := svc.Get(t.Context(), "space", "core")
+	if err != nil || !corePolicy.Coordinated || !corePolicy.Administrator || corePolicy.ModeRevision != 2 {
+		t.Fatalf("core console not normalized safely: %+v %v", corePolicy, err)
+	}
+	policy, err := svc.Get(t.Context(), "space", "a")
+	if err != nil || policy.ModeRevision != 2 {
+		t.Fatalf("normalization was not idempotent: %+v %v", policy, err)
+	}
+}
+
 func TestModeCancelsActiveGenerationAndRejectsLateCommit(t *testing.T) {
 	_, svc := setup(t)
 	ctx, scope, finish, err := svc.Begin(t.Context(), "space", "a", "", "core-b", "device-role", "request")
@@ -63,7 +103,7 @@ func TestModeCancelsActiveGenerationAndRejectsLateCommit(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer finish()
-	if scope.RoleOwnerID != "a" || scope.ResourceOwnerID != "a" {
+	if scope.RoleOwnerID != "core-b" || scope.ResourceOwnerID != "a" {
 		t.Fatalf("off owner: %+v", scope)
 	}
 	if _, err := svc.InitializeCoordinated(t.Context(), "space", "a", 1, "core-role"); err != nil {
@@ -85,6 +125,31 @@ func TestModeCancelsActiveGenerationAndRejectsLateCommit(t *testing.T) {
 	}
 	if err := svc.Validate(nextCtx, next); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestSubdeviceKeepsCenterRoleOwnerBeforeAdministratorPromotion(t *testing.T) {
+	_, svc := setup(t)
+	ctx, scope, finish, err := svc.BeginWithOwners(
+		t.Context(),
+		"space",
+		"b",
+		"b",
+		"space",
+		"center-role",
+		"request-subdevice-center-roles",
+		"b",
+		"space",
+	)
+	if err != nil {
+		t.Fatalf("begin subdevice scope: %v", err)
+	}
+	defer finish()
+	if err := coordination.ValidateCurrent(ctx); err != nil {
+		t.Fatalf("validate subdevice scope: %v", err)
+	}
+	if scope.RoleOwnerID != "space" || scope.ResourceOwnerID != "b" {
+		t.Fatalf("unexpected scope owners: role=%s resource=%s", scope.RoleOwnerID, scope.ResourceOwnerID)
 	}
 }
 
@@ -181,7 +246,7 @@ func TestDelegatedScopeUsesTargetModeAndBothDevicesFenceExecution(t *testing.T) 
 		t.Fatal(err)
 	}
 	defer finish()
-	if scope.Coordinated || scope.RoleOwnerID != "b" || scope.ResourceOwnerID != "b" {
+	if scope.Coordinated || scope.RoleOwnerID != "core" || scope.ResourceOwnerID != "b" {
 		t.Fatalf("caller policy replaced target ownership: %+v", scope)
 	}
 	if err := svc.Validate(ctx, scope); err != nil {

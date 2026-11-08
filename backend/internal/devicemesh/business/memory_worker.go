@@ -94,7 +94,7 @@ func (e *Engine) ResumeMemory(ctx context.Context, job coordination.MemoryJobLoc
 	inference.Ingress = saved.Ingress
 	ctx = coordination.WithScope(ctx, inference.Scope)
 	if err := e.finishOwnedTitle(ctx, inference, saved.Response.Generation); err != nil {
-		return *saved.Response, err
+		saved.Response.AddPostProcessingIssue("title", err)
 	}
 	return e.completeMemory(ctx, inference, saved.Hash, *saved.Response, revision)
 }

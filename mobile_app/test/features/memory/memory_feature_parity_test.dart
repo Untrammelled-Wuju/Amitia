@@ -12,6 +12,7 @@ import 'package:amitia_app/core/backend_transport/backend_service_api.dart';
 import 'package:amitia_app/core/services/device_owned_chat_service.dart';
 import 'package:amitia_app/core/services/device_owned_memory_service.dart';
 import 'package:amitia_app/core/services/providers.dart';
+import 'package:amitia_app/core/services/shared_core_data_access.dart';
 import 'package:amitia_app/features/memory/presentation/pages/owned_memory_page.dart';
 import 'package:amitia_app/features/memory/presentation/widgets/owned_memory_graph.dart';
 import 'package:amitia_app/features/memory/presentation/widgets/historical_memory_card.dart';
@@ -290,6 +291,9 @@ void main() {
           memoryDataSourceProvider.overrideWithValue(source),
           deviceOwnedMemoryServiceProvider.overrideWithValue(
             MemoryManagement(api),
+          ),
+          sharedCoreDataAccessProvider.overrideWith(
+            (ref) async => const SharedCoreDataAccess.local(),
           ),
         ],
         child: RepaintBoundary(

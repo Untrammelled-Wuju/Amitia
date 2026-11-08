@@ -2,7 +2,9 @@ package pet_center
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -215,6 +217,176 @@ func TestList_OnlyReturnsDesktopPetPlugins(t *testing.T) {
 	}
 	if len(resp.Plugins) > 0 && resp.Plugins[0].PluginID != "pet-overlay" {
 		t.Errorf("expected pet-overlay, got %s", resp.Plugins[0].PluginID)
+	}
+}
+
+func TestGetBehaviorsReadsContributionMetadata(t *testing.T) {
+	contribution := makePetPluginContrib("com.example/pet-a", "pet-overlay")
+	contribution.Metadata = map[string]any{
+		"behaviors": map[string]any{
+			"version":  1,
+			"revision": "pet-r3",
+			"behaviors": []any{
+				map[string]any{
+					"id":          "wave",
+					"name":        "挥手",
+					"toolId":      "com.example/pet-a/pet-wave",
+					"inputSchema": map[string]any{"type": "object"},
+				},
+			},
+		},
+	}
+	container := &fakeContainer{
+		installations: []domain.ExtensionInstallation{
+			{ExtensionID: "com.example/pet-a", InstalledVersion: domain.SemanticVersion{Major: 1, Minor: 0, Patch: 0}, InstallationState: domain.InstallationStateInstalled, EnablementState: domain.EnablementEnabled},
+		},
+		contributions: []domain.ContributionDefinition{contribution},
+	}
+	service := NewDesktopPetPluginManagementService(container, &fakeRuntime{}, nil)
+	catalog, err := service.GetBehaviors(t.Context(), "pet-overlay")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if catalog.CatalogRevision != "pet-r3" || len(catalog.Behaviors) != 1 || catalog.Behaviors[0].ID != "wave" {
+		t.Fatalf("unexpected pet behavior catalog: %+v", catalog)
+	}
+}
+
+func TestInvokeBehaviorExecutesCatalogToolWithRevisionFence(t *testing.T) {
+	contribution := makePetPluginContrib("com.example/pet-a", "pet-overlay")
+	contribution.Metadata = map[string]any{
+		"behaviors": map[string]any{
+			"version":  1,
+			"revision": "pet-r4",
+			"behaviors": []any{
+				map[string]any{
+					"id":          "wave",
+					"name":        "挥手",
+					"toolId":      "com.example/pet-a/pet-wave",
+					"inputSchema": map[string]any{"type": "object"},
+				},
+			},
+		},
+	}
+	container := &fakeContainer{
+		installations: []domain.ExtensionInstallation{
+			{ExtensionID: "com.example/pet-a", InstalledVersion: domain.SemanticVersion{Major: 1, Minor: 0, Patch: 0}, InstallationState: domain.InstallationStateInstalled, EnablementState: domain.EnablementEnabled},
+		},
+		contributions: []domain.ContributionDefinition{contribution},
+	}
+	var capturedExtension, capturedTool string
+	var capturedScope BehaviorInvocationScope
+	service := NewDesktopPetPluginManagementService(container, &fakeRuntime{}, nil, BehaviorToolExecutor(func(ctx context.Context, extensionID, toolID string, input json.RawMessage, scope BehaviorInvocationScope) (json.RawMessage, error) {
+		capturedExtension = extensionID
+		capturedTool = toolID
+		capturedScope = scope
+		if string(input) != `{"amplitude":2}` {
+			t.Fatalf("unexpected behavior input: %s", input)
+		}
+		return json.RawMessage(`{"ok":true}`), nil
+	}))
+	result, err := service.InvokeBehavior(
+		t.Context(),
+		"pet-overlay",
+		"wave",
+		"pet-r4",
+		json.RawMessage(`{"amplitude":2}`),
+		BehaviorInvocationScope{SpaceID: "space", DeviceID: "device-a", CharacterID: "role", ConversationID: "conversation", Channel: "chat", SessionID: "session", RequestID: "request"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if capturedExtension != "com.example/pet-a" || capturedTool != "com.example/pet-a/pet-wave" {
+		t.Fatalf("unexpected tool route: extension=%s tool=%s", capturedExtension, capturedTool)
+	}
+	if capturedScope.SpaceID != "space" || capturedScope.DeviceID != "device-a" || capturedScope.CharacterID != "role" || capturedScope.RequestID != "request" {
+		t.Fatalf("invocation scope was not preserved: %+v", capturedScope)
+	}
+	if result.BehaviorID != "wave" || result.CatalogRevision != "pet-r4" || string(result.Result) != `{"ok":true}` {
+		t.Fatalf("unexpected invocation result: %+v", result)
+	}
+}
+
+func TestInvokeBehaviorRejectsStaleCatalogRevision(t *testing.T) {
+	contribution := makePetPluginContrib("com.example/pet-a", "pet-overlay")
+	contribution.Metadata = map[string]any{
+		"behaviors": map[string]any{
+			"version":  1,
+			"revision": "pet-r5",
+			"behaviors": []any{
+				map[string]any{"id": "wave", "name": "挥手", "toolId": "com.example/pet-a/pet-wave", "inputSchema": map[string]any{"type": "object"}},
+			},
+		},
+	}
+	container := &fakeContainer{
+		installations: []domain.ExtensionInstallation{{ExtensionID: "com.example/pet-a", InstallationState: domain.InstallationStateInstalled, EnablementState: domain.EnablementEnabled}},
+		contributions: []domain.ContributionDefinition{contribution},
+	}
+	called := false
+	service := NewDesktopPetPluginManagementService(container, &fakeRuntime{}, nil, BehaviorToolExecutor(func(context.Context, string, string, json.RawMessage, BehaviorInvocationScope) (json.RawMessage, error) {
+		called = true
+		return json.RawMessage(`null`), nil
+	}))
+	_, err := service.InvokeBehavior(t.Context(), "pet-overlay", "wave", "pet-r4", json.RawMessage(`{}`), BehaviorInvocationScope{})
+	if !errors.Is(err, ErrBehaviorRevision) {
+		t.Fatalf("expected revision error, got %v", err)
+	}
+	if called {
+		t.Fatal("stale behavior revision must not execute the tool")
+	}
+}
+
+func TestInvokeBehaviorRequiresToolIdAndExecutor(t *testing.T) {
+	contribution := makePetPluginContrib("com.example/pet-a", "pet-overlay")
+	contribution.Metadata = map[string]any{
+		"behaviors": map[string]any{
+			"version":  1,
+			"revision": "pet-r6",
+			"behaviors": []any{
+				map[string]any{"id": "wave", "name": "挥手", "inputSchema": map[string]any{"type": "object"}},
+			},
+		},
+	}
+	container := &fakeContainer{
+		installations: []domain.ExtensionInstallation{{ExtensionID: "com.example/pet-a", InstallationState: domain.InstallationStateInstalled, EnablementState: domain.EnablementEnabled}},
+		contributions: []domain.ContributionDefinition{contribution},
+	}
+	service := NewDesktopPetPluginManagementService(container, &fakeRuntime{}, nil)
+	_, err := service.InvokeBehavior(t.Context(), "pet-overlay", "wave", "pet-r6", json.RawMessage(`{}`), BehaviorInvocationScope{})
+	if !errors.Is(err, ErrBehaviorExecutorMissing) {
+		t.Fatalf("expected missing executor error, got %v", err)
+	}
+	service.executor = func(context.Context, string, string, json.RawMessage, BehaviorInvocationScope) (json.RawMessage, error) {
+		return json.RawMessage(`null`), nil
+	}
+	_, err = service.InvokeBehavior(t.Context(), "pet-overlay", "wave", "pet-r6", json.RawMessage(`{}`), BehaviorInvocationScope{})
+	if !errors.Is(err, ErrBehaviorNotExecutable) || !strings.Contains(err.Error(), "toolId") {
+		t.Fatalf("expected missing toolId error, got %v", err)
+	}
+}
+
+func TestInvokeBehaviorPropagatesExecutorError(t *testing.T) {
+	contribution := makePetPluginContrib("com.example/pet-a", "pet-overlay")
+	contribution.Metadata = map[string]any{
+		"behaviors": map[string]any{
+			"version":  1,
+			"revision": "pet-r7",
+			"behaviors": []any{
+				map[string]any{"id": "wave", "name": "挥手", "toolId": "com.example/pet-a/pet-wave", "inputSchema": map[string]any{"type": "object"}},
+			},
+		},
+	}
+	container := &fakeContainer{
+		installations: []domain.ExtensionInstallation{{ExtensionID: "com.example/pet-a", InstallationState: domain.InstallationStateInstalled, EnablementState: domain.EnablementEnabled}},
+		contributions: []domain.ContributionDefinition{contribution},
+	}
+	original := errors.New("runtime returned status 500: actuator unavailable")
+	service := NewDesktopPetPluginManagementService(container, &fakeRuntime{}, nil, BehaviorToolExecutor(func(context.Context, string, string, json.RawMessage, BehaviorInvocationScope) (json.RawMessage, error) {
+		return nil, original
+	}))
+	_, err := service.InvokeBehavior(t.Context(), "pet-overlay", "wave", "pet-r7", json.RawMessage(`{}`), BehaviorInvocationScope{})
+	if !errors.Is(err, original) || !strings.Contains(err.Error(), "actuator unavailable") {
+		t.Fatalf("original executor error was not preserved: %v", err)
 	}
 }
 

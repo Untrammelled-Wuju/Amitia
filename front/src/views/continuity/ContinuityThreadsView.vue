@@ -236,7 +236,6 @@ watch(viewOptions, options => {
 let generation = 0;
 let detailReadRequest = 0;
 let lastLinkedRole = '';
-let providerTimer: ReturnType<typeof setInterval> | undefined;
 const detailOpen = ref(false);
 const query = ref("");
 const statusFilter = ref<ThreadStatus | "">("");
@@ -465,6 +464,9 @@ function invalidate() {
   selectedId.value = "";
   loading.value = false;
 }
+function refreshProviderWhenVisible() {
+  if (document.visibilityState === "visible") void mesh.refresh().catch(invalidate);
+}
 watch([characterId, source, memoryView, mesh.coreId, () => mesh.policy.value?.providerEpoch, () => mesh.policy.value?.modeRevision, () => mesh.policy.value?.permissionRevision], invalidate, { flush: "sync" });
 watch(() => route.query.characterId, () => { invalidate(); void refresh(); });
 watch(() => route.query.create, () => { void maybeOpenCreateFromQuery(); });
@@ -474,13 +476,15 @@ onMounted(() => {
   window.addEventListener("amitia:runtime-connection-changed", invalidate);
   window.addEventListener("amitia:execution-scope-changed", invalidate);
   window.addEventListener("amitia:memory-scope-changed", refresh);
-  providerTimer = setInterval(() => { void mesh.refresh().catch(invalidate); }, 3000);
+  window.addEventListener("focus", refreshProviderWhenVisible);
+  document.addEventListener("visibilitychange", refreshProviderWhenVisible);
 });
 onUnmounted(() => {
-  if (providerTimer) clearInterval(providerTimer);
   window.removeEventListener("amitia:runtime-connection-changed", invalidate);
   window.removeEventListener("amitia:execution-scope-changed", invalidate);
   window.removeEventListener("amitia:memory-scope-changed", refresh);
+  window.removeEventListener("focus", refreshProviderWhenVisible);
+  document.removeEventListener("visibilitychange", refreshProviderWhenVisible);
   invalidate();
 });
 

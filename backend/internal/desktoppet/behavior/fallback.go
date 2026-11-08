@@ -105,7 +105,7 @@ func DefaultFallbackGraph() *FallbackGraph {
 	g.AddEdge("dragged", "picked_up", "idle_normal")
 	g.AddEdge("greeting", "wave", "bow", "idle_normal")
 	g.AddEdge("goodbye", "wave", "idle_normal")
-	g.AddEdge("excited", "happy", "wave", "idle_normal")
+	g.AddEdge("excited", "wave", "idle_normal")
 	g.AddEdge("scared", "sad", "tired", "idle_normal")
 	g.AddEdge("cry", "sad", "tired", "idle_normal")
 	g.AddEdge("surprised", "idle_blink", "idle_normal")

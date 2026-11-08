@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"sync/atomic"
 
 	protocol "github.com/u-ai/backend/internal/deviceruntime/protocol"
@@ -41,6 +42,9 @@ func (g *bindingGate) ResolveContext(name string) CancellableRuntimeInvokeHandle
 			Operation string `json:"operation"`
 		}
 		rolePreflight := name == "coordination.data" && len(invoke.Input) <= 64<<10 && json.Unmarshal(invoke.Input, &preflight) == nil && preflight.Operation == "roles"
+		if rolePreflight {
+			log.Printf("devicemesh: agent: role preflight invocation=%s active=%t", invoke.InvocationID, g.active.Load())
+		}
 		if !g.active.Load() && !rolePreflight {
 			return nil, errors.New("服务提供者切换尚未完成")
 		}

@@ -9,14 +9,16 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../core/device_mesh/device_presence.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/services/device_mesh_service.dart';
 import '../../../../core/services/device_management_intent.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 import '../../../../core/runtime/backend/mobile_backend_providers.dart';
+import '../../../../core/runtime/backend/mobile_deployment_mode.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_popup_menu.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
-import 'device_core_call_page.dart';
 import 'device_capability_grants_page.dart';
 
 final _devicesProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>(
@@ -38,9 +40,13 @@ final _devicesProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>(
     );
     final devices = await service.devices();
     intent.validate(await service.coordination());
-    return [
-      for (final device in devices) {...device, '_managementIntent': intent},
-    ];
+    final localIdentity = await ref.read(
+      localDeviceMeshIdentityProvider.future,
+    );
+    final localDeviceId = localIdentity?['deviceId']?.toString().trim();
+    return excludeDeviceMeshIdentity(devices, localDeviceId)
+        .map((device) => {...device, '_managementIntent': intent})
+        .toList(growable: false);
   },
 );
 
@@ -50,16 +56,19 @@ class DevicesPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final devicesAsync = ref.watch(_devicesProvider);
+    final isCenter =
+        ref.watch(mobileDeploymentConfigProvider).mode ==
+        MobileDeploymentMode.local;
 
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
-        title: '我的设备',
+        title: '已绑定设备',
         navigation: AmitiaAppBarNavigation.back,
         actions: [
           AmitiaIconButton(
-            icon: Icons.add_link_outlined,
-            tooltip: '添加当前设备',
-            onPressed: () => context.push(AppRoutes.settingsDeviceAdd),
+            icon: isCenter ? Icons.qr_code_2 : Icons.qr_code_scanner,
+            tooltip: isCenter ? '配对新设备' : '加入统筹中心',
+            onPressed: () => _openPairing(context, ref),
           ),
           AmitiaIconButton(
             icon: Icons.tune_outlined,
@@ -120,16 +129,17 @@ class DevicesPage extends ConsumerWidget {
                     Text('暂无已绑定设备', style: AppTypography.cardTitle(context)),
                     const SizedBox(height: 6),
                     Text(
-                      '可将当前设备加入 Cloud Core 的 Device Mesh，设备本地 Runtime / Device Agent 会继续保留。',
+                      isCenter
+                          ? '配对子设备后，它们会显示在这里；设备本地 Runtime / Device Agent 会继续保留。'
+                          : '当前设备加入统筹中心后，中心设备会显示在这里。',
                       style: AppTypography.caption(context),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 18),
                     AmitiaButton(
-                      label: '添加当前设备',
-                      icon: Icons.add_link_outlined,
-                      onPressed: () =>
-                          context.push(AppRoutes.settingsDeviceAdd),
+                      label: isCenter ? '配对新设备' : '加入统筹中心',
+                      icon: isCenter ? Icons.qr_code_2 : Icons.qr_code_scanner,
+                      onPressed: () => _openPairing(context, ref),
                     ),
                     const SizedBox(height: 8),
                     AmitiaButton(
@@ -181,18 +191,9 @@ class DevicesPage extends ConsumerWidget {
                           onRevoke: items[i].intent.canAdminister
                               ? () => _confirmRevoke(context, ref, items[i])
                               : null,
-                          onCall: () => Navigator.of(context).push(
-                            amitiaSlideRoute(
-                              builder: (_) => DeviceCoreCallPage(
-                                deviceId: items[i].deviceId,
-                                label: items[i].name,
-                              ),
-                            ),
-                          ),
                           onGrants:
-                              items[i].intent.canAdminister ||
-                                  items[i].intent.policy['deviceId'] ==
-                                      items[i].deviceId
+                              items[i].intent.canAdminister &&
+                                  isDeviceMeshTrusted(items[i].trustState)
                               ? () => Navigator.of(context).push(
                                   amitiaSlideRoute(
                                     builder: (_) => DeviceCapabilityGrantsPage(
@@ -218,7 +219,9 @@ class DevicesPage extends ConsumerWidget {
                             );
                             return result;
                           },
-                          onProbe: items[i].intent.canAdminister
+                          onProbe:
+                              items[i].intent.canAdminister &&
+                                  isDeviceMeshTrusted(items[i].trustState)
                               ? (runtimeId) async {
                                   final service = ref.read(
                                     deviceMeshServiceProvider,
@@ -311,6 +314,11 @@ class DevicesPage extends ConsumerWidget {
     if (error is StateError) return error.message.toString();
     return error.toString().replaceFirst('Exception: ', '');
   }
+
+  Future<void> _openPairing(BuildContext context, WidgetRef ref) async {
+    await context.push(AppRoutes.settingsDeviceAdd);
+    if (context.mounted) ref.invalidate(_devicesProvider);
+  }
 }
 
 class _RuntimeItem {
@@ -383,7 +391,6 @@ class _DeviceItem {
 class _DeviceTile extends StatefulWidget {
   final _DeviceItem item;
   final VoidCallback? onRevoke;
-  final VoidCallback onCall;
   final VoidCallback? onGrants;
   final Future<Map<String, dynamic>?> Function() onLoadSync;
   final Future<void> Function(String runtimeId)? onProbe;
@@ -391,7 +398,6 @@ class _DeviceTile extends StatefulWidget {
   const _DeviceTile({
     required this.item,
     required this.onRevoke,
-    required this.onCall,
     this.onGrants,
     required this.onLoadSync,
     required this.onProbe,
@@ -409,7 +415,9 @@ class _DeviceTileState extends State<_DeviceTile> {
   @override
   void initState() {
     super.initState();
-    _loadSync(silent: true);
+    if (isDeviceMeshTrusted(widget.item.trustState)) {
+      _loadSync(silent: true);
+    }
   }
 
   @override
@@ -420,7 +428,9 @@ class _DeviceTileState extends State<_DeviceTile> {
       _sync = null;
       _syncLoading = false;
       _probeBusy = '';
-      _loadSync(silent: true);
+      if (isDeviceMeshTrusted(widget.item.trustState)) {
+        _loadSync(silent: true);
+      }
     }
   }
 
@@ -431,17 +441,21 @@ class _DeviceTileState extends State<_DeviceTile> {
         platform.contains('mobile')) {
       return Icons.smartphone_outlined;
     }
-    if (platform.contains('ipad') || platform.contains('tablet'))
+    if (platform.contains('ipad') || platform.contains('tablet')) {
       return Icons.tablet_mac_outlined;
+    }
     return Icons.computer_outlined;
   }
 
   String get _syncLabel {
+    final blocked = deviceSyncBlockedLabel(widget.item.trustState);
+    if (blocked.isNotEmpty) return blocked;
     if (_syncLoading && _sync == null) return '读取中';
     final value = _sync;
     if (value == null) return '暂不可用';
-    if ((value['error'] ?? '').toString().isNotEmpty)
+    if ((value['error'] ?? '').toString().isNotEmpty) {
       return (value['error']).toString();
+    }
     final lastApplied =
         value['lastApplied'] ?? value['lastAppliedSequence'] ?? value['cursor'];
     final latest = value['latest'] ?? value['latestSequence'] ?? value['head'];
@@ -451,29 +465,32 @@ class _DeviceTileState extends State<_DeviceTile> {
   }
 
   Future<void> _loadSync({bool silent = false}) async {
-    if (_syncLoading) return;
+    if (_syncLoading || !isDeviceMeshTrusted(widget.item.trustState)) return;
     setState(() => _syncLoading = true);
     final intent = widget.item.intent;
     try {
       final value = await widget.onLoadSync();
       if (!mounted || !identical(intent, widget.item.intent)) return;
       setState(() => _sync = value ?? <String, dynamic>{});
-      if (!silent)
+      if (!silent) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('同步状态已刷新')));
+      }
     } catch (e) {
       if (!mounted || !identical(intent, widget.item.intent)) return;
       setState(
         () => _sync = <String, dynamic>{'error': DevicesPage._message(e)},
       );
-      if (!silent)
+      if (!silent) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
     } finally {
-      if (mounted && identical(intent, widget.item.intent))
+      if (mounted && identical(intent, widget.item.intent)) {
         setState(() => _syncLoading = false);
+      }
     }
   }
 
@@ -484,20 +501,22 @@ class _DeviceTileState extends State<_DeviceTile> {
     try {
       await widget.onProbe?.call(runtimeId);
     } catch (e) {
-      if (mounted && identical(intent, widget.item.intent))
+      if (mounted && identical(intent, widget.item.intent)) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Runtime 探测失败：${DevicesPage._message(e)}')),
         );
+      }
     } finally {
-      if (mounted && identical(intent, widget.item.intent))
+      if (mounted && identical(intent, widget.item.intent)) {
         setState(() => _probeBusy = '');
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
-    final online = item.presence.toLowerCase() == 'online';
+    final online = isDevicePresenceOnline(item.presence);
     final heartbeat = item.lastHeartbeat == null
         ? '暂无心跳'
         : _relative(item.lastHeartbeat!);
@@ -581,8 +600,6 @@ class _DeviceTileState extends State<_DeviceTile> {
                   switch (action) {
                     case 'sync':
                       _loadSync();
-                    case 'call':
-                      widget.onCall();
                     case 'grants':
                       widget.onGrants?.call();
                     case 'revoke':
@@ -592,13 +609,9 @@ class _DeviceTileState extends State<_DeviceTile> {
                 itemBuilder: (_) => [
                   PopupMenuItem(
                     value: 'sync',
-                    enabled: !_syncLoading,
+                    enabled:
+                        isDeviceMeshTrusted(item.trustState) && !_syncLoading,
                     child: const Text('刷新同步状态'),
-                  ),
-                  PopupMenuItem(
-                    value: 'call',
-                    enabled: item.trustState == 'trusted',
-                    child: const Text('通过 Core 调用'),
                   ),
                   if (widget.onGrants != null)
                     const PopupMenuItem(value: 'grants', child: Text('能力授权')),

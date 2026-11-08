@@ -298,6 +298,12 @@ func (p *qdrantProvider) startProcessWithHealthCheck(ctx context.Context, env qd
 			{Host: "127.0.0.1", Port: p.config.Qdrant.Port + 1, Protocol: "tcp"},
 		},
 		StartupTimeout: policy.StartupTimeout,
+		OnStdout: func(line string) {
+			amitialog.Printf("[qdrant-stdout] %s", line)
+		},
+		OnStderr: func(line string) {
+			amitialog.Printf("[qdrant-stderr] %s", line)
+		},
 	}
 
 	if err := supervisor.Register(processSpec); err != nil {

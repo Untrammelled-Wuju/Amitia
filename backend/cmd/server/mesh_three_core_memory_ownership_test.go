@@ -114,11 +114,11 @@ func TestThreeRealCoreSixMemoryLayersSummaryAndContinuityKeepTheirOwners(t *test
 	for _, kind := range []string{"working", "profile", "episodic", "fact", "vector", "graph", "summary"} {
 		query := threeCoreMemoryQuery(t, b, a, kind, deviceReply.ConversationID)
 		if query.Snapshot.OwnerID != b.core || len(query.Snapshot.Resources) != 0 || query.HistoricalSnapshot == nil || query.HistoricalSnapshot.OwnerID != a.device.DeviceID.String() || len(query.HistoricalSnapshot.Resources) != threeCoreExpectedMemoryCount(kind) {
-			t.Fatalf("开启统筹没有保留设备 %s 历史读取", kind)
+			t.Fatalf("开启统筹没有保留设备 %s 历史读取: current=%s currentResources=%d historical=%+v", kind, query.Snapshot.OwnerID, len(query.Snapshot.Resources), query.HistoricalSnapshot)
 		}
 	}
 	coreReply := decodeThreeCoreMemoryResponse[business.Response](t, b.request(t, a, http.MethodPost, "/api/device-mesh/v1/business/messages", map[string]any{"requestId": "core-six-layers", "characterId": "one", "message": "云端喜欢咖啡"}, http.StatusOK))
-	if !coreReply.Saved || coreReply.MemoryStatus != "saved" || coreReply.Scope.ResourceOwnerID != b.core {
+	if !coreReply.Saved || coreReply.MemoryStatus != "saved" || coreReply.Scope.ResourceOwnerID != a.device.DeviceID.String() || !coreReply.Scope.Coordinated {
 		t.Fatalf("统筹记忆未保存: %s %s", coreReply.MemoryStatus, coreReply.MemoryError)
 	}
 	coreSummary := decodeThreeCoreMemoryResponse[business.SummaryResponse](t, b.request(t, a, http.MethodPost, "/api/device-mesh/v1/business/conversations/"+coreReply.ConversationID+"/summary/generate", map[string]any{"requestId": "core-summary", "characterId": "one", "expectedExecutionScope": coreReply.Scope, "expectedRevision": 0}, http.StatusOK))
@@ -167,7 +167,7 @@ func TestThreeRealCoreSixMemoryLayersSummaryAndContinuityKeepTheirOwners(t *test
 		t.Fatal("B 专属持续事项被自动迁移到 C")
 	}
 	cReply := decodeThreeCoreMemoryResponse[business.Response](t, c.request(t, a, http.MethodPost, "/api/device-mesh/v1/business/messages", map[string]any{"requestId": "c-six-layers", "characterId": "one", "conversationId": coreReply.ConversationID, "message": "切换后继续讨论", "context": business.ForwardedContext{PreviousCoreID: b.core, ConversationID: coreReply.ConversationID, Summary: coreSummary.Text, Messages: []business.ContextMessage{{ID: "previous-b-user", OwnerID: b.core, Role: "user", Content: "云端喜欢咖啡"}, {ID: "previous-b-assistant", OwnerID: b.core, Role: "assistant", Content: coreReply.Text}}}}, http.StatusOK))
-	if !cReply.Saved || cReply.MemoryStatus != "saved" || cReply.Scope.ResourceOwnerID != c.core {
+	if !cReply.Saved || cReply.MemoryStatus != "saved" || cReply.Scope.ResourceOwnerID != a.device.DeviceID.String() || !cReply.Scope.Coordinated {
 		t.Fatalf("携带上下文的新 C 记忆未保存: %s %s", cReply.MemoryStatus, cReply.MemoryError)
 	}
 	cSummary := decodeThreeCoreMemoryResponse[business.SummaryResponse](t, c.request(t, a, http.MethodPost, "/api/device-mesh/v1/business/conversations/"+cReply.ConversationID+"/summary/generate", map[string]any{"requestId": "c-summary", "characterId": "one", "expectedExecutionScope": cReply.Scope, "expectedRevision": 0}, http.StatusOK))

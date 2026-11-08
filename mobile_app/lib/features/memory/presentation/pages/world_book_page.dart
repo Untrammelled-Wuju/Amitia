@@ -12,10 +12,12 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/models/worldbook.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/services/shared_core_data_access.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 import '../../../../core/runtime/backend/mobile_backend_providers.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import '../../../../core/widgets/shared_core_read_only_banner.dart';
 
 class WorldBookPage extends ConsumerStatefulWidget {
   const WorldBookPage({super.key});
@@ -69,6 +71,17 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
 
   @override
   Widget build(BuildContext context) {
+    final accessAsync = ref.watch(sharedCoreDataAccessProvider);
+    final access =
+        accessAsync.valueOrNull ??
+        SharedCoreDataAccess(
+          read: true,
+          write: false,
+          reason: accessAsync.hasError
+              ? '无法确认统筹中心数据权限：${accessAsync.error}'
+              : '正在确认统筹中心数据权限',
+          coreId: '',
+        );
     ref.listen(rawBackendServiceApiProvider, (_, __) {
       final overlay = _overlayContext;
       _overlayContext = null;
@@ -90,17 +103,24 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
         actions: [
           AmitiaIconButton(
             icon: Icons.science_outlined,
-            onPressed: _showMatchTester,
+            tooltip: '匹配测试',
+            onPressed: access.write ? _showMatchTester : null,
           ),
           AmitiaIconButton(
             icon: Icons.file_upload_outlined,
-            onPressed: _importJson,
+            tooltip: '导入世界书',
+            onPressed: access.write ? _importJson : null,
           ),
           AmitiaIconButton(
             icon: Icons.file_download_outlined,
+            tooltip: '导出世界书',
             onPressed: _exportJson,
           ),
-          AmitiaIconButton(icon: Icons.add, onPressed: () => _showEditor(null)),
+          AmitiaIconButton(
+            icon: Icons.add,
+            tooltip: '新增规则',
+            onPressed: access.write ? () => _showEditor(null) : null,
+          ),
         ],
       ),
       body: SafeArea(
@@ -119,6 +139,7 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
                       .toList(growable: false);
             return Column(
               children: [
+                if (access.readOnly) SharedCoreReadOnlyBanner(access: access),
                 _buildFilters(context),
                 Expanded(
                   child: visible.isEmpty
@@ -126,8 +147,10 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
                           icon: Icons.menu_book_outlined,
                           title: '暂无世界书规则',
                           subtitle: '添加规则后，匹配内容会注入对话上下文',
-                          actionText: '新增规则',
-                          onAction: () => _showEditor(null),
+                          actionText: access.write ? '新增规则' : null,
+                          onAction: access.write
+                              ? () => _showEditor(null)
+                              : null,
                         )
                       : RefreshIndicator(
                           onRefresh: _load,
@@ -246,12 +269,12 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
           Row(
             children: [
               TextButton.icon(
-                onPressed: () => _showEditor(entry),
+                onPressed: _canWrite ? () => _showEditor(entry) : null,
                 icon: const Icon(Icons.edit_outlined, size: 16),
                 label: const Text('编辑'),
               ),
               TextButton.icon(
-                onPressed: () => _delete(entry),
+                onPressed: _canWrite ? () => _delete(entry) : null,
                 icon: Icon(
                   Icons.delete_outline,
                   size: 16,
@@ -267,6 +290,7 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
   }
 
   Future<void> _showEditor(WorldBookDto? existing) async {
+    if (!_canWrite) return;
     final patternController = TextEditingController(
       text: existing?.matchPattern ?? '',
     );
@@ -436,6 +460,7 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
   }
 
   Future<void> _showMatchTester() async {
+    if (!_canWrite) return;
     final controller = TextEditingController();
     List<WorldBookMatchDto> matches = const [];
     var testing = false;
@@ -529,6 +554,7 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
   }
 
   Future<void> _importJson() async {
+    if (!_canWrite) return;
     final picked = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['json'],
@@ -611,6 +637,7 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
   }
 
   Future<void> _delete(WorldBookDto entry) async {
+    if (!_canWrite) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
@@ -636,4 +663,7 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
     await ref.read(worldBookServiceProvider).delete(entry.id);
     await _load();
   }
+
+  bool get _canWrite =>
+      ref.read(sharedCoreDataAccessProvider).valueOrNull?.write ?? false;
 }

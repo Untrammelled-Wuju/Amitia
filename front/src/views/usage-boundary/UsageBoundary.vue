@@ -7,8 +7,8 @@ SPDX-License-Identifier: AGPL-3.0-only
     <el-card shadow="never" class="content-card">
       <section class="legal-section">
         <h3>服务使用</h3>
-        <p>你可以在本地模式或自己配置的 Cloud Core 中使用 Amitia。具体可用能力取决于当前部署、模型、扩展、权限和设备运行状态。</p>
-        <p>客户端界面显示某项能力并不代表服务端一定可用；实际执行以当前 Core、Device Agent 和相关服务返回结果为准。</p>
+        <p>你可以把当前设备作为统筹中心，也可以连接自己信任的远程统筹中心。具体可用能力取决于中心授权、设备开放设置、模型、扩展和运行状态。</p>
+        <p>客户端界面显示某项能力并不代表目标设备一定可执行；实际执行以统筹中心、目标设备和相关服务返回结果为准。</p>
       </section>
 
       <el-divider />
@@ -18,7 +18,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         <ul>
           <li>Space ID 仅用于数据归属；云端认证由 Device Credential 完成。</li>
           <li>设备配对、设备凭据、撤销与解除绑定应通过应用提供的真实 Device Mesh 接口完成。</li>
-          <li>云端统筹模式下业务 WebSocket 连接 Cloud Core，本机 Device Agent 继续承担设备侧能力。</li>
+          <li>使用远程统筹中心时，业务连接指向中心，本机 Device Agent 继续承担本机能力。</li>
         </ul>
       </section>
 

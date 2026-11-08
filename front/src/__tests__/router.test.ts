@@ -19,10 +19,10 @@ describe("router", () => {
 
   it("仅提供当前空间与设备地址", () => {
     expect(router.resolve("/my-space").matched.at(-1)?.redirect).toBe("/my-space/profile");
-    for (const section of ["profile", "identity", "runtime"]) {
+    for (const section of ["profile", "identity", "runtime", "devices"]) {
       expect(router.resolve(`/my-space/${section}`).name).toBe(`mySpace${section[0].toUpperCase()}${section.slice(1)}`);
     }
-    for (const removed of ["/user-settings", "/devices", "/my-space/devices"]) {
+    for (const removed of ["/user-settings", "/devices"]) {
       expect(router.resolve(removed).name).toBe("catchAll");
     }
   });

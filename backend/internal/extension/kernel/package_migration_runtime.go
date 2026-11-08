@@ -431,7 +431,7 @@ func (e *migrationExecutorBase) executeScriptSQL(ctx context.Context) (int, erro
 	committed := false
 	defer func() {
 		if !committed {
-			if err := tx.Rollback(); err != nil {
+			if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
 				log.Printf("[original-error] %v", err)
 			}
 		}

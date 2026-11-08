@@ -44,7 +44,7 @@ func TestActualTLSRoleAvatarsFollowRoleOwnerAndClear(t *testing.T) {
 		}
 		t.Fatal("role not found")
 	}
-	assertAvatar(avatars[a])
+	assertAvatar(avatars[b])
 	policy, err := b.services.DeviceMesh.Coordination.Get(t.Context(), b.core, a.device.DeviceID.String())
 	if err != nil {
 		t.Fatal(err)

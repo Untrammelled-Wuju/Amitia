@@ -20,6 +20,7 @@ storage:
     performance:
         max_search_threads: 2
         optimizer_cpu_budget: 1
+        io_uring: disabled
     optimizers:
         default_segment_number: 1
         indexing_threshold_kb: 20000

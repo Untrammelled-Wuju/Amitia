@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:dio/dio.dart';
 import '../backend_transport/backend_service_api.dart';
 import '../backend_transport/providers/backend_transport_providers.dart';
 import '../ui_runtime/ui_runtime_invalidation.dart';
@@ -27,6 +30,7 @@ import 'channel_sandbox_service.dart';
 import 'workspace_service.dart';
 import 'device_mesh_service.dart';
 import 'device_owned_speech_service.dart';
+import 'shared_core_data_access.dart';
 import 'privacy_service.dart';
 import 'temporal_service.dart' as temporal_config;
 import 'onboarding_service.dart';
@@ -266,6 +270,28 @@ final deviceMeshServiceProvider = Provider<DeviceMeshService>(
   (ref) => DeviceMeshService(_getDynamicServiceApi(ref)),
 );
 
+final sharedCoreDataAccessProvider =
+    FutureProvider.autoDispose<SharedCoreDataAccess>((ref) async {
+      ref.watch(mobileDeploymentConfigProvider);
+      final api = ref.watch(rawBackendServiceApiProvider);
+      if (api == null || api.generation <= 0) {
+        throw StateError('无法确认统筹中心数据权限，请恢复 Core 连接后重试');
+      }
+      final deployment = ref.read(mobileDeploymentConfigProvider);
+      if (deployment.mode != MobileDeploymentMode.cloud) {
+        return const SharedCoreDataAccess.local();
+      }
+      final response = await ref.read(deviceMeshServiceProvider).coordination();
+      if (!identical(ref.read(rawBackendServiceApiProvider), api) ||
+          ref.read(mobileDeploymentConfigProvider).mode !=
+              MobileDeploymentMode.cloud ||
+          ref.read(mobileDeploymentConfigProvider).remoteCoreUri !=
+              deployment.remoteCoreUri) {
+        throw StateError('统筹中心已切换，请重新加载数据权限');
+      }
+      return SharedCoreDataAccess.fromCoordination(response);
+    });
+
 final mobileDeviceMeshIdentityProvider = Provider<MobileDeviceMeshIdentity>(
   (ref) => const MobileDeviceMeshIdentity(),
 );
@@ -313,6 +339,13 @@ final localDeviceMeshStatusProvider =
     FutureProvider.autoDispose<Map<String, dynamic>?>((ref) async {
       final service = ref.watch(deviceMeshLocalServiceProvider);
       return service?.status();
+    });
+
+final deviceCapabilityExposureProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+      final service = ref.watch(deviceMeshLocalServiceProvider);
+      if (service == null) throw StateError('本机 Runtime 当前不可用');
+      return service.capabilityExposure();
     });
 
 final privacyServiceProvider = Provider<PrivacyService>(
@@ -455,7 +488,7 @@ final clientRuntimeSessionStateProvider = StreamProvider.autoDispose
         } catch (error, stackTrace) {
           print("[original-error] $error\n$stackTrace");
         }
-        await Future<void>.delayed(const Duration(seconds: 2));
+        await Future<void>.delayed(const Duration(seconds: 30));
       }
     });
 
@@ -471,39 +504,68 @@ final conversationUIEventWindowProvider = StreamProvider.autoDispose
       final seen = <String>{};
       var cursor = 0;
       var emittedInitial = false;
+      final cancelToken = CancelToken();
+      ref.onDispose(cancelToken.cancel);
       const pageSize = 2000;
 
-      while (true) {
+      bool append(Map<String, dynamic> row) {
+        final sequence = (row['sequence'] as num?)?.toInt() ?? 0;
+        final eventId = (row['eventId'] ?? '').toString();
+        final key = sequence > 0 ? 'seq:$sequence' : 'id:$eventId';
+        if (!seen.add(key)) return false;
+        records.add(row);
+        if (sequence > cursor) cursor = sequence;
+        return true;
+      }
+
+      Future<bool> catchUp() async {
         var changed = false;
         while (true) {
-          try {
-            final page = await svc.getConversationUIEventsAfterSequence(
-              id,
-              afterSequence: cursor,
-              limit: pageSize,
-            );
-            if (page.isEmpty) break;
-            for (final row in page) {
-              final sequence = (row['sequence'] as num?)?.toInt() ?? 0;
-              final eventId = (row['eventId'] ?? '').toString();
-              final key = sequence > 0 ? 'seq:$sequence' : 'id:$eventId';
-              if (seen.add(key)) {
-                records.add(row);
-                changed = true;
-              }
-              if (sequence > cursor) cursor = sequence;
-            }
-            if (page.length < pageSize) break;
-          } catch (error, stackTrace) {
-            print("[original-error] $error\n$stackTrace");
-            break;
+          final page = await svc.getConversationUIEventsAfterSequence(
+            id,
+            afterSequence: cursor,
+            limit: pageSize,
+          );
+          for (final row in page) {
+            changed = append(row) || changed;
           }
+          if (page.length < pageSize) break;
         }
-        if (changed || !emittedInitial) {
-          emittedInitial = true;
-          yield List<Map<String, dynamic>>.unmodifiable(records);
+        return changed;
+      }
+
+      while (!cancelToken.isCancelled) {
+        try {
+          final changed = await catchUp();
+          if (changed || !emittedInitial) {
+            emittedInitial = true;
+            yield List<Map<String, dynamic>>.unmodifiable(records);
+          }
+          final eventStream = await svc.conversationUIEvents(
+            id,
+            afterSequence: cursor,
+            cancelToken: cancelToken,
+          );
+          await for (final row in eventStream) {
+            if (append(row)) {
+              yield List<Map<String, dynamic>>.unmodifiable(records);
+            }
+          }
+        } catch (error, stackTrace) {
+          if (cancelToken.isCancelled) return;
+          print("[original-error] $error\n$stackTrace");
         }
-        await Future<void>.delayed(const Duration(seconds: 1));
+        if (cancelToken.isCancelled) return;
+        try {
+          if (await catchUp()) {
+            emittedInitial = true;
+            yield List<Map<String, dynamic>>.unmodifiable(records);
+          }
+        } catch (error, stackTrace) {
+          if (cancelToken.isCancelled) return;
+          print("[original-error] $error\n$stackTrace");
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 900));
       }
     });
 

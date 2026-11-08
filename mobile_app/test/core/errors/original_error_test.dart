@@ -14,6 +14,23 @@ void main() {
     expect(originalErrorText(error), 'Bad state: 原始服务错误');
   });
 
+  test('BackendTransportError preserves response body before cause', () {
+    final error = BackendTransportError(
+      code: BackendTransportErrorCode.conflict,
+      statusCode: 409,
+      responseBody: {
+        'code': 'pairing.already_paired',
+        'message': '该设备已添加，无需重复扫码',
+      },
+      cause: Exception('transport failed'),
+    );
+
+    final text = originalErrorText(error);
+    expect(text, contains('该设备已添加，无需重复扫码'));
+    expect(text, contains('pairing.already_paired'));
+    expect(text, contains('transport failed'));
+  });
+
   test('ServiceApiException exposes the original message through toString', () {
     final error = ServiceApiException(code: 409, message: '项目数据版本冲突');
     expect(error.toString(), '项目数据版本冲突');

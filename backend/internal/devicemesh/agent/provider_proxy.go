@@ -56,6 +56,13 @@ func (h *LocalHandler) handleProviderProxy(c *gin.Context) {
 		c.JSON(403, gin.H{"message": util.OriginalErrorMessage(err, "仅允许本机访问云端连接通道")})
 		return
 	}
+	h.mu.RLock()
+	coreMode := h.coreMode
+	h.mu.RUnlock()
+	if coreMode {
+		c.JSON(409, gin.H{"code": "mesh.agent_mode_required", "message": "当前 Runtime 是统筹中心节点，不代理远程统筹中心请求"})
+		return
+	}
 	h.providerMu.Lock()
 	providerContext, paused := h.providerContext, h.providerPaused
 	h.providerMu.Unlock()
@@ -77,7 +84,7 @@ func (h *LocalHandler) handleProviderProxy(c *gin.Context) {
 	c.Request = c.Request.WithContext(requestContext)
 	credential, err := h.credStore.LoadCredential()
 	if err != nil || credential == nil || !time.Now().Before(credential.ExpiresAt) {
-		c.JSON(401, gin.H{"message": util.OriginalErrorMessage(err, "云端绑定凭证不可用，请重新配对")})
+		c.JSON(401, gin.H{"message": util.OriginalErrorMessage(err, "统筹中心凭证不可用，请重新配对")})
 		return
 	}
 	path := c.Param("path")

@@ -4,6 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../runtime_bridge_provider.dart';
 import '../../backend_connection/providers/backend_connection_providers.dart';
+import '../../backend_connection/backend_connection_availability.dart';
+import '../../backend_connection/backend_connection_repository.dart';
+import '../../backend_connection/backend_connection_source.dart';
 import '../../backend_transport/providers/backend_transport_providers.dart';
 import '../../backend_transport/state/backend_transport_state.dart';
 import '../backend/mobile_backend_providers.dart';
@@ -16,13 +19,19 @@ final runtimeStatusProjectionProvider = Provider<RuntimeStatusProjection>((
   ref,
 ) {
   final bridge = ref.watch(runtimeBridgeProvider);
-  final connectionSource = ref.watch(backendConnectionSourceProvider);
   final mode = ref.watch(mobileDeploymentConfigProvider).mode;
+  final rawConnectionSource = ref.watch(backendConnectionSourceProvider);
+  final connectionSource = mode == MobileDeploymentMode.local
+      ? rawConnectionSource
+      : RepositoryBackendConnectionSource(
+          ref.watch(backendConnectionRepositoryProvider),
+        );
   final transportSource = _TransportStateSourceImpl(ref, mode);
   final projection = DefaultRuntimeStatusProjection(
     bridge: bridge,
     connectionSource: connectionSource,
     transportStateSource: transportSource,
+    connectionOwnsGeneration: mode != MobileDeploymentMode.local,
   );
 
   ref.onDispose(() async {
@@ -128,5 +137,19 @@ class _TransportStateSourceImpl implements TransportStateSource {
     if (_closed) return;
     _closed = true;
     await _controller.close();
+  }
+}
+
+final class RepositoryBackendConnectionSource
+    implements BackendConnectionSource {
+  final BackendConnectionRepository _repository;
+
+  const RepositoryBackendConnectionSource(this._repository);
+
+  @override
+  Future<BackendConnectionAvailability> resolve({
+    int? expectedRuntimeGeneration,
+  }) {
+    return _repository.resolve(expectedRuntimeGeneration: null);
   }
 }

@@ -84,7 +84,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
           _configs = const [];
           _providers = const [];
           _loading = false;
-          _error = '云端统筹模式下，只有获授权的 Core 管理员设备可以配置模型，请在 Core 控制页面修改。';
+          _error = '模型由统筹中心统一管理，只有获授权的中心管理员设备可以配置。';
         });
         return;
       }

@@ -13,9 +13,9 @@ func (rt *Runtime) ProjectionState(ctx context.Context, scope coordination.Execu
 		return coordination.ProjectionStatus{}, err
 	}
 	var data coordination.DataPort
-	if scope.Coordinated {
+	if scope.ResourceOwnerID == scope.CoreID {
 		data = rt.CoreDataPort
-	} else if scope.TargetDeviceID == rt.LocalDeviceID {
+	} else if scope.ResourceOwnerID == rt.LocalDeviceID {
 		data = rt.LocalDeviceDataPort
 	}
 	var result coordination.ProjectionStatus
@@ -52,9 +52,9 @@ func (rt *Runtime) MemoryDeletionComplete(ctx context.Context, scope coordinatio
 		return false, err
 	}
 	var data coordination.DataPort
-	if scope.Coordinated {
+	if scope.ResourceOwnerID == scope.CoreID {
 		data = rt.CoreDataPort
-	} else if scope.TargetDeviceID == rt.LocalDeviceID {
+	} else if scope.ResourceOwnerID == rt.LocalDeviceID {
 		data = rt.LocalDeviceDataPort
 	}
 	if data != nil {
@@ -89,9 +89,9 @@ func (rt *Runtime) CleanupMemoryDeletions(ctx context.Context, scope coordinatio
 		return 0, fmt.Errorf("清理路由校验失败: %w", err)
 	}
 	var data coordination.DataPort
-	if scope.Coordinated {
+	if scope.ResourceOwnerID == scope.CoreID {
 		data = rt.CoreDataPort
-	} else if scope.TargetDeviceID == rt.LocalDeviceID {
+	} else if scope.ResourceOwnerID == rt.LocalDeviceID {
 		data = rt.LocalDeviceDataPort
 	}
 	if data != nil {

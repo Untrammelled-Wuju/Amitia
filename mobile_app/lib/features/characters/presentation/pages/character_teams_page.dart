@@ -8,8 +8,11 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
+import '../../../../core/services/providers.dart';
+import '../../../../core/services/shared_core_data_access.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import '../../../../core/widgets/shared_core_read_only_banner.dart';
 
 class CharacterTeamsPage extends ConsumerStatefulWidget {
   const CharacterTeamsPage({super.key});
@@ -146,6 +149,7 @@ class _CharacterTeamsPageState extends ConsumerState<CharacterTeamsPage> {
       '系统';
 
   Future<void> _createTeam() async {
+    if (!_canWrite) return;
     final value = await _showTeamEditor(title: '新建团队');
     if (value == null) return;
     setState(() => _acting = true);
@@ -176,6 +180,7 @@ class _CharacterTeamsPageState extends ConsumerState<CharacterTeamsPage> {
   }
 
   Future<void> _editTeam() async {
+    if (!_canWrite) return;
     if (_detail == null) return;
     final value = await _showTeamEditor(title: '编辑团队', initial: _team);
     if (value == null) return;
@@ -201,6 +206,7 @@ class _CharacterTeamsPageState extends ConsumerState<CharacterTeamsPage> {
   }
 
   Future<void> _addMember() async {
+    if (!_canWrite) return;
     if (_detail == null) return;
     final memberIds = _members
         .map((member) => member['memberId']?.toString())
@@ -299,6 +305,7 @@ class _CharacterTeamsPageState extends ConsumerState<CharacterTeamsPage> {
   }
 
   Future<void> _addContext() async {
+    if (!_canWrite) return;
     if (_detail == null) return;
     final content = await _askText('添加共享上下文', '规则、决策或共享知识', maxLines: 4);
     if (content == null || content.trim().isEmpty) return;
@@ -329,6 +336,7 @@ class _CharacterTeamsPageState extends ConsumerState<CharacterTeamsPage> {
   }
 
   Future<void> _testRoute() async {
+    if (!_canWrite) return;
     if (_detail == null) return;
     final message = await _askText('团队消息路由', '测试消息');
     if (message == null || message.trim().isEmpty) return;
@@ -568,6 +576,17 @@ class _CharacterTeamsPageState extends ConsumerState<CharacterTeamsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final accessAsync = ref.watch(sharedCoreDataAccessProvider);
+    final access =
+        accessAsync.valueOrNull ??
+        SharedCoreDataAccess(
+          read: true,
+          write: false,
+          reason: accessAsync.hasError
+              ? '无法确认统筹中心数据权限：${accessAsync.error}'
+              : '正在确认统筹中心数据权限',
+          coreId: '',
+        );
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '团队',
@@ -576,7 +595,7 @@ class _CharacterTeamsPageState extends ConsumerState<CharacterTeamsPage> {
           AmitiaIconButton(
             icon: Icons.add,
             tooltip: '新建团队',
-            onPressed: _acting ? null : _createTeam,
+            onPressed: _acting || !access.write ? null : _createTeam,
           ),
         ],
       ),
@@ -585,6 +604,7 @@ class _CharacterTeamsPageState extends ConsumerState<CharacterTeamsPage> {
           : ListView(
               padding: EdgeInsets.all(AppSpacing.pagePadding),
               children: [
+                if (access.readOnly) SharedCoreReadOnlyBanner(access: access),
                 if (_error != null)
                   Container(
                     padding: EdgeInsets.all(AppSpacing.sm),
@@ -604,8 +624,8 @@ class _CharacterTeamsPageState extends ConsumerState<CharacterTeamsPage> {
                     icon: Icons.groups_outlined,
                     title: '暂无团队',
                     subtitle: '创建团队后，可统一管理负责人、成员和共享上下文。',
-                    actionText: '新建团队',
-                    onAction: _createTeam,
+                    actionText: access.write ? '新建团队' : null,
+                    onAction: access.write ? _createTeam : null,
                   )
                 else ...[
                   SizedBox(
@@ -689,7 +709,7 @@ class _CharacterTeamsPageState extends ConsumerState<CharacterTeamsPage> {
                   ),
                 ),
                 TextButton(
-                  onPressed: _acting ? null : _editTeam,
+                  onPressed: _acting || !_canWrite ? null : _editTeam,
                   child: const Text('编辑'),
                 ),
               ],
@@ -719,15 +739,15 @@ class _CharacterTeamsPageState extends ConsumerState<CharacterTeamsPage> {
               runSpacing: AppSpacing.sm,
               children: [
                 OutlinedButton(
-                  onPressed: _acting ? null : _addMember,
+                  onPressed: _acting || !_canWrite ? null : _addMember,
                   child: const Text('添加成员'),
                 ),
                 OutlinedButton(
-                  onPressed: _acting ? null : _addContext,
+                  onPressed: _acting || !_canWrite ? null : _addContext,
                   child: const Text('添加共享上下文'),
                 ),
                 OutlinedButton(
-                  onPressed: _acting ? null : _testRoute,
+                  onPressed: _acting || !_canWrite ? null : _testRoute,
                   child: const Text('测试路由'),
                 ),
               ],
@@ -847,4 +867,7 @@ class _CharacterTeamsPageState extends ConsumerState<CharacterTeamsPage> {
           ],
         ),
       );
+
+  bool get _canWrite =>
+      ref.read(sharedCoreDataAccessProvider).valueOrNull?.write ?? false;
 }

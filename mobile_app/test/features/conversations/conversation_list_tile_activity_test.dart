@@ -6,6 +6,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('UTC 会话时间按设备本地时区显示', () {
+    final value = DateTime.parse('2026-11-08T04:39:00Z').toLocal();
+    final hour = value.hour.toString().padLeft(2, '0');
+    final minute = value.minute.toString().padLeft(2, '0');
+    expect(
+      formatConversationTime('2026-11-08T04:39:00Z'),
+      anyOf('$hour:$minute', contains('$hour:$minute')),
+    );
+  });
+
   testWidgets('消息项显示工具状态、未读数和时间下方加载图标', (tester) async {
     final conversation = ConversationDto(
       id: 'conversation-a',

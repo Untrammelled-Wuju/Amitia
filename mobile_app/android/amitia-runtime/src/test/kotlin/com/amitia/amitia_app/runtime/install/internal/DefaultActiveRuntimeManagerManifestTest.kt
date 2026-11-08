@@ -312,6 +312,7 @@ internal class FakeRuntimeHostLayoutWithManifest(
     override val metadataRoot: File = File(controlRoot, RuntimeHostLayout.DIR_METADATA)
     override val transactionsRoot: File = File(controlRoot, RuntimeHostLayout.DIR_TRANSACTIONS)
     override val locksRoot: File = File(controlRoot, RuntimeHostLayout.DIR_LOCKS)
+    override val packagesRoot: File = File(controlRoot, RuntimeHostLayout.DIR_PACKAGES)
 
     override val configRoot: File = File(dataDir, RuntimeHostLayout.DIR_CONFIG)
     override val dataRoot: File = File(dataDir, RuntimeHostLayout.DIR_DATA)

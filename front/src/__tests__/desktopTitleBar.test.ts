@@ -66,6 +66,7 @@ describe("跨端窗口导航控件", () => {
     expect(titleBarSource).not.toMatch(/#WindowControlButtons\s*\{[^}]*z-index:/);
     expect(titleBarSource).not.toContain("-webkit-backdrop-filter: blur");
     expect(titleBarSource).not.toContain("filter: brightness");
+    expect(indexHtmlSource).toContain("worker-src 'self' blob:");
     expect(appShellSource).toContain("height: 100%;");
     expect(backgroundSource).toContain("position: absolute !important");
     expect(appSource).toContain("html.amitia-titlebar-shell .el-overlay {\n  top: 0 !important;");

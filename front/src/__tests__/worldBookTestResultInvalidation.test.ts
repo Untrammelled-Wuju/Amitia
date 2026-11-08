@@ -42,6 +42,15 @@ const state = {
 vi.mock("@/composables/useWorldBook", () => ({
   useWorldBook: () => state,
 }));
+vi.mock("@/composables/useCoreDataAccess", () => ({
+  useCoreDataAccess: () => ({
+    access: { value: { read: true, write: true, reason: "", coreId: "core" } },
+    checking: { value: false },
+    error: { value: "" },
+    refresh: async () => ({ read: true, write: true, reason: "", coreId: "core" }),
+    requireWrite: async () => ({ read: true, write: true, reason: "", coreId: "core" }),
+  }),
+}));
 
 beforeEach(() => {
   state.fetchRules.mockClear();

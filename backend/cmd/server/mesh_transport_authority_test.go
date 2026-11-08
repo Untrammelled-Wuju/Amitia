@@ -92,6 +92,11 @@ func TestOwnedAuthorityAcrossRealTLSMeshReconnectAndPermissionChange(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
+	coreDataPort, err := newMeshLocalDataPort(p.services, dir, "core")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt.CoreDataPort = coreDataPort
 	raw, err := credential.GenerateRawCredential()
 	if err != nil {
 		t.Fatal(err)

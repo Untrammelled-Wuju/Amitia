@@ -44,6 +44,7 @@ type DataQuery struct {
 	HistoricalRoleID     string                 `json:"historicalRoleId,omitempty"`
 	ListConversations    bool                   `json:"listConversations,omitempty"`
 	GroupState           *GroupState            `json:"-"`
+	Role                 *Role                  `json:"role,omitempty"`
 }
 
 type RoleCatalogPort interface {
@@ -83,6 +84,10 @@ type DataPort interface {
 	Roles(context.Context, ExecutionScope) ([]Role, error)
 	Snapshot(context.Context, ExecutionScope, DataQuery) (DataSnapshot, error)
 	Commit(context.Context, Commit) (Acknowledgement, error)
+}
+
+type RoleSnapshotPort interface {
+	SnapshotWithRole(context.Context, ExecutionScope, DataQuery, Role) (DataSnapshot, error)
 }
 
 type HistoricalDataPort interface {
@@ -183,7 +188,7 @@ func ValidateSnapshot(scope ExecutionScope, snapshot DataSnapshot) error {
 		validWorldbookRole := resource.Kind == "worldbook" && (resource.RoleID == scope.RoleID || resource.RoleID == GlobalWorldbookRole)
 		validGlobalMemoryRole := !scope.MemoryViewAll && scope.MemoryRoleID != GlobalMemoryRole && resource.RoleID == GlobalMemoryRole && MemoryKind(resource.Kind)
 		validGroupRole := snapshot.GroupRoles != nil && GroupConversationKind(resource.Kind) && snapshot.GroupRoles[GroupResourceConversationID(resource)] == resource.RoleID
-		if resource.OwnerID != scope.ResourceOwnerID || resource.RoleID == "" || resource.RoleID != StorageRole(scope, resource.Kind) && !validWorldbookRole && !validGroupRole && !validGlobalMemoryRole && !(scope.MemoryViewAll && MemoryKind(resource.Kind)) || resource.Deleted || !validKind(resource.Kind) || resource.ID == "" || resource.Revision < 1 || !json.Valid(resource.Body) || seen[key] {
+		if resource.OwnerID != DataOwnerID(scope, resource.Kind) || resource.RoleID == "" || resource.RoleID != StorageRole(scope, resource.Kind) && !validWorldbookRole && !validGroupRole && !validGlobalMemoryRole && !(scope.MemoryViewAll && MemoryKind(resource.Kind)) || resource.Deleted || !validKind(resource.Kind) || resource.ID == "" || resource.Revision < 1 || !json.Valid(resource.Body) || seen[key] {
 			return fmt.Errorf("%w: 无效上下文记录", ErrWrongOwner)
 		}
 		seen[key] = true

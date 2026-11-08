@@ -33,7 +33,7 @@ func TestDeviceManagementIntentOriginalPolicyAndOrdinarySelfGrant(t *testing.T) 
 			}
 			db.SetMaxOpenConns(1)
 			t.Cleanup(func() { db.Close() })
-			for _, schema := range []string{coordination.PolicySchema, coordination.CapabilityGrantsSchema, coordination.ProviderSchema, coordination.RemoteAuthoritySchema, coordination.CancelledAuthoritySchema, coordination.SourceAuthoritySchema, meshaudit.Schema, `CREATE TABLE kernel_devices(device_id TEXT PRIMARY KEY,space_id TEXT,trust_state TEXT,created_at TEXT,last_seen_at TEXT)`} {
+			for _, schema := range []string{coordination.PolicySchema, coordination.CapabilityGrantsSchema, coordination.CapabilityExposureSchema, coordination.CapabilityExposureStateSchema, coordination.ProviderSchema, coordination.RemoteAuthoritySchema, coordination.CancelledAuthoritySchema, coordination.SourceAuthoritySchema, meshaudit.Schema, `CREATE TABLE kernel_devices(device_id TEXT PRIMARY KEY,space_id TEXT,trust_state TEXT,created_at TEXT,last_seen_at TEXT)`} {
 				if _, err := db.Exec(schema); err != nil {
 					t.Fatal(err)
 				}
@@ -69,7 +69,7 @@ func TestDeviceManagementIntentOriginalPolicyAndOrdinarySelfGrant(t *testing.T) 
 				defer finish()
 				grant, err := svc.SetCapabilityGrant(c.Request.Context(), "space", "b", "a", "ai.chat", 0, true)
 				if err != nil {
-					c.Status(409)
+					c.JSON(409, gin.H{"message": err.Error()})
 					return
 				}
 				if grant.Revision != 1 || !grant.Allowed {
@@ -84,7 +84,7 @@ func TestDeviceManagementIntentOriginalPolicyAndOrdinarySelfGrant(t *testing.T) 
 			out := httptest.NewRecorder()
 			router.ServeHTTP(out, req)
 			if out.Code != scenario.status || writes != map[bool]int{true: 1, false: 0}[scenario.status == 200] {
-				t.Fatalf("status %d writes %d, expected %d", out.Code, writes, scenario.status)
+				t.Fatalf("status %d writes %d, expected %d body=%s", out.Code, writes, scenario.status, out.Body.String())
 			}
 			if scenario.status == 200 {
 				policy, err := svc.Get(t.Context(), "space", "a")

@@ -1,3 +1,89 @@
+class GameModeSession {
+  final String spaceId;
+  final String sessionId;
+  final String deviceId;
+  final String state;
+  final String gameExtensionId;
+  final String gamePluginId;
+  final String gameTitle;
+  final String runtimeId;
+  final int revision;
+  final DateTime? startedAt;
+  final DateTime? updatedAt;
+  final DateTime? releasedAt;
+
+  const GameModeSession({
+    required this.spaceId,
+    required this.sessionId,
+    required this.deviceId,
+    required this.state,
+    required this.gameExtensionId,
+    required this.gamePluginId,
+    required this.gameTitle,
+    required this.runtimeId,
+    required this.revision,
+    this.startedAt,
+    this.updatedAt,
+    this.releasedAt,
+  });
+
+  bool get active => state.isNotEmpty && state != 'inactive';
+
+  factory GameModeSession.fromJson(Map<String, dynamic> json) {
+    return GameModeSession(
+      spaceId: (json['spaceId'] ?? '').toString(),
+      sessionId: (json['sessionId'] ?? '').toString(),
+      deviceId: (json['deviceId'] ?? '').toString(),
+      state: (json['state'] ?? 'inactive').toString(),
+      gameExtensionId: (json['gameExtensionId'] ?? '').toString(),
+      gamePluginId: (json['gamePluginId'] ?? '').toString(),
+      gameTitle: (json['gameTitle'] ?? '').toString(),
+      runtimeId: (json['runtimeId'] ?? '').toString(),
+      revision: (json['revision'] as num?)?.toInt() ?? 0,
+      startedAt: json['startedAt'] != null
+          ? DateTime.tryParse(json['startedAt'].toString())
+          : null,
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.tryParse(json['updatedAt'].toString())
+          : null,
+      releasedAt: json['releasedAt'] != null
+          ? DateTime.tryParse(json['releasedAt'].toString())
+          : null,
+    );
+  }
+}
+
+class GameModeStatus {
+  final GameModeSession session;
+  final String currentDeviceId;
+  final bool owned;
+  final bool canAcquire;
+
+  const GameModeStatus({
+    required this.session,
+    required this.currentDeviceId,
+    required this.owned,
+    required this.canAcquire,
+  });
+
+  factory GameModeStatus.fromJson(Map<String, dynamic> json) {
+    final rawSession = json['session'];
+    if (rawSession is! Map) {
+      throw StateError('GameModeStatus: session is missing');
+    }
+    final currentDeviceId = (json['currentDeviceId'] ?? '').toString();
+    if (currentDeviceId.isEmpty) {
+      throw StateError('GameModeStatus: currentDeviceId is missing');
+    }
+    return GameModeStatus(
+      session: GameModeSession.fromJson(Map<String, dynamic>.from(rawSession)),
+      currentDeviceId: currentDeviceId,
+      owned: json['owned'] == true,
+      canAcquire: json['canAcquire'] == true,
+    );
+  }
+}
+
 class GamePluginSummary {
   final String extensionId;
   final String pluginId;
@@ -106,14 +192,20 @@ class GamePluginDetail {
       packageRevision: json['packageRevision'] as String?,
       descriptorRevision: json['descriptorRevision'] as String?,
       managementTarget: (json['managementTarget'] ?? '').toString(),
-      capabilities: ((json['capabilities'] as List?) ?? []).map((e) => e.toString()).toList(),
-      permissions: ((json['permissions'] as List?) ?? []).map((e) => e.toString()).toList(),
+      capabilities: ((json['capabilities'] as List?) ?? [])
+          .map((e) => e.toString())
+          .toList(),
+      permissions: ((json['permissions'] as List?) ?? [])
+          .map((e) => e.toString())
+          .toList(),
       provider: json['provider'] as String?,
       runtimes: ((json['runtimes'] as List?) ?? [])
           .map((e) => GameRuntimeSummary.fromJson(e as Map<String, dynamic>))
           .toList(),
       healthSummary: json['healthSummary'] != null
-          ? HealthSummary.fromJson(json['healthSummary'] as Map<String, dynamic>)
+          ? HealthSummary.fromJson(
+              json['healthSummary'] as Map<String, dynamic>,
+            )
           : null,
     );
   }
@@ -135,14 +227,20 @@ class GamePluginDetail {
       packageRevision: json['packageRevision'] as String?,
       descriptorRevision: json['descriptorRevision'] as String?,
       managementTarget: (json['managementTarget'] ?? '').toString(),
-      capabilities: ((json['capabilities'] as List?) ?? []).map((e) => e.toString()).toList(),
-      permissions: ((json['permissions'] as List?) ?? []).map((e) => e.toString()).toList(),
+      capabilities: ((json['capabilities'] as List?) ?? [])
+          .map((e) => e.toString())
+          .toList(),
+      permissions: ((json['permissions'] as List?) ?? [])
+          .map((e) => e.toString())
+          .toList(),
       provider: json['provider'] as String?,
       runtimes: ((json['runtimes'] as List?) ?? [])
           .map((e) => GameRuntimeSummary.fromJson(e as Map<String, dynamic>))
           .toList(),
       healthSummary: json['healthSummary'] != null
-          ? HealthSummary.fromJson(json['healthSummary'] as Map<String, dynamic>)
+          ? HealthSummary.fromJson(
+              json['healthSummary'] as Map<String, dynamic>,
+            )
           : null,
     );
   }
@@ -246,13 +344,19 @@ class GameRuntimeDetail {
       extensionId: (json['extensionId'] ?? '').toString(),
       runtimeState: (json['runtimeState'] ?? '').toString(),
       desiredState: json['desiredState'] as String?,
-      createdAt: json['createdAt'] != null ? DateTime.tryParse(json['createdAt']) : null,
-      updatedAt: json['updatedAt'] != null ? DateTime.tryParse(json['updatedAt']) : null,
+      createdAt: json['createdAt'] != null
+          ? DateTime.tryParse(json['createdAt'])
+          : null,
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.tryParse(json['updatedAt'])
+          : null,
       process: json['process'] != null
           ? ProcessSummary.fromJson(json['process'] as Map<String, dynamic>)
           : null,
       connection: json['connection'] != null
-          ? ConnectionSummary.fromJson(json['connection'] as Map<String, dynamic>)
+          ? ConnectionSummary.fromJson(
+              json['connection'] as Map<String, dynamic>,
+            )
           : null,
       handshake: json['handshake'] != null
           ? HandshakeSummary.fromJson(json['handshake'] as Map<String, dynamic>)
@@ -261,10 +365,14 @@ class GameRuntimeDetail {
           .map((e) => GameService.fromJson(e as Map<String, dynamic>))
           .toList(),
       controlAuthority: json['controlAuthority'] != null
-          ? ControlAuthority.fromJson(json['controlAuthority'] as Map<String, dynamic>)
+          ? ControlAuthority.fromJson(
+              json['controlAuthority'] as Map<String, dynamic>,
+            )
           : null,
       healthSummary: json['healthSummary'] != null
-          ? HealthSummary.fromJson(json['healthSummary'] as Map<String, dynamic>)
+          ? HealthSummary.fromJson(
+              json['healthSummary'] as Map<String, dynamic>,
+            )
           : null,
     );
   }
@@ -280,13 +388,19 @@ class GameRuntimeDetail {
       extensionId: (json['extensionId'] ?? '').toString(),
       runtimeState: (json['runtimeState'] ?? '').toString(),
       desiredState: json['desiredState'] as String?,
-      createdAt: json['createdAt'] != null ? DateTime.tryParse(json['createdAt']) : null,
-      updatedAt: json['updatedAt'] != null ? DateTime.tryParse(json['updatedAt']) : null,
+      createdAt: json['createdAt'] != null
+          ? DateTime.tryParse(json['createdAt'])
+          : null,
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.tryParse(json['updatedAt'])
+          : null,
       process: json['process'] != null
           ? ProcessSummary.fromJson(json['process'] as Map<String, dynamic>)
           : null,
       connection: json['connection'] != null
-          ? ConnectionSummary.fromJson(json['connection'] as Map<String, dynamic>)
+          ? ConnectionSummary.fromJson(
+              json['connection'] as Map<String, dynamic>,
+            )
           : null,
       handshake: json['handshake'] != null
           ? HandshakeSummary.fromJson(json['handshake'] as Map<String, dynamic>)
@@ -295,10 +409,14 @@ class GameRuntimeDetail {
           .map((e) => GameService.fromJson(e as Map<String, dynamic>))
           .toList(),
       controlAuthority: json['controlAuthority'] != null
-          ? ControlAuthority.fromJsonChecked(json['controlAuthority'] as Map<String, dynamic>)
+          ? ControlAuthority.fromJsonChecked(
+              json['controlAuthority'] as Map<String, dynamic>,
+            )
           : null,
       healthSummary: json['healthSummary'] != null
-          ? HealthSummary.fromJson(json['healthSummary'] as Map<String, dynamic>)
+          ? HealthSummary.fromJson(
+              json['healthSummary'] as Map<String, dynamic>,
+            )
           : null,
     );
   }
@@ -362,17 +480,15 @@ class HealthSummary {
   final String? message;
   final DateTime? updatedAt;
 
-  const HealthSummary({
-    required this.status,
-    this.message,
-    this.updatedAt,
-  });
+  const HealthSummary({required this.status, this.message, this.updatedAt});
 
   factory HealthSummary.fromJson(Map<String, dynamic> json) {
     return HealthSummary(
       status: (json['status'] ?? '').toString(),
       message: json['message'] as String?,
-      updatedAt: json['updatedAt'] != null ? DateTime.tryParse(json['updatedAt']) : null,
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.tryParse(json['updatedAt'])
+          : null,
     );
   }
 }
@@ -418,8 +534,9 @@ class ConnectionSummary {
       connected: (json['connected'] as bool?) ?? false,
       protocolVersion: json['protocolVersion'] as String?,
       peerGeneration: json['peerGeneration'] as int?,
-      lastHeartbeatAt:
-          json['lastHeartbeatAt'] != null ? DateTime.tryParse(json['lastHeartbeatAt']) : null,
+      lastHeartbeatAt: json['lastHeartbeatAt'] != null
+          ? DateTime.tryParse(json['lastHeartbeatAt'])
+          : null,
     );
   }
 }
@@ -468,7 +585,9 @@ class ControlAuthority {
       runtimeId: (json['runtimeId'] ?? '').toString(),
       mode: (json['mode'] ?? '').toString(),
       epoch: (json['epoch'] as int?) ?? 0,
-      updatedAt: json['updatedAt'] != null ? DateTime.tryParse(json['updatedAt']) : null,
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.tryParse(json['updatedAt'])
+          : null,
     );
   }
 
@@ -481,7 +600,9 @@ class ControlAuthority {
       runtimeId: runtimeId,
       mode: (json['mode'] ?? '').toString(),
       epoch: (json['epoch'] as int?) ?? 0,
-      updatedAt: json['updatedAt'] != null ? DateTime.tryParse(json['updatedAt']) : null,
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.tryParse(json['updatedAt'])
+          : null,
     );
   }
 }
@@ -515,10 +636,7 @@ class GameCenterRuntimeList {
   final List<GameRuntimeSummary> items;
   final int total;
 
-  const GameCenterRuntimeList({
-    required this.items,
-    required this.total,
-  });
+  const GameCenterRuntimeList({required this.items, required this.total});
 
   factory GameCenterRuntimeList.fromJson(Map<String, dynamic> json) {
     return GameCenterRuntimeList(
@@ -534,10 +652,7 @@ class GameCenterServiceList {
   final List<GameService> items;
   final int total;
 
-  const GameCenterServiceList({
-    required this.items,
-    required this.total,
-  });
+  const GameCenterServiceList({required this.items, required this.total});
 
   factory GameCenterServiceList.fromJson(Map<String, dynamic> json) {
     return GameCenterServiceList(
@@ -652,7 +767,9 @@ class GameCenterHealthResponse {
     return GameCenterHealthResponse(
       status: (json['status'] ?? '').toString(),
       version: json['version'] as String?,
-      timestamp: json['timestamp'] != null ? DateTime.tryParse(json['timestamp']) : null,
+      timestamp: json['timestamp'] != null
+          ? DateTime.tryParse(json['timestamp'])
+          : null,
     );
   }
 }
@@ -660,9 +777,7 @@ class GameCenterHealthResponse {
 class GameRuntimeServicesResponse {
   final List<GameServiceSummary> services;
 
-  const GameRuntimeServicesResponse({
-    required this.services,
-  });
+  const GameRuntimeServicesResponse({required this.services});
 
   factory GameRuntimeServicesResponse.fromJson(Map<String, dynamic> json) {
     return GameRuntimeServicesResponse(
@@ -710,7 +825,9 @@ class GameRuntimeHealthResponse {
       runtimeState: json['runtimeState'] as String?,
       lastHeartbeat: json['lastHeartbeat'] != null
           ? DateTime.tryParse(json['lastHeartbeat'])
-          : (json['updatedAt'] != null ? DateTime.tryParse(json['updatedAt']) : null),
+          : (json['updatedAt'] != null
+                ? DateTime.tryParse(json['updatedAt'])
+                : null),
     );
   }
 }

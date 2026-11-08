@@ -30,7 +30,7 @@ function fixture() {
   const fetch = vi.fn().mockResolvedValue({ ok: true });
   const send = vi.fn();
   const win = { isDestroyed: () => false, show: vi.fn(), focus: vi.fn(), webContents: { send } };
-  const host = new UIHostSSE({ businessCore: { fetch } as unknown as BusinessCoreClient, mainWindow: () => win as unknown as BrowserWindow });
+  const host = new UIHostSSE({ businessCore: { fetch, fetchLocal: vi.fn() } as unknown as BusinessCoreClient, mainWindow: () => win as unknown as BrowserWindow });
   const dispatch = (id: string, expiresAt?: string, payload: Record<string, unknown> = {}) => (host as unknown as { parseAndDispatch(raw: string): void }).parseAndDispatch('event: scheduled_notification\ndata: ' + JSON.stringify({ requestId: id, expiresAt, payload: { title: '喝水', body: '休息一下', conversationId: 'conversation', characterId: 'role', ownerId: 'core', sound: false, ...payload } }));
   return { fetch, send, win, dispatch };
 }
@@ -40,12 +40,15 @@ it('registers the desktop notification endpoint from its confirmed write before 
   const fetch = vi.fn()
     .mockResolvedValueOnce({ ok: true, json: async () => ({ code: 200, data: { id: 'endpoint', deviceId: 'desktop-device', platform: 'desktop' } }) })
     .mockRejectedValueOnce(new Error('test stop'));
-  const host = new UIHostSSE({ businessCore: { fetch } as unknown as BusinessCoreClient, mainWindow: () => null });
+  const fetchLocal = vi.fn().mockRejectedValueOnce(new Error('test stop'));
+  const host = new UIHostSSE({ businessCore: { fetch, fetchLocal } as unknown as BusinessCoreClient, mainWindow: () => null });
   host.start();
-  await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+  await vi.waitFor(() => expect(fetchLocal).toHaveBeenCalledOnce());
   host.stop();
   expect(fetch.mock.calls.map(([path]) => path)).toEqual([
     '/api/notifications/devices/register',
+  ]);
+  expect(fetchLocal.mock.calls.map(([path]) => path)).toEqual([
     '/api/proactive-sse?clientId=electron-ui-host',
   ]);
   expect(JSON.parse(fetch.mock.calls[0]![1]!.body as string)).toMatchObject({
@@ -63,14 +66,17 @@ it('renews the desktop session once when the notification API returns a business
     .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ code: 401, msg: '本地凭据无效' }) })
     .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ code: 200, data: { id: 'endpoint', deviceId: 'desktop-device', platform: 'desktop' } }) })
     .mockRejectedValueOnce(new Error('test stop'));
-  const host = new UIHostSSE({ businessCore: { fetch } as unknown as BusinessCoreClient, mainWindow: () => null });
+  const fetchLocal = vi.fn().mockRejectedValueOnce(new Error('test stop'));
+  const host = new UIHostSSE({ businessCore: { fetch, fetchLocal } as unknown as BusinessCoreClient, mainWindow: () => null });
   host.start();
-  await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
+  await vi.waitFor(() => expect(fetchLocal).toHaveBeenCalledOnce());
   host.stop();
   expect(invalidateSessionMock).toHaveBeenCalledOnce();
   expect(fetch.mock.calls.map(([path]) => path)).toEqual([
     '/api/notifications/devices/register',
     '/api/notifications/devices/register',
+  ]);
+  expect(fetchLocal.mock.calls.map(([path]) => path)).toEqual([
     '/api/proactive-sse?clientId=electron-ui-host',
   ]);
 });
@@ -110,6 +116,28 @@ it('deduplicates retries and ignores expired notification envelopes', () => {
   f.dispatch('notification');
   f.dispatch('expired', new Date(Date.now() - 1000).toISOString());
   expect(notifications.entries).toHaveLength(1);
+});
+
+it('notifies the desktop snapshot host for extension and ui changes without polling', () => {
+  const onExtensionChange = vi.fn();
+  const host = new UIHostSSE({
+    businessCore: { fetch: vi.fn() } as unknown as BusinessCoreClient,
+    mainWindow: () => null,
+    onExtensionChange,
+  });
+  const dispatch = (event: string, id: string) => (host as unknown as { parseAndDispatch(raw: string): void }).parseAndDispatch(
+    `event: ${event}\ndata: ${JSON.stringify({ requestId: id, extensionId: 'com.amitia/plugin-market', payload: {} })}`,
+  );
+
+  dispatch('extension_contributions_changed', 'change-1');
+  dispatch('ui_provider_changed', 'change-2');
+  dispatch('ui_notify', 'notify-1');
+
+  expect(onExtensionChange.mock.calls).toEqual([
+    ['extension_contributions_changed', 'com.amitia/plugin-market'],
+    ['ui_provider_changed', 'com.amitia/plugin-market'],
+    ['ui_notify', 'com.amitia/plugin-market'],
+  ]);
 });
 
 it('reports actual OS failure instead of reporting a successful display', () => {

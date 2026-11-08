@@ -8,12 +8,14 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/devicemesh/agent"
 	"github.com/u-ai/backend/internal/devicemesh/bootstrap"
+	meshcapabilities "github.com/u-ai/backend/internal/devicemesh/capabilities"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/devicemesh/credential"
 	"github.com/u-ai/backend/internal/devicemesh/executionjournal"
@@ -35,6 +37,7 @@ type Runtime struct {
 	CoreDataPort              coordination.DataPort
 	LocalDeviceDataPort       coordination.DataPort
 	LocalDeviceID             string
+	CoreDeviceID              string
 	Hub                       *server.ConnectionHub
 	Handler                   *server.Handler
 	Probe                     *server.ProbeService
@@ -52,6 +55,8 @@ type Runtime struct {
 	auditCancel               context.CancelFunc
 	auditDone                 chan struct{}
 }
+
+var ErrDeviceOffline = errors.New("devicemesh: target device is offline")
 
 func NewCloudRuntimeWithHubAndSessions(
 	db *sql.DB,
@@ -118,6 +123,10 @@ func NewCloudRuntimeWithHubAndSessions(
 	}
 
 	rt.Handler = server.NewHandler(sessions, hub)
+	rt.Handler.SetOnCapabilityExposure(func(ctx context.Context, space runtimeidentity.SpaceID, device runtimeidentity.DeviceID, revision int64, exposed []string) error {
+		_, err := rt.Coordination.SetCapabilityExposure(ctx, space.String(), device.String(), revision, exposed)
+		return err
+	})
 	rt.Coordination.SetAuthorityBarrier(rt.fenceRemoteAuthority)
 	rt.Handler.AddOnReady(func(space runtimeidentity.SpaceID, device runtimeidentity.DeviceID) {
 		go func() {
@@ -137,6 +146,18 @@ func (rt *Runtime) SetSessions(sessions *deviceruntime.Service) {
 	if rt.Handler != nil {
 		rt.Handler.SetSessions(sessions)
 	}
+}
+
+func (rt *Runtime) BindLocalCapabilityExposure(ctx context.Context, spaceID string) error {
+	if rt == nil || rt.LocalHandler == nil || rt.Coordination == nil || strings.TrimSpace(spaceID) == "" || strings.TrimSpace(rt.LocalDeviceID) == "" {
+		return fmt.Errorf("devicemesh: local capability exposure requires LocalHandler, coordination, space and local device")
+	}
+	deviceID := runtimeidentity.ParseDeviceID(rt.LocalDeviceID)
+	rt.LocalHandler.SetLocalCapabilityExposureSync(func(syncCtx context.Context, revision int64, exposed []string) error {
+		_, err := rt.Coordination.SetCapabilityExposure(syncCtx, spaceID, deviceID.String(), revision, exposed)
+		return err
+	})
+	return rt.LocalHandler.PublishLocalCapabilityExposure(ctx)
 }
 
 func (rt *Runtime) SetDispatcher(d agent.RuntimeDispatcher) {
@@ -243,6 +264,9 @@ func NewDeviceAgentRuntime(dataDir string, platform runtimeidentity.Platform, ta
 }
 
 func (rt *Runtime) autoRecoverCredential(handler *agent.LocalHandler) {
+	if handler == nil || !handler.AgentMode() {
+		return
+	}
 	cred, err := handler.LoadCredential()
 	if err != nil || cred == nil {
 		return
@@ -266,37 +290,21 @@ func (rt *Runtime) autoRecoverCredential(handler *agent.LocalHandler) {
 		}
 	}
 
-	dispatcher := rt.dispatcher
-	if rt.deviceDispatcher != nil {
-		dispatcher = rt.deviceDispatcher
+	meshClient, activateWorker := handler.PrepareProviderMesh(cred, identity, tlsConfig)
+	if cursor != nil {
+		meshClient.SetCursor(cursor)
 	}
-
-	meshClient := agent.NewMeshClient(agent.MeshClientConfig{
-		CloudBaseURL:      cred.CloudBaseUrl,
-		Credential:        cred.Credential,
-		SpaceID:           cred.SpaceID,
-		Identity:          identity,
-		Cursor:            cursor,
-		RuntimeDispatcher: dispatcher,
-		TLSConfig:         tlsConfig,
-		SignRequest:       handler.SignRequest,
-		ExecutionJournal:  handler.ExecutionJournal(),
-	})
-	taskWorker := agent.NewTaskWorker(meshClient)
-	if rt.taskRuntime != nil {
-		taskWorker.SetTaskRuntime(rt.taskRuntime)
-	}
-	meshClient.SetTaskWorker(taskWorker)
-	meshClient.SetCredentialStore(handler.CredentialStore())
 	handler.SetMeshClient(meshClient)
 	meshClient.Start()
+	activateWorker()
 }
 
-func (rt *Runtime) AttachDeviceAgent(dataDir string, platform runtimeidentity.Platform, dispatcher agent.RuntimeDispatcher, observer func(*agent.StoredCredential) error) error {
+func (rt *Runtime) AttachDeviceAgent(dataDir string, platform runtimeidentity.Platform, dispatcher agent.RuntimeDispatcher, agentMode bool, observer func(*agent.StoredCredential) error) error {
 	if rt.LocalHandler != nil || dispatcher == nil {
 		return fmt.Errorf("设备 Agent 已存在或缺少能力路由")
 	}
 	handler := agent.NewLocalHandler(dataDir, platform)
+	handler.SetAgentMode(agentMode)
 	handler.SetDispatcher(dispatcher)
 	handler.SetTaskRuntime(rt.taskRuntime)
 	if rt.DB != nil {
@@ -319,7 +327,9 @@ func (rt *Runtime) AttachDeviceAgent(dataDir string, platform runtimeidentity.Pl
 	}
 	rt.LocalHandler = handler
 	rt.deviceDispatcher = dispatcher
-	rt.autoRecoverCredential(handler)
+	if agentMode {
+		rt.autoRecoverCredential(handler)
+	}
 	return nil
 }
 
@@ -353,9 +363,15 @@ func (rt *Runtime) InvokeDeviceHandlerWithRuntimeType(
 	if rt == nil || rt.Hub == nil || rt.PendingInvocations == nil {
 		return capability.UnifiedToolResult{}, fmt.Errorf("devicemesh: invocation runtime unavailable")
 	}
+	requiredCapability := meshcapabilities.ForHandler(string(runtimeType), handlerName)
+	if rt.Coordination != nil {
+		if err := rt.Coordination.RequireCapabilityExposure(ctx, spaceID.String(), targetDeviceID.String(), requiredCapability); err != nil {
+			return capability.UnifiedToolResult{}, err
+		}
+	}
 	conn, ok := rt.Hub.GetByDevice(spaceID, targetDeviceID)
 	if !ok || conn == nil {
-		return capability.UnifiedToolResult{}, fmt.Errorf("devicemesh: target device is offline")
+		return capability.UnifiedToolResult{}, ErrDeviceOffline
 	}
 	if deadline <= 0 {
 		deadline = 30 * time.Second

@@ -77,13 +77,14 @@ func (a *MCPToolAdapter) AdaptTool(descriptor MCPToolDescriptor) ToolDefinition 
 	computedHash := computeMCPToolHash(descriptor)
 
 	return ToolDefinition{
-		ID:          string(capabilityID),
-		ModelName:   modelName,
-		Source:      CapabilitySourceToToolSource(source),
-		Name:        descriptor.Title,
-		Description: descriptor.Description,
-		Version:     computedHash,
-		InputSchema: descriptor.InputSchema,
+		ID:           string(capabilityID),
+		CapabilityID: capabilityID,
+		ModelName:    modelName,
+		Source:       CapabilitySourceToToolSource(source),
+		Name:         descriptor.Title,
+		Description:  descriptor.Description,
+		Version:      computedHash,
+		InputSchema:  descriptor.InputSchema,
 		OutputSchema: func() json.RawMessage {
 			if len(descriptor.OutputSchema) > 0 {
 				return descriptor.OutputSchema

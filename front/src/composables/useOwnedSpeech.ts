@@ -9,16 +9,10 @@ const unwrap = (response: any) => response?.data?.data ?? response?.data;
 export function useOwnedSpeech(onInvalidated: () => void = () => {}) {
   let generation = 0;
   const controllers = new Set<AbortController>();
-  let activeScope: OwnedExecutionScope | null = null;
-  let roleTimer: ReturnType<typeof setInterval> | undefined;
-  let checkingRole = false;
   function invalidate() {
     generation++;
     for (const controller of controllers) controller.abort();
     controllers.clear();
-    activeScope = null;
-    if (roleTimer) clearInterval(roleTimer);
-    roleTimer = undefined;
     onInvalidated();
   }
   onMounted(() => {
@@ -26,27 +20,6 @@ export function useOwnedSpeech(onInvalidated: () => void = () => {}) {
     window.addEventListener("amitia:execution-scope-changed", invalidate);
   });
 
-  function monitor(scope: OwnedExecutionScope) {
-    activeScope = scope;
-    if (roleTimer) clearInterval(roleTimer);
-    roleTimer = setInterval(async () => {
-      if (checkingRole || !activeScope) return;
-      const currentScope = activeScope;
-      const captured = generation;
-      checkingRole = true;
-      try {
-        const deployment = await getDeploymentConfig();
-        const status = unwrap(await apiClient.get("/api/device-mesh/v1/coordination/me"));
-        const roles = unwrap(await apiClient.get("/api/device-mesh/v1/business/roles"));
-        if (captured !== generation || activeScope !== currentScope) return;
-        const role = roles?.roles?.find((item: any) => item.id === currentScope.roleId);
-        if (deployment.mode !== "cloud" || status?.coreId !== currentScope.coreId || status?.policy?.providerEpoch !== currentScope.providerEpoch || status?.policy?.modeRevision !== currentScope.modeRevision || status?.policy?.permissionRevision !== currentScope.permissionRevision || status?.policy?.coordinated !== currentScope.coordinated || roles?.roleOwnerId !== currentScope.roleOwnerId || role?.revision !== currentScope.roleRevision) invalidate();
-      } catch (error) {
-  console.error("[original-error]", error);
-if (captured === generation && activeScope === currentScope) invalidate(); }
-      finally { checkingRole = false; }
-    }, 1000);
-  }
   onUnmounted(() => {
     window.removeEventListener("amitia:runtime-connection-changed", invalidate);
     window.removeEventListener("amitia:execution-scope-changed", invalidate);
@@ -83,7 +56,6 @@ if (captured === generation && activeScope === currentScope) invalidate(); }
       const latest = unwrap(await query());
       current();
       if (!sameAuthority(expected, latest?.executionScope)) throw new Error("角色或服务权限已变化，旧语音已丢弃");
-      monitor(expected);
       return `data:audio/mpeg;base64,${result.audio.data}`;
     } finally { controllers.delete(controller); }
   }

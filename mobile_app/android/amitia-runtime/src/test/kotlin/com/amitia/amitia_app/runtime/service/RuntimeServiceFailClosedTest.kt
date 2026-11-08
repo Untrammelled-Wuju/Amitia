@@ -219,7 +219,7 @@ class RuntimeServiceFailClosedTest {
     }
 }
 
-class TestProotComponent : ProotComponent {
+internal class TestProotComponent : ProotComponent {
     var launchCount = 0
         private set
     private var session: ProotSession? = null
@@ -252,7 +252,7 @@ class TestProotComponent : ProotComponent {
     }
 }
 
-class TestProotSession : ProotSession {
+internal class TestProotSession : ProotSession {
     override val sessionId: String = "test-session"
     override fun isAlive(): Boolean = true
     override fun awaitExit(timeoutMillis: Long): Int? = 0
@@ -267,7 +267,7 @@ class TestProotSession : ProotSession {
     }
 }
 
-class TestProotEnvironmentAssembler : ProotEnvironmentAssembler(
+internal class TestProotEnvironmentAssembler : ProotEnvironmentAssembler(
     layout = DefaultRuntimeHostLayout(
         controlBaseDir = File("/data/control"),
         dataBaseDir = File("/data/data"),
@@ -286,7 +286,7 @@ class TestProotEnvironmentAssembler : ProotEnvironmentAssembler(
     }
 }
 
-class FailingEnvironmentAssembler : ProotEnvironmentAssembler(
+internal class FailingEnvironmentAssembler : ProotEnvironmentAssembler(
     layout = DefaultRuntimeHostLayout(
         controlBaseDir = File("/data/control"),
         dataBaseDir = File("/data/data"),
@@ -301,22 +301,22 @@ class FailingEnvironmentAssembler : ProotEnvironmentAssembler(
     }
 }
 
-class NoActiveRuntimeManager : ActiveRuntimeManager {
+internal class NoActiveRuntimeManager : ActiveRuntimeManager {
     override fun current() = com.amitia.amitia_app.runtime.install.ActiveRuntimeResult.NoActiveRuntime
     override fun activate(version: String) = com.amitia.amitia_app.runtime.install.ActiveRuntimeResult.NoActiveRuntime
     override fun resolveActiveProgramRoot() = ActiveProgramRootResult.NoActiveRuntime
 }
 
-class ActiveProgramRootFailureManager : ActiveRuntimeManager {
+internal class ActiveProgramRootFailureManager : ActiveRuntimeManager {
     override fun current() = com.amitia.amitia_app.runtime.install.ActiveRuntimeResult.NoActiveRuntime
     override fun activate(version: String) = com.amitia.amitia_app.runtime.install.ActiveRuntimeResult.NoActiveRuntime
     override fun resolveActiveProgramRoot() = ActiveProgramRootResult.Failure(
-        com.amitia.amitia_app.runtime.install.RuntimeInstallErrorCode.UNKNOWN,
+        com.amitia.amitia_app.runtime.install.RuntimeInstallErrorCode.ACTIVE_RUNTIME_METADATA_INVALID,
         "test failure",
     )
 }
 
-class ValidActiveRuntimeManager : ActiveRuntimeManager {
+internal class ValidActiveRuntimeManager : ActiveRuntimeManager {
     override fun current() = com.amitia.amitia_app.runtime.install.ActiveRuntimeResult.Active(
         com.amitia.amitia_app.runtime.install.ActiveRuntimeInfo("1.0.0", 0L)
     )
@@ -332,7 +332,7 @@ class ValidActiveRuntimeManager : ActiveRuntimeManager {
     )
 }
 
-class TestRuntimeEnvironmentBuilder : com.amitia.amitia_app.runtime.proot.RuntimeEnvironmentBuilder {
+internal class TestRuntimeEnvironmentBuilder : com.amitia.amitia_app.runtime.proot.RuntimeEnvironmentBuilder {
     override fun build(request: com.amitia.amitia_app.runtime.proot.RuntimeEnvironmentRequest): com.amitia.amitia_app.runtime.proot.RuntimeEnvironmentResult {
         return com.amitia.amitia_app.runtime.proot.RuntimeEnvironmentResult.Success(
             com.amitia.amitia_app.runtime.proot.RuntimeEnvironment(
@@ -343,7 +343,7 @@ class TestRuntimeEnvironmentBuilder : com.amitia.amitia_app.runtime.proot.Runtim
     }
 }
 
-class TestAndroidRuntimeModuleOverride(
+internal class TestAndroidRuntimeModuleOverride(
     private val prootComponent: ProotComponent?,
     private val prootRootfsPath: String?,
     private val assembler: ProotEnvironmentAssembler?,

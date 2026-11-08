@@ -8,6 +8,7 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/models/voice.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/services/shared_core_data_access.dart';
 import '../../../../core/services/voice_preview_player.dart';
 import '../../../../core/services/owned_speech_player.dart';
 import '../../../../core/runtime/backend/mobile_backend_providers.dart';
@@ -17,6 +18,7 @@ import '../../../../core/services/core_configuration_guard.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import '../../../../core/widgets/shared_core_read_only_banner.dart';
 
 class CharacterVoicePage extends ConsumerStatefulWidget {
   final String characterId;
@@ -100,6 +102,10 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
 
   Future<bool> _save() async {
     if (_saving) return false;
+    if (!_canWrite) {
+      _show('当前为中心只读模式，不能修改角色语音设置', error: true);
+      return false;
+    }
     if (_voiceMode == 'clone' && _customVoiceId.trim().isEmpty) {
       _show('请先完成声音复刻或填写克隆音色 ID', error: true);
       return false;
@@ -271,6 +277,17 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
 
   @override
   Widget build(BuildContext context) {
+    final accessAsync = ref.watch(sharedCoreDataAccessProvider);
+    final access =
+        accessAsync.valueOrNull ??
+        SharedCoreDataAccess(
+          read: true,
+          write: false,
+          reason: accessAsync.hasError
+              ? '无法确认统筹中心数据权限：${accessAsync.error}'
+              : '正在确认统筹中心数据权限',
+          coreId: '',
+        );
     final bound =
         ref.watch(mobileDeploymentConfigProvider).mode ==
         MobileDeploymentMode.cloud;
@@ -303,6 +320,7 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
             : ListView(
                 padding: EdgeInsets.all(AppSpacing.pagePadding),
                 children: [
+                  if (access.readOnly) SharedCoreReadOnlyBanner(access: access),
                   AmitiaSectionHeader(title: '角色专属音色'),
                   SizedBox(height: AppSpacing.sm),
                   AmitiaCard(
@@ -323,8 +341,10 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
                             ),
                           ],
                           selected: {_voiceMode},
-                          onSelectionChanged: (value) =>
-                              setState(() => _voiceMode = value.first),
+                          onSelectionChanged: access.write
+                              ? (value) =>
+                                    setState(() => _voiceMode = value.first)
+                              : null,
                         ),
                         SizedBox(height: AppSpacing.lg),
                         if (_voiceMode == 'preset')
@@ -352,9 +372,11 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
                                 ),
                               );
                             }).toList(),
-                            onChanged: (value) => setState(
-                              () => _voiceType = value ?? _voiceType,
-                            ),
+                            onChanged: access.write
+                                ? (value) => setState(
+                                    () => _voiceType = value ?? _voiceType,
+                                  )
+                                : null,
                           )
                         else ...[
                           DropdownButtonFormField<String>(
@@ -388,8 +410,11 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
                                     (item) => item.value?.isNotEmpty == true,
                                   ),
                             ],
-                            onChanged: (value) =>
-                                setState(() => _customVoiceId = value ?? ''),
+                            onChanged: access.write
+                                ? (value) => setState(
+                                    () => _customVoiceId = value ?? '',
+                                  )
+                                : null,
                           ),
                           if (_customVoiceId.isNotEmpty &&
                               !_cloneSpeakerIds.contains(_customVoiceId)) ...[
@@ -405,7 +430,8 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
                             icon: Icons.upload_file,
                             isSecondary: true,
                             onPressed:
-                                _configurationIntent?.canConfigure == true
+                                access.write &&
+                                    _configurationIntent?.canConfigure == true
                                 ? _cloneVoice
                                 : null,
                           ),
@@ -448,8 +474,11 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
                                 ),
                               ),
                             ],
-                            onChanged: (value) =>
-                                setState(() => _voiceConfigId = value ?? ''),
+                            onChanged: access.write
+                                ? (value) => setState(
+                                    () => _voiceConfigId = value ?? '',
+                                  )
+                                : null,
                           ),
                         SizedBox(height: AppSpacing.sm),
                         _slider(
@@ -457,21 +486,27 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
                           _speed,
                           0.5,
                           2,
-                          (v) => setState(() => _speed = v),
+                          access.write
+                              ? (v) => setState(() => _speed = v)
+                              : null,
                         ),
                         _slider(
                           '音调',
                           _pitch,
                           0.5,
                           2,
-                          (v) => setState(() => _pitch = v),
+                          access.write
+                              ? (v) => setState(() => _pitch = v)
+                              : null,
                         ),
                         _slider(
                           '音量',
                           _volume,
                           0.2,
                           2,
-                          (v) => setState(() => _volume = v),
+                          access.write
+                              ? (v) => setState(() => _volume = v)
+                              : null,
                         ),
                         DropdownButtonFormField<String>(
                           value:
@@ -504,15 +539,19 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
                                     ),
                                   )
                                   .toList(),
-                          onChanged: (value) =>
-                              setState(() => _emotion = value ?? ''),
+                          onChanged: access.write
+                              ? (value) =>
+                                    setState(() => _emotion = value ?? '')
+                              : null,
                         ),
                         _slider(
                           '情绪强度',
                           _emotionScale.toDouble(),
                           1,
                           5,
-                          (v) => setState(() => _emotionScale = v.round()),
+                          access.write
+                              ? (v) => setState(() => _emotionScale = v.round())
+                              : null,
                           divisions: 4,
                         ),
                         _slider(
@@ -520,7 +559,10 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
                           _silenceDuration.toDouble(),
                           0,
                           5000,
-                          (v) => setState(() => _silenceDuration = v.round()),
+                          access.write
+                              ? (v) =>
+                                    setState(() => _silenceDuration = v.round())
+                              : null,
                           divisions: 50,
                         ),
                       ],
@@ -542,7 +584,7 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
                         child: AmitiaButton(
                           label: _saving ? '保存中...' : '保存',
                           icon: Icons.save_outlined,
-                          onPressed: _saving ? null : _save,
+                          onPressed: _saving || !access.write ? null : _save,
                         ),
                       ),
                     ],
@@ -559,7 +601,7 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
     double value,
     double min,
     double max,
-    ValueChanged<double> onChanged, {
+    ValueChanged<double>? onChanged, {
     int? divisions,
   }) {
     return Column(
@@ -579,4 +621,7 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
       ],
     );
   }
+
+  bool get _canWrite =>
+      ref.read(sharedCoreDataAccessProvider).valueOrNull?.write ?? false;
 }

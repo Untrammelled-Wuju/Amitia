@@ -341,9 +341,9 @@ async function handleOwnedCallSaved(result: OwnedChatResponse) {
 
 const { get, post, put, del } = useApi();
 const owned = useDeviceOwnedConversation();
-let ownedPolicyTimer: ReturnType<typeof setInterval> | null = null;
 let ownedPolling = false;
 let ownedDisposed = false;
+let refreshOwnedRuntimeHandler: (() => Promise<void>) | undefined;
 const {
   currentWorkspace,
   recentWorkspaces,
@@ -1359,41 +1359,44 @@ onMounted(async () => {
     });
     return ownedInitializationPromise;
   };
-  const startOwnedPolling = () => {
-    if (ownedDisposed || ownedPolicyTimer) return;
-    ownedPolicyTimer = setInterval(async () => {
-      if (ownedDisposed || ownedPolling) return;
-      ownedPolling = true;
-      try {
-        const previousProvider = `${owned.coreId.value}/${owned.policy.value?.providerEpoch}/${owned.policy.value?.modeRevision}/${owned.policy.value?.permissionRevision}`;
-        await pollOwnedChat(owned, async () => {
-          if (!ownedInitialized) { await initializeOwned(); return; }
-          syncOwnedCharacters();
-          const notificationOwner = String(route.query.ownerId || '');
-          if (notificationOwner && notificationOwner !== owned.coreId.value) {
-            resetConversationScope(); convId.value = '';
-            modelError.value = '通知所属核心与当前核心不同，请先切换至原核心后打开';
-            return;
+  const refreshOwnedRuntime = async () => {
+    if (ownedDisposed || ownedPolling) return;
+    ownedPolling = true;
+    try {
+      const previousProvider = `${owned.coreId.value}/${owned.policy.value?.providerEpoch}/${owned.policy.value?.modeRevision}/${owned.policy.value?.permissionRevision}`;
+      await pollOwnedChat(owned, async () => {
+        if (!ownedInitialized) { await initializeOwned(); return; }
+        syncOwnedCharacters();
+        const notificationOwner = String(route.query.ownerId || '');
+        if (notificationOwner && notificationOwner !== owned.coreId.value) {
+          resetConversationScope(); convId.value = '';
+          modelError.value = '通知所属核心与当前核心不同，请先切换至原核心后打开';
+          return;
+        }
+        const currentProvider = `${owned.coreId.value}/${owned.policy.value?.providerEpoch}/${owned.policy.value?.modeRevision}/${owned.policy.value?.permissionRevision}`;
+        const shouldRefreshOwnedData = previousProvider !== currentProvider || (ownedDataRefreshPending && Date.now() >= ownedDataRetryAt);
+        if (shouldRefreshOwnedData) {
+          try {
+            await refreshOwnedData(true);
+          } catch (error) {
+            scheduleOwnedDataRetry();
+            reportOwnedLoadError(error);
           }
-          const currentProvider = `${owned.coreId.value}/${owned.policy.value?.providerEpoch}/${owned.policy.value?.modeRevision}/${owned.policy.value?.permissionRevision}`;
-          const providerChanged = previousProvider !== currentProvider;
-          const shouldRefreshOwnedData = providerChanged || (ownedDataRefreshPending && Date.now() >= ownedDataRetryAt);
-          if (shouldRefreshOwnedData) {
-            try {
-              await refreshOwnedData(true);
-            } catch (error) {
-              scheduleOwnedDataRetry();
-              reportOwnedLoadError(error);
-            }
-          }
-          if (!characters.value.some((character) => character.id === characterId.value)) { characterId.value = ""; modelError.value = "当前角色已失效，请重新选择角色"; }
-        }, (error) => {
-          scheduleOwnedDataRetry();
-          reportOwnedLoadError(error);
-        }, () => ownedDisposed);
-      } finally { ownedPolling = false; }
-    }, 3000);
+        }
+        if (!characters.value.some((character) => character.id === characterId.value)) { characterId.value = ""; modelError.value = "当前角色已失效，请重新选择角色"; }
+      }, (error) => {
+        scheduleOwnedDataRetry();
+        reportOwnedLoadError(error);
+      }, () => ownedDisposed);
+    } finally { ownedPolling = false; }
   };
+  refreshOwnedRuntimeHandler = refreshOwnedRuntime;
+  window.addEventListener("amitia:owned-runtime-refresh", refreshOwnedRuntime);
+  window.addEventListener("amitia:runtime-connection-changed", refreshOwnedRuntime);
+  window.addEventListener("amitia:execution-scope-changed", refreshOwnedRuntime);
+  window.addEventListener("focus", refreshOwnedRuntime);
+  window.addEventListener("online", refreshOwnedRuntime);
+  document.addEventListener("visibilitychange", refreshOwnedRuntime);
   let available = false;
   try { available = await owned.refresh(); }
   catch (error) {
@@ -1401,7 +1404,7 @@ onMounted(async () => {
     if (!(error instanceof OwnedChatStateChangedError) && !owned.notice.value.includes("等待新服务批准")) owned.markUnavailable();
     scheduleOwnedDataRetry();
     reportOwnedLoadError(error);
-    startOwnedPolling();
+    void refreshOwnedRuntime();
     return;
   }
   if (ownedDisposed) return;
@@ -1413,11 +1416,11 @@ onMounted(async () => {
         reportOwnedLoadError(error);
       }
     }
-    finally { startOwnedPolling(); }
+    finally { void refreshOwnedRuntime(); }
     return;
   }
   reportOwnedLoadError(new Error(owned.notice.value || "设备对话服务尚未就绪"));
-  startOwnedPolling();
+  void refreshOwnedRuntime();
 });
 
 onUnmounted(() => {
@@ -1426,10 +1429,17 @@ onUnmounted(() => {
   chatLayoutObserver?.disconnect();
   chatLayoutObserver = null;
   window.removeEventListener("amitia:execution-scope-changed", handleScopeChanged);
+  if (refreshOwnedRuntimeHandler) {
+    window.removeEventListener("amitia:owned-runtime-refresh", refreshOwnedRuntimeHandler);
+    window.removeEventListener("amitia:runtime-connection-changed", refreshOwnedRuntimeHandler);
+    window.removeEventListener("amitia:execution-scope-changed", refreshOwnedRuntimeHandler);
+    window.removeEventListener("focus", refreshOwnedRuntimeHandler);
+    window.removeEventListener("online", refreshOwnedRuntimeHandler);
+    document.removeEventListener("visibilitychange", refreshOwnedRuntimeHandler);
+    refreshOwnedRuntimeHandler = undefined;
+  }
   window.removeEventListener("amitia:draft-created", handleSidebarDraftCreated);
   ownedDisposed = true;
-  if (ownedPolicyTimer) clearInterval(ownedPolicyTimer);
-  ownedPolicyTimer = null;
   cleanupSSE();
   window.removeEventListener("resize", updateViewport);
 });

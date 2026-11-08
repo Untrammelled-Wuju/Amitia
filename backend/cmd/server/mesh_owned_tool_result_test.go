@@ -23,7 +23,7 @@ func TestOwnedToolResultIsAcknowledgedInPhysicalDeviceStore(t *testing.T) {
 	defer finish()
 	scope.RoleRevision = 3
 	ctx = coordination.WithScope(ctx, scope)
-	runtime := &devicemesh.Runtime{Coordination: service, LocalDeviceID: p.ownerID, LocalDeviceDataPort: p}
+	runtime := &devicemesh.Runtime{Coordination: service, LocalDeviceID: p.ownerID, CoreDataPort: p, LocalDeviceDataPort: p}
 	p.services.DeviceMesh = runtime
 	r := &meshOwnedToolRuntime{services: p.services}
 	result := capability.NewToolSuccessResult("invoke", "tool")

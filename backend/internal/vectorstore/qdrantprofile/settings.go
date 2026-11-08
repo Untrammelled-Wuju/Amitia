@@ -21,6 +21,7 @@ type Settings struct {
 	WALSegmentsAhead          uint64
 	MaxSearchThreads          uint64
 	OptimizerCPUBudget        int64
+	IoUring                   string
 	DefaultSegmentNumber      uint64
 	IndexingThresholdKB       uint64
 	FlushIntervalSeconds      uint64
@@ -47,6 +48,7 @@ func CompactSettings() Settings {
 		WALSegmentsAhead:          0,
 		MaxSearchThreads:          1,
 		OptimizerCPUBudget:        1,
+		IoUring:                   "disabled",
 		DefaultSegmentNumber:      1,
 		IndexingThresholdKB:       50000,
 		FlushIntervalSeconds:      15,
@@ -74,6 +76,7 @@ func BalancedSettings() Settings {
 		WALSegmentsAhead:          0,
 		MaxSearchThreads:          2,
 		OptimizerCPUBudget:        1,
+		IoUring:                   "disabled",
 		DefaultSegmentNumber:      1,
 		IndexingThresholdKB:       20000,
 		FlushIntervalSeconds:      10,
@@ -101,6 +104,7 @@ func PerformanceSettings() Settings {
 		WALSegmentsAhead:          0,
 		MaxSearchThreads:          2,
 		OptimizerCPUBudget:        2,
+		IoUring:                   "disabled",
 		DefaultSegmentNumber:      1,
 		IndexingThresholdKB:       10000,
 		FlushIntervalSeconds:      5,
@@ -158,6 +162,9 @@ func (s Settings) Validate() error {
 	}
 	if s.OptimizerCPUBudget < 1 || s.OptimizerCPUBudget > 2 {
 		return fmt.Errorf("%w: optimizerCPUBudget out of range: %d", ErrInvalidProfileSettings, s.OptimizerCPUBudget)
+	}
+	if s.IoUring != "disabled" {
+		return fmt.Errorf("%w: ioUring must be disabled, got %q", ErrInvalidProfileSettings, s.IoUring)
 	}
 	if s.DefaultSegmentNumber != 1 {
 		return fmt.Errorf("%w: defaultSegmentNumber must be 1, got %d", ErrInvalidProfileSettings, s.DefaultSegmentNumber)

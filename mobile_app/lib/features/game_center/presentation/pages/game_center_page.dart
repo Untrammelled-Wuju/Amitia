@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:file_picker/file_picker.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../domain/game_center_dto.dart';
+import '../../data/game_package_picker.dart';
 import '../controllers/game_center_providers.dart';
 import '../controllers/game_center_controller.dart';
 import '../widgets/game_package_confirmation.dart';
@@ -25,28 +25,43 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
     super.initState();
     Future.microtask(() async {
       final controller = ref.read(gameCenterControllerProvider.notifier);
-      await controller.loadPlugins();
-      await controller.loadCenterHealth();
+      await controller.loadGameMode();
+      if (ref.read(gameCenterControllerProvider).gameModeStatus?.owned ==
+          true) {
+        await controller.loadPlugins();
+        await controller.loadCenterHealth();
+      }
     });
   }
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(gameCenterControllerProvider);
+    final active = state.gameModeStatus?.owned == true;
 
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '游戏中心 v1',
         navigation: AmitiaAppBarNavigation.back,
         actions: [
+          if (active)
+            IconButton(
+              icon: const Icon(Icons.logout),
+              tooltip: '退出游戏模式',
+              onPressed: state.gameModeOperating
+                  ? null
+                  : () => ref
+                        .read(gameCenterControllerProvider.notifier)
+                        .releaseGameMode(),
+            ),
           IconButton(
             icon: const Icon(Icons.add_box_outlined),
             tooltip: '安装插件',
-            onPressed: () => _showInstallDialog(context),
+            onPressed: active ? () => _showInstallDialog(context) : null,
           ),
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: state.pluginsRefreshing
+            onPressed: !active || state.pluginsRefreshing
                 ? null
                 : () async {
                     final controller = ref.read(
@@ -58,14 +73,28 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
           ),
         ],
       ),
-      body: SafeArea(
-        top: false,
-        child: _buildBody(context, state),
-      ),
+      body: SafeArea(top: false, child: _buildBody(context, state)),
     );
   }
 
   Widget _buildBody(BuildContext context, GameCenterState state) {
+    if (state.gameModeLoading && state.gameModeStatus == null) {
+      return const AmitiaLoadingState(message: '正在检查游戏模式状态...');
+    }
+    if (state.gameModeStatus == null) {
+      return AmitiaErrorState(
+        message: state.gameModeError ?? '无法获取游戏模式状态',
+        onRetry: () =>
+            ref.read(gameCenterControllerProvider.notifier).loadGameMode(),
+      );
+    }
+    final status = state.gameModeStatus!;
+    if (!status.session.active) {
+      return _buildGameModeEntry(context, state);
+    }
+    if (!status.owned) {
+      return _buildOccupiedState(context, state);
+    }
     if (state.pluginsLoading) {
       return const AmitiaLoadingState(message: '加载中...');
     }
@@ -86,6 +115,112 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
       );
     }
     return _buildPluginList(context, state);
+  }
+
+  Widget _buildGameModeEntry(BuildContext context, GameCenterState state) {
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.all(AppSpacing.pagePadding),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.sports_esports_outlined,
+              size: 64,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            const SizedBox(height: 20),
+            Text('进入游戏模式', style: AppTypography.pageTitle(context)),
+            const SizedBox(height: 8),
+            Text(
+              '同一时间只允许一台设备使用游戏模式。进入后其他设备只能查看状态并通过对话控制。',
+              style: AppTypography.caption(context),
+              textAlign: TextAlign.center,
+            ),
+            if (state.gameModeError != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                state.gameModeError!,
+                style: AppTypography.caption(
+                  context,
+                ).copyWith(color: Theme.of(context).colorScheme.error),
+                textAlign: TextAlign.center,
+              ),
+            ],
+            const SizedBox(height: 20),
+            AmitiaButton(
+              label: state.gameModeOperating ? '正在进入...' : '进入游戏模式',
+              isFullWidth: true,
+              onPressed: state.gameModeOperating
+                  ? null
+                  : () => ref
+                        .read(gameCenterControllerProvider.notifier)
+                        .acquireGameMode(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOccupiedState(BuildContext context, GameCenterState state) {
+    final session = state.gameModeStatus!.session;
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.all(AppSpacing.pagePadding),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.devices_other,
+              size: 64,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            const SizedBox(height: 20),
+            Text('其他设备正在游戏模式中', style: AppTypography.pageTitle(context)),
+            const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: EdgeInsets.all(AppSpacing.md),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('设备', style: AppTypography.label(context)),
+                    Text(session.deviceId, style: AppTypography.body(context)),
+                    const SizedBox(height: 8),
+                    Text('状态', style: AppTypography.label(context)),
+                    Text(session.state, style: AppTypography.body(context)),
+                    if (session.gameTitle.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text('游戏', style: AppTypography.label(context)),
+                      Text(
+                        session.gameTitle,
+                        style: AppTypography.body(context),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '当前 Space 同一时间只允许一台设备进入游戏模式。你可以通过对话查询或控制该设备。',
+              style: AppTypography.caption(context),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            AmitiaButton(
+              label: '刷新状态',
+              isSecondary: true,
+              isFullWidth: true,
+              onPressed: () => ref
+                  .read(gameCenterControllerProvider.notifier)
+                  .loadGameMode(),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildPluginList(BuildContext context, GameCenterState state) {
@@ -145,7 +280,20 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
           final plugin = state.plugins[index - 1];
           return _PluginCard(
             plugin: plugin,
-            onTap: () {
+            onTap: () async {
+              final updated = await ref
+                  .read(gameCenterControllerProvider.notifier)
+                  .updateGameMode(nextState: 'active', gameTitle: plugin.name);
+              if (!context.mounted) return;
+              if (!updated) {
+                final error =
+                    ref.read(gameCenterControllerProvider).gameModeError ??
+                    '更新游戏模式失败';
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text(error)));
+                return;
+              }
               context.push(
                 Uri(
                   path: AppRoutes.gamePlugin,
@@ -181,9 +329,7 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('安装游戏插件'),
-        content: const Text(
-          '请选择 .gamex 游戏扩展包。安装将使用统一的扩展包预览、确认与事务生命周期。',
-        ),
+        content: const Text('请选择 .gamex 游戏扩展包。安装将使用统一的扩展包预览、确认与事务生命周期。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -192,14 +338,9 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
           TextButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              final result = await FilePicker.platform.pickFiles(
-                allowMultiple: false,
-                type: FileType.custom,
-                allowedExtensions: const ['gamex'],
-              );
-              final path = result?.files.single.path;
-              if (path == null || path.isEmpty) return;
               try {
+                final path = await pickGamePackagePath();
+                if (path == null) return;
                 final lifecycle = ref.read(gameCenterPackageLifecycleProvider);
                 final preview = await lifecycle.previewPackage(path);
                 if (!context.mounted) return;

@@ -56,7 +56,7 @@ func RegisterDeviceExecutionWorkflowRoutes(group *gin.RouterGroup, runtime *Runt
 	}
 
 	management := group.Group("")
-	management.Use(security.RequireAuthMethod(security.AuthMethodDesktopSession), trustedActor)
+	management.Use(security.RequireAuthMethod(security.AuthMethodDesktopSession, security.AuthMethodLocalToken), trustedActor)
 	api.registerWorkflowManagementRoutes(management)
 
 	events := group.Group("")
@@ -66,4 +66,34 @@ func RegisterDeviceExecutionWorkflowRoutes(group *gin.RouterGroup, runtime *Runt
 	runtimeProducer := group.Group("")
 	runtimeProducer.Use(security.RequireAuthMethod(security.AuthMethodLocalToken), trustedActor)
 	api.registerWorkflowRuntimeProducerRoutes(runtimeProducer)
+}
+
+func RegisterDeviceAgentSkillRoutes(group *gin.RouterGroup, runtime *Runtime) {
+	if group == nil || runtime == nil {
+		return
+	}
+	group.Use(func(c *gin.Context) {
+		actor := security.GetActor(c)
+		if actor == nil || actor.SpaceID == "" || !actor.IsLocalTrusted {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "device-local authenticated session required"})
+			return
+		}
+		c.Next()
+	})
+	NewKernelAPI(runtime).registerAgentSkillRoutes(group)
+}
+
+func RegisterDeviceUIRoutes(extensions, parent *gin.RouterGroup, runtime *Runtime) {
+	if extensions == nil || runtime == nil {
+		return
+	}
+	extensions.Use(func(c *gin.Context) {
+		actor := security.GetActor(c)
+		if actor == nil || actor.SpaceID == "" || !actor.IsLocalTrusted {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "device-local authenticated session required"})
+			return
+		}
+		c.Next()
+	})
+	NewUIAPI(runtime).RegisterRoutes(extensions, parent)
 }

@@ -4,6 +4,7 @@ import { getDesktopInstanceID } from "../desktop-identity";
 import {
   getMeshIdentity,
   getMeshStatus,
+  watchMeshState,
   postMeshBootstrap,
   deleteMeshCredential,
   claimPinnedMeshPairing,
@@ -23,18 +24,16 @@ export type MeshCoordinatorEvent =
 
 export interface MeshCoordinatorOptions {
   getMainWindow: () => BrowserWindow | null;
-  pollIntervalMs?: number;
 }
-
-const DEFAULT_POLL_INTERVAL_MS = 10000;
 
 export class DeviceMeshCoordinator {
   private getMainWindow: () => BrowserWindow | null;
-  private readonly pollIntervalMs: number;
   private readonly platform: string;
 
   private stopped = true;
-  private pollTimer: ReturnType<typeof setTimeout> | null = null;
+  private stopStateStream: (() => void) | null = null;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private reconnectAttempt = 0;
   private lastState: DeviceMeshAgentState | null = null;
   private lastStatus: DeviceMeshStatusResponse | null = null;
   private lastDeviceId: string | null = null;
@@ -42,7 +41,6 @@ export class DeviceMeshCoordinator {
 
   constructor(options: MeshCoordinatorOptions) {
     this.getMainWindow = options.getMainWindow;
-    this.pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
     this.platform = process.platform === "win32" ? "windows" : process.platform;
   }
 
@@ -50,15 +48,16 @@ export class DeviceMeshCoordinator {
     if (!this.stopped) return;
     this.stopped = false;
     void this.refreshIdentity();
-    void this.pollLoop();
+    void this.refreshStatus();
+    this.connectStateStream();
   }
 
   stop(): void {
     this.stopped = true;
-    if (this.pollTimer) {
-      clearTimeout(this.pollTimer);
-      this.pollTimer = null;
-    }
+    this.stopStateStream?.();
+    this.stopStateStream = null;
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = null;
   }
 
   isRunning(): boolean {
@@ -96,6 +95,7 @@ export class DeviceMeshCoordinator {
       bootstrapTicket: ticket.ticket,
       fingerprint: pairing?.fingerprint,
       coreId: pairing?.coreId,
+      replaceCandidate: true,
     });
 
     await this.refreshStatus();
@@ -136,17 +136,30 @@ return null;
 }
   }
 
-  private async pollLoop(): Promise<void> {
-    while (!this.stopped) {
-      try {
-        await this.refreshStatus();
-      } catch (error) {
-  console.error("[original-error]", error);
-}
-      await new Promise((resolve) => {
-        this.pollTimer = setTimeout(resolve, this.pollIntervalMs);
-      });
-    }
+  private connectStateStream(): void {
+    if (this.stopped || this.stopStateStream) return;
+    this.stopStateStream = watchMeshState(
+      (state) => {
+        this.reconnectAttempt = 0;
+        this.emitState(state as DeviceMeshAgentState);
+        void this.refreshStatus();
+      },
+      (error) => {
+        if (error) console.error("[original-error]", error);
+        this.stopStateStream?.();
+        this.stopStateStream = null;
+        this.scheduleStateReconnect();
+      },
+    );
+  }
+
+  private scheduleStateReconnect(): void {
+    if (this.stopped || this.reconnectTimer) return;
+    const delay = Math.min(30_000, 1000 * 2 ** this.reconnectAttempt++);
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.connectStateStream();
+    }, delay);
   }
 
   private emitState(state: DeviceMeshAgentState): void {

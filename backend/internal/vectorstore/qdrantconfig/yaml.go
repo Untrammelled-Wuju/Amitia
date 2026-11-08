@@ -40,6 +40,7 @@ type qdrantYAMLWAL struct {
 type qdrantYAMLPerformance struct {
 	MaxSearchThreads   uint64 `yaml:"max_search_threads"`
 	OptimizerCPUBudget int64  `yaml:"optimizer_cpu_budget"`
+	IoUring            string `yaml:"io_uring,omitempty"`
 }
 
 type qdrantYAMLOptimizers struct {

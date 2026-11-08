@@ -2,12 +2,16 @@ package dataportability
 
 import (
 	"archive/zip"
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 )
+
+const maxManifestSizeBytes = 1 << 20
 
 type VerificationResult struct {
 	Format             string   `json:"format"`
@@ -45,12 +49,17 @@ func VerifyArchive(archivePath string) (*VerificationResult, error) {
 		return result, ErrImportPackageInvalid
 	}
 	seenEntries := make(map[string]bool, len(zr.File))
+	var archiveUncompressed uint64
 	for _, entry := range zr.File {
 		if seenEntries[entry.Name] {
 			return result, ErrImportPackageInvalid
 		}
 		seenEntries[entry.Name] = true
 		if entry.UncompressedSize64 > MaxSingleResource {
+			return result, ErrBackupCompressionInvalid
+		}
+		archiveUncompressed += entry.UncompressedSize64
+		if archiveUncompressed > MaxTotalResources {
 			return result, ErrBackupCompressionInvalid
 		}
 	}
@@ -67,6 +76,10 @@ func VerifyArchive(archivePath string) (*VerificationResult, error) {
 	}
 	defer mf.Close()
 
+	if manifestFile.UncompressedSize64 > maxManifestSizeBytes {
+		result.Errors = append(result.Errors, "manifest exceeds maximum size")
+		return result, ErrBackupCompressionInvalid
+	}
 	manifestData, err := io.ReadAll(mf)
 	if err != nil {
 		return nil, err
@@ -85,7 +98,12 @@ func VerifyArchive(archivePath string) (*VerificationResult, error) {
 	}
 
 	var totalCompressed, totalUncompressed uint64
+	seenComponents := make(map[string]bool, len(manifest.Components))
 	for _, comp := range manifest.Components {
+		if comp.ID == "" || seenComponents[comp.ID] {
+			return result, ErrBackupManifestInvalid
+		}
+		seenComponents[comp.ID] = true
 		var matched *zip.File
 		for _, zf := range zr.File {
 			isFullPath := zf.Name == comp.Path
@@ -111,21 +129,30 @@ func VerifyArchive(archivePath string) (*VerificationResult, error) {
 			return result, ErrBackupCompressionInvalid
 		}
 
-		if comp.SHA256 != "" {
-			rc, err := matched.Open()
-			if err != nil {
-				result.ComponentsFailed++
-				continue
-			}
-			h := sha256.New()
-			io.Copy(h, rc)
-			rc.Close()
-			actualSum := hex.EncodeToString(h.Sum(nil))
-			if actualSum != comp.SHA256 {
-				result.ComponentsFailed++
-				result.Errors = append(result.Errors, "checksum mismatch: "+comp.ID)
-				continue
-			}
+		expected, decodeErr := hex.DecodeString(comp.SHA256)
+		if len(comp.SHA256) != sha256.Size*2 || decodeErr != nil {
+			result.ComponentsFailed++
+			result.Errors = append(result.Errors, "missing or invalid checksum: "+comp.ID)
+			continue
+		}
+		rc, err := matched.Open()
+		if err != nil {
+			result.ComponentsFailed++
+			result.Errors = append(result.Errors, "open component: "+comp.ID+": "+err.Error())
+			continue
+		}
+		h := sha256.New()
+		_, copyErr := io.Copy(h, rc)
+		closeErr := rc.Close()
+		if copyErr != nil || closeErr != nil {
+			result.ComponentsFailed++
+			result.Errors = append(result.Errors, "read component: "+comp.ID+": "+errors.Join(copyErr, closeErr).Error())
+			continue
+		}
+		if actual := h.Sum(nil); !bytes.Equal(actual, expected) {
+			result.ComponentsFailed++
+			result.Errors = append(result.Errors, "checksum mismatch: "+comp.ID)
+			continue
 		}
 
 		result.ComponentsVerified++

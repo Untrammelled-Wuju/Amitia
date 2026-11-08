@@ -85,7 +85,7 @@ func NewHostPluginPackageManager(runtime *Runtime, profile runtimeprofile.Profil
 					return errors.New("plugin package redirect must not contain user information")
 				}
 				if profile == runtimeprofile.ProfileCloudCore && request.URL.Scheme != "https" {
-					return errors.New("Cloud Core plugin package redirects must use HTTPS")
+					return errors.New("统筹中心插件包重定向必须使用 HTTPS")
 				}
 				if len(via) > 0 && via[len(via)-1].URL.Host != request.URL.Host {
 					request.Header.Del("Authorization")
@@ -267,7 +267,7 @@ func (m *HostPluginPackageManager) openPackage(ctx context.Context, packageURI, 
 	}
 	if parsed.Scheme == "file" {
 		if m.profile == runtimeprofile.ProfileCloudCore {
-			return nil, "", "", errors.New("Cloud Core cannot install a plugin package from a local file")
+			return nil, "", "", errors.New("统筹中心不能从本地文件安装插件包")
 		}
 		file, err := os.Open(filepath.FromSlash(parsed.Path))
 		if err != nil {
@@ -277,7 +277,7 @@ func (m *HostPluginPackageManager) openPackage(ctx context.Context, packageURI, 
 	}
 	if m.profile == runtimeprofile.ProfileCloudCore {
 		if parsed.Scheme != "https" {
-			return nil, "", "", errors.New("Cloud Core only permits HTTPS plugin package downloads")
+			return nil, "", "", errors.New("统筹中心仅允许通过 HTTPS 下载插件包")
 		}
 		host := parsed.Hostname()
 		if ip := net.ParseIP(host); ip != nil && (ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsUnspecified()) {

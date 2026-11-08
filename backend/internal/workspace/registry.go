@@ -131,6 +131,19 @@ func (r *Registry) UpdateRemoteMountConfig(id WorkspaceID, config RemoteMountCon
 	return m, true
 }
 
+func (r *Registry) UpdateLocalMountConfig(id WorkspaceID, readOnly bool) (WorkspaceMount, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	m, ok := r.mounts[id]
+	if !ok || m.Kind != WorkspaceKindLocal {
+		return WorkspaceMount{}, false
+	}
+	m.ReadOnly = readOnly
+	m.UpdatedAt = time.Now().UTC()
+	r.mounts[id] = m
+	return m, true
+}
+
 func (r *Registry) InvalidateRemoteClients(id WorkspaceID) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

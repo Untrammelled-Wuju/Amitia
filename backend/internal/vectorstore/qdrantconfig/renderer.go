@@ -75,6 +75,7 @@ func renderMobile(doc Document) ([]byte, error) {
 			Performance: qdrantYAMLPerformance{
 				MaxSearchThreads:   s.MaxSearchThreads,
 				OptimizerCPUBudget: s.OptimizerCPUBudget,
+				IoUring:            s.IoUring,
 			},
 			Optimizers: qdrantYAMLOptimizers{
 				DefaultSegmentNumber:   s.DefaultSegmentNumber,

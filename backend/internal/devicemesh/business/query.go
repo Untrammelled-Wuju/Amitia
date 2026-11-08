@@ -3,6 +3,8 @@ package business
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -32,9 +34,9 @@ func (e *Engine) Query(ctx context.Context, request Request, query coordination.
 		}
 		query.SearchQuery, query.ResourceKind = search, "conversation"
 	}
-	ctx, scope, finish, err := e.coordination.Begin(ctx, request.SpaceID, request.DeviceID, request.TargetDeviceID, request.CoreID, request.RoleID, uuid.NewString())
+	ctx, scope, finish, err := e.beginRequest(ctx, request, request.RoleID, uuid.NewString())
 	if err != nil {
-		return QueryResult{}, err
+		return QueryResult{}, fmt.Errorf("建立数据查询权限失败: %w", err)
 	}
 	defer finish()
 	if err := e.coordination.RequireCapability(ctx, scope.SpaceID, scope.InitiatorDeviceID, scope.TargetDeviceID, "ai.chat"); err != nil {
@@ -42,7 +44,7 @@ func (e *Engine) Query(ctx context.Context, request Request, query coordination.
 	}
 	roles, err := e.data.Roles(ctx, scope)
 	if err != nil {
-		return QueryResult{}, err
+		return QueryResult{}, fmt.Errorf("读取查询角色失败: %w", err)
 	}
 	requestedRole := request.RoleID
 	if requestedRole == "" {
@@ -64,7 +66,7 @@ func (e *Engine) Query(ctx context.Context, request Request, query coordination.
 		if port, ok := e.data.(coordination.GroupStatePort); ok {
 			group, groupErr := port.GroupState(ctx, scope, query.ConversationID)
 			if groupErr != nil {
-				return QueryResult{}, groupErr
+				return QueryResult{}, fmt.Errorf("读取会话分组失败: %w", groupErr)
 			}
 			if group.IsGroup() {
 				scope.ConversationRoleID = group.ConversationRoleID
@@ -88,14 +90,16 @@ func (e *Engine) Query(ctx context.Context, request Request, query coordination.
 		scope.MemoryViewAll = all
 	}
 	ctx = coordination.WithScope(ctx, scope)
-	conversationRoute, err := e.resolveStoredConversationRoute(ctx, scope, query.ConversationID, request.ConversationOrigin)
+	resolutionRequest := request
+	resolutionRequest.ConversationID = query.ConversationID
+	conversationRoute, err := e.resolveRunConversationRoute(ctx, scope, resolutionRequest)
 	if err != nil {
 		return QueryResult{}, err
 	}
 	query.ConversationID = conversationRoute.CurrentID
 	snapshot, err := e.data.Snapshot(ctx, scope, query)
 	if err != nil {
-		return QueryResult{}, err
+		return QueryResult{}, fmt.Errorf("读取查询快照失败: %w", err)
 	}
 	if err := coordination.ValidateSnapshot(scope, snapshot); err != nil {
 		return QueryResult{}, err
@@ -113,14 +117,22 @@ func (e *Engine) Query(ctx context.Context, request Request, query coordination.
 			return QueryResult{}, err
 		}
 	}
-	if port, ok := e.data.(coordination.HistoricalDataPort); ok && scope.Coordinated && (conversationRoute.HistoricalID != "" || query.Management && query.HistoricalRoleID != "") && (query.Cursor == "" || query.HistoricalCursor != "") {
+	historicalID := conversationRoute.HistoricalID
+	if historicalID == "" && query.Management && query.HistoricalRoleID != "" && scope.Coordinated && scope.TargetDeviceID != scope.CoreID && request.ConversationOrigin == nil {
+		historicalID = query.ConversationID
+	}
+	if scope.Coordinated && (historicalID != "" || query.Management && query.HistoricalRoleID != "") && (query.Cursor == "" || query.HistoricalCursor != "") {
+		port, ok := e.data.(coordination.HistoricalDataPort)
+		if !ok {
+			return QueryResult{}, errors.New("历史数据读取端口不可用")
+		}
 		historicalQuery := query
-		historicalQuery.ConversationID = conversationRoute.HistoricalID
+		historicalQuery.ConversationID = historicalID
 		historicalQuery.Cursor = query.HistoricalCursor
 		historicalQuery.HistoricalCursor = ""
 		result.HistoricalSnapshot, err = port.HistoricalSnapshot(ctx, scope, historicalQuery)
 		if err != nil {
-			return QueryResult{}, err
+			return QueryResult{}, fmt.Errorf("读取历史查询快照失败: %w", err)
 		}
 	}
 	filterHistoricalContinuationMirrors(conversationRoute, result.Snapshot, result.HistoricalSnapshot)

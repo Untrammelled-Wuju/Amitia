@@ -129,7 +129,10 @@ func (r *Runtime) PreviewPackage(ctx context.Context, request PackagePreviewRequ
 			preview.Issues = append(preview.Issues, issue)
 		}
 	}
-	if len(pkg.V2Signature) > 0 {
+	if request.TrustedBundled {
+		preview.SignatureStatus = "bundled"
+		preview.TrustDecision = "bundled"
+	} else if len(pkg.V2Signature) > 0 {
 		doc, parseErr := trust.ParseSignatureDocument(pkg.V2Signature)
 		if parseErr != nil {
 			return InstallPreview{}, fmt.Errorf("kernel: invalid v2 signature document: %w", parseErr)
@@ -176,13 +179,17 @@ func (r *Runtime) PreviewPackage(ctx context.Context, request PackagePreviewRequ
 			preview.Issues = append(preview.Issues, PreviewIssue{Category: PreviewNotInstallable, Code: "package_signature_required", Message: "signed package required in production"})
 		}
 	}
-	if reason := r.packageTrustBlockReason(ctx, pkg, artifact.ArchiveHash); reason != "" {
-		preview.TrustDecision = "rejected"
-		preview.Issues = append(preview.Issues, PreviewIssue{Category: PreviewNotInstallable, Code: "trust_policy_rejected", Message: reason})
+	if !request.TrustedBundled {
+		if reason := r.packageTrustBlockReason(ctx, pkg, artifact.ArchiveHash); reason != "" {
+			preview.TrustDecision = "rejected"
+			preview.Issues = append(preview.Issues, PreviewIssue{Category: PreviewNotInstallable, Code: "trust_policy_rejected", Message: reason})
+		}
 	}
 	appendGamePluginArtifactPackageIssues(pkg, &preview)
 	r.evaluatePackageCompatibilityAndDependencies(ctx, pkg, &preview)
-	r.evaluatePackageUpdateRisks(ctx, &preview)
+	if !request.TrustedBundled {
+		r.evaluatePackageUpdateRisks(ctx, &preview)
+	}
 	r.evaluatePackageMigrationPreflight(ctx, pkg.Manifest, &preview)
 	for _, file := range pkg.Files {
 		lower := strings.ToLower(file.Path)

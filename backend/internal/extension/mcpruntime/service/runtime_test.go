@@ -15,6 +15,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	kernelmcp "github.com/u-ai/backend/internal/extension/kernel/mcp"
+	"github.com/u-ai/backend/internal/extension/kernel/scope"
 	mcp "github.com/u-ai/backend/internal/extension/mcpruntime"
 	"github.com/u-ai/backend/internal/extension/mcpruntime/client"
 	"github.com/u-ai/backend/internal/extension/mcpruntime/protocol"
@@ -164,7 +165,7 @@ func TestContributionBindingPlacementIsEnforced(t *testing.T) {
 				kernelmcp.NewCanonicalStdioRegistry(kernelmcp.NewCanonicalStdioFactory(resolver)),
 				kernelmcp.NewCanonicalRemoteRegistry(kernelmcp.NewCanonicalRemoteFactory()),
 				resolver,
-				kernel.NewToolFacade(registry, nil),
+				newTestToolFacade(registry),
 				nil,
 				t.TempDir(),
 				test.profile,
@@ -366,12 +367,20 @@ func buildTestRuntime(t *testing.T, dataDir string, db *gorm.DB, repository *mcp
 		kernelmcp.NewCanonicalStdioRegistry(kernelmcp.NewCanonicalStdioFactory(resolver)),
 		kernelmcp.NewCanonicalRemoteRegistry(kernelmcp.NewCanonicalRemoteFactory()),
 		resolver,
-		kernel.NewToolFacade(registry, nil),
+		newTestToolFacade(registry),
 		nil,
 		dataDir,
 		runtimeprofile.ProfileLocal,
 	)
 	return runtime, err
+}
+
+func newTestToolFacade(registry *capability.ToolRegistry) *kernel.ToolFacade {
+	facade := kernel.NewToolFacade(registry, nil)
+	facade.SetCapabilityProviders(capability.NewProviderRegistry())
+	scopeStore := scope.NewMemoryScopeStore()
+	facade.SetScopeManager(scope.NewScopeManager(scopeStore, scope.NewScopeEvaluator(scopeStore, nil)))
+	return facade
 }
 
 func newMCPTestDB(t *testing.T) *gorm.DB {

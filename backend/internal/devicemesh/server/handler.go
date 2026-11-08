@@ -23,6 +23,7 @@ import (
 type CommandAckHandler func(invocationID string, generation int64, status string, result json.RawMessage) bool
 type DisconnectHandler func(sessionID string, generation int64)
 type ReadyHandler func(spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID)
+type CapabilityExposureHandler func(context.Context, runtimeidentity.SpaceID, runtimeidentity.DeviceID, int64, []string) error
 type InvocationResultHandler func(result protocol.RuntimeResultPayload)
 type InvocationErrorHandler func(errResult protocol.RuntimeErrorPayload)
 type InvocationCancelAckHandler func(invocationID string, reason string)
@@ -60,6 +61,7 @@ type Handler struct {
 	onTaskProgressPayload   TaskProgressPayloadHandler
 	onTaskCheckpointPayload TaskCheckpointPayloadHandler
 	onTaskHeartbeatPayload  TaskHeartbeatPayloadHandler
+	onCapabilityExposure    CapabilityExposureHandler
 }
 
 func NewHandler(sessions *deviceruntime.Service, hub *ConnectionHub) *Handler {
@@ -88,6 +90,10 @@ func (h *Handler) SetOnCommandAck(handler CommandAckHandler) {
 
 func (h *Handler) SetOnDisconnect(handler DisconnectHandler) {
 	h.onDisconnect = handler
+}
+
+func (h *Handler) SetOnCapabilityExposure(handler CapabilityExposureHandler) {
+	h.onCapabilityExposure = handler
 }
 
 func (h *Handler) SetOnReady(handler ReadyHandler) {
@@ -201,6 +207,12 @@ func (h *Handler) handleConnection(ctx context.Context, conn *websocket.Conn, pr
 		h.sendError(conn, "mesh.identity_mismatch", "envelope identity does not match credential", true)
 		return fmt.Errorf("identity mismatch")
 	}
+	if hello.CapabilityExposureRevision > 0 && h.onCapabilityExposure != nil {
+		if err := h.onCapabilityExposure(ctx, principal.SpaceID, principal.DeviceID, hello.CapabilityExposureRevision, hello.ExposedCapabilities); err != nil {
+			h.sendError(conn, "mesh.capability_catalog_invalid", err.Error(), true)
+			return fmt.Errorf("persist capability exposure: %w", err)
+		}
+	}
 
 	acquireReq := deviceruntime.AcquireRequest{
 		Identity: protocol.SessionIdentity{
@@ -266,16 +278,20 @@ func (h *Handler) handleConnection(ctx context.Context, conn *websocket.Conn, pr
 	onReady := h.onReady
 	readyObservers := append([]ReadyHandler(nil), h.onReadyObservers...)
 	h.readyMu.RUnlock()
-	if onReady != nil {
-		onReady(principal.SpaceID, principal.DeviceID)
-	}
-	for _, observer := range readyObservers {
-		if observer != nil {
-			observer(principal.SpaceID, principal.DeviceID)
-		}
-	}
+	h.dispatchReady(onReady, readyObservers, principal.SpaceID, principal.DeviceID)
 
 	return h.messageLoop(ctx, meshConn, session.ID, session.ConnectionGeneration, env.Sequence)
+}
+
+func (h *Handler) dispatchReady(onReady ReadyHandler, observers []ReadyHandler, spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID) {
+	if onReady != nil {
+		go onReady(spaceID, deviceID)
+	}
+	for _, observer := range observers {
+		if observer != nil {
+			go observer(spaceID, deviceID)
+		}
+	}
 }
 
 func (h *Handler) readHello(conn *websocket.Conn) ([]byte, error) {
@@ -412,14 +428,18 @@ func (h *Handler) messageLoop(ctx context.Context, conn *MeshConnection, session
 				conn.LastPongAt = time.Now().UTC()
 				pong := protocol.PongPayload{Time: ping.Time}
 				if err := h.sendEnvelope(conn, protocol.MessageTypePong, pong); err != nil {
-					log.Printf("[original-error] %v", err)
+					return fmt.Errorf("send pong: %w", err)
 				}
-				h.sessions.Heartbeat(ctx, sessionID, generation, time.Now().UTC())
+				if _, err := h.sessions.Heartbeat(ctx, sessionID, generation, time.Now().UTC()); err != nil {
+					return fmt.Errorf("record ping heartbeat: %w", err)
+				}
 			}
 
 		case protocol.MessageTypePong:
 			conn.LastPongAt = time.Now().UTC()
-			h.sessions.Heartbeat(ctx, sessionID, generation, time.Now().UTC())
+			if _, err := h.sessions.Heartbeat(ctx, sessionID, generation, time.Now().UTC()); err != nil {
+				return fmt.Errorf("record pong heartbeat: %w", err)
+			}
 
 		case protocol.MessageTypeCommand:
 			h.sendErrorConn(conn, "mesh.unsupported_command", "commands not supported in G21", false)
@@ -508,6 +528,27 @@ func (h *Handler) messageLoop(ctx context.Context, conn *MeshConnection, session
 				if h.onInvocationCancelAck != nil {
 					h.onInvocationCancelAck(cancel.InvocationID, cancel.Reason)
 				}
+			}
+
+		case protocol.MessageTypeCapabilityCatalog:
+			var catalog protocol.CapabilityCatalogPayload
+			if err := json.Unmarshal(env.Payload, &catalog); err != nil {
+				h.sendErrorConn(conn, "mesh.capability_catalog_invalid", err.Error(), false)
+				break
+			}
+			if h.onCapabilityExposure == nil {
+				if err := h.sendEnvelope(conn, protocol.MessageTypeCapabilityCatalogAck, protocol.CapabilityCatalogAckPayload{Revision: catalog.Revision, Accepted: false, Error: "设备能力目录接收方未配置"}); err != nil {
+					log.Printf("[original-error] %v", err)
+				}
+				break
+			}
+			persistErr := h.onCapabilityExposure(ctx, conn.SpaceID, conn.DeviceID, catalog.Revision, catalog.Capabilities)
+			ack := protocol.CapabilityCatalogAckPayload{Revision: catalog.Revision, Accepted: persistErr == nil}
+			if persistErr != nil {
+				ack.Error = persistErr.Error()
+			}
+			if err := h.sendEnvelope(conn, protocol.MessageTypeCapabilityCatalogAck, ack); err != nil {
+				log.Printf("[original-error] %v", err)
 			}
 
 		default:

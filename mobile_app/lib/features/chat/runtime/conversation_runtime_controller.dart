@@ -75,7 +75,7 @@ class ConversationRuntimeController extends ChangeNotifier {
          permissionPreferences?.mode,
        ) {
     _ownedPoll = Timer.periodic(
-      const Duration(seconds: 3),
+      const Duration(seconds: 30),
       (_) => unawaited(_pollOwnedState()),
     );
   }
@@ -1748,6 +1748,11 @@ class ConversationRuntimeController extends ChangeNotifier {
     );
   }
 
+  void dismissPendingApproval(String approvalId) {
+    final changed = _pendingApprovals.remove(approvalId.trim()) != null;
+    if (changed) notifyListeners();
+  }
+
   void _projectTurns() {
     final turns = _agentReducer.turns;
     final activeRenderIds = <String>{};
@@ -1861,6 +1866,7 @@ class ConversationRuntimeController extends ChangeNotifier {
   ChatMessage _messageFromDto(MessageDto dto) {
     final role = _roleFor(dto.role);
     final type = _typeForDto(dto, null);
+    final parsedTime = DateTime.tryParse(dto.createdAt);
     String groupAvatar(String characterId) {
       for (final member in _group?.members ?? const <OwnedGroupMember>[]) {
         if (member.characterId == characterId) return member.characterAvatar;
@@ -1898,7 +1904,7 @@ class ConversationRuntimeController extends ChangeNotifier {
       content: dto.content,
       reasoningContent: dto.reasoningContent,
       reasoningDurationMs: dto.reasoningDurationMs,
-      time: DateTime.tryParse(dto.createdAt) ?? DateTime.now(),
+      time: (parsedTime ?? DateTime.now()).toLocal(),
       sequence: dto.sequence > 0 ? dto.sequence : null,
       status: _statusForDto(dto.status),
       agentTaskId: _firstString(task, const <String>[
@@ -2721,8 +2727,10 @@ class ConversationRuntimeRegistry extends ChangeNotifier {
   Timer? _notifyTimer;
   bool _disposed = false;
   String _visibleConversationId = '';
+  int _collectionRevision = 0;
 
   String get visibleConversationId => _visibleConversationId;
+  int get collectionRevision => _collectionRevision;
   Iterable<ConversationRuntimeController> get sessions =>
       _sessions.values.toSet();
 
@@ -2849,6 +2857,7 @@ class ConversationRuntimeRegistry extends ChangeNotifier {
     final id = conversationId.trim();
     if (id.isEmpty || _visibleConversationId == id) return;
     _backgroundCompletions[id] = (_backgroundCompletions[id] ?? 0) + 1;
+    _collectionRevision++;
     _scheduleNotify();
   }
 
@@ -2903,7 +2912,5 @@ final conversationRuntimeRegistryProvider =
 
 final conversationRuntimeControllerProvider =
     ChangeNotifierProvider<ConversationRuntimeController>((ref) {
-      return ref
-          .watch(conversationRuntimeRegistryProvider)
-          .session('default');
+      return ref.watch(conversationRuntimeRegistryProvider).session('default');
     });

@@ -237,7 +237,7 @@ func (r *WorkflowDeviceCatalogRepository) ReplaceDevice(ctx context.Context, own
 		return err
 	}
 	defer func() {
-		if err := tx.Rollback(); err != nil {
+		if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
 			amitialog.Printf("[original-error] %v", err)
 		}
 	}()

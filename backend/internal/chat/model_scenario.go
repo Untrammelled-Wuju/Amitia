@@ -2,9 +2,14 @@ package chat
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
+
+	"gorm.io/gorm"
 )
+
+var ErrModelNotConfigured = errors.New("没有可用的模型配置，请先在设置中配置并启用模型")
 
 type modelScenario struct {
 	ID          string
@@ -59,7 +64,7 @@ func (s *service) modelForScenario(scenario string, explicitID int) (*ModelConfi
 		return nil, fmt.Errorf("不支持的模型用途: %s", scenario)
 	}
 	if explicitID > 0 {
-		return s.repo.GetModelByID(explicitID)
+		return normalizeActiveModel(s.repo.GetModelByID(explicitID))
 	}
 	routes, err := s.repo.GetModelRoutes()
 	if err != nil {
@@ -74,8 +79,26 @@ func (s *service) modelForScenario(scenario string, explicitID int) (*ModelConfi
 			return nil, err
 		}
 		if id > 0 {
-			return s.repo.GetModelByID(id)
+			return normalizeActiveModel(s.repo.GetModelByID(id))
 		}
 	}
-	return s.repo.GetActiveModel()
+	return normalizeActiveModel(s.repo.GetActiveModel())
+}
+
+func normalizeModelLookup(cfg *ModelConfig, err error) (*ModelConfig, error) {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrModelNotConfigured
+	}
+	return cfg, err
+}
+
+func normalizeActiveModel(cfg *ModelConfig, err error) (*ModelConfig, error) {
+	cfg, err = normalizeModelLookup(cfg, err)
+	if err != nil {
+		return nil, err
+	}
+	if cfg == nil || cfg.IsActive != 1 {
+		return nil, ErrModelNotConfigured
+	}
+	return cfg, nil
 }

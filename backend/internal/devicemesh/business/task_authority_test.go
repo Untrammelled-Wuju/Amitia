@@ -37,7 +37,7 @@ func TestTaskExecutionAuthorityRequiresTaskGrantRoleAndCurrentMode(t *testing.T)
 		t.Fatal(err)
 	}
 	roles, roleScope, _, err := engine.TaskRoles(t.Context(), request)
-	if err != nil || len(roles) != 1 || roles[0].ID != "role" || roleScope.RoleOwnerID != "b" || model.calls.Load() != 0 {
+	if err != nil || len(roles) != 1 || roles[0].ID != "role" || roleScope.RoleOwnerID != "core" || model.calls.Load() != 0 {
 		t.Fatalf("任务角色列表未使用目标设备归属: %+v %+v %v", roles, roleScope, err)
 	}
 	current, authority, finish, err := engine.OpenTaskExecution(t.Context(), request)

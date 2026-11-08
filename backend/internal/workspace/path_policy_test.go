@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/glebarez/sqlite"
+	"gorm.io/gorm"
 )
 
 func TestValidateRelativePath(t *testing.T) {
@@ -94,6 +97,81 @@ func TestSymlinkProtection(t *testing.T) {
 	}
 	if !errors.Is(err, ErrSymlinkNotAllowed) {
 		t.Errorf("expected ErrSymlinkNotAllowed, got %v", err)
+	}
+}
+
+func TestLocalBackendListMarksSymlinkUnavailable(t *testing.T) {
+	tmpDir := t.TempDir()
+	root := filepath.Join(tmpDir, "ws")
+	if err := os.MkdirAll(root, 0755); err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(tmpDir, "outside.txt")
+	if err := os.WriteFile(outside, []byte("outside"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "escape.txt")); err != nil {
+		t.Skip("symlinks not supported on this platform")
+	}
+	backend := NewLocalBackend(root)
+	mount := WorkspaceMount{
+		ID:      "test",
+		Name:    "Test",
+		Kind:    WorkspaceKindLocal,
+		RootURI: "amitia://workspace/@test/",
+	}
+	entries, err := backend.List(t.Context(), mount, "", ListOptions{Limit: 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("unexpected entries: %#v", entries)
+	}
+	if entries[0].Readable || entries[0].Writable {
+		t.Fatalf("symlink was advertised as usable: %#v", entries[0])
+	}
+}
+
+func TestRegisterLocalMountAppliesReadOnlyOnExistingRoot(t *testing.T) {
+	root := t.TempDir()
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "workspace.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`CREATE TABLE workspace_mounts (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL,
+		kind TEXT NOT NULL,
+		local_root TEXT NOT NULL DEFAULT '',
+		native_grant_id TEXT NOT NULL DEFAULT '',
+		backend_config_json TEXT NOT NULL DEFAULT '',
+		credential_ref TEXT NOT NULL DEFAULT '',
+		read_only INTEGER NOT NULL DEFAULT 0,
+		enabled INTEGER NOT NULL DEFAULT 1,
+		created_at TEXT NOT NULL,
+		updated_at TEXT NOT NULL,
+		last_used_at TEXT NOT NULL
+	)`).Error; err != nil {
+		t.Fatal(err)
+	}
+	service := NewServiceWithPersistence(NewRegistry(), nil, NewMountRepository(db), nil)
+	first, err := service.RegisterLocalMount(t.Context(), "workspace", root, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := service.RegisterLocalMount(t.Context(), "workspace", root, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.ID != first.ID {
+		t.Fatalf("same root produced a different mount: %s != %s", second.ID, first.ID)
+	}
+	if !second.ReadOnly {
+		t.Fatalf("existing writable mount ignored the read-only request: %#v", second)
+	}
+	current, ok := service.registry.GetMount(first.ID)
+	if !ok || !current.ReadOnly {
+		t.Fatalf("registry did not apply read-only mode: %#v", current)
 	}
 }
 

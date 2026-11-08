@@ -60,9 +60,10 @@ func provisionBundledPlugin(ctx context.Context, runtime *Runtime, path, spaceID
 		return fmt.Errorf("open package: %w", err)
 	}
 	preview, previewErr := runtime.PreviewPackage(ctx, PackagePreviewRequest{
-		SpaceID:   spaceID,
-		ScopeType: "global",
-		FileName:  filepath.Base(path),
+		SpaceID:        spaceID,
+		ScopeType:      "global",
+		FileName:       filepath.Base(path),
+		TrustedBundled: true,
 		Source: PackageSourceProvenance{
 			URI:        "bundled:" + filepath.Base(path),
 			CatalogID:  "bundled",

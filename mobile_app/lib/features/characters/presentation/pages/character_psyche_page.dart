@@ -7,8 +7,10 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/services/shared_core_data_access.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import '../../../../core/widgets/shared_core_read_only_banner.dart';
 
 class CharacterPsychePage extends ConsumerStatefulWidget {
   final String characterId;
@@ -45,6 +47,17 @@ class _CharacterPsychePageState extends ConsumerState<CharacterPsychePage> {
 
   @override
   Widget build(BuildContext context) {
+    final accessAsync = ref.watch(sharedCoreDataAccessProvider);
+    final access =
+        accessAsync.valueOrNull ??
+        SharedCoreDataAccess(
+          read: true,
+          write: false,
+          reason: accessAsync.hasError
+              ? '无法确认统筹中心数据权限：${accessAsync.error}'
+              : '正在确认统筹中心数据权限',
+          coreId: '',
+        );
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '心理状态',
@@ -53,24 +66,31 @@ class _CharacterPsychePageState extends ConsumerState<CharacterPsychePage> {
       ),
       body: SafeArea(
         top: false,
-        child: FutureBuilder<Map<String, dynamic>?>(
-          future: _psycheFuture,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (snapshot.hasError) {
-              return AmitiaErrorState(message: '加载失败: ${snapshot.error}');
-            }
-            final state = snapshot.data;
-            if (state == null || state.isEmpty) {
-              return const AmitiaEmptyState(
-                icon: Icons.psychology_outlined,
-                title: '暂无心理状态数据',
-              );
-            }
-            return _buildContent(context, state, _historyFuture);
-          },
+        child: Column(
+          children: [
+            if (access.readOnly) SharedCoreReadOnlyBanner(access: access),
+            Expanded(
+              child: FutureBuilder<Map<String, dynamic>?>(
+                future: _psycheFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (snapshot.hasError) {
+                    return AmitiaErrorState(message: '加载失败: ${snapshot.error}');
+                  }
+                  final state = snapshot.data;
+                  if (state == null || state.isEmpty) {
+                    return const AmitiaEmptyState(
+                      icon: Icons.psychology_outlined,
+                      title: '暂无心理状态数据',
+                    );
+                  }
+                  return _buildContent(context, state, _historyFuture);
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -218,7 +238,7 @@ class _CharacterPsychePageState extends ConsumerState<CharacterPsychePage> {
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton(
-                      onPressed: _deletingEmotionId == null
+                      onPressed: _deletingEmotionId == null && _canWrite
                           ? () => _clearEmotionHistory(context, items)
                           : null,
                       child: const Text('清空'),
@@ -306,7 +326,7 @@ class _CharacterPsychePageState extends ConsumerState<CharacterPsychePage> {
           SizedBox(width: AppSpacing.xs),
           IconButton(
             tooltip: '删除',
-            onPressed: _deletingEmotionId == null
+            onPressed: _deletingEmotionId == null && _canWrite
                 ? () => _deleteEmotionHistory(context, item)
                 : null,
             icon: _deletingEmotionId == item['id'].toString()
@@ -326,6 +346,7 @@ class _CharacterPsychePageState extends ConsumerState<CharacterPsychePage> {
     BuildContext context,
     Map<String, dynamic> item,
   ) async {
+    if (!_canWrite) return;
     final id = (item['id'] ?? '').toString();
     if (id.isEmpty) return;
     final confirmed = await showDialog<bool>(
@@ -376,6 +397,7 @@ class _CharacterPsychePageState extends ConsumerState<CharacterPsychePage> {
     BuildContext context,
     List<Map<String, dynamic>> items,
   ) async {
+    if (!_canWrite) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -421,6 +443,9 @@ class _CharacterPsychePageState extends ConsumerState<CharacterPsychePage> {
       ).showSnackBar(SnackBar(content: Text('清空失败：$error')));
     }
   }
+
+  bool get _canWrite =>
+      ref.read(sharedCoreDataAccessProvider).valueOrNull?.write ?? false;
 
   String _emotionLabel(String value) {
     return switch (value.trim().toLowerCase()) {

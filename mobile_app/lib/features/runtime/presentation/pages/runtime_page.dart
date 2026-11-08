@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -14,6 +16,9 @@ import '../../../../core/runtime/runtime_bridge.dart';
 import '../../../../core/runtime/runtime_bridge_state.dart';
 import '../../../../core/runtime/status/runtime_status_provider.dart';
 import '../../../../core/runtime/status/runtime_status_snapshot.dart';
+import '../../../../core/runtime/backend/mobile_backend_providers.dart';
+import '../../../../core/backend_connection/providers/backend_connection_providers.dart';
+import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 
 String _runtimeStateLabel(RuntimeStatusSnapshot status) {
   if (status.runtimeReady) return '运行中';
@@ -115,9 +120,38 @@ class _RuntimePageState extends ConsumerState<RuntimePage> {
     );
   }
 
+  void _resumeRuntimeCoordination() {
+    ref.invalidate(backendConnectionProvider);
+    ref.invalidate(backendTransportProvider);
+    final lifecycle = ref.read(mobileBackendLifecycleProvider);
+    lifecycle.resumeAutomaticReconciliation();
+    unawaited(lifecycle.reconcile(ref.read(mobileDeploymentConfigProvider)));
+  }
+
+  Future<RuntimeBridgeCommandResult> _startRuntime() async {
+    final result = await ref.read(runtimeBridgeProvider).start();
+    if (result.accepted && result.error == null) {
+      _resumeRuntimeCoordination();
+    }
+    return result;
+  }
+
+  Future<RuntimeBridgeCommandResult> _stopRuntime() async {
+    final lifecycle = ref.read(mobileBackendLifecycleProvider);
+    lifecycle.pauseAutomaticReconciliation();
+    final result = await ref.read(runtimeBridgeProvider).stop();
+    if (!result.accepted || result.error != null) {
+      lifecycle.resumeAutomaticReconciliation();
+    }
+    return result;
+  }
+
   Future<void> _repairRuntime() async {
     if (_commandInFlight) return;
     setState(() => _commandInFlight = true);
+    final lifecycle = ref.read(mobileBackendLifecycleProvider);
+    lifecycle.pauseAutomaticReconciliation();
+    var coordinationResumed = false;
     try {
       final bridge = ref.read(runtimeBridgeProvider);
       if (ref.read(runtimeStatusCurrentProvider).runtimeReady) {
@@ -150,9 +184,16 @@ class _RuntimePageState extends ConsumerState<RuntimePage> {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('运行环境已重新安装，正在启动')));
-        await bridge.start();
+        final startResult = await bridge.start();
+        if (startResult.accepted && startResult.error == null) {
+          _resumeRuntimeCoordination();
+          coordinationResumed = true;
+        }
       }
     } finally {
+      if (!coordinationResumed) {
+        lifecycle.resumeAutomaticReconciliation();
+      }
       if (mounted) setState(() => _commandInFlight = false);
     }
   }
@@ -221,9 +262,7 @@ class _RuntimePageState extends ConsumerState<RuntimePage> {
                   label: '启动',
                   icon: Icons.play_arrow,
                   onPressed: _canStart(status) && !_commandInFlight
-                      ? () => _runCommand(
-                          () => ref.read(runtimeBridgeProvider).start(),
-                        )
+                      ? () => _runCommand(_startRuntime)
                       : null,
                 ),
               if (status.runtimeReady ||
@@ -233,9 +272,7 @@ class _RuntimePageState extends ConsumerState<RuntimePage> {
                   icon: Icons.stop,
                   isSecondary: true,
                   onPressed: _canStop(status) && !_commandInFlight
-                      ? () => _runCommand(
-                          () => ref.read(runtimeBridgeProvider).stop(),
-                        )
+                      ? () => _runCommand(_stopRuntime)
                       : null,
                 ),
               AmitiaButton(
@@ -303,6 +340,16 @@ class _StatusCard extends StatelessWidget {
                 : BadgeType.neutral,
           ),
           _InfoLine(label: '已安装', value: status.runtimeInstalled ? '是' : '否'),
+          if (status.primaryError case final error?) ...[
+            Divider(height: AppSpacing.xl, color: context.borderPrimary),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: SelectableText(
+                error.toString(),
+                style: AppTypography.caption(context),
+              ),
+            ),
+          ],
         ],
       ),
     );

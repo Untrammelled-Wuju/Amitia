@@ -408,6 +408,9 @@ if (convId.value === response.conversationId && characterId.value === originalRo
         const assistant = { id: assistantId, uiKey: `request:${requestEnvelope.requestId}`, ownerId: response.executionScope.resourceOwnerId, sourceRevision: response.saved ? 1 : undefined, requestId: response.requestId, role: "assistant", content: response.reply, reasoningContent: response.reasoning, citationSnapshot: response.citationSnapshot || [], status: "completed", conversationId: response.conversationId, sourceConversationId: response.resourceConversationId || parseConversationReference(response.conversationId)?.id || response.conversationId, characterId: response.executionScope.roleId, executionScope: response.executionScope, saved: response.saved, memoryStatus: response.memoryStatus, createdAt: new Date().toISOString() };
         if (index >= 0) messages.value[index] = { ...messages.value[index], ...assistant };
         else messages.value.push(assistant);
+        for (const issue of response.postProcessingIssues || []) {
+          ElMessage.warning(`回复已保存；${issue.stage}：${issue.message}`);
+        }
         convId.value = response.conversationId;
         activeSendConversations.set(requestEnvelope.requestId, response.conversationId);
         syncSendState();

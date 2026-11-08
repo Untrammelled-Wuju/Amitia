@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/config"
-	"github.com/u-ai/backend/internal/devicemesh/agent"
 	"github.com/u-ai/backend/internal/devicemesh/lan"
 	"github.com/u-ai/backend/internal/spaceidentity"
 )
@@ -26,13 +25,9 @@ func startMeshLAN(ctx context.Context, services *AppServices, handler http.Handl
 	if err != nil {
 		return err
 	}
-	signer, err := agent.NewIdentityStore(config.AppCfg.Storage.DataDir).CryptoSigner()
-	if err != nil {
-		return err
-	}
 	var server *lan.Server
 	if len(addresses) > 0 {
-		server, err = lan.Start(handler, signer, spaceidentity.DefaultSpaceID(), port, addresses)
+		server, err = lan.Start(handler, config.AppCfg.Storage.DataDir, spaceidentity.DefaultSpaceID(), port, addresses)
 		if err != nil {
 			return err
 		}
@@ -89,7 +84,7 @@ func startMeshLAN(ctx context.Context, services *AppServices, handler http.Handl
 			if len(addresses) == 0 {
 				continue
 			}
-			server, err = lan.Start(handler, signer, spaceidentity.DefaultSpaceID(), port, addresses)
+			server, err = lan.Start(handler, config.AppCfg.Storage.DataDir, spaceidentity.DefaultSpaceID(), port, addresses)
 			if err != nil {
 				log.Printf("device mesh LAN listener restart failed: %v", err)
 				continue

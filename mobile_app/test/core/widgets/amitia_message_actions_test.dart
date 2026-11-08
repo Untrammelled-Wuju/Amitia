@@ -8,6 +8,30 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('消息头部的 UTC 时间按设备本地时区显示', (tester) async {
+    final instant = DateTime.parse('2026-11-08T04:39:00Z');
+    final local = instant.toLocal();
+    final expected =
+        '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AmitiaMessageView(
+            characterId: 'one',
+            message: ChatMessage(
+              id: 'utc-time',
+              role: MessageRole.assistant,
+              type: MessageType.text,
+              content: '时间测试',
+              time: instant,
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(find.text(expected), findsOneWidget);
+  });
+
   testWidgets('正文结束后思考和输入光标不等待保存而继续动画', (tester) async {
     await tester.pumpWidget(
       MaterialApp(

@@ -40,8 +40,16 @@ String originalErrorMapText(Map<dynamic, dynamic> value) {
 
 String originalErrorText(Object error) {
   if (error is BackendTransportError) {
+    final responseBody = error.responseBody;
     final cause = error.cause;
-    if (cause != null) return originalErrorText(cause);
+    final values = <String>[
+      if (responseBody is Map)
+        originalErrorMapText(responseBody)
+      else if (responseBody != null)
+        responseBody.toString(),
+      if (cause != null) originalErrorText(cause),
+    ].where((value) => value.trim().isNotEmpty).toSet();
+    if (values.isNotEmpty) return values.join('\n');
   }
   if (error is DioException) {
     final data = error.response?.data;

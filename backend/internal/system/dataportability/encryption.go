@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -23,6 +24,9 @@ const (
 	encryptionSaltSize = 16
 	encryptionKeySize  = 32
 	encryptionNonce    = 12
+	encryptionMemory   = 64 * 1024
+	encryptionRounds   = 3
+	encryptionThreads  = 2
 )
 
 type encryptedFileHeader struct {
@@ -93,9 +97,9 @@ func EncryptFile(sourcePath, destinationPath, passphrase string) error {
 		KDF:        "argon2id",
 		Salt:       salt,
 		Nonce:      noncePrefix,
-		MemoryKiB:  64 * 1024,
-		Iterations: 3,
-		Threads:    2,
+		MemoryKiB:  encryptionMemory,
+		Iterations: encryptionRounds,
+		Threads:    encryptionThreads,
 		ChunkBytes: encryptionChunk,
 	}
 	headerData, err := json.Marshal(header)
@@ -163,7 +167,7 @@ func EncryptFile(sourcePath, destinationPath, passphrase string) error {
 	return nil
 }
 
-func DecryptFile(sourcePath, destinationPath, passphrase string) error {
+func DecryptFile(sourcePath, destinationPath, passphrase string) (resultErr error) {
 	if passphrase == "" {
 		return ErrBackupPassphraseRequired
 	}
@@ -174,32 +178,41 @@ func DecryptFile(sourcePath, destinationPath, passphrase string) error {
 	if err != nil {
 		return err
 	}
-	defer source.Close()
+	defer func() { resultErr = errors.Join(resultErr, source.Close()) }()
 
 	magic := make([]byte, len(encryptedFileMagic))
-	if _, err := io.ReadFull(source, magic); err != nil || string(magic) != encryptedFileMagic {
-		return ErrRestoreDecryptFailed
+	if _, err := io.ReadFull(source, magic); err != nil {
+		return fmt.Errorf("%w: read magic: %w", ErrRestoreDecryptFailed, err)
+	}
+	if string(magic) != encryptedFileMagic {
+		return fmt.Errorf("%w: invalid encrypted file magic", ErrRestoreDecryptFailed)
 	}
 	var headerLength uint32
-	if err := binary.Read(source, binary.BigEndian, &headerLength); err != nil || headerLength == 0 || headerLength > 1<<20 {
-		return ErrRestoreDecryptFailed
+	if err := binary.Read(source, binary.BigEndian, &headerLength); err != nil {
+		return fmt.Errorf("%w: read header length: %w", ErrRestoreDecryptFailed, err)
+	}
+	if headerLength == 0 || headerLength > 1<<20 {
+		return fmt.Errorf("%w: invalid header length %d", ErrRestoreDecryptFailed, headerLength)
 	}
 	headerData := make([]byte, headerLength)
 	if _, err := io.ReadFull(source, headerData); err != nil {
-		return ErrRestoreDecryptFailed
+		return fmt.Errorf("%w: read header: %w", ErrRestoreDecryptFailed, err)
 	}
 	var header encryptedFileHeader
 	if err := json.Unmarshal(headerData, &header); err != nil {
-		return ErrRestoreDecryptFailed
+		return fmt.Errorf("%w: parse header: %w", ErrRestoreDecryptFailed, err)
 	}
 	if header.Version != encryptedVersion ||
 		header.Algorithm != "AES-256-GCM" ||
 		header.KDF != "argon2id" ||
 		len(header.Salt) != encryptionSaltSize ||
 		len(header.Nonce) != 8 ||
-		header.ChunkBytes <= 0 ||
-		header.ChunkBytes > 16<<20 {
-		return ErrRestoreDecryptFailed
+		header.ChunkBytes != encryptionChunk ||
+		header.MemoryKiB != encryptionMemory ||
+		header.Iterations != encryptionRounds ||
+		header.Threads != encryptionThreads {
+		return fmt.Errorf("%w: unsupported header parameters: version=%d algorithm=%q kdf=%q saltBytes=%d nonceBytes=%d chunkBytes=%d memoryKiB=%d iterations=%d threads=%d", ErrRestoreDecryptFailed,
+			header.Version, header.Algorithm, header.KDF, len(header.Salt), len(header.Nonce), header.ChunkBytes, header.MemoryKiB, header.Iterations, header.Threads)
 	}
 
 	destination, err := os.OpenFile(destinationPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
@@ -209,17 +222,11 @@ func DecryptFile(sourcePath, destinationPath, passphrase string) error {
 	keepDestination := false
 	defer func() {
 		if !keepDestination {
-			if err := os.Remove(destinationPath); err != nil {
-				amitialog.Printf("[original-error] %v", err)
-			}
+			resultErr = errors.Join(resultErr, os.Remove(destinationPath))
 		}
 	}()
 	closeWithError := func(cause error) error {
-		closeErr := destination.Close()
-		if cause != nil {
-			return cause
-		}
-		return closeErr
+		return errors.Join(cause, destination.Close())
 	}
 
 	key := argon2.IDKey([]byte(passphrase), header.Salt, header.Iterations, header.MemoryKiB, header.Threads, encryptionKeySize)
@@ -235,31 +242,39 @@ func DecryptFile(sourcePath, destinationPath, passphrase string) error {
 	for {
 		var plainLength, cipherLength uint32
 		if err := binary.Read(source, binary.BigEndian, &plainLength); err != nil {
-			return closeWithError(ErrRestoreDecryptFailed)
+			return closeWithError(fmt.Errorf("%w: read chunk %d plaintext length: %w", ErrRestoreDecryptFailed, counter, err))
 		}
 		if err := binary.Read(source, binary.BigEndian, &cipherLength); err != nil {
-			return closeWithError(ErrRestoreDecryptFailed)
+			return closeWithError(fmt.Errorf("%w: read chunk %d ciphertext length: %w", ErrRestoreDecryptFailed, counter, err))
 		}
 		if plainLength > uint32(header.ChunkBytes) || cipherLength != plainLength+uint32(gcm.Overhead()) || cipherLength > uint32(header.ChunkBytes)+uint32(gcm.Overhead()) {
-			return closeWithError(ErrRestoreDecryptFailed)
+			return closeWithError(fmt.Errorf("%w: invalid chunk %d lengths: plaintext=%d ciphertext=%d", ErrRestoreDecryptFailed, counter, plainLength, cipherLength))
 		}
 		ciphertext := make([]byte, cipherLength)
 		if _, err := io.ReadFull(source, ciphertext); err != nil {
-			return closeWithError(ErrRestoreDecryptFailed)
+			return closeWithError(fmt.Errorf("%w: read chunk %d ciphertext: %w", ErrRestoreDecryptFailed, counter, err))
 		}
 		plaintext, err := gcm.Open(nil, chunkNonce(header.Nonce, counter), ciphertext, headerData)
 		if err != nil {
-			return closeWithError(ErrRestoreDecryptFailed)
+			return closeWithError(fmt.Errorf("%w: authenticate chunk %d: %w", ErrRestoreDecryptFailed, counter, err))
 		}
 		if len(plaintext) > 0 {
 			if _, err := destination.Write(plaintext); err != nil {
 				return closeWithError(err)
 			}
 		}
-		counter++
 		if plainLength == 0 {
+			var trailing [1]byte
+			n, err := io.ReadFull(source, trailing[:])
+			if n != 0 {
+				return closeWithError(fmt.Errorf("%w: trailing data after encrypted terminator", ErrRestoreDecryptFailed))
+			}
+			if !errors.Is(err, io.EOF) {
+				return closeWithError(fmt.Errorf("%w: check encrypted terminator: %w", ErrRestoreDecryptFailed, err))
+			}
 			break
 		}
+		counter++
 	}
 	if err := destination.Sync(); err != nil {
 		return closeWithError(err)

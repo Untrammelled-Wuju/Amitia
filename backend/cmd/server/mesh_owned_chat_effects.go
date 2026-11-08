@@ -20,7 +20,7 @@ import (
 type chatEffectsSourceCallKey struct{}
 
 func (p *meshLocalDataPort) CommitOwnedChatEffects(ctx context.Context, scope coordination.ExecutionScope, request coordination.OwnedChatEffectsRequest) error {
-	if scope.ResourceOwnerID != p.ownerID || scope.RoleOwnerID != p.ownerID {
+	if scope.ResourceOwnerID != p.ownerID || (scope.RoleOwnerID != p.ownerID && scope.RoleOwnerID != scope.CoreID) {
 		return coordination.ErrWrongOwner
 	}
 	if request.ConversationID == "" || !request.Abort && request.MessageID == "" || request.RequestID != scope.RequestID || len(request.ConversationID) > 512 || len(request.ThreadID) > 512 {

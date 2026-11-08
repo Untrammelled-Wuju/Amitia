@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../backend_connection_availability.dart';
 import '../backend_connection_config.dart';
-import '../backend_connection_credential.dart';
 import '../backend_connection_endpoint.dart';
 import '../backend_connection_error.dart';
 import '../backend_connection_repository.dart';
@@ -38,9 +37,9 @@ final backendConnectionProvider = FutureProvider<BackendConnectionAvailability>(
   (ref) async {
     final config = ref.watch(mobileDeploymentConfigProvider);
     final repo = ref.watch(backendConnectionRepositoryProvider);
+    final runtimeAsync = ref.watch(runtimeSnapshotProvider);
 
     if (config.mode == MobileDeploymentMode.local) {
-      final runtimeAsync = ref.watch(runtimeSnapshotProvider);
       final runtime = runtimeAsync.valueOrNull;
       if (runtime == null ||
           runtime.state != RuntimeBridgeState.ready ||
@@ -54,6 +53,19 @@ final backendConnectionProvider = FutureProvider<BackendConnectionAvailability>(
         );
       }
       return repo.resolve(expectedRuntimeGeneration: runtime.generation);
+    }
+
+    final runtime = runtimeAsync.valueOrNull;
+    if (runtime == null ||
+        runtime.state != RuntimeBridgeState.ready ||
+        runtime.generation <= 0) {
+      repo.invalidate();
+      return const BackendConnectionUnavailable(
+        BackendConnectionError(
+          BackendConnectionErrorCode.RUNTIME_NOT_READY,
+          'embedded device agent runtime is not ready',
+        ),
+      );
     }
 
     return repo.resolve(expectedRuntimeGeneration: null);
@@ -72,14 +84,37 @@ class DefaultBackendConnectionRepository
   int _resolutionEpoch = 0;
   int _cloudBusinessGeneration = 0;
   String? _lastCloudCacheKey;
+  final Map<String, Future<BackendConnectionAvailability>> _inFlight = {};
 
   DefaultBackendConnectionRepository(this._source);
 
   @override
   Future<BackendConnectionAvailability> resolve({
     int? expectedRuntimeGeneration,
-  }) async {
+  }) {
+    final key = expectedRuntimeGeneration?.toString() ?? 'cloud';
+    final existing = _inFlight[key];
+    if (existing != null) return existing;
+
     final epoch = ++_resolutionEpoch;
+    late final Future<BackendConnectionAvailability> future;
+    future =
+        _resolveOnce(
+          expectedRuntimeGeneration: expectedRuntimeGeneration,
+          epoch: epoch,
+        ).whenComplete(() {
+          if (identical(_inFlight[key], future)) {
+            _inFlight.remove(key);
+          }
+        });
+    _inFlight[key] = future;
+    return future;
+  }
+
+  Future<BackendConnectionAvailability> _resolveOnce({
+    required int? expectedRuntimeGeneration,
+    required int epoch,
+  }) async {
     final result = await _source.resolve(
       expectedRuntimeGeneration: expectedRuntimeGeneration,
     );
@@ -128,6 +163,7 @@ class DefaultBackendConnectionRepository
       spaceId: result.config.spaceId,
       deviceId: result.config.deviceId,
       runtimeId: result.config.runtimeId,
+      fingerprint: result.config.fingerprint,
     );
     _cached = stamped;
     return BackendConnectionAvailable(stamped);
@@ -147,6 +183,7 @@ class DefaultBackendConnectionRepository
       config.spaceId,
       config.deviceId,
       config.runtimeId,
+      config.fingerprint,
     ].join('|');
   }
 
@@ -160,6 +197,7 @@ class DefaultBackendConnectionRepository
     // away from the Native Runtime generation before READY is observed.
     _resolutionEpoch++;
     _cached = null;
+    _inFlight.clear();
   }
 }
 
@@ -184,21 +222,20 @@ class _CloudBackendConnectionSource implements BackendConnectionSource {
 
     try {
       final parsed = normalizeRemoteCoreUri(uri);
-      final auth = Platform.isIOS || Platform.isAndroid
+      final embedded = Platform.isIOS || Platform.isAndroid
           ? await _loadEmbeddedCredential(parsed)
           : null;
-      if (auth == null) {
+      if (embedded == null) {
         return const BackendConnectionUnavailable(
           BackendConnectionError(
             BackendConnectionErrorCode.CREDENTIAL_UNAVAILABLE,
-            'this device is not paired with the configured Cloud Core',
+            '当前设备尚未与配置的统筹中心配对',
           ),
         );
       }
+      final auth = embedded.auth;
 
-      final credential = BackendConnectionCredential.tryCreate(auth.credential);
-      if (credential == null ||
-          auth.spaceId.isEmpty ||
+      if (auth.spaceId.isEmpty ||
           auth.deviceId.isEmpty ||
           auth.runtimeId.isEmpty) {
         return const BackendConnectionUnavailable(
@@ -220,33 +257,13 @@ class _CloudBackendConnectionSource implements BackendConnectionSource {
         return const BackendConnectionUnavailable(
           BackendConnectionError(
             BackendConnectionErrorCode.CREDENTIAL_INVALID,
-            'paired Cloud Core does not match the configured remote core URI',
+            '已配对的统筹中心与当前远程中心地址不一致',
           ),
         );
       }
 
-      final scheme = parsed.scheme.toLowerCase();
-      final port = parsed.hasPort
-          ? parsed.port
-          : (scheme == 'https' ? 443 : 80);
       return BackendConnectionAvailable(
-        BackendConnectionConfig(
-          schemaVersion: 1,
-          generation: 1,
-          endpoint: BackendConnectionEndpoint(
-            host: parsed.host,
-            port: port,
-            httpScheme: scheme,
-            webSocketScheme: scheme == 'https' ? 'wss' : 'ws',
-            livenessPath: '/readyz',
-            readinessPath: '/readyz',
-          ),
-          authStrategy: BackendAuthStrategy.deviceCredential,
-          credential: credential,
-          spaceId: auth.spaceId,
-          deviceId: auth.deviceId,
-          runtimeId: auth.runtimeId,
-        ),
+        cloudProxyConnectionConfig(local: embedded.local, auth: auth),
       );
     } on BackendConnectionError catch (error) {
       return BackendConnectionUnavailable(error);
@@ -254,15 +271,14 @@ class _CloudBackendConnectionSource implements BackendConnectionSource {
       return BackendConnectionUnavailable(
         BackendConnectionError(
           BackendConnectionErrorCode.ENDPOINT_INVALID,
-          'failed to resolve direct Cloud Core connection: $error',
+          '无法解析统筹中心直连地址: $error',
         ),
       );
     }
   }
 
-  Future<MobileCloudDeviceCredential?> _loadEmbeddedCredential(
-    Uri cloud,
-  ) async {
+  Future<({MobileCloudDeviceCredential auth, BackendConnectionConfig local})?>
+  _loadEmbeddedCredential(Uri cloud) async {
     final localAvailability = await const RuntimeBackendConnectionSource()
         .resolve();
     if (localAvailability is! BackendConnectionAvailable) {
@@ -319,24 +335,28 @@ class _CloudBackendConnectionSource implements BackendConnectionSource {
           normalizeRemoteCoreUri(cloudBaseUrl).origin != cloud.origin) {
         throw const BackendConnectionError(
           BackendConnectionErrorCode.CREDENTIAL_INVALID,
-          'paired Cloud Core does not match the configured remote core URI',
+          '已配对的统筹中心与当前远程中心地址不一致',
         );
       }
       final expiresAt =
           DateTime.tryParse((auth['expiresAt'] ?? '').toString())?.toUtc() ??
           DateTime.now().toUtc().add(const Duration(days: 30));
-      return MobileCloudDeviceCredential(
-        cloudBaseUrl: cloudBaseUrl,
-        credentialId: (auth['credentialId'] ?? '').toString().trim(),
-        credential: authorization.substring(prefix.length).trim(),
-        spaceId: (auth['spaceId'] ?? '').toString().trim(),
-        deviceId: (auth['deviceId'] ?? '').toString().trim(),
-        runtimeId: (auth['runtimeId'] ?? '').toString().trim(),
-        expiresAt: expiresAt,
-        protocol: 'amitia.device-runtime',
-        envelopeVersion: 1,
-        schemaVersion: '1.0.0',
-        websocketPath: '/api/device-mesh/v1/runtime/ws',
+      return (
+        auth: MobileCloudDeviceCredential(
+          cloudBaseUrl: cloudBaseUrl,
+          credentialId: (auth['credentialId'] ?? '').toString().trim(),
+          credential: authorization.substring(prefix.length).trim(),
+          spaceId: (auth['spaceId'] ?? '').toString().trim(),
+          deviceId: (auth['deviceId'] ?? '').toString().trim(),
+          runtimeId: (auth['runtimeId'] ?? '').toString().trim(),
+          fingerprint: (auth['fingerprint'] ?? '').toString().trim(),
+          expiresAt: expiresAt,
+          protocol: 'amitia.device-runtime',
+          envelopeVersion: 1,
+          schemaVersion: '1.0.0',
+          websocketPath: '/api/device-mesh/v1/runtime/ws',
+        ),
+        local: local,
       );
     } on DioException catch (error) {
       final status = error.response?.statusCode;
@@ -345,11 +365,36 @@ class _CloudBackendConnectionSource implements BackendConnectionSource {
             ? BackendConnectionErrorCode.CREDENTIAL_INVALID
             : BackendConnectionErrorCode.CREDENTIAL_UNAVAILABLE,
         status == 404
-            ? 'this device is not paired with the configured Cloud Core'
+            ? '当前设备尚未与配置的统筹中心配对'
             : 'failed to load Device Mesh cloud credential',
       );
     } finally {
       dio.close(force: true);
     }
   }
+}
+
+BackendConnectionConfig cloudProxyConnectionConfig({
+  required BackendConnectionConfig local,
+  required MobileCloudDeviceCredential auth,
+}) {
+  return BackendConnectionConfig(
+    schemaVersion: 1,
+    generation: 1,
+    endpoint: BackendConnectionEndpoint(
+      host: local.endpoint.host,
+      port: local.endpoint.port,
+      httpScheme: local.endpoint.httpScheme,
+      webSocketScheme: local.endpoint.webSocketScheme,
+      pathPrefix: '/internal/device-mesh/provider',
+      livenessPath: '/readyz',
+      readinessPath: '/readyz',
+    ),
+    authStrategy: BackendAuthStrategy.localToken,
+    credential: local.credential,
+    spaceId: auth.spaceId,
+    deviceId: auth.deviceId,
+    runtimeId: auth.runtimeId,
+    fingerprint: auth.fingerprint,
+  );
 }

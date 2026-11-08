@@ -97,3 +97,24 @@ func TestBrokerValidatesElicitationFormDecision(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestBrokerPublishesPendingInteractionNotification(t *testing.T) {
+	notified := make(chan PendingInteraction, 1)
+	broker := NewBroker(nil, func(item PendingInteraction) {
+		notified <- item
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		_, _ = broker.Elicit(ctx, "server-1", json.RawMessage(`{"mode":"form","requestedSchema":{"type":"object","properties":{}}}`))
+	}()
+
+	select {
+	case item := <-notified:
+		if item.ID == "" || item.ServerID != "server-1" || item.Kind != "elicitation" {
+			t.Fatalf("unexpected interaction notification: %#v", item)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("pending interaction notification timed out")
+	}
+}

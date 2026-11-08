@@ -29,7 +29,7 @@ func RegisterCharacterRouterWithLifecycle(r *gin.RouterGroup, ctx *app.AppContex
 	}
 	handler := NewHandler(svc)
 	handler.chatTester = chatTester
-	admin := security.SharedCoreAdminOnly()
+	admin := security.SharedCoreDataWriteOnly()
 	intent := handler.guardRoleAuthority()
 
 	r.GET("/characters", handler.List)

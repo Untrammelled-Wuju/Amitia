@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../core/services/mcp_interaction_events.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_button.dart';
 
@@ -15,32 +16,41 @@ class McpInteractionGuard extends ConsumerStatefulWidget {
   const McpInteractionGuard({super.key});
 
   @override
-  ConsumerState<McpInteractionGuard> createState() => _McpInteractionGuardState();
+  ConsumerState<McpInteractionGuard> createState() =>
+      _McpInteractionGuardState();
 }
 
 class _McpInteractionGuardState extends ConsumerState<McpInteractionGuard> {
-  Timer? _timer;
+  StreamSubscription<void>? _subscription;
   bool _loading = false;
   bool _dialogOpen = false;
   bool _available = true;
+  bool _refreshQueued = false;
 
   @override
   void initState() {
     super.initState();
+    _subscription = MCPInteractionEvents.pending.listen((_) {
+      _refreshQueued = true;
+      unawaited(_poll());
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _poll();
-      _timer = Timer.periodic(const Duration(seconds: 2), (_) => _poll());
+      unawaited(_poll());
     });
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _subscription?.cancel();
     super.dispose();
   }
 
   Future<void> _poll() async {
-    if (!mounted || !_available || _loading || _dialogOpen) return;
+    if (!mounted || !_available || _dialogOpen) return;
+    if (_loading) {
+      _refreshQueued = true;
+      return;
+    }
     _loading = true;
     try {
       if (!mounted) return;
@@ -48,15 +58,19 @@ class _McpInteractionGuardState extends ConsumerState<McpInteractionGuard> {
       if (!mounted || items.isEmpty || _dialogOpen) return;
       _dialogOpen = true;
       await _showInteraction(items.first);
+      _refreshQueued = true;
     } catch (error) {
-      if (error.toString().contains('404')) {
+      final message = error.toString();
+      if (message.contains('404') || message.contains('403')) {
         _available = false;
-        _timer?.cancel();
-        _timer = null;
       }
     } finally {
       _loading = false;
       _dialogOpen = false;
+      if (_refreshQueued && mounted && _available) {
+        _refreshQueued = false;
+        unawaited(_poll());
+      }
     }
   }
 
@@ -65,7 +79,8 @@ class _McpInteractionGuardState extends ConsumerState<McpInteractionGuard> {
     if (id.isEmpty || !mounted) return;
     final kind = (item['kind'] ?? '').toString();
     final request = _asMap(item['request']);
-    final serverName = (item['serverName'] ?? item['serverId'] ?? '').toString();
+    final serverName = (item['serverName'] ?? item['serverId'] ?? '')
+        .toString();
     if (kind == 'elicitation') {
       await _showElicitation(id, serverName, request);
     } else {
@@ -103,18 +118,27 @@ class _McpInteractionGuardState extends ConsumerState<McpInteractionGuard> {
                   style: AppTypography.bodySmall(dialogContext),
                 ),
                 SizedBox(height: AppSpacing.md),
-                SelectableText(_prettyJson(request), style: AppTypography.caption(dialogContext)),
+                SelectableText(
+                  _prettyJson(request),
+                  style: AppTypography.caption(dialogContext),
+                ),
               ],
             ),
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, 'cancel'), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, 'cancel'),
+            child: const Text('取消'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, 'decline'),
             child: Text('拒绝', style: TextStyle(color: dialogContext.error)),
           ),
-          FilledButton(onPressed: () => Navigator.pop(dialogContext, 'accept'), child: const Text('批准')),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, 'accept'),
+            child: const Text('批准'),
+          ),
         ],
       ),
     );
@@ -157,7 +181,8 @@ class _McpInteractionGuardState extends ConsumerState<McpInteractionGuard> {
         barrierDismissible: false,
         builder: (dialogContext) => StatefulBuilder(
           builder: (dialogContext, setDialogState) {
-            final reason = (request['message'] ?? request['reason'] ?? '').toString();
+            final reason = (request['message'] ?? request['reason'] ?? '')
+                .toString();
             return AlertDialog(
               title: const Text('处理 Elicitation 请求'),
               content: SizedBox(
@@ -168,54 +193,91 @@ class _McpInteractionGuardState extends ConsumerState<McpInteractionGuard> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       if (serverName.isNotEmpty) ...[
-                        Text(serverName, style: AppTypography.caption(dialogContext)),
+                        Text(
+                          serverName,
+                          style: AppTypography.caption(dialogContext),
+                        ),
                         SizedBox(height: AppSpacing.sm),
                       ],
                       if (reason.isNotEmpty) ...[
-                        Text(reason, style: AppTypography.bodySmall(dialogContext)),
+                        Text(
+                          reason,
+                          style: AppTypography.bodySmall(dialogContext),
+                        ),
                         SizedBox(height: AppSpacing.md),
                       ],
                       ...properties.entries.take(50).expand((entry) {
                         final definition = _asMap(entry.value);
-                        final type = (definition['type'] ?? 'string').toString();
-                        final title = (definition['title'] ?? entry.key).toString();
-                        final description = (definition['description'] ?? '').toString();
-                        final label = required.contains(entry.key) ? '$title *' : title;
+                        final type = (definition['type'] ?? 'string')
+                            .toString();
+                        final title = (definition['title'] ?? entry.key)
+                            .toString();
+                        final description = (definition['description'] ?? '')
+                            .toString();
+                        final label = required.contains(entry.key)
+                            ? '$title *'
+                            : title;
                         Widget field;
                         if (definition['enum'] is List) {
-                          final options = (definition['enum'] as List).take(100).toList();
+                          final options = (definition['enum'] as List)
+                              .take(100)
+                              .toList();
                           field = DropdownButtonFormField<dynamic>(
                             value: enumValues[entry.key],
                             decoration: InputDecoration(
                               labelText: label,
-                              helperText: description.isEmpty ? null : description,
+                              helperText: description.isEmpty
+                                  ? null
+                                  : description,
                             ),
                             items: options
-                                .map((option) => DropdownMenuItem<dynamic>(value: option, child: Text(option.toString())))
+                                .map(
+                                  (option) => DropdownMenuItem<dynamic>(
+                                    value: option,
+                                    child: Text(option.toString()),
+                                  ),
+                                )
                                 .toList(growable: false),
-                            onChanged: (value) => setDialogState(() => enumValues[entry.key] = value),
+                            onChanged: (value) => setDialogState(
+                              () => enumValues[entry.key] = value,
+                            ),
                           );
                         } else if (type == 'boolean') {
                           field = SwitchListTile(
                             contentPadding: EdgeInsets.zero,
                             title: Text(label),
-                            subtitle: description.isEmpty ? null : Text(description),
+                            subtitle: description.isEmpty
+                                ? null
+                                : Text(description),
                             value: boolValues[entry.key] ?? false,
-                            onChanged: (value) => setDialogState(() => boolValues[entry.key] = value),
+                            onChanged: (value) => setDialogState(
+                              () => boolValues[entry.key] = value,
+                            ),
                           );
                         } else {
                           field = Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(label, style: AppTypography.caption(dialogContext)),
+                              Text(
+                                label,
+                                style: AppTypography.caption(dialogContext),
+                              ),
                               const SizedBox(height: 6),
                               AmitiaTextField(
                                 controller: controllers[entry.key],
-                                hintText: description.isEmpty ? null : description,
-                                keyboardType: type == 'number' || type == 'integer'
-                                    ? const TextInputType.numberWithOptions(decimal: true, signed: true)
+                                hintText: description.isEmpty
+                                    ? null
+                                    : description,
+                                keyboardType:
+                                    type == 'number' || type == 'integer'
+                                    ? const TextInputType.numberWithOptions(
+                                        decimal: true,
+                                        signed: true,
+                                      )
                                     : TextInputType.text,
-                                maxLines: definition['format'] == 'textarea' ? 4 : 1,
+                                maxLines: definition['format'] == 'textarea'
+                                    ? 4
+                                    : 1,
                               ),
                             ],
                           );
@@ -228,12 +290,17 @@ class _McpInteractionGuardState extends ConsumerState<McpInteractionGuard> {
               ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.pop(dialogContext, {'action': 'cancel'}),
+                  onPressed: () =>
+                      Navigator.pop(dialogContext, {'action': 'cancel'}),
                   child: const Text('取消'),
                 ),
                 TextButton(
-                  onPressed: () => Navigator.pop(dialogContext, {'action': 'decline'}),
-                  child: Text('拒绝', style: TextStyle(color: dialogContext.error)),
+                  onPressed: () =>
+                      Navigator.pop(dialogContext, {'action': 'decline'}),
+                  child: Text(
+                    '拒绝',
+                    style: TextStyle(color: dialogContext.error),
+                  ),
                 ),
                 FilledButton(
                   onPressed: () {
@@ -256,15 +323,23 @@ class _McpInteractionGuardState extends ConsumerState<McpInteractionGuard> {
                           value = text;
                         }
                       }
-                      if (required.contains(entry.key) && (value == null || value == '')) {
+                      if (required.contains(entry.key) &&
+                          (value == null || value == '')) {
                         ScaffoldMessenger.of(dialogContext).showSnackBar(
-                          SnackBar(content: Text('请填写“${definition['title'] ?? entry.key}”')),
+                          SnackBar(
+                            content: Text(
+                              '请填写“${definition['title'] ?? entry.key}”',
+                            ),
+                          ),
                         );
                         return;
                       }
                       if (value != null) content[entry.key] = value;
                     }
-                    Navigator.pop(dialogContext, {'action': 'accept', 'content': content});
+                    Navigator.pop(dialogContext, {
+                      'action': 'accept',
+                      'content': content,
+                    });
                   },
                   child: const Text('批准'),
                 ),
@@ -274,7 +349,11 @@ class _McpInteractionGuardState extends ConsumerState<McpInteractionGuard> {
         ),
       );
       if (result == null) return;
-      await _resolve(id, (result['action'] ?? 'cancel').toString(), _asMap(result['content']));
+      await _resolve(
+        id,
+        (result['action'] ?? 'cancel').toString(),
+        _asMap(result['content']),
+      );
     } finally {
       for (final controller in controllers.values) {
         controller.dispose();
@@ -300,7 +379,8 @@ class _McpInteractionGuardState extends ConsumerState<McpInteractionGuard> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (serverName.isNotEmpty) Text(serverName, style: AppTypography.caption(dialogContext)),
+              if (serverName.isNotEmpty)
+                Text(serverName, style: AppTypography.caption(dialogContext)),
               if (reason.isNotEmpty) ...[
                 SizedBox(height: AppSpacing.sm),
                 Text(reason, style: AppTypography.bodySmall(dialogContext)),
@@ -308,12 +388,18 @@ class _McpInteractionGuardState extends ConsumerState<McpInteractionGuard> {
               SizedBox(height: AppSpacing.md),
               SelectableText(url, style: AppTypography.caption(dialogContext)),
               SizedBox(height: AppSpacing.sm),
-              Text('批准后链接会复制到剪贴板，可由系统浏览器打开。', style: AppTypography.caption(dialogContext)),
+              Text(
+                '批准后链接会复制到剪贴板，可由系统浏览器打开。',
+                style: AppTypography.caption(dialogContext),
+              ),
             ],
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, 'cancel'), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, 'cancel'),
+            child: const Text('取消'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, 'decline'),
             child: Text('拒绝', style: TextStyle(color: dialogContext.error)),
@@ -330,12 +416,18 @@ class _McpInteractionGuardState extends ConsumerState<McpInteractionGuard> {
     if (action == 'accept' && url.isNotEmpty) {
       await Clipboard.setData(ClipboardData(text: url));
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('链接已复制到剪贴板')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('链接已复制到剪贴板')));
       }
     }
   }
 
-  Future<void> _resolve(String id, String action, Map<String, dynamic> content) async {
+  Future<void> _resolve(
+    String id,
+    String action,
+    Map<String, dynamic> content,
+  ) async {
     try {
       await ref.read(mcpServiceProvider).resolveInteraction(id, {
         'action': action,
@@ -343,7 +435,9 @@ class _McpInteractionGuardState extends ConsumerState<McpInteractionGuard> {
       });
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('MCP 请求处理失败：$error')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('MCP 请求处理失败：$error')));
     }
   }
 
@@ -355,8 +449,8 @@ class _McpInteractionGuardState extends ConsumerState<McpInteractionGuard> {
         final decoded = jsonDecode(value);
         if (decoded is Map) return Map<String, dynamic>.from(decoded);
       } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+        print("[original-error] $error\n$stackTrace");
+      }
     }
     return <String, dynamic>{};
   }
@@ -366,8 +460,8 @@ class _McpInteractionGuardState extends ConsumerState<McpInteractionGuard> {
       final text = const JsonEncoder.withIndent('  ').convert(value);
       return text.length > 10000 ? '${text.substring(0, 10000)}…' : text;
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-final text = value.toString();
+      print("[original-error] $error\n$stackTrace");
+      final text = value.toString();
       return text.length > 10000 ? '${text.substring(0, 10000)}…' : text;
     }
   }

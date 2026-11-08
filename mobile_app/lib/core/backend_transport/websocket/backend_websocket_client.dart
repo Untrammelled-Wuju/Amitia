@@ -6,6 +6,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../../backend_connection/backend_connection_config.dart';
 import '../../backend_connection/backend_uri_builder.dart';
+import '../../security/certificate_pin.dart';
 import '../auth/backend_auth_header.dart';
 import '../errors/backend_transport_error.dart';
 import '../errors/backend_transport_error_code.dart';
@@ -18,6 +19,7 @@ class BackendWebSocketSessionImpl implements BackendWebSocketSession {
   @override
   final int generation;
   final WebSocketChannel _channel;
+  final HttpClient? _ownerClient;
   final StreamController<BackendWebSocketMessage> _controller =
       StreamController<BackendWebSocketMessage>.broadcast();
   final Set<StreamSubscription> _subscriptions = {};
@@ -27,7 +29,9 @@ class BackendWebSocketSessionImpl implements BackendWebSocketSession {
   BackendWebSocketSessionImpl({
     required this.generation,
     required WebSocketChannel channel,
-  }) : _channel = channel {
+    HttpClient? ownerClient,
+  }) : _channel = channel,
+       _ownerClient = ownerClient {
     _subscriptions.add(
       _channel.stream.listen(
         (data) {
@@ -54,7 +58,8 @@ class BackendWebSocketSessionImpl implements BackendWebSocketSession {
   }
 
   @override
-  BackendWebSocketState get state => _closed ? BackendWebSocketState.closed : _state;
+  BackendWebSocketState get state =>
+      _closed ? BackendWebSocketState.closed : _state;
 
   @override
   Stream<BackendWebSocketMessage> get messages => _controller.stream;
@@ -84,6 +89,7 @@ class BackendWebSocketSessionImpl implements BackendWebSocketSession {
     if (_closed) return;
     _closed = true;
     await _channel.sink.close();
+    _ownerClient?.close();
     for (final sub in _subscriptions) {
       await sub.cancel();
     }
@@ -100,13 +106,12 @@ class BackendWebSocketClient implements BackendWebSocketTransport {
   BackendWebSocketState _state = BackendWebSocketState.idle;
   bool _closed = false;
 
-  BackendWebSocketClient(
-    this._config, {
-    BackendUriBuilder? uriBuilder,
-  }) : _uriBuilder = uriBuilder ?? BackendUriBuilder();
+  BackendWebSocketClient(this._config, {BackendUriBuilder? uriBuilder})
+    : _uriBuilder = uriBuilder ?? BackendUriBuilder();
 
   @override
-  BackendWebSocketState get state => _closed ? BackendWebSocketState.closed : _state;
+  BackendWebSocketState get state =>
+      _closed ? BackendWebSocketState.closed : _state;
 
   @override
   Future<BackendWebSocketSession> connect(
@@ -128,9 +133,7 @@ class BackendWebSocketClient implements BackendWebSocketTransport {
     );
 
     final token = _config.credential.revealForTransport();
-    final headers = <String, String>{
-      'User-Agent': 'Amitia-Mobile',
-    };
+    final headers = <String, String>{'User-Agent': 'Amitia-Mobile'};
     switch (_config.authStrategy) {
       case BackendAuthStrategy.localToken:
         headers[BackendAuthHeader.localToken] = token;
@@ -141,15 +144,28 @@ class BackendWebSocketClient implements BackendWebSocketTransport {
         headers['X-Amitia-Runtime-ID'] = _config.runtimeId;
     }
 
-    final webSocket = await WebSocket.connect(
-      uri.toString(),
-      headers: headers,
-    );
+    final ownerClient =
+        _config.authStrategy == BackendAuthStrategy.deviceCredential &&
+            _config.fingerprint.trim().isNotEmpty
+        ? createCertificatePinnedHttpClient(_config.fingerprint)
+        : null;
+    late final WebSocket webSocket;
+    try {
+      webSocket = await WebSocket.connect(
+        uri.toString(),
+        headers: headers,
+        customClient: ownerClient,
+      );
+    } catch (_) {
+      ownerClient?.close(force: true);
+      rethrow;
+    }
     final channel = IOWebSocketChannel(webSocket);
 
     final session = BackendWebSocketSessionImpl(
       generation: _config.generation,
       channel: channel,
+      ownerClient: ownerClient,
     );
 
     _sessions.add(session);

@@ -1,10 +1,13 @@
 package pet_center
 
 import (
+	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/middleware/security"
 )
 
 type HTTPHandler struct {
@@ -22,12 +25,89 @@ func (h *HTTPHandler) RegisterRoutes(group *gin.RouterGroup) {
 
 func (h *HTTPHandler) registerPluginRoutes(plugins *gin.RouterGroup) {
 	plugins.GET("", h.listPlugins)
+	plugins.GET("/:pluginId/behaviors", h.getBehaviors)
+	plugins.POST("/:pluginId/behaviors/:behaviorId/invoke", h.invokeBehavior)
 	plugins.GET("/:pluginId", h.getPlugin)
 	plugins.POST("/install", h.install)
-	plugins.POST("/:extensionId/update", h.update)
-	plugins.POST("/:extensionId/enable", h.enable)
-	plugins.POST("/:extensionId/disable", h.disable)
-	plugins.DELETE("/:extensionId", h.uninstall)
+	plugins.POST("/:pluginId/update", h.update)
+	plugins.POST("/:pluginId/enable", h.enable)
+	plugins.POST("/:pluginId/disable", h.disable)
+	plugins.DELETE("/:pluginId", h.uninstall)
+}
+
+type behaviorInvocationRequest struct {
+	Arguments               json.RawMessage `json:"arguments"`
+	ExpectedCatalogRevision string          `json:"expectedCatalogRevision"`
+	CharacterID             string          `json:"characterId"`
+	ConversationID          string          `json:"conversationId"`
+	Channel                 string          `json:"channel"`
+	SessionID               string          `json:"sessionId"`
+}
+
+func (h *HTTPHandler) invokeBehavior(c *gin.Context) {
+	if h.service == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "pet service unavailable", "data": nil})
+		return
+	}
+	actor := security.GetActor(c)
+	if actor == nil || actor.SpaceID == "" || actor.DeviceID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "msg": "pet behavior identity is required", "error": "pet behavior identity is required"})
+		return
+	}
+	var request behaviorInvocationRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error(), "error": err.Error()})
+		return
+	}
+	channel := request.Channel
+	if channel == "" {
+		channel = "desktop-pet"
+	}
+	result, err := h.service.InvokeBehavior(
+		c.Request.Context(),
+		c.Param("pluginId"),
+		c.Param("behaviorId"),
+		request.ExpectedCatalogRevision,
+		request.Arguments,
+		BehaviorInvocationScope{
+			SpaceID:        actor.SpaceID.String(),
+			DeviceID:       actor.DeviceID.String(),
+			CharacterID:    request.CharacterID,
+			ConversationID: request.ConversationID,
+			Channel:        channel,
+			SessionID:      request.SessionID,
+			RequestID:      actor.RequestID,
+		},
+	)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrBehaviorRevision), errors.Is(err, ErrBehaviorNotFound):
+			c.JSON(http.StatusConflict, gin.H{"code": 409, "msg": err.Error(), "error": err.Error()})
+		case errors.Is(err, ErrInvalidInput), errors.Is(err, ErrBehaviorNotExecutable):
+			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error(), "error": err.Error()})
+		case errors.Is(err, ErrExtensionNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"code": 404, "msg": err.Error(), "error": err.Error()})
+		case errors.Is(err, ErrBehaviorExecutorMissing):
+			c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": err.Error(), "error": err.Error()})
+		default:
+			c.JSON(http.StatusBadGateway, gin.H{"code": 502, "msg": err.Error(), "error": err.Error()})
+		}
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": result})
+}
+
+func (h *HTTPHandler) getBehaviors(c *gin.Context) {
+	if h.service == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "pet service unavailable", "data": nil})
+		return
+	}
+	result, err := h.service.GetBehaviors(c.Request.Context(), c.Param("pluginId"))
+	if err != nil {
+		writeHandlerError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": result})
 }
 
 func (h *HTTPHandler) listPlugins(c *gin.Context) {
@@ -85,7 +165,7 @@ func (h *HTTPHandler) update(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "pet service unavailable", "data": nil})
 		return
 	}
-	extensionID := c.Param("extensionId")
+	extensionID := c.Param("pluginId")
 	if extensionID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "extensionId required", "data": nil})
 		return
@@ -108,7 +188,7 @@ func (h *HTTPHandler) enable(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "pet service unavailable", "data": nil})
 		return
 	}
-	extensionID := c.Param("extensionId")
+	extensionID := c.Param("pluginId")
 	result, err := h.service.Enable(c.Request.Context(), extensionID)
 	if err != nil {
 		writeHandlerError(c, err)
@@ -122,7 +202,7 @@ func (h *HTTPHandler) disable(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "pet service unavailable", "data": nil})
 		return
 	}
-	extensionID := c.Param("extensionId")
+	extensionID := c.Param("pluginId")
 	result, err := h.service.Disable(c.Request.Context(), extensionID)
 	if err != nil {
 		writeHandlerError(c, err)
@@ -136,7 +216,7 @@ func (h *HTTPHandler) uninstall(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "pet service unavailable", "data": nil})
 		return
 	}
-	extensionID := c.Param("extensionId")
+	extensionID := c.Param("pluginId")
 	result, err := h.service.Uninstall(c.Request.Context(), extensionID)
 	if err != nil {
 		writeHandlerError(c, err)

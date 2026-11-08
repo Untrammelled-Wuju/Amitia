@@ -56,9 +56,9 @@ func (s *service) OwnedStateMutations(ctx context.Context, inference business.In
 		appraisal = &interaction.AppraisalResult{EventType: "chat"}
 	}
 	now := time.Now().UTC()
-	psycheState, psycheRevision := currentOwnedPsycheState(inference.Snapshot.Resources, inference.Scope.RoleID)
-	relationshipState, relationshipRevision := currentOwnedRelationshipState(inference.Snapshot.Resources, inference.Scope.RoleID)
-	needState, needRevision := currentOwnedNeedState(inference.Snapshot.Resources, inference.Scope.RoleID)
+	psycheState, psycheRevision := currentOwnedPsycheState(inference.Snapshot.Resources, inference.Scope.RoleID, coordination.DataOwnerID(inference.Scope, coordination.RuntimeStateKindPsyche))
+	relationshipState, relationshipRevision := currentOwnedRelationshipState(inference.Snapshot.Resources, inference.Scope.RoleID, coordination.DataOwnerID(inference.Scope, coordination.RuntimeStateKindRelationship))
+	needState, needRevision := currentOwnedNeedState(inference.Snapshot.Resources, inference.Scope.RoleID, coordination.DataOwnerID(inference.Scope, coordination.RuntimeStateKindNeeds))
 	psycheState = nextOwnedPsycheState(psycheState, appraisal, now)
 	relationshipState = nextOwnedRelationshipState(relationshipState, appraisal, now)
 	needState = nextOwnedNeedState(needState, appraisal, now)
@@ -87,12 +87,12 @@ func (s *service) OwnedStateMutations(ctx context.Context, inference business.In
 	return mutations, coordination.ValidateCurrent(ctx)
 }
 
-func currentOwnedPsycheState(resources []coordination.Resource, roleID string) (interaction.PsycheState, int64) {
+func currentOwnedPsycheState(resources []coordination.Resource, roleID, ownerID string) (interaction.PsycheState, int64) {
 	var value interaction.PsycheState
 	revision := int64(0)
 	qualifiedID := coordination.RoleRuntimeStateID(coordination.RuntimeStateKindPsyche, roleID)
 	for _, resource := range resources {
-		if resource.Kind != coordination.RuntimeStateKindPsyche || resource.RoleID != roleID || resource.Deleted {
+		if resource.Kind != coordination.RuntimeStateKindPsyche || resource.OwnerID != ownerID || resource.RoleID != roleID || resource.Deleted {
 			continue
 		}
 		if resource.ID == qualifiedID {
@@ -108,12 +108,12 @@ func currentOwnedPsycheState(resources []coordination.Resource, roleID string) (
 	return value, revision
 }
 
-func currentOwnedRelationshipState(resources []coordination.Resource, roleID string) (interaction.RelationshipState, int64) {
+func currentOwnedRelationshipState(resources []coordination.Resource, roleID, ownerID string) (interaction.RelationshipState, int64) {
 	var value interaction.RelationshipState
 	revision := int64(0)
 	qualifiedID := coordination.RoleRuntimeStateID(coordination.RuntimeStateKindRelationship, roleID)
 	for _, resource := range resources {
-		if resource.Kind != coordination.RuntimeStateKindRelationship || resource.RoleID != roleID || resource.Deleted {
+		if resource.Kind != coordination.RuntimeStateKindRelationship || resource.OwnerID != ownerID || resource.RoleID != roleID || resource.Deleted {
 			continue
 		}
 		if resource.ID == qualifiedID {
@@ -129,12 +129,12 @@ func currentOwnedRelationshipState(resources []coordination.Resource, roleID str
 	return value, revision
 }
 
-func currentOwnedNeedState(resources []coordination.Resource, roleID string) (interaction.NeedState, int64) {
+func currentOwnedNeedState(resources []coordination.Resource, roleID, ownerID string) (interaction.NeedState, int64) {
 	var value interaction.NeedState
 	revision := int64(0)
 	qualifiedID := coordination.RoleRuntimeStateID(coordination.RuntimeStateKindNeeds, roleID)
 	for _, resource := range resources {
-		if resource.Kind != coordination.RuntimeStateKindNeeds || resource.RoleID != roleID || resource.Deleted {
+		if resource.Kind != coordination.RuntimeStateKindNeeds || resource.OwnerID != ownerID || resource.RoleID != roleID || resource.Deleted {
 			continue
 		}
 		if resource.ID == qualifiedID {

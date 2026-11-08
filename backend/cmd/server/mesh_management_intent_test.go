@@ -19,31 +19,33 @@ func TestDeviceManagementRealTLSRequiresOriginalAuthorityAcrossPolicyABA(t *test
 	a, b, other := newThreeCoreFixture(t, "management-a", schemas), newThreeCoreFixture(t, "management-b", schemas), newThreeCoreFixture(t, "management-other", schemas)
 	pairThreeCoreFixtures(t, a, b)
 	pairThreeCoreFixtures(t, other, b)
-	readHeaders := func() map[string]string {
+	provisionFixtureSelfCredential(t, b)
+	readHeaders := func(label string, caller *threeCoreFixture) map[string]string {
 		var state struct {
 			CoreID string              `json:"coreId"`
 			Policy coordination.Policy `json:"policy"`
 		}
-		if err := json.Unmarshal(b.request(t, a, http.MethodGet, "/api/device-mesh/v1/coordination/me", nil, 200), &state); err != nil || state.CoreID != b.core || state.Policy.DeviceID != a.device.DeviceID.String() {
-			t.Fatal("management snapshot invalid", err)
+		if err := json.Unmarshal(b.request(t, caller, http.MethodGet, "/api/device-mesh/v1/coordination/me", nil, 200), &state); err != nil || state.CoreID != b.core || state.Policy.DeviceID != caller.device.DeviceID.String() {
+			t.Fatalf("%s management snapshot invalid: %v", label, err)
 		}
 		return map[string]string{security.ExpectedCoreHeader: state.CoreID, security.ExpectedConfigurationPolicyHeader: fmt.Sprintf("%d:%d:%d", state.Policy.ProviderEpoch, state.Policy.ModeRevision, state.Policy.PermissionRevision)}
 	}
-	original := readHeaders()
+	original := readHeaders("source", a)
+	centerHeaders := readHeaders("center", b)
 	grantPath := "/api/device-mesh/v1/business/devices/" + a.device.DeviceID.String() + "/grants"
 	payload := map[string]any{"callerId": other.device.DeviceID.String(), "capability": "ai.chat", "allowed": true, "expectedRevision": 0, "expectedCoreId": b.core}
-	b.request(t, a, http.MethodPut, grantPath, payload, 409, map[string]string{})
+	b.request(t, b, http.MethodPut, grantPath, payload, 409, map[string]string{})
 	var granted struct {
 		Grant coordination.CapabilityGrant `json:"grant"`
 	}
-	if err := json.Unmarshal(b.request(t, a, http.MethodPut, grantPath, payload, 200, original), &granted); err != nil {
+	if err := json.Unmarshal(b.request(t, b, http.MethodPut, grantPath, payload, 200, centerHeaders), &granted); err != nil {
 		t.Fatal(err)
 	}
 	if granted.Grant.Revision != 1 || !granted.Grant.Allowed || granted.Grant.TargetID != a.device.DeviceID.String() {
 		t.Fatalf("invalid actual grant acknowledgement: %+v", granted)
 	}
 	payload["capability"] = "task.execute"
-	b.request(t, a, http.MethodPut, grantPath, payload, 409, original)
+	b.request(t, b, http.MethodPut, grantPath, payload, 200, centerHeaders)
 	policy, err := b.services.DeviceMesh.Coordination.Get(t.Context(), b.core, a.device.DeviceID.String())
 	if err != nil {
 		t.Fatal(err)
@@ -57,7 +59,7 @@ func TestDeviceManagementRealTLSRequiresOriginalAuthorityAcrossPolicyABA(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	administrator := readHeaders()
+	administrator := readHeaders("administrator", a)
 	pending := newThreeCoreFixture(t, "management-pending", schemas)
 	_, token, err := b.pairing.CreateOffer(t.Context(), b.device.DeviceID, time.Minute, true)
 	if err != nil {
@@ -73,7 +75,7 @@ func TestDeviceManagementRealTLSRequiresOriginalAuthorityAcrossPolicyABA(t *test
 	claimResult := httptest.NewRecorder()
 	pending.router.ServeHTTP(claimResult, claim)
 	if claimResult.Code != http.StatusAccepted {
-		t.Fatalf("pending claim status %d", claimResult.Code)
+		t.Fatalf("pending claim status %d body=%s", claimResult.Code, claimResult.Body.String())
 	}
 	approvals, err := b.pairing.PendingApprovals(t.Context())
 	if err != nil || len(approvals) != 1 {
@@ -103,9 +105,9 @@ func TestDeviceManagementRealTLSRequiresOriginalAuthorityAcrossPolicyABA(t *test
 	if err := b.services.DeviceMesh.DeviceReg.RequireTrustedDevice(t.Context(), runtimeidentity.SpaceID(b.core), a.device.DeviceID); err != nil {
 		t.Fatal("stale revoke changed actual trust", err)
 	}
-	foreign := readHeaders()
+	foreign := readHeaders("foreign", b)
 	foreign[security.ExpectedCoreHeader] = "foreign-core"
-	b.request(t, a, http.MethodPut, grantPath, payload, 409, foreign)
+	b.request(t, b, http.MethodPut, grantPath, payload, 409, foreign)
 	b.request(t, a, http.MethodPost, revokePath+"/runtimes/unknown/probe", nil, 409, map[string]string{})
 	b.request(t, a, http.MethodPost, revokePath+"/runtimes/unknown/probe", nil, 409, original)
 	b.request(t, a, http.MethodDelete, revokePath, nil, 200)

@@ -2,6 +2,8 @@ package sqlite
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	amitialog "log"
 	"time"
@@ -70,7 +72,7 @@ func (r *WorkflowExecutionRepository) CollectGarbage(ctx context.Context, now ti
 		return out, fmt.Errorf("workflow gc begin: %w", err)
 	}
 	defer func() {
-		if err := tx.Rollback(); err != nil {
+		if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
 			amitialog.Printf("[original-error] %v", err)
 		}
 	}()

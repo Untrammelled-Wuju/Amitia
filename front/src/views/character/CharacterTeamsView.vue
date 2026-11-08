@@ -8,12 +8,13 @@
       breadcrumb-label="角色页面层级"
       class="team-breadcrumb"
     />
+    <el-alert v-if="!canWrite" :title="coreData.access.value.reason || '当前设备只能查看统筹中心团队数据'" type="info" :closable="false" show-icon />
 
     <div class="team-layout">
       <aside class="team-sidebar">
         <div class="team-sidebar-head">
           <strong>全部团队</strong>
-          <el-button size="small" type="primary" @click="openCreate">新建</el-button>
+          <el-button size="small" type="primary" :disabled="!canWrite" @click="openCreate">新建</el-button>
         </div>
         <button
           v-for="team in teams"
@@ -53,8 +54,8 @@
               </div>
             </div>
             <div class="team-actions">
-              <el-button size="small" @click="openEdit">编辑</el-button>
-              <el-button size="small" :loading="routing" @click="testRoute">测试路由</el-button>
+              <el-button size="small" :disabled="!canWrite" @click="openEdit">编辑</el-button>
+              <el-button size="small" :disabled="!canWrite" :loading="routing" @click="testRoute">测试路由</el-button>
             </div>
           </header>
 
@@ -81,7 +82,7 @@
                   <el-option label="负责人" value="lead" />
                   <el-option label="成员" value="member" />
                 </el-select>
-                <el-button :disabled="!memberForm.roleId" :loading="addingMember" @click="addMember">加入</el-button>
+                <el-button :disabled="!canWrite || !memberForm.roleId" :loading="addingMember" @click="addMember">加入</el-button>
               </div>
             </article>
 
@@ -101,7 +102,7 @@
                   <el-option label="知识" value="knowledge" />
                 </el-select>
                 <el-input v-model="contextForm.content" type="textarea" :rows="3" placeholder="添加团队规则、决策或共享知识" />
-                <el-button :disabled="!contextForm.content.trim()" :loading="addingContext" @click="addContext">添加共享上下文</el-button>
+                <el-button :disabled="!canWrite || !contextForm.content.trim()" :loading="addingContext" @click="addContext">添加共享上下文</el-button>
               </div>
             </article>
 
@@ -151,7 +152,7 @@
       </el-form>
       <template #footer>
         <el-button @click="createVisible = false">取消</el-button>
-        <el-button type="primary" :loading="creating" @click="createTeam">创建</el-button>
+        <el-button type="primary" :disabled="!canWrite" :loading="creating" @click="createTeam">创建</el-button>
       </template>
     </el-dialog>
 
@@ -173,7 +174,7 @@
       </el-form>
       <template #footer>
         <el-button @click="editVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="saveTeam">保存</el-button>
+        <el-button type="primary" :disabled="!canWrite" :loading="saving" @click="saveTeam">保存</el-button>
       </template>
     </el-dialog>
   </div>
@@ -198,6 +199,7 @@ import {
 } from "@/api/role-runtime";
 import type { AgentProfile, Team } from "@/api/role-types";
 import { originalErrorMessage } from "@/runtime/original-error";
+import { useCoreDataAccess } from "@/composables/useCoreDataAccess";
 
 interface TeamDetail {
   team: Team;
@@ -207,6 +209,8 @@ interface TeamDetail {
 }
 
 const route = useRoute();
+const coreData = useCoreDataAccess();
+const canWrite = computed(() => coreData.access.value.write);
 const teams = ref<Team[]>([]);
 const roles = ref<AgentProfile[]>([]);
 const templates = ref<Record<string, any>[]>([]);
@@ -287,6 +291,7 @@ async function selectTeam(id: string) {
 }
 
 function openCreate() {
+  if (!canWrite.value) return;
   Object.assign(createForm, {
     templateId: "",
     name: "",
@@ -309,9 +314,11 @@ function applyTemplate(templateId: string) {
 }
 
 async function createTeam() {
+  if (!canWrite.value) return;
   if (!createForm.name.trim()) return;
   creating.value = true;
   try {
+    await coreData.requireWrite();
     const payload = {
       ...createForm,
       memberIds: createForm.memberIds.filter((id) => id !== createForm.leadAgentId),
@@ -331,6 +338,7 @@ async function createTeam() {
 }
 
 function openEdit() {
+  if (!canWrite.value) return;
   if (!selectedTeam.value) return;
   Object.assign(editForm, {
     name: selectedTeam.value.team.name,
@@ -343,9 +351,11 @@ function openEdit() {
 }
 
 async function saveTeam() {
+  if (!canWrite.value) return;
   if (!selectedTeam.value || !editForm.name.trim()) return;
   saving.value = true;
   try {
+    await coreData.requireWrite();
     await updateRoleTeam(selectedTeam.value.team.id, {
       ...editForm,
       expectedRevision: selectedTeam.value.team.revision,
@@ -362,9 +372,11 @@ async function saveTeam() {
 }
 
 async function addMember() {
+  if (!canWrite.value) return;
   if (!selectedTeam.value || !memberForm.roleId) return;
   addingMember.value = true;
   try {
+    await coreData.requireWrite();
     await addRoleToTeam(selectedTeam.value.team.id, {
       memberType: "agent",
       memberId: memberForm.roleId,
@@ -382,9 +394,11 @@ async function addMember() {
 }
 
 async function addContext() {
+  if (!canWrite.value) return;
   if (!selectedTeam.value || !contextForm.content.trim()) return;
   addingContext.value = true;
   try {
+    await coreData.requireWrite();
     await createRoleTeamContext(selectedTeam.value.team.id, {
       kind: contextForm.kind,
       key: "",
@@ -401,6 +415,7 @@ async function addContext() {
 }
 
 async function testRoute() {
+  if (!canWrite.value) return;
   if (!selectedTeam.value) return;
   const result = await ElMessageBox.prompt("输入一条团队测试消息", "团队消息路由").catch((cause) => {
     if (cause === "cancel" || cause === "close") return null;
@@ -409,6 +424,7 @@ async function testRoute() {
   if (!result) return;
   routing.value = true;
   try {
+    await coreData.requireWrite();
     const value = await routeRoleTeamMessage(selectedTeam.value.team.id, {
       message: result.value,
       conversationId: `team-route-${crypto.randomUUID()}`,

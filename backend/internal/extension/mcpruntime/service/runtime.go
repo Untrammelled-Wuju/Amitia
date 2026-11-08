@@ -21,6 +21,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/mcpruntime/host"
 	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/internal/scriptruntime/commandenv"
+	"github.com/u-ai/backend/pkg/sse"
 	"gorm.io/gorm"
 	amitialog "log"
 )
@@ -71,7 +72,15 @@ func NewRuntime(
 	discoveryService := discovery.New(repository, connections)
 	toolSyncer := canonical.NewToolSyncer(repository, toolFacade)
 	featureService := features.New(repository, connections)
-	interactionBroker := host.NewBroker(chatService)
+	interactionBroker := host.NewBroker(chatService, func(item host.PendingInteraction) {
+		sse.Global.Broadcast("mcp_interaction_pending", map[string]any{
+			"id":        item.ID,
+			"serverId":  item.ServerID,
+			"kind":      item.Kind,
+			"createdAt": item.CreatedAt,
+			"expiresAt": item.ExpiresAt,
+		})
+	})
 	hostService := host.New(repository, connections, nil, interactionBroker, interactionBroker)
 	dependencyService := dependency.New(repository, connections, discoveryService, toolSyncer, commandResolver)
 
@@ -84,6 +93,9 @@ func NewRuntime(
 			return fmt.Errorf("register MCP tools for %s: %w", serverID, err)
 		}
 		return nil
+	})
+	connections.RegisterDisconnectedHandler(func(ctx context.Context, serverID string) error {
+		return toolSyncer.UnregisterServer(ctx, serverID)
 	})
 
 	runtime := &Runtime{

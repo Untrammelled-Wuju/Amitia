@@ -11,7 +11,7 @@ import (
 	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
-const defaultHeartbeatValidity = 5 * time.Minute
+const defaultHeartbeatValidity = 90 * time.Second
 
 type Registry struct {
 	mu                sync.RWMutex
@@ -578,6 +578,7 @@ func (r *Registry) BindRuntimeSession(ctx context.Context, binding RuntimeSessio
 	if errors.Is(err, ErrRegistryEntryNotFound) {
 		now := at
 		newEntry := &RuntimeEntry{
+			HostClientID:         entryID,
 			EntryID:              entryID,
 			Kind:                 RegistryEntryKindRuntime,
 			SpaceID:              binding.SpaceID,
@@ -677,7 +678,15 @@ func (r *Registry) DisconnectRuntimeSession(ctx context.Context, binding Runtime
 
 	entry, ok := r.entries[entryID]
 	if !ok {
-		return ErrRuntimePresenceNotFound
+		persisted, err := r.repo.GetEntry(ctx, entryID)
+		if errors.Is(err, ErrRegistryEntryNotFound) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		entry = persisted
+		r.entries[entryID] = cloneRuntimeEntry(entry)
 	}
 
 	if entry.Kind != RegistryEntryKindRuntime {

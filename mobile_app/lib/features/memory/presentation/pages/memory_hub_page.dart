@@ -9,6 +9,7 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../core/errors/original_error.dart';
 import '../../../../core/models/memory.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_icons.dart';
@@ -130,9 +131,15 @@ class _MemoryHubPageState extends ConsumerState<MemoryHubPage> {
         _cursor = page.nextCursor;
         _hasMore = page.hasMore;
       });
-    } catch (error) {
+    } catch (error, stackTrace) {
       if (mounted) {
-        setState(() => _error = error.toString());
+        final detail = originalErrorText(error);
+        final original = error.toString();
+        setState(() => _error = [
+          if (detail != original) detail,
+          original,
+          stackTrace.toString(),
+        ].join('\n'));
       }
     } finally {
       if (mounted) {
@@ -142,6 +149,25 @@ class _MemoryHubPageState extends ConsumerState<MemoryHubPage> {
         });
       }
     }
+  }
+
+  Widget _buildLoadError({required bool reset}) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextButton(
+            onPressed: () => _loadMore(reset: reset),
+            child: Text(reset ? '记忆加载失败，点击重试' : '加载失败，点击重试'),
+          ),
+          ExpansionTile(
+            title: const Text('原始错误'),
+            children: [SelectableText(_error)],
+          ),
+        ],
+      ),
+    );
   }
 
   String _memoryTitle(MemoryDto memory) {
@@ -172,15 +198,7 @@ class _MemoryHubPageState extends ConsumerState<MemoryHubPage> {
       return const HubSectionPlaceholder(message: '正在加载记忆…');
     }
     if (_error.isNotEmpty && _memories.isEmpty) {
-      return Padding(
-        padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
-        child: Center(
-          child: TextButton(
-            onPressed: () => _loadMore(reset: true),
-            child: const Text('记忆加载失败，点击重试'),
-          ),
-        ),
-      );
+      return _buildLoadError(reset: true);
     }
     if (_memories.isEmpty) {
       return const HubSectionPlaceholder(message: '暂无最近记忆');
@@ -221,13 +239,7 @@ class _MemoryHubPageState extends ConsumerState<MemoryHubPage> {
             ),
           )
         else if (_error.isNotEmpty)
-          Padding(
-            padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
-            child: TextButton(
-              onPressed: _loadMore,
-              child: const Text('加载失败，点击重试'),
-            ),
-          )
+          _buildLoadError(reset: false)
         else if (!_hasMore && _memories.isNotEmpty)
           HubSectionPlaceholder(message: '没有更多记忆'),
       ],

@@ -71,6 +71,7 @@ class SchemaUIBridgeController {
       nonce: _nextNonce(),
       actionId: invocation.actionId,
       input: scopedInput,
+      meta: invocation.meta,
     );
   }
 
@@ -209,8 +210,8 @@ class SchemaUIBridgeController {
     try {
       await _service.revokeSchemaUISession(id);
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-// Revocation is best effort. The server also expires abandoned UI sessions.
+      print("[original-error] $error\n$stackTrace");
+      // Revocation is best effort. The server also expires abandoned UI sessions.
     }
   }
 

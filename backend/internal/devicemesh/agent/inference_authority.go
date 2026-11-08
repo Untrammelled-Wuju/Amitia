@@ -11,6 +11,16 @@ func (h *LocalHandler) LocalInferenceContext(ctx context.Context) (context.Conte
 	if h == nil {
 		return nil, nil, ErrCoreInferenceRequired
 	}
+	h.mu.RLock()
+	coreMode := h.coreMode
+	h.mu.RUnlock()
+	if coreMode {
+		if err := context.Cause(ctx); err != nil {
+			return nil, nil, err
+		}
+		child, cancel := context.WithCancelCause(ctx)
+		return child, func() { cancel(context.Canceled) }, nil
+	}
 	h.providerMu.Lock()
 	defer h.providerMu.Unlock()
 	if err := context.Cause(ctx); err != nil {

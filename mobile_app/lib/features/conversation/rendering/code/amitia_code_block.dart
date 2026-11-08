@@ -62,8 +62,16 @@ class _AmitiaCodeBlockState extends State<AmitiaCodeBlock> {
       return null;
     }
     final language = widget.language.trim().toLowerCase();
+    if (const <String>{
+      '',
+      'text',
+      'txt',
+      'plain',
+      'plaintext',
+    }.contains(language)) {
+      return null;
+    }
     final resolved = switch (language) {
-      '' => 'text',
       'js' => 'javascript',
       'ts' => 'typescript',
       'py' => 'python',
@@ -72,13 +80,16 @@ class _AmitiaCodeBlockState extends State<AmitiaCodeBlock> {
       'md' => 'markdown',
       _ => language,
     };
+    if (!SyntaxHighlighterPlus.supportedLanguages.contains(resolved)) {
+      return null;
+    }
     try {
-      return SyntaxHighlighterPlus(
+      return await SyntaxHighlighterPlus(
         theme: _themeName,
       ).highlight(resolved, widget.code);
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-return null;
+      print("[original-error] $error\n$stackTrace");
+      return null;
     }
   }
 

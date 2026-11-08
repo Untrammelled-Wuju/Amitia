@@ -24,6 +24,34 @@ func TestPrepareNetworkLaunchWithoutEnforcementReturnsDirectPlan(t *testing.T) {
 	}
 }
 
+func TestPrepareNetworkLaunchUsesNodePermissionIsolationForNoneMode(t *testing.T) {
+	plan, err := prepareNetworkLaunchWithStateRoot(
+		ServiceNetworkPolicy{Mode: "none", Enforce: true},
+		"/runtime/node/bin/node",
+		[]string{"--permission", "--allow-fs-read=/runtime/plugin", "/runtime/plugin/index.js"},
+		"/runtime/work",
+		"/runtime/temp",
+		"/runtime/state",
+	)
+	if err != nil {
+		t.Fatalf("prepareNetworkLaunch() error = %v", err)
+	}
+	if plan.Path != "/runtime/node/bin/node" || !plan.FilesystemIsolated || !plan.NetworkPolicyEnforced {
+		t.Fatalf("unexpected Node permission launch plan: %+v", plan)
+	}
+}
+
+func TestPrepareNetworkLaunchRejectsNodePermissionPlanWithNetworkAccess(t *testing.T) {
+	if nodePermissionIsolationPlan(
+		ServiceNetworkPolicy{Mode: "none", Enforce: true},
+		"/runtime/node/bin/node",
+		[]string{"--permission", "--allow-net", "/runtime/plugin/index.js"},
+		"/runtime/work",
+	) {
+		t.Fatal("Node permission plan with --allow-net must not satisfy none mode")
+	}
+}
+
 func TestValidateNetworkPolicySupportAcceptsHostMediatedRestricted(t *testing.T) {
 	policy := ServiceNetworkPolicy{
 		Mode: "restricted", Enforce: true, RequireProxy: true,

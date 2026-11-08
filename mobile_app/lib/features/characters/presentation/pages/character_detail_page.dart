@@ -17,12 +17,14 @@ import '../../../../core/backend_connection/providers/backend_connection_provide
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/character_avatar.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/services/shared_core_data_access.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/settings/current_character_provider.dart';
 import '../../../../core/models/character.dart';
 import '../../../../core/models/model_config.dart';
 import '../../../../core/ui_runtime/mobile_extension_slot.dart';
 import '../../../../core/ui_runtime/ui_runtime_controller.dart';
+import '../../../../core/widgets/shared_core_read_only_banner.dart';
 
 class CharacterDetailPage extends ConsumerStatefulWidget {
   final String characterId;
@@ -98,6 +100,17 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
   @override
   Widget build(BuildContext context) {
     final characterAsync = ref.watch(characterListProvider);
+    final coreAccessAsync = ref.watch(sharedCoreDataAccessProvider);
+    final coreAccess =
+        coreAccessAsync.valueOrNull ??
+        SharedCoreDataAccess(
+          read: true,
+          write: false,
+          reason: coreAccessAsync.hasError
+              ? '无法确认统筹中心数据权限：${coreAccessAsync.error}'
+              : '正在确认统筹中心数据权限',
+          coreId: '',
+        );
     final backendAvailability = ref
         .watch(backendConnectionProvider)
         .valueOrNull;
@@ -128,12 +141,18 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
         if (character == null) {
           return const AmitiaScaffold(body: Center(child: Text('角色不存在')));
         }
+        final currentCharacterId =
+            characters.where((item) => item.isActive == 1).firstOrNull?.id ??
+            characters.where((item) => item.isDefault).firstOrNull?.id ??
+            '';
         _syncControllers(character);
         return _buildScaffold(
           context,
           character,
           hasExtensionTab,
           backendAvailability,
+          coreAccess,
+          character.id == currentCharacterId,
         );
       },
     );
@@ -154,6 +173,8 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     CharacterDto character,
     bool hasExtensionTab,
     BackendConnectionAvailability? backendAvailability,
+    SharedCoreDataAccess coreAccess,
+    bool isCurrent,
   ) {
     final tabs = <String>[
       '概览',
@@ -187,7 +208,13 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
         top: false,
         child: Column(
           children: [
-            _buildInfoSection(context, character, backendAvailability),
+            SharedCoreReadOnlyBanner(access: coreAccess),
+            _buildInfoSection(
+              context,
+              character,
+              backendAvailability,
+              isCurrent,
+            ),
             Padding(
               padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
               child: MobileExtensionSlot(
@@ -227,12 +254,23 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     BuildContext context,
     CharacterDto character,
     BackendConnectionAvailability? backendAvailability,
+    bool isCurrent,
   ) {
     final normalizedStatus = character.status.toLowerCase();
-    final isOnline =
-        character.isActive == 1 ||
-        normalizedStatus == '在线' ||
-        normalizedStatus == 'enabled';
+    final isExplicitOnline = const {
+      '在线',
+      'online',
+      'active',
+    }.contains(normalizedStatus);
+    final isOnline = isCurrent || isExplicitOnline;
+    final statusLabel = isCurrent
+        ? '使用中'
+        : switch (normalizedStatus) {
+            'enabled' => '已启用',
+            'disabled' => '已停用',
+            'archived' => '已归档',
+            _ => character.status,
+          };
     final initial = character.name.isNotEmpty ? character.name[0] : '?';
 
     return Padding(
@@ -245,7 +283,9 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
       child: Row(
         children: [
           InkWell(
-            onTap: _uploadingAvatar ? null : () => _uploadAvatar(character),
+            onTap: _uploadingAvatar || !_canWrite
+                ? null
+                : () => _uploadAvatar(character),
             customBorder: const CircleBorder(),
             child: Stack(
               children: [
@@ -311,7 +351,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                 Row(
                   children: [
                     AmitiaStatusBadge(
-                      label: character.status,
+                      label: statusLabel,
                       type: isOnline ? BadgeType.success : BadgeType.neutral,
                     ),
                     SizedBox(width: AppSpacing.sm),
@@ -690,7 +730,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
           label: _savingSettings ? '保存中...' : '保存角色设定',
           icon: Icons.save_outlined,
           isFullWidth: true,
-          onPressed: _savingSettings
+          onPressed: _savingSettings || !_canWrite
               ? null
               : () => _saveCharacterSettings(character),
         ),
@@ -874,7 +914,9 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
           '模型',
           modelLabel,
           Icons.psychology_outlined,
-          onTap: () => _showCharacterModelSettings(character, configs),
+          onTap: _canWrite
+              ? () => _showCharacterModelSettings(character, configs)
+              : null,
         ),
         SizedBox(height: AppSpacing.sm),
         _buildAbilitySection(
@@ -1210,6 +1252,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     BuildContext context,
     CharacterDto character,
   ) {
+    final canWrite = _canWrite;
     showModalBottomSheet(
       context: context,
       backgroundColor: context.surfacePrimary,
@@ -1233,10 +1276,12 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                     context.accentPrimary,
                   ),
                   title: '设为当前角色',
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    _setAsCurrent(character);
-                  },
+                  onTap: canWrite
+                      ? () {
+                          Navigator.pop(sheetContext);
+                          _setAsCurrent(character);
+                        }
+                      : null,
                 ),
                 AmitiaListTile(
                   leading: _buildActionIcon(
@@ -1245,10 +1290,12 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                     context.accentPrimary,
                   ),
                   title: '复制角色',
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    _copyCharacter(character);
-                  },
+                  onTap: canWrite
+                      ? () {
+                          Navigator.pop(sheetContext);
+                          _copyCharacter(character);
+                        }
+                      : null,
                 ),
                 AmitiaListTile(
                   leading: _buildActionIcon(
@@ -1269,10 +1316,12 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                     context.error,
                   ),
                   title: '删除角色',
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    _showDeleteConfirm(context, character);
-                  },
+                  onTap: canWrite
+                      ? () {
+                          Navigator.pop(sheetContext);
+                          _showDeleteConfirm(context, character);
+                        }
+                      : null,
                 ),
                 const SizedBox(height: 8),
               ],
@@ -1294,6 +1343,9 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
       child: Icon(icon, size: 20, color: color),
     );
   }
+
+  bool get _canWrite =>
+      ref.read(sharedCoreDataAccessProvider).valueOrNull?.write ?? false;
 
   Future<void> _setAsCurrent(CharacterDto character) async {
     try {

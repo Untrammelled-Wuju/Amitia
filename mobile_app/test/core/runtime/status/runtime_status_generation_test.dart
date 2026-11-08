@@ -41,9 +41,8 @@ void main() {
           readinessPath: '/readyz',
         ),
         authStrategy: BackendAuthStrategy.localToken,
-        credential: BackendConnectionCredential.tryCreate(
-              'a' * 32,
-            ) ??
+        credential:
+            BackendConnectionCredential.tryCreate('a' * 32) ??
             (throw StateError('Failed to create credential')),
       );
     }
@@ -74,11 +73,13 @@ void main() {
       await projection.initialize();
       await _pump();
 
-      transportSource.emit(const TransportStateSnapshot(
-        generation: 10,
-        httpState: BackendHttpState.available,
-        webSocketState: BackendWebSocketState.connected,
-      ));
+      transportSource.emit(
+        const TransportStateSnapshot(
+          generation: 10,
+          httpState: BackendHttpState.available,
+          webSocketState: BackendWebSocketState.connected,
+        ),
+      );
       await _pump();
 
       expect(projection.current.generation, 10);
@@ -109,11 +110,13 @@ void main() {
       await projection.initialize();
       await _pump();
 
-      transportSource.emit(const TransportStateSnapshot(
-        generation: 9,
-        httpState: BackendHttpState.available,
-        webSocketState: BackendWebSocketState.connected,
-      ));
+      transportSource.emit(
+        const TransportStateSnapshot(
+          generation: 9,
+          httpState: BackendHttpState.available,
+          webSocketState: BackendWebSocketState.connected,
+        ),
+      );
       await _pump();
 
       expect(projection.current.phase, RuntimeStatusPhase.degraded);
@@ -143,14 +146,54 @@ void main() {
 
       await projection.initialize();
       await _pump();
-      transportSource.emit(const TransportStateSnapshot(
-        generation: 5,
-        httpState: BackendHttpState.available,
-        webSocketState: BackendWebSocketState.connected,
-      ));
+      transportSource.emit(
+        const TransportStateSnapshot(
+          generation: 5,
+          httpState: BackendHttpState.available,
+          webSocketState: BackendWebSocketState.connected,
+        ),
+      );
       await _pump();
 
       expect(projection.current.generation, 5);
+
+      await projection.dispose();
+    });
+
+    test('Remote business connection uses its own generation', () async {
+      const bridgeSnapshot = RuntimeBridgeSnapshot(
+        schemaVersion: 1,
+        state: RuntimeBridgeState.ready,
+        generation: 2,
+        runtimeInstalled: true,
+        runtimeAvailable: true,
+      );
+      bridge.setSnapshot(bridgeSnapshot);
+      connectionSource.setAvailability(
+        BackendConnectionAvailable(_makeConfig(1)),
+      );
+
+      final projection = DefaultRuntimeStatusProjection(
+        bridge: bridge,
+        connectionSource: connectionSource,
+        transportStateSource: transportSource,
+        connectionOwnsGeneration: true,
+      );
+
+      await projection.initialize();
+      await _pump();
+      transportSource.emit(
+        const TransportStateSnapshot(
+          generation: 1,
+          httpState: BackendHttpState.available,
+          webSocketState: BackendWebSocketState.connected,
+        ),
+      );
+      await _pump();
+
+      expect(projection.current.phase, RuntimeStatusPhase.ready);
+      expect(projection.current.businessAvailable, true);
+      expect(projection.current.generation, 2);
 
       await projection.dispose();
     });

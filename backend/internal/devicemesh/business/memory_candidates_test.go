@@ -13,11 +13,6 @@ func TestOwnedMemoryCandidatesReplayAndAtomicReview(t *testing.T) {
 	for _, on := range []bool{false, true} {
 		t.Run(map[bool]string{false: "Source", true: "Core"}[on], func(t *testing.T) {
 			e, db, service, model := engineHarness(t)
-			if on {
-				if _, err := service.InitializeCoordinated(t.Context(), "core", "a", 1, "role"); err != nil {
-					t.Fatal(err)
-				}
-			}
 			model.extract = func(context.Context, Inference, Generation) ([]DerivedMemory, error) { return nil, nil }
 			req := Request{SpaceID: "core", DeviceID: "a", CoreID: "core", RoleID: "role", ConversationID: "chat", RequestID: "chat-request", Message: "我喜欢茶"}
 			chat, err := e.Run(t.Context(), req)
@@ -32,7 +27,23 @@ func TestOwnedMemoryCandidatesReplayAndAtomicReview(t *testing.T) {
 			}
 			before := model.extractions.Load()
 			req.RequestID = "candidate"
-			req.ExpectedScope = &chat.Scope
+			if on {
+				e.data = originDataPort{testDataPort{db: db, role: coordination.Role{ID: "role", Revision: 1, Profile: json.RawMessage(`{}`)}}}
+				if _, err := service.InitializeCoordinated(t.Context(), "core", "a", 1, "role"); err != nil {
+					t.Fatal(err)
+				}
+				req.ResourceOwnerID, req.RoleOwnerID = "core", "core"
+				req.ConversationOrigin = &ConversationOrigin{OwnerID: "a", ID: "chat"}
+				pageRequest := req
+				pageRequest.ConversationID, pageRequest.ConversationOrigin = "", nil
+				current, err := e.Query(t.Context(), pageRequest, coordination.DataQuery{Management: true, ResourceKind: "memory"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				req.ExpectedScope = &current.Scope
+			} else {
+				req.ExpectedScope = &chat.Scope
+			}
 			input := MemoryCandidateInput{Action: "generate", ConversationID: "chat"}
 			generated, err := e.ManageOwnedMemoryCandidates(t.Context(), req, input)
 			if err != nil || len(generated.Resources) != 1 {

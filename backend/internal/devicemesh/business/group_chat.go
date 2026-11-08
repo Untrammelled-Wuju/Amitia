@@ -139,13 +139,14 @@ type GroupInviteProposal struct {
 }
 
 type GroupResponse struct {
-	ConversationID string     `json:"conversationId"`
-	RequestID      string     `json:"requestId"`
-	GroupRoundID   string     `json:"groupRoundId"`
-	Status         string     `json:"status"`
-	UserMessageID  string     `json:"userMessageId"`
-	Deliveries     []Response `json:"deliveries"`
-	Saved          bool       `json:"saved"`
+	ConversationID   string          `json:"conversationId"`
+	RequestID        string          `json:"requestId"`
+	GroupRoundID     string          `json:"groupRoundId"`
+	Status           string          `json:"status"`
+	UserMessageID    string          `json:"userMessageId"`
+	Deliveries       []Response      `json:"deliveries"`
+	FailedDeliveries []GroupDelivery `json:"failedDeliveries,omitempty"`
+	Saved            bool            `json:"saved"`
 }
 
 type GroupInviteInput struct {
@@ -562,7 +563,7 @@ func (e *Engine) beginGroupScope(ctx context.Context, request Request) (context.
 	if request.TargetDeviceID == "" {
 		request.TargetDeviceID = request.DeviceID
 	}
-	ctx, scope, finish, err := e.coordination.Begin(ctx, request.SpaceID, request.DeviceID, request.TargetDeviceID, request.CoreID, request.RoleID, request.RequestID)
+	ctx, scope, finish, err := e.beginRequest(ctx, request, request.RoleID, request.RequestID)
 	if err != nil {
 		return ctx, scope, finish, coordination.Role{}, coordination.GroupState{}, err
 	}
@@ -1498,7 +1499,7 @@ func (e *Engine) executeGroupRound(ctx context.Context, scope coordination.Execu
 					}
 					message, sourceMessageID = source.Content, previous.MessageID
 				}
-				request := Request{SpaceID: scope.SpaceID, DeviceID: scope.InitiatorDeviceID, TargetDeviceID: scope.TargetDeviceID, CoreID: scope.CoreID, RoleID: delivery.CharacterID, ConversationID: currentRound.ConversationID, RequestID: delivery.ChildRequestID, Message: message, Group: &GroupMessageOptions{Mode: currentRound.Mode}, PreparedReply: &PreparedGroupReply{UserMessageID: currentRound.TriggerMessageID, UserMessageRevision: 1, UserSequence: currentRound.TriggerSequence, GroupRoundID: currentRound.RoundID, DeliveryID: delivery.DeliveryID, SourceMessageID: sourceMessageID, DeliveryIndex: index}}
+				request := Request{SpaceID: scope.SpaceID, DeviceID: scope.InitiatorDeviceID, TargetDeviceID: scope.TargetDeviceID, CoreID: scope.CoreID, ResourceOwnerID: scope.ResourceOwnerID, RoleOwnerID: scope.RoleOwnerID, RoleID: delivery.CharacterID, ConversationID: currentRound.ConversationID, RequestID: delivery.ChildRequestID, Message: message, Group: &GroupMessageOptions{Mode: currentRound.Mode}, PreparedReply: &PreparedGroupReply{UserMessageID: currentRound.TriggerMessageID, UserMessageRevision: 1, UserSequence: currentRound.TriggerSequence, GroupRoundID: currentRound.RoundID, DeliveryID: delivery.DeliveryID, SourceMessageID: sourceMessageID, DeliveryIndex: index}}
 				if delivery.Source == "user" {
 					request.PreparedReply.ContextSequence = currentRound.TriggerSequence
 				}
@@ -1570,6 +1571,8 @@ func (e *Engine) executeGroupRound(ctx context.Context, scope coordination.Execu
 			}
 			if item.delivery.Status == GroupDeliveryCompleted {
 				result.Deliveries = append(result.Deliveries, item.response)
+			} else if item.delivery.Status == GroupDeliveryFailed || item.delivery.Status == GroupDeliveryCancelled {
+				result.FailedDeliveries = append(result.FailedDeliveries, item.delivery)
 			}
 		}
 		if latestResource, latestErr := e.data.(coordination.ResourcePort).Resource(ctx, scope, "group-round", round.RoundID); latestErr == nil && latestResource != nil {

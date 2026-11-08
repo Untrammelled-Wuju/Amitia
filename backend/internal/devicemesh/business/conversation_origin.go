@@ -27,7 +27,7 @@ func resolveConversationRoute(scope coordination.ExecutionScope, id string, orig
 		return conversationRoute{}, coordination.ErrWrongOwner
 	}
 	if origin == nil {
-		return conversationRoute{CurrentID: id, HistoricalID: id}, nil
+		return conversationRoute{CurrentID: id}, nil
 	}
 	if id == "" || origin.ID != id || origin.OwnerID == "" || len(origin.OwnerID) > 512 || strings.ContainsRune(origin.OwnerID, '\x00') {
 		return conversationRoute{}, coordination.ErrWrongOwner
@@ -61,7 +61,7 @@ func (e *Engine) resolveStoredConversationRoute(ctx context.Context, scope coord
 	if err == nil || !errors.Is(err, coordination.ErrWrongOwner) || origin == nil || !scope.Coordinated || origin.ID != id || origin.OwnerID == "" || len(origin.OwnerID) > 512 || len(id) > 512 || strings.ContainsRune(id+origin.OwnerID, '\x00') {
 		return route, err
 	}
-	route, err = continuationRoute(scope, id, origin, false)
+	route, err = continuationRoute(scope, id, origin, true)
 	if err != nil {
 		return conversationRoute{}, err
 	}
@@ -85,6 +85,9 @@ func (e *Engine) resolveStoredConversationRoute(ctx context.Context, scope coord
 func (e *Engine) resolveRunConversationRoute(ctx context.Context, scope coordination.ExecutionScope, request Request) (conversationRoute, error) {
 	route, err := e.resolveStoredConversationRoute(ctx, scope, request.ConversationID, request.ConversationOrigin)
 	origin := request.ConversationOrigin
+	if err == nil && origin != nil && request.Context != nil && request.Context.PreviousCoreID == origin.OwnerID && origin.OwnerID != scope.TargetDeviceID {
+		route.HistoricalID = ""
+	}
 	if err == nil || !errors.Is(err, coordination.ErrWrongOwner) || origin == nil || !scope.Coordinated || request.Context == nil || request.Context.PreviousCoreID != origin.OwnerID || request.Context.ConversationID != origin.ID || origin.ID != request.ConversationID || origin.ID == "" || len(origin.ID) > 512 || len(origin.OwnerID) > 512 || strings.ContainsRune(origin.OwnerID+origin.ID, '\x00') {
 		return route, err
 	}

@@ -18,6 +18,14 @@ type taskInputData struct {
 	afterCommit func()
 }
 
+func (p *taskInputData) Roles(_ context.Context, scope coordination.ExecutionScope) ([]coordination.Role, error) {
+	return []coordination.Role{{
+		ID:       scope.RoleID,
+		Revision: scope.RoleRevision,
+		Profile:  json.RawMessage(`{}`),
+	}}, nil
+}
+
 func (p *taskInputData) Commit(_ context.Context, commit coordination.Commit) (coordination.Acknowledgement, error) {
 	if p.resources == nil {
 		p.resources = make(map[string]*coordination.Resource)

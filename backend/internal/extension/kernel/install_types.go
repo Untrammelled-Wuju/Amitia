@@ -124,6 +124,7 @@ type PackagePreviewRequest struct {
 	FileName           string
 	AllowUnsignedDev   bool
 	AllowUnsignedLocal bool
+	TrustedBundled     bool
 	DeveloperSessionID string
 	Source             PackageSourceProvenance
 }

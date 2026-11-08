@@ -1,5 +1,6 @@
 <template>
   <section class="owned-management">
+    <el-alert v-if="!canWrite" :title="coreData.access.value.reason || '当前设备只能查看统筹中心记忆'" type="info" :closable="false" show-icon />
     <div class="management-toolbar">
       <el-input v-if="props.search === undefined" v-model="query" clearable placeholder="检索当前查看范围的记忆" @keyup.enter="search()" />
       <el-select v-model="mode" aria-label="记忆检索方式"><el-option label="关键词" value="keyword" /><el-option label="混合检索" value="hybrid" /><el-option label="向量检索" value="vector" /></el-select>
@@ -12,8 +13,8 @@
       <el-button :loading="loading" @click="search()">检索</el-button>
     </div>
     <div class="management-actions">
-      <el-button :disabled="loading" @click="openCreate">新增记忆</el-button>
-      <el-button :disabled="loading" @click="openGenerate">从对话生成候选</el-button>
+      <el-button :disabled="!canWrite || loading" @click="openCreate">新增记忆</el-button>
+      <el-button :disabled="!canWrite || loading" @click="openGenerate">从对话生成候选</el-button>
       <el-button :disabled="loading" @click="loadCandidates">待审核候选</el-button>
       <el-button :disabled="loading" @click="checkConsolidation">巩固检查</el-button>
       <el-button :disabled="loading" @click="emit('refresh')">刷新</el-button>
@@ -29,22 +30,22 @@
     <el-button v-if="nextCursor" :loading="loading" @click="search(true)">加载更多检索结果</el-button>
     <article v-for="row in candidates" :key="`${row.ownerId}/${row.id}`" class="management-row">
       <strong>{{ row.body.key }}</strong><p>{{ row.body.value }}</p><small>待审核 · {{ row.ownerId }} · 版本 {{ row.revision }}</small>
-      <div><el-button :disabled="loading" @click="accept(row)">确认保存</el-button><el-button :disabled="loading" @click="editCandidate(row)">编辑候选</el-button><el-button :disabled="loading" @click="reject(row)">拒绝</el-button></div>
+      <div><el-button :disabled="!canWrite || loading" @click="accept(row)">确认保存</el-button><el-button :disabled="!canWrite || loading" @click="editCandidate(row)">编辑候选</el-button><el-button :disabled="!canWrite || loading" @click="reject(row)">拒绝</el-button></div>
     </article>
     <el-dialog v-model="editorOpen" :title="editingCandidate ? '编辑候选记忆' : '新增记忆'" width="min(560px, 96vw)">
       <el-form label-position="top"><el-form-item label="标题"><el-input v-model="form.key" maxlength="512" /></el-form-item><el-form-item label="内容"><el-input v-model="form.value" type="textarea" :rows="5" /></el-form-item><el-form-item label="记忆类型"><el-select v-model="form.memoryType"><el-option v-for="kind in types" :key="kind.value" :label="kind.label" :value="kind.value" /></el-select></el-form-item><el-form-item label="重要程度"><el-input-number v-model="form.importance" :min="0" :max="10" /></el-form-item><el-form-item label="保留等级"><el-select v-model="form.retentionLevel" :disabled="form.pinned"><el-option v-for="level in 5" :key="level" :label="`L${level}`" :value="level" /></el-select></el-form-item><el-form-item label="固定记忆"><el-switch v-model="form.pinned" /><span>固定为 L1，保持完整强度</span></el-form-item></el-form>
-      <template #footer><el-button @click="editorOpen = false">取消</el-button><el-button :loading="loading" @click="save">保存</el-button></template>
+      <template #footer><el-button @click="editorOpen = false">取消</el-button><el-button :loading="loading" :disabled="!canWrite" @click="save">保存</el-button></template>
     </el-dialog>
     <el-dialog v-model="generateOpen" title="从已保存对话提取候选" width="min(560px, 96vw)">
       <el-alert title="提取结果先保存为待审核候选，确认后才写入当前数据所有者的记忆。旧设备对话保持原位置，审核时会再次核验来源。" type="info" :closable="false" />
       <el-select v-model="generationSource" @change="loadGenerationConversations"><el-option label="当前数据所有者" value="current" /><el-option v-for="role in historicalRoles" :key="role.id" :label="`旧设备 · ${role.name || role.id}`" :value="role.id" /></el-select>
       <el-select v-model="conversationId" placeholder="选择对话"><el-option v-for="row in conversations" :key="row.id" :label="row.title || row.id" :value="row.id" /></el-select>
-      <template #footer><el-button @click="generateOpen = false">取消</el-button><el-button :loading="loading" @click="generate">生成候选</el-button></template>
+      <template #footer><el-button @click="generateOpen = false">取消</el-button><el-button :loading="loading" :disabled="!canWrite" @click="generate">生成候选</el-button></template>
     </el-dialog>
     <el-dialog v-model="conflictOpen" title="确认记忆冲突" width="min(560px, 96vw)">
       <article v-for="row in conflictRows" :key="row.id"><strong>{{ row.body.key }}</strong><p>{{ text(row) }}</p><small>原数据所有者 {{ row.ownerId }} · 版本 {{ row.revision }}</small></article>
       <el-select v-model="resolution"><el-option label="替换原内容" value="replace" /><el-option label="合并原内容与新内容" value="merge" /><el-option label="同时保留两条" value="keep_both" /></el-select>
-      <template #footer><el-button @click="conflictOpen = false">取消</el-button><el-button :loading="loading" :disabled="!resolution" @click="resolveConflict">按原版本处理</el-button></template>
+      <template #footer><el-button @click="conflictOpen = false">取消</el-button><el-button :loading="loading" :disabled="!canWrite || !resolution" @click="resolveConflict">按原版本处理</el-button></template>
     </el-dialog>
   </section>
 </template>
@@ -56,10 +57,13 @@ import { useOwnedMemoryManagement, ownedMemoryAuthority, type OwnedMemoryManagem
 import type { OwnedExecutionScope } from "@/runtime/device-owned-chat";
 import { parseConversationReference } from "@/runtime/device-owned-conversation-reference";
 import { ownedMemoryVerificationLabel, ownedMemoryScoreSummary } from "@/runtime/owned-memory-format";
+import { useCoreDataAccess } from "@/composables/useCoreDataAccess";
 
 const props = defineProps<{ executionScope: OwnedExecutionScope; search?: string }>();
 const emit = defineEmits<{ saved: []; refresh: [] }>();
 const owned = useDeviceOwnedConversation();
+const coreData = useCoreDataAccess();
+const canWrite = computed(() => coreData.access.value.write);
 const api = useOwnedMemoryManagement();
 const internalQuery = ref("");
 const query = computed({ get: () => props.search ?? internalQuery.value, set: value => { internalQuery.value = value; } });
@@ -131,13 +135,13 @@ async function loadCandidates() {
   } catch (cause) { if (ticket === generation) error.value = cause instanceof Error ? cause.message : "候选记忆加载失败"; }
   finally { if (ticket === generation) loading.value = false; }
 }
-function openCreate() { editorScope = snapshot(); editingCandidate.value = undefined; Object.assign(form, { key: "", value: "", memoryType: "custom", importance: 5, retentionLevel: 3, pinned: false }); attempt = ""; editorOpen.value = true; }
-function editCandidate(row: OwnedMemoryManagementResource) { editorScope = JSON.parse(JSON.stringify(row.executionScope)); editingCandidate.value = JSON.parse(JSON.stringify(row)); Object.assign(form, { key: row.body.key, value: row.body.value, memoryType: row.body.memoryType || "custom", importance: row.body.importance ?? 5, retentionLevel: row.body.retentionLevel || 3, pinned: row.body.pinned === true }); attempt = ""; editorOpen.value = true; }
+function openCreate() { if (!canWrite.value) return; editorScope = snapshot(); editingCandidate.value = undefined; Object.assign(form, { key: "", value: "", memoryType: "custom", importance: 5, retentionLevel: 3, pinned: false }); attempt = ""; editorOpen.value = true; }
+function editCandidate(row: OwnedMemoryManagementResource) { if (!canWrite.value) return; editorScope = JSON.parse(JSON.stringify(row.executionScope)); editingCandidate.value = JSON.parse(JSON.stringify(row)); Object.assign(form, { key: row.body.key, value: row.body.value, memoryType: row.body.memoryType || "custom", importance: row.body.importance ?? 5, retentionLevel: row.body.retentionLevel || 3, pinned: row.body.pinned === true }); attempt = ""; editorOpen.value = true; }
 async function mutate(scope: OwnedExecutionScope, input: Record<string, unknown>, candidate = false) {
   if (ownedMemoryAuthority(scope) !== ownedMemoryAuthority(props.executionScope)) { error.value = "服务或权限已变化，请重新加载原记录再操作"; return; }
   const ticket = generation; const fingerprint = JSON.stringify([ownedMemoryAuthority(scope), input, candidate]); if (!attempt || fingerprint !== attemptFingerprint) { attempt = crypto.randomUUID(); attemptFingerprint = fingerprint; }
   loading.value = true; error.value = "";
-  try { await api.write(scope, attempt, input, candidate); if (ticket !== generation) return; attempt = ""; editorOpen.value = false; generateOpen.value = false; conflictOpen.value = false; ElMessage.success(input.action === "generate" ? "候选已由数据所有者确认保存，审核后再用于记忆" : "数据所有者已确认保存"); emit("saved"); if (ticket === generation) await loadCandidates(); }
+  try { await coreData.requireWrite(); await api.write(scope, attempt, input, candidate); if (ticket !== generation) return; attempt = ""; editorOpen.value = false; generateOpen.value = false; conflictOpen.value = false; ElMessage.success(input.action === "generate" ? "候选已由数据所有者确认保存，审核后再用于记忆" : "数据所有者已确认保存"); emit("saved"); if (ticket === generation) await loadCandidates(); }
   catch (cause) { if (ticket !== generation) return; try { const conflicts = api.conflicts(cause, scope); if (conflicts.length) { conflictRows.value = conflicts; conflictIntent = { scope, input, candidates: candidate }; resolution.value = ""; conflictOpen.value = true; } else error.value = cause instanceof Error ? cause.message : "操作尚未确认保存"; } catch (invalid) { error.value = invalid instanceof Error ? invalid.message : "冲突记录的数据归属无效"; } }
   finally { if (ticket === generation) loading.value = false; }
 }
@@ -147,7 +151,7 @@ async function reject(row: OwnedMemoryManagementResource) { const original = JSO
   console.error("[original-error]", error);
 } }
 async function resolveConflict() { const original = conflictIntent; const row = conflictRows.value[0]; if (!original || !row || !resolution.value) return; await mutate(original.scope, { ...original.input, action: original.candidates ? "accept" : "resolve", conflictId: row.id, expectedConflictRevision: row.revision, resolution: resolution.value }, original.candidates); }
-async function openGenerate() { const scope = snapshot(); const ticket = generation; try { const roles = await owned.historicalRoles(scope.roleId); if (ticket !== generation) return; historicalRoles.value = roles; generationSource.value = "current"; generateScope = scope; attempt = ""; generateOpen.value = true; await loadGenerationConversations(); } catch (cause) { if (ticket === generation) error.value = cause instanceof Error ? cause.message : "对话加载失败"; } }
+async function openGenerate() { if (!canWrite.value) return; const scope = snapshot(); const ticket = generation; try { const roles = await owned.historicalRoles(scope.roleId); if (ticket !== generation) return; historicalRoles.value = roles; generationSource.value = "current"; generateScope = scope; attempt = ""; generateOpen.value = true; await loadGenerationConversations(); } catch (cause) { if (ticket === generation) error.value = cause instanceof Error ? cause.message : "对话加载失败"; } }
 async function loadGenerationConversations() {
   const scope = generateScope; if (!scope) return;
   const ticket = generation; const source = generationSource.value;

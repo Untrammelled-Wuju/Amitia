@@ -153,7 +153,36 @@
             },
             "metadata": {
               "mode": "formal-plugin",
-              "security": "full"
+              "security": "full",
+              "behaviors": {
+                "version": 1,
+                "revision": "world-game-1.0.5",
+                "behaviors": [
+                  {
+                    "id": "move_forward",
+                    "name": "向前移动",
+                    "description": "由游戏插件动态声明并执行的移动行为。",
+                    "serviceId": "world-game-runtime",
+                    "method": "worldgame.command",
+                    "inputSchema": {
+                      "type": "object",
+                      "properties": {
+                        "direction": {
+                          "type": "string",
+                          "enum": [
+                            "forward"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "direction"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "risk": "low"
+                  }
+                ]
+              }
             },
             "artifacts": [
               {

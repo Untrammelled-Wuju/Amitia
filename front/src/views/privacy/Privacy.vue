@@ -9,8 +9,8 @@ SPDX-License-Identifier: AGPL-3.0-only
         <h3>数据收集与存储</h3>
         <ul>
           <li>Amitia 会保存维持个人空间、对话、角色、记忆、扩展与运行配置所需的数据。</li>
-          <li><strong>本地模式：</strong>业务数据由当前设备上的 Runtime/Core 处理并存储。</li>
-          <li><strong>云端统筹模式：</strong>Electron/Flutter 的业务 API 与 WebSocket 连接你配置的 Cloud Core，角色、对话和记忆由 Cloud Core 统一管理；本机 Device Agent 继续处理设备能力。</li>
+          <li><strong>设备本地数据：</strong>聊天会话、消息、项目、文件、提醒、主动任务、MCP、Skill、工作流和扩展包由对应设备保存。</li>
+          <li><strong>统筹中心数据：</strong>角色、记忆、团队、世界书、用户画像和模型配置由当前选择的统筹中心保存。</li>
           <li>聊天、记忆、导入记录及相关业务数据可以通过应用提供的删除、清理、备份或恢复功能管理。</li>
         </ul>
       </section>
@@ -32,18 +32,18 @@ SPDX-License-Identifier: AGPL-3.0-only
         <ul>
           <li>相机、麦克风、文件、通知等系统权限由操作系统授权，并可在应用的权限/安全设置中检查。</li>
           <li>扩展包、MCP、Agent Skills、工作流及其它工具能力受当前权限、运行时策略和运行模式约束。</li>
-          <li>云端统筹模式不会把所有设备本地能力自动搬到 Cloud Core；需要设备执行的操作仍通过已绑定的 Device Agent/Device Mesh 路径完成。</li>
+          <li>统筹中心不会把所有设备本地能力自动搬到中心；设备能力是否可见由该设备自己的能力开放设置决定。</li>
         </ul>
       </section>
 
       <el-divider />
 
       <section class="legal-section">
-        <h3>设备与云端协同</h3>
+        <h3>设备与统筹协同</h3>
         <ul>
-          <li>绑定设备后，Device Mesh 会使用设备凭据维护云端与该设备之间的受控协同连接。</li>
-          <li>你可以在“我的设备”中查看、管理或移除云端登记设备，并可在设备端解除本机云端凭据。</li>
-          <li>设备凭据用于云端设备认证；第三方服务凭据只属于对应 Service Connection。进入云端统筹模式后，本机仍保留 Device Agent。</li>
+          <li>绑定设备后，Device Mesh 会使用设备凭据维护统筹中心与该设备之间的受控协同连接。</li>
+          <li>你可以在“我的设备”中查看、管理或移除中心登记设备，并可在设备端解除本机中心凭据。</li>
+          <li>设备凭据用于统筹中心认证；第三方服务凭据只属于对应 Service Connection。</li>
         </ul>
       </section>
 

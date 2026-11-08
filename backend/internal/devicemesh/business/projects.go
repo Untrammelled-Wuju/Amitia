@@ -52,7 +52,7 @@ func (e *Engine) CreateProject(ctx context.Context, request Request, input Creat
 	if title == "" || len(title) > 256 || !utf8.ValidString(title) || strings.ContainsAny(title, "\x00\r\n") || request.RequestID == "" || len(request.RequestID) > 128 || request.ExpectedScope == nil || err != nil {
 		return ProjectResponse{}, errors.New("项目名称或原数据归属参数无效")
 	}
-	ctx, scope, finish, err := e.coordination.Begin(ctx, request.SpaceID, request.DeviceID, request.TargetDeviceID, request.CoreID, request.RoleID, request.RequestID)
+	ctx, scope, finish, err := e.beginRequest(ctx, request, request.RoleID, request.RequestID)
 	if err != nil {
 		return ProjectResponse{}, err
 	}

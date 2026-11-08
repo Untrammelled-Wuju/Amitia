@@ -72,6 +72,7 @@ import '../../../features/settings/presentation/pages/maintenance_page.dart';
 import '../../../features/settings/presentation/pages/user_feedback_page.dart';
 import '../../../features/settings/presentation/pages/storage_page.dart';
 import '../../../features/settings/presentation/pages/user_settings_page.dart';
+import '../../../features/settings/presentation/pages/runtime_mode_page.dart';
 import '../../../features/settings/presentation/pages/devices_page.dart';
 import '../../../features/settings/presentation/pages/device_add_page.dart';
 import '../../../features/settings/presentation/pages/device_settings_page.dart';
@@ -743,6 +744,11 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/settings/devices',
+    pageBuilder: (context, state) =>
+        amitiaSlidePage(state: state, child: const RuntimeModePage()),
+  ),
+  GoRoute(
+    path: '/settings/devices/bound',
     pageBuilder: (context, state) =>
         amitiaSlidePage(state: state, child: const DevicesPage()),
   ),

@@ -16,6 +16,9 @@ func (e *Engine) RestoreMemoryArchive(ctx context.Context, request Request, inpu
 	if input.OperationID == "" || archive.Format != "amitia-owned-memory-v1" {
 		return errors.New("记忆恢复请求无效")
 	}
+	if len(archive.Entries) == 0 {
+		return context.Cause(ctx)
+	}
 	ctx, scope, finish, err := e.memoryManagementScope(ctx, request, false)
 	if err != nil {
 		return err

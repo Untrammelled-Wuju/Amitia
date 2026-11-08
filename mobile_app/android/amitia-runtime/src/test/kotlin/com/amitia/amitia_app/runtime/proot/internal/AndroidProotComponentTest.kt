@@ -9,6 +9,7 @@ import com.amitia.amitia_app.runtime.proot.ProotCommand
 import com.amitia.amitia_app.runtime.proot.ProotLaunchRequest
 import com.amitia.amitia_app.runtime.proot.ProotLaunchSpec
 import com.amitia.amitia_app.runtime.proot.ProotObserver
+import com.amitia.amitia_app.runtime.proot.ProotProcessLauncher
 import com.amitia.amitia_app.runtime.proot.ProotSession
 import com.amitia.amitia_app.runtime.proot.ProotStopResult
 import com.amitia.amitia_app.runtime.proot.ProotTerminationResult
@@ -97,7 +98,7 @@ internal class AndroidProotComponentTest {
             rootfsPath = "/rootfs",
             workingDirectory = "/opt/amitia",
             command = listOf("/opt/amitia/server"),
-            bindMounts = emptyList(),
+            bindMountsSource = emptyList(),
             environmentSource = com.amitia.amitia_app.runtime.proot.ProotEnvironment.EMPTY,
         )
     }

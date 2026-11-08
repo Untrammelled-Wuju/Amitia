@@ -2,9 +2,177 @@
   <div class="game-mode-page">
     <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" />
 
-    <div v-loading="loading" class="game-mode-placeholder">
-      <el-empty v-if="!loading" description="请从第二栏选择或添加游戏插件" :image-size="80" />
+    <div class="page-head">
+      <div class="page-copy">
+        <span class="eyebrow">GAME MODE</span>
+        <h1>游戏模式</h1>
+        <p>同一 Space 同一时间只允许一台设备进入。其他设备可以查看占用状态，并通过对话控制正在运行的设备。</p>
+      </div>
+      <div class="head-actions">
+        <el-button v-if="gameOwned" :icon="Plus" @click="openInstallDialog()">添加游戏</el-button>
+        <el-button :icon="Refresh" :loading="loading" @click="refresh">刷新</el-button>
+        <el-button v-if="gameOwned" type="danger" plain :loading="gameModeOperating" @click="releaseGameMode">退出游戏模式</el-button>
+      </div>
     </div>
+
+    <div v-if="gameModeLoading && !gameModeStatus" v-loading="true" class="game-mode-placeholder" />
+
+    <template v-else-if="gameModeStatus">
+      <section class="current-game-card" :class="{ 'is-connected': gameOwned }">
+        <div class="current-game-visual">
+          <div class="visual-grid" />
+          <div class="visual-mark">{{ gameInitial(currentGamePlugin?.name || gameModeStatus.session.gameTitle || "G") }}</div>
+        </div>
+        <div class="current-game-content">
+          <div class="current-game-meta">
+            <span class="status-pill" :class="gameOwned ? 'online' : 'offline'">
+              <span class="status-dot" />
+              {{ gameOwned ? "本机正在使用" : gameActive ? "其他设备正在使用" : "等待进入" }}
+            </span>
+            <span class="version-text">{{ gameModeStateLabel(gameModeStatus.session.state) }}</span>
+          </div>
+          <template v-if="gameActive">
+            <h2>{{ currentGamePlugin?.name || gameModeStatus.session.gameTitle || "游戏模式已进入" }}</h2>
+            <p>
+              {{ gameOwned
+                ? "选择已安装的游戏插件启动，或直接回到当前游戏控制界面。游戏行为与状态由插件动态提供。"
+                : "当前 Space 的游戏模式已被其他设备占用。你可以继续聊天，通过对话查看或控制该设备上运行的游戏插件。" }}
+            </p>
+            <div class="current-game-stats">
+              <div class="stat-item">
+                <span>{{ gameOwned ? "当前设备" : "占用设备" }}</span>
+                <strong>{{ gameModeStatus.session.deviceId || "-" }}</strong>
+              </div>
+              <div class="stat-item">
+                <span>运行状态</span>
+                <strong>{{ gameModeStateLabel(gameModeStatus.session.state) }}</strong>
+              </div>
+              <div class="stat-item">
+                <span>{{ gameOwned ? "可用插件" : "游戏" }}</span>
+                <strong>{{ gameOwned ? plugins.length : (gameModeStatus.session.gameTitle || "-") }}</strong>
+              </div>
+            </div>
+            <div class="current-game-actions">
+              <el-button v-if="gameOwned && currentGamePlugin" type="primary" @click="openGamePlugin(currentGamePlugin)">继续当前游戏</el-button>
+              <el-button @click="refresh">刷新状态</el-button>
+            </div>
+          </template>
+          <template v-else>
+            <h2>进入游戏模式</h2>
+            <p>进入后本机取得该 Space 的唯一游戏租约。设备断开时租约保持，其他设备不会自动抢占。</p>
+            <div class="current-game-stats">
+              <div class="stat-item">
+                <span>准入规则</span>
+                <strong>同一时间单设备</strong>
+              </div>
+              <div class="stat-item">
+                <span>设备状态</span>
+                <strong>可进入</strong>
+              </div>
+              <div class="stat-item">
+                <span>控制方式</span>
+                <strong>设备执行</strong>
+              </div>
+            </div>
+            <div class="current-game-actions">
+              <el-button type="primary" :loading="gameModeOperating" @click="acquireGameMode">进入游戏模式</el-button>
+            </div>
+          </template>
+        </div>
+      </section>
+
+      <template v-if="gameOwned">
+        <section class="content-section">
+          <div class="section-heading">
+            <div>
+              <h2>游戏插件</h2>
+              <p>插件、运行状态和行为目录均由本机 GameHost 提供。</p>
+            </div>
+            <span class="section-count">{{ plugins.length }} 个</span>
+          </div>
+          <div v-if="loading" class="game-grid loading-grid">
+            <div v-for="index in 3" :key="index" class="game-card skeleton-card" />
+          </div>
+          <div v-else-if="plugins.length" class="game-grid">
+            <article
+              v-for="plugin in plugins"
+              :key="plugin.extensionId + ':' + plugin.pluginId"
+              class="game-card"
+              :class="{ 'is-active': currentGamePlugin?.pluginId === plugin.pluginId }"
+              @click="openGamePlugin(plugin)"
+            >
+              <div class="game-card-top">
+                <div class="game-icon">{{ gameInitial(plugin.name) }}</div>
+                <span class="mini-status" :class="plugin.health === 'healthy' ? 'online' : 'offline'">
+                  {{ healthLabel(plugin.health) }}
+                </span>
+                <el-dropdown trigger="click" @click.stop @command="handlePluginCommand(plugin, $event)">
+                  <button class="icon-button" type="button" aria-label="游戏插件菜单" @click.stop>
+                    <el-icon><MoreFilled /></el-icon>
+                  </button>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item command="detail">详情</el-dropdown-item>
+                      <el-dropdown-item command="update">更新</el-dropdown-item>
+                      <el-dropdown-item command="uninstall" divided>卸载</el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
+              </div>
+              <div class="game-card-body">
+                <div class="game-card-title-row">
+                  <h3>{{ plugin.name }}</h3>
+                </div>
+                <p>{{ plugin.capabilities?.join(" · ") || "由插件动态声明游戏能力" }}</p>
+              </div>
+              <div class="game-card-footer" @click.stop>
+                <span>v{{ plugin.version }} · {{ pluginRuntime(plugin) ? stateLabel(pluginRuntime(plugin)?.state) : "无运行连接" }}</span>
+                <span class="card-actions">
+                  <el-button v-if="isPluginRunning(plugin)" size="small" :loading="busy === plugin.extensionId" @click="stopPlugin(plugin)">停止</el-button>
+                  <el-button v-else size="small" type="primary" :loading="busy === plugin.extensionId" @click="startPlugin(plugin)">启动</el-button>
+                </span>
+              </div>
+            </article>
+            <button class="add-game-card" type="button" @click="openInstallDialog()">
+              <span class="add-icon"><el-icon><Plus /></el-icon></span>
+              <strong>添加游戏</strong>
+              <span>选择 .gamex 游戏扩展包</span>
+            </button>
+          </div>
+          <button v-else class="empty-game-state" type="button" @click="openInstallDialog()">
+            <span class="empty-game-icon"><el-icon><Plus /></el-icon></span>
+            <strong>尚未安装游戏插件</strong>
+            <span>游戏行为不会写死在客户端中，安装游戏扩展后由插件动态提供可执行行为。</span>
+          </button>
+        </section>
+
+        <section v-if="runtimes.length" class="content-section runtime-section">
+          <div class="section-heading">
+            <div>
+              <h2>运行连接</h2>
+              <p>查看 GameHost 运行时和开发者诊断入口。</p>
+            </div>
+            <span class="section-count">{{ runtimes.length }} 个</span>
+          </div>
+          <div class="runtime-list">
+            <div v-for="runtime in runtimes" :key="runtime.runtimeId" class="runtime-card">
+              <div class="runtime-main">
+                <span class="runtime-status-dot" :class="runtime.connected ? 'online' : 'offline'" />
+                <div class="runtime-copy">
+                  <strong>{{ plugins.find((plugin) => plugin.pluginId === runtime.pluginId)?.name || runtime.pluginId || runtime.runtimeId }}</strong>
+                  <span>{{ runtime.runtimeId }} · {{ stateLabel(runtime.state) }} · {{ healthLabel(runtime.health) }}</span>
+                </div>
+              </div>
+              <div class="runtime-actions">
+                <el-button size="small" :disabled="!isRuntimeStartable(runtime.state)" :loading="busy === runtime.runtimeId" @click="runtimeAction(runtime.runtimeId, 'start')">启动</el-button>
+                <el-button size="small" :disabled="runtime.state !== 'running'" :loading="busy === runtime.runtimeId" @click="runtimeAction(runtime.runtimeId, 'stop')">停止</el-button>
+                <el-button size="small" @click="showRuntimeDetail(runtime)">详情</el-button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </template>
+    </template>
 
     <el-dialog
       v-model="installDialogVisible"
@@ -252,6 +420,8 @@ import { useRoute, useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
   MoreFilled,
+  Plus,
+  Refresh,
   UploadFilled,
 } from "@element-plus/icons-vue";
 import { useApi } from "@/composables/useApi";
@@ -285,6 +455,25 @@ type Runtime = {
 
 type GameService = { serviceId: string; state?: string; health?: string };
 type PackageOperationView = { status?: string; errorCode?: string };
+type GameModeSession = {
+  spaceId?: string;
+  sessionId?: string;
+  deviceId?: string;
+  state?: string;
+  gameExtensionId?: string;
+  gamePluginId?: string;
+  gameTitle?: string;
+  runtimeId?: string;
+  revision?: number;
+  startedAt?: string;
+  updatedAt?: string;
+};
+type GameModeStatus = {
+  session: GameModeSession & { active?: boolean };
+  currentDeviceId: string;
+  owned: boolean;
+  canAcquire: boolean;
+};
 
 const api = useApi();
 const route = useRoute();
@@ -296,6 +485,21 @@ const error = ref("");
 const plugins = ref<Plugin[]>([]);
 const runtimes = ref<Runtime[]>([]);
 const developerAccess = ref(false);
+const gameModeLoading = ref(false);
+const gameModeOperating = ref(false);
+const gameModeStatus = ref<GameModeStatus | null>(null);
+const gameActive = computed(() => {
+  const state = gameModeStatus.value?.session?.state;
+  return Boolean(state && state !== "inactive");
+});
+const gameOwned = computed(() => gameModeStatus.value?.owned === true && gameActive.value);
+const currentGamePlugin = computed(() => {
+  const session = gameModeStatus.value?.session;
+  if (!session) return null;
+  return plugins.value.find((plugin) => plugin.pluginId === session.gamePluginId)
+    || plugins.value.find((plugin) => plugin.extensionId === session.gameExtensionId)
+    || null;
+});
 const selectedRuntimeSupportsControl = computed(() => {
   const runtime = runtimes.value.find((item) => item.runtimeId === selectedRuntimeId.value);
   const plugin = plugins.value.find((item) => item.pluginId === (runtime?.pluginId || runtimeDetail.value?.pluginId));
@@ -381,25 +585,99 @@ const canInstallPreview = computed(() => {
 
 async function refresh() {
   loading.value = true;
+  gameModeLoading.value = true;
   error.value = "";
   try {
-    const [pluginResult, runtimeResult, developerResult] = await Promise.all([
-      api.get<{ items?: Plugin[] }>("/api/game-center/plugins", { page: 1, pageSize: 100 }),
-      api.get<{ items?: Runtime[] }>("/api/game-center/runtimes", { page: 1, pageSize: 100 }),
-      api.get<{ enabled?: boolean }>("/api/game-center/developer-access").catch((error) => {
-        console.error("[original-error]", error);
-        return { enabled: false };
-      }),
-    ]);
-    plugins.value = pluginResult?.items ?? [];
-    runtimes.value = runtimeResult?.items ?? [];
-    developerAccess.value = developerResult?.enabled === true;
-    void bindRuntimeAgentContexts(runtimes.value);
+    gameModeStatus.value = await api.get<GameModeStatus>("/api/game-mode");
+    if (gameOwned.value) {
+      await loadGameData();
+    } else {
+      plugins.value = [];
+      runtimes.value = [];
+      developerAccess.value = false;
+    }
   } catch (err: any) {
     error.value = err?.message || "游戏模式加载失败";
   } finally {
     loading.value = false;
+    gameModeLoading.value = false;
   }
+}
+
+async function loadGameData() {
+  const [pluginResult, runtimeResult, developerResult] = await Promise.all([
+    api.get<{ items?: Plugin[] }>("/api/game-center/plugins", { page: 1, pageSize: 100 }),
+    api.get<{ items?: Runtime[] }>("/api/game-center/runtimes", { page: 1, pageSize: 100 }),
+    api.get<{ enabled?: boolean }>("/api/game-center/developer-access").catch((error) => {
+      console.error("[original-error]", error);
+      return { enabled: false };
+    }),
+  ]);
+  plugins.value = pluginResult?.items ?? [];
+  runtimes.value = runtimeResult?.items ?? [];
+  developerAccess.value = developerResult?.enabled === true;
+  void bindRuntimeAgentContexts(runtimes.value);
+}
+
+async function acquireGameMode() {
+  if (gameModeOperating.value) return;
+  gameModeOperating.value = true;
+  error.value = "";
+  try {
+    await api.post<GameModeSession>("/api/game-mode/acquire", {});
+    ElMessage.success("已进入游戏模式");
+    await refresh();
+  } catch (err: any) {
+    error.value = err?.message || "进入游戏模式失败";
+  } finally {
+    gameModeOperating.value = false;
+  }
+}
+
+async function releaseGameMode() {
+  const status = gameModeStatus.value;
+  const session = status?.session;
+  if (!status || !session?.sessionId) return;
+  try {
+    await ElMessageBox.confirm(
+      "退出后当前游戏模式的唯一租约会被释放，其他设备可以立即进入。",
+      "退出游戏模式",
+      { type: "warning", confirmButtonText: "退出", cancelButtonText: "取消" },
+    );
+  } catch {
+    return;
+  }
+  gameModeOperating.value = true;
+  error.value = "";
+  try {
+    await api.post("/api/game-mode/release", {
+      sessionId: session.sessionId,
+      expectedRevision: session.revision ?? 0,
+    });
+    ElMessage.success("已退出游戏模式");
+    await refresh();
+  } catch (err: any) {
+    error.value = err?.message || "退出游戏模式失败";
+    await refresh();
+  } finally {
+    gameModeOperating.value = false;
+  }
+}
+
+async function selectGameForLease(plugin: Plugin) {
+  const status = gameModeStatus.value;
+  const session = status?.session;
+  if (!status?.owned || !session?.sessionId) return;
+  const runtime = pluginRuntime(plugin);
+  if (session.gameTitle === plugin.name && session.runtimeId === (runtime?.runtimeId || "")) return;
+  const updated = await api.post<GameModeSession>("/api/game-mode/update", {
+    sessionId: session.sessionId,
+    state: "active",
+    gameTitle: plugin.name,
+    runtimeId: runtime?.runtimeId || "",
+    expectedRevision: session.revision ?? 0,
+  });
+  gameModeStatus.value = { ...status, session: updated };
 }
 
 function currentGameAgentContext() {
@@ -458,6 +736,10 @@ function pluginRuntime(plugin: Plugin) {
     || null;
 }
 
+function isPluginRunning(plugin: Plugin) {
+  return pluginRuntime(plugin)?.state === "running";
+}
+
 function isRuntimeStartable(state?: string) {
   return state === "created" || state === "stopped";
 }
@@ -478,6 +760,19 @@ function stateLabel(value?: string) {
     stopping: "停止中",
     failed: "异常",
     ready: "已就绪",
+  };
+  return labels[String(value || "").toLowerCase()] || value || "未知";
+}
+
+function gameModeStateLabel(value?: string) {
+  const labels: Record<string, string> = {
+    inactive: "未进入",
+    starting: "启动中",
+    active: "运行中",
+    paused: "已暂停",
+    stopping: "停止中",
+    unknown: "设备失联",
+    reconciling: "状态核对中",
   };
   return labels[String(value || "").toLowerCase()] || value || "未知";
 }
@@ -672,10 +967,23 @@ async function waitForPackageOperation(operationId?: string) {
 }
 
 async function openGamePlugin(plugin: Plugin) {
-  await router.push({
-    name: "gamePlugin",
-    query: { extensionId: plugin.extensionId, pluginId: plugin.pluginId },
-  });
+  if (!gameOwned.value) {
+    ElMessage.warning("只有当前游戏模式占用设备可以打开游戏控制界面");
+    return;
+  }
+  if (!plugin.enabled) {
+    ElMessage.warning("请先启用该游戏插件");
+    return;
+  }
+  try {
+    await selectGameForLease(plugin);
+    await router.push({
+      name: "gamePlugin",
+      query: { extensionId: plugin.extensionId, pluginId: plugin.pluginId },
+    });
+  } catch (err: any) {
+    error.value = err?.message || "切换当前游戏失败";
+  }
 }
 
 async function pluginMenuAction(plugin: Plugin, command: string) {
@@ -690,6 +998,10 @@ async function pluginMenuAction(plugin: Plugin, command: string) {
   if (command === "uninstall") {
     await uninstall(plugin);
   }
+}
+
+function handlePluginCommand(plugin: Plugin, command: unknown) {
+  void pluginMenuAction(plugin, String(command || ""));
 }
 
 async function showPluginDetail(plugin: Plugin) {

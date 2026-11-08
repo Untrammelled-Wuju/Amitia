@@ -552,7 +552,12 @@ class ChatService {
 
   Future<bool> deleteConversation(String id, {String? characterId}) async {
     await _requireOwned();
-    await owned.edit('conversation', id, deleted: true, characterId: characterId);
+    await owned.edit(
+      'conversation',
+      id,
+      deleted: true,
+      characterId: characterId,
+    );
     return true;
   }
 
@@ -610,9 +615,17 @@ class ChatService {
     return;
   }
 
-  Future<void> restoreArchivedConversation(String id, {String? characterId}) async {
+  Future<void> restoreArchivedConversation(
+    String id, {
+    String? characterId,
+  }) async {
     await _requireOwned();
-    await owned.edit('conversation', id, changes: {'archived': false}, characterId: characterId);
+    await owned.edit(
+      'conversation',
+      id,
+      changes: {'archived': false},
+      characterId: characterId,
+    );
     return;
   }
 
@@ -795,9 +808,11 @@ class ChatService {
     String expectedCoreId = '',
   }) async {
     await _requireOwned();
-    if (expectedCoreId.isNotEmpty && owned.coreId != expectedCoreId) throw StateError('通知所属Core已变化，不能向当前服务发送原通知回复');
+    if (expectedCoreId.isNotEmpty && owned.coreId != expectedCoreId)
+      throw StateError('通知所属Core已变化，不能向当前服务发送原通知回复');
     final requestId = clientMessageId.trim();
-    if (requestId.isEmpty || conversationId.isEmpty) throw ArgumentError('通知回复缺少原会话及请求编号');
+    if (requestId.isEmpty || conversationId.isEmpty)
+      throw ArgumentError('通知回复缺少原会话及请求编号');
     Map<String, dynamic>? completed;
     await for (final event in owned.send(
       requestId: requestId,
@@ -869,5 +884,4 @@ class ChatService {
       },
     );
   }
-
 }

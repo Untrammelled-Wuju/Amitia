@@ -7,11 +7,13 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/services/shared_core_data_access.dart';
 import '../../../../core/services/space_profile_service.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/profile_avatar.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import '../../../../core/widgets/shared_core_read_only_banner.dart';
 
 class UserSettingsPage extends ConsumerStatefulWidget {
   const UserSettingsPage({super.key});
@@ -53,6 +55,10 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
     String? userLabel,
     String? bio,
   }) async {
+    final access = ref.read(sharedCoreDataAccessProvider).valueOrNull;
+    if (access == null || !access.write) {
+      throw StateError(access?.reason ?? '无法确认统筹中心数据写权限');
+    }
     final current = _profile;
     if (current == null) return;
     final updated = await ref
@@ -71,6 +77,13 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
 
   Future<void> _changeAvatar() async {
     if (_avatarUpdating) return;
+    final access = ref.read(sharedCoreDataAccessProvider).valueOrNull;
+    if (access == null || !access.write) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(access?.reason ?? '无法确认统筹中心数据写权限')),
+      );
+      return;
+    }
     setState(() => _avatarUpdating = true);
     try {
       final avatar = await pickProfileAvatar(context);
@@ -96,6 +109,17 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final accessAsync = ref.watch(sharedCoreDataAccessProvider);
+    final access =
+        accessAsync.valueOrNull ??
+        SharedCoreDataAccess(
+          read: true,
+          write: false,
+          reason: accessAsync.hasError
+              ? '无法确认统筹中心数据权限：${accessAsync.error}'
+              : '正在确认统筹中心数据权限',
+          coreId: '',
+        );
     final profile = _profile;
     final displayName = (profile?.displayName ?? '').trim().isEmpty
         ? '我的空间'
@@ -113,13 +137,16 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
           : ListView(
               padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
               children: [
+                if (access.readOnly) SharedCoreReadOnlyBanner(access: access),
                 SizedBox(height: AppSpacing.lg),
                 Center(
                   child: Semantics(
                     button: true,
                     label: '更换头像',
                     child: GestureDetector(
-                      onTap: _avatarUpdating ? null : _changeAvatar,
+                      onTap: _avatarUpdating || !access.write
+                          ? null
+                          : _changeAvatar,
                       child: ProfileAvatar(
                         avatar: profile?.avatar ?? '',
                         initial: initial,
@@ -147,17 +174,19 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
                   ),
                 ),
                 SizedBox(height: AppSpacing.sectionGap),
-                const _SectionLabel(text: '本地资料'),
+                const _SectionLabel(text: '中心资料'),
                 SizedBox(height: AppSpacing.sm),
                 _buildCard([
                   _buildEditTile(
                     '显示名称',
                     displayName,
-                    () => _showEditSheet(
-                      '显示名称',
-                      displayName,
-                      (value) => _save(displayName: value),
-                    ),
+                    access.write
+                        ? () => _showEditSheet(
+                            '显示名称',
+                            displayName,
+                            (value) => _save(displayName: value),
+                          )
+                        : null,
                   ),
                   _divider(),
                   _buildEditTile(
@@ -165,24 +194,28 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
                     (profile?.userLabel ?? '').trim().isEmpty
                         ? '未设置'
                         : profile!.userLabel,
-                    () => _showEditSheet(
-                      'AI 对你的称呼',
-                      profile?.userLabel ?? '',
-                      (value) => _save(userLabel: value),
-                      allowEmpty: true,
-                    ),
+                    access.write
+                        ? () => _showEditSheet(
+                            'AI 对你的称呼',
+                            profile?.userLabel ?? '',
+                            (value) => _save(userLabel: value),
+                            allowEmpty: true,
+                          )
+                        : null,
                   ),
                   _divider(),
                   _buildEditTile(
                     '个人简介',
                     (profile?.bio ?? '').trim().isEmpty ? '未设置' : profile!.bio,
-                    () => _showEditSheet(
-                      '个人简介',
-                      profile?.bio ?? '',
-                      (value) => _save(bio: value),
-                      maxLines: 3,
-                      allowEmpty: true,
-                    ),
+                    access.write
+                        ? () => _showEditSheet(
+                            '个人简介',
+                            profile?.bio ?? '',
+                            (value) => _save(bio: value),
+                            maxLines: 3,
+                            allowEmpty: true,
+                          )
+                        : null,
                   ),
                 ]),
                 SizedBox(height: AppSpacing.sectionGap),
@@ -195,8 +228,8 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
                   _divider(),
                   _buildNavTile(
                     icon: Icons.devices_outlined,
-                    title: '设备管理',
-                    subtitle: '可信设备、云端配对与撤销',
+                    title: '运行模式',
+                    subtitle: '本机角色、统筹中心与已绑定设备',
                     onTap: () => context.push(AppRoutes.settingsDevices),
                   ),
                 ]),
@@ -232,7 +265,7 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
     return const SizedBox.shrink();
   }
 
-  Widget _buildEditTile(String title, String value, VoidCallback onTap) {
+  Widget _buildEditTile(String title, String value, VoidCallback? onTap) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -250,7 +283,8 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
               ),
             ),
             const SizedBox(width: 4),
-            Icon(Icons.chevron_right, size: 20, color: context.textTertiary),
+            if (onTap != null)
+              Icon(Icons.chevron_right, size: 20, color: context.textTertiary),
           ],
         ),
       ),

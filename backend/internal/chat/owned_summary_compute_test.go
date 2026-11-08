@@ -18,7 +18,7 @@ func (summaryModelRepository) GetModelRoutes() ([]map[string]interface{}, error)
 }
 
 func (summaryModelRepository) GetActiveModel() (*ModelConfig, error) {
-	return &ModelConfig{ID: 42}, nil
+	return &ModelConfig{ID: 42, IsActive: 1}, nil
 }
 
 func TestOwnedSummaryComputeUsesCoreConfigurationAndRoleWithoutTools(t *testing.T) {

@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"sync/atomic"
 	"testing"
@@ -64,6 +65,60 @@ func TestCandidateCancelledExchangeDoesNotPersistOrReplaceCanonical(t *testing.T
 	}
 }
 
+func TestExplicitPairingCanReplaceConflictingCandidateWithoutLosingItOnFailure(t *testing.T) {
+	h := NewLocalHandler(t.TempDir(), runtimeidentity.PlatformWindows)
+	t.Cleanup(h.Stop)
+	identity, err := h.identity.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stale := &StoredCredential{
+		CloudBaseUrl: "https://192.168.1.20:18899",
+		Fingerprint:  "stale-fingerprint",
+		CredentialID: "stale-candidate",
+		Credential:   "stale-secret",
+		SpaceID:      "stale-core",
+		DeviceID:     identity.DeviceID,
+		RuntimeID:    identity.RuntimeID,
+		ExpiresAt:    time.Now().Add(time.Hour),
+	}
+	if err := h.credStore.SaveCandidate(stale); err != nil {
+		t.Fatal(err)
+	}
+	var exchanges atomic.Int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/public/device-mesh/v1/pairing/status", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"spaceId": "core-b", "providerPath": []string{"core-b"}})
+	})
+	mux.HandleFunc("/api/public/device-mesh/v1/bootstrap/exchange", func(w http.ResponseWriter, r *http.Request) {
+		exchanges.Add(1)
+		http.Error(w, "synthetic exchange failure", http.StatusBadGateway)
+	})
+	_, endpoint := successorTLSServer(t, "core-b", mux)
+	_, err = h.BindProvider(t.Context(), BindingRequest{
+		CloudBaseURL: endpoint.URL, CoreID: endpoint.CoreID, Fingerprint: endpoint.Fingerprint,
+		BootstrapTicket: "independent-ticket",
+	})
+	var failure *BindingError
+	if !errors.As(err, &failure) || failure.Status != http.StatusConflict {
+		t.Fatalf("未显式替换时接受了冲突候选: %v", err)
+	}
+	if exchanges.Load() != 0 {
+		t.Fatal("冲突候选在显式替换前发起了 Exchange")
+	}
+	_, err = h.BindProvider(t.Context(), BindingRequest{
+		CloudBaseURL: endpoint.URL, CoreID: endpoint.CoreID, Fingerprint: endpoint.Fingerprint,
+		BootstrapTicket: "independent-ticket", ReplaceCandidate: true,
+	})
+	if !errors.As(err, &failure) || failure.Code != "bootstrap_failed" || exchanges.Load() != 1 {
+		t.Fatalf("显式替换未进入新绑定流程: err=%v exchanges=%d", err, exchanges.Load())
+	}
+	retained, err := h.credStore.LoadCandidate()
+	if err != nil || !sameCandidateBinding(retained, stale) {
+		t.Fatalf("新绑定失败时丢失了旧候选: candidate=%+v err=%v", retained, err)
+	}
+}
+
 func TestCandidateCancelledBusinessGateDoesNotPromoteCanonical(t *testing.T) {
 	h := NewLocalHandler(t.TempDir(), runtimeidentity.PlatformWindows)
 	t.Cleanup(h.Stop)
@@ -87,7 +142,7 @@ func TestCandidateCancelledBusinessGateDoesNotPromoteCanonical(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"coreId": "core-b", "coordinationAvailable": true, "aiProvider": "core", "policy": map[string]any{"providerEpoch": 1, "modeRevision": 1, "permissionRevision": 1}})
 	})
 	mux.HandleFunc("/api/device-mesh/v1/business/roles", func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{"roleOwnerId": identity.DeviceID.String(), "providerEpoch": 1, "modeRevision": 1, "roles": []any{}})
+		_ = json.NewEncoder(w).Encode(map[string]any{"roleOwnerId": "core-b", "providerEpoch": 1, "modeRevision": 1, "roles": []any{}})
 	})
 	mux.HandleFunc(meshprotocol.WebSocketPath, func(w http.ResponseWriter, r *http.Request) {
 		connection, err := (&websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}).Upgrade(w, r, nil)

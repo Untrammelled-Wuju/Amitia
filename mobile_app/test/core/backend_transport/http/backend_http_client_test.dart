@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:amitia_app/core/backend_connection/backend_connection_config.dart';
 import 'package:amitia_app/core/backend_connection/backend_connection_credential.dart';
@@ -84,7 +87,10 @@ void main() {
         'core-b',
       );
       expect(
-        server.requests.single.headers['x-amitia-expected-configuration-policy'],
+        server
+            .requests
+            .single
+            .headers['x-amitia-expected-configuration-policy'],
         '1:2:3',
       );
     });
@@ -247,6 +253,76 @@ void main() {
       }
     });
 
+    test('409 preserves the complete response body', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        request.response.statusCode = HttpStatus.conflict;
+        request.response.headers.contentType = ContentType.json;
+        request.response.write(
+          '{"code":"pairing.already_paired","message":"该设备已添加，无需重复扫码","detail":"same origin"}',
+        );
+        await request.response.close();
+      });
+      final conflictClient = BackendHttpClient(_makeConfig(server.port));
+      addTearDown(conflictClient.close);
+
+      try {
+        await conflictClient.send(
+          BackendHttpRequest(
+            method: BackendHttpMethod.post,
+            path: '/internal/device-mesh/pairing/claim',
+            body: const <String, dynamic>{},
+          ),
+        );
+        fail('409 must throw');
+      } on BackendTransportError catch (error) {
+        expect(error.statusCode, HttpStatus.conflict);
+        expect(error.responseBody, isA<Map>());
+        expect((error.responseBody as Map)['message'], '该设备已添加，无需重复扫码');
+        expect(error.toString(), contains('pairing.already_paired'));
+        expect(error.toString(), contains('该设备已添加，无需重复扫码'));
+      }
+    });
+
+    test('streaming 409 preserves the complete response body', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        request.response.statusCode = HttpStatus.conflict;
+        request.response.headers.contentType = ContentType.json;
+        request.response.write(
+          '{"code":"mesh.continuity_unavailable","message":"持续事项解析失败","detail":"revision 3 != 4"}',
+        );
+        await request.response.close();
+      });
+      final conflictClient = BackendHttpClient(_makeConfig(server.port));
+      addTearDown(conflictClient.close);
+
+      try {
+        await conflictClient.send(
+          BackendHttpRequest(
+            method: BackendHttpMethod.post,
+            path: '/api/device-mesh/v1/business/messages',
+            body: const <String, dynamic>{'message': 'test409'},
+            headers: const {'Accept': 'text/event-stream'},
+            streamResponse: true,
+          ),
+        );
+        fail('409 must throw');
+      } on BackendTransportError catch (error) {
+        expect(error.statusCode, HttpStatus.conflict);
+        expect(error.responseBody, isA<Map>());
+        expect(
+          (error.responseBody as Map)['code'],
+          'mesh.continuity_unavailable',
+        );
+        expect((error.responseBody as Map)['message'], '持续事项解析失败');
+        expect((error.responseBody as Map)['detail'], 'revision 3 != 4');
+        expect(error.toString(), isNot(contains("Instance of 'ResponseBody'")));
+      }
+    });
+
     test('close makes transport state closed', () async {
       await client.close();
       expect(client.state.name, 'closed');
@@ -266,6 +342,71 @@ void main() {
         ),
         throwsA(isA<Exception>()),
       );
+    });
+
+    test('单次请求可覆盖全局超时且控制头不会发送到服务端', () async {
+      final scoped = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final requestHeaders = Completer<HttpHeaders>();
+      final requestHandled = () async {
+        final request = await scoped.first;
+        requestHeaders.complete(request.headers);
+        await Future<void>.delayed(const Duration(milliseconds: 180));
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..write('{}');
+        await request.response.close();
+      }();
+      final delayedClient = BackendHttpClient(
+        _makeConfig(scoped.port),
+        operationTimeout: const Duration(milliseconds: 50),
+      );
+      try {
+        final response = await delayedClient.send(
+          BackendHttpRequest(
+            method: BackendHttpMethod.post,
+            path: '/internal/device-mesh/bootstrap',
+            body: const <String, dynamic>{},
+            headers: const {'X-Amitia-Request-Timeout-Seconds': '1'},
+          ),
+        );
+        await requestHandled;
+        expect(response.statusCode, 200);
+        expect(
+          (await requestHeaders.future).value(
+            'x-amitia-request-timeout-seconds',
+          ),
+          isNull,
+        );
+      } finally {
+        await delayedClient.close();
+        await scoped.close(force: true);
+      }
+    });
+
+    test('重复超时响应头不会阻断正常响应', () async {
+      final scoped = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final requestHandled = () async {
+        final request = await scoped.first;
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.add('x-amitia-timeout-disabled', 'false')
+          ..headers.add('x-amitia-timeout-disabled', 'false')
+          ..headers.add('x-amitia-timeout-seconds', '180')
+          ..headers.add('x-amitia-timeout-seconds', '180')
+          ..write('{}');
+        await request.response.close();
+      }();
+      final duplicateHeaderClient = BackendHttpClient(_makeConfig(scoped.port));
+      try {
+        final response = await duplicateHeaderClient.send(
+          BackendHttpRequest(method: BackendHttpMethod.get, path: '/api/space'),
+        );
+        await requestHandled;
+        expect(response.statusCode, 200);
+      } finally {
+        await duplicateHeaderClient.close();
+        await scoped.close(force: true);
+      }
     });
   });
 

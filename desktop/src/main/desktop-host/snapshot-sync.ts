@@ -7,9 +7,10 @@ export class DesktopSnapshotSync {
   private readonly mainWindow: BrowserWindow;
   private readonly host: DesktopHostManager;
   private readonly businessCoreClient: BusinessCoreClient;
-  private timer: NodeJS.Timeout | null = null;
   private stopped = false;
   private syncing = false;
+  private requested = false;
+  private drainPromise: Promise<void> | null = null;
 
   constructor(mainWindow: BrowserWindow, host: DesktopHostManager, businessCoreClient: BusinessCoreClient) {
     this.mainWindow = mainWindow;
@@ -25,18 +26,31 @@ export class DesktopSnapshotSync {
     } else {
       sync();
     }
-    this.timer = setInterval(sync, 2000);
   }
 
   stop(): void {
     this.stopped = true;
-    if (this.timer) {
-      clearInterval(this.timer);
-      this.timer = null;
-    }
+    this.requested = false;
   }
 
   async syncNow(): Promise<void> {
+    if (this.stopped || this.mainWindow.isDestroyed()) return;
+    this.requested = true;
+    if (this.drainPromise) return this.drainPromise;
+    this.drainPromise = this.drain().finally(() => {
+      this.drainPromise = null;
+    });
+    return this.drainPromise;
+  }
+
+  private async drain(): Promise<void> {
+    while (this.requested && !this.stopped && !this.mainWindow.isDestroyed()) {
+      this.requested = false;
+      await this.syncOnce();
+    }
+  }
+
+  private async syncOnce(): Promise<void> {
     if (this.stopped || this.syncing || this.mainWindow.isDestroyed()) return;
     this.syncing = true;
     try {

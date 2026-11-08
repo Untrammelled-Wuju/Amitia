@@ -71,10 +71,32 @@ func TestSignedPairingApprovalAndDuplicateBlockingAcrossPhoneAndComputerPlatform
 				if err != nil {
 					t.Fatal(err)
 				}
-				if _, err := claim(duplicateToken, identity.DeviceID); !errors.Is(err, pairing.ErrAlreadyPaired) {
-					t.Fatalf("paired platform added twice: %v", err)
+				replacement, err := claim(duplicateToken, identity.DeviceID)
+				if err != nil || replacement.Pending == nil {
+					t.Fatalf("已信任设备无法重新配对: %v", err)
 				}
-				if _, err := claim(duplicateToken, "copied-device"); !errors.Is(err, proof.ErrIdentityCopy) {
+				if err := service.DecideApproval(t.Context(), replacement.Pending.RequestID, replacement.Pending.Revision, true); err != nil {
+					t.Fatal(err)
+				}
+				replacement, err = claim(duplicateToken, identity.DeviceID)
+				if err != nil || replacement.RawTicket == "" {
+					t.Fatalf("已信任设备重新配对未获得新票据: %v", err)
+				}
+				_, replacementCredential, _, err := rt.BootstrapSvc.Exchange(t.Context(), replacement.RawTicket, identity.DeviceID, identity.RuntimeID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err := rt.CredentialSvc.Validate(t.Context(), replacementCredential); err != nil {
+					t.Fatal(err)
+				}
+				if replacementCredential == rawCredential {
+					t.Fatal("重新配对未轮换 Device Credential")
+				}
+				_, copiedToken, err := service.CreateOffer(t.Context(), "issuer", time.Minute, true)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err := claim(copiedToken, "copied-device"); !errors.Is(err, proof.ErrIdentityCopy) {
 					t.Fatalf("same identity key admitted under another device: %v", err)
 				}
 			})

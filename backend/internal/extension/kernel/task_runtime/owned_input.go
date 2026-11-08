@@ -30,8 +30,11 @@ type AcknowledgedTaskInputPort struct {
 
 func taskInputScope(ctx context.Context, run *TaskRun) (coordination.ExecutionScope, error) {
 	scope, ok := coordination.FromContext(ctx)
-	if !ok || run == nil || run.TaskRunID == "" || len(run.TaskRunID) > 256 || run.ScopeSnapshotID == "" || run.DefinitionFingerprint == "" || run.InputHash == "" || scope.CoreID == "" || scope.AuthorizationRealm != scope.CoreID || scope.InitiatorDeviceID == "" || scope.TargetDeviceID == "" || scope.RequestID == "" || scope.ExecutionID == "" || scope.TurnID == "" || scope.RoleID == "" || scope.RoleRevision < 1 || scope.ProviderEpoch < 1 || scope.TargetProviderEpoch < 1 || scope.ModeRevision < 1 || scope.PermissionRevision < 1 || scope.TargetPermissionRevision < 1 || scope.RoleOwnerID != scope.ResourceOwnerID || scope.ResourceOwnerID == "" {
+	if !ok || run == nil || run.TaskRunID == "" || len(run.TaskRunID) > 256 || run.ScopeSnapshotID == "" || run.DefinitionFingerprint == "" || run.InputHash == "" || scope.CoreID == "" || scope.AuthorizationRealm != scope.CoreID || scope.InitiatorDeviceID == "" || scope.TargetDeviceID == "" || scope.RequestID == "" || scope.ExecutionID == "" || scope.TurnID == "" || scope.RoleID == "" || scope.RoleRevision < 1 || scope.ProviderEpoch < 1 || scope.TargetProviderEpoch < 1 || scope.ModeRevision < 1 || scope.PermissionRevision < 1 || scope.TargetPermissionRevision < 1 || scope.RoleOwnerID == "" || scope.ResourceOwnerID == "" {
 		return coordination.ExecutionScope{}, NewTaskError(ErrTaskScopeDenied, "任务输入缺少完整所有者和持久授权")
+	}
+	if scope.RoleOwnerID != scope.TargetDeviceID && scope.RoleOwnerID != scope.CoreID {
+		return coordination.ExecutionScope{}, coordination.ErrWrongOwner
 	}
 	if scope.Coordinated && scope.ResourceOwnerID != scope.CoreID || !scope.Coordinated && scope.ResourceOwnerID != scope.TargetDeviceID {
 		return coordination.ExecutionScope{}, coordination.ErrWrongOwner
@@ -71,6 +74,9 @@ func (p AcknowledgedTaskInputPort) SaveInput(ctx context.Context, run *TaskRun) 
 func (p AcknowledgedTaskInputPort) Input(ctx context.Context, run *TaskRun) (json.RawMessage, error) {
 	scope, err := taskInputScope(ctx, run)
 	if err != nil {
+		return nil, err
+	}
+	if err := coordination.ValidateRoleRevision(ctx, p.Data, scope); err != nil {
 		return nil, err
 	}
 	port, ok := p.Data.(coordination.ResourcePort)

@@ -83,8 +83,8 @@ class _NotificationSettingsPageState
             status['enabled'] == true && status['previewEnabled'] != false;
       });
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-if (!mounted) return;
+      print("[original-error] $error\n$stackTrace");
+      if (!mounted) return;
       setState(() => _floatingPreviewEnabled = false);
     }
   }
@@ -569,7 +569,7 @@ if (!mounted) return;
   String get _deliveryModeLabel {
     return switch ((_serverCapabilities['deliveryMode'] ?? '').toString()) {
       'native' => '本地 Core · Native Bridge',
-      'remote' => 'Cloud Core · Remote Push',
+      'remote' => '统筹中心 · Remote Push',
       _ => '等待 Core 能力',
     };
   }
@@ -580,7 +580,7 @@ if (!mounted) return;
         : '当前设备 Provider';
     return _serverCapabilities['deliveryMode'] == 'native'
         ? '通过本地 Core → Native Bridge 投递到本机'
-        : '通过 Cloud Core → $provider 投递到本机';
+        : '通过统筹中心 → $provider 投递到本机';
   }
 
   String get _providerReadinessLabel {
@@ -601,13 +601,13 @@ if (!mounted) return;
       return '本地 Native Bridge';
     }
     final providers = _serverCapabilities['nativeDataPushProviders'];
-    if (providers is! Map) return 'Cloud Core 未返回透传能力';
+    if (providers is! Map) return '统筹中心未返回透传能力';
     final deviceProviders =
         _platformState?.nativeDataProviders ?? const <String>[];
     final ready = effectiveNativeDataProviders(deviceProviders, providers);
     if (ready.isNotEmpty) return ready.join(' / ');
     if (deviceProviders.isEmpty) return '当前设备未启用原生透传接收器';
-    return '设备与 Cloud Core 暂无共同透传通道（使用系统通知降级）';
+    return '设备与统筹中心暂无共同透传通道（使用系统通知降级）';
   }
 
   String get _executionSubtitle {

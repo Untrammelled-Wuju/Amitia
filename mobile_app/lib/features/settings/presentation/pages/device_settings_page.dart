@@ -7,6 +7,7 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../core/device_mesh/device_presence.dart';
 import '../../../../core/runtime/backend/mobile_deployment_mode.dart';
 import '../../../../core/runtime/backend/mobile_backend_providers.dart';
 import '../../../../core/services/providers.dart';
@@ -22,7 +23,7 @@ class DeviceSettingsPage extends ConsumerWidget {
     final status = ref.watch(localDeviceMeshStatusProvider);
     final devices = ref.watch(deviceMeshDevicesProvider);
     final state = status.asData?.value?['state']?.toString() ?? '';
-    final connected = state.toLowerCase() == 'connected';
+    final connected = isDeviceMeshConnectedState(state);
     final cloudBaseUrl = status.asData?.value?['cloudBaseUrl']
         ?.toString()
         .trim();
@@ -50,14 +51,14 @@ class DeviceSettingsPage extends ConsumerWidget {
           children: [
             _StatusTile(
               icon: cloud ? Icons.cloud_done_outlined : Icons.laptop_outlined,
-              title: '运行模式',
+              title: '统筹中心',
               subtitle: cloud
-                  ? '角色、对话、记忆和跨设备任务由 Cloud Core 统一管理'
-                  : '项目服务、角色、对话和记忆全部在当前设备运行',
-              value: cloud ? '云端统筹' : '本地模式',
+                  ? '使用另一台设备提供的统筹数据和模型服务'
+                  : '当前设备保存统筹数据、模型配置并管理其他设备',
+              value: cloud ? '远程统筹中心' : '本机统筹中心',
               valueColor: context.accentPrimary,
             ),
-            _sectionTitle(context, '云端协同'),
+            _sectionTitle(context, '统筹协同'),
             _group(context, [
               _StatusTile(
                 icon: Icons.cloud_done_outlined,
@@ -74,13 +75,13 @@ class DeviceSettingsPage extends ConsumerWidget {
                 icon: Icons.route_outlined,
                 title: '任务路由',
                 subtitle: connected
-                    ? '云端可将设备任务路由到已连接 Runtime'
-                    : '连接云端协同后由 Device Mesh 自动路由',
+                    ? '统筹中心可将设备任务路由到已连接 Runtime'
+                    : '连接统筹中心后由 Device Mesh 自动路由',
                 value: connected ? '自动' : '关闭',
               ),
               _StatusTile(
                 icon: Icons.devices_outlined,
-                title: '云端设备',
+                title: '统筹设备',
                 subtitle: '来自 /api/device-mesh/v1/devices',
                 value: deviceCount == null ? '—' : '$deviceCount 台',
               ),
@@ -90,11 +91,13 @@ class DeviceSettingsPage extends ConsumerWidget {
               _StatusTile(
                 icon: Icons.sync_outlined,
                 title: '跨设备同步',
-                subtitle: '当前后端没有独立同步开关；连接 Cloud Core 后由云端协同机制自动工作',
-                value: connected ? '随云端协同' : '未启用',
+                subtitle: '当前后端没有独立同步开关；连接统筹中心后由协同机制自动工作',
+                value: connected ? '随统筹协同' : '未启用',
                 valueColor: connected ? context.success : context.textTertiary,
               ),
             ]),
+            _sectionTitle(context, '能力开放'),
+            _DeviceCapabilityExposure(),
             _sectionTitle(context, '设备管理'),
             _group(context, [
               _RouteTile(
@@ -111,10 +114,10 @@ class DeviceSettingsPage extends ConsumerWidget {
               ),
               _RouteTile(
                 icon: Icons.cloud_outlined,
-                title: '运行模式',
+                title: '统筹中心',
                 subtitle: deployment.remoteCoreUri?.trim().isNotEmpty == true
                     ? deployment.remoteCoreUri!.trim()
-                    : '本地模式 / 云端统筹模式与 Core 地址',
+                    : '本机或远程统筹中心地址',
                 onTap: () => context.push(AppRoutes.settingsDeployment),
               ),
             ]),
@@ -125,7 +128,7 @@ class DeviceSettingsPage extends ConsumerWidget {
                   horizontal: AppSpacing.pagePadding,
                 ),
                 child: AmitiaButton(
-                  label: '解除本机云端绑定',
+                  label: '解除本机统筹绑定',
                   isSecondary: true,
                   isFullWidth: true,
                   onPressed: () => _unlink(context, ref),
@@ -142,8 +145,8 @@ class DeviceSettingsPage extends ConsumerWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('解除云端绑定'),
-        content: const Text('这会删除本机保存的 Device Mesh 云端凭据。云端设备记录仍可在“我的设备”中单独移除。'),
+        title: const Text('解除中心绑定'),
+        content: const Text('这会删除本机保存的 Device Mesh 中心凭据。中心设备记录仍可在“我的设备”中单独移除。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
@@ -165,7 +168,7 @@ class DeviceSettingsPage extends ConsumerWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('本机云端绑定已解除')));
+        ).showSnackBar(const SnackBar(content: Text('本机中心绑定已解除')));
       }
     } catch (e) {
       if (context.mounted) {
@@ -186,7 +189,7 @@ class DeviceSettingsPage extends ConsumerWidget {
     final data = status.asData?.value;
     if (data == null) return '本机 Runtime 尚未就绪';
     final raw = (data['state'] ?? 'unprovisioned').toString();
-    if (raw.toLowerCase() == 'unprovisioned') return '本机尚未加入 Cloud Core';
+    if (raw.toLowerCase() == 'unprovisioned') return '本机尚未加入统筹中心';
     final error = (data['lastErrorCode'] ?? '').toString();
     return error.isEmpty ? raw : '$raw · $error';
   }
@@ -211,6 +214,114 @@ class DeviceSettingsPage extends ConsumerWidget {
         ),
         child: Column(children: [for (final child in children) child]),
       );
+}
+
+class _DeviceCapabilityExposure extends ConsumerStatefulWidget {
+  @override
+  ConsumerState<_DeviceCapabilityExposure> createState() =>
+      _DeviceCapabilityExposureState();
+}
+
+class _DeviceCapabilityExposureState
+    extends ConsumerState<_DeviceCapabilityExposure> {
+  String _saving = '';
+
+  Future<void> _toggle(
+    Map<String, dynamic> state,
+    Map<String, dynamic> item,
+    bool enabled,
+  ) async {
+    final id = (item['id'] ?? '').toString();
+    final revision = state['revision'];
+    if (id.isEmpty || revision is! int || _saving.isNotEmpty) return;
+    setState(() => _saving = id);
+    try {
+      final result = await ref
+          .read(deviceMeshLocalServiceProvider)!
+          .setCapabilityExposure(
+            capability: id,
+            enabled: enabled,
+            expectedRevision: revision,
+          );
+      ref.invalidate(deviceCapabilityExposureProvider);
+      final syncError = (result['syncError'] ?? '').toString();
+      if (syncError.isNotEmpty && mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(syncError)));
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('能力设置保存失败：$error')));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = '');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final exposure = ref.watch(deviceCapabilityExposureProvider);
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.sm,
+        AppSpacing.pagePadding,
+        AppSpacing.md,
+      ),
+      child: exposure.when(
+        loading: () => const LinearProgressIndicator(),
+        error: (error, _) => Text(
+          '能力开放状态读取失败：$error',
+          style: AppTypography.caption(
+            context,
+          ).copyWith(color: Theme.of(context).colorScheme.error),
+        ),
+        data: (state) {
+          final values = state['capabilities'] is List
+              ? (state['capabilities'] as List)
+                    .whereType<Map>()
+                    .map((item) => Map<String, dynamic>.from(item))
+                    .toList()
+              : const <Map<String, dynamic>>[];
+          return Container(
+            decoration: BoxDecoration(
+              color: context.surfacePrimary,
+              borderRadius: AppRadius.brMedium,
+              border: Border.all(color: context.borderPrimary, width: 0.6),
+            ),
+            child: Column(
+              children: [
+                for (final item in values)
+                  SwitchListTile(
+                    value: item['enabled'] == true,
+                    onChanged: _saving.isEmpty
+                        ? (enabled) => _toggle(state, item, enabled)
+                        : null,
+                    title: Text(
+                      (item['label'] ?? item['id'] ?? '').toString(),
+                      style: AppTypography.body(context),
+                    ),
+                    subtitle: Text(
+                      (item['description'] ?? item['id'] ?? '').toString(),
+                      style: AppTypography.caption(context),
+                    ),
+                    secondary: _saving == item['id']
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : null,
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
 }
 
 class _StatusTile extends StatelessWidget {

@@ -133,7 +133,7 @@ func (r *PackageTrustRepository) MarkActive(ctx context.Context, mutation trust.
 		return fmt.Errorf("kernel: begin trust activation: %w", err)
 	}
 	defer func() {
-		if err := tx.Rollback(); err != nil {
+		if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
 			amitialog.Printf("[original-error] %v", err)
 		}
 	}()

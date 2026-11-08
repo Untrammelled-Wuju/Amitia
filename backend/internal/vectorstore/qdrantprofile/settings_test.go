@@ -111,6 +111,22 @@ func TestSettings_TelemetryMustBeDisabled(t *testing.T) {
 	}
 }
 
+func TestSettings_IoUringMustBeDisabled(t *testing.T) {
+	for name, settings := range map[string]Settings{
+		"compact":     CompactSettings(),
+		"balanced":    BalancedSettings(),
+		"performance": PerformanceSettings(),
+	} {
+		if settings.IoUring != "disabled" {
+			t.Errorf("%s IoUring = %q", name, settings.IoUring)
+		}
+		settings.IoUring = "auto"
+		if err := settings.Validate(); err == nil {
+			t.Errorf("%s: expected error for io_uring auto", name)
+		}
+	}
+}
+
 func TestSettings_SnapshotURLRecoveryMustBeFalse(t *testing.T) {
 	s := BalancedSettings()
 	s.EnableSnapshotURLRecovery = true

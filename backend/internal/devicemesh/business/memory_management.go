@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"sort"
 	"strings"
@@ -17,6 +18,8 @@ import (
 	"github.com/u-ai/backend/internal/memorypolicy"
 	amitialog "log"
 )
+
+var ErrMemorySemanticUnavailable = errors.New("记忆语义检索不可用")
 
 type MemoryManagementInput struct {
 	RetentionLevel           int    `json:"retentionLevel,omitempty"`
@@ -225,14 +228,14 @@ func (e *Engine) SearchOwnedMemories(ctx context.Context, request Request, input
 		}
 		model, ok := e.model.(SemanticModel)
 		if !ok {
-			return MemoryManagementResponse{}, errors.New("当前 Core 尚未配置记忆检索模型")
+			return MemoryManagementResponse{}, fmt.Errorf("%w: 当前 Core 尚未配置记忆检索模型", ErrMemorySemanticUnavailable)
 		}
 		values, fingerprint, err := model.OwnedQueryVector(ctx, input.Query)
 		if err != nil {
-			return MemoryManagementResponse{}, err
+			return MemoryManagementResponse{}, fmt.Errorf("%w: %w", ErrMemorySemanticUnavailable, err)
 		}
 		if err := coordination.ValidateQueryVector(coordination.DataQuery{Vector: values, VectorModel: fingerprint}); err != nil || len(values) == 0 {
-			return MemoryManagementResponse{}, errors.New("当前 Core 的检索向量无效")
+			return MemoryManagementResponse{}, fmt.Errorf("%w: 当前 Core 的检索向量无效", ErrMemorySemanticUnavailable)
 		}
 		vectors, err := e.memoryManagementSnapshot(ctx, scope, "vector", "")
 		if err != nil {

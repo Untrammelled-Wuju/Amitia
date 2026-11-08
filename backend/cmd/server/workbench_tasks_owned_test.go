@@ -77,13 +77,21 @@ func TestWorkbenchOwnedTasksCloudDeviceAndContinuationHTTP(t *testing.T) {
 	if err := json.Unmarshal(b.request(t, a, http.MethodPost, "/api/device-mesh/v1/business/messages", map[string]any{"requestId": "task-turn-core", "characterId": "one", "conversationId": "same-id", "conversationOrigin": map[string]string{"ownerId": a.device.DeviceID.String(), "id": "same-id"}, "message": "continue"}, 200), &turn); err != nil {
 		t.Fatal(err)
 	}
-	if turn.Data.ConversationID == "same-id" || turn.Data.ConversationID == "" {
-		t.Fatalf("continuation not created: %+v", turn)
+	if turn.Data.ConversationID != "same-id" {
+		t.Fatalf("coordinated device conversation was moved or replaced: %+v", turn)
 	}
-	seedWorkbenchTask(t, tracker, b.core, b.core, turn.Data.ConversationID, "task-turn-core", "core-task")
+	seedWorkbenchTask(t, tracker, b.core, a.device.DeviceID.String(), turn.Data.ConversationID, "task-turn-core", "core-task")
 	query.Set("conversationId", "same-id")
-	if err := json.Unmarshal(b.request(t, a, http.MethodGet, "/api/workbench/tasks?"+query.Encode(), nil, 200), &list); err != nil || len(list.Tasks) != 1 || list.Tasks[0].CoordinationID != "core-task" || list.ConversationID != turn.Data.ConversationID || list.QueryContext.ExecutionScope.ResourceOwnerID != b.core {
+	query.Del("coordinationId")
+	if err := json.Unmarshal(b.request(t, a, http.MethodGet, "/api/workbench/tasks?"+query.Encode(), nil, 200), &list); err != nil || len(list.Tasks) != 2 || list.ConversationID != turn.Data.ConversationID || list.QueryContext.ExecutionScope.ResourceOwnerID != a.device.DeviceID.String() || !list.QueryContext.ExecutionScope.Coordinated {
 		t.Fatalf("continuation task: %+v %v", list, err)
+	}
+	ids := map[string]bool{}
+	for _, task := range list.Tasks {
+		ids[task.CoordinationID] = true
+	}
+	if !ids["core-task"] || !ids["device-task"] {
+		t.Fatalf("continuation task list is incomplete: %+v", list)
 	}
 	query.Set("coordinationId", "core-task")
 	b.request(t, a, http.MethodGet, "/api/workbench/tasks/checkpoints?"+query.Encode(), nil, 200)

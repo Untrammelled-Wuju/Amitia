@@ -88,6 +88,30 @@ func TestOwnedStateMutationsIgnoreOtherGroupMemberState(t *testing.T) {
 	}
 }
 
+func TestOwnedStateMutationsReadOnlyTheAuthoritativeCoordinatedOwner(t *testing.T) {
+	svc := &service{}
+	runtime := interaction.RuntimeAssembly{Appraisal: &interaction.AppraisalResult{EventType: "chat"}}
+	encoded, err := json.Marshal(runtime)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope := coordination.ExecutionScope{SpaceID: "space", CoreID: "core", ResourceOwnerID: "device", RoleOwnerID: "core", Coordinated: true, RoleID: "role", RequestID: "request", TurnID: "turn"}
+	ctx := coordination.WithScope(t.Context(), scope)
+	inference := business.Inference{Scope: scope, ConversationID: "conversation", Snapshot: coordination.DataSnapshot{Role: coordination.Role{ID: "role", Revision: 1}, Resources: []coordination.Resource{
+		{OwnerID: "device", Kind: "psyche", ID: coordination.RoleRuntimeStateID("psyche", "role"), RoleID: "role", Revision: 7, Body: json.RawMessage(`{"valence":0.4,"dominance":0.5,"arousal":0.5}`)},
+		{OwnerID: "core", Kind: "psyche", ID: coordination.RoleRuntimeStateID("psyche", "role"), RoleID: "role", Revision: 24, Body: json.RawMessage(`{"valence":0.6,"dominance":0.5,"arousal":0.5}`)},
+	}}}
+	mutations, err := svc.OwnedStateMutations(ctx, inference, business.Generation{StateEffects: encoded})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, mutation := range mutations {
+		if mutation.Kind == "psyche" && mutation.ExpectedRevision != 24 {
+			t.Fatalf("psyche revision=%d", mutation.ExpectedRevision)
+		}
+	}
+}
+
 func TestOwnedStateMutationsMigrateLegacyStateWithoutOverwritingOtherRoles(t *testing.T) {
 	svc := &service{}
 	runtime := interaction.RuntimeAssembly{Appraisal: &interaction.AppraisalResult{EventType: "chat"}}

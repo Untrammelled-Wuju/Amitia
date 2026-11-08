@@ -43,9 +43,13 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
   bool _batchBusy = false;
   final Map<String, ConversationDto> _selected = {};
   final Set<String> _expandedProjects = <String>{};
-  Timer? _activityPollTimer;
   late final bool Function() _backHandler;
   late final ConversationBackHandler _backRegistry;
+  late final ProviderSubscription<ConversationRuntimeRegistry>
+  _runtimeRegistrySubscription;
+  int _lastRuntimeCollectionRevision = 0;
+  Timer? _conversationRetryTimer;
+  int _conversationRetryAttempt = 0;
 
   @override
   void initState() {
@@ -53,19 +57,63 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
     _backHandler = _handleSelectionBack;
     _backRegistry = ref.read(conversationBackHandlerProvider);
     _backRegistry.onBack = _backHandler;
+    final runtimeRegistry = ref.read(conversationRuntimeRegistryProvider);
+    _lastRuntimeCollectionRevision = runtimeRegistry.collectionRevision;
+    _runtimeRegistrySubscription = ref
+        .listenManual<ConversationRuntimeRegistry>(
+          conversationRuntimeRegistryProvider,
+          (previous, next) {
+            if (next.collectionRevision == _lastRuntimeCollectionRevision)
+              return;
+            _lastRuntimeCollectionRevision = next.collectionRevision;
+            ref.invalidate(conversationListProvider);
+            ref.invalidate(conversationSidebarProvider);
+            ref.read(conversationCollectionRevisionProvider.notifier).state++;
+          },
+        );
     _loadViewMode();
-    _activityPollTimer = Timer.periodic(
-      const Duration(seconds: 2),
-      (_) => _pollLiveActivity(),
-    );
   }
 
   @override
   void dispose() {
+    _conversationRetryTimer?.cancel();
+    _runtimeRegistrySubscription.close();
     if (identical(_backRegistry.onBack, _backHandler))
       _backRegistry.onBack = null;
-    _activityPollTimer?.cancel();
     super.dispose();
+  }
+
+  void _scheduleConversationRetry() {
+    if (_conversationRetryTimer?.isActive ?? false) return;
+    const delays = <Duration>[
+      Duration(seconds: 2),
+      Duration(seconds: 4),
+      Duration(seconds: 8),
+      Duration(seconds: 16),
+      Duration(seconds: 30),
+    ];
+    final index = _conversationRetryAttempt.clamp(0, delays.length - 1);
+    _conversationRetryAttempt++;
+    _conversationRetryTimer = Timer(delays[index], () {
+      if (!mounted) return;
+      ref.invalidate(conversationListProvider);
+      ref.invalidate(conversationSidebarProvider);
+    });
+  }
+
+  void _cancelConversationRetry() {
+    _conversationRetryTimer?.cancel();
+    _conversationRetryTimer = null;
+    _conversationRetryAttempt = 0;
+  }
+
+  void _retryConversations({bool projects = false}) {
+    _cancelConversationRetry();
+    if (projects) {
+      ref.invalidate(conversationSidebarProvider);
+    } else {
+      ref.invalidate(conversationListProvider);
+    }
   }
 
   bool _handleSelectionBack() {
@@ -76,12 +124,6 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
         _selected.clear();
       });
     return true;
-  }
-
-  void _pollLiveActivity() {
-    if (!mounted) return;
-    ref.invalidate(conversationListProvider);
-    ref.invalidate(conversationSidebarProvider);
   }
 
   void _toggleSelection(ConversationDto conversation) {
@@ -557,11 +599,16 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
     Map<String, CharacterDto> charactersById,
   ) {
     return conversationsAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (err, _) => _buildError(err, () {
-        ref.invalidate(conversationListProvider);
-      }),
+      loading: () {
+        _conversationRetryTimer?.cancel();
+        return const Center(child: CircularProgressIndicator());
+      },
+      error: (err, _) {
+        _scheduleConversationRetry();
+        return _buildError(err, _retryConversations);
+      },
       data: (conversations) {
+        _cancelConversationRetry();
         final filtered = conversations
             .where(
               (conversation) =>
@@ -617,11 +664,16 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
     Map<String, CharacterDto> charactersById,
   ) {
     return sidebarAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (err, _) => _buildError(err, () {
-        ref.invalidate(conversationSidebarProvider);
-      }),
+      loading: () {
+        _conversationRetryTimer?.cancel();
+        return const Center(child: CircularProgressIndicator());
+      },
+      error: (err, _) {
+        _scheduleConversationRetry();
+        return _buildError(err, () => _retryConversations(projects: true));
+      },
       data: (sidebar) {
+        _cancelConversationRetry();
         final projects = sidebar.projects
             .where((project) => project.hiddenAt.isEmpty)
             .toList(growable: false);

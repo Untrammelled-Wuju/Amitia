@@ -1,88 +1,33 @@
+import 'dart:convert';
+
 import '../backend_transport/backend_service_api.dart';
 import 'package:dio/dio.dart';
-import 'device_owned_chat_service.dart';
+
+List<Map<String, dynamic>> excludeDeviceMeshIdentity(
+  List<Map<String, dynamic>> devices,
+  String? localDeviceId,
+) {
+  final local = localDeviceId?.trim() ?? '';
+  if (local.isEmpty) {
+    return devices;
+  }
+  return devices
+      .where((device) => device['deviceId']?.toString() != local)
+      .toList(growable: false);
+}
 
 class DeviceMeshService {
   final BackendServiceApi _api;
 
   DeviceMeshService(this._api);
 
-  Future<Map<String, dynamic>> prepareCall(String target) async {
-    final before = await coordination();
-    if (before['coordinationAvailable'] != true)
-      throw StateError('Core 的设备业务服务尚未就绪');
-    final result = await _api.get<Map<String, dynamic>>(
-      '/api/device-mesh/v1/business/roles',
-      queryParameters: {'targetDeviceId': target},
-    );
-    final after = await coordination();
-    if (after['coreId'] != before['coreId'] ||
-        after['coordinationAvailable'] != true ||
-        result?['roles'] is! List ||
-        result?['roleOwnerId'] is! String ||
-        result?['executionScope'] is! Map ||
-        result?['executionScope']['coreId'] != before['coreId'] ||
-        result?['executionScope']['targetDeviceId'] != target ||
-        result?['executionScope']['resourceOwnerId'] !=
-            result?['roleOwnerId']) {
-      throw StateError('服务提供者已变化，请刷新后重新选择角色');
-    }
-    return {...result!, 'coreId': before['coreId']};
-  }
-
-  Stream<Map<String, dynamic>> call({
-    required String target,
-    required String role,
-    required String core,
-    required String owner,
-    required String requestId,
-    required String message,
-    required Map<String, dynamic> expectedScope,
-    required CancelToken cancelToken,
-  }) async* {
-    final stream = await _api.postStream(
-      '/api/device-mesh/v1/business/messages',
-      data: {
-        'targetDeviceId': target,
-        'characterId': role,
-        'requestId': requestId,
-        'message': message,
-        'expectedExecutionScope': expectedScope,
-      },
-      headers: {'Accept': 'text/event-stream'},
-      cancelToken: cancelToken,
-    );
-    await for (final event in decodeOwnedChatStream(stream, requestId)) {
-      final scope =
-          event['executionScope'] ??
-          (event['data'] is Map ? event['data']['executionScope'] : null);
-      if (scope is Map && scope['coreId'] != core) {
-        cancelToken.cancel('服务提供者已变化');
-        throw StateError('云端服务提供者已从「$core」切换为「${scope['coreId']}」，当前调用已中断。');
-      }
-      if (scope is Map &&
-          (scope['targetDeviceId'] != target ||
-              scope['resourceOwnerId'] != owner ||
-              scope['roleId'] != role)) {
-        cancelToken.cancel('目标数据归属或角色已变化');
-        throw StateError('目标设备的数据归属或角色已变化，当前调用已中断。');
-      }
-      if (cancelToken.isCancelled) throw StateError('当前调用已中断，迟到回复已拦截');
-      yield event;
-    }
-  }
-
-  Future<void> interruptCall(String requestId) async {
-    await _api.post(
-      '/api/device-mesh/v1/business/messages/${Uri.encodeComponent(requestId)}/interrupt',
-    );
-  }
-
   Future<List<Map<String, dynamic>>> capabilityGrants(String target) async {
     final result = await _api.get<Map<String, dynamic>>(
       '/api/device-mesh/v1/business/devices/${Uri.encodeComponent(target)}/grants',
     );
-    if (result?['grants'] is! List) throw StateError('能力授权列表不可用');
+    if (result?['grants'] is! List) {
+      throw StateError('能力授权列表不可用');
+    }
     return (result!['grants'] as List)
         .whereType<Map>()
         .map((row) => Map<String, dynamic>.from(row))
@@ -133,6 +78,48 @@ class DeviceMeshService {
         : const [];
   }
 
+  Stream<List<Map<String, dynamic>>> approvalEvents(
+    CancelToken cancelToken,
+  ) async* {
+    final stream = await _api.getStream(
+      '/api/device-mesh/v1/pairing/approvals/stream',
+      headers: const {'Accept': 'text/event-stream'},
+      cancelToken: cancelToken,
+    );
+    final buffer = StringBuffer();
+    await for (final chunk in stream.transform(utf8.decoder)) {
+      buffer.write(chunk);
+      var value = buffer.toString();
+      var boundary = value.indexOf('\n\n');
+      while (boundary >= 0) {
+        final block = value.substring(0, boundary);
+        value = value.substring(boundary + 2);
+        buffer
+          ..clear()
+          ..write(value);
+        var event = 'message';
+        final data = <String>[];
+        for (final line in const LineSplitter().convert(block)) {
+          if (line.startsWith('event:')) event = line.substring(6).trim();
+          if (line.startsWith('data:')) data.add(line.substring(5).trimLeft());
+        }
+        if (event != 'pairing_approvals' || data.isEmpty) {
+          boundary = value.indexOf('\n\n');
+          continue;
+        }
+        final decoded = jsonDecode(data.join('\n'));
+        if (decoded is! Map || decoded['requests'] is! List) {
+          throw StateError('配对审批事件格式无效');
+        }
+        yield (decoded['requests'] as List)
+            .whereType<Map>()
+            .map((row) => Map<String, dynamic>.from(row))
+            .toList(growable: false);
+        boundary = value.indexOf('\n\n');
+      }
+    }
+  }
+
   Future<void> decideApproval(
     String requestId, {
     required bool allow,
@@ -180,7 +167,7 @@ class DeviceMeshService {
   }
 
   Future<Map<String, dynamic>> createPairingOffer({
-    int ttlSeconds = 600,
+    int ttlSeconds = 1800,
     String endpoint = '',
   }) async {
     final response = await _api.post<Map<String, dynamic>>(
@@ -263,11 +250,38 @@ class DeviceMeshLocalService {
     return response;
   }
 
+  Future<Map<String, dynamic>> capabilityExposure() async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/internal/device-mesh/capabilities',
+    );
+    if (response == null) throw StateError('无法读取设备能力开放状态');
+    return response;
+  }
+
+  Future<Map<String, dynamic>> setCapabilityExposure({
+    required String capability,
+    required bool enabled,
+    required int expectedRevision,
+  }) async {
+    final response = await _api.put<Map<String, dynamic>>(
+      '/internal/device-mesh/capabilities/${Uri.encodeComponent(capability)}',
+      data: <String, dynamic>{
+        'enabled': enabled,
+        'expectedRevision': expectedRevision,
+      },
+    );
+    if (response == null || response['state'] is! Map) {
+      throw StateError('设备未确认能力开放状态保存结果');
+    }
+    return response;
+  }
+
   Future<Map<String, dynamic>> bootstrap({
     required String cloudBaseUrl,
     required String bootstrapTicket,
     String fingerprint = '',
     String coreId = '',
+    bool replaceCandidate = true,
   }) async {
     final response = await _api.post<Map<String, dynamic>>(
       '/internal/device-mesh/bootstrap',
@@ -276,10 +290,32 @@ class DeviceMeshLocalService {
         'bootstrapTicket': bootstrapTicket,
         if (fingerprint.isNotEmpty) 'fingerprint': fingerprint,
         if (coreId.isNotEmpty) 'coreId': coreId,
+        'replaceCandidate': replaceCandidate,
       },
+      headers: const {'X-Amitia-Request-Timeout-Seconds': '50'},
     );
     if (response == null) throw StateError('本机设备绑定失败：后端未返回结果');
     return response;
+  }
+
+  Future<Map<String, dynamic>> updateEndpoint({
+    required String cloudBaseUrl,
+    required String coreId,
+    String fingerprint = '',
+  }) async {
+    final response = await _api.post<Map<String, dynamic>>(
+      '/internal/device-mesh/endpoint/update',
+      data: <String, dynamic>{
+        'cloudBaseUrl': cloudBaseUrl,
+        'coreId': coreId,
+        if (fingerprint.isNotEmpty) 'fingerprint': fingerprint,
+      },
+      headers: const {'X-Amitia-Request-Timeout-Seconds': '50'},
+    );
+    if (response?['ok'] != true) {
+      throw StateError('本机设备未确认统筹中心地址更新结果');
+    }
+    return response!;
   }
 
   Future<void> deleteCredential() async {

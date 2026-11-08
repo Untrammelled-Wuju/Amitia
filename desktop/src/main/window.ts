@@ -2,8 +2,9 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { app, BrowserWindow, nativeTheme, shell } from "electron";
 import { getInitialBrandImage } from "./branding";
-import { isDevMode } from "./path-manager";
+import { getInstallDir, isDevMode } from "./path-manager";
 import { get as httpGet } from "node:http";
+import { inspect } from "node:util";
 import { APP_PROTOCOL_ORIGIN } from "./app-protocol";
 import { windowChromeOptions } from "./window-chrome";
 import { IPC_CHANNELS } from "../shared/ipc";
@@ -11,6 +12,7 @@ import { attachExternalWebUIHost } from "./external-web-ui";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const MAIN_RENDERER_LOAD_TIMEOUT_MS = 15000;
+const RENDERER_RETRY_URL = `${APP_PROTOCOL_ORIGIN}/core-error-retry`;
 
 const DEV_SERVER_URL = (
   process.env.VITE_DEV_SERVER_URL ||
@@ -35,16 +37,19 @@ export function buildRendererURL(
     : `${APP_PROTOCOL_ORIGIN}/${hash}`;
 }
 
-function healthCheck(url: string, timeoutMs = 3000): Promise<boolean> {
-  return new Promise((resolve) => {
+function healthCheck(url: string, timeoutMs = 1000): Promise<void> {
+  return new Promise((resolve, reject) => {
     const req = httpGet(url, (res) => {
       res.resume();
-      resolve(res.statusCode === 200 || res.statusCode === 304);
+      if (res.statusCode === 200 || res.statusCode === 304) {
+        resolve();
+      } else {
+        reject(new Error(`开发服务器 ${url} 返回 HTTP ${res.statusCode} ${res.statusMessage ?? ""}`));
+      }
     });
-    req.on("error", () => resolve(false));
+    req.on("error", reject);
     req.setTimeout(timeoutMs, () => {
-      req.destroy();
-      resolve(false);
+      req.destroy(new Error(`开发服务器 ${url} 请求超时`));
     });
   });
 }
@@ -56,19 +61,6 @@ function installMacDeveloperShortcut(win: BrowserWindow): void {
     event.preventDefault();
     win.webContents.toggleDevTools();
   });
-}
-
-async function waitForDevServer(
-  maxRetries = 40,
-  intervalMs = 1500,
-): Promise<boolean> {
-  if (!DEV_SERVER_URL) return false;
-  const target = `${DEV_SERVER_URL}/`;
-  for (let i = 0; i < maxRetries; i++) {
-    if (await healthCheck(target)) return true;
-    await new Promise((r) => setTimeout(r, intervalMs));
-  }
-  return false;
 }
 
 export function createMainWindow(): BrowserWindow {
@@ -124,6 +116,11 @@ export function createMainWindow(): BrowserWindow {
   });
 
   win.webContents.on("will-navigate", (event, url) => {
+    if (url === RENDERER_RETRY_URL) {
+      event.preventDefault();
+      void revealMainWindow(win);
+      return;
+    }
     const current = win.webContents.getURL();
     if (current && !isAllowedNavigation(url)) {
       event.preventDefault();
@@ -154,14 +151,22 @@ function withTimeout<T>(
   });
 }
 
-async function loadErrorPage(win: BrowserWindow): Promise<void> {
+async function loadErrorPage(win: BrowserWindow, error: unknown): Promise<void> {
   if (win.isDestroyed()) {
     return;
   }
   try {
-    await win.loadURL(`${APP_PROTOCOL_ORIGIN}/core-error.html`);
-  } catch (error) {
-    console.error("[AmitiaDesktop] 启动错误页加载失败:", error);
+    if (isDevMode()) {
+      await win.loadFile(join(getInstallDir(), "src", "renderer", "core-error.html"));
+    } else {
+      await win.loadURL(`${APP_PROTOCOL_ORIGIN}/core-error.html`);
+    }
+    const detail = inspect(error, { depth: null, maxArrayLength: null, maxStringLength: null });
+    await win.webContents.executeJavaScript(
+      `document.querySelector("#original-error").textContent = ${JSON.stringify(detail)};`,
+    );
+  } catch (pageError) {
+    console.error("[AmitiaDesktop] 启动错误页加载失败:", new AggregateError([error, pageError]));
   }
 }
 
@@ -175,14 +180,13 @@ export async function revealMainWindow(win: BrowserWindow): Promise<void> {
   });
 
   try {
-    await withTimeout(
-      loadMainRenderer(win),
-      MAIN_RENDERER_LOAD_TIMEOUT_MS,
-      "主界面加载超时",
-    );
+    await loadMainRenderer(win);
   } catch (error) {
     console.error("[AmitiaDesktop] 主界面加载失败:", error);
-    await loadErrorPage(win);
+    if (!win.isDestroyed()) {
+      win.webContents.stop();
+      await loadErrorPage(win, error);
+    }
   }
 
   await firstPaint;
@@ -195,20 +199,27 @@ export async function revealMainWindow(win: BrowserWindow): Promise<void> {
 
 async function loadMainRenderer(win: BrowserWindow): Promise<void> {
   if (!isDevMode()) {
-    await win.loadURL(`${APP_PROTOCOL_ORIGIN}/#/`);
+    await withTimeout(win.loadURL(`${APP_PROTOCOL_ORIGIN}/#/`), MAIN_RENDERER_LOAD_TIMEOUT_MS, "主界面加载超时");
     return;
   }
-
-  const ready = await waitForDevServer();
-  if (ready) {
-    await win.loadURL(DEV_SERVER_URL);
-    win.webContents.openDevTools({ mode: "detach" });
-    return;
+  if (!DEV_SERVER_URL) {
+    throw new Error("未配置 VITE_DEV_SERVER_URL");
   }
-
-  await win.loadURL(
-    `data:text/html,<html><body style="background:#1a1a2e;color:#e0e0e0;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:system-ui"><div style="text-align:center"><h1 style="font-size:20px;margin-bottom:8px">无法连接到开发服务器</h1><p style="color:#888;margin-bottom:24px">${DEV_SERVER_URL || "未配置 VITE_DEV_SERVER_URL"}</p><button onclick="location.reload()" style="padding:8px 24px;background:#4a6cf7;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px">重试</button></div></body></html>`,
-  );
+  const deadline = Date.now() + MAIN_RENDERER_LOAD_TIMEOUT_MS;
+  for (;;) {
+    try {
+      await healthCheck(`${DEV_SERVER_URL}/`);
+      break;
+    } catch (error) {
+      if (Date.now() >= deadline) {
+        throw new Error(`无法连接到开发服务器 ${DEV_SERVER_URL}`, { cause: error });
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+  }
+  const remaining = Math.max(1, deadline - Date.now());
+  await withTimeout(win.loadURL(DEV_SERVER_URL), remaining, "主界面加载超时");
+  win.webContents.openDevTools({ mode: "detach" });
 }
 
 function isAllowedNavigation(url: string): boolean {

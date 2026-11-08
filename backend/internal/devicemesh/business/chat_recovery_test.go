@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -24,7 +25,7 @@ func TestOwnedRecoveryConfirmsSavedReplyWithoutCallingModel(t *testing.T) {
 	}
 	foreign := response.Scope
 	foreign.ResourceOwnerID = "other"
-	if _, err := engine.ReconcileOwnedTurn(t.Context(), foreign, response.ConversationID); !errors.Is(err, coordination.ErrScopeExpired) {
+	if _, err := engine.ReconcileOwnedTurn(t.Context(), foreign, response.ConversationID); !errors.Is(err, coordination.ErrWrongOwner) {
 		t.Fatalf("foreign owner accepted: %v", err)
 	}
 }
@@ -132,7 +133,7 @@ func TestOwnedRuntimePersistsToolJournalAndRetryLoadsItWithoutReplay(t *testing.
 	}
 	row, err := coordination.NewOwnershipStore(db, "a").Get(t.Context(), "checkpoint", "turn/"+request.RequestID)
 	var saved checkpoint
-	if err != nil || row == nil || json.Unmarshal(row.Body, &saved) != nil || saved.Runtime == nil || len(saved.Runtime.Blocks) != 2 || saved.Runtime.Blocks[0].Status != "completed" || saved.Runtime.Blocks[1].Type != "error" || saved.Runtime.Blocks[1].Content != "model disconnected after confirmed tool result" {
+	if err != nil || row == nil || json.Unmarshal(row.Body, &saved) != nil || saved.Runtime == nil || len(saved.Runtime.Blocks) != 2 || saved.Runtime.Blocks[0].Status != "completed" || saved.Runtime.Blocks[1].Type != "error" || !strings.Contains(saved.Runtime.Blocks[1].Content, "model disconnected after confirmed tool result") {
 		t.Fatalf("journal not durable: row=%+v saved=%+v err=%v", row, saved, err)
 	}
 	model.generate = func(ctx context.Context, inference Inference) (Generation, error) {

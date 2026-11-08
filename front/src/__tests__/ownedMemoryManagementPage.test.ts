@@ -4,6 +4,15 @@ import DeviceOwnedMemoryManagement from "../components/DeviceOwnedMemoryManageme
 const mocks = vi.hoisted(() => ({ write: vi.fn(), read: vi.fn(), conflicts: vi.fn(), conversations: vi.fn(), historicalRoles: vi.fn(), data: vi.fn() }));
 vi.mock("../composables/useOwnedMemoryManagement", async () => ({ ...await vi.importActual<any>("../composables/useOwnedMemoryManagement"), useOwnedMemoryManagement: () => mocks }));
 vi.mock("../composables/useApi", () => ({ apiClient: {} }));
+vi.mock("../composables/useCoreDataAccess", () => ({
+  useCoreDataAccess: () => ({
+    access: { value: { read: true, write: true, reason: "", coreId: "core" } },
+    checking: { value: false },
+    error: { value: "" },
+    refresh: async () => ({ read: true, write: true, reason: "", coreId: "core" }),
+    requireWrite: async () => ({ read: true, write: true, reason: "", coreId: "core" }),
+  }),
+}));
 vi.mock("../composables/useDeviceOwnedConversation", () => ({ useDeviceOwnedConversation: () => mocks }));
 vi.mock("element-plus", () => ({ ElMessage: { success: vi.fn() }, ElMessageBox: { confirm: vi.fn().mockResolvedValue(true) } }));
 const global = { stubs: {

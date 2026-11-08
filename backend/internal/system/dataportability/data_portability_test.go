@@ -1,6 +1,7 @@
 package dataportability_test
 
 import (
+	"archive/zip"
 	"bufio"
 	"context"
 	"encoding/json"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/glebarez/sqlite"
 	"github.com/u-ai/backend/internal/character"
@@ -19,6 +21,57 @@ import (
 	"github.com/u-ai/backend/internal/system/dataportability"
 	"gorm.io/gorm"
 )
+
+func rewriteArchiveManifest(t *testing.T, source, destination string, mutate func(*dataportability.BackupManifest)) {
+	t.Helper()
+	reader, err := zip.OpenReader(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	output, err := os.Create(destination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writer := zip.NewWriter(output)
+	for _, entry := range reader.File {
+		content, readErr := entry.Open()
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		data, readErr := io.ReadAll(content)
+		if closeErr := content.Close(); readErr == nil {
+			readErr = closeErr
+		}
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		if entry.Name == "manifest.json" {
+			var manifest dataportability.BackupManifest
+			if err := json.Unmarshal(data, &manifest); err != nil {
+				t.Fatal(err)
+			}
+			mutate(&manifest)
+			data, err = json.Marshal(manifest)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		target, err := writer.CreateHeader(&zip.FileHeader{Name: entry.Name, Method: entry.Method})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := target.Write(data); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := output.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
 
 type failingBackupContributor struct{}
 
@@ -37,6 +90,73 @@ func (failingBackupContributor) PreviewImport(context.Context, dataportability.I
 }
 func (failingBackupContributor) Import(context.Context, dataportability.ImportRequest, dataportability.BackupReader) error {
 	return nil
+}
+
+type cancelingRestoreContributor struct {
+	cancel context.CancelFunc
+	cause  error
+}
+
+func (*cancelingRestoreContributor) ID() string             { return "qa-cancel" }
+func (*cancelingRestoreContributor) Name() string           { return "QA cancellation" }
+func (*cancelingRestoreContributor) Dependencies() []string { return []string{"character"} }
+func (*cancelingRestoreContributor) ComponentIDs() []string { return []string{"qa.cancel"} }
+func (*cancelingRestoreContributor) Plan(context.Context, dataportability.BackupRequest) ([]dataportability.BackupComponentPlan, error) {
+	return []dataportability.BackupComponentPlan{{ID: "qa.cancel", LogicalName: "qa.cancel", Kind: dataportability.KindDataset, ItemCount: 1}}, nil
+}
+func (*cancelingRestoreContributor) Export(_ context.Context, _ dataportability.BackupRequest, out dataportability.BackupWriter) error {
+	w, err := out.CreateComponent("qa.cancel", "qa.cancel", dataportability.KindDataset)
+	if err != nil {
+		return err
+	}
+	_, err = io.WriteString(w, "{}\n")
+	return errors.Join(err, w.Close())
+}
+func (*cancelingRestoreContributor) PreviewImport(context.Context, dataportability.ImportPreviewRequest, dataportability.BackupReader) ([]dataportability.ImportComponentPreview, error) {
+	return nil, nil
+}
+func (c *cancelingRestoreContributor) Import(ctx context.Context, _ dataportability.ImportRequest, _ dataportability.BackupReader) error {
+	if c.cancel != nil {
+		c.cancel()
+		c.cancel = nil
+		return errors.Join(c.cause, ctx.Err())
+	}
+	return ctx.Err()
+}
+
+func TestRestoreRollsBackAfterClientCancellation(t *testing.T) {
+	db, coord, _ := newPortabilityFixture(t)
+	seedPortabilityFixture(t, db)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	cause := errors.New("QA connection dropped after the role write")
+	if err := coord.RegisterContributors(&cancelingRestoreContributor{cancel: cancel, cause: cause}); err != nil {
+		t.Fatal(err)
+	}
+	backup, err := coord.CreateBackup(ctx, dataportability.BackupRequest{
+		Scope: dataportability.ScopeAll, Profile: dataportability.ProfilePortable, Purpose: dataportability.PurposeMigration,
+	}, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ticket, err := coord.CreateRestoreTicket(ctx, backup.Path, backup.BackupID, backup.Manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Model(&character.Character{}).Where("id = ?", "role-a").Update("name", "before restore").Error; err != nil {
+		t.Fatal(err)
+	}
+	result, err := coord.ExecuteRestore(ctx, ticket, "", nil)
+	if result == nil || result.Status != "rolled_back" || !errors.Is(err, cause) || !errors.Is(err, context.Canceled) {
+		t.Fatalf("restore cancellation: %#v %v", result, err)
+	}
+	var role character.Character
+	if err := db.Where("id = ?", "role-a").Take(&role).Error; err != nil {
+		t.Fatal(err)
+	}
+	if role.Name != "before restore" {
+		t.Fatalf("rollback left restored role name %q", role.Name)
+	}
 }
 
 func newPortabilityFixture(t *testing.T) (*gorm.DB, *dataportability.Coordinator, string) {
@@ -68,7 +188,7 @@ func newPortabilityFixture(t *testing.T) (*gorm.DB, *dataportability.Coordinator
 		t.Fatal(err)
 	}
 	coord := dataportability.NewCoordinator(dataDir, "test", "test", "migrations-v1-1", dataportability.NewStagingManager(dataDir))
-	if err := coord.RegisterContributors(dataportability.NewCharacterContributor(db), chat.NewChatBackupContributor(db), coresystem.NewSettingsBackupContributor(db), chat.NewModelConfigBackupContributor(db), business.NewRuntimeStateBackupContributor(sqlDB)); err != nil {
+	if err := coord.RegisterContributors(dataportability.NewCharacterContributor(db, nil), chat.NewChatBackupContributor(db), coresystem.NewSettingsBackupContributor(db), chat.NewModelConfigBackupContributor(db), business.NewRuntimeStateBackupContributor(sqlDB)); err != nil {
 		t.Fatal(err)
 	}
 	return db, coord, dataDir
@@ -165,6 +285,189 @@ func TestCharacterScopeExportsOnlyRelatedChats(t *testing.T) {
 	}
 	if len(messages) != 1 || messages[0]["id"] != "msg-a" || messages[0]["characterId"] != "role-a" {
 		t.Fatalf("unexpected character export messages: %#v", messages)
+	}
+}
+
+func TestEmptyBackupAndReplacementPreviewLeaveNoStagedArchive(t *testing.T) {
+	_, coord, dataDir := newPortabilityFixture(t)
+	req := dataportability.BackupRequest{
+		Scope: dataportability.ScopeAll, Profile: dataportability.ProfilePortable, Purpose: dataportability.PurposeMigration,
+	}
+	var staged []string
+	for i := 0; i < 2; i++ {
+		backup, err := coord.CreateBackup(t.Context(), req, "", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		manifest, err := coord.RestorePreview(t.Context(), backup.Path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		count := int64(-1)
+		for _, component := range manifest.Components {
+			if component.ID == "character.records.v1" {
+				count = component.ItemCount
+			}
+		}
+		if count != 0 {
+			t.Fatalf("expected empty character component, got %d", count)
+		}
+		ticket, err := coord.CreateRestoreTicket(t.Context(), backup.Path, backup.BackupID, manifest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		staged = append(staged, ticket.ArchivePath)
+	}
+	if _, err := os.Stat(staged[0]); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("previous preview left staged data: %v", err)
+	}
+	if err := coord.CancelRestore(); err != nil {
+		t.Fatal(err)
+	}
+	matches, err := filepath.Glob(filepath.Join(dataDir, "imports", ".restore", "*.amitia-backup"))
+	if err != nil || len(matches) != 0 {
+		t.Fatalf("cancel left staged archives: %v, %v", matches, err)
+	}
+}
+
+func TestPreviewImportCleansStagingAfterRejectedManifest(t *testing.T) {
+	_, coord, dataDir := newPortabilityFixture(t)
+	archivePath := filepath.Join(dataDir, "rejected.amitia-backup")
+	writer := dataportability.NewArchiveWriter(archivePath)
+	manifest, err := json.Marshal(dataportability.BackupManifest{
+		Format: "unsupported",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.WriteManifest(manifest); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Finalize(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := coord.PreviewImport(t.Context(), archivePath); !errors.Is(err, dataportability.ErrImportFormatUnsupported) {
+		t.Fatalf("unexpected preview result: %v", err)
+	}
+	entries, err := os.ReadDir(filepath.Join(dataDir, "imports", ".staging"))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("rejected preview left staging entries: %v", entries)
+	}
+}
+
+func TestVerifyArchiveRejectsMissingComponentChecksum(t *testing.T) {
+	db, coord, dataDir := newPortabilityFixture(t)
+	seedPortabilityFixture(t, db)
+	backup, err := coord.CreateBackup(t.Context(), dataportability.BackupRequest{
+		Scope: dataportability.ScopeAll, Profile: dataportability.ProfilePortable, Purpose: dataportability.PurposeMigration,
+	}, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tampered := filepath.Join(dataDir, "tampered.amitia-backup")
+	rewriteArchiveManifest(t, backup.Path, tampered, func(manifest *dataportability.BackupManifest) {
+		manifest.Components[0].SHA256 = ""
+	})
+	result, err := dataportability.VerifyArchive(tampered)
+	if result == nil || result.PackageIntegrity || result.ComponentsFailed == 0 {
+		t.Fatalf("archive without a component checksum was accepted: %#v %v", result, err)
+	}
+	if _, err := coord.RestorePreview(t.Context(), tampered); !errors.Is(err, dataportability.ErrRestoreIntegrityFailed) {
+		t.Fatalf("restore preview accepted the tampered archive: %v", err)
+	}
+}
+
+func TestExpiredImportRemovesStagedData(t *testing.T) {
+	db, coord, dataDir := newPortabilityFixture(t)
+	seedPortabilityFixture(t, db)
+	backup, err := coord.CreateBackup(t.Context(), dataportability.BackupRequest{
+		Scope: dataportability.ScopeAll, Profile: dataportability.ProfilePortable, Purpose: dataportability.PurposeMigration,
+	}, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ticket, err := coord.StageImport(t.Context(), backup.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ticketPath := filepath.Join(dataDir, "imports", ".tickets", ticket.ID+".json")
+	data, err := os.ReadFile(ticketPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stored dataportability.ImportTicket
+	if err := json.Unmarshal(data, &stored); err != nil {
+		t.Fatal(err)
+	}
+	stored.ExpiresAt = time.Now().Add(-time.Minute).UTC().Format(time.RFC3339)
+	data, err = json.Marshal(stored)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(ticketPath, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := coord.CommitStagedImport(t.Context(), ticket.ID, dataportability.CollisionSkip, false); !errors.Is(err, dataportability.ErrImportTicketExpired) {
+		t.Fatalf("unexpected expired import result: %v", err)
+	}
+	if _, err := os.Stat(ticketPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expired ticket was retained: %v", err)
+	}
+	if _, err := os.Stat(ticket.ArchivePath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expired staged archive was retained: %v", err)
+	}
+}
+
+func TestStartupCleanupRemovesAbandonedImportTransients(t *testing.T) {
+	db, coord, dataDir := newPortabilityFixture(t)
+	seedPortabilityFixture(t, db)
+	backup, err := coord.CreateBackup(t.Context(), dataportability.BackupRequest{
+		Scope: dataportability.ScopeAll, Profile: dataportability.ProfilePortable, Purpose: dataportability.PurposeMigration,
+	}, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ticket, err := coord.StageImport(t.Context(), backup.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, relative := range []string{
+		filepath.Join("imports", ".staging", "abandoned"),
+		filepath.Join("imports", ".uploads"),
+	} {
+		dir := filepath.Join(dataDir, relative)
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "partial"), []byte("partial"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := coord.CleanupTransientImports(); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{
+		filepath.Join(dataDir, "imports", ".tickets", ticket.ID+".json"),
+		ticket.ArchivePath,
+	} {
+		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("abandoned import data was retained: %s: %v", path, err)
+		}
+	}
+	for _, relative := range []string{
+		filepath.Join("imports", ".staging"),
+		filepath.Join("imports", ".uploads"),
+	} {
+		entries, err := os.ReadDir(filepath.Join(dataDir, relative))
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			t.Fatal(err)
+		}
+		if len(entries) != 0 {
+			t.Fatalf("abandoned transient entries remain in %s: %v", relative, entries)
+		}
 	}
 }
 

@@ -3,6 +3,10 @@ import '../../data/game_center_api.dart';
 import '../../domain/game_center_dto.dart';
 
 class GameCenterState {
+  final GameModeStatus? gameModeStatus;
+  final bool gameModeLoading;
+  final bool gameModeOperating;
+  final String? gameModeError;
   final List<GamePluginSummary> plugins;
   final bool pluginsLoading;
   final bool pluginsRefreshing;
@@ -40,6 +44,10 @@ class GameCenterState {
   final Set<String> runtimeOperationByRuntimeId;
 
   const GameCenterState({
+    this.gameModeStatus,
+    this.gameModeLoading = false,
+    this.gameModeOperating = false,
+    this.gameModeError,
     this.plugins = const [],
     this.pluginsLoading = false,
     this.pluginsRefreshing = false,
@@ -71,6 +79,12 @@ class GameCenterState {
   });
 
   GameCenterState copyWith({
+    GameModeStatus? gameModeStatus,
+    bool? gameModeLoading,
+    bool? gameModeOperating,
+    String? gameModeError,
+    bool clearGameModeError = false,
+    bool clearGameModeStatus = false,
     List<GamePluginSummary>? plugins,
     bool? pluginsLoading,
     bool? pluginsRefreshing,
@@ -111,34 +125,65 @@ class GameCenterState {
     Set<String>? runtimeOperationByRuntimeId,
   }) {
     return GameCenterState(
+      gameModeStatus: clearGameModeStatus
+          ? null
+          : (gameModeStatus ?? this.gameModeStatus),
+      gameModeLoading: gameModeLoading ?? this.gameModeLoading,
+      gameModeOperating: gameModeOperating ?? this.gameModeOperating,
+      gameModeError: clearGameModeError
+          ? null
+          : (gameModeError ?? this.gameModeError),
       plugins: plugins ?? this.plugins,
       pluginsLoading: pluginsLoading ?? this.pluginsLoading,
       pluginsRefreshing: pluginsRefreshing ?? this.pluginsRefreshing,
-      pluginsError: clearPluginsError ? null : (pluginsError ?? this.pluginsError),
+      pluginsError: clearPluginsError
+          ? null
+          : (pluginsError ?? this.pluginsError),
       generation: generation ?? this.generation,
-      selectedPluginId: clearSelectedPlugin ? null : (selectedPluginId ?? this.selectedPluginId),
-      selectedExtensionId: clearSelectedExtension ? null : (selectedExtensionId ?? this.selectedExtensionId),
+      selectedPluginId: clearSelectedPlugin
+          ? null
+          : (selectedPluginId ?? this.selectedPluginId),
+      selectedExtensionId: clearSelectedExtension
+          ? null
+          : (selectedExtensionId ?? this.selectedExtensionId),
       pluginDetail: pluginDetail ?? this.pluginDetail,
       pluginDetailLoading: pluginDetailLoading ?? this.pluginDetailLoading,
-      pluginDetailError: clearPluginDetailError ? null : (pluginDetailError ?? this.pluginDetailError),
-      selectedRuntimeId: clearSelectedRuntime ? null : (selectedRuntimeId ?? this.selectedRuntimeId),
+      pluginDetailError: clearPluginDetailError
+          ? null
+          : (pluginDetailError ?? this.pluginDetailError),
+      selectedRuntimeId: clearSelectedRuntime
+          ? null
+          : (selectedRuntimeId ?? this.selectedRuntimeId),
       runtimeDetail: runtimeDetail ?? this.runtimeDetail,
       runtimeLoading: runtimeLoading ?? this.runtimeLoading,
-      runtimeError: clearRuntimeError ? null : (runtimeError ?? this.runtimeError),
+      runtimeError: clearRuntimeError
+          ? null
+          : (runtimeError ?? this.runtimeError),
       runtimeServices: runtimeServices ?? this.runtimeServices,
-      runtimeServicesLoading: runtimeServicesLoading ?? this.runtimeServicesLoading,
-      runtimeServicesError: clearRuntimeServicesError ? null : (runtimeServicesError ?? this.runtimeServicesError),
+      runtimeServicesLoading:
+          runtimeServicesLoading ?? this.runtimeServicesLoading,
+      runtimeServicesError: clearRuntimeServicesError
+          ? null
+          : (runtimeServicesError ?? this.runtimeServicesError),
       runtimeHealth: runtimeHealth ?? this.runtimeHealth,
       runtimeHealthLoading: runtimeHealthLoading ?? this.runtimeHealthLoading,
-      runtimeHealthError: clearRuntimeHealthError ? null : (runtimeHealthError ?? this.runtimeHealthError),
+      runtimeHealthError: clearRuntimeHealthError
+          ? null
+          : (runtimeHealthError ?? this.runtimeHealthError),
       handshake: handshake ?? this.handshake,
       handshakeLoading: handshakeLoading ?? this.handshakeLoading,
-      handshakeError: clearHandshakeError ? null : (handshakeError ?? this.handshakeError),
+      handshakeError: clearHandshakeError
+          ? null
+          : (handshakeError ?? this.handshakeError),
       centerHealth: centerHealth ?? this.centerHealth,
       centerHealthLoading: centerHealthLoading ?? this.centerHealthLoading,
-      centerHealthError: clearCenterHealthError ? null : (centerHealthError ?? this.centerHealthError),
-      packageOperationByExtensionId: packageOperationByExtensionId ?? this.packageOperationByExtensionId,
-      runtimeOperationByRuntimeId: runtimeOperationByRuntimeId ?? this.runtimeOperationByRuntimeId,
+      centerHealthError: clearCenterHealthError
+          ? null
+          : (centerHealthError ?? this.centerHealthError),
+      packageOperationByExtensionId:
+          packageOperationByExtensionId ?? this.packageOperationByExtensionId,
+      runtimeOperationByRuntimeId:
+          runtimeOperationByRuntimeId ?? this.runtimeOperationByRuntimeId,
     );
   }
 }
@@ -148,9 +193,140 @@ class GameCenterController extends StateNotifier<GameCenterState> {
 
   GameCenterController({required this.api}) : super(const GameCenterState());
 
+  Future<void> loadGameMode() async {
+    state = state.copyWith(gameModeLoading: true, clearGameModeError: true);
+    try {
+      final status = await api.getGameModeStatus();
+      if (!mounted) return;
+      state = state.copyWith(gameModeStatus: status, gameModeLoading: false);
+    } catch (error) {
+      if (!mounted) return;
+      state = state.copyWith(
+        gameModeLoading: false,
+        gameModeError: error.toString(),
+      );
+    }
+  }
+
+  Future<bool> acquireGameMode() async {
+    if (state.gameModeOperating) return false;
+    state = state.copyWith(gameModeOperating: true, clearGameModeError: true);
+    try {
+      await api.acquireGameMode();
+      if (!mounted) return false;
+      state = state.copyWith(gameModeOperating: false);
+      await loadGameMode();
+      if (state.gameModeStatus?.owned != true) {
+        throw StateError(state.gameModeError ?? '进入游戏模式后未取得执行租约');
+      }
+      await loadPlugins();
+      await loadCenterHealth();
+      return true;
+    } catch (error) {
+      if (!mounted) return false;
+      state = state.copyWith(
+        gameModeOperating: false,
+        gameModeError: error.toString(),
+      );
+      await loadGameMode();
+      return false;
+    }
+  }
+
+  Future<bool> updateGameMode({
+    required String nextState,
+    String gameTitle = '',
+    String runtimeId = '',
+  }) async {
+    final status = this.state.gameModeStatus;
+    if (status == null || !status.owned || this.state.gameModeOperating)
+      return false;
+    this.state = this.state.copyWith(
+      gameModeOperating: true,
+      clearGameModeError: true,
+    );
+    try {
+      final session = await api.updateGameMode(
+        sessionId: status.session.sessionId,
+        state: nextState,
+        expectedRevision: status.session.revision,
+        gameTitle: gameTitle,
+        runtimeId: runtimeId,
+      );
+      if (!mounted) return false;
+      this.state = this.state.copyWith(
+        gameModeStatus: GameModeStatus(
+          session: session,
+          currentDeviceId: status.currentDeviceId,
+          owned: true,
+          canAcquire: false,
+        ),
+        gameModeOperating: false,
+      );
+      return true;
+    } catch (error) {
+      if (!mounted) return false;
+      this.state = this.state.copyWith(
+        gameModeOperating: false,
+        gameModeError: error.toString(),
+      );
+      return false;
+    }
+  }
+
+  Future<bool> releaseGameMode() async {
+    final status = state.gameModeStatus;
+    if (status == null || !status.owned || state.gameModeOperating)
+      return false;
+    state = state.copyWith(gameModeOperating: true, clearGameModeError: true);
+    try {
+      await api.releaseGameMode(
+        sessionId: status.session.sessionId,
+        expectedRevision: status.session.revision,
+        runtimeId: status.session.runtimeId,
+      );
+      if (!mounted) return false;
+      state = state.copyWith(
+        gameModeStatus: GameModeStatus(
+          session: GameModeSession(
+            spaceId: status.session.spaceId,
+            sessionId: status.session.sessionId,
+            deviceId: status.session.deviceId,
+            state: 'inactive',
+            gameExtensionId: '',
+            gamePluginId: '',
+            gameTitle: '',
+            runtimeId: '',
+            revision: status.session.revision + 1,
+          ),
+          currentDeviceId: status.currentDeviceId,
+          owned: false,
+          canAcquire: true,
+        ),
+        gameModeOperating: false,
+        plugins: const [],
+        clearSelectedPlugin: true,
+        clearSelectedExtension: true,
+        clearSelectedRuntime: true,
+      );
+      return true;
+    } catch (error) {
+      if (!mounted) return false;
+      state = state.copyWith(
+        gameModeOperating: false,
+        gameModeError: error.toString(),
+      );
+      return false;
+    }
+  }
+
   Future<void> loadPlugins() async {
     final gen = state.generation + 1;
-    state = state.copyWith(pluginsLoading: true, generation: gen, clearPluginsError: true);
+    state = state.copyWith(
+      pluginsLoading: true,
+      generation: gen,
+      clearPluginsError: true,
+    );
     try {
       final result = await api.listPlugins();
       if (!mounted) return;
@@ -165,7 +341,11 @@ class GameCenterController extends StateNotifier<GameCenterState> {
 
   Future<void> refreshPlugins() async {
     final gen = state.generation + 1;
-    state = state.copyWith(pluginsRefreshing: true, generation: gen, clearPluginsError: true);
+    state = state.copyWith(
+      pluginsRefreshing: true,
+      generation: gen,
+      clearPluginsError: true,
+    );
     try {
       final result = await api.listPlugins();
       if (!mounted) return;
@@ -174,7 +354,10 @@ class GameCenterController extends StateNotifier<GameCenterState> {
     } catch (e) {
       if (!mounted) return;
       if (gen != state.generation) return;
-      state = state.copyWith(pluginsRefreshing: false, pluginsError: e.toString());
+      state = state.copyWith(
+        pluginsRefreshing: false,
+        pluginsError: e.toString(),
+      );
     }
   }
 
@@ -198,7 +381,10 @@ class GameCenterController extends StateNotifier<GameCenterState> {
     } catch (e) {
       if (!mounted) return;
       if (gen != state.generation) return;
-      state = state.copyWith(pluginDetailLoading: false, pluginDetailError: e.toString());
+      state = state.copyWith(
+        pluginDetailLoading: false,
+        pluginDetailError: e.toString(),
+      );
     }
   }
 
@@ -222,8 +408,8 @@ class GameCenterController extends StateNotifier<GameCenterState> {
         // will resolve the user's current/default character on first wake.
         await api.bindAgentContext(runtimeId);
       } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-// Runtime selection must remain usable during transient restart windows.
+        print("[original-error] $error\n$stackTrace");
+        // Runtime selection must remain usable during transient restart windows.
         // A later selection or real tool invocation refreshes the binding.
       }
     } catch (e) {
@@ -292,23 +478,29 @@ class GameCenterController extends StateNotifier<GameCenterState> {
     });
   }
 
-  Future<bool> _withPackageOp(String extensionId, Future<bool> Function() op) async {
-    final ops = Set<String>.from(state.packageOperationByExtensionId)..add(extensionId);
+  Future<bool> _withPackageOp(
+    String extensionId,
+    Future<bool> Function() op,
+  ) async {
+    final ops = Set<String>.from(state.packageOperationByExtensionId)
+      ..add(extensionId);
     state = state.copyWith(packageOperationByExtensionId: ops);
     try {
       return await op();
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-return false;
+      print("[original-error] $error\n$stackTrace");
+      return false;
     } finally {
       if (mounted) {
-        final newOps = Set<String>.from(state.packageOperationByExtensionId)..remove(extensionId);
+        final newOps = Set<String>.from(state.packageOperationByExtensionId)
+          ..remove(extensionId);
         state = state.copyWith(packageOperationByExtensionId: newOps);
       }
     }
   }
 
-  bool hasPackageOp(String extensionId) => state.packageOperationByExtensionId.contains(extensionId);
+  bool hasPackageOp(String extensionId) =>
+      state.packageOperationByExtensionId.contains(extensionId);
 
   Future<bool> startRuntime(String runtimeId) async {
     return _withRuntimeOp(runtimeId, () async {
@@ -344,7 +536,10 @@ return false;
     });
   }
 
-  Future<bool> release(String runtimeId, {String targetMode = 'observe'}) async {
+  Future<bool> release(
+    String runtimeId, {
+    String targetMode = 'observe',
+  }) async {
     return _withRuntimeOp(runtimeId, () async {
       final epoch = state.runtimeDetail?.controlAuthority?.epoch ?? 0;
       final result = await api.release(
@@ -379,27 +574,43 @@ return false;
     });
   }
 
-  Future<bool> _withRuntimeOp(String runtimeId, Future<bool> Function() op) async {
-    final ops = Set<String>.from(state.runtimeOperationByRuntimeId)..add(runtimeId);
-    state = state.copyWith(runtimeOperationByRuntimeId: ops);
+  Future<bool> _withRuntimeOp(
+    String runtimeId,
+    Future<bool> Function() op,
+  ) async {
+    final ops = Set<String>.from(state.runtimeOperationByRuntimeId)
+      ..add(runtimeId);
+    state = state.copyWith(
+      runtimeOperationByRuntimeId: ops,
+      clearRuntimeError: true,
+    );
     try {
       return await op();
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-return false;
+      print("[original-error] $error\n$stackTrace");
+      if (mounted) {
+        state = state.copyWith(runtimeError: error.toString());
+      }
+      return false;
     } finally {
       if (mounted) {
-        final newOps = Set<String>.from(state.runtimeOperationByRuntimeId)..remove(runtimeId);
+        final newOps = Set<String>.from(state.runtimeOperationByRuntimeId)
+          ..remove(runtimeId);
         state = state.copyWith(runtimeOperationByRuntimeId: newOps);
       }
     }
   }
 
-  bool hasRuntimeOp(String runtimeId) => state.runtimeOperationByRuntimeId.contains(runtimeId);
+  bool hasRuntimeOp(String runtimeId) =>
+      state.runtimeOperationByRuntimeId.contains(runtimeId);
 
   Future<void> loadCenterHealth() async {
     final gen = state.generation + 1;
-    state = state.copyWith(centerHealthLoading: true, generation: gen, clearCenterHealthError: true);
+    state = state.copyWith(
+      centerHealthLoading: true,
+      generation: gen,
+      clearCenterHealthError: true,
+    );
     try {
       final result = await api.health();
       if (!mounted) return;
@@ -408,43 +619,70 @@ return false;
     } catch (e) {
       if (!mounted) return;
       if (gen != state.generation) return;
-      state = state.copyWith(centerHealthLoading: false, centerHealthError: e.toString());
+      state = state.copyWith(
+        centerHealthLoading: false,
+        centerHealthError: e.toString(),
+      );
     }
   }
 
   Future<void> loadRuntimeServices(String runtimeId) async {
     final gen = state.generation + 1;
-    state = state.copyWith(runtimeServicesLoading: true, generation: gen, clearRuntimeServicesError: true);
+    state = state.copyWith(
+      runtimeServicesLoading: true,
+      generation: gen,
+      clearRuntimeServicesError: true,
+    );
     try {
       final result = await api.getRuntimeServices(runtimeId);
       if (!mounted) return;
       if (gen != state.generation) return;
-      state = state.copyWith(runtimeServices: result, runtimeServicesLoading: false);
+      state = state.copyWith(
+        runtimeServices: result,
+        runtimeServicesLoading: false,
+      );
     } catch (e) {
       if (!mounted) return;
       if (gen != state.generation) return;
-      state = state.copyWith(runtimeServicesLoading: false, runtimeServicesError: e.toString());
+      state = state.copyWith(
+        runtimeServicesLoading: false,
+        runtimeServicesError: e.toString(),
+      );
     }
   }
 
   Future<void> loadRuntimeHealth(String runtimeId) async {
     final gen = state.generation + 1;
-    state = state.copyWith(runtimeHealthLoading: true, generation: gen, clearRuntimeHealthError: true);
+    state = state.copyWith(
+      runtimeHealthLoading: true,
+      generation: gen,
+      clearRuntimeHealthError: true,
+    );
     try {
       final result = await api.getRuntimeHealth(runtimeId);
       if (!mounted) return;
       if (gen != state.generation) return;
-      state = state.copyWith(runtimeHealth: result, runtimeHealthLoading: false);
+      state = state.copyWith(
+        runtimeHealth: result,
+        runtimeHealthLoading: false,
+      );
     } catch (e) {
       if (!mounted) return;
       if (gen != state.generation) return;
-      state = state.copyWith(runtimeHealthLoading: false, runtimeHealthError: e.toString());
+      state = state.copyWith(
+        runtimeHealthLoading: false,
+        runtimeHealthError: e.toString(),
+      );
     }
   }
 
   Future<void> performHandshake(String runtimeId) async {
     final gen = state.generation + 1;
-    state = state.copyWith(handshakeLoading: true, generation: gen, clearHandshakeError: true);
+    state = state.copyWith(
+      handshakeLoading: true,
+      generation: gen,
+      clearHandshakeError: true,
+    );
     try {
       final result = await api.handshake(runtimeId);
       if (!mounted) return;
@@ -453,7 +691,10 @@ return false;
     } catch (e) {
       if (!mounted) return;
       if (gen != state.generation) return;
-      state = state.copyWith(handshakeLoading: false, handshakeError: e.toString());
+      state = state.copyWith(
+        handshakeLoading: false,
+        handshakeError: e.toString(),
+      );
     }
   }
 }

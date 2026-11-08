@@ -93,6 +93,7 @@ type ProcessSpec struct {
 	OnStreamError       func(error)         `json:"-"`
 	SensitiveArgIndexes []int               `json:"-"`
 	ExecutableProcess   ProcessExec         `json:"-"`
+	BindToParent        bool                `json:"-"`
 }
 
 func cloneSliceInt(in []int) []int {
@@ -155,6 +156,7 @@ func (s ProcessSpec) Clone() ProcessSpec {
 		OnStreamError:       s.OnStreamError,
 		SensitiveArgIndexes: cloneSliceInt(s.SensitiveArgIndexes),
 		ExecutableProcess:   s.ExecutableProcess,
+		BindToParent:        s.BindToParent,
 	}
 }
 

@@ -19,6 +19,14 @@ type ownerCASFixture struct {
 	bothRead  chan struct{}
 }
 
+func (d *ownerCASFixture) Roles(_ context.Context, scope coordination.ExecutionScope) ([]coordination.Role, error) {
+	return []coordination.Role{{
+		ID:       scope.RoleID,
+		Revision: scope.RoleRevision,
+		Profile:  json.RawMessage(`{}`),
+	}}, nil
+}
+
 func newOwnerCASFixture(src *taskInputData) *ownerCASFixture {
 	data := &ownerCASFixture{resources: make(map[string]*coordination.Resource)}
 	for key, resource := range src.resources {

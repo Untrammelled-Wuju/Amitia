@@ -35,6 +35,7 @@ type ActorContext struct {
 	CorrelationID    string
 	RequestID        string
 	IsLocalTrusted   bool
+	IsHostDevice     bool
 }
 
 type contextKey struct{}

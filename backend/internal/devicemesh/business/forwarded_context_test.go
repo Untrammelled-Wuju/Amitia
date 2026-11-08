@@ -13,7 +13,7 @@ func TestForwardedContextIsUsedWithoutCopyingHistoricalMessages(t *testing.T) {
 	engine, db, _, model := engineHarness(t)
 	forwarded := &ForwardedContext{PreviousCoreID: "old-core", ConversationID: "conversation", Summary: "已有对话摘要", Messages: []ContextMessage{{ID: "old-message", OwnerID: "old-core", Role: "assistant", Content: "历史内容", Status: "completed"}}}
 	model.generate = func(_ context.Context, inference Inference) (Generation, error) {
-		if inference.Context == nil || inference.Context.Summary != forwarded.Summary || inference.Scope.CoreID != "core" || inference.Scope.RoleOwnerID != "a" {
+		if inference.Context == nil || inference.Context.Summary != forwarded.Summary || inference.Scope.CoreID != "core" || inference.Scope.RoleOwnerID != "core" {
 			t.Fatalf("context or authority changed: %+v", inference)
 		}
 		return Generation{Text: "接续回复"}, nil

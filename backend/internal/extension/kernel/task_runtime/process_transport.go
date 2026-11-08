@@ -63,7 +63,7 @@ func (h *TaskProcessHost) runProcess(ctx context.Context, input, checkpoint json
 	}
 	if profile == runtimeprofile.ProfileCloudCore && !h.config.RequireSandbox && strings.TrimSpace(resourcePolicy) == "allow-degraded" {
 		if missing := cloudHostMissingResourceLimits(h.config.NativeLimits, resourceSupport); len(missing) > 0 {
-			slog.Warn("Cloud Core 任务宿主运行在资源隔离降级模式", "task_run_id", h.config.TaskRunID, "missing_hard_limits", strings.Join(missing, ","))
+			slog.Warn("统筹中心任务宿主运行在资源隔离降级模式", "task_run_id", h.config.TaskRunID, "missing_hard_limits", strings.Join(missing, ","))
 		}
 	}
 	if err := coordination.ValidateCurrent(ctx); err != nil {
@@ -141,7 +141,7 @@ func (h *TaskProcessHost) runProcess(ctx context.Context, input, checkpoint json
 			return 1, NewTaskError(ErrTaskScopeDenied, "云端任务网络沙箱不得要求启动后激活")
 		}
 	} else if cloudNetworkMode == cloudTaskNetworkDegraded {
-		slog.Warn("Cloud Core 任务在管理员显式授权的网络隔离降级模式运行", "task_run_id", h.config.TaskRunID)
+		slog.Warn("统筹中心任务在管理员显式授权的网络隔离降级模式运行", "task_run_id", h.config.TaskRunID)
 	}
 	environment := process.NewEnvironmentBuilder()
 	if profile == runtimeprofile.ProfileCloudCore && !h.config.RequireSandbox {

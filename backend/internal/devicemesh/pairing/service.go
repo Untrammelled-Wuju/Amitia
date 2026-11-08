@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	DefaultOfferTTL = 5 * time.Minute
+	DefaultOfferTTL = 30 * time.Minute
 	bootstrapFile   = "device-pairing-bootstrap"
 )
 
@@ -35,7 +35,7 @@ var (
 	ErrPairingPending = errors.New("该设备正在配对，请勿重复添加")
 	ErrOfferNotFound  = errors.New("配对码无效")
 	ErrOfferExpired   = errors.New("配对码已过期，请重新生成")
-	ErrOfferConsumed  = errors.New("配对码已使用，请重新生成")
+	ErrOfferInvalid   = errors.New("配对码已失效，请重新生成")
 )
 
 type Service struct {
@@ -44,6 +44,7 @@ type Service struct {
 	spaceID      runtimeidentity.SpaceID
 	devices      *host_registry.Registry
 	bootstrapSvc *bootstrap.Service
+	approvals    approvalEventHub
 }
 
 type Offer struct {
@@ -57,20 +58,22 @@ type Offer struct {
 }
 
 type ClaimRequest struct {
-	OfferToken  string
-	SetupCode   string
-	DeviceID    runtimeidentity.DeviceID
-	RuntimeID   runtimeidentity.RuntimeID
-	Platform    runtimeidentity.Platform
-	Label       string
-	Proof       *proof.Proof
-	Coordinated bool
+	OfferToken     string
+	SetupCode      string
+	IssuerDeviceID runtimeidentity.DeviceID
+	DeviceID       runtimeidentity.DeviceID
+	RuntimeID      runtimeidentity.RuntimeID
+	Platform       runtimeidentity.Platform
+	Label          string
+	Proof          *proof.Proof
+	Coordinated    bool
 }
 
 type ClaimResult struct {
-	Ticket    *bootstrap.BootstrapTicket
-	RawTicket string
-	Pending   *Approval
+	Ticket       *bootstrap.BootstrapTicket
+	RawTicket    string
+	PairingToken string
+	Pending      *Approval
 }
 
 func NewService(db *sql.DB, dataDir string, spaceID runtimeidentity.SpaceID, devices *host_registry.Registry, bootstrapSvc *bootstrap.Service) (*Service, error) {
@@ -197,9 +200,6 @@ func (s *Service) Claim(ctx context.Context, req ClaimRequest) (*ClaimResult, er
 	if req.DeviceID == "" || req.RuntimeID == "" || req.Platform == runtimeidentity.PlatformUnknown || !req.Platform.IsKnown() {
 		return nil, errors.New("pairing: deviceId, runtimeId and platform are required")
 	}
-	if strings.TrimSpace(req.OfferToken) == "" && strings.TrimSpace(req.SetupCode) == "" {
-		return nil, errors.New("pairing: offerToken or setupCode is required")
-	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -211,10 +211,13 @@ func (s *Service) Claim(ctx context.Context, req ClaimRequest) (*ClaimResult, er
 	}
 	now := time.Now().UTC()
 	offerID := ""
+	pairingToken := ""
 	if strings.TrimSpace(req.OfferToken) != "" {
 		offerID, err = s.validateOfferTx(ctx, tx, strings.TrimSpace(req.OfferToken), req.DeviceID, now)
-	} else {
+	} else if strings.TrimSpace(req.SetupCode) != "" {
 		err = s.authorizeFirstDeviceTx(ctx, tx, strings.TrimSpace(req.SetupCode))
+	} else {
+		offerID, pairingToken, err = s.createDirectOfferTx(ctx, tx, req.IssuerDeviceID, req.DeviceID, now)
 	}
 	if err != nil {
 		return nil, err
@@ -226,9 +229,6 @@ func (s *Service) Claim(ctx context.Context, req ClaimRequest) (*ClaimResult, er
 	}
 	if existing != nil && existing.SpaceID != s.spaceID {
 		return nil, host_registry.ErrDeviceOwnedByOther
-	}
-	if existing != nil && existing.TrustState == host_registry.DeviceTrustTrusted {
-		return nil, ErrAlreadyPaired
 	}
 	var activeTickets int
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(1) FROM kernel_device_mesh_bootstrap_tickets
@@ -253,6 +253,9 @@ func (s *Service) Claim(ctx context.Context, req ClaimRequest) (*ClaimResult, er
 			return nil, proof.ErrProof
 		}
 	}
+	if existing != nil && existing.TrustState == host_registry.DeviceTrustTrusted && req.Proof == nil {
+		return nil, ErrAlreadyPaired
+	}
 	if offerID != "" {
 		pending, err := s.approvalTx(ctx, tx, offerID, req, now)
 		if err != nil {
@@ -265,19 +268,30 @@ func (s *Service) Claim(ctx context.Context, req ClaimRequest) (*ClaimResult, er
 			if err := tx.Commit(); err != nil {
 				return nil, err
 			}
-			return &ClaimResult{Pending: pending}, nil
+			s.publishApproval(*pending)
+			return &ClaimResult{PairingToken: pairingToken, Pending: pending}, nil
 		}
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO kernel_device_coordination(space_id,device_id,coordinated) VALUES(?,?,?) ON CONFLICT(space_id,device_id) DO UPDATE SET coordinated=excluded.coordinated,administrator=0,mode_revision=mode_revision+1,permission_revision=permission_revision+1,selected_role=''`, s.spaceID.String(), req.DeviceID.String(), req.Coordinated); err != nil {
-		return nil, err
+	if existing != nil && existing.TrustState == host_registry.DeviceTrustTrusted {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO kernel_device_coordination(space_id,device_id,coordinated) VALUES(?,?,?) ON CONFLICT(space_id,device_id) DO NOTHING`, s.spaceID.String(), req.DeviceID.String(), req.Coordinated); err != nil {
+			return nil, err
+		}
+	} else {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO kernel_device_coordination(space_id,device_id,coordinated) VALUES(?,?,?) ON CONFLICT(space_id,device_id) DO UPDATE SET coordinated=excluded.coordinated,administrator=0,mode_revision=mode_revision+1,permission_revision=permission_revision+1,selected_role=''`, s.spaceID.String(), req.DeviceID.String(), req.Coordinated); err != nil {
+			return nil, err
+		}
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE kernel_device_mesh_bootstrap_tickets SET status='revoked', updated_at=?
 		WHERE space_id=? AND device_id=? AND status='active'`, now.Format(time.RFC3339Nano), s.spaceID.String(), req.DeviceID.String()); err != nil {
 		return nil, err
 	}
+	trustState := host_registry.DeviceTrustPending
+	if existing != nil && existing.TrustState == host_registry.DeviceTrustTrusted {
+		trustState = host_registry.DeviceTrustTrusted
+	}
 	record := host_registry.DeviceRecord{
 		SpaceID: s.spaceID, DeviceID: req.DeviceID, Platform: req.Platform,
-		Label: strings.TrimSpace(req.Label), TrustState: host_registry.DeviceTrustPending,
+		Label: strings.TrimSpace(req.Label), TrustState: trustState,
 		CreatedAt: now, LastSeenAt: now, Revision: 1,
 	}
 	if existing != nil {
@@ -292,16 +306,8 @@ func (s *Service) Claim(ctx context.Context, req ClaimRequest) (*ClaimResult, er
 		return nil, err
 	}
 	if offerID != "" {
-		res, err := tx.ExecContext(ctx, `UPDATE kernel_device_pairing_offers SET status='consumed', consumed_at=? WHERE offer_id=? AND status='active'`, now.Format(time.RFC3339Nano), offerID)
-		if err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE kernel_device_pairing_approvals SET state='completed', revision=revision+1, decided_at=? WHERE offer_id=? AND space_id=? AND device_id=? AND state='approved'`, now.Format(time.RFC3339Nano), offerID, s.spaceID.String(), req.DeviceID.String()); err != nil {
 			return nil, err
-		}
-		count, err := res.RowsAffected()
-		if err != nil {
-			return nil, err
-		}
-		if count != 1 {
-			return nil, ErrOfferConsumed
 		}
 	}
 	if err := meshaudit.QueueTx(pairingAuditContext(ctx, s.spaceID.String(), req), tx, s.spaceID.String(), req.DeviceID.String(), "device_mesh.pairing_claimed", meshaudit.Details{}); err != nil {
@@ -315,7 +321,9 @@ func (s *Service) Claim(ctx context.Context, req ClaimRequest) (*ClaimResult, er
 
 func pairingAuditContext(ctx context.Context, space string, request ClaimRequest) context.Context {
 	method := "pairing_offer"
-	if request.Proof != nil {
+	if request.IssuerDeviceID != "" && strings.TrimSpace(request.OfferToken) == "" {
+		method = "pairing_address"
+	} else if request.Proof != nil {
 		method = "pairing_proof"
 	} else if strings.TrimSpace(request.OfferToken) == "" {
 		method = "bootstrap_setup"
@@ -367,19 +375,12 @@ func (s *Service) validateOfferTx(ctx context.Context, tx *sql.Tx, raw string, d
 	if err == nil && target != deviceID.String() {
 		return "", errors.New("该配对入口仅供指定设备连接新服务提供者")
 	}
-	existing, err := s.devices.GetDeviceTx(ctx, tx, deviceID)
-	if err != nil {
-		return "", err
-	}
-	if existing != nil && existing.SpaceID == s.spaceID && existing.TrustState == host_registry.DeviceTrustTrusted {
-		return "", ErrAlreadyPaired
-	}
 	expiresAt, err := time.Parse(time.RFC3339Nano, expires)
 	if err != nil {
 		return "", err
 	}
 	if status != "active" {
-		return "", ErrOfferConsumed
+		return "", ErrOfferInvalid
 	}
 	if !now.Before(expiresAt) {
 		return "", ErrOfferExpired
@@ -392,6 +393,49 @@ func (s *Service) validateOfferTx(ctx context.Context, tx *sql.Tx, raw string, d
 		return "", host_registry.ErrDeviceNotTrusted
 	}
 	return offerID, nil
+}
+
+func (s *Service) createDirectOfferTx(ctx context.Context, tx *sql.Tx, issuerID, requesterID runtimeidentity.DeviceID, now time.Time) (string, string, error) {
+	if issuerID == "" {
+		return "", "", errors.New("pairing: trusted issuer device is required")
+	}
+	if issuerID == requesterID {
+		return "", "", ErrSelfPairing
+	}
+	issuer, err := s.devices.GetDeviceTx(ctx, tx, issuerID)
+	if err != nil {
+		return "", "", err
+	}
+	if issuer == nil || issuer.SpaceID != s.spaceID || issuer.TrustState != host_registry.DeviceTrustTrusted {
+		return "", "", host_registry.ErrDeviceNotTrusted
+	}
+	var active int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM kernel_device_pairing_offers WHERE space_id=? AND created_by_device_id=? AND status='active' AND julianday(expires_at)>julianday(?)`, s.spaceID.String(), issuerID.String(), now.Format(time.RFC3339Nano)).Scan(&active); err != nil {
+		return "", "", err
+	}
+	if active >= 128 {
+		return "", "", errors.New("待处理配对入口已达到上限，请处理或等待过期后重试")
+	}
+	raw, err := randomSecret("amt_pair_")
+	if err != nil {
+		return "", "", err
+	}
+	offerID := uuid.NewString()
+	expiresAt := now.Add(DefaultOfferTTL)
+	if _, err := tx.ExecContext(ctx, `INSERT INTO kernel_device_pairing_offers
+		(offer_id, offer_hash, space_id, created_by_device_id, status, expires_at, consumed_at, created_at)
+		VALUES (?, ?, ?, ?, 'active', ?, NULL, ?)`,
+		offerID, hash(raw), s.spaceID.String(), issuerID.String(),
+		expiresAt.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano)); err != nil {
+		return "", "", fmt.Errorf("pairing: create direct offer: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO kernel_device_pairing_approval_policy(offer_id,required) VALUES(?,1)`, offerID); err != nil {
+		return "", "", err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO kernel_device_pairing_offer_targets(offer_id,device_id) VALUES(?,?)`, offerID, requesterID.String()); err != nil {
+		return "", "", err
+	}
+	return offerID, raw, nil
 }
 
 func (s *Service) authorizeFirstDeviceTx(ctx context.Context, tx *sql.Tx, setupCode string) error {
@@ -435,6 +479,17 @@ func (s *Service) ensureSchema(ctx context.Context) error {
 		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
 			return fmt.Errorf("pairing: ensure schema: %w", err)
 		}
+	}
+	return validateApprovalSchemaCurrent(ctx, s.db)
+}
+
+func validateApprovalSchemaCurrent(ctx context.Context, db *sql.DB) error {
+	var schema string
+	if err := db.QueryRowContext(ctx, `SELECT sql FROM sqlite_master WHERE type='table' AND name='kernel_device_pairing_approvals'`).Scan(&schema); err != nil {
+		return err
+	}
+	if !strings.Contains(schema, "UNIQUE(offer_id, device_id)") {
+		return fmt.Errorf("pairing: kernel_device_pairing_approvals schema is not current: %s", strings.TrimSpace(schema))
 	}
 	return nil
 }

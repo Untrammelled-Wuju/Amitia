@@ -16,6 +16,7 @@ import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/settings/current_character_provider.dart';
 import '../../../../core/widgets/profile_avatar.dart';
+import '../../../../core/widgets/shared_core_read_only_banner.dart';
 
 class CharacterCreatePage extends ConsumerStatefulWidget {
   const CharacterCreatePage({super.key});
@@ -175,6 +176,9 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
 
   @override
   Widget build(BuildContext context) {
+    final accessAsync = ref.watch(sharedCoreDataAccessProvider);
+    final access = accessAsync.valueOrNull;
+    final canWrite = access?.write ?? false;
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '创建角色 (${_currentStep + 1}/${_steps.length})',
@@ -185,6 +189,8 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
         top: false,
         child: Column(
           children: [
+            if (access?.readOnly == true)
+              SharedCoreReadOnlyBanner(access: access!),
             Padding(
               padding: EdgeInsets.symmetric(
                 horizontal: AppSpacing.pagePadding,
@@ -247,7 +253,7 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
                           : '下一步',
                       isFullWidth: true,
                       onPressed: _currentStep == _steps.length - 1
-                          ? (_isCreating ? null : _finish)
+                          ? (_isCreating || !canWrite ? null : _finish)
                           : (_isPickingAvatar ? null : _nextStep),
                     ),
                   ),

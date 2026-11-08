@@ -177,6 +177,17 @@ func NewPluginHost(cfg PluginHostConfig) (*PluginHost, error) {
 	if !filepath.IsAbs(cfg.WorkingDirectory) {
 		return nil, errors.New("javascript_main: working directory must be absolute")
 	}
+	pluginHostPath, err := canonicalNodeEntrypoint(cfg.PluginHostPath)
+	if err != nil {
+		return nil, fmt.Errorf("javascript_main: resolve plugin host path: %w", err)
+	}
+	if filepath.IsAbs(cfg.BootstrapSpec.Entry) {
+		entry, err := canonicalNodeEntrypoint(cfg.BootstrapSpec.Entry)
+		if err != nil {
+			return nil, fmt.Errorf("javascript_main: resolve plugin entry path: %w", err)
+		}
+		cfg.BootstrapSpec.Entry = entry
+	}
 	host := &PluginHost{
 		instanceID:          cfg.InstanceID,
 		extensionID:         cfg.ExtensionID,
@@ -188,7 +199,7 @@ func NewPluginHost(cfg PluginHostConfig) (*PluginHost, error) {
 		rpcVersion:          cfg.HostAPIVersion,
 		hostAPI:             cfg.HostAPI,
 		nodePath:            cfg.NodePath,
-		pluginHostPath:      cfg.PluginHostPath,
+		pluginHostPath:      pluginHostPath,
 		workDir:             cfg.WorkingDirectory,
 		env:                 cfg.Env,
 		networkDisabled:     cfg.NetworkDisabled,
@@ -203,6 +214,20 @@ func NewPluginHost(cfg PluginHostConfig) (*PluginHost, error) {
 		done:                make(chan struct{}),
 	}
 	return host, nil
+}
+
+func canonicalNodeEntrypoint(entry string) (string, error) {
+	dir, err := filepath.EvalSymlinks(filepath.Dir(entry))
+	if err != nil {
+		return "", err
+	}
+	if dir == filepath.VolumeName(dir)+string(filepath.Separator) {
+		return "", fmt.Errorf("node permission path is a filesystem root: %s", dir)
+	}
+	if strings.Contains(dir, "*") {
+		return "", fmt.Errorf("node permission path contains wildcard: %s", dir)
+	}
+	return filepath.Join(dir, filepath.Base(entry)), nil
 }
 
 func (h *PluginHost) InstanceID() string  { return h.instanceID }

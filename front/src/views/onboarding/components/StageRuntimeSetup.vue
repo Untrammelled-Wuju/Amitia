@@ -2,13 +2,21 @@
   <div class="ob-stage-inner ob-setup-stage-inner ob-flow-stage-inner">
     <div class="ob-boot-panel ob-setup-step-panel">
       <h2 class="ob-boot-title">
-        {{ deployMode === "local" ? "正在检查运行环境" : "正在连接 Cloud Core" }}
+        {{
+          connectionFailed
+            ? deployMode === "local"
+              ? "启动本机统筹中心失败"
+              : "连接远程统筹中心失败"
+            : deployMode === "local"
+              ? "正在启动本机统筹中心"
+              : "正在连接远程统筹中心"
+        }}
       </h2>
       <div class="ob-boot-copy">
         {{
           deployMode === "local"
-            ? "系统将检查本地核心服务、运行时就绪状态和能力接口。"
-            : "Cloud Core 使用设备凭证认证。检查完成后，未绑定的当前设备必须先通过一次性配对再继续。"
+            ? "系统将检查本机统筹服务和运行时能力。"
+            : "远程统筹中心使用设备凭证认证。检查完成后，当前设备必须先完成配对再继续。"
         }}
       </div>
       <div class="ob-boot-list">
@@ -18,15 +26,21 @@
           <span class="ob-boot-state">{{ row.stateText }}</span>
         </div>
       </div>
+      <div v-if="connectionFailed" class="ob-pairing-panel">
+        <div class="ob-pairing-error">
+          <pre>{{ failureDetail }}</pre>
+        </div>
+        <button class="ob-stage-action ob-pairing-action" type="button" @click="startChecks">重新检查</button>
+      </div>
 
       <div v-if="pairingRequired" class="ob-pairing-panel">
         <div class="ob-input-label">
-          {{ firstDeviceSetupRequired ? "首设备设置码" : "一次性配对 Offer" }}
+          {{ firstDeviceSetupRequired ? "首设备设置码" : "配对二维码" }}
         </div>
         <div class="ob-boot-copy pairing-copy">
           {{
             firstDeviceSetupRequired
-              ? "这是该 Space 的第一台可信设备。设置码只在 Cloud Core 主机本地生成，不会通过网络公开。"
+              ? "这是该统筹中心的第一台可信设备。设置码只在中心设备本地生成，不会通过网络公开。"
               : "请从任意已信任设备生成 amitia://pair?...，也可以直接粘贴 Offer Token。"
           }}
         </div>
@@ -46,7 +60,7 @@
       <div v-else-if="webAccessSetupRequired" class="ob-pairing-panel">
         <div class="ob-input-label">设置 Web 访问密码</div>
         <div class="ob-boot-copy pairing-copy">
-          该密码只用于浏览器访问 Cloud Core。Flutter、Electron、Device Agent 和插件不需要输入。
+          该密码只用于浏览器访问统筹中心。Flutter、Electron、Device Agent 和插件不需要输入。
         </div>
         <input
           v-model="webAccessPassword"
@@ -107,6 +121,8 @@ const emit = defineEmits<{ healthCheckDone: [] }>();
 type Row = { name: string; state: "" | "running" | "done" | "error"; stateText: string };
 const bootRows = ref<Row[]>([]);
 const checksComplete = ref(false);
+const connectionFailed = ref(false);
+const failureDetail = ref("");
 const pairingRequired = ref(false);
 const pairingVerified = ref(false);
 const firstDeviceSetupRequired = ref(false);
@@ -125,9 +141,11 @@ let verificationPrepared = false;
 function resetRows() {
   const names = props.deployMode === "local"
     ? ["检查本地服务", "检查运行时就绪状态", "检查运行时能力"]
-    : ["检查 Cloud Core", "读取 Space 信息", "检查设备配对服务", "确认运行时兼容性"];
+    : ["检查统筹中心", "读取统筹数据身份", "检查设备配对服务", "确认运行时兼容性"];
   bootRows.value = names.map((name) => ({ name, state: "", stateText: "等待" }));
   checksComplete.value = false;
+  connectionFailed.value = false;
+  failureDetail.value = "";
   pairingRequired.value = false;
   pairingVerified.value = false;
   pairingError.value = "";
@@ -185,6 +203,8 @@ async function runCheck(row: Row, url: string, validate?: (data: any) => boolean
   console.error("[original-error]", error);
 row.state = "error";
     row.stateText = "失败";
+    connectionFailed.value = true;
+    failureDetail.value = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
     return false;
   }
 }
@@ -214,7 +234,7 @@ function parseOffer(raw: string, expectedBaseURL: string): string {
   const uri = new URL(value);
   const endpoint = uri.searchParams.get("endpoint")?.trim() || "";
   if (endpoint && normalizeOrigin(endpoint) !== normalizeOrigin(expectedBaseURL)) {
-    throw new Error("配对 Offer 属于另一个 Cloud Core，请检查服务地址");
+    throw new Error("配对 Offer 属于另一个统筹中心，请检查服务地址");
   }
   const offer = uri.searchParams.get("offer")?.trim() || "";
   if (!offer) throw new Error("配对 URI 中没有 Offer Token");
@@ -251,6 +271,8 @@ async function finishPairedDevice(baseURL: string): Promise<void> {
     }
   } catch (error) {
     await props.afterVerificationFailed?.(baseURL, error);
+    connectionFailed.value = true;
+    failureDetail.value = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
     throw error;
   }
   emit("healthCheckDone");
@@ -385,6 +407,14 @@ onUnmounted(() => abortController?.abort());
 .ob-pairing-error {
   font-size: 12px;
   color: #ff8f8f;
+}
+.ob-pairing-error pre {
+  margin: 0;
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
 }
 .ob-pairing-action {
   justify-self: start;

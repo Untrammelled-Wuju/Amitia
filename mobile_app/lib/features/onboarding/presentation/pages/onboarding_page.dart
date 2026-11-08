@@ -202,8 +202,8 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         _envChecked = checked.every((value) => value);
       });
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-if (!mounted) return;
+      print("[original-error] $error\n$stackTrace");
+      if (!mounted) return;
       setState(() {
         _envResults = [false, false, false];
         _envChecked = false;
@@ -252,9 +252,7 @@ if (!mounted) return;
           ? await onboarding.health()
           : await onboarding.healthAt(_remoteCoreCtrl.text.trim());
       if (health.isEmpty) {
-        throw StateError(
-          _deployMode == 0 ? '本地 Business Core 不可用' : 'Cloud Core 不可用',
-        );
+        throw StateError(_deployMode == 0 ? '本机统筹中心不可用' : '远程统筹中心不可用');
       }
       var firstDeviceSetupRequired = false;
       if (_deployMode == 1) {
@@ -279,8 +277,8 @@ if (!mounted) return;
         });
       }
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-await deploymentNotifier.update(previousConfig);
+      print("[original-error] $error\n$stackTrace");
+      await deploymentNotifier.update(previousConfig);
       ref.invalidate(backendConnectionProvider);
       ref.invalidate(backendTransportProvider);
       try {
@@ -288,8 +286,8 @@ await deploymentNotifier.update(previousConfig);
             .read(mobileBackendLifecycleProvider)
             .reconcile(previousConfig);
       } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+        print("[original-error] $error\n$stackTrace");
+      }
       rethrow;
     } finally {
       if (deploymentChanged) {
@@ -310,7 +308,7 @@ await deploymentNotifier.update(previousConfig);
     switch (_currentStep) {
       case 2:
         if (_deployMode == 1 && _remoteCoreCtrl.text.trim().isEmpty) {
-          throw StateError('云端统筹模式必须填写 Cloud Core 地址');
+          throw StateError('使用远程统筹中心必须填写中心地址');
         }
         await _applyDeploymentSelection();
         return;
@@ -324,7 +322,7 @@ await deploymentNotifier.update(previousConfig);
           final localMesh = ref.read(deviceMeshLocalServiceProvider);
           final identity = await localMesh?.identity();
           if (identity == null) {
-            throw StateError('本机 Device Agent 不可用，无法完成云端设备配对');
+            throw StateError('本机 Device Agent 不可用，无法完成统筹中心设备配对');
           }
           final deviceId = (identity['deviceId'] ?? '').toString().trim();
           final runtimeId = (identity['runtimeId'] ?? '').toString().trim();
@@ -360,7 +358,7 @@ await deploymentNotifier.update(previousConfig);
               );
           final ticket = (claimed['ticket'] ?? '').toString().trim();
           if (ticket.isEmpty) {
-            throw StateError('Cloud Core 未返回 Bootstrap Ticket');
+            throw StateError('统筹中心未返回 Bootstrap Ticket');
           }
           if (localMesh == null) {
             throw StateError('本机 Device Agent 不可用，无法保存设备凭据');
@@ -396,7 +394,7 @@ await deploymentNotifier.update(previousConfig);
               .read(characterServiceProvider)
               .authority();
           if (mounted) {
-            amitiaSnackBar(context, 'AI 服务由云端 Core 提供，已跳过本机模型配置');
+            amitiaSnackBar(context, 'AI 服务由统筹中心提供，已跳过本机模型配置');
           }
         }
         return;
@@ -1056,21 +1054,16 @@ await deploymentNotifier.update(previousConfig);
 
   Widget _buildDeployMode() {
     final modes = [
-      ('本地模式', '项目服务、数据和设备能力全部在当前设备运行', Icons.laptop, true),
-      (
-        '云端统筹模式',
-        '连接 Cloud Core，由 Core 统一管理角色、对话、记忆和跨设备任务',
-        Icons.cloud_outlined,
-        false,
-      ),
+      ('以本机作为统筹中心', '当前设备保存统筹数据和模型配置，并管理其他设备', Icons.laptop, true),
+      ('使用远程统筹中心', '连接另一台设备提供的统筹中心', Icons.cloud_outlined, false),
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('选择运行模式', style: AppTypography.sectionTitle(context)),
+        Text('选择统筹中心', style: AppTypography.sectionTitle(context)),
         SizedBox(height: AppSpacing.sm),
         Text(
-          '本地模式不限模型或扩展能力；云端统筹模式统一管理多设备数据。',
+          '本机可以作为统筹中心，也可以连接另一台设备提供的统筹中心。',
           style: AppTypography.caption(context),
         ),
         SizedBox(height: AppSpacing.lg),
@@ -1160,7 +1153,7 @@ await deploymentNotifier.update(previousConfig);
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Cloud Core 地址', style: AppTypography.label(context)),
+                Text('统筹中心地址', style: AppTypography.label(context)),
                 SizedBox(height: AppSpacing.xs),
                 AmitiaTextField(
                   controller: _remoteCoreCtrl,
@@ -1174,7 +1167,7 @@ await deploymentNotifier.update(previousConfig);
                 ),
                 SizedBox(height: AppSpacing.sm),
                 Text(
-                  '业务 HTTP/WS 会连接该 Cloud Core；本机 Device Agent 负责设备能力执行。',
+                  '连接后使用该中心的数据和模型；本机 Device Agent 负责设备能力执行。',
                   style: AppTypography.caption(context),
                 ),
               ],
@@ -1194,8 +1187,8 @@ await deploymentNotifier.update(previousConfig);
         SizedBox(height: AppSpacing.sm),
         Text(
           isCloud
-              ? '不创建产品账号。当前设备通过 Device Mesh 配对加入 Cloud Core，个人资料归属于该 Space。'
-              : '本地模式不需要账号。个人资料保存在本地 Space，设备身份由 Device Mesh 独立管理。',
+              ? '不创建产品账号。当前设备通过 Device Mesh 配对加入远程统筹中心。'
+              : '本机统筹中心不需要产品账号，统筹数据保存在当前设备。',
           style: AppTypography.caption(context),
         ),
         SizedBox(height: AppSpacing.lg),
@@ -1224,7 +1217,7 @@ await deploymentNotifier.update(previousConfig);
                 SizedBox(height: AppSpacing.xs),
                 AmitiaTextField(
                   hintText: _firstDeviceSetupRequired
-                      ? '输入 Cloud Core 本机显示的一次性设置码'
+                      ? '输入统筹中心本机显示的一次性设置码'
                       : '粘贴 amitia://pair?... 二维码内容或 Offer Token',
                   controller: _pairingCodeController,
                   prefixIcon: Icon(
@@ -1237,8 +1230,8 @@ await deploymentNotifier.update(previousConfig);
                 SizedBox(height: AppSpacing.sm),
                 Text(
                   _firstDeviceSetupRequired
-                      ? '这是该 Cloud Core 的第一台可信设备。设置码只能从 Cloud Core 本机安全界面获取。'
-                      : '可在任意已信任设备上生成一次性配对二维码；二维码只用于签发当前设备的 Device Credential。',
+                      ? '这是该统筹中心的第一台可信设备。设置码只能从中心设备安全界面获取。'
+                      : '可在任意已信任设备上生成 30 分钟有效的配对二维码；二维码只用于签发当前设备的 Device Credential。',
                   style: AppTypography.caption(context),
                 ),
               ],
@@ -1260,7 +1253,7 @@ await deploymentNotifier.update(previousConfig);
                     Expanded(
                       child: Text(
                         isCloud
-                            ? 'Device ID 只用于设备寻址，真正的云端认证由一次性配对后签发的 Device Credential 完成。'
+                            ? 'Device ID 只用于设备寻址，真正的云端认证由配对后签发的 Device Credential 完成。'
                             : 'Space ID 负责数据归属；Device ID / Runtime ID 负责执行位置，两者不再混用。',
                         style: AppTypography.label(
                           context,
@@ -1291,7 +1284,7 @@ await deploymentNotifier.update(previousConfig);
           expected.scheme != offered.scheme ||
           expected.host != offered.host ||
           expected.port != offered.port) {
-        throw StateError('配对 Offer 属于另一个 Cloud Core');
+        throw StateError('配对 Offer 属于另一个统筹中心');
       }
     }
     return uri.queryParameters['offer']?.trim() ?? '';
@@ -1846,7 +1839,7 @@ await deploymentNotifier.update(previousConfig);
         .map((e) => e.value)
         .join('、');
     final items = <(String, String)>[
-      ('运行模式', _deployMode == 0 ? '本地模式' : '云端统筹模式'),
+      ('统筹中心', _deployMode == 0 ? '本机统筹中心' : '远程统筹中心'),
       (
         '个人空间',
         _profileNameController.text.trim().isNotEmpty

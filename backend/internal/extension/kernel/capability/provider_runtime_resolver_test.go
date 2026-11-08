@@ -120,3 +120,39 @@ func TestProviderRuntimeExecutionResolverExecutesDirectJavaScriptToolWithoutProv
 		t.Fatalf("direct JavaScript route mismatch: %+v", route)
 	}
 }
+
+func TestProviderRuntimeExecutionResolverExecutesInProcessInternalToolWithoutProviderTarget(t *testing.T) {
+	resolver := NewProviderRuntimeExecutionResolver(nil)
+	route, err := resolver.ResolveRuntimeExecution(context.Background(), ToolDefinition{
+		ID:           "query_memory",
+		CapabilityID: "memory.query",
+		Runtime:      RuntimeBinding{RuntimeType: RuntimeTypeInternal, HandlerName: "memory.query"},
+	}, ToolInvocationContext{
+		SpaceID: "realm",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if route.RemoteDevice || route.Binding.RuntimeType != RuntimeTypeInternal || route.Binding.HandlerName != "memory.query" || route.SpaceID != "realm" {
+		t.Fatalf("in-process internal route mismatch: %+v", route)
+	}
+}
+
+func TestProviderRuntimeExecutionResolverExecutesLocalGameHostToolWithoutProviderTarget(t *testing.T) {
+	resolver := NewProviderRuntimeExecutionResolver(nil)
+	route, err := resolver.ResolveRuntimeExecution(context.Background(), ToolDefinition{
+		ID:           "com.example/game/move",
+		CapabilityID: "com.example/game/move",
+		Runtime: RuntimeBinding{
+			RuntimeType: RuntimeTypeGameHost,
+			HandlerName: "worldgame.command",
+			Metadata:    map[string]any{"pluginId": "com.example/game/plugin", "serviceId": "game"},
+		},
+	}, ToolInvocationContext{SpaceID: "realm"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if route.RemoteDevice || route.Binding.RuntimeType != RuntimeTypeGameHost || route.Binding.HandlerName != "worldgame.command" || route.SpaceID != "realm" {
+		t.Fatalf("local GameHost route mismatch: %+v", route)
+	}
+}

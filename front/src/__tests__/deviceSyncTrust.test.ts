@@ -1,8 +1,8 @@
 import { flushPromises, shallowMount } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), confirm: vi.fn(), prompt: vi.fn(), offer: vi.fn(), provision: vi.fn(), saveDeployment: vi.fn(), pairingStatus: vi.fn(), initialize: vi.fn(), state: {} as any, devices: [] as any[] }));
-vi.mock("@/composables/useApi", () => ({ useApi: () => ({ get: mocks.get, post: mocks.post }) }));
+const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), confirm: vi.fn(), prompt: vi.fn(), offer: vi.fn(), provision: vi.fn(), saveDeployment: vi.fn(), pairingStatus: vi.fn(), initialize: vi.fn(), meshIdentity: vi.fn(), meshStatus: vi.fn(), state: {} as any, devices: [] as any[] }));
+vi.mock("@/composables/useApi", () => ({ useApi: () => ({ get: mocks.get, post: mocks.post, put: mocks.put }) }));
 vi.mock("element-plus", () => ({ ElMessage: { success: vi.fn(), warning: vi.fn(), error: vi.fn() }, ElMessageBox: { confirm: mocks.confirm, prompt: mocks.prompt } }));
 vi.mock("@/composables/useDeviceManagementIntent", () => ({
   deviceManagementRequestConfig: () => ({}),
@@ -11,34 +11,43 @@ vi.mock("@/composables/useDeviceManagementIntent", () => ({
     capture: async () => ({ controller: new AbortController(), state: mocks.state }),
   }),
 }));
-vi.mock("@/runtime/runtime-adapter", () => ({ getDeploymentConfig: async () => ({ mode: "local" }), getRuntimeConnection: async () => ({ apiBaseURL: "http://local.test" }), createCurrentDevicePairingOffer: mocks.offer, provisionCurrentDeviceMesh: mocks.provision, saveDeploymentConfig: mocks.saveDeployment, getCurrentDevicePairingStatus: mocks.pairingStatus }));
+vi.mock("@/runtime/runtime-adapter", () => ({ getDeploymentConfig: async () => ({ mode: "local" }), getRuntimeConnection: async () => ({ apiBaseURL: "http://local.test" }), createCurrentDevicePairingOffer: mocks.offer, provisionCurrentDeviceMesh: mocks.provision, saveDeploymentConfig: mocks.saveDeployment, getCurrentDevicePairingStatus: mocks.pairingStatus, resolveApiUrl: async (path: string) => path, isDeviceLocalApiPath: () => false, isDeviceRoleManagementPath: () => false, getBackendAuthHeaders: async () => ({}) }));
 vi.mock("@/runtime/runtime-capabilities", () => ({ initializeRuntimeCapabilities: mocks.initialize }));
 vi.mock("@/components/DevicePairScanner.vue", () => ({ default: { template: "<div />" } }));
 vi.mock("@/components/DeviceCapabilityGrants.vue", () => ({ default: { template: "<div />" } }));
-vi.mock("@/components/DeviceCoreCall.vue", () => ({ default: { template: "<div />" } }));
 import DevicePairingPanel from "@/components/DevicePairingPanel.vue";
 import BoundDevicesPanel from "@/components/BoundDevicesPanel.vue";
 
 function mountBoundDevices() {
   return shallowMount(BoundDevicesPanel, { global: {
-    stubs: { "el-button": true, "el-tag": true, "el-alert": true, "el-card": true, "el-empty": true },
+    stubs: {
+      "el-button": true,
+      "el-tag": true,
+      "el-alert": true,
+      "el-card": true,
+      "el-empty": true,
+      "el-dialog": { props: ["modelValue", "title"], template: '<div data-dialog :data-title="title"><slot /></div>' },
+    },
     directives: { loading: () => {} },
   } });
 }
 
-function mountPairing() {
+function mountPairing(mode: "local" | "cloud" = "local") {
   return shallowMount(DevicePairingPanel, {
-    props: { serverURL: "https://draft.core" },
+    props: { serverURL: "https://draft.core", mode },
     global: { stubs: { "el-button": true, "el-alert": true, "el-input": true } },
   });
 }
 
 describe("设备同步信任状态", () => {
   beforeEach(() => {
-    window.amitiaDesktop = { getMeshIdentity: async () => ({ deviceId: "trusted" }), getMeshStatus: async () => ({}) } as any;
+    mocks.meshIdentity.mockReset().mockResolvedValue({ deviceId: "trusted" });
+    mocks.meshStatus.mockReset().mockResolvedValue({});
+    window.amitiaDesktop = { getMeshIdentity: mocks.meshIdentity, getMeshStatus: mocks.meshStatus } as any;
     mocks.devices = ["trusted", "revoked", "pending"].map(trustState => ({ deviceId: trustState, trustState, platform: "windows" }));
     mocks.state = { policy: { deviceId: "trusted" }, canAdminister: false };
     mocks.post.mockReset().mockImplementation(async () => { mocks.devices = mocks.devices.map(device => device.deviceId === "trusted" ? { ...device, trustState: "trusted" } : device); return { ok: true }; });
+    mocks.put.mockReset().mockResolvedValue({ ok: true });
     mocks.confirm.mockReset().mockResolvedValue("confirm");
     mocks.offer.mockReset().mockResolvedValue({ qrPayload: "amitia://pair?offer=test", qrImage: "test-image" });
     mocks.prompt.mockReset().mockResolvedValue({ value: "manual-offer" });
@@ -48,7 +57,25 @@ describe("设备同步信任状态", () => {
     mocks.initialize.mockReset().mockResolvedValue(undefined);
     mocks.get.mockReset().mockImplementation(async (path: string) => path.endsWith("/devices") ? { devices: mocks.devices } : { lastApplied: 3 });
   });
+  it("本机中心只生成二维码，子设备只扫码或选择图片", async () => {
+    const center = mountPairing("local");
+    await flushPromises();
+    expect(center.find('[data-amitia-ui="device-pairing.generate"]').exists()).toBe(true);
+    expect(center.find('[data-amitia-ui="device-pairing.manual"]').exists()).toBe(true);
+    expect(center.find('[data-amitia-ui="device-pairing.scan"]').exists()).toBe(false);
+    expect(center.find('[data-amitia-ui="device-pairing.image"]').exists()).toBe(false);
+    center.unmount();
+
+    const child = mountPairing("cloud");
+    await flushPromises();
+    expect(child.find('[data-amitia-ui="device-pairing.generate"]').exists()).toBe(false);
+    expect(child.find('[data-amitia-ui="device-pairing.scan"]').exists()).toBe(true);
+    expect(child.find('[data-amitia-ui="device-pairing.image"]').exists()).toBe(true);
+    expect(child.find('[data-amitia-ui="device-pairing.manual"]').exists()).toBe(true);
+    child.unmount();
+  });
   it("仅查询可信设备，撤销和待配对设备显示明确状态", async () => {
+    mocks.meshIdentity.mockResolvedValue({ deviceId: "device-host" });
     const wrapper = mountBoundDevices();
     await flushPromises();
     expect(mocks.get.mock.calls.filter(call => call[0].endsWith("/sync/status")).map(call => call[1].deviceId)).toEqual(["trusted"]);
@@ -58,7 +85,22 @@ describe("设备同步信任状态", () => {
     expect(mocks.get.mock.calls.filter(call => call[0].endsWith("/sync/status"))).toHaveLength(1);
     wrapper.unmount();
   });
+  it("中心设备不显示自身也不查询自身同步状态", async () => {
+    mocks.meshIdentity.mockResolvedValue({ deviceId: "trusted" });
+    mocks.state = { policy: { deviceId: "trusted" }, canAdminister: true };
+    mocks.devices = [
+      { deviceId: "trusted", trustState: "trusted", platform: "android" },
+      { deviceId: "phone-a", trustState: "trusted", platform: "android" },
+    ];
+    const wrapper = mountBoundDevices();
+    await flushPromises();
+    expect((wrapper.vm as any).boundDevices.map((device: any) => device.deviceId)).toEqual(["phone-a"]);
+    expect(mocks.get.mock.calls.filter(call => call[0].endsWith("/sync/status")).map(call => call[1].deviceId)).toEqual(["phone-a"]);
+    expect(mocks.meshStatus).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
   it("刷新后撤销状态覆盖已有同步结果", async () => {
+    mocks.meshIdentity.mockResolvedValue({ deviceId: "device-host" });
     const wrapper = mountBoundDevices();
     await flushPromises();
     mocks.devices = [{ deviceId: "trusted", trustState: "revoked" }];
@@ -68,11 +110,57 @@ describe("设备同步信任状态", () => {
     wrapper.unmount();
   });
   it("普通设备不查询其他可信设备的同步状态", async () => {
+    mocks.meshIdentity.mockResolvedValue({ deviceId: "device-host" });
     mocks.devices.push({ deviceId: "other-device", trustState: "trusted" });
     const wrapper = mountBoundDevices();
     await flushPromises();
     await (wrapper.vm as any).loadSync("other-device");
     expect(mocks.get.mock.calls.filter(call => call[0].endsWith("/sync/status")).map(call => call[1].deviceId)).toEqual(["trusted"]);
+    wrapper.unmount();
+  });
+  it("子设备请求在单个审批弹窗内以列表更新", async () => {
+    mocks.state = { coreId: "core", coreConsoleDeviceId: "trusted", policy: { deviceId: "trusted" }, canAdminister: true };
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path.endsWith("/pairing/approvals")) {
+        return {
+          requests: [
+            { requestId: "request-a", deviceId: "phone-a", platform: "android", label: "", revision: 1 },
+            { requestId: "request-b", deviceId: "phone-b", platform: "ios", label: "", revision: 1 },
+          ],
+        };
+      }
+      if (path.endsWith("/devices")) return { devices: mocks.devices };
+      return { lastApplied: 3 };
+    });
+    const wrapper = mountBoundDevices();
+    await flushPromises();
+    const dialogs = wrapper.findAll("[data-dialog]");
+    expect(dialogs).toHaveLength(1);
+    expect(dialogs[0].attributes("data-title")).toBe("子设备配对请求");
+    expect(dialogs[0].text()).toContain("phone-a");
+    expect(dialogs[0].text()).toContain("phone-b");
+    wrapper.unmount();
+  });
+  it("批准子设备后立即重新读取已绑定设备列表", async () => {
+    mocks.state = { coreId: "core", coreConsoleDeviceId: "trusted", policy: { deviceId: "trusted" }, canAdminister: true };
+    let approved = false;
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path.endsWith("/pairing/approvals")) {
+        return approved
+          ? { requests: [] }
+          : { requests: [{ requestId: "request-a", deviceId: "phone-a", platform: "android", label: "", revision: 1 }] };
+      }
+      if (path.endsWith("/devices")) {
+        return { devices: approved ? [...mocks.devices, { deviceId: "phone-a", trustState: "trusted", platform: "android" }] : mocks.devices };
+      }
+      return { lastApplied: 3 };
+    });
+    mocks.put.mockImplementation(async () => { approved = true; return { ok: true }; });
+    const wrapper = mountBoundDevices();
+    await flushPromises();
+    await (wrapper.vm as any).decidePairing({ requestId: "request-a", deviceId: "phone-a", platform: "android", label: "", revision: 1 }, true);
+    expect(mocks.put).toHaveBeenCalledOnce();
+    expect((wrapper.vm as any).boundDevices.some((device: any) => device.deviceId === "phone-a")).toBe(true);
     wrapper.unmount();
   });
   it("本机所有者确认恢复后才生成配对二维码", async () => {
@@ -100,7 +188,7 @@ describe("设备同步信任状态", () => {
     wrapper.unmount();
   });
   it("手动配对使用云端表单地址，完成配对后才保存运行模式", async () => {
-    const wrapper = mountPairing();
+    const wrapper = mountPairing("cloud");
     await flushPromises();
     await (wrapper.vm as any).joinCurrentDevice();
     expect(mocks.pairingStatus).toHaveBeenCalledWith("https://draft.core");
@@ -111,7 +199,7 @@ describe("设备同步信任状态", () => {
     wrapper.unmount();
   });
   it("扫描局域网二维码保留身份校验，成功后更新云端连接地址", async () => {
-    const wrapper = mountPairing();
+    const wrapper = mountPairing("cloud");
     await flushPromises();
     const fingerprint = "a".repeat(64);
     await (wrapper.vm as any).joinCurrentDevice(`amitia://pair?endpoint=${encodeURIComponent("https://scanned.core")}&offer=scan-offer&core=scan-core&fingerprint=${fingerprint}`);
@@ -122,7 +210,7 @@ describe("设备同步信任状态", () => {
   });
   it("配对失败时不保存运行模式，不发布完成事件", async () => {
     mocks.provision.mockRejectedValueOnce(new Error("配对失败"));
-    const wrapper = mountPairing();
+    const wrapper = mountPairing("cloud");
     await flushPromises();
     await (wrapper.vm as any).joinCurrentDevice();
     expect(mocks.saveDeployment).not.toHaveBeenCalled();

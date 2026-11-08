@@ -16,6 +16,8 @@ type HelloPayload struct {
 	LastProcessedCommandSequence int64                     `json:"lastProcessedCommandSequence"`
 	LastEventSequence            int64                     `json:"lastEventSequence"`
 	ActualStateHash              string                    `json:"actualStateHash,omitempty"`
+	CapabilityExposureRevision   int64                     `json:"capabilityExposureRevision"`
+	ExposedCapabilities          []string                  `json:"exposedCapabilities"`
 }
 
 func (p HelloPayload) ResumeCursor(connectionGeneration int64) SessionCursor {
@@ -31,10 +33,9 @@ func (p HelloPayload) ResumeCursor(connectionGeneration int64) SessionCursor {
 type ResumeMode string
 
 const (
-	ResumeModeFresh        ResumeMode = "fresh"
-	ResumeModeResume       ResumeMode = "resume"
-	ResumeModeFull         ResumeMode = "full"
-	ResumeModeResumeOrFull ResumeMode = "resume_or_full"
+	ResumeModeFresh  ResumeMode = "fresh"
+	ResumeModeResume ResumeMode = "resume"
+	ResumeModeFull   ResumeMode = "full"
 )
 
 type HelloAckPayload struct {

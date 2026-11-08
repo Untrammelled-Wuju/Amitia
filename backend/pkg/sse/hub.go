@@ -40,6 +40,7 @@ type Hub struct {
 var (
 	Global                 = &Hub{clients: make(map[string]*Client)}
 	anonymousClientCounter atomic.Uint64
+	heartbeatInterval      = 15 * time.Second
 )
 
 func newAnonymousClientID() string {
@@ -268,6 +269,8 @@ func SSEHandler(c *gin.Context) {
 	client := Global.SubscribeDevice(clientID, spaceID, deviceID)
 	defer Global.UnsubscribeClient(client)
 
+	heartbeat := time.NewTicker(heartbeatInterval)
+	defer heartbeat.Stop()
 	c.Writer.Flush()
 	for {
 		select {
@@ -279,6 +282,11 @@ func SSEHandler(c *gin.Context) {
 			data, _ := msg["data"].(map[string]interface{})
 			jsonData, _ := json.Marshal(data)
 			c.SSEvent(eventName, string(jsonData))
+			c.Writer.Flush()
+		case <-heartbeat.C:
+			if _, err := c.Writer.WriteString(": heartbeat\n\n"); err != nil {
+				return
+			}
 			c.Writer.Flush()
 		case <-c.Done():
 			return

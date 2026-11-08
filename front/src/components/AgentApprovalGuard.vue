@@ -117,7 +117,6 @@ const dismissed = ref(new Set<string>());
 const resolving = ref(false);
 const timelineLoading = ref(false);
 const timeline = ref<TimelineEvent[]>([]);
-let pollTimer: ReturnType<typeof setInterval> | null = null;
 let refreshEpoch = 0;
 
 const conversationId = computed(() =>
@@ -291,6 +290,9 @@ function openRoute(target: string) {
 function onApprovalEvent() {
   void loadItems();
 }
+function refreshWhenVisible() {
+  if (document.visibilityState === "visible") void loadItems();
+}
 
 watch(
   () => route.fullPath,
@@ -306,15 +308,15 @@ watch(current, (next, previous) => {
 
 onMounted(() => {
   window.addEventListener("amitia:agent-approval", onApprovalEvent);
+  window.addEventListener("focus", refreshWhenVisible);
+  document.addEventListener("visibilitychange", refreshWhenVisible);
   void loadItems();
-  pollTimer = setInterval(() => {
-    if (document.visibilityState === "visible") void loadItems();
-  }, 3000);
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener("amitia:agent-approval", onApprovalEvent);
-  if (pollTimer) clearInterval(pollTimer);
+  window.removeEventListener("focus", refreshWhenVisible);
+  document.removeEventListener("visibilitychange", refreshWhenVisible);
 });
 </script>
 

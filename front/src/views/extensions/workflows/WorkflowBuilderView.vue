@@ -197,7 +197,7 @@
                     <el-option label="等待设备上线" value="wait" />
                   </el-select>
                 </label>
-                <p class="panel-tip">只选择设备即可。Runtime Session / Provider Instance 由 Cloud Core 根据当前在线能力自动解析。</p>
+                <p class="panel-tip">只选择设备即可。Runtime Session / Provider Instance 由统筹中心根据当前在线能力自动解析。</p>
               </div>
               <label v-if="selectedNode.type === 'wait'">等待毫秒<el-input-number v-model="waitDuration" :min="0" :max="86400000" controls-position="right" @change="applyWaitDuration" /></label>
               <div v-if="editorMode === 'advanced'" class="reliability-card">
@@ -1114,7 +1114,7 @@ function capabilityForPreset(preset:string){const id=triggerCapabilityId(preset)
 function canUseDeviceTrigger(preset:string){if(preset==="advanced")return true;if(isCloudWorkflow)return false;const item=capabilityForPreset(preset);return !!item?.supported;}
 function triggerCapabilityLabel(trigger:WorkflowTrigger){if(isCloudWorkflow)return "仅本地";const item=capabilityForPreset(eventTriggerPreset(trigger));if(!item)return "状态未知";if(!item.supported)return "不支持";if(item.available)return "可用";if(item.permissionRequired)return "需要权限";return "暂不可用";}
 function triggerCapabilityTagType(trigger:WorkflowTrigger):"success"|"warning"|"danger"|"info"{if(isCloudWorkflow)return "danger";const item=capabilityForPreset(eventTriggerPreset(trigger));if(!item)return "info";if(!item.supported)return "danger";return item.available?"success":"warning";}
-function triggerCapabilityReason(trigger:WorkflowTrigger){if(isCloudWorkflow)return "设备触发器必须安装到当前设备或指定远程设备，Cloud Core 不参与实时本地触发。";const item=capabilityForPreset(eventTriggerPreset(trigger));if(!item)return "未取得目标设备 Capability 状态。";if(item.available)return "目标设备当前已具备运行条件。";return item.reason||item.permission||"目标设备当前不可用。";}
+function triggerCapabilityReason(trigger:WorkflowTrigger){if(isCloudWorkflow)return "设备触发器必须安装到当前设备或指定远程设备，统筹中心不参与实时本地触发。";const item=capabilityForPreset(eventTriggerPreset(trigger));if(!item)return "未取得目标设备 Capability 状态。";if(item.available)return "目标设备当前已具备运行条件。";return item.reason||item.permission||"目标设备当前不可用。";}
 async function generateTaskerSecret(trigger:WorkflowTrigger){if(!canUseDeviceTrigger("tasker")){ElMessage.warning(triggerCapabilityReason(trigger));return;}taskerSecretBusy.value=trigger.id;try{const value=await createWorkflowTaskerSecret(workflowTarget);trigger.config.secretRef=value.secretRef;markDirty();await ElMessageBox.alert(`Secret：${value.secret}\n\nAction：com.amitia.workflow.TASKER\nSecret 只会显示这一次，请立即保存到 Tasker。`,"Tasker Secret",{confirmButtonText:"我已保存",closeOnClickModal:false,closeOnPressEscape:false});}catch(e:any){ElMessage.error(e?.response?.data?.error||e?.message||"Tasker Secret 生成失败");}finally{taskerSecretBusy.value="";}}
 async function createWakeConfig(trigger:WorkflowTrigger){
   if(!canUseDeviceTrigger("voice_wake")){ElMessage.warning(triggerCapabilityReason(trigger));return;}

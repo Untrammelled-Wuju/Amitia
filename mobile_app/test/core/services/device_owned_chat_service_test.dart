@@ -29,6 +29,7 @@ class _OwnedApi implements BackendServiceApi {
   bool wrongAck = false;
   bool summaryMode = false;
   Map<String, dynamic>? dataExecutionScope;
+  Map<String, dynamic>? chatExecutionScope;
   Completer<Map<String, dynamic>>? deferred;
   Completer<Map<String, dynamic>>? conversationDeferred;
   void Function()? postCallback;
@@ -68,6 +69,7 @@ class _OwnedApi implements BackendServiceApi {
             'roles': [
               {'id': 'role-a', 'name': 'A', 'revision': 1},
             ],
+            'executionScope': chatExecutionScope ?? scope(),
           }
           as T;
     if (path.endsWith('/resources')) {
@@ -532,6 +534,28 @@ void main() {
     );
   });
 
+  test('消息管理和运行快照使用目标消息或会话的设备归属', () async {
+    SharedPreferences.setMockInitialValues({});
+    final api = _OwnedApi();
+    api.dataExecutionScope = {
+      ...scope(),
+      'roleOwnerId': 'core-b',
+      'resourceOwnerId': 'core-b',
+    };
+    final service = DeviceOwnedChatService(api);
+
+    await service.management(
+      'feedback/list',
+      body: {'messageId': 'message', 'expectedExecutionScope': scope()},
+    );
+    expect(api.postPath, endsWith('/chat-management/feedback/list'));
+    expect(api.editRequest?['expectedExecutionScope'], scope());
+
+    await service.runtime('snapshot', body: {'conversationId': 'chat'});
+    expect(api.postPath, endsWith('/chat-runtime/snapshot'));
+    expect(api.editRequest?['expectedExecutionScope'], scope());
+  });
+
   test('手机从所有者原附件恢复文件和视频，不生成本地镜像文件', () {
     final service = DeviceOwnedChatService(
       _OwnedApi(),
@@ -643,7 +667,7 @@ void main() {
   });
   test('手机发送前不要求尚未生成的轮次标识', () async {
     final api = _OwnedApi();
-    api.dataExecutionScope = preSendScope();
+    api.chatExecutionScope = preSendScope();
     final service = DeviceOwnedChatService(
       api,
       providerKey: () => 'https://provider',
@@ -667,9 +691,88 @@ void main() {
     expect(api.streamRequest?['expectedExecutionScope'], preSendScope());
     expect(events.last['type'], 'completed');
   });
+  test('新会话发送从角色目录补全通用执行范围', () async {
+    final api = _OwnedApi();
+    api.chatExecutionScope = {
+      ...preSendScope(),
+      'roleId': '',
+      'roleRevision': 0,
+    };
+    final service = DeviceOwnedChatService(
+      api,
+      providerKey: () => 'https://provider',
+    );
+    await service.refresh();
+    api.streamEvents = [
+      {'type': 'started', 'executionScope': scope(), 'conversationId': 'chat'},
+      {
+        'type': 'completed',
+        'data': {
+          'requestId': 'request',
+          'saved': true,
+          'executionScope': scope(),
+          'conversationId': 'chat',
+        },
+      },
+    ];
+    await service.send(requestId: 'request', message: 'hello').toList();
+    final expected =
+        api.streamRequest?['expectedExecutionScope'] as Map<String, dynamic>;
+    expect(expected['roleId'], 'role-a');
+    expect(expected['roleRevision'], 1);
+  });
+  test('手机发送使用设备会话归属而不是中心记忆归属', () async {
+    final api = _OwnedApi();
+    api.dataExecutionScope = {...preSendScope(), 'resourceOwnerId': 'core-b'};
+    api.chatExecutionScope = preSendScope();
+    final service = DeviceOwnedChatService(
+      api,
+      providerKey: () => 'https://provider',
+    );
+    await service.refresh();
+    api.streamEvents = [
+      {'type': 'started', 'executionScope': scope(), 'conversationId': 'chat'},
+      {
+        'type': 'completed',
+        'data': {
+          'requestId': 'request',
+          'saved': true,
+          'executionScope': scope(),
+          'conversationId': 'chat',
+        },
+      },
+    ];
+    await service.send(requestId: 'request', message: 'hello').toList();
+    expect(api.streamRequest?['expectedExecutionScope'], preSendScope());
+  });
+  test('聊天运行快照同时携带原始会话来源', () async {
+    final api = _OwnedApi();
+    api.managementResponse = {
+      'executionScope': scope(),
+      'messages': <Map<String, dynamic>>[],
+    };
+    final service = DeviceOwnedChatService(
+      api,
+      providerKey: () => 'https://provider',
+    );
+    await service.refresh();
+    await service.runtime(
+      'snapshot',
+      body: {
+        'conversationId': 'meshconv1:device-a:chat',
+        'expectedExecutionScope': scope(),
+      },
+    );
+    expect(api.editRequest?['conversationId'], 'chat');
+    expect(api.editRequest?['conversationOwnerId'], 'device-a');
+    expect(api.editRequest?['conversationOrigin'], {
+      'ownerId': 'device-a',
+      'id': 'chat',
+    });
+  });
   test('手机发送前仍拒绝缺少稳定数据归属的响应', () async {
     final api = _OwnedApi();
-    api.dataExecutionScope = preSendScope()..remove('roleOwnerId');
+    api.chatExecutionScope = preSendScope()..remove('roleOwnerId');
     final service = DeviceOwnedChatService(
       api,
       providerKey: () => 'https://provider',
@@ -1328,6 +1431,39 @@ void main() {
     expect(api.editRequest?['changes'], {'archived': true});
   });
 
+  test('已加载的本地会话标记已读时不再重复读取资源', () async {
+    final api = _OwnedApi();
+    api.resource = {
+      'kind': 'conversation',
+      'id': 'chat',
+      'ownerId': 'device-a',
+      'roleId': 'role-a',
+      'revision': 7,
+      'deleted': false,
+      'body': {'id': 'chat', 'title': '对话'},
+    };
+    api.editAck = {
+      'ownerId': 'device-a',
+      'versions': {'conversation/chat': 8},
+    };
+    final service = DeviceOwnedChatService(
+      api,
+      providerKey: () => 'https://provider',
+    );
+    await service.refresh();
+    final id = conversationReference({'ownerId': 'device-a', 'id': 'chat'});
+    await service.query(id);
+    expect(api.resourceQueries, isEmpty);
+    await service.edit(
+      'conversation',
+      id,
+      changes: {'lastReadTurnSequence': 4},
+    );
+    expect(api.resourceQueries, isEmpty);
+    expect(api.editRequest?['expectedRevision'], 7);
+    expect(api.editRequest?['expectedExecutionScope'], scope());
+  });
+
   test('删除会话不受并发历史查询覆盖上下文影响', () async {
     final api = _OwnedApi();
     api.resource = {
@@ -1734,7 +1870,7 @@ void main() {
     );
   });
 
-  test('提供者切换提示保留至服务实例重新创建', () async {
+  test('提供者切换提示在当前实例显示，重新创建后不恢复陈旧中断提示', () async {
     final api = _OwnedApi();
     final service = DeviceOwnedChatService(
       api,
@@ -1752,10 +1888,40 @@ void main() {
     );
     await restored.refresh();
     expect(restored.coreId, 'core-c');
-    expect(restored.notice, contains('core-b'));
+    expect(restored.notice, isEmpty);
   });
 
-  test('没有前端历史时从绑定状态恢复切换提示且不重复中断', () async {
+  test('首次绑定远程中心后重启不恢复本地到云端的陈旧中断提示', () async {
+    SharedPreferences.setMockInitialValues({
+      'amitia.mesh.provider-state': jsonEncode({
+        'coreId': 'core-c',
+        'notice': '云端服务提供者已从「local」切换为「core-c」，当前回复已中断。',
+        'changeId': 'initial-bind',
+      }),
+    });
+    final api = _OwnedApi()..core = 'core-c';
+    final transition = {
+      'coreId': 'core-c',
+      'previousCoreId': 'core-c',
+      'providerChangeId': 'initial-bind',
+    };
+    final restored = DeviceOwnedChatService(
+      api,
+      providerKey: () => 'https://provider',
+      providerTransition: () async => transition,
+    );
+    await restored.refresh();
+    expect(restored.coreId, 'core-c');
+    expect(restored.notice, isEmpty);
+    await Future<void>.delayed(Duration.zero);
+    final preferences = await SharedPreferences.getInstance();
+    final persisted =
+        jsonDecode(preferences.getString('amitia.mesh.provider-state')!)
+            as Map<String, dynamic>;
+    expect(persisted['notice'], isEmpty);
+  });
+
+  test('没有前端历史时显示一次切换提示且重启后不重复中断', () async {
     final api = _OwnedApi()..core = 'core-c';
     final transition = {
       'coreId': 'core-c',
@@ -1779,7 +1945,7 @@ void main() {
       providerTransition: () async => transition,
     );
     await restored.refresh();
-    expect(restored.notice, contains('core-b'));
+    expect(restored.notice, isEmpty);
     expect(restored.revision, 0);
   });
 
@@ -1799,6 +1965,29 @@ void main() {
     });
     await assertion;
   });
+
+  test('同一会话并发查询复用同一读取结果', () async {
+    final api = _OwnedApi();
+    final service = DeviceOwnedChatService(
+      api,
+      providerKey: () => 'https://provider',
+    );
+    await service.refresh();
+    api.conversationDeferred = Completer<Map<String, dynamic>>();
+    final first = service.query('chat');
+    final second = service.query('chat');
+    await Future<void>.delayed(Duration.zero);
+    api.conversationDeferred!.complete({
+      'executionScope': scope(),
+      'snapshot': {
+        'ownerId': 'device-a',
+        'resources': [api.resource],
+      },
+    });
+    final results = await Future.wait([first, second]);
+    expect(results[0], same(results[1]));
+  });
+
   test('按 UTF-8 字节分块接收，保存确认后才完成', () async {
     final events = await decodeOwnedChatStream(
       bytes([

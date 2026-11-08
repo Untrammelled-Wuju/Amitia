@@ -20,14 +20,18 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/agent"
 	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
+	mcpapi "github.com/u-ai/backend/internal/extension/mcpruntime/api"
 	"github.com/u-ai/backend/internal/middleware"
 	"github.com/u-ai/backend/internal/middleware/security"
+	"github.com/u-ai/backend/internal/notificationruntime"
+	"github.com/u-ai/backend/internal/reminder"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/internal/spaceidentity"
 	"github.com/u-ai/backend/internal/system"
 	"github.com/u-ai/backend/internal/workbenchterminal"
 	"github.com/u-ai/backend/internal/workspace"
 	"github.com/u-ai/backend/pkg/app"
+	"github.com/u-ai/backend/pkg/sse"
 	"github.com/u-ai/backend/pkg/util"
 )
 
@@ -133,7 +137,11 @@ func registerDeviceAgentDesktopPetRoutes(
 		SessionService:   sessionSvc,
 	}
 	if localMeshHandler != nil {
-		localMeshHandler.RegisterRoutes(r, security.LocalRuntimeControlMiddleware(localStore, config.AppCfg.Server.Host), security.AuthenticationMiddleware(authConfig))
+		middlewares := deviceAgentLocalMeshMiddlewares(
+			security.AuthenticationMiddleware(authConfig),
+			security.LocalRuntimeControlMiddleware(localStore, config.AppCfg.Server.Host),
+		)
+		localMeshHandler.RegisterRoutes(r, middlewares[0], middlewares[1:]...)
 	}
 	deviceRoles := r.Group("/api")
 	deviceRoles.Use(security.AuthenticationMiddleware(authConfig))
@@ -338,12 +346,45 @@ func registerDeviceAgentDesktopPetRoutes(
 		security.AuthMethodLocalToken,
 	))
 	extension.RegisterExtensionCenterRoutes(deviceCenter, services.Extension)
+	if services.Reminders != nil {
+		reminderDeviceID := ""
+		if services.DeviceMesh != nil {
+			reminderDeviceID = services.DeviceMesh.LocalDeviceID
+		}
+		reminder.RegisterRouter(deviceCenter, services.Reminders, reminderDeviceID)
+	}
+	if services.NotificationRuntime != nil {
+		notificationruntime.RegisterRoutes(deviceCenter, services.NotificationRuntime)
+	}
+	if services.MCPRuntime != nil {
+		mcpapi.RegisterRouter(deviceCenter, ctx, services.MCPRuntime.API)
+		mcpapi.RegisterOAuthCallback(r, services.MCPRuntime.API)
+	}
+
+	deviceEvents := r.Group("/api")
+	deviceEvents.Use(security.AuthenticationMiddleware(authConfig))
+	deviceEvents.Use(security.RequireAuthMethod(
+		security.AuthMethodDesktopSession,
+		security.AuthMethodLocalToken,
+	))
+	deviceEvents.GET("/proactive-sse", sse.SSEHandler)
 
 	deviceExtensions := r.Group("/api/extensions")
 	deviceExtensions.Use(security.AuthenticationMiddleware(authConfig))
-	deviceExtensions.Use(security.RequireAuthMethod(security.AuthMethodDesktopSession))
+	deviceExtensions.Use(security.RequireAuthMethod(
+		security.AuthMethodDesktopSession,
+		security.AuthMethodLocalToken,
+	))
 	deviceExtensions.Use(readiness.RejectWritesWhenSafeMode(services.SafeMode))
 	extension.RegisterDeviceExecutionPackageRoutes(deviceExtensions, services.Extension)
+	extension.RegisterDeviceAgentSkillRoutes(deviceExtensions, services.Extension)
+	deviceUIParent := r.Group("/api")
+	deviceUIParent.Use(security.AuthenticationMiddleware(authConfig))
+	deviceUIParent.Use(security.RequireAuthMethod(
+		security.AuthMethodDesktopSession,
+		security.AuthMethodLocalToken,
+	))
+	extension.RegisterDeviceUIRoutes(deviceExtensions, deviceUIParent, services.Extension)
 
 	localWorkflows := r.Group("/api/local")
 	localWorkflows.Use(security.AuthenticationMiddleware(authConfig))
@@ -385,6 +426,13 @@ func registerDeviceAgentDesktopPetRoutes(
 	)
 
 	return nil
+}
+
+func deviceAgentLocalMeshMiddlewares(
+	authenticate gin.HandlerFunc,
+	localControl gin.HandlerFunc,
+) []gin.HandlerFunc {
+	return []gin.HandlerFunc{authenticate, localControl}
 }
 
 func deviceAgentDesktopPetReady(services *AppServices) error {

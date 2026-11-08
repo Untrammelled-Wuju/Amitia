@@ -203,6 +203,24 @@ void main() {
       );
     });
 
+    test('desktop pet package management routes to device agent', () async {
+      await proxy.get('/api/extensions/pet/plugins');
+      await proxy.post(
+        '/api/extensions/pet/plugins/install',
+        data: <String, dynamic>{
+          'packagePath':
+              '/home/amitia/.amitia-imports/desktop-pet/qa-pet-v1.petx',
+        },
+      );
+      expect(deviceLocalApi.calls.length, 2);
+      expect(businessApi.calls.length, 0);
+      expect(deviceLocalApi.calls.map((call) => call.path), <String>[
+        '/api/extensions/pet/plugins',
+        '/api/extensions/pet/plugins/install',
+      ]);
+      expect(deviceLocalApi.calls.last.headers?['Idempotency-Key'], isNotNull);
+    });
+
     test('chat import staging routes to device agent', () async {
       await proxy.post(
         '/api/imports/confirm',

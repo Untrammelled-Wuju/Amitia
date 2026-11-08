@@ -130,10 +130,11 @@ func NewServiceFromRuntime(runtime *kernelruntime.Runtime) *DesktopPetPluginMana
 	)
 }
 
-func NewServiceFromRuntimeWithPreflight(runtime *kernelruntime.Runtime, preflight PackageTargetPreflight) *DesktopPetPluginManagementService {
+func NewServiceFromRuntimeWithPreflight(runtime *kernelruntime.Runtime, preflight PackageTargetPreflight, executors ...BehaviorToolExecutor) *DesktopPetPluginManagementService {
 	return NewDesktopPetPluginManagementService(
 		newKernelAdapter(runtime),
 		newKernelRuntimeAdapter(runtime),
 		preflight,
+		executors...,
 	)
 }

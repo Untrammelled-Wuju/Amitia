@@ -8,6 +8,7 @@ export const accountNavigation: AccountNavigationItem[] = [
   { id: "profile", path: "/my-space/profile", label: "资料与头像" },
   { id: "identity", path: "/my-space/identity", label: "身份信息" },
   { id: "runtime", path: "/my-space/runtime", label: "运行模式" },
+  { id: "devices", path: "/my-space/devices", label: "已绑定设备" },
 ];
 
 export function resolveAccountEntry(path: string): string {

@@ -111,8 +111,15 @@ func (api *WorkflowAPI) invokeDeviceWorkflow(c *gin.Context, operation string, p
 	if err != nil {
 		status := http.StatusBadGateway
 		message := err.Error()
-		if strings.Contains(strings.ToLower(message), "offline") || strings.Contains(strings.ToLower(message), "not found") {
+		lower := strings.ToLower(message)
+		if strings.Contains(lower, "offline") || strings.Contains(lower, "not found") {
 			status = http.StatusServiceUnavailable
+		}
+		if strings.Contains(lower, "workflow is disabled") {
+			status = http.StatusConflict
+		}
+		if strings.Contains(lower, "workflowid is required") {
+			status = http.StatusBadRequest
 		}
 		if strings.Contains(message, "WORKFLOW_REVISION_CONFLICT") {
 			status = http.StatusConflict

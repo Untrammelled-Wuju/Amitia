@@ -142,7 +142,7 @@ const pageTitleOverrides: Record<string, string> = {
   "/my-space/profile": "资料与头像",
   "/my-space/identity": "身份信息",
   "/my-space/runtime": "运行模式",
-  "/my-space/devices": "运行模式",
+  "/my-space/devices": "已绑定设备",
   "/user-settings": "我的空间",
   "/creative-workshop/character-cards": "角色卡工坊",
   "/creative-workshop/pet": "桌宠",

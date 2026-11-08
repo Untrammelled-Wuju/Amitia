@@ -117,7 +117,8 @@ class RuntimeCrashRecoveryIntegrationTest {
 
     private fun stateStoreAt(targetState: RuntimeState): RuntimeStateStore {
         val store = RuntimeStateStore()
-        store.update { it.copy(state = RuntimeState.INSTALLED, generation = 1L) }
+        store.initialize(RuntimeState.INSTALLED)
+        store.update { it.copy(generation = 1L) }
         when (targetState) {
             RuntimeState.STARTING -> store.update { it.copy(state = RuntimeState.STARTING, generation = 2L) }
             RuntimeState.STOPPING -> {
@@ -223,7 +224,12 @@ class RuntimeCrashRecoveryIntegrationTest {
         val scheduler = ControllableScheduler()
         val (controller, host) = makeController(RuntimeState.STOPPING, policy, scheduler)
 
-        host.emit(RuntimeServiceHostEvent.ExpectedStopped(generation = controller.snapshot().generation))
+        host.emit(
+            RuntimeServiceHostEvent.ExpectedStopped(
+                generation = controller.snapshot().generation,
+                result = com.amitia.amitia_app.runtime.service.ServiceTeardownResult.FullyStopped(1),
+            )
+        )
 
         assertEquals(RuntimeState.STOPPED, controller.snapshot().state)
         assertEquals(0, policy.evaluateCalls.get())

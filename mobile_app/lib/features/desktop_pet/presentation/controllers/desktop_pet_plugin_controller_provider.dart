@@ -11,10 +11,10 @@ final desktopPetPluginApiProvider = Provider<DesktopPetPluginApi>((ref) {
 
 final desktopPetPluginControllerProvider =
     StateNotifierProvider<DesktopPetPluginController, DesktopPetPluginState>(
-  (ref) => DesktopPetPluginController(
-    api: ref.watch(desktopPetPluginApiProvider),
-  ),
-);
+      (ref) => DesktopPetPluginController(
+        api: ref.watch(desktopPetPluginApiProvider),
+      ),
+    );
 
 class DesktopPetPluginState {
   final List<DesktopPetPluginSummaryRef> plugins;
@@ -80,7 +80,10 @@ class DesktopPetPluginSummaryRef {
 class DesktopPetPluginController extends StateNotifier<DesktopPetPluginState> {
   final DesktopPetPluginApi api;
 
-  DesktopPetPluginController({required this.api}) : super(const DesktopPetPluginState());
+  DesktopPetPluginController({required this.api})
+    : super(const DesktopPetPluginState());
+
+  DesktopPetPluginState get current => state;
 
   Future<void> load() async {
     final gen = state.generation + 1;
@@ -120,15 +123,17 @@ class DesktopPetPluginController extends StateNotifier<DesktopPetPluginState> {
     if (gen != state.generation) return false;
     state = state.copyWith(
       plugins: result.plugins
-          .map((p) => DesktopPetPluginSummaryRef(
-                pluginId: p.pluginId,
-                extensionId: p.extensionId,
-                name: p.name,
-                description: p.description,
-                version: p.version,
-                enabled: p.enabled,
-                installState: p.installState,
-              ))
+          .map(
+            (p) => DesktopPetPluginSummaryRef(
+              pluginId: p.pluginId,
+              extensionId: p.extensionId,
+              name: p.name,
+              description: p.description,
+              version: p.version,
+              enabled: p.enabled,
+              installState: p.installState,
+            ),
+          )
           .toList(),
       clearError: true,
     );
@@ -138,9 +143,11 @@ class DesktopPetPluginController extends StateNotifier<DesktopPetPluginState> {
   Future<DesktopPetPluginDetail?> detail(String pluginId) async {
     try {
       return await api.detail(pluginId);
-    } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-return null;
+    } catch (error) {
+      if (mounted) {
+        state = state.copyWith(error: safeErrorMessage(error));
+      }
+      rethrow;
     }
   }
 
@@ -154,20 +161,18 @@ return null;
     }
 
     final gen = state.generation + 1;
-    state = state.copyWith(
-      installing: true,
-      generation: gen,
-      clearError: true,
-    );
+    state = state.copyWith(installing: true, generation: gen, clearError: true);
 
     var dispatched = false;
+    String? operationError;
     try {
       dispatched = true;
       final result = await api.install(trimmed);
       return result.extensionId.isNotEmpty;
     } catch (e) {
+      operationError = safeErrorMessage(e);
       if (mounted) {
-        state = state.copyWith(error: safeErrorMessage(e));
+        state = state.copyWith(error: operationError);
       }
       return false;
     } finally {
@@ -175,12 +180,20 @@ return null;
         await _refetchAfterMutation();
       }
       if (mounted) {
-        state = state.copyWith(installing: false);
+        state = state.copyWith(
+          installing: false,
+          error: operationError,
+          clearError: operationError == null,
+        );
       }
     }
   }
 
-  Future<bool> update(String pluginId, String extensionId, String packagePath) async {
+  Future<bool> update(
+    String pluginId,
+    String extensionId,
+    String packagePath,
+  ) async {
     return _withPluginMutation(pluginId, () async {
       final result = await api.update(extensionId, packagePath.trim());
       return result.extensionId == extensionId;
@@ -208,25 +221,27 @@ return null;
     });
   }
 
-  Future<bool> _withPluginMutation(String pluginId, Future<bool> Function() op) async {
+  Future<bool> _withPluginMutation(
+    String pluginId,
+    Future<bool> Function() op,
+  ) async {
     if (state.operationByPluginId.contains(pluginId)) {
       return false;
     }
 
     final ops = Set<String>.from(state.operationByPluginId)..add(pluginId);
-    state = state.copyWith(
-      operationByPluginId: ops,
-      clearError: true,
-    );
+    state = state.copyWith(operationByPluginId: ops, clearError: true);
 
     var dispatched = false;
+    String? operationError;
     try {
       dispatched = true;
       final ok = await op();
       return ok;
     } catch (e) {
+      operationError = safeErrorMessage(e);
       if (mounted) {
-        state = state.copyWith(error: safeErrorMessage(e));
+        state = state.copyWith(error: operationError);
       }
       return false;
     } finally {
@@ -234,8 +249,13 @@ return null;
         await _refetchAfterMutation();
       }
       if (mounted) {
-        final next = Set<String>.from(state.operationByPluginId)..remove(pluginId);
-        state = state.copyWith(operationByPluginId: next);
+        final next = Set<String>.from(state.operationByPluginId)
+          ..remove(pluginId);
+        state = state.copyWith(
+          operationByPluginId: next,
+          error: operationError,
+          clearError: operationError == null,
+        );
       }
     }
   }
@@ -252,5 +272,6 @@ return null;
     }
   }
 
-  bool hasOperation(String pluginId) => state.operationByPluginId.contains(pluginId);
+  bool hasOperation(String pluginId) =>
+      state.operationByPluginId.contains(pluginId);
 }

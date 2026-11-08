@@ -88,7 +88,10 @@ def _create_minimal_valid_rootfs(base: Path) -> None:
     (base / "usr" / "bin" / "sh").touch()
     (base / "usr" / "bin" / "env").touch()
     (base / "etc" / "ssl" / "certs").mkdir(parents=True, exist_ok=True)
-    (base / "etc" / "ssl" / "certs" / "ca-certificates.crt").touch()
+    (base / "etc" / "ssl" / "certs" / "ca-certificates.crt").write_text(
+        "-----BEGIN CERTIFICATE-----\nAQID\n-----END CERTIFICATE-----\n",
+        encoding="utf-8",
+    )
     (base / "usr" / "lib" / "ld-linux-aarch64.so.1").touch()
     (base / "usr" / "lib" / "libstdc++.so.6").touch()
     (base / "usr" / "lib" / "libgcc_s.so.1").touch()
@@ -182,6 +185,15 @@ class TestRootfsStructureValidation(unittest.TestCase):
             root = Path(tmpdir)
             errors = validate_ca_certificates(root)
             self.assertTrue(any("CA" in e for e in errors))
+
+    def test_empty_ca_certificates_fails(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            bundle = root / "etc" / "ssl" / "certs" / "ca-certificates.crt"
+            bundle.parent.mkdir(parents=True)
+            bundle.touch()
+            errors = validate_ca_certificates(root)
+            self.assertTrue(any("Empty" in error for error in errors))
 
     def test_missing_guest_dir_fails(self):
         with tempfile.TemporaryDirectory() as tmpdir:

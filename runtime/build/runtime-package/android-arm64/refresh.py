@@ -146,8 +146,18 @@ def main():
             raw_tar_buffer.seek(0)
             with tarfile.open(fileobj=raw_tar_buffer, mode="r") as source_tar:
                 for member in source_tar:
-                    if member.isfile() and (member.name in executables or member.name.endswith(".sh")):
+                    member.mtime = 0
+                    member.uid = 0
+                    member.gid = 0
+                    member.uname = ""
+                    member.gname = ""
+                    member.pax_headers = {}
+                    if member.isdir():
                         member.mode = 0o755
+                    elif member.isfile() and (member.name in executables or member.name.endswith(".sh")):
+                        member.mode = 0o755
+                    elif member.isfile():
+                        member.mode = 0o755 if member.mode & 0o111 else 0o644
                     payload = source_tar.extractfile(member) if member.isreg() else None
                     normalized_tar.addfile(member, payload)
         tar_data = normalized_tar_buffer.getvalue()

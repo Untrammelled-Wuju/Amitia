@@ -101,6 +101,7 @@ For the update E2E matrix, the same source can emit a second package version wit
 
 ```bash
 MOCK_PLUGIN_VERSION=1.1.0 npm run package
+MOCK_PLUGIN_NETWORK_MODE=none MOCK_PLUGIN_OUTPUT=world-game-plugin-mobile-qa.amitiax npm run package
 ```
 
 ## Verify Package

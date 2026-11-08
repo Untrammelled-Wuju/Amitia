@@ -44,6 +44,7 @@ class DefaultRuntimeStatusProjection implements RuntimeStatusProjection {
   final RuntimeBridge _bridge;
   final BackendConnectionSource _connectionSource;
   final TransportStateSource? _transportStateSource;
+  final bool _connectionOwnsGeneration;
 
   final StreamController<RuntimeStatusSnapshot> _snapshotController =
       StreamController<RuntimeStatusSnapshot>.broadcast();
@@ -65,9 +66,11 @@ class DefaultRuntimeStatusProjection implements RuntimeStatusProjection {
     required RuntimeBridge bridge,
     required BackendConnectionSource connectionSource,
     TransportStateSource? transportStateSource,
+    bool connectionOwnsGeneration = false,
   }) : _bridge = bridge,
        _connectionSource = connectionSource,
-       _transportStateSource = transportStateSource;
+       _transportStateSource = transportStateSource,
+       _connectionOwnsGeneration = connectionOwnsGeneration;
 
   Future<void> initialize() async {
     if (_disposed) return;
@@ -109,8 +112,8 @@ class DefaultRuntimeStatusProjection implements RuntimeStatusProjection {
         _rederive();
       }
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-if (!_disposed) {
+      print("[original-error] $error\n$stackTrace");
+      if (!_disposed) {
         _lastConnection = BackendConnectionUnavailable();
         _rederive();
       }
@@ -189,6 +192,7 @@ if (!_disposed) {
       runtime: _lastBridge,
       connection: _lastConnection,
       transport: _lastTransport,
+      connectionOwnsGeneration: _connectionOwnsGeneration,
     );
 
     if (derived != _current) {
@@ -254,6 +258,7 @@ RuntimeStatusSnapshot deriveRuntimeStatus({
   required RuntimeBridgeSnapshot runtime,
   required BackendConnectionAvailability connection,
   required TransportStateSnapshot transport,
+  bool connectionOwnsGeneration = false,
 }) {
   if (!runtime.runtimeAvailable &&
       runtime.state == RuntimeBridgeState.unavailable) {
@@ -417,15 +422,21 @@ RuntimeStatusSnapshot deriveRuntimeStatus({
           ),
         );
       }
-      return _deriveReadyStatus(runtime, connection, transport);
+      return _deriveReadyStatus(
+        runtime,
+        connection,
+        transport,
+        connectionOwnsGeneration: connectionOwnsGeneration,
+      );
   }
 }
 
 RuntimeStatusSnapshot _deriveReadyStatus(
   RuntimeBridgeSnapshot runtime,
   BackendConnectionAvailability connection,
-  TransportStateSnapshot transport,
-) {
+  TransportStateSnapshot transport, {
+  required bool connectionOwnsGeneration,
+}) {
   final connectionConfigured = _isConnectionConfigured(connection);
   final runtimeVersion = runtime.manifest?.runtimeVersion ?? '';
 
@@ -471,6 +482,7 @@ RuntimeStatusSnapshot _deriveReadyStatus(
     runtime,
     connection,
     transport,
+    connectionOwnsGeneration: connectionOwnsGeneration,
   );
   if (!generationConsistent) {
     return RuntimeStatusSnapshot(
@@ -633,8 +645,17 @@ RuntimeStatusError? _mapRuntimeError(RuntimeBridgeError? lastError) {
 bool _isGenerationConsistent(
   RuntimeBridgeSnapshot runtime,
   BackendConnectionAvailability connection,
-  TransportStateSnapshot transport,
-) {
+  TransportStateSnapshot transport, {
+  required bool connectionOwnsGeneration,
+}) {
+  if (connectionOwnsGeneration) {
+    if (connection is BackendConnectionAvailable &&
+        transport.generation != 0 &&
+        transport.generation != connection.config.generation) {
+      return false;
+    }
+    return true;
+  }
   if (transport.generation != 0 && transport.generation != runtime.generation) {
     return false;
   }

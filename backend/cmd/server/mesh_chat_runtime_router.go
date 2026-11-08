@@ -55,6 +55,10 @@ func registerMeshChatRuntimeRouter(mesh *gin.RouterGroup, services *AppServices,
 				c.JSON(409, gin.H{"message": "聊天数据归属已变化，请刷新"})
 				return
 			}
+			request.TargetDeviceID = request.ExpectedScope.TargetDeviceID
+			request.ResourceOwnerID = request.ExpectedScope.ResourceOwnerID
+			request.RoleOwnerID = request.ExpectedScope.RoleOwnerID
+			request.RoleID = request.ExpectedScope.RoleID
 			err := services.OwnedBusiness.WithConversationExecutionScope(c.Request.Context(), *request.ExpectedScope, request.ConversationID, func(ctx context.Context) error {
 				if operation == "queue/status" {
 					status, err := services.OwnedBusiness.ResumeQueuedChat(ctx, *request.ExpectedScope, request.RequestID, request.ConversationID)
@@ -73,10 +77,9 @@ func registerMeshChatRuntimeRouter(mesh *gin.RouterGroup, services *AppServices,
 				}
 				view, err := services.OwnedBusiness.Query(ctx, request.Request, query)
 				if err != nil {
-					return err
+					return fmt.Errorf("读取聊天运行快照失败: %w", err)
 				}
-				request.ConversationID = view.ConversationID
-				key := business.RuntimeKey(view.Scope, request.ConversationID)
+				key := business.RuntimeKey(view.Scope, view.ConversationID)
 				turns, messages, conversation := ownedRuntimeDocuments(view, key)
 				if request.TurnID != "" && operation != "snapshot" && operation != "turns" && operation != "events" {
 					turns, err = loadOwnedRuntimeTarget(ctx, services.OwnedBusiness, request.Request, request.TurnID, view, turns)
@@ -92,13 +95,13 @@ func registerMeshChatRuntimeRouter(mesh *gin.RouterGroup, services *AppServices,
 						return err
 					}
 				}
-				approvals := ownedRuntimeApprovals(services, view.Scope, request.ConversationID, turns)
+				approvals := ownedRuntimeApprovals(services, view, turns)
 				data := gin.H{"executionScope": view.Scope, "version": conversationstream.ProtocolVersion, "revision": len(turns), "conversation": conversation, "messages": messages, "turns": turns, "lastEventSequence": runtime.LastEventSequence, "activeTurn": runtime.ActiveTurn, "approvals": approvals, "messageHistory": gin.H{"hasMore": view.Snapshot.NextCursors["message"] != "", "nextCursor": view.Snapshot.NextCursors["message"]}, "turnHistory": gin.H{"hasMore": view.Snapshot.NextCursors["checkpoint"] != "", "nextCursor": view.Snapshot.NextCursors["checkpoint"]}}
 				switch operation {
 				case "snapshot":
 					queued, err := services.OwnedBusiness.ResumeConversationQueuedChats(ctx, request.Request)
 					if err != nil {
-						return err
+						return fmt.Errorf("恢复会话排队请求失败: %w", err)
 					}
 					data["queuedRequests"] = queued
 					c.JSON(200, gin.H{"code": 200, "data": data})
@@ -261,13 +264,15 @@ func ownedRuntimeDocuments(view business.QueryResult, key string) ([]map[string]
 	return turns, messages, conversation
 }
 
-func ownedRuntimeApprovals(services *AppServices, scope coordination.ExecutionScope, conversation string, turns []map[string]any) []map[string]any {
+func ownedRuntimeApprovals(services *AppServices, view business.QueryResult, turns []map[string]any) []map[string]any {
 	result := make([]map[string]any, 0)
 	if services.KernelContainer == nil || services.KernelContainer.ApprovalBroker == nil {
 		return result
 	}
-	for _, approval := range services.KernelContainer.ApprovalBroker.List(scope.SpaceID, conversation) {
-		if approval.RuntimeKey != business.RuntimeKey(scope, conversation) {
+	conversation := strings.TrimSpace(view.ConversationID)
+	runtimeKey := business.RuntimeKey(view.Scope, conversation)
+	for _, approval := range services.KernelContainer.ApprovalBroker.List(view.Scope.SpaceID, conversation) {
+		if approval.RuntimeKey != runtimeKey {
 			continue
 		}
 		for _, turn := range turns {
@@ -447,7 +452,7 @@ func ownedRuntimeItems(runtime conversationstream.ActiveTurnState, conversation,
 	items := make([]map[string]any, 0, len(runtime.Blocks))
 	for _, block := range runtime.Blocks {
 		blockStatus := block.Status
-		if status == "completed" || status == "failed" || status == "interrupted" {
+		if status == "completed" || status == "failed" || status == "interrupted" || status == "needs_reconciliation" {
 			if blockStatus != "completed" && blockStatus != "failed" && blockStatus != "interrupted" {
 				blockStatus = status
 			}

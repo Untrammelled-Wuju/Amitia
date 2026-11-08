@@ -11,6 +11,7 @@ const expectRequiredArtifact = /^(1|true|yes)$/i.test((process.env.MOCK_PLUGIN_R
 const errors = [];
 const runtimeModulePrefix = 'modules/world-game-runtime/';
 const supportModulePrefix = 'modules/world-game-support/';
+const uiModulePrefix = 'modules/world-game-ui/';
 
 function readZipEntries(buffer) {
   const entries = new Map();
@@ -53,6 +54,7 @@ function allowedPath(name) {
     || name === 'integrity/content-tree.json'
     || name.startsWith(runtimeModulePrefix)
     || name.startsWith(supportModulePrefix)
+    || name.startsWith(uiModulePrefix)
     || name.startsWith('artifacts/');
 }
 

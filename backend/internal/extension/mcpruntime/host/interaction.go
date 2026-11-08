@@ -38,12 +38,17 @@ type pendingEntry struct {
 
 type Broker struct {
 	executor SamplingExecutor
+	notify   func(PendingInteraction)
 	mu       sync.Mutex
 	pending  map[string]*pendingEntry
 }
 
-func NewBroker(executor SamplingExecutor) *Broker {
-	return &Broker{executor: executor, pending: map[string]*pendingEntry{}}
+func NewBroker(executor SamplingExecutor, notifiers ...func(PendingInteraction)) *Broker {
+	var notifier func(PendingInteraction)
+	if len(notifiers) > 0 {
+		notifier = notifiers[0]
+	}
+	return &Broker{executor: executor, notify: notifier, pending: map[string]*pendingEntry{}}
 }
 
 func (b *Broker) CreateMessage(ctx context.Context, serverID string, request json.RawMessage) (any, error) {
@@ -102,6 +107,11 @@ func (b *Broker) await(ctx context.Context, serverID, kind string, request json.
 	b.mu.Lock()
 	b.pending[entry.value.ID] = entry
 	b.mu.Unlock()
+	if b.notify != nil {
+		item := entry.value
+		item.Request = append(json.RawMessage(nil), item.Request...)
+		b.notify(item)
+	}
 	defer func() {
 		b.mu.Lock()
 		delete(b.pending, entry.value.ID)

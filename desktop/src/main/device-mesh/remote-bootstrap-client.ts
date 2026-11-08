@@ -64,15 +64,99 @@ export async function getPairingStatus(cloudBaseURL: string): Promise<CloudPairi
 
 export async function claimPairing(cloudBaseURL: string, req: CloudPairingClaimRequest): Promise<CloudBootstrapTicketResponse> {
   const status = await getPairingStatus(cloudBaseURL);
-  const deadline = Date.now() + 120_000;
-  while (Date.now() < deadline) {
-  const proof = await signMeshPairingClaim(status.spaceId, req);
-  const res = await cloudFetch(cloudBaseURL, "/api/public/device-mesh/v1/pairing/claim", "POST", { ...req, proof }, false);
+  const claim = async () => {
+    const proof = await signMeshPairingClaim(status.spaceId, req);
+    return cloudFetch(cloudBaseURL, "/api/public/device-mesh/v1/pairing/claim", "POST", { ...req, proof }, false);
+  };
+  let res = await claim();
   if (!res.ok) throw await responseError(res, "pairing claim failed");
-  if (res.status === 202) { await new Promise<void>((resolve) => setTimeout(resolve, 1000)); continue; }
-  return res.json() as Promise<CloudBootstrapTicketResponse>;
+  if (res.status === 202) {
+    const pending = await res.json() as { requestId?: string };
+    if (!pending.requestId) throw new Error("统筹中心未返回配对申请编号");
+    await waitForPairingApproval(cloudBaseURL, pending.requestId);
+    res = await claim();
+    if (!res.ok) throw await responseError(res, "pairing claim failed");
   }
-  throw new Error("等待服务提供设备批准配对超时，请再次扫码");
+  return res.json() as Promise<CloudBootstrapTicketResponse>;
+}
+
+async function waitForPairingApproval(cloudBaseURL: string, requestID: string): Promise<void> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(new Error("等待统筹中心批准配对超时")), 31 * 60_000);
+  let reconnectAttempt = 0;
+  let lastError: unknown;
+  try {
+    while (!controller.signal.aborted) {
+      try {
+        const response = await fetch(new URL(`/api/public/device-mesh/v1/pairing/requests/${encodeURIComponent(requestID)}/events`, cloudBaseURL), {
+          headers: { Accept: "text/event-stream" },
+          signal: controller.signal,
+        });
+        if (!response.ok || !response.body || !response.headers.get("content-type")?.includes("text/event-stream")) {
+          const message = await response.text() || `等待配对审批失败: HTTP ${response.status}`;
+          const error = new Error(message);
+          if (response.status >= 500) throw new PairingApprovalReconnect(error);
+          throw new PairingApprovalTerminal(error);
+        }
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let decision = "";
+        try {
+          while (!controller.signal.aborted && !decision) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true }).replace(/\r/g, "");
+            const boundary = buffer.lastIndexOf("\n\n");
+            if (boundary < 0) continue;
+            for (const block of buffer.slice(0, boundary).split("\n\n")) {
+              let event = "message";
+              const data: string[] = [];
+              for (const line of block.split("\n")) {
+                if (line.startsWith("event:")) event = line.slice(6).trim();
+                if (line.startsWith("data:")) data.push(line.slice(5).trimStart());
+              }
+              if (event === "pairing_approved") decision = "approved";
+              if (event === "pairing_rejected") throw new PairingApprovalTerminal(new Error(data.join("\n") || "统筹中心拒绝了本次配对"));
+              if (event === "pairing_expired") throw new PairingApprovalTerminal(new Error("配对申请已过期，请重新生成二维码"));
+            }
+            buffer = buffer.slice(boundary + 2);
+          }
+        } finally {
+          reader.releaseLock();
+        }
+        if (decision === "approved") return;
+        throw new PairingApprovalReconnect(new Error("配对审批事件流在批准前结束"));
+      } catch (error) {
+        lastError = error;
+        if (controller.signal.aborted) throw lastError;
+        if (error instanceof PairingApprovalTerminal) throw error.cause;
+        if (!(error instanceof PairingApprovalReconnect)) {
+          lastError = new PairingApprovalReconnect(error instanceof Error ? error : new Error(String(error)));
+        }
+        reconnectAttempt++;
+        const delay = Math.min(10_000, 1000 * 2 ** Math.min(reconnectAttempt - 1, 4));
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+    throw lastError ?? new Error("等待配对审批超时，请重新生成二维码");
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+class PairingApprovalReconnect extends Error {
+  constructor(cause: Error) {
+    super(cause.message, { cause });
+    this.name = "PairingApprovalReconnect";
+  }
+}
+
+class PairingApprovalTerminal extends Error {
+  constructor(readonly cause: Error) {
+    super(cause.message, { cause });
+    this.name = "PairingApprovalTerminal";
+  }
 }
 
 export async function createPairingOffer(cloudBaseURL: string, ttlSeconds = 300): Promise<CloudPairingOfferResponse> {

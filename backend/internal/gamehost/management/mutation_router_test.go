@@ -2,6 +2,7 @@ package management
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -60,5 +61,12 @@ func TestGameCenterRearmRouteUsesConfiguredService(t *testing.T) {
 	}
 	if gotRuntimeID != "rt_test" {
 		t.Fatalf("rearm route passed runtime id %q", gotRuntimeID)
+	}
+}
+
+func TestRuntimeRestartStateConflictIsRecognized(t *testing.T) {
+	err := errors.New("restart runtime failed: runtime_restart_failed: runtime not in restartable state: created")
+	if !isRuntimeExecutorError(err, "runtime not in restartable state") {
+		t.Fatal("restart lifecycle conflict was not recognized")
 	}
 }

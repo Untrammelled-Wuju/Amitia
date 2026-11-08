@@ -9,8 +9,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../artifact/artifact_providers.dart' show createAuthenticatedDio;
 import '../backend_connection/backend_connection_availability.dart';
 import '../backend_connection/backend_connection_config.dart';
-import '../backend_connection/providers/backend_connection_providers.dart';
+import '../backend_transport/providers/backend_transport_providers.dart';
 import '../services/extension_service.dart';
+import '../services/mcp_interaction_events.dart';
 import '../services/providers.dart';
 import '../settings/ui_style_command_service.dart';
 import 'ui_device_identity.dart';
@@ -63,7 +64,9 @@ abstract final class MobileUIHostCommandBus {
 final mobileUIHostEventClientProvider = Provider<MobileUIHostEventClient?>((
   ref,
 ) {
-  final availability = ref.watch(backendConnectionProvider).valueOrNull;
+  final availability = ref
+      .watch(deviceLocalBackendConnectionProvider)
+      .valueOrNull;
   if (availability is! BackendConnectionAvailable) return null;
 
   final client = MobileUIHostEventClient(
@@ -215,8 +218,8 @@ class MobileUIHostEventClient {
         _scheduleReconnect();
       }
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-if (!_disposed && version == _connectionVersion) {
+      print("[original-error] $error\n$stackTrace");
+      if (!_disposed && version == _connectionVersion) {
         _scheduleReconnect();
       }
     }
@@ -246,8 +249,8 @@ if (!_disposed && version == _connectionVersion) {
               hostSessionId: _hostSessionId,
             )
             .catchError((Object error, StackTrace stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}),
+              print("[original-error] $error\n$stackTrace");
+            }),
       );
     });
   }
@@ -272,13 +275,18 @@ if (!_disposed && version == _connectionVersion) {
           _dispatchEvent(eventType, decoded.cast<String, dynamic>());
         }
       } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-// Malformed event payloads are isolated from the long-lived stream.
+        print("[original-error] $error\n$stackTrace");
+        // Malformed event payloads are isolated from the long-lived stream.
       }
     }
   }
 
   void _dispatchEvent(String eventType, Map<String, dynamic> envelope) {
+    if (eventType == 'mcp_interaction_pending') {
+      MCPInteractionEvents.notifyPending();
+      return;
+    }
+
     if (_uiRuntimeChangeEvents.contains(eventType)) {
       if (eventType != 'extension_rollback_failed') {
         UIRuntimeInvalidationBus.notifyChanged();
@@ -487,8 +495,8 @@ if (!_disposed && version == _connectionVersion) {
               hostSessionId: sessionId,
             )
             .catchError((Object error, StackTrace stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}),
+              print("[original-error] $error\n$stackTrace");
+            }),
       );
     }
     _cancelCurrentTransport();

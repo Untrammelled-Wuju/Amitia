@@ -151,7 +151,6 @@ function toggleHistory(coordinationId: string) {
 }
 let generation = 0;
 let active = false;
-let timer: ReturnType<typeof setInterval> | undefined;
 let controller: AbortController | undefined;
 function formatDate(raw: string) { const time = Date.parse(raw); return Number.isFinite(time) ? new Date(time).toLocaleString() : '时间未知'; }
 function statusName(raw: string) { return ({ planning: '规划中', running: '运行中', waiting: '等待中', aggregating: '结果整理', succeeded: '已结束', failed: '失败', cancelled: '已取消', paused: '已暂停', pending: '待运行' } as Record<string, string>)[raw] ?? raw; }
@@ -164,7 +163,6 @@ function dependencyStatuses(dependencies: string[], task: WorkbenchTaskItem) {
 }
 function invalidate() { generation++; controller?.abort(); controller = undefined; busy.value = false; }
 function resumeOnVisible() { if (!document.hidden) void load(true); }
-function pollVisible() { if (!document.hidden && !busy.value) void load(); }
 async function load(force = false) {
   currentBudgetTime.value = Date.now();
   if (!active || (busy.value && !force)) return;
@@ -247,9 +245,9 @@ watch(() => [props.conversationId, props.characterId], resetContext);
 window.addEventListener('amitia:execution-scope-changed', resetContext);
 window.addEventListener('amitia:runtime-connection-changed', resetContext);
 onBeforeUnmount(() => { window.removeEventListener('amitia:execution-scope-changed', resetContext); window.removeEventListener('amitia:runtime-connection-changed', resetContext); });
-onActivated(() => { active = true; resetContext(); if (timer) clearInterval(timer); timer = setInterval(pollVisible, 12000); document.addEventListener('visibilitychange', resumeOnVisible); window.addEventListener('online', resumeOnVisible); });
-onDeactivated(() => { active = false; resetHistory(); invalidate(); tasks.value = []; summary.value = normalizeTaskSummary(null); verifiedAuthority = ''; snapshotStale.value = false; if (timer) clearInterval(timer); timer = undefined; document.removeEventListener('visibilitychange', resumeOnVisible); window.removeEventListener('online', resumeOnVisible); });
-onBeforeUnmount(() => { active = false; resetHistory(); invalidate(); if (timer) clearInterval(timer); document.removeEventListener('visibilitychange', resumeOnVisible); window.removeEventListener('online', resumeOnVisible); });
+onActivated(() => { active = true; resetContext(); void load(true); document.addEventListener('visibilitychange', resumeOnVisible); window.addEventListener('online', resumeOnVisible); });
+onDeactivated(() => { active = false; resetHistory(); invalidate(); tasks.value = []; summary.value = normalizeTaskSummary(null); verifiedAuthority = ''; snapshotStale.value = false; document.removeEventListener('visibilitychange', resumeOnVisible); window.removeEventListener('online', resumeOnVisible); });
+onBeforeUnmount(() => { active = false; resetHistory(); invalidate(); document.removeEventListener('visibilitychange', resumeOnVisible); window.removeEventListener('online', resumeOnVisible); });
 </script>
 <style scoped>
 .task-list{height:100%;overflow:auto;padding:12px;box-sizing:border-box;display:flex;flex-direction:column;gap:10px;font-size:13px}.task-list header,.title{display:flex;align-items:center;justify-content:space-between;gap:12px}.task-list button{border:1px solid var(--surface-border);border-radius:7px;background:transparent;color:inherit;padding:5px 12px;cursor:pointer}.note,.meta{color:var(--el-text-color-secondary);font-size:12px}.error,.warning{color:var(--el-color-danger)}.summary{display:flex;flex-wrap:wrap;gap:7px}.summary span{border-radius:6px;padding:5px 8px;background:var(--el-fill-color-light)}.task-card{padding:12px;border:1px solid var(--surface-border);border-radius:9px;display:flex;flex-direction:column;gap:8px;overflow-wrap:anywhere}.child{display:flex;align-items:center;gap:9px;padding:7px;background:var(--el-fill-color-light);border-radius:7px}.state{font-weight:600;min-width:60px}.objective{flex:1;min-width:0}.child small{color:var(--el-color-warning)}.child .dependency{max-width:240px;overflow-wrap:anywhere;color:var(--el-text-color-secondary)}.child.conflict{border:1px solid var(--el-color-danger)}.child .depth{flex-shrink:0;color:var(--el-text-color-secondary);font-size:11px}.child .warning{color:var(--el-color-danger)}.checkpoint-panel{border:1px solid var(--surface-border);border-radius:7px;padding:8px}.checkpoint-row{display:flex;flex-wrap:wrap;gap:9px;padding:6px 0;border-bottom:1px solid var(--surface-border)}

@@ -3,6 +3,7 @@ package business
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/u-ai/backend/internal/memorypolicy"
 	"strings"
 	"time"
@@ -96,12 +97,13 @@ func (e *Engine) prepareMemoryMutations(ctx context.Context, scope coordination.
 	}
 	mutations, err := memoryMutations(scope, conversation, derived, *snapshot)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("生成记忆变更失败: %w", err)
 	}
 	port, ok := e.data.(coordination.ResourcePort)
 	if !ok {
 		return mutations, nil
 	}
+	resourceScope := scope
 	seen := make(map[string]bool, len(snapshot.Resources))
 	initialCount := len(snapshot.Resources)
 	for _, resource := range snapshot.Resources {
@@ -113,28 +115,34 @@ func (e *Engine) prepareMemoryMutations(ctx context.Context, scope coordination.
 			continue
 		}
 		seen[key] = true
-		resource, err := port.Resource(ctx, scope, mutation.Kind, mutation.ID)
+		resource, err := port.Resource(ctx, resourceScope, mutation.Kind, mutation.ID)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("读取已有记忆资源 %s/%s 失败: %w", mutation.Kind, mutation.ID, err)
 		}
 		if resource == nil {
 			continue
 		}
 		if resource.Deleted {
-			return nil, coordination.ErrResourceVersion
+			return nil, fmt.Errorf("已有记忆资源 %s/%s 已删除: %w", mutation.Kind, mutation.ID, coordination.ErrResourceVersion)
 		}
-		if resource.OwnerID != scope.ResourceOwnerID || resource.RoleID != coordination.StorageRole(scope, mutation.Kind) || resource.Kind != mutation.Kind || resource.ID != mutation.ID {
-			return nil, coordination.ErrWrongOwner
+		if resource.OwnerID != resourceScope.ResourceOwnerID || resource.RoleID != coordination.StorageRole(resourceScope, mutation.Kind) || resource.Kind != mutation.Kind || resource.ID != mutation.ID {
+			return nil, fmt.Errorf("已有记忆资源归属不匹配 %s/%s owner=%s role=%s expectedOwner=%s expectedRole=%s: %w", mutation.Kind, mutation.ID, resource.OwnerID, resource.RoleID, resourceScope.ResourceOwnerID, coordination.StorageRole(resourceScope, mutation.Kind), coordination.ErrWrongOwner)
 		}
 		snapshot.Resources = append(snapshot.Resources, *resource)
 	}
-	if err := coordination.ValidateSnapshot(scope, *snapshot); err != nil {
-		return nil, err
+	validationScope := scope
+	validationScope.ResourceOwnerID = snapshot.OwnerID
+	if err := coordination.ValidateSnapshot(validationScope, *snapshot); err != nil {
+		return nil, fmt.Errorf("校验记忆来源快照失败: %w", err)
 	}
 	if len(snapshot.Resources) > initialCount {
 		return e.prepareMemoryMutations(ctx, scope, conversation, derived, snapshot)
 	}
-	return memoryMutations(scope, conversation, derived, *snapshot)
+	result, err := memoryMutations(scope, conversation, derived, *snapshot)
+	if err != nil {
+		return nil, fmt.Errorf("生成最终记忆变更失败: %w", err)
+	}
+	return result, nil
 }
 
 func partitionMemoryDerived(input []DerivedMemory) []DerivedMemory {

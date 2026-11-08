@@ -10,7 +10,7 @@ import (
 
 func (p *meshLocalDataPort) BusinessUsage(ctx context.Context, scope coordination.ExecutionScope, since string) (coordination.BusinessUsage, error) {
 	result := coordination.BusinessUsage{OwnerID: p.ownerID, Daily: []coordination.BusinessUsageDay{}}
-	if scope.ResourceOwnerID != p.ownerID || scope.RoleOwnerID != p.ownerID {
+	if scope.ResourceOwnerID != p.ownerID || (scope.RoleOwnerID != p.ownerID && scope.RoleOwnerID != scope.CoreID) {
 		return result, coordination.ErrWrongOwner
 	}
 	if since != "" {

@@ -21,6 +21,7 @@ const SourceAuthoritySchema = `CREATE TABLE IF NOT EXISTS kernel_device_source_a
 	PRIMARY KEY(space_id,device_id))`
 
 var ErrAuthorityUnconfirmed = errors.New("设备存在尚未确认完成的远端数据请求，请恢复设备连接后再变更权限")
+var ErrAuthoritySourceOffline = errors.New("远端设备当前离线，无法确认权限屏障")
 
 type AuthorityBarrier func(context.Context, string, string, int64, []string) error
 
@@ -87,8 +88,6 @@ func (s *Service) TrackRemoteAuthority(ctx context.Context, scope ExecutionScope
 }
 
 func (s *Service) ReconcileRemoteAuthority(ctx context.Context, space, target, session string, generation int64, reconcile func(context.Context, []string) error) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	rows, err := s.db.QueryContext(ctx, `SELECT call_id FROM kernel_device_remote_authority WHERE space_id=? AND target_id=? AND (session_id<>? OR generation<?) ORDER BY call_id LIMIT 256`, space, target, session, generation)
 	if err != nil {
 		return err
@@ -116,7 +115,7 @@ func (s *Service) ReconcileRemoteAuthority(ctx context.Context, space, target, s
 	}
 	defer tx.Rollback()
 	for _, id := range ids {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM kernel_device_remote_authority WHERE call_id=?`, id); err != nil {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM kernel_device_remote_authority WHERE call_id=? AND space_id=? AND target_id=? AND (session_id<>? OR generation<?)`, id, space, target, session, generation); err != nil {
 			return err
 		}
 	}
@@ -168,7 +167,7 @@ func (s *Service) ConfirmRemoteAuthority(ctx context.Context, id string) error {
 	return err
 }
 
-func (s *Service) fenceAuthorityLocked(ctx context.Context, space, device string, closedRevision int64) error {
+func (s *Service) fenceAuthorityLocked(ctx context.Context, space, device string, closedRevision int64, allowOfflineSource bool) error {
 	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT target_id FROM kernel_device_remote_authority WHERE space_id=? AND (caller_id=? OR target_id=?) ORDER BY target_id`, space, device, device)
 	if err != nil {
 		return err
@@ -203,6 +202,10 @@ func (s *Service) fenceAuthorityLocked(ctx context.Context, space, device string
 		delete(s.active[key], id)
 	}
 	if err := s.authorityBarrier(ctx, space, device, closedRevision, sources); err != nil {
+		if allowOfflineSource && errors.Is(err, ErrAuthoritySourceOffline) {
+			_, deleteErr := s.db.ExecContext(ctx, `DELETE FROM kernel_device_remote_authority WHERE space_id=? AND (caller_id=? OR target_id=?)`, space, device, device)
+			return deleteErr
+		}
 		return errors.Join(ErrAuthorityUnconfirmed, err)
 	}
 	_, err = s.db.ExecContext(ctx, `DELETE FROM kernel_device_remote_authority WHERE space_id=? AND (caller_id=? OR target_id=?)`, space, device, device)
@@ -242,7 +245,7 @@ func (s *Service) fenceAllRemoteAuthorityLocked(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		if err := s.fenceAuthorityLocked(ctx, actor.space, actor.device, policy.PermissionRevision); err != nil {
+		if err := s.fenceAuthorityLocked(ctx, actor.space, actor.device, policy.PermissionRevision, true); err != nil {
 			return err
 		}
 	}

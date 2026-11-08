@@ -94,3 +94,24 @@ func TestSyncRegistryFailureIsUnavailable(t *testing.T) {
 		}
 	}
 }
+
+func TestSyncRoutesInheritOuterAuthenticationWithoutRevalidatingProof(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	group := router.Group("/api")
+	invocations := 0
+	group.Use(func(c *gin.Context) {
+		invocations++
+		c.Set("actorContext", &auth.ActorContext{PrincipalType: auth.PrincipalLocalUI, SpaceID: "space", DeviceID: "device", IsLocalTrusted: true})
+		c.Next()
+	})
+	NewHandler(nil, nil).RegisterRoutes(group)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest("GET", "/api/v1/sync/status?deviceId=device", nil))
+	if invocations != 1 {
+		t.Fatalf("sync route authenticated %d times", invocations)
+	}
+	if response.Code != 503 {
+		t.Fatalf("unexpected route result: %d %s", response.Code, response.Body.String())
+	}
+}

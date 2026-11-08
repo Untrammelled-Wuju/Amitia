@@ -140,12 +140,16 @@ func (s *service) ExportDataPortability(ctx context.Context, request ExportReque
 	}, nil
 }
 
-func (s *service) InspectDataPortabilityImport(ctx context.Context, uploadPath, passphrase string) (map[string]interface{}, error) {
+func (s *service) InspectDataPortabilityImport(ctx context.Context, uploadPath, passphrase string) (_ map[string]interface{}, resultErr error) {
+	var decryptedPath string
+	defer func() {
+		resultErr = errors.Join(resultErr, removeDataPortabilityTempFile(uploadPath), removeDataPortabilityTempFile(decryptedPath))
+	}()
 	if s.coordinator == nil {
-		return nil, dataportability.ErrBackupUnavailable
+		resultErr = dataportability.ErrBackupUnavailable
+		return nil, resultErr
 	}
 	archivePath := uploadPath
-	var decryptedPath string
 	if dataportability.IsEncryptedFile(uploadPath) {
 		if passphrase == "" {
 			return nil, dataportability.ErrBackupPassphraseRequired
@@ -157,14 +161,6 @@ func (s *service) InspectDataPortabilityImport(ctx context.Context, uploadPath, 
 		archivePath = decryptedPath
 	}
 	ticket, err := s.coordinator.StageImport(ctx, archivePath)
-	if decryptedPath != "" {
-		if err := os.Remove(decryptedPath); err != nil {
-			amitialog.Printf("[original-error] %v", err)
-		}
-	}
-	if err := os.Remove(uploadPath); err != nil {
-		amitialog.Printf("[original-error] %v", err)
-	}
 	if err != nil {
 		return nil, err
 	}
@@ -176,6 +172,17 @@ func (s *service) InspectDataPortabilityImport(ctx context.Context, uploadPath, 
 		"preview":            ticket.Preview,
 		"requiresPassphrase": false,
 	}, nil
+}
+
+func removeDataPortabilityTempFile(path string) error {
+	if path == "" {
+		return nil
+	}
+	err := os.Remove(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	return err
 }
 
 func (s *service) CommitDataPortabilityImport(ctx context.Context, ticketID string, policy dataportability.CollisionPolicy, activate bool) (map[string]interface{}, error) {
@@ -231,41 +238,37 @@ func (s *service) CreateDataPortabilityBackup(ctx context.Context, passphrase st
 	}, nil
 }
 
-func (s *service) PreviewDataPortabilityRestore(ctx context.Context, name, passphrase string) (map[string]interface{}, error) {
+func (s *service) PreviewDataPortabilityRestore(ctx context.Context, name, passphrase string) (_ map[string]interface{}, resultErr error) {
 	if s.coordinator == nil {
 		return nil, dataportability.ErrBackupUnavailable
 	}
+	release, err := s.coordinator.BeginRestoreOperation()
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	path, err := s.dataPortabilityBackupPath(name)
 	if err != nil {
 		return nil, err
 	}
 	archivePath := path
-	var decryptedPath string
-	if dataportability.IsEncryptedFile(path) {
+	encrypted := dataportability.IsEncryptedFile(path)
+	if encrypted {
 		if passphrase == "" {
 			return nil, dataportability.ErrBackupPassphraseRequired
 		}
-		decryptedPath = filepath.Join(s.dataDir, "imports", ".uploads", uuid.NewString()+".amitia-backup")
+		decryptedPath := filepath.Join(s.dataDir, "imports", ".uploads", uuid.NewString()+".amitia-backup")
 		if err := dataportability.DecryptFile(path, decryptedPath, passphrase); err != nil {
 			return nil, err
 		}
+		defer func() { resultErr = errors.Join(resultErr, os.Remove(decryptedPath)) }()
 		archivePath = decryptedPath
 	}
 	manifest, err := s.coordinator.RestorePreview(ctx, archivePath)
 	if err != nil {
-		if decryptedPath != "" {
-			if err := os.Remove(decryptedPath); err != nil {
-				amitialog.Printf("[original-error] %v", err)
-			}
-		}
 		return nil, err
 	}
 	ticket, err := s.coordinator.CreateRestoreTicket(ctx, archivePath, manifest.BackupID, manifest)
-	if decryptedPath != "" {
-		if err := os.Remove(decryptedPath); err != nil {
-			amitialog.Printf("[original-error] %v", err)
-		}
-	}
 	if err != nil {
 		return nil, err
 	}
@@ -274,7 +277,7 @@ func (s *service) PreviewDataPortabilityRestore(ctx context.Context, name, passp
 		"backupId":    ticket.BackupID,
 		"createdAt":   ticket.CreatedAt,
 		"manifest":    manifest,
-		"encrypted":   dataportability.IsEncryptedFile(path),
+		"encrypted":   encrypted,
 	}, nil
 }
 
@@ -282,6 +285,11 @@ func (s *service) ExecuteDataPortabilityRestore(ctx context.Context, operationID
 	if s.coordinator == nil {
 		return nil, dataportability.ErrBackupUnavailable
 	}
+	release, err := s.coordinator.BeginRestoreOperation()
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	ticket, err := s.coordinator.ConsumeRestoreTicket()
 	if err != nil {
 		return nil, err
@@ -311,6 +319,11 @@ func (s *service) CancelDataPortabilityRestore() error {
 	if s.coordinator == nil {
 		return dataportability.ErrBackupUnavailable
 	}
+	release, err := s.coordinator.BeginRestoreOperation()
+	if err != nil {
+		return err
+	}
+	defer release()
 	return s.coordinator.CancelRestore()
 }
 

@@ -54,7 +54,10 @@ export class DesktopDeploymentLifecycle {
     this.desktopPetManager = deps.desktopPetManager;
     this.currentConfig = { ...initialConfig };
     this.topology = resolveBackendTopology(initialConfig, getCoreBaseURL());
-    this.businessCoreClient = new BusinessCoreClient(this.topology.businessCore.baseURL);
+    this.businessCoreClient = new BusinessCoreClient(
+      this.topology.businessCore.baseURL,
+      this.topology.deploymentMode === "cloud",
+    );
   }
 
   async reconcile(config: DeploymentModeConfig): Promise<RuntimeStatus> {
@@ -102,7 +105,10 @@ export class DesktopDeploymentLifecycle {
 
     await ensureCoreProfile("local");
     this.topology = resolveBackendTopology(this.currentConfig, getCoreBaseURL());
-    this.businessCoreClient = new BusinessCoreClient(this.topology.businessCore.baseURL);
+    this.businessCoreClient = new BusinessCoreClient(
+      this.topology.businessCore.baseURL,
+      false,
+    );
     await this.probeLocalRuntime();
     await this.probeBusinessCore(this.topology.businessCore);
 
@@ -185,7 +191,10 @@ export class DesktopDeploymentLifecycle {
     this.runtimeManager.setBusinessCoreStatus("starting", businessCore.baseURL);
 
     try {
-      const client = new BusinessCoreClient(businessCore.baseURL);
+      const client = new BusinessCoreClient(
+        businessCore.baseURL,
+        this.topology.deploymentMode === "cloud",
+      );
       const probeResult = await client.probe();
 
       if (probeResult.ready) {
@@ -221,7 +230,10 @@ export class DesktopDeploymentLifecycle {
     const mainWindow = this.getMainWindow();
     if (!mainWindow) return;
 
-    this.businessCoreClient = new BusinessCoreClient(topology.businessCore.baseURL);
+    this.businessCoreClient = new BusinessCoreClient(
+      topology.businessCore.baseURL,
+      topology.deploymentMode === "cloud",
+    );
 
     this.desktopHostManager = new DesktopHostManager(
       mainWindow,
@@ -229,18 +241,21 @@ export class DesktopDeploymentLifecycle {
       this.businessCoreClient,
     );
 
+    this.uiHostSSE = new UIHostSSE({
+      businessCore: this.businessCoreClient,
+      mainWindow: this.getMainWindow,
+      onExtensionChange: () => {
+        void this.desktopSnapshotSync?.syncNow();
+      },
+    });
+    this.uiHostSSE.start();
+
     this.desktopSnapshotSync = new DesktopSnapshotSync(
       mainWindow,
       this.desktopHostManager,
       this.businessCoreClient,
     );
     this.desktopSnapshotSync.start();
-
-    this.uiHostSSE = new UIHostSSE({
-      businessCore: this.businessCoreClient,
-      mainWindow: this.getMainWindow,
-    });
-    this.uiHostSSE.start();
   }
 
   private stopBusinessIntegrations(): void {

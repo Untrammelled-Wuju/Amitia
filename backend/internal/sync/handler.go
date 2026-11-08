@@ -108,9 +108,8 @@ func (h *Handler) requireDevice(c *gin.Context, spaceID, deviceID string) bool {
 	return false
 }
 
-func (h *Handler) RegisterRoutes(r *gin.RouterGroup, authMW gin.HandlerFunc) {
+func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
 	sync := r.Group("/v1/sync")
-	sync.Use(authMW)
 
 	sync.POST("/pull", h.HandlePull)
 	sync.POST("/push", h.HandlePush)

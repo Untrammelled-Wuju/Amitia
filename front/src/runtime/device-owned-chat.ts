@@ -52,6 +52,11 @@ export interface OwnedChatResponse {
   deliveryId?: string;
   characterName?: string;
   characterAvatar?: string;
+  postProcessingIssues?: Array<{
+    stage: string;
+    message: string;
+    detail?: string;
+  }>;
 }
 
 export interface OwnedChatToolProgress {

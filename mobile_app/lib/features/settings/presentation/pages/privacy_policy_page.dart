@@ -15,7 +15,7 @@ class PrivacyPolicyPage extends StatelessWidget {
       Icons.storage_outlined,
       [
         'Amitia 会保存维持个人空间、对话、角色、记忆和运行配置所需的数据。',
-        '本地模式的数据由当前设备处理；云端统筹模式的数据由你配置的 Cloud Core 统一管理。',
+        '聊天、消息、项目、文件、提醒和本地能力由对应设备保存；角色、记忆、团队、世界书、用户画像和模型配置由统筹中心保存。',
         '聊天、记忆和相关业务数据可通过应用提供的删除、清理或备份功能进行管理。',
       ],
     ),
@@ -36,11 +36,11 @@ class PrivacyPolicyPage extends StatelessWidget {
       ],
     ),
     (
-      '设备与云端协同',
+      '设备与统筹协同',
       Icons.devices_outlined,
       [
-        '启用云端统筹模式并绑定设备后，Device Mesh 会使用设备凭据维护云端协同连接。',
-        '你可以在“我的设备”中查看或移除云端登记设备，也可以在设备设置中解除本机云端凭据。',
+        '绑定设备后，Device Mesh 会使用设备凭据维护统筹中心与设备之间的受控连接。',
+        '你可以在“我的设备”中查看或移除中心登记设备，也可以在设备设置中解除本机中心凭据。',
       ],
     ),
   ];
@@ -61,7 +61,7 @@ class PrivacyPolicyPage extends StatelessWidget {
         ),
         children: [
           Text(
-            '本页面说明当前应用实际的数据与权限边界。具体部署的数据处理范围以你的本地/云端配置和已启用扩展为准。',
+            '本页面说明当前应用实际的数据与权限边界。具体处理范围以你选择的统筹中心和已启用能力为准。',
             style: AppTypography.caption(context),
           ),
           SizedBox(height: AppSpacing.lg),

@@ -50,6 +50,7 @@ export const DEVICE_LOCAL_ROUTE_PREFIXES = [
   "/api/extensions/updates",
   "/api/extensions/versions",
   "/api/extensions/kernel/extensions",
+  "/api/proactive-sse",
   "/api/desktop-pets",
   "/api/desktop-pet",
   "/api/local/workflows",
@@ -130,7 +131,7 @@ export async function getRuntimeConnection(): Promise<RuntimeConnection> {
       cachedConnection = { apiBaseURL: proxy, websocketBaseURL: toWebSocketBaseURL(proxy) };
       return cachedConnection;
     }
-    throw new Error("本机尚未建立经过验证的云端绑定，请重新配对设备");
+    throw new Error("本机尚未建立经过验证的统筹中心绑定，请重新配对设备");
   }
 
   cachedConnection = {
@@ -302,7 +303,7 @@ export async function provisionCurrentDeviceMesh(baseURL: string, pairing: Pairi
   await provisionWebDevice(baseURL, pairing);
 }
 
-export async function createCurrentDevicePairingOffer(baseURL: string, ttlSeconds = 600): Promise<PairingOffer> {
+export async function createCurrentDevicePairingOffer(baseURL: string, ttlSeconds = 1800): Promise<PairingOffer> {
   const api = window.amitiaDesktop;
   if (api && (await getDeploymentConfig()).mode === "local") baseURL = await resolveLocalRuntimeBaseURL();
   if (api && baseURL.endsWith("/internal/device-mesh/provider")) baseURL = (await getDeploymentConfig()).serverURL || baseURL;
@@ -323,7 +324,7 @@ export async function deprovisionCurrentDeviceMesh(baseURL: string, originalInte
 
   const nativeStatus = api?.getMeshStatus ? await api.getMeshStatus() : null;
   if (api && !nativeStatus?.cloudBaseUrl && (authHeaders.Authorization || authHeaders["X-Amitia-Desktop-Session"])) {
-    throw new Error("当前设备没有可验证的云端绑定，无法撤销远端设备凭证");
+    throw new Error("当前设备没有可验证的统筹中心绑定，无法撤销远端设备凭证");
   }
   const revokeBaseURL = api && nativeStatus?.cloudBaseUrl
     ? `${await resolveLocalRuntimeBaseURL()}/internal/device-mesh/provider`
@@ -350,7 +351,7 @@ export async function deprovisionCurrentDeviceMesh(baseURL: string, originalInte
         if (state.coreId !== original.coreId || state.canAdminister !== original.canAdminister || policy.deviceId !== original.policy.deviceId || policy.coordinated !== original.policy.coordinated || policy.administrator !== original.policy.administrator || revisions.join(":") !== [original.policy.providerEpoch, original.policy.modeRevision, original.policy.permissionRevision].join(":")) throw new Error("原解绑权限已变化，请重新确认");
       }
       if (controller.signal.aborted || (await getRuntimeConnection()).apiBaseURL !== originalConnection) throw new Error("Core 连接已变化，请重新确认解绑");
-      if (api?.getMeshStatus && (await api.getMeshStatus())?.cloudBaseUrl !== nativeStatus?.cloudBaseUrl) throw new Error("云端绑定已变化，请重新确认解绑");
+      if (api?.getMeshStatus && (await api.getMeshStatus())?.cloudBaseUrl !== nativeStatus?.cloudBaseUrl) throw new Error("统筹中心绑定已变化，请重新确认解绑");
       const url = `${revokeBaseURL.replace(/\/+$/, "")}/api/device-mesh/v1/devices/${encodeURIComponent(identity.deviceId)}`;
       const init: RequestInit = {
         method: "DELETE",
@@ -362,7 +363,7 @@ export async function deprovisionCurrentDeviceMesh(baseURL: string, originalInte
       response = await fetch(url, api ? init : await signWebAuthenticatedFetch(baseURL, url, init));
       if (controller.signal.aborted || (await getRuntimeConnection()).apiBaseURL !== originalConnection) throw new Error("解绑期间 Core 已变化，原解绑结果不能清除新绑定");
       if (!response.ok) {
-        let message = `Cloud Core 撤销设备失败 (${response.status})`;
+        let message = `统筹中心撤销设备失败 (${response.status})`;
         try {
           const payload = await response.json();
           message = String(payload?.message || payload?.msg || message);
@@ -374,9 +375,9 @@ export async function deprovisionCurrentDeviceMesh(baseURL: string, originalInte
       const acknowledgement = await response.json();
       if (acknowledgement?.ok !== true || acknowledgement.deviceId !== identity.deviceId) throw new Error("Core 未确认原设备凭据撤销，不能清除本地绑定");
       if (controller.signal.aborted || (await getRuntimeConnection()).apiBaseURL !== originalConnection) throw new Error("原解绑连接已变化，不能清除当前绑定");
-      if (api?.getMeshStatus && (await api.getMeshStatus())?.cloudBaseUrl !== nativeStatus?.cloudBaseUrl) throw new Error("云端绑定已变化，不能清除当前绑定");
+      if (api?.getMeshStatus && (await api.getMeshStatus())?.cloudBaseUrl !== nativeStatus?.cloudBaseUrl) throw new Error("统筹中心绑定已变化，不能清除当前绑定");
     } catch (error: any) {
-      throw new Error(error?.message || "无法连接 Cloud Core，云端设备凭证尚未撤销");
+      throw new Error(error?.message || "无法连接统筹中心，设备凭证尚未撤销");
     } finally {
       window.removeEventListener("amitia:runtime-connection-changed", invalidate);
       window.removeEventListener("amitia:execution-scope-changed", invalidate);

@@ -123,6 +123,40 @@ func TestBuildUIContributionOpAllowsInlineSchema(t *testing.T) {
 	}
 }
 
+func TestBuildUIContributionOpIsIdempotentForIdenticalRegistration(t *testing.T) {
+	definition := ui_contribution.UIContributionDefinition{
+		ContributionID: "stable-panel", ExtensionID: "com.example/stable", ModuleID: "stable-ui",
+		Kind: ui_contribution.UIContributionPanel, ContractVersion: 1,
+		Slot: ui_contribution.UISlotReference{SlotID: "provider.test.panel", ContractVersion: 1},
+		Entry: ui_contribution.UIEntryDefinition{Type: ui_contribution.SandboxSchemaRenderer, ContentHash: "inline-v1"},
+		Schema: json.RawMessage(`{"schemaVersion":"schema-ui/1","type":"document","children":[{"id":"title","type":"text","props":{"text":"Stable"}}]}`),
+		Sandbox: ui_contribution.UISandboxPolicy{Type: ui_contribution.SandboxSchemaRenderer},
+		Integrity: ui_contribution.ContributionIntegrity{DefinitionHash: "inline-v1"},
+	}
+	data, err := json.Marshal(definition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := ui_contribution.NewUIHost()
+	if err := host.RegisterContribution(&definition); err != nil {
+		t.Fatal(err)
+	}
+	installer := &TypedContributionInstaller{container: &Container{
+		UIHost: host, SchemaValidator: schema_ui.NewValidator(),
+		SchemaRegistry: schema_ui.NewSchemaRegistry(schema_ui.NewValidator(), nil),
+	}}
+	op, err := installer.buildUIContributionOp(context.Background(), domain.ContributionDefinition{
+		ID: "stable-panel", ExtensionID: "com.example/stable", ModuleID: "stable-ui",
+		Kind: domain.ContributionKindUIPage, Adapter: domain.ContributionAdapterUI,
+	}, data, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := op.doInstall(context.Background()); err != nil {
+		t.Fatalf("identical registration must be idempotent: %v", err)
+	}
+}
+
 func TestActivateUIProviderReplacesExistingDefinition(t *testing.T) {
 	registry := ui_provider.NewRegistry()
 	providerID := "weekday-page-provider"

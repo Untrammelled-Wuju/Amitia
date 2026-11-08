@@ -5,6 +5,7 @@ import 'mobile_deployment_mode.dart';
 import 'mobile_deployment_config_repository.dart';
 import 'backend_topology_resolver.dart';
 import 'mobile_backend_lifecycle.dart';
+import 'device_agent_remote_core_probe.dart';
 import '../embedded/embedded_runtime_controller.dart';
 import '../embedded/method_channel_embedded_runtime_controller.dart';
 
@@ -63,7 +64,7 @@ final mobileBackendLifecycleProvider = Provider<MobileBackendLifecycle>((ref) {
   final lifecycle = DefaultMobileBackendLifecycle(
     resolver: resolver,
     embeddedRuntime: embedded,
-    remoteProbe: const DirectRemoteCoreProbe(),
+    remoteProbe: DeviceAgentRemoteCoreProbe(),
   );
 
   ref.onDispose(() => lifecycle.shutdown());
@@ -72,5 +73,8 @@ final mobileBackendLifecycleProvider = Provider<MobileBackendLifecycle>((ref) {
 
 final mobileBackendStatusProvider = StreamProvider<MobileBackendStatus>((ref) {
   final lifecycle = ref.watch(mobileBackendLifecycleProvider);
-  return lifecycle.statusStream.distinct();
+  return (() async* {
+    yield lifecycle.currentStatus;
+    yield* lifecycle.statusStream.distinct();
+  })();
 });

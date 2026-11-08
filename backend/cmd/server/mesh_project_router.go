@@ -23,7 +23,7 @@ func registerMeshProjectRouter(mesh *gin.RouterGroup, services *AppServices, cor
 			c.JSON(400, gin.H{"message": "项目分页参数无效"})
 			return
 		}
-		result, err := services.OwnedBusiness.Query(c.Request.Context(), business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: c.Query("targetDeviceId"), RoleID: c.Query("characterId")}, coordination.DataQuery{Management: true, ResourceKind: "project", HistoricalRoleID: historicalRole, HistoricalCursor: historicalCursor, Cursor: cursor, Limit: 128})
+		result, err := services.OwnedBusiness.Query(c.Request.Context(), business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: actor.DeviceID.String(), ResourceOwnerID: actor.DeviceID.String(), RoleOwnerID: coreID, RoleID: c.Query("characterId")}, coordination.DataQuery{Management: true, ResourceKind: "project", HistoricalRoleID: historicalRole, HistoricalCursor: historicalCursor, Cursor: cursor, Limit: 128})
 		if err != nil {
 			c.JSON(409, gin.H{"message": err.Error()})
 			return
@@ -71,7 +71,11 @@ func registerMeshProjectRouter(mesh *gin.RouterGroup, services *AppServices, cor
 			c.JSON(400, gin.H{"message": "项目参数无效"})
 			return
 		}
-		result, err := services.OwnedBusiness.CreateProject(c.Request.Context(), business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: payload.TargetDeviceID, RoleID: payload.RoleID, RequestID: payload.RequestID, ExpectedScope: payload.ExpectedScope}, business.CreateProjectInput{Title: payload.Title, Workspaces: payload.Workspaces, PrimaryWorkspaceID: payload.PrimaryWorkspaceID})
+		if payload.TargetDeviceID != "" && payload.TargetDeviceID != actor.DeviceID.String() {
+			c.JSON(403, gin.H{"message": "项目属于设备本地数据，不能写入其他设备项目"})
+			return
+		}
+		result, err := services.OwnedBusiness.CreateProject(c.Request.Context(), business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: actor.DeviceID.String(), ResourceOwnerID: actor.DeviceID.String(), RoleOwnerID: coreID, RoleID: payload.RoleID, RequestID: payload.RequestID, ExpectedScope: payload.ExpectedScope}, business.CreateProjectInput{Title: payload.Title, Workspaces: payload.Workspaces, PrimaryWorkspaceID: payload.PrimaryWorkspaceID})
 		if err != nil {
 			c.JSON(409, gin.H{"message": err.Error()})
 			return

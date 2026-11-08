@@ -2,6 +2,7 @@ package security_test
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -138,5 +139,102 @@ func TestAdministrationCannotBypassAuthentication(t *testing.T) {
 		if response.Code != 403 {
 			t.Fatalf("actor without administrator permission was allowed: %+v %d", actor, response.Code)
 		}
+	}
+}
+
+func TestSharedCoreDataWritesRequireCurrentAdministratorButReadsRemainAvailable(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "kernel.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	t.Cleanup(func() { _ = db.Close() })
+	if err := sqlite.Migrate(t.Context(), db); err != nil {
+		t.Fatal(err)
+	}
+	registry := host_registry.NewRegistry(db)
+	if _, err := registry.EnsureDevice(t.Context(), host_registry.DeviceRecord{SpaceID: "space", DeviceID: "device", TrustState: host_registry.DeviceTrustTrusted}); err != nil {
+		t.Fatal(err)
+	}
+	credentials := credential.NewService(credential.NewRepository(db), 3600)
+	_, raw, err := credentials.Exchange(t.Context(), &credential.ExchangeTicketView{SpaceID: "space", DeviceID: "device", RuntimeID: "runtime", Status: "active", ExpiresAt: time.Now().Add(time.Hour)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	policies := coordination.NewService(db)
+	router := gin.New()
+	router.Use(security.AuthenticationMiddleware(security.AuthConfig{Mode: "cloud_core", SpaceID: "space", DeviceCredentials: credentials, DeviceRegistry: registry, Coordination: policies}))
+	writes := 0
+	router.GET("/center-data", func(c *gin.Context) { c.JSON(200, gin.H{"visible": true}) })
+	router.POST("/center-data", security.SharedCoreDataWriteOnly(), func(c *gin.Context) {
+		writes++
+		c.Status(200)
+	})
+	request := func(method, policyRevision string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, "/center-data", nil)
+		req.Header.Set("Authorization", "AmitiaDevice "+raw)
+		if policyRevision != "" {
+			req.Header.Set(security.ExpectedCoreHeader, "space")
+			req.Header.Set(security.ExpectedConfigurationPolicyHeader, policyRevision)
+		}
+		recorder := httptest.NewRecorder()
+		router.ServeHTTP(recorder, req)
+		return recorder
+	}
+	if response := request(http.MethodGet, ""); response.Code != 200 {
+		t.Fatalf("read status=%d body=%s", response.Code, response.Body.String())
+	}
+	if response := request(http.MethodPost, ""); response.Code != 403 {
+		t.Fatalf("non-coordinated write status=%d body=%s", response.Code, response.Body.String())
+	}
+	policy, err := policies.InitializeCoordinated(t.Context(), "space", "device", 1, "role")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response := request(http.MethodPost, ""); response.Code != 403 {
+		t.Fatalf("coordinated non-administrator write status=%d body=%s", response.Code, response.Body.String())
+	}
+	policy, err = policies.GrantAdministrator(t.Context(), "space", "device", policy.PermissionRevision, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revision := fmt.Sprintf("%d:%d:%d", policy.ProviderEpoch, policy.ModeRevision, policy.PermissionRevision)
+	if response := request(http.MethodPost, revision); response.Code != 200 || writes != 1 {
+		t.Fatalf("administrator write status=%d writes=%d body=%s", response.Code, writes, response.Body.String())
+	}
+	policy, err = policies.GrantAdministrator(t.Context(), "space", "device", policy.PermissionRevision, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response := request(http.MethodPost, revision); response.Code != 403 {
+		t.Fatalf("revoked administrator write status=%d body=%s", response.Code, response.Body.String())
+	}
+	policy, err = policies.GrantAdministrator(t.Context(), "space", "device", policy.PermissionRevision, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response := request(http.MethodPost, revision); response.Code != 409 {
+		t.Fatalf("stale administrator scope status=%d body=%s", response.Code, response.Body.String())
+	}
+	fresh := fmt.Sprintf("%d:%d:%d", policy.ProviderEpoch, policy.ModeRevision, policy.PermissionRevision)
+	if response := request(http.MethodPost, fresh); response.Code != 200 || writes != 2 {
+		t.Fatalf("fresh administrator write status=%d writes=%d body=%s", response.Code, writes, response.Body.String())
+	}
+	if writes != 2 {
+		t.Fatal("forbidden requests mutated center data")
+	}
+	var failure struct {
+		Code     string `json:"code"`
+		Message  string `json:"message"`
+		RawError string `json:"rawError"`
+	}
+	policy, err = policies.GrantAdministrator(t.Context(), "space", "device", policy.PermissionRevision, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := request(http.MethodPost, fresh)
+	if response.Code != 403 || json.Unmarshal(response.Body.Bytes(), &failure) != nil || failure.Code != "mesh.core_data_write_forbidden" || failure.Message == "" || failure.RawError != failure.Message {
+		t.Fatalf("forbidden response lost original message: status=%d body=%s", response.Code, response.Body.String())
 	}
 }

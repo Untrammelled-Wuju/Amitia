@@ -3,6 +3,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/tls"
 	"database/sql"
 	"encoding/json"
@@ -25,6 +28,7 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/agent"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	"github.com/u-ai/backend/internal/devicemesh/credential"
 	"github.com/u-ai/backend/internal/devicemesh/lan"
 	"github.com/u-ai/backend/internal/devicemesh/pairing"
 	meshserver "github.com/u-ai/backend/internal/devicemesh/server"
@@ -139,6 +143,7 @@ type threeCoreFixture struct {
 	router     *gin.Engine
 	model      *threeCoreModel
 	platform   runtimeidentity.Platform
+	dataDir    string
 	dispatcher interface {
 		RegisterCancellable(string, agent.CancellableRuntimeInvokeHandler)
 	}
@@ -222,9 +227,9 @@ func newThreeCoreFixture(t *testing.T, core string, schemas *threeCoreSchemas, p
 	services := sourceServices
 	services.LocalSpaceID = core
 	services.DeviceMesh, services.OwnedBusiness = rt, business.NewEngine(rt.Coordination, rt, model)
-	f := &threeCoreFixture{core: core, services: services, local: local, identity: identity, device: device, pairing: pair, router: gin.New(), model: model, platform: platform}
+	f := &threeCoreFixture{core: core, services: services, local: local, identity: identity, device: device, pairing: pair, router: gin.New(), model: model, platform: platform, dataDir: dir}
 	f.dispatcher = dispatcher
-	authMW := security.AuthenticationMiddleware(security.AuthConfig{Mode: "network", SpaceID: core, DeviceCredentials: rt.CredentialSvc, DeviceRegistry: registry, Coordination: rt.Coordination})
+	authMW := security.AuthenticationMiddleware(security.AuthConfig{Mode: "network", SpaceID: core, LocalDeviceID: device.DeviceID, DeviceCredentials: rt.CredentialSvc, DeviceRegistry: registry, Coordination: rt.Coordination})
 	deps := &meshserver.RouterDeps{DB: db, Sessions: rt.GetSessions(), BootstrapSvc: rt.BootstrapSvc, CredentialSvc: rt.CredentialSvc, Hub: rt.Hub, Handler: rt.Handler, Probe: rt.Probe, DeviceReg: registry, PairingSvc: pair, Coordination: rt.Coordination, BusinessCoordinationReady: true, ProviderPath: local.ProviderPath, LANEndpoints: local.LANEndpoints,
 		GetSpaceID: func(c *gin.Context) (runtimeidentity.SpaceID, bool) {
 			actor := security.GetActor(c)
@@ -274,11 +279,11 @@ func newThreeCoreFixture(t *testing.T, core string, schemas *threeCoreSchemas, p
 	if err != nil {
 		t.Fatal(err)
 	}
-	signer, err := identity.CryptoSigner()
+	tlsKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		t.Fatal(err)
 	}
-	certificate, pin, err := lan.Certificate(signer, core, []net.IP{addresses[0]}, time.Now())
+	certificate, pin, err := lan.Certificate(tlsKey, core, []net.IP{addresses[0]}, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -299,6 +304,43 @@ func newThreeCoreFixture(t *testing.T, core string, schemas *threeCoreSchemas, p
 	f.http = &http.Client{Transport: transport, Timeout: 15 * time.Second}
 	t.Cleanup(func() { rt.Stop(); transport.CloseIdleConnections(); server.Close() })
 	return f
+}
+
+func provisionFixtureSelfCredential(t *testing.T, f *threeCoreFixture) {
+	t.Helper()
+	identity, err := f.identity.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := credential.GenerateRawCredential()
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	stored := &agent.StoredCredential{
+		CloudBaseUrl: f.endpoint.URL,
+		Fingerprint:  f.endpoint.Fingerprint,
+		CredentialID: "fixture-self-" + f.core,
+		Credential:   raw,
+		SpaceID:      runtimeidentity.SpaceID(f.core),
+		DeviceID:     identity.DeviceID,
+		RuntimeID:    identity.RuntimeID,
+		ExpiresAt:    now.Add(time.Hour),
+	}
+	db := f.services.KernelContainer.DeviceRegistry.Database()
+	if _, err := db.ExecContext(t.Context(), `INSERT INTO kernel_device_identity_keys(device_id,public_key,created_at) VALUES(?,?,?) ON CONFLICT(device_id) DO UPDATE SET public_key=excluded.public_key,revoked=0`, identity.DeviceID, identity.PublicKey, now.Unix()); err != nil {
+		t.Fatal(err)
+	}
+	if err := credential.NewRepository(db).Create(t.Context(), &credential.DeviceRuntimeCredential{
+		ID: stored.CredentialID, SpaceID: stored.SpaceID, DeviceID: stored.DeviceID, RuntimeID: stored.RuntimeID,
+		CredentialHash: credential.HashRawCredential(raw), Status: credential.CredentialActive,
+		CreatedAt: now, LastUsedAt: now, ExpiresAt: stored.ExpiresAt, Revision: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := agent.NewCredentialStore(f.dataDir).SaveCredential(stored); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func (f *threeCoreFixture) request(t *testing.T, caller *threeCoreFixture, method, path string, payload any, expected int, originalManagementHeaders ...map[string]string) []byte {
@@ -409,6 +451,54 @@ func pairThreeCoreFixtures(t *testing.T, caller, provider *threeCoreFixture) {
 	}
 }
 
+func TestThreeCoreSameProviderRepairKeepsCandidateRoleReadiness(t *testing.T) {
+	schemas := newThreeCoreSchemas(t)
+	caller, provider := newThreeCoreFixture(t, "core-a", schemas), newThreeCoreFixture(t, "core-b", schemas)
+	pairThreeCoreFixtures(t, caller, provider)
+	identity, err := caller.identity.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := credential.GenerateRawCredential()
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	stored := &agent.StoredCredential{
+		CloudBaseUrl: provider.endpoint.URL,
+		Fingerprint:  provider.endpoint.Fingerprint,
+		CredentialID: "candidate-" + provider.core,
+		Credential:   raw,
+		SpaceID:      runtimeidentity.SpaceID(provider.core),
+		DeviceID:     identity.DeviceID,
+		RuntimeID:    identity.RuntimeID,
+		ExpiresAt:    now.Add(time.Hour),
+	}
+	if err := credential.NewRepository(provider.services.KernelContainer.DeviceRegistry.Database()).Create(t.Context(), &credential.DeviceRuntimeCredential{
+		ID: stored.CredentialID, SpaceID: stored.SpaceID, DeviceID: stored.DeviceID, RuntimeID: stored.RuntimeID,
+		CredentialHash: credential.HashRawCredential(raw), Status: credential.CredentialActive,
+		CreatedAt: now, LastUsedAt: now, ExpiresAt: stored.ExpiresAt, Revision: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := agent.NewCredentialStore(caller.dataDir).SaveCandidate(stored); err != nil {
+		t.Fatal(err)
+	}
+	resumed, err := caller.local.ResumeProviderBinding(t.Context())
+	if err != nil || !resumed {
+		t.Fatalf("同一中心候选绑定未完成: resumed=%t err=%v", resumed, err)
+	}
+	var roles struct {
+		Roles []coordination.Role `json:"roles"`
+	}
+	if err := json.Unmarshal(provider.request(t, caller, http.MethodGet, "/api/device-mesh/v1/business/roles", nil, http.StatusOK), &roles); err != nil {
+		t.Fatal(err)
+	}
+	if len(roles.Roles) == 0 {
+		t.Fatal("同一中心重新配对后角色目录为空")
+	}
+}
+
 func TestThreeRealCoreBusinessSwitchPreservesOwnershipAndExpiresAdministrator(t *testing.T) {
 	schemas := newThreeCoreSchemas(t)
 	a, b, c := newThreeCoreFixture(t, "core-a", schemas), newThreeCoreFixture(t, "core-b", schemas), newThreeCoreFixture(t, "core-c", schemas)
@@ -429,13 +519,15 @@ func TestThreeRealCoreBusinessSwitchPreservesOwnershipAndExpiresAdministrator(t 
 	var previous struct {
 		Data business.Response `json:"data"`
 	}
-	if json.Unmarshal(b.request(t, a, http.MethodPost, "/api/device-mesh/v1/business/messages", map[string]any{"requestId": "before-switch", "characterId": "one", "message": "旧对话"}, http.StatusOK), &previous) != nil || !previous.Data.Saved || previous.Data.Scope.ResourceOwnerID != b.core {
-		t.Fatal("旧对话没有保存在 B")
+	if json.Unmarshal(b.request(t, a, http.MethodPost, "/api/device-mesh/v1/business/messages", map[string]any{"requestId": "before-switch", "characterId": "one", "message": "旧对话"}, http.StatusOK), &previous) != nil || !previous.Data.Saved || previous.Data.Scope.ResourceOwnerID != a.device.DeviceID.String() || !previous.Data.Scope.Coordinated {
+		t.Fatal("统筹对话没有保存在设备")
 	}
 	if name := <-b.model.roles; name != b.core+" 的角色" {
 		t.Fatal("统筹模式使用了设备角色而不是 Core 角色")
 	}
 	oldScope := previous.Data.Scope
+	oldScope.ResourceOwnerID = b.core
+	oldScope.RoleOwnerID = b.core
 	oldScope.RequestID, oldScope.TurnID, oldScope.ExecutionID = "exclusive-b-state", "exclusive-b-turn", "exclusive-b-execution"
 	oldContext, endExclusive, err := b.services.DeviceMesh.Coordination.Restore(t.Context(), oldScope, b.services.DeviceMesh)
 	if err != nil {
@@ -512,8 +604,9 @@ func TestThreeRealCoreBusinessSwitchPreservesOwnershipAndExpiresAdministrator(t 
 		t.Fatal("C 未保留 A 的统筹模式或错误继承管理员权限")
 	}
 	oldCount := 0
-	if err := b.services.KernelContainer.DeviceRegistry.Database().QueryRowContext(t.Context(), `SELECT COUNT(*) FROM kernel_device_owned_resources WHERE owner_id=? AND kind='message' AND deleted=0`, b.core).Scan(&oldCount); err != nil || oldCount < 2 {
-		t.Fatalf("B 的专属对话读取失败: count=%d error=%v", oldCount, err)
+	deviceDatabase := a.services.KernelContainer.DeviceRegistry.Database()
+	if err := deviceDatabase.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM kernel_device_owned_resources WHERE owner_id=? AND kind='message' AND deleted=0`, a.device.DeviceID.String()).Scan(&oldCount); err != nil || oldCount < 2 {
+		t.Fatalf("设备专属对话读取失败: count=%d error=%v", oldCount, err)
 	}
 	migrated := 0
 	if err := c.services.KernelContainer.DeviceRegistry.Database().QueryRowContext(t.Context(), `SELECT COUNT(*) FROM kernel_device_owned_resources WHERE owner_id=?`, b.core).Scan(&migrated); err != nil || migrated != 0 {
@@ -523,12 +616,12 @@ func TestThreeRealCoreBusinessSwitchPreservesOwnershipAndExpiresAdministrator(t 
 	if err := b.services.KernelContainer.DeviceRegistry.Database().QueryRowContext(t.Context(), `SELECT COUNT(*) FROM kernel_device_owned_resources WHERE owner_id=? AND resource_id IN ('exclusive-memory','exclusive-summary','exclusive-continuity') AND deleted=0`, b.core).Scan(&retainedExclusive); err != nil || retainedExclusive != 3 {
 		t.Fatal("B 的专属记忆、摘要或持续事项丢失")
 	}
-	contextMessages := []business.ContextMessage{{ID: "previous-user", Role: "user", Content: "旧对话", OwnerID: b.core}, {ID: "previous-assistant", Role: "assistant", Content: previous.Data.Text, OwnerID: b.core}}
+	contextMessages := []business.ContextMessage{{ID: "previous-user", Role: "user", Content: "旧对话", OwnerID: a.device.DeviceID.String()}, {ID: "previous-assistant", Role: "assistant", Content: previous.Data.Text, OwnerID: a.device.DeviceID.String()}}
 	var resumed struct {
 		Data business.Response `json:"data"`
 	}
 	payload := map[string]any{"requestId": "after-switch", "conversationId": previous.Data.ConversationID, "characterId": "one", "message": "继续对话", "context": business.ForwardedContext{PreviousCoreID: b.core, ConversationID: previous.Data.ConversationID, Summary: "上一轮由 B 提供服务", Messages: contextMessages}}
-	if json.Unmarshal(c.request(t, a, http.MethodPost, "/api/device-mesh/v1/business/messages", payload, http.StatusOK), &resumed) != nil || !resumed.Data.Saved || resumed.Data.Scope.CoreID != c.core || resumed.Data.Scope.ResourceOwnerID != c.core || resumed.Data.Text != "回复来自 "+c.core {
+	if json.Unmarshal(c.request(t, a, http.MethodPost, "/api/device-mesh/v1/business/messages", payload, http.StatusOK), &resumed) != nil || !resumed.Data.Saved || resumed.Data.Scope.CoreID != c.core || resumed.Data.Scope.ResourceOwnerID != a.device.DeviceID.String() || !resumed.Data.Scope.Coordinated || resumed.Data.ConversationID != previous.Data.ConversationID || resumed.Data.Text != "回复来自 "+c.core {
 		t.Fatal("新对话未由 C 计算并保存")
 	}
 	if name := <-c.model.roles; name != c.core+" 的角色" {
@@ -543,8 +636,8 @@ func TestThreeRealCoreBusinessSwitchPreservesOwnershipAndExpiresAdministrator(t 
 		t.Fatal("C 没有收到当前对话上下文")
 	}
 	retained := 0
-	if err := b.services.KernelContainer.DeviceRegistry.Database().QueryRowContext(t.Context(), `SELECT COUNT(*) FROM kernel_device_owned_resources WHERE owner_id=? AND kind='message' AND deleted=0`, b.core).Scan(&retained); err != nil || retained != oldCount {
-		t.Fatal("C 继续对话修改了 B 的专属对话")
+	if err := deviceDatabase.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM kernel_device_owned_resources WHERE owner_id=? AND kind='message' AND deleted=0`, a.device.DeviceID.String()).Scan(&retained); err != nil || retained != oldCount+2 {
+		t.Fatal("C 继续对话没有写回原设备或修改了其他设备消息")
 	}
 }
 
@@ -577,8 +670,8 @@ func TestThreeRealCoreBusinessSwitchKeepsDeviceOwnedConversationWhenCoordination
 	if json.Unmarshal(b.request(t, a, http.MethodPost, "/api/device-mesh/v1/business/messages", map[string]any{"requestId": "device-before-switch", "characterId": "one", "message": "设备原有对话"}, http.StatusOK), &before) != nil || !before.Data.Saved || before.Data.Scope.Coordinated || before.Data.Scope.ResourceOwnerID != a.device.DeviceID.String() {
 		t.Fatal("非统筹对话未由设备保存")
 	}
-	if name := <-b.model.roles; name != a.core+" 的角色" {
-		t.Fatal("非统筹对话未使用设备自己的角色")
+	if name := <-b.model.roles; name != b.core+" 的角色" {
+		t.Fatal("非统筹对话未使用当前 Core 的角色")
 	}
 	pairThreeCoreFixtures(t, b, c)
 	if err := a.local.FollowSuccessor(t.Context()); err == nil {
@@ -603,8 +696,8 @@ func TestThreeRealCoreBusinessSwitchKeepsDeviceOwnedConversationWhenCoordination
 	if json.Unmarshal(c.request(t, a, http.MethodPost, "/api/device-mesh/v1/business/messages", payload, http.StatusOK), &after) != nil || !after.Data.Saved || after.Data.Scope.CoreID != c.core || after.Data.Scope.Coordinated || after.Data.Scope.ResourceOwnerID != a.device.DeviceID.String() || after.Data.ConversationID != before.Data.ConversationID || after.Data.Text != "回复来自 "+c.core {
 		t.Fatal("非统筹切换后没有由 C 计算并回写原设备对话")
 	}
-	if name := <-c.model.roles; name != a.core+" 的角色" {
-		t.Fatal("非统筹切换后设备自己的角色被替换")
+	if name := <-c.model.roles; name != c.core+" 的角色" {
+		t.Fatal("非统筹切换后没有使用新 Core 的角色")
 	}
 	for _, provider := range []*threeCoreFixture{b, c} {
 		privateCopies := 0

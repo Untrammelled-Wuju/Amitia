@@ -11,8 +11,9 @@ import '../../../../core/widgets/character_avatar.dart';
 import '../../../chat/runtime/conversation_runtime_controller.dart';
 
 String formatConversationTime(String updatedAt) {
-  final time = DateTime.tryParse(updatedAt);
-  if (time == null) return '';
+  final parsed = DateTime.tryParse(updatedAt);
+  if (parsed == null) return '';
+  final time = parsed.toLocal();
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
   final conversationDate = DateTime(time.year, time.month, time.day);
@@ -90,165 +91,169 @@ class ConversationListTile extends ConsumerWidget {
     final pinned = conversation.pinnedAt.trim().isNotEmpty;
 
     return GestureDetector(
-      onLongPressStart: onLongPressAt == null ? null : (details) => onLongPressAt!(details.globalPosition),
+      onLongPressStart: onLongPressAt == null
+          ? null
+          : (details) => onLongPressAt!(details.globalPosition),
       child: Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        onLongPress: onLongPressAt == null ? onLongPress : null,
-        child: Column(
-          children: [
-            SizedBox(
-              height: 76,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 10,
-                ),
-                child: Row(
-                  children: [
-                    if (selecting)
-                      IgnorePointer(child: Checkbox(value: selected, onChanged: (_) {})),
-                    Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        CharacterAvatar(
-                          characterId: conversation.characterId,
-                          avatar: role?.avatar ?? '',
-                          initial: role?.name ?? '',
-                          placeholder: const Center(
-                            child: Icon(
-                              Icons.person_rounded,
-                              color: Colors.white,
-                              size: 26,
-                            ),
-                          ),
-                          size: 46,
-                          color: context.accentPrimary,
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          onLongPress: onLongPressAt == null ? onLongPress : null,
+          child: Column(
+            children: [
+              SizedBox(
+                height: 76,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
+                  child: Row(
+                    children: [
+                      if (selecting)
+                        IgnorePointer(
+                          child: Checkbox(value: selected, onChanged: (_) {}),
                         ),
-                        if (unreadCount > 0)
-                          Positioned(
-                            right: -1,
-                            top: -1,
-                            child: Container(
-                              constraints: const BoxConstraints(
-                                minWidth: 18,
-                                minHeight: 18,
+                      Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          CharacterAvatar(
+                            characterId: conversation.characterId,
+                            avatar: role?.avatar ?? '',
+                            initial: role?.name ?? '',
+                            placeholder: const Center(
+                              child: Icon(
+                                Icons.person_rounded,
+                                color: Colors.white,
+                                size: 26,
                               ),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: context.error,
-                                borderRadius: BorderRadius.circular(9),
-                                border: Border.all(
-                                  color: context.backgroundPrimary,
-                                  width: 2,
+                            ),
+                            size: 46,
+                            color: context.accentPrimary,
+                          ),
+                          if (unreadCount > 0)
+                            Positioned(
+                              right: -1,
+                              top: -1,
+                              child: Container(
+                                constraints: const BoxConstraints(
+                                  minWidth: 18,
+                                  minHeight: 18,
                                 ),
-                              ),
-                              alignment: Alignment.center,
-                              child: Text(
-                                unreadCount > 99 ? '99+' : '$unreadCount',
-                                style: AppTypography.label(context).copyWith(
-                                  color: Colors.white,
-                                  fontSize: unreadCount > 99 ? 8 : 9,
-                                  height: 1,
-                                  fontWeight: FontWeight.w600,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: context.error,
+                                  borderRadius: BorderRadius.circular(9),
+                                  border: Border.all(
+                                    color: context.backgroundPrimary,
+                                    width: 2,
+                                  ),
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  unreadCount > 99 ? '99+' : '$unreadCount',
+                                  style: AppTypography.label(context).copyWith(
+                                    color: Colors.white,
+                                    fontSize: unreadCount > 99 ? 8 : 9,
+                                    height: 1,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Row(
-                            children: [
-                              if (pinned) ...[
-                                AmitiaIcon(
-                                  AmitiaIconGlyph.pin,
-                                  size: 13,
-                                  color: context.textTertiary,
-                                ),
-                                const SizedBox(width: 4),
-                              ],
-                              Expanded(
-                                child: Text(
-                                  title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: AppTypography.body(context).copyWith(
-                                    fontSize: 15.5,
-                                    fontWeight: FontWeight.w500,
-                                    height: 1.25,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  Text(
-                                    timeText,
-                                    style: AppTypography.label(
-                                      context,
-                                    ).copyWith(fontSize: 11.5, height: 1.2),
-                                  ),
-                                  if (isGenerating) ...[
-                                    const SizedBox(height: 3),
-                                    SizedBox(
-                                      width: 11,
-                                      height: 11,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 1.5,
-                                        color: context.accentPrimary,
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 5),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  summary,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: AppTypography.bodySmall(context)
-                                      .copyWith(
-                                        fontSize: 13,
-                                        color: context.textSecondary,
-                                        height: 1.3,
-                                      ),
-                                ),
-                              ),
-                            ],
-                          ),
                         ],
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Row(
+                              children: [
+                                if (pinned) ...[
+                                  AmitiaIcon(
+                                    AmitiaIconGlyph.pin,
+                                    size: 13,
+                                    color: context.textTertiary,
+                                  ),
+                                  const SizedBox(width: 4),
+                                ],
+                                Expanded(
+                                  child: Text(
+                                    title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppTypography.body(context).copyWith(
+                                      fontSize: 15.5,
+                                      fontWeight: FontWeight.w500,
+                                      height: 1.25,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text(
+                                      timeText,
+                                      style: AppTypography.label(
+                                        context,
+                                      ).copyWith(fontSize: 11.5, height: 1.2),
+                                    ),
+                                    if (isGenerating) ...[
+                                      const SizedBox(height: 3),
+                                      SizedBox(
+                                        width: 11,
+                                        height: 11,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 1.5,
+                                          color: context.accentPrimary,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 5),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    summary,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppTypography.bodySmall(context)
+                                        .copyWith(
+                                          fontSize: 13,
+                                          color: context.textSecondary,
+                                          height: 1.3,
+                                        ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            if (showDivider)
-              Padding(
-                padding: const EdgeInsets.only(left: 74, right: 16),
-                child: Divider(
-                  height: 0.5,
-                  thickness: 0.5,
-                  color: context.borderSecondary,
+              if (showDivider)
+                Padding(
+                  padding: const EdgeInsets.only(left: 74, right: 16),
+                  child: Divider(
+                    height: 0.5,
+                    thickness: 0.5,
+                    color: context.borderSecondary,
+                  ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
-      ),
       ),
     );
   }

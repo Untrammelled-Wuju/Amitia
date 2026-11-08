@@ -51,6 +51,7 @@ export interface DeviceMeshBootstrapRequest {
   bootstrapTicket: string;
   fingerprint?: string;
   coreId?: string;
+  replaceCandidate?: boolean;
 }
 
 export interface MeshPairingInput {

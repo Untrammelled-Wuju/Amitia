@@ -140,7 +140,12 @@ class DefaultRuntimeControllerEventTest {
         val stateStore = stateStoreWith(RuntimeState.STOPPING)
         val host = FakeRuntimeServiceHost()
         val controller = defaultTestController(stateStore = stateStore, host = host)
-        host.emit(RuntimeServiceHostEvent.ExpectedStopped(generation = controller.snapshot().generation))
+        host.emit(
+            RuntimeServiceHostEvent.ExpectedStopped(
+                generation = controller.snapshot().generation,
+                result = com.amitia.amitia_app.runtime.service.ServiceTeardownResult.FullyStopped(1),
+            )
+        )
         assertEquals(RuntimeState.STOPPED, controller.snapshot().state)
     }
 

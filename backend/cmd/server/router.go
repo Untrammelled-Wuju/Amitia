@@ -299,8 +299,14 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		}); err != nil {
 			return nil, fmt.Errorf("register local mesh identity: %w", err)
 		}
-		if err := services.DeviceMesh.Coordination.InitializeCoreConsole(context.Background(), spaceID, localMeshIdentity.DeviceID.String(), services.RuntimeProfile == runtimeprofile.ProfileCloudCore); err != nil {
+		if err := services.DeviceMesh.Coordination.InitializeCoreConsole(context.Background(), spaceID, localMeshIdentity.DeviceID.String(), true); err != nil {
 			return nil, fmt.Errorf("initialize Core console ownership: %w", err)
+		}
+		if err := services.DeviceMesh.Coordination.CoordinateTrustedDevices(context.Background(), spaceID, localMeshIdentity.DeviceID.String()); err != nil {
+			amitialog.Printf("[original-error] coordinate trusted center devices: %v", err)
+		}
+		if err := services.DeviceMesh.BindLocalCapabilityExposure(context.Background(), spaceID); err != nil {
+			return nil, fmt.Errorf("bind local capability exposure: %w", err)
 		}
 	}
 	newAuthConfig := func(mode string) security.AuthConfig {
@@ -592,8 +598,10 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 
 	apiGroup := r.Group("/api")
 	if services.DeviceMesh != nil && services.DeviceMesh.LocalHandler != nil {
-		services.DeviceMesh.LocalHandler.RegisterRoutes(r, security.LocalRuntimeControlMiddleware(localCredentialStore, config.AppCfg.Server.Host), security.AuthenticationMiddleware(newAuthConfig("local_single_user")))
-		registerLocalSourceTaskApprovalRouter(r.Group("/internal/device-mesh", security.LocalRuntimeControlMiddleware(localCredentialStore, config.AppCfg.Server.Host)), services)
+		localAuthMiddleware := security.AuthenticationMiddleware(newAuthConfig("local_single_user"))
+		localControlMiddleware := security.LocalRuntimeControlMiddleware(localCredentialStore, config.AppCfg.Server.Host)
+		services.DeviceMesh.LocalHandler.RegisterRoutes(r, localAuthMiddleware, localControlMiddleware)
+		registerLocalSourceTaskApprovalRouter(r.Group("/internal/device-mesh", localAuthMiddleware, localControlMiddleware), services)
 	}
 	apiGroup.Use(security.AuthenticationMiddleware(newAuthConfig(config.AppCfg.Security.Mode)))
 	if channelSandbox != nil {
@@ -624,7 +632,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			}
 			c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": profileData})
 		})
-		apiGroup.PUT("/space/profile", func(c *gin.Context) {
+		apiGroup.PUT("/space/profile", security.SharedCoreDataWriteOnly(), func(c *gin.Context) {
 			var profileData spaceidentity.Profile
 			if err := c.ShouldBindJSON(&profileData); err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
@@ -737,6 +745,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		registerCloudGameCenterGateway(apiGroup, services)
 		registerCloudWorkbenchBrowserGateway(apiGroup, services)
 		registerCloudImageGenerationGateway(apiGroup, services)
+		registerGameModeRoutes(apiGroup, services)
 		if services.KernelContainer != nil && services.KernelContainer.GameHost != nil {
 			log.Info("[GameCenter] GameHost detected, registering game-center routes")
 			kernelReader := management.NewKernelReaderWithContributions(services.KernelContainer.DefinitionRepository, services.KernelContainer.InstallationRepository, services.KernelContainer.ContributionRepository)
@@ -824,6 +833,13 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 					)
 					rpcHandler := management.NewRPCHandler(rpcInvoker)
 					management.RegisterRPCRouter(apiGroup, rpcHandler)
+					behaviorService := management.NewGameBehaviorService(
+						management.NewGameHostPluginRegistry(services.KernelContainer.GameHost.PluginRegistry),
+						management.NewGameHostRuntimeManagerAdapter(services.KernelContainer.GameHost.RuntimeManager),
+						rpcInvoker,
+						gameHostBehaviorAuthorizer(services),
+					)
+					management.RegisterGameBehaviorRouter(apiGroup, behaviorService)
 
 					debugHandler := management.NewDebugHandler(services.KernelContainer.GameHost, func(ctx context.Context, toolID string, input json.RawMessage, scope management.DebugToolScope) (any, bool) {
 						if services.KernelContainer.ToolFacade == nil {
@@ -848,7 +864,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 				return nil, fmt.Errorf("sync: authoritative device coordination is required")
 			}
 			syncHandler := sync.NewHandler(services.Sync, services.KernelContainer.DeviceRegistry, services.DeviceMesh.Coordination)
-			syncHandler.RegisterRoutes(apiGroup, security.AuthenticationMiddleware(newAuthConfig(config.AppCfg.Security.Mode)))
+			syncHandler.RegisterRoutes(apiGroup)
 		}
 
 		if services.DeviceMesh == nil || services.DeviceMesh.BootstrapSvc == nil || services.DeviceMesh.CredentialSvc == nil || services.DeviceMesh.Hub == nil || services.DeviceMesh.Handler == nil {
@@ -882,7 +898,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 				PairingSvc:                pairingSvc,
 				Coordination:              services.DeviceMesh.Coordination,
 				BusinessCoordinationReady: services.DeviceMesh.BusinessCoordinationReady,
-				Coordinated:               services.RuntimeProfile == runtimeprofile.ProfileCloudCore,
+				Coordinated:               services.RuntimeProfile.IsCore(),
 				ProviderPath:              services.DeviceMesh.LocalHandler.ProviderPath,
 				Successor: func(ctx context.Context, device string) (any, error) {
 					result, err := services.DeviceMesh.LocalHandler.PrepareSuccessor(ctx, device)
@@ -1057,6 +1073,9 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 					}
 					if services.DeviceMesh.PendingTasks != nil {
 						services.DeviceMesh.PendingTasks.CancelAll(sessionID, "device connection closed")
+					}
+					if err := markGameModeUnknownAfterDisconnect(context.Background(), services, sessionID); err != nil {
+						log.Warn("game mode presence update failed", "sessionId", sessionID, "generation", generation, "error", err)
 					}
 				}),
 			}); err != nil {

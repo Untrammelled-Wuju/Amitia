@@ -236,7 +236,7 @@ export function useDeviceOwnedConversation() {
     saveProviderState();
     policy.value = current.policy || null;
     enabled.value = current.coordinationAvailable === true;
-    if (!enabled.value && mode === "cloud") { enabled.value = true; roles.value = []; roleOwnerId.value = ""; stopLocal("云端设备对话服务尚未就绪，当前回复已中断"); throw new Error(notice.value); }
+    if (!enabled.value && mode === "cloud") { enabled.value = true; roles.value = []; roleOwnerId.value = ""; stopLocal("统筹中心对话服务尚未就绪，当前回复已中断"); throw new Error(notice.value); }
     if (!enabled.value) return false;
     const roleGeneration = revision;
     const available = unwrap<any>(await apiClient.get("/api/device-mesh/v1/business/roles"));
@@ -679,8 +679,9 @@ export function useDeviceOwnedConversation() {
     const captured = revision;
     const rows = new Map<string, OwnedProject>();
     const historical = new Map<string, OwnedProject>();
-    const availableHistoricalRoles = policy.value?.coordinated ? await historicalRoles(characterId) : [];
-    const historicalRole = selectedHistoricalRole || (availableHistoricalRoles.length === 1 ? availableHistoricalRoles[0].id : "");
+    const discoveredHistoricalRoles = policy.value?.coordinated ? await historicalRoles(characterId) : [];
+    const availableHistoricalRoles = discoveredHistoricalRoles.filter((role) => role.id !== characterId);
+    const historicalRole = selectedHistoricalRole || (discoveredHistoricalRoles.length === 1 && availableHistoricalRoles.length === 1 ? availableHistoricalRoles[0].id : "");
     if (historicalRole && !availableHistoricalRoles.some((role) => role.id === historicalRole)) throw new Error("旧项目角色已变化，请重新选择");
     const cursors = new Set<string>();
     let cursor = "";

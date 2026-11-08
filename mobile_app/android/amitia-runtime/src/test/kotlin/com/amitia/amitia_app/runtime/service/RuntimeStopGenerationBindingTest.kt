@@ -1,6 +1,7 @@
 package com.amitia.amitia_app.runtime.service
 
 import android.content.Intent
+import com.amitia.amitia_app.runtime.AndroidRuntimeModule
 import com.amitia.amitia_app.runtime.service.internal.RuntimeForegroundNotification
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -18,10 +19,19 @@ import java.util.concurrent.CopyOnWriteArrayList
 class RuntimeStopGenerationBindingTest {
 
     private lateinit var service: RuntimeService
+    private lateinit var component: LifecycleProotComponent
     private val events = CopyOnWriteArrayList<RuntimeServiceHostEvent>()
 
     @Before
     fun setUp() {
+        AndroidRuntimeModule.resetCacheForTest()
+        component = LifecycleProotComponent()
+        TestAndroidRuntimeModuleOverride(
+            prootComponent = component,
+            prootRootfsPath = "/rootfs",
+            assembler = LifecycleProotEnvironmentAssembler(),
+            activeRuntimeManager = LifecycleValidActiveRuntimeManager(),
+        ).apply()
         service = Robolectric.setupService(RuntimeService::class.java)
         val binder = service.onBind(null) as RuntimeServiceBinder
         binder.endpoint.addListener(RuntimeServiceHostListener { events.add(it) })
@@ -30,6 +40,7 @@ class RuntimeStopGenerationBindingTest {
     @After
     fun tearDown() {
         service.onDestroy()
+        AndroidRuntimeModule.resetCacheForTest()
         events.clear()
         RuntimeService.clearInstanceRef()
     }
@@ -40,12 +51,16 @@ class RuntimeStopGenerationBindingTest {
             action = RuntimeServiceContract.ACTION_START_HOST
             putExtra(RuntimeServiceContract.EXTRA_RUNTIME_GENERATION, 100L)
         }, 0, 1)
+        awaitEvent { service.currentProotSession() != null }
 
         service.onStartCommand(Intent().apply {
             action = RuntimeServiceContract.ACTION_STOP_HOST
             putExtra(RuntimeServiceContract.EXTRA_TARGET_GENERATION, 100L)
         }, 0, 2)
 
+        awaitEvent {
+            events.any { it is RuntimeServiceHostEvent.ExpectedStopped }
+        }
         val expectedStopped = events.filterIsInstance<RuntimeServiceHostEvent.ExpectedStopped>()
         assertEquals(1, expectedStopped.size)
         assertEquals(100L, expectedStopped[0].generation)
@@ -57,6 +72,7 @@ class RuntimeStopGenerationBindingTest {
             action = RuntimeServiceContract.ACTION_START_HOST
             putExtra(RuntimeServiceContract.EXTRA_RUNTIME_GENERATION, 200L)
         }, 0, 1)
+        awaitEvent { service.currentProotSession() != null }
 
         service.onStartCommand(Intent().apply {
             action = RuntimeServiceContract.ACTION_STOP_HOST
@@ -73,6 +89,7 @@ class RuntimeStopGenerationBindingTest {
             action = RuntimeServiceContract.ACTION_START_HOST
             putExtra(RuntimeServiceContract.EXTRA_RUNTIME_GENERATION, 300L)
         }, 0, 1)
+        awaitEvent { service.currentProotSession() != null }
 
         service.onStartCommand(Intent().apply {
             action = RuntimeServiceContract.ACTION_STOP_HOST
@@ -88,6 +105,7 @@ class RuntimeStopGenerationBindingTest {
             action = RuntimeServiceContract.ACTION_START_HOST
             putExtra(RuntimeServiceContract.EXTRA_RUNTIME_GENERATION, 400L)
         }, 0, 1)
+        awaitEvent { service.currentProotSession() != null }
 
         service.onStartCommand(Intent().apply {
             action = RuntimeServiceContract.ACTION_STOP_HOST
@@ -104,6 +122,7 @@ class RuntimeStopGenerationBindingTest {
             action = RuntimeServiceContract.ACTION_START_HOST
             putExtra(RuntimeServiceContract.EXTRA_RUNTIME_GENERATION, 500L)
         }, 0, 1)
+        awaitEvent { service.currentProotSession() != null }
 
         service.onStartCommand(Intent().apply {
             action = RuntimeServiceContract.ACTION_STOP_HOST
@@ -131,12 +150,16 @@ class RuntimeStopGenerationBindingTest {
             action = RuntimeServiceContract.ACTION_START_HOST
             putExtra(RuntimeServiceContract.EXTRA_RUNTIME_GENERATION, 700L)
         }, 0, 1)
+        awaitEvent { service.currentProotSession() != null }
 
         service.onStartCommand(Intent().apply {
             action = RuntimeServiceContract.ACTION_STOP_HOST
             putExtra(RuntimeServiceContract.EXTRA_TARGET_GENERATION, 700L)
         }, 0, 2)
 
+        awaitEvent {
+            events.any { it is RuntimeServiceHostEvent.ExpectedStopped }
+        }
         val expectedStopped = events.filterIsInstance<RuntimeServiceHostEvent.ExpectedStopped>()
         assertEquals(1, expectedStopped.size)
         assertEquals(700L, expectedStopped[0].generation)
@@ -154,5 +177,14 @@ class RuntimeStopGenerationBindingTest {
         val expectedStoppedAfter = events.filterIsInstance<RuntimeServiceHostEvent.ExpectedStopped>()
         assertEquals(1, expectedStoppedAfter.size)
         assertEquals(700L, expectedStoppedAfter[0].generation)
+    }
+
+    private fun awaitEvent(condition: () -> Boolean) {
+        val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5)
+        while (System.nanoTime() < deadline) {
+            if (condition()) return
+            Thread.sleep(10)
+        }
+        assertTrue("runtime stop condition was not observed before timeout", condition())
     }
 }

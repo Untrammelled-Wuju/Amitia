@@ -22,6 +22,7 @@ const packageStagingDir = join(projectRoot, '.package-staging');
 const outputFile = join(packageOutputDir, process.env.MOCK_PLUGIN_OUTPUT || 'world-game-plugin.amitiax');
 const packageVersionOverride = (process.env.MOCK_PLUGIN_VERSION || '').trim();
 const requireCompanionArtifact = /^(1|true|yes)$/i.test((process.env.MOCK_PLUGIN_REQUIRED_ARTIFACT || '').trim());
+const networkModeOverride = (process.env.MOCK_PLUGIN_NETWORK_MODE || '').trim().toLowerCase();
 const runtimeModuleId = 'world-game-runtime';
 const supportModuleId = 'world-game-support';
 const runtimeModuleRoot = join(packageStagingDir, 'modules', runtimeModuleId);
@@ -140,6 +141,17 @@ function createPayloadLayout() {
 
   const manifest = JSON.parse(readFileSync(join(projectRoot, 'amitia-extension.json'), 'utf8'));
   if (packageVersionOverride) manifest.extension.version = packageVersionOverride;
+  if (networkModeOverride) {
+    if (networkModeOverride !== 'none') throw new Error(`unsupported MOCK_PLUGIN_NETWORK_MODE: ${networkModeOverride}`);
+    const gameContribution = manifest.modules
+      ?.flatMap(module => module.contributions || [])
+      .find(contribution => contribution.kind === 'gamex');
+    if (!gameContribution) throw new Error('network-mode fixture needs a gamex contribution');
+    gameContribution.spec.network = { mode: 'none' };
+    gameContribution.requiredPermissions = (gameContribution.requiredPermissions || []).filter(
+      permission => permission !== 'service.network.request',
+    );
+  }
   for (const module of manifest.modules || []) {
     for (const contribution of module.contributions || []) {
       const entry = contribution.spec?.entry;

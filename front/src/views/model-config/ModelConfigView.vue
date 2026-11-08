@@ -4,7 +4,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <div class="page">
-    <el-alert v-if="!checking && !canConfigure" title="云端统筹模式的模型由 Core 统一管理。当前设备没有管理员权限，请在 Core 控制页面修改。" type="info" :closable="false" show-icon />
+    <el-alert v-if="!checking && !canConfigure" title="模型由统筹中心统一管理。当前设备没有管理员权限，请在中心设备修改。" type="info" :closable="false" show-icon />
     <el-tabs v-if="canConfigure" :model-value="activeTab" @tab-change="onTabChange">
       <el-tab-pane label="普通模型" name="llm" />
       <el-tab-pane label="语音模型" name="voice" />

@@ -36,8 +36,10 @@ func redactModelConfigForResponse(cfg *ModelConfig) {
 	cfg.HasAPIKey = cfg.APIKey != ""
 	cfg.APIKey = ""
 	var capabilities ModelCapabilities
-	if err := json.Unmarshal([]byte(cfg.CapabilitiesJSON), &capabilities); err != nil {
-		amitialog.Printf("[original-error] %v", err)
+	if strings.TrimSpace(cfg.CapabilitiesJSON) != "" {
+		if err := json.Unmarshal([]byte(cfg.CapabilitiesJSON), &capabilities); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	cfg.SupportsVision = capabilities.SupportsImage
 	applyReasoningCapabilities(cfg)

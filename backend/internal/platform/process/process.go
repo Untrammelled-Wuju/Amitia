@@ -12,6 +12,8 @@ import (
 
 type ProcessTreeHandle uintptr
 
+const ParentBoundChildFlag = "--parent-bound-child"
+
 type ProcessConfig struct {
 	Executable     string
 	Args           []string
@@ -21,6 +23,7 @@ type ProcessConfig struct {
 	OnStderr       func(line string)
 	OnScannerError func(error)
 	StartTimeout   time.Duration
+	BindToParent   bool
 }
 
 type ProcessManager interface {

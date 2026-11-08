@@ -100,7 +100,7 @@ func (p *ownedMemoryConsumers) OwnedStorageStats(ctx context.Context) (business.
 	if p.storage == nil {
 		return business.OwnedStorageStats{}, errors.New("Kernel 存储统计入口不可用")
 	}
-	rows, err := p.storage.QueryContext(ctx, `SELECT kind,COUNT(*) FROM kernel_device_owned_resources WHERE deleted=0 AND kind IN ('conversation','message') GROUP BY kind`)
+	rows, err := p.storage.QueryContext(ctx, `SELECT kind,COUNT(*) FROM kernel_device_owned_resources WHERE deleted=0 AND kind IN ('conversation','message','memory') GROUP BY kind`)
 	if err != nil {
 		return business.OwnedStorageStats{}, err
 	}
@@ -117,6 +117,8 @@ func (p *ownedMemoryConsumers) OwnedStorageStats(ctx context.Context) (business.
 			stats.ConversationCount = count
 		case "message":
 			stats.MessageCount = count
+		case "memory":
+			stats.MemoryCount = count
 		}
 	}
 	if err := rows.Err(); err != nil {

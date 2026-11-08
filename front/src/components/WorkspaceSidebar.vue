@@ -477,8 +477,6 @@ const chatSearchResults = computed(() => {
     })
     .slice(0, 30);
 });
-let conversationActivityTimer: number | null = null;
-let conversationActivityRefreshing = false;
 
 function normalizeSearchResult(value: Record<string, any>): ConversationItem | null {
   const id = String(value.id || "").trim();
@@ -669,19 +667,10 @@ watch(sidebarView, () => {
   void nextTick(syncViewIndicator);
 });
 
-function syncConversationActivityPolling() {
-  if (conversationActivityTimer !== null) return;
-  conversationActivityTimer = window.setInterval(async () => {
-    if (conversationActivityRefreshing) return;
-    conversationActivityRefreshing = true;
-    try {
-      await chatStore.fetchSidebar();
-    } catch (error) {
-  console.error("[original-error]", error);
-} finally {
-      conversationActivityRefreshing = false;
-    }
-  }, 2000);
+function refreshSidebarWhenVisible() {
+  if (document.visibilityState === "visible") void chatStore.fetchSidebar().catch((error) => {
+    console.error("[original-error]", error);
+  });
 }
 
 async function handleNewChat() {
@@ -1088,7 +1077,8 @@ onMounted(() => {
   console.error("[original-error]", error);
   return undefined;
 });
-  syncConversationActivityPolling();
+  window.addEventListener("focus", refreshSidebarWhenVisible);
+  document.addEventListener("visibilitychange", refreshSidebarWhenVisible);
 });
 
 onUnmounted(() => {
@@ -1097,10 +1087,8 @@ onUnmounted(() => {
   viewSwitchResizeObserver = undefined;
   if (chatSearchTimer !== null) window.clearTimeout(chatSearchTimer);
   chatSearchRequest++;
-  if (conversationActivityTimer !== null) {
-    window.clearInterval(conversationActivityTimer);
-    conversationActivityTimer = null;
-  }
+  window.removeEventListener("focus", refreshSidebarWhenVisible);
+  document.removeEventListener("visibilitychange", refreshSidebarWhenVisible);
 });
 
 </script>

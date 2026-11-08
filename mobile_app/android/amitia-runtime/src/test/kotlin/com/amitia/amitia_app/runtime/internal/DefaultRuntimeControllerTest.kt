@@ -130,19 +130,7 @@ class DefaultRuntimeControllerTest {
 
     private fun createStateStore(initialState: RuntimeState): RuntimeStateStore {
         val store = RuntimeStateStore()
-        store.update {
-            RuntimeSnapshot(
-                state = initialState,
-                runtimeVersion = null,
-                activeOperationId = null,
-                activeOperationType = null,
-                progress = it.progress,
-                components = it.components,
-                lastError = null,
-                generation = it.generation,
-                updatedAtEpochMillis = it.updatedAtEpochMillis
-            )
-        }
+        store.initialize(initialState)
         return store
     }
 
@@ -150,7 +138,7 @@ class DefaultRuntimeControllerTest {
 
     private fun createReadyStateStore(generation: Long): RuntimeStateStore {
         val store = RuntimeStateStore()
-        store.update { it.copy(state = RuntimeState.INSTALLED) }
+        store.initialize(RuntimeState.INSTALLED)
         store.update { it.copy(state = RuntimeState.STARTING) }
         store.update { it.copy(state = RuntimeState.READY, generation = generation) }
         return store
@@ -342,7 +330,12 @@ class DefaultRuntimeControllerTest {
         stopAndCapture(controller)
         assertTrue(controller.snapshot().state == RuntimeState.STOPPING)
 
-        host.emit(RuntimeServiceHostEvent.ExpectedStopped(gen))
+        host.emit(
+            RuntimeServiceHostEvent.ExpectedStopped(
+                generation = gen,
+                result = com.amitia.amitia_app.runtime.service.ServiceTeardownResult.FullyStopped(1),
+            )
+        )
         assertEquals(RuntimeState.STOPPED, controller.snapshot().state)
     }
 

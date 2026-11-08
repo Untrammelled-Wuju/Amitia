@@ -21,6 +21,14 @@ func TestMainVisionCapabilityMerge(t *testing.T) {
 	}
 }
 
+func TestRedactModelConfigAcceptsEmptyCapabilities(t *testing.T) {
+	cfg := &ModelConfig{CapabilitiesJSON: "  ", APIKey: "secret"}
+	redactModelConfigForResponse(cfg)
+	if cfg.APIKey != "" || cfg.SupportsVision {
+		t.Fatalf("empty capabilities were applied incorrectly: %+v", cfg)
+	}
+}
+
 func TestMainVisionNativeHistoryAndLocalParts(t *testing.T) {
 	visionModelConfigProviderMu.RLock()
 	original := visionModelConfigProvider

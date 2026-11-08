@@ -241,11 +241,18 @@ class DeviceOwnedMemoryService {
         if (memoryView.isNotEmpty) 'memoryView': memoryView,
       },
     );
-    if (result == null || result['executionScope'] is! Map || result['history'] is! Map) throw StateError('记忆历史结果无效');
+    if (result == null ||
+        result['executionScope'] is! Map ||
+        result['history'] is! Map)
+      throw StateError('记忆历史结果无效');
     _validateScope(result['executionScope'], state);
     final history = Map<String, dynamic>.from(result['history'] as Map);
-    if (history['memoryId'] != id || history['versions'] is! List) throw StateError('记忆历史归属无效');
-    return (history['versions'] as List).whereType<Map>().map((row) => Map<String, dynamic>.from(row)).toList(growable: false);
+    if (history['memoryId'] != id || history['versions'] is! List)
+      throw StateError('记忆历史归属无效');
+    return (history['versions'] as List)
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .toList(growable: false);
   }
 
   Future<List<MemoryDto>> listMemories({
@@ -304,6 +311,38 @@ class DeviceOwnedMemoryService {
   }) async {
     if (limit < 1 || limit > 128) throw ArgumentError('记忆分页参数无效');
     final role = characterId ?? '';
+    if (role.isEmpty && cursor.isEmpty) {
+      final before = await _state();
+      final result = await api.get<Map<String, dynamic>>(
+        '/api/device-mesh/v1/business/roles',
+      );
+      final after = await _state();
+      final roles = result?['roles'];
+      final scope = result?['executionScope'];
+      if (roles is! List ||
+          scope is! Map ||
+          scope['coreId'] != before['coreId'] ||
+          scope['coreId'] != after['coreId'] ||
+          result?['roleOwnerId'] is! String ||
+          (result!['roleOwnerId'] as String).isEmpty ||
+          scope['roleOwnerId'] != result['roleOwnerId'] ||
+          scope['resourceOwnerId'] != scope['targetDeviceId'] ||
+          scope['targetDeviceId'] != before['policy']['deviceId'] ||
+          scope['targetDeviceId'] != after['policy']['deviceId'] ||
+          const [
+            'providerEpoch',
+            'modeRevision',
+            'permissionRevision',
+            'coordinated',
+          ].any(
+            (key) =>
+                scope[key] != before['policy'][key] ||
+                scope[key] != after['policy'][key],
+          )) {
+        throw StateError('最近记忆的角色列表归属或权限已变化');
+      }
+      if (roles.isEmpty) return const MemoryPage(items: [], nextCursor: '');
+    }
     final original = cursor.isEmpty ? null : _pageScopes[cursor];
     if (cursor.isNotEmpty && original == null) throw StateError('记忆分页缺少原始记忆范围');
     final page = await query(

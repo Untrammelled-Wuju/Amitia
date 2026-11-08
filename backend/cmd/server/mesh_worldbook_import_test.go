@@ -13,6 +13,18 @@ func TestActualTLSWorldbookImportIsAtomic(t *testing.T) {
 	a := newThreeCoreFixture(t, "worldbook-import-a", schemas)
 	b := newThreeCoreFixture(t, "worldbook-import-b", schemas)
 	pairThreeCoreFixtures(t, a, b)
+	policy, err := b.services.DeviceMesh.Coordination.Get(t.Context(), b.core, a.device.DeviceID.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ensureCoordinatedForTest(t, b, a, policy.ModeRevision)
+	policy, err = b.services.DeviceMesh.Coordination.Get(t.Context(), b.core, a.device.DeviceID.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.services.DeviceMesh.Coordination.GrantAdministrator(t.Context(), b.core, a.device.DeviceID.String(), policy.PermissionRevision, true); err != nil {
+		t.Fatal(err)
+	}
 	const endpoint = "/api/device-mesh/v1/business"
 	view := decodeThreeCoreMemoryResponse[business.QueryResult](t, b.request(t, a, http.MethodGet, endpoint+"/data?kind=worldbook&characterId=one", nil, http.StatusOK))
 	validRule := func(pattern, content string) map[string]any {

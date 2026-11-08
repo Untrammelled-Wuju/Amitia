@@ -183,6 +183,13 @@ class BackendTransportNotifier extends AsyncNotifier<BackendTransportState> {
     );
   }
 
+  BackendTransport ensureTransport(BackendConnectionConfig config) {
+    if (_current == null || _currentGeneration != config.generation) {
+      _recreateTransport(config);
+    }
+    return _current!;
+  }
+
   void _closeCurrentIfNeeded() {
     if (_current != null) {
       _transportLogger.d(
@@ -205,22 +212,22 @@ class BackendTransportNotifier extends AsyncNotifier<BackendTransportState> {
 
 final backendCurrentTransportProvider = Provider<BackendTransport?>((ref) {
   final transportAsync = ref.watch(backendTransportProvider);
+  final connection = ref.watch(backendConnectionProvider).valueOrNull;
+  final notifier = ref.read(backendTransportProvider.notifier);
 
   final state = transportAsync.asData?.value;
 
-  if (state is! TransportAvailable) {
-    return null;
+  if (state is TransportAvailable) {
+    final transport = notifier.currentTransport;
+    if (transport != null && notifier.currentGeneration == state.generation) {
+      return transport;
+    }
   }
 
-  final notifier = ref.read(backendTransportProvider.notifier);
-
-  final transport = notifier.currentTransport;
-
-  if (transport == null || notifier.currentGeneration != state.generation) {
-    return null;
+  if (connection is BackendConnectionAvailable) {
+    return notifier.ensureTransport(connection.config);
   }
-
-  return transport;
+  return null;
 });
 
 final backendTransportGenerationProvider = Provider<int>((ref) {
@@ -230,6 +237,14 @@ final backendTransportGenerationProvider = Provider<int>((ref) {
 
   if (state is TransportAvailable) {
     return state.generation;
+  }
+
+  final connection = ref.watch(backendConnectionProvider).valueOrNull;
+  if (connection is BackendConnectionAvailable) {
+    return ref
+        .read(backendTransportProvider.notifier)
+        .ensureTransport(connection.config)
+        .generation;
   }
 
   return 0;
@@ -441,10 +456,16 @@ final rawDeviceLocalBackendServiceApiProvider = Provider<BackendServiceApi?>((
 
 final rawBackendServiceApiProvider = Provider<BackendServiceApi?>((ref) {
   final mode = ref.watch(mobileDeploymentConfigProvider).mode;
-  final transport = mode == MobileDeploymentMode.local
-      ? ref.watch(deviceLocalBackendCurrentTransportProvider)
-      : ref.watch(backendCurrentTransportProvider);
-  if (transport == null) return null;
+  if (mode == MobileDeploymentMode.local) {
+    final transport = ref.watch(deviceLocalBackendCurrentTransportProvider);
+    if (transport == null) return null;
+    return BackendServiceApi(transport.http, transport.generation);
+  }
+  final connection = ref.watch(backendConnectionProvider).valueOrNull;
+  if (connection is! BackendConnectionAvailable) return null;
+  final transport = ref
+      .read(backendTransportProvider.notifier)
+      .ensureTransport(connection.config);
   return BackendServiceApi(transport.http, transport.generation);
 });
 

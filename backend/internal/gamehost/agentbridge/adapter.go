@@ -64,21 +64,26 @@ func (a *RuntimeAdapter) Execute(ctx context.Context, binding capability.Runtime
 	if err := protocol.ValidatePluginMethod(method); err != nil {
 		return failure(invocation.InvocationID, toolID, capability.ErrorCodeInvalidInput, "invalid plugin RPC method", err)
 	}
-	peer, err := a.resolvePeer(ctx, binding)
-	if err != nil {
-		started, startErr := a.startStoppedRuntime(ctx, binding, err)
+	peer, resolveErr := a.resolvePeer(ctx, binding)
+	readyErr := error(nil)
+	if resolveErr == nil {
+		readyErr = a.ensurePeerReady(ctx, peer)
+	}
+	if resolveErr != nil || readyErr != nil {
+		started, startErr := a.startStartableRuntime(ctx, binding)
 		if startErr != nil {
-			return failure(invocation.InvocationID, toolID, capability.ErrorCodeRuntimeUnavailable, "start plugin runtime", startErr)
+			return failure(invocation.InvocationID, toolID, capability.ErrorCodeRuntimeUnavailable, "start plugin runtime", errors.Join(resolveErr, readyErr, startErr))
 		}
-		if started {
-			peer, err = a.waitForReadyPeer(ctx, binding)
+		if !started {
+			if resolveErr != nil {
+				return failure(invocation.InvocationID, toolID, capability.ErrorCodeRuntimeUnavailable, "plugin runtime is unavailable", resolveErr)
+			}
+			return failure(invocation.InvocationID, toolID, capability.ErrorCodeRuntimeUnavailable, "plugin runtime is not ready", readyErr)
 		}
-	}
-	if err != nil {
-		return failure(invocation.InvocationID, toolID, capability.ErrorCodeRuntimeUnavailable, "plugin runtime is unavailable", err)
-	}
-	if err := a.ensurePeerReady(ctx, peer); err != nil {
-		return failure(invocation.InvocationID, toolID, capability.ErrorCodeRuntimeUnavailable, "plugin runtime is not ready", err)
+		peer, resolveErr = a.waitForReadyPeer(ctx, binding)
+		if resolveErr != nil {
+			return failure(invocation.InvocationID, toolID, capability.ErrorCodeRuntimeUnavailable, "plugin runtime is unavailable", errors.Join(readyErr, resolveErr))
+		}
 	}
 	requestID := invocation.InvocationID
 	if strings.TrimSpace(requestID) == "" {
@@ -140,8 +145,8 @@ func (a *RuntimeAdapter) Execute(ctx context.Context, binding capability.Runtime
 	return result
 }
 
-func (a *RuntimeAdapter) startStoppedRuntime(ctx context.Context, binding capability.RuntimeBinding, resolveErr error) (bool, error) {
-	if a == nil || a.starter == nil || resolveErr == nil || !strings.Contains(resolveErr.Error(), "has no active generation") {
+func (a *RuntimeAdapter) startStartableRuntime(ctx context.Context, binding capability.RuntimeBinding) (bool, error) {
+	if a == nil || a.starter == nil {
 		return false, nil
 	}
 	plugin, err := a.resolvePlugin(ctx, binding)
@@ -160,7 +165,16 @@ func (a *RuntimeAdapter) startStoppedRuntime(ctx context.Context, binding capabi
 		return false, nil
 	}
 	if err := a.starter.StartRuntime(ctx, runtimeID); err != nil {
-		return false, err
+		current, currentErr := a.runtimes.Get(ctx, runtimeID)
+		if currentErr != nil {
+			return false, errors.Join(err, currentErr)
+		}
+		switch current.State {
+		case ghdomain.RuntimeStateStarting, ghdomain.RuntimeStateRunning, ghdomain.RuntimeStateDegraded, ghdomain.RuntimeStateRestarting:
+			return true, nil
+		default:
+			return false, err
+		}
 	}
 	return true, nil
 }
@@ -264,6 +278,9 @@ func (a *RuntimeAdapter) Health(ctx context.Context, binding capability.RuntimeB
 	}
 	peer, err := a.resolvePeer(ctx, binding)
 	if err != nil {
+		if a.startableRuntimeState(ctx, binding) {
+			return capability.HealthReady
+		}
 		return capability.HealthUnhealthy
 	}
 	snapshot, err := a.readiness.Resolve(ctx, peer.RuntimeID)
@@ -288,6 +305,25 @@ func (a *RuntimeAdapter) Health(ctx context.Context, binding capability.RuntimeB
 		return capability.HealthDegraded
 	}
 	return capability.HealthUnknown
+}
+
+func (a *RuntimeAdapter) startableRuntimeState(ctx context.Context, binding capability.RuntimeBinding) bool {
+	if a == nil || a.starter == nil {
+		return false
+	}
+	plugin, err := a.resolvePlugin(ctx, binding)
+	if err != nil {
+		return false
+	}
+	runtimeID, err := a.resolveRuntime(ctx, binding, plugin.ID)
+	if err != nil {
+		return false
+	}
+	runtimeInstance, err := a.runtimes.Get(ctx, runtimeID)
+	if err != nil {
+		return false
+	}
+	return runtimeInstance.State == ghdomain.RuntimeStateCreated || runtimeInstance.State == ghdomain.RuntimeStateStopped
 }
 
 func (a *RuntimeAdapter) resolvePeer(ctx context.Context, binding capability.RuntimeBinding) (ipc.Peer, error) {

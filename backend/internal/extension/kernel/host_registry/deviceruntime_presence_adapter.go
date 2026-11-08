@@ -2,6 +2,7 @@ package host_registry
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/u-ai/backend/internal/deviceruntime/protocol"
@@ -39,10 +40,24 @@ func (a *DeviceRuntimePresenceAdapter) Acquire(
 
 func (a *DeviceRuntimePresenceAdapter) Heartbeat(
 	ctx context.Context,
-	sessionID runtimeidentity.RuntimeSessionID,
+	snapshot protocol.PresenceSnapshot,
 	at time.Time,
 ) error {
-	return nil
+	binding := RuntimeSessionBinding{
+		SpaceID:              snapshot.SpaceID,
+		DeviceID:             snapshot.DeviceID,
+		RuntimeID:            snapshot.RuntimeID,
+		RuntimeSessionID:     snapshot.RuntimeSessionID,
+		Platform:             snapshot.Platform,
+		ConnectionGeneration: snapshot.ConnectionGeneration,
+		At:                   at,
+	}
+	err := a.registry.HeartbeatRuntimeSession(ctx, binding)
+	if err == nil || (!errors.Is(err, ErrRuntimePresenceNotFound) && !errors.Is(err, ErrStaleRuntimeSessionBinding)) {
+		return err
+	}
+	_, rebindErr := a.registry.BindRuntimeSession(ctx, binding)
+	return rebindErr
 }
 
 func (a *DeviceRuntimePresenceAdapter) Close(

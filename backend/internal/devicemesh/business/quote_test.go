@@ -34,7 +34,7 @@ func TestOwnedQuoteReadsActualOwnerAndStoresReviewedSnapshot(t *testing.T) {
 			}
 			digest := sha256.Sum256([]byte("我喜欢茶"))
 			req.RequestID, req.Message, req.ExpectedScope = "quoted", "为什么？", &current.Scope
-			req.Quote = &QuoteReference{OwnerID: first.Scope.ResourceOwnerID, RoleID: "role", ConversationID: "chat", MessageID: "original/user", ExpectedRevision: 1, ContentHash: hex.EncodeToString(digest[:]), ExpectedScope: &current.Scope}
+			req.Quote = &QuoteReference{OwnerID: first.Scope.ResourceOwnerID, RoleID: "role", ConversationID: "chat", MessageID: "original/user", ExpectedRevision: 1, ContentHash: hex.EncodeToString(digest[:]), ExpectedScope: &first.Scope}
 			model.generate = func(_ context.Context, in Inference) (Generation, error) {
 				if in.Quote == nil || in.Quote.Content != "我喜欢茶" || in.Quote.OwnerID != "a" {
 					t.Fatalf("unreviewed quote: %+v", in.Quote)

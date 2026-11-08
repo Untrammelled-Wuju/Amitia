@@ -137,7 +137,7 @@ func AuthenticationMiddleware(cfg AuthConfig) gin.HandlerFunc {
 func LocalAdminAuthenticationMiddleware(cfg AuthConfig) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if cfg.Mode != "local_single_user" && cfg.Mode != "local" {
-			util.ErrorResponse(c, response.Unauthorized, "本地管理接口仅允许本地模式", nil)
+			util.ErrorResponse(c, response.Unauthorized, "本机管理接口仅允许当前设备访问", nil)
 			c.Abort()
 			return
 		}
@@ -228,13 +228,13 @@ func handleNetworkAuth(c *gin.Context, cfg AuthConfig) {
 			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"code": "mesh.policy_unavailable", "message": "设备权限状态暂不可用"})
 			return
 		}
-		if policy.Coordinated && policy.Administrator {
+		if cfg.LocalDeviceID != "" && cred.DeviceID == cfg.LocalDeviceID || policy.Coordinated && policy.Administrator {
 			permissions = auth.OwnerDevicePermissions()
 		}
 		c.Set(configurationPolicyContextKey, policy)
 		c.Set(configurationPolicyServiceContextKey, cfg.Coordination)
 	}
-	actor := &auth.ActorContext{PrincipalType: auth.PrincipalTrustedDevice, SpaceID: cred.SpaceID, DeviceID: cred.DeviceID, RuntimeID: cred.RuntimeID, Capabilities: []string{"*"}, Permissions: permissions, AuthMethod: AuthMethodDeviceCredential, RequestID: generateRequestID(), CorrelationID: sanitizeCorrelationID(c.GetHeader("X-Request-ID"))}
+	actor := &auth.ActorContext{PrincipalType: auth.PrincipalTrustedDevice, SpaceID: cred.SpaceID, DeviceID: cred.DeviceID, RuntimeID: cred.RuntimeID, Capabilities: []string{"*"}, Permissions: permissions, AuthMethod: AuthMethodDeviceCredential, RequestID: generateRequestID(), CorrelationID: sanitizeCorrelationID(c.GetHeader("X-Request-ID")), IsHostDevice: cfg.LocalDeviceID != "" && cred.DeviceID == cfg.LocalDeviceID}
 	applyActorToContext(c, actor)
 }
 
@@ -277,7 +277,7 @@ func handleLocalAuth(c *gin.Context, cfg AuthConfig) {
 		return
 	}
 	if !isLoopback(c.Request.RemoteAddr) || !isLoopback(cfg.ListenAddress) {
-		util.ErrorResponse(c, response.Unauthorized, "本地模式仅允许回环访问", nil)
+		util.ErrorResponse(c, response.Unauthorized, "本机管理接口仅允许回环访问", nil)
 		c.Abort()
 		return
 	}

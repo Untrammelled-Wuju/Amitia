@@ -45,7 +45,7 @@ export function useDashboardData() {
   let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
   const deployLabel = computed(() =>
-    health.value?.deployMode === "cloud-web" ? "云端统筹" : "本地模式",
+    health.value?.deployMode === "cloud-web" ? "远程统筹中心" : "本机统筹中心",
   );
   const deployClass = computed(() =>
     health.value?.deployMode === "cloud-web" ? "status-warn" : "status-ok",

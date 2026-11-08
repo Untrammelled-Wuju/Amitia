@@ -76,7 +76,7 @@ func (r *ProviderRuntimeExecutionResolver) ResolveRuntimeExecution(
 	invocation ToolInvocationContext,
 ) (RuntimeExecutionRoute, error) {
 	target := invocation.ExecutionTarget
-	if target.IsZero() && (tool.Runtime.RuntimeType == RuntimeTypeJavaScript || tool.Runtime.RuntimeType == RuntimeTypePluginJS) {
+	if target.IsZero() && usesInProcessAdapter(tool.Runtime.RuntimeType) {
 		return RuntimeExecutionRoute{
 			Binding: tool.Runtime,
 			SpaceID: runtimeidentity.ParseSpaceID(invocation.SpaceID),

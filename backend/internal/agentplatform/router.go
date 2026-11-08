@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/middleware/security"
 )
 
 type HTTPHandler struct {
@@ -23,19 +24,20 @@ func RegisterRoutes(group *gin.RouterGroup, service *Service, spaceID, ownerID s
 	roles.GET("", handler.listAgents)
 
 	teams := roles.Group("/teams")
+	admin := security.SharedCoreDataWriteOnly()
 	teams.GET("/templates", handler.listTeamTemplates)
-	teams.POST("/from-template", handler.createTeamFromTemplate)
+	teams.POST("/from-template", admin, handler.createTeamFromTemplate)
 	teams.GET("", handler.listTeams)
-	teams.POST("", handler.createTeam)
+	teams.POST("", admin, handler.createTeam)
 	teams.GET("/:id", handler.getTeam)
-	teams.PUT("/:id", handler.updateTeam)
-	teams.POST("/:id/members", handler.addTeamMember)
-	teams.POST("/:id/contexts", handler.createTeamContext)
+	teams.PUT("/:id", admin, handler.updateTeam)
+	teams.POST("/:id/members", admin, handler.addTeamMember)
+	teams.POST("/:id/contexts", admin, handler.createTeamContext)
 	teams.GET("/:id/context", handler.sharedTeamContext)
-	teams.POST("/:id/handoffs", handler.createTeamHandoff)
-	teams.POST("/:id/route", handler.routeTeamMessage)
-	teams.POST("/:id/handoffs/:handoffId/accept", handler.acceptTeamHandoff)
-	teams.POST("/:id/handoffs/:handoffId/complete", handler.completeTeamHandoff)
+	teams.POST("/:id/handoffs", admin, handler.createTeamHandoff)
+	teams.POST("/:id/route", admin, handler.routeTeamMessage)
+	teams.POST("/:id/handoffs/:handoffId/accept", admin, handler.acceptTeamHandoff)
+	teams.POST("/:id/handoffs/:handoffId/complete", admin, handler.completeTeamHandoff)
 }
 
 func (h *HTTPHandler) localActor(c *gin.Context) {

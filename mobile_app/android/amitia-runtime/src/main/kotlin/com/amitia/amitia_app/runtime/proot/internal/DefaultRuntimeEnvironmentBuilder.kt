@@ -92,7 +92,7 @@ internal class DefaultRuntimeEnvironmentBuilder(
         if (policy.host != "127.0.0.1") {
             return RuntimeEnvironmentErrorCode.ENDPOINT_INVALID to "backend host must be 127.0.0.1"
         }
-        if (policy.port < 0 || policy.port > 65535) {
+        if (policy.port < 0 || policy.port > 65535 || policy.port == 3000) {
             return RuntimeEnvironmentErrorCode.ENDPOINT_INVALID to "backend port is invalid"
         }
         return null
@@ -177,7 +177,7 @@ internal class DefaultRuntimeEnvironmentBuilder(
     private fun ensureRuntimeConfig(layout: RuntimeHostLayout) {
         ensureDirectory(layout.configRoot)
         val configFile = File(layout.configRoot, "config.yml")
-        val value = "desktopPetRuntime:\n  enabled: false\n"
+        val value = "desktopPetRuntime:\n  enabled: true\n"
         configFile.writeText(value, Charsets.UTF_8)
         configFile.setReadable(false, false)
         configFile.setWritable(false, false)

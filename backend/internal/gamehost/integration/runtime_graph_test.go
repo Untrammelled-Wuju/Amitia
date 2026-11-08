@@ -92,6 +92,30 @@ func makeTestPlugin(extensionID, pluginID string, entryPoint string) KernelGameP
 	}
 }
 
+func TestGamePluginNodeArgumentsEnforceDenyAllNetwork(t *testing.T) {
+	args := gamePluginNodeArguments(
+		trusted_service.ServiceNetworkPolicy{Mode: "none", Enforce: true},
+		"/opt/amitia/games/generation",
+		"/opt/amitia/games/generation/modules/runtime-module/index.js",
+		"linux",
+	)
+	joined := strings.Join(args, "\n")
+	for _, required := range []string{
+		"--permission",
+		"--allow-fs-read=/opt/amitia/games/generation",
+		"/opt/amitia/games/generation/modules/runtime-module/index.js",
+	} {
+		if !strings.Contains(joined, required) {
+			t.Fatalf("Node args missing %q: %v", required, args)
+		}
+	}
+	if strings.Contains(joined, "--allow-net") ||
+		strings.Contains(joined, "--allow-child-process") ||
+		strings.Contains(joined, "--allow-worker") {
+		t.Fatalf("deny-all Node args grant prohibited permissions: %v", args)
+	}
+}
+
 type recordingRuntimeExecutor struct {
 	stopped []ghdomain.RuntimeInstanceID
 	cleaned []ghdomain.RuntimeInstanceID

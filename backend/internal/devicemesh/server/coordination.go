@@ -25,7 +25,7 @@ func makePolicyHandler(deps *RouterDeps) gin.HandlerFunc {
 			c.JSON(401, gin.H{"code": "mesh.identity_required", "message": "请先配对当前设备"})
 			return
 		}
-		if actor.HasPermission(auth.PermSystemAdmin) {
+		if actor.HasPermission(auth.PermSystemAdmin) && actor.DeviceID == deps.LocalCoreDeviceID {
 			if err := deps.Coordination.InitializeCoreConsole(c.Request.Context(), actor.SpaceID.String(), actor.DeviceID.String(), deps.Coordinated); err != nil {
 				c.JSON(503, gin.H{"code": "mesh.policy_unavailable", "message": err.Error()})
 				return
@@ -36,7 +36,12 @@ func makePolicyHandler(deps *RouterDeps) gin.HandlerFunc {
 			c.JSON(503, gin.H{"code": "mesh.policy_unavailable", "message": err.Error()})
 			return
 		}
-		c.JSON(200, gin.H{"policy": policy, "canAdminister": actor.HasPermission(auth.PermSystemAdmin), "aiProvider": "core", "coreId": actor.SpaceID.String(), "coreConsoleDeviceId": deps.LocalCoreDeviceID.String(), "coordinationAvailable": deps.BusinessCoordinationReady})
+		canWrite := security.SharedCoreDataWriteAllowed(actor, policy)
+		reason := ""
+		if !canWrite {
+			reason = "当前设备未获统筹中心管理员授权，只能查看中心数据"
+		}
+		c.JSON(200, gin.H{"policy": policy, "canAdminister": actor.HasPermission(auth.PermSystemAdmin), "coreDataAccess": gin.H{"read": true, "write": canWrite, "reason": reason}, "aiProvider": "core", "coreId": actor.SpaceID.String(), "coreConsoleDeviceId": deps.LocalCoreDeviceID.String(), "coordinationAvailable": deps.BusinessCoordinationReady})
 	}
 }
 

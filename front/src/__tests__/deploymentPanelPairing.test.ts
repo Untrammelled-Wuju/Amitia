@@ -23,8 +23,8 @@ vi.mock("../runtime/runtime-capabilities", () => ({
   isDesktopShell: () => true,
 }));
 
-describe("云端统筹设置", () => {
-  it("地址检查与设备配对完成后才保存云端模式", async () => {
+describe("统筹中心设置", () => {
+  it("运行模式只管理连接配置，远程中心完成连接验证后才切换", async () => {
     mocks.getDeploymentConfig.mockResolvedValue({ mode: "local" });
     mocks.getApiBaseURL.mockResolvedValue("http://127.0.0.1:18899");
     mocks.saveDeploymentConfig.mockResolvedValue({ mode: "cloud", serverURL: "https://core.example" });
@@ -35,6 +35,7 @@ describe("云端统筹设置", () => {
         stubs: {
           DevicePairingPanel: true,
           BoundDevicesPanel: true,
+          DeviceCapabilityExposure: true,
           StageRuntimeSetup: {
             name: "StageRuntimeSetup",
             emits: ["healthCheckDone"],
@@ -54,11 +55,15 @@ describe("云端统筹设置", () => {
       await state.loadConfig();
       expect(wrapper.findComponent(DevicePairingPanel).exists()).toBe(false);
       expect(wrapper.findComponent(BoundDevicesPanel).exists()).toBe(false);
+      await state.handleSave();
+      expect(mocks.saveDeploymentConfig).toHaveBeenLastCalledWith({ mode: "local" });
+      mocks.saveDeploymentConfig.mockClear();
       state.formMode = "cloud";
       state.formData.serverURL = "https://core.example";
       await wrapper.vm.$nextTick();
+      expect(wrapper.findComponent(DevicePairingPanel).exists()).toBe(true);
+      expect(wrapper.findComponent(DevicePairingPanel).props("mode")).toBe("cloud");
       expect(wrapper.findComponent(DevicePairingPanel).props("serverURL")).toBe("https://core.example");
-      expect(wrapper.findComponent(BoundDevicesPanel).exists()).toBe(true);
       await state.handleSave();
       await wrapper.vm.$nextTick();
       expect(mocks.saveDeploymentConfig).not.toHaveBeenCalled();
@@ -75,13 +80,7 @@ describe("云端统筹设置", () => {
       pairing.vm.$emit("healthCheckDone");
       state.formMode = "cloud";
       await wrapper.vm.$nextTick();
-      const devicePanel = wrapper.findComponent(DevicePairingPanel);
-      devicePanel.vm.$emit("paired", "https://new.core");
-      await wrapper.vm.$nextTick();
-      expect(state.formData.serverURL).toBe("https://new.core");
-      expect(state.deviceManagementGeneration).toBe(1);
-      state.formMode = "local";
-      await wrapper.vm.$nextTick();
+      expect(wrapper.findComponent(DevicePairingPanel).exists()).toBe(true);
       expect(wrapper.findComponent(BoundDevicesPanel).exists()).toBe(false);
     } finally {
       wrapper.unmount();

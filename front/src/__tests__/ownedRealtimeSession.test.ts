@@ -63,7 +63,7 @@ describe("Owned 单连接通话原权限及保存确认", () => {
     socket.frame({ type: "completed", requestId: id, data: completed(id) });
     socket.frame({ type: "audio", requestId: id, data: await audio(id) });
     socket.frame({ type: "turn_ready", requestId: id });
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await vi.waitFor(() => expect(options.onAudio).toHaveBeenCalledOnce());
     await flushPromises();
     expect(options.onCompleted).toHaveBeenCalledOnce();
     expect(options.onAudio).toHaveBeenCalledOnce();

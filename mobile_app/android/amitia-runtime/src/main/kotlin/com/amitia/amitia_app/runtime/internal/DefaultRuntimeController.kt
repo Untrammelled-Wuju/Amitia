@@ -94,7 +94,7 @@ internal class DefaultRuntimeController(
     private val verifiedRuntimeVersionRef = AtomicReference<String?>(null)
 
     private companion object {
-        const val SERVICE_SESSION_TIMEOUT_MS = 30_000L
+        const val SERVICE_SESSION_TIMEOUT_MS = 5 * 60_000L
         const val SERVICE_SESSION_POLL_MS = 100L
         const val SESSION_READY_EXIT_OBSERVATION_MS = 150L
     }
@@ -221,6 +221,20 @@ internal class DefaultRuntimeController(
                 cancelServiceSessionWatchdog()
                 cancelStartupDetector()
                 val current = stateStore.snapshot()
+                if (current.state == RuntimeState.STOPPING &&
+                    event.cause == RuntimeServiceTerminationCause.STOP_RESULT_FAILED
+                ) {
+                    val error = mapTerminationCauseToError(event.cause, event.message)
+                    stateStore.update {
+                        it.copy(
+                            state = RuntimeState.FAILED,
+                            lastError = error,
+                            activeProfile = null,
+                        )
+                    }
+                    clearExpectedStop(event.generation)
+                    return
+                }
                 if (!isRecoveryEligible(current, event.cause)) return
                 val target = RuntimeStateMachine.unexpectedTerminationTarget(current.state)
                 if (target != null && target != current.state) {

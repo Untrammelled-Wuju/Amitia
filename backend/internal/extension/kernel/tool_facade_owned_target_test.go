@@ -23,7 +23,7 @@ func (r *ownedTargetResolver) Resolve(request capability.CapabilityResolutionReq
 }
 
 func TestOwnedToolPlacementUsesAuthorizedDevice(t *testing.T) {
-	for _, runtime := range []capability.RuntimeType{capability.RuntimeTypeGameHost, capability.RuntimeTypeBrowser, capability.RuntimeTypePluginJS, capability.RuntimeTypeWorkspace, capability.RuntimeTypePluginService} {
+	for _, runtime := range []capability.RuntimeType{capability.RuntimeTypeBrowser, capability.RuntimeTypePluginJS, capability.RuntimeTypeWorkspace, capability.RuntimeTypePluginService} {
 		t.Run(string(runtime), func(t *testing.T) {
 			resolver := &ownedTargetResolver{result: capability.CapabilityResolution{Provider: capability.CapabilityProviderDefinition{ID: "device-provider"}, ProviderInstance: capability.CapabilityProviderInstance{ID: "device-instance"}, ExecutionTarget: capability.InvocationExecutionTarget{Placement: "device", SpaceID: "realm", DeviceID: "phone-a"}}}
 			facade := &ToolFacade{capabilityResolver: resolver}
@@ -42,6 +42,36 @@ func TestOwnedToolPlacementUsesAuthorizedDevice(t *testing.T) {
 				t.Fatalf("offline device accepted: %+v", resolved)
 			}
 		})
+	}
+}
+
+func TestOwnedGameHostRoutesToActiveGameHostDevice(t *testing.T) {
+	resolver := &ownedTargetResolver{result: capability.CapabilityResolution{
+		Provider:         capability.CapabilityProviderDefinition{ID: "game-provider"},
+		ProviderInstance: capability.CapabilityProviderInstance{ID: "game-instance"},
+		ExecutionTarget:  capability.InvocationExecutionTarget{Placement: "device", SpaceID: "realm", DeviceID: "center-device"},
+	}}
+	facade := &ToolFacade{capabilityResolver: resolver, localDeviceID: "center-device"}
+	scope := InvocationScope{SpaceID: "realm", ExecContext: &execution.ExecutionContext{
+		RuntimeTarget: &execution.RuntimeTarget{Placement: "device", DeviceID: "phone-a"},
+		Metadata: map[string]any{
+			"ownedDeviceTarget": true,
+			"gameHostDeviceId":  "center-device",
+		},
+	}}
+	definition := capability.ToolDefinition{
+		ID:           "com.example.game/move",
+		CapabilityID: "com.example.game/move",
+		ExtensionID:  "com.example.game",
+		Runtime:      capability.RuntimeBinding{RuntimeType: capability.RuntimeTypeGameHost, Metadata: map[string]any{"modulePlacement": "device"}},
+	}
+	resolved := facade.resolveExecutionTarget(context.Background(), definition, scope)
+	if resolved.target.DeviceID != "center-device" || resolver.calls != 1 || resolver.request.RequiredDeviceID != "center-device" || resolver.request.PreferredDeviceID != "center-device" || resolver.request.RequiredPlacement != capability.ProviderPlacementDevice || resolver.request.AllowCore {
+		t.Fatalf("game host did not route to active host: resolved=%+v request=%+v", resolved, resolver.request)
+	}
+	resolver.result.ExecutionTarget.DeviceID = "phone-a"
+	if resolved := facade.resolveExecutionTarget(context.Background(), definition, scope); resolved.resolutionCode != "CAPABILITY_TARGET_MISMATCH" || !resolved.target.IsZero() {
+		t.Fatalf("wrong game host device accepted: %+v", resolved)
 	}
 }
 
@@ -92,6 +122,65 @@ func TestOwnedLocalWorkspaceUsesCoreProvider(t *testing.T) {
 	resolved := facade.resolveExecutionTarget(context.Background(), definition, scope)
 	if resolved.target.Placement != "core" || resolver.calls != 1 || resolver.request.RequiredPlacement != capability.ProviderPlacementCore || resolver.request.AllowDevice || resolver.request.RequiredDeviceID != "" {
 		t.Fatalf("local workspace did not use core provider: resolved=%+v request=%+v", resolved, resolver.request)
+	}
+}
+
+func TestOwnedWorkspaceRoutesToWorkspaceDevice(t *testing.T) {
+	resolver := &ownedTargetResolver{result: capability.CapabilityResolution{
+		Provider:         capability.CapabilityProviderDefinition{ID: "workspace-provider"},
+		ProviderInstance: capability.CapabilityProviderInstance{ID: "workspace-instance"},
+		ExecutionTarget:  capability.InvocationExecutionTarget{Placement: "device", SpaceID: "realm", DeviceID: "phone-b"},
+	}}
+	facade := &ToolFacade{capabilityResolver: resolver, localDeviceID: "center-device"}
+	scope := InvocationScope{SpaceID: "realm", ExecContext: &execution.ExecutionContext{
+		RuntimeTarget: &execution.RuntimeTarget{Placement: "device", DeviceID: "phone-a"},
+		Metadata: map[string]any{
+			"ownedDeviceTarget": true,
+			"workspaceDeviceId": "phone-b",
+		},
+	}}
+	definition := capability.ToolDefinition{
+		ID:           "workspace.write",
+		CapabilityID: "workspace.write",
+		ExtensionID:  "com.amitia.builtin.workspace",
+		ModuleID:     "builtin-workspace",
+		Runtime:      capability.RuntimeBinding{RuntimeType: capability.RuntimeTypeWorkspace},
+	}
+	resolved := facade.resolveExecutionTarget(context.Background(), definition, scope)
+	if resolved.target.DeviceID != "phone-b" || resolver.calls != 1 || resolver.request.RequiredDeviceID != "phone-b" || resolver.request.PreferredDeviceID != "phone-b" || resolver.request.RequiredPlacement != capability.ProviderPlacementDevice || resolver.request.AllowCore {
+		t.Fatalf("workspace did not route to its owner: resolved=%+v request=%+v", resolved, resolver.request)
+	}
+	resolver.result.ExecutionTarget.DeviceID = "phone-a"
+	if resolved := facade.resolveExecutionTarget(context.Background(), definition, scope); resolved.resolutionCode != "CAPABILITY_TARGET_MISMATCH" || !resolved.target.IsZero() {
+		t.Fatalf("conversation target accepted for workspace provider: %+v", resolved)
+	}
+}
+
+func TestOwnedWorkspaceUsesPrimaryBindingDevice(t *testing.T) {
+	resolver := &ownedTargetResolver{result: capability.CapabilityResolution{
+		Provider:         capability.CapabilityProviderDefinition{ID: "workspace-provider"},
+		ProviderInstance: capability.CapabilityProviderInstance{ID: "workspace-instance"},
+		ExecutionTarget:  capability.InvocationExecutionTarget{Placement: "device", SpaceID: "realm", DeviceID: "phone-b"},
+	}}
+	facade := &ToolFacade{capabilityResolver: resolver, localDeviceID: "center-device"}
+	scope := InvocationScope{SpaceID: "realm", ExecContext: &execution.ExecutionContext{
+		RuntimeTarget:      &execution.RuntimeTarget{Placement: "device", DeviceID: "phone-a"},
+		PrimaryWorkspaceID: "workspace-b",
+		WorkspaceBindings: []execution.WorkspaceBinding{
+			{ID: "workspace-a", DeviceID: "phone-a"},
+			{ID: "workspace-b", DeviceID: "phone-b"},
+		},
+		Metadata: map[string]any{"ownedDeviceTarget": true},
+	}}
+	definition := capability.ToolDefinition{
+		ID:           "workspace.write",
+		CapabilityID: "workspace.write",
+		ExtensionID:  "com.amitia.builtin.workspace",
+		Runtime:      capability.RuntimeBinding{RuntimeType: capability.RuntimeTypeWorkspace},
+	}
+	resolved := facade.resolveExecutionTarget(context.Background(), definition, scope)
+	if resolved.target.DeviceID != "phone-b" || resolver.calls != 1 || resolver.request.RequiredDeviceID != "phone-b" || resolver.request.RequiredPlacement != capability.ProviderPlacementDevice || resolver.request.AllowCore {
+		t.Fatalf("workspace did not use primary binding device: resolved=%+v request=%+v", resolved, resolver.request)
 	}
 }
 

@@ -14,7 +14,9 @@ Future<bool> showGamePackagePreviewConfirmation(
       .where((e) => e.isNotEmpty)
       .toList(growable: false);
   final signature = preview['signature'];
-  final signatureStatus = signature is Map ? (signature['status'] ?? 'unknown').toString() : 'unknown';
+  final signatureStatus = signature is Map
+      ? (signature['status'] ?? 'unknown').toString()
+      : 'unknown';
   final result = await showDialog<bool>(
     context: context,
     builder: (dialogContext) => AlertDialog(
@@ -32,7 +34,10 @@ Future<bool> showGamePackagePreviewConfirmation(
             Text('签名：$signatureStatus'),
             if (risks.isNotEmpty) ...[
               const SizedBox(height: 10),
-              const Text('高风险能力：', style: TextStyle(fontWeight: FontWeight.w600)),
+              const Text(
+                '高风险能力：',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
               Text(risks.join('、')),
             ],
             if (warnings.isNotEmpty) ...[
@@ -46,8 +51,14 @@ Future<bool> showGamePackagePreviewConfirmation(
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
-        FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: Text('确认$actionLabel')),
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext, false),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(dialogContext, true),
+          child: Text('确认$actionLabel'),
+        ),
       ],
     ),
   );
@@ -86,7 +97,10 @@ Future<bool> showGamePackageUninstallConfirmation(
         ],
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext, false),
+          child: const Text('取消'),
+        ),
         FilledButton(
           onPressed: allowed ? () => Navigator.pop(dialogContext, true) : null,
           child: const Text('确认卸载'),

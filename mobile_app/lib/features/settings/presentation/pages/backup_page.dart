@@ -623,7 +623,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
               ),
               SizedBox(height: AppSpacing.sectionGap),
               Text(
-                '迁移导出与导入先经过范围预检、归档校验和冲突确认。完整备份只用于当前设备 Runtime 灾难恢复；Cloud 模式下不会直接覆盖共享 Cloud Core 数据库。',
+                '迁移导出与导入先经过范围预检、归档校验和冲突确认。完整备份只用于当前设备 Runtime 灾难恢复；连接远程统筹中心时不会直接覆盖中心数据库。',
                 style: AppTypography.body(
                   context,
                 ).copyWith(color: context.textTertiary),

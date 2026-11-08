@@ -18,11 +18,13 @@ func registerMeshRuntimeStateRouter(mesh *gin.RouterGroup, services *AppServices
 			return
 		}
 		view, err := services.OwnedBusiness.RuntimeState(c.Request.Context(), business.Request{
-			SpaceID:        actor.SpaceID.String(),
-			DeviceID:       actor.DeviceID.String(),
-			CoreID:         coreID,
-			TargetDeviceID: c.Query("targetDeviceId"),
-			RoleID:         c.Query("characterId"),
+			SpaceID:         actor.SpaceID.String(),
+			DeviceID:        actor.DeviceID.String(),
+			CoreID:          coreID,
+			TargetDeviceID:  actor.DeviceID.String(),
+			ResourceOwnerID: actor.DeviceID.String(),
+			RoleOwnerID:     coreID,
+			RoleID:          c.Query("characterId"),
 		})
 		if err != nil {
 			writeRuntimeStateError(c, err)

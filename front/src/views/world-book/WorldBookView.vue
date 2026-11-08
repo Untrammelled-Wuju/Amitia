@@ -12,25 +12,26 @@ SPDX-License-Identifier: AGPL-3.0-only
       breadcrumb-label="角色页面层级"
     >
       <template #actions>
-        <div v-if="canConfigure && loadedContext" class="header-actions">
+        <div v-if="loadedContext" class="header-actions">
         <el-button
+          v-if="canWrite"
           size="small"
           :type="testPanelOpen ? 'warning' : 'success'"
           @click="testPanelOpen = !testPanelOpen"
         >
           {{ testPanelOpen ? "关闭测试" : "在线测试" }}
         </el-button>
-        <el-button size="small" @click="openImportDialog">JSON导入</el-button>
+        <el-button v-if="canWrite" size="small" @click="openImportDialog">JSON导入</el-button>
         <el-button size="small" @click="exportRules">JSON导出</el-button>
-        <el-button size="small" type="primary" :disabled="mutationLoading" @click="showAddForm = true"
+        <el-button v-if="canWrite" size="small" type="primary" :disabled="mutationLoading" @click="showAddForm = true"
           >新增规则</el-button
         >
         </div>
       </template>
     </ExtensionPageHeader>
     <pre v-if="operationError && !showAddForm && !editVisible && !importDialogVisible" class="worldbook-error" role="alert" aria-label="世界书原始错误" tabindex="0">{{ operationError }}</pre>
-    <el-alert v-if="!canConfigure" title="云端统筹模式的世界书由 Core 管理，只有获授权的 Core 管理员可以查看和配置。" type="info" :closable="false" show-icon />
-    <template v-if="canConfigure && loadedContext">
+    <el-alert v-if="!canWrite" :title="coreData.access.value.reason || '当前设备只能查看统筹中心世界书'" type="info" :closable="false" show-icon />
+    <template v-if="loadedContext">
     <div class="filter-bar">
       <el-select
         v-model="filterType"
@@ -328,7 +329,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         </div>
         <div class="rule-pattern">匹配: {{ rule.matchPattern }}</div>
         <div class="rule-content">注入: {{ rule.injectContent }}</div>
-        <div class="rule-actions">
+        <div v-if="canWrite" class="rule-actions">
           <el-button size="small" :disabled="mutationLoading" @click="startEdit(rule)">编辑</el-button>
           <el-button size="small" type="danger" :disabled="mutationLoading" @click="handleDelete(rule.id)"
             >删除</el-button
@@ -359,6 +360,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { DocumentCopy, UploadFilled } from "@element-plus/icons-vue";
 import ExtensionPageHeader from "@/views/extensions/components/ExtensionPageHeader.vue";
 import { useWorldBook, type WorldBookEntry } from "@/composables/useWorldBook";
+import { useCoreDataAccess } from "@/composables/useCoreDataAccess";
 import {
   importExampleJson,
   parseWorldBookImport,
@@ -390,7 +392,8 @@ const {
   matchTypeLabel,
   scopeLabel,
 } = useWorldBook();
-const { canConfigure } = access;
+const coreData = useCoreDataAccess();
+const canWrite = computed(() => coreData.access.value.write);
 const editorContext = ref("");
 watch(loadedContext, (current) => {
   if (current !== editorContext.value) {
@@ -442,7 +445,8 @@ const importInvalidCount = computed(
 );
 const canImportJson = computed(
   () =>
-    importRows.value.length > 0
+    canWrite.value
+    && importRows.value.length > 0
     && importInvalidCount.value === 0
     && !importParsing.value
     && !importLoading.value,
@@ -483,6 +487,7 @@ function onFilterChange() {
 }
 
 async function runTest() {
+  if (!canWrite.value) return;
   const version = ++testRequestVersion;
   const text = testText.value;
   operationError.value = "";
@@ -503,7 +508,7 @@ async function runTest() {
 }
 
 async function handleCreate() {
-  if (mutationLoading.value) return;
+  if (!canWrite.value || mutationLoading.value) return;
   operationError.value = "";
   mutationLoading.value = true;
   try {
@@ -523,6 +528,7 @@ async function handleCreate() {
 }
 
 function startEdit(rule: any) {
+  if (!canWrite.value) return;
   editorContext.value = loadedContext.value;
   editingEntry.value = rule;
   editForm.scope = rule.scope || "role";
@@ -535,7 +541,7 @@ function startEdit(rule: any) {
 }
 
 async function handleUpdate() {
-  if (mutationLoading.value) return;
+  if (!canWrite.value || mutationLoading.value) return;
   operationError.value = "";
   mutationLoading.value = true;
   try {
@@ -550,7 +556,7 @@ async function handleUpdate() {
 }
 
 async function handleDelete(id: string) {
-  if (mutationLoading.value) return;
+  if (!canWrite.value || mutationLoading.value) return;
   const context = loadedContext.value;
   try {
     await ElMessageBox.confirm("确定删除这条规则？", "删除确认", {
@@ -631,7 +637,7 @@ async function loadImportFile(file: File) {
 }
 
 async function confirmImport() {
-  if (!canImportJson.value) return;
+  if (!canImportJson.value || !canWrite.value) return;
   const items = importRows.value
     .filter((row) => row.valid && row.item)
     .map((row) => row.item as Partial<WorldBookEntry>);

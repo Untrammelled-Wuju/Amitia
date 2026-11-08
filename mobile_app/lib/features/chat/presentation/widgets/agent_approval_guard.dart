@@ -10,6 +10,7 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../core/models/attention.dart';
+import '../../../../core/services/mcp_interaction_events.dart';
 import '../../../../core/services/providers.dart';
 import '../../runtime/conversation_runtime_controller.dart';
 
@@ -22,19 +23,21 @@ class AgentApprovalGuard extends ConsumerStatefulWidget {
   ConsumerState<AgentApprovalGuard> createState() => _AgentApprovalGuardState();
 }
 
-class _AgentApprovalGuardState extends ConsumerState<AgentApprovalGuard> {
+class _AgentApprovalGuardState extends ConsumerState<AgentApprovalGuard>
+    with WidgetsBindingObserver {
   bool _dialogOpen = false;
   String _activeApprovalId = '';
   String _activeAttentionId = '';
   List<AttentionItem> _attentionItems = const [];
   final Set<String> _dismissedAttentionIds = <String>{};
-  Timer? _attentionTimer;
+  StreamSubscription<void>? _interactionSubscription;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     unawaited(_loadAttention());
-    _attentionTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+    _interactionSubscription = MCPInteractionEvents.pending.listen((_) {
       if (mounted && ModalRoute.of(context)?.isCurrent == true) {
         unawaited(_loadAttention());
       }
@@ -42,8 +45,24 @@ class _AgentApprovalGuardState extends ConsumerState<AgentApprovalGuard> {
   }
 
   @override
+  void didUpdateWidget(covariant AgentApprovalGuard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.conversationId != widget.conversationId) {
+      unawaited(_loadAttention());
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_loadAttention());
+    }
+  }
+
+  @override
   void dispose() {
-    _attentionTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    unawaited(_interactionSubscription?.cancel());
     super.dispose();
   }
 
@@ -134,6 +153,20 @@ class _AgentApprovalGuardState extends ConsumerState<AgentApprovalGuard> {
           .read(conversationRuntimeRegistryProvider)
           .sessionForConversation(widget.conversationId)
           .resolveApproval(id, approved);
+    } catch (error, stackTrace) {
+      print("[original-error] $error\n$stackTrace");
+      ref
+          .read(conversationRuntimeRegistryProvider)
+          .sessionForConversation(widget.conversationId)
+          .dismissPendingApproval(id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error.toString()),
+            duration: const Duration(seconds: 10),
+          ),
+        );
+      }
     } finally {
       _dialogOpen = false;
       _activeApprovalId = '';

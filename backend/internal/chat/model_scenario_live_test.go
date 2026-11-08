@@ -52,7 +52,7 @@ func TestModelScenarioActualHTTPInference(t *testing.T) {
 				t.Fatal(err)
 			}
 			for id, name := range map[int]string{2: "chat", 3: "summary", 4: "memory", 5: "explicit"} {
-				if err := f.model.db.Create(&ModelConfig{ID: id, Name: name, APIType: "openai-compatible", Protocol: "openai_chat", BaseURL: provider.URL, ModelName: name, MaxTokens: 128}).Error; err != nil {
+				if err := f.model.db.Create(&ModelConfig{ID: id, Name: name, APIType: "openai-compatible", Protocol: "openai_chat", BaseURL: provider.URL, ModelName: name, MaxTokens: 128, IsActive: 1}).Error; err != nil {
 					t.Fatal(err)
 				}
 			}

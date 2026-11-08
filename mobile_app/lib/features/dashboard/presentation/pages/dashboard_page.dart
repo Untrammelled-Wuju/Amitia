@@ -21,8 +21,8 @@ Future<Map<String, dynamic>?> _safeGet(
         .read(backendServiceProvider)
         .get<Map<String, dynamic>>(path, queryParameters: query);
   } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-return null;
+    print("[original-error] $error\n$stackTrace");
+    return null;
   }
 }
 
@@ -207,7 +207,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 ),
                 _kv(
                   '运行模式',
-                  health?['deployMode'] == 'cloud-web' ? '云端统筹' : '本地模式',
+                  health?['deployMode'] == 'cloud-web' ? '远程统筹中心' : '本机统筹中心',
                 ),
                 _kv('运行时长', health?['uptime'] ?? 'unknown'),
                 _kv('安全状态', securityStatus),

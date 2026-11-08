@@ -1,6 +1,16 @@
 package sse
 
-import "testing"
+import (
+	"bufio"
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/gin-gonic/gin"
+)
 
 func TestScheduledNotificationTargetsAuthenticatedDevice(t *testing.T) {
 	hub := &Hub{clients: map[string]*Client{}}
@@ -55,4 +65,35 @@ func TestDeviceSubscriptionPreservesHostRegistryAddressAndAvoidsCrossDeviceRepla
 	if !hub.SendToClient("ui-host", "ui_notify", nil) {
 		t.Fatal("host address not restored")
 	}
+}
+
+func TestSSEHandlerEmitsHeartbeatWithoutBusinessEvents(t *testing.T) {
+	previous := heartbeatInterval
+	heartbeatInterval = 10 * time.Millisecond
+	t.Cleanup(func() { heartbeatInterval = previous })
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.GET("/events", SSEHandler)
+	server := httptest.NewServer(router)
+	t.Cleanup(server.Close)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL+"/events?clientId=heartbeat-test", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK || !strings.Contains(response.Header.Get("Content-Type"), "text/event-stream") {
+		t.Fatalf("SSE 响应无效: status=%d content-type=%s", response.StatusCode, response.Header.Get("Content-Type"))
+	}
+	reader := bufio.NewReader(response.Body)
+	line, err := reader.ReadString('\n')
+	if err != nil || line != ": heartbeat\n" {
+		t.Fatalf("SSE 未发送心跳: line=%q err=%v", line, err)
+	}
+	cancel()
 }

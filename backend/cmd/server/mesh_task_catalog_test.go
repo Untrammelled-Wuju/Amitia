@@ -52,7 +52,7 @@ func installThreeCoreCatalogTasks(t *testing.T, device *threeCoreFixture, versio
 	}
 }
 
-func TestCoreConsoleTaskCatalogStillRequiresTargetCapabilityGrant(t *testing.T) {
+func TestCoreConsoleTaskCatalogUsesExposedMemberCapabilities(t *testing.T) {
 	schemas := newThreeCoreSchemas(t)
 	a, b := newThreeCoreFixture(t, "console-a", schemas), newThreeCoreFixture(t, "console-b", schemas)
 	pairThreeCoreFixtures(t, a, b)
@@ -78,10 +78,7 @@ func TestCoreConsoleTaskCatalogStillRequiresTargetCapabilityGrant(t *testing.T) 
 		return recorder.Body.Bytes()
 	}
 	rolePath := "/api/device-mesh/v1/business/tasks/roles?targetDeviceId=" + a.device.DeviceID.String()
-	call(http.MethodGet, rolePath, nil, 403)
-	if _, err := b.services.DeviceMesh.Coordination.SetCapabilityGrant(t.Context(), b.core, b.device.DeviceID.String(), a.device.DeviceID.String(), "task.execute", 0, true); err != nil {
-		t.Fatal(err)
-	}
+	call(http.MethodGet, rolePath, nil, 200)
 	var options struct {
 		Data struct {
 			Scope coordination.ExecutionScope `json:"executionScope"`

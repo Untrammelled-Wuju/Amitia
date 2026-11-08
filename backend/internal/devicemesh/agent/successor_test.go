@@ -2,7 +2,8 @@ package agent
 
 import (
 	"context"
-	"crypto/ed25519"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/tls"
 	"database/sql"
@@ -47,7 +48,7 @@ func successorTLSServer(t *testing.T, core string, handler http.Handler) (*httpt
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, key, err := ed25519.GenerateKey(rand.Reader)
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		t.Fatal(err)
 	}

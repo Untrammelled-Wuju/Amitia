@@ -248,9 +248,13 @@ def validate_ca_certificates(root: Path, policy: Optional[dict] = None) -> List[
     if policy and policy.get("caCertificatesPath"):
         custom_path = root / policy["caCertificatesPath"].lstrip("/")
         ca_bundle_candidates.insert(0, custom_path)
-    ca_found = any(p.exists() for p in ca_bundle_candidates)
-    if not ca_found:
+    ca_bundle = next((path for path in ca_bundle_candidates if path.is_file()), None)
+    if ca_bundle is None:
         errors.append("Missing CA certificates bundle")
+    elif ca_bundle.stat().st_size == 0:
+        errors.append("Empty CA certificates bundle")
+    elif b"-----BEGIN CERTIFICATE-----" not in ca_bundle.read_bytes():
+        errors.append("Invalid CA certificates bundle: no PEM certificates")
     return errors
 
 

@@ -188,6 +188,19 @@ func TestRuntimeSummaryUsesTopologyWideReadiness(t *testing.T) {
 	}
 }
 
+func TestPluginRuntimeCountExcludesNonOperationalInstances(t *testing.T) {
+	f := newManagementFixture(t)
+	if count := f.service.countRuntimesForPlugin(string(f.plugin.ID)); count != 1 {
+		t.Fatalf("running runtime count=%d, want 1", count)
+	}
+	if err := f.runtimes.UpdateRuntimeState(f.runtime.ID, ghdomain.RuntimeStateStopping, "test", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if count := f.service.countRuntimesForPlugin(string(f.plugin.ID)); count != 0 {
+		t.Fatalf("stopping runtime count=%d, want 0", count)
+	}
+}
+
 func TestRuntimeHandshakeStatusUsesRuntimeReadinessNotRuntimeIDAsConnectionID(t *testing.T) {
 	f := newManagementFixture(t)
 	f.attach(t, "bridge", f.generation, true)

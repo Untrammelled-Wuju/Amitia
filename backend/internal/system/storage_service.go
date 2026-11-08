@@ -51,6 +51,7 @@ func (s *service) GetStorageInfo() map[string]interface{} {
 		} else {
 			result["messageCount"] = stats.MessageCount
 			result["conversationCount"] = stats.ConversationCount
+			result["memoryCount"] = stats.MemoryCount
 			dbSize += stats.DatabaseBytes
 			result["dbSize"] = formatStorageBytes(dbSize)
 			result["dbSizeBytes"] = dbSize
@@ -59,12 +60,6 @@ func (s *service) GetStorageInfo() map[string]interface{} {
 	} else {
 		result["ownedStorageError"] = "统一存储统计入口不可用"
 	}
-	entries, err := s.memoryConsumer.Read(context.Background(), "", "memory", true)
-	if err != nil {
-		result["memoryError"] = err.Error()
-		return result
-	}
-	result["memoryCount"] = len(entries)
 	return result
 }
 

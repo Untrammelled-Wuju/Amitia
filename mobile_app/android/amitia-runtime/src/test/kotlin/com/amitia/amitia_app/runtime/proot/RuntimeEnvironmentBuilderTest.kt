@@ -43,6 +43,20 @@ class RuntimeEnvironmentBuilderTest {
     }
 
     @Test
+    fun runtimeConfigEnablesDesktopPetDeviceRuntime() {
+        val layout = createLayout()
+        val builder = createBuilder()
+        val request = RuntimeEnvironmentRequest(
+            hostLayout = layout,
+            endpoint = BackendEndpointPolicy("127.0.0.1", 18899, "http", "ws")
+        )
+        builder.build(request) as RuntimeEnvironmentResult.Success
+
+        val config = File(layout.configRoot, "config.yml").readText(Charsets.UTF_8)
+        assertEquals("desktopPetRuntime:\n  enabled: true\n", config)
+    }
+
+    @Test
     fun guestRuntimeContainsAllRequiredRoots() {
         val layout = createLayout()
         val builder = createBuilder()

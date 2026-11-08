@@ -123,8 +123,7 @@ describe("Core 角色语音保存与播放", () => {
     expect(mesh.notice.value).toContain("core-c");
   });
 
-  it.each(["updated", "deleted"])("播放期间角色%s，元数据轮询立即停播", async (change) => {
-    vi.useFakeTimers();
+  it.each(["updated", "deleted"])("播放期间角色%s，授权变化事件立即停播", async (change) => {
     let deleted = false;
     mocks.get.mockImplementation(async (path) => ({ data: path.endsWith("/coordination/me") ? { coreId: scope.coreId, policy: { coordinated: scope.coordinated, providerEpoch: 1, modeRevision: 1, permissionRevision: 1 } } : path.endsWith("/roles") ? { roles: deleted ? [] : [{ id: "source-role", revision: scope.roleRevision }], roleOwnerId: scope.roleOwnerId } : { executionScope: structuredClone(scope) } }));
     const pause = vi.fn();
@@ -136,7 +135,7 @@ describe("Core 角色语音保存与播放", () => {
     await vi.waitFor(() => expect(play).toHaveBeenCalledTimes(1));
     if (change === "deleted") deleted = true;
     else scope.roleRevision++;
-    await vi.advanceTimersByTimeAsync(1000);
+    window.dispatchEvent(new CustomEvent("amitia:execution-scope-changed"));
     expect(pause).toHaveBeenCalledTimes(1);
     expect(mocks.get.mock.calls.filter(([path]) => path.endsWith("/business/data"))).toHaveLength(2);
   });

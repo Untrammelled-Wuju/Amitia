@@ -41,7 +41,7 @@ func New() (*imageprovider.Registry, error) {
 	if runtimeprofile.CurrentProcessProfile().IsDeviceAgent() {
 		if err := registry.RegisterWithDescriptor(cloudbridge.ProviderName, cloudbridge.NewProvider(config.AppCfg.Storage.DataDir), imageprovider.ProviderDescriptor{
 			Name:           cloudbridge.ProviderName,
-			DisplayName:    "Cloud Core 生图代理",
+			DisplayName:    "统筹中心生图代理",
 			DefaultModel:   "active",
 			DefaultBaseURL: "",
 			SupportedModes: []imageprovider.GenerationMode{

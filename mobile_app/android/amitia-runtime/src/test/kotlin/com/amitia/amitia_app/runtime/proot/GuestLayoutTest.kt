@@ -71,7 +71,6 @@ class GuestLayoutTest {
     }
 
     @Test
-    @Test
     fun localTokenPath_isWithinDataRoot() {
         assertEquals("/var/lib/amitia/security/local-token", GuestLayout.LOCAL_TOKEN)
         assertTrue(GuestLayout.LOCAL_TOKEN.startsWith(GuestLayout.DATA))

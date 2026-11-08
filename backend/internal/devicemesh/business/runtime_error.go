@@ -55,6 +55,11 @@ func DescribeRuntimeError(err error) RuntimeError {
 		result.ErrorCode = "task_context_exceeded"
 		result.Stage = "model"
 		result.Provider = "model"
+	case strings.Contains(lower, "没有可用的模型配置"):
+		result.ErrorCode = "model_not_configured"
+		result.Stage = "model"
+		result.Provider = "model"
+		result.Retryable = false
 	case strings.Contains(lower, "tool loop") || strings.Contains(lower, "repeated tool failure"):
 		result.ErrorCode = "task_tool_loop_limit"
 		result.Stage = "tool"

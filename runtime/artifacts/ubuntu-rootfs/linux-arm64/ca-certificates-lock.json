@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "component": "ca-certificates",
+  "distribution": "ubuntu",
+  "release": "24.04",
+  "architecture": "all",
+  "package": "ca-certificates",
+  "version": "20260816ubuntu0.24.04.2",
+  "archiveFileName": "ca-certificates_20260816ubuntu0.24.04.2_all.deb",
+  "sourceUrl": "https://ports.ubuntu.com/ubuntu-ports/pool/main/c/ca-certificates/ca-certificates_20260816ubuntu0.24.04.2_all.deb",
+  "sha256": "f9fbacd417b515450b831032cc39d18059e9874e67525679a43c16071dabf9a0"
+}

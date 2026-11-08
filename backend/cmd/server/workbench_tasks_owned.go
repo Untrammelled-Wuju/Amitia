@@ -19,7 +19,17 @@ func workbenchConversationAccess(services *AppServices, coreID string) workbench
 			return coordination.ErrScopeExpired
 		}
 		origin := business.ConversationOrigin{OwnerID: query.OwnerID, ID: query.ConversationID}
-		request := business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), TargetDeviceID: query.TargetDeviceID, CoreID: coreID, RoleID: query.CharacterID, ConversationID: query.ConversationID, ConversationOrigin: &origin}
+		targetDeviceID := query.TargetDeviceID
+		if targetDeviceID == "" {
+			targetDeviceID = query.OwnerID
+		}
+		if targetDeviceID == "" {
+			targetDeviceID = actor.DeviceID.String()
+		}
+		if targetDeviceID != actor.DeviceID.String() {
+			return coordination.ErrWrongOwner
+		}
+		request := business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), TargetDeviceID: targetDeviceID, CoreID: coreID, ResourceOwnerID: targetDeviceID, RoleOwnerID: coreID, RoleID: query.CharacterID, ConversationID: query.ConversationID, ConversationOrigin: &origin}
 		return services.OwnedBusiness.WithConversationRead(ctx, request, func(ctx context.Context, scope coordination.ExecutionScope, id string) error {
 			return read(ctx, workbenchtasks.QueryContext{ExecutionScope: scope, ConversationOrigin: origin, ConversationID: id, CanReadRecord: func(ctx context.Context, record *interaction.InteractionRecord) (bool, error) {
 				if record.Scope.SpaceID != scope.SpaceID || record.Scope.ConversationID != id || record.Scope.CharacterID != scope.RoleID {

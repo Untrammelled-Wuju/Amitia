@@ -57,7 +57,7 @@ class RuntimeServiceStartupFailureTeardownTest {
         }, 0, 1)
 
         val failedEvents = events.filterIsInstance<RuntimeServiceHostEvent.StartupFailed>()
-        assertEquals(1, failedEvents.size())
+        assertEquals(1, failedEvents.size)
         assertEquals(RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR, failedEvents[0].cause)
     }
 
@@ -76,7 +76,7 @@ class RuntimeServiceStartupFailureTeardownTest {
         }, 0, 1)
 
         val failedEvents = events.filterIsInstance<RuntimeServiceHostEvent.StartupFailed>()
-        assertEquals(1, failedEvents.size())
+        assertEquals(1, failedEvents.size)
         assertEquals(1L, failedEvents[0].generation)
         assertEquals(RuntimeServiceTerminationCause.PROOT_COMPONENT_MISSING, failedEvents[0].cause)
         assertNull(service.currentProotSession())
@@ -98,7 +98,7 @@ class RuntimeServiceStartupFailureTeardownTest {
         }, 0, 1)
 
         val failedEvents = events.filterIsInstance<RuntimeServiceHostEvent.StartupFailed>()
-        assertEquals(1, failedEvents.size())
+        assertEquals(1, failedEvents.size)
         assertEquals(2L, failedEvents[0].generation)
         assertEquals(RuntimeServiceTerminationCause.ROOTFS_MISSING, failedEvents[0].cause)
         assertNull(service.currentProotSession())
@@ -113,7 +113,7 @@ class RuntimeServiceStartupFailureTeardownTest {
             prootComponent = component,
             prootRootfsPath = "/rootfs",
             assembler = assembler,
-            activeRuntimeManager = NoActiveRuntimeManager(),
+            activeRuntimeManager = StartupFailureNoActiveRuntimeManager(),
         )
 
         service.onStartCommand(Intent().apply {
@@ -122,7 +122,7 @@ class RuntimeServiceStartupFailureTeardownTest {
         }, 0, 1)
 
         val failedEvents = events.filterIsInstance<RuntimeServiceHostEvent.StartupFailed>()
-        assertEquals(1, failedEvents.size())
+        assertEquals(1, failedEvents.size)
         assertEquals(3L, failedEvents[0].generation)
         assertEquals(RuntimeServiceTerminationCause.NO_ACTIVE_RUNTIME, failedEvents[0].cause)
         assertNull(service.currentProotSession())
@@ -137,7 +137,7 @@ class RuntimeServiceStartupFailureTeardownTest {
             prootComponent = component,
             prootRootfsPath = "/rootfs",
             assembler = assembler,
-            activeRuntimeManager = ValidActiveRuntimeManager(),
+            activeRuntimeManager = StartupFailureValidActiveRuntimeManager(),
         )
 
         service.onStartCommand(Intent().apply {
@@ -146,7 +146,7 @@ class RuntimeServiceStartupFailureTeardownTest {
         }, 0, 1)
 
         val failedEvents = events.filterIsInstance<RuntimeServiceHostEvent.StartupFailed>()
-        assertEquals(1, failedEvents.size())
+        assertEquals(1, failedEvents.size)
         assertEquals(4L, failedEvents[0].generation)
         assertEquals(RuntimeServiceTerminationCause.ENVIRONMENT_BUILD_FAILED, failedEvents[0].cause)
         assertNull(service.currentProotSession())
@@ -160,7 +160,7 @@ class RuntimeServiceStartupFailureTeardownTest {
             prootComponent = component,
             prootRootfsPath = "/rootfs",
             assembler = null,
-            activeRuntimeManager = ValidActiveRuntimeManager(),
+            activeRuntimeManager = StartupFailureValidActiveRuntimeManager(),
         )
 
         service.onStartCommand(Intent().apply {
@@ -169,7 +169,7 @@ class RuntimeServiceStartupFailureTeardownTest {
         }, 0, 1)
 
         val failedEvents = events.filterIsInstance<RuntimeServiceHostEvent.StartupFailed>()
-        assertEquals(1, failedEvents.size())
+        assertEquals(1, failedEvents.size)
         assertEquals(6L, failedEvents[0].generation)
         assertEquals(RuntimeServiceTerminationCause.ASSEMBLER_MISSING, failedEvents[0].cause)
         assertNull(service.currentProotSession())
@@ -184,7 +184,7 @@ class RuntimeServiceStartupFailureTeardownTest {
             prootComponent = component,
             prootRootfsPath = "/rootfs",
             assembler = assembler,
-            activeRuntimeManager = ValidActiveRuntimeManager(),
+            activeRuntimeManager = StartupFailureValidActiveRuntimeManager(),
         )
 
         service.onStartCommand(Intent().apply {
@@ -193,7 +193,7 @@ class RuntimeServiceStartupFailureTeardownTest {
         }, 0, 1)
 
         val failedEvents = events.filterIsInstance<RuntimeServiceHostEvent.StartupFailed>()
-        assertEquals(1, failedEvents.size())
+        assertEquals(1, failedEvents.size)
         assertEquals(7L, failedEvents[0].generation)
         assertEquals(RuntimeServiceTerminationCause.ENVIRONMENT_BUILD_FAILED, failedEvents[0].cause)
         assertNull(service.currentProotSession())
@@ -208,7 +208,7 @@ class RuntimeServiceStartupFailureTeardownTest {
             prootComponent = component,
             prootRootfsPath = "/rootfs",
             assembler = assembler,
-            activeRuntimeManager = ValidActiveRuntimeManager(),
+            activeRuntimeManager = StartupFailureValidActiveRuntimeManager(),
         )
 
         service.onStartCommand(Intent().apply {
@@ -227,7 +227,7 @@ class RuntimeServiceStartupFailureTeardownTest {
         assembler: ProotEnvironmentAssembler?,
         activeRuntimeManager: ActiveRuntimeManager?,
     ) {
-        TestAndroidRuntimeModuleOverride(
+        StartupFailureAndroidRuntimeModuleOverride(
             prootComponent = prootComponent,
             prootRootfsPath = prootRootfsPath,
             assembler = assembler,
@@ -260,13 +260,13 @@ class ThrowingProotComponent : ProotComponent {
     override fun close() {}
 }
 
-class NoActiveRuntimeManager : ActiveRuntimeManager {
+internal class StartupFailureNoActiveRuntimeManager : ActiveRuntimeManager {
     override fun current() = com.amitia.amitia_app.runtime.install.ActiveRuntimeResult.NoActiveRuntime
     override fun activate(version: String) = com.amitia.amitia_app.runtime.install.ActiveRuntimeResult.NoActiveRuntime
     override fun resolveActiveProgramRoot() = ActiveProgramRootResult.NoActiveRuntime
 }
 
-class ValidActiveRuntimeManager : ActiveRuntimeManager {
+internal class StartupFailureValidActiveRuntimeManager : ActiveRuntimeManager {
     override fun current() = com.amitia.amitia_app.runtime.install.ActiveRuntimeResult.Active(
         com.amitia.amitia_app.runtime.install.ActiveRuntimeInfo("1.0.0", 0L)
     )
@@ -282,7 +282,7 @@ class ValidActiveRuntimeManager : ActiveRuntimeManager {
     )
 }
 
-class TestAndroidRuntimeModuleOverride(
+internal class StartupFailureAndroidRuntimeModuleOverride(
     private val prootComponent: ProotComponent?,
     private val prootRootfsPath: String?,
     private val assembler: ProotEnvironmentAssembler?,

@@ -4,6 +4,7 @@ class ActionInvocation {
   final String actionId;
   final String target;
   final Map<String, dynamic>? input;
+  final Map<String, dynamic>? meta;
   final String extensionId;
   final String contributionId;
   final Map<String, dynamic> ownerIdentity;
@@ -12,6 +13,7 @@ class ActionInvocation {
     required this.actionId,
     required this.target,
     this.input,
+    this.meta,
     required this.extensionId,
     required this.contributionId,
     required this.ownerIdentity,
@@ -22,6 +24,7 @@ class ActionInvocation {
       'actionId': actionId,
       'target': target,
       if (input != null) 'input': input,
+      if (meta != null) 'meta': meta,
       'owner': ownerIdentity,
     };
   }
@@ -53,13 +56,15 @@ class ActionDispatcher {
       if (permissions != null) 'permissions': permissions,
     };
 
-    onDispatch(ActionInvocation(
-      actionId: action.actionId,
-      target: action.target,
-      input: action.input,
-      extensionId: extensionId,
-      contributionId: contributionId,
-      ownerIdentity: ownerIdentity,
-    ));
+    onDispatch(
+      ActionInvocation(
+        actionId: action.actionId,
+        target: action.target,
+        input: action.input,
+        extensionId: extensionId,
+        contributionId: contributionId,
+        ownerIdentity: ownerIdentity,
+      ),
+    );
   }
 }

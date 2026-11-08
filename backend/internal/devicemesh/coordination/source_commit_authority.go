@@ -25,11 +25,11 @@ func WithSourceManagementAuthority(ctx context.Context, scope ExecutionScope, ca
 
 func (s *OwnershipStore) validateSourceCommitAuthority(ctx context.Context, tx *sql.Tx, commit Commit) error {
 	if proof, ok := ctx.Value(sourceManagementAuthorityKey{}).(sourceCommitAuthority); ok {
-		if proof.CallID == "" || proof.Scope.TargetDeviceID != s.ownerID || commit.Scope.ResourceOwnerID != s.ownerID || commit.Scope.RoleOwnerID != s.ownerID {
+		if proof.CallID == "" || proof.Scope.TargetDeviceID != s.ownerID || commit.Scope.ResourceOwnerID != s.ownerID || (commit.Scope.RoleOwnerID != s.ownerID && commit.Scope.RoleOwnerID != commit.Scope.CoreID) {
 			return ErrWrongOwner
 		}
 		original, current := proof.Scope, commit.Scope
-		if !original.Coordinated && (original.ResourceOwnerID != s.ownerID || original.RoleOwnerID != s.ownerID) {
+		if !original.Coordinated && (original.ResourceOwnerID != s.ownerID || (original.RoleOwnerID != s.ownerID && original.RoleOwnerID != original.CoreID)) {
 			return ErrWrongOwner
 		}
 		current.RequestID, current.RoleID, current.MemoryRoleID, current.ResourceOwnerID, current.RoleOwnerID = original.RequestID, original.RoleID, original.MemoryRoleID, original.ResourceOwnerID, original.RoleOwnerID
@@ -62,7 +62,7 @@ func (s *OwnershipStore) validateSourceCommitAuthority(ctx context.Context, tx *
 	if !ok {
 		return nil
 	}
-	if proof.Scope != commit.Scope || proof.Scope.Coordinated || proof.Scope.ResourceOwnerID != s.ownerID || proof.Scope.TargetDeviceID != s.ownerID || proof.Scope.RoleOwnerID != s.ownerID || proof.CallID == "" || len(proof.CallID) > 512 {
+	if proof.Scope != commit.Scope || proof.Scope.ResourceOwnerID != s.ownerID || proof.Scope.TargetDeviceID != s.ownerID || (proof.Scope.RoleOwnerID != s.ownerID && proof.Scope.RoleOwnerID != proof.Scope.CoreID) || proof.CallID == "" || len(proof.CallID) > 512 {
 		return ErrWrongOwner
 	}
 	if err := validateSourceCallQuery(ctx, tx, proof.Scope.SpaceID, proof.CallID); err != nil {

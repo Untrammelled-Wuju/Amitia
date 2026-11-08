@@ -35,6 +35,50 @@ class RuntimeInstallerTest {
     @get:Rule
     val tempFolder = TemporaryFolder()
 
+    private class InstallerNoActiveRuntimeManager : ActiveRuntimeManager {
+        override fun current(): ActiveRuntimeResult = ActiveRuntimeResult.NoActiveRuntime
+        override fun activate(version: String): ActiveRuntimeResult = ActiveRuntimeResult.NoActiveRuntime
+        override fun resolveActiveProgramRoot(): ActiveProgramRootResult = ActiveProgramRootResult.NoActiveRuntime
+    }
+
+    private fun missingManifestStore(): RuntimeManifestStore = object : RuntimeManifestStore {
+        override fun read(): RuntimeManifestResult = RuntimeManifestResult.failure(
+            RuntimeManifestError(
+                RuntimeManifestErrorCode.MANIFEST_NOT_FOUND,
+                "no manifest"
+            )
+        )
+
+        override fun write(manifest: RuntimeManifest): RuntimeManifestResult = RuntimeManifestResult.success(manifest)
+
+        override fun delete(): RuntimeManifestResult = RuntimeManifestResult.failure(
+            RuntimeManifestError(
+                RuntimeManifestErrorCode.MANIFEST_WRITE_FAILED,
+                "delete not supported in test"
+            )
+        )
+    }
+
+    private fun missingManifestBuilder(): RuntimeManifestBuilder = object : RuntimeManifestBuilder {
+        override fun build(): RuntimeManifestResult = RuntimeManifestResult.failure(
+            RuntimeManifestError(
+                RuntimeManifestErrorCode.MANIFEST_INVALID_JSON,
+                "builder not configured"
+            )
+        )
+
+        override fun buildFromInstalledTree(
+            runtimeVersion: String,
+            sourceCommit: String,
+            packageId: String,
+            packageSha256: String,
+            rootfsId: String,
+            runtimeRootTreeSha256: String,
+            payloads: List<RuntimeManifestPayload>,
+            components: List<RuntimeManifestComponent>,
+        ): RuntimeManifestResult = build()
+    }
+
     private fun createSupportedAbiGate(): RuntimeAbiGate {
         return object : RuntimeAbiGate {
             override fun evaluate(): RuntimeAbiStatus {
@@ -78,7 +122,7 @@ class RuntimeInstallerTest {
         baseDir: File,
         abiGate: RuntimeAbiGate = createSupportedAbiGate(),
         packageVerifier: PackageVerifier = DefaultPackageVerifier(),
-        activeRuntimeManager: ActiveRuntimeManager? = null,
+        activeRuntimeManager: ActiveRuntimeManager = InstallerNoActiveRuntimeManager(),
         manifestStore: RuntimeManifestStore? = null,
         manifestBuilder: RuntimeManifestBuilder? = null,
     ): DefaultRuntimeInstaller {
@@ -91,39 +135,8 @@ class RuntimeInstallerTest {
             rootfsManager = DefaultRootfsManager(layout.controlRoot, DefaultSafeArchiveExtractor()),
             runtimeVerifier = com.amitia.amitia_app.runtime.install.DefaultInstalledRuntimeVerifier(treeHasher = { "" }),
             receiptStore = DefaultInstallReceiptStore(layout),
-            manifestStore = manifestStore ?: object : RuntimeManifestStore {
-                override fun read(): RuntimeManifestResult {
-                    return RuntimeManifestResult.failure(
-                        RuntimeManifestError(
-                            RuntimeManifestErrorCode.MANIFEST_NOT_FOUND,
-                            "no manifest"
-                        )
-                    )
-                }
-
-                override fun write(manifest: RuntimeManifest): RuntimeManifestResult {
-                    return RuntimeManifestResult.success(manifest)
-                }
-
-                override fun delete(): RuntimeManifestResult {
-                    return RuntimeManifestResult.failure(
-                        RuntimeManifestError(
-                            RuntimeManifestErrorCode.MANIFEST_WRITE_FAILED,
-                            "delete not supported in test"
-                        )
-                    )
-                }
-            },
-            manifestBuilder = manifestBuilder ?: object : RuntimeManifestBuilder {
-                override fun build(): RuntimeManifestResult {
-                    return RuntimeManifestResult.failure(
-                        RuntimeManifestError(
-                            RuntimeManifestErrorCode.MANIFEST_INVALID_JSON,
-                            "builder not configured"
-                        )
-                    )
-                }
-            },
+            manifestStore = manifestStore ?: missingManifestStore(),
+            manifestBuilder = manifestBuilder ?: missingManifestBuilder(),
             activeRuntimeManager = activeRuntimeManager,
         )
     }
@@ -198,7 +211,9 @@ class RuntimeInstallerTest {
             rootfsManager = DefaultRootfsManager(layout.controlRoot, DefaultSafeArchiveExtractor()),
             runtimeVerifier = com.amitia.amitia_app.runtime.install.DefaultInstalledRuntimeVerifier(treeHasher = { "" }),
             receiptStore = DefaultInstallReceiptStore(layout),
-            activeRuntimeManager = null,
+            manifestStore = missingManifestStore(),
+            manifestBuilder = missingManifestBuilder(),
+            activeRuntimeManager = InstallerNoActiveRuntimeManager(),
         )
 
         val result = installer.install(
@@ -262,6 +277,7 @@ class RuntimeInstallerTest {
                         packageIndex = PackageIndex(
                             runtimeVersion = "1.0.0",
                             packageId = "test-package",
+                            sourceRevision = "a".repeat(40),
                             target = PackageTarget("android", "arm64-v8a", "proot", "linux", "arm64"),
                             guestLayout = PayloadRef("guest.layout", "guest-layout-sha", 100),
                             mountContract = PayloadRef("mount.contract", "mount-contract-sha", 100),
@@ -294,7 +310,9 @@ class RuntimeInstallerTest {
             rootfsManager = DefaultRootfsManager(layout.controlRoot, DefaultSafeArchiveExtractor()),
             runtimeVerifier = com.amitia.amitia_app.runtime.install.DefaultInstalledRuntimeVerifier(treeHasher = { "" }),
             receiptStore = receiptStore,
-            activeRuntimeManager = null,
+            manifestStore = missingManifestStore(),
+            manifestBuilder = missingManifestBuilder(),
+            activeRuntimeManager = InstallerNoActiveRuntimeManager(),
         )
 
         val result = installer.install(
@@ -523,6 +541,8 @@ class RuntimeInstallerTest {
                     "full verify intentionally fails in test"
                 )
             }
+
+            override fun computeTreeSha256(rootDir: File): String = "failing-tree"
         }
 
         val fakeVerifier = createFakePackageVerifier(baseDir, "4.0.0")
@@ -534,6 +554,8 @@ class RuntimeInstallerTest {
             rootfsManager = DefaultRootfsManager(layout.controlRoot, DefaultSafeArchiveExtractor()),
             runtimeVerifier = failingVerifier,
             receiptStore = DefaultInstallReceiptStore(layout),
+            manifestStore = missingManifestStore(),
+            manifestBuilder = missingManifestBuilder(),
             activeRuntimeManager = object : ActiveRuntimeManager {
                 override fun current(): ActiveRuntimeResult = ActiveRuntimeResult.NoActiveRuntime
                 override fun activate(version: String): ActiveRuntimeResult {
@@ -648,6 +670,8 @@ class RuntimeInstallerTest {
             rootfsManager = DefaultRootfsManager(layout.controlRoot, DefaultSafeArchiveExtractor()),
             runtimeVerifier = com.amitia.amitia_app.runtime.install.DefaultInstalledRuntimeVerifier(treeHasher = { "" }),
             receiptStore = DefaultInstallReceiptStore(layout),
+            manifestStore = missingManifestStore(),
+            manifestBuilder = missingManifestBuilder(),
             activeRuntimeManager = object : ActiveRuntimeManager {
                 override fun current(): ActiveRuntimeResult = ActiveRuntimeResult.NoActiveRuntime
                 override fun activate(version: String): ActiveRuntimeResult {
@@ -681,6 +705,7 @@ class RuntimeInstallerTest {
                         packageIndex = PackageIndex(
                             runtimeVersion = runtimeVersion,
                             packageId = "test-package",
+                            sourceRevision = "a".repeat(40),
                             target = PackageTarget("android", "arm64-v8a", "proot", "linux", "arm64"),
                             guestLayout = PayloadRef("guest.layout", "guest-layout-sha", 100),
                             mountContract = PayloadRef("mount.contract", "mount-contract-sha", 100),
@@ -693,15 +718,12 @@ class RuntimeInstallerTest {
                             runtimeVersion = runtimeVersion,
                             packageId = "test-package",
                             components = listOf(
-                                RuntimeManifestComponent(
+                                ComponentRef(
                                     id = "test-component",
                                     version = runtimeVersion,
                                     architecture = "arm64-v8a",
-                                    root = "/test",
-                                    entry = null,
+                                    path = "/test",
                                     sha256 = "abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234",
-                                    treeSha256 = null,
-                                    source = RuntimeManifestComponent.SOURCE_PACKAGE,
                                 )
                             ),
                         ),

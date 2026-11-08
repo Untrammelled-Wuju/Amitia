@@ -3,30 +3,32 @@ package protocol
 type MessageType string
 
 const (
-	MessageTypeHello          MessageType = "hello"
-	MessageTypeHelloAck       MessageType = "hello_ack"
-	MessageTypeCommand        MessageType = "command"
-	MessageTypeCommandAck     MessageType = "command_ack"
-	MessageTypeEventAck       MessageType = "event_ack"
-	MessageTypeRuntimeInvoke  MessageType = "runtime.invoke"
-	MessageTypeRuntimeResult  MessageType = "runtime.result"
-	MessageTypeRuntimeError   MessageType = "runtime.error"
-	MessageTypeRuntimeEvent   MessageType = "runtime_event"
-	MessageTypeRuntimeCancel  MessageType = "runtime.cancel"
-	MessageTypeStateSnapshot  MessageType = "state_snapshot"
-	MessageTypeError          MessageType = "error"
-	MessageTypePing           MessageType = "ping"
-	MessageTypePong           MessageType = "pong"
-	MessageTypeTaskDispatch   MessageType = "task_dispatch"
-	MessageTypeTaskCancel     MessageType = "task_cancel"
-	MessageTypeTaskClaim      MessageType = "task_claim"
-	MessageTypeTaskLeaseAck   MessageType = "task_lease_ack"
-	MessageTypeTaskComplete   MessageType = "task_complete"
-	MessageTypeTaskProgress   MessageType = "task_progress"
-	MessageTypeTaskCheckpoint MessageType = "task_checkpoint"
-	MessageTypeTaskHeartbeat  MessageType = "task_heartbeat"
-	MessageTypeTaskPause      MessageType = "task_pause"
-	MessageTypeTaskResume     MessageType = "task_resume"
+	MessageTypeHello                MessageType = "hello"
+	MessageTypeHelloAck             MessageType = "hello_ack"
+	MessageTypeCommand              MessageType = "command"
+	MessageTypeCommandAck           MessageType = "command_ack"
+	MessageTypeEventAck             MessageType = "event_ack"
+	MessageTypeRuntimeInvoke        MessageType = "runtime.invoke"
+	MessageTypeRuntimeResult        MessageType = "runtime.result"
+	MessageTypeRuntimeError         MessageType = "runtime.error"
+	MessageTypeRuntimeEvent         MessageType = "runtime_event"
+	MessageTypeRuntimeCancel        MessageType = "runtime.cancel"
+	MessageTypeStateSnapshot        MessageType = "state_snapshot"
+	MessageTypeError                MessageType = "error"
+	MessageTypePing                 MessageType = "ping"
+	MessageTypePong                 MessageType = "pong"
+	MessageTypeTaskDispatch         MessageType = "task_dispatch"
+	MessageTypeTaskCancel           MessageType = "task_cancel"
+	MessageTypeTaskClaim            MessageType = "task_claim"
+	MessageTypeTaskLeaseAck         MessageType = "task_lease_ack"
+	MessageTypeTaskComplete         MessageType = "task_complete"
+	MessageTypeTaskProgress         MessageType = "task_progress"
+	MessageTypeTaskCheckpoint       MessageType = "task_checkpoint"
+	MessageTypeTaskHeartbeat        MessageType = "task_heartbeat"
+	MessageTypeTaskPause            MessageType = "task_pause"
+	MessageTypeTaskResume           MessageType = "task_resume"
+	MessageTypeCapabilityCatalog    MessageType = "capability_catalog"
+	MessageTypeCapabilityCatalogAck MessageType = "capability_catalog_ack"
 )
 
 func (t MessageType) String() string {
@@ -42,7 +44,8 @@ func (t MessageType) IsValid() bool {
 		MessageTypeError, MessageTypePing, MessageTypePong,
 		MessageTypeTaskDispatch, MessageTypeTaskCancel,
 		MessageTypeTaskClaim, MessageTypeTaskLeaseAck, MessageTypeTaskComplete, MessageTypeTaskProgress, MessageTypeTaskCheckpoint,
-		MessageTypeTaskHeartbeat, MessageTypeTaskPause, MessageTypeTaskResume:
+		MessageTypeTaskHeartbeat, MessageTypeTaskPause, MessageTypeTaskResume,
+		MessageTypeCapabilityCatalog, MessageTypeCapabilityCatalogAck:
 		return true
 	}
 	return false

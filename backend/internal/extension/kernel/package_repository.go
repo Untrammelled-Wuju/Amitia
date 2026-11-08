@@ -251,6 +251,8 @@ func (r *PackageRepository) PutArtifact(ctx context.Context, a PackageArtifact) 
 	signer_key_id=excluded.signer_key_id, publisher_id=excluded.publisher_id,
 	trust_decision=excluded.trust_decision, verification_report_json=excluded.verification_report_json,
 	verified_at=excluded.verified_at, quarantined_at=excluded.quarantined_at,
+		retention_state=CASE WHEN extension_package_artifacts.deleted_at <> '' AND excluded.deleted_at = '' THEN excluded.retention_state ELSE extension_package_artifacts.retention_state END,
+		deleted_at=CASE WHEN extension_package_artifacts.deleted_at <> '' AND excluded.deleted_at = '' THEN '' ELSE extension_package_artifacts.deleted_at END,
 	last_verified_at=CASE WHEN excluded.last_verified_at = '' THEN extension_package_artifacts.last_verified_at ELSE excluded.last_verified_at END,
 	verification_status=CASE WHEN excluded.verification_status = 'pending' AND extension_package_artifacts.verification_status <> '' THEN extension_package_artifacts.verification_status ELSE excluded.verification_status END`,
 		a.ArtifactID, a.ExtensionID, a.Version, a.ArchiveHash, a.ManifestHash, a.ContentTreeHash,

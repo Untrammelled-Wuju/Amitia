@@ -53,9 +53,9 @@ describe("deployment endpoint normalization", () => {
   });
 
   it("exposes only the two user-facing deployment modes", () => {
-    expect(configToLabel({ mode: "local" })).toBe("本地模式");
+    expect(configToLabel({ mode: "local" })).toBe("本机统筹中心");
     expect(configToLabel({ mode: "cloud", serverURL: "https://cloud.example.com" })).toBe(
-      "云端统筹 (https://cloud.example.com)",
+      "远程统筹中心 (https://cloud.example.com)",
     );
   });
 

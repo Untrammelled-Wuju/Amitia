@@ -33,6 +33,14 @@ func (s *KernelEventNotificationSink) Publish(ctx context.Context, n notificatio
 		return fmt.Errorf("resolve extension id for plugin %q: %w", n.PluginID, err)
 	}
 
+	_, err = s.eventService.Publish(ctx, "gamehost.notification", 1, n.Payload, gameHostNotificationPublishOptions(extensionID, n))
+	if err != nil {
+		return fmt.Errorf("publish gamehost notification event: %w", err)
+	}
+	return nil
+}
+
+func gameHostNotificationPublishOptions(extensionID string, n notification.Notification) event.PublishOptions {
 	metadata := map[string]string{
 		"pluginId":  string(n.PluginID),
 		"runtimeId": string(n.RuntimeID),
@@ -41,17 +49,13 @@ func (s *KernelEventNotificationSink) Publish(ctx context.Context, n notificatio
 	}
 	metadataJSON, _ := json.Marshal(metadata)
 
-	opts := event.PublishOptions{
+	return event.PublishOptions{
+		ProducerID:          extensionID,
+		ProducerType:        event.EventProducerTypeSystem,
 		ProducerExtensionID: extensionID,
 		TraceID:             n.ID,
 		Metadata:            metadataJSON,
 	}
-
-	_, err = s.eventService.Publish(ctx, "gamehost.notification", 1, n.Payload, opts)
-	if err != nil {
-		return fmt.Errorf("publish gamehost notification event: %w", err)
-	}
-	return nil
 }
 
 func (s *KernelEventNotificationSink) resolveExtensionID(ctx context.Context, pluginID domain.PluginID) (string, error) {

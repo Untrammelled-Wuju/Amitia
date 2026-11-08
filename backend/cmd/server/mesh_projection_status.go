@@ -60,7 +60,7 @@ func (p *meshLocalDataPort) CleanupMemoryDeletions(ctx context.Context, scope co
 }
 
 func (p *meshLocalDataPort) ProjectionState(ctx context.Context, scope coordination.ExecutionScope, rebuild bool) (coordination.ProjectionStatus, error) {
-	if scope.ResourceOwnerID != p.ownerID || scope.RoleOwnerID != p.ownerID {
+	if scope.ResourceOwnerID != p.ownerID || (scope.RoleOwnerID != p.ownerID && scope.RoleOwnerID != scope.CoreID) {
 		return coordination.ProjectionStatus{}, coordination.ErrWrongOwner
 	}
 	unlock := character.LockRuntimeRole(p.services.DB)

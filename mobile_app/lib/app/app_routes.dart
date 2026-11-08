@@ -60,6 +60,7 @@ abstract final class AppRoutes {
   static const settingsTheme = '/settings/theme';
   static const settingsUser = '/settings/user';
   static const settingsDevices = '/settings/devices';
+  static const settingsBoundDevices = '/settings/devices/bound';
   static const settingsDeviceAdd = '/settings/devices/add';
   static const settingsDeviceSettings = '/settings/devices/settings';
   static const settingsPrivacyScan = '/settings/privacy-scan';

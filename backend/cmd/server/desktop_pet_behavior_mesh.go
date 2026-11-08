@@ -30,7 +30,6 @@ import (
 const (
 	desktopPetBehaviorMeshHandler        = "desktop_pet.behavior.submit_event"
 	desktopPetBehaviorMeshResolveHandler = "desktop_pet.behavior.resolve_target"
-	behaviorMeshPollInterval             = 2 * time.Second
 	behaviorMeshBatchSize                = 50
 	behaviorMeshInvokeTimeout            = 5 * time.Second
 	behaviorMeshClaimLease               = 5 * time.Minute
@@ -197,6 +196,7 @@ type desktopPetBehaviorMeshPublisher struct {
 
 	workerMu sync.Mutex
 	cancel   context.CancelFunc
+	wake     chan struct{}
 	wg       sync.WaitGroup
 	running  atomic.Bool
 }
@@ -233,15 +233,18 @@ func (p *desktopPetBehaviorMeshPublisher) Start(ctx context.Context) error {
 		return nil
 	}
 	workerCtx, cancel := context.WithCancel(ctx)
+	wake := make(chan struct{}, 1)
 	p.cancel = cancel
+	p.wake = wake
 	p.running.Store(true)
 	p.wg.Add(1)
 	p.workerMu.Unlock()
 	go func() {
 		defer p.wg.Done()
 		defer p.running.Store(false)
-		p.run(workerCtx)
+		p.run(workerCtx, wake)
 	}()
+	p.requestWake()
 	return nil
 }
 
@@ -252,6 +255,7 @@ func (p *desktopPetBehaviorMeshPublisher) Stop() {
 	p.workerMu.Lock()
 	cancel := p.cancel
 	p.cancel = nil
+	p.wake = nil
 	p.workerMu.Unlock()
 	if cancel != nil {
 		cancel()
@@ -348,25 +352,97 @@ func (p *desktopPetBehaviorMeshPublisher) PublishBehaviorEvent(ctx context.Conte
 			"error":   err.Error(),
 		})
 	}
+	p.requestWake()
 	return nil
 }
 
-func (p *desktopPetBehaviorMeshPublisher) run(ctx context.Context) {
-	if err := p.processBatch(ctx); err != nil && ctx.Err() == nil {
-		log.Warn("desktop pet behavior mesh initial retry batch failed", map[string]interface{}{"error": err.Error()})
+func (p *desktopPetBehaviorMeshPublisher) requestWake() {
+	if p == nil {
+		return
 	}
-	ticker := time.NewTicker(behaviorMeshPollInterval)
-	defer ticker.Stop()
+	p.workerMu.Lock()
+	wake := p.wake
+	p.workerMu.Unlock()
+	if wake == nil {
+		return
+	}
+	select {
+	case wake <- struct{}{}:
+	default:
+	}
+}
+
+func (p *desktopPetBehaviorMeshPublisher) run(ctx context.Context, wake <-chan struct{}) {
 	for {
+		if err := p.processBatch(ctx); err != nil && ctx.Err() == nil {
+			log.Warn("desktop pet behavior mesh retry batch failed", map[string]interface{}{"error": err.Error()})
+		}
+		delay, pending, err := p.nextPendingDelay(ctx)
+		if err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			log.Warn("desktop pet behavior mesh retry schedule failed", map[string]interface{}{"error": err.Error()})
+			delay = time.Second
+			pending = true
+		}
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
-			if err := p.processBatch(ctx); err != nil && ctx.Err() == nil {
-				log.Warn("desktop pet behavior mesh retry batch failed", map[string]interface{}{"error": err.Error()})
+		case <-wake:
+			continue
+		default:
+		}
+		if !pending {
+			select {
+			case <-ctx.Done():
+				return
+			case <-wake:
+				continue
 			}
 		}
+		if delay <= 0 {
+			continue
+		}
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return
+		case <-wake:
+			if !timer.Stop() {
+				<-timer.C
+			}
+			continue
+		case <-timer.C:
+		}
 	}
+}
+
+func (p *desktopPetBehaviorMeshPublisher) nextPendingDelay(ctx context.Context) (time.Duration, bool, error) {
+	if p == nil || p.db == nil {
+		return 0, false, errors.New("desktop pet behavior mesh unavailable")
+	}
+	now := time.Now().UTC()
+	var row desktopPetBehaviorMeshOutbox
+	err := p.db.WithContext(ctx).
+		Select("available_at").
+		Where("status = ? AND (expires_at IS NULL OR expires_at > ?)", "pending", now).
+		Order("available_at ASC").
+		First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	delay := row.AvailableAt.Sub(now)
+	if delay < 0 {
+		delay = 0
+	}
+	return delay, true, nil
 }
 
 func (p *desktopPetBehaviorMeshPublisher) processBatch(ctx context.Context) error {
@@ -921,4 +997,15 @@ func bindDesktopPetOwnerFromCredential(ctx context.Context, services *AppService
 		return errors.New("desktop pet local owner id is not configured")
 	}
 	return services.DesktopPetOwnerMapper.Bind(ctx, cloudSpaceID, deviceID, localOwnerID)
+}
+
+func syncDesktopPetOwnerFromCredential(ctx context.Context, services *AppServices, credential *devicemeshagent.StoredCredential) error {
+	if credential == nil {
+		return nil
+	}
+	if services != nil && services.DesktopPetOwnerMapper == nil {
+		amitialog.Printf("desktop pet owner mapping unavailable for current runtime profile; skipped optional binding")
+		return nil
+	}
+	return bindDesktopPetOwnerFromCredential(ctx, services, credential.SpaceID.String(), credential.DeviceID.String())
 }

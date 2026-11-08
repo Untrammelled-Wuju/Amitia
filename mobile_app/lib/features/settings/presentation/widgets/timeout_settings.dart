@@ -66,9 +66,9 @@ class _TimeoutSettingsState extends ConsumerState<TimeoutSettings> {
         _seconds = (value['seconds'] as num).toInt();
       });
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-if (mounted && epoch == _loadEpoch)
-        setState(() => _error = '无法加载当前 Core 超时设置，普通绑定设备需要由云端管理员配置');
+      print("[original-error] $error\n$stackTrace");
+      if (mounted && epoch == _loadEpoch)
+        setState(() => _error = '无法加载当前统筹中心超时设置，普通绑定设备需要由中心管理员配置');
     } finally {
       if (mounted && epoch == _loadEpoch) setState(() => _loading = false);
     }
@@ -94,8 +94,8 @@ if (mounted && epoch == _loadEpoch)
         context,
       ).showSnackBar(const SnackBar(content: Text('超时设置已保存，对新调用生效')));
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-if (mounted) {
+      print("[original-error] $error\n$stackTrace");
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(error.toString())));

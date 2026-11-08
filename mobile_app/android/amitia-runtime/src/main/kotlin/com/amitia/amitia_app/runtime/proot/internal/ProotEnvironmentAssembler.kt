@@ -130,7 +130,7 @@ internal open class ProotEnvironmentAssembler(
     }
 
     private fun ensureCaBundleFile(): File {
-        val certificates = caCertificateDirectories
+        val platformCertificates = caCertificateDirectories
             .asSequence()
             .flatMap { directory ->
                 directory.listFiles()
@@ -146,9 +146,26 @@ internal open class ProotEnvironmentAssembler(
             .toList()
 
         val bundle = File(layout.dataRoot, "security/ca-certificates.crt")
+        val certificates = platformCertificates.ifEmpty {
+            val packagedBundle = File(layout.rootfsRoot, "etc/ssl/certs/ca-certificates.crt")
+            if (packagedBundle.isFile) {
+                listOf(packagedBundle.readText(Charsets.US_ASCII).trim())
+                    .filter { it.contains("-----BEGIN CERTIFICATE-----") }
+            } else {
+                emptyList()
+            }
+        }
         if (certificates.isEmpty()) {
-            if (bundle.exists()) bundle.delete()
-            return bundle
+            if (bundle.isFile) {
+                val existing = bundle.readText(Charsets.US_ASCII).trim()
+                if (existing.contains("-----BEGIN CERTIFICATE-----")) {
+                    return bundle
+                }
+            }
+            throw ProotEnvironmentException(
+                RuntimeEnvironmentErrorCode.BUILD_FAILED,
+                "no CA certificates are available from Android or the installed Runtime Package",
+            )
         }
 
         val content = buildString {

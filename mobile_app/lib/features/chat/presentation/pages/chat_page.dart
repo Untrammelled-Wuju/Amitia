@@ -36,6 +36,7 @@ import '../../../../core/services/device_owned_chat_service.dart';
 import '../../../../core/services/workspace_service.dart';
 import '../../../../core/native_bridge/providers/native_bridge_relay_provider.dart';
 import '../../../../core/runtime/backend/mobile_backend_providers.dart';
+import '../../../../core/runtime/backend/mobile_backend_lifecycle.dart';
 import '../../../../core/runtime/backend/mobile_deployment_mode.dart';
 import '../../../../core/models/character.dart';
 import '../../../../core/models/conversation.dart';
@@ -666,7 +667,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     if (deployment.mode == MobileDeploymentMode.cloud) {
       final localMesh = ref.read(deviceMeshLocalServiceProvider);
       if (localMesh == null) {
-        throw StateError('本机 Device Agent 尚未就绪，云端统筹模式无法绑定本地工作目录');
+        throw StateError('本机 Device Agent 尚未就绪，当前无法绑定本地工作目录');
       }
       final identity = await localMesh.identity();
       deviceId = (identity['deviceId'] ?? '').toString().trim();
@@ -1882,8 +1883,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final text = input['text']?.toString() ?? '';
     final fileName = (input['fileName'] ?? input['filename'] ?? 'image.png')
         .toString();
-    final mimeType = (input['mimeType'] ?? 'image/png')
-        .toString();
+    final mimeType = (input['mimeType'] ?? 'image/png').toString();
     if (encoded.isEmpty && resourceUri.isEmpty) {
       final camera = input['source']?.toString() == 'camera';
       await _pickAndSendImage(camera);
@@ -1923,13 +1923,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final text = input['text']?.toString() ?? '';
     final fileName = (input['fileName'] ?? input['filename'] ?? 'video.mp4')
         .toString();
-    final mimeType = (input['mimeType'] ?? 'video/mp4')
-        .toString();
+    final mimeType = (input['mimeType'] ?? 'video/mp4').toString();
     final durationMs =
-        int.tryParse(
-          (input['durationMs'] ?? '0').toString(),
-        ) ??
-        0;
+        int.tryParse((input['durationMs'] ?? '0').toString()) ?? 0;
     if (encoded.isEmpty && resourceUri.isEmpty) {
       final camera = input['source']?.toString() == 'camera';
       await _pickAndSendVideo(camera);
@@ -1976,14 +1972,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final fileName = (input['fileName'] ?? input['filename'] ?? '文件')
         .toString()
         .trim();
-    final sizeBytes =
-        int.tryParse(
-          (input['sizeBytes'] ?? '0').toString(),
-        ) ??
-        0;
-    final mimeType =
-        (input['mimeType'] ?? 'application/octet-stream')
-            .toString();
+    final sizeBytes = int.tryParse((input['sizeBytes'] ?? '0').toString()) ?? 0;
+    final mimeType = (input['mimeType'] ?? 'application/octet-stream')
+        .toString();
     await _runtime.sendFile(
       resourceUri: resourceUri,
       fileName: fileName.isEmpty ? '文件' : fileName,
@@ -2010,13 +2001,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     }
     final fileName = (input['fileName'] ?? input['filename'] ?? 'voice.webm')
         .toString();
-    final mimeType = (input['mimeType'] ?? 'audio/webm')
-        .toString();
+    final mimeType = (input['mimeType'] ?? 'audio/webm').toString();
     final durationMs =
-        int.tryParse(
-          (input['durationMs'] ?? '0').toString(),
-        ) ??
-        0;
+        int.tryParse((input['durationMs'] ?? '0').toString()) ?? 0;
     await _withArtifactUpload((service) async {
       if (encoded.isNotEmpty) {
         final artifact = await _uploadProviderBase64(
@@ -2679,6 +2666,14 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       );
     }
     final selectedCharacterId = ref.watch(currentCharacterIdProvider);
+    final mobileBackendStatus = ref
+        .watch(mobileBackendStatusProvider)
+        .valueOrNull;
+    final showCenterUnavailable = shouldShowMobileBackendUnavailableBanner(
+      mobileBackendStatus,
+    );
+    final contentTopInset =
+        _chatTopBarHeight + (showCenterUnavailable ? 52 : 0);
     final characters =
         ref.watch(characterListProvider).valueOrNull ?? const <CharacterDto>[];
     final modelConfigs =
@@ -2712,6 +2707,25 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       });
     }
     if (characterId.isNotEmpty) _runtime.setCharacterId(characterId);
+    ref.listen<AsyncValue<MobileBackendStatus>>(mobileBackendStatusProvider, (
+      previous,
+      next,
+    ) {
+      final recovered =
+          shouldShowMobileBackendUnavailableBanner(previous?.valueOrNull) &&
+          !shouldShowMobileBackendUnavailableBanner(next.valueOrNull);
+      final conversationId = _runtime.conversationId;
+      if (!recovered || conversationId == null || conversationId.isEmpty) {
+        return;
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _runtime.conversationId == conversationId) {
+          unawaited(
+            _runtime.openConversation(conversationId, characterId: characterId),
+          );
+        }
+      });
+    });
 
     final characterName = (character?.name ?? '').trim();
     final avatarInitial = characterName.isNotEmpty
@@ -3224,7 +3238,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                         controller: _scrollController,
                                         padding: EdgeInsets.fromLTRB(
                                           0,
-                                          _chatTopBarHeight + 24,
+                                          contentTopInset + 24,
                                           0,
                                           (composerHeight -
                                                       MediaQuery.paddingOf(
@@ -3654,6 +3668,32 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               ),
             ),
           ),
+          if (showCenterUnavailable)
+            Positioned(
+              top: MediaQuery.paddingOf(context).top + _chatTopBarHeight,
+              left: 12,
+              right: 12,
+              child: Container(
+                key: const ValueKey('chat-center-unavailable'),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.errorContainer,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '统筹中心不可达 · 当前仅显示已确认数据\n'
+                  '${mobileBackendStatus?.businessCore.message ?? '远端 Core 连接失败'}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.caption(context).copyWith(
+                    color: Theme.of(context).colorScheme.onErrorContainer,
+                  ),
+                ),
+              ),
+            ),
           AgentApprovalGuard(conversationId: _runtime.conversationId ?? ''),
           if (_runtime.automationStatus case final status?)
             Positioned.fill(child: AutomationStatusIndicator(status: status)),

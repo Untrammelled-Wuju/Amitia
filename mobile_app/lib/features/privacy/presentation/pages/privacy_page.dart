@@ -70,8 +70,8 @@ class _PrivacyPageState extends ConsumerState<PrivacyPage> {
                   color: context.accentPrimary,
                   paragraphs: [
                     'Amitia 采用本地优先架构，你的对话记录、记忆数据、角色设定等核心数据均存储在本地设备的加密数据库中。',
-                    '在本地模式下，项目服务与数据运行在当前设备。',
-                    '在云端统筹模式下，数据将通过受保护的连接传输至你指定的 Cloud Core。',
+                    '本机作为统筹中心时，统筹数据与模型配置保存在当前设备。',
+                    '使用远程统筹中心时，统筹数据由你指定的中心设备管理。',
                   ],
                 ),
                 SizedBox(height: AppSpacing.lg),

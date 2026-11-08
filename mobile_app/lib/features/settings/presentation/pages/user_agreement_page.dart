@@ -24,12 +24,12 @@ class UserAgreementPage extends ConsumerWidget {
       (
         '服务使用',
         Icons.check_circle_outline,
-        '你可以在本地模式或自己配置的云端统筹模式中使用 Amitia。本地模式不限制模型或扩展能力。',
+        '你可以把当前设备作为统筹中心，也可以连接自己信任的远程统筹中心。模型、设备能力和跨设备调用受中心授权与设备开放设置约束。',
       ),
       (
         '个人空间与设备',
         Icons.person_outline,
-        'Amitia 不创建产品账号。Space ID 用于数据归属，Device ID / Runtime ID 用于执行路由，云端设备通过一次性配对签发的 Device Credential 鉴权。',
+        'Amitia 不创建产品账号。Space ID 用于数据归属，Device ID / Runtime ID 用于执行路由，加入统筹中心的设备通过配对签发的 Device Credential 鉴权。',
       ),
       (
         '扩展与工具',

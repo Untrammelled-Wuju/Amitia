@@ -30,6 +30,13 @@ func RegisterGameCenterRouter(group *gin.RouterGroup, service *GameCenterManagem
 	}
 }
 
+func RegisterGameBehaviorRouter(group *gin.RouterGroup, service *GameBehaviorService) {
+	handler := NewGameBehaviorHandler(service)
+	gameCenter := group.Group("/game-center")
+	gameCenter.GET("/behaviors", handler.List)
+	gameCenter.POST("/behaviors/invoke", handler.Invoke)
+}
+
 func RegisterGameCenterMutationRouter(group *gin.RouterGroup, mutationHandler *MutationHandler) {
 	gameCenter := group.Group("/game-center")
 	{

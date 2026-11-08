@@ -8,15 +8,17 @@ import (
 	"io"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/character"
 	"gorm.io/gorm"
 )
 
 type CharacterContributor struct {
-	DB *gorm.DB
+	DB        *gorm.DB
+	lifecycle character.AgentRoleLifecycle
 }
 
-func NewCharacterContributor(db *gorm.DB) *CharacterContributor {
-	return &CharacterContributor{DB: db}
+func NewCharacterContributor(db *gorm.DB, lifecycle character.AgentRoleLifecycle) *CharacterContributor {
+	return &CharacterContributor{DB: db, lifecycle: lifecycle}
 }
 
 func (c *CharacterContributor) ID() string             { return "character" }
@@ -74,12 +76,14 @@ func (c *CharacterContributor) Plan(ctx context.Context, req BackupRequest) ([]B
 		return nil, nil
 	}
 	var count int64
-	if req.EffectiveScope() == ScopeCharacter && req.CharacterID != "" {
-		c.DB.WithContext(ctx).Table("characters").Where("id = ?", req.CharacterID).Where("deleted_at IS NULL").Count(&count)
-	} else {
-		c.DB.WithContext(ctx).Table("characters").Where("deleted_at IS NULL").Count(&count)
+	query := c.DB.WithContext(ctx).Table("characters").Where("deleted_at IS NULL")
+	if req.EffectiveScope() == ScopeCharacter {
+		query = query.Where("id = ?", req.CharacterID)
 	}
-	if count == 0 {
+	if err := query.Count(&count).Error; err != nil {
+		return nil, err
+	}
+	if count == 0 && req.EffectiveScope() == ScopeCharacter {
 		return nil, ErrBackupNotFound
 	}
 
@@ -96,7 +100,7 @@ func (c *CharacterContributor) Plan(ctx context.Context, req BackupRequest) ([]B
 	}, nil
 }
 
-func (c *CharacterContributor) Export(ctx context.Context, req BackupRequest, out BackupWriter) error {
+func (c *CharacterContributor) Export(ctx context.Context, req BackupRequest, out BackupWriter) (resultErr error) {
 	if req.EffectiveScope() == ScopeSettings || req.EffectiveScope() == ScopeMemory {
 		return nil
 	}
@@ -104,10 +108,10 @@ func (c *CharacterContributor) Export(ctx context.Context, req BackupRequest, ou
 	if err != nil {
 		return err
 	}
-	defer compW.Close()
+	defer func() { resultErr = errors.Join(resultErr, compW.Close()) }()
 
 	query := c.DB.WithContext(ctx).Table("characters").Where("deleted_at IS NULL")
-	if req.EffectiveScope() == ScopeCharacter && req.CharacterID != "" {
+	if req.EffectiveScope() == ScopeCharacter {
 		query = query.Where("id = ?", req.CharacterID)
 	}
 
@@ -115,19 +119,20 @@ func (c *CharacterContributor) Export(ctx context.Context, req BackupRequest, ou
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() { resultErr = errors.Join(resultErr, rows.Close()) }()
 
 	for rows.Next() {
 		var rec characterExportRecord
 		if err := c.DB.ScanRows(rows, &rec); err != nil {
-			continue
+			return err
 		}
 		data, err := json.Marshal(rec)
 		if err != nil {
-			continue
+			return err
 		}
-		compW.Write(data)
-		compW.Write([]byte("\n"))
+		if _, err := compW.Write(append(data, '\n')); err != nil {
+			return err
+		}
 	}
 	return rows.Err()
 }
@@ -263,6 +268,7 @@ func (c *CharacterContributor) RestoreCharacters(ctx context.Context, in BackupR
 				"sort_order":            rec.SortOrder,
 				"created_at":            rec.CreatedAt,
 				"updated_at":            rec.UpdatedAt,
+				"deleted_at":            nil,
 				"gender":                rec.Gender,
 				"gender_label":          rec.GenderLabel,
 				"pronoun":               rec.Pronoun,
@@ -293,6 +299,15 @@ func (c *CharacterContributor) RestoreCharacters(ctx context.Context, in BackupR
 			}
 			if writeErr != nil {
 				return writeErr
+			}
+			if c.lifecycle != nil {
+				var role character.Character
+				if err := tx.Where("id = ?", newID).Take(&role).Error; err != nil {
+					return err
+				}
+				if err := c.lifecycle.EnsureRoleAgent(tx, &role); err != nil {
+					return err
+				}
 			}
 
 			if idMap != nil {

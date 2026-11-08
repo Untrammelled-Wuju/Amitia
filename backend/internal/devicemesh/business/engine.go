@@ -39,6 +39,8 @@ type Request struct {
 	SpaceID            string                         `json:"-"`
 	DeviceID           string                         `json:"-"`
 	CoreID             string                         `json:"-"`
+	ResourceOwnerID    string                         `json:"-"`
+	RoleOwnerID        string                         `json:"-"`
 	ProjectWorkspaces  []ProjectWorkspace             `json:"-"`
 	PrimaryWorkspaceID string                         `json:"-"`
 	TargetDeviceID     string                         `json:"targetDeviceId,omitempty"`
@@ -207,14 +209,39 @@ type Response struct {
 	ExecutionID        string                         `json:"executionId"`
 	Scope              coordination.ExecutionScope    `json:"executionScope"`
 	Generation
-	Saved           bool   `json:"saved"`
-	MemoryStatus    string `json:"memoryStatus"`
-	MemoryError     string `json:"memoryError,omitempty"`
-	Interrupted     bool   `json:"interrupted,omitempty"`
-	GroupRoundID    string `json:"groupRoundId,omitempty"`
-	DeliveryID      string `json:"deliveryId,omitempty"`
-	CharacterName   string `json:"characterName,omitempty"`
-	CharacterAvatar string `json:"characterAvatar,omitempty"`
+	Saved                bool            `json:"saved"`
+	MemoryStatus         string          `json:"memoryStatus"`
+	MemoryError          string          `json:"memoryError,omitempty"`
+	Interrupted          bool            `json:"interrupted,omitempty"`
+	GroupRoundID         string          `json:"groupRoundId,omitempty"`
+	DeliveryID           string          `json:"deliveryId,omitempty"`
+	CharacterName        string          `json:"characterName,omitempty"`
+	CharacterAvatar      string          `json:"characterAvatar,omitempty"`
+	PostProcessingIssues []ResponseIssue `json:"postProcessingIssues,omitempty"`
+}
+
+type ResponseIssue struct {
+	Stage   string `json:"stage"`
+	Message string `json:"message"`
+	Detail  string `json:"detail,omitempty"`
+}
+
+func (e *Engine) beginRequest(ctx context.Context, request Request, roleID, requestID string) (context.Context, coordination.ExecutionScope, func(), error) {
+	if request.ResourceOwnerID != "" || request.RoleOwnerID != "" {
+		return e.coordination.BeginWithOwners(ctx, request.SpaceID, request.DeviceID, request.TargetDeviceID, request.CoreID, roleID, requestID, request.ResourceOwnerID, request.RoleOwnerID)
+	}
+	return e.coordination.Begin(ctx, request.SpaceID, request.DeviceID, request.TargetDeviceID, request.CoreID, roleID, requestID)
+}
+
+func (r *Response) AddPostProcessingIssue(stage string, err error) {
+	if r == nil || err == nil {
+		return
+	}
+	r.PostProcessingIssues = append(r.PostProcessingIssues, ResponseIssue{
+		Stage:   stage,
+		Message: err.Error(),
+		Detail:  fmt.Sprintf("%+v", err),
+	})
 }
 
 type checkpoint struct {
@@ -491,9 +518,9 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 	if request.TargetDeviceID == "" {
 		request.TargetDeviceID = request.DeviceID
 	}
-	ctx, scope, finish, err := e.coordination.Begin(ctx, request.SpaceID, request.DeviceID, request.TargetDeviceID, request.CoreID, request.RoleID, request.RequestID)
+	ctx, scope, finish, err := e.beginRequest(ctx, request, request.RoleID, request.RequestID)
 	if err != nil {
-		return Response{}, err
+		return Response{}, fmt.Errorf("建立对话请求权限失败: %w", err)
 	}
 	defer finish()
 	if err := e.coordination.RequireCapability(ctx, scope.SpaceID, scope.InitiatorDeviceID, scope.TargetDeviceID, "ai.chat"); err != nil {
@@ -501,7 +528,7 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 	}
 	roles, err := e.data.Roles(ctx, scope)
 	if err != nil {
-		return Response{}, err
+		return Response{}, fmt.Errorf("读取对话角色失败: %w", err)
 	}
 	requestedRole := request.RoleID
 	if requestedRole == "" {
@@ -524,7 +551,7 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 		if port, ok := e.data.(coordination.GroupStatePort); ok {
 			group, groupErr := port.GroupState(ctx, scope, request.ConversationID)
 			if groupErr != nil {
-				return Response{}, groupErr
+				return Response{}, fmt.Errorf("读取当前对话分组失败: %w", groupErr)
 			}
 			if group.IsGroup() {
 				scope.ConversationRoleID = group.ConversationRoleID
@@ -539,9 +566,12 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 	}
 	if request.ExpectedScope != nil {
 		expected := *request.ExpectedScope
+		if expected.MemoryRoleID == "" {
+			expected.MemoryRoleID = scope.MemoryRoleID
+		}
 		expected.RequestID, expected.TurnID, expected.ExecutionID = scope.RequestID, scope.TurnID, scope.ExecutionID
 		if expected != scope {
-			return Response{}, coordination.ErrScopeExpired
+			return Response{}, fmt.Errorf("对话预期范围已变化 expected=%+v current=%+v: %w", expected, scope, coordination.ErrScopeExpired)
 		}
 	}
 	scope.TurnID = uuid.NewString()
@@ -549,7 +579,7 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 	ctx = coordination.WithScope(ctx, scope)
 	conversationRoute, err := e.resolveRunConversationRoute(ctx, scope, request)
 	if err != nil {
-		return Response{}, err
+		return Response{}, fmt.Errorf("解析对话来源失败: %w", err)
 	}
 	quoteRequest := request
 	request.ConversationID = conversationRoute.CurrentID
@@ -558,7 +588,7 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 		if port, ok := e.data.(coordination.GroupStatePort); ok {
 			group, groupErr := port.GroupState(ctx, scope, request.ConversationID)
 			if groupErr != nil {
-				return Response{}, groupErr
+				return Response{}, fmt.Errorf("读取对话可见范围失败: %w", groupErr)
 			}
 			if group.IsGroup() {
 				dataQuery.GroupState = &group
@@ -583,14 +613,14 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
 		if err := port.CommitOwnedChatEffects(cleanup, scope, coordination.OwnedChatEffectsRequest{ConversationID: request.ConversationID, RequestID: scope.RequestID, Abort: true}); err != nil && finalErr == nil {
-			finalErr = err
+			finalErr = fmt.Errorf("结束对话后处理失败: %w", err)
 		}
 	}()
 	previousCheckpoint := false
 	if port, ok := e.data.(coordination.ResourcePort); ok {
 		resource, err := port.Resource(ctx, scope, "checkpoint", "turn/"+request.RequestID)
 		if err != nil {
-			return Response{}, err
+			return Response{}, fmt.Errorf("读取现有对话检查点失败: %w", err)
 		}
 		previousCheckpoint = resource != nil
 	}
@@ -606,7 +636,7 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 	}
 	snapshot, err := e.data.Snapshot(ctx, scope, dataQuery)
 	if err != nil {
-		return Response{}, err
+		return Response{}, fmt.Errorf("读取对话上下文失败: %w", err)
 	}
 	if err := coordination.ValidateSnapshot(scope, snapshot); err != nil {
 		return Response{}, err
@@ -637,7 +667,7 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 		historicalQuery.HistoricalRoleID = request.HistoricalRoleID
 		historicalSnapshot, err = port.HistoricalSnapshot(ctx, scope, historicalQuery)
 		if err != nil {
-			return Response{}, err
+			return Response{}, fmt.Errorf("读取历史对话快照失败: %w", err)
 		}
 	}
 	filterHistoricalContinuationMirrors(conversationRoute, snapshot, historicalSnapshot)
@@ -646,7 +676,7 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 	}
 	projectID, workspaces, primaryWorkspaceID, err := e.resolveRunProject(ctx, scope, request, snapshot)
 	if err != nil {
-		return Response{}, err
+		return Response{}, fmt.Errorf("解析对话项目失败: %w", err)
 	}
 	if ingress, ok := IngressFromContext(ctx); ok && strings.TrimSpace(ingress.SandboxRoot) != "" && strings.TrimSpace(ingress.SandboxWorkspaceID) != "" {
 		workspaces = []ProjectWorkspace{{ID: ingress.SandboxWorkspaceID, DeviceID: scope.TargetDeviceID, Name: "渠道沙箱", Kind: "local", RootURI: ingress.SandboxRoot}}
@@ -661,7 +691,7 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 		return Response{}, errors.New("对话工作目录无效")
 	}
 	if err := resolveConversationSettings(&request, snapshot, role); err != nil {
-		return Response{}, err
+		return Response{}, fmt.Errorf("解析对话设置失败: %w", err)
 	}
 	fingerprintData := map[string]any{"conversationId": request.ConversationID, "message": request.Message, "roleId": request.RoleID, "historicalRoleId": request.HistoricalRoleID, "targetDeviceId": request.TargetDeviceID, "context": request.Context, "projectId": projectID, "workspaces": workspaces, "primaryWorkspaceId": primaryWorkspaceID, "workingDirectory": request.WorkingDirectory}
 	fingerprintData["conversationSettings"] = settingsFromRequest(request)
@@ -688,7 +718,7 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 		if errors.Is(err, coordination.ErrScopeExpired) && location.State == "started" {
 			return Response{}, ErrUncertainExecution
 		}
-		return Response{}, err
+		return Response{}, fmt.Errorf("注册对话请求失败: %w", err)
 	}
 	checkpointID := "turn/" + request.RequestID
 	for _, row := range snapshot.Resources {
@@ -727,7 +757,7 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 	if prepared == nil {
 		quote, quoteDependencies, err = e.reviewQuote(ctx, scope, quoteRequest, request.Quote)
 		if err != nil {
-			return Response{}, err
+			return Response{}, fmt.Errorf("核对引用消息失败: %w", err)
 		}
 	}
 	if quote == nil && request.ExternalQuote != nil && strings.TrimSpace(request.ExternalQuote.Content) != "" {
@@ -848,10 +878,10 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 	}()
 	emitCurrent := func(event Event) error {
 		if err := coordination.ValidateCurrent(ctx); err != nil {
-			return err
+			return fmt.Errorf("对话事件当前权限校验失败: %w", err)
 		}
 		if err := e.coordination.Validate(ctx, scope); err != nil {
-			return err
+			return fmt.Errorf("对话事件范围校验失败: %w", err)
 		}
 		event.Scope = scope
 		event.ConversationID = request.ConversationID
@@ -980,7 +1010,7 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 		finishContext, finishCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer finishCancel()
 		if err := completeTurn(finishContext, finalResponse.Generation, cause); err != nil && finalErr == nil {
-			finalErr = err
+			finalErr = fmt.Errorf("完成对话回合失败: %w", err)
 		}
 	}()
 	if err := emitCurrent(Event{Type: "started"}); err != nil {
@@ -1022,9 +1052,9 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 					return response, errors.Join(cause, saveErr)
 				}
 			}
-			return response, cause
+			return response, fmt.Errorf("对话执行期间权限校验失败: %w", cause)
 		}
-		return Response{}, err
+		return Response{}, fmt.Errorf("模型生成对话回复失败: %w", err)
 	}
 	if generation.Reasoning != "" {
 		if err := emitCurrent(Event{Type: "reasoning-completed", Round: generation.Round}); err != nil {
@@ -1035,10 +1065,10 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 		return Response{}, err
 	}
 	if err := e.coordination.Validate(ctx, scope); err != nil {
-		return Response{}, err
+		return Response{}, fmt.Errorf("生成结果提交前权限校验失败: %w", err)
 	}
 	if err := coordination.ValidateRoleRevision(ctx, e.data, scope); err != nil {
-		return Response{}, err
+		return Response{}, fmt.Errorf("生成结果提交前角色校验失败: %w", err)
 	}
 	var stateMutations []coordination.Mutation
 	if mutator, ok := e.model.(OwnedStateMutator); ok && !generation.Suppressed && (!hasIngress || !ingress.SuppressReplyPersistence) {
@@ -1066,6 +1096,17 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 	} else if !hasIngress || !ingress.SuppressReplyPersistence {
 		response.Evidence = append(response.Evidence, coordination.ResourceVersion{Kind: "message", ID: request.RequestID + "/user", Revision: userRevision})
 	}
+	checkpointRuntime := ownedRuntimeManager.RuntimeSnapshot(RuntimeKey(scope, request.ConversationID)).ActiveTurn
+	if checkpointRuntime != nil {
+		copied := *checkpointRuntime
+		switch {
+		case response.Interrupted:
+			copied.Status = "interrupted"
+		case response.Saved:
+			copied.Status = "completed"
+		}
+		checkpointRuntime = &copied
+	}
 	output := []coordination.Mutation{
 		{Kind: "message", ID: request.RequestID + "/assistant", RoleID: coordination.StorageRole(scope, "message"), Body: body(map[string]any{"id": request.RequestID + "/assistant", "conversationId": request.ConversationID, "characterId": role.ID, "characterName": role.Name, "characterAvatar": role.Avatar, "roleOwnerId": scope.RoleOwnerID, "senderType": "character", "role": "assistant", "content": generation.Text, "reasoningContent": generation.Reasoning, "tokens": generation.Tokens, "outputs": generation.Outputs, "forceVoice": generation.ForceVoice, "requestId": request.RequestID, "groupRoundId": func() string {
 			if prepared != nil {
@@ -1078,9 +1119,9 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 			}
 			return ""
 		}(), "createdAt": time.Now().UTC().Format(time.RFC3339Nano), "executionScope": scope})},
-		{Kind: "checkpoint", ID: checkpointID, RoleID: role.ID, ExpectedRevision: coordination.RevisionCurrent, Body: body(checkpoint{Hash: fingerprint, Status: "completed", ConversationID: request.ConversationID, Response: &response, Context: request.Context, Runtime: ownedRuntimeManager.RuntimeSnapshot(RuntimeKey(scope, request.ConversationID)).ActiveTurn})},
+		{Kind: "checkpoint", ID: checkpointID, RoleID: role.ID, ExpectedRevision: coordination.RevisionCurrent, Body: body(checkpoint{Hash: fingerprint, Status: "completed", ConversationID: request.ConversationID, Response: &response, Context: request.Context, Runtime: checkpointRuntime})},
 	}
-	output[1].Body = body(checkpoint{Hash: fingerprint, Status: "completed", ConversationID: request.ConversationID, Response: &response, Context: request.Context, Runtime: ownedRuntimeManager.RuntimeSnapshot(RuntimeKey(scope, request.ConversationID)).ActiveTurn, Ingress: storedIngress})
+	output[1].Body = body(checkpoint{Hash: fingerprint, Status: "completed", ConversationID: request.ConversationID, Response: &response, Context: request.Context, Runtime: checkpointRuntime, Ingress: storedIngress})
 	var assistantDocument map[string]any
 	if err := json.Unmarshal(output[0].Body, &assistantDocument); err != nil {
 		return response, err
@@ -1149,15 +1190,16 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 		unlockGroupReply = nil
 	}
 	checkpointRevision, err := e.ownedCheckpointRevision(ctx, scope)
+	memoryReady := err == nil
 	if err != nil {
-		return response, err
+		response.AddPostProcessingIssue("checkpoint_revision", err)
 	}
 	if err := e.coordination.CompleteRequest(ctx, scope); err != nil {
-		return response, err
+		response.AddPostProcessingIssue("request_completion", err)
 	}
 	if committed, ok := e.model.(CommittedModel); ok && !generation.Suppressed && (!hasIngress || !ingress.SuppressReplyPersistence) {
 		if err := committed.OwnedReplyCommitted(ctx, inference, generation, request.RequestID+"/assistant"); err != nil {
-			return response, fmt.Errorf("回复已保存，回复后处理失败: %w", err)
+			response.AddPostProcessingIssue("reply_postprocess", err)
 		}
 	}
 	if generation.Suppressed || hasIngress && ingress.SuppressReplyPersistence {
@@ -1167,13 +1209,15 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 	if emit != nil {
 		return response, nil
 	}
-	response, err = e.completeMemory(ctx, inference, fingerprint, response, checkpointRevision)
-	if err != nil {
-		return response, err
+	if memoryReady {
+		response, err = e.completeMemory(ctx, inference, fingerprint, response, checkpointRevision)
+		if err != nil {
+			response.AddPostProcessingIssue("memory", err)
+		}
 	}
 	if prepared == nil {
 		if err := e.finishOwnedTitle(ctx, inference, generation); err != nil {
-			return response, fmt.Errorf("回复已保存，会话标题更新失败: %w", err)
+			response.AddPostProcessingIssue("title", err)
 		}
 	}
 	return response, nil
@@ -1221,10 +1265,10 @@ func (e *Engine) completeMemory(ctx context.Context, inference Inference, finger
 	}
 	scope := inference.Scope
 	if err := e.coordination.Validate(ctx, scope); err != nil {
-		return response, err
+		return response, fmt.Errorf("回复保存后权限校验失败: %w", err)
 	}
 	if err := coordination.ValidateRoleRevision(ctx, e.data, scope); err != nil {
-		return response, err
+		return response, fmt.Errorf("回复保存后角色校验失败: %w", err)
 	}
 	if err := e.finishOwnedEffects(ctx, inference, response.Generation); err != nil {
 		return response, fmt.Errorf("回复已保存，Owner后处理失败: %w", err)
@@ -1258,28 +1302,34 @@ func (e *Engine) completeMemory(ctx context.Context, inference Inference, finger
 		return e.recordMemoryStatus(ctx, scope, fingerprint, response, checkpointRevision)
 	}
 	if err := e.coordination.Validate(ctx, scope); err != nil {
-		return response, err
+		return response, fmt.Errorf("后处理提交前权限校验失败: %w", err)
 	}
-	mutations, err := e.prepareMemoryMutations(ctx, scope, response.ConversationID, modelMemoryDerived(derived), &inference.Snapshot)
+	plannedScope := memoryScope(scope)
+	mutations, err := e.prepareMemoryMutations(ctx, plannedScope, response.ConversationID, modelMemoryDerived(derived), &inference.Snapshot)
 	if err != nil {
 		response.MemoryStatus = "failed"
 		if memoryFailureStatus(err) == "paused" {
 			response.MemoryStatus = "paused"
 		}
-		response.MemoryError = err.Error()
+		response.MemoryError = fmt.Errorf("准备记忆写入失败: %w", err).Error()
 		return e.recordMemoryStatus(ctx, scope, fingerprint, response, checkpointRevision)
 	}
 	recalled := snapshotForRecallEvidence(inference.Snapshot, inference.Snapshot.RecallEvidence)
-	mutations = reinforceMemoryMutations(mutations, recalled, scope, time.Now())
+	mutations = reinforceMemoryMutations(mutations, recalled, plannedScope, time.Now())
 	if len(mutations) > 0 {
-		dependencies := append([]coordination.ResourceVersion(nil), response.Evidence...)
+		var dependencies []coordination.ResourceVersion
+		if plannedScope.ResourceOwnerID == scope.ResourceOwnerID {
+			dependencies = append(dependencies, response.Evidence...)
+		}
 		for _, resource := range inference.Snapshot.Resources {
 			switch resource.Kind {
 			case "memory", "fact", "vector", "graph", "profile", "episodic", "working", "summary":
-				dependencies = append(dependencies, coordination.ResourceVersion{Kind: resource.Kind, ID: resource.ID, Revision: resource.Revision})
+				if resource.OwnerID == plannedScope.ResourceOwnerID {
+					dependencies = append(dependencies, coordination.ResourceVersion{Kind: resource.Kind, ID: resource.ID, Revision: resource.Revision})
+				}
 			}
 		}
-		planned = &coordination.Commit{Scope: memoryScope(scope), Mutations: mutations, Dependencies: dependencies}
+		planned = &coordination.Commit{Scope: plannedScope, Mutations: mutations, Dependencies: dependencies}
 		if proof := coordination.CommitLease(ctx); proof != nil {
 			proof.AllowCompleted = true
 			planned.LeaseProof = proof
@@ -1296,7 +1346,7 @@ func (e *Engine) completeMemory(ctx context.Context, inference Inference, finger
 		}
 		if _, err := e.commit(ctx, *planned); err != nil {
 			response.MemoryStatus = memoryFailureStatus(err)
-			response.MemoryError = err.Error()
+			response.MemoryError = fmt.Errorf("提交记忆写入失败: %w", err).Error()
 			return e.recordMemoryStatus(ctx, scope, fingerprint, response, checkpointRevision)
 		}
 	}
@@ -1314,6 +1364,10 @@ func memoryFailureStatus(err error) string {
 
 func memoryScope(scope coordination.ExecutionScope) coordination.ExecutionScope {
 	scope.RequestID += "|memory"
+	if scope.Coordinated && scope.RoleOwnerID == scope.CoreID {
+		scope.ResourceOwnerID = scope.CoreID
+		scope.RoleOwnerID = scope.CoreID
+	}
 	return scope
 }
 

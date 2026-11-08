@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/google/uuid"
@@ -269,7 +270,7 @@ func (e *Engine) ResumeConversationQueuedChats(ctx context.Context, request Requ
 	for {
 		view, err := e.Query(ctx, request, query)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("读取排队会话快照失败: %w", err)
 		}
 		for _, resource := range view.Snapshot.Resources {
 			var document queuedChatDocument

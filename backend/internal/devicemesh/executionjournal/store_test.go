@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -77,6 +78,29 @@ func TestUncertainActionCannotBeRetriedAfterProcessRestart(t *testing.T) {
 	}
 	if calls != 1 {
 		t.Fatal("uncertain action repeated")
+	}
+}
+
+func TestDeterministicActionRejectionIsPersistedWithoutBecomingUncertain(t *testing.T) {
+	db, store := harness(t)
+	invoke := invocation()
+	var calls atomic.Int32
+	run := func() (*protocol.RuntimeResultPayload, error) {
+		calls.Add(1)
+		return nil, executionjournal.Reject(errors.New("workflow is disabled"))
+	}
+	if _, err := store.Execute(t.Context(), invoke, run); err == nil || errors.Is(err, executionjournal.ErrUncertain) {
+		t.Fatalf("deterministic rejection classified as uncertain: %v", err)
+	}
+	if _, err := executionjournal.NewStore(db).Execute(t.Context(), invoke, run); err == nil || errors.Is(err, executionjournal.ErrUncertain) || !strings.Contains(err.Error(), "workflow is disabled") {
+		t.Fatalf("persisted rejection was not replayed: %v", err)
+	}
+	var status string
+	if err := db.QueryRow(`SELECT status FROM kernel_device_execution_journal WHERE device_id=? AND action_id=?`, "device-a", "action").Scan(&status); err != nil || status != "rejected" {
+		t.Fatalf("unexpected rejection status=%q err=%v", status, err)
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("rejected action executed %d times", calls.Load())
 	}
 }
 

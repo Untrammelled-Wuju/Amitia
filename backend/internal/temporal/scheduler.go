@@ -76,13 +76,13 @@ func (s *Service) ProcessDueAnchors(ctx context.Context, recovery bool) (Process
 			} else {
 				result.Emitted++
 				s.metrics.anchorEvents.Add(1)
-				if anchor.AllowProactiveMention && s.candidatePublisher != nil {
-					if publishErr := s.candidatePublisher.PublishTemporalCandidate(ctx, ProactiveCandidate{EventID: event.ID, AnchorID: anchor.ID, SpaceID: anchor.SpaceID, CharacterID: anchor.CharacterID, Kind: anchor.AnchorType, Title: anchor.Title, OccurrenceAtUTC: utc(*occurrence), ExpiresAtUTC: utc(occurrence.Add(window)), IdempotencyKey: key}); publishErr != nil {
-						s.metrics.proactiveCandidateErrors.Add(1)
-					} else {
-						s.metrics.proactiveCandidates.Add(1)
-					}
+			}
+			if anchor.AllowProactiveMention && s.candidatePublisher != nil {
+				if publishErr := s.candidatePublisher.PublishTemporalCandidate(ctx, ProactiveCandidate{EventID: event.ID, AnchorID: anchor.ID, SpaceID: anchor.SpaceID, CharacterID: anchor.CharacterID, Kind: anchor.AnchorType, Title: anchor.Title, OccurrenceAtUTC: utc(*occurrence), ExpiresAtUTC: utc(occurrence.Add(window)), IdempotencyKey: key}); publishErr != nil {
+					s.metrics.proactiveCandidateErrors.Add(1)
+					return result, publishErr
 				}
+				s.metrics.proactiveCandidates.Add(1)
 			}
 		}
 		previous := utc(*occurrence)

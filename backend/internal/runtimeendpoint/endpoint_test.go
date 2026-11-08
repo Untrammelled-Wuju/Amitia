@@ -1,9 +1,32 @@
 package runtimeendpoint
 
 import (
+	"bytes"
+	"log"
 	"path/filepath"
 	"testing"
 )
+
+func TestWriteMissingEndpointDoesNotLogFailure(t *testing.T) {
+	oldWriter := log.Writer()
+	oldFlags := log.Flags()
+	defer func() {
+		log.SetOutput(oldWriter)
+		log.SetFlags(oldFlags)
+	}()
+	var output bytes.Buffer
+	log.SetOutput(&output)
+	log.SetFlags(0)
+
+	runDir := t.TempDir()
+	endpoint := New("test", "space", "127.0.0.1", 59922)
+	if err := Write(runDir, endpoint); err != nil {
+		t.Fatalf("write first endpoint: %v", err)
+	}
+	if output.Len() != 0 {
+		t.Fatalf("first endpoint write logged failure: %s", output.String())
+	}
+}
 
 func TestRemoveIfOwnerRemovesMatchingEndpoint(t *testing.T) {
 	runDir := t.TempDir()

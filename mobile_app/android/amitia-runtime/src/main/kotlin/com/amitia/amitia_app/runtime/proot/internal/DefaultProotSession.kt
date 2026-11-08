@@ -6,6 +6,7 @@ import com.amitia.amitia_app.runtime.proot.ProotObserver
 import com.amitia.amitia_app.runtime.proot.ProotSession
 import com.amitia.amitia_app.runtime.proot.ProotStopResult
 import com.amitia.amitia_app.runtime.proot.ProotTerminationResult
+import java.io.File
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
@@ -44,8 +45,8 @@ internal class DefaultProotSession(
             process.exitValue()
             false
         } catch (e: IllegalThreadStateException) {
-          e.printStackTrace()
-         true }
+            true
+        }
     }
 
     override fun requestStop() {
@@ -61,51 +62,49 @@ internal class DefaultProotSession(
         if (timeoutMillis <= 0L) return exitRef.get()?.exitCode
         return try {
             exitDeferred.get(timeoutMillis, java.util.concurrent.TimeUnit.MILLISECONDS)?.exitCode
-        } catch (e: Exception) {
-          e.printStackTrace()
-
+        } catch (e: java.util.concurrent.TimeoutException) {
             exitRef.get()?.exitCode
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            exitRef.get()?.exitCode
+        } catch (e: java.util.concurrent.ExecutionException) {
+            throw IllegalStateException(e.cause?.message ?: e.message, e.cause ?: e)
         }
     }
 
     override fun stop(graceMillis: Long): ProotStopResult {
-        if (closed.get()) {
-            val code = exitRef.get()?.exitCode
+        val existingExit = exitRef.get()
+        if (closed.get() || existingExit != null || !process.isAlive) {
+            val code = existingExit?.exitCode ?: try { process.exitValue() } catch (originalError: IllegalThreadStateException) { null }
             return ProotStopResult.AlreadyStopped(sessionId, code)
         }
         stopRequested.set(true)
+        val processTreeSnapshot = snapshotProcessTree()
         return try {
             process.destroy()
             val graceful = try {
                 exitDeferred.get(graceMillis, java.util.concurrent.TimeUnit.MILLISECONDS)
-            } catch (originalError77: Exception) {
-              originalError77.printStackTrace()
-
+            } catch (originalError77: java.util.concurrent.TimeoutException) {
                 null
             }
             if (graceful != null) {
+                terminateSnapshotProcesses(processTreeSnapshot)
                 val code = exitRef.get()?.exitCode
                 ProotStopResult.Graceful(sessionId, code)
             } else {
-                process.destroyForcibly()
-                try { exitDeferred.get(5, java.util.concurrent.TimeUnit.SECONDS) } catch (originalError85: Exception) {
-                  originalError85.printStackTrace()
-                }
+                forceTerminateProcessTree(processTreeSnapshot)
+                try { exitDeferred.get(5, java.util.concurrent.TimeUnit.SECONDS) } catch (originalError85: java.util.concurrent.TimeoutException) { }
                 val code = exitRef.get()?.exitCode
                 ProotStopResult.Forced(sessionId, code)
             }
         } catch (e: InterruptedException) {
-          e.printStackTrace()
-
             Thread.currentThread().interrupt()
-            process.destroyForcibly()
-            try { exitDeferred.get(5, java.util.concurrent.TimeUnit.SECONDS) } catch (originalError92: Exception) {
-              originalError92.printStackTrace()
-            }
+            forceTerminateProcessTree(processTreeSnapshot)
+            try { exitDeferred.get(5, java.util.concurrent.TimeUnit.SECONDS) } catch (originalError92: java.util.concurrent.TimeoutException) { }
             val code = exitRef.get()?.exitCode
             ProotStopResult.Forced(sessionId, code)
         } catch (e: Exception) {
-            process.destroyForcibly()
+            forceTerminateProcessTree(processTreeSnapshot)
             ProotStopResult.Failed(sessionId, com.amitia.amitia_app.runtime.proot.ProotErrorCode.PROCESS_STOP_FAILED, e.message ?: "error")
         }
     }
@@ -118,7 +117,8 @@ internal class DefaultProotSession(
             try { stderrPump.stop() } catch (originalError104: Throwable) {
               originalError104.printStackTrace()
             }
-            try { if (process.isAlive) process.destroyForcibly() } catch (originalError105: Throwable) {
+            val processTreeSnapshot = snapshotProcessTree()
+            try { if (process.isAlive) forceTerminateProcessTree(processTreeSnapshot) } catch (originalError105: Throwable) {
               originalError105.printStackTrace()
             }
             shutdownWatcherExecutor()
@@ -136,6 +136,7 @@ internal class DefaultProotSession(
             return ProotTerminationResult.ConfirmedExited(code)
         }
 
+        val processTreeSnapshot = snapshotProcessTree()
         try { process.destroy() } catch (originalError119: Throwable) {
           originalError119.printStackTrace()
         }
@@ -147,17 +148,19 @@ internal class DefaultProotSession(
             null
         }
         if (gracefulExit != null) {
+            terminateSnapshotProcesses(processTreeSnapshot)
             return ProotTerminationResult.ConfirmedExited(gracefulExit)
         }
 
         if (!process.isAlive) {
+            terminateSnapshotProcesses(processTreeSnapshot)
             val code = try { process.exitValue() } catch (originalError130: IllegalThreadStateException) {
               originalError130.printStackTrace()
              null }
             return ProotTerminationResult.ConfirmedExited(code)
         }
 
-        try { process.destroyForcibly() } catch (originalError134: Throwable) {
+        try { forceTerminateProcessTree(processTreeSnapshot) } catch (originalError134: Throwable) {
           originalError134.printStackTrace()
         }
         val forcedExit = try {
@@ -168,10 +171,12 @@ internal class DefaultProotSession(
             null
         }
         if (forcedExit != null) {
+            terminateSnapshotProcesses(processTreeSnapshot)
             return ProotTerminationResult.ConfirmedExited(forcedExit)
         }
 
         if (!process.isAlive) {
+            terminateSnapshotProcesses(processTreeSnapshot)
             val code = try { process.exitValue() } catch (originalError145: IllegalThreadStateException) {
               originalError145.printStackTrace()
              null }
@@ -209,6 +214,227 @@ internal class DefaultProotSession(
         } catch (originalError179: Throwable) {
           originalError179.printStackTrace()
         }
+    }
+
+    private fun forceTerminateProcessTree(
+        snapshot: Collection<ProcessIdentity> = emptyList(),
+    ) {
+        val rootPid = processPid()
+        val targetPids = linkedSetOf<Int>()
+        if (rootPid != null) {
+            val descendants = descendantPids(rootPid, mutableSetOf())
+            for (pid in descendants) {
+                targetPids.add(pid)
+                if (!isSameProcess(pid)) continue
+                try {
+                    android.os.Process.sendSignal(pid, android.os.Process.SIGNAL_KILL)
+                } catch (error: Throwable) {
+                    System.err.println("sendSignal failed for pid=$pid: ${error.message}")
+                    error.printStackTrace()
+                }
+            }
+            targetPids.add(rootPid)
+            if (isSameProcess(rootPid)) {
+                try {
+                    android.os.Process.sendSignal(rootPid, android.os.Process.SIGNAL_KILL)
+                } catch (error: Throwable) {
+                    System.err.println("sendSignal failed for root pid=$rootPid: ${error.message}")
+                    error.printStackTrace()
+                }
+            }
+        }
+        val snapshotPids = snapshot
+            .filter(::isSameProcess)
+            .map(ProcessIdentity::pid)
+            .filterNot(targetPids::contains)
+        if (snapshotPids.isNotEmpty()) {
+            killWithSystemTool(snapshotPids)
+        }
+        if (targetPids.isNotEmpty()) killWithSystemTool(targetPids)
+        process.destroyForcibly()
+        val retryPids = (targetPids + snapshotPids).filter { isSameProcess(it) && isProcessAlive(it) }
+        if (retryPids.isNotEmpty()) {
+            killWithSystemTool(retryPids)
+        }
+    }
+
+    private data class ProcessIdentity(
+        val pid: Int,
+        val startTime: String,
+    )
+
+    private fun snapshotProcessTree(): List<ProcessIdentity> {
+        val rootPid = processPid() ?: return emptyList()
+        val pids = descendantPids(rootPid, mutableSetOf()) + rootPid
+        return pids.mapNotNull(::processIdentity)
+    }
+
+    private fun processIdentity(pid: Int): ProcessIdentity? {
+        val stat = try {
+            File("/proc/$pid/stat").readText().trim()
+        } catch (originalError: Throwable) {
+            return processIdentityFromPs(pid)
+        }
+        val fields = stat.substringAfterLast(") ", "")
+            .split(Regex("\\s+"))
+            .filter(String::isNotEmpty)
+        val startTime = fields.getOrNull(19) ?: return null
+        return ProcessIdentity(pid, startTime)
+    }
+
+    private fun processIdentityFromPs(pid: Int): ProcessIdentity? {
+        return try {
+            val process = ProcessBuilder("ps", "-p", pid.toString(), "-o", "lstart=")
+                .redirectErrorStream(true)
+                .start()
+            val output = process.inputStream.bufferedReader().use { it.readText().trim() }
+            if (process.waitFor() != 0 || output.isEmpty()) return null
+            ProcessIdentity(pid, output)
+        } catch (originalError: Throwable) {
+            null
+        }
+    }
+
+    private fun isSameProcess(identity: ProcessIdentity): Boolean {
+        return processIdentity(identity.pid)?.startTime == identity.startTime
+    }
+
+    private fun isSameProcess(pid: Int): Boolean {
+        return processIdentity(pid) != null && isProcessAlive(pid)
+    }
+
+    private fun terminateSnapshotProcesses(snapshot: Collection<ProcessIdentity>) {
+        val pids = snapshot
+            .filter(::isSameProcess)
+            .map(ProcessIdentity::pid)
+            .filter(::isProcessAlive)
+        if (pids.isNotEmpty()) {
+            killWithSystemTool(pids)
+        }
+    }
+
+    private fun killWithSystemTool(pids: Collection<Int>) {
+        val kill = File("/system/bin/kill")
+        if (pids.isEmpty()) return
+        val command = if (kill.isFile) {
+            listOf(kill.absolutePath, "-9") + pids.map(Int::toString)
+        } else {
+            listOf("kill", "-9") + pids.map(Int::toString)
+        }
+        val process = try {
+            ProcessBuilder(command)
+                .redirectErrorStream(true)
+                .start()
+        } catch (error: Throwable) {
+            System.err.println("system kill failed for pids=$pids: ${error.message}")
+            error.printStackTrace()
+            return
+        }
+        try {
+            if (!process.waitFor(1, java.util.concurrent.TimeUnit.SECONDS)) {
+                process.destroyForcibly()
+            }
+        } catch (error: Throwable) {
+            process.destroyForcibly()
+            System.err.println("system kill wait failed for pids=$pids: ${error.message}")
+            error.printStackTrace()
+        }
+    }
+
+    private fun isProcessAlive(pid: Int): Boolean {
+        val stat = File("/proc/$pid/stat")
+        val raw = try {
+            stat.readText()
+        } catch (error: Throwable) {
+            return try {
+                val process = ProcessBuilder("kill", "-0", pid.toString())
+                    .redirectErrorStream(true)
+                    .start()
+                process.inputStream.close()
+                process.waitFor() == 0
+            } catch (originalError: Throwable) {
+                false
+            }
+        }
+        val state = raw.substringAfterLast(") ", "").firstOrNull()
+        return state != null && state != 'Z' && state != 'X'
+    }
+
+    private fun processPid(): Int? {
+        val method = runCatching {
+            process.javaClass.getDeclaredMethod("pid").apply { isAccessible = true }
+        }.getOrNull()
+        if (method != null) {
+            try {
+                return (method.invoke(process) as? Number)?.toInt()
+            } catch (originalError166: Throwable) {
+                originalError166.printStackTrace()
+            }
+        }
+        var type: Class<*>? = process.javaClass
+        while (type != null) {
+            val field = runCatching { type.getDeclaredField("pid").apply { isAccessible = true } }.getOrNull()
+            if (field != null) {
+                try {
+                    return (field.get(process) as? Number)?.toInt()
+                } catch (originalError177: Throwable) {
+                    originalError177.printStackTrace()
+                    return null
+                }
+            }
+            type = type.superclass
+        }
+        return null
+    }
+
+    private fun descendantPids(pid: Int, seen: MutableSet<Int>): List<Int> {
+        if (!seen.add(pid)) return emptyList()
+        val children = try {
+            File("/proc/$pid/task/$pid/children")
+                .readText()
+                .trim()
+                .split(Regex("\\s+"))
+                .mapNotNull(String::toIntOrNull)
+        } catch (originalError194: Throwable) {
+            if (!File("/proc").isDirectory) {
+                return descendantPidsFromPs(pid, seen)
+            }
+            originalError194.printStackTrace()
+            emptyList()
+        }
+        val result = mutableListOf<Int>()
+        for (child in children) {
+            result.addAll(descendantPids(child, seen))
+            result.add(child)
+        }
+        return result
+    }
+
+    private fun descendantPidsFromPs(pid: Int, seen: MutableSet<Int>): List<Int> {
+        val childrenByParent = try {
+            val process = ProcessBuilder("ps", "-axo", "pid=,ppid=")
+                .redirectErrorStream(true)
+                .start()
+            val lines = process.inputStream.bufferedReader().use { it.readLines() }
+            if (process.waitFor() != 0) return emptyList()
+            lines.mapNotNull { line ->
+                val parts = line.trim().split(Regex("\\s+"))
+                if (parts.size < 2) return@mapNotNull null
+                val childPid = parts[0].toIntOrNull() ?: return@mapNotNull null
+                val parentPid = parts[1].toIntOrNull() ?: return@mapNotNull null
+                parentPid to childPid
+            }.groupBy({ it.first }, { it.second })
+        } catch (originalError: Throwable) {
+            originalError.printStackTrace()
+            emptyMap()
+        }
+        val result = mutableListOf<Int>()
+        for (child in childrenByParent[pid].orEmpty()) {
+            if (!seen.add(child)) continue
+            result.addAll(descendantPidsFromPs(child, seen))
+            result.add(child)
+        }
+        return result
     }
 
     private fun waitForRealExit(): Int {
@@ -249,8 +475,6 @@ internal class DefaultProotSession(
             process.exitValue()
             true
         } catch (originalError217: IllegalThreadStateException) {
-          originalError217.printStackTrace()
-
             false
         }
     }

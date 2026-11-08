@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -42,22 +43,29 @@ type LocalHandler struct {
 	successorMu        sync.Mutex
 	followMu           sync.Mutex
 	followOperation    *providerFollowOperation
-	followOnce         sync.Once
-	followCancel       context.CancelFunc
 	pendingCore        string
 	bindingVersion     uint64
+	stateMu            sync.Mutex
+	stateSubscribers   map[chan AgentState]struct{}
+	capabilityExposure *CapabilityExposureStore
+	localExposureSync  func(context.Context, int64, []string) error
+	coreMode           bool
 }
+
+var providerReadinessTimeout = 45 * time.Second
 
 func NewLocalHandler(dataDir string, platform runtimeidentity.Platform) *LocalHandler {
 	providerContext, providerCancel := context.WithCancel(context.Background())
 	handler := &LocalHandler{
-		providerContext: providerContext,
-		providerCancel:  providerCancel,
-		identity:        NewIdentityStore(dataDir),
-		credStore:       NewCredentialStore(dataDir),
-		platform:        platform,
-		dataDir:         dataDir,
-		dispatcher:      NewRuntimeDispatcher(),
+		providerContext:    providerContext,
+		providerCancel:     providerCancel,
+		identity:           NewIdentityStore(dataDir),
+		credStore:          NewCredentialStore(dataDir),
+		platform:           platform,
+		dataDir:            dataDir,
+		dispatcher:         NewRuntimeDispatcher(),
+		stateSubscribers:   make(map[chan AgentState]struct{}),
+		capabilityExposure: NewCapabilityExposureStore(dataDir),
 	}
 	if pending, err := handler.credStore.pendingUnpair(); err != nil || pending {
 		handler.pauseProvider()
@@ -78,10 +86,80 @@ func NewLocalHandler(dataDir string, platform runtimeidentity.Platform) *LocalHa
 	return handler
 }
 
+func (h *LocalHandler) SetAgentMode(enabled bool) {
+	h.mu.Lock()
+	h.coreMode = !enabled
+	h.mu.Unlock()
+	if !enabled {
+		h.pauseProvider()
+	}
+}
+
+func (h *LocalHandler) AgentMode() bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return !h.coreMode
+}
+
 func (h *LocalHandler) SetMeshClient(c *MeshClient) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.mesh = c
+}
+
+func (h *LocalHandler) SetLocalCapabilityExposureSync(sync func(context.Context, int64, []string) error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.localExposureSync = sync
+}
+
+func (h *LocalHandler) PublishLocalCapabilityExposure(ctx context.Context) error {
+	h.mu.RLock()
+	syncExposure := h.localExposureSync
+	h.mu.RUnlock()
+	if syncExposure == nil {
+		return nil
+	}
+	revision, exposed, err := h.capabilityExposure.Enabled()
+	if err != nil {
+		return err
+	}
+	return syncExposure(ctx, revision, exposed)
+}
+
+func (h *LocalHandler) PublishState(state AgentState) {
+	h.stateMu.Lock()
+	defer h.stateMu.Unlock()
+	for subscriber := range h.stateSubscribers {
+		select {
+		case subscriber <- state:
+		default:
+		}
+	}
+	if state == StateReady {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+			defer cancel()
+			if err := h.FollowSuccessor(ctx); err != nil {
+				log.Printf("[original-error] %v", err)
+			}
+		}()
+	}
+}
+
+func (h *LocalHandler) subscribeState() (<-chan AgentState, func()) {
+	h.stateMu.Lock()
+	defer h.stateMu.Unlock()
+	events := make(chan AgentState, 4)
+	h.stateSubscribers[events] = struct{}{}
+	return events, func() {
+		h.stateMu.Lock()
+		defer h.stateMu.Unlock()
+		if _, ok := h.stateSubscribers[events]; ok {
+			delete(h.stateSubscribers, events)
+			close(events)
+		}
+	}
 }
 
 func (h *LocalHandler) SetDispatcher(d RuntimeDispatcher) {
@@ -98,38 +176,61 @@ func (h *LocalHandler) SetExecutionGuard(guard RuntimeExecutionGuard) {
 
 func (h *LocalHandler) ExecutionJournal() *executionjournal.Store { return h.executionJournal }
 
+func (h *LocalHandler) PrepareProviderMesh(cred *StoredCredential, identity *LocalIdentity, tlsConfig *tls.Config) (*MeshClient, func()) {
+	gate := &bindingGate{dispatcher: h.dispatcher}
+	meshClient := NewMeshClient(MeshClientConfig{
+		CloudBaseURL:       cred.CloudBaseUrl,
+		Credential:         cred.Credential,
+		SpaceID:            cred.SpaceID,
+		Identity:           identity,
+		RuntimeDispatcher:  gate,
+		TLSConfig:          tlsConfig,
+		SignRequest:        h.identity.SignRequest,
+		ExecutionJournal:   h.executionJournal,
+		ExecutionGuard:     h.executionGuard,
+		CapabilityExposure: h.capabilityExposure,
+		OnState:            h.PublishState,
+	})
+	var worker TaskWorkerIface
+	if h.taskWorker != nil {
+		worker = h.taskWorker
+	} else {
+		defaultWorker := NewTaskWorker(meshClient)
+		if h.taskRuntime != nil {
+			defaultWorker.SetTaskRuntime(h.taskRuntime)
+		}
+		worker = defaultWorker
+	}
+	gate.worker = worker
+	meshClient.SetTaskWorker(gate)
+	meshClient.SetCredentialStore(h.credStore)
+	return meshClient, func() {
+		gate.active.Store(true)
+		h.taskWorkerSet = worker != nil && h.taskRuntime != nil
+	}
+}
+
 func (h *LocalHandler) SetLocalCoreID(core string) {
 	h.mu.Lock()
 	h.localCoreID = core
 	h.mu.Unlock()
-	h.followOnce.Do(func() {
-		ctx, cancel := context.WithCancel(context.Background())
-		h.mu.Lock()
-		h.followCancel = cancel
-		h.mu.Unlock()
-		go func() {
-			ticker := time.NewTicker(5 * time.Second)
-			defer ticker.Stop()
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case <-ticker.C:
-					call, cancel := context.WithTimeout(ctx, 45*time.Second)
-					if err := h.FollowSuccessor(call); err != nil {
-						log.Printf("[original-error] %v", err)
-					}
-					cancel()
-				}
-			}
-		}()
-	})
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+		defer cancel()
+		if err := h.FollowSuccessor(ctx); err != nil {
+			log.Printf("[original-error] %v", err)
+		}
+	}()
 }
 
 func (h *LocalHandler) ProviderPath() ([]string, error) {
 	h.mu.RLock()
 	core := h.localCoreID
+	coreMode := h.coreMode
 	h.mu.RUnlock()
+	if coreMode {
+		return []string{core}, nil
+	}
 	credential, err := h.credStore.LoadCredential()
 	if err != nil {
 		return nil, err
@@ -138,7 +239,7 @@ func (h *LocalHandler) ProviderPath() ([]string, error) {
 	if credential != nil {
 		if len(credential.ProviderPath) > 0 {
 			path = append(path, credential.ProviderPath...)
-		} else {
+		} else if credential.SpaceID.String() != core {
 			path = append(path, credential.SpaceID.String())
 		}
 	}
@@ -205,9 +306,6 @@ func (h *LocalHandler) Stop() {
 	h.pauseProvider()
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if h.followCancel != nil {
-		h.followCancel()
-	}
 	if h.mesh != nil {
 		h.mesh.Stop()
 	}
@@ -216,6 +314,9 @@ func (h *LocalHandler) Stop() {
 func (h *LocalHandler) RegisterRoutes(r *gin.Engine, authMW gin.HandlerFunc, providerAuth ...gin.HandlerFunc) {
 	dm := r.Group("/internal/device-mesh")
 	dm.Use(authMW)
+	if len(providerAuth) > 0 {
+		dm.Use(providerAuth[0])
+	}
 
 	dm.GET("/identity", h.handleIdentity)
 	dm.GET("/lan", func(c *gin.Context) {
@@ -224,14 +325,19 @@ func (h *LocalHandler) RegisterRoutes(r *gin.Engine, authMW gin.HandlerFunc, pro
 	})
 	dm.POST("/identity/sign-claim", h.handleSignClaim)
 	dm.POST("/pairing/claim", h.handlePinnedPairing)
+	dm.POST("/endpoint/update", h.handleUpdateEndpoint)
+	dm.GET("/pairing/requests/:requestId/events", h.handlePinnedPairingEvents)
 	dm.POST("/bootstrap", h.handleBootstrap)
 	dm.GET("/status", h.handleStatus)
+	dm.GET("/status/events", h.handleStatusEvents)
+	dm.GET("/capabilities", h.handleCapabilities)
+	dm.PUT("/capabilities/:capability", h.handleSetCapability)
+	dm.GET("/capabilities/events", h.handleCapabilityEvents)
 	dm.GET("/cloud-auth", h.handleCloudAuth)
-	proxyAuth := authMW
-	if len(providerAuth) > 0 {
-		proxyAuth = providerAuth[0]
-	}
-	r.Any("/internal/device-mesh/provider/*path", proxyAuth, h.handleProviderProxy)
+	proxyMiddlewares := []gin.HandlerFunc{authMW}
+	proxyMiddlewares = append(proxyMiddlewares, providerAuth...)
+	proxyMiddlewares = append(proxyMiddlewares, h.handleProviderProxy)
+	r.Any("/internal/device-mesh/provider/*path", proxyMiddlewares...)
 	dm.DELETE("/credential", h.handleDeleteCredential)
 }
 
@@ -295,6 +401,7 @@ type BindingRequest struct {
 	BootstrapTicket        string `json:"bootstrapTicket" binding:"required"`
 	Fingerprint            string `json:"fingerprint"`
 	CoreID                 string `json:"coreId"`
+	ReplaceCandidate       bool   `json:"replaceCandidate"`
 }
 
 type BindingError struct {
@@ -364,21 +471,24 @@ func (h *LocalHandler) BindProvider(ctx context.Context, req BindingRequest) (gi
 	}
 	h.bindingVersion++
 	if candidate != nil && req.expectedCandidate == nil {
-		if candidate.CloudBaseUrl != req.CloudBaseURL || candidate.Fingerprint != req.Fingerprint || req.CoreID != "" && candidate.SpaceID.String() != req.CoreID {
+		matchesRequest := candidate.CloudBaseUrl == req.CloudBaseURL && candidate.Fingerprint == req.Fingerprint && (req.CoreID == "" || candidate.SpaceID.String() == req.CoreID)
+		if !matchesRequest && !req.ReplaceCandidate {
 			return nil, bindingFailure(409, gin.H{"message": "已有尚未完成的服务切换，请先完成或撤销该配对"})
 		}
-		identity, err := h.identity.Load()
-		if err != nil {
-			return nil, err
+		if matchesRequest {
+			identity, err := h.identity.Load()
+			if err != nil {
+				return nil, err
+			}
+			if !time.Now().Before(candidate.ExpiresAt) || candidate.DeviceID != identity.DeviceID || candidate.RuntimeID != identity.RuntimeID {
+				return nil, bindingFailure(403, gin.H{"message": "候选凭证已过期或设备身份已变化"})
+			}
+			configuration, err := lan.PinnedTLS(lan.Endpoint{URL: candidate.CloudBaseUrl, Fingerprint: candidate.Fingerprint, CoreID: candidate.SpaceID.String()})
+			if err != nil {
+				return nil, err
+			}
+			return h.activateProvider(ctx, candidate, identity, configuration)
 		}
-		if !time.Now().Before(candidate.ExpiresAt) || candidate.DeviceID != identity.DeviceID || candidate.RuntimeID != identity.RuntimeID {
-			return nil, bindingFailure(403, gin.H{"message": "候选凭证已过期或设备身份已变化"})
-		}
-		configuration, err := lan.PinnedTLS(lan.Endpoint{URL: candidate.CloudBaseUrl, Fingerprint: candidate.Fingerprint, CoreID: candidate.SpaceID.String()})
-		if err != nil {
-			return nil, err
-		}
-		return h.activateProvider(ctx, candidate, identity, configuration)
 	}
 	id, err := h.identity.Load()
 	if err != nil {
@@ -496,32 +606,9 @@ func (h *LocalHandler) activateProvider(ctx context.Context, cred *StoredCredent
 			return nil, bindingFailure(503, gin.H{"code": "provider_drain_failed", "message": "原设备通道尚未停止，服务切换已暂停"})
 		}
 	}
-	gate := &bindingGate{dispatcher: h.dispatcher}
-	newMesh := NewMeshClient(MeshClientConfig{
-		CloudBaseURL:      cred.CloudBaseUrl,
-		Credential:        cred.Credential,
-		SpaceID:           cred.SpaceID,
-		Identity:          id,
-		RuntimeDispatcher: gate,
-		TLSConfig:         tlsConfig,
-		SignRequest:       h.identity.SignRequest,
-		ExecutionJournal:  h.executionJournal,
-		ExecutionGuard:    h.executionGuard,
-	})
-	var worker TaskWorkerIface
-	if h.taskWorker != nil {
-		worker = h.taskWorker
-	} else {
-		defaultWorker := NewTaskWorker(newMesh)
-		if h.taskRuntime != nil {
-			defaultWorker.SetTaskRuntime(h.taskRuntime)
-		}
-		worker = defaultWorker
-	}
-	gate.worker = worker
-	newMesh.SetTaskWorker(gate)
+	newMesh, activateWorker := h.PrepareProviderMesh(cred, id, tlsConfig)
 	newMesh.Start()
-	readyCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	readyCtx, cancel := context.WithTimeout(ctx, providerReadinessTimeout)
 	err = newMesh.WaitReady(readyCtx)
 	cancel()
 	if err != nil {
@@ -566,7 +653,6 @@ func (h *LocalHandler) activateProvider(ctx context.Context, cred *StoredCredent
 	if err := h.credStore.DeleteCursor(); err != nil {
 		log.Printf("devicemesh: agent: delete cursor failed: %v", err)
 	}
-	newMesh.SetCredentialStore(h.credStore)
 	h.mesh = newMesh
 	if err := h.credStore.DeleteTransition(); err != nil {
 		newMesh.Stop()
@@ -577,9 +663,8 @@ func (h *LocalHandler) activateProvider(ctx context.Context, cred *StoredCredent
 		return nil, bindingFailure(500, gin.H{"code": "storage_error", "message": err.Error()})
 	}
 	h.pendingCore = ""
-	h.taskWorkerSet = worker != nil && h.taskRuntime != nil
 	h.resumeProvider()
-	gate.active.Store(true)
+	activateWorker()
 
 	return gin.H{
 		"ok":           true,
@@ -589,9 +674,132 @@ func (h *LocalHandler) activateProvider(ctx context.Context, cred *StoredCredent
 		"expiresAt":    cred.ExpiresAt.UTC().Format(time.RFC3339Nano),
 	}, nil
 }
+
+func (h *LocalHandler) handleCapabilities(c *gin.Context) {
+	state, err := h.capabilityExposure.Snapshot()
+	if err != nil {
+		c.JSON(500, gin.H{"message": err.Error()})
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(200, state)
+}
+
+func (h *LocalHandler) handleSetCapability(c *gin.Context) {
+	var request struct {
+		Enabled          bool  `json:"enabled"`
+		ExpectedRevision int64 `json:"expectedRevision"`
+	}
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 16<<10)
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(400, gin.H{"message": err.Error()})
+		return
+	}
+	state, err := h.capabilityExposure.SetEnabled(c.Param("capability"), request.ExpectedRevision, request.Enabled)
+	if err != nil {
+		c.JSON(409, gin.H{"message": err.Error()})
+		return
+	}
+	h.mu.RLock()
+	mesh := h.mesh
+	localSync := h.localExposureSync
+	h.mu.RUnlock()
+	synced := false
+	var syncErrs []error
+	if mesh != nil {
+		syncCtx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+		synced, err = mesh.PublishCapabilityExposure(syncCtx)
+		cancel()
+		if err != nil {
+			syncErrs = append(syncErrs, err)
+		}
+	}
+	if localSync != nil {
+		syncCtx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+		err = localSync(syncCtx, state.Revision, state.EnabledIDs)
+		cancel()
+		if err != nil {
+			syncErrs = append(syncErrs, err)
+		} else {
+			synced = true
+		}
+	}
+	syncError := ""
+	if syncErr := errors.Join(syncErrs...); syncErr != nil {
+		syncError = syncErr.Error()
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(200, gin.H{"state": state, "centerSynced": synced, "syncError": syncError})
+}
+
+func (h *LocalHandler) handleCapabilityEvents(c *gin.Context) {
+	state, err := h.capabilityExposure.Snapshot()
+	if err != nil {
+		c.JSON(500, gin.H{"message": err.Error()})
+		return
+	}
+	events, cancel := h.capabilityExposure.Subscribe()
+	defer cancel()
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-store")
+	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no")
+	c.Status(http.StatusOK)
+	send := func(value CapabilityExposureState) error {
+		data, err := json.Marshal(value)
+		if err != nil {
+			return err
+		}
+		if _, err := c.Writer.WriteString("event: capability_exposure\ndata: " + string(data) + "\n\n"); err != nil {
+			return err
+		}
+		c.Writer.Flush()
+		return nil
+	}
+	if err := send(state); err != nil {
+		return
+	}
+	heartbeat := time.NewTicker(20 * time.Second)
+	defer heartbeat.Stop()
+	for {
+		select {
+		case <-c.Request.Context().Done():
+			return
+		case value, ok := <-events:
+			if !ok {
+				return
+			}
+			if err := send(value); err != nil {
+				return
+			}
+		case <-heartbeat.C:
+			if _, err := c.Writer.WriteString(": keepalive\n\n"); err != nil {
+				return
+			}
+			c.Writer.Flush()
+		}
+	}
+}
 func (h *LocalHandler) handleStatus(c *gin.Context) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
+	if h.coreMode {
+		c.JSON(200, gin.H{
+			"state":                 string(StateUnprovisioned),
+			"cloudBaseUrl":          "",
+			"deviceId":              "",
+			"runtimeId":             "",
+			"runtimeSessionId":      "",
+			"connectionGeneration":  0,
+			"lastConnectedAt":       "",
+			"lastHeartbeatAt":       "",
+			"lastErrorCode":         "",
+			"providerChangePending": false,
+			"successorCoreId":       "",
+			"agentMode":             false,
+		})
+		return
+	}
 	state := StateUnprovisioned
 	if h.mesh != nil {
 		state = h.mesh.State()
@@ -618,6 +826,7 @@ func (h *LocalHandler) handleStatus(c *gin.Context) {
 		"lastErrorCode":         "",
 		"providerChangePending": h.pendingCore != "",
 		"successorCoreId":       h.pendingCore,
+		"agentMode":             true,
 	}
 
 	if cred != nil {
@@ -638,7 +847,60 @@ func (h *LocalHandler) handleStatus(c *gin.Context) {
 	c.JSON(200, resp)
 }
 
+func (h *LocalHandler) handleStatusEvents(c *gin.Context) {
+	events, cancel := h.subscribeState()
+	defer cancel()
+	h.mu.RLock()
+	state := StateUnprovisioned
+	if h.mesh != nil {
+		state = h.mesh.State()
+	}
+	h.mu.RUnlock()
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-store")
+	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no")
+	c.Status(http.StatusOK)
+	send := func(value AgentState) error {
+		if _, err := c.Writer.WriteString("event: mesh_state\ndata: {\"state\":\"" + string(value) + "\"}\n\n"); err != nil {
+			return err
+		}
+		c.Writer.Flush()
+		return nil
+	}
+	if err := send(state); err != nil {
+		return
+	}
+	heartbeat := time.NewTicker(20 * time.Second)
+	defer heartbeat.Stop()
+	for {
+		select {
+		case <-c.Request.Context().Done():
+			return
+		case value, ok := <-events:
+			if !ok {
+				return
+			}
+			if err := send(value); err != nil {
+				return
+			}
+		case <-heartbeat.C:
+			if _, err := c.Writer.WriteString(": keepalive\n\n"); err != nil {
+				return
+			}
+			c.Writer.Flush()
+		}
+	}
+}
+
 func (h *LocalHandler) handleCloudAuth(c *gin.Context) {
+	h.mu.RLock()
+	coreMode := h.coreMode
+	h.mu.RUnlock()
+	if coreMode {
+		c.JSON(409, gin.H{"code": "mesh.agent_mode_required", "message": "当前 Runtime 是统筹中心节点，不作为子设备使用远程统筹凭据"})
+		return
+	}
 	cred, err := h.credStore.LoadCredential()
 	if err != nil {
 		c.JSON(500, gin.H{"code": "credential_load_failed", "message": err.Error()})

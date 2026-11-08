@@ -21,6 +21,9 @@ func (rt *Runtime) fenceRemoteAuthority(ctx context.Context, space, device strin
 		}
 		reply, err := rt.InvokeDeviceHandlerWithRuntimeType(ctx, runtimeidentity.SpaceID(space), runtimeidentity.DeviceID(source), capability.RuntimeTypeInternal, "coordination.data", payload, 30*time.Second)
 		if err != nil {
+			if errors.Is(err, ErrDeviceOffline) {
+				return errors.Join(coordination.ErrAuthoritySourceOffline, err)
+			}
 			return err
 		}
 		var ack struct {

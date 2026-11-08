@@ -8,6 +8,7 @@ import (
 
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/auth"
+	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/chat/localmodel"
 	"github.com/u-ai/backend/internal/devicemesh/agent"
@@ -27,12 +28,13 @@ import (
 )
 
 type dataPortabilityDeps struct {
-	DataDir   string
-	DB        *gorm.DB
-	KernelDB  *sql.DB
-	Memory    business.MemoryArchivePort
-	ExtSvc    *extension.Runtime
-	Workspace *workspace.Service
+	DataDir       string
+	DB            *gorm.DB
+	KernelDB      *sql.DB
+	Memory        business.MemoryArchivePort
+	ExtSvc        *extension.Runtime
+	Workspace     *workspace.Service
+	RoleLifecycle character.AgentRoleLifecycle
 }
 
 func buildDataPortabilityCoordinator(deps dataPortabilityDeps) (*dataportability.Coordinator, error) {
@@ -40,9 +42,12 @@ func buildDataPortabilityCoordinator(deps dataPortabilityDeps) (*dataportability
 
 	staging := dataportability.NewStagingManager(deps.DataDir)
 	coord := dataportability.NewCoordinator(deps.DataDir, config.AppVersion(), runtime.GOOS, schemaFinger, staging)
+	if err := coord.CleanupTransientImports(); err != nil {
+		return nil, fmt.Errorf("cleanup transient imports: %w", err)
+	}
 
 	contributors := []dataportability.BackupContributor{
-		dataportability.NewCharacterContributor(deps.DB),
+		dataportability.NewCharacterContributor(deps.DB, deps.RoleLifecycle),
 		business.NewMemoryBackupContributor(deps.Memory),
 		chat.NewChatBackupContributor(deps.DB),
 		business.NewRuntimeStateBackupContributor(deps.KernelDB),

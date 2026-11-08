@@ -140,9 +140,33 @@ func (c *MemoryBackupContributor) Import(ctx context.Context, req dataportabilit
 }
 
 func (e *Engine) ExportMemoryArchive(ctx context.Context, request Request, role string) (MemoryArchive, error) {
+	archive := MemoryArchive{Format: "amitia-owned-memory-v1", Entries: []MemoryConsumerEntry{}}
 	if role == "" && request.RoleID == "" {
 		var err error
 		request, err = e.PrivacyRequestRole(ctx, request)
+		if errors.Is(err, coordination.ErrRoleRequired) {
+			port, ok := e.data.(interface {
+				LocalMemoryArchiveEmpty(context.Context, coordination.ExecutionScope) (bool, error)
+			})
+			if !ok {
+				return MemoryArchive{}, err
+			}
+			inner, scope, finish, scopeErr := e.coordination.Begin(ctx, request.SpaceID, request.DeviceID, request.TargetDeviceID, request.CoreID, "", request.RequestID)
+			if scopeErr != nil {
+				return MemoryArchive{}, errors.Join(err, scopeErr)
+			}
+			defer finish()
+			if grantErr := e.coordination.RequireCapability(inner, scope.SpaceID, scope.InitiatorDeviceID, scope.TargetDeviceID, "ai.chat"); grantErr != nil {
+				return MemoryArchive{}, errors.Join(err, grantErr)
+			}
+			empty, checkErr := port.LocalMemoryArchiveEmpty(inner, scope)
+			if checkErr != nil {
+				return MemoryArchive{}, errors.Join(err, checkErr)
+			}
+			if empty {
+				return archive, e.coordination.Validate(inner, scope)
+			}
+		}
 		if err != nil {
 			return MemoryArchive{}, err
 		}
@@ -156,7 +180,6 @@ func (e *Engine) ExportMemoryArchive(ctx context.Context, request Request, role 
 	if err != nil {
 		return MemoryArchive{}, err
 	}
-	archive := MemoryArchive{Format: "amitia-owned-memory-v1", Entries: []MemoryConsumerEntry{}}
 	seen := map[string]bool{}
 	for _, actor := range roles {
 		if role != "" && actor.ID != role {

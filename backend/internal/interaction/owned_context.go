@@ -1,9 +1,11 @@
 package interaction
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -11,7 +13,6 @@ import (
 	"github.com/u-ai/backend/internal/continuity"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
-	amitialog "log"
 )
 
 type ownedContextKey struct{}
@@ -68,12 +69,13 @@ func WithOwnedContext(ctx context.Context, scope coordination.ExecutionScope, da
 				return ctx, err
 			}
 			key, value := business.MemoryText(document, "key"), business.MemoryValue(content)
-			var importance, confidence float64
-			if err := json.Unmarshal(content["importance"], &importance); err != nil {
-				amitialog.Printf("[original-error] %v", err)
+			importance, err := ownedMemoryNumber(content["importance"])
+			if err != nil {
+				return ctx, fmt.Errorf("decode owned memory importance: %w", err)
 			}
-			if err := json.Unmarshal(content["confidence"], &confidence); err != nil {
-				amitialog.Printf("[original-error] %v", err)
+			confidence, err := ownedMemoryNumber(content["confidence"])
+			if err != nil {
+				return ctx, fmt.Errorf("decode owned memory confidence: %w", err)
 			}
 			memories = append(memories, MemoryItem{Key: key, Value: value, Type: row.Kind, Importance: int(importance), Confidence: int(confidence), Scope: row.RoleID})
 			if row.Kind == "fact" {
@@ -130,6 +132,18 @@ func WithOwnedContext(ctx context.Context, scope coordination.ExecutionScope, da
 	}
 	snapshot.Channel = FieldReady(ChannelCapabilities{Channel: channel, SupportsText: true, SupportsImage: true, SupportsVoice: true}, "owned-channel", version)
 	return context.WithValue(ctx, ownedContextKey{}, snapshot), nil
+}
+
+func ownedMemoryNumber(raw json.RawMessage) (float64, error) {
+	value := bytes.TrimSpace(raw)
+	if len(value) == 0 || bytes.Equal(value, []byte("null")) {
+		return 0, nil
+	}
+	var number float64
+	if err := json.Unmarshal(value, &number); err != nil {
+		return 0, err
+	}
+	return number, nil
 }
 
 func ownedContextFromContext(ctx context.Context) (ContextSnapshot, bool) {

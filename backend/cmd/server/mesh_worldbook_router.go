@@ -13,7 +13,8 @@ import (
 )
 
 func registerMeshWorldbookRouter(mesh *gin.RouterGroup, services *AppServices, coreID string) {
-	mesh.POST("/worldbook/manage", func(c *gin.Context) {
+	admin := security.SharedCoreDataWriteOnly()
+	mesh.POST("/worldbook/manage", admin, func(c *gin.Context) {
 		actor := security.GetActor(c)
 		if actor == nil || actor.DeviceID == "" {
 			c.AbortWithStatus(http.StatusUnauthorized)
@@ -33,9 +34,18 @@ func registerMeshWorldbookRouter(mesh *gin.RouterGroup, services *AppServices, c
 			c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 			return
 		}
+		policy, err := services.DeviceMesh.Coordination.Get(c.Request.Context(), actor.SpaceID.String(), actor.DeviceID.String())
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"message": err.Error()})
+			return
+		}
+		resourceOwner, roleOwner := actor.DeviceID.String(), coreID
+		if policy.Coordinated {
+			resourceOwner = coreID
+		}
 		result, err := services.OwnedBusiness.ManageWorldbook(c.Request.Context(), business.Request{
 			SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID,
-			TargetDeviceID: input.TargetDeviceID, RoleID: input.RoleID, RequestID: input.RequestID,
+			TargetDeviceID: actor.DeviceID.String(), ResourceOwnerID: resourceOwner, RoleOwnerID: roleOwner, RoleID: input.RoleID, RequestID: input.RequestID,
 		}, input)
 		if err != nil {
 			writeWorldbookError(c, err)
@@ -43,7 +53,7 @@ func registerMeshWorldbookRouter(mesh *gin.RouterGroup, services *AppServices, c
 		}
 		c.JSON(http.StatusOK, gin.H{"code": 200, "data": result})
 	})
-	mesh.POST("/worldbook/import", func(c *gin.Context) {
+	mesh.POST("/worldbook/import", admin, func(c *gin.Context) {
 		actor := security.GetActor(c)
 		if actor == nil || actor.DeviceID == "" {
 			c.AbortWithStatus(http.StatusUnauthorized)
@@ -63,9 +73,18 @@ func registerMeshWorldbookRouter(mesh *gin.RouterGroup, services *AppServices, c
 			c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 			return
 		}
+		policy, err := services.DeviceMesh.Coordination.Get(c.Request.Context(), actor.SpaceID.String(), actor.DeviceID.String())
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"message": err.Error()})
+			return
+		}
+		resourceOwner, roleOwner := actor.DeviceID.String(), coreID
+		if policy.Coordinated {
+			resourceOwner = coreID
+		}
 		result, err := services.OwnedBusiness.ImportWorldbook(c.Request.Context(), business.Request{
 			SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID,
-			TargetDeviceID: input.TargetDeviceID, RoleID: input.RoleID, RequestID: input.RequestID,
+			TargetDeviceID: actor.DeviceID.String(), ResourceOwnerID: resourceOwner, RoleOwnerID: roleOwner, RoleID: input.RoleID, RequestID: input.RequestID,
 		}, input)
 		if err != nil {
 			writeWorldbookError(c, err)
@@ -99,10 +118,19 @@ func registerMeshWorldbookRouter(mesh *gin.RouterGroup, services *AppServices, c
 			c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 			return
 		}
+		policy, err := services.DeviceMesh.Coordination.Get(c.Request.Context(), actor.SpaceID.String(), actor.DeviceID.String())
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"message": err.Error()})
+			return
+		}
+		resourceOwner, roleOwner := actor.DeviceID.String(), coreID
+		if policy.Coordinated {
+			resourceOwner = coreID
+		}
 		result, err := services.OwnedBusiness.MatchWorldbook(c.Request.Context(), business.Request{
 			SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID,
-			TargetDeviceID: input.TargetDeviceID, RoleID: input.RoleID, RequestID: input.RequestID,
-		}, input.RoleID, input.TargetDeviceID, input.ExpectedScope, input.Text)
+			TargetDeviceID: actor.DeviceID.String(), ResourceOwnerID: resourceOwner, RoleOwnerID: roleOwner, RoleID: input.RoleID, RequestID: input.RequestID,
+		}, input.RoleID, actor.DeviceID.String(), input.ExpectedScope, input.Text)
 		if err != nil {
 			writeWorldbookError(c, err)
 			return

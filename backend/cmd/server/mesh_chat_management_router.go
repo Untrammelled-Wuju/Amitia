@@ -32,7 +32,15 @@ func registerMeshChatManagementRouter(mesh *gin.RouterGroup, services *AppServic
 				return
 			}
 			payload.Operation = operation
-			result, err := services.OwnedBusiness.ManageChat(c.Request.Context(), business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: payload.TargetDeviceID, RoleID: payload.CharacterID, ExpectedScope: payload.ExpectedScope}, payload.ChatManagementRequest)
+			if payload.TargetDeviceID != "" && payload.TargetDeviceID != actor.DeviceID.String() {
+				c.JSON(403, gin.H{"message": "会话属于设备本地数据，不能管理其他设备会话"})
+				return
+			}
+			if payload.ExpectedScope.SpaceID != actor.SpaceID.String() || payload.ExpectedScope.InitiatorDeviceID != actor.DeviceID.String() || payload.ExpectedScope.CoreID != coreID || payload.ExpectedScope.RoleID != payload.CharacterID || payload.ExpectedScope.TargetDeviceID != actor.DeviceID.String() {
+				c.JSON(409, gin.H{"message": "聊天管理权限或数据归属已变化，请刷新"})
+				return
+			}
+			result, err := services.OwnedBusiness.ManageChat(c.Request.Context(), business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: payload.ExpectedScope.TargetDeviceID, ResourceOwnerID: payload.ExpectedScope.ResourceOwnerID, RoleOwnerID: payload.ExpectedScope.RoleOwnerID, RoleID: payload.CharacterID, ExpectedScope: payload.ExpectedScope}, payload.ChatManagementRequest)
 			if err != nil {
 				c.JSON(409, gin.H{"message": err.Error()})
 				return

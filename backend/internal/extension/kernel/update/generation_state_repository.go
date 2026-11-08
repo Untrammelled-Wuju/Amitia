@@ -3,6 +3,7 @@ package update
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	amitialog "log"
 	"time"
@@ -77,7 +78,7 @@ func (r *GenerationStateRepository) SetActiveGeneration(ctx context.Context, ext
 		return fmt.Errorf("generation-state-repo: begin tx: %w", err)
 	}
 	defer func() {
-		if err := tx.Rollback(); err != nil {
+		if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
 			amitialog.Printf("[original-error] %v", err)
 		}
 	}()

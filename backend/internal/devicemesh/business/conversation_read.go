@@ -41,7 +41,7 @@ func (e *Engine) WithConversationRead(ctx context.Context, request Request, read
 	if request.ConversationID == "" || request.ConversationOrigin == nil || request.RoleID == "" {
 		return coordination.ErrWrongOwner
 	}
-	ctx, scope, finish, err := e.coordination.Begin(ctx, request.SpaceID, request.DeviceID, request.TargetDeviceID, request.CoreID, request.RoleID, uuid.NewString())
+	ctx, scope, finish, err := e.beginRequest(ctx, request, request.RoleID, uuid.NewString())
 	if err != nil {
 		return err
 	}

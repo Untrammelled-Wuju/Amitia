@@ -101,6 +101,14 @@ func (r *MountRepository) UpdateConfig(id string, configJSON string, credentialR
 	).Error
 }
 
+func (r *MountRepository) UpdateReadOnly(id string, readOnly bool) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	return r.db.Exec(
+		"UPDATE workspace_mounts SET read_only = ?, updated_at = ? WHERE id = ?",
+		boolToInt(readOnly), now, id,
+	).Error
+}
+
 func (r *MountRepository) Touch(id string, lastUsedAt time.Time) error {
 	return r.db.Exec(
 		"UPDATE workspace_mounts SET last_used_at = ? WHERE id = ?",

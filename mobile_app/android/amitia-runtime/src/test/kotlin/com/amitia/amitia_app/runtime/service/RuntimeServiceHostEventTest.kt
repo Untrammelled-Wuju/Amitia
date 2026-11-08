@@ -8,8 +8,8 @@ class RuntimeServiceHostEventTest {
 
     @Test
     fun runtimeServiceHostEvent_expectedStopped_isDataClass() {
-        val a = RuntimeServiceHostEvent.ExpectedStopped(generation = 1L)
-        val b = RuntimeServiceHostEvent.ExpectedStopped(generation = 1L)
+        val a = RuntimeServiceHostEvent.ExpectedStopped(generation = 1L, result = ServiceTeardownResult.FullyStopped(1))
+        val b = RuntimeServiceHostEvent.ExpectedStopped(generation = 1L, result = ServiceTeardownResult.FullyStopped(1))
         assertEquals(a, b)
     }
 
@@ -42,7 +42,7 @@ class RuntimeServiceHostEventTest {
     fun runtimeServiceHostListener_forwardsEvent() {
         val received = mutableListOf<RuntimeServiceHostEvent>()
         val listener = RuntimeServiceHostListener { event -> received.add(event) }
-        val expectedEvent = RuntimeServiceHostEvent.ExpectedStopped(generation = 1L)
+        val expectedEvent = RuntimeServiceHostEvent.ExpectedStopped(generation = 1L, result = ServiceTeardownResult.FullyStopped(1))
         listener.onServiceHostEvent(expectedEvent)
         assertEquals(1, received.size)
         assertEquals(expectedEvent, received[0])

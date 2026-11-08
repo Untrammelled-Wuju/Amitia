@@ -234,12 +234,12 @@ func TestGroupChatInvitesMemberPersistsOneInputAndRunsEachRole(t *testing.T) {
 	}
 	if json.Unmarshal(turn, &result) != nil || !result.Data.Saved || result.Data.Status != business.GroupRoundCompleted || len(result.Data.Deliveries) != 1 || result.Data.Deliveries[0].Scope.RoleID != "two" {
 		detail := ""
-		if resource, err := coordination.NewOwnershipStore(fixture.services.KernelContainer.DeviceRegistry.Database(), fixture.core).Get(t.Context(), "group-round", result.Data.GroupRoundID); err == nil && resource != nil {
+		if resource, err := coordination.NewOwnershipStore(caller.services.KernelContainer.DeviceRegistry.Database(), caller.device.DeviceID.String()).Get(t.Context(), "group-round", result.Data.GroupRoundID); err == nil && resource != nil {
 			detail = string(resource.Body)
 			var stored business.GroupRound
 			if json.Unmarshal(resource.Body, &stored) == nil {
 				for _, delivery := range stored.Deliveries {
-					if deliveryResource, getErr := coordination.NewOwnershipStore(fixture.services.KernelContainer.DeviceRegistry.Database(), fixture.core).Get(t.Context(), "group-delivery", delivery.DeliveryID); getErr == nil && deliveryResource != nil {
+					if deliveryResource, getErr := coordination.NewOwnershipStore(caller.services.KernelContainer.DeviceRegistry.Database(), caller.device.DeviceID.String()).Get(t.Context(), "group-delivery", delivery.DeliveryID); getErr == nil && deliveryResource != nil {
 						detail += " " + string(deliveryResource.Body)
 					}
 				}
@@ -247,7 +247,7 @@ func TestGroupChatInvitesMemberPersistsOneInputAndRunsEachRole(t *testing.T) {
 		}
 		t.Fatalf("群聊执行失败: %s %s status=%s", turn, detail, result.Data.Status)
 	}
-	roundResource, roundErr := coordination.NewOwnershipStore(fixture.services.KernelContainer.DeviceRegistry.Database(), fixture.core).Get(t.Context(), "group-round", result.Data.GroupRoundID)
+	roundResource, roundErr := coordination.NewOwnershipStore(caller.services.KernelContainer.DeviceRegistry.Database(), caller.device.DeviceID.String()).Get(t.Context(), "group-round", result.Data.GroupRoundID)
 	var storedRound business.GroupRound
 	if roundErr != nil || roundResource == nil || json.Unmarshal(roundResource.Body, &storedRound) != nil || len(storedRound.Deliveries) != 1 || storedRound.Deliveries[0].Status != business.GroupDeliveryCompleted {
 		t.Fatalf("群聊轮次未保存最终投递状态: %+v", storedRound)
@@ -320,6 +320,39 @@ func TestCreateEmptyGroupConversationWithoutModelMessage(t *testing.T) {
 	}
 	if json.Unmarshal(created, &response) != nil || !response.Data.Saved || response.Data.Group.ConversationType != "group" || len(response.Data.Group.Members) != 2 {
 		t.Fatalf("创建空群聊失败: %s", created)
+	}
+	conversation, err := coordination.NewOwnershipStore(caller.services.KernelContainer.DeviceRegistry.Database(), caller.device.DeviceID.String()).Get(t.Context(), "conversation", response.Data.Group.ConversationID)
+	if err != nil || conversation == nil || conversation.OwnerID != caller.device.DeviceID.String() {
+		t.Fatalf("群聊会话未保存在设备: %+v %v", conversation, err)
+	}
+	directCtx, directScope, finishDirect, err := fixture.services.DeviceMesh.Coordination.BeginWithOwners(t.Context(), fixture.core, caller.device.DeviceID.String(), caller.device.DeviceID.String(), fixture.core, "one", "direct-group-snapshot", caller.device.DeviceID.String(), fixture.core)
+	if err != nil {
+		t.Fatal(err)
+	}
+	directRoles, err := fixture.services.DeviceMesh.Roles(directCtx, directScope)
+	if err != nil {
+		finishDirect()
+		t.Fatal(err)
+	}
+	directRole, err := coordination.ResolveRole("one", directRoles)
+	if err != nil {
+		finishDirect()
+		t.Fatal(err)
+	}
+	directScope.RoleID, directScope.RoleRevision = directRole.ID, directRole.Revision
+	if err := coordination.ResolveMemoryScope(&directScope, ""); err != nil {
+		finishDirect()
+		t.Fatal(err)
+	}
+	directScope.ConversationRoleID = response.Data.Group.ConversationRoleID
+	directSnapshot, err := fixture.services.DeviceMesh.Snapshot(coordination.WithScope(directCtx, directScope), directScope, coordination.DataQuery{ConversationID: response.Data.Group.ConversationID})
+	finishDirect()
+	if err != nil || directSnapshot.Group == nil {
+		t.Fatalf("设备群聊快照未合并: group=%+v resources=%d err=%v", directSnapshot.Group, len(directSnapshot.Resources), err)
+	}
+	businessSnapshot, err := fixture.services.OwnedBusiness.Query(t.Context(), business.Request{SpaceID: fixture.core, DeviceID: caller.device.DeviceID.String(), TargetDeviceID: caller.device.DeviceID.String(), CoreID: fixture.core, ResourceOwnerID: caller.device.DeviceID.String(), RoleOwnerID: fixture.core, RoleID: "one"}, coordination.DataQuery{ConversationID: response.Data.Group.ConversationID, Limit: 128})
+	if err != nil || businessSnapshot.Snapshot.Group == nil {
+		t.Fatalf("业务群聊快照未合并: group=%+v resources=%d err=%v runtime=%T", businessSnapshot.Snapshot.Group, len(businessSnapshot.Snapshot.Resources), err, fixture.services.DeviceMesh)
 	}
 	view := fixture.request(t, caller, http.MethodGet, "/api/device-mesh/v1/business/conversations/"+response.Data.Group.ConversationID+"?characterId=one", nil, http.StatusOK)
 	var snapshot struct {
@@ -415,7 +448,7 @@ func TestGroupChatAutoGeneratesTitleAfterFirstRound(t *testing.T) {
 	if json.Unmarshal(turn, &result) != nil || result.Data.Status != business.GroupRoundCompleted || len(result.Data.Deliveries) != 1 {
 		t.Fatalf("群聊首轮失败: %s", turn)
 	}
-	resource, err := coordination.NewOwnershipStore(fixture.services.KernelContainer.DeviceRegistry.Database(), fixture.core).Get(t.Context(), "conversation", response.Data.Group.ConversationID)
+	resource, err := coordination.NewOwnershipStore(caller.services.KernelContainer.DeviceRegistry.Database(), caller.device.DeviceID.String()).Get(t.Context(), "conversation", response.Data.Group.ConversationID)
 	if err != nil || resource == nil {
 		t.Fatalf("群聊会话缺失: %+v %v", resource, err)
 	}
@@ -792,7 +825,7 @@ func TestGroupChatRetryIsIdempotentAndKeepsSingleReply(t *testing.T) {
 	if json.Unmarshal(failedRaw, &failedTurn) != nil || failedTurn.Data.Status != business.GroupRoundCompletedWithErrors || len(failedTurn.Data.Deliveries) != 0 {
 		t.Fatalf("失败投递未正确返回: %s", failedRaw)
 	}
-	roundResource, err := coordination.NewOwnershipStore(fixture.services.KernelContainer.DeviceRegistry.Database(), fixture.core).Get(t.Context(), "group-round", failedTurn.Data.GroupRoundID)
+	roundResource, err := coordination.NewOwnershipStore(caller.services.KernelContainer.DeviceRegistry.Database(), caller.device.DeviceID.String()).Get(t.Context(), "group-round", failedTurn.Data.GroupRoundID)
 	var failedRound business.GroupRound
 	if err != nil || roundResource == nil || json.Unmarshal(roundResource.Body, &failedRound) != nil || len(failedRound.Deliveries) != 1 || failedRound.Deliveries[0].Status != business.GroupDeliveryFailed {
 		t.Fatalf("失败投递未持久化: %+v %v", failedRound, err)
@@ -890,7 +923,7 @@ func TestGroupChatAutoInvitationRunsAppendedDelivery(t *testing.T) {
 	if !roles["one"] || !roles["two"] {
 		t.Fatalf("自动接话角色回复不完整: %+v", roles)
 	}
-	roundResource, err := coordination.NewOwnershipStore(fixture.services.KernelContainer.DeviceRegistry.Database(), fixture.core).Get(t.Context(), "group-round", turn.Data.GroupRoundID)
+	roundResource, err := coordination.NewOwnershipStore(caller.services.KernelContainer.DeviceRegistry.Database(), caller.device.DeviceID.String()).Get(t.Context(), "group-round", turn.Data.GroupRoundID)
 	var round business.GroupRound
 	if err != nil || roundResource == nil || json.Unmarshal(roundResource.Body, &round) != nil || round.Status != business.GroupRoundCompleted || len(round.Deliveries) != 2 {
 		t.Fatalf("自动接话轮次未完成持久化: %+v %v", round, err)
@@ -944,10 +977,14 @@ func TestGroupDiscussionRunsBoundedSequentialCharacterAgents(t *testing.T) {
 			t.Fatalf("讨论发言顺序错误: %d=%s", index, delivery.Scope.RoleID)
 		}
 	}
-	roundResource, err := coordination.NewOwnershipStore(fixture.services.KernelContainer.DeviceRegistry.Database(), fixture.core).Get(t.Context(), "group-round", turn.Data.GroupRoundID)
+	roundResource, err := coordination.NewOwnershipStore(caller.services.KernelContainer.DeviceRegistry.Database(), caller.device.DeviceID.String()).Get(t.Context(), "group-round", turn.Data.GroupRoundID)
 	var round business.GroupRound
 	if err != nil || roundResource == nil || json.Unmarshal(roundResource.Body, &round) != nil || round.Mode != business.GroupModeDiscussion || len(round.Deliveries) != 6 {
-		t.Fatalf("讨论轮次未持久化: %+v %v", round, err)
+		var actualOwner string
+		var deleted bool
+		var raw []byte
+		_ = caller.services.KernelContainer.DeviceRegistry.Database().QueryRowContext(t.Context(), `SELECT owner_id,deleted,body FROM kernel_device_owned_resources WHERE kind='group-round' AND resource_id=?`, turn.Data.GroupRoundID).Scan(&actualOwner, &deleted, &raw)
+		t.Fatalf("讨论轮次未持久化: %+v %v expectedOwner=%s actualOwner=%s deleted=%t body=%s", round, err, caller.device.DeviceID.String(), actualOwner, deleted, string(raw))
 	}
 	for index, delivery := range round.Deliveries {
 		if delivery.TurnIndex != index || delivery.Status != business.GroupDeliveryCompleted || delivery.Source != "discussion" {
@@ -1003,7 +1040,7 @@ func TestGroupDiscussionStopsDownstreamAfterCharacterFailure(t *testing.T) {
 	if len(calls) != 2 {
 		t.Fatalf("讨论失败后仍执行了后续角色: %#v", calls)
 	}
-	roundResource, err := coordination.NewOwnershipStore(fixture.services.KernelContainer.DeviceRegistry.Database(), fixture.core).Get(t.Context(), "group-round", turn.Data.GroupRoundID)
+	roundResource, err := coordination.NewOwnershipStore(caller.services.KernelContainer.DeviceRegistry.Database(), caller.device.DeviceID.String()).Get(t.Context(), "group-round", turn.Data.GroupRoundID)
 	var round business.GroupRound
 	if err != nil || roundResource == nil || json.Unmarshal(roundResource.Body, &round) != nil || len(round.Deliveries) != 6 {
 		t.Fatalf("讨论失败轮次未持久化: %+v %v", round, err)

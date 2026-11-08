@@ -23,6 +23,7 @@ type MemoryConsumerPort interface {
 type OwnedStorageStats struct {
 	ConversationCount int64
 	MessageCount      int64
+	MemoryCount       int64
 	DatabaseBytes     int64
 }
 

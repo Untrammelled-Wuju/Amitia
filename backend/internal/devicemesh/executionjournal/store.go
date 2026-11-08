@@ -27,6 +27,33 @@ var ErrUncertain = errors.New("设备动作已发起或结果不明，禁止自�
 var ErrConflict = errors.New("设备动作编号对应的服务提供者或参数已变化，拒绝重复执行")
 var ErrFence = errors.New("设备动作的执行租约已过期")
 
+type RejectedError struct{ Err error }
+
+func (e *RejectedError) Error() string {
+	if e == nil || e.Err == nil {
+		return "设备动作已被确定拒绝"
+	}
+	return e.Err.Error()
+}
+
+func (e *RejectedError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Err
+}
+
+func Reject(err error) error {
+	if err == nil {
+		return nil
+	}
+	return &RejectedError{Err: err}
+}
+
+type rejectionRecord struct {
+	Message string `json:"message"`
+}
+
 type Store struct{ db *sql.DB }
 
 func NewStore(db *sql.DB) *Store { return &Store{db: db} }
@@ -154,6 +181,13 @@ func (s *Store) execute(ctx context.Context, invoke protocol.RuntimeInvokePayloa
 		}
 		return &result, nil
 	}
+	if status == "rejected" {
+		var rejected rejectionRecord
+		if json.Unmarshal(storedResult, &rejected) != nil || strings.TrimSpace(rejected.Message) == "" {
+			return nil, ErrUncertain
+		}
+		return nil, Reject(errors.New(rejected.Message))
+	}
 	inserted, err := insertion.RowsAffected()
 	if err != nil {
 		return nil, err
@@ -186,15 +220,26 @@ func (s *Store) execute(ctx context.Context, invoke protocol.RuntimeInvokePayloa
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	defer func() {
-		if err != nil {
-			err = errors.Join(ErrUncertain, err)
-		}
-	}()
 	result, runErr := run()
 	if runErr != nil || result == nil {
-		if runErr != nil {
+		var rejected *RejectedError
+		if errors.As(runErr, &rejected) {
+			record, encodeErr := json.Marshal(rejectionRecord{Message: runErr.Error()})
+			if encodeErr != nil {
+				return nil, errors.Join(ErrUncertain, encodeErr, runErr)
+			}
+			updated, updateErr := s.db.ExecContext(ctx, `UPDATE kernel_device_execution_journal SET status='rejected',result=?,updated_at=? WHERE device_id=? AND action_id=? AND status='started' AND payload_hash=?`, record, time.Now().UTC().Format(time.RFC3339Nano), invoke.DeviceID.String(), action, digest)
+			if updateErr != nil {
+				return nil, errors.Join(ErrUncertain, updateErr, runErr)
+			}
+			changed, changedErr := updated.RowsAffected()
+			if changedErr != nil || changed != 1 {
+				return nil, errors.Join(ErrUncertain, changedErr, runErr)
+			}
 			return nil, runErr
+		}
+		if runErr != nil {
+			return nil, errors.Join(ErrUncertain, runErr)
 		}
 		return nil, ErrUncertain
 	}

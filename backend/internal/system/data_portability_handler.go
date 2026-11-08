@@ -144,9 +144,6 @@ func (h *Handler) DataPortabilityInspectImport(c *gin.Context) {
 	}
 	result, err := svc.InspectDataPortabilityImport(c.Request.Context(), uploadPath, c.PostForm("passphrase"))
 	if err != nil {
-		if err := os.Remove(uploadPath); err != nil {
-			amitialog.Printf("[original-error] %v", err)
-		}
 		respondDataPortabilityError(c, err)
 		return
 	}
@@ -300,7 +297,7 @@ func respondDataPortabilityErrorWithResult(c *gin.Context, err error, result map
 		status = http.StatusNotFound
 	case errors.Is(err, dataportability.ErrBackupPassphraseRequired), errors.Is(err, dataportability.ErrRestoreDecryptFailed):
 		status = http.StatusUnauthorized
-	case errors.Is(err, dataportability.ErrImportTicketExpired), errors.Is(err, dataportability.ErrImportTicketChanged):
+	case errors.Is(err, dataportability.ErrImportTicketExpired), errors.Is(err, dataportability.ErrImportTicketChanged), errors.Is(err, dataportability.ErrRestoreBusy):
 		status = http.StatusConflict
 	case errors.Is(err, dataportability.ErrBackupScopeInvalid),
 		errors.Is(err, dataportability.ErrBackupProfileInvalid),

@@ -949,6 +949,9 @@ void main() {
     });
     expect(controller.activeTurnId, 'turn-1');
 
+    controller.dismissPendingApproval('approval-1');
+    expect(controller.pendingApprovals, isEmpty);
+
     controller.dispose();
     await events.close();
   });
@@ -1116,6 +1119,7 @@ void main() {
       registry.activityFor(completedConversation)?.unreadCompletedCount,
       1,
     );
+    expect(registry.collectionRevision, 1);
 
     registry.dispose();
     await events.close();

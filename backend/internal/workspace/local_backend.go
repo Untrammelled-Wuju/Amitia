@@ -365,9 +365,10 @@ func (b *LocalBackend) buildEntry(mount WorkspaceMount, rel string, info os.File
 	if info.IsDir() {
 		entryType = WorkspaceEntryTypeDirectory
 	}
+	symlink := info.Mode()&os.ModeSymlink != 0
 	modTime := info.ModTime().UTC()
 	var size *int64
-	if !info.IsDir() {
+	if !info.IsDir() && !symlink {
 		s := info.Size()
 		size = &s
 	}
@@ -382,7 +383,7 @@ func (b *LocalBackend) buildEntry(mount WorkspaceMount, rel string, info os.File
 		Type:       entryType,
 		SizeBytes:  size,
 		ModifiedAt: &modTime,
-		Readable:   true,
-		Writable:   !mount.ReadOnly,
+		Readable:   !symlink,
+		Writable:   !mount.ReadOnly && !symlink,
 	}
 }

@@ -21,6 +21,7 @@ function httpRequest(
   method: string,
   body?: unknown,
   headers?: Record<string, string>,
+  timeoutMs = 10000,
 ): Promise<{ status: number; data: string }> {
   return new Promise((resolve, reject) => {
     const url = new URL(path, baseUrl);
@@ -37,10 +38,10 @@ function httpRequest(
       {
         hostname: url.hostname,
         port: url.port,
-        path: url.pathname,
+        path: url.pathname + url.search,
         method,
         headers: reqHeaders,
-        timeout: 10000,
+        timeout: timeoutMs,
       },
       (res) => {
         let data = "";
@@ -102,22 +103,35 @@ export async function signMeshPairingClaim(coreId: string, body: CloudPairingCla
 }
 
 export async function claimPinnedMeshPairing(baseURL: string, input: MeshPairingInput): Promise<CloudBootstrapTicketResponse> {
-  const deadline = Date.now() + 120_000;
-  while (Date.now() < deadline) {
-  const response = await httpRequest(LOCAL_MESH_BASE_URL, "/internal/device-mesh/pairing/claim", "POST", {
+  const claim = () => httpRequest(LOCAL_MESH_BASE_URL, "/internal/device-mesh/pairing/claim", "POST", {
     endpoint: { url: baseURL, fingerprint: input.fingerprint, coreId: input.coreId },
     offerToken: input.offerToken, setupCode: input.setupCode,
   }, getAuthHeaders());
+  let response = await claim();
   const data = JSON.parse(response.data) as CloudBootstrapTicketResponse & { message?: string };
   if (response.status === 202) {
-    await new Promise<void>((resolve) => setTimeout(resolve, 1000));
-    continue;
+    const pending = JSON.parse(response.data) as { requestId?: string };
+    if (!pending.requestId) throw new Error("统筹中心未返回配对申请编号");
+    const query = new URLSearchParams({
+      url: baseURL,
+      fingerprint: input.fingerprint || "",
+      coreId: input.coreId || "",
+    });
+    const waited = await httpRequest(
+      LOCAL_MESH_BASE_URL,
+      `/internal/device-mesh/pairing/requests/${encodeURIComponent(pending.requestId)}/events?${query.toString()}`,
+      "GET",
+      undefined,
+      { ...getAuthHeaders(), Accept: "text/event-stream" },
+      125000,
+    );
+    if (waited.status !== 200) throw new Error(waited.data || "等待统筹中心批准配对失败");
+    response = await claim();
   }
-  if (response.status !== 200) throw new Error(data.message || "局域网配对失败");
-  if (!data.ticket || data.spaceId !== input.coreId) throw new Error("配对服务身份与二维码不一致");
-  return data;
-  }
-  throw new Error("等待服务提供设备批准配对超时，可再次扫描同一配对码继续等待");
+  const accepted = JSON.parse(response.data) as CloudBootstrapTicketResponse & { message?: string; requestId?: string };
+  if (response.status !== 200) throw new Error(accepted.message || "局域网配对失败");
+  if (!accepted.ticket || accepted.spaceId !== input.coreId) throw new Error("配对服务身份与二维码不一致");
+  return accepted;
 }
 
 
@@ -165,6 +179,55 @@ export async function getMeshStatus(): Promise<DeviceMeshStatusResponse | null> 
   console.error("[original-error]", error);
 return null;
   }
+}
+
+export function watchMeshState(
+  onState: (state: string) => void,
+  onEnd: (error?: Error) => void,
+): () => void {
+  const url = new URL("/internal/device-mesh/status/events", LOCAL_MESH_BASE_URL);
+  let closed = false;
+  const req = http.request({
+    hostname: url.hostname,
+    port: url.port,
+    path: url.pathname,
+    method: "GET",
+    headers: { ...getAuthHeaders(), Accept: "text/event-stream" },
+  }, (res) => {
+    if (res.statusCode !== 200 || !String(res.headers["content-type"] || "").includes("text/event-stream")) {
+      res.resume();
+      onEnd(new Error(`设备状态事件流连接失败: HTTP ${res.statusCode ?? 0}`));
+      return;
+    }
+    res.setEncoding("utf8");
+    res.on("data", (chunk: string) => {
+      for (const line of chunk.split("\n")) {
+        if (!line.startsWith("data:")) continue;
+        try {
+          const payload = JSON.parse(line.slice(5).trim()) as { state?: string };
+          if (payload.state) onState(payload.state);
+        } catch (error) {
+          onEnd(error instanceof Error ? error : new Error(String(error)));
+          req.destroy();
+          return;
+        }
+      }
+    });
+    res.on("end", () => {
+      if (!closed) onEnd();
+    });
+    res.on("error", (error) => {
+      if (!closed) onEnd(error);
+    });
+  });
+  req.on("error", (error) => {
+    if (!closed) onEnd(error);
+  });
+  req.end();
+  return () => {
+    closed = true;
+    req.destroy();
+  };
 }
 
 export async function postMeshBootstrap(req: DeviceMeshBootstrapRequest): Promise<DeviceMeshBootstrapResponse> {

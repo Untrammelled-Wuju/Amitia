@@ -52,7 +52,7 @@ func (p originDataPort) HistoricalSnapshot(ctx context.Context, scope coordinati
 	return &snapshot, err
 }
 
-func TestOwnedConversationOriginContinuesHistoryWithoutOverwritingSameIDAtCore(t *testing.T) {
+func TestOwnedConversationOriginKeepsCoordinatedDeviceConversationLocal(t *testing.T) {
 	engine, db, service, model := engineHarness(t)
 	engine.data = originDataPort{testDataPort{db: db, role: coordination.Role{ID: "role", Revision: 1, Profile: json.RawMessage(`{}`)}}}
 	for _, owner := range []string{"a", "core"} {
@@ -68,50 +68,39 @@ func TestOwnedConversationOriginContinuesHistoryWithoutOverwritingSameIDAtCore(t
 	if _, err := service.InitializeCoordinated(t.Context(), "core", "a", 1, "role"); err != nil {
 		t.Fatal(err)
 	}
-	request := Request{SpaceID: "core", DeviceID: "a", CoreID: "core", RoleID: "role", ConversationID: "same-id", RequestID: "ambiguous", Message: "continue"}
-	if _, err := engine.Query(t.Context(), request, coordination.DataQuery{ConversationID: "same-id"}); !errors.Is(err, coordination.ErrRequestConflict) {
-		t.Fatalf("ambiguous query merged owners: %v", err)
-	}
-	if _, err := engine.Run(t.Context(), request); !errors.Is(err, coordination.ErrRequestConflict) || model.calls.Load() != 0 {
-		t.Fatalf("ambiguous inference generated a reply: %v", err)
+	request := Request{SpaceID: "core", DeviceID: "a", TargetDeviceID: "a", CoreID: "core", ResourceOwnerID: "a", RoleOwnerID: "core", RoleID: "role", ConversationID: "same-id", RequestID: "device-page", Message: "continue"}
+	currentPage, err := engine.Query(t.Context(), request, coordination.DataQuery{ConversationID: "same-id"})
+	if err != nil || currentPage.Snapshot.OwnerID != "a" || currentPage.HistoricalSnapshot != nil {
+		t.Fatalf("device page mixed the center namespace: %+v %v", currentPage, err)
 	}
 	request.ConversationOrigin = &ConversationOrigin{OwnerID: "core", ID: "same-id"}
-	current, err := engine.Query(t.Context(), request, coordination.DataQuery{ConversationID: "same-id"})
-	if err != nil || current.HistoricalSnapshot != nil {
-		t.Fatalf("Core conversation included same-id device history: %+v %v", current, err)
+	if _, err := engine.Query(t.Context(), request, coordination.DataQuery{ConversationID: "same-id"}); !errors.Is(err, coordination.ErrWrongOwner) {
+		t.Fatalf("device page opened the center namespace: %v", err)
 	}
 	request.ConversationOrigin = &ConversationOrigin{OwnerID: "a", ID: "same-id"}
 	request.RequestID = "continue-device-history"
 	model.generate = func(_ context.Context, inference Inference) (Generation, error) {
-		if inference.ConversationID == "same-id" || inference.HistoricalSnapshot == nil || inference.HistoricalSnapshot.OwnerID != "a" {
-			t.Fatal("history did not receive a separate continuation")
+		if inference.ConversationID != "same-id" || inference.HistoricalSnapshot != nil {
+			t.Fatal("device conversation was moved or replaced during coordination")
 		}
 		for _, resource := range inference.Snapshot.Resources {
-			if resource.Kind == "message" && resource.ID == "seed-message" {
-				t.Fatal("unrelated Core conversation entered history continuation")
+			if resource.Kind == "message" && resource.ID == "seed-message" && resource.OwnerID != "a" {
+				t.Fatal("unrelated Core message entered the device conversation")
 			}
 		}
 		return Generation{Text: "continued"}, nil
 	}
 	response, err := engine.Run(t.Context(), request)
-	if err != nil || !response.Saved || response.ConversationID == "same-id" || response.ConversationOrigin == nil || *response.ConversationOrigin != *request.ConversationOrigin {
-		t.Fatalf("continuation failed: %+v %v", response, err)
+	if err != nil || !response.Saved || response.ConversationID != "same-id" || response.ConversationOrigin == nil || *response.ConversationOrigin != *request.ConversationOrigin || response.Scope.ResourceOwnerID != "a" {
+		t.Fatalf("coordinated device conversation failed: %+v %v", response, err)
 	}
-	for _, owner := range []string{"a", "core"} {
-		original, err := coordination.NewOwnershipStore(db, owner).Get(t.Context(), "conversation", "same-id")
-		if err != nil || original == nil || original.Revision != 1 {
-			t.Fatalf("original %s conversation was rewritten: %+v %v", owner, original, err)
-		}
+	deviceConversation, err := coordination.NewOwnershipStore(db, "a").Get(t.Context(), "conversation", "same-id")
+	if err != nil || deviceConversation == nil || deviceConversation.Revision < 2 {
+		t.Fatalf("device conversation was not updated locally: %+v %v", deviceConversation, err)
 	}
-	continuation, err := coordination.NewOwnershipStore(db, "core").Get(t.Context(), "conversation", response.ConversationID)
-	if err != nil || continuation == nil {
-		t.Fatal("continuation did not persist at Core")
-	}
-	var document struct {
-		Origin ConversationOrigin `json:"conversationOrigin"`
-	}
-	if json.Unmarshal(continuation.Body, &document) != nil || document.Origin != *request.ConversationOrigin {
-		t.Fatal("persisted continuation lost explicit lineage")
+	centerConversation, err := coordination.NewOwnershipStore(db, "core").Get(t.Context(), "conversation", "same-id")
+	if err != nil || centerConversation == nil || centerConversation.Revision != 1 {
+		t.Fatalf("center conversation was overwritten: %+v %v", centerConversation, err)
 	}
 }
 
@@ -256,7 +245,7 @@ func TestCoreCutoverContinuesOnlyForwardedContextWithoutReadingFormerCore(t *tes
 	if _, err := service.InitializeCoordinated(t.Context(), "core", "a", 1, "role"); err != nil {
 		t.Fatal(err)
 	}
-	request := Request{SpaceID: "core", DeviceID: "a", CoreID: "core", RoleID: "role", ConversationID: "old-conversation", ConversationOrigin: &ConversationOrigin{OwnerID: "former-core", ID: "old-conversation"}, RequestID: "cutover-context", Message: "continue"}
+	request := Request{SpaceID: "core", DeviceID: "a", TargetDeviceID: "a", CoreID: "core", ResourceOwnerID: "a", RoleOwnerID: "core", RoleID: "role", ConversationID: "old-conversation", ConversationOrigin: &ConversationOrigin{OwnerID: "former-core", ID: "old-conversation"}, RequestID: "cutover-context", Message: "continue"}
 	query := coordination.DataQuery{ConversationID: request.ConversationID}
 	if _, err := engine.Query(t.Context(), request, query); !errors.Is(err, coordination.ErrWrongOwner) {
 		t.Fatalf("new Core pretended to expose old Core data: %v", err)
@@ -266,18 +255,18 @@ func TestCoreCutoverContinuesOnlyForwardedContextWithoutReadingFormerCore(t *tes
 	}
 	request.Context = &ForwardedContext{PreviousCoreID: "former-core", ConversationID: request.ConversationID, Messages: []ContextMessage{{ID: "old-message", OwnerID: "former-core", Role: "user", Content: "old client context"}}}
 	model.generate = func(_ context.Context, inference Inference) (Generation, error) {
-		if inference.HistoricalSnapshot != nil || inference.Context == nil || len(inference.Context.Messages) != 1 || inference.Scope.ResourceOwnerID != "core" {
+		if inference.HistoricalSnapshot != nil || inference.Context == nil || len(inference.Context.Messages) != 1 || inference.Scope.ResourceOwnerID != "a" {
 			t.Fatal("cutover did not isolate client context from old Core storage")
 		}
 		return Generation{Text: "new Core reply"}, nil
 	}
 	response, err := engine.Run(t.Context(), request)
-	if err != nil || !response.Saved || response.ConversationID == request.ConversationID {
+	if err != nil || !response.Saved || response.ConversationID == request.ConversationID || response.Scope.ResourceOwnerID != "a" {
 		t.Fatalf("cutover continuation failed: %+v %v", response, err)
 	}
 	current, err := engine.Query(t.Context(), request, query)
-	if err != nil || current.HistoricalSnapshot != nil || current.ConversationOrigin == nil || *current.ConversationOrigin != *request.ConversationOrigin {
-		t.Fatalf("new Core continuation was not independently readable: %+v %v", current, err)
+	if err != nil || current.HistoricalSnapshot != nil || current.ConversationOrigin == nil || *current.ConversationOrigin != *request.ConversationOrigin || current.Scope.ResourceOwnerID != "a" {
+		t.Fatalf("device continuation was not independently readable: %+v %v", current, err)
 	}
 	var formerRows int
 	if err := db.QueryRow(`SELECT count(*) FROM kernel_device_owned_resources WHERE owner_id='former-core'`).Scan(&formerRows); err != nil || formerRows != 0 {

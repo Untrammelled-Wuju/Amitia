@@ -68,11 +68,15 @@ func TestRemoteSyncAuthorityAndLocalContinuity(t *testing.T) {
 	}
 	handler := NewHandler(service, registry, policies)
 	remote := gin.New()
-	handler.RegisterRoutes(remote.Group("/api"), security.AuthenticationMiddleware(security.AuthConfig{Mode: "cloud_core", SpaceID: "core-space", DeviceCredentials: credentials, DeviceRegistry: registry, Coordination: policies}))
+	remoteGroup := remote.Group("/api")
+	remoteGroup.Use(security.AuthenticationMiddleware(security.AuthConfig{Mode: "cloud_core", SpaceID: "core-space", DeviceCredentials: credentials, DeviceRegistry: registry, Coordination: policies}))
+	handler.RegisterRoutes(remoteGroup)
 	local := gin.New()
-	handler.RegisterRoutes(local.Group("/api"), func(c *gin.Context) {
+	localGroup := local.Group("/api")
+	localGroup.Use(func(c *gin.Context) {
 		c.Set("actorContext", &auth.ActorContext{PrincipalType: auth.PrincipalLocalUI, SpaceID: "core-space", DeviceID: "device", IsLocalTrusted: true, Permissions: auth.OwnerDevicePermissions()})
 	})
+	handler.RegisterRoutes(localGroup)
 	request := func(router *gin.Engine, method, path, body, core, policy string) *httptest.ResponseRecorder {
 		t.Helper()
 		req := httptest.NewRequest(method, path, strings.NewReader(body))

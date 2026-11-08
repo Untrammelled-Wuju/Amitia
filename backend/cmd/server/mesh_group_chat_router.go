@@ -18,7 +18,10 @@ func registerMeshGroupChatRouter(group *gin.RouterGroup, services *AppServices, 
 		if actor == nil {
 			return business.Request{}
 		}
-		return business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: targetDeviceID, RoleID: characterID, ConversationID: conversationID, RequestID: requestID}
+		if targetDeviceID != "" && targetDeviceID != actor.DeviceID.String() {
+			return business.Request{}
+		}
+		return business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: actor.DeviceID.String(), ResourceOwnerID: actor.DeviceID.String(), RoleOwnerID: coreID, RoleID: characterID, ConversationID: conversationID, RequestID: requestID}
 	}
 	respond := func(c *gin.Context, result business.GroupMutationResponse, err error) {
 		if err == nil {

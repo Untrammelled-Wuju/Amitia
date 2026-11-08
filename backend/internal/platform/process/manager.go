@@ -5,7 +5,9 @@ package process
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	amitialog "log"
 	"os"
 	"os/exec"
@@ -41,7 +43,13 @@ func (m *DefaultProcessManager) Start(ctx context.Context, config ProcessConfig)
 		cancel:    cancel,
 	}
 
-	if err := cmd.Start(); err != nil {
+	var lifetime io.Closer
+	if config.BindToParent {
+		lifetime, err = startParentBoundCommand(cmd)
+	} else {
+		err = cmd.Start()
+	}
+	if err != nil {
 		cancel()
 		return nil, fmt.Errorf("process: start: %w", err)
 	}
@@ -51,6 +59,9 @@ func (m *DefaultProcessManager) Start(ctx context.Context, config ProcessConfig)
 
 	handle, attachErr := attachProcessTree(cmd)
 	if attachErr != nil {
+		if lifetime != nil {
+			attachErr = errors.Join(attachErr, lifetime.Close())
+		}
 		if err := cmd.Process.Kill(); err != nil {
 			amitialog.Printf("[original-error] %v", err)
 		}
@@ -99,12 +110,16 @@ func (m *DefaultProcessManager) Start(ctx context.Context, config ProcessConfig)
 
 	go func() {
 		err := cmd.Wait()
+		if lifetime != nil {
+			err = errors.Join(err, lifetime.Close())
+		}
 		stdoutWG.Wait()
 		stderrWG.Wait()
 		closeProcessTree(mp.Handle)
 		exitCode := 0
 		if err != nil {
-			if exitErr, ok := err.(*exec.ExitError); ok {
+			var exitErr *exec.ExitError
+			if errors.As(err, &exitErr) {
 				exitCode = exitErr.ExitCode()
 			} else {
 				exitCode = -1

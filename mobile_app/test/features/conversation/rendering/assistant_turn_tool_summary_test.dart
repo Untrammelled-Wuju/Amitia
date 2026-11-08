@@ -214,6 +214,72 @@ void main() {
     expect(find.text('完成 · 1.2s'), findsOneWidget);
   });
 
+  testWidgets('纯文本工具错误按原文展示且不当作JSON解析', (tester) async {
+    const message =
+        'capability: no available provider: no executable instance for workspace.write';
+    await _pumpTurn(
+      tester,
+      const AssistantTurnDto(
+        id: 'turn-plain-result',
+        conversationId: 'conversation-1',
+        status: 'completed',
+        items: [
+          AssistantTurnItemDto(
+            id: 'call-plain',
+            turnId: 'turn-plain-result',
+            sequence: 1,
+            type: 'tool_call',
+            status: 'failed',
+            callId: 'call-plain',
+            toolName: 'workspace.write',
+          ),
+          AssistantTurnItemDto(
+            id: 'result-plain',
+            turnId: 'turn-plain-result',
+            sequence: 2,
+            type: 'tool_result',
+            status: 'failed',
+            callId: 'call-plain',
+            toolName: 'workspace.write',
+            resultJson: message,
+          ),
+        ],
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('tool-stream-toggle')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('tool-call-expand-call-plain')));
+    await tester.pumpAndSettle();
+    expect(find.text(message), findsOneWidget);
+  });
+
+  testWidgets('重启后待对账的工具不显示为运行中', (tester) async {
+    await _pumpTurn(
+      tester,
+      const AssistantTurnDto(
+        id: 'turn-reconcile',
+        conversationId: 'conversation-1',
+        status: 'needs_reconciliation',
+        items: [
+          AssistantTurnItemDto(
+            id: 'call-reconcile',
+            turnId: 'turn-reconcile',
+            sequence: 1,
+            type: 'tool_call',
+            status: 'needs_reconciliation',
+            callId: 'call-reconcile',
+            toolName: 'workspace.write',
+          ),
+        ],
+      ),
+    );
+    expect(find.text('1 个工具 · 1 个待确认恢复'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('tool-stream-toggle')));
+    await tester.pumpAndSettle();
+    expect(find.text('待确认恢复'), findsOneWidget);
+    expect(find.text('运行中'), findsNothing);
+  });
+
   testWidgets('调用状态未更新时采用结果终态', (tester) async {
     await _pumpTurn(
       tester,

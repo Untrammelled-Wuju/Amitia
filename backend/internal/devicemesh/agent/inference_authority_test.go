@@ -1,8 +1,11 @@
 package agent
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -120,4 +123,77 @@ func TestInterruptedUnpairRecoversAfterRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	finish()
+}
+
+func TestCoreModeIgnoresStoredDeviceCredential(t *testing.T) {
+	handler := NewLocalHandler(t.TempDir(), runtimeidentity.PlatformAndroid)
+	credential := &StoredCredential{
+		CloudBaseUrl: "https://old-core.example",
+		CredentialID: "old-credential",
+		Credential:   "old-secret",
+		SpaceID:      "old-core",
+		DeviceID:     "center-device",
+		RuntimeID:    "center-runtime",
+		ExpiresAt:    time.Now().Add(time.Hour),
+	}
+	if err := handler.credStore.SaveCredential(credential); err != nil {
+		t.Fatal(err)
+	}
+	handler.SetAgentMode(false)
+	handler.SetLocalCoreID("local-core")
+
+	ctx, finish, err := handler.LocalInferenceContext(t.Context())
+	if err != nil {
+		t.Fatalf("core mode rejected local inference with stale credential: %v", err)
+	}
+	finish()
+	if ctx == nil {
+		t.Fatal("local inference context is nil")
+	}
+
+	path, err := handler.ProviderPath()
+	if err != nil || len(path) != 1 || path[0] != "local-core" {
+		t.Fatalf("provider path = %v, %v", path, err)
+	}
+
+	router := gin.New()
+	handler.RegisterRoutes(router, func(c *gin.Context) { c.Next() })
+
+	statusResponse := httptest.NewRecorder()
+	router.ServeHTTP(statusResponse, httptest.NewRequest(http.MethodGet, "/internal/device-mesh/status", nil))
+	var status map[string]any
+	if statusResponse.Code != http.StatusOK || json.Unmarshal(statusResponse.Body.Bytes(), &status) != nil {
+		t.Fatalf("status response: %d %s", statusResponse.Code, statusResponse.Body.String())
+	}
+	if status["state"] != string(StateUnprovisioned) || status["agentMode"] != false || status["coreId"] != nil || status["cloudBaseUrl"] != "" {
+		t.Fatalf("stale remote status leaked in core mode: %+v", status)
+	}
+
+	authResponse := httptest.NewRecorder()
+	router.ServeHTTP(authResponse, httptest.NewRequest(http.MethodGet, "/internal/device-mesh/cloud-auth", nil))
+	if authResponse.Code != http.StatusConflict {
+		t.Fatalf("cloud auth in core mode: %d %s", authResponse.Code, authResponse.Body.String())
+	}
+
+	handler.SetAgentMode(true)
+	if _, _, err := handler.LocalInferenceContext(t.Context()); !errors.Is(err, ErrCoreInferenceRequired) {
+		t.Fatalf("stored credential was not reactivated for device-agent mode: %v", err)
+	}
+}
+
+func TestCoreModeAllowsExplicitPairingHandshake(t *testing.T) {
+	handler := NewLocalHandler(t.TempDir(), runtimeidentity.PlatformDarwin)
+	handler.SetAgentMode(false)
+	router := gin.New()
+	handler.RegisterRoutes(router, func(c *gin.Context) { c.Next() })
+
+	for _, path := range []string{"/internal/device-mesh/identity/sign-claim", "/internal/device-mesh/pairing/claim"} {
+		request := httptest.NewRequest(http.MethodPost, path, bytes.NewBufferString(`{}`))
+		request.Header.Set("Content-Type", "application/json")
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, request)
+		if response.Code == http.StatusConflict {
+			t.Fatalf("core mode blocked explicit pairing handshake %s: %s", path, response.Body.String())
+		}
+	}
 }

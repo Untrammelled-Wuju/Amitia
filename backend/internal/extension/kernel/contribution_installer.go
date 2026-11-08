@@ -1375,6 +1375,12 @@ func (i *TypedContributionInstaller) buildUIContributionOp(ctx context.Context, 
 	return installOp{
 		kind: contrib.Kind,
 		doInstall: func(ctx context.Context) error {
+			if existing, err := i.container.UIHost.GetContribution(uiDef.ContributionID); err == nil {
+				if !sameUIContribution(existing, &uiDef) {
+					return fmt.Errorf("ui contribution %s is already registered with a different definition", uiDef.ContributionID)
+				}
+				return nil
+			}
 			if hasSchema {
 				if hasInlineSchema {
 					if err := i.container.SchemaRegistry.LoadFromBytesWithContext(string(uiDef.ExtensionID), string(uiDef.ContributionID), generation, "", "", uiDef.Schema); err != nil {
@@ -1438,6 +1444,16 @@ func (i *TypedContributionInstaller) buildUIContributionOp(ctx context.Context, 
 			}
 		},
 	}, nil
+}
+
+func sameUIContribution(left, right *ui_contribution.UIContributionDefinition) bool {
+	return left != nil && right != nil &&
+		left.ContributionID == right.ContributionID &&
+		left.ExtensionID == right.ExtensionID &&
+		left.ModuleID == right.ModuleID &&
+		left.Kind == right.Kind &&
+		left.Entry.ContentHash == right.Entry.ContentHash &&
+		left.Integrity.DefinitionHash == right.Integrity.DefinitionHash
 }
 
 func (i *TypedContributionInstaller) buildDesktopContributionOp(ctx context.Context, contrib domain.ContributionDefinition, defData []byte, uiDef ui_contribution.UIContributionDefinition, generation int64) (installOp, error) {
@@ -1550,19 +1566,7 @@ func contributionUsesGameHostRuntime(contrib domain.ContributionDefinition, defD
 }
 
 func canonicalGameHostToolID(extensionID, toolID string) string {
-	extensionID = strings.Trim(strings.TrimSpace(extensionID), "/")
-	toolID = strings.Trim(strings.TrimSpace(toolID), "/")
-	if extensionID == "" {
-		return toolID
-	}
-	if toolID == "" {
-		return extensionID
-	}
-	prefix := extensionID + "/"
-	if strings.HasPrefix(toolID, prefix) {
-		return toolID
-	}
-	return prefix + toolID
+	return string(capability.CanonicalGameHostCapabilityID(extensionID, toolID))
 }
 
 func canonicalGameHostPluginID(extensionID, pluginID string) string {
@@ -1589,6 +1593,8 @@ func enrichGameHostToolRuntimeBinding(binding capability.RuntimeBinding, runtime
 	if binding.Metadata == nil {
 		binding.Metadata = make(map[string]any)
 	}
+	runtimeID, _ := runtimeDef["runtimeId"].(string)
+	binding.RuntimeID = strings.TrimSpace(runtimeID)
 	for _, key := range []string{"pluginId", "serviceId"} {
 		value, _ := runtimeDef[key].(string)
 		value = strings.TrimSpace(value)
@@ -2670,8 +2676,12 @@ func (i *TypedContributionInstaller) recoverInMemoryRegistrations(ctx context.Co
 			return fmt.Errorf("list ui contributions for recover: %w", err)
 		}
 		for _, uiDef := range uiDefs {
-			if err := i.container.UIHost.RegisterContribution(uiDef); err != nil {
-				log.Printf("[original-error] %v", err)
+			if existing, existingErr := i.container.UIHost.GetContribution(uiDef.ContributionID); existingErr == nil {
+				if !sameUIContribution(existing, uiDef) {
+					return fmt.Errorf("recover ui contribution %s: existing registration differs from persisted definition", uiDef.ContributionID)
+				}
+			} else if err := i.container.UIHost.RegisterContribution(uiDef); err != nil {
+				return fmt.Errorf("recover ui contribution %s: %w", uiDef.ContributionID, err)
 			}
 			if i.container.PageHost != nil && strings.TrimSpace(uiDef.Entry.RuntimeID) == "" && (uiDef.Kind == ui_contribution.UIContributionWebPage || uiDef.Kind == ui_contribution.UIContributionSchemaPage) {
 				entryKind := extension_page_host.PageKindWeb
@@ -2703,15 +2713,15 @@ func (i *TypedContributionInstaller) recoverInMemoryRegistrations(ctx context.Co
 					Icon:        uiDef.Display.Icon,
 					Permissions: perms,
 				})
-				if err := i.container.PageHost.RegisterPage(ctx, pageDef); err != nil {
-					log.Printf("[original-error] %v", err)
+				if err := i.container.PageHost.EnsurePage(ctx, pageDef); err != nil {
+					return fmt.Errorf("recover ui page %s: %w", uiDef.ContributionID, err)
 				}
 			}
 			if i.container.SchemaRegistry != nil && uiDef.Entry.SchemaPath != "" {
 				basePath := resolveExtensionBundlePath(i.container.ExtRoot, string(extID))
 				if basePath != "" {
 					if err := i.container.SchemaRegistry.LoadFromPathWithContext(string(uiDef.ExtensionID), string(uiDef.ContributionID), generation, "", "", basePath, uiDef.Entry.SchemaPath); err != nil {
-						log.Printf("[original-error] %v", err)
+						return fmt.Errorf("recover ui schema %s: %w", uiDef.ContributionID, err)
 					}
 				}
 			}

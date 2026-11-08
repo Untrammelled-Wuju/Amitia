@@ -30,6 +30,7 @@ interface RegisteredNotificationDevice {
 export interface UIHostSSEOptions {
   businessCore: BusinessCoreClient;
   mainWindow: () => BrowserWindow | null;
+  onExtensionChange?: (eventType: string, extensionId: string) => void;
 }
 
 const MAX_RETRIES = 10;
@@ -48,6 +49,7 @@ const severityMap: Record<string, "info" | "error" | "warning" | "none"> = {
 export class UIHostSSE {
   private readonly businessCore: BusinessCoreClient;
   private readonly mainWindow: () => BrowserWindow | null;
+  private readonly onExtensionChange?: (eventType: string, extensionId: string) => void;
   private abortController: AbortController | null = null;
   private stopped = true;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -57,6 +59,7 @@ export class UIHostSSE {
   constructor(options: UIHostSSEOptions) {
     this.businessCore = options.businessCore;
     this.mainWindow = options.mainWindow;
+    this.onExtensionChange = options.onExtensionChange;
   }
 
   start(): void {
@@ -167,7 +170,7 @@ export class UIHostSSE {
   private async openEventStream(path: string, init: RequestInit): Promise<Response> {
     let lastMessage = "桌面通知事件流不可用";
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      const response = await this.businessCore.fetch(path, init);
+      const response = await this.businessCore.fetchLocal(path, init);
       const contentType = response.headers.get("content-type")?.toLowerCase() || "";
       if (response.ok && response.body && !contentType.includes("application/json")) return response;
       let body: BusinessCoreEnvelope<unknown> | null = null;
@@ -208,6 +211,9 @@ export class UIHostSSE {
 return;
     }
     if (!this.shouldProcess(envelope)) return;
+    if (eventName.startsWith("extension_") || eventName.startsWith("ui_")) {
+      this.onExtensionChange?.(eventName, envelope.extensionId);
+    }
     switch (eventName) {
       case "scheduled_notification":
         this.handleScheduledNotification(envelope);

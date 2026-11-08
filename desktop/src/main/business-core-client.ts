@@ -1,5 +1,6 @@
 import { getDesktopAuthHeaders, getLocalAdminHeaders } from "./backend-session-client";
 import { getMeshCloudAuth, getMeshIdentity } from "./device-mesh/local-agent-client";
+import type { DeviceMeshCloudAuth } from "./device-mesh/local-agent-client";
 import { getCoreBaseURL } from "./core-endpoint";
 
 export interface BusinessCoreProbeResult {
@@ -19,14 +20,21 @@ return false;
 }
 
 export class BusinessCoreClient {
-  constructor(private readonly baseURL: string) {}
+  constructor(
+    private readonly baseURL: string,
+    private readonly meshAuthorizationEnabled = true,
+  ) {}
 
   url(path: string): URL {
     return new URL(path, this.baseURL);
   }
 
   async authHeaders(): Promise<Record<string, string>> {
-    const cloudAuth = await getMeshCloudAuth();
+    const cloudAuth = this.meshAuthorizationEnabled ? await getMeshCloudAuth() : null;
+    return this.authHeadersFor(cloudAuth);
+  }
+
+  private async authHeadersFor(cloudAuth: DeviceMeshCloudAuth | null): Promise<Record<string, string>> {
     if (cloudAuth?.authorization && sameOrigin(cloudAuth.cloudBaseUrl, this.baseURL)) {
       return {
         Authorization: cloudAuth.authorization,
@@ -45,11 +53,23 @@ return {};
   }
 
   async fetch(path: string, init: RequestInit = {}): Promise<Response> {
-    const cloudAuth = await getMeshCloudAuth();
+    const cloudAuth = this.meshAuthorizationEnabled ? await getMeshCloudAuth() : null;
     const pinned = Boolean(cloudAuth?.cloudBaseUrl && sameOrigin(cloudAuth.cloudBaseUrl, this.baseURL));
     const url = pinned ? `${getCoreBaseURL()}/internal/device-mesh/provider${path}` : this.url(path).toString();
     const headers: Record<string, string> = {
-      ...(pinned ? getLocalAdminHeaders() : await this.authHeaders()),
+      ...(pinned ? getLocalAdminHeaders() : await this.authHeadersFor(cloudAuth)),
+      ...((init.headers as Record<string, string>) || {}),
+    };
+    if (init.body && !headers["Content-Type"]) {
+      headers["Content-Type"] = "application/json";
+    }
+    return fetch(url, { ...init, headers });
+  }
+
+  async fetchLocal(path: string, init: RequestInit = {}): Promise<Response> {
+    const url = new URL(path, getCoreBaseURL()).toString();
+    const headers: Record<string, string> = {
+      ...getLocalAdminHeaders(),
       ...((init.headers as Record<string, string>) || {}),
     };
     if (init.body && !headers["Content-Type"]) {

@@ -339,7 +339,13 @@ func (api *KernelAPI) agentSkillActivations(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 		return
 	}
-	items, err := service.ListHistory(c.Request.Context(), kernelAPIUser(c), c.Param("id"), 50)
+	spaceID := kernelAPIUser(c)
+	definition, err := service.GetInstalled(c.Request.Context(), spaceID, c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	items, err := service.ListHistory(c.Request.Context(), spaceID, definition.ExtensionID, 50)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

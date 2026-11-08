@@ -30,13 +30,20 @@ import com.amitia.amitia_app.runtime.packagetrusted.RuntimePackageSourceResult
 import com.amitia.amitia_app.runtime.packagetrusted.TrustedRuntimePackageSource
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import java.util.concurrent.Executors
 
 internal class RuntimeBridgeHandler(
     private val controller: RuntimeController,
     private val backendConnectionProvider: BackendConnectionProvider,
     private val manifestStore: RuntimeManifestStore?,
     private val runtimePackageSource: RuntimePackageSource,
+    private val mainDispatcher: ((() -> Unit) -> Unit)? = null,
+    private val logEmitter: ((String, String) -> Unit)? = null,
 ) : MethodChannel.MethodCallHandler {
+
+    private val runtimeWorkExecutor = Executors.newSingleThreadExecutor { task ->
+        Thread(task, "RuntimeBridgeWork").apply { isDaemon = true }
+    }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         try {
@@ -161,76 +168,84 @@ internal class RuntimeBridgeHandler(
     }
 
     private fun handleInstall(result: MethodChannel.Result) {
-        emitRuntimeLog("INFO", "Runtime installation requested")
-        when (val source = runtimePackageSource.materialize()) {
-            is RuntimePackageSourceResult.Failed -> {
-                emitRuntimeLog(
-                    "ERROR",
-                    "Runtime package preparation failed [${source.code.name}]: ${source.message}",
-                )
-                result.error(
-                    source.code.name,
-                    source.message,
-                    null,
-                )
-            }
-            is RuntimePackageSourceResult.Ready -> {
-                val trustedRef = source.reference
-                emitRuntimeLog(
-                    "INFO",
-                    "Runtime package prepared for version ${trustedRef.expectedRuntimeVersion}",
-                )
-                val request = RuntimeInstallRequest(
-                    packageUri = trustedRef.packageFile.absolutePath,
-                    expectedVersion = trustedRef.expectedRuntimeVersion,
-                    allowRepairExisting = false,
-                )
-                controller.install(request, object : RuntimeOperationCallback {
-                    override fun onCompleted(operationResult: RuntimeOperationResult) {
-                        handleOperationResult(operationResult, result)
+        runRuntimeWork(result, "runtime installation") {
+            emitRuntimeLog("INFO", "Runtime installation requested")
+            when (val source = runtimePackageSource.materialize()) {
+                is RuntimePackageSourceResult.Failed -> {
+                    emitRuntimeLog(
+                        "ERROR",
+                        "Runtime package preparation failed [${source.code.name}]: ${source.message}",
+                    )
+                    postToMain {
+                        result.error(
+                            source.code.name,
+                            source.message,
+                            null,
+                        )
                     }
-                })
+                }
+                is RuntimePackageSourceResult.Ready -> {
+                    val trustedRef = source.reference
+                    emitRuntimeLog(
+                        "INFO",
+                        "Runtime package prepared for version ${trustedRef.expectedRuntimeVersion}",
+                    )
+                    val request = RuntimeInstallRequest(
+                        packageUri = trustedRef.packageFile.absolutePath,
+                        expectedVersion = trustedRef.expectedRuntimeVersion,
+                        allowRepairExisting = false,
+                    )
+                    controller.install(request, object : RuntimeOperationCallback {
+                        override fun onCompleted(operationResult: RuntimeOperationResult) {
+                            postToMain { handleOperationResult(operationResult, result) }
+                        }
+                    })
+                }
             }
         }
     }
 
     private fun handleReconcileEmbedded(result: MethodChannel.Result) {
-        emitRuntimeLog("INFO", "Runtime reconcile requested")
-        val expectedRuntimeVersion = TrustedRuntimePackageSource.expectedRuntimeVersion()
-        val expectedPackageSha256 = TrustedRuntimePackageSource.expectedPackageSha256()
-        val manifestResult = manifestStore?.read()
-        val installedManifest =
-            (manifestResult as? RuntimeManifestResult.Success)?.manifest
-        val identityMatches = installedManifest?.packageSha256
-            ?.equals(expectedPackageSha256, ignoreCase = true) == true
-        val snapshot = controller.snapshot()
-        val runtimeHealthy = identityMatches &&
-            snapshot.state != RuntimeState.CORRUPTED &&
-            snapshot.state != RuntimeState.FAILED
-        if (runtimeHealthy) {
-            emitRuntimeLog(
-                "INFO",
-                "Runtime identity already matches embedded package $expectedRuntimeVersion",
-            )
-            result.success(buildSnapshotResponse())
-            return
-        }
-
-        when (val source = runtimePackageSource.materialize()) {
-            is RuntimePackageSourceResult.Failed -> {
+        runRuntimeWork(result, "runtime reconcile") {
+            emitRuntimeLog("INFO", "Runtime reconcile requested")
+            val expectedRuntimeVersion = TrustedRuntimePackageSource.expectedRuntimeVersion()
+            val expectedPackageSha256 = TrustedRuntimePackageSource.expectedPackageSha256()
+            val manifestResult = manifestStore?.read()
+            val installedManifest =
+                (manifestResult as? RuntimeManifestResult.Success)?.manifest
+            val identityMatches = installedManifest?.packageSha256
+                ?.equals(expectedPackageSha256, ignoreCase = true) == true
+            val snapshot = controller.snapshot()
+            val runtimeHealthy = identityMatches &&
+                snapshot.state != RuntimeState.CORRUPTED &&
+                snapshot.state != RuntimeState.FAILED
+            if (runtimeHealthy) {
                 emitRuntimeLog(
-                    "ERROR",
-                    "Runtime package preparation failed [${source.code.name}]: ${source.message}",
+                    "INFO",
+                    "Runtime identity already matches embedded package $expectedRuntimeVersion",
                 )
-                result.error(
-                    source.code.name,
-                    source.message,
-                    null,
-                )
+                postToMain { result.success(buildSnapshotResponse()) }
+                return@runRuntimeWork
             }
-            is RuntimePackageSourceResult.Ready -> {
-                val trustedRef = source.reference
-                continueReconcileEmbedded(trustedRef, result, 0)
+
+            when (val source = runtimePackageSource.materialize()) {
+                is RuntimePackageSourceResult.Failed -> {
+                    emitRuntimeLog(
+                        "ERROR",
+                        "Runtime package preparation failed [${source.code.name}]: ${source.message}",
+                    )
+                    postToMain {
+                        result.error(
+                            source.code.name,
+                            source.message,
+                            null,
+                        )
+                    }
+                }
+                is RuntimePackageSourceResult.Ready -> {
+                    val trustedRef = source.reference
+                    postToMain { continueReconcileEmbedded(trustedRef, result, 0) }
+                }
             }
         }
     }
@@ -304,23 +319,27 @@ internal class RuntimeBridgeHandler(
         result: MethodChannel.Result,
         attempt: Int,
     ) {
-        emitRuntimeLog(
-            "INFO",
-            "Installing embedded Runtime ${trustedRef.expectedRuntimeVersion}",
-        )
-        val request = RuntimeInstallRequest(
-            packageUri = trustedRef.packageFile.absolutePath,
-            expectedVersion = trustedRef.expectedRuntimeVersion,
-            allowRepairExisting = true,
-        )
-        controller.install(request, object : RuntimeOperationCallback {
-            override fun onCompleted(operationResult: RuntimeOperationResult) {
-                if (retryTransientReconcileFailure(operationResult, trustedRef, result, attempt)) {
-                    return
+        runRuntimeWork(result, "embedded runtime installation") {
+            emitRuntimeLog(
+                "INFO",
+                "Installing embedded Runtime ${trustedRef.expectedRuntimeVersion}",
+            )
+            val request = RuntimeInstallRequest(
+                packageUri = trustedRef.packageFile.absolutePath,
+                expectedVersion = trustedRef.expectedRuntimeVersion,
+                allowRepairExisting = true,
+            )
+            controller.install(request, object : RuntimeOperationCallback {
+                override fun onCompleted(operationResult: RuntimeOperationResult) {
+                    postToMain {
+                        if (retryTransientReconcileFailure(operationResult, trustedRef, result, attempt)) {
+                            return@postToMain
+                        }
+                        handleOperationResult(operationResult, result)
+                    }
                 }
-                handleOperationResult(operationResult, result)
-            }
-        })
+            })
+        }
     }
 
     private fun repairEmbeddedRuntime(
@@ -328,23 +347,27 @@ internal class RuntimeBridgeHandler(
         result: MethodChannel.Result,
         attempt: Int,
     ) {
-        emitRuntimeLog(
-            "INFO",
-            "Repairing embedded Runtime ${trustedRef.expectedRuntimeVersion}",
-        )
-        val request = RuntimeRepairRequest(
-            packageUri = trustedRef.packageFile.absolutePath,
-            preserveUserData = true,
-            expectedVersion = trustedRef.expectedRuntimeVersion,
-        )
-        controller.repair(request, object : RuntimeOperationCallback {
-            override fun onCompleted(operationResult: RuntimeOperationResult) {
-                if (retryTransientReconcileFailure(operationResult, trustedRef, result, attempt)) {
-                    return
+        runRuntimeWork(result, "embedded runtime repair") {
+            emitRuntimeLog(
+                "INFO",
+                "Repairing embedded Runtime ${trustedRef.expectedRuntimeVersion}",
+            )
+            val request = RuntimeRepairRequest(
+                packageUri = trustedRef.packageFile.absolutePath,
+                preserveUserData = true,
+                expectedVersion = trustedRef.expectedRuntimeVersion,
+            )
+            controller.repair(request, object : RuntimeOperationCallback {
+                override fun onCompleted(operationResult: RuntimeOperationResult) {
+                    postToMain {
+                        if (retryTransientReconcileFailure(operationResult, trustedRef, result, attempt)) {
+                            return@postToMain
+                        }
+                        handleOperationResult(operationResult, result)
+                    }
                 }
-                handleOperationResult(operationResult, result)
-            }
-        })
+            })
+        }
     }
 
     private fun retryTransientReconcileFailure(
@@ -367,46 +390,84 @@ internal class RuntimeBridgeHandler(
     }
 
     private fun handleVerify(result: MethodChannel.Result) {
-        emitRuntimeLog("INFO", "Runtime verification requested")
-        val request = RuntimeVerifyRequest(deep = false)
-        controller.verify(request, object : RuntimeOperationCallback {
-            override fun onCompleted(operationResult: RuntimeOperationResult) {
-                handleOperationResult(operationResult, result)
-            }
-        })
+        runRuntimeWork(result, "runtime verification") {
+            emitRuntimeLog("INFO", "Runtime verification requested")
+            val request = RuntimeVerifyRequest(deep = false)
+            controller.verify(request, object : RuntimeOperationCallback {
+                override fun onCompleted(operationResult: RuntimeOperationResult) {
+                    postToMain { handleOperationResult(operationResult, result) }
+                }
+            })
+        }
     }
 
     private fun handleRepair(result: MethodChannel.Result) {
-        emitRuntimeLog("INFO", "Runtime repair requested")
-        when (val source = runtimePackageSource.materialize()) {
-            is RuntimePackageSourceResult.Failed -> {
-                emitRuntimeLog(
-                    "ERROR",
-                    "Runtime package preparation failed [${source.code.name}]: ${source.message}",
-                )
-                result.error(
-                    source.code.name,
-                    source.message,
-                    null,
-                )
-            }
-            is RuntimePackageSourceResult.Ready -> {
-                val trustedRef = source.reference
-                emitRuntimeLog(
-                    "INFO",
-                    "Runtime package prepared for repair",
-                )
-                val request = RuntimeRepairRequest(
-                    packageUri = trustedRef.packageFile.absolutePath,
-                    preserveUserData = true,
-                    expectedVersion = trustedRef.expectedRuntimeVersion,
-                )
-                controller.repair(request, object : RuntimeOperationCallback {
-                    override fun onCompleted(operationResult: RuntimeOperationResult) {
-                        handleOperationResult(operationResult, result)
+        runRuntimeWork(result, "runtime repair") {
+            emitRuntimeLog("INFO", "Runtime repair requested")
+            when (val source = runtimePackageSource.materialize()) {
+                is RuntimePackageSourceResult.Failed -> {
+                    emitRuntimeLog(
+                        "ERROR",
+                        "Runtime package preparation failed [${source.code.name}]: ${source.message}",
+                    )
+                    postToMain {
+                        result.error(
+                            source.code.name,
+                            source.message,
+                            null,
+                        )
                     }
-                })
+                }
+                is RuntimePackageSourceResult.Ready -> {
+                    val trustedRef = source.reference
+                    emitRuntimeLog(
+                        "INFO",
+                        "Runtime package prepared for repair",
+                    )
+                    val request = RuntimeRepairRequest(
+                        packageUri = trustedRef.packageFile.absolutePath,
+                        preserveUserData = true,
+                        expectedVersion = trustedRef.expectedRuntimeVersion,
+                    )
+                    controller.repair(request, object : RuntimeOperationCallback {
+                        override fun onCompleted(operationResult: RuntimeOperationResult) {
+                            postToMain { handleOperationResult(operationResult, result) }
+                        }
+                    })
+                }
             }
+        }
+    }
+
+    private fun runRuntimeWork(
+        result: MethodChannel.Result,
+        operation: String,
+        block: () -> Unit,
+    ) {
+        runtimeWorkExecutor.execute {
+            try {
+                block()
+            } catch (error: Throwable) {
+                val message = "$operation failed: ${error.message ?: error.javaClass.simpleName}"
+                emitRuntimeLog("ERROR", message)
+                error.printStackTrace()
+                postToMain {
+                    result.error(
+                        "INTERNAL_ERROR",
+                        message,
+                        error.stackTraceToString(),
+                    )
+                }
+            }
+        }
+    }
+
+    private fun postToMain(block: () -> Unit) {
+        val dispatcher = mainDispatcher
+        if (dispatcher != null) {
+            dispatcher(block)
+        } else {
+            Handler(Looper.getMainLooper()).post(block)
         }
     }
 
@@ -484,10 +545,15 @@ internal class RuntimeBridgeHandler(
     }
 
     private fun emitRuntimeLog(level: String, message: String) {
-        when (level) {
-            "ERROR" -> android.util.Log.e(BRIDGE_LOG_TAG, message)
-            "WARN" -> android.util.Log.w(BRIDGE_LOG_TAG, message)
-            else -> android.util.Log.i(BRIDGE_LOG_TAG, message)
+        val emitter = logEmitter
+        if (emitter != null) {
+            emitter(level, message)
+        } else {
+            when (level) {
+                "ERROR" -> android.util.Log.e(BRIDGE_LOG_TAG, message)
+                "WARN" -> android.util.Log.w(BRIDGE_LOG_TAG, message)
+                else -> android.util.Log.i(BRIDGE_LOG_TAG, message)
+            }
         }
         try {
             RuntimeLogCallback.instance?.onLog(level, message)

@@ -5,6 +5,7 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import '../../infrastructure/desktop_pet_package_picker.dart';
 import '../controllers/desktop_pet_plugin_controller_provider.dart';
 import '../../infrastructure/desktop_pet_plugin_dto.dart';
 
@@ -128,7 +129,7 @@ class _DesktopPetPluginSectionState
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          '刷新失败',
+                          state.error!,
                           style: AppTypography.caption(
                             context,
                           ).copyWith(color: context.error),
@@ -264,24 +265,43 @@ class _DesktopPetPluginSectionState
             onPressed: () => Navigator.pop(dialogCtx),
             child: const Text('取消'),
           ),
+          TextButton(
+            onPressed: () async {
+              try {
+                final path = await pickDesktopPetPackagePath();
+                if (path != null && dialogCtx.mounted) {
+                  textController.text = path;
+                }
+              } catch (error) {
+                if (!dialogCtx.mounted) return;
+                ScaffoldMessenger.of(
+                  dialogCtx,
+                ).showSnackBar(SnackBar(content: Text(error.toString())));
+              }
+            },
+            child: const Text('选择文件'),
+          ),
           ValueListenableBuilder<TextEditingValue>(
             valueListenable: textController,
             builder: (context, value, _) => TextButton(
               onPressed:
-                  value.text.trim().isEmpty || controller.state.installing
+                  value.text.trim().isEmpty || controller.current.installing
                   ? null
                   : () {
                       Navigator.pop(dialogCtx);
                       final path = textController.text.trim();
                       controller.install(path).then((ok) {
                         if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(ok ? '安装成功' : '安装失败')),
-                          );
+                          final message = ok
+                              ? '安装成功'
+                              : (controller.current.error ?? '安装失败');
+                          ScaffoldMessenger.of(
+                            context,
+                          ).showSnackBar(SnackBar(content: Text(message)));
                         }
                       });
                     },
-              child: Text(controller.state.installing ? '安装中...' : '安装'),
+              child: Text(controller.current.installing ? '安装中...' : '安装'),
             ),
           ),
         ],
@@ -343,6 +363,7 @@ class _PluginDetailSheet extends StatefulWidget {
 class _PluginDetailSheetState extends State<_PluginDetailSheet> {
   DesktopPetPluginDetail? _detail;
   bool _loading = false;
+  String? _detailError;
 
   @override
   void initState() {
@@ -351,13 +372,25 @@ class _PluginDetailSheetState extends State<_PluginDetailSheet> {
   }
 
   Future<void> _loadDetail() async {
-    setState(() => _loading = true);
-    final d = await widget.controller.detail(widget.pluginId);
-    if (mounted) {
-      setState(() {
-        _detail = d;
-        _loading = false;
-      });
+    setState(() {
+      _loading = true;
+      _detailError = null;
+    });
+    try {
+      final d = await widget.controller.detail(widget.pluginId);
+      if (mounted) {
+        setState(() {
+          _detail = d;
+          _loading = false;
+        });
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _detailError = error.toString();
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -413,6 +446,15 @@ class _PluginDetailSheetState extends State<_PluginDetailSheet> {
                   style: AppTypography.caption(context),
                 ),
             ],
+            if (_detailError != null) ...[
+              const SizedBox(height: 8),
+              SelectableText(
+                _detailError!,
+                style: AppTypography.caption(
+                  context,
+                ).copyWith(color: context.error),
+              ),
+            ],
             const SizedBox(height: 20),
             Row(
               children: [
@@ -431,7 +473,10 @@ class _PluginDetailSheetState extends State<_PluginDetailSheet> {
                                     Navigator.pop(context);
                                     _showSnackBar(
                                       context,
-                                      ok ? '禁用成功' : '操作失败',
+                                      ok
+                                          ? '禁用成功'
+                                          : (widget.controller.current.error ??
+                                                '操作失败'),
                                     );
                                   }
                                 },
@@ -450,7 +495,10 @@ class _PluginDetailSheetState extends State<_PluginDetailSheet> {
                                     Navigator.pop(context);
                                     _showSnackBar(
                                       context,
-                                      ok ? '启用成功' : '操作失败',
+                                      ok
+                                          ? '启用成功'
+                                          : (widget.controller.current.error ??
+                                                '操作失败'),
                                     );
                                   }
                                 },
@@ -524,9 +572,12 @@ class _PluginDetailSheetState extends State<_PluginDetailSheet> {
                           .update(widget.pluginId, widget.extensionId, path)
                           .then((ok) {
                             if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text(ok ? '更新成功' : '更新失败')),
-                              );
+                              final message = ok
+                                  ? '更新成功'
+                                  : (widget.controller.current.error ?? '更新失败');
+                              ScaffoldMessenger.of(
+                                context,
+                              ).showSnackBar(SnackBar(content: Text(message)));
                             }
                           });
                     },
@@ -563,9 +614,12 @@ class _PluginDetailSheetState extends State<_PluginDetailSheet> {
                 widget.extensionId,
               );
               if (context.mounted) {
+                final message = ok
+                    ? '卸载成功'
+                    : (widget.controller.current.error ?? '卸载失败');
                 ScaffoldMessenger.of(
                   context,
-                ).showSnackBar(SnackBar(content: Text(ok ? '卸载成功' : '卸载失败')));
+                ).showSnackBar(SnackBar(content: Text(message)));
               }
             },
             child: const Text('卸载'),

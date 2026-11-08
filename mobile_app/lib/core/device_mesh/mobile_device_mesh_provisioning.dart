@@ -1,8 +1,10 @@
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart';
 
 import '../errors/original_error.dart';
 
 import '../runtime/backend/backend_topology_resolver.dart';
+import '../security/certificate_pin.dart';
 import 'mobile_cloud_device_credential_store.dart';
 
 class MobileDeviceMeshProvisioning {
@@ -19,16 +21,19 @@ class MobileDeviceMeshProvisioning {
     required String deviceId,
     required String runtimeId,
     required String platform,
+    required String fingerprint,
   }) async {
     final core = normalizeRemoteCoreUri(coreUri);
     final ticket = bootstrapTicket.trim();
     final normalizedDeviceId = deviceId.trim();
     final normalizedRuntimeId = runtimeId.trim();
     final normalizedPlatform = platform.trim().toLowerCase();
+    final normalizedFingerprint = fingerprint.trim().toLowerCase();
     if (ticket.isEmpty ||
         normalizedDeviceId.isEmpty ||
         normalizedRuntimeId.isEmpty ||
-        normalizedPlatform.isEmpty) {
+        normalizedPlatform.isEmpty ||
+        !RegExp(r'^[0-9a-f]{64}$').hasMatch(normalizedFingerprint)) {
       throw StateError('Device Mesh bootstrap identity is incomplete');
     }
 
@@ -45,6 +50,10 @@ class MobileDeviceMeshProvisioning {
         },
       ),
     );
+    dio.httpClientAdapter = IOHttpClientAdapter(
+      createHttpClient: () =>
+          createCertificatePinnedHttpClient(normalizedFingerprint),
+    );
     try {
       final response = await dio.post<dynamic>(
         '/api/public/device-mesh/v1/bootstrap/exchange',
@@ -57,7 +66,7 @@ class MobileDeviceMeshProvisioning {
       );
       final raw = response.data;
       if (raw is! Map) {
-        throw StateError('Cloud Core returned an invalid Device Credential');
+        throw StateError('统筹中心返回了无效的 Device Credential');
       }
       final data = Map<String, dynamic>.from(raw);
       final expiresAt = DateTime.tryParse(
@@ -70,9 +79,9 @@ class MobileDeviceMeshProvisioning {
         spaceId: (data['spaceId'] ?? '').toString().trim(),
         deviceId: (data['deviceId'] ?? '').toString().trim(),
         runtimeId: (data['runtimeId'] ?? '').toString().trim(),
+        fingerprint: normalizedFingerprint,
         expiresAt:
-            expiresAt ??
-            DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+            expiresAt ?? DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
         protocol: (data['protocol'] ?? '').toString().trim(),
         envelopeVersion: (data['envelopeVersion'] as num?)?.toInt() ?? 0,
         schemaVersion: (data['schemaVersion'] ?? '').toString().trim(),
@@ -85,7 +94,7 @@ class MobileDeviceMeshProvisioning {
           validated.deviceId != normalizedDeviceId ||
           validated.runtimeId != normalizedRuntimeId ||
           validated.isExpired) {
-        throw StateError('Cloud Core Device Credential validation failed');
+        throw StateError('统筹中心 Device Credential 验证失败');
       }
       await _store.save(validated);
       return validated;

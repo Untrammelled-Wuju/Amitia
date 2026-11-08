@@ -50,7 +50,13 @@ class DefaultRuntimeManifestBuilderTest {
         RuntimeAbiStatus.Supported(
             abi = "arm64-v8a",
             processIs64Bit = true,
-            snapshot = RuntimeAbiSnapshot(emptyMap())
+            snapshot = RuntimeAbiSnapshot(
+                supportedAbis = listOf("arm64-v8a"),
+                supported64BitAbis = listOf("arm64-v8a"),
+                supported32BitAbis = emptyList(),
+                processIs64Bit = true,
+                osArchitecture = "aarch64",
+            )
         )
 
     private fun sampleManifest(): RuntimeManifest = RuntimeManifest(

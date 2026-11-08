@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/auth"
 )
 
 func LocalRuntimeControlMiddleware(store *LocalCredentialStore, listenAddr string) gin.HandlerFunc {
@@ -28,6 +29,11 @@ func LocalRuntimeControlMiddleware(store *LocalCredentialStore, listenAddr strin
 				c.AbortWithStatusJSON(403, gin.H{"code": "forbidden", "message": "listen address not loopback"})
 				return
 			}
+		}
+
+		if actor, ok := auth.FromContext(c.Request.Context()); ok && actor != nil && actor.IsLocalTrusted {
+			c.Next()
+			return
 		}
 
 		token := c.GetHeader("X-Amitia-Local-Token")

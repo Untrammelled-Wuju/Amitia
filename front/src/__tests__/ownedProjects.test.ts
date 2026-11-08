@@ -100,6 +100,19 @@ describe("按角色和数据所有者保存的逻辑项目", () => {
     expect(store.sidebar.projects).toHaveLength(1);
   });
 
+  it("统筹目录只含当前角色时不把当前项目重复当作历史项目", async () => {
+    scope.coordinated = true;
+    scope.roleOwnerId = "core";
+    scope.resourceOwnerId = "source";
+    owned.policy.value = { ...owned.policy.value!, coordinated: true };
+    historicalRoles = [{ id: "role", name: "当前角色" }];
+    currentProjects = [project("source")];
+    const store = useChatStore();
+    await store.fetchSidebar();
+    expect(mocks.get.mock.calls.find(([path]) => path.endsWith("/projects"))?.[1].params).not.toHaveProperty("historicalRoleId");
+    expect(store.sidebar.projects).toHaveLength(1);
+  });
+
   it("重命名、置顶、移动对话和隐藏使用原 Owner 与 CAS 版本", async () => {
     const store = useChatStore();
     await store.fetchSidebar();

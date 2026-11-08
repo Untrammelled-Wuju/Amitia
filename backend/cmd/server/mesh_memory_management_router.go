@@ -32,7 +32,16 @@ func registerMeshMemoryManagementRouter(mesh *gin.RouterGroup, services *AppServ
 					return
 				}
 			}
-			request := business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: c.Query("targetDeviceId"), RoleID: c.Query("characterId"), RequestID: uuid.NewString()}
+			policy, err := services.DeviceMesh.Coordination.Get(c.Request.Context(), actor.SpaceID.String(), actor.DeviceID.String())
+			if err != nil {
+				c.JSON(http.StatusServiceUnavailable, gin.H{"message": err.Error()})
+				return
+			}
+			resourceOwner, roleOwner := actor.DeviceID.String(), actor.DeviceID.String()
+			if policy.Coordinated {
+				resourceOwner, roleOwner = coreID, coreID
+			}
+			request := business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: actor.DeviceID.String(), ResourceOwnerID: resourceOwner, RoleOwnerID: roleOwner, RoleID: c.Query("characterId"), RequestID: uuid.NewString()}
 			query := business.MemoryManagementQuery{Query: c.Query("query"), Mode: c.Query("mode"), MemoryType: c.Query("memoryType"), Source: c.Query("source"), Sort: c.Query("sort"), Cursor: c.Query("cursor"), Limit: limit}
 			query.DecayState = c.Query("decayState")
 			if raw := c.Query("retentionLevel"); raw != "" {
@@ -53,7 +62,6 @@ func registerMeshMemoryManagementRouter(mesh *gin.RouterGroup, services *AppServ
 			}
 			request.MemoryView = c.Query("memoryView")
 			var result business.MemoryManagementResponse
-			var err error
 			if candidates {
 				result, err = services.OwnedBusiness.ListOwnedMemoryCandidates(c.Request.Context(), request, query)
 			} else {
@@ -86,7 +94,16 @@ func registerMeshMemoryManagementRouter(mesh *gin.RouterGroup, services *AppServ
 				c.JSON(400, gin.H{"message": err.Error()})
 				return
 			}
-			request := business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: metadata.TargetDeviceID, RoleID: metadata.RoleID, HistoricalRoleID: metadata.HistoricalRoleID, RequestID: metadata.RequestID, ExpectedScope: metadata.ExpectedScope, ConversationOrigin: metadata.ConversationOrigin}
+			policy, err := services.DeviceMesh.Coordination.Get(c.Request.Context(), actor.SpaceID.String(), actor.DeviceID.String())
+			if err != nil {
+				c.JSON(http.StatusServiceUnavailable, gin.H{"message": err.Error()})
+				return
+			}
+			resourceOwner, roleOwner := actor.DeviceID.String(), actor.DeviceID.String()
+			if policy.Coordinated {
+				resourceOwner, roleOwner = coreID, coreID
+			}
+			request := business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: actor.DeviceID.String(), ResourceOwnerID: resourceOwner, RoleOwnerID: roleOwner, RoleID: metadata.RoleID, HistoricalRoleID: metadata.HistoricalRoleID, RequestID: metadata.RequestID, ExpectedScope: metadata.ExpectedScope, ConversationOrigin: metadata.ConversationOrigin}
 			var result business.MemoryManagementResponse
 			if candidates {
 				var input business.MemoryCandidateInput
@@ -106,15 +123,25 @@ func registerMeshMemoryManagementRouter(mesh *gin.RouterGroup, services *AppServ
 			writeMeshMemoryManagement(c, result, err)
 		}
 	}
+	admin := security.SharedCoreDataWriteOnly()
 	mesh.GET("/memories", read(false))
-	mesh.POST("/memories/manage", manage(false))
+	mesh.POST("/memories/manage", admin, manage(false))
 	mesh.GET("/memories/consolidation", func(c *gin.Context) {
 		actor := security.GetActor(c)
 		if actor == nil || actor.DeviceID == "" {
 			c.AbortWithStatus(http.StatusUnauthorized)
 			return
 		}
-		request := business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: c.Query("targetDeviceId"), RoleID: c.Query("characterId"), RequestID: uuid.NewString(), MemoryView: c.Query("memoryView")}
+		policy, err := services.DeviceMesh.Coordination.Get(c.Request.Context(), actor.SpaceID.String(), actor.DeviceID.String())
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"message": err.Error()})
+			return
+		}
+		resourceOwner, roleOwner := actor.DeviceID.String(), actor.DeviceID.String()
+		if policy.Coordinated {
+			resourceOwner, roleOwner = coreID, coreID
+		}
+		request := business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: actor.DeviceID.String(), ResourceOwnerID: resourceOwner, RoleOwnerID: roleOwner, RoleID: c.Query("characterId"), RequestID: uuid.NewString(), MemoryView: c.Query("memoryView")}
 		report, err := services.OwnedBusiness.OwnedMemoryConsolidation(c.Request.Context(), request)
 		if err != nil {
 			c.JSON(http.StatusConflict, gin.H{"message": err.Error()})
@@ -129,7 +156,16 @@ func registerMeshMemoryManagementRouter(mesh *gin.RouterGroup, services *AppServ
 			c.AbortWithStatus(http.StatusUnauthorized)
 			return
 		}
-		request := business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: c.Query("targetDeviceId"), RoleID: c.Query("characterId"), RequestID: uuid.NewString(), MemoryView: c.Query("memoryView")}
+		policy, err := services.DeviceMesh.Coordination.Get(c.Request.Context(), actor.SpaceID.String(), actor.DeviceID.String())
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"message": err.Error()})
+			return
+		}
+		resourceOwner, roleOwner := actor.DeviceID.String(), actor.DeviceID.String()
+		if policy.Coordinated {
+			resourceOwner, roleOwner = coreID, coreID
+		}
+		request := business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: actor.DeviceID.String(), ResourceOwnerID: resourceOwner, RoleOwnerID: roleOwner, RoleID: c.Query("characterId"), RequestID: uuid.NewString(), MemoryView: c.Query("memoryView")}
 		history, scope, err := services.OwnedBusiness.OwnedMemoryHistory(c.Request.Context(), request, id)
 		if err != nil {
 			c.JSON(http.StatusConflict, gin.H{"message": err.Error()})
@@ -138,8 +174,8 @@ func registerMeshMemoryManagementRouter(mesh *gin.RouterGroup, services *AppServ
 		c.JSON(http.StatusOK, gin.H{"code": 200, "data": gin.H{"executionScope": scope, "history": history}})
 	})
 	mesh.GET("/memory-candidates", read(true))
-	mesh.POST("/memory-candidates/manage", manage(true))
-	mesh.POST("/memory-scope/transfer", func(c *gin.Context) {
+	mesh.POST("/memory-candidates/manage", admin, manage(true))
+	mesh.POST("/memory-scope/transfer", admin, func(c *gin.Context) {
 		actor := security.GetActor(c)
 		if actor == nil || actor.DeviceID == "" {
 			c.AbortWithStatus(http.StatusUnauthorized)
@@ -161,7 +197,16 @@ func registerMeshMemoryManagementRouter(mesh *gin.RouterGroup, services *AppServ
 			c.JSON(400, gin.H{"message": err.Error()})
 			return
 		}
-		ack, err := services.OwnedBusiness.TransferMemory(c.Request.Context(), business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: payload.TargetDeviceID, RoleID: payload.RoleID, RequestID: payload.RequestID, ExpectedScope: payload.ExpectedScope}, payload.MemoryTransferInput)
+		policy, err := services.DeviceMesh.Coordination.Get(c.Request.Context(), actor.SpaceID.String(), actor.DeviceID.String())
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"message": err.Error()})
+			return
+		}
+		resourceOwner, roleOwner := actor.DeviceID.String(), actor.DeviceID.String()
+		if policy.Coordinated {
+			resourceOwner, roleOwner = coreID, coreID
+		}
+		ack, err := services.OwnedBusiness.TransferMemory(c.Request.Context(), business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: actor.DeviceID.String(), ResourceOwnerID: resourceOwner, RoleOwnerID: roleOwner, RoleID: payload.RoleID, RequestID: payload.RequestID, ExpectedScope: payload.ExpectedScope}, payload.MemoryTransferInput)
 		if err != nil {
 			c.JSON(409, gin.H{"message": err.Error()})
 			return

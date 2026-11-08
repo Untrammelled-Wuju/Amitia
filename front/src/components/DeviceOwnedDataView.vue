@@ -75,7 +75,6 @@ watch(viewOptions, options => {
 const roleSelectId = useId();
 let generation = 0;
 let historicalGeneration = 0;
-let providerTimer: ReturnType<typeof setInterval> | undefined;
 
 async function initialize() {
   const ticket = ++generation;
@@ -123,15 +122,17 @@ watch(owned.coreId, () => {
 onMounted(() => {
   void initialize();
   window.addEventListener("amitia:runtime-connection-changed", initialize);
-  providerTimer = setInterval(() => { void owned.refresh().catch((error) => {
-  console.error("[original-error]", error);
-loading.value = false; error.value = "当前 Core 的数据服务暂不可用，请恢复服务后重试"; }); }, 3000);
+  window.addEventListener("amitia:execution-scope-changed", initialize);
+  window.addEventListener("focus", initialize);
+  document.addEventListener("visibilitychange", initialize);
 });
 onUnmounted(() => {
   generation++;
   historicalGeneration++;
-  if (providerTimer) clearInterval(providerTimer);
   window.removeEventListener("amitia:runtime-connection-changed", initialize);
+  window.removeEventListener("amitia:execution-scope-changed", initialize);
+  window.removeEventListener("focus", initialize);
+  document.removeEventListener("visibilitychange", initialize);
 });
 </script>
 

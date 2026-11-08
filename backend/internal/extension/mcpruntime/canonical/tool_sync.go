@@ -77,8 +77,8 @@ func (s *ToolSyncer) UnregisterServer(ctx context.Context, serverID string) erro
 	if s == nil || s.facade == nil {
 		return nil
 	}
-	s.facade.UnregisterMCPTools(ctx, serverID)
-	return nil
+	_, err := s.facade.UnregisterMCPTools(ctx, serverID)
+	return err
 }
 
 func firstNonEmpty(values ...string) string {

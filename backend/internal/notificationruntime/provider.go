@@ -316,8 +316,10 @@ func NewFCMProviderFromEnvironment() *FCMProvider {
 		}
 	}
 	var account fcmServiceAccount
-	if err := json.Unmarshal([]byte(raw), &account); err != nil {
-		amitialog.Printf("[original-error] %v", err)
+	if raw != "" {
+		if err := json.Unmarshal([]byte(raw), &account); err != nil {
+			amitialog.Printf("[original-error] %v", err)
+		}
 	}
 	if account.TokenURI == "" {
 		account.TokenURI = "https://oauth2.googleapis.com/token"

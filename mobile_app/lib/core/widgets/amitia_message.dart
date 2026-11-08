@@ -492,12 +492,14 @@ class AmitiaMessageBubble extends StatelessWidget {
   }
 
   String _formatTime(DateTime value) {
+    value = value.toLocal();
     final hour = value.hour.toString().padLeft(2, '0');
     final minute = value.minute.toString().padLeft(2, '0');
     return '$hour:$minute';
   }
 
   String _formatDateTime(DateTime value) {
+    value = value.toLocal();
     final month = value.month.toString().padLeft(2, '0');
     final day = value.day.toString().padLeft(2, '0');
     return '${value.year}-$month-$day ${_formatTime(value)}';

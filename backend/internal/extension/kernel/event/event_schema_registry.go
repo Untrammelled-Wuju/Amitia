@@ -197,6 +197,18 @@ func DefaultHostEventTypes() []EventTypeDefinition {
 	maxMeta := int64(32 * 1024)
 	return []EventTypeDefinition{
 		{
+			EventTypeID: "gamehost.notification", Version: 1,
+			Description:     "Durable GameHost plugin notification event",
+			PayloadSchema:   json.RawMessage(`{"type":"object"}`),
+			MaxPayloadBytes: maxPayload, MaxMetadataBytes: maxMeta,
+			RiskLevel:        RiskLevelMedium,
+			ProducerPolicy:   EventProducerPolicy{AllowedProducers: []string{"system"}, RequireSystemTrust: true, MaxPayloadBytes: maxPayload, MaxMetadataBytes: maxMeta},
+			SubscriberPolicy: EventSubscriberPolicy{AllowThirdParty: false, MaxSubscribers: 32, RequireApproval: true, RequiredPermissions: []string{"event.subscribe"}},
+			DeliveryPolicy:   EventDeliveryPolicy{Timeout: 5e9, MaxAttempts: 3, InitialBackoff: 1e9, MaxBackoff: 3e8, BackoffMultiplier: 2, JitterFactor: 0.2, OrderingRequirement: OrderingPerPartition, MaxInFlight: 4},
+			OrderingPolicy:   OrderingPerPartition,
+			RetentionPolicy:  EventRetentionPolicy{MaxAge: 7 * 24 * 60 * 60 * 1e9, MaxDeliveryCount: 3},
+		},
+		{
 			EventTypeID: "conversation.ui_event", Version: 1,
 			Description:     "Durable conversation UI projection event",
 			PayloadSchema:   json.RawMessage(`{"type":"object","required":["type","conversationId","sequence"],"properties":{"type":{"type":"string"},"conversationId":{"type":"string"},"sequence":{"type":"integer","minimum":1},"messageId":{"type":"string"},"channel":{"type":"string"},"direction":{"type":"string"},"role":{"type":"string"},"content":{"type":"string"},"createdAt":{"type":"string"},"status":{"type":"string"},"data":{}}}`),

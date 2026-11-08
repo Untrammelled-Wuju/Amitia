@@ -3,6 +3,7 @@ package chat
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -27,7 +28,7 @@ func scenarioRepository(t *testing.T) *repository {
 	if err := db.Exec(`CREATE TABLE model_scenario_routes (scenario TEXT PRIMARY KEY, model_config_id INTEGER NOT NULL DEFAULT 0)`).Error; err != nil {
 		t.Fatal(err)
 	}
-	for _, cfg := range []ModelConfig{{ID: 1, Name: "default", IsActive: 1}, {ID: 2, Name: "assigned"}, {ID: 3, Name: "explicit"}} {
+	for _, cfg := range []ModelConfig{{ID: 1, Name: "default", IsActive: 1}, {ID: 2, Name: "assigned", IsActive: 1}, {ID: 3, Name: "explicit", IsActive: 1}, {ID: 4, Name: "inactive"}} {
 		if err := db.Create(&cfg).Error; err != nil {
 			t.Fatal(err)
 		}
@@ -90,6 +91,38 @@ func TestRepositoryModelRoutesRoundTrip(t *testing.T) {
 	}
 	if _, err := model.modelForScenario("chat", 999); err == nil {
 		t.Fatal("invalid explicit model fell back silently")
+	}
+	if _, err := model.modelForScenario("chat", 4); !errors.Is(err, ErrModelNotConfigured) {
+		t.Fatalf("inactive explicit model was accepted: %v", err)
+	}
+	if err := repo.UpdateModelRoutes([]map[string]interface{}{{"scenario": "chat", "modelConfigId": 4}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := model.modelForScenario("chat", 0); !errors.Is(err, ErrModelNotConfigured) {
+		t.Fatalf("inactive routed model was accepted: %v", err)
+	}
+}
+
+func TestModelForScenarioReportsMissingConfiguration(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "empty-routes.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	if err := db.AutoMigrate(&ModelConfig{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`CREATE TABLE model_scenario_routes (scenario TEXT PRIMARY KEY, model_config_id INTEGER NOT NULL DEFAULT 0)`).Error; err != nil {
+		t.Fatal(err)
+	}
+	model := &service{repo: &repository{db: db}}
+	cfg, err := model.modelForScenario("chat", 0)
+	if cfg != nil || !errors.Is(err, ErrModelNotConfigured) {
+		t.Fatalf("unexpected missing-model result: %#v %v", cfg, err)
 	}
 }
 
