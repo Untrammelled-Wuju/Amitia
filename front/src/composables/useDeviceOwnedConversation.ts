@@ -171,6 +171,16 @@ export function useDeviceOwnedConversation() {
 	  if (captured !== revision || result.executionScope.coreId !== coreId.value) throw new Error("服务状态已变化，旧记忆目录已丢弃");
 	  return result.roles;
 	}
+  async function resourcePreview(kind: "conversation" | "message" | "memory" | "summary" | "project" | "emotion", id: string, characterId: string) {
+    if (!enabled.value) throw new Error("设备数据服务尚未就绪");
+    if (!id || !characterId) throw new Error("请先选择需要管理的数据");
+    const captured = revision;
+    const result = unwrap<{ resource: MeshResource | null; executionScope: OwnedExecutionScope }>(await apiClient.get("/api/device-mesh/v1/business/resources", { params: { kind, id, characterId } }));
+    if (captured !== revision || result.executionScope.coreId !== coreId.value || result.executionScope.roleId !== characterId) throw new Error("服务状态已变化，请重新加载后再操作");
+    if (!result.resource || result.resource.deleted) throw new Error("该记录不在当前数据来源中，请在原设备管理历史数据");
+    if (result.resource.ownerId !== result.executionScope.resourceOwnerId || result.resource.roleId !== result.executionScope.roleId) throw new Error("记录的数据归属不一致，请重新加载");
+    return result;
+  }
   function refresh(): Promise<boolean> {
     if (refreshInFlight) return refreshInFlight;
     const pending = refreshState().finally(() => {
@@ -728,5 +738,5 @@ export function useDeviceOwnedConversation() {
     if (captured !== revision || result.saved !== true || result.project?.id !== `project-${identity}` || result.project?.primaryWorkspaceId !== primaryWorkspaceId || result.executionScope?.requestId !== requestId || authorityStamp(result.executionScope) !== authorityStamp(expected) || result.acknowledgement?.ownerId !== expected.resourceOwnerId || result.acknowledgement?.requestId !== requestId || result.acknowledgement?.versions?.[`project/${result.project.id}`] !== 1 || result.acknowledgement?.versions?.[`checkpoint/project/${requestId}`] !== 1) throw new Error("项目尚未获得数据所有者保存确认");
     return { ...result.project, ownerId: expected.resourceOwnerId, roleId: expected.roleId, readOnly: false, revision: 1, executionScope: result.executionScope } as OwnedProject;
   }
-  return { enabled, roles, coreId, roleOwnerId, policy, notice, refresh, markUnavailable, selectInitialRole, query, data, historicalRoles, projections, hasMore, conversations, allMessages, exportConversation, conversationSummary, editConversationSummary, prepareSummaryGeneration, generateConversationSummary, edit, messages, send, groupState, sendGroup, createGroupConversation, inviteGroupMembers, removeGroupMember, updateGroupSettings, requestGroupReplies, retryGroupDelivery, failedGroupDeliveries, interrupt, stopLocal, previousSummary, projects, createProject };
+  return { enabled, roles, coreId, roleOwnerId, policy, notice, refresh, markUnavailable, selectInitialRole, query, data, resourcePreview, historicalRoles, projections, hasMore, conversations, allMessages, exportConversation, conversationSummary, editConversationSummary, prepareSummaryGeneration, generateConversationSummary, edit, messages, send, groupState, sendGroup, createGroupConversation, inviteGroupMembers, removeGroupMember, updateGroupSettings, requestGroupReplies, retryGroupDelivery, failedGroupDeliveries, interrupt, stopLocal, previousSummary, projects, createProject };
 }

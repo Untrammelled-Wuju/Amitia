@@ -8,12 +8,18 @@ export async function ownedManagementRequest<T = any>(operation: string, body: R
   return ownedChatRequest<T>("chat-management", operation, body, roleId);
 }
 
-export async function prepareOwnedChatRequest(body: Record<string, any> = {}, roleId = "") {
+export function ownedMessageManagementRequest<T = any>(operation: string, body: Record<string, any> = {}, roleId = ""): Promise<T> {
+  return ownedChatRequest<T>("chat-management", operation, body, roleId, "message");
+}
+
+export async function prepareOwnedChatRequest(body: Record<string, any> = {}, roleId = "", previewKind: "working" | "message" = "working") {
   const owned = useDeviceOwnedConversation();
   if (!await owned.refresh()) throw new Error(owned.notice.value || "设备对话服务尚未就绪");
   const role = roleId || body.characterId || owned.selectInitialRole(localStorage.getItem(`webchat-char-id:${owned.coreId.value}:${owned.roleOwnerId.value}`) || "");
   if (!role) throw new Error("请先在聊天页面选择需要管理的角色");
-  const prepared = await owned.data("working", role);
+  const prepared = previewKind === "message"
+    ? await owned.resourcePreview("message", String(body.messageId || ""), role)
+    : await owned.data("working", role);
   const expected = (body.expectedExecutionScope || prepared.executionScope) as OwnedExecutionScope;
   if (!sameOwnedAuthority(expected, prepared.executionScope)) throw new Error("服务或数据归属已变化，请重新预览后操作");
   const origin = parseConversationReference(String(body.conversationId || ""));
@@ -21,8 +27,8 @@ export async function prepareOwnedChatRequest(body: Record<string, any> = {}, ro
   return { owned, expected, payload: { requestId: crypto.randomUUID(), ...payload } };
 }
 
-async function ownedChatRequest<T>(group: string, operation: string, body: Record<string, any>, roleId: string): Promise<T> {
-  const { owned, expected, payload } = await prepareOwnedChatRequest(body, roleId);
+async function ownedChatRequest<T>(group: string, operation: string, body: Record<string, any>, roleId: string, previewKind: "working" | "message" = "working"): Promise<T> {
+  const { owned, expected, payload } = await prepareOwnedChatRequest(body, roleId, previewKind);
   const path = `/api/device-mesh/v1/business/${group}/${operation}`;
   const response = await apiClient.post(path, payload);
   const result = response.data?.code === 200 && response.data.data !== undefined ? response.data.data : response.data;

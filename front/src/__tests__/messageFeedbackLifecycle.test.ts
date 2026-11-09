@@ -48,4 +48,11 @@ describe("message feedback lifecycle", () => {
     expect(wrapper.find('[title="有帮助"]').classes()).not.toContain("is-active");
     wrapper.unmount();
   });
+  it("does not load feedback for historical read-only messages", async () => {
+    const wrapper = shallowMount(Renderer, { global: { stubs: { "el-icon": true } }, props: { message: { ...message, status: "completed", saved: true, sourceRevision: 1, readOnly: true }, characterId: "one" } });
+    await flushPromises();
+    expect(mocks.load).not.toHaveBeenCalled();
+    expect(wrapper.find('[title="有帮助"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
 });

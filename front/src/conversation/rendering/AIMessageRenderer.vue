@@ -290,7 +290,7 @@ const replyId = computed(() => String(props.message.replyToMessageId ?? ""));
 const replySender = computed(() => String(props.message.replyToRole === "user" ? "你" : props.charName));
 const replyText = computed(() => String(props.message.replyToExcerpt ?? "").slice(0, 120));
 const isAssistant = computed(() => message.value.role === "assistant");
-const feedbackReady = computed(() => !props.readOnly && isAssistant.value && !streaming.value && props.message.saved !== false && Number(props.message.sourceRevision) > 0 && Boolean(props.message.id && props.characterId));
+const feedbackReady = computed(() => !props.readOnly && props.message.readOnly !== true && isAssistant.value && !streaming.value && props.message.saved !== false && Number(props.message.sourceRevision) > 0 && Boolean(props.message.id && props.characterId));
 const feedbackIdentity = computed(() => JSON.stringify([props.message.id, props.characterId, props.message.ownerId, props.message.executionScope, feedbackReady.value]));
 let feedbackGeneration = 0;
 
@@ -368,7 +368,7 @@ async function removeFeedback() {
   const identity = feedbackIdentity.value;
   const generation = ++feedbackGeneration;
   try {
-    await deleteMessageFeedback(messageFeedback.value.id, props.characterId, props.message.executionScope);
+    await deleteMessageFeedback(messageFeedback.value.id, String(props.message.id), props.characterId, props.message.executionScope);
     if (identity !== feedbackIdentity.value || generation !== feedbackGeneration) return;
     messageFeedback.value = null;
     ElMessage.success("反馈已撤销");
