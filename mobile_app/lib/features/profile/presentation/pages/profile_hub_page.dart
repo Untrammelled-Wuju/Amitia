@@ -35,6 +35,11 @@ class ProfileHubPage extends ConsumerWidget {
       route: AppRoutes.gameCenter,
     ),
     _ProfileEntry(
+      title: '归档对话',
+      glyph: AmitiaIconGlyph.archive,
+      route: AppRoutes.chatLogs,
+    ),
+    _ProfileEntry(
       title: '设置',
       glyph: AmitiaIconGlyph.settings,
       route: AppRoutes.settings,

@@ -10,6 +10,7 @@ import '../../../features/conversations/presentation/pages/conversation_search_p
 import '../../../features/agent/presentation/pages/agent_page.dart';
 import '../../../features/agent/presentation/pages/agent_task_detail_page.dart';
 import '../../../features/channels/presentation/pages/channel_messages_page.dart';
+import '../../../features/chat_logs/presentation/pages/chat_logs_page.dart';
 import '../../../features/extensions/presentation/pages/extension_center_page.dart';
 import '../../../features/extensions/presentation/pages/extension_page_host_page.dart';
 import '../../../features/tasks/presentation/pages/task_hub_page.dart';
@@ -100,10 +101,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
               context: context,
               state: state,
               rootLevel: true,
-              child: const ProviderTabHost(
-                routePath: AppRoutes.me,
-                fallback: ProfileHubPage(),
-              ),
+              child: const ProfileHubPage(),
             ),
           ),
         ],
@@ -134,6 +132,11 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
         },
       ),
     ),
+  ),
+  GoRoute(
+    path: AppRoutes.chatLogs,
+    pageBuilder: (context, state) =>
+        amitiaSlidePage(state: state, child: const ChatLogsPage()),
   ),
   GoRoute(
     path: '/chat',

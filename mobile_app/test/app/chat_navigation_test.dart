@@ -340,7 +340,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('main-tab-我的')));
     await tester.pumpAndSettle();
     expect(find.byType(ProfileHubPage), findsOneWidget);
-    for (final label in ['角色', '创意工坊', '游戏模式', '设置']) {
+    for (final label in ['角色', '创意工坊', '游戏模式', '归档对话', '设置']) {
       expect(find.text(label), findsOneWidget);
     }
   });
@@ -411,7 +411,7 @@ void main() {
     _expectRootHeaderSurface(tester);
     _expectRootContentTop(tester, find.byType(ProfileHubPage));
     expect(find.text('我的空间'), findsOneWidget);
-    for (final label in ['角色', '创意工坊', '游戏模式', '设置']) {
+    for (final label in ['角色', '创意工坊', '游戏模式', '归档对话', '设置']) {
       expect(find.text(label), findsOneWidget);
     }
     expect(find.text('渠道消息'), findsNothing);
