@@ -1,7 +1,7 @@
 {
   "schemaVersion": "schema-ui/1",
   "type": "document",
-  "title": "提醒与主动任务",
+  "title": "主动任务",
   "lifecycle": {
     "onMount": [
       {

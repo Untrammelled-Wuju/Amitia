@@ -53,7 +53,7 @@ async function main() {
     }
   }
 
-  for (const pluginName of ["plugin-market", "runtime-insights", "workspace", "chat-import", "reminders", "storage", "chat-logs", "memory-hub", "character-hub", "creative-workshop-hub", "game-center-hub"]) {
+  for (const pluginName of ["plugin-market", "runtime-insights", "workspace", "chat-import", "active-task", "storage", "chat-logs", "memory-hub", "character-hub", "creative-workshop-hub", "game-center-hub"]) {
     const pluginDir = resolve(unpackedDir, "resources", "bundled-plugins", pluginName);
     const pluginPackages = existsSync(pluginDir)
       ? readdirSync(pluginDir).filter((name) => name.endsWith(".amitiax"))

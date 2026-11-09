@@ -4,6 +4,13 @@ import { resolve } from "node:path"
 import builtinRoutesSource from "../router/builtinRoutes.ts?raw"
 import { validateDocument } from "@/components/extension/schema-ui-utils"
 
+function extensionPluginRoutes(): string[] {
+  const manifest = JSON.parse(readFileSync(resolve(__dirname, "../../../plugins-builtin/plugin-market/amitia-extension.json"), "utf8"))
+  return manifest.modules.flatMap((module: any) => module.contributions)
+    .flatMap((contribution: any) => contribution.spec?.metadata?.routes ?? [])
+    .map((item: any) => item.path)
+}
+
 describe("Extension Center Baseline", () => {
   describe("Router", () => {
     it("leaves extension and kernel roots to the plugin route registry", { timeout: 30000 }, async () => {
@@ -18,10 +25,11 @@ describe("Extension Center Baseline", () => {
       expect(routes).toEqual(expect.arrayContaining(["/extensions", "/kernel"]))
     })
 
-    it("resolves MCP server route", async () => {
+    it("leaves MCP server route to the extension plugin", async () => {
       const router = (await import("@/router")).default
       const route = router.resolve("/extensions/mcp")
-      expect(route.name).toBe("extensionMCP")
+      expect(route.name).not.toBe("extensionMCP")
+      expect(extensionPluginRoutes()).toContain("/extensions/mcp")
     })
 
     it("validates the plugin-owned extension and kernel hub schemas", () => {
@@ -31,21 +39,31 @@ describe("Extension Center Baseline", () => {
       }
     })
 
-    it("resolves package manager route", async () => {
+    it("leaves package manager route to the extension plugin", async () => {
       const router = (await import("@/router")).default
       const route = router.resolve("/extensions/packages")
-      expect(route.name).toBe("extensionPackages")
+      expect(route.name).not.toBe("extensionPackages")
+      expect(extensionPluginRoutes()).toContain("/extensions/packages")
     })
 
-    it("resolves workflow routes from extension center", async () => {
+    it("leaves workflow routes to the extension plugin", async () => {
       const router = (await import("@/router")).default
-      expect(router.resolve("/extensions/workflows").name).toBe("extensionWorkflows")
-      expect(router.resolve("/extensions/workflows/test-workflow-id").name).toBe("extensionWorkflowBuilder")
+      expect(router.resolve("/extensions/workflows").name).not.toBe("extensionWorkflows")
+      expect(router.resolve("/extensions/workflows/test-workflow-id").name).not.toBe("extensionWorkflowBuilder")
+      expect(extensionPluginRoutes()).toEqual(expect.arrayContaining([
+        "/extensions/workflows",
+        "/extensions/workflows/:id",
+      ]))
     })
 
-    it("resolves character card workshop route", async () => {
+    it("leaves character card workshop to the creative plugin route registry", async () => {
       const router = (await import("@/router")).default
-      expect(router.resolve("/creative-workshop/character-cards").name).toBe("characterCardWorkshop")
+      expect(router.resolve("/creative-workshop/character-cards").name).not.toBe("characterCardWorkshop")
+      const manifest = JSON.parse(readFileSync(resolve(__dirname, "../../../plugins-builtin/creative-workshop-hub/amitia-extension.json"), "utf8"))
+      const routes = manifest.modules.flatMap((module: any) => module.contributions)
+        .flatMap((contribution: any) => contribution.spec?.metadata?.routes ?? [])
+        .map((item: any) => item.path)
+      expect(routes).toContain("/creative-workshop/character-cards")
     })
 
     it("does not redirect retired workflow routes", async () => {
@@ -66,10 +84,11 @@ describe("Extension Center Baseline", () => {
       expect(route.name).not.toBe("extensionSkillDetail")
     })
 
-    it("resolves agent skill list route", async () => {
+    it("leaves agent skill list route to the extension plugin", async () => {
       const router = (await import("@/router")).default
       const route = router.resolve("/extensions/agent-skills")
-      expect(route.name).toBe("extensionAgentSkills")
+      expect(route.name).not.toBe("extensionAgentSkills")
+      expect(extensionPluginRoutes()).toContain("/extensions/agent-skills")
     })
 
     it("removes retired workshop route", async () => {
@@ -96,20 +115,6 @@ describe("Extension Center Baseline", () => {
       expect(route.name).not.toBe("extensionRuns")
     })
 
-    it("all extension routes require auth", async () => {
-      const router = (await import("@/router")).default
-      const extRoutes = [
-        "/extensions/mcp",
-        "/extensions/packages",
-        "/extensions/agent-skills",
-        "/extensions/workflows",
-      ]
-      for (const path of extRoutes) {
-        const route = router.resolve(path)
-        const matched = route.matched[route.matched.length - 1]
-        expect(matched.meta.requiresAuth, `route ${path} should require auth`).toBe(true)
-      }
-    })
   })
 
   describe("API client", () => {

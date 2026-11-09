@@ -11,7 +11,7 @@ import {
 describe("builtin route migration plan", () => {
   it("classifies every built-in business route", () => {
     expect(unclassifiedBuiltinRoutes()).toEqual([]);
-    expect(builtinRouteMigrationPlan().length).toBeGreaterThan(20);
+    expect(builtinRouteMigrationPlan().length).toBeGreaterThan(10);
   });
 
   it("maps nested routes to their top-level provider namespace", () => {
@@ -51,6 +51,14 @@ describe("builtin route migration plan", () => {
     expect(paths).not.toContain("/creative-workshop");
     expect(paths).not.toContain("/game-center");
     expect(paths).not.toContain("/creative-workshop/pet");
+    expect(paths).not.toContain("/creative-workshop/character-cards");
+    expect(paths).not.toContain("/creative-workshop/pet/installations");
+    expect(paths).not.toContain("/game-center/plugin");
+    expect(paths).not.toContain("/extensions/packages");
+    expect(paths).not.toContain("/extensions/mcp");
+    expect(paths).not.toContain("/extensions/agent-skills");
+    expect(paths).not.toContain("/extensions/workflows");
+    expect(paths).not.toContain("/extensions/workflows/:id");
     expect(paths).not.toContain("/privacy-scan");
 
     const manifest = JSON.parse(readFileSync(
@@ -89,17 +97,17 @@ describe("builtin route migration plan", () => {
       .map((route) => route.path);
     expect(chatImportRoutes).toContain("/import");
 
-    const remindersManifest = JSON.parse(readFileSync(
-      resolve(__dirname, "../../../plugins-builtin/reminders/amitia-extension.json"),
+    const activeTaskManifest = JSON.parse(readFileSync(
+      resolve(__dirname, "../../../plugins-builtin/active-task/amitia-extension.json"),
       "utf8",
     )) as {
       modules: Array<{ contributions: Array<{ spec?: { metadata?: { routes?: Array<{ path: string }> } } }> }>;
     };
-    const remindersRoutes = remindersManifest.modules
+    const activeTaskRoutes = activeTaskManifest.modules
       .flatMap((module) => module.contributions)
       .flatMap((contribution) => contribution.spec?.metadata?.routes ?? [])
       .map((route) => route.path);
-    expect(remindersRoutes).toContain("/reminders");
+    expect(activeTaskRoutes).toContain("/reminders");
 
     const storageManifest = JSON.parse(readFileSync(
       resolve(__dirname, "../../../plugins-builtin/storage/amitia-extension.json"),
@@ -176,7 +184,12 @@ describe("builtin route migration plan", () => {
       .flatMap((module) => module.contributions)
       .flatMap((contribution) => contribution.spec?.metadata?.routes ?? [])
       .map((route) => route.path);
-    expect(creativeWorkshopRoutes).toEqual(expect.arrayContaining(["/creative-workshop", "/creative-workshop/pet"]));
+    expect(creativeWorkshopRoutes).toEqual(expect.arrayContaining([
+      "/creative-workshop",
+      "/creative-workshop/character-cards",
+      "/creative-workshop/pet",
+      "/creative-workshop/pet/installations",
+    ]));
 
     const gameCenterManifest = JSON.parse(readFileSync(
       resolve(__dirname, "../../../plugins-builtin/game-center-hub/amitia-extension.json"),
@@ -188,6 +201,21 @@ describe("builtin route migration plan", () => {
       .flatMap((module) => module.contributions)
       .flatMap((contribution) => contribution.spec?.metadata?.routes ?? [])
       .map((route) => route.path);
-    expect(gameCenterRoutes).toContain("/game-center");
+    expect(gameCenterRoutes).toEqual(expect.arrayContaining(["/game-center", "/game-center/plugin"]));
+
+    const pluginMarketManifest = JSON.parse(readFileSync(
+      resolve(__dirname, "../../../plugins-builtin/plugin-market/amitia-extension.json"),
+      "utf8",
+    )) as any;
+    expect(pluginMarketManifest.modules
+      .flatMap((module: any) => module.contributions)
+      .flatMap((contribution: any) => contribution.spec?.metadata?.routes ?? [])
+      .map((route: any) => route.path)).toEqual(expect.arrayContaining([
+        "/extensions/packages",
+        "/extensions/mcp",
+        "/extensions/agent-skills",
+        "/extensions/workflows",
+        "/extensions/workflows/:id",
+      ]));
   });
 });

@@ -15,7 +15,7 @@
 
 | 模块 | 插件 | 状态 |
 | --- | --- | --- |
-| 插件市场、扩展中心与内核入口 | `com.amitia/plugin-market` | `/extensions`、`/kernel` 根路由、市场页面、导航和路由均使用 Tool、UI Provider、Route Registry；宿主固定占位页和重定向壳已删除 |
+| 插件市场、扩展中心与内核入口 | `com.amitia/plugin-market` | `/extensions`、`/kernel`、扩展包、工作流、MCP、Agent Skills 的页面和路由均使用 Tool、UI Provider、Route Registry；宿主固定业务页已删除 |
 | 渠道页面与连接 | `com.amitia/channel-*` | 已使用 Service、UI Provider、Route Registry |
 | 表情与消息渲染 | `com.amitia/emote` | 已使用 Tool、UI Slot、UI Provider |
 | 生活系统 | `com.amitia/lifestyle` | 已使用 Tool、UI Slot、UI Provider |
@@ -24,7 +24,7 @@
 | 长期运行维护 | `com.amitia/runtime-insights` | 状态、配置和维护动作均走 Host API |
 | 工作区文件与 Git | `com.amitia/workspace` | 固定路由与 Vue 页面已删除，文件、Git 和隔离工作区统一走 Workspace Bridge |
 | 聊天导入 | `com.amitia/chat-import` | 固定路由与 Vue 向导已删除，解析、批次管理和设备会话晋升统一走 Import Bridge |
-| 提醒与主动任务 | `com.amitia/reminders` | 固定路由与 Vue 页面已删除，任务、队列和历史统一走现有 Reminder Host API |
+| 主动任务（已合并提醒能力） | `com.amitia.builtin.active-task` | 唯一任务业务插件；固定路由与 Vue 页面已删除，主动任务、定时提醒、队列和历史统一走现有 Reminder Host API |
 | 存储维护 | `com.amitia/storage` | 固定路由与 Vue 页面已删除，清理、备份和恢复分别走独立 Storage Host API |
 | 归档对话 | `com.amitia/chat-logs` | 固定路由与 Vue 页面已删除，读取、恢复、删除、摘要和导出统一走 Conversation Logs Host API；列表、消息和操作仅接受具有 `archivedAt` 的会话 |
 | 记忆 Hub | `com.amitia/memory-hub` | `/memory`、`/knowledge`、`/memory-manager`、`/memory-timeline`、`/episodic`、`/graph`、`/profiles` 固定路由已删除，页面、路由、二级导航和主导航均由 UI Provider 提供 |

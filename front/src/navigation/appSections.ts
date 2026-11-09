@@ -40,10 +40,7 @@ export const appSections: AppSectionDefinition[] = [
     id: "tasks",
     route: "/reminders",
     label: "任务",
-    entries: [
-      { route: "/reminders", label: "主动任务" },
-      { route: "/continuity", label: "持续事项" },
-    ],
+    entries: [],
   },
   {
     id: "workshop",
@@ -55,12 +52,7 @@ export const appSections: AppSectionDefinition[] = [
     id: "extensions",
     route: "/extensions",
     label: "扩展中心",
-    entries: [
-      { route: "/extensions/packages", label: "扩展包" },
-      { route: "/extensions/workflows", label: "工作流" },
-      { route: "/extensions/mcp", label: "MCP 服务" },
-      { route: "/extensions/agent-skills", label: "Agent Skills" },
-    ],
+    entries: [],
   },
 ];
 

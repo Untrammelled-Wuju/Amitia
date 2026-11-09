@@ -23,22 +23,11 @@ describe("两级导航映射", () => {
   });
 
   it("提供任务、角色、记忆、创意工坊和扩展中心的二级入口", () => {
-    expect(appSection("tasks")?.entries.map(entry => entry.label)).toEqual([
-      "主动任务",
-      "持续事项",
-    ]);
+    expect(appSection("tasks")?.entries).toEqual([]);
     expect(appSection("character")?.entries).toEqual([]);
     expect(appSection("memory")?.entries).toEqual([]);
-    expect(appSection("workshop")?.entries.map(entry => entry.label)).toEqual([
-      "角色卡工坊",
-      "桌宠",
-    ]);
-    expect(appSection("extensions")?.entries.map(entry => entry.label)).toEqual([
-      "扩展包",
-      "工作流",
-      "MCP 服务",
-      "Agent Skills",
-    ]);
+    expect(appSection("workshop")?.entries).toEqual([]);
+    expect(appSection("extensions")?.entries).toEqual([]);
   });
 
   it("第二栏位于圆角主工作区内部", () => {

@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { builtinBusinessRoutes } from "@/router/builtinRoutes";
 
-interface RemindersManifest {
+interface ActiveTaskManifest {
   modules: Array<{
     contributions: Array<{
       spec?: {
@@ -15,22 +15,22 @@ interface RemindersManifest {
   }>;
 }
 
-describe("reminders plugin migration", () => {
+describe("active task plugin migration", () => {
   it("keeps /reminders out of the fixed business router", () => {
     expect(builtinBusinessRoutes.some((route) => route.path === "/reminders")).toBe(false);
   });
 
-  it("provides /reminders through the route registry", () => {
+  it("provides the merged task page through the active task route registry", () => {
     const manifest = JSON.parse(readFileSync(
-      resolve(__dirname, "../../../plugins-builtin/reminders/amitia-extension.json"),
+      resolve(__dirname, "../../../plugins-builtin/active-task/amitia-extension.json"),
       "utf8",
-    )) as RemindersManifest;
+    )) as ActiveTaskManifest;
     const routes = manifest.modules
       .flatMap((module) => module.contributions)
       .flatMap((contribution) => contribution.spec?.metadata?.routes ?? []);
     expect(routes).toContainEqual(expect.objectContaining({
       path: "/reminders",
-      providerId: "reminders-page-provider",
+      providerId: "active-task-page-provider",
     }));
   });
 });

@@ -41,7 +41,7 @@ func TestBuiltInAndOrdinaryPluginSourcesAreSeparated(t *testing.T) {
 		"com.amitia/runtime-insights":      true,
 		"com.amitia/workspace":             true,
 		"com.amitia/chat-import":           true,
-		"com.amitia/reminders":             true,
+		"com.amitia.builtin.active-task":   true,
 		"com.amitia/storage":               true,
 		"com.amitia/chat-logs":             true,
 		"com.amitia/memory-hub":            true,

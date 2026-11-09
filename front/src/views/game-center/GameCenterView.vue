@@ -978,7 +978,7 @@ async function openGamePlugin(plugin: Plugin) {
   try {
     await selectGameForLease(plugin);
     await router.push({
-      name: "gamePlugin",
+      path: "/game-center/plugin",
       query: { extensionId: plugin.extensionId, pluginId: plugin.pluginId },
     });
   } catch (err: any) {

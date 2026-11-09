@@ -13,8 +13,8 @@ const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = resolve(sourceRoot, "..", "..");
 const stagingRoot = join(sourceRoot, ".package-staging");
 const manifest = JSON.parse(readFileSync(join(sourceRoot, "amitia-extension.json"), "utf8"));
-const outputDir = option("--output", join(repoRoot, "plugin", "reminders"));
-const outputFile = option("--file", join(outputDir, `amitia-reminders-${manifest.plugin.version}.amitiax`));
+const outputDir = option("--output", join(repoRoot, "plugin", "active-task"));
+const outputFile = option("--file", join(outputDir, `amitia-active-task-${manifest.plugin.version}.amitiax`));
 
 function browserHash(path) {
   const digest = createHash("sha256").update(readFileSync(path)).digest("base64");
@@ -22,11 +22,11 @@ function browserHash(path) {
 }
 
 rmSync(stagingRoot, { recursive: true, force: true });
-mkdirSync(join(stagingRoot, "modules", "reminders-runtime", "dist"), { recursive: true });
-mkdirSync(join(stagingRoot, "modules", "reminders-ui", "desktop"), { recursive: true });
-copyFileSync(join(sourceRoot, "src", "runtime", "index.mjs"), join(stagingRoot, "modules", "reminders-runtime", "dist", "index.js"));
-writeFileSync(join(stagingRoot, "modules", "reminders-runtime", "package.json"), `${JSON.stringify({ type: "module" }, null, 2)}\n`);
-copyFileSync(join(sourceRoot, "ui", "schema", "reminders.json"), join(stagingRoot, "modules", "reminders-ui", "desktop", "reminders.json"));
+mkdirSync(join(stagingRoot, "modules", "active-task-runtime", "dist"), { recursive: true });
+mkdirSync(join(stagingRoot, "modules", "active-task-ui", "desktop"), { recursive: true });
+copyFileSync(join(sourceRoot, "src", "runtime", "index.mjs"), join(stagingRoot, "modules", "active-task-runtime", "dist", "index.js"));
+writeFileSync(join(stagingRoot, "modules", "active-task-runtime", "package.json"), `${JSON.stringify({ type: "module" }, null, 2)}\n`);
+copyFileSync(join(sourceRoot, "ui", "schema", "active-tasks.json"), join(stagingRoot, "modules", "active-task-ui", "desktop", "active-tasks.json"));
 for (const module of manifest.modules || []) {
   for (const contribution of module.contributions || []) {
     const schemaPath = contribution.spec?.entry?.schema_path;

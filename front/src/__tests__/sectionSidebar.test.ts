@@ -28,6 +28,21 @@ vi.mock("../ui-runtime/providerRoutes", () => ({
         { route: "/profiles", label: "用户画像" },
       ];
     }
+    if (sectionId === "tasks") {
+      return [
+        { route: "/reminders", label: "主动任务" },
+        { route: "/continuity", label: "持续事项" },
+      ];
+    }
+    if (sectionId === "extensions") {
+      return [
+        { route: "/extensions/market", label: "插件市场" },
+        { route: "/extensions/packages", label: "扩展包" },
+        { route: "/extensions/workflows", label: "工作流" },
+        { route: "/extensions/mcp", label: "MCP 服务" },
+        { route: "/extensions/agent-skills", label: "Agent Skills" },
+      ];
+    }
     return [];
   },
 }));
@@ -36,7 +51,7 @@ async function render(sectionId: "character" | "memory" | "tasks" | "game" | "wo
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
-      { path: "/game-plugin", name: "gamePlugin", component: { template: "<div />" } },
+      { path: "/game-center/plugin", component: { template: "<div />" } },
       { path: "/:pathMatch(.*)*", component: { template: "<div />" } },
     ],
   });
@@ -97,7 +112,7 @@ describe("一级导航对应的第二栏", () => {
     expect(game.wrapper.findAll(".game-plugin-row strong").map(node => node.text())).toEqual(["示例游戏"]);
     await game.wrapper.get(".game-plugin-row").trigger("click");
     await vi.waitFor(() => expect(game.router.currentRoute.value).toMatchObject({
-      name: "gamePlugin",
+      path: "/game-center/plugin",
       query: { pluginId: "game-plugin", extensionId: "com.example/game" },
     }));
     await game.router.push("/chat");

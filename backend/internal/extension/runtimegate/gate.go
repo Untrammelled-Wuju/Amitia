@@ -16,6 +16,21 @@ const (
 	HostRuntimeCreativeCards       = "host.creative.character-cards"
 	HostRuntimeCreativePetInstall  = "host.creative.pet-installations"
 	HostRuntimeGamePlugin          = "host.game.plugin"
+	HostRuntimeContinuityThreads   = "host.tasks.continuity"
+	HostRuntimeExtensionPackages   = "host.extensions.packages"
+	HostRuntimeExtensionMCP        = "host.extensions.mcp"
+	HostRuntimeExtensionSkills     = "host.extensions.agent-skills"
+	HostRuntimeExtensionWorkflows  = "host.extensions.workflows"
+	HostRuntimeKernelWasm          = "host.kernel.wasm"
+	HostRuntimeKernelHooks         = "host.kernel.hooks"
+	HostRuntimeKernelTrusted       = "host.kernel.trusted-services"
+	HostRuntimeKernelTasks         = "host.kernel.tasks"
+	HostRuntimeKernelEvents        = "host.kernel.events"
+	HostRuntimeKernelSchedules     = "host.kernel.schedules"
+	HostRuntimeKernelDesktop       = "host.kernel.desktop"
+	HostRuntimeKernelUpdates       = "host.kernel.updates"
+	HostRuntimeKernelDevConsole    = "host.kernel.dev-console"
+	HostRuntimeKernelDevMode       = "host.kernel.dev-mode"
 	HostRuntimeMemoryOverview      = "host.memory.overview"
 	HostRuntimeMemoryTimeline      = "host.memory.timeline"
 	HostRuntimeMemoryEpisodic      = "host.memory.episodic"
@@ -42,6 +57,21 @@ var hostRuntimeAllowlist = map[string]struct{}{
 	HostRuntimeCreativeCards:       {},
 	HostRuntimeCreativePetInstall:  {},
 	HostRuntimeGamePlugin:          {},
+	HostRuntimeContinuityThreads:   {},
+	HostRuntimeExtensionPackages:   {},
+	HostRuntimeExtensionMCP:        {},
+	HostRuntimeExtensionSkills:     {},
+	HostRuntimeExtensionWorkflows:  {},
+	HostRuntimeKernelWasm:          {},
+	HostRuntimeKernelHooks:         {},
+	HostRuntimeKernelTrusted:       {},
+	HostRuntimeKernelTasks:         {},
+	HostRuntimeKernelEvents:        {},
+	HostRuntimeKernelSchedules:     {},
+	HostRuntimeKernelDesktop:       {},
+	HostRuntimeKernelUpdates:       {},
+	HostRuntimeKernelDevConsole:    {},
+	HostRuntimeKernelDevMode:       {},
 	HostRuntimeMemoryOverview:      {},
 	HostRuntimeMemoryTimeline:      {},
 	HostRuntimeMemoryEpisodic:      {},

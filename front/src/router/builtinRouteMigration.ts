@@ -16,7 +16,6 @@ const migrationByRoot: Record<string, Omit<BuiltinRouteMigration, "path" | "root
   "/extension": { capability: "extension.page", priority: 80 },
   "/kernel": { capability: "settings.section", priority: 60 },
   "/settings": { capability: "settings.shell", priority: 80 },
-  "/continuity": { capability: "conversation.sidebar", priority: 65 },
   "/channel-center": { capability: "extension.page", priority: 70 },
   "/my-space": { capability: "settings.shell", priority: 70 },
 };

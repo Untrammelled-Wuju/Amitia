@@ -65,7 +65,7 @@ function packagePaths() {
     ["plugins-builtin/runtime-insights/amitia-extension.json", "runtime-insights"],
     ["plugins-builtin/workspace/amitia-extension.json", "workspace"],
     ["plugins-builtin/chat-import/amitia-extension.json", "chat-import"],
-    ["plugins-builtin/reminders/amitia-extension.json", "reminders"],
+    ["plugins-builtin/active-task/amitia-extension.json", "active-task"],
     ["plugins-builtin/storage/amitia-extension.json", "storage"],
     ["plugins-builtin/chat-logs/amitia-extension.json", "chat-logs"],
     ["plugins-builtin/memory-hub/amitia-extension.json", "memory-hub"],
@@ -96,8 +96,8 @@ function packagePaths() {
         ? `amitia-workspace-${manifest.plugin.version}.amitiax`
       : directory === "chat-import"
         ? `amitia-chat-import-${manifest.plugin.version}.amitiax`
-      : directory === "reminders"
-        ? `amitia-reminders-${manifest.plugin.version}.amitiax`
+      : directory === "active-task"
+        ? `amitia-active-task-${manifest.plugin.version}.amitiax`
       : directory === "storage"
         ? `amitia-storage-${manifest.plugin.version}.amitiax`
       : directory === "chat-logs"

@@ -39,7 +39,7 @@ function buildPlugins() {
     ["com.amitia/runtime-insights", nodeBinary, [join(root, "plugins-builtin/runtime-insights/scripts/build-package.mjs"), "--output", join(pluginRoot, "runtime-insights")]],
     ["com.amitia/workspace", nodeBinary, [join(root, "plugins-builtin/workspace/scripts/build-package.mjs"), "--output", join(pluginRoot, "workspace")]],
     ["com.amitia/chat-import", nodeBinary, [join(root, "plugins-builtin/chat-import/scripts/build-package.mjs"), "--output", join(pluginRoot, "chat-import")]],
-    ["com.amitia/reminders", nodeBinary, [join(root, "plugins-builtin/reminders/scripts/build-package.mjs"), "--output", join(pluginRoot, "reminders")]],
+    ["com.amitia.builtin.active-task", nodeBinary, [join(root, "plugins-builtin/active-task/scripts/build-package.mjs"), "--output", join(pluginRoot, "active-task")]],
     ["com.amitia/storage", nodeBinary, [join(root, "plugins-builtin/storage/scripts/build-package.mjs"), "--output", join(pluginRoot, "storage")]],
     ["com.amitia/chat-logs", nodeBinary, [join(root, "plugins-builtin/chat-logs/scripts/build-package.mjs"), "--output", join(pluginRoot, "chat-logs")]],
     ["com.amitia/memory-hub", nodeBinary, [join(root, "plugins-builtin/memory-hub/scripts/build-package.mjs"), "--output", join(pluginRoot, "memory-hub")]],
@@ -69,7 +69,7 @@ function expectedPackages() {
     ["plugins-builtin/runtime-insights/amitia-extension.json", "runtime-insights"],
     ["plugins-builtin/workspace/amitia-extension.json", "workspace"],
     ["plugins-builtin/chat-import/amitia-extension.json", "chat-import"],
-    ["plugins-builtin/reminders/amitia-extension.json", "reminders"],
+    ["plugins-builtin/active-task/amitia-extension.json", "active-task"],
     ["plugins-builtin/storage/amitia-extension.json", "storage"],
     ["plugins-builtin/chat-logs/amitia-extension.json", "chat-logs"],
     ["plugins-builtin/memory-hub/amitia-extension.json", "memory-hub"],
@@ -100,8 +100,8 @@ function expectedPackages() {
         ? `amitia-workspace-${manifest.plugin.version}.amitiax`
       : directory === "chat-import"
         ? `amitia-chat-import-${manifest.plugin.version}.amitiax`
-      : directory === "reminders"
-        ? `amitia-reminders-${manifest.plugin.version}.amitiax`
+      : directory === "active-task"
+        ? `amitia-active-task-${manifest.plugin.version}.amitiax`
       : directory === "storage"
         ? `amitia-storage-${manifest.plugin.version}.amitiax`
       : directory === "chat-logs"

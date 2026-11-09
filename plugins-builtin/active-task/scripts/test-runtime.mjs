@@ -45,4 +45,4 @@ await command({ action: "pause", payload: { kind: "user_reminder", id: "task-a",
 assert.deepEqual(calls.at(-1), { method: "host.reminder.pause", input: { id: "task-a", generation: 2 } });
 await assert.rejects(command({ action: "unknown" }), /未知提醒操作/);
 await extension.deactivate();
-console.log("reminders-runtime=ok");
+console.log("active-task-runtime=ok");

@@ -54,16 +54,28 @@ describe("creative workshop hub plugin migration", () => {
       resolve(__dirname, "../../../plugins-builtin/creative-workshop-hub/amitia-extension.json"),
       "utf8",
     )) as {
-      modules: Array<{ contributions: Array<{ spec?: { metadata?: { routes?: Array<{ path: string }>; navigationItems?: Array<{ route: string }> } } }> }>;
+      modules: Array<{ contributions: Array<{ spec?: { metadata?: { routes?: Array<{ path: string }>; navigationItems?: Array<{ route: string }>; sectionEntries?: Array<{ route: string }> } } }> }>;
     };
     const metadata = manifest.modules
       .flatMap((module) => module.contributions)
       .map((contribution) => contribution.spec?.metadata)
-      .filter(Boolean) as Array<{ routes?: Array<{ path: string }>; navigationItems?: Array<{ route: string }> }>;
+      .filter(Boolean) as Array<{ routes?: Array<{ path: string }>; navigationItems?: Array<{ route: string }>; sectionEntries?: Array<{ route: string }> }>;
     expect(metadata.flatMap((item) => item.routes ?? []).map((route) => route.path)).toEqual(
-      expect.arrayContaining(["/creative-workshop", "/creative-workshop/pet"]),
+      expect.arrayContaining([
+        "/creative-workshop",
+        "/creative-workshop/character-cards",
+        "/creative-workshop/pet",
+        "/creative-workshop/pet/installations",
+      ]),
     );
     expect(metadata.flatMap((item) => item.navigationItems ?? []).map((item) => item.route)).toContain("/creative-workshop");
+    expect(metadata.flatMap((item) => item.sectionEntries ?? []).map((item) => item.route)).toEqual(expect.arrayContaining([
+      "/creative-workshop/character-cards",
+      "/creative-workshop/pet",
+      "/creative-workshop/pet/installations",
+    ]));
+    expect(builtinBusinessRoutes.some((route) => route.path === "/creative-workshop/character-cards")).toBe(false);
+    expect(builtinBusinessRoutes.some((route) => route.path === "/creative-workshop/pet/installations")).toBe(false);
   });
 
   it("removes the hub route when the plugin page provider is disabled", () => {

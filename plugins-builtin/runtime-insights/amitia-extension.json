@@ -77,9 +77,9 @@
           "ui",
           "ui_provider"
         ],
-        "maxContributions": 12,
+        "maxContributions": 32,
         "maxTools": 1,
-        "maxRoutes": 4,
+        "maxRoutes": 14,
         "maxServices": 0,
         "allowUnregister": true
       },
@@ -485,6 +485,526 @@
           ]
         },
         {
+          "id": "kernel-wasm-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "WASM 运行时"
+          },
+          "spec": {
+            "contribution_id": "kernel-wasm-page",
+            "extension_id": "com.amitia/runtime-insights",
+            "module_id": "runtime-insights-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "WASM 运行时"
+              },
+              "description": {
+                "default": "查看和管理本地 WASM 运行时。"
+              },
+              "icon": "cpu"
+            },
+            "entry": {
+              "type": "host_native",
+              "path": "builtin://com.amitia/runtime-insights/kernel/wasm",
+              "runtime_id": "host.kernel.wasm",
+              "content_hash": "builtin"
+            },
+            "sandbox": {
+              "type": "host_native"
+            },
+            "ordering": {
+              "priority": 242
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            },
+            "actions": [],
+            "integrity": {
+              "definition_hash": "kernel-wasm-page-v1"
+            }
+          }
+        },
+        {
+          "id": "kernel-hooks-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "Hook 中心"
+          },
+          "spec": {
+            "contribution_id": "kernel-hooks-page",
+            "extension_id": "com.amitia/runtime-insights",
+            "module_id": "runtime-insights-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "Hook 中心"
+              },
+              "description": {
+                "default": "查看 Hook 贡献、熔断状态和执行诊断。"
+              },
+              "icon": "connection"
+            },
+            "entry": {
+              "type": "host_native",
+              "path": "builtin://com.amitia/runtime-insights/kernel/hooks",
+              "runtime_id": "host.kernel.hooks",
+              "content_hash": "builtin"
+            },
+            "sandbox": {
+              "type": "host_native"
+            },
+            "ordering": {
+              "priority": 241
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            },
+            "actions": [],
+            "integrity": {
+              "definition_hash": "kernel-hooks-page-v1"
+            }
+          }
+        },
+        {
+          "id": "kernel-trusted-services-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "可信服务运行时"
+          },
+          "spec": {
+            "contribution_id": "kernel-trusted-services-page",
+            "extension_id": "com.amitia/runtime-insights",
+            "module_id": "runtime-insights-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "可信服务运行时"
+              },
+              "description": {
+                "default": "查看可信服务进程、能力和隔离状态。"
+              },
+              "icon": "shield"
+            },
+            "entry": {
+              "type": "host_native",
+              "path": "builtin://com.amitia/runtime-insights/kernel/trusted-services",
+              "runtime_id": "host.kernel.trusted-services",
+              "content_hash": "builtin"
+            },
+            "sandbox": {
+              "type": "host_native"
+            },
+            "ordering": {
+              "priority": 240
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            },
+            "actions": [],
+            "integrity": {
+              "definition_hash": "kernel-trusted-services-page-v1"
+            }
+          }
+        },
+        {
+          "id": "kernel-tasks-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "任务运行时"
+          },
+          "spec": {
+            "contribution_id": "kernel-tasks-page",
+            "extension_id": "com.amitia/runtime-insights",
+            "module_id": "runtime-insights-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "任务运行时"
+              },
+              "description": {
+                "default": "查看和控制正式 TaskRun。"
+              },
+              "icon": "list"
+            },
+            "entry": {
+              "type": "host_native",
+              "path": "builtin://com.amitia/runtime-insights/kernel/tasks",
+              "runtime_id": "host.kernel.tasks",
+              "content_hash": "builtin"
+            },
+            "sandbox": {
+              "type": "host_native"
+            },
+            "ordering": {
+              "priority": 239
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            },
+            "actions": [],
+            "integrity": {
+              "definition_hash": "kernel-tasks-page-v1"
+            }
+          }
+        },
+        {
+          "id": "kernel-events-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "事件中心"
+          },
+          "spec": {
+            "contribution_id": "kernel-events-page",
+            "extension_id": "com.amitia/runtime-insights",
+            "module_id": "runtime-insights-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "事件中心"
+              },
+              "description": {
+                "default": "查看事件总线状态和历史。"
+              },
+              "icon": "data-line"
+            },
+            "entry": {
+              "type": "host_native",
+              "path": "builtin://com.amitia/runtime-insights/kernel/events",
+              "runtime_id": "host.kernel.events",
+              "content_hash": "builtin"
+            },
+            "sandbox": {
+              "type": "host_native"
+            },
+            "ordering": {
+              "priority": 238
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            },
+            "actions": [],
+            "integrity": {
+              "definition_hash": "kernel-events-page-v1"
+            }
+          }
+        },
+        {
+          "id": "kernel-schedules-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "调度中心"
+          },
+          "spec": {
+            "contribution_id": "kernel-schedules-page",
+            "extension_id": "com.amitia/runtime-insights",
+            "module_id": "runtime-insights-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "调度中心"
+              },
+              "description": {
+                "default": "查看和管理宿主调度计划。"
+              },
+              "icon": "timer"
+            },
+            "entry": {
+              "type": "host_native",
+              "path": "builtin://com.amitia/runtime-insights/kernel/schedules",
+              "runtime_id": "host.kernel.schedules",
+              "content_hash": "builtin"
+            },
+            "sandbox": {
+              "type": "host_native"
+            },
+            "ordering": {
+              "priority": 237
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            },
+            "actions": [],
+            "integrity": {
+              "definition_hash": "kernel-schedules-page-v1"
+            }
+          }
+        },
+        {
+          "id": "kernel-desktop-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "桌面贡献中心"
+          },
+          "spec": {
+            "contribution_id": "kernel-desktop-page",
+            "extension_id": "com.amitia/runtime-insights",
+            "module_id": "runtime-insights-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "桌面贡献中心"
+              },
+              "description": {
+                "default": "查看桌面命令、菜单和状态贡献。"
+              },
+              "icon": "monitor"
+            },
+            "entry": {
+              "type": "host_native",
+              "path": "builtin://com.amitia/runtime-insights/kernel/desktop",
+              "runtime_id": "host.kernel.desktop",
+              "content_hash": "builtin"
+            },
+            "sandbox": {
+              "type": "host_native"
+            },
+            "ordering": {
+              "priority": 236
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            },
+            "actions": [],
+            "integrity": {
+              "definition_hash": "kernel-desktop-page-v1"
+            }
+          }
+        },
+        {
+          "id": "kernel-updates-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "扩展更新中心"
+          },
+          "spec": {
+            "contribution_id": "kernel-updates-page",
+            "extension_id": "com.amitia/runtime-insights",
+            "module_id": "runtime-insights-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "扩展更新中心"
+              },
+              "description": {
+                "default": "查看扩展更新渠道、版本和部署状态。"
+              },
+              "icon": "upload"
+            },
+            "entry": {
+              "type": "host_native",
+              "path": "builtin://com.amitia/runtime-insights/kernel/updates",
+              "runtime_id": "host.kernel.updates",
+              "content_hash": "builtin"
+            },
+            "sandbox": {
+              "type": "host_native"
+            },
+            "ordering": {
+              "priority": 235
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            },
+            "actions": [],
+            "integrity": {
+              "definition_hash": "kernel-updates-page-v1"
+            }
+          }
+        },
+        {
+          "id": "kernel-dev-console-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "开发者诊断控制台"
+          },
+          "spec": {
+            "contribution_id": "kernel-dev-console-page",
+            "extension_id": "com.amitia/runtime-insights",
+            "module_id": "runtime-insights-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "开发者诊断控制台"
+              },
+              "description": {
+                "default": "查看运行时日志、诊断信息和开发调试数据。"
+              },
+              "icon": "terminal"
+            },
+            "entry": {
+              "type": "host_native",
+              "path": "builtin://com.amitia/runtime-insights/kernel/dev-console",
+              "runtime_id": "host.kernel.dev-console",
+              "content_hash": "builtin"
+            },
+            "sandbox": {
+              "type": "host_native"
+            },
+            "ordering": {
+              "priority": 234
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            },
+            "actions": [],
+            "integrity": {
+              "definition_hash": "kernel-dev-console-page-v1"
+            }
+          }
+        },
+        {
+          "id": "kernel-dev-mode-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "开发模式中心"
+          },
+          "spec": {
+            "contribution_id": "kernel-dev-mode-page",
+            "extension_id": "com.amitia/runtime-insights",
+            "module_id": "runtime-insights-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "开发模式中心"
+              },
+              "description": {
+                "default": "管理开发工作区、构建、热重载和开发信任。"
+              },
+              "icon": "code"
+            },
+            "entry": {
+              "type": "host_native",
+              "path": "builtin://com.amitia/runtime-insights/kernel/dev-mode",
+              "runtime_id": "host.kernel.dev-mode",
+              "content_hash": "builtin"
+            },
+            "sandbox": {
+              "type": "host_native"
+            },
+            "ordering": {
+              "priority": 233
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            },
+            "actions": [],
+            "integrity": {
+              "definition_hash": "kernel-dev-mode-page-v1"
+            }
+          }
+        },
+        {
           "id": "runtime-insights-routes",
           "kind": "ui_provider",
           "adapter": "ui_provider",
@@ -540,6 +1060,86 @@
                   "capability": "page.provider",
                   "title": "长期运行维护",
                   "priority": 243
+                },
+                {
+                  "id": "kernel-wasm",
+                  "path": "/kernel/wasm",
+                  "providerId": "kernel-wasm-page-provider",
+                  "capability": "page.provider",
+                  "title": "WASM 运行时",
+                  "priority": 242
+                },
+                {
+                  "id": "kernel-hooks",
+                  "path": "/kernel/hooks",
+                  "providerId": "kernel-hooks-page-provider",
+                  "capability": "page.provider",
+                  "title": "Hook 中心",
+                  "priority": 241
+                },
+                {
+                  "id": "kernel-trusted-services",
+                  "path": "/kernel/trusted-services",
+                  "providerId": "kernel-trusted-services-page-provider",
+                  "capability": "page.provider",
+                  "title": "可信服务运行时",
+                  "priority": 240
+                },
+                {
+                  "id": "kernel-tasks",
+                  "path": "/kernel/tasks",
+                  "providerId": "kernel-tasks-page-provider",
+                  "capability": "page.provider",
+                  "title": "任务运行时",
+                  "priority": 239
+                },
+                {
+                  "id": "kernel-events",
+                  "path": "/kernel/events",
+                  "providerId": "kernel-events-page-provider",
+                  "capability": "page.provider",
+                  "title": "事件中心",
+                  "priority": 238
+                },
+                {
+                  "id": "kernel-schedules",
+                  "path": "/kernel/schedules",
+                  "providerId": "kernel-schedules-page-provider",
+                  "capability": "page.provider",
+                  "title": "调度中心",
+                  "priority": 237
+                },
+                {
+                  "id": "kernel-desktop",
+                  "path": "/kernel/desktop",
+                  "providerId": "kernel-desktop-page-provider",
+                  "capability": "page.provider",
+                  "title": "桌面贡献中心",
+                  "priority": 236
+                },
+                {
+                  "id": "kernel-updates",
+                  "path": "/kernel/updates",
+                  "providerId": "kernel-updates-page-provider",
+                  "capability": "page.provider",
+                  "title": "扩展更新中心",
+                  "priority": 235
+                },
+                {
+                  "id": "kernel-dev-console",
+                  "path": "/kernel/dev-console",
+                  "providerId": "kernel-dev-console-page-provider",
+                  "capability": "page.provider",
+                  "title": "开发者诊断控制台",
+                  "priority": 234
+                },
+                {
+                  "id": "kernel-dev-mode",
+                  "path": "/kernel/dev-mode",
+                  "providerId": "kernel-dev-mode-page-provider",
+                  "capability": "page.provider",
+                  "title": "开发模式中心",
+                  "priority": 233
                 }
               ],
               "navigationItems": [
@@ -574,6 +1174,78 @@
                   "groupIcon": "extensions",
                   "order": 182,
                   "mobile": true
+                }
+              ],
+              "sectionEntries": [
+                {
+                  "id": "kernel-wasm",
+                  "section": "extensions",
+                  "route": "/kernel/wasm",
+                  "label": "WASM 运行时",
+                  "order": 110
+                },
+                {
+                  "id": "kernel-hooks",
+                  "section": "extensions",
+                  "route": "/kernel/hooks",
+                  "label": "Hook 中心",
+                  "order": 120
+                },
+                {
+                  "id": "kernel-trusted-services",
+                  "section": "extensions",
+                  "route": "/kernel/trusted-services",
+                  "label": "可信服务运行时",
+                  "order": 130
+                },
+                {
+                  "id": "kernel-tasks",
+                  "section": "extensions",
+                  "route": "/kernel/tasks",
+                  "label": "任务运行时",
+                  "order": 140
+                },
+                {
+                  "id": "kernel-events",
+                  "section": "extensions",
+                  "route": "/kernel/events",
+                  "label": "事件中心",
+                  "order": 150
+                },
+                {
+                  "id": "kernel-schedules",
+                  "section": "extensions",
+                  "route": "/kernel/schedules",
+                  "label": "调度中心",
+                  "order": 160
+                },
+                {
+                  "id": "kernel-desktop",
+                  "section": "extensions",
+                  "route": "/kernel/desktop",
+                  "label": "桌面贡献中心",
+                  "order": 170
+                },
+                {
+                  "id": "kernel-updates",
+                  "section": "extensions",
+                  "route": "/kernel/updates",
+                  "label": "扩展更新中心",
+                  "order": 180
+                },
+                {
+                  "id": "kernel-dev-console",
+                  "section": "extensions",
+                  "route": "/kernel/dev-console",
+                  "label": "开发者诊断控制台",
+                  "order": 190
+                },
+                {
+                  "id": "kernel-dev-mode",
+                  "section": "extensions",
+                  "route": "/kernel/dev-mode",
+                  "label": "开发模式中心",
+                  "order": 200
                 }
               ]
             }
@@ -700,6 +1372,336 @@
             "metadata": {
               "routes": [
                 "/long-running"
+              ]
+            }
+          }
+        },
+        {
+          "id": "kernel-wasm-page-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "WASM 运行时页面 Provider"
+          },
+          "spec": {
+            "providerId": "kernel-wasm-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 242,
+            "platforms": [
+              "web",
+              "windows",
+              "linux",
+              "macos"
+            ],
+            "trustLevel": "official",
+            "entries": {
+              "*": {
+                "type": "schema_renderer",
+                "contributionId": "kernel-wasm-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/kernel/wasm"
+              ]
+            }
+          }
+        },
+        {
+          "id": "kernel-hooks-page-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "Hook 中心页面 Provider"
+          },
+          "spec": {
+            "providerId": "kernel-hooks-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 241,
+            "platforms": [
+              "web",
+              "windows",
+              "linux",
+              "macos"
+            ],
+            "trustLevel": "official",
+            "entries": {
+              "*": {
+                "type": "schema_renderer",
+                "contributionId": "kernel-hooks-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/kernel/hooks"
+              ]
+            }
+          }
+        },
+        {
+          "id": "kernel-trusted-services-page-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "可信服务运行时页面 Provider"
+          },
+          "spec": {
+            "providerId": "kernel-trusted-services-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 240,
+            "platforms": [
+              "web",
+              "windows",
+              "linux",
+              "macos"
+            ],
+            "trustLevel": "official",
+            "entries": {
+              "*": {
+                "type": "schema_renderer",
+                "contributionId": "kernel-trusted-services-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/kernel/trusted-services"
+              ]
+            }
+          }
+        },
+        {
+          "id": "kernel-tasks-page-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "任务运行时页面 Provider"
+          },
+          "spec": {
+            "providerId": "kernel-tasks-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 239,
+            "platforms": [
+              "web",
+              "windows",
+              "linux",
+              "macos"
+            ],
+            "trustLevel": "official",
+            "entries": {
+              "*": {
+                "type": "schema_renderer",
+                "contributionId": "kernel-tasks-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/kernel/tasks"
+              ]
+            }
+          }
+        },
+        {
+          "id": "kernel-events-page-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "事件中心页面 Provider"
+          },
+          "spec": {
+            "providerId": "kernel-events-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 238,
+            "platforms": [
+              "web",
+              "windows",
+              "linux",
+              "macos"
+            ],
+            "trustLevel": "official",
+            "entries": {
+              "*": {
+                "type": "schema_renderer",
+                "contributionId": "kernel-events-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/kernel/events"
+              ]
+            }
+          }
+        },
+        {
+          "id": "kernel-schedules-page-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "调度中心页面 Provider"
+          },
+          "spec": {
+            "providerId": "kernel-schedules-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 237,
+            "platforms": [
+              "web",
+              "windows",
+              "linux",
+              "macos"
+            ],
+            "trustLevel": "official",
+            "entries": {
+              "*": {
+                "type": "schema_renderer",
+                "contributionId": "kernel-schedules-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/kernel/schedules"
+              ]
+            }
+          }
+        },
+        {
+          "id": "kernel-desktop-page-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "桌面贡献中心页面 Provider"
+          },
+          "spec": {
+            "providerId": "kernel-desktop-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 236,
+            "platforms": [
+              "web",
+              "windows",
+              "linux",
+              "macos"
+            ],
+            "trustLevel": "official",
+            "entries": {
+              "*": {
+                "type": "schema_renderer",
+                "contributionId": "kernel-desktop-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/kernel/desktop"
+              ]
+            }
+          }
+        },
+        {
+          "id": "kernel-updates-page-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "扩展更新中心页面 Provider"
+          },
+          "spec": {
+            "providerId": "kernel-updates-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 235,
+            "platforms": [
+              "web",
+              "windows",
+              "linux",
+              "macos"
+            ],
+            "trustLevel": "official",
+            "entries": {
+              "*": {
+                "type": "schema_renderer",
+                "contributionId": "kernel-updates-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/kernel/updates"
+              ]
+            }
+          }
+        },
+        {
+          "id": "kernel-dev-console-page-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "开发者诊断控制台页面 Provider"
+          },
+          "spec": {
+            "providerId": "kernel-dev-console-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 234,
+            "platforms": [
+              "web",
+              "windows",
+              "linux",
+              "macos"
+            ],
+            "trustLevel": "official",
+            "entries": {
+              "*": {
+                "type": "schema_renderer",
+                "contributionId": "kernel-dev-console-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/kernel/dev-console"
+              ]
+            }
+          }
+        },
+        {
+          "id": "kernel-dev-mode-page-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "开发模式中心页面 Provider"
+          },
+          "spec": {
+            "providerId": "kernel-dev-mode-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 233,
+            "platforms": [
+              "web",
+              "windows",
+              "linux",
+              "macos"
+            ],
+            "trustLevel": "official",
+            "entries": {
+              "*": {
+                "type": "schema_renderer",
+                "contributionId": "kernel-dev-mode-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/kernel/dev-mode"
               ]
             }
           }

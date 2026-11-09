@@ -9,11 +9,11 @@ import (
 
 func TestWorkspacePluginSchemaCompiles(t *testing.T) {
 	for _, path := range []string{
-		filepath.Join("..", "..", "..", "..", "..", "plugins-code", "workspace", "ui", "schema", "workspace.json"),
-		filepath.Join("..", "..", "..", "..", "..", "plugins-code", "chat-import", "ui", "schema", "chat-import.json"),
-		filepath.Join("..", "..", "..", "..", "..", "plugins-code", "reminders", "ui", "schema", "reminders.json"),
-		filepath.Join("..", "..", "..", "..", "..", "plugins-code", "storage", "ui", "schema", "storage.json"),
-		filepath.Join("..", "..", "..", "..", "..", "plugins-code", "chat-logs", "ui", "schema", "chat-logs.json"),
+		filepath.Join("..", "..", "..", "..", "..", "plugins-builtin", "workspace", "ui", "schema", "workspace.json"),
+		filepath.Join("..", "..", "..", "..", "..", "plugins-builtin", "chat-import", "ui", "schema", "chat-import.json"),
+		filepath.Join("..", "..", "..", "..", "..", "plugins-builtin", "active-task", "ui", "schema", "active-tasks.json"),
+		filepath.Join("..", "..", "..", "..", "..", "plugins-builtin", "storage", "ui", "schema", "storage.json"),
+		filepath.Join("..", "..", "..", "..", "..", "plugins-builtin", "chat-logs", "ui", "schema", "chat-logs.json"),
 	} {
 		data, err := os.ReadFile(path)
 		if err != nil {

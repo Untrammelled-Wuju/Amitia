@@ -106,11 +106,11 @@ async function command(host, inputValue) {
   }
 }
 
-const remindersExtension = {
+const activeTaskExtension = {
   async activate(context) {
     activeHost = context.host;
     context.handlers.bindTool("command", (handlerInput) => command(activeHost, handlerInput));
-    context.log.info("reminders plugin activated");
+    context.log.info("active task plugin activated");
   },
   async deactivate() {
     activeHost = null;
@@ -118,9 +118,9 @@ const remindersExtension = {
 };
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = remindersExtension;
+  module.exports = activeTaskExtension;
 }
 
 if (typeof globalThis.defineExtension === "function") {
-  globalThis.defineExtension(remindersExtension);
+  globalThis.defineExtension(activeTaskExtension);
 }
