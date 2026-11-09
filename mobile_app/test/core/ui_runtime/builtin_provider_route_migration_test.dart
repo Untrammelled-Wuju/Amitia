@@ -5,12 +5,6 @@ import 'package:amitia_app/core/ui_runtime/mobile_host_runtime_registry.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const migratedChildPaths = <String>[
-  '/characters',
-  '/characters/:id',
-  '/characters/teams',
-  '/memory',
-  '/memory/episodic',
-  '/memory/graph',
   '/workshop/character-cards',
   '/workshop/pet/installations',
   '/game-center',
@@ -84,4 +78,18 @@ void main() {
     expect(source, contains('path: AppRoutes.chatLogs'));
     expect(source, contains('path: AppRoutes.me'));
   });
+
+  test(
+    'core secondary pages are registered instead of falling through to 404',
+    () {
+      final source = File(
+        'lib/core/ui_runtime/routing/builtin_route_catalog.dart',
+      ).readAsStringSync();
+      expect(source, contains("path: '/settings/:pathMatch(.*)*'"));
+      expect(source, contains("path: '/characters/:pathMatch(.*)*'"));
+      expect(source, contains("path: '/memory/:pathMatch(.*)*'"));
+      expect(source, contains("path: '/reminders'"));
+      expect(source, contains("path: '/continuity'"));
+    },
+  );
 }

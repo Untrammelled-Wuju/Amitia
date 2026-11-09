@@ -63,7 +63,11 @@ void main() {
     expect(privacy.group.title, '隐私');
     expect(
       privacy.group.items.map((item) => item.title),
-      containsAll(['隐私说明', '使用边界', '隐私扫描']),
+      containsAll(['归档对话', '隐私说明', '使用边界', '隐私扫描']),
+    );
+    expect(
+      privacy.group.items.map((item) => item.route),
+      contains(AppRoutes.chatLogs),
     );
     expect(
       about.group.items.map((item) => item.title),

@@ -18,8 +18,28 @@ import '../../../features/memory/presentation/pages/memory_hub_page.dart';
 import '../../../features/profile/presentation/pages/character_world_book_hub_page.dart';
 import '../../../features/profile/presentation/pages/profile_hub_page.dart';
 import '../../../features/settings/presentation/pages/mobile_user_space_host.dart';
+import '../../../features/settings/presentation/pages/settings_page.dart';
+import '../../../features/reminders/presentation/pages/reminders_page.dart';
+import '../../../features/continuity/presentation/pages/continuity_page.dart';
+import '../../../features/continuity/presentation/pages/continuity_detail_page.dart';
+import '../mobile_native_page_host.dart';
 import '../../../core/widgets/main_tab_scaffold.dart';
 import '../provider_tab_host.dart';
+
+MobileNativePageHost _nativePage(GoRouterState state) => MobileNativePageHost(
+  context: {
+    'route': state.uri.toString(),
+    'pathParameters': state.pathParameters,
+    'queryParameters': state.uri.queryParameters,
+  },
+);
+
+MobileUserSpaceHost _userSpacePage(GoRouterState state) => MobileUserSpaceHost(
+  context: {
+    'route': state.uri.toString(),
+    'queryParameters': state.uri.queryParameters,
+  },
+);
 
 /// All built-in business routes live in this catalog instead of the app
 /// bootstrap router. The router only owns recovery/authentication boundaries,
@@ -123,20 +143,78 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: AppRoutes.settings,
+    pageBuilder: (context, state) =>
+        amitiaSlidePage(state: state, child: _userSpacePage(state)),
+  ),
+  GoRoute(
+    path: '/settings/category/:categoryId',
     pageBuilder: (context, state) => amitiaSlidePage(
       state: state,
-      child: MobileUserSpaceHost(
-        context: {
-          'route': state.uri.toString(),
-          'queryParameters': state.uri.queryParameters,
-        },
+      child: SettingsCategoryPage(
+        categoryId: state.pathParameters['categoryId']!,
       ),
     ),
+  ),
+  GoRoute(
+    path: '/settings/:pathMatch(.*)*',
+    pageBuilder: (context, state) =>
+        amitiaSlidePage(state: state, child: _userSpacePage(state)),
   ),
   GoRoute(
     path: AppRoutes.chatLogs,
     pageBuilder: (context, state) =>
         amitiaSlidePage(state: state, child: const ChatLogsPage()),
+  ),
+  GoRoute(
+    path: '/characters',
+    pageBuilder: (context, state) =>
+        amitiaSlidePage(state: state, child: _nativePage(state)),
+  ),
+  GoRoute(
+    path: '/characters/:pathMatch(.*)*',
+    pageBuilder: (context, state) =>
+        amitiaSlidePage(state: state, child: _nativePage(state)),
+  ),
+  GoRoute(
+    path: '/memory',
+    pageBuilder: (context, state) =>
+        amitiaSlidePage(state: state, child: _nativePage(state)),
+  ),
+  GoRoute(
+    path: '/memory/:pathMatch(.*)*',
+    pageBuilder: (context, state) =>
+        amitiaSlidePage(state: state, child: _nativePage(state)),
+  ),
+  for (final path in <String>[
+    '/knowledge',
+    '/profiles',
+    '/episodic',
+    '/graph',
+    '/memory-manager',
+    '/memory-timeline',
+    '/world-book',
+  ])
+    GoRoute(
+      path: path,
+      pageBuilder: (context, state) =>
+          amitiaSlidePage(state: state, child: _nativePage(state)),
+    ),
+  GoRoute(
+    path: '/reminders',
+    pageBuilder: (context, state) =>
+        amitiaSlidePage(state: state, child: const RemindersPage()),
+  ),
+  GoRoute(
+    path: '/continuity',
+    pageBuilder: (context, state) =>
+        amitiaSlidePage(state: state, child: const ContinuityPage()),
+  ),
+  GoRoute(
+    path: '/continuity/:id',
+    pageBuilder: (context, state) => amitiaSlidePage(
+      state: state,
+      child: ContinuityDetailPage(threadId: state.pathParameters['id']!),
+    ),
   ),
   GoRoute(
     path: '/chat',

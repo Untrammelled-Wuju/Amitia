@@ -18,61 +18,44 @@ import '../../../../core/widgets/profile_avatar.dart';
 class ProfileHubPage extends ConsumerWidget {
   const ProfileHubPage({super.key});
 
-  static const _coreEntries = <_ProfileEntry>[
-    _ProfileEntry(
-      title: '角色',
-      glyph: AmitiaIconGlyph.characters,
-      route: AppRoutes.meCharacters,
-    ),
-    _ProfileEntry(
-      title: '创意工坊',
-      glyph: AmitiaIconGlyph.workshop,
-      route: AppRoutes.workshop,
-    ),
-    _ProfileEntry(
-      title: '游戏模式',
-      glyph: AmitiaIconGlyph.game,
-      route: AppRoutes.gameCenter,
-    ),
-    _ProfileEntry(
-      title: '归档对话',
-      glyph: AmitiaIconGlyph.archive,
-      route: AppRoutes.chatLogs,
-    ),
-    _ProfileEntry(
-      title: '设置',
-      glyph: AmitiaIconGlyph.settings,
-      route: AppRoutes.settings,
-    ),
-  ];
+  static const _charactersEntry = _ProfileEntry(
+    title: '角色',
+    icon: AmitiaIconGlyph.characters,
+    route: AppRoutes.meCharacters,
+  );
+  static const _workshopEntry = _ProfileEntry(
+    title: '创意工坊',
+    icon: AmitiaIconGlyph.workshop,
+    route: AppRoutes.workshop,
+  );
+  static const _gameEntry = _ProfileEntry(
+    title: '游戏模式',
+    icon: AmitiaIconGlyph.game,
+    route: AppRoutes.gameCenter,
+  );
+  static const _channelsEntry = _ProfileEntry(
+    title: '渠道消息',
+    icon: AmitiaIconGlyph.channels,
+    route: AppRoutes.channelMessages,
+  );
+  static const _settingsEntry = _ProfileEntry(
+    title: '设置',
+    icon: AmitiaIconGlyph.settings,
+    route: AppRoutes.settings,
+  );
 
   List<_ProfileEntry> _entries(WidgetRef ref) {
-    final snapshot = ref.watch(effectiveUIRuntimeSnapshotProvider);
-    const reservedTitles = <String>{
-      '角色',
-      '创意工坊',
-      '游戏模式',
-      '归档对话',
-      '设置',
-      '记忆',
-      '任务',
-    };
-    final extensionEntries = UINavigationRegistry.resolve(snapshot)
-        .where((item) => item.profile)
-        .map(
-          (item) => _ProfileEntry(
-            title: item.label,
-            iconData: item.icon,
-            route: item.route,
-          ),
-        )
-        .where(
-          (entry) =>
-              !reservedTitles.contains(entry.title) &&
-              !_coreEntries.any((core) => core.route == entry.route),
-        )
-        .toList(growable: false);
-    return <_ProfileEntry>[..._coreEntries, ...extensionEntries];
+    final snapshot = ref.watch(uiRuntimeProvider).valueOrNull;
+    final showChannels = UINavigationRegistry.resolve(
+      snapshot,
+    ).any((item) => item.id == UINavigationRegistry.channelMessagesItem.id);
+    return <_ProfileEntry>[
+      _charactersEntry,
+      _workshopEntry,
+      _gameEntry,
+      if (showChannels) _channelsEntry,
+      _settingsEntry,
+    ];
   }
 
   @override
@@ -167,8 +150,7 @@ class ProfileHubPage extends ConsumerWidget {
               children: [
                 for (var index = 0; index < entries.length; index++)
                   HubEntryCard(
-                    icon: entries[index].glyph ?? AmitiaIconGlyph.extensions,
-                    iconData: entries[index].iconData,
+                    icon: entries[index].icon,
                     title: entries[index].title,
                     onTap: () => context.push(entries[index].route),
                     showDivider: index < entries.length - 1,
@@ -185,13 +167,11 @@ class ProfileHubPage extends ConsumerWidget {
 class _ProfileEntry {
   const _ProfileEntry({
     required this.title,
+    required this.icon,
     required this.route,
-    this.glyph,
-    this.iconData,
   });
 
   final String title;
+  final AmitiaIconGlyph icon;
   final String route;
-  final AmitiaIconGlyph? glyph;
-  final IconData? iconData;
 }
