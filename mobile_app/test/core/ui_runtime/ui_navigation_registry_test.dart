@@ -185,7 +185,7 @@ void main() {
               },
               {
                 'id': 'settings',
-                'path': '/storage',
+                'path': '/vendor-storage',
                 'providerId': 'placement-pages',
                 'capability': UICapability.pageProvider,
               },
@@ -197,13 +197,13 @@ void main() {
               },
               {
                 'id': 'workspace',
-                'path': '/workspaces',
+                'path': '/vendor-workspaces',
                 'providerId': 'placement-pages',
                 'capability': UICapability.pageProvider,
               },
               {
                 'id': 'contextual',
-                'path': '/import',
+                'path': '/vendor-import',
                 'providerId': 'placement-pages',
                 'capability': UICapability.pageProvider,
               },
@@ -219,7 +219,7 @@ void main() {
               {
                 'id': 'settings',
                 'label': '存储维护',
-                'route': '/storage',
+                'route': '/vendor-storage',
                 'group': 'settings',
               },
               {
@@ -232,13 +232,13 @@ void main() {
               {
                 'id': 'workspace',
                 'label': '工作区',
-                'route': '/workspaces',
+                'route': '/vendor-workspaces',
                 'group': 'workspace',
               },
               {
                 'id': 'contextual',
                 'label': '聊天导入',
-                'route': '/import',
+                'route': '/vendor-import',
                 'group': 'character',
               },
             ],
@@ -252,7 +252,7 @@ void main() {
         UINavigationPlacement.primary,
       );
       expect(
-        items.singleWhere((item) => item.route == '/storage').placement,
+        items.singleWhere((item) => item.route == '/vendor-storage').placement,
         UINavigationPlacement.settings,
       );
       expect(
@@ -260,11 +260,13 @@ void main() {
         UINavigationPlacement.profile,
       );
       expect(
-        items.singleWhere((item) => item.route == '/workspaces').placement,
+        items
+            .singleWhere((item) => item.route == '/vendor-workspaces')
+            .placement,
         UINavigationPlacement.workspace,
       );
       expect(
-        items.singleWhere((item) => item.route == '/import').placement,
+        items.singleWhere((item) => item.route == '/vendor-import').placement,
         UINavigationPlacement.contextual,
       );
       expect(
