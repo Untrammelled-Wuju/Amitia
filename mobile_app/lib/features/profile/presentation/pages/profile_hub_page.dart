@@ -48,6 +48,15 @@ class ProfileHubPage extends ConsumerWidget {
 
   List<_ProfileEntry> _entries(WidgetRef ref) {
     final snapshot = ref.watch(effectiveUIRuntimeSnapshotProvider);
+    const reservedTitles = <String>{
+      '角色',
+      '创意工坊',
+      '游戏模式',
+      '归档对话',
+      '设置',
+      '记忆',
+      '任务',
+    };
     final extensionEntries = UINavigationRegistry.resolve(snapshot)
         .where((item) => item.profile)
         .map(
@@ -58,9 +67,9 @@ class ProfileHubPage extends ConsumerWidget {
           ),
         )
         .where(
-          (entry) => !_coreEntries.any(
-            (core) => core.route == entry.route || core.title == entry.title,
-          ),
+          (entry) =>
+              !reservedTitles.contains(entry.title) &&
+              !_coreEntries.any((core) => core.route == entry.route),
         )
         .toList(growable: false);
     return <_ProfileEntry>[..._coreEntries, ...extensionEntries];
