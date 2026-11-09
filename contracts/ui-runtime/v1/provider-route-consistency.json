@@ -5,6 +5,10 @@
     "/privacy",
     "/usage-boundary",
     "/settings/ui-providers",
+    "/settings",
+    "/my-space",
+    "/me",
+    "/logs",
     "/characters",
     "/memory",
     "/tasks",
@@ -20,36 +24,6 @@
       "registryProviderId": "plugin-market-routes",
       "routeId": "plugin-market",
       "pageProviderId": "plugin-market-page-provider",
-      "entries": [
-        "web",
-        "electron_windows",
-        "electron_macos",
-        "electron_linux",
-        "mobile"
-      ]
-    },
-    {
-      "path": "/settings",
-      "extensionId": "com.amitia/user-space-hub",
-      "manifest": "plugins-builtin/user-space-hub/amitia-extension.json",
-      "registryProviderId": "user-space-routes",
-      "routeId": "settings-root",
-      "pageProviderId": "user-space-page-provider",
-      "entries": [
-        "web",
-        "electron_windows",
-        "electron_macos",
-        "electron_linux",
-        "mobile"
-      ]
-    },
-    {
-      "path": "/me",
-      "extensionId": "com.amitia/user-space-hub",
-      "manifest": "plugins-builtin/user-space-hub/amitia-extension.json",
-      "registryProviderId": "user-space-routes",
-      "routeId": "me-shell",
-      "pageProviderId": "user-space-page-provider",
       "entries": [
         "web",
         "electron_windows",

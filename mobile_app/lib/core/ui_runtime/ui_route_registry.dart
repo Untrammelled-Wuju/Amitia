@@ -29,6 +29,10 @@ const _protectedRouteNamespaces = <String>{
   AppRoutes.dashboard,
   AppRoutes.agent,
   AppRoutes.me,
+  AppRoutes.settings,
+  AppRoutes.chatLogs,
+  '/logs',
+  '/my-space',
   AppRoutes.tasks,
   AppRoutes.reminders,
   AppRoutes.continuity,
@@ -49,7 +53,7 @@ const _openProviderRouteNamespaces = <String>{
 };
 
 const _protectedProviderRoutePaths = <String>{AppRoutes.settingsUIProviders};
-const _providerContentShellPaths = <String>{AppRoutes.me, AppRoutes.settings};
+const _providerContentShellPaths = <String>{};
 
 String? _rootNamespace(String path) {
   final normalized = path.trim();

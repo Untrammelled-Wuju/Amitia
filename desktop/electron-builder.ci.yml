@@ -29,24 +29,8 @@ extraResources:
     to: bundled-plugins/chat-import
     filter:
       - "*.amitiax"
-  - from: ../plugin/active-task
-    to: bundled-plugins/active-task
-    filter:
-      - "*.amitiax"
   - from: ../plugin/storage
     to: bundled-plugins/storage
-    filter:
-      - "*.amitiax"
-  - from: ../plugin/chat-logs
-    to: bundled-plugins/chat-logs
-    filter:
-      - "*.amitiax"
-  - from: ../plugin/memory-hub
-    to: bundled-plugins/memory-hub
-    filter:
-      - "*.amitiax"
-  - from: ../plugin/character-hub
-    to: bundled-plugins/character-hub
     filter:
       - "*.amitiax"
   - from: ../plugin/creative-workshop-hub
@@ -59,10 +43,6 @@ extraResources:
       - "*.amitiax"
   - from: ../plugin/channels-hub
     to: bundled-plugins/channels-hub
-    filter:
-      - "*.amitiax"
-  - from: ../plugin/user-space-hub
-    to: bundled-plugins/user-space-hub
     filter:
       - "*.amitiax"
   - from: ../runtime/plugin-host/dist

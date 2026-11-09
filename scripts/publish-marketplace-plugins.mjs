@@ -66,11 +66,9 @@ function packagePaths() {
     ["plugins-builtin/workspace/amitia-extension.json", "workspace"],
     ["plugins-builtin/chat-import/amitia-extension.json", "chat-import"],
     ["plugins-builtin/storage/amitia-extension.json", "storage"],
-    ["plugins-builtin/chat-logs/amitia-extension.json", "chat-logs"],
     ["plugins-builtin/creative-workshop-hub/amitia-extension.json", "creative-workshop-hub"],
     ["plugins-builtin/game-center-hub/amitia-extension.json", "game-center-hub"],
     ["plugins-builtin/channels-hub/amitia-extension.json", "channels-hub"],
-    ["plugins-builtin/user-space-hub/amitia-extension.json", "user-space-hub"],
     ["plugins-code/agent-identities/browser-profile/amitia-extension.json", "agent-identities"],
     ["plugins-code/agent-identities/calendar/amitia-extension.json", "agent-identities"],
     ["plugins-code/agent-identities/email/amitia-extension.json", "agent-identities"],
@@ -97,16 +95,12 @@ function packagePaths() {
         ? `amitia-chat-import-${manifest.plugin.version}.amitiax`
       : directory === "storage"
         ? `amitia-storage-${manifest.plugin.version}.amitiax`
-      : directory === "chat-logs"
-        ? `amitia-chat-logs-${manifest.plugin.version}.amitiax`
       : directory === "creative-workshop-hub"
         ? `amitia-creative-workshop-hub-${manifest.plugin.version}.amitiax`
       : directory === "game-center-hub"
         ? `amitia-game-center-hub-${manifest.plugin.version}.amitiax`
       : directory === "channels-hub"
         ? `amitia-channels-hub-${manifest.plugin.version}.amitiax`
-      : directory === "user-space-hub"
-        ? `amitia-user-space-hub-${manifest.plugin.version}.amitiax`
         : directory === "agent-identities"
           ? `${basename(dirname(join(root, manifestPath)))}-${manifest.plugin.version}.amitiax`
           : `${name}-${manifest.plugin.version}.amitiax`

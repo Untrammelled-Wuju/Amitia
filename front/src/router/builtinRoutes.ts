@@ -30,7 +30,11 @@ export const builtinBusinessRoutes: RouteRecordRaw[] = [
   { path: "/reminders", name: "activeTasks", component: () => import("@/views/tasks/ActiveTasksView.vue"), meta: { requiresAuth: true } },
   { path: "/continuity", name: "continuity", component: () => import("@/views/continuity/ContinuityThreadsView.vue"), meta: { requiresAuth: true } },
   { path: "/continuity/:id", name: "continuityThread", component: () => import("@/views/continuity/ContinuityThreadsView.vue"), meta: { requiresAuth: true } },
+  { path: "/logs", name: "chatLogs", component: () => import("@/views/chat-logs/ChatLogsView.vue"), meta: { requiresAuth: true, coreSurface: true } },
   { path: "/extensions", name: "extensionsHub", component: () => import("@/views/SectionLandingView.vue"), props: { title: "扩展中心", description: "从第二栏选择插件市场、扩展包、工作流、MCP 服务或 Agent Skills。" }, meta: { requiresAuth: true, allowsExtensionChildren: true } },
   { path: "/extension/page/:pageId", name: "extensionPage", component: () => import("@/components/extension/ExtensionPageHost.vue"), meta: { requiresAuth: true, fullHeight: true } },
-  { path: "/settings/ui-providers", name: "settingsUIProviders", component: () => import("@/views/settings/UIProviderSettingsView.vue"), meta: { requiresAuth: true, allowsExtensionChildren: true } },
+  { path: "/my-space/:pathMatch(.*)*", name: "mySpace", component: () => import("@/views/user-settings/UserSpaceHost.vue"), meta: { requiresAuth: true, coreSurface: true } },
+  { path: "/me", redirect: "/my-space" },
+  { path: "/settings/:pathMatch(.*)*", name: "settings", component: () => import("@/views/user-settings/UserSpaceHost.vue"), meta: { requiresAuth: true, coreSurface: true } },
+  { path: "/settings/ui-providers", name: "settingsUIProviders", component: () => import("@/views/settings/UIProviderSettingsView.vue"), meta: { requiresAuth: true } },
 ];

@@ -40,8 +40,11 @@ describe("builtin route ownership", () => {
       "/reminders",
       "/continuity",
       "/extensions",
+      "/settings/:pathMatch(.*)*",
+      "/my-space/:pathMatch(.*)*",
+      "/logs",
     ]));
-    for (const path of ["/extensions/market", "/extensions/packages", "/runtime-debug", "/decision-viz", "/long-running", "/workspaces", "/import", "/storage", "/logs"]) {
+    for (const path of ["/extensions/market", "/extensions/packages", "/runtime-debug", "/decision-viz", "/long-running", "/workspaces", "/import", "/storage"]) {
       expect(paths).not.toContain(path);
     }
   });
@@ -53,7 +56,7 @@ describe("builtin route ownership", () => {
     }
   });
 
-  it("keeps settings and runtime tools in plugin route registries", () => {
+  it("keeps runtime tools in plugin route registries", () => {
     const runtimeManifest = JSON.parse(readFileSync(
       resolve(__dirname, "../../../plugins-builtin/runtime-insights/amitia-extension.json"),
       "utf8",

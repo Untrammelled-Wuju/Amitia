@@ -22,11 +22,9 @@ const bundledOutputDirectories = new Map([
   ["com.amitia/workspace", "workspace"],
   ["com.amitia/chat-import", "chat-import"],
   ["com.amitia/storage", "storage"],
-  ["com.amitia/chat-logs", "chat-logs"],
   ["com.amitia/creative-workshop-hub", "creative-workshop-hub"],
   ["com.amitia/game-center-hub", "game-center-hub"],
   ["com.amitia/channels-hub", "channels-hub"],
-  ["com.amitia/user-space-hub", "user-space-hub"],
 ])
 
 function run(command, args, cwd = root) {
@@ -64,11 +62,9 @@ function buildPlugins() {
     ["com.amitia/workspace", nodeBinary, [join(root, "plugins-builtin/workspace/scripts/build-package.mjs"), "--output", join(pluginRoot, "workspace")]],
     ["com.amitia/chat-import", nodeBinary, [join(root, "plugins-builtin/chat-import/scripts/build-package.mjs"), "--output", join(pluginRoot, "chat-import")]],
     ["com.amitia/storage", nodeBinary, [join(root, "plugins-builtin/storage/scripts/build-package.mjs"), "--output", join(pluginRoot, "storage")]],
-    ["com.amitia/chat-logs", nodeBinary, [join(root, "plugins-builtin/chat-logs/scripts/build-package.mjs"), "--output", join(pluginRoot, "chat-logs")]],
     ["com.amitia/creative-workshop-hub", nodeBinary, [join(root, "plugins-builtin/creative-workshop-hub/scripts/build-package.mjs"), "--output", join(pluginRoot, "creative-workshop-hub")]],
     ["com.amitia/game-center-hub", nodeBinary, [join(root, "plugins-builtin/game-center-hub/scripts/build-package.mjs"), "--output", join(pluginRoot, "game-center-hub")]],
     ["com.amitia/channels-hub", nodeBinary, [join(root, "plugins-builtin/channels-hub/scripts/build-package.mjs"), "--output", join(pluginRoot, "channels-hub")]],
-    ["com.amitia/user-space-hub", nodeBinary, [join(root, "plugins-builtin/user-space-hub/scripts/build-package.mjs"), "--output", join(pluginRoot, "user-space-hub")]],
     ...["browser-profile", "calendar", "email", "phone", "wallet"].map((name) => {
       const manifest = readManifest(join(root, "plugins-code/agent-identities", name, "amitia-extension.json"))
       return [manifest.plugin.id, nodeBinary, [join(root, "plugins-code/agent-identities/scripts/build-package.mjs"), "--package", join(root, "plugins-code/agent-identities", name)]]
@@ -94,11 +90,9 @@ function expectedPackages() {
     ["plugins-builtin/workspace/amitia-extension.json", "workspace"],
     ["plugins-builtin/chat-import/amitia-extension.json", "chat-import"],
     ["plugins-builtin/storage/amitia-extension.json", "storage"],
-    ["plugins-builtin/chat-logs/amitia-extension.json", "chat-logs"],
     ["plugins-builtin/creative-workshop-hub/amitia-extension.json", "creative-workshop-hub"],
     ["plugins-builtin/game-center-hub/amitia-extension.json", "game-center-hub"],
     ["plugins-builtin/channels-hub/amitia-extension.json", "channels-hub"],
-    ["plugins-builtin/user-space-hub/amitia-extension.json", "user-space-hub"],
     ["plugins-code/agent-identities/browser-profile/amitia-extension.json", "agent-identities"],
     ["plugins-code/agent-identities/calendar/amitia-extension.json", "agent-identities"],
     ["plugins-code/agent-identities/email/amitia-extension.json", "agent-identities"],
@@ -125,16 +119,12 @@ function expectedPackages() {
         ? `amitia-chat-import-${manifest.plugin.version}.amitiax`
       : directory === "storage"
         ? `amitia-storage-${manifest.plugin.version}.amitiax`
-      : directory === "chat-logs"
-        ? `amitia-chat-logs-${manifest.plugin.version}.amitiax`
       : directory === "creative-workshop-hub"
         ? `amitia-creative-workshop-hub-${manifest.plugin.version}.amitiax`
       : directory === "game-center-hub"
         ? `amitia-game-center-hub-${manifest.plugin.version}.amitiax`
       : directory === "channels-hub"
         ? `amitia-channels-hub-${manifest.plugin.version}.amitiax`
-      : directory === "user-space-hub"
-        ? `amitia-user-space-hub-${manifest.plugin.version}.amitiax`
         : directory === "agent-identities"
           ? `${basename(dirname(join(root, manifestPath)))}-${manifest.plugin.version}.amitiax`
           : packageName(manifest)

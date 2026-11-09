@@ -5,7 +5,6 @@ import 'package:amitia_app/core/ui_runtime/mobile_host_runtime_registry.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const migratedChildPaths = <String>[
-  '/settings',
   '/characters',
   '/characters/:id',
   '/characters/teams',
@@ -17,7 +16,6 @@ const migratedChildPaths = <String>[
   '/game-center',
   '/extensions/packages',
   '/extensions/mcp/:id',
-  '/chat-logs',
   '/chat-import',
   '/developer',
   '/developer/kernel/tasks',
@@ -37,12 +35,9 @@ void main() {
 
   test('all migrated mobile plugins publish route registries', () {
     const manifests = <String>[
-      'character-hub',
-      'memory-hub',
       'creative-workshop-hub',
       'game-center-hub',
       'plugin-market',
-      'chat-logs',
       'chat-import',
       'runtime-insights',
       'channels-hub',
@@ -79,5 +74,14 @@ void main() {
 
   test('generic mobile native page runtime is registered', () {
     expect(resolveMobileHostRuntime('host.mobile.native-page'), isNotNull);
+  });
+
+  test('personal settings and archive routes remain in the core catalog', () {
+    final source = File(
+      'lib/core/ui_runtime/routing/builtin_route_catalog.dart',
+    ).readAsStringSync();
+    expect(source, contains('path: AppRoutes.settings'));
+    expect(source, contains('path: AppRoutes.chatLogs'));
+    expect(source, contains('path: AppRoutes.me'));
   });
 }

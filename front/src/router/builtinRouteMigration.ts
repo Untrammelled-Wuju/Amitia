@@ -18,6 +18,7 @@ const migrationByRoot: Record<string, Omit<BuiltinRouteMigration, "path" | "root
   "/settings": { capability: "settings.shell", priority: 80 },
   "/channel-center": { capability: "extension.page", priority: 70 },
   "/my-space": { capability: "settings.shell", priority: 70 },
+  "/me": { capability: "settings.shell", priority: 70 },
   "/characters": { capability: "character.shell", priority: 85 },
   "/character": { capability: "character.shell", priority: 85 },
   "/world-book": { capability: "character.shell", priority: 84 },
@@ -32,6 +33,7 @@ const migrationByRoot: Record<string, Omit<BuiltinRouteMigration, "path" | "root
   "/tasks": { capability: "page.provider", priority: 83 },
   "/reminders": { capability: "page.provider", priority: 83 },
   "/continuity": { capability: "page.provider", priority: 82 },
+  "/logs": { capability: "page.provider", priority: 70 },
 };
 
 export function routeRoot(path: string): string {

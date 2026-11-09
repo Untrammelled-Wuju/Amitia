@@ -1,52 +1,27 @@
-import { readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { builtinBusinessRoutes } from "@/router/builtinRoutes";
 import { shadowsProtectedRoute } from "@/ui-runtime/providerRoutes";
 
-describe("user space hub plugin migration", () => {
-  it("keeps settings and account pages out of the host business router", () => {
+describe("user space core routes", () => {
+  it("owns settings and account routes in the core router", () => {
     const paths = builtinBusinessRoutes.map((route) => String(route.path ?? ""));
-    expect(paths).not.toContain("/settings");
-    expect(paths).not.toContain("/settings/system");
-    expect(paths).not.toContain("/settings/model");
-    expect(paths).not.toContain("/my-space");
-    expect(paths).not.toContain("/my-space/profile");
+    expect(paths).toContain("/settings/:pathMatch(.*)*");
+    expect(paths).toContain("/my-space/:pathMatch(.*)*");
+    expect(paths).toContain("/settings/ui-providers");
+    expect(builtinBusinessRoutes.find((route) => route.path === "/settings/:pathMatch(.*)*")?.meta?.coreSurface).toBe(true);
+    expect(builtinBusinessRoutes.find((route) => route.path === "/my-space/:pathMatch(.*)*")?.meta?.coreSurface).toBe(true);
   });
 
-  it("retains only the provider repair route under the settings namespace", () => {
-    const route = builtinBusinessRoutes.find((item) => item.path === "/settings/ui-providers");
-    expect(route?.meta?.allowsExtensionChildren).toBe(true);
-    expect(builtinBusinessRoutes.filter((item) => String(item.path ?? "").startsWith("/settings"))).toHaveLength(1);
-    expect(shadowsProtectedRoute("/settings/ui-providers")).toBe(true);
-    expect(shadowsProtectedRoute("/settings/:section")).toBe(false);
-    expect(shadowsProtectedRoute("/my-space/:section")).toBe(false);
+  it("rejects provider ownership of settings and account routes", () => {
+    expect(shadowsProtectedRoute("/settings")).toBe(true);
+    expect(shadowsProtectedRoute("/settings/system")).toBe(true);
+    expect(shadowsProtectedRoute("/my-space")).toBe(true);
+    expect(shadowsProtectedRoute("/my-space/profile")).toBe(true);
   });
 
-  it("provides settings and account surfaces through one plugin host runtime", () => {
-    const manifest = JSON.parse(readFileSync(
-      resolve(__dirname, "../../../plugins-builtin/user-space-hub/amitia-extension.json"),
-      "utf8",
-    )) as {
-      modules: Array<{
-        contributions: Array<{
-          spec?: {
-            entry?: { runtime_id?: string };
-            metadata?: { routes?: Array<{ path: string; providerId: string }> };
-          };
-        }>;
-      }>;
-    };
-    const contributions = manifest.modules.flatMap((module) => module.contributions);
-    const routes = contributions
-      .flatMap((item) => item.spec?.metadata?.routes ?? [])
-      .filter((item): item is { path: string; providerId: string } => typeof item === "object" && item !== null);
-    expect(routes.map((item) => item.path)).toEqual(expect.arrayContaining([
-      "/settings/:section",
-      "/settings/model/:modelType",
-      "/my-space/:section",
-    ]));
-    expect(routes.every((item) => ["user-space-page-provider"].includes(item.providerId))).toBe(true);
-    expect(contributions.some((item) => item.spec?.entry?.runtime_id === "host.user-space")).toBe(true);
+  it("removes the plugin source", () => {
+    expect(existsSync(resolve(__dirname, "../../../plugins-builtin/user-space-hub/amitia-extension.json"))).toBe(false);
   });
 });

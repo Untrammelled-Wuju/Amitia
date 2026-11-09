@@ -46,25 +46,28 @@ UIProviderSnapshot _snapshot(List<UIProviderDefinition> providers) {
 }
 
 void main() {
-  test('section shells protect their root and accept child provider routes', () {
-    expect(isProtectedProviderRoutePath(AppRoutes.extensions), isTrue);
-    expect(
-      isProtectedProviderRoutePath('${AppRoutes.extensions}/market'),
-      isFalse,
-    );
-    expect(
-      isProtectedProviderRoutePath('${AppRoutes.extensions}/third-party'),
-      isFalse,
-    );
-    expect(isProtectedProviderRoutePath('/decision-viz'), isFalse);
-    expect(isProtectedProviderRoutePath('/long-running'), isFalse);
-  });
+  test(
+    'section shells protect their root and accept child provider routes',
+    () {
+      expect(isProtectedProviderRoutePath(AppRoutes.extensions), isTrue);
+      expect(
+        isProtectedProviderRoutePath('${AppRoutes.extensions}/market'),
+        isFalse,
+      );
+      expect(
+        isProtectedProviderRoutePath('${AppRoutes.extensions}/third-party'),
+        isFalse,
+      );
+      expect(isProtectedProviderRoutePath('/decision-viz'), isFalse);
+      expect(isProtectedProviderRoutePath('/long-running'), isFalse);
+    },
+  );
 
   test('closed built-in namespaces remain protected', () {
-    expect(isProtectedProviderRoutePath(AppRoutes.settings), isFalse);
+    expect(isProtectedProviderRoutePath(AppRoutes.settings), isTrue);
     expect(
       isProtectedProviderRoutePath('${AppRoutes.settings}/plugin'),
-      isFalse,
+      isTrue,
     );
     expect(
       isProtectedProviderRoutePath('${AppRoutes.memoryHub}/plugin'),
@@ -86,7 +89,7 @@ void main() {
     },
   );
 
-  test('settings root resolves from the provider snapshot', () {
+  test('settings root is rejected from the provider snapshot', () {
     final snapshot = _snapshot([
       _provider(
         id: 'user-space-routes',
@@ -112,7 +115,7 @@ void main() {
 
     expect(
       resolveProviderRoutes(snapshot).map((route) => route.path),
-      contains(AppRoutes.settings),
+      isNot(contains(AppRoutes.settings)),
     );
   });
 

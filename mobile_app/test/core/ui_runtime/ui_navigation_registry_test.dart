@@ -191,7 +191,7 @@ void main() {
               },
               {
                 'id': 'profile',
-                'path': '/logs',
+                'path': '/profile-history',
                 'providerId': 'placement-pages',
                 'capability': UICapability.pageProvider,
               },
@@ -225,8 +225,9 @@ void main() {
               {
                 'id': 'profile',
                 'label': '归档对话',
-                'route': '/logs',
+                'route': '/profile-history',
                 'group': 'home',
+                'placement': 'profile',
               },
               {
                 'id': 'workspace',
@@ -255,7 +256,7 @@ void main() {
         UINavigationPlacement.settings,
       );
       expect(
-        items.singleWhere((item) => item.route == '/logs').placement,
+        items.singleWhere((item) => item.route == '/profile-history').placement,
         UINavigationPlacement.profile,
       );
       expect(
@@ -291,7 +292,7 @@ void main() {
             },
             {
               'id': 'profile',
-              'path': '/settings',
+              'path': '/profile-space',
               'providerId': 'mobile-placement-pages',
               'capability': UICapability.pageProvider,
             },
@@ -320,7 +321,7 @@ void main() {
             {
               'id': 'profile',
               'label': '设置',
-              'route': '/settings',
+              'route': '/profile-space',
               'group': 'space',
               'tabLabel': '我的',
               'mobile': true,
@@ -349,7 +350,7 @@ void main() {
       UINavigationRegistry.resolveMobile(
         snapshot,
       ).where((item) => item.extensionId != null).map((item) => item.route),
-      ['/settings'],
+      ['/profile-space'],
     );
   });
 
@@ -384,43 +385,46 @@ void main() {
     },
   );
 
-  test('backs a section root navigation item with its effective child route', () {
-    final snapshot = _snapshot([
-      _provider(
-        id: 'plugin-market-routes',
-        extensionId: 'com.amitia/plugin-market',
-        capability: UICapability.routeRegistry,
-        priority: 260,
-        metadata: const {
-          'routes': [
-            {
-              'id': 'plugin-market',
-              'path': '/extensions/market',
-              'providerId': 'plugin-market-page-provider',
-              'capability': UICapability.pageProvider,
-            },
-          ],
-          'navigationItems': [
-            {
-              'id': 'extensions-hub',
-              'label': '扩展中心',
-              'route': AppRoutes.extensions,
-              'placement': 'primary',
-              'group': 'extensions',
-              'order': 90,
-            },
-          ],
-        },
-      ),
-      _page('com.amitia/plugin-market', 'plugin-market-page-provider'),
-    ]);
+  test(
+    'backs a section root navigation item with its effective child route',
+    () {
+      final snapshot = _snapshot([
+        _provider(
+          id: 'plugin-market-routes',
+          extensionId: 'com.amitia/plugin-market',
+          capability: UICapability.routeRegistry,
+          priority: 260,
+          metadata: const {
+            'routes': [
+              {
+                'id': 'plugin-market',
+                'path': '/extensions/market',
+                'providerId': 'plugin-market-page-provider',
+                'capability': UICapability.pageProvider,
+              },
+            ],
+            'navigationItems': [
+              {
+                'id': 'extensions-hub',
+                'label': '扩展中心',
+                'route': AppRoutes.extensions,
+                'placement': 'primary',
+                'group': 'extensions',
+                'order': 90,
+              },
+            ],
+          },
+        ),
+        _page('com.amitia/plugin-market', 'plugin-market-page-provider'),
+      ]);
 
-    final item = UINavigationRegistry.resolve(
-      snapshot,
-    ).singleWhere((item) => item.route == AppRoutes.extensions);
-    expect(item.extensionId, 'com.amitia/plugin-market');
-    expect(item.placement, UINavigationPlacement.primary);
-  });
+      final item = UINavigationRegistry.resolve(
+        snapshot,
+      ).singleWhere((item) => item.route == AppRoutes.extensions);
+      expect(item.extensionId, 'com.amitia/plugin-market');
+      expect(item.placement, UINavigationPlacement.primary);
+    },
+  );
 
   test(
     'hides app.navigation links when the extension route is not effective',

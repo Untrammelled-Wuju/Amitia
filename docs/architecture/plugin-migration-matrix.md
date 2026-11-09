@@ -22,7 +22,7 @@
 | 插件市场、扩展中心与内核入口 | `com.amitia/plugin-market` | `/extensions`、`/kernel`、扩展包、工作流、MCP、Agent Skills 的页面和路由均使用 Tool、UI Provider、Route Registry；宿主固定业务页已删除 |
 | 渠道页面与连接 | `com.amitia/channel-*` | 已使用 Service、UI Provider、Route Registry |
 | 渠道中心 | `com.amitia/channels-hub` | 固定 `/channel-center` 路由已删除，渠道发现、插件导航和接入入口由插件提供 |
-| 设置与个人空间 | `com.amitia/user-space-hub` | `/settings` 根路由及 `/settings`、`/my-space` 子路由均由插件 Host Runtime 提供；Web、桌面和移动端共用同一 Provider 快照，Provider 修复页保留为核心恢复入口 |
+| 设置与个人空间 | 核心模块 | `/settings`、`/my-space`、`/me` 及移动端“我的”页面由核心路由和内置页面提供；扩展仍可通过 Slot、Hook、Service 和 Tool 注入能力 |
 | 表情与消息渲染 | `com.amitia/emote` | 已使用 Tool、UI Slot、UI Provider |
 | 生活系统 | `com.amitia/lifestyle` | 已使用 Tool、UI Slot、UI Provider |
 | 运行时调试 | `com.amitia/runtime-insights` | 已从固定 Vue 路由迁出 |
@@ -32,7 +32,7 @@
 | 工作区文件与 Git | `com.amitia/workspace` | 固定路由与 Vue 页面已删除，文件、Git 和隔离工作区统一走 Workspace Bridge |
 | 聊天导入 | `com.amitia/chat-import` | 固定路由与 Vue 向导已删除，解析、批次管理和设备会话晋升统一走 Import Bridge |
 | 存储维护 | `com.amitia/storage` | 固定路由与 Vue 页面已删除，清理、备份和恢复分别走独立 Storage Host API |
-| 归档对话 | `com.amitia/chat-logs` | 固定路由与 Vue 页面已删除，读取、恢复、删除、摘要和导出统一走 Conversation Logs Host API；列表、消息和操作仅接受具有 `archivedAt` 的会话 |
+| 归档对话 | 核心模块 | Web `/logs` 与移动端 `/chat-logs` 使用核心页面和 Owner 会话服务；读取、恢复、删除、摘要和导出仅接受具有 `archivedAt` 的会话 |
 | 创意工坊 Hub | `com.amitia/creative-workshop-hub` | 固定 `/creative-workshop` 与桌宠中心入口已删除，工坊页面、路由和主导航由 UI Provider 提供 |
 | 游戏中心 Hub | `com.amitia/game-center-hub` | 固定 `/game-center` 路由已删除，中心页面、路由和导航由 UI Provider 提供，能力门禁仍由核心执行 |
 
