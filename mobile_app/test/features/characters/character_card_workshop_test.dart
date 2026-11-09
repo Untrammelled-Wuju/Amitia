@@ -3,6 +3,7 @@ import 'package:amitia_app/core/backend_transport/providers/backend_transport_pr
 import 'package:amitia_app/core/models/character.dart';
 import 'package:amitia_app/core/services/character_service.dart';
 import 'package:amitia_app/core/services/providers.dart';
+import 'package:amitia_app/core/services/shared_core_data_access.dart';
 import 'package:amitia_app/features/characters/presentation/pages/character_card_workshop_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -118,6 +119,9 @@ void main() {
           backendServiceProvider.overrideWithValue(api),
           characterServiceProvider.overrideWithValue(service),
           characterListProvider.overrideWith((ref) async => roles),
+          sharedCoreDataAccessProvider.overrideWith(
+            (ref) async => const SharedCoreDataAccess.local(),
+          ),
         ],
         child: MaterialApp.router(routerConfig: router),
       ),

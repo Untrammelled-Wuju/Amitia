@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"math"
 	"os"
 	"testing"
 	"time"
@@ -90,6 +91,20 @@ func TestOwnedChatManagementIncludesActualHistoryAndRejectsForeignOwner(t *testi
 	}
 	if result["totalConversations"] != 1 || result["totalMessages"] != 1 {
 		t.Fatalf("counts=%v", result)
+	}
+	for _, operation := range []string{"conversations", "search"} {
+		for _, page := range []int{math.MaxInt, math.MaxInt/2 + 2} {
+			pageResult, err := p.ManageChat(t.Context(), scope, coordination.ChatManagementRequest{
+				Operation: operation, ConversationOwnerID: p.ownerID, Keyword: "visible", Page: page, PageSize: 2,
+			})
+			if err != nil || pageResult["page"] != page || pageResult["total"] != 1 {
+				t.Fatalf("%s page=%d result=%v err=%v", operation, page, pageResult, err)
+			}
+			items, ok := pageResult["items"].([]map[string]any)
+			if !ok || items == nil || len(items) != 0 {
+				t.Fatalf("%s page=%d items=%v", operation, page, pageResult["items"])
+			}
+		}
 	}
 	result, err = p.ManageChat(t.Context(), scope, coordination.ChatManagementRequest{Operation: "export", ConversationOwnerID: p.ownerID, ConversationIDs: []string{"owned"}, Format: "json"})
 	if err != nil {

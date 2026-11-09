@@ -3,6 +3,7 @@ package business
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/u-ai/backend/internal/agentpermission"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
@@ -22,18 +23,18 @@ func settingsFromRequest(request Request) conversationSettings {
 
 func validateConversationSettings(request Request) error {
 	if request.MessageStyle != "" && request.MessageStyle != "flow" && request.MessageStyle != "bubble" {
-		return errors.New("聊天界面风格无效")
+		return fmt.Errorf("%w: 聊天界面风格无效", ErrInvalidRequest)
 	}
 	if request.ModelConfigID < 0 {
-		return errors.New("模型配置编号无效")
+		return fmt.Errorf("%w: 模型配置编号无效", ErrInvalidRequest)
 	}
 	switch request.ReasoningEffort {
 	case "", "low", "medium", "high", "xhigh":
 	default:
-		return errors.New("推理强度无效")
+		return fmt.Errorf("%w: 推理强度无效", ErrInvalidRequest)
 	}
 	if request.PermissionMode != "" && !agentpermission.Valid(request.PermissionMode) {
-		return errors.New("权限模式无效")
+		return fmt.Errorf("%w: 权限模式无效", ErrInvalidRequest)
 	}
 	return nil
 }

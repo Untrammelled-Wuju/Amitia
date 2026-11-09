@@ -944,10 +944,10 @@ func (e *Engine) RunGroupEvents(ctx context.Context, request Request, emit func(
 	request.Message = strings.TrimSpace(request.Message)
 	request.RequestID = strings.TrimSpace(request.RequestID)
 	if request.ConversationID == "" || request.RequestID == "" || request.Group == nil {
-		return GroupResponse{}, errors.New("群聊请求缺少会话、请求编号或能力声明")
+		return GroupResponse{}, fmt.Errorf("%w: 群聊请求缺少会话、请求编号或能力声明", ErrInvalidRequest)
 	}
 	if len(request.RequestID) > 128 || request.Message == "" || len(request.Message) > 128<<10 {
-		return GroupResponse{}, errors.New("请求编号和消息内容无效")
+		return GroupResponse{}, fmt.Errorf("%w: 请求编号和消息内容无效", ErrInvalidRequest)
 	}
 	if request.TargetDeviceID == "" {
 		request.TargetDeviceID = request.DeviceID
@@ -958,7 +958,7 @@ func (e *Engine) RunGroupEvents(ctx context.Context, request Request, emit func(
 	if _, exists := e.active[activeKey]; exists {
 		e.mu.Unlock()
 		cancel(nil)
-		return GroupResponse{}, errors.New("当前请求正在执行")
+		return GroupResponse{}, ErrRequestInFlight
 	}
 	e.active[activeKey] = cancel
 	e.mu.Unlock()

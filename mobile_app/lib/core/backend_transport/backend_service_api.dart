@@ -12,11 +12,7 @@ class ServiceApiException implements Exception {
   final String message;
   final String? detail;
 
-  ServiceApiException({
-    required this.code,
-    required this.message,
-    this.detail,
-  });
+  ServiceApiException({required this.code, required this.message, this.detail});
 
   factory ServiceApiException.fromTransportError(BackendTransportError e) {
     return ServiceApiException(
@@ -63,7 +59,6 @@ class ServiceApiException implements Exception {
         return 10000;
     }
   }
-
 }
 
 class BackendServiceApi {
@@ -80,12 +75,14 @@ class BackendServiceApi {
     Map<String, String>? headers,
     T Function(dynamic)? fromJson,
   }) async {
-    final response = await _http.send(BackendHttpRequest(
-      method: BackendHttpMethod.get,
-      path: path,
-      queryParameters: queryParameters,
-      headers: headers,
-    ));
+    final response = await _http.send(
+      BackendHttpRequest(
+        method: BackendHttpMethod.get,
+        path: path,
+        queryParameters: queryParameters,
+        headers: headers,
+      ),
+    );
     return _parseResponse<T>(response, fromJson, path);
   }
 
@@ -96,13 +93,15 @@ class BackendServiceApi {
     Map<String, String>? headers,
     T Function(dynamic)? fromJson,
   }) async {
-    final response = await _http.send(BackendHttpRequest(
-      method: BackendHttpMethod.post,
-      path: path,
-      queryParameters: queryParameters,
-      headers: headers,
-      body: data,
-    ));
+    final response = await _http.send(
+      BackendHttpRequest(
+        method: BackendHttpMethod.post,
+        path: path,
+        queryParameters: queryParameters,
+        headers: headers,
+        body: data,
+      ),
+    );
     return _parseResponse<T>(response, fromJson, path);
   }
 
@@ -112,14 +111,16 @@ class BackendServiceApi {
     Map<String, String>? headers,
     CancelToken? cancelToken,
   }) async {
-    final response = await _http.send(BackendHttpRequest(
-      method: BackendHttpMethod.get,
-      path: path,
-      queryParameters: queryParameters,
-      headers: headers,
-      streamResponse: true,
-      cancelToken: cancelToken,
-    ));
+    final response = await _http.send(
+      BackendHttpRequest(
+        method: BackendHttpMethod.get,
+        path: path,
+        queryParameters: queryParameters,
+        headers: headers,
+        streamResponse: true,
+        cancelToken: cancelToken,
+      ),
+    );
     return _responseStream(response, path);
   }
 
@@ -130,15 +131,17 @@ class BackendServiceApi {
     Map<String, String>? headers,
     CancelToken? cancelToken,
   }) async {
-    final response = await _http.send(BackendHttpRequest(
-      method: BackendHttpMethod.post,
-      path: path,
-      queryParameters: queryParameters,
-      headers: headers,
-      body: data,
-      streamResponse: true,
-      cancelToken: cancelToken,
-    ));
+    final response = await _http.send(
+      BackendHttpRequest(
+        method: BackendHttpMethod.post,
+        path: path,
+        queryParameters: queryParameters,
+        headers: headers,
+        body: data,
+        streamResponse: true,
+        cancelToken: cancelToken,
+      ),
+    );
     return _responseStream(response, path);
   }
 
@@ -147,6 +150,7 @@ class BackendServiceApi {
     Map<String, String> fields = const {},
     Map<String, List<String>> files = const {},
     Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
     T Function(dynamic)? fromJson,
   }) async {
     final form = FormData();
@@ -160,12 +164,15 @@ class BackendServiceApi {
         );
       }
     }
-    final response = await _http.send(BackendHttpRequest(
-      method: BackendHttpMethod.post,
-      path: path,
-      queryParameters: queryParameters,
-      body: form,
-    ));
+    final response = await _http.send(
+      BackendHttpRequest(
+        method: BackendHttpMethod.post,
+        path: path,
+        queryParameters: queryParameters,
+        headers: headers,
+        body: form,
+      ),
+    );
     return _parseResponse<T>(response, fromJson, path);
   }
 
@@ -177,12 +184,14 @@ class BackendServiceApi {
     Map<String, String>? headers,
     T Function(dynamic)? fromJson,
   }) async {
-    final response = await _http.send(BackendHttpRequest(
-      method: BackendHttpMethod.post,
-      path: path,
-      headers: headers,
-      body: data,
-    ));
+    final response = await _http.send(
+      BackendHttpRequest(
+        method: BackendHttpMethod.post,
+        path: path,
+        headers: headers,
+        body: data,
+      ),
+    );
     return _parsePayloadResponse<T>(response, fromJson, path);
   }
 
@@ -193,13 +202,15 @@ class BackendServiceApi {
     Map<String, String>? headers,
     T Function(dynamic)? fromJson,
   }) async {
-    final response = await _http.send(BackendHttpRequest(
-      method: BackendHttpMethod.put,
-      path: path,
-      queryParameters: queryParameters,
-      headers: headers,
-      body: data,
-    ));
+    final response = await _http.send(
+      BackendHttpRequest(
+        method: BackendHttpMethod.put,
+        path: path,
+        queryParameters: queryParameters,
+        headers: headers,
+        body: data,
+      ),
+    );
     return _parseResponse<T>(response, fromJson, path);
   }
 
@@ -210,23 +221,31 @@ class BackendServiceApi {
     Map<String, String>? headers,
     T Function(dynamic)? fromJson,
   }) async {
-    final response = await _http.send(BackendHttpRequest(
-      method: BackendHttpMethod.patch,
-      path: path,
-      queryParameters: queryParameters,
-      headers: headers,
-      body: data,
-    ));
+    final response = await _http.send(
+      BackendHttpRequest(
+        method: BackendHttpMethod.patch,
+        path: path,
+        queryParameters: queryParameters,
+        headers: headers,
+        body: data,
+      ),
+    );
     return _parseResponse<T>(response, fromJson, path);
   }
 
-  Future<void> delete(String path, {Map<String, dynamic>? queryParameters, Map<String, String>? headers}) async {
-    final response = await _http.send(BackendHttpRequest(
-      method: BackendHttpMethod.delete,
-      path: path,
-      queryParameters: queryParameters,
-      headers: headers,
-    ));
+  Future<void> delete(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+  }) async {
+    final response = await _http.send(
+      BackendHttpRequest(
+        method: BackendHttpMethod.delete,
+        path: path,
+        queryParameters: queryParameters,
+        headers: headers,
+      ),
+    );
     _parseSimpleResponse(response, path);
   }
 
@@ -236,23 +255,21 @@ class BackendServiceApi {
     Map<String, String>? headers,
     T Function(dynamic)? fromJson,
   }) async {
-    final response = await _http.send(BackendHttpRequest(
-      method: BackendHttpMethod.delete,
-      path: path,
-      headers: headers,
-      body: data,
-    ));
+    final response = await _http.send(
+      BackendHttpRequest(
+        method: BackendHttpMethod.delete,
+        path: path,
+        headers: headers,
+        body: data,
+      ),
+    );
     return _parseResponse<T>(response, fromJson, path);
   }
 
   Stream<List<int>> _responseStream(BackendHttpResponse response, String path) {
     final data = response.data;
     if (data is! ResponseBody) {
-      throw ServiceApiException(
-        code: 10000,
-        message: '流式响应格式无效',
-        detail: path,
-      );
+      throw ServiceApiException(code: 10000, message: '流式响应格式无效', detail: path);
     }
     return data.stream.map<List<int>>((chunk) => chunk);
   }
@@ -270,7 +287,11 @@ class BackendServiceApi {
       if (rawCode is num) {
         final code = rawCode.toInt();
         if (code != 200) {
-          throw ServiceApiException(code: code, message: message, detail: detail);
+          throw ServiceApiException(
+            code: code,
+            message: message,
+            detail: detail,
+          );
         }
         final responseData = data['data'];
         if (responseData == null) return null;
@@ -279,16 +300,27 @@ class BackendServiceApi {
       }
       if (rawCode is String) {
         final normalized = rawCode.trim().toLowerCase();
-        final success = normalized == 'ok' || normalized == 'success' || normalized == 'no_update';
+        final success =
+            normalized == 'ok' ||
+            normalized == 'success' ||
+            normalized == 'no_update';
         if (!success) {
-          throw ServiceApiException(code: 500, message: message.isEmpty ? rawCode : message, detail: detail);
+          throw ServiceApiException(
+            code: 500,
+            message: message.isEmpty ? rawCode : message,
+            detail: detail,
+          );
         }
         final responseData = data.containsKey('data') ? data['data'] : data;
         if (responseData == null) return null;
         if (fromJson != null) return fromJson(responseData);
         return responseData as T?;
       }
-      throw ServiceApiException(code: 500, message: message.isEmpty ? '无效响应状态' : message, detail: detail);
+      throw ServiceApiException(
+        code: 500,
+        message: message.isEmpty ? '无效响应状态' : message,
+        detail: detail,
+      );
     }
     if (fromJson != null && data != null) {
       return fromJson(data);
@@ -328,8 +360,13 @@ class BackendServiceApi {
       }
       if (rawCode is String) {
         final normalized = rawCode.trim().toLowerCase();
-        if (normalized != 'ok' && normalized != 'success' && normalized != 'no_update') {
-          throw ServiceApiException(code: 500, message: message.isEmpty ? rawCode : message);
+        if (normalized != 'ok' &&
+            normalized != 'success' &&
+            normalized != 'no_update') {
+          throw ServiceApiException(
+            code: 500,
+            message: message.isEmpty ? rawCode : message,
+          );
         }
       }
     }

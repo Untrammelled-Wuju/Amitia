@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/theme/app_colors.dart';
@@ -42,7 +44,11 @@ class _DesktopPetPluginSectionState
               TextButton.icon(
                 onPressed: state.installing
                     ? null
-                    : () => _showInstallDialog(context, controller),
+                    : () => _pickAndPreviewPackage(
+                        context,
+                        controller,
+                        pickPackage: ref.read(desktopPetPackagePickerProvider),
+                      ),
                 icon: const Icon(Icons.add, size: 16),
                 label: Text(state.installing ? '安装中...' : '安装'),
               ),
@@ -97,7 +103,11 @@ class _DesktopPetPluginSectionState
             title: '尚未安装桌宠插件',
             subtitle: '安装后即可在此管理',
             actionText: '安装插件',
-            onAction: () => _showInstallDialog(context, controller),
+            onAction: () => _pickAndPreviewPackage(
+              context,
+              controller,
+              pickPackage: ref.read(desktopPetPackagePickerProvider),
+            ),
           ),
         ),
       );
@@ -244,71 +254,6 @@ class _DesktopPetPluginSectionState
     );
   }
 
-  void _showInstallDialog(
-    BuildContext context,
-    DesktopPetPluginController controller,
-  ) {
-    final textController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (dialogCtx) => AlertDialog(
-        title: const Text('安装插件'),
-        content: TextField(
-          controller: textController,
-          decoration: const InputDecoration(
-            labelText: '安装包路径',
-            hintText: '输入或粘贴 .petx 包路径',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () async {
-              try {
-                final path = await pickDesktopPetPackagePath();
-                if (path != null && dialogCtx.mounted) {
-                  textController.text = path;
-                }
-              } catch (error) {
-                if (!dialogCtx.mounted) return;
-                ScaffoldMessenger.of(
-                  dialogCtx,
-                ).showSnackBar(SnackBar(content: Text(error.toString())));
-              }
-            },
-            child: const Text('选择文件'),
-          ),
-          ValueListenableBuilder<TextEditingValue>(
-            valueListenable: textController,
-            builder: (context, value, _) => TextButton(
-              onPressed:
-                  value.text.trim().isEmpty || controller.current.installing
-                  ? null
-                  : () {
-                      Navigator.pop(dialogCtx);
-                      final path = textController.text.trim();
-                      controller.install(path).then((ok) {
-                        if (context.mounted) {
-                          final message = ok
-                              ? '安装成功'
-                              : (controller.current.error ?? '安装失败');
-                          ScaffoldMessenger.of(
-                            context,
-                          ).showSnackBar(SnackBar(content: Text(message)));
-                        }
-                      });
-                    },
-              child: Text(controller.current.installing ? '安装中...' : '安装'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _showDetailSheet(
     BuildContext context,
     DesktopPetPluginSummaryRef plugin,
@@ -322,6 +267,7 @@ class _DesktopPetPluginSectionState
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (sheetCtx) => _PluginDetailSheet(
+        hostContext: context,
         pluginId: plugin.pluginId,
         extensionId: plugin.extensionId,
         name: plugin.name,
@@ -330,12 +276,204 @@ class _DesktopPetPluginSectionState
         enabled: plugin.enabled,
         installState: plugin.installState,
         controller: controller,
+        pickPackage: ref.read(desktopPetPackagePickerProvider),
       ),
     );
   }
 }
 
+Future<void> _pickAndPreviewPackage(
+  BuildContext context,
+  DesktopPetPluginController controller, {
+  DesktopPetPackagePicker? pickPackage,
+  String expectedExtensionId = '',
+}) async {
+  String? path;
+  try {
+    path = await (pickPackage ?? pickDesktopPetPackagePath)();
+  } catch (error) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(error.toString())));
+    return;
+  }
+  if (path == null || !context.mounted) return;
+
+  final preview = await controller.previewPackage(
+    path,
+    expectedExtensionId: expectedExtensionId,
+  );
+  if (!context.mounted) return;
+  if (preview == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(controller.current.error ?? '桌宠插件包预览失败')),
+    );
+    return;
+  }
+
+  final accepted = await showDialog<bool>(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => _DesktopPetPackagePreviewDialog(
+      fileName: path!.split(RegExp(r'[/\\]')).last,
+      preview: preview,
+      isUpdate:
+          expectedExtensionId.trim().isNotEmpty ||
+          (preview['currentVersion'] ?? '').toString().trim().isNotEmpty,
+    ),
+  );
+  if (accepted != true || !context.mounted) return;
+
+  final ok = await controller.commitPackagePreview(
+    preview,
+    expectedExtensionId: expectedExtensionId,
+  );
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(
+        ok
+            ? (expectedExtensionId.trim().isEmpty ? '桌宠插件安装成功' : '桌宠插件更新成功')
+            : (controller.current.error ?? '桌宠插件安装失败'),
+      ),
+    ),
+  );
+}
+
+class _DesktopPetPackagePreviewDialog extends StatefulWidget {
+  final String fileName;
+  final Map<String, dynamic> preview;
+  final bool isUpdate;
+
+  const _DesktopPetPackagePreviewDialog({
+    required this.fileName,
+    required this.preview,
+    required this.isUpdate,
+  });
+
+  @override
+  State<_DesktopPetPackagePreviewDialog> createState() =>
+      _DesktopPetPackagePreviewDialogState();
+}
+
+class _DesktopPetPackagePreviewDialogState
+    extends State<_DesktopPetPackagePreviewDialog> {
+  bool _acknowledged = false;
+
+  bool get _requiresAcknowledgement {
+    final preview = widget.preview;
+    final signature = preview['signature'];
+    final signatureStatus = signature is Map
+        ? (signature['status'] ?? '').toString()
+        : '';
+    final diff = preview['upgradeDiff'];
+    return signatureStatus == 'unsigned' ||
+        ((preview['scripts'] as num?)?.toInt() ?? 0) > 0 ||
+        (((preview['highRiskCapabilities'] as List?) ?? const []).isNotEmpty) ||
+        (((preview['warnings'] as List?) ?? const []).isNotEmpty) ||
+        (((preview['capabilityConfirmations'] as List?) ?? const [])
+            .isNotEmpty) ||
+        (diff is Map &&
+            (diff['signerChanged'] == true ||
+                diff['configMigrationRequired'] == true));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final preview = widget.preview;
+    final name = (preview['name'] ?? preview['id'] ?? '桌宠插件').toString();
+    final version = (preview['version'] ?? '').toString();
+    final extensionId = (preview['id'] ?? '').toString();
+    final signature = preview['signature'];
+    final signatureStatus = signature is Map
+        ? (signature['status'] ?? '').toString()
+        : '';
+    final warnings = ((preview['warnings'] as List?) ?? const [])
+        .map((item) => item.toString())
+        .toList();
+    final errors = ((preview['errors'] as List?) ?? const [])
+        .map((item) => item.toString())
+        .toList();
+    final risks = ((preview['highRiskCapabilities'] as List?) ?? const [])
+        .map((item) => item.toString())
+        .toList();
+    return AlertDialog(
+      title: Text(widget.isUpdate ? '确认更新桌宠插件' : '确认安装桌宠插件'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(name, style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 4),
+            Text('文件：${widget.fileName}'),
+            Text('扩展 ID：$extensionId'),
+            Text('版本：$version'),
+            Text('管理目标：${preview['managementTarget'] ?? ''}'),
+            Text('签名：${signatureStatus.isEmpty ? 'unknown' : signatureStatus}'),
+            Text('兼容性：${preview['compatible'] == true ? '通过' : '不通过'}'),
+            Text(
+              '资源：${(preview['assets'] as num?)?.toInt() ?? 0} 个，'
+              '文件 ${(preview['fileCount'] as num?)?.toInt() ?? 0} 个',
+            ),
+            if (risks.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                '高风险能力：${risks.join('、')}',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ],
+            for (final warning in warnings)
+              Text(
+                '警告：$warning',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            for (final error in errors)
+              Text(
+                '错误：$error',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            const SizedBox(height: 8),
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              title: const Text('查看完整预览信息'),
+              children: [
+                SelectableText(
+                  const JsonEncoder.withIndent('  ').convert(preview),
+                ),
+              ],
+            ),
+            if (_requiresAcknowledgement)
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _acknowledged,
+                onChanged: (value) =>
+                    setState(() => _acknowledged = value == true),
+                title: const Text('我已查看签名、权限、风险和完整预览信息，并确认继续'),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed:
+              (_requiresAcknowledgement && !_acknowledged) || errors.isNotEmpty
+              ? null
+              : () => Navigator.pop(context, true),
+          child: Text(widget.isUpdate ? '确认更新' : '确认安装'),
+        ),
+      ],
+    );
+  }
+}
+
 class _PluginDetailSheet extends StatefulWidget {
+  final BuildContext hostContext;
   final String pluginId;
   final String extensionId;
   final String name;
@@ -344,8 +482,10 @@ class _PluginDetailSheet extends StatefulWidget {
   final bool enabled;
   final String installState;
   final DesktopPetPluginController controller;
+  final DesktopPetPackagePicker pickPackage;
 
   const _PluginDetailSheet({
+    required this.hostContext,
     required this.pluginId,
     required this.extensionId,
     required this.name,
@@ -354,6 +494,7 @@ class _PluginDetailSheet extends StatefulWidget {
     required this.enabled,
     required this.installState,
     required this.controller,
+    required this.pickPackage,
   });
 
   @override
@@ -512,7 +653,12 @@ class _PluginDetailSheetState extends State<_PluginDetailSheet> {
                         ? null
                         : () {
                             Navigator.pop(context);
-                            _showUpdateDialog(context);
+                            _pickAndPreviewPackage(
+                              widget.hostContext,
+                              widget.controller,
+                              pickPackage: widget.pickPackage,
+                              expectedExtensionId: widget.extensionId,
+                            );
                           },
                   ),
                 ),
@@ -536,55 +682,6 @@ class _PluginDetailSheetState extends State<_PluginDetailSheet> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  void _showUpdateDialog(BuildContext context) {
-    final textController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (dialogCtx) => AlertDialog(
-        title: const Text('更新插件'),
-        content: TextField(
-          controller: textController,
-          decoration: const InputDecoration(
-            labelText: '安装包路径',
-            hintText: '输入或粘贴新版本包路径',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx),
-            child: const Text('取消'),
-          ),
-          ValueListenableBuilder<TextEditingValue>(
-            valueListenable: textController,
-            builder: (context, value, _) => TextButton(
-              onPressed:
-                  value.text.trim().isEmpty ||
-                      widget.controller.hasOperation(widget.pluginId)
-                  ? null
-                  : () {
-                      Navigator.pop(dialogCtx);
-                      final path = textController.text.trim();
-                      widget.controller
-                          .update(widget.pluginId, widget.extensionId, path)
-                          .then((ok) {
-                            if (context.mounted) {
-                              final message = ok
-                                  ? '更新成功'
-                                  : (widget.controller.current.error ?? '更新失败');
-                              ScaffoldMessenger.of(
-                                context,
-                              ).showSnackBar(SnackBar(content: Text(message)));
-                            }
-                          });
-                    },
-              child: Text('更新'),
-            ),
-          ),
-        ],
       ),
     );
   }

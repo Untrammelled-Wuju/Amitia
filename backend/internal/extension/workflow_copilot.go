@@ -108,15 +108,25 @@ func (api *WorkflowAPI) aiExplain(c *gin.Context) {
 	c.JSON(http.StatusOK, explanation)
 }
 
+// writeWorkflowAIError separates "the caller asked for something invalid" from
+// "the model is missing" and "the model answered with something unusable".
+// Reporting a malformed model answer as 400 told the UI that the user's
+// instruction was wrong, so it never offered a retry.
 func writeWorkflowAIError(c *gin.Context, err error) {
 	status := http.StatusBadRequest
-	if errors.Is(err, errWorkflowAIUnavailable) {
+	switch {
+	case errors.Is(err, errWorkflowAIUnavailable):
 		status = http.StatusServiceUnavailable
+	case errors.Is(err, errWorkflowAIInvalidOutput):
+		status = http.StatusBadGateway
 	}
 	c.JSON(status, gin.H{"error": err.Error()})
 }
 
-var errWorkflowAIUnavailable = errors.New("workflow AI model unavailable")
+var (
+	errWorkflowAIUnavailable   = errors.New("workflow AI model unavailable")
+	errWorkflowAIInvalidOutput = errors.New("workflow AI response unusable")
+)
 
 func (api *WorkflowAPI) workflowAIModel() (interface {
 	GenerateWorkshopJSON(context.Context, string, string) (string, string, string, error)
@@ -209,7 +219,7 @@ func (api *WorkflowAPI) generateWorkflowAIProposal(ctx context.Context, mode, in
 		}
 		return proposal, nil
 	}
-	return workflowAIProposal{}, fmt.Errorf("AI could not produce a valid workflow: %w", lastErr)
+	return workflowAIProposal{}, fmt.Errorf("AI could not produce a valid workflow: %w", fmt.Errorf("%w: %v", errWorkflowAIInvalidOutput, lastErr))
 }
 
 func decodeWorkflowAIProposal(raw string) (workflowAIProposal, error) {
@@ -271,7 +281,7 @@ func (api *WorkflowAPI) generateWorkflowAIExplanation(ctx context.Context, instr
 		}
 		return result, nil
 	}
-	return workflowAIExplanation{}, fmt.Errorf("AI could not explain workflow: %w", lastErr)
+	return workflowAIExplanation{}, fmt.Errorf("AI could not explain workflow: %w", fmt.Errorf("%w: %v", errWorkflowAIInvalidOutput, lastErr))
 }
 
 func (api *WorkflowAPI) workflowAICatalog(ctx context.Context, spaceID string) []map[string]any {

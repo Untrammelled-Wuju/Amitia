@@ -130,7 +130,7 @@ func (r *Reconciler) HandleEvent(ctx context.Context, evt LifecycleEvent) error 
 	case PhaseInstalled:
 		return r.handleInstalledLocked(ctx, evt)
 	case PhaseEnabled:
-		return r.handleEnabledLocked(evt)
+		return r.handleEnabledLocked(ctx, evt)
 	case PhaseDisabled:
 		return r.handleDisabledLocked(ctx, evt)
 	case PhaseUpdated:
@@ -163,12 +163,18 @@ func (r *Reconciler) handleInstalledLocked(ctx context.Context, evt LifecycleEve
 	return nil
 }
 
-func (r *Reconciler) handleEnabledLocked(evt LifecycleEvent) error {
+func (r *Reconciler) handleEnabledLocked(ctx context.Context, evt LifecycleEvent) error {
 	if evt.Contribution.ID != "" {
 		ref := ContributionRefFromDefinition(evt.Contribution)
 		reg, ok := r.registry[ref.Key()]
 		if !ok {
-			return fmt.Errorf("%w: %s", ErrNotFound, ref.Key())
+			created, err := r.contribToRegistrationLocked(ctx, evt.Contribution, true)
+			if err != nil {
+				return err
+			}
+			r.registry[ref.Key()] = created
+			r.enabled[ref.Key()] = true
+			return nil
 		}
 		r.enabled[ref.Key()] = true
 		reg.Status = ContributionStatusActive

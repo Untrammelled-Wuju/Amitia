@@ -97,7 +97,7 @@ func (api *DesktopAPI) EnableContributionByID(c *gin.Context) {
 	}
 	contribID := c.Param("contributionId")
 	if err := api.host.EnableContribution(c.Request.Context(), contribID); err != nil {
-		apiError(c, http.StatusNotFound, err.Error())
+		apiError(c, HTTPStatus(err), err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"contributionId": contribID, "status": ContributionStatusRegistered})
@@ -110,7 +110,7 @@ func (api *DesktopAPI) DisableContributionByID(c *gin.Context) {
 	}
 	contribID := c.Param("contributionId")
 	if err := api.host.DisableContribution(contribID); err != nil {
-		apiError(c, http.StatusNotFound, err.Error())
+		apiError(c, HTTPStatus(err), err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"contributionId": contribID, "status": ContributionStatusDisabled})
@@ -141,7 +141,7 @@ func (api *DesktopAPI) InvokeContributionAction(c *gin.Context) {
 	}
 	result, err := api.host.InvokeAction(c.Request.Context(), contribID, scopeCtx)
 	if err != nil {
-		apiError(c, http.StatusInternalServerError, err.Error())
+		apiError(c, HTTPStatus(err), err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"contributionId": contribID, "result": json.RawMessage(result)})

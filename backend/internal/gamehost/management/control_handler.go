@@ -111,7 +111,7 @@ func (h *ControlHandler) Takeover(c *gin.Context) {
 			c.JSON(http.StatusConflict, gin.H{"code": 409, "msg": err.Error()})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": err.Error()})
+		WriteError(c, err)
 		return
 	}
 
@@ -155,7 +155,7 @@ func (h *ControlHandler) Release(c *gin.Context) {
 			c.JSON(http.StatusForbidden, gin.H{"code": 403, "msg": err.Error()})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": err.Error()})
+		WriteError(c, err)
 		return
 	}
 
@@ -176,7 +176,7 @@ func (h *ControlHandler) EmergencyStop(c *gin.Context) {
 
 	result, err := h.emergencyStopFn(c.Request.Context(), runtimeID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": err.Error()})
+		WriteError(c, err)
 		return
 	}
 
@@ -196,7 +196,7 @@ func (h *ControlHandler) Rearm(c *gin.Context) {
 	}
 
 	if err := h.rearmFn(c.Request.Context(), runtimeID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": err.Error()})
+		WriteError(c, err)
 		return
 	}
 

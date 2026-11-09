@@ -11,8 +11,7 @@ void main() {
       final fakeApi = _GateBlockedApi();
       final service = CharacterService(fakeApi);
 
-      expect(() => service.list(),
-          throwsA(isA<BusinessBackendUnavailable>()));
+      expect(() => service.list(), throwsA(isA<BusinessBackendUnavailable>()));
       expect(fakeApi.sendCount, 0);
     });
 
@@ -20,8 +19,10 @@ void main() {
       final fakeApi = _GateBlockedApi();
       final service = CharacterService(fakeApi);
 
-      expect(() => service.getById('char-001'),
-          throwsA(isA<BusinessBackendUnavailable>()));
+      expect(
+        () => service.getById('char-001'),
+        throwsA(isA<BusinessBackendUnavailable>()),
+      );
       expect(fakeApi.sendCount, 0);
     });
 
@@ -29,8 +30,10 @@ void main() {
       final fakeApi = _GateBlockedApi();
       final service = CharacterService(fakeApi);
 
-      expect(() => service.create({'name': 'test'}),
-          throwsA(isA<BusinessBackendUnavailable>()));
+      expect(
+        () => service.create({'name': 'test'}),
+        throwsA(isA<BusinessBackendUnavailable>()),
+      );
       expect(fakeApi.sendCount, 0);
     });
 
@@ -38,8 +41,10 @@ void main() {
       final fakeApi = _GateBlockedApi();
       final service = CharacterService(fakeApi);
 
-      expect(() => service.update('char-001', {'name': 'test'}),
-          throwsA(isA<BusinessBackendUnavailable>()));
+      expect(
+        () => service.update('char-001', {'name': 'test'}),
+        throwsA(isA<BusinessBackendUnavailable>()),
+      );
       expect(fakeApi.sendCount, 0);
     });
 
@@ -47,8 +52,10 @@ void main() {
       final fakeApi = _GateBlockedApi();
       final service = CharacterService(fakeApi);
 
-      expect(() => service.delete('char-001'),
-          throwsA(isA<BusinessBackendUnavailable>()));
+      expect(
+        () => service.delete('char-001'),
+        throwsA(isA<BusinessBackendUnavailable>()),
+      );
       expect(fakeApi.sendCount, 0);
     });
 
@@ -65,45 +72,46 @@ void main() {
       expect(fakeApi.sendCount, 5);
     });
 
-    test('gate transition true→false→true: requests blocked then allowed',
-        () async {
-      final gateState = _GateState(available: true);
-      final fakeApi = _DynamicGateApi(
-        gateState: gateState,
-        responseData: [
-          {
-            'id': 'char-001',
-            'name': 'Test',
-            'avatar': '',
-            'identity': '',
-            'personality': '',
-            'speakingStyle': '',
-            'description': '',
-            'status': 'enabled',
-            'isActive': 0,
-            'createdAt': '2026-01-01 00:00:00',
-          }
-        ],
-      );
-      final service = CharacterService(fakeApi);
+    test(
+      'gate transition true→false→true: requests blocked then allowed',
+      () async {
+        final gateState = _GateState(available: true);
+        final fakeApi = _DynamicGateApi(
+          gateState: gateState,
+          responseData: [
+            {
+              'id': 'char-001',
+              'name': 'Test',
+              'avatar': '',
+              'identity': '',
+              'personality': '',
+              'speakingStyle': '',
+              'description': '',
+              'status': 'enabled',
+              'isActive': 0,
+              'createdAt': '2026-01-01 00:00:00',
+            },
+          ],
+        );
+        final service = CharacterService(fakeApi);
 
-      // Gate true: request succeeds
-      final result1 = await service.list();
-      expect(result1, hasLength(1));
-      expect(fakeApi.sendCount, 1);
+        final result1 = await service.list();
+        expect(result1, hasLength(1));
+        expect(fakeApi.sendCount, 1);
 
-      // Gate false: request blocked
-      gateState.available = false;
-      expect(() => service.list(),
-          throwsA(isA<BusinessBackendUnavailable>()));
-      expect(fakeApi.sendCount, 1);
+        gateState.available = false;
+        expect(
+          () => service.list(),
+          throwsA(isA<BusinessBackendUnavailable>()),
+        );
+        expect(fakeApi.sendCount, 1);
 
-      // Gate true again: request succeeds
-      gateState.available = true;
-      final result2 = await service.list();
-      expect(result2, hasLength(1));
-      expect(fakeApi.sendCount, 2);
-    });
+        gateState.available = true;
+        final result2 = await service.list();
+        expect(result2, hasLength(1));
+        expect(fakeApi.sendCount, 2);
+      },
+    );
   });
 
   group('CharacterService Generation Mismatch', () {
@@ -111,8 +119,7 @@ void main() {
       final fakeApi = _GenerationMismatchApi(currentGeneration: 5);
       final service = CharacterService(fakeApi);
 
-      expect(() => service.list(),
-          throwsA(isA<BusinessBackendUnavailable>()));
+      expect(() => service.list(), throwsA(isA<BusinessBackendUnavailable>()));
       expect(fakeApi.sendCount, 0);
     });
   });
@@ -220,6 +227,7 @@ class _GateBlockedApi implements BackendServiceApi {
     Map<String, String> fields = const {},
     Map<String, List<String>> files = const {},
     Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
     T Function(dynamic)? fromJson,
   }) async => null;
 
@@ -355,6 +363,7 @@ class _GatePassingApi implements BackendServiceApi {
     Map<String, String> fields = const {},
     Map<String, List<String>> files = const {},
     Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
     T Function(dynamic)? fromJson,
   }) async => null;
 
@@ -488,6 +497,7 @@ class _DynamicGateApi implements BackendServiceApi {
     Map<String, String> fields = const {},
     Map<String, List<String>> files = const {},
     Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
     T Function(dynamic)? fromJson,
   }) async => null;
 
@@ -611,6 +621,7 @@ class _GenerationMismatchApi implements BackendServiceApi {
     Map<String, String> fields = const {},
     Map<String, List<String>> files = const {},
     Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
     T Function(dynamic)? fromJson,
   }) async => null;
 

@@ -52,6 +52,7 @@ var (
 
 	ErrGitOperationUnsupported = errors.New("git operation unsupported")
 
+	ErrIsolatedInvalidRequest = errors.New("isolated workspace request invalid")
 	ErrIsolatedCreateFailed   = errors.New("isolated workspace create failed")
 	ErrIsolatedTooLarge       = errors.New("isolated workspace too large")
 	ErrIsolatedDirty          = errors.New("isolated workspace dirty")

@@ -13,7 +13,7 @@ import (
 )
 
 func (e *Engine) RestoreMemoryArchive(ctx context.Context, request Request, input dataportability.ImportRequest, archive MemoryArchive) error {
-	if input.OperationID == "" || archive.Format != "amitia-owned-memory-v1" {
+	if input.OperationID == "" || archive.Format != OwnedMemoryArchiveFormat {
 		return errors.New("记忆恢复请求无效")
 	}
 	if len(archive.Entries) == 0 {

@@ -117,17 +117,21 @@ func (h *BridgeClipboardHost) sendClipboardRequest(ctx context.Context, operatio
 		req.hostSessionID = target.HostSessionID
 		payload["hostClientId"] = target.HostClientID
 		payload["hostSessionId"] = target.HostSessionID
-		h.hub.SendToClient(target.HostClientID, "clipboard_request", payload)
 	} else {
 		if h.hub == nil || !h.hub.HasClients() {
 			return "", nil, ErrClipboardHostUnavailable
 		}
-		h.hub.Broadcast("clipboard_request", payload)
 	}
 
 	h.mu.Lock()
 	h.pendingRequests[requestID] = req
 	h.mu.Unlock()
+
+	if req.hostClientID != "" {
+		h.hub.SendToClient(req.hostClientID, "clipboard_request", payload)
+	} else {
+		h.hub.Broadcast("clipboard_request", payload)
+	}
 
 	return requestID, req, nil
 }

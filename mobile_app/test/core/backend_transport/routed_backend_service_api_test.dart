@@ -116,10 +116,11 @@ class _RecordingApi implements BackendServiceApi {
     Map<String, String> fields = const {},
     Map<String, List<String>> files = const {},
     Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
     T Function(dynamic)? fromJson,
   }) async {
     calls.add(
-      _RoutedCall('POST_MULTIPART', path, null, <String, Object?>{
+      _RoutedCall('POST_MULTIPART', path, headers, <String, Object?>{
         'fields': fields,
         'files': files,
       }),

@@ -44,7 +44,7 @@ func (p *meshLocalDataPort) ownedRuntimeContext(ctx context.Context, scope coord
 		}
 		result[loader.Name()] = raw
 	}
-	if query.ChatRuntime != nil && !query.ChatRuntime.IsInternal && scope.TurnID != "" && p.services.RelTimeCoordinator != nil && temporal.FeatureFlagsFromEnvironment().RelationshipTimeEnabled {
+	if query.ChatRuntime != nil && !query.ChatRuntime.IsInternal && !query.SkipRelationshipTime && scope.TurnID != "" && p.services.RelTimeCoordinator != nil && temporal.FeatureFlagsFromEnvironment().RelationshipTimeEnabled {
 		if err := coordination.ValidateCurrent(ctx); err != nil {
 			return nil, err
 		}

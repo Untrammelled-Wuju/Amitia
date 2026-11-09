@@ -271,6 +271,7 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 	}
 	fail := func(name string, cause error, committedPath string) (KernelInstallResult, error) {
 		_ = committedPath
+		amitialog.Printf("[package-install-failure] operation_id=%s step=%s: %v", operationID, name, cause)
 		if targetGeneration.Current.GenerationID != "" {
 			if compensationErr := r.compensatePackageGeneration(context.Background(), stableGeneration, targetGeneration, currentSwitched); compensationErr != nil {
 				if err := r.container.PackageRepository.SetOperation(context.Background(), operationID, "requires_recovery", name, "PACKAGE_RECOVERY_REQUIRED", compensationErr.Error(), false, guard); err != nil {
@@ -331,13 +332,17 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 		if _, err := r.createPackageRollbackPoint(ctx, operationID, "active", installed, previousDefinition, previousModules, previousContributions); err != nil {
 			return fail("install.create_rollback_point", err, "")
 		}
+	} else if !errors.Is(currentErr, domain.ErrInvalidExtensionID) {
+		return fail("install.read_installation", currentErr, "")
 	}
 	targetGeneration, stableGeneration, err = r.preparePackageGeneration(ctx, operationID, artifact, staging.Path, guard.FencingToken)
 	if err != nil {
 		return fail(StepCommitInstalledTree, err, "")
 	}
 	if previous == nil && stableGeneration.GenerationID != "" {
-		return fail("install.validate_current_pointer", fmt.Errorf("kernel: current pointer exists without installation read model"), targetGeneration.GenerationPath)
+		if err := r.verifyLegacyUninstallGeneration(ctx, session, stableGeneration); err != nil {
+			return fail("install.validate_current_pointer", fmt.Errorf("kernel: current pointer exists without installation read model: %w", err), targetGeneration.GenerationPath)
+		}
 	}
 	if previous != nil {
 		stableFromDB := packageGenerationFromInstallation(*previous)

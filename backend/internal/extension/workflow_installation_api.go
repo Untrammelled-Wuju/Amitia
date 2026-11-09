@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -69,7 +70,7 @@ func (api *WorkflowAPI) installationFor(ctx context.Context, def workflow.Workfl
 	if !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
 	}
-	return nil, errors.New("workflow installation not found")
+	return nil, fmt.Errorf("workflow installation not found: %w", sql.ErrNoRows)
 }
 
 func applyInstallation(def workflow.WorkflowDefinition, inst workflow.WorkflowInstallation) workflow.WorkflowDefinition {

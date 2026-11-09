@@ -147,7 +147,69 @@ class DesktopPetPluginController extends StateNotifier<DesktopPetPluginState> {
       if (mounted) {
         state = state.copyWith(error: safeErrorMessage(error));
       }
-      rethrow;
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> previewPackage(
+    String packagePath, {
+    String expectedExtensionId = '',
+  }) async {
+    if (state.installing) return null;
+    final path = packagePath.trim();
+    if (path.isEmpty) return null;
+    state = state.copyWith(installing: true, clearError: true);
+    try {
+      return await api.previewPackage(
+        path,
+        expectedExtensionId: expectedExtensionId,
+      );
+    } catch (error) {
+      if (mounted) {
+        state = state.copyWith(error: safeErrorMessage(error));
+      }
+      return null;
+    } finally {
+      if (mounted) {
+        state = state.copyWith(installing: false);
+      }
+    }
+  }
+
+  Future<bool> commitPackagePreview(
+    Map<String, dynamic> preview, {
+    String expectedExtensionId = '',
+  }) async {
+    if (state.installing) return false;
+    final gen = state.generation + 1;
+    state = state.copyWith(installing: true, generation: gen, clearError: true);
+    var dispatched = false;
+    String? operationError;
+    try {
+      dispatched = true;
+      final operationId = await api.commitPackagePreview(
+        preview,
+        expectedExtensionId: expectedExtensionId,
+      );
+      return operationId.isNotEmpty;
+    } catch (error) {
+      operationError = safeErrorMessage(error);
+      if (mounted) {
+        state = state.copyWith(error: operationError);
+      }
+      return false;
+    } finally {
+      if (dispatched && mounted) {
+        await _refetchAfterMutation();
+      }
+      if (mounted) {
+        final finalError = operationError ?? state.error;
+        state = state.copyWith(
+          installing: false,
+          error: finalError,
+          clearError: finalError == null,
+        );
+      }
     }
   }
 
@@ -180,10 +242,11 @@ class DesktopPetPluginController extends StateNotifier<DesktopPetPluginState> {
         await _refetchAfterMutation();
       }
       if (mounted) {
+        final finalError = operationError ?? state.error;
         state = state.copyWith(
           installing: false,
-          error: operationError,
-          clearError: operationError == null,
+          error: finalError,
+          clearError: finalError == null,
         );
       }
     }
@@ -251,10 +314,11 @@ class DesktopPetPluginController extends StateNotifier<DesktopPetPluginState> {
       if (mounted) {
         final next = Set<String>.from(state.operationByPluginId)
           ..remove(pluginId);
+        final finalError = operationError ?? state.error;
         state = state.copyWith(
           operationByPluginId: next,
-          error: operationError,
-          clearError: operationError == null,
+          error: finalError,
+          clearError: finalError == null,
         );
       }
     }

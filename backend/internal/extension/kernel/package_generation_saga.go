@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
+	"github.com/u-ai/backend/internal/extension/kernel/enablement"
 )
 
 func (r *Runtime) completePackageGenerationStep(ctx context.Context, operationID, name string, order int, stable, target PackageGenerationCurrent, result string, guard PackageWriteGuard) error {
@@ -43,6 +44,58 @@ func packageGenerationJSON(current PackageGenerationCurrent) string {
 		return "{}"
 	}
 	return string(data)
+}
+
+func (r *Runtime) verifyLegacyUninstallGeneration(ctx context.Context, session PackagePreviewSession, current PackageGenerationCurrent) error {
+	if current.ExtensionID != session.ExtensionID || current.Version != session.Version {
+		return errors.New("reinstall package does not match the existing generation")
+	}
+	container := r.container
+	op, _, err := container.PackageRepository.GetOperation(ctx, session.SpaceID, current.OperationID)
+	if err != nil {
+		return fmt.Errorf("read previous generation operation: %w", err)
+	}
+	if op.Status != string(PackageOperationCompleted) || op.ScopeType != session.ScopeType || op.ScopeID != session.ScopeID ||
+		op.ExtensionID != current.ExtensionID || op.TargetGeneration != current.GenerationID || op.TargetVersion != current.Version ||
+		op.ArtifactID != current.ArtifactID || op.FencingToken != current.FencingToken {
+		return errors.New("previous generation operation does not match the installation")
+	}
+	version, err := container.PackageRepository.GetCurrentPackageVersion(ctx, current.ExtensionID)
+	if err != nil {
+		return fmt.Errorf("read previous package version: %w", err)
+	}
+	if version.GenerationID != current.GenerationID || version.Version != current.Version || version.ArtifactID != current.ArtifactID ||
+		version.InstallOperationID != current.OperationID || !equalTreeHash(version.InstalledTreeHash, current.TreeHash) {
+		return errors.New("previous package version does not match the existing generation")
+	}
+	if container.EnablementStore == nil {
+		return errors.New("extension enablement store unavailable")
+	}
+	state, err := container.EnablementStore.Get(ctx, enablement.StateSubject{Kind: enablement.SubjectExtension, ID: current.ExtensionID})
+	if err != nil {
+		return fmt.Errorf("read legacy uninstall state: %w", err)
+	}
+	completedAt, err := time.Parse(time.RFC3339Nano, op.CompletedAt)
+	if err != nil || state.Enablement != enablement.EnablementDisabled || state.DesiredRuntime != enablement.DesiredRuntimeStopped || !state.UpdatedAt.After(completedAt) {
+		return errors.New("legacy uninstall state cannot be verified")
+	}
+	id := domain.ExtensionID(current.ExtensionID)
+	semver, err := domain.ParseVersion(current.Version)
+	if err != nil {
+		return err
+	}
+	if _, err := container.DefinitionRepository.GetExtension(ctx, id, semver); !errors.Is(err, domain.ErrInvalidExtensionID) {
+		return fmt.Errorf("previous extension definition is not confirmed absent: %v", err)
+	}
+	modules, err := container.ModuleRepository.ListModules(ctx, id)
+	if err != nil || len(modules) != 0 {
+		return fmt.Errorf("previous extension modules are not confirmed absent: %v", err)
+	}
+	contributions, err := container.ContributionRepository.ListContributions(ctx, id)
+	if err != nil || len(contributions) != 0 {
+		return fmt.Errorf("previous extension contributions are not confirmed absent: %v", err)
+	}
+	return container.PackageGenerationStore.VerifyGeneration(ctx, current)
 }
 
 func (r *Runtime) preparePackageGeneration(ctx context.Context, operationID string, artifact PackageArtifact, sourcePath string, fencingToken int64) (PackagePreparedGeneration, PackageGenerationCurrent, error) {

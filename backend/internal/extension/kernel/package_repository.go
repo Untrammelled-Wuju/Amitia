@@ -717,6 +717,10 @@ func (r *PackageRepository) PutRollbackPoint(ctx context.Context, point PackageR
 }
 
 func (r *PackageRepository) GetRollbackPoint(ctx context.Context, extensionID, version string) (PackageRollbackPoint, error) {
+	return r.getRollbackPoint(ctx, extensionID, version, "")
+}
+
+func (r *PackageRepository) getRollbackPoint(ctx context.Context, extensionID, version, generationID string) (PackageRollbackPoint, error) {
 	var p PackageRollbackPoint
 	err := r.db.QueryRowContext(ctx, `SELECT rollback_point_id, extension_id, source_version,
 		source_generation, source_version_id, source_generation_id, snapshot_id, artifact_id,
@@ -727,7 +731,8 @@ func (r *PackageRepository) GetRollbackPoint(ctx context.Context, extensionID, v
 		retention_state, retention_until, source_operation_id, installed_path, created_at, expires_at
 		FROM extension_package_rollback_points WHERE extension_id = ? AND source_version = ?
 		AND retention_state IN ('active', 'forward_recovery')
-		ORDER BY created_at DESC LIMIT 1`, extensionID, version).Scan(&p.RollbackPointID, &p.ExtensionID,
+		AND (? = '' OR source_generation_id = ? OR source_generation_id = '')
+		ORDER BY created_at DESC LIMIT 1`, extensionID, version, generationID, generationID).Scan(&p.RollbackPointID, &p.ExtensionID,
 		&p.SourceVersion, &p.SourceGeneration, &p.SourceVersionID, &p.SourceGenerationID,
 		&p.SnapshotID, &p.ArtifactID, &p.DefinitionSnapshotJSON,
 		&p.ModuleSnapshotJSON, &p.ContributionSnapshotJSON, &p.PermissionSnapshotJSON,

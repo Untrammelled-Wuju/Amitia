@@ -227,6 +227,18 @@ func (i *TypedContributionInstaller) registerBuiltInAdapters() {
 	})
 	i.registerAdapter(domain.ContributionAdapterDesktopPet, contributionAdapterHandler{
 		build: i.buildDesktopPetPluginOp,
+		activate: func(ctx context.Context, contrib domain.ContributionDefinition, _ int64) error {
+			if i.container.DesktopPetPluginBoundary == nil {
+				return nil
+			}
+			return i.container.DesktopPetPluginBoundary.MarkContributionAvailable(ctx, contrib.ExtensionID, contrib)
+		},
+		deactivate: func(ctx context.Context, contrib domain.ContributionDefinition) error {
+			if i.container.DesktopPetPluginBoundary == nil {
+				return nil
+			}
+			return i.container.DesktopPetPluginBoundary.MarkContributionUnavailable(ctx, contrib.ExtensionID, contrib)
+		},
 	})
 }
 

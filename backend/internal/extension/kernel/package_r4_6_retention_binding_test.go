@@ -464,7 +464,7 @@ func TestR46RetentionBindingPassesForExactIdentity(t *testing.T) {
 	putR46RollbackPoint(t, ctx, container, point)
 	putR46VersionRecord(t, ctx, container, r46VersionRecord())
 
-	binding, err := runtime.verifyRollbackRetentionBinding(ctx, "com.example/r46", "1.0.0", "artifact-r46")
+	binding, err := runtime.verifyRollbackRetentionBinding(ctx, "com.example/r46", "1.0.0", "artifact-r46", "")
 	if err != nil {
 		t.Fatalf("expected binding to pass, got: %v", err)
 	}
@@ -489,7 +489,7 @@ func TestR46RetentionBindingRejectsSourceVersionIDMismatch(t *testing.T) {
 		ArtifactID: "artifact-r46", VersionState: "current", GenerationID: "generation-r46",
 	})
 
-	_, err := runtime.verifyRollbackRetentionBinding(ctx, "com.example/r46", "1.0.0", "artifact-r46")
+	_, err := runtime.verifyRollbackRetentionBinding(ctx, "com.example/r46", "1.0.0", "artifact-r46", "")
 	if err == nil {
 		t.Fatal("expected rejection for version id mismatch")
 	}
@@ -505,7 +505,7 @@ func TestR46RetentionBindingRejectsVersionLabelMismatch(t *testing.T) {
 		ArtifactID: "artifact-r46", VersionState: "current", GenerationID: "generation-r46",
 	})
 
-	_, err := runtime.verifyRollbackRetentionBinding(ctx, "com.example/r46", "1.0.0", "artifact-r46")
+	_, err := runtime.verifyRollbackRetentionBinding(ctx, "com.example/r46", "1.0.0", "artifact-r46", "")
 	if err == nil {
 		t.Fatal("expected rejection for version label mismatch")
 	}
@@ -521,7 +521,7 @@ func TestR46RetentionBindingRejectsVersionArtifactMismatch(t *testing.T) {
 		ArtifactID: "artifact-different", VersionState: "current", GenerationID: "generation-r46",
 	})
 
-	_, err := runtime.verifyRollbackRetentionBinding(ctx, "com.example/r46", "1.0.0", "artifact-r46")
+	_, err := runtime.verifyRollbackRetentionBinding(ctx, "com.example/r46", "1.0.0", "artifact-r46", "")
 	if err == nil {
 		t.Fatal("expected rejection for version artifact mismatch")
 	}
@@ -537,7 +537,7 @@ func TestR46RetentionBindingRejectsVersionGenerationMismatch(t *testing.T) {
 		ArtifactID: "artifact-r46", VersionState: "current", GenerationID: "generation-different",
 	})
 
-	_, err := runtime.verifyRollbackRetentionBinding(ctx, "com.example/r46", "1.0.0", "artifact-r46")
+	_, err := runtime.verifyRollbackRetentionBinding(ctx, "com.example/r46", "1.0.0", "artifact-r46", "")
 	if err == nil {
 		t.Fatal("expected rejection for version generation mismatch")
 	}
@@ -570,7 +570,7 @@ func TestR46RetentionBindingRejectsMissingSnapshotID(t *testing.T) {
 		t.Fatalf("insert rollback point: %v", err)
 	}
 
-	_, err := runtime.verifyRollbackRetentionBinding(ctx, "com.example/r46", "1.0.0", "artifact-r46")
+	_, err := runtime.verifyRollbackRetentionBinding(ctx, "com.example/r46", "1.0.0", "artifact-r46", "")
 	if err == nil {
 		t.Fatal("expected rejection for missing snapshot id")
 	}
@@ -602,7 +602,7 @@ func TestR46RetentionBindingRejectsSnapshotHashMismatch(t *testing.T) {
 		t.Fatalf("insert rollback point: %v", err)
 	}
 
-	_, err := runtime.verifyRollbackRetentionBinding(ctx, "com.example/r46", "1.0.0", "artifact-r46")
+	_, err := runtime.verifyRollbackRetentionBinding(ctx, "com.example/r46", "1.0.0", "artifact-r46", "")
 	if err == nil {
 		t.Fatal("expected rejection for snapshot hash mismatch")
 	}
@@ -640,7 +640,7 @@ func TestR46RetentionBindingRejectsWrongReferenceOwner(t *testing.T) {
 		t.Fatalf("create wrong-owner reference: %v", err)
 	}
 
-	_, err := runtime.verifyRollbackRetentionBinding(ctx, "com.example/r46", "1.0.0", "artifact-r46")
+	_, err := runtime.verifyRollbackRetentionBinding(ctx, "com.example/r46", "1.0.0", "artifact-r46", "")
 	if err == nil {
 		t.Fatal("expected rejection for wrong reference owner")
 	}
@@ -673,7 +673,7 @@ func TestR46RetentionBindingRejectsMissingReference(t *testing.T) {
 		t.Fatalf("insert rollback point without reference: %v", err)
 	}
 
-	_, err := runtime.verifyRollbackRetentionBinding(ctx, "com.example/r46", "1.0.0", "artifact-r46")
+	_, err := runtime.verifyRollbackRetentionBinding(ctx, "com.example/r46", "1.0.0", "artifact-r46", "")
 	if err == nil {
 		t.Fatal("expected rejection for missing reference")
 	}
@@ -691,7 +691,7 @@ func TestR46RetentionBindingRejectsDuplicateReference(t *testing.T) {
 		t.Fatalf("duplicate reference: %v", err)
 	}
 
-	_, err := runtime.verifyRollbackRetentionBinding(ctx, "com.example/r46", "1.0.0", "artifact-r46")
+	_, err := runtime.verifyRollbackRetentionBinding(ctx, "com.example/r46", "1.0.0", "artifact-r46", "")
 	if err == nil {
 		t.Fatal("expected rejection for duplicate reference")
 	}
@@ -708,7 +708,7 @@ func TestR46RetentionBindingRejectsReleasedReference(t *testing.T) {
 		t.Fatalf("release reference: %v", err)
 	}
 
-	_, err := runtime.verifyRollbackRetentionBinding(ctx, "com.example/r46", "1.0.0", "artifact-r46")
+	_, err := runtime.verifyRollbackRetentionBinding(ctx, "com.example/r46", "1.0.0", "artifact-r46", "")
 	if err == nil {
 		t.Fatal("expected rejection for released reference")
 	}
@@ -742,7 +742,7 @@ func TestR46RetentionBindingRejectsExpiredReference(t *testing.T) {
 		t.Fatalf("insert rollback point: %v", err)
 	}
 
-	_, err := runtime.verifyRollbackRetentionBinding(ctx, "com.example/r46", "1.0.0", "artifact-r46")
+	_, err := runtime.verifyRollbackRetentionBinding(ctx, "com.example/r46", "1.0.0", "artifact-r46", "")
 	if err == nil {
 		t.Fatal("expected rejection for expired reference")
 	}
@@ -778,7 +778,7 @@ func TestR46RetentionBindingRejectsReferenceExpirationDrift(t *testing.T) {
 		t.Fatalf("create reference with different expiration: %v", err)
 	}
 
-	_, err := runtime.verifyRollbackRetentionBinding(ctx, "com.example/r46", "1.0.0", "artifact-r46")
+	_, err := runtime.verifyRollbackRetentionBinding(ctx, "com.example/r46", "1.0.0", "artifact-r46", "")
 	if err == nil {
 		t.Fatal("expected rejection for reference expiration drift")
 	}
@@ -791,12 +791,31 @@ func TestR46UninstallPolicyUsesRollbackPointIDAsReferenceOwner(t *testing.T) {
 	putR46RollbackPoint(t, ctx, container, point)
 	putR46VersionRecord(t, ctx, container, r46VersionRecord())
 
-	policy, _, err := runtime.computeUninstallArtifactPolicy(ctx, "artifact-r46", "com.example/r46", "1.0.0")
+	policy, _, err := runtime.computeUninstallArtifactPolicy(ctx, "artifact-r46", "com.example/r46", "1.0.0", "generation-r46")
 	if err != nil {
 		t.Fatalf("expected policy computation to succeed, got: %v", err)
 	}
 	if policy != ArtifactPolicyRetainForRollback {
 		t.Fatalf("expected RetainForRollback, got %s", policy)
+	}
+}
+
+func TestUninstallKeepsArtifactReferencedByEarlierInstallationOfSameVersion(t *testing.T) {
+	runtime, container, ctx := setupR46Runtime(t)
+	point := validR46RollbackPoint()
+	putR46Artifact(t, ctx, container, r46Artifact())
+	putR46RollbackPoint(t, ctx, container, point)
+	reinstalled := r46VersionRecord()
+	reinstalled.GenerationID = "reinstalled-generation"
+	putR46VersionRecord(t, ctx, container, reinstalled)
+
+	policy, _, err := runtime.computeUninstallArtifactPolicy(ctx, reinstalled.ArtifactID, reinstalled.ExtensionID, reinstalled.Version, reinstalled.GenerationID)
+	if err != nil || policy != ArtifactPolicyRetainArtifact {
+		t.Fatalf("policy=%s err=%v", policy, err)
+	}
+	refs, err := container.PackageRepository.ListActiveArtifactReferences(ctx, reinstalled.ArtifactID, ArtifactReferenceRollbackPoint, point.RollbackPointID)
+	if err != nil || len(refs) != 1 {
+		t.Fatalf("historical rollback reference lost: count=%d err=%v", len(refs), err)
 	}
 }
 

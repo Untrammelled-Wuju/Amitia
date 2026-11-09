@@ -25,7 +25,7 @@ func (h *Handler) GetCenterHealth(c *gin.Context) {
 
 	result, err := h.service.ListPlugins(c.Request.Context(), PluginFilter{}.Normalize())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": err.Error()})
+		WriteError(c, err)
 		return
 	}
 
@@ -55,7 +55,7 @@ func (h *Handler) ListPlugins(c *gin.Context) {
 
 	result, err := h.service.ListPlugins(c.Request.Context(), filter)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": err.Error()})
+		WriteError(c, err)
 		return
 	}
 
@@ -89,7 +89,7 @@ func (h *Handler) GetPlugin(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"code": 404, "msg": err.Error()})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": err.Error()})
+		WriteError(c, err)
 		return
 	}
 
@@ -111,7 +111,7 @@ func (h *Handler) ListRuntimes(c *gin.Context) {
 
 	result, err := h.service.ListRuntimes(c.Request.Context(), filter)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": err.Error()})
+		WriteError(c, err)
 		return
 	}
 
@@ -137,7 +137,7 @@ func (h *Handler) GetRuntime(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"code": 404, "msg": err.Error()})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": err.Error()})
+		WriteError(c, err)
 		return
 	}
 
@@ -158,7 +158,7 @@ func (h *Handler) ListServices(c *gin.Context) {
 
 	result, err := h.service.ListServices(c.Request.Context(), runtimeID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": err.Error()})
+		WriteError(c, err)
 		return
 	}
 
@@ -179,7 +179,7 @@ func (h *Handler) GetRuntimeHealth(c *gin.Context) {
 
 	result, err := h.service.GetRuntimeHealth(c.Request.Context(), runtimeID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": err.Error()})
+		WriteError(c, err)
 		return
 	}
 
@@ -232,7 +232,7 @@ func (h *Handler) GetHandshakeStatus(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": err.Error()})
+		WriteError(c, err)
 		return
 	}
 
@@ -256,7 +256,7 @@ func (h *Handler) GetControlAuthority(c *gin.Context) {
 
 	result, err := h.service.GetControlAuthority(c.Request.Context(), runtimeID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": err.Error()})
+		WriteError(c, err)
 		return
 	}
 

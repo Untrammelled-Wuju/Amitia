@@ -81,6 +81,7 @@ __pycache__/
 
 # Generated extension candidates, packages and source archives
 backend/testdata/extensions/**/dist-candidate-*/
+/plugins-code/qa-desktop-pet-plugin/.build/
 /Plugin/
 /testplugins/mock-amitiax-game-plugin/dist-package/
 /testplugins/game-plugin-demo/go/mock-game-plugin.exe

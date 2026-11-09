@@ -17,6 +17,7 @@ import (
 	"github.com/u-ai/backend/internal/chat/importbatch"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/system/dataportability"
+	"github.com/u-ai/backend/pkg/util"
 	"gorm.io/gorm"
 )
 
@@ -440,8 +441,7 @@ func (p *meshLocalDataPort) manageChatForRole(ctx context.Context, scope coordin
 		if size < 1 || size > 128 {
 			size = 50
 		}
-		start := min((page-1)*size, len(items))
-		end := min(start+size, len(items))
+		start, end := util.PageBounds(len(items), page, size)
 		return map[string]any{"items": items[start:end], "total": len(items), "page": page, "pageSize": size}, nil
 	case "export":
 		if request.ConversationID == "" && len(request.ConversationIDs) == 0 {

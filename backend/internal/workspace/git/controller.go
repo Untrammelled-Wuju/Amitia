@@ -387,7 +387,7 @@ type IsolatedCreateResult struct {
 func (c *GitController) CreateIsolated(ctx context.Context, req IsolatedCreateRequest) (*IsolatedCreateResult, error) {
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" {
-		return nil, fmt.Errorf("%w: name is required", ErrIsolatedCreateFailed)
+		return nil, fmt.Errorf("%w: name is required", ErrIsolatedInvalidRequest)
 	}
 	mode := GitIsolationMode(strings.TrimSpace(req.Mode))
 	if mode == "" {
@@ -398,7 +398,7 @@ func (c *GitController) CreateIsolated(ctx context.Context, req IsolatedCreateRe
 		}
 	}
 	if mode != GitIsolationModeClone && mode != GitIsolationModeSnapshot {
-		return nil, fmt.Errorf("%w: mode %q not supported", ErrIsolatedCreateFailed, mode)
+		return nil, fmt.Errorf("%w: mode %q not supported", ErrIsolatedInvalidRequest, mode)
 	}
 
 	dataRoot := c.roots.DataRoot()
@@ -419,7 +419,7 @@ func (c *GitController) CreateIsolated(ctx context.Context, req IsolatedCreateRe
 	switch mode {
 	case GitIsolationModeClone:
 		if req.GitRemote == nil || strings.TrimSpace(req.GitRemote.URL) == "" {
-			return nil, fmt.Errorf("%w: gitRemote.url is required for clone mode", ErrIsolatedCreateFailed)
+			return nil, fmt.Errorf("%w: gitRemote.url is required for clone mode", ErrIsolatedInvalidRequest)
 		}
 		if err := ValidateRemoteURL(req.GitRemote.URL); err != nil {
 			return nil, err
@@ -441,7 +441,7 @@ func (c *GitController) CreateIsolated(ctx context.Context, req IsolatedCreateRe
 		source = &GitSourceSpec{Type: "git", URI: req.GitRemote.URL, Ref: req.Ref, Depth: req.Depth, RemoteID: req.GitRemote.RemoteID}
 	case GitIsolationModeSnapshot:
 		if strings.TrimSpace(req.SourceWorkspaceURI) == "" {
-			return nil, fmt.Errorf("%w: sourceWorkspaceUri is required for snapshot mode", ErrIsolatedCreateFailed)
+			return nil, fmt.Errorf("%w: sourceWorkspaceUri is required for snapshot mode", ErrIsolatedInvalidRequest)
 		}
 		sourceRoot, _, err := c.resolveRepositoryPath(req.SourceWorkspaceURI)
 		if err != nil {

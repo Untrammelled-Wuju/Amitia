@@ -2,6 +2,7 @@ package kernel
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -10,6 +11,89 @@ import (
 
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 )
+
+func TestPackageReinstallAfterLegacyUninstall(t *testing.T) {
+	for _, legacyUninstall := range []bool{true, false} {
+		t.Run(map[bool]string{true: "legacy_uninstall", false: "missing_installation_only"}[legacyUninstall], func(t *testing.T) {
+			ctx := t.Context()
+			runtime, container := newPackagePipelineRuntime(t)
+			installed := installPackagePipelineVersion(t, runtime, "1.0.0")
+			stable, err := container.PackageGenerationStore.ReadCurrent(installed.ExtensionID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			operation, _, err := container.PackageRepository.GetOperation(ctx, "user-1", installed.OperationID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			session, err := container.PackageRepository.GetPreview(ctx, operation.PreviewSessionID, "user-1", "global", "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			var original InstallPreview
+			if err := json.Unmarshal([]byte(session.PreviewResultJSON), &original); err != nil {
+				t.Fatal(err)
+			}
+			if legacyUninstall {
+				err = runtime.Uninstall(ctx, installed.ExtensionID)
+			} else {
+				err = container.InstallationRepository.DeleteInstallation(ctx, domain.ExtensionID(installed.ExtensionID))
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			reinstallArchivePath := installed.ArtifactPath
+			if legacyUninstall {
+				reinstallArchivePath = createPackagePipelineArchive(t, "1.0.0")
+			}
+			archive, err := os.Open(reinstallArchivePath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer archive.Close()
+			preview, err := runtime.PreviewPackage(ctx, PackagePreviewRequest{
+				SpaceID: "user-1", ScopeType: "global", FileName: "pipeline.amitiax",
+				AllowUnsignedDev: true, DeveloperSessionID: original.DeveloperSessionID,
+			}, archive)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if legacyUninstall && preview.ArtifactID == stable.ArtifactID {
+				t.Fatalf("reinstall fixture reused the installed artifact: %s", preview.ArtifactID)
+			}
+			confirmations := make(map[string]bool)
+			for _, name := range preview.RequiredConfirmations {
+				confirmations[name] = true
+			}
+			confirmation, err := runtime.ConfirmPackagePreview(ctx, PackagePreviewConfirmationRequest{
+				SessionID: preview.SessionID, SpaceID: "user-1", ScopeType: "global", Confirmations: confirmations,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			reinstalled, installErr := runtime.ExecutePackageInstall(ctx, PackageInstallRequest{
+				SessionID: preview.SessionID, SpaceID: "user-1", ScopeType: "global",
+				ConfirmationToken: confirmation.ConfirmationToken, IdempotencyKey: "reinstall-legacy",
+			})
+			current, err := container.PackageGenerationStore.ReadCurrent(installed.ExtensionID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !legacyUninstall {
+				if installErr == nil || current != stable {
+					t.Fatalf("unproven orphan was replaced: current=%+v err=%v", current, installErr)
+				}
+				return
+			}
+			if installErr != nil || current.GenerationID == stable.GenerationID || current.OperationID != reinstalled.OperationID {
+				t.Fatalf("reinstall did not activate a new generation: current=%+v err=%v", current, installErr)
+			}
+			if err := container.PackageGenerationStore.VerifyGeneration(ctx, stable); err != nil {
+				t.Fatalf("old generation was lost: %v", err)
+			}
+		})
+	}
+}
 
 func TestPackageGenerationInstallPersistsEvidenceAndReadModel(t *testing.T) {
 	ctx := context.Background()

@@ -4,6 +4,7 @@ import 'package:amitia_app/core/models/character.dart';
 import 'package:amitia_app/core/services/character_detail_service.dart';
 import 'package:amitia_app/core/services/character_service.dart';
 import 'package:amitia_app/core/services/providers.dart';
+import 'package:amitia_app/core/services/shared_core_data_access.dart';
 import 'package:amitia_app/core/widgets/profile_avatar.dart';
 import 'package:amitia_app/features/characters/presentation/pages/character_create_page.dart';
 import 'package:flutter/material.dart';
@@ -44,6 +45,12 @@ class _Characters extends Fake implements CharacterService {
       name: data['name'] as String,
       roleAuthority: authorityValue,
     );
+  }
+
+  @override
+  Future<CharacterDto?> setActive(String id, {String? roleAuthority}) async {
+    expect(roleAuthority, authorityValue);
+    return CharacterDto(id: id, name: payload!['name'] as String);
   }
 }
 
@@ -97,6 +104,9 @@ void main() {
         overrides: [
           characterServiceProvider.overrideWithValue(characters),
           characterDetailServiceProvider.overrideWithValue(details),
+          sharedCoreDataAccessProvider.overrideWith(
+            (ref) async => const SharedCoreDataAccess.local(),
+          ),
         ],
         child: MaterialApp.router(routerConfig: router),
       ),

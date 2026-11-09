@@ -71,6 +71,33 @@ func TestBoundaryLifecycle_FullCycle(t *testing.T) {
 	}
 }
 
+func TestBoundaryMarkContributionAvailableRegistersContribution(t *testing.T) {
+	src := newFakeSource()
+	bound := NewBoundary(src)
+	ctx := context.Background()
+	ext := domain.ExtensionID("com.example/pet")
+	resource := makeContrib(string(ext), "resource", domain.ContributionKindDesktopPetPlugin, map[string]any{
+		"contributionKind": "pet_resource",
+		"displayName":      "Resource",
+		"assetKind":        "manifest",
+	})
+
+	if err := bound.MarkContributionAvailable(ctx, ext, resource); err != nil {
+		t.Fatalf("mark contribution available: %v", err)
+	}
+	ref := ContributionRefFromDefinition(resource)
+	reg, ok := bound.Find(ref)
+	if !ok {
+		t.Fatal("contribution was not registered")
+	}
+	if reg.Status != ContributionStatusActive {
+		t.Fatalf("status=%s want active", reg.Status)
+	}
+	if err := bound.ValidateResourceAccess(ctx, ref); err != nil {
+		t.Fatalf("resource should be accessible: %v", err)
+	}
+}
+
 func TestBoundaryValidateActionInvocation(t *testing.T) {
 	src := newFakeSource()
 	bound := NewBoundary(src)

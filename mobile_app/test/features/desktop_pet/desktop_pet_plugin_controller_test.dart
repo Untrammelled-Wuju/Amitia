@@ -18,6 +18,8 @@ class _FakeDesktopPetPluginApi implements DesktopPetPluginApi {
   int uninstallCallCount = 0;
   int installCallCount = 0;
   int updateCallCount = 0;
+  int previewPackageCallCount = 0;
+  int commitPackageCallCount = 0;
 
   bool failList = false;
   bool failDetail = false;
@@ -26,10 +28,22 @@ class _FakeDesktopPetPluginApi implements DesktopPetPluginApi {
   bool failUninstall = false;
   bool failInstall = false;
   bool failUpdate = false;
+  bool failPackagePreview = false;
+  bool failPackageCommit = false;
   Duration delay = Duration.zero;
+  Map<String, dynamic> packagePreview = const {
+    'sessionId': 'preview-1',
+    'id': 'com.amitia.qa/desktop-pet-plugin',
+    'name': 'QA Desktop Pet',
+    'version': '1.0.0',
+  };
 
   @override
-  Future<DesktopPetPluginList> list({int page = 1, int pageSize = 20, String? search}) async {
+  Future<DesktopPetPluginList> list({
+    int page = 1,
+    int pageSize = 20,
+    String? search,
+  }) async {
     listCallCount++;
     if (delay > Duration.zero) {
       await Future.delayed(delay);
@@ -47,25 +61,29 @@ class _FakeDesktopPetPluginApi implements DesktopPetPluginApi {
       throw Exception('detail failed');
     }
     return listResult.plugins
-        .firstWhere((p) => p.pluginId == pluginId,
-            orElse: () => const DesktopPetPluginSummary(
-                  extensionId: '',
-                  pluginId: '',
-                  name: '',
-                  description: '',
-                  version: '',
-                  enabled: false,
-                  installState: '',
-                ))
-        .let((p) => DesktopPetPluginDetail(
-              extensionId: p.extensionId,
-              pluginId: p.pluginId,
-              name: p.name,
-              description: p.description,
-              version: p.version,
-              enabled: p.enabled,
-              installState: p.installState,
-            ));
+        .firstWhere(
+          (p) => p.pluginId == pluginId,
+          orElse: () => const DesktopPetPluginSummary(
+            extensionId: '',
+            pluginId: '',
+            name: '',
+            description: '',
+            version: '',
+            enabled: false,
+            installState: '',
+          ),
+        )
+        .let(
+          (p) => DesktopPetPluginDetail(
+            extensionId: p.extensionId,
+            pluginId: p.pluginId,
+            name: p.name,
+            description: p.description,
+            version: p.version,
+            enabled: p.enabled,
+            installState: p.installState,
+          ),
+        );
   }
 
   @override
@@ -82,7 +100,10 @@ class _FakeDesktopPetPluginApi implements DesktopPetPluginApi {
   }
 
   @override
-  Future<DesktopPetPluginInstallResult> update(String extensionId, String packagePath) async {
+  Future<DesktopPetPluginInstallResult> update(
+    String extensionId,
+    String packagePath,
+  ) async {
     updateCallCount++;
     if (failUpdate) {
       throw Exception('update failed');
@@ -95,12 +116,45 @@ class _FakeDesktopPetPluginApi implements DesktopPetPluginApi {
   }
 
   @override
+  Future<Map<String, dynamic>> previewPackage(
+    String packagePath, {
+    String expectedExtensionId = '',
+  }) async {
+    previewPackageCallCount++;
+    if (delay > Duration.zero) {
+      await Future.delayed(delay);
+    }
+    if (failPackagePreview) {
+      throw Exception('package preview failed');
+    }
+    return Map<String, dynamic>.from(packagePreview);
+  }
+
+  @override
+  Future<String> commitPackagePreview(
+    Map<String, dynamic> preview, {
+    String expectedExtensionId = '',
+  }) async {
+    commitPackageCallCount++;
+    if (delay > Duration.zero) {
+      await Future.delayed(delay);
+    }
+    if (failPackageCommit) {
+      throw Exception('package commit failed');
+    }
+    return 'operation-1';
+  }
+
+  @override
   Future<DesktopPetPluginMutationResult> enable(String extensionId) async {
     enableCallCount++;
     if (failEnable) {
       throw Exception('enable failed');
     }
-    return DesktopPetPluginMutationResult(extensionId: extensionId, success: true);
+    return DesktopPetPluginMutationResult(
+      extensionId: extensionId,
+      success: true,
+    );
   }
 
   @override
@@ -109,7 +163,10 @@ class _FakeDesktopPetPluginApi implements DesktopPetPluginApi {
     if (failDisable) {
       throw Exception('disable failed');
     }
-    return DesktopPetPluginMutationResult(extensionId: extensionId, success: true);
+    return DesktopPetPluginMutationResult(
+      extensionId: extensionId,
+      success: true,
+    );
   }
 
   @override
@@ -118,7 +175,10 @@ class _FakeDesktopPetPluginApi implements DesktopPetPluginApi {
     if (failUninstall) {
       throw Exception('uninstall failed');
     }
-    return DesktopPetPluginMutationResult(extensionId: extensionId, success: true);
+    return DesktopPetPluginMutationResult(
+      extensionId: extensionId,
+      success: true,
+    );
   }
 }
 
@@ -536,8 +596,7 @@ void main() {
     });
 
     test('error from load is cleared on subsequent successful load', () async {
-      final api = _FakeDesktopPetPluginApi()
-        ..failList = true;
+      final api = _FakeDesktopPetPluginApi()..failList = true;
 
       final controller = DesktopPetPluginController(api: api);
       await controller.load();
@@ -606,26 +665,34 @@ void main() {
       expect(controller.state.installing, false);
     });
 
-    test('install sets installing flag during operation and clears after', () async {
+    test(
+      'install sets installing flag during operation and clears after',
+      () async {
+        final api = _FakeDesktopPetPluginApi()
+          ..delay = const Duration(milliseconds: 50)
+          ..listResult = const DesktopPetPluginList(
+            plugins: [],
+            total: 0,
+            page: 1,
+            pageSize: 20,
+          );
+        final controller = DesktopPetPluginController(api: api);
+
+        final future = controller.install('/pkgs/foo.zip');
+        expect(controller.state.installing, true);
+        await future;
+        expect(controller.state.installing, false);
+      },
+    );
+
+    test('install rejects empty path', () async {
       final api = _FakeDesktopPetPluginApi()
-        ..delay = const Duration(milliseconds: 50)
         ..listResult = const DesktopPetPluginList(
           plugins: [],
           total: 0,
           page: 1,
           pageSize: 20,
         );
-      final controller = DesktopPetPluginController(api: api);
-
-      final future = controller.install('/pkgs/foo.zip');
-      expect(controller.state.installing, true);
-      await future;
-      expect(controller.state.installing, false);
-    });
-
-    test('install rejects empty path', () async {
-      final api = _FakeDesktopPetPluginApi()
-        ..listResult = const DesktopPetPluginList(plugins: [], total: 0, page: 1, pageSize: 20);
       final controller = DesktopPetPluginController(api: api);
 
       final result = await controller.install('  ');
@@ -637,7 +704,12 @@ void main() {
     test('install rejects concurrent calls', () async {
       final api = _FakeDesktopPetPluginApi()
         ..delay = const Duration(milliseconds: 50)
-        ..listResult = const DesktopPetPluginList(plugins: [], total: 0, page: 1, pageSize: 20);
+        ..listResult = const DesktopPetPluginList(
+          plugins: [],
+          total: 0,
+          page: 1,
+          pageSize: 20,
+        );
       final controller = DesktopPetPluginController(api: api);
 
       final first = controller.install('/pkgs/1.zip');
@@ -696,9 +768,31 @@ void main() {
       expect(controller.state.plugins.first.version, '1.2.0');
     });
 
-    test('enable refetch with canonical state wins over mutation response', () async {
-      final api = _FakeDesktopPetPluginApi()
-        ..listResult = const DesktopPetPluginList(
+    test(
+      'enable refetch with canonical state wins over mutation response',
+      () async {
+        final api = _FakeDesktopPetPluginApi()
+          ..listResult = const DesktopPetPluginList(
+            plugins: [
+              DesktopPetPluginSummary(
+                extensionId: 'ext-1',
+                pluginId: 'plg-1',
+                name: 'Plugin',
+                description: '',
+                version: '1.0',
+                enabled: false,
+                installState: 'installed',
+              ),
+            ],
+            total: 1,
+            page: 1,
+            pageSize: 20,
+          );
+        final controller = DesktopPetPluginController(api: api);
+        await controller.load();
+        expect(controller.state.plugins.first.enabled, false);
+
+        api.listResult = const DesktopPetPluginList(
           plugins: [
             DesktopPetPluginSummary(
               extensionId: 'ext-1',
@@ -714,32 +808,13 @@ void main() {
           page: 1,
           pageSize: 20,
         );
-      final controller = DesktopPetPluginController(api: api);
-      await controller.load();
-      expect(controller.state.plugins.first.enabled, false);
 
-      api.listResult = const DesktopPetPluginList(
-        plugins: [
-          DesktopPetPluginSummary(
-            extensionId: 'ext-1',
-            pluginId: 'plg-1',
-            name: 'Plugin',
-            description: '',
-            version: '1.0',
-            enabled: false,
-            installState: 'installed',
-          ),
-        ],
-        total: 1,
-        page: 1,
-        pageSize: 20,
-      );
+        final result = await controller.enable('plg-1', 'ext-1');
 
-      final result = await controller.enable('plg-1', 'ext-1');
-
-      expect(result, true);
-      expect(controller.state.plugins.first.enabled, false);
-    });
+        expect(result, true);
+        expect(controller.state.plugins.first.enabled, false);
+      },
+    );
 
     test('uncertain failure refetch uses backend truth', () async {
       final api = _FakeDesktopPetPluginApi()
@@ -834,38 +909,41 @@ void main() {
       expect(controller.state.error, isNotNull);
     });
 
-    test('install mutation response does not patch local state directly', () async {
-      final api = _FakeDesktopPetPluginApi()
-        ..listResult = const DesktopPetPluginList(
-          plugins: [],
-          total: 0,
+    test(
+      'install mutation response does not patch local state directly',
+      () async {
+        final api = _FakeDesktopPetPluginApi()
+          ..listResult = const DesktopPetPluginList(
+            plugins: [],
+            total: 0,
+            page: 1,
+            pageSize: 20,
+          );
+        final controller = DesktopPetPluginController(api: api);
+        await controller.load();
+
+        api.listResult = const DesktopPetPluginList(
+          plugins: [
+            DesktopPetPluginSummary(
+              extensionId: 'ext-x',
+              pluginId: 'plg-x',
+              name: 'New',
+              description: '',
+              version: '1.0.0',
+              enabled: false,
+              installState: 'installed',
+            ),
+          ],
+          total: 1,
           page: 1,
           pageSize: 20,
         );
-      final controller = DesktopPetPluginController(api: api);
-      await controller.load();
 
-      api.listResult = const DesktopPetPluginList(
-        plugins: [
-          DesktopPetPluginSummary(
-            extensionId: 'ext-x',
-            pluginId: 'plg-x',
-            name: 'New',
-            description: '',
-            version: '1.0.0',
-            enabled: false,
-            installState: 'installed',
-          ),
-        ],
-        total: 1,
-        page: 1,
-        pageSize: 20,
-      );
+        await controller.install('/pkgs/foo.zip');
 
-      await controller.install('/pkgs/foo.zip');
-
-      expect(controller.state.plugins.length, 1);
-      expect(controller.state.plugins.first.pluginId, 'plg-x');
-    });
+        expect(controller.state.plugins.length, 1);
+        expect(controller.state.plugins.first.pluginId, 'plg-x');
+      },
+    );
   });
 }

@@ -3,9 +3,11 @@ package extension
 import (
 	"context"
 	"encoding/json"
+	"path"
 	"strings"
 
 	kernelruntime "github.com/u-ai/backend/internal/extension/kernel"
+	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 )
 
@@ -95,6 +97,36 @@ func translateKernelPackagePreviewDirect(ctx context.Context, container *kernelr
 		result.AvailableActions = []string{"install"}
 	}
 	if container != nil {
+		if artifact, artifactErr := container.PackageRepository.GetArtifact(ctx, preview.ArtifactID); artifactErr == nil {
+			if pkg, openErr := amitiax.OpenArchive(artifact.ArchivePath); openErr == nil {
+				for _, file := range pkg.Files {
+					if file.IsDir {
+						continue
+					}
+					kind := classifyPackageFile(file.Path)
+					result.Files = append(result.Files, PackageFileView{
+						Path: file.Path,
+						Size: file.Size,
+						Kind: kind,
+					})
+					result.TotalSize += file.Size
+					switch kind {
+					case "script":
+						result.Scripts++
+					case "asset":
+						result.Assets++
+					case "reference":
+						result.References++
+					}
+				}
+				result.FileCount = len(result.Files)
+				result.ScriptsRequired = result.Scripts > 0
+			} else {
+				result.Warnings = append(result.Warnings, "package file inventory unavailable: "+openErr.Error())
+			}
+		} else if artifactErr != nil {
+			result.Warnings = append(result.Warnings, "package artifact unavailable: "+artifactErr.Error())
+		}
 		if current, currentErr := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(preview.ExtensionID)); currentErr == nil {
 			result.CurrentVersion = current.InstalledVersion.String()
 			result.Conflict = PackageConflictUpgrade
@@ -104,6 +136,24 @@ func translateKernelPackagePreviewDirect(ctx context.Context, container *kernelr
 		}
 	}
 	return result
+}
+
+func classifyPackageFile(filePath string) string {
+	normalized := strings.ToLower(strings.TrimPrefix(path.Clean(filePath), "./"))
+	switch path.Ext(normalized) {
+	case ".js", ".mjs", ".cjs", ".ts":
+		return "script"
+	case ".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".mp3", ".wav", ".ogg", ".mp4", ".webm":
+		return "asset"
+	}
+	if strings.HasPrefix(normalized, "assets/") ||
+		strings.HasPrefix(normalized, "references/") {
+		if strings.HasPrefix(normalized, "references/") {
+			return "reference"
+		}
+		return "asset"
+	}
+	return "file"
 }
 
 func packagePreviewManagementTarget(preview kernelruntime.InstallPreview) (string, []string) {

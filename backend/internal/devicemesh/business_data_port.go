@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
@@ -145,12 +146,7 @@ func (rt *Runtime) LocalMemoryArchiveEmpty(ctx context.Context, scope coordinati
 	if err != nil || len(roles) != 0 {
 		return false, err
 	}
-	var hasRecords bool
-	err = rt.DB.QueryRowContext(ctx, `SELECT EXISTS(
-		SELECT 1 FROM kernel_device_owned_resources WHERE owner_id=? AND deleted=0 AND (
-			kind IN ('memory','fact','episodic','profile','graph','vector','working','summary')
-			OR (kind='checkpoint' AND resource_id LIKE 'memory-candidate/%')
-		))`, scope.ResourceOwnerID).Scan(&hasRecords)
+	hasRecords, err := business.HasLiveMemoryArchiveRecords(ctx, rt.DB, scope.ResourceOwnerID)
 	return !hasRecords, err
 }
 
@@ -298,6 +294,7 @@ func (rt *Runtime) Snapshot(ctx context.Context, scope coordination.ExecutionSco
 		coreQuery.RequestID = ""
 		coreQuery.ListConversations = false
 		coreQuery.Role = &role
+		coreQuery.SkipRelationshipTime = true
 		coreSnapshot, coreErr := rt.CoreDataPort.Snapshot(ctx, coreScope, coreQuery)
 		if coreErr != nil {
 			return snapshot, fmt.Errorf("读取中心记忆快照失败: %w", coreErr)

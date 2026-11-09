@@ -1,6 +1,9 @@
 package domain
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 type ErrorCode string
 
@@ -62,9 +65,6 @@ func NewRetryableHostError(code ErrorCode, message string) *HostError {
 }
 
 func IsHostError(err error, code ErrorCode) bool {
-	he, ok := err.(*HostError)
-	if !ok {
-		return false
-	}
-	return he.Code == code
+	var he *HostError
+	return errors.As(err, &he) && he.Code == code
 }

@@ -33,28 +33,31 @@ class _FakeFilePicker extends FilePicker {
 }
 
 void main() {
-  test('selects a petx package with the generic Android-safe picker', () async {
-    final directory = await Directory.systemTemp.createTemp('petx-picker-');
-    addTearDown(() => directory.delete(recursive: true));
-    final package = File('${directory.path}/qa.petx')
-      ..writeAsBytesSync([1, 2, 3]);
-    final picker = _FakeFilePicker(
-      FilePickerResult([
-        PlatformFile(name: 'qa.petx', path: package.path, size: 3),
-      ]),
-    );
-    FilePicker.platform = picker;
-    addTearDown(() => FilePicker.platform = _FakeFilePicker(null));
+  test(
+    'selects a petx plugin package with the generic Android-safe picker',
+    () async {
+      final directory = await Directory.systemTemp.createTemp('petx-picker-');
+      addTearDown(() => directory.delete(recursive: true));
+      final package = File('${directory.path}/qa.petx')
+        ..writeAsBytesSync([1, 2, 3]);
+      final picker = _FakeFilePicker(
+        FilePickerResult([
+          PlatformFile(name: 'qa.petx', path: package.path, size: 3),
+        ]),
+      );
+      FilePicker.platform = picker;
+      addTearDown(() => FilePicker.platform = _FakeFilePicker(null));
 
-    expect(await pickDesktopPetPackagePath(), package.path);
-    expect(picker.requestedType, FileType.any);
-    expect(picker.requestedMultiple, isFalse);
-  });
+      expect(await pickDesktopPetPackagePath(), package.path);
+      expect(picker.requestedType, FileType.any);
+      expect(picker.requestedMultiple, isFalse);
+    },
+  );
 
   test('rejects a non-petx package with the original path', () async {
     final picker = _FakeFilePicker(
       FilePickerResult([
-        PlatformFile(name: 'qa.zip', path: '/tmp/qa.zip', size: 3),
+        PlatformFile(name: 'qa.amitiax', path: '/tmp/qa.amitiax', size: 3),
       ]),
     );
     FilePicker.platform = picker;
@@ -66,7 +69,7 @@ void main() {
         isA<StateError>().having(
           (error) => error.message,
           'message',
-          allOf(contains('.petx'), contains('/tmp/qa.zip')),
+          allOf(contains('.petx'), contains('/tmp/qa.amitiax')),
         ),
       ),
     );

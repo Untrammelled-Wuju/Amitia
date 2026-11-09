@@ -68,6 +68,11 @@ func TestIsHostError(t *testing.T) {
 	if IsHostError(regularErr, ErrInternal) {
 		t.Error("expected IsHostError to return false for non-HostError")
 	}
+
+	wrapped := fmt.Errorf("emergency stop: %w", NewHostError(ErrNotFound, "runtime not found"))
+	if !IsHostError(wrapped, ErrNotFound) {
+		t.Error("expected IsHostError to see a wrapped HostError")
+	}
 }
 
 func TestHostErrorAs(t *testing.T) {

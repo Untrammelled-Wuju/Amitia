@@ -265,3 +265,44 @@ func TestBridgeClipboardHost_IsAvailableWithClients(t *testing.T) {
 		t.Error("IsAvailable() = false after subscribe, want true")
 	}
 }
+
+// Regression: the pending request was registered only after the clipboard
+// event was published, so a host that answered immediately had its reply
+// dropped and the caller waited for the timeout instead of returning the
+// host's answer. This showed up as TestBridgeClipboardHost_FailRequest
+// failing intermittently under a loaded full-suite run.
+func TestBridgeClipboardHost_RequestRegisteredBeforeEvent(t *testing.T) {
+	hub := sse.Global
+	clientID := "test-clip-order-" + t.Name()
+	client := hub.Subscribe(clientID)
+	defer hub.Unsubscribe(clientID)
+
+	h := NewBridgeClipboardHost(hub)
+	for i := 0; i < 50; i++ {
+		done := make(chan error, 1)
+		go func() { done <- h.WriteText(context.Background(), "order") }()
+
+		select {
+		case msg := <-client.Events:
+			data, _ := msg["data"].(map[string]interface{})
+			requestID, _ := data["requestId"].(string)
+			if requestID == "" {
+				t.Fatalf("iteration %d: event carried no requestId", i)
+			}
+			if !h.FailClipboardRequest(requestID, errors.New("host failed")) {
+				t.Fatalf("iteration %d: request %s was not registered before the event was published", i, requestID)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("iteration %d: timed out waiting for clipboard_request event", i)
+		}
+
+		select {
+		case err := <-done:
+			if err == nil {
+				t.Fatalf("iteration %d: WriteText() error = nil, want the host failure", i)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("iteration %d: WriteText did not observe the failure", i)
+		}
+	}
+}

@@ -3,6 +3,7 @@ package kernel
 import (
 	"bytes"
 	"context"
+	"math"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -52,6 +53,12 @@ func TestAgentSkillPackagePromptActivationAndResources(t *testing.T) {
 		t.Fatal(err)
 	}
 	service := container.AgentSkillRuntime
+	for _, page := range []int{math.MaxInt, math.MaxInt/2 + 2} {
+		items, total, err := service.Installed(ctx, "space-a", "", "", "", "", page, 2)
+		if err != nil || total != 1 || items == nil || len(items) != 0 {
+			t.Fatalf("page=%d items=%#v total=%d err=%v", page, items, total, err)
+		}
+	}
 	available := service.Available(ctx, InvocationScope{SpaceID: "space-a", TraceID: "trace-a"})
 	if len(available) != 1 || available[0].Name != "demo-skill" {
 		t.Fatalf("available skills = %#v catalog=%#v", available, container.AgentSkillCatalog.List(agent_skill.CatalogFilter{}))

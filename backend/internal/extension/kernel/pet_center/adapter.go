@@ -2,6 +2,7 @@ package pet_center
 
 import (
 	"context"
+	"fmt"
 
 	kernelruntime "github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
@@ -115,11 +116,32 @@ func (a *kernelRuntimeAdapter) Disable(ctx context.Context, extensionID string) 
 	return a.runtime.Disable(ctx, extensionID)
 }
 
-func (a *kernelRuntimeAdapter) Uninstall(ctx context.Context, extensionID string) error {
-	if a.runtime == nil {
+func (a *kernelRuntimeAdapter) Uninstall(ctx context.Context, spaceID, extensionID string) error {
+	if a.runtime == nil || a.runtime.Container() == nil {
 		return ErrKernelUnavailable
 	}
-	return a.runtime.Uninstall(ctx, extensionID)
+	container := a.runtime.Container()
+	installation, err := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(extensionID))
+	if err != nil {
+		return err
+	}
+	generationID, _ := installation.Metadata["generationId"].(string)
+	if generationID == "" {
+		return a.runtime.Uninstall(ctx, extensionID)
+	}
+	manager := kernelruntime.NewHostPluginPackageManager(a.runtime, container.RuntimeProfile)
+	operation, err := manager.Uninstall(ctx, kernelruntime.UninstallHostPluginPackageRequest{
+		SpaceID:        spaceID,
+		ExtensionID:    extensionID,
+		IdempotencyKey: "pet-uninstall:" + generationID,
+	})
+	if err != nil {
+		return err
+	}
+	if operation.Status != string(kernelruntime.PackageOperationCompleted) {
+		return fmt.Errorf("桌宠插件卸载未完成，操作 %s 状态 %s", operation.OperationID, operation.Status)
+	}
+	return nil
 }
 
 func NewServiceFromRuntime(runtime *kernelruntime.Runtime) *DesktopPetPluginManagementService {

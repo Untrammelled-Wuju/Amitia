@@ -18,14 +18,7 @@
 
 ## 首次启动
 
-管理服务首次启动且数据库中没有管理员账号时，会创建以下默认账号：
-
-```text
-用户名：untrammelled
-密码：925011Mc
-```
-
-可通过 `AMITIA_ADMIN_BOOTSTRAP_USERNAME` 和 `AMITIA_ADMIN_BOOTSTRAP_PASSWORD` 覆盖默认值。首次登录后应立即修改密码。
+管理服务首次启动且数据库中没有管理员账号时，使用 `AMITIA_ADMIN_BOOTSTRAP_USERNAME` 指定的用户名和 `AMITIA_ADMIN_BOOTSTRAP_PASSWORD` 指定的密码创建管理员。未配置密码时，服务生成随机密码并在首次创建账号时写入启动日志。
 
 ## 环境变量
 
@@ -108,7 +101,7 @@ AMITIA_ADMIN_COOKIE_SECURE=true
 
 ## 服务器部署
 
-服务器端管理库使用 `deploy/mysql/amitia-admin-seed.sql` 初始化，可在管理服务首次启动前后执行，重复执行不会产生重复账号：
+服务器端管理库使用 `deploy/mysql/amitia-admin-seed.sql` 初始化，可在管理服务首次启动前后执行：
 
 ```bash
 mysql --host=<host> --port=<port> --user=root --password=<password> < deploy/mysql/amitia-admin-seed.sql
@@ -117,10 +110,8 @@ mysql --host=<host> --port=<port> --user=root --password=<password> < deploy/mys
 脚本执行结果：
 
 - 创建 `amitia_admin` 库（utf8mb4 / utf8mb4_unicode_ci）以及 `admin_users`、`admin_sessions`、`update_releases`、`update_release_artifacts`、`admin_audit_logs` 五张表，表结构与迁移 `202609240001` 完全一致
-- 写入默认管理员 `untrammelled` / `925011Mc`，口令为 argon2id（m=65536,t=3,p=2），与 `hashPassword` 输出格式一致；账号已存在时同步刷新口令、角色与启用状态
-- 清空 `admin_sessions`，凭据变更后旧会话立即失效
 
-脚本不写 `schema_migrations` 记录，迁移版本与校验值仍由管理服务启动时自行登记；库中已存在管理员账号时 `bootstrapAdmin` 直接跳过，与脚本写入的账号不冲突。
+账号由管理服务初始化。重复执行 SQL 保留现有账号和会话，库中已存在管理员账号时启动流程跳过创建。迁移版本与校验值由管理服务启动时登记。
 
 MySQL 业务账号不写入该脚本，凭据仅通过环境变量注入：
 

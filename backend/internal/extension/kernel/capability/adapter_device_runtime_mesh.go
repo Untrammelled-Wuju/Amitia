@@ -115,7 +115,7 @@ func (p *MeshDeviceRuntimeInvocationPort) Execute(ctx context.Context, request D
 		}
 	}
 
-	_, err := p.ports.PendingInvocations.Register(request, request.Invocation.InvocationID, sessionID.String(), generation, deadline)
+	pending, err := p.ports.PendingInvocations.Register(request, request.Invocation.InvocationID, sessionID.String(), generation, deadline)
 	if err != nil {
 		return UnifiedToolResult{
 			InvocationID: request.Invocation.InvocationID,
@@ -152,7 +152,7 @@ func (p *MeshDeviceRuntimeInvocationPort) Execute(ctx context.Context, request D
 		}
 	}
 
-	result, err := p.ports.PendingInvocations.WaitForResult(ctx, request.Invocation.InvocationID)
+	result, err := pending.WaitForResult(ctx)
 	if err != nil {
 		reasonCode := CancellationReasonCallerContext
 		if ctx.Err() == context.DeadlineExceeded {

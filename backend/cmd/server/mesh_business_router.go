@@ -647,6 +647,12 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 			status := 503
 			code := "mesh.business_unavailable"
 			switch {
+			case errors.Is(err, business.ErrInvalidRequest):
+				status = 400
+				code = "mesh.invalid_request"
+			case errors.Is(err, business.ErrRequestInFlight):
+				status = 409
+				code = "mesh.request_in_progress"
 			case errors.Is(err, coordination.ErrCapabilityGrant):
 				status = 403
 				code = "mesh.target_grant_required"
@@ -694,6 +700,10 @@ func contextualizeOwnedRuntimeError(err error, request business.Request) error {
 
 func codeForOwnedRuntimeError(err error) string {
 	switch {
+	case errors.Is(err, business.ErrInvalidRequest):
+		return "mesh.invalid_request"
+	case errors.Is(err, business.ErrRequestInFlight):
+		return "mesh.request_in_progress"
 	case errors.Is(err, coordination.ErrCapabilityGrant):
 		return "mesh.target_grant_required"
 	case errors.Is(err, coordination.ErrRoleRequired), errors.Is(err, coordination.ErrRoleSelection):

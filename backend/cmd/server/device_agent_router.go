@@ -132,6 +132,7 @@ func registerDeviceAgentDesktopPetRoutes(
 		Mode:             config.AppCfg.Security.Mode,
 		LocalCredentials: localStore,
 		SpaceID:          spaceidentity.DefaultSpaceID(),
+		LocalDeviceID:    runtimeidentity.DeviceID(services.LocalDeviceID),
 		ListenAddress:    config.AppCfg.Server.Host,
 		AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
 		SessionService:   sessionSvc,
@@ -403,6 +404,7 @@ func registerDeviceAgentDesktopPetRoutes(
 	))
 	petAPI.Use(readiness.RejectWritesWhenSafeMode(services.SafeMode))
 	{
+		extension.NewPetPluginAPI(services.Extension).RegisterRoutes(petAPI.Group("/extensions"))
 		installation.RegisterRoutes(petAPI, services.InstallationCoordinator, services.InstallationRepo, services.OwnershipGuard)
 		release.RegisterRoutes(petAPI, services.NewReleaseService, services.OwnershipGuard)
 		registerImportStagingRoutes(petAPI, services.PathRegistry, services.ImportStagingRepo, services.OwnershipGuard, services.PackageImporter)

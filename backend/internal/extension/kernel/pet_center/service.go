@@ -12,6 +12,7 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/capabilities/behaviorcatalog"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
+	"github.com/u-ai/backend/pkg/util"
 )
 
 const managementTarget = "pet_center"
@@ -42,7 +43,7 @@ type kernelRuntime interface {
 	Update(ctx context.Context, archivePath string) (kernelInstalledExtension, error)
 	Enable(ctx context.Context, extensionID string) error
 	Disable(ctx context.Context, extensionID string) error
-	Uninstall(ctx context.Context, extensionID string) error
+	Uninstall(ctx context.Context, spaceID, extensionID string) error
 }
 
 type kernelInstalledExtension struct {
@@ -135,14 +136,7 @@ func (s *DesktopPetPluginManagementService) List(ctx context.Context, page, page
 		}
 	}
 	total := len(matches)
-	start := (page - 1) * pageSize
-	if start > total {
-		start = total
-	}
-	end := start + pageSize
-	if end > total {
-		end = total
-	}
+	start, end := util.PageBounds(total, page, pageSize)
 	return &ListResponse{
 		Plugins:  matches[start:end],
 		Total:    total,
@@ -444,7 +438,7 @@ func (s *DesktopPetPluginManagementService) Disable(ctx context.Context, extensi
 	return &MutationResult{ExtensionID: extensionID, Success: true}, nil
 }
 
-func (s *DesktopPetPluginManagementService) Uninstall(ctx context.Context, extensionID string) (*MutationResult, error) {
+func (s *DesktopPetPluginManagementService) Uninstall(ctx context.Context, spaceID, extensionID string) (*MutationResult, error) {
 	if s.runtime == nil {
 		return nil, ErrKernelUnavailable
 	}
@@ -454,7 +448,7 @@ func (s *DesktopPetPluginManagementService) Uninstall(ctx context.Context, exten
 	if err := s.requireDesktopPetPlugin(ctx, extensionID); err != nil {
 		return nil, err
 	}
-	if err := s.runtime.Uninstall(ctx, extensionID); err != nil {
+	if err := s.runtime.Uninstall(ctx, spaceID, extensionID); err != nil {
 		return nil, err
 	}
 	return &MutationResult{ExtensionID: extensionID, Success: true}, nil

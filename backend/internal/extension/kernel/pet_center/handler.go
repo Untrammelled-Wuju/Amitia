@@ -5,9 +5,11 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/middleware/security"
+	"github.com/u-ai/backend/internal/requestidentity"
 )
 
 type HTTPHandler struct {
@@ -33,6 +35,10 @@ func (h *HTTPHandler) registerPluginRoutes(plugins *gin.RouterGroup) {
 	plugins.POST("/:pluginId/enable", h.enable)
 	plugins.POST("/:pluginId/disable", h.disable)
 	plugins.DELETE("/:pluginId", h.uninstall)
+	plugins.POST("/actions/update", h.updateByBody)
+	plugins.POST("/actions/enable", h.enableByBody)
+	plugins.POST("/actions/disable", h.disableByBody)
+	plugins.POST("/actions/uninstall", h.uninstallByBody)
 }
 
 type behaviorInvocationRequest struct {
@@ -42,6 +48,11 @@ type behaviorInvocationRequest struct {
 	ConversationID          string          `json:"conversationId"`
 	Channel                 string          `json:"channel"`
 	SessionID               string          `json:"sessionId"`
+}
+
+type pluginActionRequest struct {
+	ExtensionID string `json:"extensionId"`
+	PackagePath string `json:"packagePath"`
 }
 
 func (h *HTTPHandler) invokeBehavior(c *gin.Context) {
@@ -183,6 +194,29 @@ func (h *HTTPHandler) update(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": result})
 }
 
+func (h *HTTPHandler) updateByBody(c *gin.Context) {
+	if h.service == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "pet service unavailable", "data": nil})
+		return
+	}
+	var request pluginActionRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error(), "data": nil})
+		return
+	}
+	request.ExtensionID = strings.TrimSpace(request.ExtensionID)
+	if request.ExtensionID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "extensionId required", "data": nil})
+		return
+	}
+	result, err := h.service.Update(c.Request.Context(), request.ExtensionID, request.PackagePath)
+	if err != nil {
+		writeHandlerError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": result})
+}
+
 func (h *HTTPHandler) enable(c *gin.Context) {
 	if h.service == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "pet service unavailable", "data": nil})
@@ -195,6 +229,10 @@ func (h *HTTPHandler) enable(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": result})
+}
+
+func (h *HTTPHandler) enableByBody(c *gin.Context) {
+	h.mutateByBody(c, true)
 }
 
 func (h *HTTPHandler) disable(c *gin.Context) {
@@ -211,13 +249,71 @@ func (h *HTTPHandler) disable(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": result})
 }
 
+func (h *HTTPHandler) disableByBody(c *gin.Context) {
+	h.mutateByBody(c, false)
+}
+
 func (h *HTTPHandler) uninstall(c *gin.Context) {
 	if h.service == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "pet service unavailable", "data": nil})
 		return
 	}
 	extensionID := c.Param("pluginId")
-	result, err := h.service.Uninstall(c.Request.Context(), extensionID)
+	result, err := h.service.Uninstall(c.Request.Context(), requestidentity.ResolveGin(c), extensionID)
+	if err != nil {
+		writeHandlerError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": result})
+}
+
+func (h *HTTPHandler) uninstallByBody(c *gin.Context) {
+	if h.service == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "pet service unavailable", "data": nil})
+		return
+	}
+	var request pluginActionRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error(), "data": nil})
+		return
+	}
+	request.ExtensionID = strings.TrimSpace(request.ExtensionID)
+	if request.ExtensionID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "extensionId required", "data": nil})
+		return
+	}
+	result, err := h.service.Uninstall(c.Request.Context(), requestidentity.ResolveGin(c), request.ExtensionID)
+	if err != nil {
+		writeHandlerError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": result})
+}
+
+func (h *HTTPHandler) mutateByBody(c *gin.Context, enable bool) {
+	if h.service == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "pet service unavailable", "data": nil})
+		return
+	}
+	var request pluginActionRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error(), "data": nil})
+		return
+	}
+	request.ExtensionID = strings.TrimSpace(request.ExtensionID)
+	if request.ExtensionID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "extensionId required", "data": nil})
+		return
+	}
+	var (
+		result *MutationResult
+		err    error
+	)
+	if enable {
+		result, err = h.service.Enable(c.Request.Context(), request.ExtensionID)
+	} else {
+		result, err = h.service.Disable(c.Request.Context(), request.ExtensionID)
+	}
 	if err != nil {
 		writeHandlerError(c, err)
 		return

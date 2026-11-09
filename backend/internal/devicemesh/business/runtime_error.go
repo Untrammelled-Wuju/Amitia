@@ -42,6 +42,13 @@ func DescribeRuntimeError(err error) RuntimeError {
 	}
 	lower := strings.ToLower(raw)
 	switch {
+	case errors.Is(err, ErrInvalidRequest):
+		result.ErrorCode = "invalid_request"
+		result.Stage = "validation"
+		result.Retryable = false
+	case errors.Is(err, ErrRequestInFlight):
+		result.ErrorCode = "request_in_progress"
+		result.Stage = "admission"
 	case errors.Is(err, context.DeadlineExceeded) || strings.Contains(lower, "timeout") || strings.Contains(lower, "timed out"):
 		result.ErrorCode = "task_timeout"
 	case errors.Is(err, ErrInterrupted) || errors.Is(err, context.Canceled):

@@ -1,6 +1,7 @@
 package extension
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -108,7 +109,7 @@ func (api *HookAPI) getContribution(c *gin.Context) {
 	id := c.Param("id")
 	contrib, err := svc.ReadModel.GetContribution(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		writeHookError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, contrib)
@@ -122,7 +123,7 @@ func (api *HookAPI) enableContribution(c *gin.Context) {
 	}
 	id := c.Param("id")
 	if err := svc.Lifecycle.EnableContribution(c.Request.Context(), id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		writeHookError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"contributionId": id, "enabled": true})
@@ -136,10 +137,46 @@ func (api *HookAPI) disableContribution(c *gin.Context) {
 	}
 	id := c.Param("id")
 	if err := svc.Lifecycle.DisableContribution(c.Request.Context(), id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		writeHookError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"contributionId": id, "enabled": false})
+}
+
+func hookErrorStatus(err error) int {
+	switch {
+	case errors.Is(err, hook.ErrContributionMissing), errors.Is(err, hook.ErrPointNotFound):
+		return http.StatusNotFound
+	case errors.Is(err, hook.ErrContributionExists), errors.Is(err, hook.ErrPointExists):
+		return http.StatusConflict
+	case errors.Is(err, hook.ErrMaxHandlers):
+		return http.StatusTooManyRequests
+	case errors.Is(err, hook.ErrRecursion), errors.Is(err, hook.ErrDepthExceeded):
+		return http.StatusBadRequest
+	case errors.Is(err, hook.ErrCircuitOpen):
+		return http.StatusServiceUnavailable
+	}
+	var hookErr *hook.HookError
+	if !errors.As(err, &hookErr) {
+		return http.StatusInternalServerError
+	}
+	switch hookErr.Code {
+	case hook.ErrCodeHookNotFound, hook.ErrCodeHookPointNotFound, hook.ErrCodeEntryNotDeclared:
+		return http.StatusNotFound
+	case hook.ErrCodePermissionDenied, hook.ErrCodeScopeDenied, hook.ErrCodeMutationClaimDenied:
+		return http.StatusForbidden
+	case hook.ErrCodeContributionDisabled, hook.ErrCodeHookMutationConflict:
+		return http.StatusConflict
+	case hook.ErrCodeRuntimeNotReady, hook.ErrCodeCircuitOpen, hook.ErrCodeDependencyUnavailable:
+		return http.StatusServiceUnavailable
+	case hook.ErrCodeHookTimeout:
+		return http.StatusGatewayTimeout
+	}
+	return http.StatusInternalServerError
+}
+
+func writeHookError(c *gin.Context, err error) {
+	c.JSON(hookErrorStatus(err), gin.H{"error": err.Error()})
 }
 
 func (api *HookAPI) getCircuit(c *gin.Context) {
@@ -151,7 +188,7 @@ func (api *HookAPI) getCircuit(c *gin.Context) {
 	id := c.Param("id")
 	stats, err := svc.ReadModel.GetCircuitStats(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		writeHookError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, stats)
@@ -165,7 +202,7 @@ func (api *HookAPI) resetCircuit(c *gin.Context) {
 	}
 	id := c.Param("id")
 	if err := svc.ReadModel.ResetCircuit(c.Request.Context(), id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		writeHookError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"contributionId": id, "reset": true})

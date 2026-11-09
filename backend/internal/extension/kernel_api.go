@@ -2,6 +2,8 @@ package extension
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -347,7 +349,7 @@ func (api *KernelAPI) enable(c *gin.Context) {
 		return
 	}
 	if err := api.runtime.Kernel.Enable(c.Request.Context(), extID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		writeKernelExtensionError(c, err)
 		return
 	}
 	api.runtime.InvalidateExtensionReadModels()
@@ -373,7 +375,7 @@ func (api *KernelAPI) disable(c *gin.Context) {
 		return
 	}
 	if err := api.runtime.Kernel.Disable(c.Request.Context(), extID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		writeKernelExtensionError(c, err)
 		return
 	}
 	api.runtime.InvalidateExtensionReadModels()
@@ -534,8 +536,26 @@ func (api *KernelAPI) pause(c *gin.Context) {
 		return
 	}
 	if err := api.runtime.Kernel.Disable(c.Request.Context(), extID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		writeKernelExtensionError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"extensionId": extID, "state": "paused"})
+}
+
+// writeKernelExtensionError classifies lifecycle failures for extension control.
+//
+// An extension id that does not even parse is a caller mistake. Reporting it as
+// 500 made the console show an outage for a plain typo, and clients retried a
+// request that could never succeed.
+func writeKernelExtensionError(c *gin.Context, err error) {
+	status := http.StatusInternalServerError
+	switch {
+	case errors.Is(err, domain.ErrInvalidExtensionID),
+		errors.Is(err, domain.ErrInvalidVersion),
+		errors.Is(err, domain.ErrInvalidModuleID):
+		status = http.StatusBadRequest
+	case errors.Is(err, sql.ErrNoRows):
+		status = http.StatusNotFound
+	}
+	c.JSON(status, gin.H{"error": err.Error()})
 }

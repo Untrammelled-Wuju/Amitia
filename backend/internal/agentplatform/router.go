@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/middleware/security"
+	"gorm.io/gorm"
 )
 
 type HTTPHandler struct {
@@ -188,13 +189,16 @@ func (h *HTTPHandler) respondStatus(c *gin.Context, value any, err error, status
 func (h *HTTPHandler) respondError(c *gin.Context, err error) {
 	status := http.StatusBadRequest
 	message := err.Error()
-	if errors.Is(err, context.Canceled) {
+	switch {
+	case errors.Is(err, context.Canceled):
 		status = 499
-	}
-	if strings.Contains(message, "不存在") || strings.Contains(message, "not found") {
+	case errors.Is(err, gorm.ErrRecordNotFound),
+		strings.Contains(message, "不存在"),
+		strings.Contains(message, "not found"):
 		status = http.StatusNotFound
-	}
-	if strings.Contains(message, "unavailable") || strings.Contains(message, "数据库") || strings.Contains(message, "读取") {
+	case strings.Contains(message, "unavailable"),
+		strings.Contains(message, "数据库"),
+		strings.Contains(message, "读取"):
 		status = http.StatusInternalServerError
 	}
 	c.JSON(status, gin.H{"code": status, "msg": message, "error": message})

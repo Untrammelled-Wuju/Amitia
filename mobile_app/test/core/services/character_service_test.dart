@@ -6,36 +6,38 @@ import 'package:amitia_app/core/services/character_service.dart';
 void main() {
   group('CharacterService Read Mapping', () {
     test('list() maps GET /api/characters response to CharacterDto', () async {
-      final fakeApi = _FakeBackendServiceApi(responseData: [
-        {
-          'id': 'char-001',
-          'name': 'Amitia',
-          'avatar': 'amitia.png',
-          'identity': '心理模拟伙伴',
-          'personality': '温和、敏锐',
-          'speakingStyle': '简洁回应',
-          'description': '主角',
-          'status': 'enabled',
-          'isActive': 1,
-          'createdAt': '2026-01-01 10:00:00',
-          'voiceType': 'zh_female',
-          'voiceSpeed': 1.0,
-        },
-        {
-          'id': 'char-002',
-          'name': 'TestCharacter',
-          'avatar': '',
-          'identity': '测试角色',
-          'personality': '测试人格',
-          'speakingStyle': '直接',
-          'description': '测试',
-          'status': 'enabled',
-          'isActive': 0,
-          'createdAt': '2026-01-02 12:00:00',
-          'voiceType': null,
-          'voiceSpeed': null,
-        },
-      ]);
+      final fakeApi = _FakeBackendServiceApi(
+        responseData: [
+          {
+            'id': 'char-001',
+            'name': 'Amitia',
+            'avatar': 'amitia.png',
+            'identity': '心理模拟伙伴',
+            'personality': '温和、敏锐',
+            'speakingStyle': '简洁回应',
+            'description': '主角',
+            'status': 'enabled',
+            'isActive': 1,
+            'createdAt': '2026-01-01 10:00:00',
+            'voiceType': 'zh_female',
+            'voiceSpeed': 1.0,
+          },
+          {
+            'id': 'char-002',
+            'name': 'TestCharacter',
+            'avatar': '',
+            'identity': '测试角色',
+            'personality': '测试人格',
+            'speakingStyle': '直接',
+            'description': '测试',
+            'status': 'enabled',
+            'isActive': 0,
+            'createdAt': '2026-01-02 12:00:00',
+            'voiceType': null,
+            'voiceSpeed': null,
+          },
+        ],
+      );
 
       final service = CharacterService(fakeApi);
       final result = await service.list();
@@ -67,18 +69,20 @@ void main() {
     });
 
     test('getById() maps GET /api/characters/:id to CharacterDto', () async {
-      final fakeApi = _FakeBackendServiceApi(responseData: {
-        'id': 'char-003',
-        'name': 'Specific',
-        'avatar': '',
-        'identity': '特定角色',
-        'personality': '特定人格',
-        'speakingStyle': '特定风格',
-        'description': '',
-        'status': 'enabled',
-        'isActive': 0,
-        'createdAt': '2026-02-01 08:00:00',
-      });
+      final fakeApi = _FakeBackendServiceApi(
+        responseData: {
+          'id': 'char-003',
+          'name': 'Specific',
+          'avatar': '',
+          'identity': '特定角色',
+          'personality': '特定人格',
+          'speakingStyle': '特定风格',
+          'description': '',
+          'status': 'enabled',
+          'isActive': 0,
+          'createdAt': '2026-02-01 08:00:00',
+        },
+      );
 
       final service = CharacterService(fakeApi);
       final result = await service.getById('char-003');
@@ -94,18 +98,20 @@ void main() {
 
   group('CharacterService Write Mapping', () {
     test('create() sends POST /api/characters with correct payload', () async {
-      final fakeApi = _FakeBackendServiceApi(responseData: {
-        'id': 'char-new-001',
-        'name': 'NewCharacter',
-        'avatar': '',
-        'identity': '新角色',
-        'personality': '新人格',
-        'speakingStyle': '新风格',
-        'description': '描述',
-        'status': 'enabled',
-        'isActive': 0,
-        'createdAt': '2026-08-14 15:00:00',
-      });
+      final fakeApi = _FakeBackendServiceApi(
+        responseData: {
+          'id': 'char-new-001',
+          'name': 'NewCharacter',
+          'avatar': '',
+          'identity': '新角色',
+          'personality': '新人格',
+          'speakingStyle': '新风格',
+          'description': '描述',
+          'status': 'enabled',
+          'isActive': 0,
+          'createdAt': '2026-08-14 15:00:00',
+        },
+      );
 
       final service = CharacterService(fakeApi);
       final result = await service.create({
@@ -128,34 +134,38 @@ void main() {
       expect(body['identity'], '新角色');
     });
 
-    test('update() sends PUT /api/characters/:id with correct payload',
-        () async {
-      final fakeApi = _FakeBackendServiceApi(responseData: {
-        'id': 'char-update-001',
-        'name': 'UpdatedName',
-        'avatar': '',
-        'identity': '更新身份',
-        'personality': '更新人格',
-        'speakingStyle': '更新风格',
-        'description': '更新描述',
-        'status': 'enabled',
-        'isActive': 1,
-        'createdAt': '2026-08-14 16:00:00',
-      });
+    test(
+      'update() sends PUT /api/characters/:id with correct payload',
+      () async {
+        final fakeApi = _FakeBackendServiceApi(
+          responseData: {
+            'id': 'char-update-001',
+            'name': 'UpdatedName',
+            'avatar': '',
+            'identity': '更新身份',
+            'personality': '更新人格',
+            'speakingStyle': '更新风格',
+            'description': '更新描述',
+            'status': 'enabled',
+            'isActive': 1,
+            'createdAt': '2026-08-14 16:00:00',
+          },
+        );
 
-      final service = CharacterService(fakeApi);
-      final result = await service.update('char-update-001', {
-        'name': 'UpdatedName',
-        'identity': '更新身份',
-      });
+        final service = CharacterService(fakeApi);
+        final result = await service.update('char-update-001', {
+          'name': 'UpdatedName',
+          'identity': '更新身份',
+        });
 
-      expect(result, isNotNull);
-      expect(result!.name, 'UpdatedName');
-      expect(result.identity, '更新身份');
-      expect(fakeApi.requestCount, 1);
-      expect(fakeApi.lastMethod, 'PUT');
-      expect(fakeApi.lastPath, '/api/characters/char-update-001');
-    });
+        expect(result, isNotNull);
+        expect(result!.name, 'UpdatedName');
+        expect(result.identity, '更新身份');
+        expect(fakeApi.requestCount, 1);
+        expect(fakeApi.lastMethod, 'PUT');
+        expect(fakeApi.lastPath, '/api/characters/char-update-001');
+      },
+    );
 
     test('delete() sends DELETE /api/characters/:id', () async {
       final fakeApi = _FakeBackendServiceApi(responseData: null);
@@ -373,6 +383,7 @@ class _FakeBackendServiceApi implements BackendServiceApi {
     Map<String, String> fields = const {},
     Map<String, List<String>> files = const {},
     Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
     T Function(dynamic)? fromJson,
   }) async => null;
 
@@ -503,6 +514,7 @@ class _DynamicFakeBackendServiceApi implements BackendServiceApi {
     Map<String, String> fields = const {},
     Map<String, List<String>> files = const {},
     Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
     T Function(dynamic)? fromJson,
   }) async => null;
 

@@ -19,6 +19,15 @@ import (
 )
 
 var ErrUncertainExecution = errors.New("上次执行的结果尚未确认，请查询结果后再继续，系统不会重复执行已发起的动作")
+
+// ErrInvalidRequest marks caller supplied input that the service rejected.
+// The HTTP layer answers these with 400 so clients do not treat a bad request
+// as a transient outage and retry it.
+var ErrInvalidRequest = errors.New("请求参数无效")
+
+// ErrRequestInFlight reports a second delivery of a request that is still
+// running. It is a conflict with the in-flight turn, not a service outage.
+var ErrRequestInFlight = errors.New("当前请求正在执行")
 var ErrInterrupted = errors.New("当前回复已主动停止")
 
 type Request struct {
@@ -85,13 +94,13 @@ func validateForwardedContext(request Request) error {
 	}
 	context := request.Context
 	if context.PreviousCoreID == "" || context.ConversationID == "" || context.ConversationID != request.ConversationID || len(context.Summary) > 64<<10 || len(context.Messages) > 128 || len(body(context)) > 1<<20 {
-		return errors.New("传递的对话上下文无效或超过上限")
+		return fmt.Errorf("%w: 传递的对话上下文无效或超过上限", ErrInvalidRequest)
 	}
 	seen := map[string]bool{}
 	for _, message := range context.Messages {
 		key := message.OwnerID + "\x00" + message.ID
 		if message.ID == "" || len(message.ID) > 512 || len(message.OwnerID) > 512 || strings.ContainsRune(message.OwnerID, '\x00') || strings.ContainsRune(message.ID, '\x00') || seen[key] || (message.Role != "user" && message.Role != "assistant") || len(message.Content) > 128<<10 || message.Status == "sending" || message.Status == "failed" {
-			return errors.New("传递的对话上下文包含无效消息")
+			return fmt.Errorf("%w: 传递的对话上下文包含无效消息", ErrInvalidRequest)
 		}
 		seen[key] = true
 	}
@@ -477,7 +486,7 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 	if _, exists := e.active[activeKey]; exists {
 		e.mu.Unlock()
 		cancel(nil)
-		return Response{}, errors.New("当前请求正在执行")
+		return Response{}, ErrRequestInFlight
 	}
 	e.active[activeKey] = cancel
 	e.mu.Unlock()
@@ -495,18 +504,26 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 	return e.runEventsLocked(ctx, request, emit)
 }
 
+// validateInboundRequest normalises and checks everything the caller controls.
+// Every rejection is wrapped in ErrInvalidRequest so transport layers can tell
+// a bad request apart from a failing dependency.
+func validateInboundRequest(request *Request) error {
+	request.Message = strings.TrimSpace(request.Message)
+	request.RequestID = strings.TrimSpace(request.RequestID)
+	if request.RequestID == "" || len(request.RequestID) > 128 || request.Message == "" || len(request.Message) > 128<<10 {
+		return fmt.Errorf("%w: 请求编号和消息内容无效", ErrInvalidRequest)
+	}
+	if err := validateForwardedContext(*request); err != nil {
+		return err
+	}
+	return validateConversationSettings(*request)
+}
+
 func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func(Event) error) (finalResponse Response, finalErr error) {
 	if e.coordination == nil || e.data == nil || e.model == nil {
 		return Response{}, errors.New("业务服务尚未初始化")
 	}
-	request.Message = strings.TrimSpace(request.Message)
-	if request.RequestID == "" || len(request.RequestID) > 128 || request.Message == "" || len(request.Message) > 128<<10 {
-		return Response{}, errors.New("请求编号和消息内容无效")
-	}
-	if err := validateForwardedContext(request); err != nil {
-		return Response{}, err
-	}
-	if err := validateConversationSettings(request); err != nil {
+	if err := validateInboundRequest(&request); err != nil {
 		return Response{}, err
 	}
 	if err := ValidateAttachments(request.Attachments); err != nil {

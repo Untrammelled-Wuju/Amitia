@@ -45,6 +45,7 @@ type DataQuery struct {
 	ListConversations    bool                   `json:"listConversations,omitempty"`
 	GroupState           *GroupState            `json:"-"`
 	Role                 *Role                  `json:"role,omitempty"`
+	SkipRelationshipTime bool                   `json:"-"`
 }
 
 type RoleCatalogPort interface {

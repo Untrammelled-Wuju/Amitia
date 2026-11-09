@@ -4,14 +4,36 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"math"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 )
+
+func TestPluginListHTTPReturnsEmptyPageForLargeOffsets(t *testing.T) {
+	router := behaviorTestRouter(behaviorTestService(t, "pet-r9", nil), nil)
+	for _, prefix := range []string{"/pet/plugins", "/desktop-pet/plugins"} {
+		for _, page := range []int{math.MaxInt, math.MaxInt/2 + 2} {
+			response := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodGet, "/api/extensions"+prefix+"?page="+strconv.Itoa(page)+"&pageSize=2", nil)
+			router.ServeHTTP(response, request)
+			var payload struct {
+				Data ListResponse `json:"data"`
+			}
+			if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+				t.Fatal(err)
+			}
+			if response.Code != http.StatusOK || payload.Data.Page != page || payload.Data.Total != 1 || payload.Data.Plugins == nil || len(payload.Data.Plugins) != 0 {
+				t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+			}
+		}
+	}
+}
 
 func behaviorTestService(t *testing.T, revision string, executor BehaviorToolExecutor) *DesktopPetPluginManagementService {
 	t.Helper()
@@ -117,6 +139,26 @@ func TestInvokeBehaviorHTTPRequiresDeviceActor(t *testing.T) {
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
 	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestPluginMutationByBodyAcceptsSlashExtensionID(t *testing.T) {
+	service := behaviorTestService(t, "pet-r9", nil)
+	router := behaviorTestRouter(service, &auth.ActorContext{
+		PrincipalType: auth.PrincipalTrustedDevice,
+		SpaceID:       "space-a",
+		DeviceID:      "device-a",
+	})
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/extensions/pet/plugins/actions/enable",
+		bytes.NewBufferString(`{"extensionId":"com.example/pet-a"}`),
+	)
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
 }

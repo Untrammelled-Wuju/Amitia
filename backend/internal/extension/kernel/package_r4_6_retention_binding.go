@@ -19,6 +19,7 @@ func (r *Runtime) verifyRollbackRetentionBinding(
 	extensionID string,
 	sourceVersion string,
 	artifactID string,
+	generationID string,
 ) (PackageRollbackRetentionBinding, error) {
 	var empty PackageRollbackRetentionBinding
 
@@ -54,10 +55,11 @@ func (r *Runtime) verifyRollbackRetentionBinding(
 
 	repository := r.container.PackageRepository
 
-	point, err := repository.GetRollbackPoint(
+	point, err := repository.getRollbackPoint(
 		ctx,
 		extensionID,
 		sourceVersion,
+		generationID,
 	)
 
 	if err != nil {

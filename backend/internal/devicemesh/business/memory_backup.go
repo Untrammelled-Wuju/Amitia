@@ -2,6 +2,7 @@ package business
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +15,17 @@ import (
 )
 
 const OwnedMemoryBackupComponent = "memory.owned"
+const OwnedMemoryArchiveFormat = "amitia-owned-memory-v1"
+
+func HasLiveMemoryArchiveRecords(ctx context.Context, db *sql.DB, ownerID string) (bool, error) {
+	var exists bool
+	err := db.QueryRowContext(ctx, `SELECT EXISTS(
+		SELECT 1 FROM kernel_device_owned_resources WHERE (? = '' OR owner_id=?) AND deleted=0 AND (
+			kind IN ('memory','fact','episodic','profile','graph','vector','working','summary')
+			OR (kind='checkpoint' AND resource_id LIKE 'memory-candidate/%')
+		))`, ownerID, ownerID).Scan(&exists)
+	return exists, err
+}
 
 type MemoryArchive struct {
 	Format  string                `json:"format"`
@@ -99,7 +111,7 @@ func readMemoryArchive(in dataportability.BackupReader) (*MemoryArchive, error) 
 	if err := decoder.Decode(&extra); err != io.EOF {
 		return nil, errors.New("记忆备份包含额外内容")
 	}
-	if limited.N <= 0 || archive.Format != "amitia-owned-memory-v1" || len(archive.Entries) > 32768 {
+	if limited.N <= 0 || archive.Format != OwnedMemoryArchiveFormat || len(archive.Entries) > 32768 {
 		return nil, errors.New("记忆备份格式或大小无效")
 	}
 	seen := map[string]bool{}
@@ -140,7 +152,7 @@ func (c *MemoryBackupContributor) Import(ctx context.Context, req dataportabilit
 }
 
 func (e *Engine) ExportMemoryArchive(ctx context.Context, request Request, role string) (MemoryArchive, error) {
-	archive := MemoryArchive{Format: "amitia-owned-memory-v1", Entries: []MemoryConsumerEntry{}}
+	archive := MemoryArchive{Format: OwnedMemoryArchiveFormat, Entries: []MemoryConsumerEntry{}}
 	if role == "" && request.RoleID == "" {
 		var err error
 		request, err = e.PrivacyRequestRole(ctx, request)

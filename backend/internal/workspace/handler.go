@@ -77,7 +77,7 @@ func (h *Handler) getMountLocation(c *gin.Context) {
 func (h *Handler) listMounts(c *gin.Context) {
 	mounts, err := h.service.ListMounts(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		WriteError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, mounts)
@@ -96,7 +96,7 @@ func (h *Handler) getMount(c *gin.Context) {
 func (h *Handler) removeMount(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.service.RemoveMount(c.Request.Context(), WorkspaceID(id)); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		WriteError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"deleted": true})
@@ -202,7 +202,7 @@ func (h *Handler) registerSAFMount(c *gin.Context) {
 	}
 	mount, err := h.service.RegisterSAFMount(c.Request.Context(), req.Name, req.GrantID, req.ReadOnly)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		WriteError(c, err)
 		return
 	}
 	c.JSON(http.StatusCreated, mount)
@@ -220,7 +220,7 @@ func (h *Handler) replaceSAFGrant(c *gin.Context) {
 	}
 	mount, err := h.service.ReplaceSAFGrant(c.Request.Context(), WorkspaceID(id), req.GrantID, req.ReadOnly)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		WriteError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, mount)
@@ -230,7 +230,7 @@ func (h *Handler) refreshMountStatus(c *gin.Context) {
 	id := c.Param("id")
 	mount, err := h.service.RefreshMountStatus(c.Request.Context(), WorkspaceID(id))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		WriteError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, mount)
@@ -249,7 +249,7 @@ func (h *Handler) registerRemoteMount(c *gin.Context) {
 	}
 	mount, err := h.service.RegisterRemoteMount(c.Request.Context(), req.Name, req.Config, req.CredentialRef, req.ReadOnly)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		WriteError(c, err)
 		return
 	}
 	c.JSON(http.StatusCreated, mount)
@@ -268,7 +268,7 @@ func (h *Handler) updateRemoteMount(c *gin.Context) {
 	}
 	mount, err := h.service.UpdateRemoteMountConfig(c.Request.Context(), WorkspaceID(id), req.Config, req.CredentialRef, req.ReadOnly)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		WriteError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, mount)

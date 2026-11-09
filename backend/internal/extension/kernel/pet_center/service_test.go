@@ -134,7 +134,7 @@ func (f *fakeRuntime) Disable(ctx context.Context, extensionID string) error {
 	return nil
 }
 
-func (f *fakeRuntime) Uninstall(ctx context.Context, extensionID string) error {
+func (f *fakeRuntime) Uninstall(ctx context.Context, _ string, extensionID string) error {
 	if f.uninstallFn != nil {
 		return f.uninstallFn(ctx, extensionID)
 	}
@@ -691,7 +691,7 @@ func TestUninstall_RejectsNonPetExtension(t *testing.T) {
 		},
 	}
 	svc := NewDesktopPetPluginManagementService(container, &fakeRuntime{}, nil)
-	_, err := svc.Uninstall(context.Background(), "com.example/game-only")
+	_, err := svc.Uninstall(context.Background(), "space-a", "com.example/game-only")
 	if err != ErrNotDesktopPetPlugin {
 		t.Errorf("expected ErrNotDesktopPetPlugin, got %v", err)
 	}
@@ -714,7 +714,7 @@ func TestUninstall_PetExtensionSucceeds(t *testing.T) {
 		},
 	}
 	svc := NewDesktopPetPluginManagementService(container, rt, nil)
-	_, err := svc.Uninstall(context.Background(), "com.example/pet-uninstall")
+	_, err := svc.Uninstall(context.Background(), "space-a", "com.example/pet-uninstall")
 	if err != nil {
 		t.Fatalf("Uninstall: %v", err)
 	}

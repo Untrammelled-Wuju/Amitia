@@ -37,6 +37,8 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/installation/coordinator"
 	installationprojection "github.com/u-ai/backend/internal/desktoppet/installation/projection"
 	installationrecovery "github.com/u-ai/backend/internal/desktoppet/installation/recovery"
+	desktoppetintegration "github.com/u-ai/backend/internal/desktoppet/integration"
+	petpluginboundary "github.com/u-ai/backend/internal/desktoppet/plugin_boundary"
 	"github.com/u-ai/backend/internal/reminder"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/pkg/platform"
@@ -262,7 +264,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		return nil, fmt.Errorf("initialize game mode service: %w", err)
 	}
 	temporalSvc := temporal.NewService(temporal.NewRepository(ctx.DB), temporal.SystemClock{})
-	memoryConsumers := &ownedMemoryConsumers{}
+	memoryConsumers := &ownedMemoryConsumers{profile: runtimeProfile}
 	relTimeRepo := temporal.NewRelationshipTimeRepository(ctx.DB, temporal.SystemClock{})
 	relTimeCoordinator := temporal.NewRelationshipTimeCoordinator(relTimeRepo, temporal.SystemClock{})
 	knowledgeSvc := knowledge.NewService(ctx)
@@ -851,6 +853,38 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	if err != nil {
 		return nil, fmt.Errorf("initialize installation coordinator: %w", err)
 	}
+	petPackageImporter := importer.NewPackageImporterWithJournal(
+		releaseRepo,
+		releaseStoragePort,
+		importer.NewDefaultPackageValidator(pathRegistry, importStagingRepo),
+		pathRegistry,
+		importStagingRepo,
+		releasebuild.NewPublishJournalManager(releaseRepo),
+	)
+	petxReleaseBridge := newPetxAssetReleaseBridge(
+		kernelContainer.InstallationRepository,
+		installationRepo,
+		releaseRepo,
+		releaseStoragePort,
+		installationCoordinator,
+		string(kernelRuntimeIdentity.SpaceID),
+		kernelRuntimeIdentity.DeviceID.String(),
+	)
+	petCapabilities := desktoppetintegration.NewProductionCapabilities(desktoppetintegration.ProductionCapabilitiesOptions{
+		InstallationRepo: installationRepo,
+		ReleaseService:   petxReleaseBridge,
+		RuntimeFacade:    desktoppetintegration.NewExistingActionCorrelationPort(),
+		RuntimePort:      desktoppetintegration.NewExistingRuntimeCorrelationPort(),
+		FloatingWindow:   desktoppetintegration.NewExistingWindowCorrelationPort(),
+	})
+	petBoundary, err := petpluginboundary.NewProductionBoundary(
+		petpluginboundary.NewContainerSource(kernelContainer.ContributionRepository, kernelContainer.InstallationRepository),
+		petCapabilities,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("initialize desktop pet plugin boundary: %w", err)
+	}
+	kernelContainer.DesktopPetPluginBoundary = petBoundary
 
 	recoveryRepo := installationrecovery.NewInstallRepoAdapter(ctx.DB)
 	installationRecoveryWorker := installationrecovery.NewRecoveryWorker(recoveryRepo)
@@ -1058,7 +1092,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		OwnershipGuard:               ownershipGuard,
 		PathRegistry:                 pathRegistry,
 		ImportStagingRepo:            importStagingRepo,
-		PackageImporter:              importer.NewPackageImporterWithJournal(releaseRepo, releaseStoragePort, importer.NewDefaultPackageValidator(pathRegistry, importStagingRepo), pathRegistry, importStagingRepo, releasebuild.NewPublishJournalManager(releaseRepo)),
+		PackageImporter:              petPackageImporter,
 		Readiness:                    readinessSvc,
 		SafeMode:                     safeModeCtrl,
 		CanonicalStdioFactory:        canonicalStdioFactory,

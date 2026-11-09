@@ -96,6 +96,7 @@ class _ProjectApi implements BackendServiceApi {
           as T;
     if (path.endsWith('/roles'))
       return {
+            'executionScope': scope(),
             'roles': [
               {'id': 'role', 'revision': 1},
             ],

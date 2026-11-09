@@ -52,9 +52,10 @@ func (c *RelationshipTimeCoordinator) PrepareInbound(ctx context.Context, input 
 		input.ObservedAt = c.clock.Now()
 	}
 	input.ObservedAt = input.ObservedAt.UTC()
+	recordedElsewhere := false
 	err = c.repo.WithTransaction(ctx, func(repo *RelationshipTimeRepository) (txErr error) {
 		defer func() {
-			if txErr != nil {
+			if txErr != nil || recordedElsewhere {
 				return
 			}
 			policy := ResolveRelationshipTimePolicy(result, input.Message, false, settings)
@@ -90,6 +91,10 @@ func (c *RelationshipTimeCoordinator) PrepareInbound(ctx context.Context, input 
 			existing, getErr := repo.GetReceipt(ctx, input.SpaceID, input.RequestID)
 			if getErr != nil {
 				return getErr
+			}
+			if existing == nil {
+				recordedElsewhere = true
+				return nil
 			}
 			if existing.CharacterID != input.CharacterID {
 				return errors.New("relationship time request scope mismatch")
@@ -200,6 +205,12 @@ func (c *RelationshipTimeCoordinator) PrepareInbound(ctx context.Context, input 
 		}
 		return nil
 	})
+	if err != nil {
+		return result, err
+	}
+	if recordedElsewhere {
+		return RelationshipTimeContext{Version: RelationshipTimeVersion, SpaceID: input.SpaceID, CharacterID: input.CharacterID}, nil
+	}
 	return result, err
 }
 

@@ -12,7 +12,7 @@ import (
 )
 
 func worktreeHTTPError(c *gin.Context, err error) {
-	code := http.StatusInternalServerError
+	code := HTTPStatus(err)
 	switch {
 	case errors.Is(err, gitworktree.ErrInvalidArgument):
 		code = http.StatusBadRequest

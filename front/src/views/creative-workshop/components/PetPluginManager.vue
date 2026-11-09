@@ -84,7 +84,7 @@
       :title="installMode === 'update' ? `更新 ${updateTarget?.name || '桌宠插件'}` : '安装桌宠插件'"
       width="680px"
       destroy-on-close
-      @closed="resetInstallState"
+      @closed="resetClosedInstallState"
     >
       <div
         class="package-drop-zone"
@@ -224,7 +224,7 @@ interface PackageOperationView {
   errorCode?: string;
 }
 
-const { get, post, del } = useApi();
+const { get, post } = useApi();
 const plugins = ref<PetPlugin[]>([]);
 const loading = ref(false);
 const busy = ref("");
@@ -240,6 +240,7 @@ const installLoading = ref(false);
 const uploadProgress = ref(0);
 const installAcknowledged = ref(false);
 const packageInput = ref<HTMLInputElement | null>(null);
+let previewRequest = 0;
 
 const previewIsPetPlugin = computed(() => {
   const preview = installPreview.value;
@@ -298,6 +299,7 @@ function openInstallDialog(plugin?: PetPlugin) {
 }
 
 function resetInstallState() {
+  previewRequest += 1;
   installFile.value = null;
   installPreview.value = null;
   previewLoading.value = false;
@@ -308,15 +310,20 @@ function resetInstallState() {
   installMode.value = "install";
 }
 
+function resetClosedInstallState() {
+  if (!installDialogVisible.value) resetInstallState();
+}
+
 async function choosePackage() {
   const desktop = window.amitiaDesktop;
   if (!desktop?.selectExtensionPackage) {
     packageInput.value?.click();
     return;
   }
+  const request = previewRequest;
   try {
     const selected = await desktop.selectExtensionPackage();
-    if (!selected) return;
+    if (!selected || request !== previewRequest || !installDialogVisible.value) return;
     const bytes = Uint8Array.from(atob(selected.base64), (character) => character.charCodeAt(0));
     await setPackageFile(new File([bytes], selected.name, { type: "application/zip" }));
   } catch (error: any) {
@@ -337,31 +344,33 @@ async function onPackageDrop(event: DragEvent) {
 }
 
 async function setPackageFile(file: File) {
+  if (!installDialogVisible.value || installLoading.value) return;
+  const request = ++previewRequest;
+  installFile.value = null;
+  installPreview.value = null;
+  installAcknowledged.value = false;
+  previewLoading.value = false;
+  uploadProgress.value = 0;
+  installMode.value = updateTarget.value ? "update" : "install";
   if (!/\.petx$/i.test(file.name)) {
     ElMessage.warning("请选择 .petx 桌宠插件包");
     return;
   }
   installFile.value = file;
-  installPreview.value = null;
-  installAcknowledged.value = false;
-  await buildPackagePreview();
-}
-
-async function buildPackagePreview() {
-  if (!installFile.value) return;
+  const isCurrent = () => request === previewRequest && installDialogVisible.value;
   previewLoading.value = true;
-  uploadProgress.value = 0;
   try {
     const preview = await previewExtensionPackage(
-      installFile.value,
+      file,
       "global",
       "",
       updateTarget.value?.extensionId || "",
       (percent) => {
-        uploadProgress.value = percent;
+        if (isCurrent()) uploadProgress.value = percent;
       },
       "pet-center",
     );
+    if (!isCurrent()) return;
     installPreview.value = preview;
     if (preview.currentVersion) installMode.value = "update";
     if (!previewIsPetPlugin.value) {
@@ -372,11 +381,12 @@ async function buildPackagePreview() {
       ElMessage.error(`更新包 ID 不匹配：需要 ${updateTarget.value.extensionId}，实际为 ${preview.id}`);
     }
   } catch (error: any) {
-    installPreview.value = null;
-    ElMessage.error(error?.message || "插件包预览失败");
+    if (isCurrent()) ElMessage.error(error?.message || "插件包预览失败");
   } finally {
-    previewLoading.value = false;
-    uploadProgress.value = installPreview.value ? 100 : uploadProgress.value;
+    if (isCurrent()) {
+      previewLoading.value = false;
+      uploadProgress.value = installPreview.value ? 100 : uploadProgress.value;
+    }
   }
 }
 
@@ -432,7 +442,8 @@ async function togglePlugin(plugin: PetPlugin) {
   busy.value = plugin.extensionId;
   try {
     await post(
-      `/api/extensions/pet/plugins/${encodeURIComponent(plugin.extensionId)}/${plugin.enabled ? "disable" : "enable"}`,
+      `/api/extensions/pet/plugins/actions/${plugin.enabled ? "disable" : "enable"}`,
+      { extensionId: plugin.extensionId },
     );
     ElMessage.success(plugin.enabled ? "桌宠插件已禁用" : "桌宠插件已启用");
     await loadPlugins();
@@ -460,7 +471,9 @@ return;
   }
   busy.value = plugin.extensionId;
   try {
-    await del(`/api/extensions/pet/plugins/${encodeURIComponent(plugin.extensionId)}`);
+    await post("/api/extensions/pet/plugins/actions/uninstall", {
+      extensionId: plugin.extensionId,
+    });
     ElMessage.success("桌宠插件已卸载");
     await loadPlugins();
   } catch (error: any) {

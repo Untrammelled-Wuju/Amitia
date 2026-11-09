@@ -9,9 +9,12 @@ import (
 	"errors"
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/agent/tool"
+	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	"github.com/u-ai/backend/internal/middleware/security"
+	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/internal/system/dataportability"
 	amitialog "log"
 	"time"
@@ -94,6 +97,7 @@ func (r *canonicalChatMemoryRuntime) Recall(ctx context.Context, spaceID, role, 
 type ownedMemoryConsumers struct {
 	runtime *canonicalChatMemoryRuntime
 	storage *sql.DB
+	profile runtimeprofile.Profile
 }
 
 func (p *ownedMemoryConsumers) OwnedStorageStats(ctx context.Context) (business.OwnedStorageStats, error) {
@@ -251,12 +255,30 @@ func (p *ownedMemoryConsumers) DeletionChecks(ctx context.Context, id string) ([
 }
 
 func (p *ownedMemoryConsumers) Archive(ctx context.Context, role string) (business.MemoryArchive, error) {
-	ctx, request, finish, err := p.authority(ctx, role)
-	if err != nil {
+	current, request, finish, err := p.authority(ctx, role)
+	if err == nil {
+		defer finish()
+		archive, exportErr := p.runtime.engine.ExportMemoryArchive(current, request, role)
+		if exportErr == nil {
+			return archive, nil
+		}
+		err = exportErr
+	}
+	if p.profile != runtimeprofile.ProfileDeviceAgent || role != "" || p.storage == nil ||
+		(!errors.Is(err, sql.ErrNoRows) && !errors.Is(err, coordination.ErrRoleRequired)) {
 		return business.MemoryArchive{}, err
 	}
-	defer finish()
-	return p.runtime.engine.ExportMemoryArchive(ctx, request, role)
+	actor, ok := auth.FromContext(ctx)
+	if !ok || actor == nil || !actor.IsLocalTrusted || actor.SpaceID.String() != p.runtime.spaceID ||
+		actor.DeviceID.String() != p.runtime.deviceID ||
+		(actor.AuthMethod != security.AuthMethodLocalToken && actor.AuthMethod != security.AuthMethodDesktopSession) {
+		return business.MemoryArchive{}, err
+	}
+	hasRecords, checkErr := business.HasLiveMemoryArchiveRecords(ctx, p.storage, "")
+	if checkErr != nil || hasRecords {
+		return business.MemoryArchive{}, errors.Join(err, checkErr)
+	}
+	return business.MemoryArchive{Format: business.OwnedMemoryArchiveFormat, Entries: []business.MemoryConsumerEntry{}}, nil
 }
 
 func (p *ownedMemoryConsumers) RestoreArchive(ctx context.Context, input dataportability.ImportRequest, archive business.MemoryArchive) error {

@@ -23,6 +23,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/enablement"
 	"github.com/u-ai/backend/internal/extension/kernel/observability"
 	"github.com/u-ai/backend/internal/extension/kernel/skill"
+	"github.com/u-ai/backend/pkg/util"
 	amitialog "log"
 )
 
@@ -199,14 +200,7 @@ func (s *AgentSkillRuntime) Installed(ctx context.Context, spaceID, characterID,
 	if pageSize < 1 || pageSize > 100 {
 		pageSize = 20
 	}
-	start := (page - 1) * pageSize
-	if start > total {
-		start = total
-	}
-	end := start + pageSize
-	if end > total {
-		end = total
-	}
+	start, end := util.PageBounds(total, page, pageSize)
 	return items[start:end], total, nil
 }
 

@@ -10,6 +10,7 @@ import (
 	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/internal/temporal"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -20,7 +21,11 @@ func registerMeshRelationshipTimeRouter(mesh *gin.RouterGroup, services *AppServ
 			c.AbortWithStatus(401)
 			return
 		}
-		request := business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: c.Query("targetDeviceId"), RoleID: c.Query("characterId")}
+		target := strings.TrimSpace(c.Query("targetDeviceId"))
+		if target == "" {
+			target = actor.DeviceID.String()
+		}
+		request := business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: target, ResourceOwnerID: target, RoleID: c.Query("characterId")}
 		input := coordination.RelationshipTimeRequest{EpisodeID: c.Query("episodeId")}
 		input.Limit, _ = strconv.Atoi(c.Query("limit"))
 		if c.Request.Method == "PUT" {

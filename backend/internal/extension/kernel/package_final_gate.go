@@ -301,7 +301,7 @@ func (r *Runtime) verifyPackageFinalGateWithGuard(ctx context.Context, operation
 						checkArtifact.Detail = "retain-for-rollback policy: base verification failed"
 						break
 					}
-					binding, bindingErr := r.verifyRollbackRetentionBinding(ctx, operation.ExtensionID, operation.TargetVersion, operation.ArtifactID)
+					binding, bindingErr := r.verifyRollbackRetentionBinding(ctx, operation.ExtensionID, operation.TargetVersion, operation.ArtifactID, claims.CurrentGenerationID)
 					if bindingErr != nil {
 						checkArtifact.Detail = fmt.Sprintf("retain-for-rollback binding invalid: %v", bindingErr)
 						break

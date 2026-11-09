@@ -33,8 +33,10 @@ void main() {
       projection.setPhase(RuntimeStatusPhase.degraded);
 
       expect(gate.businessAvailable, false);
-      expect(() => gate.requireBusinessAvailable(),
-          throwsA(isA<BusinessBackendUnavailable>()));
+      expect(
+        () => gate.requireBusinessAvailable(),
+        throwsA(isA<BusinessBackendUnavailable>()),
+      );
 
       await projection.dispose();
     });
@@ -65,8 +67,10 @@ void main() {
       expect(result.generation, 5);
 
       projection.setGeneration(10);
-      expect(() => gate.acquireApi(api),
-          throwsA(isA<BusinessBackendUnavailable>()));
+      expect(
+        () => gate.acquireApi(api),
+        throwsA(isA<BusinessBackendUnavailable>()),
+      );
 
       await projection.dispose();
     });
@@ -94,11 +98,13 @@ void main() {
       connectionSource.setAvailability(
         BackendConnectionAvailable(_makeConfig(1)),
       );
-      transportSource.emit(const TransportStateSnapshot(
-        generation: 1,
-        httpState: BackendHttpState.available,
-        webSocketState: BackendWebSocketState.connected,
-      ));
+      transportSource.emit(
+        const TransportStateSnapshot(
+          generation: 1,
+          httpState: BackendHttpState.available,
+          webSocketState: BackendWebSocketState.connected,
+        ),
+      );
 
       await Future.delayed(const Duration(milliseconds: 20));
 
@@ -107,33 +113,37 @@ void main() {
       expect(projection.current.phase, RuntimeStatusPhase.ready);
       expect(gate.businessAvailable, true);
 
-      bridge.setSnapshot(const RuntimeBridgeSnapshot(
-        schemaVersion: 1,
-        state: RuntimeBridgeState.ready,
-        generation: 2,
-        runtimeInstalled: true,
-        runtimeAvailable: true,
-      ));
+      bridge.setSnapshot(
+        const RuntimeBridgeSnapshot(
+          schemaVersion: 1,
+          state: RuntimeBridgeState.ready,
+          generation: 2,
+          runtimeInstalled: true,
+          runtimeAvailable: true,
+        ),
+      );
 
       await Future.delayed(const Duration(milliseconds: 20));
 
-      connectionSource.setAvailability(
-        BackendConnectionUnavailable(),
-      );
+      connectionSource.setAvailability(BackendConnectionUnavailable());
 
-      bridge.setSnapshot(const RuntimeBridgeSnapshot(
-        schemaVersion: 1,
-        state: RuntimeBridgeState.ready,
-        generation: 3,
-        runtimeInstalled: true,
-        runtimeAvailable: true,
-      ));
+      bridge.setSnapshot(
+        const RuntimeBridgeSnapshot(
+          schemaVersion: 1,
+          state: RuntimeBridgeState.ready,
+          generation: 3,
+          runtimeInstalled: true,
+          runtimeAvailable: true,
+        ),
+      );
 
       await Future.delayed(const Duration(milliseconds: 20));
 
       expect(gate.businessAvailable, false);
-      expect(() => gate.requireBusinessAvailable(),
-          throwsA(isA<BusinessBackendUnavailable>()));
+      expect(
+        () => gate.requireBusinessAvailable(),
+        throwsA(isA<BusinessBackendUnavailable>()),
+      );
 
       await projection.dispose();
       await transportSource.close();
@@ -154,7 +164,8 @@ BackendConnectionConfig _makeConfig(int generation) {
       readinessPath: '/readyz',
     ),
     authStrategy: BackendAuthStrategy.localToken,
-    credential: BackendConnectionCredential.tryCreate('a' * 32) ??
+    credential:
+        BackendConnectionCredential.tryCreate('a' * 32) ??
         (throw StateError('Failed to create credential')),
   );
 }
@@ -226,8 +237,7 @@ class _FakeApi implements BackendServiceApi {
     Map<String, dynamic>? queryParameters,
     Map<String, String>? headers,
     T Function(dynamic)? fromJson,
-  }) async =>
-      null;
+  }) async => null;
 
   @override
   Future<T?> post<T>(
@@ -236,8 +246,7 @@ class _FakeApi implements BackendServiceApi {
     Map<String, dynamic>? queryParameters,
     Map<String, String>? headers,
     T Function(dynamic)? fromJson,
-  }) async =>
-      null;
+  }) async => null;
 
   @override
   Future<T?> put<T>(
@@ -246,8 +255,7 @@ class _FakeApi implements BackendServiceApi {
     Map<String, dynamic>? queryParameters,
     Map<String, String>? headers,
     T Function(dynamic)? fromJson,
-  }) async =>
-      null;
+  }) async => null;
 
   @override
   Future<void> delete(
@@ -262,8 +270,7 @@ class _FakeApi implements BackendServiceApi {
     Object? data,
     Map<String, String>? headers,
     T Function(dynamic)? fromJson,
-  }) async =>
-      null;
+  }) async => null;
 
   @override
   Future<Stream<List<int>>> getStream(
@@ -288,6 +295,7 @@ class _FakeApi implements BackendServiceApi {
     Map<String, String> fields = const {},
     Map<String, List<String>> files = const {},
     Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
     T Function(dynamic)? fromJson,
   }) async => null;
 

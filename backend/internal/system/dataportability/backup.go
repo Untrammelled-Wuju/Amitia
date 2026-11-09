@@ -145,7 +145,7 @@ func (c *Coordinator) CreateBackup(ctx context.Context, req BackupRequest, dbPat
 					amitialog.Printf("[original-error] %v", err)
 				}
 			}
-			return nil, c.failBackup(opID, err)
+			return nil, c.failBackup(opID, fmt.Errorf("contributor %s export failed: %w", ct.ID(), err))
 		}
 		for _, capture := range ordered {
 			if err := capture.writer.Close(); err != nil {

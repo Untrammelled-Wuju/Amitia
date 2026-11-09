@@ -9,16 +9,26 @@ void main() {
     test('blocks all requests when gate throws', () {
       final gated = _AlwaysBlockedGatedApi();
 
-      expect(() => gated.get('/api/test'),
-          throwsA(isA<BusinessBackendUnavailable>()));
-      expect(() => gated.post('/api/test', data: {'x': 1}),
-          throwsA(isA<BusinessBackendUnavailable>()));
-      expect(() => gated.put('/api/test', data: {'x': 1}),
-          throwsA(isA<BusinessBackendUnavailable>()));
-      expect(() => gated.delete('/api/test'),
-          throwsA(isA<BusinessBackendUnavailable>()));
-      expect(() => gated.deleteWithResponse('/api/test'),
-          throwsA(isA<BusinessBackendUnavailable>()));
+      expect(
+        () => gated.get('/api/test'),
+        throwsA(isA<BusinessBackendUnavailable>()),
+      );
+      expect(
+        () => gated.post('/api/test', data: {'x': 1}),
+        throwsA(isA<BusinessBackendUnavailable>()),
+      );
+      expect(
+        () => gated.put('/api/test', data: {'x': 1}),
+        throwsA(isA<BusinessBackendUnavailable>()),
+      );
+      expect(
+        () => gated.delete('/api/test'),
+        throwsA(isA<BusinessBackendUnavailable>()),
+      );
+      expect(
+        () => gated.deleteWithResponse('/api/test'),
+        throwsA(isA<BusinessBackendUnavailable>()),
+      );
 
       expect(gated.sendCount, 0);
     });
@@ -163,6 +173,7 @@ class _AlwaysBlockedGatedApi implements BackendServiceApi {
     Map<String, String> fields = const {},
     Map<String, List<String>> files = const {},
     Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
     T Function(dynamic)? fromJson,
   }) async => null;
 
@@ -268,6 +279,7 @@ class _PassingGatedApi implements BackendServiceApi {
     Map<String, String> fields = const {},
     Map<String, List<String>> files = const {},
     Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
     T Function(dynamic)? fromJson,
   }) async => null;
 

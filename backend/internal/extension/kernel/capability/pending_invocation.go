@@ -268,21 +268,12 @@ func (m *PendingInvocationManager) CancelByDevice(deviceID string, reason string
 	}
 }
 
-func (m *PendingInvocationManager) WaitForResult(ctx context.Context, invocationID string) (UnifiedToolResult, error) {
-	m.mu.RLock()
-	pi, ok := m.pending[invocationID]
-	m.mu.RUnlock()
-	if !ok {
-		return NewToolFailureResult(invocationID, "", &ToolError{
-			Code:    ErrorCodeRuntimeUnavailable,
-			Message: "invocation not registered",
-		}), nil
-	}
+func (pi *PendingInvocation) WaitForResult(ctx context.Context) (UnifiedToolResult, error) {
 	select {
 	case result := <-pi.ResultCh:
 		return result, nil
 	case <-ctx.Done():
-		return ResultFromContextError(invocationID, ctx.Err()), ctx.Err()
+		return ResultFromContextError(pi.InvocationID, ctx.Err()), ctx.Err()
 	}
 }
 

@@ -642,7 +642,7 @@ func (r *Runtime) PreviewPackageUninstall(ctx context.Context, extensionID, spac
 	}
 	result.Dependents = uniquePackageStrings(result.Dependents)
 	result.Installable = !result.Enabled && len(result.Dependents) == 0
-	policy, policyReason, policyErr := r.computeUninstallArtifactPolicy(ctx, result.ArtifactID, extensionID, result.CurrentVersion)
+	policy, policyReason, policyErr := r.computeUninstallArtifactPolicy(ctx, result.ArtifactID, extensionID, result.CurrentVersion, result.CurrentGenerationID)
 	if policyErr != nil {
 		switch {
 		case IsPackageErrorCode(policyErr, PackageErrCodeExportRetentionUnsupported):
@@ -668,6 +668,7 @@ func (r *Runtime) computeUninstallArtifactPolicy(
 	artifactID string,
 	extensionID string,
 	currentVersion string,
+	generationID string,
 ) (ArtifactPolicy, string, error) {
 	if artifactID == "" {
 		return ArtifactPolicyRetainArtifact,
@@ -692,10 +693,11 @@ func (r *Runtime) computeUninstallArtifactPolicy(
 
 	repository := r.container.PackageRepository
 
-	point, pointErr := repository.GetRollbackPoint(
+	point, pointErr := repository.getRollbackPoint(
 		ctx,
 		extensionID,
 		currentVersion,
+		generationID,
 	)
 
 	if pointErr == nil {
@@ -704,6 +706,7 @@ func (r *Runtime) computeUninstallArtifactPolicy(
 			extensionID,
 			currentVersion,
 			artifactID,
+			generationID,
 		)
 
 		if bindingErr != nil {

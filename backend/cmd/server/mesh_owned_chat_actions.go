@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	"github.com/u-ai/backend/pkg/util"
 )
 
 func (p *meshLocalDataPort) managedConversationAction(ctx context.Context, scope coordination.ExecutionScope, role string, request coordination.ChatManagementRequest, records, selected []ownedChatManagementRecord) (map[string]any, error) {
@@ -29,8 +30,8 @@ func (p *meshLocalDataPort) managedConversationAction(ctx context.Context, scope
 		if request.PageSize == 0 {
 			size = 50
 		}
-		start := min((page-1)*size, len(items))
-		return map[string]any{"items": items[start:min(start+size, len(items))], "total": len(items), "page": page, "pageSize": size}, nil
+		start, end := util.PageBounds(len(items), page, size)
+		return map[string]any{"items": items[start:end], "total": len(items), "page": page, "pageSize": size}, nil
 	}
 	if request.RequestID == "" || len(request.RequestID) > 128 || len(request.Title) > 1024 || strings.ContainsRune(request.Title, 0) {
 		return nil, errors.New("会话管理请求参数无效")

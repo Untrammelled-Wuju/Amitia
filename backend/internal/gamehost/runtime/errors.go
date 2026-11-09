@@ -1,6 +1,9 @@
 package runtime
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 const (
 	maxMetadataKeyLength   = 128
@@ -170,25 +173,16 @@ func NewExecutionErrorWithCause(code ErrorCode, runtimeID, pluginID, serviceID, 
 }
 
 func IsTopologyError(err error, code ErrorCode) bool {
-	te, ok := err.(*TopologyError)
-	if !ok {
-		return false
-	}
-	return te.Code == code
+	var te *TopologyError
+	return errors.As(err, &te) && te.Code == code
 }
 
 func IsExecutionError(err error, code ErrorCode) bool {
-	te, ok := err.(*ExecutionError)
-	if !ok {
-		return false
-	}
-	return te.Code == code
+	var ee *ExecutionError
+	return errors.As(err, &ee) && ee.Code == code
 }
 
 func IsRuntimeRestartError(err error, code ErrorCode) bool {
-	re, ok := err.(*RuntimeRestartError)
-	if !ok {
-		return false
-	}
-	return re.Code == code
+	var re *RuntimeRestartError
+	return errors.As(err, &re) && re.Code == code
 }

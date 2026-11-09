@@ -13,6 +13,7 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/handshake"
 	"github.com/u-ai/backend/internal/gamehost/readiness"
 	"github.com/u-ai/backend/internal/gamehost/runtime"
+	"github.com/u-ai/backend/pkg/util"
 )
 
 type KernelManagementReader interface {
@@ -813,13 +814,9 @@ func paginate[T any](items []T, page, pageSize int) []T {
 	if pageSize <= 0 {
 		return items
 	}
-	start := (page - 1) * pageSize
-	if start >= len(items) {
+	start, end := util.PageBounds(len(items), page, pageSize)
+	if start == end {
 		return nil
-	}
-	end := start + pageSize
-	if end > len(items) {
-		end = len(items)
 	}
 	return items[start:end]
 }

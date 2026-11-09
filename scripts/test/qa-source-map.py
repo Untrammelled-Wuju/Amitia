@@ -2,6 +2,7 @@ import csv
 import json
 import pathlib
 import re
+import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 OUT = ROOT / "artifacts/qa-20261105-depth"
@@ -9,20 +10,24 @@ DIMENSIONS = ["正常", "错误输入", "空值边界", "重复", "快速连续"
 
 
 def main():
-    OUT.mkdir(parents=True, exist_ok=True)
+    output = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else OUT
+    output.mkdir(parents=True, exist_ok=True)
     entries = []
     sources = [
         ("Web/Electron", ROOT / "front/src/router", "*.ts", r'path:\s*[\"\x27]([^\"\x27]+)'),
+        ("Electron IPC", ROOT / "desktop/src/main", "*.ts", r'ipcMain\.(handle|on)\(\s*IPC_CHANNELS\.(\w+)'),
+        ("管理端 Web", ROOT / "admin-system/src/router", "*.ts", r'path:\s*[\"\x27]([^\"\x27]*)'),
         ("Core", ROOT / "backend", "*.go", r'\.((?:GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD|Group))\(\s*"([^"]*)"'),
         ("Android/iOS", ROOT / "mobile_app/lib", "*.dart", r'(?:class\s+(\w+(?:Page|Screen))\b|path:\s*[\"\x27]([^\"\x27]+))'),
     ]
     for platform, directory, glob, pattern in sources:
         for path in sorted(directory.rglob(glob)):
-            if path.name.endswith("_test.go"):
+            if path.name.endswith(("_test.go", ".test.ts", ".spec.ts")):
                 continue
             for number, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
                 for match in re.finditer(pattern, line):
-                    entries.append({"platform": platform, "source": str(path.relative_to(ROOT)), "line": number, "entry": " ".join(value for value in match.groups() if value), "classification": "源码候选入口，非动态路由确认"})
+                    entry_platform = "管理端 API" if "adminrelease" in path.parts else platform
+                    entries.append({"platform": entry_platform, "source": str(path.relative_to(ROOT)), "line": number, "entry": " ".join(value for value in match.groups() if value), "classification": "源码候选入口，非动态路由确认"})
     plugins = []
     for path in sorted((ROOT / "plugins-code").rglob("amitia-extension.json")):
         manifest = json.loads(path.read_text())
@@ -35,9 +40,9 @@ def main():
         tables = re.findall(r'func\s*\([^)]*\)\s*TableName\(\)\s*string\s*\{\s*return\s*"([^"]+)"', text)
         if tables:
             models.append({"source": str(path.relative_to(ROOT)), "tables": tables})
-    inventory = {"entries": entries, "plugins": plugins, "gorm_tables": models, "sql_sources": [str(path.relative_to(ROOT)) for path in (ROOT / "backend").rglob("*.sql")], "limits": "静态候选地图：嵌套分组需人工拼接；动态注册与条件启用不代表已验证。管理端不执行修改或业务操作。"}
-    (OUT / "source-map.json").write_text(json.dumps(inventory, ensure_ascii=False, indent=2))
-    with (OUT / "entry-coverage.csv").open("w", newline="") as file:
+    inventory = {"entries": entries, "plugins": plugins, "gorm_tables": models, "sql_sources": [str(path.relative_to(ROOT)) for directory in ("backend", "deploy") for path in (ROOT / directory).rglob("*.sql")], "limits": "静态候选地图。嵌套分组、动态注册和条件启用需在运行时确认。"}
+    (output / "source-map.json").write_text(json.dumps(inventory, ensure_ascii=False, indent=2))
+    with (output / "entry-coverage.csv").open("w", newline="") as file:
         writer = csv.writer(file)
         writer.writerow(["平台", "源码", "行", "候选入口", "证据等级", *DIMENSIONS])
         for entry in entries:
