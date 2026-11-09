@@ -53,7 +53,7 @@ async function main() {
     }
   }
 
-  for (const pluginName of ["plugin-market", "runtime-insights", "workspace", "chat-import", "storage", "creative-workshop-hub", "game-center-hub", "channels-hub"]) {
+  for (const pluginName of ["plugin-market"]) {
     const pluginDir = resolve(unpackedDir, "resources", "bundled-plugins", pluginName);
     const pluginPackages = existsSync(pluginDir)
       ? readdirSync(pluginDir).filter((name) => name.endsWith(".amitiax"))

@@ -9,6 +9,18 @@
     "/my-space",
     "/me",
     "/logs",
+    "/channel-center",
+    "/chat-import",
+    "/creative-workshop",
+    "/workshop",
+    "/game-center",
+    "/developer",
+    "/kernel",
+    "/workspaces",
+    "/storage",
+    "/runtime-debug",
+    "/decision-viz",
+    "/long-running",
     "/characters",
     "/memory",
     "/tasks",
@@ -24,80 +36,6 @@
       "registryProviderId": "plugin-market-routes",
       "routeId": "plugin-market",
       "pageProviderId": "plugin-market-page-provider",
-      "entries": [
-        "web",
-        "electron_windows",
-        "electron_macos",
-        "electron_linux",
-        "mobile"
-      ]
-    },
-    {
-      "path": "/creative-workshop",
-      "extensionId": "com.amitia/creative-workshop-hub",
-      "manifest": "plugins-builtin/creative-workshop-hub/amitia-extension.json",
-      "registryProviderId": "creative-workshop-hub-routes",
-      "routeId": "creative-workshop-hub",
-      "pageProviderId": "creative-workshop-hub-page-provider",
-      "entries": [
-        "web",
-        "electron_windows",
-        "electron_macos",
-        "electron_linux",
-        "mobile"
-      ]
-    },
-    {
-      "path": "/developer",
-      "extensionId": "com.amitia/runtime-insights",
-      "manifest": "plugins-builtin/runtime-insights/amitia-extension.json",
-      "registryProviderId": "runtime-insights-routes",
-      "routeId": "developer-home-mobile",
-      "pageProviderId": "runtime-insights-mobile-page-provider",
-      "entries": [
-        "web",
-        "electron_windows",
-        "electron_macos",
-        "electron_linux",
-        "mobile"
-      ]
-    },
-    {
-      "path": "/workspaces",
-      "extensionId": "com.amitia/workspace",
-      "manifest": "plugins-builtin/workspace/amitia-extension.json",
-      "registryProviderId": "workspace-routes",
-      "routeId": "workspace",
-      "pageProviderId": "workspace-page-provider",
-      "entries": [
-        "web",
-        "electron_windows",
-        "electron_macos",
-        "electron_linux"
-      ]
-    },
-    {
-      "path": "/channel-center",
-      "extensionId": "com.amitia/channels-hub",
-      "manifest": "plugins-builtin/channels-hub/amitia-extension.json",
-      "registryProviderId": "channels-hub-routes",
-      "routeId": "channels-hub",
-      "pageProviderId": "channels-hub-page-provider",
-      "entries": [
-        "web",
-        "electron_windows",
-        "electron_macos",
-        "electron_linux",
-        "mobile"
-      ]
-    },
-    {
-      "path": "/game-center",
-      "extensionId": "com.amitia/game-center-hub",
-      "manifest": "plugins-builtin/game-center-hub/amitia-extension.json",
-      "registryProviderId": "game-center-hub-routes",
-      "routeId": "game-center-hub",
-      "pageProviderId": "game-center-hub-page-provider",
       "entries": [
         "web",
         "electron_windows",

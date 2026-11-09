@@ -102,30 +102,30 @@ function routeRegistry(
 }
 
 describe("third-party replacement matrix", () => {
-  it("replaces an official page route without host-specific routing", () => {
+  it("replaces a generic provider page without host-specific routing", () => {
     const providers = [
       routeRegistry(
-        "com.amitia/workspace",
+        "com.amitia/plugin",
         "workspace-routes",
-        "/workspaces",
+        "/replaceable-page",
         "workspace-page",
         250,
       ),
-      pageProvider("com.amitia/workspace", "workspace-page"),
+      pageProvider("com.amitia/plugin", "workspace-page"),
       routeRegistry(
-        "com.example/workspace-pro",
+        "com.example/plugin-pro",
         "workspace-pro-routes",
-        "/workspaces",
+        "/replaceable-page",
         "workspace-pro-page",
         300,
       ),
-      pageProvider("com.example/workspace-pro", "workspace-pro-page"),
+      pageProvider("com.example/plugin-pro", "workspace-pro-page"),
     ];
 
     const effective = collectEffectiveProviderRoutes(store(providers));
-    expect(effective.filter((item) => item.path === "/workspaces")).toEqual([
+    expect(effective.filter((item) => item.path === "/replaceable-page")).toEqual([
       expect.objectContaining({
-        extensionId: "com.example/workspace-pro",
+        extensionId: "com.example/plugin-pro",
         providerId: "workspace-pro-page",
       }),
     ]);

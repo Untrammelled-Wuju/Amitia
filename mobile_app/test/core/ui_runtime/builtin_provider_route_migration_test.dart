@@ -5,15 +5,8 @@ import 'package:amitia_app/core/ui_runtime/mobile_host_runtime_registry.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const migratedChildPaths = <String>[
-  '/workshop/character-cards',
-  '/workshop/pet/installations',
-  '/game-center',
   '/extensions/packages',
   '/extensions/mcp/:id',
-  '/chat-import',
-  '/developer',
-  '/developer/kernel/tasks',
-  '/channel-center',
   '/desktop-pet',
 ];
 
@@ -28,14 +21,7 @@ void main() {
   });
 
   test('all migrated mobile plugins publish route registries', () {
-    const manifests = <String>[
-      'creative-workshop-hub',
-      'game-center-hub',
-      'plugin-market',
-      'chat-import',
-      'runtime-insights',
-      'channels-hub',
-    ];
+    const manifests = <String>['plugin-market'];
     for (final name in manifests) {
       final manifest =
           jsonDecode(
@@ -90,6 +76,12 @@ void main() {
       expect(source, contains("path: '/memory/:pathMatch(.*)*'"));
       expect(source, contains("path: '/reminders'"));
       expect(source, contains("path: '/continuity'"));
+      expect(source, contains("path: '/workshop'"));
+      expect(source, contains("path: '/game-center'"));
+      expect(source, contains("path: '/chat-import'"));
+      expect(source, contains("path: '/developer'"));
+      expect(source, contains("path: '/workspaces'"));
+      expect(source, contains("path: '/storage'"));
     },
   );
 }

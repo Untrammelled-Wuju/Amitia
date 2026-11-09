@@ -62,13 +62,6 @@ function packagePaths() {
     ["plugins-builtin/plugin-market/amitia-extension.json", "plugin-market"],
     ["plugins-code/emote/amitia-extension.json", "Emote"],
     ["plugins-code/lifestyle/amitia-extension.json", "lifestyle"],
-    ["plugins-builtin/runtime-insights/amitia-extension.json", "runtime-insights"],
-    ["plugins-builtin/workspace/amitia-extension.json", "workspace"],
-    ["plugins-builtin/chat-import/amitia-extension.json", "chat-import"],
-    ["plugins-builtin/storage/amitia-extension.json", "storage"],
-    ["plugins-builtin/creative-workshop-hub/amitia-extension.json", "creative-workshop-hub"],
-    ["plugins-builtin/game-center-hub/amitia-extension.json", "game-center-hub"],
-    ["plugins-builtin/channels-hub/amitia-extension.json", "channels-hub"],
     ["plugins-code/agent-identities/browser-profile/amitia-extension.json", "agent-identities"],
     ["plugins-code/agent-identities/calendar/amitia-extension.json", "agent-identities"],
     ["plugins-code/agent-identities/email/amitia-extension.json", "agent-identities"],
@@ -87,21 +80,7 @@ function packagePaths() {
         ? `amitia-plugin-market-${manifest.plugin.version}.amitiax`
       : directory === "lifestyle"
         ? `amitia-lifestyle-${manifest.plugin.version}.amitiax`
-      : directory === "runtime-insights"
-        ? `amitia-runtime-insights-${manifest.plugin.version}.amitiax`
-      : directory === "workspace"
-        ? `amitia-workspace-${manifest.plugin.version}.amitiax`
-      : directory === "chat-import"
-        ? `amitia-chat-import-${manifest.plugin.version}.amitiax`
-      : directory === "storage"
-        ? `amitia-storage-${manifest.plugin.version}.amitiax`
-      : directory === "creative-workshop-hub"
-        ? `amitia-creative-workshop-hub-${manifest.plugin.version}.amitiax`
-      : directory === "game-center-hub"
-        ? `amitia-game-center-hub-${manifest.plugin.version}.amitiax`
-      : directory === "channels-hub"
-        ? `amitia-channels-hub-${manifest.plugin.version}.amitiax`
-        : directory === "agent-identities"
+      : directory === "agent-identities"
           ? `${basename(dirname(join(root, manifestPath)))}-${manifest.plugin.version}.amitiax`
           : `${name}-${manifest.plugin.version}.amitiax`
     return directory ? join(root, "plugin", directory, fileName) : join(root, "plugin", fileName)

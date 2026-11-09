@@ -99,7 +99,7 @@ Provider 导航项必须声明归属层级：`primary`、`settings`、`profile`�
 
 通用扩展页面同时支持 `schema_page` 和 `web_page`。`web_page` 客户端模块通过短期页面能力令牌、入口内容哈希和模块目录边界从受控端点加载，并获得宿主提供的 `uiContext`、`uiActions` 与 `uiNavigate` 门面。
 
-运行时调试、BDI 决策可视化和长期运行维护由 `com.amitia/runtime-insights` 提供。插件通过 `host.runtime.snapshot` 和 `host.runtime.maintenance.*` 读取或修改状态，不直接调用管理员 HTTP 接口。
+运行时调试、BDI 决策可视化和长期运行维护由核心页面提供。扩展通过 `host.runtime.snapshot`、`host.runtime.maintenance.*`、Service 和 Slot 读取或修改状态。
 
 ## SDK 与 CLI
 

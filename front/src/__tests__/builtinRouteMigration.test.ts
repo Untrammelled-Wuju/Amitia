@@ -44,7 +44,7 @@ describe("builtin route ownership", () => {
       "/my-space",
       "/logs",
     ]));
-    for (const path of ["/extensions/market", "/extensions/packages", "/runtime-debug", "/decision-viz", "/long-running", "/workspaces", "/import", "/storage"]) {
+    for (const path of ["/extensions/market", "/extensions/packages"]) {
       expect(paths).not.toContain(path);
     }
   });
@@ -56,18 +56,9 @@ describe("builtin route ownership", () => {
     }
   });
 
-  it("keeps runtime tools in plugin route registries", () => {
-    const runtimeManifest = JSON.parse(readFileSync(
-      resolve(__dirname, "../../../plugins-builtin/runtime-insights/amitia-extension.json"),
-      "utf8",
-    )) as {
-      modules: Array<{ contributions: Array<{ spec?: { metadata?: { routes?: Array<{ path: string }> } } }> }>;
-    };
-    const routes = runtimeManifest.modules
-      .flatMap((module) => module.contributions)
-      .flatMap((contribution) => contribution.spec?.metadata?.routes ?? [])
-      .map((route) => route.path);
-    expect(routes).toEqual(expect.arrayContaining([
+  it("keeps runtime tools in the core router", () => {
+    const paths = builtinBusinessRoutes.map((item) => String(item.path ?? ""));
+    expect(paths).toEqual(expect.arrayContaining([
       "/runtime-debug",
       "/decision-viz",
       "/long-running",

@@ -18,13 +18,6 @@ const sourceDateEpoch = process.env.SOURCE_DATE_EPOCH || spawnSync("git", ["show
 const signatureCreatedAt = new Date(Number(sourceDateEpoch) * 1000).toISOString()
 const bundledOutputDirectories = new Map([
   ["com.amitia/plugin-market", "plugin-market"],
-  ["com.amitia/runtime-insights", "runtime-insights"],
-  ["com.amitia/workspace", "workspace"],
-  ["com.amitia/chat-import", "chat-import"],
-  ["com.amitia/storage", "storage"],
-  ["com.amitia/creative-workshop-hub", "creative-workshop-hub"],
-  ["com.amitia/game-center-hub", "game-center-hub"],
-  ["com.amitia/channels-hub", "channels-hub"],
 ])
 
 function run(command, args, cwd = root) {
@@ -58,13 +51,6 @@ function buildPlugins() {
     ["com.amitia/plugin-market", nodeBinary, [join(root, "plugins-builtin/plugin-market/scripts/build-package.mjs"), "--source", join(root, "plugins-builtin/plugin-market"), "--output", join(pluginRoot, "plugin-market")]],
     ["com.amitia/emote", nodeBinary, [join(root, "plugins-code/emote/scripts/build-package.mjs"), "--source", join(root, "plugins-code/emote"), "--output", join(pluginRoot, "Emote")]],
     ["com.amitia/lifestyle", nodeBinary, [join(root, "plugins-code/lifestyle/scripts/build-package.mjs"), "--source", join(root, "plugins-code/lifestyle"), "--output", join(pluginRoot, "lifestyle")]],
-    ["com.amitia/runtime-insights", nodeBinary, [join(root, "plugins-builtin/runtime-insights/scripts/build-package.mjs"), "--output", join(pluginRoot, "runtime-insights")]],
-    ["com.amitia/workspace", nodeBinary, [join(root, "plugins-builtin/workspace/scripts/build-package.mjs"), "--output", join(pluginRoot, "workspace")]],
-    ["com.amitia/chat-import", nodeBinary, [join(root, "plugins-builtin/chat-import/scripts/build-package.mjs"), "--output", join(pluginRoot, "chat-import")]],
-    ["com.amitia/storage", nodeBinary, [join(root, "plugins-builtin/storage/scripts/build-package.mjs"), "--output", join(pluginRoot, "storage")]],
-    ["com.amitia/creative-workshop-hub", nodeBinary, [join(root, "plugins-builtin/creative-workshop-hub/scripts/build-package.mjs"), "--output", join(pluginRoot, "creative-workshop-hub")]],
-    ["com.amitia/game-center-hub", nodeBinary, [join(root, "plugins-builtin/game-center-hub/scripts/build-package.mjs"), "--output", join(pluginRoot, "game-center-hub")]],
-    ["com.amitia/channels-hub", nodeBinary, [join(root, "plugins-builtin/channels-hub/scripts/build-package.mjs"), "--output", join(pluginRoot, "channels-hub")]],
     ...["browser-profile", "calendar", "email", "phone", "wallet"].map((name) => {
       const manifest = readManifest(join(root, "plugins-code/agent-identities", name, "amitia-extension.json"))
       return [manifest.plugin.id, nodeBinary, [join(root, "plugins-code/agent-identities/scripts/build-package.mjs"), "--package", join(root, "plugins-code/agent-identities", name)]]
@@ -86,13 +72,6 @@ function expectedPackages() {
     ["plugins-builtin/plugin-market/amitia-extension.json", "plugin-market"],
     ["plugins-code/emote/amitia-extension.json", "Emote"],
     ["plugins-code/lifestyle/amitia-extension.json", "lifestyle"],
-    ["plugins-builtin/runtime-insights/amitia-extension.json", "runtime-insights"],
-    ["plugins-builtin/workspace/amitia-extension.json", "workspace"],
-    ["plugins-builtin/chat-import/amitia-extension.json", "chat-import"],
-    ["plugins-builtin/storage/amitia-extension.json", "storage"],
-    ["plugins-builtin/creative-workshop-hub/amitia-extension.json", "creative-workshop-hub"],
-    ["plugins-builtin/game-center-hub/amitia-extension.json", "game-center-hub"],
-    ["plugins-builtin/channels-hub/amitia-extension.json", "channels-hub"],
     ["plugins-code/agent-identities/browser-profile/amitia-extension.json", "agent-identities"],
     ["plugins-code/agent-identities/calendar/amitia-extension.json", "agent-identities"],
     ["plugins-code/agent-identities/email/amitia-extension.json", "agent-identities"],
@@ -111,21 +90,7 @@ function expectedPackages() {
         ? `amitia-plugin-market-${manifest.plugin.version}.amitiax`
       : directory === "lifestyle"
         ? `amitia-lifestyle-${manifest.plugin.version}.amitiax`
-      : directory === "runtime-insights"
-        ? `amitia-runtime-insights-${manifest.plugin.version}.amitiax`
-      : directory === "workspace"
-        ? `amitia-workspace-${manifest.plugin.version}.amitiax`
-      : directory === "chat-import"
-        ? `amitia-chat-import-${manifest.plugin.version}.amitiax`
-      : directory === "storage"
-        ? `amitia-storage-${manifest.plugin.version}.amitiax`
-      : directory === "creative-workshop-hub"
-        ? `amitia-creative-workshop-hub-${manifest.plugin.version}.amitiax`
-      : directory === "game-center-hub"
-        ? `amitia-game-center-hub-${manifest.plugin.version}.amitiax`
-      : directory === "channels-hub"
-        ? `amitia-channels-hub-${manifest.plugin.version}.amitiax`
-        : directory === "agent-identities"
+      : directory === "agent-identities"
           ? `${basename(dirname(join(root, manifestPath)))}-${manifest.plugin.version}.amitiax`
           : packageName(manifest)
     return {

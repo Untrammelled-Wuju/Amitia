@@ -17,34 +17,6 @@ extraResources:
     to: bundled-plugins/plugin-market
     filter:
       - "*.amitiax"
-  - from: ../plugin/runtime-insights
-    to: bundled-plugins/runtime-insights
-    filter:
-      - "*.amitiax"
-  - from: ../plugin/workspace
-    to: bundled-plugins/workspace
-    filter:
-      - "*.amitiax"
-  - from: ../plugin/chat-import
-    to: bundled-plugins/chat-import
-    filter:
-      - "*.amitiax"
-  - from: ../plugin/storage
-    to: bundled-plugins/storage
-    filter:
-      - "*.amitiax"
-  - from: ../plugin/creative-workshop-hub
-    to: bundled-plugins/creative-workshop-hub
-    filter:
-      - "*.amitiax"
-  - from: ../plugin/game-center-hub
-    to: bundled-plugins/game-center-hub
-    filter:
-      - "*.amitiax"
-  - from: ../plugin/channels-hub
-    to: bundled-plugins/channels-hub
-    filter:
-      - "*.amitiax"
   - from: ../runtime/plugin-host/dist
     to: runtime/plugin-host/dist
   - from: ../runtime/task-host/dist

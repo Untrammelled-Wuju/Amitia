@@ -37,14 +37,7 @@ func TestBuiltInAndOrdinaryPluginSourcesAreSeparated(t *testing.T) {
 	builtInRoot := filepath.Join(workspaceRoot, "plugins-builtin")
 	ordinaryRoot := filepath.Join(workspaceRoot, "plugins-code")
 	expectedBuiltIns := map[string]bool{
-		"com.amitia/plugin-market":         true,
-		"com.amitia/runtime-insights":      true,
-		"com.amitia/workspace":             true,
-		"com.amitia/chat-import":           true,
-		"com.amitia/storage":               true,
-		"com.amitia/creative-workshop-hub": true,
-		"com.amitia/game-center-hub":       true,
-		"com.amitia/channels-hub":          true,
+		"com.amitia/plugin-market": true,
 	}
 	foundBuiltIns := make(map[string]bool, len(expectedBuiltIns))
 	for _, path := range sourceManifestPaths(t, builtInRoot) {

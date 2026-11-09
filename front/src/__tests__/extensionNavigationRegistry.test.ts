@@ -88,16 +88,16 @@ describe("extension navigation registry", () => {
           routes: [
             { id: "primary", path: "/primary", providerId: "placement-pages", capability: "page.provider" },
             { id: "hub", path: "/hub", providerId: "placement-pages", capability: "page.provider" },
-            { id: "settings", path: "/storage", providerId: "placement-pages", capability: "page.provider" },
+            { id: "settings", path: "/settings-pro", providerId: "placement-pages", capability: "page.provider" },
             { id: "profile", path: "/profile-history", providerId: "placement-pages", capability: "page.provider" },
-            { id: "workspace", path: "/workspaces", providerId: "placement-pages", capability: "page.provider" },
+            { id: "workspace", path: "/workspace-pro", providerId: "placement-pages", capability: "page.provider" },
           ],
           navigationItems: [
             { id: "primary", label: "主入口", route: "/primary", group: "main", placement: "primary" },
             { id: "hub", label: "业务中心", route: "/hub", group: "character", profile: true },
-            { id: "settings", label: "存储维护", route: "/storage", group: "settings" },
+            { id: "settings", label: "高级设置", route: "/settings-pro", group: "settings" },
             { id: "profile", label: "历史入口", route: "/profile-history", group: "logs", placement: "profile" },
-            { id: "workspace", label: "工作区", route: "/workspaces", group: "workspace" },
+            { id: "workspace", label: "扩展工作区", route: "/workspace-pro", group: "workspace" },
           ],
         },
       }),
@@ -105,9 +105,9 @@ describe("extension navigation registry", () => {
     ]));
     expect(items.find((item) => item.route === "/primary")?.placement).toBe("primary");
     expect(items.find((item) => item.route === "/hub")?.placement).toBe("primary");
-    expect(items.find((item) => item.route === "/storage")?.placement).toBe("settings");
+    expect(items.find((item) => item.route === "/settings-pro")?.placement).toBe("settings");
     expect(items.find((item) => item.route === "/profile-history")?.placement).toBe("profile");
-    expect(items.find((item) => item.route === "/workspaces")?.placement).toBe("workspace");
+    expect(items.find((item) => item.route === "/workspace-pro")?.placement).toBe("workspace");
   });
 
   it("keeps settings and workspace pages out of mobile tabs", () => {
@@ -120,14 +120,14 @@ describe("extension navigation registry", () => {
           routes: [
             { id: "primary", path: "/tasks", providerId: "mobile-placement-pages", capability: "page.provider" },
             { id: "profile", path: "/space-profile", providerId: "mobile-placement-pages", capability: "page.provider" },
-            { id: "settings", path: "/runtime-debug", providerId: "mobile-placement-pages", capability: "page.provider" },
-            { id: "workspace", path: "/workspaces", providerId: "mobile-placement-pages", capability: "page.provider" },
+            { id: "settings", path: "/settings-mobile-extension", providerId: "mobile-placement-pages", capability: "page.provider" },
+            { id: "workspace", path: "/workspace-mobile-extension", providerId: "mobile-placement-pages", capability: "page.provider" },
           ],
           navigationItems: [
             { id: "primary", label: "任务", route: "/tasks", group: "tasks", tabLabel: "任务", mobile: true },
             { id: "profile", label: "个人", route: "/space-profile", group: "space", tabLabel: "我的", mobile: true, profile: true },
-            { id: "settings", label: "运行时调试", route: "/runtime-debug", group: "settings", mobile: true },
-            { id: "workspace", label: "工作区", route: "/workspaces", group: "workspace", mobile: true },
+            { id: "settings", label: "扩展设置", route: "/settings-mobile-extension", group: "settings", mobile: true },
+            { id: "workspace", label: "扩展工作区", route: "/workspace-mobile-extension", group: "workspace", mobile: true },
           ],
         },
       }),
@@ -143,56 +143,12 @@ describe("extension navigation registry", () => {
     expect(items.find((item) => item.route === "/tasks")?.label).toBe("任务");
   });
 
-  it("resolves workshop hubs from plugins", () => {
-    const items = resolveBuiltinNavigationItems(store([]));
-    expect(items.filter((item) => item.group === "workshop")).toEqual([]);
-    const workshopStore = store([
-      provider({
-        providerId: "creative-workshop-hub-routes",
-        extensionId: "com.amitia/creative-workshop-hub",
-        capability: "route.registry",
-        priority: 235,
-        metadata: {
-          routes: [
-            { id: "creative-workshop-hub", path: "/creative-workshop", providerId: "creative-workshop-hub-page-provider", capability: "page.provider" },
-          ],
-          navigationItems: [
-            { id: "creative-workshop-hub", label: "创意工坊", route: "/creative-workshop", icon: "workshop", group: "workshop", order: 85 },
-          ],
-        },
-      }),
-      pageProvider("com.amitia/creative-workshop-hub", "creative-workshop-hub-page-provider"),
-    ]);
-    const workshopItems = collectExtensionNavigationItems(workshopStore);
-    expect(workshopItems.filter((item) => item.route === "/creative-workshop").map((item) => ({
-      route: item.route,
-      label: item.label,
-    }))).toEqual([{ route: "/creative-workshop", label: "创意工坊" }]);
-    const gameStore = store([
-      provider({
-        providerId: "game-center-hub-routes",
-        extensionId: "com.amitia/game-center-hub",
-        capability: "route.registry",
-        priority: 240,
-        metadata: {
-          routes: [
-            { id: "game-center-hub", path: "/game-center", providerId: "game-center-hub-page-provider", capability: "page.provider" },
-          ],
-          navigationItems: [
-            { id: "game-center-hub", label: "游戏模式", route: "/game-center", icon: "gamepad", group: "workshop", order: 80 },
-          ],
-        },
-      }),
-      pageProvider("com.amitia/game-center-hub", "game-center-hub-page-provider"),
-    ]);
-    expect(collectEffectiveProviderRoutes(gameStore)).toContainEqual(
-      expect.objectContaining({
-        path: "/game-center",
-        extensionId: "com.amitia/game-center-hub",
-        providerId: "game-center-hub-page-provider",
-      }),
-    );
-    expect(items.find((item) => item.group === "tasks")?.label).toBe("任务");
+  it("keeps workshop and game hubs in core routes", () => {
+    const paths = builtinBusinessRoutes.map((item) => String(item.path ?? ""));
+    expect(paths).toContain("/creative-workshop");
+    expect(paths).toContain("/game-center");
+    expect(shadowsProtectedRoute("/creative-workshop")).toBe(true);
+    expect(shadowsProtectedRoute("/game-center")).toBe(true);
   });
 
   it("keeps channel center out of built-in navigation and lists plugins separately", () => {
@@ -288,10 +244,10 @@ describe("extension navigation registry", () => {
 
   it("protects every built-in top-level route namespace", () => {
     expect(shadowsProtectedRoute("/chat/plugin-page")).toBe(true);
-    expect(shadowsProtectedRoute("/game-center/plugin-page")).toBe(false);
+    expect(shadowsProtectedRoute("/game-center/plugin-page")).toBe(true);
     expect(shadowsProtectedRoute("/characters")).toBe(true);
     expect(shadowsProtectedRoute("/characters/plugin-page")).toBe(true);
-    expect(shadowsProtectedRoute("/creative-workshop/plugin-page")).toBe(false);
+    expect(shadowsProtectedRoute("/creative-workshop/plugin-page")).toBe(true);
     expect(shadowsProtectedRoute("/extensions/market")).toBe(false);
     expect(shadowsProtectedRoute("/extensions")).toBe(true);
     expect(shadowsProtectedRoute("/extensions/another-provider")).toBe(false);
@@ -318,21 +274,15 @@ describe("extension navigation registry", () => {
     expect(router.getRoutes().some((route) => route.path === "/extensions/third-party")).toBe(true);
   });
 
-  it("allows a third-party provider to replace the official workspace page", () => {
+  it("keeps workspace core while allowing generic provider routes", () => {
     const providers = [
       routeRegistry("com.amitia/workspace", "workspace-routes", "/workspaces", "workspace-page-provider", 250, false),
       pageProvider("com.amitia/workspace", "workspace-page-provider"),
       routeRegistry("com.example/workspace-pro", "workspace-pro-routes", "/workspaces", "workspace-pro-page", 300, false),
       pageProvider("com.example/workspace-pro", "workspace-pro-page"),
     ];
-    expect(shadowsProtectedRoute("/workspaces")).toBe(false);
-    expect(collectEffectiveProviderRoutes(store(providers))).toContainEqual(
-      expect.objectContaining({
-        path: "/workspaces",
-        extensionId: "com.example/workspace-pro",
-        providerId: "workspace-pro-page",
-      }),
-    );
+    expect(shadowsProtectedRoute("/workspaces")).toBe(true);
+    expect(collectEffectiveProviderRoutes(store(providers))).toEqual([]);
   });
 
   it("keeps the plugin market root navigation backed by its section routes", () => {

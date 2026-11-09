@@ -21,20 +21,20 @@
 | --- | --- | --- |
 | 插件市场、扩展中心与内核入口 | `com.amitia/plugin-market` | `/extensions`、`/kernel`、扩展包、工作流、MCP、Agent Skills 的页面和路由均使用 Tool、UI Provider、Route Registry；宿主固定业务页已删除 |
 | 渠道页面与连接 | `com.amitia/channel-*` | 已使用 Service、UI Provider、Route Registry |
-| 渠道中心 | `com.amitia/channels-hub` | 固定 `/channel-center` 路由已删除，渠道发现、插件导航和接入入口由插件提供 |
+| 渠道中心 | 核心模块 | `/channel-center` 和渠道工作区由核心页面提供；渠道发现、接入和 UI 扩展继续通过 Provider、Service 和 Slot 注入 |
 | 设置与个人空间 | 核心模块 | `/settings`、`/my-space`、`/me` 及移动端“我的”页面由核心路由和内置页面提供；扩展仍可通过 Slot、Hook、Service 和 Tool 注入能力 |
 | 表情与消息渲染 | `com.amitia/emote` | 已使用 Tool、UI Slot、UI Provider |
 | 生活系统 | `com.amitia/lifestyle` | 已使用 Tool、UI Slot、UI Provider |
-| 运行时调试 | `com.amitia/runtime-insights` | 已从固定 Vue 路由迁出 |
-| BDI 决策可视化 | `com.amitia/runtime-insights` | Web、桌面与移动端均由插件提供 |
-| 长期运行维护 | `com.amitia/runtime-insights` | 状态、配置和维护动作均走 Host API |
-| Kernel 管理页 | `com.amitia/runtime-insights` | WASM、Hook、可信服务、任务、事件、调度、桌面贡献、更新、诊断和开发模式均由插件路由提供 |
-| 工作区文件与 Git | `com.amitia/workspace` | 固定路由与 Vue 页面已删除，文件、Git 和隔离工作区统一走 Workspace Bridge |
-| 聊天导入 | `com.amitia/chat-import` | 固定路由与 Vue 向导已删除，解析、批次管理和设备会话晋升统一走 Import Bridge |
-| 存储维护 | `com.amitia/storage` | 固定路由与 Vue 页面已删除，清理、备份和恢复分别走独立 Storage Host API |
+| 运行时调试 | 核心模块 | 核心页面保留，状态和诊断能力继续通过 Host API、Service 和扩展 Slot 提供 |
+| BDI 决策可视化 | 核心模块 | Web、桌面和移动端使用核心页面，决策信号仍可由扩展注入 |
+| 长期运行维护 | 核心模块 | 核心页面维护状态和配置，维护能力继续通过 Host API 暴露 |
+| Kernel 管理页 | 核心模块 | WASM、Hook、可信服务、任务、事件、调度、桌面贡献、更新、诊断和开发模式保留核心入口与扩展贡献 |
+| 工作区文件与 Git | 核心模块 | 文件和 Git 工作区使用核心页面，Workspace Bridge、Service 和扩展入口继续保留 |
+| 聊天导入 | 核心模块 | 核心导入向导保留，解析、批次和设备会话晋升继续经过 Import Bridge |
+| 存储维护 | 核心模块 | 核心存储维护页面保留，清理、备份和恢复继续通过 Storage Host API |
 | 归档对话 | 核心模块 | Web `/logs` 与移动端 `/chat-logs` 使用核心页面和 Owner 会话服务；读取、恢复、删除、摘要和导出仅接受具有 `archivedAt` 的会话 |
-| 创意工坊 Hub | `com.amitia/creative-workshop-hub` | 固定 `/creative-workshop` 与桌宠中心入口已删除，工坊页面、路由和主导航由 UI Provider 提供 |
-| 游戏中心 Hub | `com.amitia/game-center-hub` | 固定 `/game-center` 路由已删除，中心页面、路由和导航由 UI Provider 提供，能力门禁仍由核心执行 |
+| 创意工坊 Hub | 核心模块 | `/creative-workshop`、角色卡和桌宠入口由核心页面提供，工坊扩展继续通过 Provider、Service 和 Slot 注入 |
+| 游戏中心 Hub | 核心模块 | `/game-center` 和插件详情由核心页面提供，游戏扩展继续走插件生命周期，能力门禁由核心执行 |
 
 ## 核心不可替换
 

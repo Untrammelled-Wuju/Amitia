@@ -19,6 +19,11 @@ import '../../../features/profile/presentation/pages/character_world_book_hub_pa
 import '../../../features/profile/presentation/pages/profile_hub_page.dart';
 import '../../../features/settings/presentation/pages/mobile_user_space_host.dart';
 import '../../../features/settings/presentation/pages/settings_page.dart';
+import '../../../features/settings/presentation/pages/storage_page.dart';
+import '../../../features/settings/presentation/pages/long_running_page.dart';
+import '../../../features/settings/presentation/pages/decision_viz_page.dart';
+import '../../../features/runtime/presentation/pages/runtime_page.dart';
+import '../../../features/toolbox/presentation/pages/toolbox_workspace_page.dart';
 import '../../../features/reminders/presentation/pages/reminders_page.dart';
 import '../../../features/continuity/presentation/pages/continuity_page.dart';
 import '../../../features/continuity/presentation/pages/continuity_detail_page.dart';
@@ -215,6 +220,71 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
       state: state,
       child: ContinuityDetailPage(threadId: state.pathParameters['id']!),
     ),
+  ),
+  GoRoute(
+    path: '/workshop',
+    pageBuilder: (context, state) =>
+        amitiaSlidePage(state: state, child: _nativePage(state)),
+  ),
+  GoRoute(
+    path: '/workshop/:pathMatch(.*)*',
+    pageBuilder: (context, state) =>
+        amitiaSlidePage(state: state, child: _nativePage(state)),
+  ),
+  GoRoute(
+    path: '/game-center',
+    pageBuilder: (context, state) =>
+        amitiaSlidePage(state: state, child: _nativePage(state)),
+  ),
+  GoRoute(
+    path: '/game-center/:pathMatch(.*)*',
+    pageBuilder: (context, state) =>
+        amitiaSlidePage(state: state, child: _nativePage(state)),
+  ),
+  GoRoute(
+    path: '/channel-center',
+    pageBuilder: (context, state) =>
+        amitiaSlidePage(state: state, child: _nativePage(state)),
+  ),
+  GoRoute(
+    path: '/chat-import',
+    pageBuilder: (context, state) =>
+        amitiaSlidePage(state: state, child: _nativePage(state)),
+  ),
+  GoRoute(
+    path: '/developer',
+    pageBuilder: (context, state) =>
+        amitiaSlidePage(state: state, child: _nativePage(state)),
+  ),
+  GoRoute(
+    path: '/developer/:pathMatch(.*)*',
+    pageBuilder: (context, state) =>
+        amitiaSlidePage(state: state, child: _nativePage(state)),
+  ),
+  GoRoute(
+    path: '/workspaces',
+    pageBuilder: (context, state) =>
+        amitiaSlidePage(state: state, child: const ToolboxWorkspacePage()),
+  ),
+  GoRoute(
+    path: '/storage',
+    pageBuilder: (context, state) =>
+        amitiaSlidePage(state: state, child: const StoragePage()),
+  ),
+  GoRoute(
+    path: '/runtime-debug',
+    pageBuilder: (context, state) =>
+        amitiaSlidePage(state: state, child: const RuntimePage()),
+  ),
+  GoRoute(
+    path: '/decision-viz',
+    pageBuilder: (context, state) =>
+        amitiaSlidePage(state: state, child: const DecisionVizPage()),
+  ),
+  GoRoute(
+    path: '/long-running',
+    pageBuilder: (context, state) =>
+        amitiaSlidePage(state: state, child: const LongRunningPage()),
   ),
   GoRoute(
     path: '/chat',
