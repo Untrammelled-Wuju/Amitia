@@ -8,7 +8,7 @@
     "description": {
       "default": "通过统一 UI Provider 提供记忆总览、知识、情景、图谱、时间线和画像入口。"
     },
-    "version": "1.2.0",
+    "version": "1.2.5",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -80,7 +80,7 @@
         ],
         "maxContributions": 17,
         "maxTools": 0,
-        "maxRoutes": 12,
+        "maxRoutes": 13,
         "maxServices": 0,
         "allowUnregister": true
       },
@@ -536,6 +536,15 @@
             "metadata": {
               "routes": [
                 {
+                  "id": "memory-shell",
+                  "path": "/memory-hub",
+                  "providerId": "memory-hub-page-provider",
+                  "capability": "page.provider",
+                  "title": "记忆",
+                  "priority": 221
+                },
+                {
+                  "placement": "primary",
                   "id": "memory-hub",
                   "path": "/memory",
                   "providerId": "memory-hub-page-provider",
@@ -678,8 +687,10 @@
               ],
               "navigationItems": [
                 {
+                  "placement": "primary",
                   "id": "memory-hub",
                   "label": "记忆",
+                  "tabLabel": "记忆",
                   "route": "/memory",
                   "description": "查看知识库、用户画像、记忆图谱、情景和时间线。",
                   "icon": "memory",
@@ -687,7 +698,9 @@
                   "groupLabel": "记忆",
                   "groupIcon": "memory",
                   "order": 50,
+                  "profile": true,
                   "match": [
+                    "/memory-hub",
                     "/memory-manager",
                     "/memory-timeline",
                     "/knowledge",
@@ -730,11 +743,16 @@
               "electron_linux": {
                 "type": "schema_renderer",
                 "contributionId": "memory-hub-page"
+              },
+              "mobile": {
+                "type": "schema_renderer",
+                "contributionId": "memory-mobile-page"
               }
             },
             "metadata": {
               "routes": [
-                "/memory"
+                "/memory",
+                "/memory-hub"
               ]
             }
           }

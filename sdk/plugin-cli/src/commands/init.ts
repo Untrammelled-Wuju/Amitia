@@ -15,7 +15,7 @@ export const initCommand: CliCommand = {
     { name: "--display-name", description: "Display name", takesValue: true },
     { name: "--version", description: "Initial version", takesValue: true, defaultValue: "0.1.0" },
     { name: "--license", description: "License SPDX", takesValue: true, defaultValue: "MIT" },
-    { name: "--target", description: "Build target (repeatable)", takesValue: true, defaultValue: "windows-x64" },
+    { name: "--target", description: "Build target (repeatable)", takesValue: true, defaultValue: "windows-x64,macos-arm64,macos-x64,linux-x64,linux-arm64" },
     { name: "--sdk-version", description: "SDK version", takesValue: true, defaultValue: "1.0.0" },
     { name: "--output", shortName: "-o", description: "Output directory", takesValue: true, defaultValue: "." },
     { name: "--force", description: "Overwrite existing files" },
@@ -38,7 +38,7 @@ export const initCommand: CliCommand = {
       description: `Amitia extension scaffolded from ${template} template`,
       version: opts["--version"] ?? "0.1.0",
       license: opts["--license"] ?? "MIT",
-      targets: (opts["--target"] ?? "windows-x64").split(",").map((t) => t.trim()),
+      targets: (opts["--target"] ?? "windows-x64,macos-arm64,macos-x64,linux-x64,linux-arm64").split(",").map((t) => t.trim()),
       sdkVersion: opts["--sdk-version"] ?? "1.0.0",
     };
 

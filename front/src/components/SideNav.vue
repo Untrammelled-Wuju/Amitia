@@ -13,62 +13,25 @@ SPDX-License-Identifier: AGPL-3.0-only
         :default-active="activeIndex"
         :collapse="true"
         :collapse-transition="false"
-        unique-opened
         router
         class="side-menu"
       >
-        <template v-for="group in navigationGroups" :key="group.id">
-          <el-sub-menu v-if="group.label && group.items.length > 1" :index="group.id">
-            <template
-              #title
-            >
-              <span
-                class="side-nav-tooltip-anchor"
-                :aria-label="`${group.label}：${groupDescription(group)}`"
-                aria-describedby="side-nav-tooltip"
-                @mouseenter="showTooltip($event, group.label!, groupDescription(group))"
-                @mouseleave="hideTooltip"
-                @focus="showTooltip($event, group.label!, groupDescription(group))"
-                @blur="hideTooltip"
-              >
-              <el-icon><component :is="group.icon" /></el-icon>
-              <span>{{ group.label }}</span>
-              </span>
-            </template>
-            <el-menu-item
-              v-for="item in group.items"
-              :key="item.id"
-              :index="item.route"
-              :style="navigationItemStyle"
-              data-amitia-ui="app.sidebar.item"
-              :aria-label="`${item.label}：${itemDescription(item)}`"
-              aria-describedby="side-nav-tooltip"
-              @mouseenter="handleItemEnter($event, item)"
-              @mouseleave="hideTooltip"
-              @focus="handleItemFocus($event, item)"
-              @blur="hideTooltip"
-            >
-              <el-icon><component :is="item.icon" /></el-icon>
-              <span>{{ item.label }}</span>
-            </el-menu-item>
-          </el-sub-menu>
-          <el-menu-item
-            v-for="item in group.label && group.items.length > 1 ? [] : group.items"
-            :key="item.id"
-            :index="item.route"
-            :style="navigationItemStyle"
-            data-amitia-ui="app.sidebar.item"
-            :aria-label="`${item.label}：${itemDescription(item)}`"
-            aria-describedby="side-nav-tooltip"
-            @mouseenter="handleItemEnter($event, item)"
-            @mouseleave="hideTooltip"
-            @focus="handleItemFocus($event, item)"
-            @blur="hideTooltip"
-          >
-            <el-icon><component :is="item.icon" /></el-icon>
-            <span>{{ item.label }}</span>
-          </el-menu-item>
-        </template>
+        <el-menu-item
+          v-for="item in primaryNavigationItems"
+          :key="item.id"
+          :index="item.route"
+          :style="navigationItemStyle"
+          data-amitia-ui="app.sidebar.item"
+          :aria-label="`${item.label}：${itemDescription(item)}`"
+          aria-describedby="side-nav-tooltip"
+          @mouseenter="handleItemEnter($event, item)"
+          @mouseleave="hideTooltip"
+          @focus="handleItemFocus($event, item)"
+          @blur="hideTooltip"
+        >
+          <el-icon><component :is="item.icon" /></el-icon>
+          <span>{{ item.label }}</span>
+        </el-menu-item>
       </el-menu>
     </div>
 
@@ -151,7 +114,6 @@ import { useBrandLogo } from "@/composables/useBrandLogo";
 import {
   isUINavigationItemActive,
   useUINavigationRegistry,
-  type UINavigationGroup,
   type UINavigationItem,
 } from "@/ui-runtime/navigationRegistry";
 import { prewarmNavigationItem } from "@/ui-runtime/navigationPrewarm";
@@ -166,7 +128,7 @@ const emit = defineEmits<{ toggleTheme: [] }>();
 const route = useRoute();
 const router = useRouter();
 const extensionUIStore = useExtensionUIStore();
-const { groups: navigationGroups, items: navigationItems } = useUINavigationRegistry();
+const { primaryItems: primaryNavigationItems } = useUINavigationRegistry();
 const { style: navigationItemStyle } = useUIComponentVariant("navigationItem");
 const { logoUrl } = useBrandLogo();
 const profileMenuOpen = ref(false);
@@ -185,7 +147,7 @@ const groupDescriptions: Record<string, string> = {
 };
 const activeIndex = computed(() => {
   const path = route.path;
-  const active = navigationItems.value.find((item) => isUINavigationItemActive(path, item));
+  const active = primaryNavigationItems.value.find((item) => isUINavigationItemActive(path, item));
   return active?.route ?? path;
 });
 
@@ -214,10 +176,6 @@ function prewarmItem(item: UINavigationItem) {
 
 function itemDescription(item: UINavigationItem) {
   return item.description || groupDescriptions[item.group] || `打开${item.label}。`;
-}
-
-function groupDescription(group: UINavigationGroup) {
-  return groupDescriptions[group.id] || `查看${group.label || "该分组"}相关功能。`;
 }
 
 function showTooltip(event: MouseEvent | FocusEvent, title: string, description: string) {
@@ -293,11 +251,10 @@ onUnmounted(() => {
 .brand-mark { width: 24px; height: 24px; border-radius: 7px; object-fit: contain; }
 .sidebar-scroll { width: 100%; min-height: 0; flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; }
 .side-menu { border-right: none; background: transparent; width: 100%; margin-bottom: 12px; }
-.side-menu :deep(.el-menu-item), .side-menu :deep(.el-sub-menu__title) { height: 44px; min-height: 44px; margin: 4px 0; padding: 0 !important; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: var(--text-secondary); }
+.side-menu :deep(.el-menu-item) { height: 44px; min-height: 44px; margin: 4px 0; padding: 0 !important; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: var(--text-secondary); }
 .side-menu :deep(.el-icon) { width: 19px; height: 19px; margin: 0; font-size: 18px; }
-.side-menu :deep(.el-menu-item:hover), .side-menu :deep(.el-sub-menu__title:hover) { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
-.side-menu :deep(.el-menu-item.is-active), .side-menu :deep(.el-sub-menu.is-active > .el-sub-menu__title) { background: var(--workbench-sidebar-active); color: var(--text-primary); font-weight: 550; }
-.side-menu :deep(.el-sub-menu .el-menu) { background: transparent; }
+.side-menu :deep(.el-menu-item:hover) { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
+.side-menu :deep(.el-menu-item.is-active) { background: var(--workbench-sidebar-active); color: var(--text-primary); font-weight: 550; }
 .side-nav-bottom { position: relative; width: 100%; flex: 0 0 auto; margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 6px; border-top: 1px solid var(--surface-border); padding: 8px 0; }
 .profile-menu { position: absolute; left: calc(100% + 8px); bottom: 0; display: grid; gap: 2px; width: 188px; padding: 5px; border: 1px solid var(--surface-border); border-radius: 10px; background: var(--ac-color-surface); z-index: 30; }
 .profile-menu__item { display: flex; align-items: center; gap: 9px; min-height: 34px; width: 100%; padding: 0 8px; border: 0; border-radius: 7px; background: transparent; color: var(--text-secondary); cursor: pointer; font: inherit; font-size: var(--ac-font-size-sm); text-align: left; transition: background-color 0.18s ease, color 0.18s ease; }
@@ -308,7 +265,7 @@ onUnmounted(() => {
 .user-profile:hover { background: transparent; color: var(--text-primary); }
 .user-avatar { display: grid; place-items: center; width: 28px; height: 28px; flex: 0 0 auto; border-radius: 50%; background: transparent; color: var(--text-primary); font-size: var(--ac-font-size-sm); overflow: hidden; }
 .user-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.side-nav :deep(button:not(:disabled):focus-visible), .side-menu :deep(.el-menu-item:focus-visible), .side-menu :deep(.el-sub-menu__title:focus-visible) { outline: 2px solid var(--ac-color-primary); outline-offset: -2px; }
+.side-nav :deep(button:not(:disabled):focus-visible), .side-menu :deep(.el-menu-item:focus-visible) { outline: 2px solid var(--ac-color-primary); outline-offset: -2px; }
 .side-nav-tooltip-anchor { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
 .side-nav-tooltip { position: fixed; z-index: 4000; width: max-content; max-width: 232px; padding: 9px 11px; border: 1px solid var(--surface-border); border-radius: 10px; background: var(--surface-bg-elevated); color: var(--text-primary); box-shadow: 0 10px 28px color-mix(in srgb, #000 24%, transparent); pointer-events: none; transform: translateY(-50%); }
 .side-nav-tooltip strong { display: block; font-size: 12px; font-weight: 620; line-height: 1.35; }

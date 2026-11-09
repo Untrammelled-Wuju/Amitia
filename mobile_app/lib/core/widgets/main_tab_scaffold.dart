@@ -7,6 +7,8 @@ import '../../app/app_routes.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_typography.dart';
 import '../services/providers.dart';
+import '../ui_runtime/ui_navigation_registry.dart';
+import '../ui_runtime/ui_runtime_controller.dart';
 import 'amitia_icons.dart';
 
 class MainTabScaffold extends ConsumerStatefulWidget {
@@ -19,14 +21,6 @@ class MainTabScaffold extends ConsumerStatefulWidget {
 }
 
 class _MainTabScaffoldState extends ConsumerState<MainTabScaffold> {
-  static const _destinations = <_MainTabDestination>[
-    _MainTabDestination(label: '消息', icon: AmitiaIconGlyph.messages),
-    _MainTabDestination(label: '任务', icon: AmitiaIconGlyph.tasks),
-    _MainTabDestination(label: '记忆', icon: AmitiaIconGlyph.memory),
-    _MainTabDestination(label: '扩展', icon: AmitiaIconGlyph.extensions),
-    _MainTabDestination(label: '我的', icon: AmitiaIconGlyph.profile),
-  ];
-
   void _switchToTab(int index) {
     widget.navigationShell.goBranch(
       index,
@@ -58,10 +52,7 @@ class _MainTabScaffoldState extends ConsumerState<MainTabScaffold> {
       _switchToTab(0);
       return true;
     }
-    if (backHandler.shouldExit(
-      DateTime.now(),
-      const Duration(seconds: 2),
-    )) {
+    if (backHandler.shouldExit(DateTime.now(), const Duration(seconds: 2))) {
       await SystemNavigator.pop();
       return true;
     }
@@ -79,6 +70,9 @@ class _MainTabScaffoldState extends ConsumerState<MainTabScaffold> {
 
   @override
   Widget build(BuildContext context) {
+    final snapshot = ref.watch(effectiveUIRuntimeSnapshotProvider);
+    final navigationItems = UINavigationRegistry.resolveMobile(snapshot);
+    final destinations = _resolveDestinations(navigationItems);
     return BackButtonListener(
       onBackButtonPressed: _handleBackButton,
       child: Scaffold(
@@ -96,12 +90,14 @@ class _MainTabScaffoldState extends ConsumerState<MainTabScaffold> {
               height: 56,
               child: Row(
                 children: [
-                  for (var index = 0; index < _destinations.length; index++)
+                  for (final destination in destinations)
                     Expanded(
                       child: _MainTabButton(
-                        destination: _destinations[index],
-                        selected: widget.navigationShell.currentIndex == index,
-                        onTap: () => _switchToTab(index),
+                        destination: destination,
+                        selected:
+                            widget.navigationShell.currentIndex ==
+                            destination.branchIndex,
+                        onTap: () => _switchToTab(destination.branchIndex),
                       ),
                     ),
                 ],
@@ -112,13 +108,51 @@ class _MainTabScaffoldState extends ConsumerState<MainTabScaffold> {
       ),
     );
   }
+
+  List<_MainTabDestination> _resolveDestinations(List<UINavigationItem> items) {
+    final destinations = <_MainTabDestination>[
+      const _MainTabDestination(
+        branchIndex: 0,
+        label: '消息',
+        glyph: AmitiaIconGlyph.messages,
+      ),
+    ];
+    const providerTabs = <(int, String)>[
+      (1, AppRoutes.tasks),
+      (2, AppRoutes.memoryHub),
+      (3, AppRoutes.extensions),
+      (4, AppRoutes.me),
+    ];
+    for (final (branchIndex, route) in providerTabs) {
+      final item = items.cast<UINavigationItem?>().firstWhere(
+        (candidate) => candidate?.matches(route) == true,
+        orElse: () => null,
+      );
+      if (item == null) continue;
+      destinations.add(
+        _MainTabDestination(
+          branchIndex: branchIndex,
+          label: item.tabLabel.isEmpty ? item.label : item.tabLabel,
+          icon: item.icon,
+        ),
+      );
+    }
+    return destinations;
+  }
 }
 
 class _MainTabDestination {
-  const _MainTabDestination({required this.label, required this.icon});
+  const _MainTabDestination({
+    required this.branchIndex,
+    required this.label,
+    this.glyph,
+    this.icon,
+  });
 
+  final int branchIndex;
   final String label;
-  final AmitiaIconGlyph icon;
+  final AmitiaIconGlyph? glyph;
+  final IconData? icon;
 }
 
 class _MainTabButton extends StatelessWidget {
@@ -145,12 +179,20 @@ class _MainTabButton extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            AmitiaIcon(
-              key: ValueKey('main-tab-icon-${destination.label}'),
-              destination.icon,
-              size: 21,
-              color: color,
-            ),
+            if (destination.glyph case final glyph?)
+              AmitiaIcon(
+                key: ValueKey('main-tab-icon-${destination.label}'),
+                glyph,
+                size: 21,
+                color: color,
+              )
+            else
+              Icon(
+                destination.icon,
+                key: ValueKey('main-tab-icon-${destination.label}'),
+                size: 21,
+                color: color,
+              ),
             const SizedBox(height: 2),
             Text(
               destination.label,

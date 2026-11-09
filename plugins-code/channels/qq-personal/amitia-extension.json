@@ -347,6 +347,7 @@
             "metadata": {
               "navigationItems": [
                 {
+                  "placement": "contextual",
                   "id": "character.qq-personal",
                   "label": "QQ 个人号",
                   "route": "/channels/qq-personal",
@@ -364,7 +365,8 @@
                   "path": "/channels/qq-personal",
                   "priority": 211,
                   "providerId": "qq-personal-page-provider",
-                  "title": "QQ 个人号"
+                  "title": "QQ 个人号",
+                  "wrapper": "channel.workspace"
                 }
               ]
             },

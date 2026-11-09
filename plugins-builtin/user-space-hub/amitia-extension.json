@@ -8,7 +8,7 @@
     "description": {
       "default": "通过统一 Host Runtime 提供设置和个人空间业务页面。"
     },
-    "version": "1.1.0",
+    "version": "1.1.4",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -167,6 +167,14 @@
             },
             "metadata": {
               "routes": [
+          {
+            "id": "me-shell",
+            "path": "/me",
+            "providerId": "user-space-page-provider",
+            "capability": "page.provider",
+            "title": "我的",
+            "priority": 230
+          },
                 {
                   "id": "settings-root",
                   "path": "/settings",
@@ -239,6 +247,27 @@
                   "title": "设置分类",
                   "priority": 229
                 }
+              ],
+              "navigationItems": [
+                {
+                  "placement": "profile",
+                  "id": "settings",
+                  "label": "设置",
+            "tabLabel": "我的",
+                  "route": "/settings",
+                  "icon": "setting",
+                  "group": "space",
+                  "groupLabel": "个人空间",
+                  "groupIcon": "user",
+                  "order": 120,
+                  "mobile": true,
+                  "profile": true,
+                  "match": [
+                    "/settings",
+                    "/my-space",
+                    "/me"
+                  ]
+                }
               ]
             }
           }
@@ -273,6 +302,7 @@
             },
             "metadata": {
               "routes": [
+                "/me",
                 "/settings",
                 "/settings/:section",
                 "/settings/model/:modelType",

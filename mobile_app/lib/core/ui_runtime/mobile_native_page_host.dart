@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../features/characters/presentation/pages/character_create_page.dart';
 import '../../features/characters/presentation/pages/character_detail_page.dart';
+import '../../features/characters/presentation/pages/character_list_page.dart';
 import '../../features/characters/presentation/pages/character_psyche_page.dart';
 import '../../features/characters/presentation/pages/character_teams_page.dart';
 import '../../features/characters/presentation/pages/character_voice_page.dart';
@@ -13,6 +14,10 @@ import '../../features/memory/presentation/pages/memory_timeline_page.dart';
 import '../../features/memory/presentation/pages/user_profiles_page.dart';
 import '../../features/knowledge/presentation/pages/knowledge_page.dart';
 import '../../features/profile/presentation/pages/character_world_book_hub_page.dart';
+import '../../features/profile/presentation/pages/profile_hub_page.dart';
+import '../../features/tasks/presentation/pages/task_hub_page.dart';
+import '../../features/memory/presentation/pages/memory_hub_page.dart';
+import '../../features/extensions/presentation/pages/extension_center_page.dart';
 import '../../features/characters/presentation/pages/character_card_workshop_page.dart';
 import '../../features/workshop/presentation/pages/pet_center_page.dart';
 import '../../features/workshop/presentation/pages/pet_installations_page.dart';
@@ -29,6 +34,7 @@ import '../../features/workshop/presentation/pages/workflow_editor_page.dart';
 import '../../features/workshop/presentation/pages/workflow_list_page.dart';
 import '../../features/chat_logs/presentation/pages/chat_logs_page.dart';
 import '../../features/chat_import/presentation/pages/chat_import_page.dart';
+import '../../features/developer/presentation/pages/developer_home_page.dart';
 import '../../features/developer/presentation/pages/kernel_home_page.dart';
 import '../../features/developer/presentation/pages/wasm_page.dart';
 import '../../features/developer/presentation/pages/hooks_page.dart';
@@ -62,6 +68,21 @@ class MobileNativePageHost extends StatelessWidget {
   }
 
   Widget _view(String path) {
+    if (path == '/tasks') {
+      return const TaskHubPage();
+    }
+    if (path == '/memory-hub') {
+      return const MemoryHubPage();
+    }
+    if (path == '/extensions') {
+      return const ExtensionCenterPage();
+    }
+    if (path == '/me') {
+      return const ProfileHubPage();
+    }
+    if (path == '/characters') {
+      return const CharacterListPage();
+    }
     if (path == '/characters/create') {
       return const CharacterCreatePage();
     }
@@ -164,6 +185,9 @@ class MobileNativePageHost extends StatelessWidget {
     }
     if (path == '/chat-import') {
       return const ChatImportPage();
+    }
+    if (path == '/developer') {
+      return const DeveloperHomePage();
     }
     if (path == '/developer/kernel') {
       return const KernelHomePage();

@@ -8,7 +8,7 @@ import (
 const validManifest = `{
   "schemaVersion": 1,
   "plugin": {
-    "id": "com.example.plugin",
+    "id": "com.example/plugin",
     "name": {"default": "Plugin"},
     "description": {"default": "Plugin"},
     "version": "1.0.0",
@@ -68,6 +68,18 @@ func TestParseRejectsLegacyManifestFields(t *testing.T) {
 	}
 }
 
+func TestManifestRejectsPluginIDWithoutDomainNameSeparator(t *testing.T) {
+	manifest, err := Parse([]byte(validManifest))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	manifest.Plugin.ID = "com.example.plugin"
+	report := manifest.Validate()
+	if !report.HasErrors() {
+		t.Fatal("plugin id without reverse-domain/name separator must be rejected")
+	}
+}
+
 func TestContributionRequiresExplicitAdapter(t *testing.T) {
 	manifest, err := Parse([]byte(validManifest))
 	if err != nil {
@@ -115,6 +127,49 @@ func TestManifestAllowsNonPrivilegedSystemDefaults(t *testing.T) {
 	}
 	if report := manifest.Validate(); report.HasErrors() {
 		t.Fatalf("non-privileged system defaults were rejected: %+v", report.Issues)
+	}
+}
+
+func TestManifestProjectsDataPolicyIntoDomainMetadata(t *testing.T) {
+	manifest, err := Parse([]byte(validManifest))
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest.Data = &DataContract{
+		SchemaVersion: 3,
+		Scopes:        []string{"device"},
+		Backup:        true,
+		Export:        true,
+		Uninstall:     "export",
+	}
+	definition, err := manifest.ToExtensionDefinition()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if definition.Metadata["data.schemaVersion"] != 3 ||
+		definition.Metadata["data.backup"] != true ||
+		definition.Metadata["data.export"] != true ||
+		definition.Metadata["data.uninstall"] != "export" {
+		t.Fatalf("data policy was not projected: %+v", definition.Metadata)
+	}
+	scopes, ok := definition.Metadata["data.scopes"].([]string)
+	if !ok || len(scopes) != 1 || scopes[0] != "device" {
+		t.Fatalf("data scopes were not projected: %#v", definition.Metadata["data.scopes"])
+	}
+}
+
+func TestManifestExportUninstallRequiresExportCapability(t *testing.T) {
+	manifest, err := Parse([]byte(validManifest))
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest.Data = &DataContract{SchemaVersion: 1, Export: false, Uninstall: "export"}
+	if report := manifest.Validate(); !hasIssue(report, "data_uninstall") {
+		t.Fatalf("expected export policy dependency failure, got %+v", report.Issues)
+	}
+	manifest.Data.Export = true
+	if report := manifest.Validate(); report.HasErrors() {
+		t.Fatalf("valid export policy rejected: %+v", report.Issues)
 	}
 }
 
@@ -253,7 +308,7 @@ func TestManifestResolvesItsServiceGraph(t *testing.T) {
 	if !resolution.Valid() {
 		t.Fatalf("unexpected issues: %+v", resolution.Issues)
 	}
-	if len(resolution.Graph.ActivationOrder) != 1 || resolution.Graph.ActivationOrder[0] != "com.example.plugin/main" {
+	if len(resolution.Graph.ActivationOrder) != 1 || resolution.Graph.ActivationOrder[0] != "com.example/plugin/main" {
 		t.Fatalf("unexpected activation order: %+v", resolution.Graph.ActivationOrder)
 	}
 }

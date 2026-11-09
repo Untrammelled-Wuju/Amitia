@@ -248,7 +248,7 @@ func TestDescribeSchemaViolationNamesOffendingPropertiesWithoutValues(t *testing
 
 func TestSchemaContractErrorIncludesDetail(t *testing.T) {
 	err := (&SchemaContractError{
-		ToolID: "com.amitia.builtin.active-task/command",
+		ToolID: "com.amitia/active-task/command",
 		Role:   ToolSchemaInput,
 		Kind:   "instance_mismatch",
 		Detail: "/ additionalProperties(node_id)",

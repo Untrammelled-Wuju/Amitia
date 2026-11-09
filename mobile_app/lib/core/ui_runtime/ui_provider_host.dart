@@ -51,7 +51,7 @@ class _UIProviderHostState extends ConsumerState<UIProviderHost> {
   }
 
   void _advanceFallback(Object error) {
-    final snapshot = ref.read(uiRuntimeProvider).valueOrNull;
+    final snapshot = ref.read(effectiveUIRuntimeSnapshotProvider);
     final chain =
         snapshot?.fallbackChain(
           widget.capability,
@@ -198,7 +198,7 @@ class _UIProviderHostState extends ConsumerState<UIProviderHost> {
   }
 
   Widget _buildSurface(BuildContext context) {
-    final snapshot = ref.watch(uiRuntimeProvider).valueOrNull;
+    final snapshot = ref.watch(effectiveUIRuntimeSnapshotProvider);
     final chain =
         snapshot?.fallbackChain(
           widget.capability,

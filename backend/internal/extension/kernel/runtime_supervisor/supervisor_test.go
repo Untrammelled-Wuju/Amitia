@@ -204,6 +204,58 @@ func TestRestartOnCrash(t *testing.T) {
 	}
 }
 
+type crashObserverRecorder struct {
+	mu          sync.Mutex
+	extensionID string
+	moduleID    string
+	generation  int64
+	calls       int
+}
+
+func (r *crashObserverRecorder) RuntimeCrashed(_ context.Context, extensionID, moduleID string, generation int64, _ string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.extensionID = extensionID
+	r.moduleID = moduleID
+	r.generation = generation
+	r.calls++
+	return nil
+}
+
+func TestUnrecoverableCrashReleasesRuntimeContributions(t *testing.T) {
+	s := NewDefaultSupervisor()
+	rt := NewFakeRuntime()
+	_ = s.RegisterFactory(NewFakeFactory(domain.RuntimeTypeBuiltin, rt))
+	spec := makeSpec(domain.RuntimeTypeBuiltin, 7)
+	spec.MaxRestarts = 1
+	startResult := s.Reconcile(context.Background(), ReconcileRequest{
+		DefinitionID: "rt-def-1", Desired: DesiredRunning, Spec: spec,
+	})
+	if startResult.Error != nil {
+		t.Fatal(startResult.Error)
+	}
+	observer := &crashObserverRecorder{}
+	s.SetCrashObserver(observer)
+	rt.SetStartErr(ErrFakeStart)
+	s.mu.Lock()
+	s.instances[startResult.InstanceID].actual = ActualCrashed
+	s.mu.Unlock()
+	_ = s.Reconcile(context.Background(), ReconcileRequest{
+		DefinitionID: "rt-def-1", Desired: DesiredRunning, Spec: spec,
+	})
+	result := s.Reconcile(context.Background(), ReconcileRequest{
+		DefinitionID: "rt-def-1", Desired: DesiredRunning, Spec: spec,
+	})
+	if result.Actual != ActualQuarantined {
+		t.Fatalf("expected quarantined runtime, got %s", result.Actual)
+	}
+	observer.mu.Lock()
+	defer observer.mu.Unlock()
+	if observer.calls == 0 || observer.extensionID != string(spec.ExtensionID) || observer.moduleID != string(spec.ModuleID) || observer.generation != spec.Generation {
+		t.Fatalf("unexpected crash cleanup: %+v", observer)
+	}
+}
+
 func TestMaxRestartsExceeded(t *testing.T) {
 	s := NewDefaultSupervisor()
 	rt := NewFakeRuntime()

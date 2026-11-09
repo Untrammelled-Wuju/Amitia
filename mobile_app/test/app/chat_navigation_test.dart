@@ -8,6 +8,8 @@ import 'package:amitia_app/core/models/reminder.dart';
 import 'package:amitia_app/core/services/extension_service.dart';
 import 'package:amitia_app/core/services/providers.dart';
 import 'package:amitia_app/core/ui_runtime/routing/builtin_route_catalog.dart';
+import 'package:amitia_app/core/ui_runtime/ui_provider.dart';
+import 'package:amitia_app/core/ui_runtime/ui_runtime_controller.dart';
 import 'package:amitia_app/core/widgets/amitia_scaffold.dart';
 import 'package:amitia_app/core/widgets/amitia_icons.dart';
 import 'package:amitia_app/core/widgets/amitia_popup_menu.dart';
@@ -52,6 +54,147 @@ List<CharacterDto> _characters() => [
   ),
 ];
 
+UIProviderDefinition _snapshotProvider({
+  required String id,
+  String extensionId = 'test/navigation',
+  required String capability,
+  int priority = 100,
+  Map<String, dynamic> metadata = const <String, dynamic>{},
+}) {
+  return UIProviderDefinition(
+    providerId: id,
+    extensionId: extensionId,
+    capability: capability,
+    mode: UIProviderMode.replace,
+    priority: priority,
+    platforms: const <String>[],
+    entries: const <String, UIProviderEntry>{
+      '*': UIProviderEntry(type: UIProviderEntryType.declarative),
+    },
+    permissions: const <String>[],
+    placement: UIProviderPlacement.any,
+    generation: 1,
+    enabled: true,
+    builtin: false,
+    metadata: metadata,
+  );
+}
+
+UIProviderSnapshot _navigationSnapshot({Set<String> omittedTabs = const {}}) {
+  const extensionId = 'test/navigation';
+  const routes = <String>[
+    AppRoutes.tasks,
+    AppRoutes.memoryHub,
+    AppRoutes.extensions,
+    AppRoutes.me,
+    AppRoutes.characters,
+    AppRoutes.workshop,
+    AppRoutes.gameCenter,
+    AppRoutes.channelMessages,
+    AppRoutes.settings,
+  ];
+  final pageProviders = <UIProviderDefinition>[
+    for (final route in routes)
+      _snapshotProvider(
+        id: 'page:$route',
+        capability: UICapability.pageProvider,
+        metadata: {
+          'routes': [route],
+        },
+      ),
+  ];
+  final routeRows = <Map<String, Object>>[
+    for (final route in routes)
+      {
+        'id': route,
+        'path': route,
+        'providerId': 'page:$route',
+        'capability': UICapability.pageProvider,
+      },
+  ];
+  return UIProviderSnapshot(
+    providers: [
+      _snapshotProvider(
+        id: 'routes',
+        capability: UICapability.routeRegistry,
+        metadata: {
+          'routes': routeRows,
+          'navigationItems': [
+            if (!omittedTabs.contains('tasks')) {
+              'id': 'tasks',
+              'label': '任务',
+              'tabLabel': '任务',
+              'route': AppRoutes.tasks,
+              'icon': 'calendar',
+            },
+            if (!omittedTabs.contains('memory')) {
+              'id': 'memory',
+              'label': '记忆',
+              'tabLabel': '记忆',
+              'route': AppRoutes.memoryHub,
+              'icon': 'memory',
+            },
+            if (!omittedTabs.contains('extensions')) {
+              'id': 'extensions',
+              'label': '扩展中心',
+              'tabLabel': '扩展',
+              'route': AppRoutes.extensions,
+              'icon': 'extension',
+            },
+            if (!omittedTabs.contains('me')) {
+              'id': 'settings',
+              'label': '设置',
+              'tabLabel': '我的',
+              'route': AppRoutes.settings,
+              'icon': 'setting',
+              'match': [AppRoutes.me],
+            },
+            {
+              'id': 'characters',
+              'label': '角色',
+              'route': AppRoutes.characters,
+              'icon': 'character',
+              'profile': true,
+            },
+            {
+              'id': 'workshop',
+              'label': '创意工坊',
+              'route': AppRoutes.workshop,
+              'icon': 'workshop',
+              'profile': true,
+            },
+            {
+              'id': 'game',
+              'label': '游戏模式',
+              'route': AppRoutes.gameCenter,
+              'icon': 'gamepad',
+              'profile': true,
+            },
+            {
+              'id': 'settings-profile',
+              'label': '设置',
+              'route': AppRoutes.settings,
+              'icon': 'setting',
+              'profile': true,
+            },
+          ],
+        },
+      ),
+      ...pageProviders,
+    ],
+    slots: const <UISlotSnapshotEntry>[],
+    profile: const UIProfile(
+      profileId: 'default',
+      name: 'Default',
+      selections: <String, String>{},
+    ),
+    profileLayers: const <UIProfile>[],
+    context: const UIProviderResolveContext(localRuntime: true),
+    resolved: const <String, UIProviderDefinition>{},
+    version: 1,
+  );
+}
+
 GoRouter _router() {
   return GoRouter(
     initialLocation: AppRoutes.conversations,
@@ -71,6 +214,7 @@ Widget _app(
   List<ConversationDto> conversations = const <ConversationDto>[],
   List<ReminderDto> tasks = const <ReminderDto>[],
   List<MemoryDto> memories = const <MemoryDto>[],
+  UIProviderSnapshot? snapshot,
 }) {
   return ProviderScope(
     overrides: [
@@ -102,6 +246,9 @@ Widget _app(
           errors: const [],
         ),
       ),
+      uiRuntimeSnapshotOverrideProvider.overrideWithValue(
+        snapshot ?? _navigationSnapshot(),
+      ),
     ],
     child: MaterialApp.router(routerConfig: router),
   );
@@ -132,6 +279,21 @@ void _expectRootContentTop(WidgetTester tester, Finder page) {
 }
 
 void main() {
+  testWidgets('Provider 导航移除后对应主 Tab 同步消失', (tester) async {
+    await tester.pumpWidget(
+      _app(
+        _router(),
+        snapshot: _navigationSnapshot(omittedTabs: const {'tasks'}),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('main-tab-任务')), findsNothing);
+    expect(find.byKey(const ValueKey('main-tab-记忆')), findsOneWidget);
+    expect(find.byKey(const ValueKey('main-tab-扩展')), findsOneWidget);
+    expect(find.byKey(const ValueKey('main-tab-我的')), findsOneWidget);
+  });
+
   testWidgets('五个底部入口可以切换', (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(500, 1200);
@@ -183,9 +345,9 @@ void main() {
 
     expect(
       tester
-          .widget<AmitiaIcon>(find.byKey(const ValueKey('main-tab-icon-扩展')))
-          .glyph,
-      AmitiaIconGlyph.extensions,
+          .widget<Icon>(find.byKey(const ValueKey('main-tab-icon-扩展')))
+          .icon,
+      Icons.extension_outlined,
     );
     await tester.tap(find.byKey(const ValueKey('main-tab-扩展')));
     await tester.pumpAndSettle();

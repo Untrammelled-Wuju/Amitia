@@ -182,8 +182,8 @@ func TestUIActionToolInputRejectsRendererMeta(t *testing.T) {
 	ctx := context.Background()
 	registry := capability.NewToolRegistry()
 	if err := registry.Register(ctx, capability.ToolDefinition{
-		ID:          "com.amitia.builtin.active-task/command",
-		ExtensionID: "com.amitia.builtin.active-task",
+		ID:          "com.amitia/active-task/command",
+		ExtensionID: "com.amitia/active-task",
 		Name:        "Proactive Command",
 		Enabled:     true,
 		InputSchema: json.RawMessage(`{"type":"object","properties":{"action":{"type":"string"},"payload":{"type":"object"}},"additionalProperties":false}`),
@@ -194,7 +194,7 @@ func TestUIActionToolInputRejectsRendererMeta(t *testing.T) {
 
 	_, err := executor.normalizeToolInput(
 		ctx,
-		"com.amitia.builtin.active-task/command",
+		"com.amitia/active-task/command",
 		json.RawMessage(`{"action":"ui.dashboard","node_id":"lifecycle:command","form_state":{"enabled":true}}`),
 		nil,
 	)

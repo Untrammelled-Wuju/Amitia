@@ -403,6 +403,7 @@ export interface UINavigationItemDefinition {
   id: string;
   label: string;
   route: string;
+  placement: "primary" | "settings" | "profile" | "workspace" | "contextual";
   icon?: string;
   group?: string;
   groupLabel?: string;
@@ -412,6 +413,8 @@ export interface UINavigationItemDefinition {
   match?: string[];
   routePrefixes?: string[];
   mobile?: boolean;
+  profile?: boolean;
+  tabLabel?: string;
   containerId?: string;
   sidebarProviderId?: string;
   sidebarItems?: Array<{ label: string; route: string }>;

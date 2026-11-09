@@ -2221,6 +2221,12 @@ func (i *TypedContributionInstaller) DeactivateContributions(ctx context.Context
 	if inst, instErr := i.container.InstallationRepository.GetInstallation(ctx, extID); instErr == nil {
 		generation = inst.Generation
 	}
+	if i.container.PluginBroker != nil {
+		if err := i.container.PluginBroker.ReleaseExtension(ctx, string(extID)); err != nil {
+			i.recordAudit(domain.ContributionDefinition{ID: "dynamic_contributions", Kind: domain.ContributionKindProvider, ExtensionID: extID}, operationID, generation, time.Now().UTC(), auditResultFailed, err)
+			return fmt.Errorf("deactivate dynamic contributions for %s: %w", extID, err)
+		}
+	}
 
 	ordered, orderErr := orderContributionsForTeardown(contribs)
 	if orderErr != nil {
@@ -2513,6 +2519,12 @@ func (i *TypedContributionInstaller) UninstallContributions(ctx context.Context,
 		generation = inst.Generation
 	}
 	startedAt := time.Now().UTC()
+	if i.container.PluginBroker != nil {
+		if err := i.container.PluginBroker.ReleaseExtension(ctx, string(extID)); err != nil {
+			i.recordAudit(domain.ContributionDefinition{ID: "dynamic_contributions", Kind: domain.ContributionKindProvider, ExtensionID: extID}, operationID, generation, startedAt, auditResultFailed, err)
+			return fmt.Errorf("uninstall dynamic contributions for %s: %w", extID, err)
+		}
+	}
 
 	if i.container.EventService != nil {
 		if err := i.container.EventService.RemoveSubscriptionsByExtension(ctx, string(extID)); err != nil {
@@ -2590,6 +2602,9 @@ func (i *TypedContributionInstaller) UninstallContributions(ctx context.Context,
 				}
 			}
 		}
+	}
+	if i.container.UIProviderRegistry != nil {
+		i.container.UIProviderRegistry.UnregisterExtension(string(extID))
 	}
 	if i.container.UIHost != nil {
 		i.container.UIHost.UnregisterByExtension(ui_contribution.ExtensionID(extID))

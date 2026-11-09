@@ -10,6 +10,10 @@
 | 源码契约验收 | 自动遍历并验证 `plugins-builtin/` 与 `plugins-code/` 下全部源码 Manifest |
 | 源码目录边界 | 固定业务插件位于 `plugins-builtin/`；普通与市场插件位于 `plugins-code/`，并由测试强制校验 |
 | 身份插件分发包 | `email`、`calendar`、`phone`、`wallet`、`browser-profile` 已由源码重新构建并签名 |
+| JavaScript SDK | 宿主受控提供 `@amitia/plugin-sdk`，工具按 Manifest `handlerName` 注册和调用 |
+| SDK/CLI 真实链路 | 新工具项目已完成 `init`、`build`、严格 `validate`、`pack`、`install`、`enable`、`disable`、再次 `enable` 和 `uninstall` |
+| 数据契约执行 | 插件状态按扩展执行字节/键配额；更新按 `data.backup` 备份，卸载按 `data.uninstall` 保留、删除或导出后删除 |
+| 崩溃隔离清理 | 运行时重启耗尽或不可恢复失败时，自动释放该扩展的动态贡献、服务、依赖和缓存 |
 
 ## 已迁出核心
 
@@ -18,7 +22,7 @@
 | 插件市场、扩展中心与内核入口 | `com.amitia/plugin-market` | `/extensions`、`/kernel`、扩展包、工作流、MCP、Agent Skills 的页面和路由均使用 Tool、UI Provider、Route Registry；宿主固定业务页已删除 |
 | 渠道页面与连接 | `com.amitia/channel-*` | 已使用 Service、UI Provider、Route Registry |
 | 渠道中心 | `com.amitia/channels-hub` | 固定 `/channel-center` 路由已删除，渠道发现、插件导航和接入入口由插件提供 |
-| 设置与个人空间 | `com.amitia/user-space-hub` | `/settings` 与 `/my-space` 固定路由树已删除，页面和二级选择由插件 Host Runtime 提供；Provider 修复页保留为核心恢复入口 |
+| 设置与个人空间 | `com.amitia/user-space-hub` | `/settings` 根路由及 `/settings`、`/my-space` 子路由均由插件 Host Runtime 提供；Web、桌面和移动端共用同一 Provider 快照，Provider 修复页保留为核心恢复入口 |
 | 表情与消息渲染 | `com.amitia/emote` | 已使用 Tool、UI Slot、UI Provider |
 | 生活系统 | `com.amitia/lifestyle` | 已使用 Tool、UI Slot、UI Provider |
 | 运行时调试 | `com.amitia/runtime-insights` | 已从固定 Vue 路由迁出 |
@@ -27,11 +31,8 @@
 | Kernel 管理页 | `com.amitia/runtime-insights` | WASM、Hook、可信服务、任务、事件、调度、桌面贡献、更新、诊断和开发模式均由插件路由提供 |
 | 工作区文件与 Git | `com.amitia/workspace` | 固定路由与 Vue 页面已删除，文件、Git 和隔离工作区统一走 Workspace Bridge |
 | 聊天导入 | `com.amitia/chat-import` | 固定路由与 Vue 向导已删除，解析、批次管理和设备会话晋升统一走 Import Bridge |
-| 主动任务（已合并提醒能力） | `com.amitia.builtin.active-task` | 唯一任务业务插件；固定路由与 Vue 页面已删除，主动任务、定时提醒、队列和历史统一走现有 Reminder Host API |
 | 存储维护 | `com.amitia/storage` | 固定路由与 Vue 页面已删除，清理、备份和恢复分别走独立 Storage Host API |
 | 归档对话 | `com.amitia/chat-logs` | 固定路由与 Vue 页面已删除，读取、恢复、删除、摘要和导出统一走 Conversation Logs Host API；列表、消息和操作仅接受具有 `archivedAt` 的会话 |
-| 记忆 Hub | `com.amitia/memory-hub` | `/memory`、`/knowledge`、`/memory-manager`、`/memory-timeline`、`/episodic`、`/graph`、`/profiles` 固定路由已删除，页面、路由、二级导航和主导航均由 UI Provider 提供 |
-| 角色 Hub | `com.amitia/character-hub` | `/characters`、`/character`、角色详情、生活规则、语音、心理状态、团队和世界书固定路由已删除，页面、路由、二级导航和主导航均由 UI Provider 提供 |
 | 创意工坊 Hub | `com.amitia/creative-workshop-hub` | 固定 `/creative-workshop` 与桌宠中心入口已删除，工坊页面、路由和主导航由 UI Provider 提供 |
 | 游戏中心 Hub | `com.amitia/game-center-hub` | 固定 `/game-center` 路由已删除，中心页面、路由和导航由 UI Provider 提供，能力门禁仍由核心执行 |
 
@@ -45,7 +46,12 @@
 | 安装、签名、信任与事务 | 插件不能替换自身安装和权限根 |
 | Adapter Broker、Service Contract | 非核心执行语义只能通过受信 Adapter 扩展 |
 | 最小聊天、模型、会话与记忆执行边界 | 页面可替换，底层执行协议不可替换 |
+| 统筹模式 | 本地模式与云端统筹模式属于 Device Mesh/Core 权限、数据归属和路由规则，不拆成插件；保留扩展事件、服务与第三方接入点 |
+| 角色模块 | 角色、详情、团队、世界书、语音、心理状态和生活规则保留为核心业务模块；保留 UI Slot、Hook、Service、Tool 和第三方 UI 注入 |
+| 记忆模块 | 记忆总览、知识库、图谱、时间线、情景记忆和用户画像保留为核心业务模块；保留 UI Slot、Hook、Service、Tool 和第三方 UI 注入 |
+| 主动任务模块 | 主动任务、定时提醒、队列、执行和历史保留为核心业务模块；保留 UI Slot、Hook、Service、Tool 和第三方 UI 注入 |
 | 文件系统和进程监管 | 沙箱、进程树、资源限制留在核心 |
+| UI Provider 生命周期清理 | 停用、替换和卸载必须按扩展注销 Provider，并释放路由、页面能力与相关快照 |
 
 ## 验收收尾
 
@@ -54,6 +60,8 @@
 | 第三方替换矩阵 | 用测试插件逐项替换官方市场、渠道、页面、工具和服务 |
 | 生命周期零残留 | 安装、启用、停用、更新、回滚、卸载后检查路由、导航、Slot、监听器和进程 |
 | 正式资产 | 从当前源码基线重新构建并签名全部固定业务插件与普通插件 |
+
+第三方替换的源码级矩阵已覆盖官方页面、市场入口、渠道、消息渲染器和服务提供者。签名包已完成从当前源码重新构建、验签和真实安装生命周期；最终逐项证据见 `docs/audits/plugin-system-rewrite-acceptance-20261109.md`。
 
 ## 验收要求
 
@@ -72,11 +80,12 @@
 | 插件市场与扩展中心 | 支持 `/extensions` 根页面与市场页面 | 支持 `/extensions` 根页面与市场页面 | 市场页面由插件提供；扩展中心根 Tab 仍由移动端宿主壳承载 |
 | 工作区 | 支持 | 支持 | 暂不声明，移动端尚无本地 Workspace 业务页面 |
 | 聊天导入 | 支持 | 支持 | 支持 |
-| 提醒与主动任务 | 支持 | 支持 | 支持主动任务和持续事项 |
+| 主动任务 | 核心模块，支持 | 核心模块，支持 | 核心模块，支持主动任务和持续事项 |
 | 存储维护 | 支持 | 支持 | 支持设置内的存储维护页面 |
 | 归档对话 | 支持 | 支持 | 支持 |
 | 渠道中心 | 支持 | 支持 | 支持 |
 | 设置与个人空间 | 支持 | 支持 | 设置子页面支持；个人中心主 Tab 由移动端宿主壳承载 |
-| 角色、记忆与创意工坊 | 支持 | 支持 | 子页面由移动端 Host Runtime Provider 提供，主 Tab 壳保留宿主导航 |
+| 角色与记忆 | 核心模块，支持 | 核心模块，支持 | 核心模块，支持 |
+| 创意工坊 | 支持 | 支持 | 子页面由移动端 Host Runtime Provider 提供，主 Tab 壳保留宿主导航 |
 | 游戏中心、Kernel 与扩展子页 | 支持 | 支持 | 由移动端 Provider 动态注册，插件停用后对应路由消失 |
 | 聊天导入、归档、渠道与桌宠 | 支持 | 支持 | 已接入同一移动端 Provider 快照 |

@@ -1934,6 +1934,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		ContributionRepository: contribRepo,
 		EnablementStore:        stateStore,
 		RuntimeRepository:      runtimeRepo,
+		ExtensionStateStore:    extensionStateStore,
 		OperationRepository:    opRepo,
 		ScopeRepository:        scopeRepo,
 		PermissionRepository:   permRepo,
@@ -2128,6 +2129,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		return nil, fmt.Errorf("kernel: register builtin contribution routes: %w", err)
 	}
 	container.PluginBroker = NewPluginBroker(container)
+	supervisor.SetCrashObserver(container.PluginBroker)
 	if err := registerPluginBrokerRoutes(hostAPIGateway, container.PluginBroker); err != nil {
 		return nil, fmt.Errorf("kernel: register plugin broker routes: %w", err)
 	}

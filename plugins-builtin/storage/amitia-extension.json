@@ -8,7 +8,7 @@
     "description": {
       "default": "清理聊天数据、优化数据库并管理完整设备备份与恢复。"
     },
-    "version": "1.0.0",
+    "version": "1.0.1",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -250,6 +250,7 @@
             "metadata": {
               "routes": [
                 {
+                  "placement": "settings",
                   "id": "storage",
                   "path": "/storage",
                   "providerId": "storage-page-provider",
@@ -260,6 +261,7 @@
               ],
               "navigationItems": [
                 {
+                  "placement": "settings",
                   "id": "storage",
                   "label": "存储维护",
                   "route": "/storage",

@@ -215,6 +215,15 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	if err != nil {
 		return KernelInstallResult{}, err
 	}
+	dataPolicy := extensionDataPolicyFromDefinition(currentDefinition)
+	if dataPolicy.Backup {
+		if r.container.ExtensionStateStore == nil {
+			return KernelInstallResult{}, r.failPackageUpdateOperation(operationID, "backup_extension_state", errors.New("extension state store unavailable"), nil, guard)
+		}
+		if _, err := r.writeExtensionStateSnapshot(ctx, string(current.ExtensionID), operationID, "backups"); err != nil {
+			return KernelInstallResult{}, r.failPackageUpdateOperation(operationID, "backup_extension_state", err, nil, guard)
+		}
+	}
 	currentModules, err := r.container.ModuleRepository.ListModules(ctx, current.ExtensionID)
 	if err != nil {
 		return KernelInstallResult{}, err

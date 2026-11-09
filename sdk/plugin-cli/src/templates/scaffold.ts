@@ -18,7 +18,7 @@ export function scaffoldManifest(input: TemplateScaffoldInput, kind: TemplateKin
     },
     compatibility: {
       minHostVersion: "0.1.0",
-      platforms: input.targets,
+      platforms: compatibilityPlatforms(input.targets),
     },
     modules: [
       {
@@ -27,8 +27,10 @@ export function scaffoldManifest(input: TemplateScaffoldInput, kind: TemplateKin
         description: { default: input.description },
         runtime: {
           adapter: module.runtime,
-          entry: "index.js",
+          entry: module.entry.replace(/^\.\//, ""),
         },
+        dynamic: dynamicForTemplate(kind),
+        contributions: contributionsForTemplate(input, kind),
       },
     ],
     permissions: permissions.map((p) => ({ name: p, required: true })),
@@ -40,14 +42,15 @@ export function scaffoldManifest(input: TemplateScaffoldInput, kind: TemplateKin
   return JSON.stringify(manifest, null, 2) + "\n";
 }
 
-export function scaffoldPackageJson(input: TemplateScaffoldInput): string {
+export function scaffoldPackageJson(input: TemplateScaffoldInput, kind: TemplateKind = "tool"): string {
+  const module = moduleForTemplate(kind);
   const pkg = {
     name: input.extensionId,
     version: input.version,
     description: input.description,
     license: input.license,
-    type: "module",
-    main: "./dist/index.js",
+    type: "commonjs",
+    main: `./${module.entry.replace(/^\.\//, "")}`,
     scripts: {
       build: "amitia-ext build",
       dev: "amitia-ext dev",
@@ -71,8 +74,8 @@ export function scaffoldTsConfig(): string {
     {
       compilerOptions: {
         target: "ES2022",
-        module: "ESNext",
-        moduleResolution: "bundler",
+        module: "CommonJS",
+        moduleResolution: "Node",
         lib: ["ES2022", "DOM"],
         declaration: true,
         outDir: "./dist",
@@ -152,32 +155,101 @@ export function scaffoldEntry(input: TemplateScaffoldInput, kind: TemplateKind):
   }
 }
 
+function dynamicForTemplate(kind: TemplateKind): Record<string, unknown> {
+  if (kind === "tool" || kind === "composite") {
+    return {
+      allowedAdapters: ["tool"],
+      maxContributions: 1,
+      maxTools: 1,
+      maxRoutes: 0,
+      maxServices: 0,
+      allowUnregister: false,
+    };
+  }
+  return {
+    allowedAdapters: [],
+    maxContributions: 0,
+    maxTools: 0,
+    maxRoutes: 0,
+    maxServices: 0,
+    allowUnregister: false,
+  };
+}
+
+function contributionsForTemplate(input: TemplateScaffoldInput, kind: TemplateKind): Record<string, unknown>[] {
+  if (kind !== "tool" && kind !== "composite") {
+    return [];
+  }
+  const toolName = kind === "tool" ? "hello" : "ping";
+  const title = kind === "tool" ? "Hello" : "Ping";
+  const description = kind === "tool"
+    ? `Returns a greeting from ${input.displayName}`
+    : "Composite extension ping";
+  return [
+    {
+      id: `${kind}-command`,
+      kind: "tool",
+      adapter: "tool",
+      contractVersion: 1,
+      name: { default: title },
+      description: { default: description },
+      spec: {
+        toolId: `${input.extensionId}/${toolName}`,
+        modelName: toolName,
+        handlerName: toolName,
+        inputSchema: { type: "object", properties: {} },
+        outputSchema: { type: "object", additionalProperties: true },
+        riskLevel: "low",
+        sideEffect: "read_only",
+        runtime: {
+          runtimeType: "javascript",
+          handlerName: toolName,
+        },
+      },
+    },
+  ];
+}
+
 function moduleForTemplate(kind: TemplateKind): { moduleId: string; kind: string; entry: string; runtime: string } {
   switch (kind) {
     case "tool":
-      return { moduleId: "main-tool", kind: "tool", entry: "./dist/main-tool.js", runtime: "javascript_main" };
+      return { moduleId: "main-tool", kind: "tool", entry: "./dist/main-tool.js", runtime: "javascript" };
     case "agent-skill":
-      return { moduleId: "main-skill", kind: "skill", entry: "./dist/main-skill.js", runtime: "javascript_main" };
+      return { moduleId: "main-skill", kind: "skill", entry: "./dist/main-skill.js", runtime: "javascript" };
     case "workflow":
-      return { moduleId: "main-workflow", kind: "workflow", entry: "./dist/main-workflow.js", runtime: "task_runtime" };
+      return { moduleId: "main-workflow", kind: "workflow", entry: "./dist/main-workflow.js", runtime: "workflow" };
     case "mcp":
-      return { moduleId: "main-mcp", kind: "mcp_server", entry: "./dist/main-mcp.js", runtime: "trusted_service" };
+      return { moduleId: "main-mcp", kind: "mcp_server", entry: "./dist/main-mcp.js", runtime: "service" };
     case "schema-ui":
-      return { moduleId: "main-ui", kind: "ui_contribution", entry: "./dist/main-ui.js", runtime: "javascript_main" };
+      return { moduleId: "main-ui", kind: "ui_contribution", entry: "./dist/main-ui.js", runtime: "javascript" };
     case "web-ui":
-      return { moduleId: "main-webui", kind: "ui_contribution", entry: "./dist/main-webui.js", runtime: "javascript_main" };
+      return { moduleId: "main-webui", kind: "ui_contribution", entry: "./dist/main-webui.js", runtime: "javascript" };
     case "event-hook":
-      return { moduleId: "main-hook", kind: "tool", entry: "./dist/main-hook.js", runtime: "javascript_main" };
+      return { moduleId: "main-hook", kind: "tool", entry: "./dist/main-hook.js", runtime: "javascript" };
     case "provider":
-      return { moduleId: "main-provider", kind: "tool", entry: "./dist/main-provider.js", runtime: "trusted_service" };
+      return { moduleId: "main-provider", kind: "tool", entry: "./dist/main-provider.js", runtime: "service" };
     case "task":
-      return { moduleId: "main-task", kind: "task_runtime", entry: "./dist/main-task.js", runtime: "task_runtime" };
+      return { moduleId: "main-task", kind: "task_runtime", entry: "./dist/main-task.js", runtime: "workflow" };
     case "desktop":
-      return { moduleId: "main-desktop", kind: "ui_contribution", entry: "./dist/main-desktop.js", runtime: "javascript_main" };
+      return { moduleId: "main-desktop", kind: "ui_contribution", entry: "./dist/main-desktop.js", runtime: "javascript" };
     case "composite":
     default:
-      return { moduleId: "main", kind: "tool", entry: "./dist/main.js", runtime: "javascript_main" };
+      return { moduleId: "main", kind: "tool", entry: "./dist/main.js", runtime: "javascript" };
   }
+}
+
+function compatibilityPlatforms(targets: readonly string[]): string[] {
+  const result = new Set<string>()
+  for (const target of targets) {
+    const normalized = target.trim().toLowerCase()
+    if (normalized.startsWith("win")) result.add("windows")
+    else if (normalized.startsWith("mac") || normalized.startsWith("darwin")) result.add("macos")
+    else if (normalized.startsWith("linux")) result.add("linux")
+    else if (normalized.startsWith("android")) result.add("android")
+    else if (normalized.startsWith("ios")) result.add("ios")
+    else if (normalized.startsWith("web")) result.add("web")
+  }
+  return result.size > 0 ? Array.from(result) : ["windows", "linux", "macos"]
 }
 
 function permissionsForTemplate(kind: TemplateKind): string[] {
@@ -222,6 +294,7 @@ export default defineExtension({
         runtimeBinding: "host_internal",
         riskLevel: "low",
         idempotent: true,
+        metadata: { handlerName: "hello" },
       },
       async () => successResult({ message: "hello from ${input.displayName}" }),
     );
@@ -374,6 +447,7 @@ export default defineExtension({
         parameters: { type: "object", properties: {} },
         runtimeBinding: "host_internal",
         riskLevel: "low",
+        metadata: { handlerName: "ping" },
       },
       async () => successResult({ ok: true }),
     );
@@ -397,7 +471,7 @@ export function getTemplateDescriptor(kind: TemplateKind, scaffoldInput?: Templa
   };
   const entry = scaffoldEntry(input, kind);
   const manifest = scaffoldManifest(input, kind);
-  const packageJson = scaffoldPackageJson(input);
+  const packageJson = scaffoldPackageJson(input, kind);
   const tsconfig = scaffoldTsConfig();
   return {
     kind,

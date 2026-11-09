@@ -8,7 +8,7 @@
     "description": {
       "default": "发现、审查、安装、更新和卸载经过宿主验证的插件。"
     },
-    "version": "1.4.0",
+    "version": "1.4.4",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -76,7 +76,7 @@
           "ui",
           "ui_provider"
         ],
-        "maxContributions": 19,
+        "maxContributions": 20,
         "maxTools": 1,
         "maxRoutes": 16,
         "maxServices": 0,
@@ -408,6 +408,60 @@
             "actions": [],
             "integrity": {
               "definition_hash": "plugin-market-extensions-hub-page-v1"
+            }
+          }
+        },
+        {
+          "id": "plugin-market-extensions-hub-mobile-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "扩展中心移动端页面"
+          },
+          "description": {
+            "default": "在移动端管理扩展包、工作流、MCP 服务和 Agent Skills。"
+          },
+          "spec": {
+            "contribution_id": "plugin-market-extensions-hub-mobile-page",
+            "extension_id": "com.amitia/plugin-market",
+            "module_id": "plugin-market-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "扩展中心"
+              },
+              "description": {
+                "default": "管理扩展包、工作流、MCP 服务与 Agent Skills。"
+              },
+              "icon": "extension"
+            },
+            "entry": {
+              "type": "host_native",
+              "path": "builtin://com.amitia/plugin-market/extensions-hub-mobile",
+              "runtime_id": "host.mobile.native-page",
+              "content_hash": "builtin"
+            },
+            "sandbox": {
+              "type": "host_native"
+            },
+            "ordering": {
+              "priority": 259
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "actions": [],
+            "integrity": {
+              "definition_hash": "plugin-market-extensions-hub-mobile-page-v1"
             }
           }
         },
@@ -766,6 +820,7 @@
                   "priority": 258
                 },
                 {
+                  "placement": "primary",
                   "id": "extensions-hub",
                   "path": "/extensions",
                   "providerId": "plugin-market-extensions-hub-provider",
@@ -899,6 +954,26 @@
                   "label": "Agent Skills",
                   "order": 50
                 }
+              ],
+              "navigationItems": [
+                {
+                  "placement": "primary",
+                  "id": "extensions-hub",
+                  "label": "扩展中心",
+            "tabLabel": "扩展",
+                  "route": "/extensions",
+                  "description": "管理扩展包、工作流、MCP 和 Agent Skills。",
+                  "icon": "extension",
+                  "group": "extensions",
+                  "groupLabel": "扩展中心",
+                  "groupIcon": "extension",
+                  "order": 90,
+                  "mobile": true,
+                  "match": [
+                    "/extensions",
+                    "/kernel"
+                  ]
+                }
               ]
             }
           }
@@ -976,6 +1051,10 @@
               "electron_linux": {
                 "type": "schema_renderer",
                 "contributionId": "plugin-market-extensions-hub-page"
+              },
+              "mobile": {
+                "type": "schema_renderer",
+                "contributionId": "plugin-market-extensions-hub-mobile-page"
               }
             },
             "metadata": {

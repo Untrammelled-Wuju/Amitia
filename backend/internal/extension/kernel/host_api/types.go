@@ -261,6 +261,7 @@ const (
 	ErrorCodeCancelled                 = "cancelled"
 	ErrorCodeResourceNotFound          = "resource_not_found"
 	ErrorCodeStateConflict             = "state_conflict"
+	ErrorCodeQuotaExceeded             = "quota_exceeded"
 	ErrorCodeHostUnavailable           = "host_unavailable"
 	ErrorCodeUIHostUnavailable         = "ui_host_unavailable"
 	ErrorCodeDialogHostUnavailable     = "dialog_host_unavailable"

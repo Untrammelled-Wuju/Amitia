@@ -8,7 +8,7 @@
     "description": {
       "default": "通过统一 UI Provider 提供角色管理、团队、世界书与画像入口。"
     },
-    "version": "1.2.0",
+    "version": "1.2.5",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -381,6 +381,7 @@
             "metadata": {
               "routes": [
                 {
+                  "placement": "profile",
                   "id": "character-hub",
                   "path": "/characters",
                   "providerId": "character-hub-page-provider",
@@ -518,6 +519,7 @@
               ],
               "navigationItems": [
                 {
+                  "placement": "profile",
                   "id": "character-hub",
                   "label": "角色",
                   "route": "/characters",
@@ -527,6 +529,7 @@
                   "groupLabel": "角色",
                   "groupIcon": "character",
                   "order": 20,
+                  "profile": true,
                   "match": [
                     "/character",
                     "/characters/teams",
@@ -567,6 +570,10 @@
               "electron_linux": {
                 "type": "schema_renderer",
                 "contributionId": "character-hub-page"
+              },
+              "mobile": {
+                "type": "schema_renderer",
+                "contributionId": "character-mobile-page"
               }
             },
             "metadata": {

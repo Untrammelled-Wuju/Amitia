@@ -101,7 +101,7 @@ import { useTheme } from "../composables/useTheme";
 import {
   apiClient,
 } from "../composables/useApi";
-import { isUINavigationItemActive, resolvePageTitle, useUINavigationRegistry, type UINavigationItem } from "@/ui-runtime/navigationRegistry";
+import { isUINavigationItemActive, useUINavigationRegistry, type UINavigationItem } from "@/ui-runtime/navigationRegistry";
 import type { UIProviderDefinition } from "@/ui-runtime/types";
 import { useAppStore } from "@/stores/app";
 import { useExtensionUIStore } from "@/stores/extensionUI";
@@ -121,7 +121,7 @@ function handleWorkbenchOpen(event: Event) {
   const detail = (event as CustomEvent<WorkbenchOpenCommand>).detail;
   workbench.openCommand(detail);
 }
-const { items: navigationItems } = useUINavigationRegistry();
+const { items: navigationItems, titleForRoute } = useUINavigationRegistry();
 let healthInterval: number | null = null;
 const {
   state: theme,
@@ -215,7 +215,7 @@ const isContentFullHeight = computed(() => {
     path.startsWith("/extensions/workflows/") ||
     isFullHeightRoute.value;
 });
-const pageTitle = computed(() => resolvePageTitle(router.currentRoute.value.path, navigationItems.value));
+const pageTitle = computed(() => titleForRoute(router.currentRoute.value.path));
 
 const health = ref({
   appStatus: "running",

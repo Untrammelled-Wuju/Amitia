@@ -4,26 +4,49 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	amitialog "log"
+	"sync"
 	"time"
 )
 
+const (
+	DefaultExtensionStateQuotaBytes int64 = 16 << 20
+	DefaultExtensionStateQuotaKeys  int64 = 4096
+)
+
+var ErrExtensionStateQuotaExceeded = errors.New("sqlite: extension state quota exceeded")
+
 type ExtensionStateEntry struct {
-	ExtensionID string
-	ModuleID    string
-	Key         string
-	Value       json.RawMessage
-	Version     int64
-	UpdatedAt   time.Time
+	ExtensionID string          `json:"extensionId"`
+	ModuleID    string          `json:"moduleId"`
+	Key         string          `json:"key"`
+	Value       json.RawMessage `json:"value"`
+	Version     int64           `json:"version"`
+	UpdatedAt   time.Time       `json:"updatedAt"`
+}
+
+type ExtensionStateExport struct {
+	SchemaVersion int                   `json:"schemaVersion"`
+	ExtensionID   string                `json:"extensionId"`
+	ExportedAt    time.Time             `json:"exportedAt"`
+	Entries       []ExtensionStateEntry `json:"entries"`
 }
 
 type ExtensionStateStoreRepository struct {
-	db *sql.DB
+	db         *sql.DB
+	quotaMu    sync.Mutex
+	quotaBytes int64
+	quotaKeys  int64
 }
 
 func NewExtensionStateStore(db *sql.DB) *ExtensionStateStoreRepository {
-	return &ExtensionStateStoreRepository{db: db}
+	return NewExtensionStateStoreWithQuota(db, DefaultExtensionStateQuotaBytes, DefaultExtensionStateQuotaKeys)
+}
+
+func NewExtensionStateStoreWithQuota(db *sql.DB, quotaBytes, quotaKeys int64) *ExtensionStateStoreRepository {
+	return &ExtensionStateStoreRepository{db: db, quotaBytes: quotaBytes, quotaKeys: quotaKeys}
 }
 
 func (r *ExtensionStateStoreRepository) Get(ctx context.Context, extensionID string, moduleID string, key string) (json.RawMessage, int64, bool, error) {
@@ -44,6 +67,11 @@ func (r *ExtensionStateStoreRepository) Get(ctx context.Context, extensionID str
 }
 
 func (r *ExtensionStateStoreRepository) Set(ctx context.Context, extensionID string, moduleID string, key string, value json.RawMessage) (int64, error) {
+	r.quotaMu.Lock()
+	defer r.quotaMu.Unlock()
+	if err := r.checkQuotaLocked(ctx, extensionID, moduleID, key, value); err != nil {
+		return 0, err
+	}
 	now := time.Now().UTC()
 	ex := getExecutor(ctx, r.db)
 	result, err := ex.ExecContext(ctx, `
@@ -74,6 +102,8 @@ func (r *ExtensionStateStoreRepository) Set(ctx context.Context, extensionID str
 }
 
 func (r *ExtensionStateStoreRepository) CAS(ctx context.Context, extensionID string, moduleID string, key string, expectedVersion int64, newValue json.RawMessage) (bool, int64, error) {
+	r.quotaMu.Lock()
+	defer r.quotaMu.Unlock()
 	ex := getExecutor(ctx, r.db)
 	var currentValue string
 	var currentVersion int64
@@ -89,6 +119,9 @@ func (r *ExtensionStateStoreRepository) CAS(ctx context.Context, extensionID str
 		if expectedVersion != 0 {
 			return false, 0, nil
 		}
+		if err := r.checkQuotaLocked(ctx, extensionID, moduleID, key, newValue); err != nil {
+			return false, 0, err
+		}
 		now := time.Now().UTC()
 		_, insErr := ex.ExecContext(ctx, `
 			INSERT INTO extension_kv_state (extension_id, module_id, key, value, version, updated_at)
@@ -102,6 +135,9 @@ func (r *ExtensionStateStoreRepository) CAS(ctx context.Context, extensionID str
 
 	if currentVersion != expectedVersion {
 		return false, currentVersion, nil
+	}
+	if err := r.checkQuotaLocked(ctx, extensionID, moduleID, key, newValue); err != nil {
+		return false, currentVersion, err
 	}
 
 	now := time.Now().UTC()
@@ -164,4 +200,96 @@ func (r *ExtensionStateStoreRepository) List(ctx context.Context, extensionID st
 		return nil, fmt.Errorf("sqlite: iterate extension kv state: %w", err)
 	}
 	return out, nil
+}
+
+func (r *ExtensionStateStoreRepository) DeleteByExtension(ctx context.Context, extensionID string) error {
+	ex := getExecutor(ctx, r.db)
+	if _, err := ex.ExecContext(ctx, `DELETE FROM extension_kv_state WHERE extension_id = ?`, extensionID); err != nil {
+		return fmt.Errorf("sqlite: delete extension kv state by extension: %w", err)
+	}
+	return nil
+}
+
+func (r *ExtensionStateStoreRepository) Usage(ctx context.Context, extensionID string) (int, int64, error) {
+	ex := getExecutor(ctx, r.db)
+	var keys int
+	var totalBytes int64
+	err := ex.QueryRowContext(ctx,
+		`SELECT COUNT(*), COALESCE(SUM(LENGTH(CAST(value AS BLOB))), 0)
+		 FROM extension_kv_state WHERE extension_id = ?`,
+		extensionID,
+	).Scan(&keys, &totalBytes)
+	if err != nil {
+		return 0, 0, fmt.Errorf("sqlite: query extension kv state usage: %w", err)
+	}
+	return keys, totalBytes, nil
+}
+
+func (r *ExtensionStateStoreRepository) Export(ctx context.Context, extensionID string) ([]byte, error) {
+	ex := getExecutor(ctx, r.db)
+	rows, err := ex.QueryContext(ctx,
+		`SELECT extension_id, module_id, key, value, version, updated_at
+		 FROM extension_kv_state WHERE extension_id = ? ORDER BY module_id, key`,
+		extensionID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("sqlite: export extension kv state: %w", err)
+	}
+	defer rows.Close()
+	document := ExtensionStateExport{
+		SchemaVersion: 1,
+		ExtensionID:   extensionID,
+		ExportedAt:    time.Now().UTC(),
+		Entries:       []ExtensionStateEntry{},
+	}
+	for rows.Next() {
+		var entry ExtensionStateEntry
+		var value string
+		if err := rows.Scan(&entry.ExtensionID, &entry.ModuleID, &entry.Key, &value, &entry.Version, &entry.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("sqlite: scan exported extension kv state: %w", err)
+		}
+		entry.Value = json.RawMessage(value)
+		document.Entries = append(document.Entries, entry)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("sqlite: iterate exported extension kv state: %w", err)
+	}
+	payload, err := json.Marshal(document)
+	if err != nil {
+		return nil, fmt.Errorf("sqlite: encode exported extension kv state: %w", err)
+	}
+	return payload, nil
+}
+
+func (r *ExtensionStateStoreRepository) checkQuotaLocked(ctx context.Context, extensionID, moduleID, key string, value json.RawMessage) error {
+	if r.quotaBytes <= 0 && r.quotaKeys <= 0 {
+		return nil
+	}
+	ex := getExecutor(ctx, r.db)
+	var keys int
+	var totalBytes int64
+	var existingBytes int64
+	var existingCount int
+	err := ex.QueryRowContext(ctx,
+		`SELECT COUNT(*), COALESCE(SUM(LENGTH(CAST(value AS BLOB))), 0),
+		        COALESCE(MAX(CASE WHEN module_id = ? AND key = ? THEN LENGTH(CAST(value AS BLOB)) ELSE 0 END), 0),
+		        COUNT(CASE WHEN module_id = ? AND key = ? THEN 1 END)
+		 FROM extension_kv_state WHERE extension_id = ?`,
+		moduleID, key, moduleID, key, extensionID,
+	).Scan(&keys, &totalBytes, &existingBytes, &existingCount)
+	if err != nil {
+		return fmt.Errorf("sqlite: query extension kv state quota: %w", err)
+	}
+	projectedBytes := totalBytes - existingBytes + int64(len(value))
+	if r.quotaBytes > 0 && projectedBytes > r.quotaBytes {
+		return ErrExtensionStateQuotaExceeded
+	}
+	projectedKeys := keys
+	if existingCount == 0 {
+		projectedKeys++
+	}
+	if r.quotaKeys > 0 && int64(projectedKeys) > r.quotaKeys {
+		return ErrExtensionStateQuotaExceeded
+	}
+	return nil
 }

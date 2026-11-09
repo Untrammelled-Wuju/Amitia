@@ -5,8 +5,11 @@ import 'package:amitia_app/core/ui_runtime/mobile_host_runtime_registry.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const migratedChildPaths = <String>[
+  '/settings',
+  '/characters',
   '/characters/:id',
   '/characters/teams',
+  '/memory',
   '/memory/episodic',
   '/memory/graph',
   '/workshop/character-cards',
@@ -16,6 +19,7 @@ const migratedChildPaths = <String>[
   '/extensions/mcp/:id',
   '/chat-logs',
   '/chat-import',
+  '/developer',
   '/developer/kernel/tasks',
   '/channel-center',
   '/desktop-pet',

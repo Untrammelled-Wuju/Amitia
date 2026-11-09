@@ -48,6 +48,15 @@ func (m Manifest) ToExtensionDefinition() (domain.ExtensionDefinition, error) {
 			Sandbox:         hasSandboxRuntime(m.Modules),
 		},
 	}
+	if m.Data != nil {
+		definition.Metadata = map[string]any{
+			"data.schemaVersion": m.Data.SchemaVersion,
+			"data.scopes":        append([]string(nil), m.Data.Scopes...),
+			"data.backup":        m.Data.Backup,
+			"data.export":        m.Data.Export,
+			"data.uninstall":     m.Data.Uninstall,
+		}
+	}
 	for index := range m.Modules {
 		moduleDefinition, err := m.Modules[index].ToDomain(domain.ExtensionID(m.Plugin.ID))
 		if err != nil {

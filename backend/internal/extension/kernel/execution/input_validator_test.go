@@ -156,7 +156,7 @@ func TestInputValidatorReportsSchemaDetailWithoutValues(t *testing.T) {
 	}`)
 
 	tool := capability.ToolDefinition{
-		ID:          "com.amitia.builtin.active-task/command",
+		ID:          "com.amitia/active-task/command",
 		ModelName:   "active_task_command",
 		InputSchema: schema,
 		Source:      capability.ToolSourcePlugin,

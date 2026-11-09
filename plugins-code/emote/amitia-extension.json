@@ -833,6 +833,7 @@
               ],
               "navigationItems": [
                 {
+                  "placement": "contextual",
                   "id": "character.emotes",
                   "label": "表情包管理",
                   "route": "/emotes",

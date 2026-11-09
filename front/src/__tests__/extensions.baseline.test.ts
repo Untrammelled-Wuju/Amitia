@@ -147,25 +147,51 @@ describe("Extension Center Baseline", () => {
   })
 
   describe("Navigation", () => {
-    it("resolvePageTitle resolves extension paths", async () => {
-      const { resolvePageTitle } = await import("@/ui-runtime/navigationRegistry")
-      const title = resolvePageTitle("/extensions")
-      expect(title).toBe("扩展中心")
-      expect(resolvePageTitle("/kernel")).toBe("内核工具")
-    })
-
-    it("resolvePageTitle resolves MCP path", async () => {
-      const { resolvePageTitle } = await import("@/ui-runtime/navigationRegistry")
-      const title = resolvePageTitle("/extensions/mcp")
-      expect(title).toBe("MCP 服务")
-    })
-
-    it("resolvePageTitle resolves creative workshop card paths", async () => {
+    it("keeps only core titles in the host override table", async () => {
       const { resolvePageTitle } = await import("@/ui-runtime/navigationRegistry")
       expect(resolvePageTitle("/chat")).toBe("新对话")
-      expect(resolvePageTitle("/creative-workshop/pet")).toBe("桌宠")
-      expect(resolvePageTitle("/creative-workshop/character-cards")).toBe("角色卡工坊")
-      expect(resolvePageTitle("/extensions/workflows")).toBe("工作流")
+      expect(resolvePageTitle("/extensions")).toBe("AI-Amitia")
+      expect(resolvePageTitle("/creative-workshop/pet")).toBe("AI-Amitia")
+    })
+
+    it("resolves provider route titles from route metadata", async () => {
+      const { resolveProviderRouteTitle } = await import("@/ui-runtime/navigationRegistry")
+      const store = {
+        snapshot: { providers: [
+          {
+            providerId: "routes",
+            extensionId: "com.example/extension",
+            capability: "route.registry",
+            mode: "augment",
+            priority: 100,
+            entries: { web: { type: "declarative" } },
+            enabled: true,
+            builtin: false,
+            placement: "any",
+            metadata: {
+              routes: [{ id: "extensions", path: "/extensions", providerId: "extensions-page", capability: "page.provider", title: "扩展中心" }],
+            },
+          },
+          {
+            providerId: "extensions-page",
+            extensionId: "com.example/extension",
+            capability: "page.provider",
+            mode: "replace",
+            priority: 100,
+            entries: { web: { type: "declarative" } },
+            enabled: true,
+            builtin: false,
+            placement: "any",
+          },
+        ], providerContext: { platform: "web" } },
+        getProviders(capability: string) {
+          return this.snapshot.providers.filter((provider: any) => provider.capability === capability)
+        },
+        getResolvedProvider() {
+          return null
+        },
+      } as any
+      expect(resolveProviderRouteTitle(store, "/extensions")).toBe("扩展中心")
     })
   })
 })

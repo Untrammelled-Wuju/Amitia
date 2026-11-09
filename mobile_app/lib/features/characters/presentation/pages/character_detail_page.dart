@@ -122,7 +122,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
               (item) =>
                   !item.runtimeId.startsWith('host.character.') &&
                   item.contributionId !=
-                      'com.amitia.builtin.active-task.character-tab',
+                      'com.amitia/active-task.character-tab',
             )
             .isNotEmpty ??
         false;
@@ -567,7 +567,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                 slotId: 'character.detail.tab',
                 context: _characterSlotContext(character),
                 excludedContributionIds: const {
-                  'com.amitia.builtin.active-task.character-tab',
+                  'com.amitia/active-task.character-tab',
                 },
               ),
             ],

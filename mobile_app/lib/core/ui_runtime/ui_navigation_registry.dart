@@ -8,6 +8,8 @@ import 'channel_presentation.dart';
 
 enum UINavigationPanel { main, more }
 
+enum UINavigationPlacement { primary, settings, profile, workspace, contextual }
+
 @immutable
 class UINavigationItem {
   const UINavigationItem({
@@ -16,10 +18,13 @@ class UINavigationItem {
     required this.route,
     required this.icon,
     required this.panel,
+    this.placement = UINavigationPlacement.contextual,
     this.group = '',
     this.order = 0,
     this.routePrefixes = const <String>[],
     this.builtin = false,
+    this.profile = false,
+    this.tabLabel = '',
     this.extensionId,
   });
 
@@ -28,10 +33,13 @@ class UINavigationItem {
   final String route;
   final IconData icon;
   final UINavigationPanel panel;
+  final UINavigationPlacement placement;
   final String group;
   final int order;
   final List<String> routePrefixes;
   final bool builtin;
+  final bool profile;
+  final String tabLabel;
   final String? extensionId;
 
   bool matches(String location) {
@@ -43,63 +51,7 @@ class UINavigationItem {
 }
 
 abstract final class UINavigationRegistry {
-  static const List<UINavigationItem> builtinItems = <UINavigationItem>[
-    UINavigationItem(
-      id: 'builtin.characters',
-      label: '角色',
-      route: AppRoutes.characters,
-      icon: Icons.people_outline,
-      panel: UINavigationPanel.main,
-      order: 20,
-      builtin: true,
-    ),
-    UINavigationItem(
-      id: 'builtin.memory',
-      label: '记忆',
-      route: AppRoutes.memory,
-      icon: Icons.memory_outlined,
-      panel: UINavigationPanel.main,
-      order: 30,
-      builtin: true,
-    ),
-    UINavigationItem(
-      id: 'builtin.continuity',
-      label: '持续事项',
-      route: AppRoutes.continuity,
-      icon: Icons.checklist_rtl,
-      panel: UINavigationPanel.main,
-      order: 35,
-      builtin: true,
-    ),
-    UINavigationItem(
-      id: 'builtin.devices',
-      label: '设备',
-      route: AppRoutes.settingsDevices,
-      icon: Icons.devices_outlined,
-      panel: UINavigationPanel.main,
-      order: 40,
-      builtin: true,
-    ),
-    UINavigationItem(
-      id: 'builtin.extensions',
-      label: '扩展中心',
-      route: AppRoutes.extensions,
-      icon: Icons.extension_outlined,
-      panel: UINavigationPanel.main,
-      order: 50,
-      routePrefixes: <String>['/extensions', '/extension'],
-      builtin: true,
-    ),
-    UINavigationItem(
-      id: 'builtin.workshop',
-      label: '创意工坊',
-      route: AppRoutes.workshop,
-      icon: Icons.brush_outlined,
-      panel: UINavigationPanel.main,
-      order: 60,
-      builtin: true,
-    ),
-  ];
+  static const List<UINavigationItem> builtinItems = <UINavigationItem>[];
 
   static const UINavigationItem channelMessagesItem = UINavigationItem(
     id: 'builtin.channelMessages',
@@ -107,8 +59,10 @@ abstract final class UINavigationRegistry {
     route: AppRoutes.channelMessages,
     icon: Icons.forum_outlined,
     panel: UINavigationPanel.main,
+    placement: UINavigationPlacement.primary,
     order: 55,
     builtin: true,
+    profile: true,
   );
 
   static List<UINavigationItem> resolve(UIProviderSnapshot? snapshot) {
@@ -184,9 +138,19 @@ abstract final class UINavigationRegistry {
             icon: baseIcon,
             panel:
                 (row['panel'] ?? '').toString() == 'main' ||
-                    (row['panel'] == null && row['mobile'] == true)
+                    (row['panel'] == null &&
+                        (row['mobile'] == true ||
+                            (row['tabLabel'] ?? '')
+                                .toString()
+                                .trim()
+                                .isNotEmpty))
                 ? UINavigationPanel.main
                 : UINavigationPanel.more,
+            placement: _resolvePlacement(
+              row,
+              route,
+              (row['group'] ?? '扩展').toString().trim(),
+            ),
             group: (row['group'] ?? '扩展').toString().trim().isEmpty
                 ? '扩展'
                 : (row['group'] ?? '扩展').toString().trim(),
@@ -196,6 +160,8 @@ abstract final class UINavigationRegistry {
                     .map((e) => e.toString().trim())
                     .where((e) => e.startsWith('/') && e != '/')
                     .toList(),
+            profile: row['profile'] == true || row['profileHub'] == true,
+            tabLabel: (row['tabLabel'] ?? '').toString().trim(),
             extensionId: provider.extensionId,
           ),
         );
@@ -210,10 +176,13 @@ abstract final class UINavigationRegistry {
             route: item.route,
             icon: UIIconRegistry.resolve(snapshot, item.id, item.icon),
             panel: item.panel,
+            placement: item.placement,
             group: item.group,
             order: item.order,
             routePrefixes: item.routePrefixes,
             builtin: item.builtin,
+            profile: item.profile,
+            tabLabel: item.tabLabel,
             extensionId: item.extensionId,
           ),
         )
@@ -232,6 +201,57 @@ abstract final class UINavigationRegistry {
       return a.id.compareTo(b.id);
     });
     return items;
+  }
+
+  static List<UINavigationItem> resolvePrimary(UIProviderSnapshot? snapshot) {
+    return resolve(snapshot)
+        .where((item) => item.placement == UINavigationPlacement.primary)
+        .toList(growable: false);
+  }
+
+  static List<UINavigationItem> resolveMobile(UIProviderSnapshot? snapshot) {
+    return resolve(snapshot)
+        .where(
+          (item) =>
+              item.panel == UINavigationPanel.main &&
+              (item.placement == UINavigationPlacement.primary ||
+                  item.placement == UINavigationPlacement.profile),
+        )
+        .toList(growable: false);
+  }
+
+  static UINavigationPlacement _resolvePlacement(
+    Map<String, dynamic> row,
+    String route,
+    String group,
+  ) {
+    final explicit = (row['placement'] ?? row['navigationPlacement'] ?? '')
+        .toString()
+        .trim()
+        .toLowerCase();
+    for (final placement in UINavigationPlacement.values) {
+      if (placement.name == explicit) return placement;
+    }
+    if (group == 'settings') return UINavigationPlacement.settings;
+    if (route == '/settings' ||
+        route.startsWith('/settings/') ||
+        route == '/logs' ||
+        route.startsWith('/logs/')) {
+      return UINavigationPlacement.profile;
+    }
+    if (group == 'workspace' ||
+        route == '/workspaces' ||
+        route.startsWith('/workspaces/')) {
+      return UINavigationPlacement.workspace;
+    }
+    if (row['profile'] == true ||
+        row['profileHub'] == true ||
+        row['mobile'] == true ||
+        (row['panel'] ?? '').toString().trim() == 'main' ||
+        (row['tabLabel'] ?? '').toString().trim().isNotEmpty) {
+      return UINavigationPlacement.primary;
+    }
+    return UINavigationPlacement.contextual;
   }
 
   static IconData iconFromName(String raw) => UIIconRegistry.iconFromName(raw);

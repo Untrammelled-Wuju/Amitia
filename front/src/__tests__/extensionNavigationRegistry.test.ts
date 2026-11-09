@@ -5,6 +5,7 @@ import {
   collectChannelPluginNavigationItems,
   collectExtensionNavigationItems,
   resolveBuiltinNavigationItems,
+  resolveMobileNavigationItems,
 } from "@/ui-runtime/navigationRegistry";
 import {
   collectEffectiveProviderRoutes,
@@ -75,6 +76,64 @@ describe("extension navigation registry", () => {
   it("keeps dashboard entries out of the sidebar", () => {
     const items = resolveBuiltinNavigationItems(store([]));
     expect(items.some((item) => item.route.startsWith("/dashboard"))).toBe(false);
+  });
+
+  it("classifies primary, settings, profile and workspace navigation separately", () => {
+    const items = collectExtensionNavigationItems(store([
+      provider({
+        providerId: "placement-routes",
+        extensionId: "com.example/placement",
+        capability: "route.registry",
+        metadata: {
+          routes: [
+            { id: "primary", path: "/primary", providerId: "placement-pages", capability: "page.provider" },
+            { id: "hub", path: "/hub", providerId: "placement-pages", capability: "page.provider" },
+            { id: "settings", path: "/storage", providerId: "placement-pages", capability: "page.provider" },
+            { id: "profile", path: "/logs", providerId: "placement-pages", capability: "page.provider" },
+            { id: "workspace", path: "/workspaces", providerId: "placement-pages", capability: "page.provider" },
+          ],
+          navigationItems: [
+            { id: "primary", label: "主入口", route: "/primary", group: "main", placement: "primary" },
+            { id: "hub", label: "业务中心", route: "/hub", group: "character", profile: true },
+            { id: "settings", label: "存储维护", route: "/storage", group: "settings" },
+            { id: "profile", label: "归档对话", route: "/logs", group: "logs" },
+            { id: "workspace", label: "工作区", route: "/workspaces", group: "workspace" },
+          ],
+        },
+      }),
+      pageProvider("com.example/placement", "placement-pages"),
+    ]));
+    expect(items.find((item) => item.route === "/primary")?.placement).toBe("primary");
+    expect(items.find((item) => item.route === "/hub")?.placement).toBe("primary");
+    expect(items.find((item) => item.route === "/storage")?.placement).toBe("settings");
+    expect(items.find((item) => item.route === "/logs")?.placement).toBe("profile");
+    expect(items.find((item) => item.route === "/workspaces")?.placement).toBe("workspace");
+  });
+
+  it("keeps settings and workspace pages out of mobile tabs", () => {
+    const items = collectExtensionNavigationItems(store([
+      provider({
+        providerId: "mobile-placement-routes",
+        extensionId: "com.example/mobile-placement",
+        capability: "route.registry",
+        metadata: {
+          routes: [
+            { id: "primary", path: "/tasks", providerId: "mobile-placement-pages", capability: "page.provider" },
+            { id: "profile", path: "/settings", providerId: "mobile-placement-pages", capability: "page.provider" },
+            { id: "settings", path: "/runtime-debug", providerId: "mobile-placement-pages", capability: "page.provider" },
+            { id: "workspace", path: "/workspaces", providerId: "mobile-placement-pages", capability: "page.provider" },
+          ],
+          navigationItems: [
+            { id: "primary", label: "任务", route: "/tasks", group: "tasks", tabLabel: "任务", mobile: true },
+            { id: "profile", label: "设置", route: "/settings", group: "space", tabLabel: "我的", mobile: true, profile: true },
+            { id: "settings", label: "运行时调试", route: "/runtime-debug", group: "settings", mobile: true },
+            { id: "workspace", label: "工作区", route: "/workspaces", group: "workspace", mobile: true },
+          ],
+        },
+      }),
+      pageProvider("com.example/mobile-placement", "mobile-placement-pages"),
+    ]));
+    expect(resolveMobileNavigationItems(items).map((item) => item.route)).toEqual(["/tasks", "/settings"]);
   });
 
   it("resolves character, memory and workshop hubs from plugins", () => {
@@ -172,11 +231,7 @@ describe("extension navigation registry", () => {
         providerId: "game-center-hub-page-provider",
       }),
     );
-    expect(items.filter((item) => item.group === "tasks").map((item) => ({
-      route: item.route,
-      label: item.label,
-      match: item.match,
-    }))).toEqual([{ route: "/continuity", label: "持续事项", match: ["/continuity"] }]);
+    expect(items.filter((item) => item.group === "tasks")).toEqual([]);
   });
 
   it("keeps channel center out of built-in navigation and lists plugins separately", () => {
@@ -456,6 +511,22 @@ describe("extension navigation registry", () => {
     const transientStore = { ...store([]), snapshot: null } as any;
     syncProviderRoutes(router, transientStore);
     expect(router.hasRoute("ui-provider:minecraft:routes.minecraft:main")).toBe(true);
+  });
+
+  it("removes routes and navigation after provider disable or uninstall refresh", () => {
+    const router = createRouter({ history: createMemoryHistory(), routes: [] });
+    const enabledProviders = [
+      routeRegistry("minecraft", "routes.minecraft", "/games/minecraft", "page.minecraft", 10),
+      pageProvider("minecraft", "page.minecraft"),
+    ];
+    syncProviderRoutes(router, store(enabledProviders));
+    expect(router.hasRoute("ui-provider:minecraft:routes.minecraft:main")).toBe(true);
+    expect(collectExtensionNavigationItems(store(enabledProviders))).toHaveLength(1);
+
+    const disabledProviders = enabledProviders.map((item) => provider({ ...item, enabled: false }));
+    syncProviderRoutes(router, store(disabledProviders));
+    expect(router.hasRoute("ui-provider:minecraft:routes.minecraft:main")).toBe(false);
+    expect(collectExtensionNavigationItems(store(disabledProviders))).toEqual([]);
   });
 
   it("removes character-scoped task, memory, and timeline routes", () => {

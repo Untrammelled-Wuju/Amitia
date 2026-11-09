@@ -7,7 +7,7 @@ import (
 
 const (
 	EmotionExtensionID             = "com.amitia.builtin.emotion"
-	ActiveTaskExtensionID          = "com.amitia.builtin.active-task"
+	ActiveTaskExtensionID          = "com.amitia/active-task"
 	HostRuntimeCharacterPsyche     = "host.character.psyche"
 	HostRuntimeCharacterActiveTask = "host.character.active-task"
 	HostRuntimeCharacterDetail     = "host.character.detail"

@@ -524,7 +524,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	agentAdminController.SetMCPConnections(mcpRuntime.Connections)
 	if err := extensionRuntime.Kernel.RecoverPackageOperations(context.Background()); err != nil {
 		log.Error("package operation recovery failed: ", err)
-		panic("failed to recover package operations")
+		log.Warn("Core continuing with package operations quarantined for recovery")
 	}
 	if err := kernelContainer.Recover(context.Background()); err != nil {
 		log.Warn("kernel recovery warning: ", err)

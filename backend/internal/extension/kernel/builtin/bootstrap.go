@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
@@ -89,10 +88,7 @@ func (b *Bootstrapper) RetireRemoved(ctx context.Context) error {
 	}
 	for _, installation := range installations {
 		extensionID := installation.ExtensionID
-		if !strings.HasPrefix(string(extensionID), PrefixBuiltin) {
-			continue
-		}
-		if _, ok := active[extensionID]; ok {
+		if !shouldRetireBuiltin(extensionID, active) {
 			continue
 		}
 		if b.contributions != nil {
@@ -116,6 +112,14 @@ func (b *Bootstrapper) RetireRemoved(ctx context.Context) error {
 		log.Printf("[builtin-bootstrap] retired %s", extensionID)
 	}
 	return nil
+}
+
+func shouldRetireBuiltin(extensionID domain.ExtensionID, active map[domain.ExtensionID]struct{}) bool {
+	if extensionID != RetiredSearchExtensionID {
+		return false
+	}
+	_, exists := active[extensionID]
+	return !exists
 }
 
 func (b *Bootstrapper) reconcileDefinition(ctx context.Context, def Definition) error {

@@ -427,6 +427,7 @@
             "metadata": {
               "navigationItems": [
                 {
+                  "placement": "contextual",
                   "id": "wechat-connect",
                   "label": "微信连接",
                   "route": "/channels/wechat",
@@ -444,7 +445,8 @@
                   "path": "/channels/wechat",
                   "priority": 200,
                   "providerId": "wechat-page-provider",
-                  "title": "微信连接"
+                  "title": "微信连接",
+                  "wrapper": "channel.workspace"
                 }
               ]
             },

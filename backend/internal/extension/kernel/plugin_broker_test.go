@@ -228,6 +228,7 @@ func TestPluginBrokerRequiresDeclaredAdapterPermissions(t *testing.T) {
 
 type brokerTestContributionHandler struct {
 	deactivateErr error
+	deactivated   *[]string
 }
 
 type brokerTestContributionRegistration struct {
@@ -238,18 +239,109 @@ func (r *brokerTestContributionRegistration) ID() string {
 	return r.id
 }
 
-func (h *brokerTestContributionHandler) Build(context.Context, plugincontract.ModuleRef, plugincontract.ContributionDescriptor) (plugincontract.ContributionRegistration, error) {
-	return &brokerTestContributionRegistration{id: "broker-test"}, nil
+func (h *brokerTestContributionHandler) Build(_ context.Context, _ plugincontract.ModuleRef, descriptor plugincontract.ContributionDescriptor) (plugincontract.ContributionRegistration, error) {
+	return &brokerTestContributionRegistration{id: descriptor.ID}, nil
 }
 
 func (h *brokerTestContributionHandler) Activate(context.Context, plugincontract.ContributionRegistration) error {
 	return nil
 }
 
-func (h *brokerTestContributionHandler) Deactivate(context.Context, plugincontract.ContributionRegistration) error {
+func (h *brokerTestContributionHandler) Deactivate(_ context.Context, registration plugincontract.ContributionRegistration) error {
+	if h.deactivated != nil {
+		*h.deactivated = append(*h.deactivated, registration.ID())
+	}
 	return h.deactivateErr
 }
 
 func (h *brokerTestContributionHandler) Discard(context.Context, plugincontract.ContributionRegistration) error {
 	return nil
+}
+
+func TestPluginBrokerEnforcesDynamicRouteLimit(t *testing.T) {
+	descriptor := plugincontract.ContributionDescriptor{
+		ID:      "routes",
+		Kind:    "ui_provider",
+		Adapter: "ui_provider",
+		Spec: map[string]any{
+			"metadata": map[string]any{
+				"routes": []any{
+					map[string]any{"path": "/one"},
+					map[string]any{"path": "/two"},
+				},
+			},
+		},
+	}
+	limits := plugincontract.DynamicCapability{MaxContributions: 2, MaxRoutes: 2}
+	if err := dynamicContributionLimitError("com.example/routes/main", limits, 1, 0, 1, descriptor); err == nil {
+		t.Fatal("expected dynamic route limit rejection")
+	}
+	limits.MaxRoutes = 4
+	if err := dynamicContributionLimitError("com.example/routes/main", limits, 1, 0, 1, descriptor); err != nil {
+		t.Fatalf("route count within limit was rejected: %v", err)
+	}
+}
+
+func TestPluginBrokerReleaseExtensionCleansContributionsAndServices(t *testing.T) {
+	registry := plugincontract.NewAdapterRegistry(plugincontract.AdapterRegistrationPolicy{
+		MinTrust: plugincontract.TrustUserTrusted,
+	})
+	adapter := plugincontract.AdapterDescriptor{
+		ID:                 "release_test",
+		ContractVersion:    1,
+		SupportedKinds:     []string{"release_test_kind"},
+		ContributionSchema: json.RawMessage(`{"type":"object"}`),
+		Trust:              plugincontract.TrustUserTrusted,
+	}
+	if err := registry.Register(adapter); err != nil {
+		t.Fatal(err)
+	}
+	router := plugincontract.NewContributionRouter(registry)
+	var deactivated []string
+	handler := &brokerTestContributionHandler{deactivated: &deactivated}
+	if err := router.Register(adapter.ID, adapter.ContractVersion, handler); err != nil {
+		t.Fatal(err)
+	}
+	catalog := plugincontract.NewServiceCatalog()
+	broker := &PluginBroker{
+		container: &Container{
+			PluginRoutes:   router,
+			PluginServices: catalog,
+		},
+		contributions: make(map[string]map[string]dynamicContributionRecord),
+		offers:        make(map[string][]plugincontract.ServiceOffer),
+		requirements:  make(map[string][]plugincontract.ServiceRequirement),
+	}
+	module := plugincontract.ModuleRef{PluginID: "com.example/release", ModuleID: "main"}
+	for _, id := range []string{"first", "second"} {
+		if err := broker.RegisterContribution(context.Background(), module, plugincontract.ContributionDescriptor{
+			ID:              id,
+			Kind:            "release_test_kind",
+			Adapter:         adapter.ID,
+			ContractVersion: adapter.ContractVersion,
+			Name:            plugincontract.LocalizedText{Default: id},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := broker.ProvideService(module, plugincontract.ServiceOffer{
+		ServiceID: "release.echo",
+		Version:   "1.0.0",
+		Scopes:    []plugincontract.ServiceScope{plugincontract.ServiceScopeGlobal},
+		Placement: plugincontract.ServicePlacementDevice,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := broker.ReleaseExtension(context.Background(), module.PluginID); err != nil {
+		t.Fatal(err)
+	}
+	if len(deactivated) != 2 || deactivated[0] != "second" || deactivated[1] != "first" {
+		t.Fatalf("contributions were not deactivated in reverse order: %#v", deactivated)
+	}
+	if len(broker.contributions[module.Key()]) != 0 || len(broker.registrationOrder) != 0 {
+		t.Fatalf("dynamic contribution state remained: %+v", broker.contributions)
+	}
+	if _, exists := catalog.Get(module); exists {
+		t.Fatal("dynamic service module remained registered")
+	}
 }

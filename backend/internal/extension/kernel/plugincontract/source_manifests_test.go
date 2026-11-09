@@ -41,7 +41,7 @@ func TestBuiltInAndOrdinaryPluginSourcesAreSeparated(t *testing.T) {
 		"com.amitia/runtime-insights":      true,
 		"com.amitia/workspace":             true,
 		"com.amitia/chat-import":           true,
-		"com.amitia.builtin.active-task":   true,
+		"com.amitia/active-task":           true,
 		"com.amitia/storage":               true,
 		"com.amitia/chat-logs":             true,
 		"com.amitia/memory-hub":            true,
@@ -93,6 +93,49 @@ func TestBuiltInAndOrdinaryPluginSourcesAreSeparated(t *testing.T) {
 			t.Errorf("built-in plugin %s must not live under plugins-code", manifest.Plugin.ID)
 		}
 	}
+}
+
+func TestSourceNavigationItemsDeclarePlacement(t *testing.T) {
+	workspaceRoot := filepath.Join("..", "..", "..", "..", "..")
+	manifests := sourceManifestPaths(t, filepath.Join(workspaceRoot, "plugins-builtin"))
+	manifests = append(manifests, sourceManifestPaths(t, filepath.Join(workspaceRoot, "plugins-code"))...)
+	valid := map[string]bool{
+		"primary":    true,
+		"settings":   true,
+		"profile":    true,
+		"workspace":  true,
+		"contextual": true,
+	}
+	for _, path := range manifests {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		manifest, err := Parse(data)
+		if err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		for _, module := range manifest.Modules {
+			for _, contribution := range module.Contributions {
+				metadata, _ := contribution.Spec["metadata"].(map[string]any)
+				items, _ := metadata["navigationItems"].([]any)
+				for _, raw := range items {
+					item, _ := raw.(map[string]any)
+					placement := strings.TrimSpace(metadataString(item["placement"]))
+					if !valid[placement] {
+						t.Errorf("%s: navigation item %s has invalid placement %q", path, metadataString(item["id"]), placement)
+					}
+				}
+			}
+		}
+	}
+}
+
+func metadataString(value any) string {
+	if value == nil {
+		return ""
+	}
+	return value.(string)
 }
 
 func sourceManifestPaths(t *testing.T, root string) []string {

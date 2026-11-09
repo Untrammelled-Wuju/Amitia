@@ -96,12 +96,12 @@
     }
   },
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
+    "build": "node node_modules/typescript/bin/tsc && node scripts/fix-esm-imports.mjs",
+    "dev": "node node_modules/typescript/bin/tsc --watch",
     "lint": "eslint src --ext .ts",
-    "test": "vitest run",
+    "test": "node node_modules/vitest/vitest.mjs run",
     "test:scheduled-tasks": "node scripts/test-scheduled-tasks.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "node node_modules/typescript/bin/tsc --noEmit"
   },
   "devDependencies": {
     "typescript": "^5.4.0",

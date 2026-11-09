@@ -49,7 +49,7 @@ func TestUITaskDerivedSnapshotRetainsCloudOwner(t *testing.T) {
 	definitions := permission.NewPermissionDefinitionRegistry()
 	definitions.Register(permission.PermissionDefinition{ID: "active_task.create"})
 	owner := json.RawMessage(`{"spaceId":"space","coreId":"cloud-core","initiatorDeviceId":"phone","targetDeviceId":"phone","roleId":"role","resourceOwnerId":"phone"}`)
-	source := scope.ScopeSnapshot{SnapshotID: "ui-owner", ExtensionID: "com.amitia.builtin.active-task", ModuleID: "active-task-ui", CharacterID: "role", ConversationID: "conversation", Generation: 2, CreatedAt: time.Now().UTC(), OwnedExecutionScope: owner, ResolvedScopes: []scope.ScopeRef{scope.NewExtensionScope("com.amitia.builtin.active-task"), scope.NewModuleScope("com.amitia.builtin.active-task", "active-task-ui")}}
+	source := scope.ScopeSnapshot{SnapshotID: "ui-owner", ExtensionID: "com.amitia/active-task", ModuleID: "active-task-ui", CharacterID: "role", ConversationID: "conversation", Generation: 2, CreatedAt: time.Now().UTC(), OwnedExecutionScope: owner, ResolvedScopes: []scope.ScopeRef{scope.NewExtensionScope("com.amitia/active-task"), scope.NewModuleScope("com.amitia/active-task", "active-task-ui")}}
 	if err := scopes.SaveSnapshot(t.Context(), source); err != nil {
 		t.Fatal(err)
 	}

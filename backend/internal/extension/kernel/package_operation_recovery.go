@@ -148,6 +148,18 @@ func (r *Runtime) recoverPackageOperation(ctx context.Context, operation Package
 		return nil
 	}
 	completed := completedPackageSteps(steps)
+	if packageOperationStoppedBeforeGeneration(operation, completed) {
+		return r.container.PackageRepository.SetOperation(
+			ctx,
+			operation.OperationID,
+			"failed",
+			"recovered_before_generation",
+			"PACKAGE_UPDATE_FAILED",
+			"package operation stopped before generation commit",
+			true,
+			guard,
+		)
+	}
 	switch operation.OperationType {
 	case "install":
 		compensated, reconcileErr := r.reconcileInstalledPackageGeneration(ctx, operation)
@@ -535,6 +547,23 @@ func completedPackageSteps(steps []PackageOperationStep) map[string]PackageOpera
 		}
 	}
 	return result
+}
+
+func packageOperationStoppedBeforeGeneration(operation PackageOperationRecord, completed map[string]PackageOperationStep) bool {
+	if strings.TrimSpace(operation.CurrentPointerJSON) != "" ||
+		strings.TrimSpace(operation.StableGeneration) != "" ||
+		strings.TrimSpace(operation.TargetGeneration) != "" {
+		return false
+	}
+	if len(completed) == 0 {
+		return false
+	}
+	for name := range completed {
+		if !strings.HasPrefix(name, "confirmation.") {
+			return false
+		}
+	}
+	return true
 }
 
 func (r *Runtime) reconcileInstalledPackageGeneration(ctx context.Context, operation PackageOperationRecord) (bool, error) {

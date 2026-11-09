@@ -27,28 +27,27 @@ const _protectedRouteNamespaces = <String>{
   AppRoutes.conversations,
   AppRoutes.conversationSearch,
   AppRoutes.dashboard,
-  AppRoutes.characters,
   AppRoutes.agent,
   AppRoutes.me,
   AppRoutes.memoryHub,
-  AppRoutes.memory,
   AppRoutes.knowledge,
   AppRoutes.extensions,
   '/extension',
-  AppRoutes.settings,
-  AppRoutes.developer,
 };
 
 const _openProviderRouteNamespaces = <String>{
   AppRoutes.extensions,
-  AppRoutes.settings,
-  AppRoutes.characters,
   AppRoutes.me,
-  AppRoutes.memory,
-  AppRoutes.developer,
+  AppRoutes.memoryHub,
 };
 
 const _protectedProviderRoutePaths = <String>{AppRoutes.settingsUIProviders};
+const _providerContentShellPaths = <String>{
+  AppRoutes.tasks,
+  AppRoutes.memoryHub,
+  AppRoutes.extensions,
+  AppRoutes.me,
+};
 
 String? _rootNamespace(String path) {
   final normalized = path.trim();
@@ -62,6 +61,7 @@ String? _rootNamespace(String path) {
 
 bool isProtectedProviderRoutePath(String path) {
   final normalized = path.trim();
+  if (_providerContentShellPaths.contains(normalized)) return false;
   if (_protectedProviderRoutePaths.contains(normalized)) return true;
   final namespace = _rootNamespace(path);
   if (namespace == null) return false;
@@ -99,6 +99,7 @@ class UIRegisteredProviderRoute {
     required this.providerId,
     required this.capability,
     required this.priority,
+    this.wrapper,
   });
   final UIProviderDefinition registry;
   final String id;
@@ -106,6 +107,7 @@ class UIRegisteredProviderRoute {
   final String providerId;
   final String capability;
   final int priority;
+  final String? wrapper;
 }
 
 List<UIProviderDefinition> _activeRegistries(UIProviderSnapshot snapshot) {
@@ -175,6 +177,9 @@ List<UIRegisteredProviderRoute> resolveProviderRoutes(
           priority: rawPriority is num
               ? rawPriority.toInt()
               : registry.priority,
+          wrapper: (row['wrapper'] ?? '').toString().trim().isEmpty
+              ? null
+              : (row['wrapper'] ?? '').toString().trim(),
         ),
       );
     }
@@ -229,6 +234,7 @@ String uiRouteRegistrySignature(UIProviderSnapshot? snapshot) {
 List<RouteBase> buildProviderRoutes(UIProviderSnapshot? snapshot) {
   if (snapshot == null) return const <RouteBase>[];
   return resolveProviderRoutes(snapshot)
+      .where((spec) => !_providerContentShellPaths.contains(spec.path))
       .map((spec) {
         final routeName =
             'ui-provider-${spec.registry.extensionId}-${spec.registry.providerId}-${spec.id}'
@@ -244,7 +250,7 @@ List<RouteBase> buildProviderRoutes(UIProviderSnapshot? snapshot) {
               'routeRegistryProviderId': spec.registry.providerId,
               ..._routeIdentity(state.pathParameters),
             };
-            if (spec.path.startsWith('/channels/')) {
+            if (spec.wrapper == 'channel.workspace') {
               return ChannelPluginWorkspacePage(
                 providerId: spec.providerId,
                 capability: spec.capability,

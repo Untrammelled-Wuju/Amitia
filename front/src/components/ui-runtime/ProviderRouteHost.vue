@@ -13,7 +13,8 @@ const context = computed(() => buildProviderRouteContext(
   route.params,
   route.query,
 ));
-const isChannelPlugin = computed(() => route.path.startsWith("/channels/"));
+const providerWrapper = computed(() => String(route.meta.providerWrapper ?? ""));
+const isChannelPlugin = computed(() => providerWrapper.value === "channel.workspace");
 const EmptyFallback = { template: '<div class="ui-provider-route-unavailable">UI provider unavailable</div>' };
 </script>
 

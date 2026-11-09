@@ -2,6 +2,7 @@ package kernel
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"testing"
 	"time"
@@ -199,5 +200,62 @@ func TestUninstall_SucceedsWhenStopSucceeds(t *testing.T) {
 	_, getErr := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(extID))
 	if getErr == nil {
 		t.Fatalf("installation record must be deleted after successful uninstall")
+	}
+}
+
+func TestUninstallAppliesExtensionDataPolicy(t *testing.T) {
+	for _, policy := range []string{"retain", "delete", "export"} {
+		t.Run(policy, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			extID := "com.amitia.test/data-" + policy
+			rt, container, extRoot := setupUninstallTestRuntime(t, ctx, extID, runtime_supervisor.NewFakeRuntime())
+			defer container.Close()
+			version := domain.SemanticVersion{Major: 1, Minor: 0, Patch: 0}
+			if err := container.DefinitionRepository.PutExtension(ctx, domain.ExtensionDefinition{
+				ID:              domain.ExtensionID(extID),
+				Name:            domain.LocalizedText{Default: "Data Policy Test"},
+				Version:         version,
+				ManifestVersion: 1,
+				Metadata: map[string]any{
+					"data.export":    policy == "export",
+					"data.uninstall": policy,
+				},
+				Modules: []domain.ModuleDefinition{{
+					ID:          "main",
+					ExtensionID: domain.ExtensionID(extID),
+					Name:        domain.LocalizedText{Default: "main"},
+					Type:        domain.ModuleTypeService,
+					Runtime:     &domain.RuntimeDefinition{Type: domain.RuntimeTypeGo},
+				}},
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := container.ExtensionStateStore.Set(ctx, extID, "main", "state", json.RawMessage(`{"value":1}`)); err != nil {
+				t.Fatal(err)
+			}
+			if err := rt.Uninstall(ctx, extID); err != nil {
+				t.Fatal(err)
+			}
+			_, _, found, err := container.ExtensionStateStore.Get(ctx, extID, "main", "state")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if policy == "retain" && !found {
+				t.Fatal("retain policy removed extension state")
+			}
+			if policy != "retain" && found {
+				t.Fatal("delete or export policy retained extension state")
+			}
+			if policy == "export" {
+				matches, err := filepath.Glob(filepath.Join(extRoot, "extension-data", "*", "exports", "*.json"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(matches) != 1 {
+					t.Fatalf("expected one extension data export, got %v", matches)
+				}
+			}
+		})
 	}
 }

@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -13,6 +13,35 @@ const nodeBinary = process.platform === "win32"
 if (!existsSync(nodeBinary)) {
   throw new Error(`Node binary not found: ${nodeBinary}`);
 }
+
+const sdkRoot = resolve(repositoryRoot, "sdk", "plugin-sdk");
+const sdkProject = resolve(sdkRoot, "tsconfig.json");
+const sdkTsc = [
+  resolve(sdkRoot, "node_modules", "typescript", "bin", "tsc"),
+  resolve(desktopRoot, "node_modules", "typescript", "bin", "tsc"),
+].find((candidate) => existsSync(candidate));
+if (!sdkTsc) {
+  throw new Error("TypeScript compiler not found for plugin SDK");
+}
+const sdkBuild = spawnSync(nodeBinary, [sdkTsc, "--project", sdkProject], {
+  cwd: sdkRoot,
+  stdio: "inherit",
+  shell: false,
+});
+if (sdkBuild.error) throw sdkBuild.error;
+if (sdkBuild.status !== 0) {
+  throw new Error(`plugin SDK build failed with exit code ${sdkBuild.status}`);
+}
+const sdkFixImports = spawnSync(nodeBinary, [resolve(sdkRoot, "scripts", "fix-esm-imports.mjs")], {
+  cwd: sdkRoot,
+  stdio: "inherit",
+  shell: false,
+});
+if (sdkFixImports.error) throw sdkFixImports.error;
+if (sdkFixImports.status !== 0) {
+  throw new Error(`plugin SDK import repair failed with exit code ${sdkFixImports.status}`);
+}
+const sdkDist = resolve(sdkRoot, "dist");
 
 for (const host of ["plugin-host", "task-host"]) {
   const project = resolve(repositoryRoot, "runtime", host, "tsconfig.json");
@@ -33,6 +62,13 @@ for (const host of ["plugin-host", "task-host"]) {
     throw new Error(`${host} build failed with exit code ${result.status}`);
   }
   const sourceDist = resolve(repositoryRoot, "runtime", host, "dist");
+  if (host === "plugin-host") {
+    const bundledSdk = resolve(sourceDist, "sdk", "plugin-sdk");
+    rmSync(bundledSdk, { recursive: true, force: true });
+    mkdirSync(bundledSdk, { recursive: true });
+    cpSync(sdkDist, bundledSdk, { recursive: true });
+    writeFileSync(resolve(bundledSdk, "package.json"), JSON.stringify({ type: "module" }) + "\n");
+  }
   const targetDist = resolve(repositoryRoot, "AmitiaData", host, "dist");
   const suffix = `${process.pid}-${Date.now()}`;
   const tempDist = `${targetDist}.tmp-${suffix}`;

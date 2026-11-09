@@ -196,6 +196,12 @@ export interface BackendUIContributionSnapshot {
   profile?: BackendUIProfile;
   profileLayers?: BackendUIProfile[];
   resolved?: Record<string, BackendUIProviderDefinition>;
+  providerResolutions?: Record<string, {
+    providerId: string;
+    capability: string;
+    compatible: boolean;
+    reason?: string;
+  }>;
   providerContext?: Record<string, unknown>;
   providerVersion?: number;
 }

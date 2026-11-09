@@ -282,6 +282,28 @@ func TestPackageGenerationQuarantineIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestPackageGenerationRemovesOnlyExtensionInstallationRoot(t *testing.T) {
+	root := t.TempDir()
+	store := NewPackageGenerationStore(root)
+	target := filepath.Join(root, "installations", "com.example.removed")
+	keep := filepath.Join(root, "installations", "com.example.kept")
+	if err := os.MkdirAll(target, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(keep, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RemoveExtensionRoot("com.example.removed"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(target); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("removed extension root still exists: %v", err)
+	}
+	if _, err := os.Stat(keep); err != nil {
+		t.Fatalf("unrelated extension root was removed: %v", err)
+	}
+}
+
 func TestPackageGenerationWindowsReplacementLeavesRecoverablePrevious(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("windows replacement behavior")

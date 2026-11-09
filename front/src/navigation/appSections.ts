@@ -56,10 +56,18 @@ export const appSections: AppSectionDefinition[] = [
   },
 ];
 
+const settingsSectionRoutes = new Set([
+  "/storage",
+  "/runtime-debug",
+  "/decision-viz",
+  "/long-running",
+]);
+
 export function resolveAppSection(target: string): AppSectionId | null {
   const path = target.split(/[?#]/)[0];
   if (path === "/chat" || path === "/logs") return "home";
   if (path === "/settings" || path.startsWith("/settings/")) return "settings";
+  if (settingsSectionRoutes.has(path)) return "settings";
   if (path === "/my-space" || path.startsWith("/my-space/")) return "account";
   if (path === "/channel-center" || path.startsWith("/channels/")) return "channels";
   if (path === "/reminders" || path === "/continuity" || /^\/characters\/[^/]+\/active-task$/.test(path)) return "tasks";

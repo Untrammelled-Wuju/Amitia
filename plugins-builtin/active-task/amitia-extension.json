@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
   "plugin": {
-    "id": "com.amitia.builtin.active-task",
+    "id": "com.amitia/active-task",
     "name": {
       "default": "主动任务"
     },
     "description": {
       "default": "通过统一 Host API 管理主动任务、时间提醒、队列和执行历史。"
     },
-    "version": "1.2.1",
+    "version": "1.2.5",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -76,15 +76,15 @@
           "ui",
           "ui_provider"
         ],
-        "maxContributions": 6,
+        "maxContributions": 8,
         "maxTools": 1,
-        "maxRoutes": 3,
+        "maxRoutes": 4,
         "maxServices": 0,
         "allowUnregister": true
       },
       "contributions": [
         {
-          "id": "active-task-command",
+        "id": "active-task-command",
           "kind": "tool",
           "adapter": "tool",
           "contractVersion": 1,
@@ -95,7 +95,7 @@
             "default": "管理主动任务与定时提醒。"
           },
           "spec": {
-            "toolId": "com.amitia.builtin.active-task/command",
+            "toolId": "com.amitia/active-task/command",
             "modelName": "amitia_active_tasks",
             "handlerName": "command",
             "inputSchema": {
@@ -170,7 +170,7 @@
           },
           "spec": {
             "contribution_id": "active-task-page",
-            "extension_id": "com.amitia.builtin.active-task",
+            "extension_id": "com.amitia/active-task",
             "module_id": "active-task-runtime",
             "kind": "schema_page",
             "slot": {
@@ -202,9 +202,7 @@
               "platforms": [
                 "windows",
                 "linux",
-                "macos",
-                "android",
-                "ios"
+                "macos"
               ]
             },
             "actions": [
@@ -215,7 +213,7 @@
                 },
                 "target": {
                   "type": "tool",
-                  "tool_id": "com.amitia.builtin.active-task/command"
+                  "tool_id": "com.amitia/active-task/command"
                 },
                 "risk_level": "high"
               }
@@ -238,6 +236,57 @@
           ]
         },
         {
+          "id": "active-task-mobile-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "主动任务移动端页面"
+          },
+          "spec": {
+            "contribution_id": "active-task-mobile-page",
+            "extension_id": "com.amitia/active-task",
+            "module_id": "active-task-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "主动任务"
+              },
+              "description": {
+                "default": "在移动端管理主动任务、队列和历史。"
+              },
+              "icon": "alarm-clock"
+            },
+            "entry": {
+              "type": "host_native",
+              "path": "builtin://com.amitia/active-task/mobile",
+              "runtime_id": "host.mobile.native-page",
+              "content_hash": "builtin"
+            },
+            "sandbox": {
+              "type": "host_native"
+            },
+            "ordering": {
+              "priority": 248
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "actions": [],
+            "integrity": {
+              "definition_hash": "active-task-mobile-page-v1"
+            }
+          }
+        },
+        {
           "id": "continuity-page",
           "kind": "ui_page",
           "adapter": "ui",
@@ -247,7 +296,7 @@
           },
           "spec": {
             "contribution_id": "continuity-page",
-            "extension_id": "com.amitia.builtin.active-task",
+            "extension_id": "com.amitia/active-task",
             "module_id": "active-task-runtime",
             "kind": "schema_page",
             "slot": {
@@ -266,7 +315,7 @@
             },
             "entry": {
               "type": "host_native",
-              "path": "builtin://com.amitia.builtin.active-task/continuity",
+              "path": "builtin://com.amitia/active-task/continuity",
               "runtime_id": "host.tasks.continuity",
               "content_hash": "builtin"
             },
@@ -280,14 +329,63 @@
               "platforms": [
                 "windows",
                 "linux",
-                "macos",
+                "macos"
+              ]
+            },
+            "actions": [],
+            "integrity": {
+              "definition_hash": "continuity-page-v1"
+            }
+          }
+        },
+        {
+          "id": "continuity-mobile-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "持续事项移动端页面"
+          },
+          "spec": {
+            "contribution_id": "continuity-mobile-page",
+            "extension_id": "com.amitia/active-task",
+            "module_id": "active-task-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "持续事项"
+              },
+              "description": {
+                "default": "在移动端查看长期目标和持续事项。"
+              },
+              "icon": "continuity"
+            },
+            "entry": {
+              "type": "host_native",
+              "path": "builtin://com.amitia/active-task/continuity-mobile",
+              "runtime_id": "host.tasks.continuity",
+              "content_hash": "builtin"
+            },
+            "sandbox": {
+              "type": "host_native"
+            },
+            "ordering": {
+              "priority": 247
+            },
+            "visibility": {
+              "platforms": [
                 "android",
                 "ios"
               ]
             },
             "actions": [],
             "integrity": {
-              "definition_hash": "continuity-page-v1"
+              "definition_hash": "continuity-mobile-page-v1"
             }
           }
         },
@@ -325,6 +423,15 @@
             "metadata": {
               "routes": [
                 {
+                  "id": "tasks-hub",
+                  "path": "/tasks",
+                  "providerId": "active-task-page-provider",
+                  "capability": "page.provider",
+                  "title": "任务",
+                  "priority": 249
+                },
+                {
+                  "placement": "primary",
                   "id": "active-task",
                   "path": "/reminders",
                   "providerId": "active-task-page-provider",
@@ -367,15 +474,21 @@
               ],
               "navigationItems": [
                 {
+                  "placement": "primary",
                   "id": "active-task",
                   "label": "任务",
-                  "route": "/reminders",
+                  "tabLabel": "任务",
+                  "route": "/tasks",
                   "icon": "calendar",
                   "group": "tasks",
                   "groupLabel": "任务",
                   "groupIcon": "calendar",
                   "order": 69,
-                  "mobile": false
+                  "mobile": true,
+                  "match": [
+                    "/tasks",
+                    "/reminders"
+                  ]
                 }
               ]
             }
@@ -414,12 +527,13 @@
               },
               "mobile": {
                 "type": "schema_renderer",
-                "contributionId": "active-task-page"
+                "contributionId": "active-task-mobile-page"
               }
             },
             "metadata": {
               "routes": [
-                "/reminders"
+                "/reminders",
+                "/tasks"
               ]
             }
           }
@@ -457,7 +571,7 @@
               },
               "mobile": {
                 "type": "schema_renderer",
-                "contributionId": "continuity-page"
+                "contributionId": "continuity-mobile-page"
               }
             },
             "metadata": {

@@ -19,6 +19,7 @@ export interface ProviderRouteDefinition {
   capability?: UIProviderCapability;
   title?: string;
   priority: number;
+  wrapper?: string;
 }
 
 const PROVIDER_ROUTE_PREFIX = "ui-provider:";
@@ -122,6 +123,7 @@ function providerRoutes(provider: UIProviderDefinition): ProviderRouteDefinition
       capability: capabilityValue,
       title: row.title ? String(row.title) : undefined,
       priority: finiteNumber(row.priority, finiteNumber(provider.priority, 0)),
+      wrapper: row.wrapper ? String(row.wrapper).trim() : undefined,
     });
   }
   return routes;
@@ -247,6 +249,7 @@ export function syncProviderRoutes(router: Router, store: ExtensionUIStore): voi
       target.providerId !== route.meta.uiProviderId ||
       (target.capability ?? "page.provider") !== route.meta.uiCapability ||
       target.extensionId !== route.meta.extensionId ||
+      (target.wrapper ?? "") !== String(route.meta.providerWrapper ?? "") ||
       route.meta.fullHeight !== true
     ) {
       router.removeRoute(name);
@@ -277,6 +280,7 @@ export function syncProviderRoutes(router: Router, store: ExtensionUIStore): voi
         extensionRoute: true,
         extensionId: route.extensionId,
         routeRegistryProviderId: route.registryProviderId,
+        providerWrapper: route.wrapper,
         fullHeight: true,
       },
     });

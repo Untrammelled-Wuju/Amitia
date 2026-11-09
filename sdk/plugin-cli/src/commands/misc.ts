@@ -6,6 +6,7 @@ import * as http from "node:http";
 import * as https from "node:https";
 import * as os from "node:os";
 import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { buildPackage, inspectPackage, readZip, createZip } from "../archive.js";
 import type { ArchiveEntry } from "../archive.js";
@@ -39,7 +40,32 @@ export const buildCommand: CliCommand = {
   async run(ctx: CliContext, args: string[]): Promise<CliCommandResult> {
     const opts = parseOptions(args);
     const config = path.resolve(ctx.cwd, opts["--config"] ?? "tsconfig.json");
-    return runLocalTool(ctx, "typescript", ["-p", config], "build", "typescript/bin/tsc");
+    const projectTsc = path.resolve(ctx.cwd, "node_modules", "typescript", "bin", "tsc");
+    const tsc = fs.existsSync(projectTsc)
+      ? projectTsc
+      : fileURLToPath(new URL("../../node_modules/typescript/bin/tsc", import.meta.url));
+    if (!fs.existsSync(tsc)) {
+      return { exitCode: EXIT_CODES.CONFIGURATION_ERROR, message: `typescript is not installed in ${ctx.cwd}` };
+    }
+    const sdkEntry = fileURLToPath(new URL("../../node_modules/@amitia/plugin-sdk/dist/index.d.ts", import.meta.url));
+    const overlay = path.join(os.tmpdir(), `amitia-tsconfig-${process.pid}-${Date.now()}.json`);
+    fs.writeFileSync(overlay, JSON.stringify({
+      extends: config,
+      compilerOptions: {
+        baseUrl: ctx.cwd,
+        paths: {
+          "@amitia/plugin-sdk": [sdkEntry],
+        },
+      },
+    }, null, 2));
+    try {
+      const result = spawnSync(process.execPath, [tsc, "-p", overlay], { cwd: ctx.cwd, stdio: "inherit" });
+      if (result.error) return { exitCode: EXIT_CODES.ENVIRONMENT_ERROR, message: result.error.message };
+      const exitCode = result.status ?? EXIT_CODES.ENVIRONMENT_ERROR;
+      return { exitCode, message: exitCode === 0 ? "build succeeded" : "build failed" };
+    } finally {
+      fs.rmSync(overlay, { force: true });
+    }
   },
 };
 
@@ -201,19 +227,39 @@ export const installCommand: CliCommand = {
   options: [
     { name: "--package", shortName: "-p", description: "Package path", takesValue: true, required: true },
     { name: "--host", description: "Developer Host endpoint", takesValue: true, defaultValue: "" },
+    { name: "--token", description: "Local runtime token", takesValue: true },
+    { name: "--token-file", description: "Local runtime token file", takesValue: true },
+    { name: "--scope", description: "Installation scope", takesValue: true, defaultValue: "global" },
+    { name: "--scope-id", description: "Installation scope id", takesValue: true, defaultValue: "" },
+    { name: "--no-enable", description: "Do not enable after installation" },
   ],
   async run(ctx: CliContext, args: string[]): Promise<CliCommandResult> {
-    const opts = parseOptions(args);
+    const opts = parseOptions(args, installCommand.options);
     if (!opts["--package"]) {
       return {
         exitCode: EXIT_CODES.CONFIGURATION_ERROR,
         message: "missing required option: --package",
       };
     }
-    return {
-      exitCode: EXIT_CODES.HOST_CONNECTION_ERROR,
-      message: "CLI host installation is not available in the MVP; use the extension center",
-    };
+    try {
+      const host = resolveHost(opts);
+      const token = resolveLocalToken(ctx, opts);
+      const packagePath = path.resolve(ctx.cwd, opts["--package"]);
+      const payload = await installPackage(host, token, packagePath, opts["--scope"] ?? "global", opts["--scope-id"] ?? "");
+      if (opts["--no-enable"] === undefined) {
+        await hostJSON(host, token, "POST", "/api/extensions/kernel/extensions/enable", { id: payload.extensionId });
+      }
+      return {
+        exitCode: EXIT_CODES.SUCCESS,
+        message: `installed ${payload.extensionId} ${payload.version}${opts["--no-enable"] === undefined ? " and enabled" : ""}`,
+        data: payload,
+      };
+    } catch (cause) {
+      return {
+        exitCode: EXIT_CODES.HOST_CONNECTION_ERROR,
+        message: cause instanceof Error ? cause.message : String(cause),
+      };
+    }
   },
 };
 
@@ -223,21 +269,60 @@ export const uninstallCommand: CliCommand = {
   usage: "amitia-ext uninstall <extensionId>",
   options: [
     { name: "--host", description: "Developer Host endpoint", takesValue: true, defaultValue: "" },
+    { name: "--token", description: "Local runtime token", takesValue: true },
+    { name: "--token-file", description: "Local runtime token file", takesValue: true },
+    { name: "--scope", description: "Installation scope", takesValue: true, defaultValue: "global" },
+    { name: "--scope-id", description: "Installation scope id", takesValue: true, defaultValue: "" },
   ],
   async run(ctx: CliContext, args: string[]): Promise<CliCommandResult> {
-    const extensionId = args[0];
+    const opts = parseOptions(args, uninstallCommand.options);
+    const extensionId = positionalArgs(args, uninstallCommand.options)[0];
     if (!extensionId) {
       return {
         exitCode: EXIT_CODES.CONFIGURATION_ERROR,
         message: "extensionId is required",
       };
     }
-    return {
-      exitCode: EXIT_CODES.HOST_CONNECTION_ERROR,
-      message: "CLI host uninstall is not available in the MVP",
-    };
+    try {
+      const host = resolveHost(opts);
+      const token = resolveLocalToken(ctx, opts);
+      const scope = opts["--scope"] ?? "global";
+      const scopeId = opts["--scope-id"] ?? "";
+      const preview = await hostJSON(host, token, "POST", "/api/extensions/kernel/extensions/uninstall/preview", {
+        extensionId,
+        scopeType: scope,
+        scopeId,
+      });
+      const confirmations = stringSetMap(preview.requiredConfirmations);
+      const confirmation = await hostJSON(host, token, "POST", "/api/extensions/kernel/extensions/uninstall/confirm", {
+        extensionId,
+        scopeType: scope,
+        scopeId,
+        confirmations,
+      });
+      const operation = await hostJSON(host, token, "POST", "/api/extensions/kernel/extensions/uninstall", {
+        extensionId,
+        scopeType: scope,
+        scopeId,
+        confirmationToken: String(confirmation.confirmationToken ?? ""),
+        idempotencyKey: `cli-uninstall-${crypto.randomUUID()}`,
+      });
+      return {
+        exitCode: EXIT_CODES.SUCCESS,
+        message: `uninstalled ${extensionId}`,
+        data: operation,
+      };
+    } catch (cause) {
+      return {
+        exitCode: EXIT_CODES.HOST_CONNECTION_ERROR,
+        message: cause instanceof Error ? cause.message : String(cause),
+      };
+    }
   },
 };
+
+export const enableCommand = lifecycleCommand("enable", "Enable an installed extension");
+export const disableCommand = lifecycleCommand("disable", "Disable an installed extension");
 
 export const publishCheckCommand: CliCommand = {
   name: "publish-check",
@@ -348,6 +433,224 @@ export const exportDiagnosticsCommand: CliCommand = {
   },
 };
 
+function lifecycleCommand(name: "enable" | "disable", description: string): CliCommand {
+  const options: CliOption[] = [
+    { name: "--host", description: "Developer Host endpoint", takesValue: true, defaultValue: "" },
+    { name: "--token", description: "Local runtime token", takesValue: true },
+    { name: "--token-file", description: "Local runtime token file", takesValue: true },
+  ];
+  return {
+    name,
+    description,
+    usage: `amitia-ext ${name} <extensionId>`,
+    options,
+    async run(ctx: CliContext, args: string[]): Promise<CliCommandResult> {
+      const opts = parseOptions(args, options);
+      const extensionId = positionalArgs(args, options)[0];
+      if (!extensionId) {
+        return { exitCode: EXIT_CODES.CONFIGURATION_ERROR, message: "extensionId is required" };
+      }
+      try {
+        const host = resolveHost(opts);
+        const token = resolveLocalToken(ctx, opts);
+        const data = await hostJSON(host, token, "POST", `/api/extensions/kernel/extensions/${name}`, { id: extensionId });
+        return {
+          exitCode: EXIT_CODES.SUCCESS,
+          message: `${name === "enable" ? "enabled" : "disabled"} ${extensionId}`,
+          data,
+        };
+      } catch (cause) {
+        return {
+          exitCode: EXIT_CODES.HOST_CONNECTION_ERROR,
+          message: cause instanceof Error ? cause.message : String(cause),
+        };
+      }
+    },
+  };
+}
+
+function positionalArgs(args: string[], definitions: ReadonlyArray<CliOption> = []): string[] {
+  const takesValue = new Set<string>();
+  for (const definition of definitions) {
+    if (definition.takesValue) {
+      takesValue.add(definition.name);
+      if (definition.shortName) takesValue.add(definition.shortName);
+    }
+  }
+  const result: string[] = [];
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index];
+    if (!arg?.startsWith("-")) {
+      result.push(arg);
+      continue;
+    }
+    if (takesValue.has(arg) && index + 1 < args.length) index++;
+  }
+  return result;
+}
+
+function resolveHost(opts: Record<string, string | undefined>): string {
+  const host = (opts["--host"] ?? process.env.AMITIA_DEV_HOST ?? "").trim().replace(/\/+$/, "");
+  if (!host) throw new Error("missing required option: --host");
+  const parsed = new URL(host);
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error("Developer Host endpoint must use http or https");
+  }
+  return host;
+}
+
+function resolveLocalToken(ctx: CliContext, opts: Record<string, string | undefined>): string {
+  const explicit = (opts["--token"] ?? process.env.AMITIA_LOCAL_TOKEN ?? "").trim();
+  if (explicit) return explicit;
+  const dataDir = (process.env.AMITIA_DATA_DIR ?? path.resolve(ctx.cwd, "AmitiaData")).trim();
+  const tokenFile = path.resolve(ctx.cwd, opts["--token-file"] ?? path.join(dataDir, "security", "local-token"));
+  if (!fs.existsSync(tokenFile)) throw new Error(`local runtime token not found: ${tokenFile}`);
+  const token = fs.readFileSync(tokenFile, "utf8").trim();
+  if (!token) throw new Error(`local runtime token is empty: ${tokenFile}`);
+  return token;
+}
+
+async function hostJSON(
+  host: string,
+  token: string,
+  method: string,
+  requestPath: string,
+  payload?: unknown,
+  acceptedStatuses: number[] = [200],
+): Promise<Record<string, any>> {
+  const body = payload === undefined ? undefined : Buffer.from(JSON.stringify(payload));
+  const response = await rawHostRequest(host, token, method, requestPath, body, payload === undefined ? undefined : "application/json");
+  if (!acceptedStatuses.includes(response.statusCode)) {
+    throw new Error(`Developer Host ${method} ${requestPath} returned ${response.statusCode}: ${response.body}`);
+  }
+  if (!response.body.trim()) return {};
+  const value = JSON.parse(response.body);
+  return value && typeof value === "object" ? value : { value };
+}
+
+function rawHostRequest(
+  host: string,
+  token: string,
+  method: string,
+  requestPath: string,
+  body?: Buffer,
+  contentType?: string,
+): Promise<{ statusCode: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const base = new URL(host);
+    const url = new URL(requestPath, base);
+    const lib = url.protocol === "https:" ? https : http;
+    const headers: Record<string, string | number> = { Accept: "application/json", "X-Amitia-Local-Token": token };
+    if (body) {
+      headers["Content-Type"] = contentType ?? "application/octet-stream";
+      headers["Content-Length"] = body.length;
+    }
+    const request = lib.request(url, { method, headers }, (response) => {
+      const chunks: Buffer[] = [];
+      response.on("data", (chunk: Buffer) => chunks.push(chunk));
+      response.on("end", () => resolve({
+        statusCode: response.statusCode ?? 0,
+        body: Buffer.concat(chunks).toString("utf8"),
+      }));
+    });
+    request.on("error", reject);
+    request.setTimeout(125000, () => request.destroy(new Error("Developer Host request timed out")));
+    if (body) request.write(body);
+    request.end();
+  });
+}
+
+async function installPackage(
+  host: string,
+  token: string,
+  packagePath: string,
+  scopeType: string,
+  scopeId: string,
+): Promise<Record<string, unknown>> {
+  if (!fs.existsSync(packagePath)) throw new Error(`package not found: ${packagePath}`);
+  const inspection = inspectPackage(packagePath);
+  const boundary = `----amitia-ext-${crypto.randomUUID()}`;
+  const fields = new Map<string, string>([
+    ["scopeType", scopeType],
+    ["scopeId", scopeId],
+    ["allowUnsignedDev", "true"],
+  ]);
+  const chunks: Buffer[] = [];
+  for (const [name, value] of fields) {
+    chunks.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`));
+  }
+  chunks.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${path.basename(packagePath)}"\r\nContent-Type: application/octet-stream\r\n\r\n`));
+  chunks.push(fs.readFileSync(packagePath));
+  chunks.push(Buffer.from(`\r\n--${boundary}--\r\n`));
+  const previewResponse = await rawHostRequest(
+    host,
+    token,
+    "POST",
+    "/api/extensions/packages/artifacts",
+    Buffer.concat(chunks),
+    `multipart/form-data; boundary=${boundary}`,
+  );
+  if (previewResponse.statusCode !== 201) {
+    throw new Error(`package preview failed with ${previewResponse.statusCode}: ${previewResponse.body}`);
+  }
+  const previewEnvelope = JSON.parse(previewResponse.body) as Record<string, any>;
+  const preview = previewEnvelope.preview as Record<string, any> | undefined;
+  const sessionId = String(preview?.sessionId ?? "");
+  if (!sessionId) throw new Error("package preview did not return a sessionId");
+  const confirmationMap = stringSetMap(preview?.capabilityConfirmations);
+  for (const item of toList(preview?.requiredConfirmations)) {
+    const key = String(item);
+    if (key) confirmationMap[key] = true;
+  }
+  const confirmation = await hostJSON(host, token, "POST", `/api/extensions/packages/previews/${encodeURIComponent(sessionId)}/confirm`, {
+    scopeType,
+    scopeId,
+    confirmations: confirmationMap,
+  });
+  const confirmationToken = String(confirmation.confirmationToken ?? "");
+  if (!confirmationToken) throw new Error("package confirmation did not return a token");
+  const operation = await hostJSON(host, token, "POST", "/api/extensions/packages/operations/install", {
+    sessionId,
+    scopeType,
+    scopeId,
+    confirmationToken,
+    idempotencyKey: `cli-install-${crypto.randomUUID()}`,
+  }, [200, 202]);
+  const operationId = String(operation.operationId ?? "");
+  const completed = operationId ? await waitHostOperation(host, token, operationId) : operation;
+  const extensionId = String(completed.extensionId ?? preview?.extensionId ?? inspection.manifest.plugin.id);
+  const version = String(completed.version ?? preview?.version ?? inspection.manifest.plugin.version);
+  return { extensionId, version, operationId, operation: completed };
+}
+
+async function waitHostOperation(host: string, token: string, operationId: string): Promise<Record<string, any>> {
+  const deadline = Date.now() + 125000;
+  let latest: Record<string, any> = {};
+  while (Date.now() < deadline) {
+    latest = await hostJSON(host, token, "GET", `/api/extensions/packages/operations/${encodeURIComponent(operationId)}`);
+    const status = String(latest.status ?? "");
+    if (status === "completed") return latest;
+    if (status === "failed" || status === "requires_recovery" || status === "rolled_back") {
+      throw new Error(`package operation ${operationId} ended with ${status}: ${latest.errorDetail ?? latest.error ?? ""}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`package operation ${operationId} did not complete before timeout`);
+}
+
+function stringSetMap(value: unknown): Record<string, boolean> {
+  const result: Record<string, boolean> = {};
+  for (const item of toList(value)) {
+    const key = String(item);
+    if (key) result[key] = true;
+  }
+  return result;
+}
+
+function toList(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
 function parseOptions(args: string[], definitions?: ReadonlyArray<CliOption>): Record<string, string | undefined> {
   const opts: Record<string, string | undefined> = {};
   const shortToLong = new Map<string, string>();
@@ -411,8 +714,9 @@ return body;
   }
 }
 
-function runLocalTool(ctx: CliContext, packageName: string, args: string[], label: string, relativeBinary = `${packageName}/vitest.mjs`): CliCommandResult {
-  const binary = path.resolve(ctx.cwd, "node_modules", relativeBinary);
+function runLocalTool(ctx: CliContext, packageName: string, args: string[], label: string, relativeBinary = `${packageName}/vitest.mjs`, fallbackBinary = ""): CliCommandResult {
+  const projectBinary = path.resolve(ctx.cwd, "node_modules", relativeBinary);
+  const binary = fs.existsSync(projectBinary) ? projectBinary : fallbackBinary;
   if (!fs.existsSync(binary)) {
     return { exitCode: EXIT_CODES.CONFIGURATION_ERROR, message: `${packageName} is not installed in ${ctx.cwd}` };
   }

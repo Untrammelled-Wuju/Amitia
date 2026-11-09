@@ -19,6 +19,10 @@ describe("两级导航映射", () => {
     expect(resolveAppSection("/channels/qq")).toBe("channels");
     expect(resolveAppSection("/my-space/profile")).toBe("account");
     expect(resolveAppSection("/settings/system")).toBe("settings");
+    expect(resolveAppSection("/storage")).toBe("settings");
+    expect(resolveAppSection("/runtime-debug")).toBe("settings");
+    expect(resolveAppSection("/decision-viz")).toBe("settings");
+    expect(resolveAppSection("/long-running")).toBe("settings");
     expect(resolveAppSection("/plugin-only-route")).toBeNull();
   });
 

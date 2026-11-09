@@ -93,7 +93,12 @@ func TestListEnabledGamePluginsDefinitionErrorReturnsError(t *testing.T) {
 	defRepo := &mockDefinitionLister{
 		err: errors.New("repository unavailable"),
 	}
-	contribRepo := &mockContributionLister{}
+	contribRepo := &mockContributionLister{
+		contribs: map[kerneldomain.ExtensionID][]kerneldomain.ContributionDefinition{
+			"com.example.game-a": {makeGamePluginContribution()},
+			"com.example.game-b": {makeGamePluginContribution()},
+		},
+	}
 
 	source := newKernelContributionSource(instRepo, defRepo, contribRepo)
 	plugins, err := source.ListEnabledGamePlugins(context.Background())
@@ -216,12 +221,12 @@ func TestListEnabledGamePluginsSnapshotFailureNoPartialResult(t *testing.T) {
 	defRepo := &mockDefinitionLister{
 		defs: map[kerneldomain.ExtensionID]kerneldomain.ExtensionDefinition{
 			"com.example.game-a": makeExtensionDefinition("com.example.game-a"),
-			// game-b 的 definition 不存在，会报错
 		},
 	}
 	contribRepo := &mockContributionLister{
 		contribs: map[kerneldomain.ExtensionID][]kerneldomain.ContributionDefinition{
 			"com.example.game-a": {makeGamePluginContribution()},
+			"com.example.game-b": {makeGamePluginContribution()},
 		},
 	}
 
@@ -233,5 +238,43 @@ func TestListEnabledGamePluginsSnapshotFailureNoPartialResult(t *testing.T) {
 	}
 	if plugins != nil {
 		t.Errorf("expected nil plugins (no partial snapshot), got %d plugins", len(plugins))
+	}
+}
+
+func TestListEnabledGamePluginsSkipsNonGameAndDisabledExtensions(t *testing.T) {
+	disabledGame := makeExtensionInstallation("com.example/game-disabled")
+	disabledGame.EnablementState = kerneldomain.EnablementDisabled
+	instRepo := &mockInstallationLister{
+		installations: []kerneldomain.ExtensionInstallation{
+			makeExtensionInstallation("com.amitia/active-task"),
+			disabledGame,
+			makeExtensionInstallation("com.example/game-enabled"),
+		},
+	}
+	defRepo := &mockDefinitionLister{
+		defs: map[kerneldomain.ExtensionID]kerneldomain.ExtensionDefinition{
+			"com.example/game-enabled": makeExtensionDefinition("com.example/game-enabled"),
+		},
+	}
+	contribRepo := &mockContributionLister{
+		contribs: map[kerneldomain.ExtensionID][]kerneldomain.ContributionDefinition{
+			"com.amitia/active-task": {
+				{ID: "active-task-command", Kind: kerneldomain.ContributionKindTool},
+			},
+			"com.example/game-disabled": {
+				makeGamePluginContribution(),
+			},
+			"com.example/game-enabled": {
+				makeGamePluginContribution(),
+			},
+		},
+	}
+
+	plugins, err := newKernelContributionSource(instRepo, defRepo, contribRepo).ListEnabledGamePlugins(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(plugins) != 1 || plugins[0].Extension.ID != "com.example/game-enabled" {
+		t.Fatalf("unexpected plugins: %+v", plugins)
 	}
 }

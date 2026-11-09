@@ -96,6 +96,7 @@ function transformSnapshot(raw: BackendUIContributionSnapshot): UIContributionSn
     profile: raw.profile as UIProfile | undefined,
     profileLayers: (raw.profileLayers ?? []) as UIProfile[],
     resolved: (raw.resolved ?? {}) as Partial<Record<UIProviderCapability, UIProviderDefinition>>,
+    providerResolutions: (raw.providerResolutions ?? {}) as UIContributionSnapshot["providerResolutions"],
     providerContext: raw.providerContext as UIContributionSnapshot["providerContext"],
     providerVersion: raw.providerVersion ?? 1,
   };

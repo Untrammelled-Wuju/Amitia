@@ -8,7 +8,7 @@
     "description": {
       "default": "通过统一 Host API 展示运行时协作快照与 BDI 决策计划。"
     },
-    "version": "1.2.0",
+    "version": "1.2.2",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -79,7 +79,7 @@
         ],
         "maxContributions": 33,
         "maxTools": 1,
-        "maxRoutes": 24,
+        "maxRoutes": 25,
         "maxServices": 0,
         "allowUnregister": true
       },
@@ -1089,6 +1089,7 @@
             "metadata": {
               "routes": [
                 {
+                  "placement": "settings",
                   "id": "runtime-debug",
                   "path": "/runtime-debug",
                   "providerId": "runtime-debug-page-provider",
@@ -1097,6 +1098,7 @@
                   "priority": 245
                 },
                 {
+                  "placement": "settings",
                   "id": "decision-viz",
                   "path": "/decision-viz",
                   "providerId": "decision-viz-page-provider",
@@ -1105,6 +1107,7 @@
                   "priority": 244
                 },
                 {
+                  "placement": "settings",
                   "id": "long-running",
                   "path": "/long-running",
                   "providerId": "long-running-page-provider",
@@ -1201,6 +1204,14 @@
                   "priority": 232
                 },
                 {
+                  "id": "developer-home-mobile",
+                  "path": "/developer",
+                  "providerId": "runtime-insights-mobile-page-provider",
+                  "capability": "page.provider",
+                  "title": "开发者工具",
+                  "priority": 232
+                },
+                {
                   "id": "developer-kernel-wasm-mobile",
                   "path": "/developer/kernel/wasm",
                   "providerId": "runtime-insights-mobile-page-provider",
@@ -1283,6 +1294,7 @@
               ],
               "navigationItems": [
                 {
+                  "placement": "settings",
                   "id": "runtime-debug",
                   "label": "运行时调试",
                   "route": "/runtime-debug",
@@ -1293,6 +1305,7 @@
                   "order": 180
                 },
                 {
+                  "placement": "settings",
                   "id": "decision-viz",
                   "label": "BDI 决策可视化",
                   "route": "/decision-viz",
@@ -1304,6 +1317,7 @@
                   "mobile": true
                 },
                 {
+                  "placement": "settings",
                   "id": "long-running",
                   "label": "长期运行维护",
                   "route": "/long-running",
@@ -1871,6 +1885,7 @@
             },
             "metadata": {
               "routes": [
+                "/developer",
                 "/developer/kernel",
                 "/developer/kernel/wasm",
                 "/developer/kernel/hooks",

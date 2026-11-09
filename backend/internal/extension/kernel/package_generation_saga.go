@@ -47,9 +47,10 @@ func packageGenerationJSON(current PackageGenerationCurrent) string {
 }
 
 func (r *Runtime) verifyLegacyUninstallGeneration(ctx context.Context, session PackagePreviewSession, current PackageGenerationCurrent) error {
-	if current.ExtensionID != session.ExtensionID || current.Version != session.Version {
+	if current.ExtensionID != session.ExtensionID {
 		return errors.New("reinstall package does not match the existing generation")
 	}
+	sameVersion := current.Version == session.Version
 	container := r.container
 	op, _, err := container.PackageRepository.GetOperation(ctx, session.SpaceID, current.OperationID)
 	if err != nil {
@@ -68,17 +69,6 @@ func (r *Runtime) verifyLegacyUninstallGeneration(ctx context.Context, session P
 		version.InstallOperationID != current.OperationID || !equalTreeHash(version.InstalledTreeHash, current.TreeHash) {
 		return errors.New("previous package version does not match the existing generation")
 	}
-	if container.EnablementStore == nil {
-		return errors.New("extension enablement store unavailable")
-	}
-	state, err := container.EnablementStore.Get(ctx, enablement.StateSubject{Kind: enablement.SubjectExtension, ID: current.ExtensionID})
-	if err != nil {
-		return fmt.Errorf("read legacy uninstall state: %w", err)
-	}
-	completedAt, err := time.Parse(time.RFC3339Nano, op.CompletedAt)
-	if err != nil || state.Enablement != enablement.EnablementDisabled || state.DesiredRuntime != enablement.DesiredRuntimeStopped || !state.UpdatedAt.After(completedAt) {
-		return errors.New("legacy uninstall state cannot be verified")
-	}
 	id := domain.ExtensionID(current.ExtensionID)
 	semver, err := domain.ParseVersion(current.Version)
 	if err != nil {
@@ -94,6 +84,19 @@ func (r *Runtime) verifyLegacyUninstallGeneration(ctx context.Context, session P
 	contributions, err := container.ContributionRepository.ListContributions(ctx, id)
 	if err != nil || len(contributions) != 0 {
 		return fmt.Errorf("previous extension contributions are not confirmed absent: %v", err)
+	}
+	if sameVersion {
+		if container.EnablementStore == nil {
+			return errors.New("extension enablement store unavailable")
+		}
+		state, err := container.EnablementStore.Get(ctx, enablement.StateSubject{Kind: enablement.SubjectExtension, ID: current.ExtensionID})
+		if err != nil {
+			return fmt.Errorf("read legacy uninstall state: %w", err)
+		}
+		completedAt, err := time.Parse(time.RFC3339Nano, op.CompletedAt)
+		if err != nil || state.Enablement != enablement.EnablementDisabled || state.DesiredRuntime != enablement.DesiredRuntimeStopped || !state.UpdatedAt.After(completedAt) {
+			return errors.New("legacy uninstall state cannot be verified")
+		}
 	}
 	return container.PackageGenerationStore.VerifyGeneration(ctx, current)
 }

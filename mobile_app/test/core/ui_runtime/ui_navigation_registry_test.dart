@@ -76,7 +76,7 @@ UIProviderDefinition _routes({
       ],
       if (includeNavigation)
         'navigationItems': [
-          {'id': 'main', 'label': extensionId, 'route': path},
+          {'id': 'main', 'label': extensionId, 'route': path, 'panel': 'main'},
         ],
     },
   );
@@ -124,13 +124,208 @@ void main() {
     );
   });
 
-  test('continuity is a builtin drawer navigation entry', () {
-    final items = UINavigationRegistry.resolve(_snapshot(const []));
+  test('continuity is resolved from a provider navigation entry', () {
+    final items = UINavigationRegistry.resolve(
+      _snapshot([
+        _routes(
+          extensionId: 'com.amitia/active-task',
+          id: 'active-task-routes',
+          path: AppRoutes.continuity,
+          pageProviderId: 'continuity-page',
+          priority: 100,
+          includeNavigation: true,
+        ),
+        _page('com.amitia/active-task', 'continuity-page'),
+      ]),
+    );
     final continuity = items.singleWhere(
       (item) => item.route == AppRoutes.continuity,
     );
-    expect(continuity.label, '持续事项');
+    expect(continuity.label, 'com.amitia/active-task');
     expect(continuity.panel, UINavigationPanel.main);
+    expect(UINavigationRegistry.resolve(_snapshot(const [])), isEmpty);
+  });
+
+  test(
+    'separates primary, settings, profile, workspace and contextual items',
+    () {
+      final snapshot = _snapshot([
+        _provider(
+          id: 'placement-routes',
+          extensionId: 'com.example/placement',
+          capability: UICapability.routeRegistry,
+          metadata: const {
+            'routes': [
+              {
+                'id': 'hub',
+                'path': '/hub',
+                'providerId': 'placement-pages',
+                'capability': UICapability.pageProvider,
+              },
+              {
+                'id': 'settings',
+                'path': '/storage',
+                'providerId': 'placement-pages',
+                'capability': UICapability.pageProvider,
+              },
+              {
+                'id': 'profile',
+                'path': '/logs',
+                'providerId': 'placement-pages',
+                'capability': UICapability.pageProvider,
+              },
+              {
+                'id': 'workspace',
+                'path': '/workspaces',
+                'providerId': 'placement-pages',
+                'capability': UICapability.pageProvider,
+              },
+              {
+                'id': 'contextual',
+                'path': '/import',
+                'providerId': 'placement-pages',
+                'capability': UICapability.pageProvider,
+              },
+            ],
+            'navigationItems': [
+              {
+                'id': 'hub',
+                'label': '业务中心',
+                'route': '/hub',
+                'group': 'character',
+                'profile': true,
+              },
+              {
+                'id': 'settings',
+                'label': '存储维护',
+                'route': '/storage',
+                'group': 'settings',
+              },
+              {
+                'id': 'profile',
+                'label': '归档对话',
+                'route': '/logs',
+                'group': 'home',
+              },
+              {
+                'id': 'workspace',
+                'label': '工作区',
+                'route': '/workspaces',
+                'group': 'workspace',
+              },
+              {
+                'id': 'contextual',
+                'label': '聊天导入',
+                'route': '/import',
+                'group': 'character',
+              },
+            ],
+          },
+        ),
+        _page('com.example/placement', 'placement-pages'),
+      ]);
+      final items = UINavigationRegistry.resolve(snapshot);
+      expect(
+        items.singleWhere((item) => item.route == '/hub').placement,
+        UINavigationPlacement.primary,
+      );
+      expect(
+        items.singleWhere((item) => item.route == '/storage').placement,
+        UINavigationPlacement.settings,
+      );
+      expect(
+        items.singleWhere((item) => item.route == '/logs').placement,
+        UINavigationPlacement.profile,
+      );
+      expect(
+        items.singleWhere((item) => item.route == '/workspaces').placement,
+        UINavigationPlacement.workspace,
+      );
+      expect(
+        items.singleWhere((item) => item.route == '/import').placement,
+        UINavigationPlacement.contextual,
+      );
+      expect(
+        UINavigationRegistry.resolvePrimary(snapshot).map((item) => item.route),
+        ['/hub'],
+      );
+    },
+  );
+
+  test('mobile tabs only accept primary and profile placements', () {
+    final snapshot = _snapshot([
+      _provider(
+        id: 'mobile-placement-routes',
+        extensionId: 'com.example/mobile-placement',
+        capability: UICapability.routeRegistry,
+        metadata: const {
+          'routes': [
+            {
+              'id': 'primary',
+              'path': '/tasks',
+              'providerId': 'mobile-placement-pages',
+              'capability': UICapability.pageProvider,
+            },
+            {
+              'id': 'profile',
+              'path': '/settings',
+              'providerId': 'mobile-placement-pages',
+              'capability': UICapability.pageProvider,
+            },
+            {
+              'id': 'settings',
+              'path': '/runtime-debug',
+              'providerId': 'mobile-placement-pages',
+              'capability': UICapability.pageProvider,
+            },
+            {
+              'id': 'workspace',
+              'path': '/workspaces',
+              'providerId': 'mobile-placement-pages',
+              'capability': UICapability.pageProvider,
+            },
+          ],
+          'navigationItems': [
+            {
+              'id': 'primary',
+              'label': '任务',
+              'route': '/tasks',
+              'group': 'tasks',
+              'tabLabel': '任务',
+              'mobile': true,
+            },
+            {
+              'id': 'profile',
+              'label': '设置',
+              'route': '/settings',
+              'group': 'space',
+              'tabLabel': '我的',
+              'mobile': true,
+              'profile': true,
+            },
+            {
+              'id': 'settings',
+              'label': '运行时调试',
+              'route': '/runtime-debug',
+              'group': 'settings',
+              'mobile': true,
+            },
+            {
+              'id': 'workspace',
+              'label': '工作区',
+              'route': '/workspaces',
+              'group': 'workspace',
+              'mobile': true,
+            },
+          ],
+        },
+      ),
+      _page('com.example/mobile-placement', 'mobile-placement-pages'),
+    ]);
+    expect(
+      UINavigationRegistry.resolveMobile(snapshot).map((item) => item.route),
+      ['/settings', '/tasks'],
+    );
   });
 
   test(

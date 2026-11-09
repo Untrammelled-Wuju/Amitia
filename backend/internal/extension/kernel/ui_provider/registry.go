@@ -855,13 +855,21 @@ type Resolution struct {
 	Reason        string              `json:"reason,omitempty"`
 }
 
+type ProviderResolution struct {
+	ProviderID string     `json:"providerId"`
+	Capability Capability `json:"capability"`
+	Compatible bool       `json:"compatible"`
+	Reason     string     `json:"reason,omitempty"`
+}
+
 type Snapshot struct {
-	Providers     []*ProviderDefinition              `json:"providers"`
-	Profile       Profile                            `json:"profile"`
-	ProfileLayers []Profile                          `json:"profileLayers,omitempty"`
-	Resolved      map[Capability]*ProviderDefinition `json:"resolved"`
-	Context       ResolveContext                     `json:"context"`
-	Version       int                                `json:"version"`
+	Providers           []*ProviderDefinition              `json:"providers"`
+	Profile             Profile                            `json:"profile"`
+	ProfileLayers       []Profile                          `json:"profileLayers,omitempty"`
+	Resolved            map[Capability]*ProviderDefinition `json:"resolved"`
+	ProviderResolutions map[string]ProviderResolution      `json:"providerResolutions"`
+	Context             ResolveContext                     `json:"context"`
+	Version             int                                `json:"version"`
 }
 
 type Registry struct {
@@ -1070,6 +1078,12 @@ func cloneProvider(p *ProviderDefinition) *ProviderDefinition {
 
 func providerCompatible(p *ProviderDefinition, ctx ResolveContext) (bool, string) {
 	ctx = ctx.Normalize()
+	if p == nil {
+		return false, "provider_missing"
+	}
+	if !p.Enabled {
+		return false, "provider_disabled"
+	}
 	if !supportsPlatform(p, ctx.Platform) {
 		return false, "platform_unsupported"
 	}
@@ -1125,6 +1139,37 @@ func providerCompatible(p *ProviderDefinition, ctx ResolveContext) (bool, string
 	}
 	return true, ""
 }
+
+func providerSnapshotCompatibility(p *ProviderDefinition, ctx ResolveContext) (bool, string) {
+	ok, reason := providerCompatible(p, ctx)
+	if ok || p == nil {
+		return ok, reason
+	}
+	switch reason {
+	case "platform_unsupported":
+		return false, "platform_unsupported:" + ctx.Platform
+	case "device_platform_mismatch":
+		return false, "device_platform_mismatch:" + ctx.Platform
+	case "device_architecture_missing":
+		return false, "architecture_unavailable"
+	case "device_architecture_mismatch":
+		return false, "architecture_unsupported:" + ctx.Architecture
+	case "app_version_missing":
+		return false, "app_version_unavailable"
+	case "app_version_too_old":
+		return false, "app_version_required:" + p.DeviceRequirements.MinAppVersion
+	case "runtime_version_missing":
+		return false, "runtime_version_unavailable"
+	case "runtime_version_too_old":
+		return false, "runtime_version_required:" + p.DeviceRequirements.MinRuntimeVersion
+	default:
+		if strings.HasPrefix(reason, "device_feature_missing:") {
+			return false, "feature_required:" + strings.TrimPrefix(reason, "device_feature_missing:")
+		}
+		return false, reason
+	}
+}
+
 func containsFold(values []string, want string) bool {
 	for _, value := range values {
 		if strings.EqualFold(strings.TrimSpace(value), strings.TrimSpace(want)) {
@@ -1409,13 +1454,31 @@ func (r *Registry) SnapshotWithContext(ctx context.Context, rc ResolveContext) S
 	providers := r.List()
 	profile, layers, _ := r.effectiveProfile(ctx, rc)
 	resolved := map[Capability]*ProviderDefinition{}
+	providerResolutions := make(map[string]ProviderResolution, len(providers))
+	for _, provider := range providers {
+		compatible, reason := providerSnapshotCompatibility(provider, rc)
+		providerResolutions[provider.ProviderID] = ProviderResolution{
+			ProviderID: provider.ProviderID,
+			Capability: provider.Capability,
+			Compatible: compatible,
+			Reason:     reason,
+		}
+	}
 	for cap := range knownCapabilities {
 		rr := r.ResolveWithContext(ctx, cap, rc)
 		if rr.Provider != nil {
 			resolved[cap] = rr.Provider
 		}
 	}
-	return Snapshot{Providers: providers, Profile: profile, ProfileLayers: layers, Resolved: resolved, Context: rc, Version: int(r.Version())}
+	return Snapshot{
+		Providers:           providers,
+		Profile:             profile,
+		ProfileLayers:       layers,
+		Resolved:            resolved,
+		ProviderResolutions: providerResolutions,
+		Context:             rc,
+		Version:             int(r.Version()),
+	}
 }
 func (r *Registry) Snapshot(platform string) Snapshot {
 	return r.SnapshotWithContext(context.Background(), ResolveContext{Platform: platform})

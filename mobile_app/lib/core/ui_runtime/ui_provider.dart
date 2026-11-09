@@ -341,44 +341,60 @@ class UIProviderDefinition {
     );
   }
 
-  bool compatibleWith(UIProviderResolveContext context, String platform) {
-    if (!enabled || entryFor(platform) == null) return false;
+  String? incompatibilityReason(
+    UIProviderResolveContext context,
+    String platform,
+  ) {
+    if (!enabled) return 'provider-disabled';
+    if (entryFor(platform) == null) return 'entry-unavailable:$platform';
     if (placement == UIProviderPlacement.device && !context.localRuntime) {
-      if ((context.deviceId ?? '').isEmpty || !context.deviceOnline) {
-        return false;
+      if ((context.deviceId ?? '').isEmpty) {
+        return 'device-identity-unavailable';
       }
+      if (!context.deviceOnline) return 'device-offline';
     }
     final req = deviceRequirements;
-    if (req == null) return true;
+    if (req == null) return null;
     bool contains(List<String> values, String value) =>
         values.any((item) => item.toLowerCase() == value.toLowerCase());
     if (req.platforms.isNotEmpty && !contains(req.platforms, platform)) {
-      return false;
+      return 'platform-unsupported:$platform';
     }
     if (req.architectures.isNotEmpty) {
-      if ((context.architecture ?? '').isEmpty ||
-          !contains(req.architectures, context.architecture!)) {
-        return false;
+      if ((context.architecture ?? '').isEmpty) {
+        return 'architecture-unavailable';
+      }
+      if (!contains(req.architectures, context.architecture!)) {
+        return 'architecture-unsupported:${context.architecture}';
       }
     }
     if ((req.minAppVersion ?? '').isNotEmpty) {
-      if ((context.appVersion ?? '').isEmpty ||
-          _compareVersion(context.appVersion!, req.minAppVersion!) < 0) {
-        return false;
+      if ((context.appVersion ?? '').isEmpty) {
+        return 'app-version-unavailable';
+      }
+      if (_compareVersion(context.appVersion!, req.minAppVersion!) < 0) {
+        return 'app-version-required:${req.minAppVersion}';
       }
     }
     if ((req.minRuntimeVersion ?? '').isNotEmpty) {
-      if ((context.runtimeVersion ?? '').isEmpty ||
-          _compareVersion(context.runtimeVersion!, req.minRuntimeVersion!) <
-              0) {
-        return false;
+      if ((context.runtimeVersion ?? '').isEmpty) {
+        return 'runtime-version-unavailable';
+      }
+      if (_compareVersion(context.runtimeVersion!, req.minRuntimeVersion!) <
+          0) {
+        return 'runtime-version-required:${req.minRuntimeVersion}';
       }
     }
     for (final feature in req.requiredFeatures) {
-      if (!contains(context.deviceCapabilities, feature)) return false;
+      if (!contains(context.deviceCapabilities, feature)) {
+        return 'feature-required:$feature';
+      }
     }
-    return true;
+    return null;
   }
+
+  bool compatibleWith(UIProviderResolveContext context, String platform) =>
+      incompatibilityReason(context, platform) == null;
 
   UIProviderEntry? entryFor(String platform) {
     UIProviderEntry? supported(String key) {
@@ -482,6 +498,28 @@ class UIProfile {
     'revision': revision,
     if (updatedAt != null) 'updatedAt': updatedAt,
   };
+}
+
+class UIProviderResolution {
+  final String providerId;
+  final String capability;
+  final bool compatible;
+  final String? reason;
+
+  const UIProviderResolution({
+    required this.providerId,
+    required this.capability,
+    required this.compatible,
+    this.reason,
+  });
+
+  factory UIProviderResolution.fromJson(Map<String, dynamic> json) =>
+      UIProviderResolution(
+        providerId: (json['providerId'] ?? '').toString(),
+        capability: (json['capability'] ?? '').toString(),
+        compatible: json['compatible'] == true,
+        reason: json['reason']?.toString(),
+      );
 }
 
 class UIProfileEnvelope {
@@ -705,6 +743,7 @@ class UIProviderSnapshot {
   final List<UIProfile> profileLayers;
   final UIProviderResolveContext context;
   final Map<String, UIProviderDefinition> resolved;
+  final Map<String, UIProviderResolution> providerResolutions;
   final int version;
   const UIProviderSnapshot({
     required this.providers,
@@ -713,6 +752,7 @@ class UIProviderSnapshot {
     required this.profileLayers,
     required this.context,
     required this.resolved,
+    this.providerResolutions = const <String, UIProviderResolution>{},
     required this.version,
   });
 
@@ -741,6 +781,17 @@ class UIProviderSnapshot {
         );
       }
     }
+    final providerResolutions = <String, UIProviderResolution>{};
+    final rawProviderResolutions =
+        (json['providerResolutions'] as Map?) ?? const {};
+    for (final entry in rawProviderResolutions.entries) {
+      if (entry.value is Map) {
+        providerResolutions[entry.key
+            .toString()] = UIProviderResolution.fromJson(
+          (entry.value as Map).cast<String, dynamic>(),
+        );
+      }
+    }
     return UIProviderSnapshot(
       providers: providers,
       slots: ((json['slots'] as List?) ?? const [])
@@ -761,6 +812,7 @@ class UIProviderSnapshot {
         ((json['providerContext'] as Map?) ?? const {}).cast<String, dynamic>(),
       ),
       resolved: resolved,
+      providerResolutions: providerResolutions,
       version:
           (json['providerVersion'] as num?)?.toInt() ??
           (json['version'] as num?)?.toInt() ??
@@ -781,6 +833,9 @@ class UIProviderSnapshot {
     final sorted = [...items]..sort((a, b) => a.ordering.compareTo(b.ordering));
     return sorted;
   }
+
+  UIProviderResolution? resolutionFor(String providerId) =>
+      providerResolutions[providerId.trim()];
 
   UIProviderDefinition? resolve(String capability, {String? providerId}) {
     final platform = currentUIPlatform();

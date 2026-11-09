@@ -858,6 +858,21 @@ func (s *PackageGenerationStore) statePath(extensionID, name string) (string, er
 	return path, nil
 }
 
+func (s *PackageGenerationStore) RemoveExtensionRoot(extensionID string) error {
+	if err := s.validateRoot(); err != nil {
+		return err
+	}
+	if err := validatePathSegment("extension ID", extensionID, true); err != nil {
+		return err
+	}
+	installationsRoot := filepath.Join(s.root, "installations")
+	target := filepath.Join(installationsRoot, safeDirectoryName(extensionID))
+	if target == installationsRoot || !pathWithin(target, installationsRoot) {
+		return ErrPackageGenerationUnsafe
+	}
+	return os.RemoveAll(target)
+}
+
 func (s *PackageGenerationStore) quarantinePath(current PackageGenerationCurrent) (string, error) {
 	if err := s.validateRoot(); err != nil {
 		return "", err

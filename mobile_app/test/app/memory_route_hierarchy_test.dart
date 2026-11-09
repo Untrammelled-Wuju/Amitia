@@ -17,7 +17,7 @@ void main() {
   test('memory routes follow the actual navigation hierarchy', () {
     final paths = _paths(buildBuiltinBusinessRoutes());
     expect(paths, contains(AppRoutes.memoryHub));
-    expect(paths, contains(AppRoutes.memory));
+    expect(paths, isNot(contains(AppRoutes.memory)));
     expect(paths, isNot(contains(AppRoutes.meCharacters)));
     expect(paths, isNot(contains(AppRoutes.knowledge)));
     expect(paths, isNot(contains(AppRoutes.memoryEpisodic)));
@@ -28,7 +28,8 @@ void main() {
     expect(paths, isNot(contains('/memory/manager')));
     expect(paths, isNot(contains('/memory-manager')));
     expect(paths, isNot(contains('/knowledge')));
-    expect(isProtectedProviderRoutePath(AppRoutes.memoryHub), isTrue);
+    expect(isProtectedProviderRoutePath(AppRoutes.memoryHub), isFalse);
+    expect(isProtectedProviderRoutePath(AppRoutes.memory), isFalse);
     expect(isProtectedProviderRoutePath(AppRoutes.meCharacters), isFalse);
     expect(isProtectedProviderRoutePath(AppRoutes.knowledge), isFalse);
   });

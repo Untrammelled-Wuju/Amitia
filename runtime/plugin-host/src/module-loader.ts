@@ -6,7 +6,11 @@ import { ExtensionContext } from "./runtime-context";
 export interface LoadedExtension {
   activate?(context: ExtensionContext): Promise<void> | void;
   deactivate?(): Promise<void> | void;
+  definition?: any;
+  sdk?: any;
 }
+
+const HOST_SDK_ID = "@amitia/plugin-sdk";
 
 const FORBIDDEN_BUILTINS: Set<string> = new Set([
   "electron",
@@ -47,6 +51,38 @@ function builtinName(request: string): string {
     return request.slice(5).split("/")[0];
   }
   return request;
+}
+
+function resolveHostSdkRoot(): string {
+  const hostDist = path.dirname(module.filename);
+  const candidates = [
+    process.env.AMITIA_PLUGIN_SDK_DIR,
+    path.join(hostDist, "sdk", "plugin-sdk"),
+    path.join(hostDist, "..", "node_modules", "@amitia", "plugin-sdk", "dist"),
+  ].filter((value): value is string => Boolean(value));
+  for (const candidate of candidates) {
+    if (fs.existsSync(path.join(candidate, "index.js"))) {
+      return candidate;
+    }
+  }
+  throw new Error("Host plugin SDK is unavailable");
+}
+
+function resolveHostSdk(request: string): any {
+  const root = resolveHostSdkRoot();
+  const subpath = request.slice(HOST_SDK_ID.length + 1);
+  if (!subpath) {
+    return module.require(path.join(root, "index.js"));
+  }
+  if (!/^[a-z0-9-]+(?:\/[a-z0-9-]+)*$/.test(subpath)) {
+    throw new Error("Invalid host plugin SDK subpath: " + subpath);
+  }
+  const entry = path.join(root, subpath + ".js");
+  const relative = path.relative(root, entry);
+  if (relative.startsWith("..") || path.isAbsolute(relative) || !fs.existsSync(entry)) {
+    throw new Error("Host plugin SDK subpath is unavailable: " + subpath);
+  }
+  return module.require(entry);
 }
 
 function isForbiddenRequest(request: string, extensionRoot: string, options: ModuleLoadOptions): boolean {
@@ -107,6 +143,9 @@ export function loadExtension(entryPath: string, options: ModuleLoadOptions = {}
 
     const originalRequire = mod.require.bind(mod);
     (mod as any).require = function (request: string) {
+      if (request === HOST_SDK_ID || request.startsWith(HOST_SDK_ID + "/")) {
+        return resolveHostSdk(request);
+      }
       if (isForbiddenRequest(request, extensionRoot, options)) {
         throw new Error("Forbidden module in extension sandbox: " + request);
       }
@@ -129,6 +168,8 @@ export function loadExtension(entryPath: string, options: ModuleLoadOptions = {}
     return {
       activate: captured.activate,
       deactivate: captured.deactivate,
+      definition: captured,
+      sdk: resolveHostSdk(HOST_SDK_ID),
     };
   } finally {
     if (previousDefine === undefined) {

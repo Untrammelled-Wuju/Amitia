@@ -10,7 +10,7 @@ void main() {
   test(
     'settings children use provider routes while repair stays protected',
     () {
-      expect(isProtectedProviderRoutePath(AppRoutes.settings), isTrue);
+      expect(isProtectedProviderRoutePath(AppRoutes.settings), isFalse);
       expect(isProtectedProviderRoutePath(AppRoutes.settingsSystem), isFalse);
       expect(
         isProtectedProviderRoutePath(AppRoutes.settingsUIProviders),
@@ -23,6 +23,7 @@ void main() {
     final source = File(
       'lib/core/ui_runtime/routing/builtin_route_catalog.dart',
     ).readAsStringSync();
+    expect(source, isNot(contains("path: '/settings'")));
     expect(source, isNot(contains("path: '/settings/system'")));
     expect(source, isNot(contains("path: '/settings/models/:modelType'")));
     expect(source, isNot(contains("path: '/settings/toolbox/workspace'")));

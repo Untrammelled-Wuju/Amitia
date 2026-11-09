@@ -8,7 +8,7 @@
     "description": {
       "default": "通过统一插件契约浏览工作区文件、管理 Git 仓库并创建隔离工作区。"
     },
-    "version": "1.0.0",
+    "version": "1.0.1",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -258,6 +258,7 @@
             "metadata": {
               "routes": [
                 {
+                  "placement": "workspace",
                   "id": "workspace",
                   "path": "/workspaces",
                   "providerId": "workspace-page-provider",
@@ -268,6 +269,7 @@
               ],
               "navigationItems": [
                 {
+                  "placement": "workspace",
                   "id": "workspace",
                   "label": "工作区",
                   "route": "/workspaces",

@@ -7,12 +7,11 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test('UTC 会话时间按设备本地时区显示', () {
-    final value = DateTime.parse('2026-11-08T04:39:00Z').toLocal();
-    final hour = value.hour.toString().padLeft(2, '0');
-    final minute = value.minute.toString().padLeft(2, '0');
+    final now = DateTime.now();
+    final expected = DateTime(now.year, now.month, now.day, 12, 39);
     expect(
-      formatConversationTime('2026-11-08T04:39:00Z'),
-      anyOf('$hour:$minute', contains('$hour:$minute')),
+      formatConversationTime(expected.toUtc().toIso8601String()),
+      contains('12:39'),
     );
   });
 

@@ -1,0 +1,190 @@
+{
+  "schemaVersion": 1,
+  "protectedRoutes": [
+    "/onboarding",
+    "/privacy",
+    "/usage-boundary",
+    "/settings/ui-providers"
+  ],
+  "providerRoutes": [
+    {
+      "path": "/tasks",
+      "extensionId": "com.amitia/active-task",
+      "manifest": "plugins-builtin/active-task/amitia-extension.json",
+      "registryProviderId": "active-task-routes",
+      "routeId": "tasks-hub",
+      "pageProviderId": "active-task-page-provider",
+      "entries": [
+        "web",
+        "electron_windows",
+        "electron_macos",
+        "electron_linux",
+        "mobile"
+      ]
+    },
+    {
+      "path": "/memory-hub",
+      "extensionId": "com.amitia/memory-hub",
+      "manifest": "plugins-builtin/memory-hub/amitia-extension.json",
+      "registryProviderId": "memory-hub-routes",
+      "routeId": "memory-shell",
+      "pageProviderId": "memory-hub-page-provider",
+      "entries": [
+        "web",
+        "electron_windows",
+        "electron_macos",
+        "electron_linux",
+        "mobile"
+      ]
+    },
+    {
+      "path": "/extensions",
+      "extensionId": "com.amitia/plugin-market",
+      "manifest": "plugins-builtin/plugin-market/amitia-extension.json",
+      "registryProviderId": "plugin-market-routes",
+      "routeId": "extensions-hub",
+      "pageProviderId": "plugin-market-extensions-hub-provider",
+      "entries": [
+        "web",
+        "electron_windows",
+        "electron_macos",
+        "electron_linux",
+        "mobile"
+      ]
+    },
+    {
+      "path": "/settings",
+      "extensionId": "com.amitia/user-space-hub",
+      "manifest": "plugins-builtin/user-space-hub/amitia-extension.json",
+      "registryProviderId": "user-space-routes",
+      "routeId": "settings-root",
+      "pageProviderId": "user-space-page-provider",
+      "entries": [
+        "web",
+        "electron_windows",
+        "electron_macos",
+        "electron_linux",
+        "mobile"
+      ]
+    },
+    {
+      "path": "/me",
+      "extensionId": "com.amitia/user-space-hub",
+      "manifest": "plugins-builtin/user-space-hub/amitia-extension.json",
+      "registryProviderId": "user-space-routes",
+      "routeId": "me-shell",
+      "pageProviderId": "user-space-page-provider",
+      "entries": [
+        "web",
+        "electron_windows",
+        "electron_macos",
+        "electron_linux",
+        "mobile"
+      ]
+    },
+    {
+      "path": "/creative-workshop",
+      "extensionId": "com.amitia/creative-workshop-hub",
+      "manifest": "plugins-builtin/creative-workshop-hub/amitia-extension.json",
+      "registryProviderId": "creative-workshop-hub-routes",
+      "routeId": "creative-workshop-hub",
+      "pageProviderId": "creative-workshop-hub-page-provider",
+      "entries": [
+        "web",
+        "electron_windows",
+        "electron_macos",
+        "electron_linux",
+        "mobile"
+      ]
+    },
+    {
+      "path": "/characters",
+      "extensionId": "com.amitia/character-hub",
+      "manifest": "plugins-builtin/character-hub/amitia-extension.json",
+      "registryProviderId": "character-hub-routes",
+      "routeId": "character-hub",
+      "pageProviderId": "character-hub-page-provider",
+      "entries": [
+        "web",
+        "electron_windows",
+        "electron_macos",
+        "electron_linux",
+        "mobile"
+      ]
+    },
+    {
+      "path": "/memory",
+      "extensionId": "com.amitia/memory-hub",
+      "manifest": "plugins-builtin/memory-hub/amitia-extension.json",
+      "registryProviderId": "memory-hub-routes",
+      "routeId": "memory-hub",
+      "pageProviderId": "memory-hub-page-provider",
+      "entries": [
+        "web",
+        "electron_windows",
+        "electron_macos",
+        "electron_linux",
+        "mobile"
+      ]
+    },
+    {
+      "path": "/developer",
+      "extensionId": "com.amitia/runtime-insights",
+      "manifest": "plugins-builtin/runtime-insights/amitia-extension.json",
+      "registryProviderId": "runtime-insights-routes",
+      "routeId": "developer-home-mobile",
+      "pageProviderId": "runtime-insights-mobile-page-provider",
+      "entries": [
+        "web",
+        "electron_windows",
+        "electron_macos",
+        "electron_linux",
+        "mobile"
+      ]
+    },
+    {
+      "path": "/workspaces",
+      "extensionId": "com.amitia/workspace",
+      "manifest": "plugins-builtin/workspace/amitia-extension.json",
+      "registryProviderId": "workspace-routes",
+      "routeId": "workspace",
+      "pageProviderId": "workspace-page-provider",
+      "entries": [
+        "web",
+        "electron_windows",
+        "electron_macos",
+        "electron_linux"
+      ]
+    },
+    {
+      "path": "/channel-center",
+      "extensionId": "com.amitia/channels-hub",
+      "manifest": "plugins-builtin/channels-hub/amitia-extension.json",
+      "registryProviderId": "channels-hub-routes",
+      "routeId": "channels-hub",
+      "pageProviderId": "channels-hub-page-provider",
+      "entries": [
+        "web",
+        "electron_windows",
+        "electron_macos",
+        "electron_linux",
+        "mobile"
+      ]
+    },
+    {
+      "path": "/game-center",
+      "extensionId": "com.amitia/game-center-hub",
+      "manifest": "plugins-builtin/game-center-hub/amitia-extension.json",
+      "registryProviderId": "game-center-hub-routes",
+      "routeId": "game-center-hub",
+      "pageProviderId": "game-center-hub-page-provider",
+      "entries": [
+        "web",
+        "electron_windows",
+        "electron_macos",
+        "electron_linux",
+        "mobile"
+      ]
+    }
+  ]
+}

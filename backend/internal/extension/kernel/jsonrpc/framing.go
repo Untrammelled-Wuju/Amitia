@@ -7,6 +7,7 @@ import (
 	"io"
 	amitialog "log"
 	"sync"
+	"sync/atomic"
 )
 
 const (
@@ -28,31 +29,29 @@ type Frame struct {
 }
 
 type Framer struct {
-	mu            sync.Mutex
+	writeMu       sync.Mutex
 	r             io.Reader
 	w             io.Writer
-	maxFrameBytes int
+	maxFrameBytes atomic.Int64
 	closed        bool
 	closeMu       sync.Mutex
 }
 
 func NewFramer(r io.Reader, w io.Writer) *Framer {
-	return &Framer{r: r, w: w, maxFrameBytes: DefaultMaxFrameBytes}
+	framer := &Framer{r: r, w: w}
+	framer.maxFrameBytes.Store(DefaultMaxFrameBytes)
+	return framer
 }
 
 func (f *Framer) SetMaxFrameBytes(size int) {
 	if size <= 0 || size > MaxFrameAbsolute {
 		return
 	}
-	f.mu.Lock()
-	f.maxFrameBytes = size
-	f.mu.Unlock()
+	f.maxFrameBytes.Store(int64(size))
 }
 
 func (f *Framer) MaxFrameBytes() int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.maxFrameBytes
+	return int(f.maxFrameBytes.Load())
 }
 
 func (f *Framer) isClosed() bool {
@@ -81,10 +80,11 @@ func (f *Framer) WriteFrame(payload []byte) error {
 	if f.isClosed() {
 		return ErrClosed
 	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if len(payload) > f.maxFrameBytes {
-		return fmt.Errorf("%w: size=%d limit=%d", ErrFrameTooLarge, len(payload), f.maxFrameBytes)
+	f.writeMu.Lock()
+	defer f.writeMu.Unlock()
+	limit := f.MaxFrameBytes()
+	if len(payload) > limit {
+		return fmt.Errorf("%w: size=%d limit=%d", ErrFrameTooLarge, len(payload), limit)
 	}
 	var header [FrameHeaderSize]byte
 	binary.BigEndian.PutUint64(header[:], uint64(len(payload)))
@@ -109,9 +109,7 @@ func (f *Framer) ReadFrame() (Frame, error) {
 		return Frame{}, fmt.Errorf("jsonrpc: read header: %w", err)
 	}
 	size := binary.BigEndian.Uint64(header[:])
-	f.mu.Lock()
-	limit := f.maxFrameBytes
-	f.mu.Unlock()
+	limit := f.MaxFrameBytes()
 	if size > uint64(limit) {
 		if err := drainReader(f.r, size); err != nil {
 			amitialog.Printf("[original-error] %v", err)

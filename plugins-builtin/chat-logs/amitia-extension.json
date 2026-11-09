@@ -8,7 +8,7 @@
     "description": {
       "default": "浏览、搜索、恢复、删除、摘要和导出设备归档对话。"
     },
-    "version": "1.1.0",
+    "version": "1.1.1",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -301,6 +301,7 @@
             "metadata": {
               "routes": [
                 {
+                  "placement": "profile",
                   "id": "chat-logs",
                   "path": "/logs",
                   "providerId": "chat-logs-page-provider",
@@ -319,6 +320,7 @@
               ],
               "navigationItems": [
                 {
+                  "placement": "contextual",
                   "id": "chat-logs",
                   "label": "归档对话",
                   "route": "/logs",

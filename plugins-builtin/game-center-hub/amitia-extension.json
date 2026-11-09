@@ -8,7 +8,7 @@
     "description": {
       "default": "通过统一 UI Provider 提供游戏模式、插件管理和运行入口。"
     },
-    "version": "1.2.0",
+    "version": "1.2.4",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -276,6 +276,7 @@
             "metadata": {
               "routes": [
                 {
+                  "placement": "profile",
                   "id": "game-center-hub",
                   "path": "/game-center",
                   "providerId": "game-center-hub-page-provider",
@@ -294,6 +295,7 @@
               ],
               "navigationItems": [
                 {
+                  "placement": "profile",
                   "id": "game-center-hub",
                   "label": "游戏模式",
                   "route": "/game-center",
@@ -303,6 +305,7 @@
                   "groupLabel": "创意工坊",
                   "groupIcon": "workshop",
                   "order": 80,
+                  "profile": true,
                   "runtimeCapability": "gameMode"
                 }
               ]

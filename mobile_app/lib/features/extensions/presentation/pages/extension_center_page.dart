@@ -61,7 +61,7 @@ class ExtensionCenterPage extends ConsumerWidget {
     WidgetRef ref,
     ExtensionCenterView view,
   ) {
-    final snapshot = ref.watch(uiRuntimeProvider).valueOrNull;
+    final snapshot = ref.watch(effectiveUIRuntimeSnapshotProvider);
     final channelExtensionIds = ChannelPluginNavigationRegistry.extensionIds(
       snapshot,
     );

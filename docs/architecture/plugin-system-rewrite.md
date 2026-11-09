@@ -87,15 +87,27 @@ Adapter Conformance Test Kit 通过 `RunAdapterConformance` 统一验证 Adapter
 
 卸载时必须反向撤销全部贡献、监听器、服务、路由、定时器和缓存。
 
+UI Provider 必须按扩展身份清理，不能只依赖单个贡献 ID。卸载、包替换或回滚后，旧 Provider 不得继续出现在运行时快照或提供页面能力。
+
 内置壳页面可以通过 `allowsExtensionChildren` 声明开放挂载点。所有插件使用同一挂载规则提供子页面，宿主不得维护具体官方插件路径白名单；Web、桌面和移动端必须执行相同的开放与保护语义。
 
 页面框使用 `display.chrome` 声明 `default` 或 `frameless`。Schema UI 的横排标签使用通用 `tab-bar` 布局或变体。宿主不得按插件 ID、贡献 ID 或官方节点 ID 注入页框和视觉分支。
 
 UI Host 导航以当前 Router 的实际路由表为权威。动态 Provider 注册路由后即可通过 `host.ui.navigate` 导航，不得维护第三方路径白名单；仅登录、引导、隐私和恢复路径保持不可被插件导航。
 
+Provider 导航项必须声明归属层级：`primary`、`settings`、`profile`、`workspace` 或 `contextual`。桌面主图标栏只消费 `primary`；设置子页、用户菜单、工作区上下文和插件内部入口不得混入主栏。Web 与 Flutter 使用同一归属语义。
+
 通用扩展页面同时支持 `schema_page` 和 `web_page`。`web_page` 客户端模块通过短期页面能力令牌、入口内容哈希和模块目录边界从受控端点加载，并获得宿主提供的 `uiContext`、`uiActions` 与 `uiNavigate` 门面。
 
 运行时调试、BDI 决策可视化和长期运行维护由 `com.amitia/runtime-insights` 提供。插件通过 `host.runtime.snapshot` 和 `host.runtime.maintenance.*` 读取或修改状态，不直接调用管理员 HTTP 接口。
+
+## SDK 与 CLI
+
+JavaScript 宿主把 `@amitia/plugin-sdk` 作为受控虚拟依赖提供。插件包不得通过自带同名包替换宿主 SDK；正式构建会把同一源码基线的 SDK 发行物同步到插件宿主目录，并由 Node 权限边界限制可读范围。
+
+宿主运行时上下文统一暴露贡献、服务、Adapter、事件、存储、密钥引用、资源和类型化 Host API。工具定义中的 `metadata.handlerName` 必须与 Manifest 的 `runtime.handlerName` 一致，调用时由宿主注册表按该名称分发。
+
+`amitia-ext init` 生成的工具项目直接声明静态工具贡献和动态能力上限，`build` 使用 CLI 自带的类型定义完成离线构建。脚手架默认发布到 Windows、macOS 和 Linux，随后可执行严格校验、打包、签名、检查、安装、启用、停用和卸载。
 
 ## 生命周期
 
@@ -109,6 +121,10 @@ UI Host 导航以当前 Router 的实际路由表为权威。动态 Provider 注
 依赖者存在时不得直接移除必选服务提供者。更新失败必须恢复旧版本。可选插件故障不得阻止核心启动。
 
 随包插件目录按扩展包名称和语义版本选择最新候选，避免历史版本重复安装。单个候选在安全扫描、Manifest 解析、依赖预检、安装、启用或迁移阶段失败时，宿主记录隔离告警并继续处理其他插件，不把插件故障提升为 Core 启动失败。
+
+插件持久状态按扩展 ID 隔离并执行统一的字节数与键数配额。`data.backup` 在更新前生成状态备份；`data.export` 是导出卸载策略的前置能力声明；`data.uninstall` 决定卸载时保留、删除或先导出再删除状态。导出失败必须中止卸载，不得在无导出证据时删除数据。
+
+运行时重启耗尽或隔离后，宿主必须释放该扩展的动态贡献、服务提供与依赖、待处理注册和缓存。正常更新仍保留注册，只有不可恢复故障才进入隔离清理。
 
 ## 源码迁移顺序
 

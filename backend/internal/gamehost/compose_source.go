@@ -48,13 +48,9 @@ func (s *kernelContributionSource) ListEnabledGamePlugins(ctx context.Context) (
 
 	var result []integration.KernelGamePlugin
 	for _, inst := range installations {
-		if inst.InstallationState != kerneldomain.InstallationStateInstalled {
+		if inst.InstallationState != kerneldomain.InstallationStateInstalled ||
+			inst.EnablementState != kerneldomain.EnablementEnabled {
 			continue
-		}
-
-		def, err := s.defRepo.GetExtension(ctx, inst.ExtensionID, inst.InstalledVersion)
-		if err != nil {
-			return nil, fmt.Errorf("load enabled game plugin definition %q: %w", inst.ExtensionID, err)
 		}
 
 		contribs, err := s.contribRepo.ListContributions(ctx, inst.ExtensionID)
@@ -62,10 +58,21 @@ func (s *kernelContributionSource) ListEnabledGamePlugins(ctx context.Context) (
 			return nil, fmt.Errorf("load enabled game plugin contributions %q: %w", inst.ExtensionID, err)
 		}
 
+		gameContribs := make([]kerneldomain.ContributionDefinition, 0, len(contribs))
 		for _, c := range contribs {
-			if c.Kind != kerneldomain.ContributionKindGamePlugin {
-				continue
+			if c.Kind == kerneldomain.ContributionKindGamePlugin {
+				gameContribs = append(gameContribs, c)
 			}
+		}
+		if len(gameContribs) == 0 {
+			continue
+		}
+
+		def, err := s.defRepo.GetExtension(ctx, inst.ExtensionID, inst.InstalledVersion)
+		if err != nil {
+			return nil, fmt.Errorf("load enabled game plugin definition %q: %w", inst.ExtensionID, err)
+		}
+		for _, c := range gameContribs {
 			def.Domain = kerneldomain.ExtensionDomainGame
 			result = append(result, integration.KernelGamePlugin{
 				Extension:    def,

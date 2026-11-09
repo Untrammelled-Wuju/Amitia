@@ -100,6 +100,7 @@ type Container struct {
 	ContributionRepository sqlite.ContributionRepository
 	EnablementStore        enablement.StateStore
 	RuntimeRepository      domain.RuntimeRepository
+	ExtensionStateStore    *sqlite.ExtensionStateStoreRepository
 	OperationRepository    sqlite.OperationRepository
 	ScopeRepository        sqlite.ScopeRepository
 	PermissionRepository   sqlite.PermissionRepository

@@ -742,11 +742,20 @@ function assertUIProviderMetadata(definition: UIProviderDefinition): void {
       if (!item?.id || !item.label || !item.route?.startsWith("/")) {
         throw new ValidationError("navigation items require id, label and an absolute route");
       }
+      if (!["primary", "settings", "profile", "workspace", "contextual"].includes(item.placement)) {
+        throw new ValidationError("navigation item placement must be primary, settings, profile, workspace or contextual");
+      }
       if (item.containerId !== undefined && typeof item.containerId !== "string") {
         throw new ValidationError("navigation item containerId must be a string");
       }
       if (item.sidebarProviderId !== undefined && typeof item.sidebarProviderId !== "string") {
         throw new ValidationError("navigation item sidebarProviderId must be a string");
+      }
+      if (item.profile !== undefined && typeof item.profile !== "boolean") {
+        throw new ValidationError("navigation item profile must be a boolean");
+      }
+      if (item.tabLabel !== undefined && (typeof item.tabLabel !== "string" || !item.tabLabel.trim())) {
+        throw new ValidationError("navigation item tabLabel must be a non-empty string");
       }
       if (item.sidebarItems !== undefined) {
         if (!Array.isArray(item.sidebarItems)) throw new ValidationError("navigation item sidebarItems must be an array");

@@ -23,7 +23,7 @@ describe("图标导航栏布局", () => {
       history: createMemoryHistory(),
       routes: [{ path: "/:pathMatch(.*)*", component: { template: "<div />" } }],
     });
-    await router.push("/continuity");
+    await router.push("/chat");
     await router.isReady();
     const wrapper = mount(SideNav, {
       global: { plugins: [pinia, router, ElementPlus] },
@@ -32,8 +32,6 @@ describe("图标导航栏布局", () => {
       expect(wrapper.get(".side-nav").classes()).not.toContain("is-collapsed");
       expect(wrapper.findAll(".el-menu-item").map(item => item.text())).toEqual([
         "主页",
-        "持续事项",
-        "扩展中心",
       ]);
       expect(wrapper.find(".user-profile").exists()).toBe(true);
     } finally {
@@ -54,13 +52,13 @@ describe("图标导航栏布局", () => {
       global: { plugins: [pinia, router, ElementPlus] },
     });
     try {
-      const continuityItem = wrapper.findAll(".el-menu-item").find(item => item.text().includes("持续事项"));
-      expect(continuityItem).toBeTruthy();
-      await continuityItem!.trigger("mouseenter");
+      const homeItem = wrapper.findAll(".el-menu-item").find(item => item.text().includes("主页"));
+      expect(homeItem).toBeTruthy();
+      await homeItem!.trigger("mouseenter");
       await vi.waitFor(() => {
         const tooltip = document.body.querySelector("#side-nav-tooltip");
-        expect(tooltip?.textContent).toContain("持续事项");
-        expect(tooltip?.textContent).toContain("查看长期目标和持续事项");
+        expect(tooltip?.textContent).toContain("主页");
+        expect(tooltip?.textContent).toContain("开始新对话，或继续最近的聊天");
       });
     } finally {
       wrapper.unmount();

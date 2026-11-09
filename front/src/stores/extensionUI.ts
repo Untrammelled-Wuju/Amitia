@@ -1,6 +1,6 @@
 import { defineStore } from "pinia";
 import { ref, computed } from "vue";
-import type { UIProviderCapability, UIProviderDefinition, UIProfile, UIProfileScopeKind, UIProviderResolveContext } from "@/ui-runtime/types";
+import type { UIProviderCapability, UIProviderCompatibility, UIProviderDefinition, UIProfile, UIProfileScopeKind, UIProviderResolveContext } from "@/ui-runtime/types";
 import {
   fetchUISnapshot,
   fetchContributions,
@@ -100,6 +100,7 @@ export interface UIContributionSnapshot {
   profile?: UIProfile;
   profileLayers?: UIProfile[];
   resolved?: Partial<Record<UIProviderCapability, UIProviderDefinition>>;
+  providerResolutions?: Record<string, UIProviderCompatibility>;
   providerContext?: UIProviderResolveContext;
   providerVersion?: number;
 }
@@ -216,6 +217,12 @@ export const useExtensionUIStore = defineStore("extensionUI", () => {
   function getProviders(capability?: UIProviderCapability): UIProviderDefinition[] {
     const providers = snapshot.value?.providers ?? [];
     return capability ? providers.filter((provider) => provider.capability === capability) : providers;
+  }
+
+  function getProviderCompatibility(providerId: string): UIProviderCompatibility | null {
+    const key = providerId.trim();
+    if (!key) return null;
+    return snapshot.value?.providerResolutions?.[key] ?? null;
   }
 
   function getVisibleContributions(slotId: string, context?: Record<string, unknown>): UIContributionSummary[] {
@@ -518,6 +525,7 @@ export const useExtensionUIStore = defineStore("extensionUI", () => {
     getContributionById,
     getResolvedProvider,
     getProviders,
+    getProviderCompatibility,
     selectProvider,
     loadProfileScope,
     resetProfileScope,

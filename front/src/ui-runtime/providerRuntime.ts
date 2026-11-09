@@ -40,29 +40,42 @@ function compareVersion(a: string, b: string): number {
   return 0;
 }
 
-export function isProviderCompatible(provider: UIProviderDefinition, context: UIProviderResolveContext | undefined, platform: string): boolean {
-  if (!provider.enabled || !selectProviderEntry(provider, platform)) return false;
+export function providerCompatibilityIssue(
+  provider: UIProviderDefinition,
+  context: UIProviderResolveContext | undefined,
+  platform: string,
+): string | null {
+  if (!provider.enabled) return "provider-disabled";
+  if (!selectProviderEntry(provider, platform)) return `entry-unavailable:${platform}`;
   const placement = provider.placement ?? (provider.builtin ? "any" : "cloud");
   const ctx = context ?? { platform };
   if (placement === "device" && !ctx.localRuntime) {
-    if (!ctx.deviceId || !ctx.deviceOnline) return false;
+    if (!ctx.deviceId) return "device-identity-unavailable";
+    if (!ctx.deviceOnline) return "device-offline";
   }
   const req = provider.deviceRequirements;
-  if (!req) return true;
-  if (req.platforms?.length && !hasFold(req.platforms, platform)) return false;
+  if (!req) return null;
+  if (req.platforms?.length && !hasFold(req.platforms, platform)) return `platform-unsupported:${platform}`;
   if (req.architectures?.length) {
-    if (!ctx.architecture || !hasFold(req.architectures, ctx.architecture)) return false;
+    if (!ctx.architecture) return "architecture-unavailable";
+    if (!hasFold(req.architectures, ctx.architecture)) return `architecture-unsupported:${ctx.architecture}`;
   }
   if (req.minAppVersion) {
-    if (!ctx.appVersion || compareVersion(ctx.appVersion, req.minAppVersion) < 0) return false;
+    if (!ctx.appVersion) return "app-version-unavailable";
+    if (compareVersion(ctx.appVersion, req.minAppVersion) < 0) return `app-version-required:${req.minAppVersion}`;
   }
   if (req.minRuntimeVersion) {
-    if (!ctx.runtimeVersion || compareVersion(ctx.runtimeVersion, req.minRuntimeVersion) < 0) return false;
+    if (!ctx.runtimeVersion) return "runtime-version-unavailable";
+    if (compareVersion(ctx.runtimeVersion, req.minRuntimeVersion) < 0) return `runtime-version-required:${req.minRuntimeVersion}`;
   }
   for (const feature of req.requiredFeatures ?? []) {
-    if (!hasFold(ctx.deviceCapabilities, feature)) return false;
+    if (!hasFold(ctx.deviceCapabilities, feature)) return `feature-required:${feature}`;
   }
-  return true;
+  return null;
+}
+
+export function isProviderCompatible(provider: UIProviderDefinition, context: UIProviderResolveContext | undefined, platform: string): boolean {
+  return providerCompatibilityIssue(provider, context, platform) === null;
 }
 
 export function canLoadTrustedWebModule(provider: UIProviderDefinition, entry: UIProviderEntry): boolean {

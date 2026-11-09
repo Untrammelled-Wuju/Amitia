@@ -30,11 +30,11 @@
     }
   },
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
+    "build": "node node_modules/typescript/bin/tsc && node scripts/fix-esm-imports.mjs",
+    "dev": "node node_modules/typescript/bin/tsc --watch",
     "lint": "eslint src --ext .ts",
-    "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "test": "node node_modules/vitest/vitest.mjs run",
+    "typecheck": "node node_modules/typescript/bin/tsc --noEmit"
   },
   "dependencies": {
     "@amitia/plugin-sdk": "workspace:*"

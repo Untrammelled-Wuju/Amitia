@@ -30,6 +30,10 @@ async function renderSettings(path: string) {
       ] },
       { path: "/chat", component: defineComponent({ template: '<div>会话内容</div>' }) },
       { path: "/character", component: defineComponent({ template: '<div>角色内容</div>' }) },
+      { path: "/storage", component: defineComponent({ template: '<div>存储维护内容</div>' }) },
+      { path: "/runtime-debug", component: defineComponent({ template: '<div>运行时调试内容</div>' }) },
+      { path: "/decision-viz", component: defineComponent({ template: '<div>决策可视化内容</div>' }) },
+      { path: "/long-running", component: defineComponent({ template: '<div>长期运行维护内容</div>' }) },
     ],
   });
   await router.push(path);
@@ -67,8 +71,8 @@ describe("桌面设置分类导航", () => {
     try {
       expect(wrapper.findAll("nav section")).toHaveLength(7);
       const links = wrapper.findAll("nav a");
-      expect(links).toHaveLength(19);
-      expect(new Set(links.map(link => link.attributes("href"))).size).toBe(19);
+      expect(links).toHaveLength(23);
+      expect(new Set(links.map(link => link.attributes("href"))).size).toBe(23);
       expect(wrapper.find('a[href="/settings/deployment"]').exists()).toBe(false);
       expect(wrapper.find('a[href="/settings/runtime"]').exists()).toBe(false);
       expect(wrapper.find('a[href="/settings/feedback"]').exists()).toBe(true);
@@ -76,6 +80,9 @@ describe("桌面设置分类导航", () => {
       expect(privacyGroup?.findAll("a").map(link => link.text())).toEqual(["隐私说明", "使用边界", "隐私扫描"]);
       expect(links.slice(0, 4).map(link => link.text())).toEqual(["通用", "外观", "通知", "时间与地区"]);
       expect(wrapper.find('a[href="/settings/data-management"]').exists()).toBe(true);
+      for (const path of ["/storage", "/runtime-debug", "/decision-viz", "/long-running"]) {
+        expect(wrapper.find(`a[href="${path}"]`).exists()).toBe(true);
+      }
       expect(wrapper.find('a[href="/settings/model"]').attributes('aria-current')).toBe('page');
       expect((wrapper.get("select").element as HTMLSelectElement).value).toBe("/settings/model");
       expect(wrapper.findAll("[data-slot]").map(slot => slot.attributes("data-slot"))).toEqual([

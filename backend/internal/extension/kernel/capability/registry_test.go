@@ -203,6 +203,35 @@ func TestToolRegistryReplaceOwnerConflict(t *testing.T) {
 	}
 }
 
+func TestToolRegistryThirdPartyReplacementAfterOfficialUnregister(t *testing.T) {
+	reg := NewToolRegistry()
+	official := ToolDefinition{
+		ID:          "workspace/search",
+		ExtensionID: "com.amitia/workspace",
+		Source:      ToolSourcePlugin,
+		ModelName:   "workspace_search",
+		Name:        "official workspace search",
+		Enabled:     true,
+		InputSchema: json.RawMessage(`{"type":"object","properties":{"query":{"type":"string"}}}`),
+	}
+	if err := reg.Register(context.Background(), official); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reg.UnregisterByOwner(context.Background(), "extension:com.amitia/workspace"); err != nil {
+		t.Fatal(err)
+	}
+	thirdParty := official
+	thirdParty.ExtensionID = "com.example/workspace-pro"
+	thirdParty.Name = "third-party workspace search"
+	if err := reg.Register(context.Background(), thirdParty); err != nil {
+		t.Fatal(err)
+	}
+	tool, ok := reg.Get(context.Background(), official.ID)
+	if !ok || tool.ExtensionID != thirdParty.ExtensionID || tool.Name != thirdParty.Name {
+		t.Fatalf("third-party tool did not replace the official tool: %+v", tool)
+	}
+}
+
 func TestToolRegistryBatchRegister(t *testing.T) {
 	reg := NewToolRegistry()
 

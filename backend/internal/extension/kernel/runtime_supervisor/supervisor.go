@@ -32,6 +32,7 @@ type DefaultSupervisor struct {
 	instances     map[string]*instanceEntry
 	byDefinition  map[DefinitionID][]string
 	circuitConfig CircuitConfig
+	crashObserver CrashObserver
 }
 
 type CircuitConfig struct {
@@ -57,6 +58,12 @@ func (s *DefaultSupervisor) SetCircuitConfig(config CircuitConfig) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.circuitConfig = config
+}
+
+func (s *DefaultSupervisor) SetCrashObserver(observer CrashObserver) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.crashObserver = observer
 }
 
 func (s *DefaultSupervisor) RegisterFactory(factory RuntimeFactory) error {
@@ -274,7 +281,16 @@ func (s *DefaultSupervisor) restartInstance(ctx context.Context, instanceID stri
 	if entry.restarts >= request.Spec.MaxRestarts && request.Spec.MaxRestarts > 0 {
 		entry.actual = ActualQuarantined
 		entry.health = HealthUnhealthy
+		observer := s.crashObserver
+		extensionID := entry.identity.ExtensionID
+		moduleID := entry.identity.ModuleID
+		generation := entry.generation
 		s.mu.Unlock()
+		if observer != nil {
+			if err := observer.RuntimeCrashed(ctx, string(extensionID), string(moduleID), generation, ErrMaxRestartsExceeded.Error()); err != nil {
+				amitialog.Printf("[runtime-supervisor] crash cleanup failed for %s/%s: %v", extensionID, moduleID, err)
+			}
+		}
 		return ReconcileResult{
 			InstanceID:   instanceID,
 			DefinitionID: request.DefinitionID,
@@ -298,7 +314,16 @@ func (s *DefaultSupervisor) restartInstance(ctx context.Context, instanceID stri
 		entry.health = HealthUnhealthy
 		entry.consecFails++
 		s.evaluateCircuitLocked(entry)
+		observer := s.crashObserver
+		extensionID := entry.identity.ExtensionID
+		moduleID := entry.identity.ModuleID
+		generation := entry.generation
 		s.mu.Unlock()
+		if observer != nil {
+			if err := observer.RuntimeCrashed(ctx, string(extensionID), string(moduleID), generation, err.Error()); err != nil {
+				amitialog.Printf("[runtime-supervisor] crash cleanup failed for %s/%s: %v", extensionID, moduleID, err)
+			}
+		}
 		return ReconcileResult{
 			InstanceID:   instanceID,
 			DefinitionID: request.DefinitionID,

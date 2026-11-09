@@ -19,7 +19,7 @@ void main() {
       providers: <UIProviderDefinition>[
         UIProviderDefinition(
           providerId: 'active-task-routes',
-          extensionId: 'com.amitia.builtin.active-task',
+          extensionId: 'com.amitia/active-task',
           capability: UICapability.routeRegistry,
           mode: UIProviderMode.replace,
           priority: 248,
@@ -45,7 +45,7 @@ void main() {
         ),
         UIProviderDefinition(
           providerId: 'active-task-page-provider',
-          extensionId: 'com.amitia.builtin.active-task',
+          extensionId: 'com.amitia/active-task',
           capability: UICapability.pageProvider,
           mode: UIProviderMode.replace,
           priority: 248,

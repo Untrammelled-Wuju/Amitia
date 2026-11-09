@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/extension_service.dart';
-import '../services/providers.dart' show extensionServiceProvider, currentSpaceProfileProvider;
+import '../services/providers.dart'
+    show extensionServiceProvider, currentSpaceProfileProvider;
 import '../backend_connection/backend_connection_availability.dart';
 import '../backend_connection/providers/runtime_backend_connection_source.dart';
 import '../backend_transport/backend_service_api.dart';
@@ -16,6 +17,9 @@ import 'ui_snapshot_cache.dart';
 import 'ui_runtime_invalidation.dart';
 
 final uiRuntimeUsingLastKnownGoodProvider = StateProvider<bool>((ref) => false);
+final uiRuntimeSnapshotOverrideProvider = Provider<UIProviderSnapshot?>(
+  (ref) => null,
+);
 
 class UIRuntimeController
     extends StateNotifier<AsyncValue<UIProviderSnapshot?>> {
@@ -149,8 +153,8 @@ class UIRuntimeController
       await ensureLoaded(force: true);
       return saved;
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-// Force a fresh cloud revision before the caller offers retry.
+      print("[original-error] $error\n$stackTrace");
+      // Force a fresh cloud revision before the caller offers retry.
       await ensureLoaded(force: true);
       rethrow;
     }
@@ -241,14 +245,19 @@ final uiRuntimeProvider =
             final id = (status?['deviceId'] ?? '').toString().trim();
             return id.isEmpty ? null : id;
           } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-return null;
+            print("[original-error] $error\n$stackTrace");
+            return null;
           } finally {
             if (http != null) await http.close();
           }
         },
       );
     });
+
+final effectiveUIRuntimeSnapshotProvider = Provider<UIProviderSnapshot?>((ref) {
+  return ref.watch(uiRuntimeSnapshotOverrideProvider) ??
+      ref.watch(uiRuntimeProvider).valueOrNull;
+});
 
 final activeUIProvider = Provider.family<UIProviderDefinition?, String>((
   ref,

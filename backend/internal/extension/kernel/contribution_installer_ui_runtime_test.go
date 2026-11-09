@@ -127,10 +127,10 @@ func TestBuildUIContributionOpIsIdempotentForIdenticalRegistration(t *testing.T)
 	definition := ui_contribution.UIContributionDefinition{
 		ContributionID: "stable-panel", ExtensionID: "com.example/stable", ModuleID: "stable-ui",
 		Kind: ui_contribution.UIContributionPanel, ContractVersion: 1,
-		Slot: ui_contribution.UISlotReference{SlotID: "provider.test.panel", ContractVersion: 1},
-		Entry: ui_contribution.UIEntryDefinition{Type: ui_contribution.SandboxSchemaRenderer, ContentHash: "inline-v1"},
-		Schema: json.RawMessage(`{"schemaVersion":"schema-ui/1","type":"document","children":[{"id":"title","type":"text","props":{"text":"Stable"}}]}`),
-		Sandbox: ui_contribution.UISandboxPolicy{Type: ui_contribution.SandboxSchemaRenderer},
+		Slot:      ui_contribution.UISlotReference{SlotID: "provider.test.panel", ContractVersion: 1},
+		Entry:     ui_contribution.UIEntryDefinition{Type: ui_contribution.SandboxSchemaRenderer, ContentHash: "inline-v1"},
+		Schema:    json.RawMessage(`{"schemaVersion":"schema-ui/1","type":"document","children":[{"id":"title","type":"text","props":{"text":"Stable"}}]}`),
+		Sandbox:   ui_contribution.UISandboxPolicy{Type: ui_contribution.SandboxSchemaRenderer},
 		Integrity: ui_contribution.ContributionIntegrity{DefinitionHash: "inline-v1"},
 	}
 	data, err := json.Marshal(definition)
@@ -215,5 +215,43 @@ func TestActivateUIProviderReplacesExistingDefinition(t *testing.T) {
 	}
 	if got := updated.Entries["electron_macos"].ContentHash; got != "sha256:new" {
 		t.Fatalf("provider definition was not replaced, got %q", got)
+	}
+}
+
+func TestUninstallContributionsRemovesExtensionUIProviders(t *testing.T) {
+	registry := ui_provider.NewRegistry()
+	register := func(providerID, extensionID string) {
+		t.Helper()
+		if err := registry.Register(ui_provider.ProviderDefinition{
+			ProviderID:  providerID,
+			ExtensionID: extensionID,
+			ModuleID:    "main",
+			Capability:  ui_provider.CapabilityPageProvider,
+			Mode:        ui_provider.ModeReplace,
+			Placement:   ui_provider.PlacementDevice,
+			TrustLevel:  "official",
+			Enabled:     true,
+			Entries: map[string]ui_provider.Entry{
+				"*": {ContributionID: providerID, Type: ui_provider.EntrySchemaRenderer},
+			},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	register("removed-page-provider", "com.example/removed")
+	register("retained-page-provider", "com.example/retained")
+
+	installer := &TypedContributionInstaller{container: &Container{
+		UIProviderRegistry:     registry,
+		InstallationRepository: domain.NewInMemoryInstallationRepository(),
+	}}
+	if err := installer.UninstallContributions(context.Background(), "com.example/removed"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := registry.Get("removed-page-provider"); ok {
+		t.Fatal("uninstalled extension UI provider remained registered")
+	}
+	if _, ok := registry.Get("retained-page-provider"); !ok {
+		t.Fatal("unrelated extension UI provider was removed")
 	}
 }

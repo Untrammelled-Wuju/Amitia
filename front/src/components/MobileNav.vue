@@ -18,7 +18,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       @pointerdown="prewarmItem(item)"
     >
       <el-icon><component :is="item.icon" /></el-icon>
-      <span>{{ item.label }}</span>
+      <span>{{ item.tabLabel || item.label }}</span>
     </router-link>
   </nav>
 </template>

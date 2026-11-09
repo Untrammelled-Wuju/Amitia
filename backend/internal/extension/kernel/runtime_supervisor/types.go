@@ -216,6 +216,10 @@ type RuntimeFactory interface {
 	Create(ctx context.Context, spec InstanceSpec) (ManagedRuntime, error)
 }
 
+type CrashObserver interface {
+	RuntimeCrashed(ctx context.Context, extensionID, moduleID string, generation int64, reason string) error
+}
+
 type Supervisor interface {
 	RegisterFactory(factory RuntimeFactory) error
 	Reconcile(ctx context.Context, request ReconcileRequest) ReconcileResult

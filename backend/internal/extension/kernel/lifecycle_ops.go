@@ -852,8 +852,14 @@ func (r *Runtime) Uninstall(ctx context.Context, extensionID string) error {
 
 	inst, err := r.container.InstallationRepository.GetInstallation(ctx, extID)
 	version := ""
+	dataPolicy := extensionDataPolicy{Uninstall: "retain"}
 	if err == nil {
 		version = inst.InstalledVersion.String()
+		if r.container.DefinitionRepository != nil {
+			if definition, definitionErr := r.container.DefinitionRepository.GetExtension(ctx, extID, inst.InstalledVersion); definitionErr == nil {
+				dataPolicy = extensionDataPolicyFromDefinition(definition)
+			}
+		}
 	}
 
 	gameHostOwnedModules, ownershipErr := r.gameHostOwnedRuntimeModules(ctx, extID)
@@ -1017,6 +1023,22 @@ func (r *Runtime) Uninstall(ctx context.Context, extensionID string) error {
 		return fmt.Errorf("kernel: uninstall %s failed with %d errors: %v", extensionID, len(cleanupErrs), cleanupErrs)
 	}
 
+	if dataPolicy.Uninstall == "export" {
+		if r.container.ExtensionStateStore == nil {
+			return errors.New("kernel: extension state store unavailable for export uninstall policy")
+		}
+		if _, err := r.writeExtensionStateSnapshot(ctx, extensionID, "uninstall-"+extensionID, "exports"); err != nil {
+			return fmt.Errorf("kernel: export extension data before uninstall: %w", err)
+		}
+	}
+	if dataPolicy.Uninstall == "delete" || dataPolicy.Uninstall == "export" {
+		if r.container.ExtensionStateStore == nil {
+			return errors.New("kernel: extension state store unavailable for uninstall data policy")
+		}
+		if err := r.container.ExtensionStateStore.DeleteByExtension(ctx, extensionID); err != nil {
+			return fmt.Errorf("kernel: delete extension data: %w", err)
+		}
+	}
 	if err := r.container.ModuleRepository.DeleteModules(ctx, extID); err != nil {
 		return fmt.Errorf("kernel: delete modules: %w", err)
 	}

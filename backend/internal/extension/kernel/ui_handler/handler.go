@@ -309,6 +309,7 @@ func (h *HTTPHandler) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 		payload["profile"] = providerSnapshot.Profile
 		payload["profileLayers"] = providerSnapshot.ProfileLayers
 		payload["resolved"] = signResolvedProviderModules(providerSnapshot.Resolved)
+		payload["providerResolutions"] = providerSnapshot.ProviderResolutions
 		payload["providerContext"] = providerSnapshot.Context
 		payload["providerVersion"] = providerSnapshot.Version
 	}

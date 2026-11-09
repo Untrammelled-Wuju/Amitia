@@ -33,11 +33,13 @@ class HubEntryCard extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.onTap,
+    this.iconData,
     this.description = '',
     this.showDivider = false,
   });
 
   final AmitiaIconGlyph icon;
+  final IconData? iconData;
   final String title;
   final String description;
   final VoidCallback onTap;
@@ -69,7 +71,9 @@ class HubEntryCard extends StatelessWidget {
           ),
           child: Row(
             children: [
-              AmitiaIcon(icon, color: context.textSecondary, size: 20),
+              iconData == null
+                  ? AmitiaIcon(icon, color: context.textSecondary, size: 20)
+                  : Icon(iconData, color: context.textSecondary, size: 20),
               SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: hasDescription

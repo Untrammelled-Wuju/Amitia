@@ -1109,6 +1109,11 @@ func (r *Runtime) ExecutePackageUninstall(ctx context.Context, req ExecutePackag
 	if err != nil {
 		return op, err
 	}
+	dataDefinition, err := r.container.DefinitionRepository.GetExtension(ctx, installation.ExtensionID, installation.InstalledVersion)
+	if err != nil {
+		return op, err
+	}
+	dataPolicy := extensionDataPolicyFromDefinition(dataDefinition)
 	currentPointer, err := r.container.PackageGenerationStore.ReadCurrent(extensionID)
 	if err != nil || currentPointer.GenerationID != preview.GenerationID || currentPointer.TreeHash != preview.InstalledHash {
 		persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "requires_recovery", "bind_current_pointer", "PACKAGE_RECOVERY_REQUIRED", fmt.Sprint(err), false, uninstallGuard)
@@ -1132,6 +1137,16 @@ func (r *Runtime) ExecutePackageUninstall(ctx context.Context, req ExecutePackag
 	if err := r.stopExtensionRuntimeInstances(ctx, domain.ExtensionID(extensionID), runtime_supervisor.StopReasonUninstall); err != nil {
 		persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "failed", "stop_extension_runtime", "PACKAGE_RUNTIME_STOP_FAILED", err.Error(), true, uninstallGuard)
 		return op, errors.Join(fmt.Errorf("kernel: stop extension runtime before uninstall: %w", err), persistErr)
+	}
+	if dataPolicy.Uninstall == "export" {
+		if r.container.ExtensionStateStore == nil {
+			persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "failed", "export_extension_state", "PACKAGE_EXTENSION_DATA_EXPORT_FAILED", "extension state store unavailable", true, uninstallGuard)
+			return op, errors.Join(errors.New("kernel: extension state store unavailable for export uninstall policy"), persistErr)
+		}
+		if _, err := r.writeExtensionStateSnapshot(ctx, extensionID, op.OperationID, "exports"); err != nil {
+			persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "failed", "export_extension_state", "PACKAGE_EXTENSION_DATA_EXPORT_FAILED", err.Error(), true, uninstallGuard)
+			return op, errors.Join(fmt.Errorf("kernel: export extension data before uninstall: %w", err), persistErr)
+		}
 	}
 	if err := leaseGuard.AssertAlive(ctx); err != nil {
 		persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "requires_recovery", "renew_lease", "PACKAGE_LEASE_LOST", err.Error(), false, uninstallGuard)
@@ -1216,6 +1231,14 @@ func (r *Runtime) ExecutePackageUninstall(ctx context.Context, req ExecutePackag
 		}
 		if err := r.container.ContributionRepository.DeleteContributions(txCtx, installation.ExtensionID); err != nil {
 			return err
+		}
+		if dataPolicy.Uninstall == "delete" || dataPolicy.Uninstall == "export" {
+			if r.container.ExtensionStateStore == nil {
+				return errors.New("kernel: extension state store unavailable for uninstall data policy")
+			}
+			if err := r.container.ExtensionStateStore.DeleteByExtension(txCtx, extensionID); err != nil {
+				return err
+			}
 		}
 		if err := r.container.ModuleRepository.DeleteModules(txCtx, installation.ExtensionID); err != nil {
 			return err

@@ -1,6 +1,5 @@
 import { computed, type Component } from "vue";
 import {
-  AlarmClock,
   Avatar,
   Calendar,
   ChatLineRound,
@@ -38,6 +37,7 @@ export interface UINavigationItem {
   id: string;
   route: string;
   label: string;
+  placement: "primary" | "settings" | "profile" | "workspace" | "contextual";
   description?: string;
   icon: Component;
   order: number;
@@ -46,6 +46,8 @@ export interface UINavigationItem {
   groupIcon?: Component;
   match?: string[];
   mobile?: boolean;
+  profile?: boolean;
+  tabLabel?: string;
   extensionId?: string;
   runtimeCapability?: RuntimeCapabilityName;
   containerId?: string;
@@ -94,59 +96,17 @@ export function resolveNavigationIcon(name?: string): Component {
   return iconMap[String(name || "extension").toLowerCase()] ?? Extensions;
 }
 
-const builtinItems: UINavigationItem[] = [
-  { id: "home", route: "/chat", label: "主页", description: "开始新对话，或继续最近的聊天。", icon: HomeIcon, group: "home", order: 0, mobile: true, match: ["/chat", "/logs"] },
-  { id: "tasks.continuity", route: "/continuity", label: "持续事项", description: "查看长期目标和持续事项。", icon: AlarmClock, group: "tasks", order: 70, mobile: true, match: ["/continuity"] },
-  { id: "extensions", route: "/extensions", label: "扩展中心", description: "管理扩展包、工作流、MCP 和 Agent Skills。", icon: Extensions, group: "extensions", order: 90, match: ["/extensions", "/kernel"] },
+const coreNavigationItems: UINavigationItem[] = [
+  { id: "home", route: "/chat", label: "主页", placement: "primary", description: "开始新对话，或继续最近的聊天。", icon: HomeIcon, group: "home", order: 0, mobile: true, match: ["/chat"] },
 ];
 
-const pageTitleOverrides: Record<string, string> = {
+const corePageTitles: Record<string, string> = {
   "/onboarding": "引导",
   "/privacy": "隐私说明",
   "/usage-boundary": "使用边界",
-  "/runtime-debug": "运行时调试",
   "/chat": "新对话",
-  "/character": "角色管理",
-  "/characters/teams": "团队",
-  "/profiles": "用户画像",
-  "/world-book": "世界书",
-  "/memory-manager": "记忆总览",
-  "/memory-timeline": "时间线",
-  "/knowledge": "知识库",
-  "/episodic": "情景记忆",
-  "/graph": "记忆图谱",
-  "/settings/overview": "运行概览",
-  "/settings/data": "运行数据",
-  "/channel-center": "渠道接入",
-  "/continuity": "持续事项",
-  "/my-space": "我的空间",
-  "/my-space/profile": "资料与头像",
-  "/my-space/identity": "身份信息",
-  "/my-space/runtime": "运行模式",
-  "/my-space/devices": "已绑定设备",
-  "/user-settings": "我的空间",
-  "/creative-workshop/character-cards": "角色卡工坊",
-  "/creative-workshop/pet": "桌宠",
-  "/emotes": "表情包管理",
-  "/extensions/mcp": "MCP 服务",
-  "/extensions/packages": "扩展包",
-  "/extensions/workflows": "工作流",
-  "/kernel": "内核工具",
-  "/kernel/trusted-services": "可信服务运行时",
-  "/kernel/wasm": "WASM 运行时",
-  "/kernel/hooks": "Hook 中心",
-  "/kernel/tasks": "任务运行时",
-  "/kernel/events": "事件中心",
-  "/kernel/schedules": "调度中心",
-  "/kernel/desktop": "桌面贡献中心",
-  "/kernel/updates": "扩展更新中心",
-  "/kernel/dev-console": "开发者诊断控制台",
-  "/kernel/dev-mode": "开发模式中心",
-  "/devices": "运行模式",
-  "/long-running": "长期运行维护",
-  "/settings/system-logs": "系统运行日志",
-  "/settings/feedback": "问题反馈",
-  "/settings/prompt-trace": "Prompt Trace",
+  "/attention": "待处理",
+  "/settings/ui-providers": "界面提供者修复",
 };
 
 function finiteNumber(value: unknown, fallback: number): number {
@@ -160,6 +120,24 @@ function absolutePrefixes(value: unknown): string[] | undefined {
     .map((item) => String(item).trim())
     .filter((item) => item.startsWith("/") && item !== "/");
   return prefixes.length > 0 ? prefixes : undefined;
+}
+
+function resolveNavigationPlacement(row: Record<string, unknown>, route: string, group: string): UINavigationItem["placement"] {
+  const explicit = String(row.placement ?? row.navigationPlacement ?? "").trim().toLowerCase();
+  if (explicit === "primary" || explicit === "settings" || explicit === "profile" || explicit === "workspace" || explicit === "contextual") {
+    return explicit;
+  }
+  if (group === "settings") return "settings";
+  if (route === "/settings" || route.startsWith("/settings/") || route === "/logs" || route.startsWith("/logs/")) return "profile";
+  if (group === "workspace" || route === "/workspaces" || route.startsWith("/workspaces/")) return "workspace";
+  if (
+    row.profile === true ||
+    row.profileHub === true ||
+    row.mobile === true ||
+    String(row.panel ?? "").trim() === "main" ||
+    String(row.tabLabel ?? "").trim()
+  ) return "primary";
+  return "contextual";
 }
 
 function activeNavigationProviders(store: ReturnType<typeof useExtensionUIStore>): UIProviderDefinition[] {
@@ -215,6 +193,7 @@ export function collectExtensionNavigationItems(
         id: key,
         route,
         label,
+        placement: resolveNavigationPlacement(row, route, group),
         description: String(row.description ?? row.summary ?? "").trim(),
         icon: resolveNavigationIcon(String(row.icon ?? "extension")),
         order: finiteNumber(row.order, 1000),
@@ -223,6 +202,8 @@ export function collectExtensionNavigationItems(
         groupIcon: resolveNavigationIcon(String(row.groupIcon ?? row.icon ?? "extension")),
         match: absolutePrefixes(row.match ?? row.routePrefixes),
         mobile: row.mobile === true || String(row.panel ?? "").trim() === "main",
+        profile: row.profile === true || row.profileHub === true,
+        tabLabel: String(row.tabLabel ?? "").trim() || undefined,
         extensionId: provider.extensionId,
         containerId: String(row.containerId ?? "").trim(),
         sidebarProviderId: String(row.sidebarProviderId ?? "").trim(),
@@ -291,9 +272,37 @@ function applyIconProvider(store: ReturnType<typeof useExtensionUIStore>, items:
 }
 
 export function resolveBuiltinNavigationItems(store: ReturnType<typeof useExtensionUIStore>): UINavigationItem[] {
-  return builtinItems.filter(
+  return coreNavigationItems.filter(
     (item) => !item.runtimeCapability || isRuntimeCapabilityAvailable(item.runtimeCapability),
   );
+}
+
+export function resolveMobileNavigationItems(items: UINavigationItem[]): UINavigationItem[] {
+  return items.filter(
+    (item) => item.mobile && (item.placement === "primary" || item.placement === "profile"),
+  );
+}
+
+function matchesRoutePattern(path: string, pattern: string): boolean {
+  if (path === pattern || pattern === "*" || pattern === "/*") return true;
+  if (pattern.endsWith("/*")) {
+    const prefix = pattern.slice(0, -2);
+    return path === prefix || path.startsWith(`${prefix}/`);
+  }
+  const pathParts = path.split("/").filter(Boolean);
+  const patternParts = pattern.split("/").filter(Boolean);
+  if (pathParts.length !== patternParts.length) return false;
+  return patternParts.every((part, index) => part.startsWith(":") || part === "*" || part === pathParts[index]);
+}
+
+export function resolveProviderRouteTitle(
+  store: ReturnType<typeof useExtensionUIStore>,
+  path: string,
+): string | null {
+  const matches = collectEffectiveProviderRoutes(store)
+    .filter((route) => route.title && matchesRoutePattern(path, route.path))
+    .sort((a, b) => b.path.length - a.path.length || b.priority - a.priority);
+  return matches[0]?.title?.trim() || null;
 }
 
 export function useUINavigationRegistry() {
@@ -325,8 +334,13 @@ export function useUINavigationRegistry() {
     }
     return [...map.values()].sort((a, b) => a.order - b.order);
   });
-  const mobileItems = computed(() => items.value.filter((item) => item.mobile));
-  return { items, groups, mobileItems };
+  const primaryItems = computed(() => items.value.filter((item) => item.placement === "primary"));
+  const settingsItems = computed(() => items.value.filter((item) => item.placement === "settings"));
+  const mobileItems = computed(() => resolveMobileNavigationItems(items.value));
+  const profileItems = computed(() => items.value.filter((item) => item.profile));
+  const titleForRoute = (path: string) =>
+    resolveProviderRouteTitle(store, path) || resolvePageTitle(path, items.value);
+  return { items, primaryItems, settingsItems, groups, mobileItems, profileItems, titleForRoute };
 }
 
 export function isUINavigationItemActive(path: string, item: UINavigationItem): boolean {
@@ -334,8 +348,8 @@ export function isUINavigationItemActive(path: string, item: UINavigationItem): 
   return (item.match ?? []).some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
 }
 
-export function resolvePageTitle(path: string, items: UINavigationItem[] = builtinItems): string {
-  const override = pageTitleOverrides[path];
+export function resolvePageTitle(path: string, items: UINavigationItem[] = coreNavigationItems): string {
+  const override = corePageTitles[path];
   if (override) return override;
   const item = items.find((entry) => isUINavigationItemActive(path, entry));
   return item?.label ?? "AI-Amitia";

@@ -10,6 +10,7 @@ export const settingsGroups = [
   ] },
   { title: "数据与安全", items: [
     { label: "数据管理", path: "/settings/data-management" },
+    { label: "存储维护", path: "/storage" },
     { label: "安全", path: "/settings/safety" },
   ] },
   { title: "隐私", items: [
@@ -20,6 +21,9 @@ export const settingsGroups = [
   { title: "运行与部署", items: [
     { label: "运行概览", path: "/settings/overview" },
     { label: "运行统计", path: "/settings/data" },
+    { label: "运行时调试", path: "/runtime-debug" },
+    { label: "BDI 决策可视化", path: "/decision-viz" },
+    { label: "长期运行维护", path: "/long-running" },
   ] },
   { title: "诊断与高级", items: [
     { label: "界面提供者", path: "/settings/ui-providers" },

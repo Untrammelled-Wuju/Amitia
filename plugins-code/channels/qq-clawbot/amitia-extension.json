@@ -366,6 +366,7 @@
             "metadata": {
               "navigationItems": [
                 {
+                  "placement": "contextual",
                   "id": "character.qq",
                   "label": "QQ 渠道",
                   "route": "/channels/qq",
@@ -384,7 +385,8 @@
                   "path": "/channels/qq",
                   "priority": 210,
                   "providerId": "qq-page-provider",
-                  "title": "QQ 渠道"
+                  "title": "QQ 渠道",
+                  "wrapper": "channel.workspace"
                 }
               ]
             },

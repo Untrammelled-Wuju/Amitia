@@ -90,13 +90,17 @@ function validateEntryPaths(ctx: CliContext, manifest: PluginManifest, manifestP
   const baseDir = path.dirname(manifestPath);
   for (const module of manifest.modules ?? []) {
     if (!module.runtime?.entry) continue;
-    const entry = path.resolve(baseDir, "modules", module.id, module.runtime.entry);
-    if (!fs.existsSync(entry)) {
+    const entry = [
+      path.resolve(baseDir, "modules", module.id, module.runtime.entry),
+      path.resolve(baseDir, "dist", `${module.id}.js`),
+      path.resolve(baseDir, "dist", "index.js"),
+    ].find((candidate) => fs.existsSync(candidate));
+    if (!entry) {
       reports.push({
         ruleId: "module.entry.missing",
         severity: "warning",
-        message: `module ${module.id} entry not found: ${path.relative(ctx.cwd, entry)}`,
-        file: entry,
+        message: `module ${module.id} entry not found`,
+        file: path.resolve(baseDir, "modules", module.id, module.runtime.entry),
       });
     }
   }

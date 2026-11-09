@@ -8,7 +8,7 @@
     "description": {
       "default": "解析聊天记录、编辑消息、管理导入批次并晋升为设备会话。"
     },
-    "version": "1.1.1",
+    "version": "1.1.2",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -303,6 +303,7 @@
             "metadata": {
               "routes": [
                 {
+                  "placement": "contextual",
                   "id": "chat-import",
                   "path": "/import",
                   "providerId": "chat-import-page-provider",
@@ -321,6 +322,7 @@
               ],
               "navigationItems": [
                 {
+                  "placement": "contextual",
                   "id": "chat-import",
                   "label": "聊天导入",
                   "route": "/import",

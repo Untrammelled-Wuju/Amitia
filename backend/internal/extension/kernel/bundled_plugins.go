@@ -10,14 +10,31 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/packageext"
+	kernelsqlite "github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 )
 
 type BundledPluginIssue struct {
 	Path  string
 	Error string
+}
+
+var bundledPluginLegacyIDs = map[string][]string{
+	"com.amitia/active-task": {"com.amitia.builtin.active-task"},
+}
+
+var bundledCoreModuleIDs = map[string]bool{
+	"com.amitia/active-task":   true,
+	"com.amitia/memory-hub":    true,
+	"com.amitia/character-hub": true,
+}
+
+func isBundledCoreModule(extensionID string) bool {
+	return bundledCoreModuleIDs[extensionID]
 }
 
 func ProvisionBundledPlugins(ctx context.Context, runtime *Runtime, root, spaceID string) ([]BundledPluginIssue, error) {
@@ -133,6 +150,19 @@ func provisionBundledPlugin(ctx context.Context, runtime *Runtime, path, spaceID
 	if closeErr != nil {
 		return fmt.Errorf("close package: %w", closeErr)
 	}
+	if isBundledCoreModule(preview.ExtensionID) {
+		installation, err := runtime.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(preview.ExtensionID))
+		if errors.Is(err, domain.ErrInvalidExtensionID) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("read retired core module package: %w", err)
+		}
+		if installation.InstallationID != "" {
+			return runtime.Uninstall(ctx, preview.ExtensionID)
+		}
+		return nil
+	}
 	defaultInstall, _ := preview.Manifest.Plugin.Metadata["system.defaultInstall"].(bool)
 	if !defaultInstall {
 		return nil
@@ -158,6 +188,9 @@ func provisionBundledPlugin(ctx context.Context, runtime *Runtime, path, spaceID
 	}
 	defaultEnabled, _ := preview.Manifest.Plugin.Metadata["system.defaultEnabled"].(bool)
 	extensionID := domain.ExtensionID(preview.ExtensionID)
+	if err := reconcileBundledPluginReadModel(ctx, runtime, extensionID, spaceID, defaultEnabled); err != nil {
+		return fmt.Errorf("reconcile installation read model: %w", err)
+	}
 	bundledVersion, err := domain.ParseVersion(preview.Version)
 	if err != nil {
 		return fmt.Errorf("parse bundled package version %q: %w", preview.Version, err)
@@ -172,6 +205,9 @@ func provisionBundledPlugin(ctx context.Context, runtime *Runtime, path, spaceID
 			if err := runtime.Enable(ctx, preview.ExtensionID); err != nil {
 				return fmt.Errorf("enable already installed package: %w", err)
 			}
+		}
+		if err := retireBundledPluginAliases(ctx, runtime, preview.ExtensionID); err != nil {
+			return fmt.Errorf("retire legacy bundled plugin aliases: %w", err)
 		}
 		return nil
 	}
@@ -197,7 +233,7 @@ func provisionBundledPlugin(ctx context.Context, runtime *Runtime, path, spaceID
 		Confirmations:       confirmations,
 		ConfirmationToken:   confirmation.ConfirmationToken,
 		ExpectedExtensionID: preview.ExtensionID,
-		IdempotencyKey:      fmt.Sprintf("bundled:%s:%s:%s", preview.ExtensionID, preview.Version, preview.ArchiveHash),
+		IdempotencyKey:      fmt.Sprintf("bundled:%s:%s:%s:%s", preview.ExtensionID, preview.Version, preview.SessionID, preview.ArchiveHash),
 	}
 	if exists {
 		_, err = runtime.ExecutePackageUpdate(ctx, request)
@@ -206,6 +242,9 @@ func provisionBundledPlugin(ctx context.Context, runtime *Runtime, path, spaceID
 	}
 	if err != nil {
 		return fmt.Errorf("execute package transaction: %w", err)
+	}
+	if err := retireBundledPluginAliases(ctx, runtime, preview.ExtensionID); err != nil {
+		return fmt.Errorf("retire legacy bundled plugin aliases: %w", err)
 	}
 	if !defaultEnabled {
 		return nil
@@ -220,4 +259,166 @@ func provisionBundledPlugin(ctx context.Context, runtime *Runtime, path, spaceID
 		}
 	}
 	return nil
+}
+
+func retireBundledPluginAliases(ctx context.Context, runtime *Runtime, canonicalID string) error {
+	for _, legacyID := range bundledPluginLegacyIDs[canonicalID] {
+		if _, err := runtime.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(legacyID)); err != nil {
+			if errors.Is(err, domain.ErrInvalidExtensionID) {
+				if runtime.container.PackageGenerationStore != nil {
+					if err := runtime.container.PackageGenerationStore.RemoveExtensionRoot(legacyID); err != nil {
+						return fmt.Errorf("remove orphaned legacy bundled plugin files %s: %w", legacyID, err)
+					}
+				}
+				continue
+			}
+			return fmt.Errorf("read legacy bundled plugin %s: %w", legacyID, err)
+		}
+		if err := runtime.Uninstall(ctx, legacyID); err != nil {
+			return fmt.Errorf("uninstall legacy bundled plugin %s: %w", legacyID, err)
+		}
+		if runtime.container.PackageGenerationStore != nil {
+			if err := runtime.container.PackageGenerationStore.RemoveExtensionRoot(legacyID); err != nil {
+				return fmt.Errorf("remove legacy bundled plugin files %s: %w", legacyID, err)
+			}
+		}
+	}
+	return nil
+}
+
+func reconcileBundledPluginReadModel(ctx context.Context, runtime *Runtime, extensionID domain.ExtensionID, spaceID string, defaultEnabled bool) error {
+	if runtime == nil || runtime.container == nil || runtime.container.PackageGenerationStore == nil {
+		return nil
+	}
+	current, err := runtime.container.PackageGenerationStore.ReadCurrent(string(extensionID))
+	if errors.Is(err, ErrPackageGenerationNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	versions, err := runtime.container.PackageRepository.ListPackageVersions(ctx, string(extensionID))
+	if err != nil {
+		return err
+	}
+	if verifyErr := runtime.container.PackageGenerationStore.VerifyGeneration(ctx, current); verifyErr != nil {
+		repaired, repairErr := recoverBundledPluginGeneration(ctx, runtime, extensionID, current, versions)
+		if repairErr != nil {
+			return repairErr
+		}
+		current = repaired
+	}
+	var version PackageVersionRecord
+	found := false
+	for _, item := range versions {
+		if item.GenerationID == current.GenerationID && item.ArtifactID == current.ArtifactID && item.Version == current.Version {
+			version = item
+			found = true
+			break
+		}
+	}
+	if !found {
+		return nil
+	}
+	installed, installedErr := runtime.container.InstallationRepository.GetInstallation(ctx, extensionID)
+	if installedErr != nil && !errors.Is(installedErr, domain.ErrInvalidExtensionID) {
+		return installedErr
+	}
+	parsedVersion, err := domain.ParseVersion(current.Version)
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	if installedErr != nil {
+		installed = domain.ExtensionInstallation{
+			InstallationID:    "installation-" + uuid.NewString(),
+			ExtensionID:       extensionID,
+			InstalledAt:       now,
+			Generation:        1,
+			InstallationState: domain.InstallationStateInstalled,
+			EnablementState:   domain.EnablementDisabled,
+			Metadata:          map[string]any{},
+		}
+		if defaultEnabled {
+			installed.EnablementState = domain.EnablementEnabled
+		}
+	}
+	if installed.Metadata == nil {
+		installed.Metadata = map[string]any{}
+	}
+	installed.InstalledVersion = parsedVersion
+	installed.PackageID = current.ArtifactID
+	installed.UpdatedAt = now
+	installed.Metadata["ownerSpaceId"] = spaceID
+	installed.Metadata["scopeType"] = "global"
+	installed.Metadata["scopeId"] = ""
+	installed.Metadata["generationId"] = current.GenerationID
+	installed.Metadata["currentPath"] = version.InstalledPath
+	installed.Metadata["installedPath"] = version.InstalledPath
+	installed.Metadata["installedTreeHash"] = version.InstalledTreeHash
+	installed.Metadata["artifactId"] = current.ArtifactID
+	installed.Metadata["archiveHash"] = version.ArchiveHash
+	installed.Metadata["manifestHash"] = version.ManifestHash
+	installed.Metadata["contentTreeHash"] = version.ContentTreeHash
+	installed.Metadata["currentVersionId"] = version.VersionID
+	installed.Metadata["lastOperationId"] = current.OperationID
+	installed.Metadata["fencingToken"] = float64(current.FencingToken)
+	if runtime.container.TransactionManager == nil {
+		return runtime.container.InstallationRepository.PutInstallation(ctx, installed)
+	}
+	return runtime.container.TransactionManager.WithTransaction(ctx, func(txCtx context.Context) error {
+		if err := runtime.container.InstallationRepository.PutInstallation(txCtx, installed); err != nil {
+			return err
+		}
+		tx, ok := kernelsqlite.TxFromContext(txCtx)
+		if !ok {
+			return errors.New("kernel: installation reconciliation transaction unavailable")
+		}
+		return runtime.container.PackageRepository.ActivatePackageVersionTx(
+			txCtx,
+			tx,
+			PackageWriteGuard{},
+			string(extensionID),
+			version.VersionID,
+			current.GenerationID,
+		)
+	})
+}
+
+func recoverBundledPluginGeneration(ctx context.Context, runtime *Runtime, extensionID domain.ExtensionID, current PackageGenerationCurrent, versions []PackageVersionRecord) (PackageGenerationCurrent, error) {
+	for _, version := range versions {
+		if strings.TrimSpace(version.InstalledPath) == "" || strings.TrimSpace(version.InstalledTreeHash) == "" || strings.TrimSpace(version.InstallOperationID) == "" {
+			continue
+		}
+		info, err := os.Stat(version.InstalledPath)
+		if err != nil || !info.IsDir() {
+			continue
+		}
+		treeHash, err := runtime.container.PackageGenerationStore.ComputeGenerationTreeHash(ctx, string(extensionID), version.GenerationID)
+		if err != nil || !equalTreeHash(treeHash, version.InstalledTreeHash) {
+			continue
+		}
+		fencingToken := current.FencingToken
+		if fencingToken < 1 {
+			fencingToken = 1
+		}
+		next := PackageGenerationCurrent{
+			ExtensionID:  string(extensionID),
+			GenerationID: version.GenerationID,
+			Version:      version.Version,
+			ArtifactID:   version.ArtifactID,
+			TreeHash:     version.InstalledTreeHash,
+			OperationID:  version.InstallOperationID,
+			FencingToken: fencingToken,
+		}
+		if err := runtime.container.PackageGenerationStore.SwitchCurrent(string(extensionID), current.GenerationID, next); err != nil {
+			latest, readErr := runtime.container.PackageGenerationStore.ReadCurrent(string(extensionID))
+			if readErr == nil && runtime.container.PackageGenerationStore.VerifyGeneration(ctx, latest) == nil {
+				return latest, nil
+			}
+			return PackageGenerationCurrent{}, err
+		}
+		return runtime.container.PackageGenerationStore.ReadCurrent(string(extensionID))
+	}
+	return PackageGenerationCurrent{}, ErrPackageGenerationNotFound
 }

@@ -940,6 +940,7 @@ func (h *PluginHost) sendInitialize(ctx context.Context) error {
 		"instanceId":     h.instanceID,
 		"extensionId":    h.extensionID,
 		"moduleId":       h.moduleID,
+		"generation":     h.spec.Generation,
 		"entry":          h.spec.Entry,
 		"definitionHash": h.definitionHash,
 		"hostApiVersion": h.rpcVersion,

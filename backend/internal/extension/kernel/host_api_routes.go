@@ -867,6 +867,12 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 				modID := string(req.RuntimeIdentity.ModuleID)
 				swapped, newVersion, err := deps.StateStore.CAS(ctx, extID, modID, p.Key, p.ExpectedVersion, p.NewValue)
 				if err != nil {
+					if errors.Is(err, sqlite.ErrExtensionStateQuotaExceeded) {
+						return host_api.CallResult{
+							Status: host_api.StatusRejected,
+							Error:  &host_api.Error{Code: host_api.ErrorCodeQuotaExceeded, Message: err.Error()},
+						}, nil
+					}
 					return host_api.CallResult{
 						Status: host_api.StatusFailed,
 						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},

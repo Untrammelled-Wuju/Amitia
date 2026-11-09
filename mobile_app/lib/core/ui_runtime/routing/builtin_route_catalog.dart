@@ -9,17 +9,14 @@ import '../../../features/conversations/presentation/pages/conversation_list_pag
 import '../../../features/conversations/presentation/pages/conversation_search_page.dart';
 import '../../../features/agent/presentation/pages/agent_page.dart';
 import '../../../features/agent/presentation/pages/agent_task_detail_page.dart';
-import '../../../features/characters/presentation/pages/character_list_page.dart';
-import '../../../features/memory/presentation/pages/memory_overview_page.dart';
 import '../../../features/channels/presentation/pages/channel_messages_page.dart';
 import '../../../features/extensions/presentation/pages/extension_center_page.dart';
 import '../../../features/extensions/presentation/pages/extension_page_host_page.dart';
-import '../../../features/settings/presentation/pages/settings_page.dart';
 import '../../../features/tasks/presentation/pages/task_hub_page.dart';
 import '../../../features/memory/presentation/pages/memory_hub_page.dart';
 import '../../../features/profile/presentation/pages/profile_hub_page.dart';
-import '../../../features/developer/presentation/pages/developer_home_page.dart';
 import '../../../core/widgets/main_tab_scaffold.dart';
+import '../provider_tab_host.dart';
 
 /// All built-in business routes live in this catalog instead of the app
 /// bootstrap router. The router only owns recovery/authentication boundaries,
@@ -53,7 +50,10 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
               context: context,
               state: state,
               rootLevel: true,
-              child: const TaskHubPage(),
+              child: const ProviderTabHost(
+                routePath: AppRoutes.tasks,
+                fallback: TaskHubPage(),
+              ),
             ),
           ),
         ],
@@ -66,7 +66,10 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
               context: context,
               state: state,
               rootLevel: true,
-              child: const MemoryHubPage(),
+              child: const ProviderTabHost(
+                routePath: AppRoutes.memoryHub,
+                fallback: MemoryHubPage(),
+              ),
             ),
           ),
         ],
@@ -79,7 +82,10 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
               context: context,
               state: state,
               rootLevel: true,
-              child: const ExtensionCenterPage(),
+              child: const ProviderTabHost(
+                routePath: AppRoutes.extensions,
+                fallback: ExtensionCenterPage(),
+              ),
             ),
           ),
         ],
@@ -92,7 +98,10 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
               context: context,
               state: state,
               rootLevel: true,
-              child: const ProfileHubPage(),
+              child: const ProviderTabHost(
+                routePath: AppRoutes.me,
+                fallback: ProfileHubPage(),
+              ),
             ),
           ),
         ],
@@ -159,19 +168,6 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
     ),
   ),
   GoRoute(
-    path: '/characters',
-    pageBuilder: (context, state) =>
-        amitiaSlidePage(state: state, child: const CharacterListPage()),
-  ),
-  GoRoute(
-    path: '/memory',
-    pageBuilder: (context, state) => amitiaSlidePage(
-      context: context,
-      state: state,
-      child: const MemoryOverviewPage(),
-    ),
-  ),
-  GoRoute(
     path: AppRoutes.channelMessages,
     pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
@@ -189,15 +185,5 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
         extensionId: state.uri.queryParameters['extensionId'] ?? '',
       ),
     ),
-  ),
-  GoRoute(
-    path: '/settings',
-    pageBuilder: (context, state) =>
-        amitiaSlidePage(state: state, child: const SettingsPage()),
-  ),
-  GoRoute(
-    path: '/developer',
-    pageBuilder: (context, state) =>
-        amitiaSlidePage(state: state, child: const DeveloperHomePage()),
   ),
 ];

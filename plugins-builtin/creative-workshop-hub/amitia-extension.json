@@ -8,7 +8,7 @@
     "description": {
       "default": "通过统一 UI Provider 提供角色卡、桌宠和创作内容入口。"
     },
-    "version": "1.3.0",
+    "version": "1.3.4",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -383,6 +383,7 @@
             "metadata": {
               "routes": [
                 {
+                  "placement": "profile",
                   "id": "creative-workshop-hub",
                   "path": "/creative-workshop",
                   "providerId": "creative-workshop-hub-page-provider",
@@ -457,6 +458,7 @@
               ],
               "navigationItems": [
                 {
+                  "placement": "profile",
                   "id": "creative-workshop-hub",
                   "label": "创意工坊",
                   "route": "/creative-workshop",
@@ -466,6 +468,7 @@
                   "groupLabel": "创意工坊",
                   "groupIcon": "workshop",
                   "order": 85,
+                  "profile": true,
                   "match": [
                     "/creative-workshop"
                   ]

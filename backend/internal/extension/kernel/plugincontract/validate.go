@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	pluginIDPattern  = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*(\.[a-z0-9-]+)+(/[a-z0-9][a-z0-9-]+)?$`)
+	pluginIDPattern  = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*(\.[a-z0-9-]+)+/[a-z0-9][a-z0-9-]+$`)
 	moduleIDPattern  = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
 	serviceIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._/-]*$`)
 	adapterIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._/-]*$`)
@@ -53,6 +53,9 @@ func (m *Manifest) Validate() ValidationReport {
 	validateReservedMetadata("plugin.metadata", m.Plugin.Metadata, &report)
 	if !pluginIDPattern.MatchString(m.Plugin.ID) {
 		report.Add("plugin.id", "plugin_id", "plugin id must match reverse-domain/name")
+	}
+	if err := domain.ValidateExtensionID(domain.ExtensionID(m.Plugin.ID)); err != nil {
+		report.Add("plugin.id", "domain_extension_id", err.Error())
 	}
 	if _, err := domain.ParseVersion(m.Plugin.Version); err != nil {
 		report.Add("plugin.version", "version", err.Error())
@@ -224,6 +227,9 @@ func (m *Manifest) Validate() ValidationReport {
 		case "", "retain", "delete", "export":
 		default:
 			report.Add("data.uninstall", "data_uninstall", "uninstall policy must be retain, delete or export")
+		}
+		if m.Data.Uninstall == "export" && !m.Data.Export {
+			report.Add("data.uninstall", "data_uninstall", "export uninstall policy requires data.export")
 		}
 	}
 	if m.Integrity.Algorithm != "sha256" {

@@ -141,6 +141,13 @@ export interface UIProviderResolution {
   reason?: string;
 }
 
+export interface UIProviderCompatibility {
+  providerId: string;
+  capability: UIProviderCapability;
+  compatible: boolean;
+  reason?: string;
+}
+
 export interface UIProviderRenderContext extends Record<string, unknown> {
   route?: string;
   platform?: string;
