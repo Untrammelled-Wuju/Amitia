@@ -1,0 +1,352 @@
+{
+  "schemaVersion": 1,
+  "plugin": {
+    "id": "com.amitia/game-center-hub",
+    "name": {
+      "default": "游戏中心"
+    },
+    "description": {
+      "default": "通过统一 UI Provider 提供游戏模式、插件管理和运行入口。"
+    },
+    "version": "1.1.0",
+    "license": "AGPL-3.0-only",
+    "homepage": "https://amitia.untrammelled.top",
+    "categories": [
+      "game",
+      "navigation",
+      "system"
+    ],
+    "keywords": [
+      "game",
+      "gamex",
+      "runtime"
+    ],
+    "metadata": {
+      "system.defaultInstall": true,
+      "system.defaultEnabled": true
+    },
+    "publisher": {
+      "id": "com.amitia",
+      "displayName": "Amitia",
+      "trustLevel": "official"
+    }
+  },
+  "compatibility": {
+    "minHostVersion": "0.1.0",
+    "platforms": [
+      "web",
+      "windows",
+      "linux",
+      "macos"
+    ]
+  },
+  "modules": [
+    {
+      "id": "game-center-hub-runtime",
+      "name": {
+        "default": "游戏中心运行时"
+      },
+      "description": {
+        "default": "注册游戏中心页面、路由和导航贡献。"
+      },
+      "runtime": {
+        "adapter": "javascript",
+        "entry": "dist/index.js",
+        "timeout": "10s",
+        "memoryBytes": 33554432,
+        "capabilities": {
+          "network": false,
+          "filesystem": false
+        },
+        "hostAccess": {
+          "filesystem": {
+            "mode": "none"
+          },
+          "network": {
+            "mode": "none"
+          },
+          "process": {
+            "mode": "none"
+          }
+        }
+      },
+      "dynamic": {
+        "allowedAdapters": [
+          "ui",
+          "ui_provider"
+        ],
+        "maxContributions": 6,
+        "maxTools": 0,
+        "maxRoutes": 2,
+        "maxServices": 0,
+        "allowUnregister": true
+      },
+      "contributions": [
+        {
+          "id": "game-center-hub-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "游戏中心"
+          },
+          "description": {
+            "default": "安装、运行并查看游戏插件。"
+          },
+          "spec": {
+            "contribution_id": "game-center-hub-page",
+            "extension_id": "com.amitia/game-center-hub",
+            "module_id": "game-center-hub-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "游戏模式"
+              },
+              "description": {
+                "default": "安装、运行并查看游戏插件。"
+              },
+              "icon": "gamepad"
+            },
+            "entry": {
+              "type": "schema_renderer",
+              "schema_path": "modules/game-center-hub-ui/desktop/game-center-hub.json",
+              "content_hash": "pending"
+            },
+            "sandbox": {
+              "type": "schema_renderer"
+            },
+            "ordering": {
+              "priority": 240
+            },
+            "visibility": {
+              "platforms": [
+                "web",
+                "windows",
+                "linux",
+                "macos"
+              ]
+            },
+            "actions": [],
+            "integrity": {
+              "definition_hash": "game-center-hub-page-v1"
+            }
+          }
+        },
+        {
+          "id": "game-plugin-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "游戏插件"
+          },
+          "spec": {
+            "contribution_id": "game-plugin-page",
+            "extension_id": "com.amitia/game-center-hub",
+            "module_id": "game-center-hub-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "游戏插件"
+              },
+              "description": {
+                "default": "打开已安装游戏插件的运行与配置页面。"
+              },
+              "icon": "gamepad"
+            },
+            "entry": {
+              "type": "host_native",
+              "path": "builtin://com.amitia/game-center-hub/game-plugin",
+              "runtime_id": "host.game.plugin",
+              "content_hash": "builtin"
+            },
+            "sandbox": {
+              "type": "host_native"
+            },
+            "ordering": {
+              "priority": 239
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            },
+            "actions": [],
+            "integrity": {
+              "definition_hash": "game-plugin-page-v1"
+            }
+          }
+        },
+        {
+          "id": "game-center-hub-routes",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "游戏中心路由"
+          },
+          "spec": {
+            "providerId": "game-center-hub-routes",
+            "capability": "route.registry",
+            "mode": "replace",
+            "priority": 240,
+            "trustLevel": "official",
+            "entries": {
+              "web": {
+                "type": "declarative"
+              },
+              "electron_windows": {
+                "type": "declarative"
+              },
+              "electron_macos": {
+                "type": "declarative"
+              },
+              "electron_linux": {
+                "type": "declarative"
+              }
+            },
+            "metadata": {
+              "routes": [
+                {
+                  "id": "game-center-hub",
+                  "path": "/game-center",
+                  "providerId": "game-center-hub-page-provider",
+                  "capability": "page.provider",
+                  "title": "游戏模式",
+                  "priority": 240
+                },
+                {
+                  "id": "game-plugin",
+                  "path": "/game-center/plugin",
+                  "providerId": "game-plugin-page-provider",
+                  "capability": "page.provider",
+                  "title": "游戏插件",
+                  "priority": 239
+                }
+              ],
+              "navigationItems": [
+                {
+                  "id": "game-center-hub",
+                  "label": "游戏模式",
+                  "route": "/game-center",
+                  "description": "安装、运行并查看游戏插件。",
+                  "icon": "gamepad",
+                  "group": "workshop",
+                  "groupLabel": "创意工坊",
+                  "groupIcon": "workshop",
+                  "order": 80,
+                  "runtimeCapability": "gameMode"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "game-center-hub-page-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "游戏中心页面 Provider"
+          },
+          "spec": {
+            "providerId": "game-center-hub-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 240,
+            "trustLevel": "official",
+            "entries": {
+              "web": {
+                "type": "schema_renderer",
+                "contributionId": "game-center-hub-page"
+              },
+              "electron_windows": {
+                "type": "schema_renderer",
+                "contributionId": "game-center-hub-page"
+              },
+              "electron_macos": {
+                "type": "schema_renderer",
+                "contributionId": "game-center-hub-page"
+              },
+              "electron_linux": {
+                "type": "schema_renderer",
+                "contributionId": "game-center-hub-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/game-center"
+              ]
+            }
+          }
+        },
+        {
+          "id": "game-plugin-page-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "游戏插件页面 Provider"
+          },
+          "spec": {
+            "providerId": "game-plugin-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 239,
+            "trustLevel": "official",
+            "entries": {
+              "web": {
+                "type": "schema_renderer",
+                "contributionId": "game-plugin-page"
+              },
+              "electron_windows": {
+                "type": "schema_renderer",
+                "contributionId": "game-plugin-page"
+              },
+              "electron_macos": {
+                "type": "schema_renderer",
+                "contributionId": "game-plugin-page"
+              },
+              "electron_linux": {
+                "type": "schema_renderer",
+                "contributionId": "game-plugin-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/game-center/plugin"
+              ]
+            }
+          }
+        }
+      ],
+      "placement": "device"
+    }
+  ],
+  "permissions": [],
+  "data": {
+    "schemaVersion": 1,
+    "scopes": [
+      "device"
+    ],
+    "backup": false,
+    "export": false,
+    "uninstall": "retain"
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "contentTreeHash": ""
+  }
+}

@@ -72,3 +72,38 @@ func TestBuildServiceModuleRuntimeDefinitionAppliesHostAccess(t *testing.T) {
 		t.Fatalf("unexpected filesystem root map: %#v", rootMap)
 	}
 }
+
+func TestDynamicChannelPortEnvRequiresManifestDeclaration(t *testing.T) {
+	module := domain.ModuleDefinition{
+		Provider: &domain.ProviderMetadata{
+			Labels: map[string]string{"channelId": "qq"},
+			Metadata: map[string]any{
+				"sidecar": map[string]any{
+					"kind": "qq",
+				},
+			},
+		},
+	}
+	if env := dynamicChannelPortEnv(module); env != nil {
+		t.Fatalf("channel identity inferred an undeclared port environment: %#v", env)
+	}
+}
+
+func TestDynamicChannelPortEnvUsesManifestDeclaration(t *testing.T) {
+	module := domain.ModuleDefinition{
+		Provider: &domain.ProviderMetadata{
+			Labels: map[string]string{"channelId": "com.example/gateway"},
+			Metadata: map[string]any{
+				"id": "com.example/gateway",
+				"sidecar": map[string]any{
+					"portEnv":            "EXAMPLE_GATEWAY_PORT",
+					"additionalPortEnvs": []any{"EXAMPLE_GATEWAY_HEALTH_PORT"},
+				},
+			},
+		},
+	}
+	env := dynamicChannelPortEnv(module)
+	if env["EXAMPLE_GATEWAY_PORT"] == "" || env["EXAMPLE_GATEWAY_HEALTH_PORT"] == "" {
+		t.Fatalf("declared channel port environments were not allocated: %#v", env)
+	}
+}

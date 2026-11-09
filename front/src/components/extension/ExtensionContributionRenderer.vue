@@ -52,7 +52,7 @@ const isPage = computed(() => ["schema_page", "web_page"].includes(props.contrib
   <PluginPageFrame
     v-else-if="renderer && isPage"
     :title="contribution.title"
-    :hide-header="contribution.extensionId === 'com.amitia/emote'"
+    :hide-header="contribution.chrome === 'frameless'"
   >
     <component :is="renderer" :contribution="contribution" :context="context" :slot-id="slotId" :host-actions="hostActions" @error="(error: string) => emit('error', error)" />
   </PluginPageFrame>

@@ -140,7 +140,7 @@ function createPayloadLayout() {
   }
 
   const manifest = JSON.parse(readFileSync(join(projectRoot, 'amitia-extension.json'), 'utf8'));
-  if (packageVersionOverride) manifest.extension.version = packageVersionOverride;
+  if (packageVersionOverride) manifest.plugin.version = packageVersionOverride;
   if (networkModeOverride) {
     if (networkModeOverride !== 'none') throw new Error(`unsupported MOCK_PLUGIN_NETWORK_MODE: ${networkModeOverride}`);
     const gameContribution = manifest.modules

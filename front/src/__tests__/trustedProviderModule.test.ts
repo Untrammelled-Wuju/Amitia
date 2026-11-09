@@ -27,6 +27,7 @@ describe("same-page provider modules", () => {
     const entry = selectProviderEntry(provider, "web");
     expect(entry).not.toBeNull();
     expect(canLoadTrustedWebModule(provider, entry!)).toBe(true);
+    expect(canLoadTrustedWebModule({ ...provider, trustLevel: "bundled" }, entry!)).toBe(true);
     expect(canLoadTrustedWebModule({ ...provider, trustLevel: "unknown" }, entry!)).toBe(false);
     expect(trustedWebModule(provider, entry!)).not.toBeNull();
   });

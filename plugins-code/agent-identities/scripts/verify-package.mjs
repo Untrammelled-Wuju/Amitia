@@ -45,5 +45,5 @@ for (const [name, data] of archive) {
     throw new Error(`integrity mismatch: ${name}`);
   }
 }
-if (!manifest.extension?.id || !manifest.modules?.length) throw new Error("manifest invalid");
+if (!manifest.plugin?.id || !manifest.modules?.length) throw new Error("manifest invalid");
 console.log(`verified=${path}`);

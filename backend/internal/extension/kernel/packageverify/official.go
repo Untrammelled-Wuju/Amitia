@@ -79,8 +79,8 @@ func VerifyOfficialPublisherPackage(ctx context.Context, packagePath string) err
 		artifactEntries = append(artifactEntries, trust.ArtifactEntry{Path: filePath, Size: entry.Size, SHA256: hash})
 	}
 	result := trust.NewSignatureVerifier(store).VerifyPackage(ctx, trust.PackageVerificationInput{
-		Document: document, ActualExtensionID: pkg.Manifest.Extension.ID,
-		ActualVersion: pkg.Manifest.Extension.Version, ActualManifestVersion: pkg.Manifest.ManifestVersion,
+		Document: document, ActualExtensionID: pkg.Manifest.Plugin.ID,
+		ActualVersion: pkg.Manifest.Plugin.Version, ActualManifestVersion: pkg.Manifest.SchemaVersion,
 		ActualManifestHash: manifestHash, ActualContentTreeHash: pkg.Tree.TreeHash,
 		ActualArtifactHash: trust.ComputeCanonicalArtifactHash(artifactEntries),
 	})

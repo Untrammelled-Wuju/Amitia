@@ -39,7 +39,7 @@ func TestProviderAllowsSinglePlatform(t *testing.T) {
 	}
 }
 
-func TestBundledAmitiaProviderDoesNotRequirePublisherTrust(t *testing.T) {
+func TestAmitiaNamespaceDoesNotBypassPublisherTrust(t *testing.T) {
 	definition := ProviderDefinition{
 		ProviderID:  "plugin-market-page-provider",
 		ExtensionID: "com.amitia/plugin-market",
@@ -52,7 +52,7 @@ func TestBundledAmitiaProviderDoesNotRequirePublisherTrust(t *testing.T) {
 			"mobile": {Type: EntrySchemaRenderer, ContributionID: "plugin-market-mobile-page"},
 		},
 	}
-	if err := definition.Validate(); err != nil {
-		t.Fatalf("bundled Amitia provider should not require publisher trust: %v", err)
+	if err := definition.Validate(); err == nil {
+		t.Fatal("com.amitia namespace must not bypass explicit provider trust")
 	}
 }

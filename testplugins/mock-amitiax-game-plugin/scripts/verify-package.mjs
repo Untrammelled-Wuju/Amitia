@@ -126,8 +126,8 @@ try {
   try { filesDoc = JSON.parse(entries.get('integrity/files.json')?.toString('utf8') || '{}'); } catch { errors.push('integrity/files.json is invalid JSON'); }
   try { treeDoc = JSON.parse(entries.get('integrity/content-tree.json')?.toString('utf8') || '{}'); } catch { errors.push('integrity/content-tree.json is invalid JSON'); }
 
-  if (manifest?.manifestVersion !== 1) errors.push('manifestVersion must be 1');
-  if (manifest?.extension?.id !== 'com.amitia/world-game-plugin') errors.push('unexpected extension id');
+  if (manifest?.schemaVersion !== 1) errors.push('schemaVersion must be 1');
+  if (manifest?.plugin?.id !== 'com.amitia/world-game-plugin') errors.push('unexpected extension id');
   const gameContribution = manifest?.modules
     ?.flatMap(module => module?.contributions || [])
     .find(contribution => contribution?.kind === 'gamex');

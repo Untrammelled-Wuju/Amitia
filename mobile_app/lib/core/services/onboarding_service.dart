@@ -188,8 +188,28 @@ class OnboardingService {
       try {
         response = await claimPinned();
       } catch (error, stackTrace) {
-        if (!_isRevokedCredentialError(error)) {
-          Error.throwWithStackTrace(error, stackTrace);
+        Object? updateError;
+        try {
+          final updated = await _api.post<Map<String, dynamic>>(
+            '/internal/device-mesh/endpoint/update',
+            data: {
+              'cloudBaseUrl': coreUri,
+              'coreId': coreId,
+              if (fingerprint.isNotEmpty) 'fingerprint': fingerprint,
+            },
+            headers: const {'X-Amitia-Request-Timeout-Seconds': '50'},
+          );
+          if (updated?['ok'] == true) {
+            return {
+              'alreadyPaired': true,
+              'spaceId': coreId,
+              'deviceId': deviceId,
+              'runtimeId': runtimeId,
+            };
+          }
+          updateError = StateError('本机设备未确认统筹中心地址更新结果');
+        } catch (error) {
+          updateError = error;
         }
         Map<String, dynamic>? status;
         try {
@@ -204,8 +224,14 @@ class OnboardingService {
             stackTrace,
           );
         }
-        if ((status?['state'] ?? '').toString().toLowerCase() != 'revoked') {
-          Error.throwWithStackTrace(error, stackTrace);
+        if ((status?['state'] ?? '').toString().toLowerCase() != 'revoked' &&
+            !_isRevokedCredentialError(error)) {
+          Error.throwWithStackTrace(
+            StateError(
+              '${originalErrorText(error)}\n${originalErrorText(updateError!)}',
+            ),
+            stackTrace,
+          );
         }
         String? cleanupError;
         try {
@@ -390,9 +416,7 @@ class OnboardingService {
 
   bool _isRevokedCredentialError(Object error) {
     final text = originalErrorText(error).toLowerCase();
-    return text.contains('credential: revoked') ||
-        text.contains('pairing.already_paired') ||
-        text.contains('该设备已添加');
+    return text.contains('credential: revoked');
   }
 
   Future<void> _consumePairingEvents(

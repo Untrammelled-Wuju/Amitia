@@ -1,0 +1,422 @@
+{
+  "schemaVersion": 1,
+  "plugin": {
+    "id": "com.amitia/reminders",
+    "name": {
+      "default": "提醒与主动任务"
+    },
+    "description": {
+      "default": "通过统一 Host API 管理定时提醒、主动任务、队列和执行历史。"
+    },
+    "version": "1.0.0",
+    "license": "AGPL-3.0-only",
+    "homepage": "https://amitia.untrammelled.top",
+    "categories": [
+      "productivity",
+      "automation"
+    ],
+    "keywords": [
+      "reminder",
+      "schedule",
+      "proactive"
+    ],
+    "metadata": {
+      "system.defaultInstall": true,
+      "system.defaultEnabled": true
+    },
+    "publisher": {
+      "id": "com.amitia",
+      "displayName": "Amitia",
+      "trustLevel": "official"
+    }
+  },
+  "compatibility": {
+    "minHostVersion": "0.1.0",
+    "platforms": [
+      "windows",
+      "linux",
+      "macos"
+    ]
+  },
+  "modules": [
+    {
+      "id": "reminders-runtime",
+      "name": {
+        "default": "提醒运行时"
+      },
+      "description": {
+        "default": "调用宿主提醒与主动任务 Host API。"
+      },
+      "runtime": {
+        "adapter": "javascript",
+        "entry": "dist/index.js",
+        "timeout": "2m",
+        "memoryBytes": 67108864,
+        "capabilities": {
+          "network": false,
+          "filesystem": false
+        },
+        "hostAccess": {
+          "filesystem": {
+            "mode": "none"
+          },
+          "network": {
+            "mode": "none"
+          },
+          "process": {
+            "mode": "none"
+          }
+        }
+      },
+      "dynamic": {
+        "allowedAdapters": [
+          "tool",
+          "ui",
+          "ui_provider"
+        ],
+        "maxContributions": 8,
+        "maxTools": 1,
+        "maxRoutes": 1,
+        "maxServices": 0,
+        "allowUnregister": true
+      },
+      "contributions": [
+        {
+          "id": "reminders-command",
+          "kind": "tool",
+          "adapter": "tool",
+          "contractVersion": 1,
+          "name": {
+            "default": "提醒操作"
+          },
+          "description": {
+            "default": "管理定时提醒与主动任务。"
+          },
+          "spec": {
+            "toolId": "com.amitia/reminders/command",
+            "modelName": "amitia_reminders",
+            "handlerName": "command",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "enum": [
+                    "characters",
+                    "overview",
+                    "list",
+                    "status",
+                    "queue",
+                    "capabilities",
+                    "history",
+                    "create",
+                    "update",
+                    "pause",
+                    "resume",
+                    "cancel",
+                    "execute",
+                    "preview",
+                    "navigate"
+                  ]
+                },
+                "payload": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "action"
+              ],
+              "additionalProperties": false
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "riskLevel": "high",
+            "sideEffect": "write",
+            "internal": true,
+            "runtime": {
+              "runtimeType": "javascript",
+              "handlerName": "command"
+            }
+          },
+          "requiredPermissions": [
+            "tool.invoke",
+            "character.read",
+            "reminder.read",
+            "reminder.create",
+            "reminder.manage",
+            "reminder.execute",
+            "proactive_task.read",
+            "proactive_task.create",
+            "proactive_task.manage",
+            "proactive_task.execute",
+            "ui.navigate"
+          ]
+        },
+        {
+          "id": "reminders-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "提醒与主动任务"
+          },
+          "description": {
+            "default": "管理定时提醒、主动消息、队列和执行历史。"
+          },
+          "spec": {
+            "contribution_id": "reminders-page",
+            "extension_id": "com.amitia/reminders",
+            "module_id": "reminders-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "提醒与主动任务"
+              },
+              "description": {
+                "default": "管理定时提醒、主动消息、队列和执行历史。"
+              },
+              "icon": "alarm-clock"
+            },
+            "entry": {
+              "type": "schema_renderer",
+              "schema_path": "modules/reminders-ui/desktop/reminders.json",
+              "content_hash": "pending"
+            },
+            "sandbox": {
+              "type": "schema_renderer"
+            },
+            "ordering": {
+              "priority": 248
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            },
+            "actions": [
+              {
+                "action_id": "command",
+                "title": {
+                  "default": "执行提醒操作"
+                },
+                "target": {
+                  "type": "tool",
+                  "tool_id": "com.amitia/reminders/command"
+                },
+                "risk_level": "high"
+              }
+            ],
+            "integrity": {
+              "definition_hash": "reminders-page-v1"
+            }
+          },
+          "requiredPermissions": [
+            "tool.invoke",
+            "character.read",
+            "reminder.read",
+            "reminder.create",
+            "reminder.manage",
+            "reminder.execute",
+            "proactive_task.read",
+            "proactive_task.create",
+            "proactive_task.manage",
+            "proactive_task.execute"
+          ]
+        },
+        {
+          "id": "reminders-routes",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "提醒路由"
+          },
+          "spec": {
+            "providerId": "reminders-routes",
+            "capability": "route.registry",
+            "mode": "replace",
+            "priority": 248,
+            "trustLevel": "official",
+            "entries": {
+              "web": {
+                "type": "declarative"
+              },
+              "electron_windows": {
+                "type": "declarative"
+              },
+              "electron_macos": {
+                "type": "declarative"
+              },
+              "electron_linux": {
+                "type": "declarative"
+              }
+            },
+            "metadata": {
+              "routes": [
+                {
+                  "id": "reminders",
+                  "path": "/reminders",
+                  "providerId": "reminders-page-provider",
+                  "capability": "page.provider",
+                  "title": "提醒与主动任务",
+                  "priority": 248
+                }
+              ],
+              "navigationItems": [
+                {
+                  "id": "reminders",
+                  "label": "任务",
+                  "route": "/reminders",
+                  "icon": "calendar",
+                  "group": "tasks",
+                  "groupLabel": "任务",
+                  "groupIcon": "calendar",
+                  "order": 69,
+                  "mobile": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "reminders-page-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "提醒页面 Provider"
+          },
+          "spec": {
+            "providerId": "reminders-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 248,
+            "trustLevel": "official",
+            "entries": {
+              "web": {
+                "type": "schema_renderer",
+                "contributionId": "reminders-page"
+              },
+              "electron_windows": {
+                "type": "schema_renderer",
+                "contributionId": "reminders-page"
+              },
+              "electron_macos": {
+                "type": "schema_renderer",
+                "contributionId": "reminders-page"
+              },
+              "electron_linux": {
+                "type": "schema_renderer",
+                "contributionId": "reminders-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/reminders"
+              ]
+            }
+          }
+        }
+      ],
+      "placement": "device",
+      "deviceRequirements": {
+        "platforms": [
+          "windows",
+          "linux",
+          "macos"
+        ]
+      }
+    }
+  ],
+  "permissions": [
+    {
+      "name": "tool.invoke",
+      "reason": "通过插件工具管理提醒任务。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "character.read",
+      "reason": "列出任务所属角色。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "reminder.read",
+      "reason": "读取定时提醒、队列和历史。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "reminder.create",
+      "reason": "创建定时提醒。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "reminder.manage",
+      "reason": "更新、暂停、恢复或取消定时提醒。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "reminder.execute",
+      "reason": "立即执行定时提醒。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "proactive_task.read",
+      "reason": "读取主动任务、队列和历史。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "proactive_task.create",
+      "reason": "创建主动任务。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "proactive_task.manage",
+      "reason": "更新、暂停、恢复或取消主动任务。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "proactive_task.execute",
+      "reason": "立即执行主动任务。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "ui.navigate",
+      "reason": "跳转到持续事项页面。",
+      "required": true,
+      "scope": "extension"
+    }
+  ],
+  "data": {
+    "schemaVersion": 1,
+    "scopes": [
+      "device"
+    ],
+    "backup": false,
+    "export": false,
+    "uninstall": "retain"
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "contentTreeHash": ""
+  }
+}

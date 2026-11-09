@@ -115,10 +115,12 @@ func TestActivationReloadsSchemaWhenContentHashChanges(t *testing.T) {
 
 func schemaPageContribution(extensionID, moduleID, contributionID, schemaPath, contentHash string) domain.ContributionDefinition {
 	return domain.ContributionDefinition{
-		ID:          domain.ContributionID(contributionID),
-		ExtensionID: domain.ExtensionID(extensionID),
-		ModuleID:    domain.ModuleID(moduleID),
-		Kind:        domain.ContributionKindUIPage,
+		ID:              domain.ContributionID(contributionID),
+		ExtensionID:     domain.ExtensionID(extensionID),
+		ModuleID:        domain.ModuleID(moduleID),
+		Kind:            domain.ContributionKindUIPage,
+		Adapter:         domain.ContributionAdapterUI,
+		ContractVersion: 1,
 		Definition: map[string]any{
 			"contract_version": 1,
 			"contribution_id":  contributionID,

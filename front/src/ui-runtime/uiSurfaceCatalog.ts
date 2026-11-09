@@ -19,7 +19,7 @@ export function canonicalUISurfaceId(rawRoute: string): string {
   if (hasPrefix(route, "/creative-workshop")) return "surface.workshop";
   if (hasPrefix(route, "/settings/devices")) return "surface.settings.devices";
   if (hasPrefix(route, "/kernel")) return "surface.kernel";
-  if (hasPrefix(route, "/settings") || ["/long-running", "/decision-viz", "/privacy-scan", "/storage"].includes(route)) return "surface.settings.section";
+  if (hasPrefix(route, "/settings") || ["/long-running", "/decision-viz", "/storage"].includes(route)) return "surface.settings.section";
   if (hasPrefix(route, "/extensions") || hasPrefix(route, "/extension/page")) return "surface.extension";
   return "surface.page";
 }

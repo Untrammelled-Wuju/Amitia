@@ -20,7 +20,6 @@ export const settingsGroups = [
   { title: "运行与部署", items: [
     { label: "运行概览", path: "/settings/overview" },
     { label: "运行统计", path: "/settings/data" },
-    { label: "运行维护", path: "/settings/runtime" },
   ] },
   { title: "诊断与高级", items: [
     { label: "界面提供者", path: "/settings/ui-providers" },

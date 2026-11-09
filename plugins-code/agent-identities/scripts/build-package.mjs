@@ -90,12 +90,12 @@ const scriptRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const packageRoot = resolve(option("--package", process.cwd()));
 const manifestPath = join(packageRoot, "amitia-extension.json");
 const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-const moduleDefinition = manifest.modules.find((item) => item.type === "javascript");
+const moduleDefinition = manifest.modules.find((item) => item.runtime?.adapter === "javascript");
 if (!moduleDefinition) throw new Error("javascript module is required");
 const staging = join(packageRoot, ".package-staging");
 const moduleRoot = join(staging, "modules", moduleDefinition.id, "dist");
 const outputRoot = resolve(scriptRoot, "..", "..", "plugin", "agent-identities");
-const output = join(outputRoot, `${basename(packageRoot)}-${manifest.extension.version}.amitiax`);
+const output = join(outputRoot, `${basename(packageRoot)}-${manifest.plugin.version}.amitiax`);
 rmSync(staging, { recursive: true, force: true });
 mkdirSync(moduleRoot, { recursive: true });
 mkdirSync(outputRoot, { recursive: true });
@@ -134,20 +134,20 @@ const sbom = {
   spdxVersion: "SPDX-2.3",
   dataLicense: "CC0-1.0",
   SPDXID: "SPDXRef-DOCUMENT",
-  name: `${manifest.extension.id}@${manifest.extension.version}`,
-  documentNamespace: `https://amitia.untrammelled.top/sbom/${encodeURIComponent(manifest.extension.id)}/${manifest.extension.version}/${treeHash}`,
+  name: `${manifest.plugin.id}@${manifest.plugin.version}`,
+  documentNamespace: `https://amitia.untrammelled.top/sbom/${encodeURIComponent(manifest.plugin.id)}/${manifest.plugin.version}/${treeHash}`,
   creationInfo: {
     created: "2026-11-03T00:00:00Z",
     creators: ["Tool: Amitia agent identity package builder"],
   },
   packages: [{
     SPDXID: "SPDXRef-Package",
-    name: manifest.extension.id,
-    versionInfo: manifest.extension.version,
+    name: manifest.plugin.id,
+    versionInfo: manifest.plugin.version,
     downloadLocation: "NOASSERTION",
     filesAnalyzed: true,
-    licenseConcluded: manifest.extension.license || "NOASSERTION",
-    licenseDeclared: manifest.extension.license || "NOASSERTION",
+    licenseConcluded: manifest.plugin.license || "NOASSERTION",
+    licenseDeclared: manifest.plugin.license || "NOASSERTION",
     checksums: [{ algorithm: "SHA256", checksumValue: treeHash }],
   }],
   files: entries.map((entry, index) => ({

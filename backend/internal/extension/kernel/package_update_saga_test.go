@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
-	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
+	"github.com/u-ai/backend/internal/extension/kernel/plugincontract"
 )
 
 func TestComputePackageUpdateDiffIncludesRemovedState(t *testing.T) {
@@ -15,7 +15,21 @@ func TestComputePackageUpdateDiffIncludesRemovedState(t *testing.T) {
 	oldContributions := []domain.ContributionDefinition{{ID: "old-tool", ExtensionID: oldDefinition.ID, ModuleID: "old", RequiredScope: []string{"conversation"}}}
 	oldRequirements := []sqlite.PermissionRequirement{{ExtensionID: oldDefinition.ID, PermissionName: "network"}}
 	oldResources := []domain.ResourceOwnership{{ResourceID: "com.example/update/old-resource", OwnerID: string(oldDefinition.ID)}}
-	target := manifest_v1.Manifest{ManifestVersion: 1, Extension: manifest_v1.ExtensionMeta{ID: string(oldDefinition.ID), Name: manifest_v1.LocalizedText{Default: "Update"}, Version: "2.0.0"}, Publisher: manifest_v1.PublisherMeta{ID: "com.example", DisplayName: "Example"}, Modules: []manifest_v1.ModuleMeta{{ID: "new", Name: manifest_v1.LocalizedText{Default: "New"}, Type: "javascript"}}, Integrity: manifest_v1.IntegrityMeta{Algorithm: "sha256", FileHashes: map[string]string{"modules/new.js": "new", "migrations/002.json": "two"}}}
+	target := plugincontract.Manifest{
+		SchemaVersion: 1,
+		Plugin: plugincontract.PluginMeta{
+			ID:      string(oldDefinition.ID),
+			Name:    plugincontract.LocalizedText{Default: "Update"},
+			Version: "2.0.0",
+			Publisher: plugincontract.Publisher{
+				ID:          "com.example",
+				DisplayName: "Example",
+			},
+		},
+		Compatibility: plugincontract.Compatibility{MinHostVersion: "0.1.0"},
+		Modules:       []plugincontract.Module{{ID: "new", Name: plugincontract.LocalizedText{Default: "New"}, Runtime: &plugincontract.RuntimeSpec{Adapter: "javascript"}}},
+		Integrity:     plugincontract.Integrity{Algorithm: "sha256", FileHashes: map[string]string{"modules/new.js": "new", "migrations/002.json": "two"}},
+	}
 	diff := computePackageUpdateDiff(oldDefinition, oldModules, oldContributions, oldRequirements, oldResources, target, PackageArtifact{})
 	assertPackageUpdateDiffContains(t, diff.ModulesRemoved, "old")
 	assertPackageUpdateDiffContains(t, diff.ContributionsRemoved, "old-tool")

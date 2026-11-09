@@ -619,12 +619,14 @@ func buildBrowserContributions(extID domain.ExtensionID, modID domain.ModuleID) 
 	contributions := make([]domain.ContributionDefinition, 0, len(specs))
 	for _, s := range specs {
 		contributions = append(contributions, domain.ContributionDefinition{
-			ID:          domain.ContributionID(s.id),
-			ModuleID:    modID,
-			ExtensionID: extID,
-			Kind:        domain.ContributionKindTool,
-			Name:        domain.LocalizedText{Default: s.name},
-			Description: domain.LocalizedText{Default: s.description},
+			ID:              domain.ContributionID(s.id),
+			ModuleID:        modID,
+			ExtensionID:     extID,
+			Kind:            domain.ContributionKindTool,
+			Adapter:         domain.ContributionAdapterTool,
+			ContractVersion: 1,
+			Name:            domain.LocalizedText{Default: s.name},
+			Description:     domain.LocalizedText{Default: s.description},
 			Definition: map[string]any{
 				"capabilityId": string(BrowserCapabilityID),
 				"modelName":    s.modelName,

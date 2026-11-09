@@ -1,48 +1,79 @@
 {
-	"manifestVersion": 1,
-	"extension": {
-		"id": "com.amitia.unknown/signature-unknown-key",
-		"name": {"default": "Signature Unknown Key"},
-		"description": {"default": "Phase 10 E2E: extension signed with a key not present in trust store, must fail or require explicit confirmation"},
-		"version": "1.0.0",
-		"metadata": {
-			"expectedSignatureStatus": "unknown_key",
-			"expectedInstallStatus": "failed_or_confirmation_required"
-		}
-	},
-	"publisher": {
-		"id": "com.amitia.unknown",
-		"displayName": "Unknown Publisher",
-		"trustLevel": "untrusted"
-	},
-	"modules": [
-		{
-			"id": "main",
-			"name": {"default": "Main"},
-			"type": "javascript",
-			"runtime": {"type": "javascript", "entryPoint": "index.js"},
-			"contributions": [
-				{
-					"id": "unknown-key-tool",
-					"kind": "tool",
-					"name": {"default": "Unknown Key Tool"},
-					"description": {"default": "Tool signed by an unknown key"},
-					"modelName": "unknown_key_tool",
-					"inputSchema": {
-						"type": "object",
-						"properties": {
-							"input": {"type": "string"}
-						}
-					}
-				}
-			]
-		}
-	],
-	"permissions": [
-		{"name": "tool.invoke", "reason": "Execute tool", "required": true}
-	],
-	"integrity": {
-		"algorithm": "sha256",
-		"contentTreeHash": ""
-	}
+  "schemaVersion": 1,
+  "plugin": {
+    "id": "com.amitia.unknown/signature-unknown-key",
+    "name": {
+      "default": "Signature Unknown Key"
+    },
+    "description": {
+      "default": "Phase 10 E2E: extension signed with a key not present in trust store, must fail or require explicit confirmation"
+    },
+    "version": "1.0.0",
+    "metadata": {
+      "expectedSignatureStatus": "unknown_key",
+      "expectedInstallStatus": "failed_or_confirmation_required"
+    },
+    "publisher": {
+      "id": "com.amitia.unknown",
+      "displayName": "Unknown Publisher",
+      "trustLevel": "untrusted"
+    }
+  },
+  "compatibility": {
+    "minHostVersion": "0.1.0"
+  },
+  "modules": [
+    {
+      "id": "main",
+      "name": {
+        "default": "Main"
+      },
+      "runtime": {
+        "adapter": "javascript",
+        "entry": "index.js"
+      },
+      "dynamic": {
+        "allowedAdapters": [
+          "tool"
+        ],
+        "maxContributions": 1,
+        "maxTools": 1,
+        "maxRoutes": 0,
+        "maxServices": 0,
+        "allowUnregister": true
+      },
+      "contributions": [
+        {
+          "id": "unknown-key-tool",
+          "kind": "tool",
+          "adapter": "tool",
+          "contractVersion": 1,
+          "name": {
+            "default": "Unknown Key Tool"
+          },
+          "description": {
+            "default": "Tool signed by an unknown key"
+          }
+        }
+      ],
+      "placement": "device"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "tool.invoke",
+      "reason": "Execute tool",
+      "required": true
+    }
+  ],
+  "data": {
+    "schemaVersion": 1,
+    "backup": true,
+    "export": true,
+    "uninstall": "retain"
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "contentTreeHash": ""
+  }
 }

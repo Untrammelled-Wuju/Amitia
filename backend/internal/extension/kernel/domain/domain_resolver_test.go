@@ -4,9 +4,9 @@ import "testing"
 
 func TestResolveGeneralDomain(t *testing.T) {
 	contribs := []ContributionDefinition{
-		{Kind: ContributionKindTool},
-		{Kind: ContributionKindWorkflow},
-		{Kind: ContributionKindProvider},
+		{Kind: ContributionKindTool, Adapter: ContributionAdapterTool},
+		{Kind: ContributionKindWorkflow, Adapter: ContributionAdapterWorkflow},
+		{Kind: ContributionKindProvider, Adapter: ContributionAdapterProvider},
 	}
 	domain, err := ResolveExtensionDomain(contribs)
 	if err != nil {
@@ -19,7 +19,7 @@ func TestResolveGeneralDomain(t *testing.T) {
 
 func TestResolveGameDomain(t *testing.T) {
 	contribs := []ContributionDefinition{
-		{Kind: ContributionKindGamePlugin},
+		{Kind: ContributionKindGamePlugin, Adapter: ContributionAdapterGame},
 	}
 	domain, err := ResolveExtensionDomain(contribs)
 	if err != nil {
@@ -32,7 +32,7 @@ func TestResolveGameDomain(t *testing.T) {
 
 func TestResolveDesktopPetDomain(t *testing.T) {
 	contribs := []ContributionDefinition{
-		{Kind: ContributionKindDesktopPetPlugin},
+		{Kind: ContributionKindDesktopPetPlugin, Adapter: ContributionAdapterDesktopPet},
 	}
 	domain, err := ResolveExtensionDomain(contribs)
 	if err != nil {
@@ -45,9 +45,9 @@ func TestResolveDesktopPetDomain(t *testing.T) {
 
 func TestMultipleGameContributionsRemainGame(t *testing.T) {
 	contribs := []ContributionDefinition{
-		{Kind: ContributionKindGamePlugin},
-		{Kind: ContributionKindGamePlugin},
-		{Kind: ContributionKindGamePlugin},
+		{Kind: ContributionKindGamePlugin, Adapter: ContributionAdapterGame},
+		{Kind: ContributionKindGamePlugin, Adapter: ContributionAdapterGame},
+		{Kind: ContributionKindGamePlugin, Adapter: ContributionAdapterGame},
 	}
 	domain, err := ResolveExtensionDomain(contribs)
 	if err != nil {
@@ -60,8 +60,8 @@ func TestMultipleGameContributionsRemainGame(t *testing.T) {
 
 func TestMultipleDesktopPetContributionsRemainDesktopPet(t *testing.T) {
 	contribs := []ContributionDefinition{
-		{Kind: ContributionKindDesktopPetPlugin},
-		{Kind: ContributionKindDesktopPetPlugin},
+		{Kind: ContributionKindDesktopPetPlugin, Adapter: ContributionAdapterDesktopPet},
+		{Kind: ContributionKindDesktopPetPlugin, Adapter: ContributionAdapterDesktopPet},
 	}
 	domain, err := ResolveExtensionDomain(contribs)
 	if err != nil {
@@ -74,8 +74,8 @@ func TestMultipleDesktopPetContributionsRemainDesktopPet(t *testing.T) {
 
 func TestGameDesktopPetDomainConflict(t *testing.T) {
 	contribs := []ContributionDefinition{
-		{Kind: ContributionKindGamePlugin},
-		{Kind: ContributionKindDesktopPetPlugin},
+		{Kind: ContributionKindGamePlugin, Adapter: ContributionAdapterGame},
+		{Kind: ContributionKindDesktopPetPlugin, Adapter: ContributionAdapterDesktopPet},
 	}
 	_, err := ResolveExtensionDomain(contribs)
 	if err == nil {
@@ -85,11 +85,11 @@ func TestGameDesktopPetDomainConflict(t *testing.T) {
 
 func TestGeneralContributionsDoNotChangeGameDomain(t *testing.T) {
 	contribs := []ContributionDefinition{
-		{Kind: ContributionKindGamePlugin},
-		{Kind: ContributionKindTool},
-		{Kind: ContributionKindProvider},
-		{Kind: ContributionKindUIPage},
-		{Kind: ContributionKindMCPServer},
+		{Kind: ContributionKindGamePlugin, Adapter: ContributionAdapterGame},
+		{Kind: ContributionKindTool, Adapter: ContributionAdapterTool},
+		{Kind: ContributionKindProvider, Adapter: ContributionAdapterProvider},
+		{Kind: ContributionKindUIPage, Adapter: ContributionAdapterUI},
+		{Kind: ContributionKindMCPServer, Adapter: ContributionAdapterMCPServer},
 	}
 	domain, err := ResolveExtensionDomain(contribs)
 	if err != nil {
@@ -102,10 +102,10 @@ func TestGeneralContributionsDoNotChangeGameDomain(t *testing.T) {
 
 func TestGeneralContributionsDoNotChangeDesktopPetDomain(t *testing.T) {
 	contribs := []ContributionDefinition{
-		{Kind: ContributionKindDesktopPetPlugin},
-		{Kind: ContributionKindTool},
-		{Kind: ContributionKindWorkflow},
-		{Kind: ContributionKindHook},
+		{Kind: ContributionKindDesktopPetPlugin, Adapter: ContributionAdapterDesktopPet},
+		{Kind: ContributionKindTool, Adapter: ContributionAdapterTool},
+		{Kind: ContributionKindWorkflow, Adapter: ContributionAdapterWorkflow},
+		{Kind: ContributionKindHook, Adapter: ContributionAdapterHook},
 	}
 	domain, err := ResolveExtensionDomain(contribs)
 	if err != nil {
@@ -193,7 +193,7 @@ func TestIsExclusiveContributionKind(t *testing.T) {
 }
 
 func TestClassifyExtension(t *testing.T) {
-	classification, err := ClassifyExtension([]ContributionDefinition{{Kind: ContributionKindGamePlugin}})
+	classification, err := ClassifyExtension([]ContributionDefinition{{Kind: ContributionKindGamePlugin, Adapter: ContributionAdapterGame}})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -210,8 +210,8 @@ func TestClassifyExtension(t *testing.T) {
 
 func TestClassifyExtensionConflict(t *testing.T) {
 	classification, err := ClassifyExtension([]ContributionDefinition{
-		{Kind: ContributionKindGamePlugin},
-		{Kind: ContributionKindDesktopPetPlugin},
+		{Kind: ContributionKindGamePlugin, Adapter: ContributionAdapterGame},
+		{Kind: ContributionKindDesktopPetPlugin, Adapter: ContributionAdapterDesktopPet},
 	})
 	if err == nil {
 		t.Error("expected error for conflict")

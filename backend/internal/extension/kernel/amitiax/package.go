@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
+	"github.com/u-ai/backend/internal/extension/kernel/plugincontract"
 )
 
 const (
@@ -92,7 +92,7 @@ type IntegrityTreeDoc struct {
 }
 
 type Package struct {
-	Manifest    manifest_v1.Manifest
+	Manifest    plugincontract.Manifest
 	Layout      PackageLayout
 	Files       []FileEntry
 	Integrity   IntegrityFilesDoc
@@ -174,47 +174,24 @@ func parsePackage(reader *zip.Reader) (*Package, error) {
 	if len(manifestData) == 0 {
 		return nil, ErrManifestMissing
 	}
-	// contentTreeHash is allowed to be empty in the archived manifest because
-	// manifest.json is itself covered by integrity/files.json and the content
-	// tree. Embedding the final tree hash into manifest.json would therefore be
-	// circular. Bind the authoritative integrity/content-tree.json value into a
-	// validation-only copy before running the full Manifest v1 schema/semantic
-	// validators. Parse the original first so duplicate JSON keys still fail
-	// closed and unknown fields remain present in the validation copy.
-	parsedManifest, err := manifest_v1.Parse(manifestData)
+	parsedManifest, err := plugincontract.Parse(manifestData)
 	if err != nil {
 		return nil, err
 	}
-	validationManifestData := manifestData
 	if strings.TrimSpace(parsedManifest.Integrity.ContentTreeHash) == "" {
 		if strings.TrimSpace(pkg.Tree.TreeHash) == "" {
 			return nil, fmt.Errorf("%w: content tree hash missing", ErrIntegrityMissing)
 		}
-		var raw map[string]any
-		if err := json.Unmarshal(manifestData, &raw); err != nil {
-			return nil, fmt.Errorf("%w: parse manifest for tree binding: %v", ErrInvalidStructure, err)
-		}
-		integrity, ok := raw["integrity"].(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("%w: manifest integrity object missing", ErrIntegrityMissing)
-		}
-		integrity["contentTreeHash"] = pkg.Tree.TreeHash
-		validationManifestData, err = json.Marshal(raw)
-		if err != nil {
-			return nil, fmt.Errorf("%w: bind content tree hash: %v", ErrInvalidStructure, err)
-		}
+		parsedManifest.Integrity.ContentTreeHash = pkg.Tree.TreeHash
 	}
-	m, report, err := manifest_v1.ParseValidated(validationManifestData)
-	if err != nil {
-		return nil, err
-	}
+	report := parsedManifest.Validate()
 	if report.HasErrors() {
-		return nil, fmt.Errorf("%w: manifest validation failed: %+v", manifest_v1.ErrInvalidManifest, report.Errors)
+		return nil, fmt.Errorf("%w: manifest validation failed: %+v", plugincontract.ErrInvalidManifest, report.Issues)
 	}
-	if pkg.Tree.TreeHash != "" && m.Integrity.ContentTreeHash != pkg.Tree.TreeHash {
+	if pkg.Tree.TreeHash != "" && parsedManifest.Integrity.ContentTreeHash != pkg.Tree.TreeHash {
 		return nil, fmt.Errorf("%w: manifest content tree hash mismatch", ErrIntegrityMismatch)
 	}
-	pkg.Manifest = m
+	pkg.Manifest = *parsedManifest
 	pkg.Layout = layout
 	pkg.Files = files
 	if err := validateStructure(pkg); err != nil {
@@ -273,8 +250,8 @@ func validateStructure(pkg *Package) error {
 		if _, ok := pkg.Layout.Modules[mod.ID]; !ok {
 			return fmt.Errorf("%w: module %s missing directory", ErrInvalidStructure, mod.ID)
 		}
-		if mod.Runtime != nil && strings.TrimSpace(mod.Runtime.EntryPoint) != "" {
-			entry, err := moduleEntrypointPackagePath(mod.ID, mod.Runtime.EntryPoint)
+		if mod.Runtime != nil && strings.TrimSpace(mod.Runtime.Entry) != "" {
+			entry, err := moduleEntrypointPackagePath(mod.ID, mod.Runtime.Entry)
 			if err != nil {
 				return fmt.Errorf("%w: module %s entry point: %v", ErrInvalidStructure, mod.ID, err)
 			}
@@ -416,10 +393,10 @@ func declaredServiceExecutablePaths(pkg *Package) map[string]bool {
 		return out
 	}
 	for _, mod := range pkg.Manifest.Modules {
-		if mod.Runtime == nil || strings.TrimSpace(mod.Runtime.Type) != "service" || strings.TrimSpace(mod.Runtime.EntryPoint) == "" {
+		if mod.Runtime == nil || strings.TrimSpace(mod.Runtime.Adapter) != "service" || strings.TrimSpace(mod.Runtime.Entry) == "" {
 			continue
 		}
-		if entry, err := moduleEntrypointPackagePath(mod.ID, mod.Runtime.EntryPoint); err == nil {
+		if entry, err := moduleEntrypointPackagePath(mod.ID, mod.Runtime.Entry); err == nil {
 			out[entry] = true
 		}
 	}

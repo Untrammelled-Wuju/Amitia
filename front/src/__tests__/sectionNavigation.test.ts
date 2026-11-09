@@ -27,19 +27,8 @@ describe("两级导航映射", () => {
       "主动任务",
       "持续事项",
     ]);
-    expect(appSection("character")?.entries.map(entry => entry.label)).toEqual([
-      "角色管理",
-      "团队",
-      "世界书",
-    ]);
-    expect(appSection("memory")?.entries.map(entry => entry.label)).toEqual([
-      "知识库",
-      "记忆总览",
-      "情景记忆",
-      "记忆图谱",
-      "时间线",
-      "用户画像",
-    ]);
+    expect(appSection("character")?.entries).toEqual([]);
+    expect(appSection("memory")?.entries).toEqual([]);
     expect(appSection("workshop")?.entries.map(entry => entry.label)).toEqual([
       "角色卡工坊",
       "桌宠",

@@ -27,6 +27,7 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/server"
 	"github.com/u-ai/backend/internal/deviceruntime"
 	coreexec "github.com/u-ai/backend/internal/execution"
+	"github.com/u-ai/backend/internal/extension/kernel/adapterprovider"
 	"github.com/u-ai/backend/internal/extension/kernel/agent_skill"
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/authority"
@@ -61,6 +62,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
+	"github.com/u-ai/backend/internal/extension/kernel/plugincontract"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	"github.com/u-ai/backend/internal/extension/kernel/schedule"
 	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
@@ -462,7 +464,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	permBroker := permission.NewDefaultPermissionBroker(permDefRegistry, permStorage)
 	permBroker.SetSnapshotStore(permSnapshotStore)
 	permBroker.SetTrustLevelChecker(newRepositoryPermissionTrustChecker(instRepo, defRepo))
-	permBroker.InstallationPolicy = newInstallationPermissionPolicy(permRepo)
+	permBroker.InstallationPolicy = newInstallationPermissionPolicy(permRepo, instRepo, defRepo)
 	permBroker.PersistentOverride = map[string]struct{}{
 		permission.PermissionServiceRuntimeExecute: {},
 		permission.PermissionServiceNetworkRequest: {},
@@ -599,6 +601,16 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 
 	adapterRegistry := capability.NewRuntimeAdapterRegistry()
+	pluginAdapters, err := plugincontract.NewBuiltinAdapterRegistry()
+	if err != nil {
+		return nil, fmt.Errorf("kernel: register plugin adapters: %w", err)
+	}
+	pluginServices := plugincontract.NewServiceCatalog()
+	pluginRoutes := plugincontract.NewContributionRouter(pluginAdapters)
+	adapterProviderHandler := adapterprovider.NewSupervisorHandler(pluginAdapters, pluginRoutes)
+	if err := trustedSupervisor.RegisterStdioProtocolHandler("adapter-provider", adapterProviderHandler); err != nil {
+		return nil, fmt.Errorf("kernel: register adapter provider protocol: %w", err)
+	}
 	toolRegistry := capability.NewToolRegistry()
 
 	kernelSecretBroker, err := buildKernelSecretBroker(b.extRoot)
@@ -1388,6 +1400,12 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	if b.kernelRuntime != nil {
 		hostPluginPackages = NewHostPluginPackageManager(b.kernelRuntime, b.runtimeProfile)
 	}
+	runtimeObservabilityBridge := NewRuntimeObservabilityBridge(nil)
+	runtimeMaintenanceBridge := NewRuntimeMaintenanceBridge()
+	workspaceBridge := NewWorkspaceBridge(b.workspaceService)
+	chatImportBridge := NewChatImportBridge()
+	storageBridge := NewStorageBridge()
+	chatLogsBridge := NewChatLogsBridge()
 	if err := setupDefaultHostAPIRoutes(hostAPIGateway, HostAPIRouteDeps{
 		StateStore:                  extensionStateStore,
 		CharacterReader:             charReader,
@@ -1415,6 +1433,12 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		VectorStore:                 b.vectorStore,
 		NetworkClient:               &http.Client{Timeout: 2 * time.Minute},
 		NetworkAllowPrivate:         b.runtimeProfile != runtimeprofile.ProfileCloudCore,
+		RuntimeObservability:        runtimeObservabilityBridge,
+		RuntimeMaintenance:          runtimeMaintenanceBridge,
+		Workspace:                   workspaceBridge,
+		ChatImport:                  chatImportBridge,
+		Storage:                     storageBridge,
+		ChatLogs:                    chatLogsBridge,
 	}); err != nil {
 		return nil, fmt.Errorf("kernel: setup host api routes: %w", err)
 	}
@@ -1950,9 +1974,19 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		EnablementService:         enablementService,
 		EnablementResolver:        enablementResolver,
 
-		ToolRegistry:    toolRegistry,
-		AdapterRegistry: adapterRegistry,
-		ToolFacade:      toolFacade,
+		ToolRegistry:           toolRegistry,
+		AdapterRegistry:        adapterRegistry,
+		PluginAdapters:         pluginAdapters,
+		PluginServices:         pluginServices,
+		PluginRoutes:           pluginRoutes,
+		AdapterProviderHandler: adapterProviderHandler,
+		RuntimeObservability:   runtimeObservabilityBridge,
+		RuntimeMaintenance:     runtimeMaintenanceBridge,
+		Workspace:              workspaceBridge,
+		ChatImport:             chatImportBridge,
+		Storage:                storageBridge,
+		ChatLogs:               chatLogsBridge,
+		ToolFacade:             toolFacade,
 
 		ExecutionService: execService,
 		RuntimeState:     runtimeState,
@@ -2090,7 +2124,14 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 
 	typedInstaller.SetContainer(container)
-	if err := activateBuiltinUIContributions(ctx, typedInstaller, instRepo, contribRepo); err != nil {
+	if err := registerBuiltinContributionRoutes(container, typedInstaller); err != nil {
+		return nil, fmt.Errorf("kernel: register builtin contribution routes: %w", err)
+	}
+	container.PluginBroker = NewPluginBroker(container)
+	if err := registerPluginBrokerRoutes(hostAPIGateway, container.PluginBroker); err != nil {
+		return nil, fmt.Errorf("kernel: register plugin broker routes: %w", err)
+	}
+	if err := activateBuiltinUIContributions(ctx, typedInstaller, instRepo, defRepo, contribRepo); err != nil {
 		return nil, err
 	}
 
@@ -2181,9 +2222,10 @@ func activateBuiltinUIContributions(
 	ctx context.Context,
 	installer *TypedContributionInstaller,
 	instRepo domain.InstallationRepository,
+	defRepo domain.DefinitionRepository,
 	contribRepo sqlite.ContributionRepository,
 ) error {
-	if installer == nil || instRepo == nil || contribRepo == nil {
+	if installer == nil || instRepo == nil || defRepo == nil || contribRepo == nil {
 		return nil
 	}
 	installations, err := instRepo.ListInstallations(ctx)
@@ -2191,7 +2233,7 @@ func activateBuiltinUIContributions(
 		return fmt.Errorf("kernel: list builtin installations: %w", err)
 	}
 	for _, inst := range installations {
-		if !strings.HasPrefix(string(inst.ExtensionID), builtin.PrefixBuiltin) || inst.EnablementState != domain.EnablementEnabled {
+		if !extensionInstallationIsSystemManaged(ctx, defRepo, inst) || inst.EnablementState != domain.EnablementEnabled {
 			continue
 		}
 		contributions, err := contribRepo.ListContributions(ctx, inst.ExtensionID)
@@ -2224,13 +2266,15 @@ func reconcileEnabledBuiltinProviderInstances(
 	}
 	for _, inst := range items {
 		if inst.InstallationState != domain.InstallationStateInstalled ||
-			inst.EnablementState != domain.EnablementEnabled ||
-			!strings.HasPrefix(string(inst.ExtensionID), builtin.PrefixBuiltin) {
+			inst.EnablementState != domain.EnablementEnabled {
 			continue
 		}
 		definition, err := defs.GetExtension(ctx, inst.ExtensionID, inst.InstalledVersion)
 		if err != nil {
-			return fmt.Errorf("get definition for %s: %w", inst.ExtensionID, err)
+			continue
+		}
+		if !extensionDefinitionIsSystemManaged(definition) {
+			continue
 		}
 		if instances, err := reconciler.ActivateExtension(definition, nil); err != nil {
 			return fmt.Errorf("activate provider instances for %s: %w", inst.ExtensionID, err)
@@ -2239,6 +2283,11 @@ func reconcileEnabledBuiltinProviderInstances(
 		}
 	}
 	return nil
+}
+
+func extensionDefinitionIsSystemManaged(definition domain.ExtensionDefinition) bool {
+	managed, _ := definition.Metadata["system.managed"].(bool)
+	return managed
 }
 
 type gameHostDefinitionReconcile struct {

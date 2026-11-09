@@ -20,6 +20,7 @@ export type SchemaUINodeType =
   | "button_group"
   | "list"
   | "table"
+  | "editable_table"
   | "empty_state"
   | "alert"
   | "progress"
@@ -168,6 +169,7 @@ export const ALLOWED_NODE_TYPES = new Set<string>([
   "button_group",
   "list",
   "table",
+  "editable_table",
   "empty_state",
   "alert",
   "progress",

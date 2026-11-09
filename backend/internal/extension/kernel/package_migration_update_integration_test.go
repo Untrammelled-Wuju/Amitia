@@ -13,8 +13,8 @@ import (
 
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
-	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
 	"github.com/u-ai/backend/internal/extension/kernel/migration"
+	"github.com/u-ai/backend/internal/extension/kernel/plugincontract"
 )
 
 func packageMigrationDefinitionsAsSQL(definitions []migration.MigrationDefinition) {
@@ -51,11 +51,11 @@ func packageMigrationSQLStagingDir(t *testing.T, extensionID string, definitions
 	return dir
 }
 
-func packageMigrationManifest(extensionID, version string, definitions []migration.MigrationDefinition) manifest_v1.Manifest {
-	return manifest_v1.Manifest{Extension: manifest_v1.ExtensionMeta{ID: extensionID, Version: version, Metadata: map[string]any{"migrations": map[string]any{"definitions": definitions}}}}
+func packageMigrationManifest(extensionID, version string, definitions []migration.MigrationDefinition) plugincontract.Manifest {
+	return plugincontract.Manifest{Plugin: plugincontract.PluginMeta{ID: extensionID, Version: version, Metadata: map[string]any{"migrations": map[string]any{"definitions": definitions}}}}
 }
 
-func packageMigrationPackage(manifest manifest_v1.Manifest, definitions []migration.MigrationDefinition) *amitiax.Package {
+func packageMigrationPackage(manifest plugincontract.Manifest, definitions []migration.MigrationDefinition) *amitiax.Package {
 	files := make([]amitiax.FileEntry, 0, len(definitions))
 	for _, definition := range definitions {
 		files = append(files, amitiax.FileEntry{Path: definition.Entry, Size: 10, Hash: "entry-" + definition.MigrationID})
@@ -67,7 +67,7 @@ func TestPackageMigrationPreviewBlocksMissingSourceAndIrreversible(t *testing.T)
 	runtime, container := newPackagePipelineRuntime(t)
 	definitions := packageMigrationChain("com.example/migration-preview", 1)
 	manifest := packageMigrationManifest("com.example/migration-preview", "1.1.0", definitions)
-	preview := InstallPreview{ExtensionID: manifest.Extension.ID, Version: manifest.Extension.Version}
+	preview := InstallPreview{ExtensionID: manifest.Plugin.ID, Version: manifest.Plugin.Version}
 	runtime.evaluatePackageMigrationPreflight(context.Background(), manifest, &preview)
 	if len(preview.Issues) == 0 || preview.Issues[0].Code != "package_migration_source_version_required" {
 		t.Fatalf("fresh install migration was not blocked: %+v", preview.Issues)
@@ -78,13 +78,13 @@ func TestPackageMigrationPreviewBlocksMissingSourceAndIrreversible(t *testing.T)
 		t.Fatal(err)
 	}
 	now := time.Now().UTC()
-	installation := domain.ExtensionInstallation{InstallationID: "installation-migration-preview", ExtensionID: domain.ExtensionID(manifest.Extension.ID), InstalledVersion: version, PackageID: "artifact-old", InstallationState: domain.InstallationStateInstalled, InstalledAt: now, UpdatedAt: now}
+	installation := domain.ExtensionInstallation{InstallationID: "installation-migration-preview", ExtensionID: domain.ExtensionID(manifest.Plugin.ID), InstalledVersion: version, PackageID: "artifact-old", InstallationState: domain.InstallationStateInstalled, InstalledAt: now, UpdatedAt: now}
 	if err := container.InstallationRepository.PutInstallation(context.Background(), installation); err != nil {
 		t.Fatal(err)
 	}
 	definitions[0].Reversibility = migration.ReversibilityIrreversible
-	manifest = packageMigrationManifest(manifest.Extension.ID, "1.1.0", definitions)
-	preview = InstallPreview{ExtensionID: manifest.Extension.ID, Version: manifest.Extension.Version}
+	manifest = packageMigrationManifest(manifest.Plugin.ID, "1.1.0", definitions)
+	preview = InstallPreview{ExtensionID: manifest.Plugin.ID, Version: manifest.Plugin.Version}
 	runtime.evaluatePackageMigrationPreflight(context.Background(), manifest, &preview)
 	if !preview.MigrationIrreversible || !preview.MigrationManualRequired {
 		t.Fatalf("irreversible risk missing: %+v", preview)
@@ -139,10 +139,10 @@ func TestPackageMigrationUpdateRejectsPlanDrift(t *testing.T) {
 		t.Fatal(err)
 	}
 	version, _ := domain.ParseVersion("1.0.0")
-	current := domain.ExtensionInstallation{ExtensionID: domain.ExtensionID(manifest.Extension.ID), InstalledVersion: version}
+	current := domain.ExtensionInstallation{ExtensionID: domain.ExtensionID(manifest.Plugin.ID), InstalledVersion: version}
 	confirmed := confirmedPackageUpdate{preview: InstallPreview{MigrationPreview: preflight, MigrationPlanHash: preflight.PlanHash}, claims: packageConfirmationClaims{MigrationPlanHash: preflight.PlanHash}, pkg: packageMigrationPackage(manifest, definitions)}
 	definitions[0].DefinitionHash = "changed-definition-hash"
-	confirmed.pkg.Manifest = packageMigrationManifest(manifest.Extension.ID, manifest.Extension.Version, definitions)
+	confirmed.pkg.Manifest = packageMigrationManifest(manifest.Plugin.ID, manifest.Plugin.Version, definitions)
 	if _, err := runtime.revalidatePackageMigrationPreflight(context.Background(), current, confirmed); err == nil || !strings.Contains(err.Error(), "plan drift") {
 		t.Fatalf("migration plan drift was accepted: %v", err)
 	}
@@ -157,8 +157,8 @@ func TestPackageMigrationUpdateForwardSuccessPersistsEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	stagingPath := packageMigrationSQLStagingDir(t, manifest.Extension.ID, definitions)
-	execution, err := runtime.executePackageUpdateMigrations(context.Background(), "package-op-success", preflight, PackageRollbackPoint{RollbackPointID: "rollback-success", ExtensionID: manifest.Extension.ID, SourceVersion: "1.0.0"}, packageMigrationPackage(manifest, definitions), stagingPath)
+	stagingPath := packageMigrationSQLStagingDir(t, manifest.Plugin.ID, definitions)
+	execution, err := runtime.executePackageUpdateMigrations(context.Background(), "package-op-success", preflight, PackageRollbackPoint{RollbackPointID: "rollback-success", ExtensionID: manifest.Plugin.ID, SourceVersion: "1.0.0"}, packageMigrationPackage(manifest, definitions), stagingPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,8 +189,8 @@ func TestPackageMigrationUpdateReverseFailureRequiresManualRecovery(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	stagingPath := packageMigrationSQLStagingDir(t, manifest.Extension.ID, definitions)
-	execution, err := runtime.executePackageUpdateMigrations(context.Background(), "package-op-reverse-fail", preflight, PackageRollbackPoint{RollbackPointID: "rollback-reverse-fail", ExtensionID: manifest.Extension.ID, SourceVersion: "1.0.0"}, packageMigrationPackage(manifest, definitions), stagingPath)
+	stagingPath := packageMigrationSQLStagingDir(t, manifest.Plugin.ID, definitions)
+	execution, err := runtime.executePackageUpdateMigrations(context.Background(), "package-op-reverse-fail", preflight, PackageRollbackPoint{RollbackPointID: "rollback-reverse-fail", ExtensionID: manifest.Plugin.ID, SourceVersion: "1.0.0"}, packageMigrationPackage(manifest, definitions), stagingPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,7 +210,7 @@ func TestPackageMigrationUpdateReverseFailureRequiresManualRecovery(t *testing.T
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	packageOperationID := "package-operation-reverse-fail"
-	if err := container.PackageRepository.CreateOperation(context.Background(), PackageOperationRecord{OperationID: packageOperationID, TraceID: "trace-reverse-fail", SpaceID: "user-1", ScopeType: "global", ExtensionID: manifest.Extension.ID, OperationType: "update", Status: "created", CurrentStep: "create_operation", StartedAt: now, UpdatedAt: now}); err != nil {
+	if err := container.PackageRepository.CreateOperation(context.Background(), PackageOperationRecord{OperationID: packageOperationID, TraceID: "trace-reverse-fail", SpaceID: "user-1", ScopeType: "global", ExtensionID: manifest.Plugin.ID, OperationType: "update", Status: "created", CurrentStep: "create_operation", StartedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatal(err)
 	}
 	if err := container.PackageRepository.SetOperation(context.Background(), packageOperationID, "in_progress", "execute_migrations", "", "", false, PackageWriteGuard{}); err != nil {

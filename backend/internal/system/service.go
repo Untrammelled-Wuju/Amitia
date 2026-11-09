@@ -103,6 +103,12 @@ type Service interface {
 	AttachTemporalService(temporalSvc *temporal.Service)
 	SetDataPortabilityCoordinator(coord *dataportability.Coordinator)
 	GetDataPortabilityCoordinator() (*dataportability.Coordinator, bool)
+	CreateDataPortabilityBackup(context.Context, string) (map[string]interface{}, error)
+	ListDataPortabilityBackups() (map[string]interface{}, error)
+	DeleteDataPortabilityBackup(string) error
+	PreviewDataPortabilityRestore(context.Context, string, string) (map[string]interface{}, error)
+	ExecuteDataPortabilityRestore(context.Context, string) (map[string]interface{}, error)
+	CancelDataPortabilityRestore() error
 }
 
 type service struct {

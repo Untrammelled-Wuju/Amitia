@@ -10,6 +10,7 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/plugin_boundary"
 	"github.com/u-ai/backend/internal/deviceruntime"
 	coreexec "github.com/u-ai/backend/internal/execution"
+	"github.com/u-ai/backend/internal/extension/kernel/adapterprovider"
 	"github.com/u-ai/backend/internal/extension/kernel/agent_skill"
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/builtin"
@@ -41,6 +42,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
+	"github.com/u-ai/backend/internal/extension/kernel/plugincontract"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	"github.com/u-ai/backend/internal/extension/kernel/schedule"
 	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
@@ -140,9 +142,20 @@ type Container struct {
 	EnablementService         *enablement.EnablementService
 	EnablementResolver        enablement.EffectiveStateResolver
 
-	ToolRegistry    *capability.ToolRegistry
-	AdapterRegistry *capability.RuntimeAdapterRegistry
-	ToolFacade      *ToolFacade
+	ToolRegistry           *capability.ToolRegistry
+	AdapterRegistry        *capability.RuntimeAdapterRegistry
+	PluginAdapters         *plugincontract.AdapterRegistry
+	PluginServices         *plugincontract.ServiceCatalog
+	PluginRoutes           *plugincontract.ContributionRouter
+	PluginBroker           *PluginBroker
+	AdapterProviderHandler *adapterprovider.SupervisorHandler
+	RuntimeObservability   *RuntimeObservabilityBridge
+	RuntimeMaintenance     *RuntimeMaintenanceBridge
+	Workspace              *WorkspaceBridge
+	ChatImport             *ChatImportBridge
+	Storage                *StorageBridge
+	ChatLogs               *ChatLogsBridge
+	ToolFacade             *ToolFacade
 
 	ExecutionService *coreexec.ExecutionService
 	RuntimeState     *RuntimeState

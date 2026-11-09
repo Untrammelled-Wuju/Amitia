@@ -9,7 +9,6 @@ import * as path from "node:path";
 import { spawnSync } from "node:child_process";
 import { buildPackage, inspectPackage, readZip, createZip } from "../archive.js";
 import type { ArchiveEntry } from "../archive.js";
-import type { AmitiaxManifestV1 } from "../manifest.js";
 
 export const testCommand: CliCommand = {
   name: "test",
@@ -46,7 +45,7 @@ export const buildCommand: CliCommand = {
 
 export const packCommand: CliCommand = {
   name: "pack",
-  description: "Pack the extension into a .amitiax package",
+  description: "Pack the extension into a unified .amitiax/.gamex/.petx plugin package",
   usage: "amitia-ext pack [options]",
   options: [
     { name: "--manifest", shortName: "-m", description: "Manifest path", takesValue: true },
@@ -68,10 +67,10 @@ export const packCommand: CliCommand = {
 
 export const signCommand: CliCommand = {
   name: "sign",
-  description: "Sign a .amitiax package with a developer key (delegates to amitiax CLI)",
+  description: "Sign a unified plugin package with a developer key (delegates to amitiax CLI)",
   usage: "amitia-ext sign [options]",
   options: [
-    { name: "--package", shortName: "-p", description: "Package path (.amitiax)", takesValue: true, required: true },
+    { name: "--package", shortName: "-p", description: "Package path (.amitiax/.gamex/.petx)", takesValue: true, required: true },
     { name: "--private-key", shortName: "-k", description: "Private key file path (PEM ed25519 or hex)", takesValue: true, required: true },
     { name: "--key-id", description: "Signing key identifier (default: derived from key fingerprint)", takesValue: true },
     { name: "--publisher-id", description: "Publisher ID (default: read from manifest.json)", takesValue: true },
@@ -188,7 +187,7 @@ export const inspectCommand: CliCommand = {
     }
     try {
       const inspection = inspectPackage(path.resolve(ctx.cwd, opts["--package"]));
-      return { exitCode: EXIT_CODES.SUCCESS, message: `${inspection.manifest.extension.id} v${inspection.manifest.extension.version}`, data: inspection };
+      return { exitCode: EXIT_CODES.SUCCESS, message: `${inspection.manifest.plugin.id} v${inspection.manifest.plugin.version}`, data: inspection };
     } catch (cause) {
       return { exitCode: EXIT_CODES.VALIDATION_OR_BUILD_FAILURE, message: cause instanceof Error ? cause.message : String(cause) };
     }

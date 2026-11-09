@@ -40,8 +40,8 @@ func runVerify(args []string, output *Output) int {
 		OK:      true,
 		Message: fmt.Sprintf("完整性验证通过: %s", archivePath),
 		Data: map[string]any{
-			"extensionId": pkg.Manifest.Extension.ID,
-			"version":     pkg.Manifest.Extension.Version,
+			"extensionId": pkg.Manifest.Plugin.ID,
+			"version":     pkg.Manifest.Plugin.Version,
 			"treeHash":    pkg.Tree.TreeHash,
 			"fileCount":   len(pkg.Integrity.Files),
 			"hasV2Sig":    len(pkg.V2Signature) > 0,
@@ -86,9 +86,9 @@ func runVerify(args []string, output *Output) int {
 
 		verResult := verifier.VerifyPackage(context.Background(), trust.PackageVerificationInput{
 			Document:              doc,
-			ActualExtensionID:     pkg.Manifest.Extension.ID,
-			ActualVersion:         pkg.Manifest.Extension.Version,
-			ActualManifestVersion: pkg.Manifest.ManifestVersion,
+			ActualExtensionID:     pkg.Manifest.Plugin.ID,
+			ActualVersion:         pkg.Manifest.Plugin.Version,
+			ActualManifestVersion: pkg.Manifest.SchemaVersion,
 			ActualManifestHash:    manifestHash,
 			ActualContentTreeHash: pkg.Tree.TreeHash,
 			ActualArtifactHash:    artifactHash,

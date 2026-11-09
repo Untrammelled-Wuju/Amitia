@@ -1,0 +1,757 @@
+{
+  "schemaVersion": 1,
+  "plugin": {
+    "id": "com.amitia/runtime-insights",
+    "name": {
+      "default": "运行时洞察"
+    },
+    "description": {
+      "default": "通过统一 Host API 展示运行时协作快照与 BDI 决策计划。"
+    },
+    "version": "1.0.0",
+    "license": "AGPL-3.0-only",
+    "homepage": "https://amitia.untrammelled.top",
+    "categories": [
+      "developer",
+      "system"
+    ],
+    "keywords": [
+      "runtime",
+      "debug",
+      "decision",
+      "bdi"
+    ],
+    "metadata": {
+      "system.defaultInstall": true,
+      "system.defaultEnabled": true
+    },
+    "publisher": {
+      "id": "com.amitia",
+      "displayName": "Amitia",
+      "trustLevel": "official"
+    }
+  },
+  "compatibility": {
+    "minHostVersion": "0.1.0",
+    "platforms": [
+      "windows",
+      "linux",
+      "macos",
+      "android",
+      "ios"
+    ]
+  },
+  "modules": [
+    {
+      "id": "runtime-insights-runtime",
+      "name": {
+        "default": "运行时洞察运行时"
+      },
+      "description": {
+        "default": "读取宿主公开的运行时观察快照。"
+      },
+      "runtime": {
+        "adapter": "javascript",
+        "entry": "dist/index.js",
+        "timeout": "30s",
+        "memoryBytes": 67108864,
+        "capabilities": {
+          "network": false,
+          "filesystem": false
+        },
+        "hostAccess": {
+          "filesystem": {
+            "mode": "none"
+          },
+          "network": {
+            "mode": "none"
+          },
+          "process": {
+            "mode": "none"
+          }
+        }
+      },
+      "dynamic": {
+        "allowedAdapters": [
+          "tool",
+          "ui",
+          "ui_provider"
+        ],
+        "maxContributions": 12,
+        "maxTools": 1,
+        "maxRoutes": 4,
+        "maxServices": 0,
+        "allowUnregister": true
+      },
+      "contributions": [
+        {
+          "id": "runtime-insights-command",
+          "kind": "tool",
+          "adapter": "tool",
+          "contractVersion": 1,
+          "name": {
+            "default": "运行时快照"
+          },
+          "description": {
+            "default": "读取当前运行时协作与决策观察数据。"
+          },
+          "spec": {
+            "toolId": "com.amitia/runtime-insights/command",
+            "modelName": "amitia_runtime_insights",
+            "handlerName": "command",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "enum": [
+                    "snapshot",
+                    "maintenance.status",
+                    "maintenance.overview",
+                    "maintenance.config",
+                    "maintenance.update",
+                    "maintenance.cleanup-temp",
+                    "maintenance.rotate-logs",
+                    "maintenance.check-db"
+                  ]
+                },
+                "payload": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              "additionalProperties": false
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "riskLevel": "low",
+            "sideEffect": "read_only",
+            "internal": true,
+            "runtime": {
+              "runtimeType": "javascript",
+              "handlerName": "command"
+            }
+          },
+          "requiredPermissions": [
+            "tool.invoke",
+            "runtime.health.read",
+            "runtime.maintenance.read",
+            "runtime.maintenance.write"
+          ]
+        },
+        {
+          "id": "runtime-debug-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "运行时调试"
+          },
+          "description": {
+            "default": "查看交互状态、预算、队列、投递、工具结果与一致性巡检。"
+          },
+          "spec": {
+            "contribution_id": "runtime-debug-page",
+            "extension_id": "com.amitia/runtime-insights",
+            "module_id": "runtime-insights-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "运行时调试"
+              },
+              "description": {
+                "default": "查看运行时协作快照。"
+              },
+              "icon": "data-analysis"
+            },
+            "entry": {
+              "type": "schema_renderer",
+              "schema_path": "modules/runtime-insights-ui/desktop/runtime-debug.json",
+              "content_hash": "pending"
+            },
+            "sandbox": {
+              "type": "schema_renderer"
+            },
+            "ordering": {
+              "priority": 245
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            },
+            "actions": [
+              {
+                "action_id": "command",
+                "title": {
+                  "default": "读取运行时快照"
+                },
+                "target": {
+                  "type": "tool",
+                  "tool_id": "com.amitia/runtime-insights/command"
+                },
+                "risk_level": "low"
+              }
+            ],
+            "integrity": {
+              "definition_hash": "runtime-debug-page-v1"
+            }
+          },
+          "requiredPermissions": [
+            "tool.invoke"
+          ]
+        },
+        {
+          "id": "decision-viz-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "BDI 决策可视化"
+          },
+          "description": {
+            "default": "查看 BehaviorPlan 与 ExpressionPlan。"
+          },
+          "spec": {
+            "contribution_id": "decision-viz-page",
+            "extension_id": "com.amitia/runtime-insights",
+            "module_id": "runtime-insights-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "BDI 决策可视化"
+              },
+              "description": {
+                "default": "查看行为计划与表达计划。"
+              },
+              "icon": "data-line"
+            },
+            "entry": {
+              "type": "schema_renderer",
+              "schema_path": "modules/runtime-insights-ui/desktop/decision-viz.json",
+              "content_hash": "pending"
+            },
+            "sandbox": {
+              "type": "schema_renderer"
+            },
+            "ordering": {
+              "priority": 244
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            },
+            "actions": [
+              {
+                "action_id": "command",
+                "title": {
+                  "default": "读取决策快照"
+                },
+                "target": {
+                  "type": "tool",
+                  "tool_id": "com.amitia/runtime-insights/command"
+                },
+                "risk_level": "low"
+              }
+            ],
+            "integrity": {
+              "definition_hash": "decision-viz-page-v1"
+            }
+          },
+          "requiredPermissions": [
+            "tool.invoke"
+          ]
+        },
+        {
+          "id": "decision-viz-mobile-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "BDI 决策可视化（移动端）"
+          },
+          "description": {
+            "default": "在移动端查看 BehaviorPlan 与 ExpressionPlan。"
+          },
+          "spec": {
+            "contribution_id": "decision-viz-mobile-page",
+            "extension_id": "com.amitia/runtime-insights",
+            "module_id": "runtime-insights-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "BDI 决策可视化"
+              },
+              "description": {
+                "default": "查看行为计划与表达计划。"
+              },
+              "icon": "data-line"
+            },
+            "entry": {
+              "type": "schema_renderer",
+              "schema_path": "modules/runtime-insights-ui/mobile/decision-viz.json",
+              "content_hash": "pending"
+            },
+            "sandbox": {
+              "type": "schema_renderer"
+            },
+            "ordering": {
+              "priority": 244
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "actions": [
+              {
+                "action_id": "command",
+                "title": {
+                  "default": "读取决策快照"
+                },
+                "target": {
+                  "type": "tool",
+                  "tool_id": "com.amitia/runtime-insights/command"
+                },
+                "risk_level": "low"
+              }
+            ],
+            "integrity": {
+              "definition_hash": "decision-viz-mobile-page-v1"
+            }
+          },
+          "requiredPermissions": [
+            "tool.invoke"
+          ]
+        },
+        {
+          "id": "long-running-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "长期运行维护"
+          },
+          "description": {
+            "default": "查看任务运行状态、调整执行器配置并执行受控维护动作。"
+          },
+          "spec": {
+            "contribution_id": "long-running-page",
+            "extension_id": "com.amitia/runtime-insights",
+            "module_id": "runtime-insights-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "长期运行维护"
+              },
+              "description": {
+                "default": "查看任务状态、执行器配置和维护动作。"
+              },
+              "icon": "timer"
+            },
+            "entry": {
+              "type": "schema_renderer",
+              "schema_path": "modules/runtime-insights-ui/desktop/long-running.json",
+              "content_hash": "pending"
+            },
+            "sandbox": {
+              "type": "schema_renderer"
+            },
+            "ordering": {
+              "priority": 243
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            },
+            "actions": [
+              {
+                "action_id": "command",
+                "title": {
+                  "default": "执行维护操作"
+                },
+                "target": {
+                  "type": "tool",
+                  "tool_id": "com.amitia/runtime-insights/command"
+                },
+                "risk_level": "high"
+              }
+            ],
+            "integrity": {
+              "definition_hash": "long-running-page-v1"
+            }
+          },
+          "requiredPermissions": [
+            "tool.invoke"
+          ]
+        },
+        {
+          "id": "long-running-mobile-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "长期运行维护（移动端）"
+          },
+          "description": {
+            "default": "在移动端查看和维护长期运行任务。"
+          },
+          "spec": {
+            "contribution_id": "long-running-mobile-page",
+            "extension_id": "com.amitia/runtime-insights",
+            "module_id": "runtime-insights-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "长期运行维护"
+              },
+              "description": {
+                "default": "查看任务状态、执行器配置和维护动作。"
+              },
+              "icon": "timer"
+            },
+            "entry": {
+              "type": "schema_renderer",
+              "schema_path": "modules/runtime-insights-ui/mobile/long-running.json",
+              "content_hash": "pending"
+            },
+            "sandbox": {
+              "type": "schema_renderer"
+            },
+            "ordering": {
+              "priority": 243
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "actions": [
+              {
+                "action_id": "command",
+                "title": {
+                  "default": "执行维护操作"
+                },
+                "target": {
+                  "type": "tool",
+                  "tool_id": "com.amitia/runtime-insights/command"
+                },
+                "risk_level": "high"
+              }
+            ],
+            "integrity": {
+              "definition_hash": "long-running-mobile-page-v1"
+            }
+          },
+          "requiredPermissions": [
+            "tool.invoke"
+          ]
+        },
+        {
+          "id": "runtime-insights-routes",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "运行时洞察路由"
+          },
+          "spec": {
+            "providerId": "runtime-insights-routes",
+            "capability": "route.registry",
+            "mode": "replace",
+            "priority": 245,
+            "trustLevel": "official",
+            "entries": {
+              "web": {
+                "type": "declarative"
+              },
+              "electron_windows": {
+                "type": "declarative"
+              },
+              "electron_macos": {
+                "type": "declarative"
+              },
+              "electron_linux": {
+                "type": "declarative"
+              },
+              "mobile": {
+                "type": "declarative"
+              }
+            },
+            "metadata": {
+              "routes": [
+                {
+                  "id": "runtime-debug",
+                  "path": "/runtime-debug",
+                  "providerId": "runtime-debug-page-provider",
+                  "capability": "page.provider",
+                  "title": "运行时调试",
+                  "priority": 245
+                },
+                {
+                  "id": "decision-viz",
+                  "path": "/decision-viz",
+                  "providerId": "decision-viz-page-provider",
+                  "capability": "page.provider",
+                  "title": "BDI 决策可视化",
+                  "priority": 244
+                },
+                {
+                  "id": "long-running",
+                  "path": "/long-running",
+                  "providerId": "long-running-page-provider",
+                  "capability": "page.provider",
+                  "title": "长期运行维护",
+                  "priority": 243
+                }
+              ],
+              "navigationItems": [
+                {
+                  "id": "runtime-debug",
+                  "label": "运行时调试",
+                  "route": "/runtime-debug",
+                  "icon": "data-analysis",
+                  "group": "settings",
+                  "groupLabel": "设置",
+                  "groupIcon": "extensions",
+                  "order": 180
+                },
+                {
+                  "id": "decision-viz",
+                  "label": "BDI 决策可视化",
+                  "route": "/decision-viz",
+                  "icon": "data-line",
+                  "group": "settings",
+                  "groupLabel": "设置",
+                  "groupIcon": "extensions",
+                  "order": 181,
+                  "mobile": true
+                },
+                {
+                  "id": "long-running",
+                  "label": "长期运行维护",
+                  "route": "/long-running",
+                  "icon": "timer",
+                  "group": "settings",
+                  "groupLabel": "设置",
+                  "groupIcon": "extensions",
+                  "order": 182,
+                  "mobile": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "runtime-debug-page-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "运行时调试页面 Provider"
+          },
+          "spec": {
+            "providerId": "runtime-debug-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 245,
+            "trustLevel": "official",
+            "entries": {
+              "web": {
+                "type": "schema_renderer",
+                "contributionId": "runtime-debug-page"
+              },
+              "electron_windows": {
+                "type": "schema_renderer",
+                "contributionId": "runtime-debug-page"
+              },
+              "electron_macos": {
+                "type": "schema_renderer",
+                "contributionId": "runtime-debug-page"
+              },
+              "electron_linux": {
+                "type": "schema_renderer",
+                "contributionId": "runtime-debug-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/runtime-debug"
+              ]
+            }
+          }
+        },
+        {
+          "id": "decision-viz-page-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "决策可视化页面 Provider"
+          },
+          "spec": {
+            "providerId": "decision-viz-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 244,
+            "trustLevel": "official",
+            "entries": {
+              "web": {
+                "type": "schema_renderer",
+                "contributionId": "decision-viz-page"
+              },
+              "electron_windows": {
+                "type": "schema_renderer",
+                "contributionId": "decision-viz-page"
+              },
+              "electron_macos": {
+                "type": "schema_renderer",
+                "contributionId": "decision-viz-page"
+              },
+              "electron_linux": {
+                "type": "schema_renderer",
+                "contributionId": "decision-viz-page"
+              },
+              "mobile": {
+                "type": "schema_renderer",
+                "contributionId": "decision-viz-mobile-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/decision-viz"
+              ]
+            }
+          }
+        },
+        {
+          "id": "long-running-page-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "长期运行维护页面 Provider"
+          },
+          "spec": {
+            "providerId": "long-running-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 243,
+            "trustLevel": "official",
+            "entries": {
+              "web": {
+                "type": "schema_renderer",
+                "contributionId": "long-running-page"
+              },
+              "electron_windows": {
+                "type": "schema_renderer",
+                "contributionId": "long-running-page"
+              },
+              "electron_macos": {
+                "type": "schema_renderer",
+                "contributionId": "long-running-page"
+              },
+              "electron_linux": {
+                "type": "schema_renderer",
+                "contributionId": "long-running-page"
+              },
+              "mobile": {
+                "type": "schema_renderer",
+                "contributionId": "long-running-mobile-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/long-running"
+              ]
+            }
+          }
+        }
+      ],
+      "placement": "device",
+      "deviceRequirements": {
+        "platforms": [
+          "windows",
+          "linux",
+          "macos"
+        ]
+      }
+    }
+  ],
+  "permissions": [
+    {
+      "name": "tool.invoke",
+      "reason": "通过插件工具读取运行时观察快照。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "runtime.health.read",
+      "reason": "读取只读的运行时协作和决策快照。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "runtime.maintenance.read",
+      "reason": "读取长期运行任务状态和维护配置。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "runtime.maintenance.write",
+      "reason": "更新任务并发、超时配置并执行受控维护动作。",
+      "required": true,
+      "scope": "extension"
+    }
+  ],
+  "data": {
+    "schemaVersion": 1,
+    "scopes": [
+      "device"
+    ],
+    "backup": false,
+    "export": false,
+    "uninstall": "retain"
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "contentTreeHash": ""
+  }
+}

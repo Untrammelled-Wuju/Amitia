@@ -13,61 +13,86 @@ type PermissionMappingEntry struct {
 
 func DefaultPermissionMapping() map[Method][]PermissionMappingEntry {
 	return map[Method][]PermissionMappingEntry{
-		MethodStateGet:                  {{PermissionID: "storage.state.read", Resource: "state"}},
-		MethodStateCAS:                  {{PermissionID: "storage.state.write", Resource: "state"}},
-		MethodStateDelete:               {{PermissionID: "storage.state.write", Resource: "state"}},
-		MethodStateList:                 {{PermissionID: "storage.state.read", Resource: "state"}},
-		MethodSecretGet:                 {{PermissionID: "secret.read", Resource: "secret"}},
-		MethodResourceOpen:              {{PermissionID: "resource.read", Resource: "resource"}},
-		MethodResourceRead:              {{PermissionID: "resource.read", Resource: "resource"}},
-		MethodResourceWrite:             {{PermissionID: "resource.write", Resource: "resource"}},
-		MethodResourceClose:             {{PermissionID: "resource.read", Resource: "resource"}},
-		MethodResourceStat:              {{PermissionID: "resource.read", Resource: "resource"}},
-		MethodResourceLink:              {{PermissionID: "resource.read", Resource: "resource"}},
-		MethodResourceDelete:            {{PermissionID: "resource.write", Resource: "resource"}},
-		MethodEventEmit:                 {{PermissionID: "event.emit", Resource: "event"}},
-		MethodEventSubscribe:            {{PermissionID: "event.subscribe", Resource: "event"}},
-		MethodEventUnsubscribe:          {{PermissionID: "event.subscribe", Resource: "event"}},
-		MethodScheduleCreate:            {{PermissionID: "schedule.create", Resource: "schedule"}},
-		MethodScheduleCancel:            {{PermissionID: "schedule.manage", Resource: "schedule"}},
-		MethodScheduleList:              {{PermissionID: "schedule.create", Resource: "schedule"}},
-		MethodToolExecute:               {{PermissionID: "tool.invoke", Resource: "tool"}},
-		MethodPluginPreview:             {{PermissionID: "extensions.install", Resource: "extension", Scope: permission.ScopeGlobal}},
-		MethodPluginInstall:             {{PermissionID: "extensions.install", Resource: "extension", Scope: permission.ScopeGlobal}},
-		MethodPluginUninstall:           {{PermissionID: "extensions.uninstall", Resource: "extension", Scope: permission.ScopeGlobal}},
-		MethodPluginList:                {{PermissionID: "extensions.read", Resource: "extension", Scope: permission.ScopeGlobal}},
-		MethodCharacterRead:             {{PermissionID: "character.read", Resource: "character"}},
-		MethodCharacterList:             {{PermissionID: "character.read", Resource: "character"}},
-		MethodConversationRead:          {{PermissionID: "conversation.read", Resource: "conversation"}},
-		MethodConversationMessageSend:   {{PermissionID: "message.send", Resource: "conversation"}},
-		MethodConversationMessageAppend: {{PermissionID: "message.append", Resource: "conversation"}},
-		MethodMemoryQuery:               {{PermissionID: "memory.read", Resource: "memory"}},
-		MethodProviderInvoke:            {{PermissionID: "provider.invoke", Resource: "provider"}},
-		MethodExtensionDataRead:         {{PermissionID: "extension.data.read", Resource: "extension_data"}},
-		MethodVectorUpsert:              {{PermissionID: "vector.write", Resource: "vector"}},
-		MethodVectorSearch:              {{PermissionID: "vector.read", Resource: "vector"}},
-		MethodVectorDelete:              {{PermissionID: "vector.write", Resource: "vector"}},
-		MethodUINotify:                  {{PermissionID: "ui.notify", Resource: "ui"}},
-		MethodUIDialog:                  {{PermissionID: "ui.dialog", Resource: "ui"}},
-		MethodUINavigate:                {{PermissionID: "ui.navigate", Resource: "ui"}},
-		MethodClipboardWrite:            {{PermissionID: "clipboard.write", Resource: "clipboard"}},
-		MethodClipboardRead:             {{PermissionID: "clipboard.read", Resource: "clipboard"}},
-		MethodRuntimeHealth:             {{PermissionID: "runtime.health.read", Resource: "runtime"}},
-		MethodNetworkRequest:            {{PermissionID: "service.network.request", Resource: "network"}},
-		MethodNetworkTCPOpen:            {{PermissionID: "service.network.request", Resource: "network"}},
-		MethodNetworkTCPRead:            {{PermissionID: "service.network.request", Resource: "network"}},
-		MethodNetworkTCPWrite:           {{PermissionID: "service.network.request", Resource: "network"}},
-		MethodNetworkTCPClose:           {{PermissionID: "service.network.request", Resource: "network"}},
-		MethodNetworkUDPOpen:            {{PermissionID: "service.network.request", Resource: "network"}},
-		MethodNetworkUDPReceive:         {{PermissionID: "service.network.request", Resource: "network"}},
-		MethodNetworkUDPSend:            {{PermissionID: "service.network.request", Resource: "network"}},
-		MethodNetworkUDPClose:           {{PermissionID: "service.network.request", Resource: "network"}},
-		MethodNetworkWebSocketOpen:      {{PermissionID: "service.network.request", Resource: "network"}},
-		MethodNetworkWebSocketReceive:   {{PermissionID: "service.network.request", Resource: "network"}},
-		MethodNetworkWebSocketSend:      {{PermissionID: "service.network.request", Resource: "network"}},
-		MethodNetworkWebSocketClose:     {{PermissionID: "service.network.request", Resource: "network"}},
-		MethodMigrationSQLExecute:       {},
-		MethodMigrationSQLQuery:         {},
+		MethodStateGet:                     {{PermissionID: "storage.state.read", Resource: "state"}},
+		MethodStateCAS:                     {{PermissionID: "storage.state.write", Resource: "state"}},
+		MethodStateDelete:                  {{PermissionID: "storage.state.write", Resource: "state"}},
+		MethodStateList:                    {{PermissionID: "storage.state.read", Resource: "state"}},
+		MethodSecretGet:                    {{PermissionID: "secret.read", Resource: "secret"}},
+		MethodResourceOpen:                 {{PermissionID: "resource.read", Resource: "resource"}},
+		MethodResourceRead:                 {{PermissionID: "resource.read", Resource: "resource"}},
+		MethodResourceWrite:                {{PermissionID: "resource.write", Resource: "resource"}},
+		MethodResourceClose:                {{PermissionID: "resource.read", Resource: "resource"}},
+		MethodResourceStat:                 {{PermissionID: "resource.read", Resource: "resource"}},
+		MethodResourceLink:                 {{PermissionID: "resource.read", Resource: "resource"}},
+		MethodResourceDelete:               {{PermissionID: "resource.write", Resource: "resource"}},
+		MethodEventEmit:                    {{PermissionID: "event.emit", Resource: "event"}},
+		MethodEventSubscribe:               {{PermissionID: "event.subscribe", Resource: "event"}},
+		MethodEventUnsubscribe:             {{PermissionID: "event.subscribe", Resource: "event"}},
+		MethodScheduleCreate:               {{PermissionID: "schedule.create", Resource: "schedule"}},
+		MethodScheduleCancel:               {{PermissionID: "schedule.manage", Resource: "schedule"}},
+		MethodScheduleList:                 {{PermissionID: "schedule.create", Resource: "schedule"}},
+		MethodToolExecute:                  {{PermissionID: "tool.invoke", Resource: "tool"}},
+		MethodPluginPreview:                {{PermissionID: "extensions.install", Resource: "extension", Scope: permission.ScopeGlobal}},
+		MethodPluginInstall:                {{PermissionID: "extensions.install", Resource: "extension", Scope: permission.ScopeGlobal}},
+		MethodPluginUninstall:              {{PermissionID: "extensions.uninstall", Resource: "extension", Scope: permission.ScopeGlobal}},
+		MethodPluginList:                   {{PermissionID: "extensions.read", Resource: "extension", Scope: permission.ScopeGlobal}},
+		MethodPluginContributionRegister:   {{PermissionID: "plugin.compose", Resource: "plugin_contribution"}},
+		MethodPluginContributionUnregister: {{PermissionID: "plugin.compose", Resource: "plugin_contribution"}},
+		MethodPluginServiceProvide:         {{PermissionID: "plugin.compose", Resource: "plugin_service"}},
+		MethodPluginServiceUnprovide:       {{PermissionID: "plugin.compose", Resource: "plugin_service"}},
+		MethodPluginServiceRequire:         {{PermissionID: "plugin.compose", Resource: "plugin_service"}},
+		MethodPluginServiceRelease:         {{PermissionID: "plugin.compose", Resource: "plugin_service"}},
+		MethodPluginAdapterInvoke:          {{PermissionID: "plugin.compose", Resource: "plugin_adapter"}},
+		MethodPluginAdapterCancel:          {{PermissionID: "plugin.compose", Resource: "plugin_adapter"}},
+		MethodCharacterRead:                {{PermissionID: "character.read", Resource: "character"}},
+		MethodCharacterList:                {{PermissionID: "character.read", Resource: "character"}},
+		MethodConversationRead:             {{PermissionID: "conversation.read", Resource: "conversation"}},
+		MethodConversationMessageSend:      {{PermissionID: "message.send", Resource: "conversation"}},
+		MethodConversationMessageAppend:    {{PermissionID: "message.append", Resource: "conversation"}},
+		MethodMemoryQuery:                  {{PermissionID: "memory.read", Resource: "memory"}},
+		MethodProviderInvoke:               {{PermissionID: "provider.invoke", Resource: "provider"}},
+		MethodExtensionDataRead:            {{PermissionID: "extension.data.read", Resource: "extension_data"}},
+		MethodVectorUpsert:                 {{PermissionID: "vector.write", Resource: "vector"}},
+		MethodVectorSearch:                 {{PermissionID: "vector.read", Resource: "vector"}},
+		MethodVectorDelete:                 {{PermissionID: "vector.write", Resource: "vector"}},
+		MethodUINotify:                     {{PermissionID: "ui.notify", Resource: "ui"}},
+		MethodUIDialog:                     {{PermissionID: "ui.dialog", Resource: "ui"}},
+		MethodUINavigate:                   {{PermissionID: "ui.navigate", Resource: "ui"}},
+		MethodClipboardWrite:               {{PermissionID: "clipboard.write", Resource: "clipboard"}},
+		MethodClipboardRead:                {{PermissionID: "clipboard.read", Resource: "clipboard"}},
+		MethodRuntimeHealth:                {{PermissionID: "runtime.health.read", Resource: "runtime"}},
+		MethodRuntimeSnapshot:              {{PermissionID: "runtime.health.read", Resource: "runtime"}},
+		MethodRuntimeMaintenanceStatus:     {{PermissionID: "runtime.maintenance.read", Resource: "runtime"}},
+		MethodRuntimeMaintenanceOverview:   {{PermissionID: "runtime.maintenance.read", Resource: "runtime"}},
+		MethodRuntimeMaintenanceConfig:     {{PermissionID: "runtime.maintenance.read", Resource: "runtime"}},
+		MethodRuntimeMaintenanceUpdate:     {{PermissionID: "runtime.maintenance.write", Resource: "runtime"}},
+		MethodRuntimeCleanupTemp:           {{PermissionID: "runtime.maintenance.write", Resource: "runtime"}},
+		MethodRuntimeRotateLogs:            {{PermissionID: "runtime.maintenance.write", Resource: "runtime"}},
+		MethodRuntimeCheckDBIntegrity:      {{PermissionID: "runtime.maintenance.write", Resource: "runtime"}},
+		MethodWorkspaceRead:                {{PermissionID: "workspace.read", Resource: "workspace"}},
+		MethodWorkspaceWrite:               {{PermissionID: "workspace.write", Resource: "workspace"}},
+		MethodImportExecute:                {{PermissionID: "conversation.import", Resource: "import"}},
+		MethodStorageCleanup:               {{PermissionID: "storage.cleanup", Resource: "storage"}},
+		MethodStorageBackup:                {{PermissionID: "storage.backup", Resource: "storage"}},
+		MethodStorageRestore:               {{PermissionID: "storage.restore", Resource: "storage"}},
+		MethodConversationLogsRead:         {{PermissionID: "conversation.read", Resource: "conversation"}},
+		MethodConversationLogsManage:       {{PermissionID: "conversation.manage", Resource: "conversation"}},
+		MethodConversationLogsExport:       {{PermissionID: "conversation.export", Resource: "conversation"}},
+		MethodNetworkRequest:               {{PermissionID: "service.network.request", Resource: "network"}},
+		MethodNetworkTCPOpen:               {{PermissionID: "service.network.request", Resource: "network"}},
+		MethodNetworkTCPRead:               {{PermissionID: "service.network.request", Resource: "network"}},
+		MethodNetworkTCPWrite:              {{PermissionID: "service.network.request", Resource: "network"}},
+		MethodNetworkTCPClose:              {{PermissionID: "service.network.request", Resource: "network"}},
+		MethodNetworkUDPOpen:               {{PermissionID: "service.network.request", Resource: "network"}},
+		MethodNetworkUDPReceive:            {{PermissionID: "service.network.request", Resource: "network"}},
+		MethodNetworkUDPSend:               {{PermissionID: "service.network.request", Resource: "network"}},
+		MethodNetworkUDPClose:              {{PermissionID: "service.network.request", Resource: "network"}},
+		MethodNetworkWebSocketOpen:         {{PermissionID: "service.network.request", Resource: "network"}},
+		MethodNetworkWebSocketReceive:      {{PermissionID: "service.network.request", Resource: "network"}},
+		MethodNetworkWebSocketSend:         {{PermissionID: "service.network.request", Resource: "network"}},
+		MethodNetworkWebSocketClose:        {{PermissionID: "service.network.request", Resource: "network"}},
+		MethodMigrationSQLExecute:          {},
+		MethodMigrationSQLQuery:            {},
 	}
 }
 
@@ -125,6 +150,18 @@ func RouteScopeForMethod(method Method) ScopePolicy {
 		return ScopePolicy{RequireRoles: []string{"session"}}
 	case MethodRuntimeHealth:
 		return ScopePolicy{Namespaced: true}
+	case MethodWorkspaceRead, MethodWorkspaceWrite:
+		return ScopePolicy{Namespaced: true}
+	case MethodImportExecute:
+		return ScopePolicy{Namespaced: true}
+	case MethodStorageCleanup, MethodStorageBackup, MethodStorageRestore:
+		return ScopePolicy{Namespaced: true}
+	case MethodConversationLogsRead, MethodConversationLogsManage, MethodConversationLogsExport:
+		return ScopePolicy{Namespaced: true}
+	case MethodPluginContributionRegister, MethodPluginContributionUnregister,
+		MethodPluginServiceProvide, MethodPluginServiceUnprovide, MethodPluginServiceRequire, MethodPluginServiceRelease,
+		MethodPluginAdapterInvoke, MethodPluginAdapterCancel:
+		return ScopePolicy{Namespaced: true}
 	default:
 		return ScopePolicy{}
 	}
@@ -137,7 +174,7 @@ func IsDataRouteMethod(method Method) bool {
 	switch method {
 	case MethodStateGet, MethodStateCAS, MethodStateDelete, MethodStateList,
 		MethodResourceOpen, MethodResourceRead, MethodResourceWrite, MethodResourceClose, MethodResourceStat, MethodResourceLink, MethodResourceDelete,
-		MethodCharacterRead, MethodCharacterList, MethodConversationRead, MethodMemoryQuery, MethodRuntimeHealth, MethodExtensionDataRead,
+		MethodCharacterRead, MethodCharacterList, MethodConversationRead, MethodMemoryQuery, MethodRuntimeHealth, MethodWorkspaceRead, MethodWorkspaceWrite, MethodImportExecute, MethodStorageCleanup, MethodStorageBackup, MethodStorageRestore, MethodConversationLogsRead, MethodConversationLogsManage, MethodConversationLogsExport, MethodExtensionDataRead,
 		MethodVectorUpsert, MethodVectorSearch, MethodVectorDelete:
 		return true
 	default:
@@ -155,11 +192,27 @@ func RouteRiskForMethod(method Method) RiskLevel {
 	switch method {
 	case MethodStateCAS, MethodStateDelete, MethodResourceWrite:
 		return RiskMedium
+	case MethodRuntimeMaintenanceUpdate, MethodRuntimeCleanupTemp, MethodRuntimeRotateLogs, MethodRuntimeCheckDBIntegrity:
+		return RiskHigh
+	case MethodWorkspaceWrite:
+		return RiskHigh
+	case MethodImportExecute:
+		return RiskHigh
+	case MethodStorageCleanup, MethodStorageBackup, MethodStorageRestore:
+		return RiskHigh
+	case MethodConversationLogsManage:
+		return RiskHigh
+	case MethodConversationLogsExport:
+		return RiskMedium
 	case MethodScheduleCreate, MethodScheduleCancel:
 		return RiskMedium
 	case MethodUIDialog:
 		return RiskMedium
-	case MethodToolExecute, MethodPluginPreview, MethodPluginInstall, MethodPluginUninstall, MethodConversationMessageSend, MethodConversationMessageAppend:
+	case MethodToolExecute, MethodPluginPreview, MethodPluginInstall, MethodPluginUninstall,
+		MethodPluginContributionRegister, MethodPluginContributionUnregister,
+		MethodPluginServiceProvide, MethodPluginServiceUnprovide, MethodPluginServiceRequire, MethodPluginServiceRelease,
+		MethodPluginAdapterInvoke, MethodPluginAdapterCancel,
+		MethodConversationMessageSend, MethodConversationMessageAppend:
 		return RiskHigh
 	case MethodExtensionDataRead:
 		return RiskMedium
@@ -192,6 +245,26 @@ func RouteSideEffectForMethod(method Method) SideEffectLevel {
 		return SideEffectReadOnly
 	case MethodStateCAS, MethodStateDelete, MethodResourceWrite, MethodResourceDelete, MethodScheduleCreate, MethodScheduleCancel, MethodVectorUpsert, MethodVectorDelete:
 		return SideEffectWrite
+	case MethodRuntimeMaintenanceUpdate, MethodRuntimeCleanupTemp, MethodRuntimeRotateLogs, MethodRuntimeCheckDBIntegrity:
+		return SideEffectWrite
+	case MethodWorkspaceRead:
+		return SideEffectReadOnly
+	case MethodWorkspaceWrite:
+		return SideEffectWrite
+	case MethodImportExecute:
+		return SideEffectWrite
+	case MethodStorageCleanup, MethodStorageBackup, MethodStorageRestore:
+		return SideEffectWrite
+	case MethodConversationLogsRead, MethodConversationLogsExport:
+		return SideEffectReadOnly
+	case MethodConversationLogsManage:
+		return SideEffectWrite
+	case MethodPluginContributionRegister, MethodPluginContributionUnregister,
+		MethodPluginServiceProvide, MethodPluginServiceUnprovide, MethodPluginServiceRequire, MethodPluginServiceRelease,
+		MethodPluginAdapterCancel:
+		return SideEffectWrite
+	case MethodPluginAdapterInvoke:
+		return SideEffectExternal
 	case MethodEventEmit:
 		return SideEffectWrite
 	case MethodToolExecute, MethodPluginPreview, MethodPluginInstall, MethodPluginUninstall, MethodConversationMessageSend, MethodConversationMessageAppend, MethodNetworkRequest, MethodNetworkTCPOpen, MethodNetworkTCPRead, MethodNetworkTCPWrite, MethodNetworkTCPClose,
@@ -239,6 +312,8 @@ func RegisterPermissionDefinitions(registry *permission.PermissionDefinitionRegi
 		{ID: "clipboard.write", Name: "Write Clipboard", Description: "Write data to the user clipboard", Category: permission.CategoryDesktop, RiskLevel: capability.RiskMedium, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeSession}, PersistentGrantable: true, BackgroundAllowed: false, ChildInvocation: permission.ChildReevaluate, DefaultApproval: permission.ApprovalManual},
 		{ID: "clipboard.read", Name: "Read Clipboard", Description: "Read data from the user clipboard", Category: permission.CategoryDesktop, RiskLevel: capability.RiskHigh, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeSession}, PersistentGrantable: false, RequiresPerUse: true, BackgroundAllowed: false, ChildInvocation: permission.ChildDeny, DefaultApproval: permission.ApprovalManual},
 		{ID: "runtime.health.read", Name: "Read Runtime Health", Description: "Read health state for the current runtime scope", Category: permission.CategoryService, RiskLevel: capability.RiskLow, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule}, PersistentGrantable: true, BackgroundAllowed: true, ChildInvocation: permission.ChildInherit, DefaultApproval: permission.ApprovalAuto},
+		{ID: "runtime.maintenance.read", Name: "Read Runtime Maintenance", Description: "Read task executor status and maintenance configuration", Category: permission.CategoryService, RiskLevel: capability.RiskLow, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension}, PersistentGrantable: true, BackgroundAllowed: true, ChildInvocation: permission.ChildInherit, DefaultApproval: permission.ApprovalAuto},
+		{ID: "runtime.maintenance.write", Name: "Manage Runtime Maintenance", Description: "Update task executor limits and run host maintenance actions", Category: permission.CategoryService, RiskLevel: capability.RiskHigh, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension}, PersistentGrantable: false, RequiresPerUse: true, BackgroundAllowed: false, ChildInvocation: permission.ChildReevaluate, TrustedOnly: true, DefaultApproval: permission.ApprovalFullControl},
 		{ID: "service.network.request", AllowedScopes: []permission.ScopeType{permission.ScopeExtension, permission.ScopeModule, permission.ScopeGlobal}},
 		{ID: "migration.sql.execute", Name: "Execute Migration SQL", Description: "Execute migration SQL through the host migration boundary", Category: permission.CategoryExtension, RiskLevel: capability.RiskHigh, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule}, PersistentGrantable: false, RequiresPerUse: true, BackgroundAllowed: false, ChildInvocation: permission.ChildDeny, TrustedOnly: true, DefaultApproval: permission.ApprovalManual},
 		{ID: "migration.sql.query", Name: "Query Migration SQL", Description: "Query migration state through the host migration boundary", Category: permission.CategoryExtension, RiskLevel: capability.RiskMedium, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule}, PersistentGrantable: false, RequiresPerUse: true, BackgroundAllowed: false, ChildInvocation: permission.ChildDeny, TrustedOnly: true, DefaultApproval: permission.ApprovalManual},

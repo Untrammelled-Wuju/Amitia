@@ -283,12 +283,14 @@ func BuildMediaExtension(version string) Definition {
 func buildMediaContributions(extID domain.ExtensionID, modID domain.ModuleID) []domain.ContributionDefinition {
 	return []domain.ContributionDefinition{
 		{
-			ID:          domain.ContributionID("media.metadata"),
-			ModuleID:    modID,
-			ExtensionID: extID,
-			Kind:        domain.ContributionKindTool,
-			Name:        domain.LocalizedText{Default: "Media Metadata"},
-			Description: domain.LocalizedText{Default: "Get metadata of a media file"},
+			ID:              domain.ContributionID("media.metadata"),
+			ModuleID:        modID,
+			ExtensionID:     extID,
+			Kind:            domain.ContributionKindTool,
+			Adapter:         domain.ContributionAdapterTool,
+			ContractVersion: 1,
+			Name:            domain.LocalizedText{Default: "Media Metadata"},
+			Description:     domain.LocalizedText{Default: "Get metadata of a media file"},
 			Definition: map[string]any{
 				"capabilityId": "media.metadata",
 				"modelName":    "media.metadata",
@@ -311,12 +313,14 @@ func buildMediaContributions(extID domain.ExtensionID, modID domain.ModuleID) []
 			},
 		},
 		{
-			ID:          domain.ContributionID("media.convert"),
-			ModuleID:    modID,
-			ExtensionID: extID,
-			Kind:        domain.ContributionKindTool,
-			Name:        domain.LocalizedText{Default: "Media Convert"},
-			Description: domain.LocalizedText{Default: "Convert media to another format"},
+			ID:              domain.ContributionID("media.convert"),
+			ModuleID:        modID,
+			ExtensionID:     extID,
+			Kind:            domain.ContributionKindTool,
+			Adapter:         domain.ContributionAdapterTool,
+			ContractVersion: 1,
+			Name:            domain.LocalizedText{Default: "Media Convert"},
+			Description:     domain.LocalizedText{Default: "Convert media to another format"},
 			Definition: map[string]any{
 				"capabilityId": "media.convert",
 				"modelName":    "media.convert",
@@ -339,12 +343,14 @@ func buildMediaContributions(extID domain.ExtensionID, modID domain.ModuleID) []
 			},
 		},
 		{
-			ID:          domain.ContributionID("media.ffmpeg.execute"),
-			ModuleID:    modID,
-			ExtensionID: extID,
-			Kind:        domain.ContributionKindTool,
-			Name:        domain.LocalizedText{Default: "Advanced FFmpeg Execute"},
-			Description: domain.LocalizedText{Default: "Run advanced bounded FFmpeg arguments against one ResourceURI input and output"},
+			ID:              domain.ContributionID("media.ffmpeg.execute"),
+			ModuleID:        modID,
+			ExtensionID:     extID,
+			Kind:            domain.ContributionKindTool,
+			Adapter:         domain.ContributionAdapterTool,
+			ContractVersion: 1,
+			Name:            domain.LocalizedText{Default: "Advanced FFmpeg Execute"},
+			Description:     domain.LocalizedText{Default: "Run advanced bounded FFmpeg arguments against one ResourceURI input and output"},
 			Definition: map[string]any{
 				"capabilityId": "media.ffmpeg.execute",
 				"modelName":    "ffmpeg_execute",
@@ -495,12 +501,14 @@ func BuildBackgroundRemovalExtension(version string) Definition {
 func buildBackgroundRemovalContributions(extID domain.ExtensionID, modID domain.ModuleID) []domain.ContributionDefinition {
 	return []domain.ContributionDefinition{
 		{
-			ID:          domain.ContributionID("background_removal.remove"),
-			ModuleID:    modID,
-			ExtensionID: extID,
-			Kind:        domain.ContributionKindTool,
-			Name:        domain.LocalizedText{Default: "Background Removal"},
-			Description: domain.LocalizedText{Default: "Remove the background from an image"},
+			ID:              domain.ContributionID("background_removal.remove"),
+			ModuleID:        modID,
+			ExtensionID:     extID,
+			Kind:            domain.ContributionKindTool,
+			Adapter:         domain.ContributionAdapterTool,
+			ContractVersion: 1,
+			Name:            domain.LocalizedText{Default: "Background Removal"},
+			Description:     domain.LocalizedText{Default: "Remove the background from an image"},
 			Definition: map[string]any{
 				"capabilityId": "image.background.remove",
 				"modelName":    "image.background.remove",

@@ -17,7 +17,7 @@ func TestQAExternalPackage(t *testing.T) {
 	if err := VerifyIntegrity(pkg); err != nil {
 		t.Fatalf("verify integrity: %v", err)
 	}
-	if pkg.Manifest.Extension.ID != "com.amitia.qa/desktop-pet-plugin" {
-		t.Fatalf("extension ID=%s", pkg.Manifest.Extension.ID)
+	if pkg.Manifest.Plugin.ID != "com.amitia.qa/desktop-pet-plugin" {
+		t.Fatalf("extension ID=%s", pkg.Manifest.Plugin.ID)
 	}
 }

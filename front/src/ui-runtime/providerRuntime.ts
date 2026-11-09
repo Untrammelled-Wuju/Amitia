@@ -67,7 +67,7 @@ export function isProviderCompatible(provider: UIProviderDefinition, context: UI
 
 export function canLoadTrustedWebModule(provider: UIProviderDefinition, entry: UIProviderEntry): boolean {
   if (entry.type !== "web_module" || !entry.path) return false;
-  return ["system", "official", "trusted", "user_trusted", "verified"].includes((provider.trustLevel ?? "").toLowerCase());
+  return ["system", "bundled", "official", "trusted", "user_trusted", "verified"].includes((provider.trustLevel ?? "").toLowerCase());
 }
 
 let providerModuleBaseURL = "";

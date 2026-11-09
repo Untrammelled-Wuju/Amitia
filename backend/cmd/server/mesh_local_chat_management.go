@@ -152,6 +152,9 @@ func chatManagementSelected(records []ownedChatManagementRecord, request coordin
 		if request.ConversationID != "" && row.ID != request.ConversationID {
 			continue
 		}
+		if request.ArchivedOnly && strings.TrimSpace(chatManagementString(row.Body, "archivedAt")) == "" {
+			continue
+		}
 		if !contains(request.Channels, chatManagementString(row.Body, "channel")) || !contains(request.Sources, chatManagementString(row.Body, "source")) {
 			continue
 		}

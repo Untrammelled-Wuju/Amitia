@@ -43,8 +43,8 @@ func (RuntimeDesiredState) TableName() string {
 }
 
 type DeviceDesiredRevisionCounter struct {
-	SpaceID         string
-	DeviceID        string
+	SpaceID         string `gorm:"primaryKey"`
+	DeviceID        string `gorm:"primaryKey"`
 	CurrentRevision int64
 	UpdatedAt       string
 }

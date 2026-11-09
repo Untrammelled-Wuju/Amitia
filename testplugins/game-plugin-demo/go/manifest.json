@@ -1,6 +1,6 @@
 {
-  "manifestVersion": 1,
-  "extension": {
+  "schemaVersion": 1,
+  "plugin": {
     "id": "com.example/mock-game-plugin-go",
     "name": {
       "default": "Mock Game Plugin (Go) - G37"
@@ -23,12 +23,12 @@
       "fault-injection",
       "conformance",
       "stability-matrix"
-    ]
-  },
-  "publisher": {
-    "id": "example",
-    "displayName": "Example Developer",
-    "trustLevel": "trusted"
+    ],
+    "publisher": {
+      "id": "example",
+      "displayName": "Example Developer",
+      "trustLevel": "trusted"
+    }
   },
   "compatibility": {
     "minHostVersion": "0.1.0",
@@ -44,15 +44,26 @@
       "name": {
         "default": "Mock Go Runtime"
       },
-      "type": "service",
       "runtime": {
-        "type": "service",
-        "entryPoint": "mock-game-plugin"
+        "adapter": "service",
+        "entry": "mock-game-plugin"
+      },
+      "dynamic": {
+        "allowedAdapters": [
+          "game"
+        ],
+        "maxContributions": 1,
+        "maxTools": 0,
+        "maxRoutes": 0,
+        "maxServices": 0,
+        "allowUnregister": true
       },
       "contributions": [
         {
           "id": "mock-go-game-plugin",
           "kind": "gamex",
+          "adapter": "game",
+          "contractVersion": 1,
           "name": {
             "default": "Mock Game Plugin Go Contribution (G37)"
           },
@@ -116,7 +127,6 @@
       "placement": "device"
     }
   ],
-  "dependencies": [],
   "permissions": [
     {
       "name": "gamehost.control",
@@ -149,9 +159,14 @@
       "description": "SFixture SecretRef for control-effect downstream provider. Plugin holds only the lease, never the secret value."
     }
   ],
+  "data": {
+    "schemaVersion": 1,
+    "backup": true,
+    "export": true,
+    "uninstall": "retain"
+  },
   "integrity": {
     "algorithm": "sha256",
     "contentTreeHash": "placeholder-hash-replace-on-build"
-  },
-  "placement": "device"
+  }
 }

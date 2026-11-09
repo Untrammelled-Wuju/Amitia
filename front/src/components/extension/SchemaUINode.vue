@@ -201,6 +201,29 @@ const tableData = computed<Record<string, unknown>[]>(() => {
   return Array.isArray(d) ? (d as Record<string, unknown>[]) : [];
 });
 
+const editableTableRows = computed<Record<string, unknown>[]>(() => {
+  const binding = props.node.bindings?.find((item) => item.source === "form" || item.source === "form_state");
+  const rows = binding ? lookupPath(props.formState, binding.path) : undefined;
+  return Array.isArray(rows) ? rows.filter((row): row is Record<string, unknown> => Boolean(row && typeof row === "object" && !Array.isArray(row))) : [];
+});
+
+function editableColumnOptions(column: Record<string, unknown>): Array<{ label: string; value: string }> {
+  const options = Array.isArray(column.options) ? column.options : [];
+  return options.map((option) => {
+    if (option && typeof option === "object" && !Array.isArray(option)) {
+      const row = option as Record<string, unknown>;
+      return { label: toText(row.label ?? row.value ?? row), value: toText(row.value ?? row.label ?? row) };
+    }
+    return { label: toText(option), value: toText(option) };
+  }).filter((option) => option.value !== "");
+}
+
+function editableColumn(index: number): Record<string, unknown> {
+  const columns = mergedProps.value.columns;
+  const value = Array.isArray(columns) ? columns[index] : undefined;
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
 const listItems = computed<string[]>(() => toStringArray(mergedProps.value.items));
 
 const kvItems = computed(() => toKeyValueItems(mergedProps.value.items ?? mergedProps.value.data));
@@ -326,7 +349,11 @@ const selectOptions = computed<Array<{ label: string; value: unknown }>>(() => {
 const galleryItems = computed<Array<Record<string, unknown>>>(() => {
   const rows = mergedProps.value.items;
   if (!Array.isArray(rows)) return [];
-  const query = toText(mergedProps.value.query).trim().toLocaleLowerCase();
+  const queryPath = toText(mergedProps.value.queryPath).trim();
+  const query = (
+    toText(mergedProps.value.query)
+    || toText(queryPath ? lookupPath(props.formState, queryPath) : "")
+  ).trim().toLocaleLowerCase();
   const fields = toStringArray(mergedProps.value.searchFields);
   const filterField = toText(mergedProps.value.filterField);
   const filterValue = mergedProps.value.filterValue;
@@ -681,7 +708,10 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     <div
       v-else-if="nodeType === 'grid'"
       class="schema-ui-grid schema-ui-node"
-      :class="{ 'schema-ui-grid--master-detail': mergedProps.layout === 'master-detail' }"
+      :class="{
+        'schema-ui-grid--master-detail': mergedProps.layout === 'master-detail',
+        'schema-ui-grid--tab-bar': mergedProps.layout === 'tab-bar',
+      }"
       :data-amitia-ui="semanticTarget"
       :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
@@ -1020,6 +1050,7 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
         'schema-ui-gallery--collections': mergedProps.variant === 'collections',
         'schema-ui-gallery--groups': mergedProps.variant === 'groups',
         'schema-ui-gallery--stickers': mergedProps.variant === 'stickers',
+        'schema-ui-gallery--tab-bar': mergedProps.variant === 'tab-bar',
       }"
       :data-amitia-ui="semanticTarget"
       :data-amitia-node-target="nodeTarget"
@@ -1159,6 +1190,47 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
         :width="col.width"
         show-overflow-tooltip
       />
+    </el-table>
+
+    <el-table
+      v-else-if="nodeType === 'editable_table'"
+      class="schema-ui-table schema-ui-node"
+      :data-amitia-ui="semanticTarget"
+      :data-amitia-node-target="nodeTarget"
+      :data-node-id="node.id"
+      :data="editableTableRows"
+      :border="mergedProps.bordered === true"
+      :stripe="mergedProps.stripe !== false"
+      size="small"
+      :max-height="mergedProps.maxHeight ? toNumber(mergedProps.maxHeight) : undefined"
+    >
+      <el-table-column
+        v-for="(col, idx) in tableColumns"
+        :key="idx"
+        :prop="col.prop"
+        :label="col.label"
+        :width="col.width"
+      >
+        <template #default="{ row }">
+          <el-select
+            v-if="editableColumn(idx).type === 'select'"
+            v-model="row[col.prop]"
+            size="small"
+          >
+            <el-option
+              v-for="option in editableColumnOptions(editableColumn(idx))"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
+          <el-input
+            v-else
+            v-model="row[col.prop]"
+            size="small"
+          />
+        </template>
+      </el-table-column>
     </el-table>
 
     <el-empty
@@ -1798,7 +1870,7 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
   text-align: center;
 }
 
-.schema-ui-grid[data-node-id="plugin-market-category-bar"] {
+.schema-ui-grid--tab-bar {
   display: flex;
   align-items: stretch;
   gap: 0;
@@ -1806,7 +1878,7 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
   border-bottom: 1px solid var(--surface-border, var(--amitia-border, rgba(127, 127, 127, 0.2)));
   overflow: hidden;
 }
-.schema-ui-grid[data-node-id="plugin-market-category-bar"] > .schema-ui-button {
+.schema-ui-grid--tab-bar > .schema-ui-button {
   flex: 0 0 auto;
   height: 42px;
   padding: 0 12px;
@@ -1817,13 +1889,13 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
   box-shadow: none;
   color: var(--text-secondary);
 }
-.schema-ui-grid[data-node-id="plugin-market-category-bar"] > .schema-ui-button:hover,
-.schema-ui-grid[data-node-id="plugin-market-category-bar"] > .schema-ui-button:focus-visible {
+.schema-ui-grid--tab-bar > .schema-ui-button:hover,
+.schema-ui-grid--tab-bar > .schema-ui-button:focus-visible {
   border-bottom-color: var(--ac-color-primary);
   background: transparent;
   color: var(--text-primary);
 }
-.schema-ui-gallery[data-node-id="plugin-market-categories"] {
+.schema-ui-gallery--tab-bar {
   display: flex;
   flex: 1 1 auto;
   gap: 0;
@@ -1834,7 +1906,7 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
   overscroll-behavior-x: contain;
   scrollbar-width: thin;
 }
-.schema-ui-gallery[data-node-id="plugin-market-categories"] .schema-ui-gallery__item {
+.schema-ui-gallery--tab-bar .schema-ui-gallery__item {
   width: auto;
   height: 42px;
   flex: 0 0 auto;
@@ -1847,23 +1919,23 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
   background: transparent;
   text-align: center;
 }
-.schema-ui-gallery[data-node-id="plugin-market-categories"] .schema-ui-gallery__item:hover,
-.schema-ui-gallery[data-node-id="plugin-market-categories"] .schema-ui-gallery__item:focus-visible {
+.schema-ui-gallery--tab-bar .schema-ui-gallery__item:hover,
+.schema-ui-gallery--tab-bar .schema-ui-gallery__item:focus-visible {
   border-bottom-color: var(--ac-color-primary);
   background: transparent;
   color: var(--text-primary);
 }
-.schema-ui-gallery[data-node-id="plugin-market-categories"] .schema-ui-gallery__placeholder {
+.schema-ui-gallery--tab-bar .schema-ui-gallery__placeholder {
   display: none;
 }
-.schema-ui-gallery[data-node-id="plugin-market-categories"] .schema-ui-gallery__title {
+.schema-ui-gallery--tab-bar .schema-ui-gallery__title {
   width: auto;
   font-size: var(--ac-font-size-sm, 13px);
   font-weight: 500;
   white-space: nowrap;
 }
-.schema-ui-gallery[data-node-id="plugin-market-categories"] .schema-ui-gallery__item:focus-visible,
-.schema-ui-grid[data-node-id="plugin-market-category-bar"] > .schema-ui-button:focus-visible {
+.schema-ui-gallery--tab-bar .schema-ui-gallery__item:focus-visible,
+.schema-ui-grid--tab-bar > .schema-ui-button:focus-visible {
   outline: 2px solid var(--ac-color-primary);
   outline-offset: -2px;
 }

@@ -1,46 +1,86 @@
 {
-	"manifestVersion": 1,
-	"extension": {
-		"id": "com.amitia.repair/event-permission-denied",
-		"name": {"default": "Event Permission Denied"},
-		"description": {"default": "Phase 10 E2E: event subscription requiring a permission that is not granted, must be denied"},
-		"version": "1.0.0"
-	},
-	"publisher": {
-		"id": "com.amitia.repair",
-		"displayName": "Amitia Repair"
-	},
-	"modules": [
-		{
-			"id": "main",
-			"name": {"default": "Main"},
-			"type": "javascript",
-			"runtime": {"type": "javascript", "entryPoint": "index.js"},
-			"contributions": [
-				{
-					"id": "guarded-subscription",
-					"kind": "event_subscription",
-					"name": {"default": "Guarded Subscription"},
-					"description": {"default": "Subscription requiring event.subscribe.sensitive permission"},
-					"requiredPermissions": ["event.subscribe.sensitive"],
-					"spec": {
-						"eventTypeId": "system.sensitive",
-						"eventVersionRange": "^1",
-						"entry": "onEvent",
-						"deliveryPolicy": {
-							"timeout": "5s",
-							"maxInFlight": 2
-						}
-					}
-				}
-			]
-		}
-	],
-	"permissions": [
-		{"name": "event.subscribe.sensitive", "reason": "Subscribe to sensitive events", "required": true}
-	],
-	"integrity": {
-		"algorithm": "sha256",
-		"contentTreeHash": ""
-	}
+  "schemaVersion": 1,
+  "plugin": {
+    "id": "com.amitia.repair/event-permission-denied",
+    "name": {
+      "default": "Event Permission Denied"
+    },
+    "description": {
+      "default": "Phase 10 E2E: event subscription requiring a permission that is not granted, must be denied"
+    },
+    "version": "1.0.0",
+    "publisher": {
+      "id": "com.amitia.repair",
+      "displayName": "Amitia Repair"
+    }
+  },
+  "compatibility": {
+    "minHostVersion": "0.1.0"
+  },
+  "modules": [
+    {
+      "id": "main",
+      "name": {
+        "default": "Main"
+      },
+      "runtime": {
+        "adapter": "javascript",
+        "entry": "index.js"
+      },
+      "dynamic": {
+        "allowedAdapters": [
+          "event"
+        ],
+        "maxContributions": 1,
+        "maxTools": 0,
+        "maxRoutes": 0,
+        "maxServices": 0,
+        "allowUnregister": true
+      },
+      "contributions": [
+        {
+          "id": "guarded-subscription",
+          "kind": "event_subscription",
+          "adapter": "event",
+          "contractVersion": 1,
+          "name": {
+            "default": "Guarded Subscription"
+          },
+          "description": {
+            "default": "Subscription requiring event.subscribe.sensitive permission"
+          },
+          "spec": {
+            "eventTypeId": "system.sensitive",
+            "eventVersionRange": "^1",
+            "entry": "onEvent",
+            "deliveryPolicy": {
+              "timeout": "5s",
+              "maxInFlight": 2
+            }
+          },
+          "requiredPermissions": [
+            "event.subscribe.sensitive"
+          ]
+        }
+      ],
+      "placement": "device"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "event.subscribe.sensitive",
+      "reason": "Subscribe to sensitive events",
+      "required": true
+    }
+  ],
+  "data": {
+    "schemaVersion": 1,
+    "backup": true,
+    "export": true,
+    "uninstall": "retain"
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "contentTreeHash": ""
+  }
 }

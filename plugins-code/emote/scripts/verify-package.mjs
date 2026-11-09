@@ -6,7 +6,7 @@ import { inflateRawSync } from "node:zlib";
 const manifestSource = JSON.parse(readFileSync(join(".", "amitia-extension.json"), "utf8"));
 const packageFile = process.argv[2]
   || process.env.AMITIA_EMOTE_PACKAGE
-  || join("..", "..", "Plugin", "Emote", `amitia-emote-${manifestSource.extension.version}.amitiax`);
+  || join("..", "..", "Plugin", "Emote", `amitia-emote-${manifestSource.plugin.version}.amitiax`);
 
 function readEntries(buffer) {
   const entries = new Map();
@@ -67,7 +67,7 @@ function main() {
   for (const path of required) {
     if (!entries.has(path)) throw new Error(`missing package path: ${path}`);
   }
-  if (manifest.extension?.id !== "com.amitia/emote") throw new Error("unexpected extension id");
+  if (manifest.plugin?.id !== "com.amitia/emote") throw new Error("unexpected extension id");
   for (const platform of ["android", "ios"]) {
     if (!manifest.compatibility?.platforms?.includes(platform)) {
       throw new Error(`package must declare ${platform}`);

@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
 	"github.com/u-ai/backend/internal/extension/kernel/migration"
+	"github.com/u-ai/backend/internal/extension/kernel/plugincontract"
 )
 
 type PackageMigrationGuard struct {
@@ -17,7 +17,7 @@ func NewPackageMigrationGuard(repo *migration.MigrationRepository) *PackageMigra
 	return &PackageMigrationGuard{core: migration.NewReversibleMigrationCore(repo)}
 }
 
-func (g *PackageMigrationGuard) PreflightManifest(ctx context.Context, manifest manifest_v1.Manifest, fromVersion string) (*migration.ReversiblePreflight, error) {
+func (g *PackageMigrationGuard) PreflightManifest(ctx context.Context, manifest plugincontract.Manifest, fromVersion string) (*migration.ReversiblePreflight, error) {
 	if g == nil || g.core == nil {
 		return nil, fmt.Errorf("migration: package guard unavailable")
 	}
@@ -26,9 +26,9 @@ func (g *PackageMigrationGuard) PreflightManifest(ctx context.Context, manifest 
 		return nil, err
 	}
 	return g.core.Preflight(ctx, migration.ReversiblePreflightInput{
-		ExtensionID: manifest.Extension.ID,
+		ExtensionID: manifest.Plugin.ID,
 		FromVersion: fromVersion,
-		ToVersion:   manifest.Extension.Version,
+		ToVersion:   manifest.Plugin.Version,
 		Definitions: definitions,
 	})
 }
@@ -47,13 +47,13 @@ func (g *PackageMigrationGuard) CompensateReverse(ctx context.Context, request m
 	return g.core.CompensateReverse(ctx, request, handler)
 }
 
-func manifestMigrationDefinitions(manifest manifest_v1.Manifest) ([]migration.MigrationDefinition, error) {
-	if len(manifest.Extension.Metadata) == 0 {
+func manifestMigrationDefinitions(manifest plugincontract.Manifest) ([]migration.MigrationDefinition, error) {
+	if len(manifest.Plugin.Metadata) == 0 {
 		return nil, fmt.Errorf("migration: manifest migrations missing")
 	}
-	raw, ok := manifest.Extension.Metadata["migrations"]
+	raw, ok := manifest.Plugin.Metadata["migrations"]
 	if !ok {
-		raw, ok = manifest.Extension.Metadata["migration"]
+		raw, ok = manifest.Plugin.Metadata["migration"]
 	}
 	if !ok {
 		return nil, fmt.Errorf("migration: manifest migrations missing")

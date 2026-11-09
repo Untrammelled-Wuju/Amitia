@@ -1,0 +1,282 @@
+{
+  "schemaVersion": "schema-ui/1",
+  "type": "document",
+  "title": "长期运行维护",
+  "lifecycle": {
+    "onMount": [
+      {
+        "action_id": "command",
+        "target": "tool",
+        "input": {
+          "action": "maintenance.overview"
+        },
+        "statePath": "maintenanceStatus"
+      },
+      {
+        "action_id": "command",
+        "target": "tool",
+        "input": {
+          "action": "maintenance.config"
+        },
+        "statePath": "maintenanceConfig"
+      }
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "command",
+      "target": "tool"
+    }
+  ],
+  "children": [
+    {
+      "id": "long-running-mobile-page",
+      "type": "page",
+      "children": [
+        {
+          "id": "long-running-mobile-refresh",
+          "type": "button",
+          "props": {
+            "text": "刷新维护状态",
+            "type": "primary"
+          },
+          "actions": [
+            {
+              "action_id": "command",
+              "target": "tool",
+              "input": {
+                "action": "maintenance.overview"
+              },
+              "statePath": "maintenanceStatus"
+            },
+            {
+              "action_id": "command",
+              "target": "tool",
+              "input": {
+                "action": "maintenance.config"
+              },
+              "statePath": "maintenanceConfig"
+            }
+          ]
+        },
+        {
+          "id": "long-running-mobile-status-card",
+          "type": "card",
+          "props": {
+            "title": "任务状态"
+          },
+          "children": [
+            {
+              "id": "long-running-mobile-status",
+              "type": "key_value",
+              "props": {
+                "columns": 1,
+                "bordered": true
+              },
+              "bindings": [
+                {
+                  "path": "items",
+                  "source": "state",
+                  "sourcePath": "maintenanceStatus"
+                }
+              ]
+            },
+            {
+              "id": "long-running-mobile-tasks",
+              "type": "table",
+              "props": {
+                "columns": [
+                  { "prop": "title", "label": "任务" },
+                  { "prop": "status", "label": "状态" },
+                  { "prop": "updatedAt", "label": "更新时间" }
+                ]
+              },
+              "bindings": [
+                {
+                  "path": "data",
+                  "source": "state",
+                  "sourcePath": "maintenanceStatus.tasks"
+                }
+              ]
+            },
+            {
+              "id": "long-running-mobile-modules",
+              "type": "table",
+              "props": {
+                "columns": [
+                  { "prop": "name", "label": "模块" },
+                  { "prop": "healthy", "label": "健康" },
+                  { "prop": "message", "label": "详情" }
+                ]
+              },
+              "bindings": [
+                {
+                  "path": "data",
+                  "source": "state",
+                  "sourcePath": "maintenanceStatus.modules"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "long-running-mobile-config-card",
+          "type": "card",
+          "props": {
+            "title": "执行器配置"
+          },
+          "children": [
+            {
+              "id": "long-running-mobile-config",
+              "type": "key_value",
+              "props": {
+                "columns": 1,
+                "bordered": true
+              },
+              "bindings": [
+                {
+                  "path": "items",
+                  "source": "state",
+                  "sourcePath": "maintenanceConfig"
+                }
+              ]
+            },
+            {
+              "id": "long-running-mobile-max-tasks",
+              "type": "field",
+              "props": {
+                "label": "最大并发任务数",
+                "type": "number",
+                "min": 1,
+                "max": 20
+              },
+              "bindings": [
+                {
+                  "path": "maxTasks",
+                  "source": "form",
+                  "default": 4
+                }
+              ]
+            },
+            {
+              "id": "long-running-mobile-timeout-disabled",
+              "type": "switch",
+              "props": {
+                "label": "禁用任务超时"
+              },
+              "bindings": [
+                {
+                  "path": "timeoutDisabled",
+                  "source": "form",
+                  "default": false
+                }
+              ]
+            },
+            {
+              "id": "long-running-mobile-timeout-seconds",
+              "type": "field",
+              "props": {
+                "label": "超时秒数",
+                "type": "number",
+                "min": 30,
+                "max": 1800,
+                "step": 30
+              },
+              "bindings": [
+                {
+                  "path": "timeoutSeconds",
+                  "source": "form",
+                  "default": 90
+                }
+              ]
+            },
+            {
+              "id": "long-running-mobile-save",
+              "type": "button",
+              "props": {
+                "text": "保存配置",
+                "type": "primary"
+              },
+              "actions": [
+                {
+                  "action_id": "command",
+                  "target": "tool",
+                  "input": {
+                    "action": "maintenance.update",
+                    "payload": {
+                      "maxTasks": "$form.maxTasks",
+                      "timeout": {
+                        "disabled": "$form.timeoutDisabled",
+                        "seconds": "$form.timeoutSeconds"
+                      },
+                      "expectedRevision": "$state.maintenanceConfig.revision",
+                      "expectedTimeoutRevision": "$state.maintenanceConfig.timeoutRevision"
+                    }
+                  },
+                  "statePath": "maintenanceConfig"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "long-running-mobile-actions",
+          "type": "button_group",
+          "children": [
+            {
+              "id": "long-running-mobile-cleanup",
+              "type": "button",
+              "props": {
+                "text": "清理临时文件"
+              },
+              "actions": [
+                {
+                  "action_id": "command",
+                  "target": "tool",
+                  "input": {
+                    "action": "maintenance.cleanup-temp"
+                  },
+                  "statePath": "lastMaintenance"
+                }
+              ]
+            },
+            {
+              "id": "long-running-mobile-rotate",
+              "type": "button",
+              "props": {
+                "text": "轮转日志"
+              },
+              "actions": [
+                {
+                  "action_id": "command",
+                  "target": "tool",
+                  "input": {
+                    "action": "maintenance.rotate-logs"
+                  },
+                  "statePath": "lastMaintenance"
+                }
+              ]
+            },
+            {
+              "id": "long-running-mobile-db",
+              "type": "button",
+              "props": {
+                "text": "完整性检查"
+              },
+              "actions": [
+                {
+                  "action_id": "command",
+                  "target": "tool",
+                  "input": {
+                    "action": "maintenance.check-db"
+                  },
+                  "statePath": "lastMaintenance"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

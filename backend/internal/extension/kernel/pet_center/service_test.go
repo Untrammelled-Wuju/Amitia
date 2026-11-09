@@ -163,6 +163,8 @@ func makePetPluginContrib(extID domain.ExtensionID, contribID string) domain.Con
 		ModuleID:            "main",
 		ExtensionID:         extID,
 		Kind:                domain.ContributionKindDesktopPetPlugin,
+		Adapter:             domain.ContributionAdapterDesktopPet,
+		ContractVersion:     1,
 		Name:                domain.LocalizedText{Default: "Pet Plugin " + contribID},
 		Description:         domain.LocalizedText{Default: "A desktop pet plugin"},
 		RequiredPermissions: []string{"display.window", "input.mouse"},
@@ -171,23 +173,27 @@ func makePetPluginContrib(extID domain.ExtensionID, contribID string) domain.Con
 
 func makeGamePluginContrib(extID domain.ExtensionID, contribID string) domain.ContributionDefinition {
 	return domain.ContributionDefinition{
-		ID:          domain.ContributionID(contribID),
-		ModuleID:    "main",
-		ExtensionID: extID,
-		Kind:        domain.ContributionKindGamePlugin,
-		Name:        domain.LocalizedText{Default: "Game Plugin " + contribID},
-		Description: domain.LocalizedText{Default: "A game plugin"},
+		ID:              domain.ContributionID(contribID),
+		ModuleID:        "main",
+		ExtensionID:     extID,
+		Kind:            domain.ContributionKindGamePlugin,
+		Adapter:         domain.ContributionAdapterGame,
+		ContractVersion: 1,
+		Name:            domain.LocalizedText{Default: "Game Plugin " + contribID},
+		Description:     domain.LocalizedText{Default: "A game plugin"},
 	}
 }
 
 func makeToolContrib(extID domain.ExtensionID, contribID string) domain.ContributionDefinition {
 	return domain.ContributionDefinition{
-		ID:          domain.ContributionID(contribID),
-		ModuleID:    "main",
-		ExtensionID: extID,
-		Kind:        domain.ContributionKindTool,
-		Name:        domain.LocalizedText{Default: "Tool " + contribID},
-		Description: domain.LocalizedText{Default: "A regular tool"},
+		ID:              domain.ContributionID(contribID),
+		ModuleID:        "main",
+		ExtensionID:     extID,
+		Kind:            domain.ContributionKindTool,
+		Adapter:         domain.ContributionAdapterTool,
+		ContractVersion: 1,
+		Name:            domain.LocalizedText{Default: "Tool " + contribID},
+		Description:     domain.LocalizedText{Default: "A regular tool"},
 	}
 }
 
@@ -455,13 +461,17 @@ func TestList_SearchFiltersByPluginName(t *testing.T) {
 		contributions: []domain.ContributionDefinition{
 			{
 				ID: petID("alpha-pet"), ModuleID: "main", ExtensionID: "com.example/pet-search",
-				Kind: domain.ContributionKindDesktopPetPlugin,
-				Name: domain.LocalizedText{Default: "Alpha Pet"},
+				Kind:            domain.ContributionKindDesktopPetPlugin,
+				Adapter:         domain.ContributionAdapterDesktopPet,
+				ContractVersion: 1,
+				Name:            domain.LocalizedText{Default: "Alpha Pet"},
 			},
 			{
 				ID: petID("beta-pet"), ModuleID: "main", ExtensionID: "com.example/pet-search",
-				Kind: domain.ContributionKindDesktopPetPlugin,
-				Name: domain.LocalizedText{Default: "Beta Pet"},
+				Kind:            domain.ContributionKindDesktopPetPlugin,
+				Adapter:         domain.ContributionAdapterDesktopPet,
+				ContractVersion: 1,
+				Name:            domain.LocalizedText{Default: "Beta Pet"},
 			},
 		},
 	}

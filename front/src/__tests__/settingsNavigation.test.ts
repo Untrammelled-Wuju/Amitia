@@ -67,9 +67,10 @@ describe("桌面设置分类导航", () => {
     try {
       expect(wrapper.findAll("nav section")).toHaveLength(7);
       const links = wrapper.findAll("nav a");
-      expect(links).toHaveLength(20);
-      expect(new Set(links.map(link => link.attributes("href"))).size).toBe(20);
+      expect(links).toHaveLength(19);
+      expect(new Set(links.map(link => link.attributes("href"))).size).toBe(19);
       expect(wrapper.find('a[href="/settings/deployment"]').exists()).toBe(false);
+      expect(wrapper.find('a[href="/settings/runtime"]').exists()).toBe(false);
       expect(wrapper.find('a[href="/settings/feedback"]').exists()).toBe(true);
       const privacyGroup = wrapper.findAll("nav section").find(section => section.text().startsWith("隐私"));
       expect(privacyGroup?.findAll("a").map(link => link.text())).toEqual(["隐私说明", "使用边界", "隐私扫描"]);

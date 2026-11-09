@@ -132,6 +132,48 @@ class RevokedPinnedPairingApi extends Fake implements BackendServiceApi {
   }
 }
 
+class ExistingPinnedPairingApi extends Fake implements BackendServiceApi {
+  var claims = 0;
+  var endpointUpdated = false;
+
+  @override
+  Future<T?> post<T>(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+    T Function(dynamic)? fromJson,
+  }) async {
+    if (path == '/internal/device-mesh/pairing/claim') {
+      claims++;
+      throw StateError('request failed with status 409');
+    }
+    expect(path, '/internal/device-mesh/endpoint/update');
+    final body = data as Map<String, dynamic>;
+    expect(body['cloudBaseUrl'], 'https://center.example:7000');
+    expect(body['coreId'], 'core-b');
+    endpointUpdated = true;
+    return {'ok': true} as T;
+  }
+
+  @override
+  Future<T?> get<T>(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+    T Function(dynamic)? fromJson,
+  }) async {
+    expect(path, '/internal/device-mesh/status');
+    return {
+          'state': 'connected',
+          'coreId': 'core-old',
+          'deviceId': 'device-a',
+          'runtimeId': 'runtime-a',
+        }
+        as T;
+  }
+}
+
 void main() {
   test('证书指纹与二维码使用SubjectPublicKeyInfo哈希', () {
     Uint8List tlv(int tag, List<int> content) {
@@ -219,6 +261,24 @@ void main() {
       expect(claims, 1);
     });
   }
+
+  test('有效子设备凭据直接更新地址并恢复连接', () async {
+    final api = ExistingPinnedPairingApi();
+    final result = await OnboardingService(api).claimPairingAt(
+      'https://center.example:7000',
+      deviceId: 'device-a',
+      runtimeId: 'runtime-a',
+      platform: 'android',
+      offerToken: 'offer-a',
+      fingerprint: List.filled(64, 'a').join(),
+      coreId: 'core-b',
+    );
+
+    expect(result['alreadyPaired'], isTrue);
+    expect(result['spaceId'], 'core-b');
+    expect(api.claims, 1);
+    expect(api.endpointUpdated, isTrue);
+  });
 
   test('撤销后新码成功返回Bootstrap Ticket，不因旧错误缓存拒绝', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);

@@ -8,12 +8,16 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
-	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
+	"github.com/u-ai/backend/internal/extension/kernel/plugincontract"
 )
 
-func newInstallationPermissionPolicy(repo sqlite.PermissionRepository) func(context.Context, permission.PermissionSubject, permission.PermissionRequirement, permission.PermissionDefinition) (permission.PermissionDecision, bool) {
+func newInstallationPermissionPolicy(
+	repo sqlite.PermissionRepository,
+	installations domain.InstallationRepository,
+	definitions domain.DefinitionRepository,
+) func(context.Context, permission.PermissionSubject, permission.PermissionRequirement, permission.PermissionDefinition) (permission.PermissionDecision, bool) {
 	return func(ctx context.Context, subject permission.PermissionSubject, requirement permission.PermissionRequirement, _ permission.PermissionDefinition) (permission.PermissionDecision, bool) {
 		extensionID := installationPermissionExtensionID(subject)
 		if extensionID == "" {
@@ -26,7 +30,7 @@ func newInstallationPermissionPolicy(repo sqlite.PermissionRepository) func(cont
 		if err != nil {
 			return permission.DecisionDeny, true
 		}
-		if !granted && strings.HasPrefix(extensionID, "com.amitia.builtin.") {
+		if !granted && systemManagedInstallationPermission(ctx, extensionID, installations, definitions) {
 			requirements, err := repo.ListRequirements(ctx, domain.ExtensionID(extensionID))
 			if err != nil {
 				return permission.DecisionDeny, true
@@ -45,6 +49,27 @@ func newInstallationPermissionPolicy(repo sqlite.PermissionRepository) func(cont
 	}
 }
 
+func systemManagedInstallationPermission(
+	ctx context.Context,
+	extensionID string,
+	installations domain.InstallationRepository,
+	definitions domain.DefinitionRepository,
+) bool {
+	if installations == nil || definitions == nil {
+		return false
+	}
+	installation, err := installations.GetInstallation(ctx, domain.ExtensionID(extensionID))
+	if err != nil {
+		return false
+	}
+	definition, err := definitions.GetExtension(ctx, domain.ExtensionID(extensionID), installation.InstalledVersion)
+	if err != nil {
+		return false
+	}
+	managed, _ := definition.Metadata["system.managed"].(bool)
+	return managed
+}
+
 func installationPermissionExtensionID(subject permission.PermissionSubject) string {
 	switch subject.Type {
 	case permission.SubjectExtension, permission.SubjectModule, permission.SubjectRuntime, permission.SubjectTool:
@@ -60,7 +85,7 @@ func installationPermissionExtensionID(subject permission.PermissionSubject) str
 	return ""
 }
 
-func (r *Runtime) syncInstalledPackagePermissions(ctx context.Context, extensionID domain.ExtensionID, permissions []manifest_v1.PermissionReq) error {
+func (r *Runtime) syncInstalledPackagePermissions(ctx context.Context, extensionID domain.ExtensionID, permissions []plugincontract.Permission) error {
 	if r == nil || r.container == nil || r.container.PermissionRepository == nil {
 		return fmt.Errorf("kernel: permission repository unavailable")
 	}

@@ -20,8 +20,18 @@ const generateReleaseReportPath = resolve(__dirname, "generate-release-report.mj
 const prepareRuntimeAssetsPath = resolve(__dirname, "prepare-release-runtime-assets.mjs");
 const verifyPackagedRuntimeAssetsPath = resolve(__dirname, "verify-packaged-runtime-assets.mjs");
 const buildMarketplacePluginsPath = resolve(__dirname, "../../scripts/build-marketplace-plugins.mjs");
-const verifyPluginMarketPackagePath = resolve(__dirname, "../../plugins-code/plugin-market/scripts/verify-package.mjs");
-const testPluginMarketRuntimePath = resolve(__dirname, "../../plugins-code/plugin-market/scripts/test-runtime.mjs");
+const verifyPluginMarketPackagePath = resolve(__dirname, "../../plugins-builtin/plugin-market/scripts/verify-package.mjs");
+const testPluginMarketRuntimePath = resolve(__dirname, "../../plugins-builtin/plugin-market/scripts/test-runtime.mjs");
+const testRuntimeInsightsPath = resolve(__dirname, "../../plugins-builtin/runtime-insights/scripts/test-runtime.mjs");
+const testWorkspaceRuntimePath = resolve(__dirname, "../../plugins-builtin/workspace/scripts/test-runtime.mjs");
+const testChatImportRuntimePath = resolve(__dirname, "../../plugins-builtin/chat-import/scripts/test-runtime.mjs");
+const testRemindersRuntimePath = resolve(__dirname, "../../plugins-builtin/reminders/scripts/test-runtime.mjs");
+const testStorageRuntimePath = resolve(__dirname, "../../plugins-builtin/storage/scripts/test-runtime.mjs");
+const testChatLogsRuntimePath = resolve(__dirname, "../../plugins-builtin/chat-logs/scripts/test-runtime.mjs");
+const testMemoryHubRuntimePath = resolve(__dirname, "../../plugins-builtin/memory-hub/scripts/test-runtime.mjs");
+const testCharacterHubRuntimePath = resolve(__dirname, "../../plugins-builtin/character-hub/scripts/test-runtime.mjs");
+const testCreativeWorkshopHubRuntimePath = resolve(__dirname, "../../plugins-builtin/creative-workshop-hub/scripts/test-runtime.mjs");
+const testGameCenterHubRuntimePath = resolve(__dirname, "../../plugins-builtin/game-center-hub/scripts/test-runtime.mjs");
 const compressionLevel = process.env.ELECTRON_BUILDER_COMPRESSION_LEVEL || "5";
 
 function run(command, args, options = {}) {
@@ -114,11 +124,23 @@ async function main() {
   console.log("[build-release] building shared runtime hosts...");
   run(process.execPath, [buildRuntimeHostsPath]);
 
-  console.log("[build-release] building bundled plugin market...");
-  run(process.execPath, [buildMarketplacePluginsPath, "--build"], {
-    env: { ...process.env, AMITIA_PLUGIN_FILTER: "com.amitia/plugin-market" },
-  });
+  console.log("[build-release] building bundled plugins...");
+  for (const extensionID of ["com.amitia/plugin-market", "com.amitia/runtime-insights", "com.amitia/workspace", "com.amitia/chat-import", "com.amitia/reminders", "com.amitia/storage", "com.amitia/chat-logs", "com.amitia/memory-hub", "com.amitia/character-hub", "com.amitia/creative-workshop-hub", "com.amitia/game-center-hub"]) {
+    run(process.execPath, [buildMarketplacePluginsPath, "--build"], {
+      env: { ...process.env, AMITIA_PLUGIN_FILTER: extensionID },
+    });
+  }
   run(process.execPath, [testPluginMarketRuntimePath]);
+  run(process.execPath, [testRuntimeInsightsPath]);
+  run(process.execPath, [testWorkspaceRuntimePath]);
+  run(process.execPath, [testChatImportRuntimePath]);
+  run(process.execPath, [testRemindersRuntimePath]);
+  run(process.execPath, [testStorageRuntimePath]);
+  run(process.execPath, [testChatLogsRuntimePath]);
+  run(process.execPath, [testMemoryHubRuntimePath]);
+  run(process.execPath, [testCharacterHubRuntimePath]);
+  run(process.execPath, [testCreativeWorkshopHubRuntimePath]);
+  run(process.execPath, [testGameCenterHubRuntimePath]);
   run(process.execPath, [verifyPluginMarketPackagePath]);
 
   console.log("[build-release] building AmitiaCore from the frozen source...");

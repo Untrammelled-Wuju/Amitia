@@ -1,85 +1,445 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.amitia.dev/extensions/v1/manifest.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "plugin", "compatibility", "modules", "integrity"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "plugin": { "$ref": "#/$defs/plugin" },
+    "compatibility": { "$ref": "#/$defs/compatibility" },
+    "modules": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/module" }
+    },
+    "dependencies": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/dependency" }
+    },
+    "permissions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/permission" }
+    },
+    "resources": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/resource" }
+    },
+    "secretRefs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/secretRef" }
+    },
+    "adapterProviders": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/adapterProvider" }
+    },
+    "data": { "$ref": "#/$defs/data" },
+    "integrity": { "$ref": "#/$defs/integrity" },
+    "development": { "$ref": "#/$defs/development" }
+  },
   "$defs": {
-    "semver": {"type": "string", "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"},
-    "metadata": {
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+    },
+    "localized": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "name", "version", "description"],
+      "required": ["default"],
       "properties": {
-        "id": {"type": "string", "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$"},
-        "name": {"type": "string", "minLength": 1},
-        "version": {"$ref": "#/$defs/semver"},
-        "description": {"type": "string", "minLength": 1},
-        "author": {"type": "string"},
-        "license": {"type": "string"},
-        "tags": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+        "default": { "type": "string", "minLength": 1 },
+        "translations": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
       }
     },
-    "compatibility": {
+    "publisher": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["engineMin"],
-      "properties": {"engineMin": {"$ref": "#/$defs/semver"}, "engineMaxExclusive": {"$ref": "#/$defs/semver"}}
-    },
-    "entry": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["kind"],
-      "properties": {"kind": {"type": "string"}, "name": {"type": "string", "minLength": 1}, "artifactId": {"type": "string", "minLength": 1}, "path": {"type": "string", "minLength": 1}}
-    },
-    "skill": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["$schema", "apiVersion", "kind", "metadata", "compatibility", "entry", "capabilities", "triggers", "execution", "inputSchema", "outputSchema", "enabled", "allowLLM", "allowManual"],
+      "required": ["id", "displayName"],
       "properties": {
-        "$schema": {"const": "https://schemas.amitia.dev/extensions/v1/manifest.schema.json"},
-        "apiVersion": {"const": "extensions.amitia.dev/v1alpha1"},
-        "kind": {"const": "Skill"},
-        "metadata": {"$ref": "#/$defs/metadata"},
-        "compatibility": {"$ref": "#/$defs/compatibility"},
-        "entry": {"allOf": [{"$ref": "#/$defs/entry"}, {"properties": {"kind": {"enum": ["builtin", "workflow", "instructions"]}}, "allOf": [{"if": {"properties": {"kind": {"enum": ["workflow", "instructions"]}}}, "then": {"anyOf": [{"required": ["artifactId"]}, {"required": ["path"]}]}, "else": {"required": ["name"]}}, {"if": {"properties": {"kind": {"const": "instructions"}}}, "then": {"properties": {"path": {"enum": ["SKILL.md", "instructions/SKILL.md"]}}}}]}]},
-        "capabilities": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
-        "triggers": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["llm", "manual", "schedule", "system_event"]}},
-        "execution": {
-          "type": "object", "additionalProperties": false,
-          "required": ["timeoutMs", "hasSideEffects", "retryable", "idempotent"],
-          "properties": {"timeoutMs": {"type": "integer", "minimum": 1, "maximum": 300000}, "hasSideEffects": {"type": "boolean"}, "retryable": {"type": "boolean"}, "idempotent": {"type": "boolean"}}
-        },
-        "inputSchema": {"type": "object"}, "outputSchema": {"type": "object"}, "configSchema": {"type": "object"}, "defaultConfig": {},
-        "enabled": {"type": "boolean"}, "allowLLM": {"type": "boolean"}, "allowManual": {"type": "boolean"}
+        "id": { "type": "string", "minLength": 1 },
+        "displayName": { "type": "string", "minLength": 1 },
+        "trustLevel": { "type": "string" },
+        "contact": { "type": "string" },
+        "website": { "type": "string" }
       }
     },
     "plugin": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["$schema", "apiVersion", "kind", "metadata", "compatibility", "entry", "capabilities", "hooks", "subscriptions", "registeredSkills", "execution", "state", "enabled"],
+      "required": ["id", "name", "version", "publisher"],
       "properties": {
-        "$schema": {"const": "https://schemas.amitia.dev/extensions/v1/manifest.schema.json"},
-        "apiVersion": {"const": "extensions.amitia.dev/v1alpha1"},
-        "kind": {"const": "Plugin"},
-        "metadata": {"$ref": "#/$defs/metadata"},
-        "compatibility": {"$ref": "#/$defs/compatibility"},
-        "entry": {"allOf": [{"$ref": "#/$defs/entry"}, {"properties": {"kind": {"const": "builtin"}}}]},
-        "capabilities": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
-        "hooks": {"type": "array", "uniqueItems": true, "items": {"enum": ["on_load", "on_enable", "before_prompt", "after_reply", "on_event", "on_schedule", "on_disable", "on_unload"]}},
-        "subscriptions": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
-        "registeredSkills": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
-        "execution": {
-          "type": "object", "additionalProperties": false,
-          "required": ["hookTimeoutMs", "maxConcurrency", "failureThreshold", "circuitOpenMs"],
-          "properties": {"hookTimeoutMs": {"type": "integer", "minimum": 1, "maximum": 5000}, "maxConcurrency": {"type": "integer", "minimum": 1, "maximum": 16}, "failureThreshold": {"type": "integer", "minimum": 1, "maximum": 20}, "circuitOpenMs": {"type": "integer", "minimum": 100, "maximum": 3600000}, "halfOpenMaxRequests": {"type": "integer", "minimum": 1, "maximum": 4}}
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.-]+(?:/[a-z0-9][a-z0-9-]+)?$" },
+        "name": { "$ref": "#/$defs/localized" },
+        "description": { "$ref": "#/$defs/localized" },
+        "version": { "$ref": "#/$defs/semver" },
+        "license": { "type": "string" },
+        "homepage": { "type": "string" },
+        "repository": { "type": "string" },
+        "publisher": { "$ref": "#/$defs/publisher" },
+        "categories": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "keywords": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "icon": { "type": "string" },
+        "metadata": { "type": "object" }
+      }
+    },
+    "compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minHostVersion"],
+      "properties": {
+        "minHostVersion": { "$ref": "#/$defs/semver" },
+        "maxHostVersion": { "$ref": "#/$defs/semver" },
+        "platforms": {
+          "type": "array",
+          "items": { "enum": ["windows", "linux", "macos", "android", "ios", "web"] },
+          "uniqueItems": true
         },
-        "configSchema": {"type": "object"}, "defaultConfig": {},
-        "state": {
-          "type": "object", "additionalProperties": false, "required": ["schemaVersion"],
-          "properties": {"schemaVersion": {"$ref": "#/$defs/semver"}, "schema": {"type": "object"}, "default": {}}
+        "featureFlags": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+      }
+    },
+    "hostAccess": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "filesystem": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mode": { "enum": ["none", "read", "read_write"] },
+            "roots": { "type": "array", "items": { "enum": ["package", "plugin_data"] }, "uniqueItems": true }
+          }
         },
-        "surface": {"type": "object"},
-        "enabled": {"type": "boolean"}
+        "network": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "mode": { "enum": ["none", "host"] } }
+        },
+        "process": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mode": { "enum": ["none", "direct"] },
+            "maxProcesses": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["adapter"],
+      "properties": {
+        "adapter": { "type": "string", "minLength": 1 },
+        "serviceId": { "type": "string" },
+        "entry": { "type": "string" },
+        "workerCount": { "type": "integer", "minimum": 0 },
+        "timeout": { "type": "string" },
+        "memoryBytes": { "type": "integer", "minimum": 0 },
+        "cpuPercent": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "maxProcesses": { "type": "integer", "minimum": 0 },
+        "permissions": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "capabilities": { "type": "object", "additionalProperties": { "type": "boolean" } },
+        "environment": { "type": "object", "additionalProperties": { "type": "string" } },
+        "hostAccess": { "$ref": "#/$defs/hostAccess" },
+        "nativeArtifacts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "platform", "path", "sha256", "executable"],
+            "properties": {
+              "id": { "type": "string" },
+              "platform": { "type": "string" },
+              "architecture": { "type": "string" },
+              "path": { "type": "string" },
+              "sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+              "executable": { "type": "boolean" },
+              "arguments": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        }
+      }
+    },
+    "serviceOffer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["serviceId", "version", "scopes", "placement"],
+      "properties": {
+        "serviceId": { "type": "string", "minLength": 1 },
+        "version": { "$ref": "#/$defs/semver" },
+        "contractHash": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+        "scopes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "enum": ["global", "character", "conversation", "device", "plugin"] },
+          "uniqueItems": true
+        },
+        "placement": { "enum": ["core", "device", "cloud", "hybrid"] },
+        "priority": { "type": "integer" }
+      }
+    },
+    "serviceRequirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["serviceId"],
+      "properties": {
+        "serviceId": { "type": "string", "minLength": 1 },
+        "versionRange": { "type": "string" },
+        "contractHash": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+        "optional": { "type": "boolean" },
+        "selection": { "enum": ["single", "all", "exclusive"] },
+        "reason": { "type": "string" }
+      }
+    },
+    "dynamic": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "allowedAdapters": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "allowedKinds": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "maxContributions": { "type": "integer", "minimum": 0 },
+        "maxTools": { "type": "integer", "minimum": 0 },
+        "maxRoutes": { "type": "integer", "minimum": 0 },
+        "maxServices": { "type": "integer", "minimum": 0 },
+        "allowUnregister": { "type": "boolean" }
+      }
+    },
+    "contribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "adapter", "contractVersion", "name"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string", "minLength": 1 },
+        "adapter": { "type": "string", "minLength": 1 },
+        "contractVersion": { "type": "integer", "minimum": 1 },
+        "schema": { "type": "object" },
+        "name": { "$ref": "#/$defs/localized" },
+        "description": { "$ref": "#/$defs/localized" },
+        "version": { "$ref": "#/$defs/semver" },
+        "spec": { "type": "object" },
+        "requiredPermissions": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "requiredScope": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "exposure": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "visibleByDefault": { "type": "boolean" },
+            "hiddenFromDiscovery": { "type": "boolean" },
+            "requiredRoles": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+          }
+        },
+        "runtimeBinding": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["runtimeId"],
+          "properties": {
+            "runtimeId": { "type": "string", "minLength": 1 },
+            "generation": { "type": "integer" }
+          }
+        },
+        "dependencies": { "type": "array", "items": { "$ref": "#/$defs/dependency" } },
+        "metadata": { "type": "object" }
+      }
+    },
+    "module": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "$ref": "#/$defs/localized" },
+        "description": { "$ref": "#/$defs/localized" },
+        "version": { "$ref": "#/$defs/semver" },
+        "runtime": { "$ref": "#/$defs/runtime" },
+        "services": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "provides": { "type": "array", "items": { "$ref": "#/$defs/serviceOffer" } },
+            "requires": { "type": "array", "items": { "$ref": "#/$defs/serviceRequirement" } }
+          }
+        },
+        "dynamic": { "$ref": "#/$defs/dynamic" },
+        "contributions": { "type": "array", "items": { "$ref": "#/$defs/contribution" } },
+        "permissions": { "type": "array", "items": { "$ref": "#/$defs/permission" } },
+        "resources": { "type": "array", "items": { "$ref": "#/$defs/resource" } },
+        "dependencies": { "type": "array", "items": { "$ref": "#/$defs/dependency" } },
+        "placement": { "enum": ["core", "device", "cloud", "hybrid"] },
+        "compatibility": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "minHostVersion": { "$ref": "#/$defs/semver" },
+            "platforms": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+          }
+        },
+        "policies": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "isolation": { "enum": ["none", "process", "sandbox"] },
+            "networkAccess": { "type": "boolean" },
+            "fileSystemAccess": { "type": "boolean" }
+          }
+        },
+        "deviceRequirements": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "platforms": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+            "architectures": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+            "minAppVersion": { "type": "string" },
+            "minRuntimeVersion": { "type": "string" },
+            "requiredFeatures": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+          }
+        },
+        "providedCapabilities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "version": { "$ref": "#/$defs/semver" },
+              "metadata": { "type": "object" }
+            }
+          }
+        },
+        "provider": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": { "type": "string" },
+            "priority": { "type": "integer" },
+            "labels": { "type": "object", "additionalProperties": { "type": "string" } },
+            "metadata": { "type": "object" }
+          }
+        }
+      }
+    },
+    "dependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id"],
+      "properties": {
+        "type": { "type": "string" },
+        "id": { "type": "string" },
+        "version": { "type": "string" },
+        "optional": { "type": "boolean" },
+        "reason": { "type": "string" }
+      }
+    },
+    "permission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string" },
+        "required": { "type": "boolean" },
+        "scope": { "type": "string" }
+      }
+    },
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "path"],
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string" },
+        "path": { "type": "string" },
+        "hash": { "type": "string" },
+        "size": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "secretRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref"],
+      "properties": {
+        "ref": { "type": "string", "minLength": 1 },
+        "serviceId": { "type": "string" },
+        "purpose": { "type": "string" },
+        "description": { "type": "string" },
+        "required": { "type": "boolean" }
+      }
+    },
+    "adapterProvider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["serviceId", "adapterId", "contractVersion", "supportedKinds", "contributionSchema"],
+      "properties": {
+        "serviceId": { "type": "string", "minLength": 1 },
+        "adapterId": { "type": "string", "minLength": 1 },
+        "contractVersion": { "type": "integer", "minimum": 1 },
+        "supportedKinds": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "operations": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "contributionSchema": { "type": "object" },
+        "requiredHostCapabilities": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "permissionRequirements": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "platforms": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        }
+      }
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion"],
+      "properties": {
+        "schemaVersion": { "type": "integer", "minimum": 1 },
+        "scopes": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "backup": { "type": "boolean" },
+        "export": { "type": "boolean" },
+        "uninstall": { "enum": ["retain", "delete", "export"] }
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "contentTreeHash"],
+      "properties": {
+        "algorithm": { "const": "sha256" },
+        "contentTreeHash": { "type": "string" },
+        "fileHashes": {
+          "type": "object",
+          "additionalProperties": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" }
+        }
+      }
+    },
+    "development": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "hotReload": { "type": "boolean" },
+        "sourceMaps": { "type": "boolean" },
+        "testEntry": { "type": "string" },
+        "watchPaths": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
       }
     }
-  },
-  "oneOf": [{"$ref": "#/$defs/skill"}, {"$ref": "#/$defs/plugin"}]
+  }
 }

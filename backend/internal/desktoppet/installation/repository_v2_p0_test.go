@@ -3,22 +3,51 @@ package installation
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"testing"
 
+	"github.com/u-ai/backend/internal/desktoppet/installation/desired"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 func newRepositoryV2TestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "installation.db")), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	if err := db.AutoMigrate(&Installation{}, &RuntimeSettings{}); err != nil {
+	if err := db.AutoMigrate(&Installation{}, &RuntimeSettings{}, &desired.DeviceDesiredRevisionCounter{}); err != nil {
 		t.Fatalf("migrate installation/runtime settings: %v", err)
 	}
 	return db
+}
+
+func TestAllocateDeviceDesiredRevisionUpdatesExistingCounter(t *testing.T) {
+	db := newRepositoryV2TestDB(t)
+	repo := &repository{db: db}
+	if err := db.Create(&desired.DeviceDesiredRevisionCounter{
+		SpaceID:         "space-a",
+		DeviceID:        "device-a",
+		CurrentRevision: 1,
+	}).Error; err != nil {
+		t.Fatalf("seed revision counter: %v", err)
+	}
+
+	revision, err := repo.AllocateDeviceDesiredRevisionCAS(db, "space-a", "device-a")
+	if err != nil {
+		t.Fatalf("allocate first revision: %v", err)
+	}
+	if revision != 2 {
+		t.Fatalf("expected revision 2, got %d", revision)
+	}
+	revision, err = repo.AllocateDeviceDesiredRevisionCAS(db, "space-a", "device-a")
+	if err != nil {
+		t.Fatalf("allocate second revision: %v", err)
+	}
+	if revision != 3 {
+		t.Fatalf("expected revision 3, got %d", revision)
+	}
 }
 
 func TestRepositoryV2TransactionReadsItsOwnWritesAndRollsBack(t *testing.T) {

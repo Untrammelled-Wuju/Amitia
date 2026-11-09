@@ -71,8 +71,8 @@ for (const name of readdirSync(root).filter((item) => item.endsWith(".amitiax"))
   const data = readFileSync(path);
   const files = entries(data);
   const manifest = JSON.parse(files.get("manifest.json").toString("utf8"));
-  const extensionId = manifest.extension.id;
-  const version = manifest.extension.version;
+  const extensionId = manifest.plugin.id;
+  const version = manifest.plugin.version;
   const sbomPath = `${path}.sbom.json`;
   if (!existsSync(sbomPath)) throw new Error(`SBOM is required: ${sbomPath}`);
   const form = new FormData();

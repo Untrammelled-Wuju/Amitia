@@ -12,6 +12,7 @@ export interface BackendUIDisplayMetadata {
   title: BackendLocalizedText;
   description?: BackendLocalizedText;
   icon?: string;
+  chrome?: string;
   badge?: unknown;
   category?: string;
   keywords?: string[];

@@ -61,10 +61,10 @@ func (r *Runtime) PreviewInstall(ctx context.Context, archivePath string) (Insta
 
 	manifest := pkg.Manifest
 	preview.Manifest = manifest
-	preview.ExtensionID = manifest.Extension.ID
-	preview.Name = manifest.Extension.Name.Default
-	preview.Version = manifest.Extension.Version
-	preview.Publisher = manifest.Publisher.ID
+	preview.ExtensionID = manifest.Plugin.ID
+	preview.Name = manifest.Plugin.Name.Default
+	preview.Version = manifest.Plugin.Version
+	preview.Publisher = manifest.Plugin.Publisher.ID
 	preview.ContentTreeHash = manifest.Integrity.ContentTreeHash
 
 	report := manifest.Validate()
@@ -88,7 +88,7 @@ func (r *Runtime) PreviewInstall(ctx context.Context, archivePath string) (Insta
 		installable = false
 	}
 
-	for _, e := range report.Errors {
+	for _, e := range report.Issues {
 		category := PreviewNotInstallable
 		if e.Code == "unsupported_runtime" || e.Code == "unsupported_contribution" {
 			category = PreviewPartialUnsupported
@@ -107,12 +107,12 @@ func (r *Runtime) PreviewInstall(ctx context.Context, archivePath string) (Insta
 		supported := packageModuleSupported(mod, platform, hostVersion)
 		runtimeType := ""
 		if mod.Runtime != nil {
-			runtimeType = mod.Runtime.Type
+			runtimeType = mod.Runtime.Adapter
 		}
 		preview.Modules = append(preview.Modules, PreviewModule{
 			ID:        mod.ID,
 			Name:      mod.Name.Default,
-			Type:      mod.Type,
+			Type:      mod.EffectiveType(),
 			Runtime:   runtimeType,
 			Supported: supported,
 		})

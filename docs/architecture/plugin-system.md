@@ -18,7 +18,9 @@ Amitia 官方市场本身也是预装普通插件 `com.amitia.builtin.plugin-mar
 
 ## 插件包
 
-`.amitiax` 包以 `manifest.json` 为权威清单，包含扩展身份、版本、发布者、模块、运行时、贡献、权限、兼容性、资源及完整性信息。包归档另行携带内容树、文件哈希和发布签名。
+插件包以统一的 `manifest.json` 为权威清单，包含插件身份、版本、发布者、模块、运行 Adapter、服务提供与依赖、动态贡献能力、静态贡献、权限、兼容性、资源、数据和完整性信息。包归档另行携带内容树、文件哈希和发布签名。
+
+`.amitiax`、`.gamex` 和 `.petx` 只是包文件扩展名别名。三者共用同一 Manifest、签名、安装事务、Adapter Registry、Service Graph、权限和生命周期，不维护独立插件格式或第二套运行时。
 
 安装流程不接受清单自报结果作为安全证明。宿主会重新计算归档哈希和内容树，验证签名与发布者信任，扫描包安全风险，检查兼容性和权限，再生成短期预览会话与确认令牌。
 
@@ -27,11 +29,11 @@ Amitia 官方市场本身也是预装普通插件 `com.amitia.builtin.plugin-mar
 贡献由两层组成：
 
 - `kind` 是插件语义类型，可使用命名空间字符串，例如 `com.example.market/page`。
-- `adapter` 是宿主执行协议，例如 `ui`、`ui_slot`、`tool`、`event`、`hook`、`schedule`。
+- `adapter` 是必填的宿主执行协议，例如 `ui`、`ui_slot`、`tool`、`event`、`hook`、`schedule`。
 
-内置 `kind` 未显式声明 `adapter` 时按内置映射解析。自定义 `kind` 必须显式声明已注册适配器、正数 `contractVersion` 和 JSON Schema。宿主按照 Schema 校验贡献的 `spec`，因此新增业务贡献类型不需要修改宿主枚举。
+所有贡献必须显式声明已注册 Adapter 和正数 `contractVersion`。宿主按照 Adapter 声明的 Schema 校验贡献的 `spec`，不再根据 `kind` 隐式推断执行协议。
 
-新增执行语义时，仅当需要使用宿主尚未提供的底层执行能力，才需要注册新的适配器；普通插件扩展业务类型只需要复用已有适配器。
+新增执行语义时，由受信任的 Adapter Provider 向 Adapter Broker 注册新协议；普通插件扩展业务类型只需要复用已安装 Adapter。
 
 示例：
 
@@ -94,6 +96,12 @@ JSON Schema 位于 `docs/schemas/plugin-catalog.v1.schema.json`，TypeScript 类
 - 自定义贡献 `kind`：支持，复用已注册适配器。
 - 自定义贡献 Schema：支持，按 JSON Schema 2020-12 在安装前校验，禁止远程 `$ref` 加载。
 - 运行时贡献注册：支持。
+- 服务提供、服务依赖和拓扑激活：支持。
+- Adapter 信任分级和协议版本：支持。
+- 外部 Adapter Provider 的 build、activate、deactivate、discard 和 health RPC 契约：支持。
+- 外部 Adapter Provider 的 stdio JSON-RPC 传输、并发调用、取消和关闭回收：支持。
+- Manifest `adapterProviders` 声明、可信服务 Supervisor 挂载和安装/卸载生命周期同步：支持。
+- 插件服务目录和运行时绑定：支持。
 - 插件自定义 UI 槽位：支持。
 - 动态槽位注册：支持。
 - 通用网络发现：支持。

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
+	"github.com/u-ai/backend/internal/extension/kernel/packageext"
 )
 
 type diagnosticsBundle struct {
@@ -66,7 +67,7 @@ func runExportDiagnostics(args []string, output *Output) int {
 	} else if info.IsDir() {
 		bundle.TargetType = "directory"
 		collectDirectoryDiagnostics(absTarget, &bundle)
-	} else if strings.HasSuffix(absTarget, ".amitiax") {
+	} else if packageext.IsArchivePath(absTarget) {
 		bundle.TargetType = "amitiax"
 		collectPackageDiagnostics(absTarget, &bundle)
 	} else {
@@ -177,9 +178,9 @@ func collectPackageDiagnostics(pkgPath string, bundle *diagnosticsBundle) {
 
 	bundle.Manifest = pkg.Manifest
 	bundle.PackageInfo = map[string]any{
-		"extensionId": pkg.Manifest.Extension.ID,
-		"version":     pkg.Manifest.Extension.Version,
-		"publisher":   pkg.Manifest.Publisher.ID,
+		"extensionId": pkg.Manifest.Plugin.ID,
+		"version":     pkg.Manifest.Plugin.Version,
+		"publisher":   pkg.Manifest.Plugin.Publisher.ID,
 		"moduleCount": len(pkg.Manifest.Modules),
 		"fileCount":   len(pkg.Integrity.Files),
 		"treeHash":    pkg.Tree.TreeHash,

@@ -1,4 +1,6 @@
 import 'package:amitia_app/core/runtime/backend/mobile_deployment_mode.dart';
+import 'package:amitia_app/core/runtime/backend/backend_topology.dart';
+import 'package:amitia_app/core/runtime/backend/mobile_backend_lifecycle.dart';
 import 'package:amitia_app/features/settings/presentation/pages/device_add_page.dart';
 import 'package:amitia_app/features/settings/presentation/pages/deployment_page.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -43,6 +45,38 @@ void main() {
     expect(isDevicePairingCenter(deployment, 'address'), isFalse);
     expect(isDevicePairingCenter(deployment, 'scan'), isFalse);
     expect(isDevicePairingCenter(deployment, 'image'), isFalse);
+  });
+
+  test('已绑定设备重连不重复消费Bootstrap Ticket', () {
+    expect(pairingClaimRequiresBootstrap({'ticket': 'ticket'}), isTrue);
+    expect(pairingClaimRequiresBootstrap({'alreadyPaired': true}), isFalse);
+  });
+
+  test('本机中心配对前必须切换到子设备Runtime', () {
+    const local = MobileDeploymentConfig(mode: MobileDeploymentMode.local);
+    const cloud = MobileDeploymentConfig(
+      mode: MobileDeploymentMode.cloud,
+      remoteCoreUri: 'https://center.example:7000',
+    );
+
+    expect(pairingTransitionProfile(local), EmbeddedRuntimeProfile.deviceAgent);
+    expect(pairingTransitionProfile(cloud), isNull);
+  });
+
+  test('Runtime异步切换必须等待状态事件', () {
+    expect(
+      embeddedProfileWaitsForStream(EmbeddedRuntimeStatus.starting),
+      isTrue,
+    );
+    expect(
+      embeddedProfileWaitsForStream(EmbeddedRuntimeStatus.installing),
+      isTrue,
+    );
+    expect(embeddedProfileWaitsForStream(EmbeddedRuntimeStatus.ready), isFalse);
+    expect(
+      embeddedProfileWaitsForStream(EmbeddedRuntimeStatus.failed),
+      isFalse,
+    );
   });
 
   test('手动地址发现指纹后使用路由中心地址发起相同配对', () {

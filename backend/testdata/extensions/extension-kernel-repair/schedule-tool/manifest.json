@@ -1,48 +1,92 @@
 {
-	"manifestVersion": 1,
-	"extension": {
-		"id": "com.amitia.repair/schedule-tool",
-		"name": {"default": "Schedule Tool"},
-		"description": {"default": "Phase 10 E2E: one-shot schedule that triggers a tool execution"},
-		"version": "1.0.0"
-	},
-	"publisher": {
-		"id": "com.amitia.repair",
-		"displayName": "Amitia Repair"
-	},
-	"modules": [
-		{
-			"id": "main",
-			"name": {"default": "Main"},
-			"type": "javascript",
-			"runtime": {"type": "javascript", "entryPoint": "index.js"},
-			"contributions": [
-				{
-					"id": "tool-schedule",
-					"kind": "schedule",
-					"name": {"default": "Tool Schedule"},
-					"description": {"default": "One-shot schedule targeting a tool"},
-					"spec": {
-						"trigger": {
-							"type": "one_shot",
-							"delay": "1s"
-						},
-						"target": {
-							"type": "tool",
-							"toolId": "echo-tool",
-							"input": {"text": "scheduled"}
-						}
-					}
-				}
-			]
-		}
-	],
-	"permissions": [
-		{"name": "schedule.create", "reason": "Create one-shot schedule", "required": true},
-		{"name": "tool.invoke", "reason": "Invoke scheduled tool", "required": true}
-	],
-	"integrity": {
-		"algorithm": "sha256",
-		"contentTreeHash": ""
-	}
+  "schemaVersion": 1,
+  "plugin": {
+    "id": "com.amitia.repair/schedule-tool",
+    "name": {
+      "default": "Schedule Tool"
+    },
+    "description": {
+      "default": "Phase 10 E2E: one-shot schedule that triggers a tool execution"
+    },
+    "version": "1.0.0",
+    "publisher": {
+      "id": "com.amitia.repair",
+      "displayName": "Amitia Repair"
+    }
+  },
+  "compatibility": {
+    "minHostVersion": "0.1.0"
+  },
+  "modules": [
+    {
+      "id": "main",
+      "name": {
+        "default": "Main"
+      },
+      "runtime": {
+        "adapter": "javascript",
+        "entry": "index.js"
+      },
+      "dynamic": {
+        "allowedAdapters": [
+          "schedule"
+        ],
+        "maxContributions": 1,
+        "maxTools": 0,
+        "maxRoutes": 0,
+        "maxServices": 0,
+        "allowUnregister": true
+      },
+      "contributions": [
+        {
+          "id": "tool-schedule",
+          "kind": "schedule",
+          "adapter": "schedule",
+          "contractVersion": 1,
+          "name": {
+            "default": "Tool Schedule"
+          },
+          "description": {
+            "default": "One-shot schedule targeting a tool"
+          },
+          "spec": {
+            "trigger": {
+              "type": "one_shot",
+              "delay": "1s"
+            },
+            "target": {
+              "type": "tool",
+              "toolId": "echo-tool",
+              "input": {
+                "text": "scheduled"
+              }
+            }
+          }
+        }
+      ],
+      "placement": "device"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "schedule.create",
+      "reason": "Create one-shot schedule",
+      "required": true
+    },
+    {
+      "name": "tool.invoke",
+      "reason": "Invoke scheduled tool",
+      "required": true
+    }
+  ],
+  "data": {
+    "schemaVersion": 1,
+    "backup": true,
+    "export": true,
+    "uninstall": "retain"
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "contentTreeHash": ""
+  }
 }

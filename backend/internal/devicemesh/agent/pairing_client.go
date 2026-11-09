@@ -56,7 +56,7 @@ func (h *LocalHandler) handlePinnedPairing(c *gin.Context) {
 		c.JSON(http.StatusConflict, gin.H{"code": "pairing.self", "message": "不能添加当前设备自身"})
 		return
 	}
-	if credential != nil && credential.SpaceID.String() == request.Endpoint.CoreID {
+	if activeCredentialForCenter(credential, request.Endpoint.CoreID, time.Now()) {
 		c.JSON(http.StatusConflict, gin.H{"code": "pairing.already_paired", "message": "该设备已添加，无需重复扫码"})
 		return
 	}
@@ -109,6 +109,13 @@ func (h *LocalHandler) handlePinnedPairing(c *gin.Context) {
 	}
 	c.Header("Cache-Control", "no-store")
 	c.Data(response.StatusCode, "application/json", result)
+}
+
+func activeCredentialForCenter(credential *StoredCredential, coreID string, now time.Time) bool {
+	return credential != nil &&
+		strings.TrimSpace(credential.Credential) != "" &&
+		credential.SpaceID.String() == strings.TrimSpace(coreID) &&
+		credential.ExpiresAt.After(now)
 }
 
 func (h *LocalHandler) handlePinnedPairingEvents(c *gin.Context) {

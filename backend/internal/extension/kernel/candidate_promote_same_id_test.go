@@ -55,12 +55,14 @@ func seedStableTool(t *testing.T, ctx context.Context, container *Container, ext
 	}
 
 	stableContrib := domain.ContributionDefinition{
-		ID:          domain.ContributionID(toolID),
-		ModuleID:    "mod-1",
-		ExtensionID: domain.ExtensionID(extID),
-		Kind:        domain.ContributionKindTool,
-		Name:        domain.LocalizedText{Default: "Stable " + modelSuffix},
-		Version:     "1.0.0",
+		ID:              domain.ContributionID(toolID),
+		ModuleID:        "mod-1",
+		ExtensionID:     domain.ExtensionID(extID),
+		Kind:            domain.ContributionKindTool,
+		Adapter:         domain.ContributionAdapterTool,
+		ContractVersion: 1,
+		Name:            domain.LocalizedText{Default: "Stable " + modelSuffix},
+		Version:         "1.0.0",
 		Definition: map[string]any{
 			"toolId":       toolID,
 			"modelName":    "stable-" + modelSuffix,
@@ -88,12 +90,14 @@ func seedStableTool(t *testing.T, ctx context.Context, container *Container, ext
 func buildCandidateToolContrib(extID string, toolID string, modelSuffix string) []domain.ContributionDefinition {
 	return []domain.ContributionDefinition{
 		{
-			ID:          domain.ContributionID(toolID),
-			ModuleID:    "mod-1",
-			ExtensionID: domain.ExtensionID(extID),
-			Kind:        domain.ContributionKindTool,
-			Name:        domain.LocalizedText{Default: "Candidate " + modelSuffix},
-			Version:     "2.0.0",
+			ID:              domain.ContributionID(toolID),
+			ModuleID:        "mod-1",
+			ExtensionID:     domain.ExtensionID(extID),
+			Kind:            domain.ContributionKindTool,
+			Adapter:         domain.ContributionAdapterTool,
+			ContractVersion: 1,
+			Name:            domain.LocalizedText{Default: "Candidate " + modelSuffix},
+			Version:         "2.0.0",
 			Definition: map[string]any{
 				"toolId":       toolID,
 				"modelName":    "candidate-" + modelSuffix,
@@ -332,9 +336,11 @@ func TestSameID_DiscardCandidate_PreservesStableSameID(t *testing.T) {
 
 	candidateContribs := []domain.ContributionDefinition{
 		{
-			ID:          "ext-dup/tool",
-			ExtensionID: "ext-dup",
-			Kind:        domain.ContributionKindTool,
+			ID:              "ext-dup/tool",
+			ExtensionID:     "ext-dup",
+			Kind:            domain.ContributionKindTool,
+			Adapter:         domain.ContributionAdapterTool,
+			ContractVersion: 1,
 			Definition: map[string]any{
 				"toolId":      "ext-dup/tool",
 				"modelName":   "candidate",
@@ -384,10 +390,12 @@ func TestSameID_DiscardTwice_Idempotent(t *testing.T) {
 
 	contribs := []domain.ContributionDefinition{
 		{
-			ID:          "ext-dup-idem/tool",
-			ExtensionID: "ext-dup-idem",
-			Kind:        domain.ContributionKindTool,
-			Definition:  map[string]any{"toolId": "ext-dup-idem/tool"},
+			ID:              "ext-dup-idem/tool",
+			ExtensionID:     "ext-dup-idem",
+			Kind:            domain.ContributionKindTool,
+			Adapter:         domain.ContributionAdapterTool,
+			ContractVersion: 1,
+			Definition:      map[string]any{"toolId": "ext-dup-idem/tool"},
 		},
 	}
 
@@ -498,9 +506,11 @@ func TestSameID_PromoteHook_SameIDRecoverable(t *testing.T) {
 
 	candidateContribs := []domain.ContributionDefinition{
 		{
-			ID:          "ext-hook/hook-1",
-			ExtensionID: "ext-hook",
-			Kind:        domain.ContributionKindHook,
+			ID:              "ext-hook/hook-1",
+			ExtensionID:     "ext-hook",
+			Kind:            domain.ContributionKindHook,
+			Adapter:         domain.ContributionAdapterHook,
+			ContractVersion: 1,
 			Definition: map[string]any{
 				"contributionId": "ext-hook/hook-1",
 				"event":          "on_message",
@@ -540,9 +550,11 @@ func TestSameID_PromoteWorkflow_SameIDRecoverable(t *testing.T) {
 
 	candidateContribs := []domain.ContributionDefinition{
 		{
-			ID:          "ext-wf/wf-1",
-			ExtensionID: "ext-wf",
-			Kind:        domain.ContributionKindWorkflow,
+			ID:              "ext-wf/wf-1",
+			ExtensionID:     "ext-wf",
+			Kind:            domain.ContributionKindWorkflow,
+			Adapter:         domain.ContributionAdapterWorkflow,
+			ContractVersion: 1,
 			Definition: map[string]any{
 				"id": "ext-wf/wf-1",
 			},
@@ -663,12 +675,14 @@ func TestSameID_PromoteTool_Success_ActivatesStable(t *testing.T) {
 	}
 
 	stableContrib := domain.ContributionDefinition{
-		ID:          domain.ContributionID(toolID),
-		ModuleID:    "mod-1",
-		ExtensionID: domain.ExtensionID(extID),
-		Kind:        domain.ContributionKindTool,
-		Name:        domain.LocalizedText{Default: "Stable"},
-		Version:     "1.0.0",
+		ID:              domain.ContributionID(toolID),
+		ModuleID:        "mod-1",
+		ExtensionID:     domain.ExtensionID(extID),
+		Kind:            domain.ContributionKindTool,
+		Adapter:         domain.ContributionAdapterTool,
+		ContractVersion: 1,
+		Name:            domain.LocalizedText{Default: "Stable"},
+		Version:         "1.0.0",
 		Definition: map[string]any{
 			"toolId":      toolID,
 			"modelName":   "stable",

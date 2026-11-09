@@ -17,6 +17,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/contribution"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
+	"github.com/u-ai/backend/internal/extension/kernel/plugincontract"
 	"github.com/u-ai/backend/internal/extension/kernel/trust"
 	amitialog "log"
 )
@@ -61,6 +62,7 @@ func (r *Runtime) ExecuteInstall(ctx context.Context, archivePath string) (Kerne
 
 	manifestHash := computeManifestHash(pkg)
 	artifactHash := computeArtifactHashFromPackage(pkg)
+	signatureVerified := false
 
 	if len(pkg.V2Signature) > 0 && r.container.TrustService != nil {
 		doc, err := trust.ParseSignatureDocument(pkg.V2Signature)
@@ -70,9 +72,9 @@ func (r *Runtime) ExecuteInstall(ctx context.Context, archivePath string) (Kerne
 		verifier := r.container.TrustService.Verifier()
 		verResult := verifier.VerifyPackage(ctx, trust.PackageVerificationInput{
 			Document:              doc,
-			ActualExtensionID:     pkg.Manifest.Extension.ID,
-			ActualVersion:         pkg.Manifest.Extension.Version,
-			ActualManifestVersion: pkg.Manifest.ManifestVersion,
+			ActualExtensionID:     pkg.Manifest.Plugin.ID,
+			ActualVersion:         pkg.Manifest.Plugin.Version,
+			ActualManifestVersion: pkg.Manifest.SchemaVersion,
 			ActualManifestHash:    manifestHash,
 			ActualContentTreeHash: pkg.Tree.TreeHash,
 			ActualArtifactHash:    artifactHash,
@@ -101,12 +103,13 @@ func (r *Runtime) ExecuteInstall(ctx context.Context, archivePath string) (Kerne
 				return result, fmt.Errorf("kernel: signature verification failed: %s: %s", verResult.Status, verResult.Reason)
 			}
 		}
+		signatureVerified = true
 	}
 
 	manifest := pkg.Manifest
 	report := manifest.Validate()
 	if report.HasErrors() {
-		data, _ := json.Marshal(report.Errors)
+		data, _ := json.Marshal(report.Issues)
 		return result, fmt.Errorf("kernel: manifest validation failed: %s", data)
 	}
 
@@ -115,8 +118,8 @@ func (r *Runtime) ExecuteInstall(ctx context.Context, archivePath string) (Kerne
 		return result, fmt.Errorf("kernel: build definition: %w", err)
 	}
 
-	safeID := safeDirectoryName(manifest.Extension.ID)
-	version := manifest.Extension.Version
+	safeID := safeDirectoryName(manifest.Plugin.ID)
+	version := manifest.Plugin.Version
 
 	staging, err := os.MkdirTemp(r.root, ".install-"+safeID+"-")
 	if err != nil {
@@ -126,9 +129,13 @@ func (r *Runtime) ExecuteInstall(ctx context.Context, archivePath string) (Kerne
 	var installedDir string
 	var artifactPath string
 	var success bool
+	var servicesSynced bool
 	defer func() {
 		os.RemoveAll(staging)
 		if !success {
+			if servicesSynced {
+				removePluginContractServices(r.container.PluginServices, &pkg.Manifest)
+			}
 			if installedDir != "" {
 				os.RemoveAll(installedDir)
 			}
@@ -146,7 +153,7 @@ func (r *Runtime) ExecuteInstall(ctx context.Context, archivePath string) (Kerne
 
 	def.Package = domain.PackageReference{
 		PackageID:       packageHashHex,
-		ManifestVersion: manifest.ManifestVersion,
+		ManifestVersion: manifest.SchemaVersion,
 		ArchiveHash:     packageHash,
 		ContentTreeHash: contentTreeHash,
 	}
@@ -246,6 +253,17 @@ func (r *Runtime) ExecuteInstall(ctx context.Context, archivePath string) (Kerne
 		if err := r.container.ContributionInstaller.InstallContributions(ctx, allContribs, inst.Generation); err != nil {
 			return result, fmt.Errorf("kernel: install contributions: %w", err)
 		}
+	}
+	if err := setPluginContractServices(r.container.PluginServices, &pkg.Manifest, enablementState == domain.EnablementEnabled); err != nil {
+		return result, fmt.Errorf("kernel: register package services: %w", err)
+	}
+	servicesSynced = true
+	adapterTrust := plugincontract.TrustUserTrusted
+	if signatureVerified {
+		adapterTrust = plugincontract.TrustVerified
+	}
+	if err := registerPackageAdapterProviders(r.container.AdapterProviderHandler, &pkg.Manifest, adapterTrust); err != nil {
+		return result, fmt.Errorf("kernel: register adapter providers: %w", err)
 	}
 
 	item := installedFromManifest(manifest, installedDir, now)

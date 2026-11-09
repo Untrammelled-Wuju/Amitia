@@ -1,0 +1,304 @@
+{
+  "schemaVersion": "schema-ui/1",
+  "type": "document",
+  "title": "内核工具",
+  "actions": [],
+  "children": [
+    {
+      "id": "kernel-hub-page",
+      "type": "page",
+      "children": [
+        {
+          "id": "kernel-hub-intro",
+          "type": "alert",
+          "props": {
+            "type": "info",
+            "title": "内核工具入口由插件提供",
+            "description": "恢复、权限、进程监管和插件协议仍属于核心；这些管理和诊断入口可以随插件启停。",
+            "closable": false
+          }
+        },
+        {
+          "id": "kernel-hub-grid",
+          "type": "grid",
+          "props": {
+            "columnsTemplate": "repeat(auto-fill, minmax(240px, 1fr))",
+            "gap": "12px"
+          },
+          "children": [
+            {
+              "id": "kernel-hub-packages",
+              "type": "card",
+              "props": {
+                "header": "扩展包"
+              },
+              "children": [
+                {
+                  "id": "kernel-hub-packages-copy",
+                  "type": "text",
+                  "props": {
+                    "text": "管理安装、版本、完整性、权限与回滚。",
+                    "variant": "muted"
+                  }
+                },
+                {
+                  "id": "kernel-hub-packages-link",
+                  "type": "resource_link",
+                  "props": {
+                    "text": "打开扩展包",
+                    "href": "/extensions/packages",
+                    "target": "_self"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "kernel-hub-tasks",
+              "type": "card",
+              "props": {
+                "header": "任务运行时"
+              },
+              "children": [
+                {
+                  "id": "kernel-hub-tasks-copy",
+                  "type": "text",
+                  "props": {
+                    "text": "查看任务运行、审批、证据和恢复状态。",
+                    "variant": "muted"
+                  }
+                },
+                {
+                  "id": "kernel-hub-tasks-link",
+                  "type": "resource_link",
+                  "props": {
+                    "text": "打开任务运行时",
+                    "href": "/kernel/tasks",
+                    "target": "_self"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "kernel-hub-events",
+              "type": "card",
+              "props": {
+                "header": "事件中心"
+              },
+              "children": [
+                {
+                  "id": "kernel-hub-events-copy",
+                  "type": "text",
+                  "props": {
+                    "text": "检查事件发布、订阅、生成和隔离状态。",
+                    "variant": "muted"
+                  }
+                },
+                {
+                  "id": "kernel-hub-events-link",
+                  "type": "resource_link",
+                  "props": {
+                    "text": "打开事件中心",
+                    "href": "/kernel/events",
+                    "target": "_self"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "kernel-hub-schedules",
+              "type": "card",
+              "props": {
+                "header": "调度中心"
+              },
+              "children": [
+                {
+                  "id": "kernel-hub-schedules-copy",
+                  "type": "text",
+                  "props": {
+                    "text": "查看定时任务、执行历史和运行状态。",
+                    "variant": "muted"
+                  }
+                },
+                {
+                  "id": "kernel-hub-schedules-link",
+                  "type": "resource_link",
+                  "props": {
+                    "text": "打开调度中心",
+                    "href": "/kernel/schedules",
+                    "target": "_self"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "kernel-hub-hooks",
+              "type": "card",
+              "props": {
+                "header": "Hook 中心"
+              },
+              "children": [
+                {
+                  "id": "kernel-hub-hooks-copy",
+                  "type": "text",
+                  "props": {
+                    "text": "管理 Hook 契约、贡献和失败策略。",
+                    "variant": "muted"
+                  }
+                },
+                {
+                  "id": "kernel-hub-hooks-link",
+                  "type": "resource_link",
+                  "props": {
+                    "text": "打开 Hook 中心",
+                    "href": "/kernel/hooks",
+                    "target": "_self"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "kernel-hub-wasm",
+              "type": "card",
+              "props": {
+                "header": "WASM 运行时"
+              },
+              "children": [
+                {
+                  "id": "kernel-hub-wasm-copy",
+                  "type": "text",
+                  "props": {
+                    "text": "查看 WASM 模块、能力边界和运行状态。",
+                    "variant": "muted"
+                  }
+                },
+                {
+                  "id": "kernel-hub-wasm-link",
+                  "type": "resource_link",
+                  "props": {
+                    "text": "打开 WASM 运行时",
+                    "href": "/kernel/wasm",
+                    "target": "_self"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "kernel-hub-services",
+              "type": "card",
+              "props": {
+                "header": "可信服务"
+              },
+              "children": [
+                {
+                  "id": "kernel-hub-services-copy",
+                  "type": "text",
+                  "props": {
+                    "text": "查看服务目录、依赖图和可信边界。",
+                    "variant": "muted"
+                  }
+                },
+                {
+                  "id": "kernel-hub-services-link",
+                  "type": "resource_link",
+                  "props": {
+                    "text": "打开可信服务",
+                    "href": "/kernel/trusted-services",
+                    "target": "_self"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "kernel-hub-desktop",
+              "type": "card",
+              "props": {
+                "header": "桌面贡献"
+              },
+              "children": [
+                {
+                  "id": "kernel-hub-desktop-copy",
+                  "type": "text",
+                  "props": {
+                    "text": "检查桌面菜单、快捷键、托盘和窗口贡献。",
+                    "variant": "muted"
+                  }
+                },
+                {
+                  "id": "kernel-hub-desktop-link",
+                  "type": "resource_link",
+                  "props": {
+                    "text": "打开桌面贡献",
+                    "href": "/kernel/desktop",
+                    "target": "_self"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "kernel-hub-updates",
+              "type": "card",
+              "props": {
+                "header": "扩展更新"
+              },
+              "children": [
+                {
+                  "id": "kernel-hub-updates-copy",
+                  "type": "text",
+                  "props": {
+                    "text": "查看可用更新、版本记录和回滚点。",
+                    "variant": "muted"
+                  }
+                },
+                {
+                  "id": "kernel-hub-updates-link",
+                  "type": "resource_link",
+                  "props": {
+                    "text": "打开扩展更新",
+                    "href": "/kernel/updates",
+                    "target": "_self"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "kernel-hub-developer",
+              "type": "card",
+              "props": {
+                "header": "开发诊断"
+              },
+              "children": [
+                {
+                  "id": "kernel-hub-developer-copy",
+                  "type": "text",
+                  "props": {
+                    "text": "进入开发控制台、热重载和候选版本诊断。",
+                    "variant": "muted"
+                  }
+                },
+                {
+                  "id": "kernel-hub-developer-link",
+                  "type": "resource_link",
+                  "props": {
+                    "text": "打开开发控制台",
+                    "href": "/kernel/dev-console",
+                    "target": "_self"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "theme": {
+    "mode": "auto"
+  },
+  "performanceBudget": {
+    "maxRenderTimeMs": 80,
+    "maxLayoutCount": 100,
+    "maxNodeCount": 100,
+    "maxDataFetchCount": 0,
+    "maxActionCount": 0
+  }
+}

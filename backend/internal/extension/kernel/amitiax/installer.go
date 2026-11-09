@@ -147,7 +147,7 @@ func (i *Installer) validate(_ context.Context, request InstallRequest, result *
 	}
 	report := pkg.Manifest.Validate()
 	if report.HasErrors() {
-		for _, e := range report.Errors {
+		for _, e := range report.Issues {
 			result.Errors = append(result.Errors, InstallError{
 				Phase: PhaseValidate, Code: e.Code, Message: fmt.Sprintf("%s: %s", e.Path, e.Message),
 			})
@@ -162,10 +162,10 @@ func (i *Installer) validate(_ context.Context, request InstallRequest, result *
 			return nil, fmt.Errorf("validate: hash mismatch")
 		}
 	}
-	if request.ExtensionID != "" && pkg.Manifest.Extension.ID != string(request.ExtensionID) {
+	if request.ExtensionID != "" && pkg.Manifest.Plugin.ID != string(request.ExtensionID) {
 		result.Errors = append(result.Errors, InstallError{
 			Phase: PhaseValidate, Code: "id_mismatch",
-			Message: fmt.Sprintf("expected %s, got %s", request.ExtensionID, pkg.Manifest.Extension.ID),
+			Message: fmt.Sprintf("expected %s, got %s", request.ExtensionID, pkg.Manifest.Plugin.ID),
 		})
 		return nil, fmt.Errorf("validate: extension id mismatch")
 	}

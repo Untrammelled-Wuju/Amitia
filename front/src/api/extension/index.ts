@@ -33,6 +33,7 @@ function transformContribution(def: BackendUIContributionDefinition): UIContribu
     title: def.display?.title?.default ?? def.contribution_id,
     description: def.display?.description?.default,
     icon: def.display?.icon,
+    chrome: def.display?.chrome,
     ordering: def.ordering?.priority ?? 0,
     priority: def.ordering?.priority ?? 0,
     cellId: def.dispatch?.cell_id?.trim() || def.ordering?.sort_key?.trim() || def.contribution_id,

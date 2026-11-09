@@ -51,9 +51,13 @@ describe("插件页面公共适配", () => {
     }
   });
 
-  it("表情包主页面保留内容容器并移除标题占位", async () => {
+  it("frameless 声明保留内容容器并移除标题占位", async () => {
     const wrapper = mount(ExtensionContributionRenderer, {
-      props: { contribution: contribution("schema_page"), context: {}, slotId: "provider.page.provider" },
+      props: {
+        contribution: { ...contribution("schema_page"), extensionId: "com.example/frameless", chrome: "frameless" },
+        context: {},
+        slotId: "provider.page.provider",
+      },
     });
     try {
       await flushPromises();

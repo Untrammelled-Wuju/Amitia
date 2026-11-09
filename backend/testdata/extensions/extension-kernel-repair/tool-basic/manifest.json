@@ -1,44 +1,74 @@
 {
-	"manifestVersion": 1,
-	"extension": {
-		"id": "com.amitia.repair/tool-basic",
-		"name": {"default": "Tool Basic"},
-		"description": {"default": "Phase 10 E2E: basic tool extension that returns a static echo"},
-		"version": "1.0.0"
-	},
-	"publisher": {
-		"id": "com.amitia.repair",
-		"displayName": "Amitia Repair"
-	},
-	"modules": [
-		{
-			"id": "main",
-			"name": {"default": "Main"},
-			"type": "javascript",
-			"runtime": {"type": "javascript", "entryPoint": "index.js"},
-			"contributions": [
-				{
-					"id": "echo-tool",
-					"kind": "tool",
-					"name": {"default": "Echo Tool"},
-					"description": {"default": "Returns the input text as output"},
-					"modelName": "echo_tool",
-					"inputSchema": {
-						"type": "object",
-						"properties": {
-							"text": {"type": "string", "description": "Text to echo"}
-						},
-						"required": ["text"]
-					}
-				}
-			]
-		}
-	],
-	"permissions": [
-		{"name": "tool.invoke", "reason": "Execute echo tool", "required": true}
-	],
-	"integrity": {
-		"algorithm": "sha256",
-		"contentTreeHash": ""
-	}
+  "schemaVersion": 1,
+  "plugin": {
+    "id": "com.amitia.repair/tool-basic",
+    "name": {
+      "default": "Tool Basic"
+    },
+    "description": {
+      "default": "Phase 10 E2E: basic tool extension that returns a static echo"
+    },
+    "version": "1.0.0",
+    "publisher": {
+      "id": "com.amitia.repair",
+      "displayName": "Amitia Repair"
+    }
+  },
+  "compatibility": {
+    "minHostVersion": "0.1.0"
+  },
+  "modules": [
+    {
+      "id": "main",
+      "name": {
+        "default": "Main"
+      },
+      "runtime": {
+        "adapter": "javascript",
+        "entry": "index.js"
+      },
+      "dynamic": {
+        "allowedAdapters": [
+          "tool"
+        ],
+        "maxContributions": 1,
+        "maxTools": 1,
+        "maxRoutes": 0,
+        "maxServices": 0,
+        "allowUnregister": true
+      },
+      "contributions": [
+        {
+          "id": "echo-tool",
+          "kind": "tool",
+          "adapter": "tool",
+          "contractVersion": 1,
+          "name": {
+            "default": "Echo Tool"
+          },
+          "description": {
+            "default": "Returns the input text as output"
+          }
+        }
+      ],
+      "placement": "device"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "tool.invoke",
+      "reason": "Execute echo tool",
+      "required": true
+    }
+  ],
+  "data": {
+    "schemaVersion": 1,
+    "backup": true,
+    "export": true,
+    "uninstall": "retain"
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "contentTreeHash": ""
+  }
 }

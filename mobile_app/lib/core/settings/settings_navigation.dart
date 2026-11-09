@@ -171,11 +171,6 @@ List<SettingsCategory> buildSettingsCategories({
           route: AppRoutes.settingsUIProviders,
         ),
         SettingItem(
-          title: '长期运行维护',
-          icon: Icons.schedule_send_outlined,
-          route: AppRoutes.settingsLongRunning,
-        ),
-        SettingItem(
           title: '维护诊断',
           icon: Icons.build_circle_outlined,
           route: AppRoutes.settingsMaintenance,
@@ -229,11 +224,6 @@ List<SettingsCategory> buildSettingsCategories({
           title: '高级系统',
           icon: Icons.admin_panel_settings_outlined,
           route: AppRoutes.settingsAdvanced,
-        ),
-        SettingItem(
-          title: 'BDI 决策可视化',
-          icon: Icons.account_tree_outlined,
-          route: AppRoutes.settingsDecisionViz,
         ),
         SettingItem(
           title: '开发者模式',

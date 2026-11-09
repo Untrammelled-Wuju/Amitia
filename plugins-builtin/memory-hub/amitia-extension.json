@@ -1,0 +1,898 @@
+{
+  "schemaVersion": 1,
+  "plugin": {
+    "id": "com.amitia/memory-hub",
+    "name": {
+      "default": "记忆中心"
+    },
+    "description": {
+      "default": "通过统一 UI Provider 提供记忆总览、知识、情景、图谱、时间线和画像入口。"
+    },
+    "version": "1.1.0",
+    "license": "AGPL-3.0-only",
+    "homepage": "https://amitia.untrammelled.top",
+    "categories": [
+      "memory",
+      "navigation",
+      "system"
+    ],
+    "keywords": [
+      "memory",
+      "knowledge",
+      "graph",
+      "timeline"
+    ],
+    "metadata": {
+      "system.defaultInstall": true,
+      "system.defaultEnabled": true
+    },
+    "publisher": {
+      "id": "com.amitia",
+      "displayName": "Amitia",
+      "trustLevel": "official"
+    }
+  },
+  "compatibility": {
+    "minHostVersion": "0.1.0",
+    "platforms": [
+      "web",
+      "windows",
+      "linux",
+      "macos"
+    ]
+  },
+  "modules": [
+    {
+      "id": "memory-hub-runtime",
+      "name": {
+        "default": "记忆中心运行时"
+      },
+      "description": {
+        "default": "注册记忆中心页面、路由和导航贡献。"
+      },
+      "runtime": {
+        "adapter": "javascript",
+        "entry": "dist/index.js",
+        "timeout": "10s",
+        "memoryBytes": 33554432,
+        "capabilities": {
+          "network": false,
+          "filesystem": false
+        },
+        "hostAccess": {
+          "filesystem": {
+            "mode": "none"
+          },
+          "network": {
+            "mode": "none"
+          },
+          "process": {
+            "mode": "none"
+          }
+        }
+      },
+      "dynamic": {
+        "allowedAdapters": [
+          "ui",
+          "ui_provider"
+        ],
+        "maxContributions": 15,
+        "maxTools": 0,
+        "maxRoutes": 7,
+        "maxServices": 0,
+        "allowUnregister": true
+      },
+      "contributions": [
+        {
+          "id": "memory-hub-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "记忆中心"
+          },
+          "description": {
+            "default": "查看知识、记忆视图、图谱、情景和时间线。"
+          },
+          "spec": {
+            "contribution_id": "memory-hub-page",
+            "extension_id": "com.amitia/memory-hub",
+            "module_id": "memory-hub-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "记忆"
+              },
+              "description": {
+                "default": "管理知识、记忆视图、图谱与时间线。"
+              },
+              "icon": "memory"
+            },
+            "entry": {
+              "type": "schema_renderer",
+              "schema_path": "modules/memory-hub-ui/desktop/memory-hub.json",
+              "content_hash": "pending"
+            },
+            "sandbox": {
+              "type": "schema_renderer"
+            },
+            "ordering": {
+              "priority": 220
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            },
+            "actions": [],
+            "integrity": {
+              "definition_hash": "memory-hub-page-v1"
+            }
+          }
+        },
+        {
+          "id": "memory-overview-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "记忆总览"
+          },
+          "spec": {
+            "contribution_id": "memory-overview-page",
+            "extension_id": "com.amitia/memory-hub",
+            "module_id": "memory-hub-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "记忆总览"
+              },
+              "description": {
+                "default": "浏览、检索和维护角色记忆与全局记忆。"
+              },
+              "icon": "memory"
+            },
+            "entry": {
+              "type": "host_native",
+              "path": "builtin://com.amitia/memory-hub/memory-overview",
+              "runtime_id": "host.memory.overview",
+              "content_hash": "builtin"
+            },
+            "sandbox": {
+              "type": "host_native"
+            },
+            "ordering": {
+              "priority": 219
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            },
+            "actions": [],
+            "integrity": {
+              "definition_hash": "memory-overview-page-v1"
+            }
+          }
+        },
+        {
+          "id": "memory-timeline-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "时间线"
+          },
+          "spec": {
+            "contribution_id": "memory-timeline-page",
+            "extension_id": "com.amitia/memory-hub",
+            "module_id": "memory-hub-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "时间线"
+              },
+              "description": {
+                "default": "按时间顺序回顾角色和记忆的变化。"
+              },
+              "icon": "timeline"
+            },
+            "entry": {
+              "type": "host_native",
+              "path": "builtin://com.amitia/memory-hub/memory-timeline",
+              "runtime_id": "host.memory.timeline",
+              "content_hash": "builtin"
+            },
+            "sandbox": {
+              "type": "host_native"
+            },
+            "ordering": {
+              "priority": 218
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            },
+            "actions": [],
+            "integrity": {
+              "definition_hash": "memory-timeline-page-v1"
+            }
+          }
+        },
+        {
+          "id": "memory-episodic-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "情景记忆"
+          },
+          "spec": {
+            "contribution_id": "memory-episodic-page",
+            "extension_id": "com.amitia/memory-hub",
+            "module_id": "memory-hub-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "情景记忆"
+              },
+              "description": {
+                "default": "查看角色经历和对话形成的情景记录。"
+              },
+              "icon": "memory"
+            },
+            "entry": {
+              "type": "host_native",
+              "path": "builtin://com.amitia/memory-hub/memory-episodic",
+              "runtime_id": "host.memory.episodic",
+              "content_hash": "builtin"
+            },
+            "sandbox": {
+              "type": "host_native"
+            },
+            "ordering": {
+              "priority": 217
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            },
+            "actions": [],
+            "integrity": {
+              "definition_hash": "memory-episodic-page-v1"
+            }
+          }
+        },
+        {
+          "id": "memory-graph-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "记忆图谱"
+          },
+          "spec": {
+            "contribution_id": "memory-graph-page",
+            "extension_id": "com.amitia/memory-hub",
+            "module_id": "memory-hub-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "记忆图谱"
+              },
+              "description": {
+                "default": "查看记忆节点及其关联关系。"
+              },
+              "icon": "graph"
+            },
+            "entry": {
+              "type": "host_native",
+              "path": "builtin://com.amitia/memory-hub/memory-graph",
+              "runtime_id": "host.memory.graph",
+              "content_hash": "builtin"
+            },
+            "sandbox": {
+              "type": "host_native"
+            },
+            "ordering": {
+              "priority": 216
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            },
+            "actions": [],
+            "integrity": {
+              "definition_hash": "memory-graph-page-v1"
+            }
+          }
+        },
+        {
+          "id": "memory-knowledge-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "知识库"
+          },
+          "spec": {
+            "contribution_id": "memory-knowledge-page",
+            "extension_id": "com.amitia/memory-hub",
+            "module_id": "memory-hub-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "知识库"
+              },
+              "description": {
+                "default": "维护角色可检索和引用的知识。"
+              },
+              "icon": "collection"
+            },
+            "entry": {
+              "type": "host_native",
+              "path": "builtin://com.amitia/memory-hub/memory-knowledge",
+              "runtime_id": "host.memory.knowledge",
+              "content_hash": "builtin"
+            },
+            "sandbox": {
+              "type": "host_native"
+            },
+            "ordering": {
+              "priority": 215
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            },
+            "actions": [],
+            "integrity": {
+              "definition_hash": "memory-knowledge-page-v1"
+            }
+          }
+        },
+        {
+          "id": "memory-profiles-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "用户画像"
+          },
+          "spec": {
+            "contribution_id": "memory-profiles-page",
+            "extension_id": "com.amitia/memory-hub",
+            "module_id": "memory-hub-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "用户画像"
+              },
+              "description": {
+                "default": "维护可用于角色理解和个性化回应的用户画像。"
+              },
+              "icon": "profile"
+            },
+            "entry": {
+              "type": "host_native",
+              "path": "builtin://com.amitia/memory-hub/memory-profiles",
+              "runtime_id": "host.profile.summary",
+              "content_hash": "builtin"
+            },
+            "sandbox": {
+              "type": "host_native"
+            },
+            "ordering": {
+              "priority": 214
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            },
+            "actions": [],
+            "integrity": {
+              "definition_hash": "memory-profiles-page-v1"
+            }
+          }
+        },
+        {
+          "id": "memory-hub-routes",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "记忆中心路由"
+          },
+          "spec": {
+            "providerId": "memory-hub-routes",
+            "capability": "route.registry",
+            "mode": "replace",
+            "priority": 220,
+            "trustLevel": "official",
+            "entries": {
+              "web": {
+                "type": "declarative"
+              },
+              "electron_windows": {
+                "type": "declarative"
+              },
+              "electron_macos": {
+                "type": "declarative"
+              },
+              "electron_linux": {
+                "type": "declarative"
+              }
+            },
+            "metadata": {
+              "routes": [
+                {
+                  "id": "memory-hub",
+                  "path": "/memory",
+                  "providerId": "memory-hub-page-provider",
+                  "capability": "page.provider",
+                  "title": "记忆",
+                  "priority": 220
+                },
+                {
+                  "id": "memory-overview",
+                  "path": "/memory-manager",
+                  "providerId": "memory-overview-page-provider",
+                  "capability": "page.provider",
+                  "title": "记忆总览",
+                  "priority": 219
+                },
+                {
+                  "id": "memory-timeline",
+                  "path": "/memory-timeline",
+                  "providerId": "memory-timeline-page-provider",
+                  "capability": "page.provider",
+                  "title": "时间线",
+                  "priority": 218
+                },
+                {
+                  "id": "memory-episodic",
+                  "path": "/episodic",
+                  "providerId": "memory-episodic-page-provider",
+                  "capability": "page.provider",
+                  "title": "情景记忆",
+                  "priority": 217
+                },
+                {
+                  "id": "memory-graph",
+                  "path": "/graph",
+                  "providerId": "memory-graph-page-provider",
+                  "capability": "page.provider",
+                  "title": "记忆图谱",
+                  "priority": 216
+                },
+                {
+                  "id": "memory-knowledge",
+                  "path": "/knowledge",
+                  "providerId": "memory-knowledge-page-provider",
+                  "capability": "page.provider",
+                  "title": "知识库",
+                  "priority": 215
+                },
+                {
+                  "id": "memory-profiles",
+                  "path": "/profiles",
+                  "providerId": "memory-profiles-page-provider",
+                  "capability": "page.provider",
+                  "title": "用户画像",
+                  "priority": 214
+                }
+              ],
+              "sectionEntries": [
+                {
+                  "id": "memory-knowledge",
+                  "section": "memory",
+                  "route": "/knowledge",
+                  "label": "知识库",
+                  "order": 10
+                },
+                {
+                  "id": "memory-overview",
+                  "section": "memory",
+                  "route": "/memory-manager",
+                  "label": "记忆总览",
+                  "order": 20
+                },
+                {
+                  "id": "memory-episodic",
+                  "section": "memory",
+                  "route": "/episodic",
+                  "label": "情景记忆",
+                  "order": 30
+                },
+                {
+                  "id": "memory-graph",
+                  "section": "memory",
+                  "route": "/graph",
+                  "label": "记忆图谱",
+                  "order": 40
+                },
+                {
+                  "id": "memory-timeline",
+                  "section": "memory",
+                  "route": "/memory-timeline",
+                  "label": "时间线",
+                  "order": 50
+                },
+                {
+                  "id": "memory-profiles",
+                  "section": "memory",
+                  "route": "/profiles",
+                  "label": "用户画像",
+                  "order": 60
+                }
+              ],
+              "navigationItems": [
+                {
+                  "id": "memory-hub",
+                  "label": "记忆",
+                  "route": "/memory",
+                  "description": "查看知识库、用户画像、记忆图谱、情景和时间线。",
+                  "icon": "memory",
+                  "group": "memory",
+                  "groupLabel": "记忆",
+                  "groupIcon": "memory",
+                  "order": 50,
+                  "match": [
+                    "/memory-manager",
+                    "/memory-timeline",
+                    "/knowledge",
+                    "/episodic",
+                    "/graph",
+                    "/profiles"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "memory-hub-page-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "记忆中心页面 Provider"
+          },
+          "spec": {
+            "providerId": "memory-hub-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 220,
+            "trustLevel": "official",
+            "entries": {
+              "web": {
+                "type": "schema_renderer",
+                "contributionId": "memory-hub-page"
+              },
+              "electron_windows": {
+                "type": "schema_renderer",
+                "contributionId": "memory-hub-page"
+              },
+              "electron_macos": {
+                "type": "schema_renderer",
+                "contributionId": "memory-hub-page"
+              },
+              "electron_linux": {
+                "type": "schema_renderer",
+                "contributionId": "memory-hub-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/memory"
+              ]
+            }
+          }
+        },
+        {
+          "id": "memory-overview-page-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "记忆总览页面 Provider"
+          },
+          "spec": {
+            "providerId": "memory-overview-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 219,
+            "trustLevel": "official",
+            "entries": {
+              "web": {
+                "type": "schema_renderer",
+                "contributionId": "memory-overview-page"
+              },
+              "electron_windows": {
+                "type": "schema_renderer",
+                "contributionId": "memory-overview-page"
+              },
+              "electron_macos": {
+                "type": "schema_renderer",
+                "contributionId": "memory-overview-page"
+              },
+              "electron_linux": {
+                "type": "schema_renderer",
+                "contributionId": "memory-overview-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/memory-manager"
+              ]
+            }
+          }
+        },
+        {
+          "id": "memory-timeline-page-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "时间线页面 Provider"
+          },
+          "spec": {
+            "providerId": "memory-timeline-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 218,
+            "trustLevel": "official",
+            "entries": {
+              "web": {
+                "type": "schema_renderer",
+                "contributionId": "memory-timeline-page"
+              },
+              "electron_windows": {
+                "type": "schema_renderer",
+                "contributionId": "memory-timeline-page"
+              },
+              "electron_macos": {
+                "type": "schema_renderer",
+                "contributionId": "memory-timeline-page"
+              },
+              "electron_linux": {
+                "type": "schema_renderer",
+                "contributionId": "memory-timeline-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/memory-timeline"
+              ]
+            }
+          }
+        },
+        {
+          "id": "memory-episodic-page-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "情景记忆页面 Provider"
+          },
+          "spec": {
+            "providerId": "memory-episodic-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 217,
+            "trustLevel": "official",
+            "entries": {
+              "web": {
+                "type": "schema_renderer",
+                "contributionId": "memory-episodic-page"
+              },
+              "electron_windows": {
+                "type": "schema_renderer",
+                "contributionId": "memory-episodic-page"
+              },
+              "electron_macos": {
+                "type": "schema_renderer",
+                "contributionId": "memory-episodic-page"
+              },
+              "electron_linux": {
+                "type": "schema_renderer",
+                "contributionId": "memory-episodic-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/episodic"
+              ]
+            }
+          }
+        },
+        {
+          "id": "memory-graph-page-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "记忆图谱页面 Provider"
+          },
+          "spec": {
+            "providerId": "memory-graph-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 216,
+            "trustLevel": "official",
+            "entries": {
+              "web": {
+                "type": "schema_renderer",
+                "contributionId": "memory-graph-page"
+              },
+              "electron_windows": {
+                "type": "schema_renderer",
+                "contributionId": "memory-graph-page"
+              },
+              "electron_macos": {
+                "type": "schema_renderer",
+                "contributionId": "memory-graph-page"
+              },
+              "electron_linux": {
+                "type": "schema_renderer",
+                "contributionId": "memory-graph-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/graph"
+              ]
+            }
+          }
+        },
+        {
+          "id": "memory-knowledge-page-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "知识库页面 Provider"
+          },
+          "spec": {
+            "providerId": "memory-knowledge-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 215,
+            "trustLevel": "official",
+            "entries": {
+              "web": {
+                "type": "schema_renderer",
+                "contributionId": "memory-knowledge-page"
+              },
+              "electron_windows": {
+                "type": "schema_renderer",
+                "contributionId": "memory-knowledge-page"
+              },
+              "electron_macos": {
+                "type": "schema_renderer",
+                "contributionId": "memory-knowledge-page"
+              },
+              "electron_linux": {
+                "type": "schema_renderer",
+                "contributionId": "memory-knowledge-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/knowledge"
+              ]
+            }
+          }
+        },
+        {
+          "id": "memory-profiles-page-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "用户画像页面 Provider"
+          },
+          "spec": {
+            "providerId": "memory-profiles-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 214,
+            "trustLevel": "official",
+            "entries": {
+              "web": {
+                "type": "schema_renderer",
+                "contributionId": "memory-profiles-page"
+              },
+              "electron_windows": {
+                "type": "schema_renderer",
+                "contributionId": "memory-profiles-page"
+              },
+              "electron_macos": {
+                "type": "schema_renderer",
+                "contributionId": "memory-profiles-page"
+              },
+              "electron_linux": {
+                "type": "schema_renderer",
+                "contributionId": "memory-profiles-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/profiles"
+              ]
+            }
+          }
+        }
+      ],
+      "placement": "device"
+    }
+  ],
+  "permissions": [],
+  "data": {
+    "schemaVersion": 1,
+    "scopes": [
+      "device"
+    ],
+    "backup": false,
+    "export": false,
+    "uninstall": "retain"
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "contentTreeHash": ""
+  }
+}

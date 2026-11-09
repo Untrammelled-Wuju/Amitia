@@ -89,14 +89,16 @@ func TestRecover_TypedContributionsRestored(t *testing.T) {
 		"inputSchema": json.RawMessage(`{"type":"object","properties":{}}`),
 	}
 	toolContrib := domain.ContributionDefinition{
-		ID:          "recover-test-tool",
-		ModuleID:    "main",
-		ExtensionID: domain.ExtensionID(extID),
-		Kind:        domain.ContributionKindTool,
-		Name:        domain.LocalizedText{Default: "Test Tool"},
-		Description: domain.LocalizedText{Default: "A test tool for recovery"},
-		Version:     "1.0.0",
-		Definition:  toolDef,
+		ID:              "recover-test-tool",
+		ModuleID:        "main",
+		ExtensionID:     domain.ExtensionID(extID),
+		Kind:            domain.ContributionKindTool,
+		Adapter:         domain.ContributionAdapterTool,
+		ContractVersion: 1,
+		Name:            domain.LocalizedText{Default: "Test Tool"},
+		Description:     domain.LocalizedText{Default: "A test tool for recovery"},
+		Version:         "1.0.0",
+		Definition:      toolDef,
 	}
 	if err := container.ContributionRepository.PutContribution(ctx, toolContrib); err != nil {
 		t.Fatalf("PutContribution tool must succeed: %v", err)
@@ -116,14 +118,16 @@ func TestRecover_TypedContributionsRestored(t *testing.T) {
 	}
 	skillDefData, _ := json.Marshal(skillDef)
 	skillContrib := domain.ContributionDefinition{
-		ID:          "recover-test-skill",
-		ModuleID:    "main",
-		ExtensionID: domain.ExtensionID(extID),
-		Kind:        domain.ContributionKindAgentSkill,
-		Name:        domain.LocalizedText{Default: "Test Skill"},
-		Description: domain.LocalizedText{Default: "A test skill for recovery"},
-		Version:     "1.0.0",
-		Definition:  map[string]any{},
+		ID:              "recover-test-skill",
+		ModuleID:        "main",
+		ExtensionID:     domain.ExtensionID(extID),
+		Kind:            domain.ContributionKindAgentSkill,
+		Adapter:         domain.ContributionAdapterAgentSkill,
+		ContractVersion: 1,
+		Name:            domain.LocalizedText{Default: "Test Skill"},
+		Description:     domain.LocalizedText{Default: "A test skill for recovery"},
+		Version:         "1.0.0",
+		Definition:      map[string]any{},
 	}
 	_ = json.Unmarshal(skillDefData, &skillContrib.Definition)
 	if err := container.ContributionRepository.PutContribution(ctx, skillContrib); err != nil {
@@ -173,13 +177,15 @@ func TestRecover_MarksRequiresRecoveryOnFailure(t *testing.T) {
 	fakeRT.SetStartErr(runtime_supervisor.ErrFakeStart)
 
 	toolContrib := domain.ContributionDefinition{
-		ID:          "recover-fail-tool",
-		ModuleID:    "main",
-		ExtensionID: domain.ExtensionID(extID),
-		Kind:        domain.ContributionKindTool,
-		Name:        domain.LocalizedText{Default: "Fail Tool"},
-		Description: domain.LocalizedText{Default: "A tool that should fail recovery"},
-		Version:     "1.0.0",
+		ID:              "recover-fail-tool",
+		ModuleID:        "main",
+		ExtensionID:     domain.ExtensionID(extID),
+		Kind:            domain.ContributionKindTool,
+		Adapter:         domain.ContributionAdapterTool,
+		ContractVersion: 1,
+		Name:            domain.LocalizedText{Default: "Fail Tool"},
+		Description:     domain.LocalizedText{Default: "A tool that should fail recovery"},
+		Version:         "1.0.0",
 		Definition: map[string]any{
 			"toolId":      "recover-fail-tool",
 			"modelName":   "test-model",
@@ -216,13 +222,15 @@ func TestRecover_IdempotentNoDuplication(t *testing.T) {
 	defer container.Close()
 
 	toolContrib := domain.ContributionDefinition{
-		ID:          "recover-idempotent-tool",
-		ModuleID:    "main",
-		ExtensionID: domain.ExtensionID(extID),
-		Kind:        domain.ContributionKindTool,
-		Name:        domain.LocalizedText{Default: "Idempotent Tool"},
-		Description: domain.LocalizedText{Default: "A tool for testing idempotent recovery"},
-		Version:     "1.0.0",
+		ID:              "recover-idempotent-tool",
+		ModuleID:        "main",
+		ExtensionID:     domain.ExtensionID(extID),
+		Kind:            domain.ContributionKindTool,
+		Adapter:         domain.ContributionAdapterTool,
+		ContractVersion: 1,
+		Name:            domain.LocalizedText{Default: "Idempotent Tool"},
+		Description:     domain.LocalizedText{Default: "A tool for testing idempotent recovery"},
+		Version:         "1.0.0",
 		Definition: map[string]any{
 			"toolId":      "recover-idempotent-tool",
 			"modelName":   "test-model",

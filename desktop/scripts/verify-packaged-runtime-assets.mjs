@@ -53,18 +53,20 @@ async function main() {
     }
   }
 
-  const pluginDir = resolve(unpackedDir, "resources", "bundled-plugins", "plugin-market");
-  const pluginPackages = existsSync(pluginDir)
-    ? readdirSync(pluginDir).filter((name) => name.endsWith(".amitiax"))
-    : [];
-  if (pluginPackages.length !== 1) {
-    throw new Error(`packaged plugin market package count must be 1, got ${pluginPackages.length}`);
-  }
-  const packagedPlugin = resolve(pluginDir, pluginPackages[0]);
-  const sourcePlugin = resolve(repositoryRoot, "plugin", "plugin-market", pluginPackages[0]);
-  if (!existsSync(sourcePlugin)) throw new Error(`source plugin market package missing: ${pluginPackages[0]}`);
-  if (sha256File(packagedPlugin) !== sha256File(sourcePlugin)) {
-    throw new Error("packaged plugin market package SHA mismatch");
+  for (const pluginName of ["plugin-market", "runtime-insights", "workspace", "chat-import", "reminders", "storage", "chat-logs", "memory-hub", "character-hub", "creative-workshop-hub", "game-center-hub"]) {
+    const pluginDir = resolve(unpackedDir, "resources", "bundled-plugins", pluginName);
+    const pluginPackages = existsSync(pluginDir)
+      ? readdirSync(pluginDir).filter((name) => name.endsWith(".amitiax"))
+      : [];
+    if (pluginPackages.length !== 1) {
+      throw new Error(`packaged ${pluginName} package count must be 1, got ${pluginPackages.length}`);
+    }
+    const packagedPlugin = resolve(pluginDir, pluginPackages[0]);
+    const sourcePlugin = resolve(repositoryRoot, "plugin", pluginName, pluginPackages[0]);
+    if (!existsSync(sourcePlugin)) throw new Error(`source ${pluginName} package missing: ${pluginPackages[0]}`);
+    if (sha256File(packagedPlugin) !== sha256File(sourcePlugin)) {
+      throw new Error(`packaged ${pluginName} package SHA mismatch`);
+    }
   }
 
   console.log(`[packaged-runtime] PASS: ${manifest.entries.length} packaged runtime assets match staged hashes`);

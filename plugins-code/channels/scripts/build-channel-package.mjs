@@ -35,7 +35,7 @@ export function buildChannelPackage(sourceDir, outputDir) {
   };
   fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 
-  const packageName = `${manifest.extension.id.replaceAll("/", ".")}-${manifest.extension.version}.amitiax`;
+  const packageName = `${manifest.plugin.id.replaceAll("/", ".")}-${manifest.plugin.version}.amitiax`;
   const outputPath = path.join(outputDir, packageName);
   const temporaryPath = `${outputPath}.tmp`;
   fs.mkdirSync(outputDir, { recursive: true });

@@ -1,60 +1,41 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-
-const mocks = vi.hoisted(() => ({
-  managed: vi.fn(),
-  get: vi.fn(),
-  post: vi.fn(),
-  delete: vi.fn(),
-}));
-
-vi.mock("@/composables/useApi", () => ({
-  apiClient: {
-    get: mocks.get,
-    post: mocks.post,
-    delete: mocks.delete,
-  },
-}));
-
-vi.mock("@/runtime/owned-chat-management", () => ({
-  ownedManagementRequest: mocks.managed,
-}));
-
-import { createConversationFromImport } from "@/views/chat-import/api";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { describe, expect, it } from "vitest";
+import { builtinBusinessRoutes } from "@/router/builtinRoutes";
 import { isDeviceLocalApiPath } from "@/runtime/runtime-adapter";
 
-describe("chat import promotion", () => {
-  beforeEach(() => {
-    mocks.managed.mockReset();
+interface ChatImportManifest {
+  modules: Array<{
+    contributions: Array<{
+      spec?: {
+        metadata?: {
+          routes?: Array<{ path: string; providerId: string }>;
+        };
+      };
+    }>;
+  }>;
+}
+
+describe("chat import plugin migration", () => {
+  it("keeps the import page out of the host business router", () => {
+    expect(builtinBusinessRoutes.some((route) => route.path === "/import")).toBe(false);
   });
 
-  it("promotes the persisted import batch through the owned chat authority", async () => {
-    mocks.managed.mockResolvedValue({
-      conversationId: "import-owned-conversation",
-      imported: true,
-      executionScope: {
-        resourceOwnerId: "device",
-        roleId: "role",
-      },
-    });
-
-    const result = await createConversationFromImport("imp-batch");
-
-    expect(mocks.managed).toHaveBeenCalledWith(
-      "from-import",
-      { importBatchId: "imp-batch" },
-      "post",
-      "",
-    );
-    expect(result.ownerConversationId).toBe("import-owned-conversation");
-    expect(result.conversationId).toBe(
-      "meshconv1:device:import-owned-conversation",
-    );
+  it("provides /import through the chat-import plugin route registry", () => {
+    const manifest = JSON.parse(readFileSync(
+      resolve(__dirname, "../../../plugins-builtin/chat-import/amitia-extension.json"),
+      "utf8",
+    )) as ChatImportManifest;
+    const routes = manifest.modules
+      .flatMap((module) => module.contributions)
+      .flatMap((contribution) => contribution.spec?.metadata?.routes ?? []);
+    expect(routes).toContainEqual(expect.objectContaining({
+      path: "/import",
+      providerId: "chat-import-page-provider",
+    }));
   });
 
-  it("routes import staging to the retained device runtime", () => {
+  it("retains device-local staging behind the core runtime", () => {
     expect(isDeviceLocalApiPath("/api/imports/confirm")).toBe(true);
-    expect(
-      isDeviceLocalApiPath("/api/device-mesh/v1/business/chat-management/from-import"),
-    ).toBe(false);
   });
 });

@@ -415,7 +415,7 @@ return null;
     if (!envelope || !envelope.payload) return;
     if (!shouldProcess(envelope)) return;
     const target = envelope.payload.target as string;
-    if (target && isNavigationAllowed(target)) {
+    if (target && isNavigationAllowed(target, router)) {
       router.push(target).catch((error) => {
   console.error("[original-error]", error);
 // ignore navigation errors
@@ -548,7 +548,7 @@ return null;
             const response = await fetch(await resolveApiUrl(path), await createAuthenticatedFetchInit(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state }) }));
             if (!response.ok) throw new Error('通知回执未确认');
           },
-          navigate: (target) => { if (isNavigationAllowed(target)) void router.push(target); },
+          navigate: (target) => { if (isNavigationAllowed(target, router)) void router.push(target); },
         }).catch((error) => {
   console.error("[original-error]", error);
 });

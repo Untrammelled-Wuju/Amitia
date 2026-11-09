@@ -419,6 +419,9 @@ func (i *TypedContributionInstaller) buildInstallOp(ctx context.Context, contrib
 	if i.container == nil {
 		return installOp{}, fmt.Errorf("container not attached")
 	}
+	if err := i.validateContributionAdapter(contrib); err != nil {
+		return installOp{}, err
+	}
 
 	defData, err := json.Marshal(contrib.Definition)
 	if err != nil {
@@ -430,6 +433,23 @@ func (i *TypedContributionInstaller) buildInstallOp(ctx context.Context, contrib
 		return installOp{}, fmt.Errorf("unsupported contribution adapter %s for kind %s", contrib.EffectiveAdapter(), contrib.Kind)
 	}
 	return handler.build(ctx, contrib, defData, generation)
+}
+
+func (i *TypedContributionInstaller) validateContributionAdapter(contrib domain.ContributionDefinition) error {
+	if i == nil || i.container == nil || i.container.PluginAdapters == nil {
+		return nil
+	}
+	adapter := contrib.EffectiveAdapter()
+	descriptor, ok := i.container.PluginAdapters.Get(string(adapter), 1)
+	if !ok {
+		return fmt.Errorf("plugin adapter %s v1 is not registered", adapter)
+	}
+	for _, kind := range descriptor.SupportedKinds {
+		if kind == string(contrib.Kind) {
+			return nil
+		}
+	}
+	return fmt.Errorf("plugin adapter %s v1 does not support contribution kind %s", adapter, contrib.Kind)
 }
 
 func (i *TypedContributionInstaller) buildUISlotOp(ctx context.Context, contrib domain.ContributionDefinition, defData []byte) (installOp, error) {
@@ -1547,6 +1567,7 @@ func (i *TypedContributionInstaller) registerPage(ctx context.Context, uiDef ui_
 		ContractVersion: uiDef.ContractVersion,
 		EntryKind:       entryKind,
 		EntryPath:       uiDef.Entry.Path,
+		EntryHash:       uiDef.Entry.ContentHash,
 		SchemaPath:      uiDef.Entry.SchemaPath,
 		Title: extension_page_host.LocalizedText{
 			Default:      uiDef.Display.Title.Default,
@@ -1750,6 +1771,9 @@ func (i *TypedContributionInstaller) applyLocalUnsignedTrustOverride(ctx context
 }
 
 func (i *TypedContributionInstaller) activateSingle(ctx context.Context, contrib domain.ContributionDefinition, generation int64) error {
+	if err := i.validateContributionAdapter(contrib); err != nil {
+		return err
+	}
 	handler, ok := i.adapterHandler(contrib.EffectiveAdapter())
 	if !ok {
 		return fmt.Errorf("unsupported contribution adapter %s for kind %s", contrib.EffectiveAdapter(), contrib.Kind)

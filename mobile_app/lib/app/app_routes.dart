@@ -42,9 +42,7 @@ abstract final class AppRoutes {
   static const settingsAppearance = '/settings/appearance';
   static const settingsUIProviders = '/settings/ui-providers';
   static const settingsRuntime = '/settings/runtime';
-  static const settingsLongRunning = '/settings/long-running';
   static const settingsAdvanced = '/settings/advanced';
-  static const settingsDecisionViz = '/settings/decision-viz';
   static const settingsPermissions = '/settings/permissions';
   static const settingsAndroidAutomation = '/settings/android-automation';
   static const settingsVirtualDisplay = '/settings/virtual-display';

@@ -15,25 +15,26 @@ import (
 func createTestArchive(t *testing.T, path string) {
 	t.Helper()
 	manifestJSON := `{
-		"manifestVersion": 1,
-		"extension": {
+		"schemaVersion": 1,
+		"plugin": {
 			"id": "com.example/test",
 			"name": {"default": "Test"},
 			"description": {"default": "Test extension"},
-			"version": "1.0.0"
+			"version": "1.0.0",
+			"publisher": {
+				"id": "com.example",
+				"displayName": "Example"
+			}
 		},
-		"publisher": {
-			"id": "com.example",
-			"displayName": "Example"
-		},
+		"compatibility": {"minHostVersion": "0.1.0"},
 		"modules": [
 			{
 				"id": "main",
 				"name": {"default": "Main"},
-				"type": "javascript",
-				"runtime": {"type": "javascript", "entryPoint": "index.js"},
+				"runtime": {"adapter": "javascript", "entry": "index.js"},
+				"placement": "device",
 				"contributions": [
-					{"id": "test-tool", "kind": "tool", "name": {"default": "Test Tool"}}
+					{"id": "test-tool", "kind": "tool", "adapter": "tool", "contractVersion": 1, "name": {"default": "Test Tool"}}
 				]
 			}
 		],
@@ -160,8 +161,11 @@ func TestOpenArchive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenArchive: %v", err)
 	}
-	if pkg.Manifest.Extension.ID != "com.example/test" {
-		t.Errorf("unexpected id: %s", pkg.Manifest.Extension.ID)
+	if pkg.Manifest.Plugin.ID != "com.example/test" {
+		t.Errorf("unexpected id: %s", pkg.Manifest.Plugin.ID)
+	}
+	if pkg.Manifest.Plugin.ID != "com.example/test" {
+		t.Fatalf("missing unified manifest: %#v", pkg.Manifest)
 	}
 	if pkg.Layout.ManifestPath != "manifest.json" {
 		t.Errorf("expected manifest path, got %s", pkg.Layout.ManifestPath)

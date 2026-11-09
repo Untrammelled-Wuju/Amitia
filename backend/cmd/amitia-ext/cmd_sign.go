@@ -66,9 +66,9 @@ func runSign(args []string, output *Output) int {
 	}
 
 	doc, payload, err := packageSigner.SignPackage(trust.PackageSignatureInput{
-		ExtensionID:     pkg.Manifest.Extension.ID,
-		Version:         pkg.Manifest.Extension.Version,
-		ManifestVersion: pkg.Manifest.ManifestVersion,
+		ExtensionID:     pkg.Manifest.Plugin.ID,
+		Version:         pkg.Manifest.Plugin.Version,
+		ManifestVersion: pkg.Manifest.SchemaVersion,
 		ManifestHash:    manifestHash,
 		ContentTreeHash: pkg.Tree.TreeHash,
 		ArtifactHash:    artifactHash,

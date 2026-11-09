@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
-	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
+	"github.com/u-ai/backend/internal/extension/kernel/plugincontract"
 )
 
 type PackageVersionState string
@@ -462,8 +462,8 @@ type PackageVersionComparison struct {
 	ToSignatureStatus   string                  `json:"toSignatureStatus"`
 	ArtifactChanges     []PackageArtifactChange `json:"artifactChanges"`
 	ManifestChanges     []PackageManifestChange `json:"manifestChanges"`
-	FromManifest        manifest_v1.Manifest    `json:"-"`
-	ToManifest          manifest_v1.Manifest    `json:"-"`
+	FromManifest        plugincontract.Manifest `json:"-"`
+	ToManifest          plugincontract.Manifest `json:"-"`
 	FromFiles           []amitiax.FileEntry     `json:"-"`
 	ToFiles             []amitiax.FileEntry     `json:"-"`
 }
@@ -555,7 +555,7 @@ func computePackageArtifactFileChanges(fromFiles, toFiles []amitiax.FileEntry) [
 	return changes
 }
 
-func computePackageManifestFieldChanges(fromManifest, toManifest manifest_v1.Manifest) []PackageManifestChange {
+func computePackageManifestFieldChanges(fromManifest, toManifest plugincontract.Manifest) []PackageManifestChange {
 	fromRaw, _ := json.Marshal(fromManifest)
 	toRaw, _ := json.Marshal(toManifest)
 	var fromMap, toMap map[string]interface{}

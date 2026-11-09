@@ -193,7 +193,7 @@ func supportsDeclarativeEntry(capability Capability) bool {
 }
 func trustedRootLevel(level string) bool {
 	switch strings.ToLower(strings.TrimSpace(level)) {
-	case "system", "official", "trusted", "user_trusted":
+	case "system", "bundled", "official", "trusted", "user_trusted":
 		return true
 	default:
 		return false
@@ -219,7 +219,7 @@ func (d ProviderDefinition) Validate() error {
 	if !d.Placement.Valid() {
 		return fmt.Errorf("ui_provider: invalid placement %q", d.Placement)
 	}
-	if !d.Builtin && !isBundledExtensionID(d.ExtensionID) && requiresTrustedRootProvider(d.Capability) && !trustedRootLevel(d.TrustLevel) {
+	if !d.Builtin && requiresTrustedRootProvider(d.Capability) && !trustedRootLevel(d.TrustLevel) {
 		return fmt.Errorf("ui_provider: capability %s requires an explicitly trusted publisher", d.Capability)
 	}
 	if len(d.Entries) == 0 {
@@ -293,10 +293,6 @@ func (d ProviderDefinition) Validate() error {
 		return err
 	}
 	return nil
-}
-
-func isBundledExtensionID(extensionID string) bool {
-	return strings.HasPrefix(extensionID, "com.amitia/")
 }
 
 func validateCrossPlatformUIEntries(d ProviderDefinition) error {

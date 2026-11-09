@@ -1,46 +1,81 @@
 {
-	"manifestVersion": 1,
-	"extension": {
-		"id": "com.amitia.repair/tool-scope-denied",
-		"name": {"default": "Tool Scope Denied"},
-		"description": {"default": "Phase 10 E2E: tool that requires a scope which is not bound by default, must be denied"},
-		"version": "1.0.0"
-	},
-	"publisher": {
-		"id": "com.amitia.repair",
-		"displayName": "Amitia Repair"
-	},
-	"modules": [
-		{
-			"id": "main",
-			"name": {"default": "Main"},
-			"type": "javascript",
-			"runtime": {"type": "javascript", "entryPoint": "index.js"},
-			"contributions": [
-				{
-					"id": "scoped-tool",
-					"kind": "tool",
-					"name": {"default": "Scoped Tool"},
-					"description": {"default": "Tool requiring resource:private scope to execute"},
-					"modelName": "scoped_tool",
-					"requiredPermissions": ["tool.invoke"],
-					"requiredScope": ["resource:private"],
-					"inputSchema": {
-						"type": "object",
-						"properties": {
-							"target": {"type": "string", "description": "Target resource id"}
-						},
-						"required": ["target"]
-					}
-				}
-			]
-		}
-	],
-	"permissions": [
-		{"name": "tool.invoke", "reason": "Invoke scoped tool", "required": true, "scope": "resource:private"}
-	],
-	"integrity": {
-		"algorithm": "sha256",
-		"contentTreeHash": ""
-	}
+  "schemaVersion": 1,
+  "plugin": {
+    "id": "com.amitia.repair/tool-scope-denied",
+    "name": {
+      "default": "Tool Scope Denied"
+    },
+    "description": {
+      "default": "Phase 10 E2E: tool that requires a scope which is not bound by default, must be denied"
+    },
+    "version": "1.0.0",
+    "publisher": {
+      "id": "com.amitia.repair",
+      "displayName": "Amitia Repair"
+    }
+  },
+  "compatibility": {
+    "minHostVersion": "0.1.0"
+  },
+  "modules": [
+    {
+      "id": "main",
+      "name": {
+        "default": "Main"
+      },
+      "runtime": {
+        "adapter": "javascript",
+        "entry": "index.js"
+      },
+      "dynamic": {
+        "allowedAdapters": [
+          "tool"
+        ],
+        "maxContributions": 1,
+        "maxTools": 1,
+        "maxRoutes": 0,
+        "maxServices": 0,
+        "allowUnregister": true
+      },
+      "contributions": [
+        {
+          "id": "scoped-tool",
+          "kind": "tool",
+          "adapter": "tool",
+          "contractVersion": 1,
+          "name": {
+            "default": "Scoped Tool"
+          },
+          "description": {
+            "default": "Tool requiring resource:private scope to execute"
+          },
+          "requiredPermissions": [
+            "tool.invoke"
+          ],
+          "requiredScope": [
+            "resource:private"
+          ]
+        }
+      ],
+      "placement": "device"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "tool.invoke",
+      "reason": "Invoke scoped tool",
+      "required": true,
+      "scope": "resource:private"
+    }
+  ],
+  "data": {
+    "schemaVersion": 1,
+    "backup": true,
+    "export": true,
+    "uninstall": "retain"
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "contentTreeHash": ""
+  }
 }

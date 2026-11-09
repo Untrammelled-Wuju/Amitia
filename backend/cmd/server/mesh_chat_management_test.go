@@ -121,6 +121,38 @@ func TestOwnedChatManagementIncludesActualHistoryAndRejectsForeignOwner(t *testi
 	}
 }
 
+func TestOwnedChatManagementArchivedOnlySelection(t *testing.T) {
+	p := setupMeshLocalDataPort(t)
+	scope := coordination.ExecutionScope{TargetDeviceID: p.ownerID, CoreID: "core", ResourceOwnerID: p.ownerID, RoleOwnerID: p.ownerID, RoleID: "one", RoleRevision: 3, RequestID: "archived"}
+	seedOwnedChatManagement(t, p, "conversation", "archived", "one", `{"title":"Archived","archivedAt":"2026-10-01T00:00:00Z"}`)
+	seedOwnedChatManagement(t, p, "conversation", "active", "one", `{"title":"Active","archivedAt":""}`)
+	seedOwnedChatManagement(t, p, "message", "archived-message", "one", `{"conversationId":"archived","role":"user","content":"archived message"}`)
+	seedOwnedChatManagement(t, p, "message", "active-message", "one", `{"conversationId":"active","role":"user","content":"active message"}`)
+	request := coordination.ChatManagementRequest{Operation: "conversations", ConversationOwnerID: p.ownerID, ArchivedOnly: true}
+	result, err := p.ManageChat(t.Context(), scope, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, _ := result["items"].([]map[string]any)
+	if result["total"] != 1 || len(items) != 1 || items[0]["id"] != "archived" {
+		t.Fatalf("archived-only list=%v", result)
+	}
+	_, err = p.services.KernelContainer.DeviceRegistry.Database().Exec(`UPDATE kernel_device_owned_resources SET body=?,revision=revision+1 WHERE owner_id=? AND kind='conversation' AND resource_id='archived'`, []byte(`{"title":"Archived","archivedAt":""}`), p.ownerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err = p.ManageChat(t.Context(), scope, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result["total"] != 0 {
+		t.Fatalf("restored conversation remained in archived list: %v", result)
+	}
+	if _, err := p.ManageChat(t.Context(), scope, coordination.ChatManagementRequest{Operation: "message-range", ConversationOwnerID: p.ownerID, ConversationID: "active", ArchivedOnly: true}); err == nil {
+		t.Fatal("active conversation messages were exposed to archived-only management")
+	}
+}
+
 func TestOwnedChatCleanupPreservesMemoriesAndDeletesCurrentHistory(t *testing.T) {
 	for _, include := range []bool{false, true} {
 		t.Run(map[bool]string{false: "keep-memory", true: "delete-memory"}[include], func(t *testing.T) {

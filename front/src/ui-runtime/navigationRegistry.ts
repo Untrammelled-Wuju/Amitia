@@ -96,11 +96,7 @@ export function resolveNavigationIcon(name?: string): Component {
 
 const builtinItems: UINavigationItem[] = [
   { id: "home", route: "/chat", label: "主页", description: "开始新对话，或继续最近的聊天。", icon: HomeIcon, group: "home", order: 0, mobile: true, match: ["/chat", "/logs"] },
-  { id: "tasks", route: "/reminders", label: "任务", description: "管理主动任务和持续事项。", icon: AlarmClock, group: "tasks", order: 70, mobile: true, match: ["/continuity"] },
-  { id: "character.hub", route: "/characters", label: "角色", description: "管理角色、模型、技能与团队。", icon: CharacterIcon, group: "character", order: 20, mobile: true, match: ["/character", "/characters/teams", "/world-book"] },
-  { id: "memory.hub", route: "/memory", label: "记忆", description: "查看知识库、用户画像、记忆图谱、情景和时间线。", icon: BrainIcon, group: "memory", order: 50, mobile: true, match: ["/memory-manager", "/memory-timeline", "/knowledge", "/episodic", "/graph", "/profiles"] },
-  { id: "workshop.game-center", route: "/game-center", label: "游戏模式", description: "安装、运行并查看游戏插件。", icon: GamepadIcon, group: "workshop", order: 80, runtimeCapability: "gameMode" },
-  { id: "workshop", route: "/creative-workshop", label: "创意工坊", description: "创建角色卡、桌宠和其他创作内容。", icon: MagicStick, group: "workshop", order: 85, match: ["/creative-workshop"] },
+  { id: "tasks.continuity", route: "/continuity", label: "持续事项", description: "查看长期目标和持续事项。", icon: AlarmClock, group: "tasks", order: 70, mobile: true, match: ["/continuity"] },
   { id: "extensions", route: "/extensions", label: "扩展中心", description: "管理扩展包、工作流、MCP 和 Agent Skills。", icon: Extensions, group: "extensions", order: 90, match: ["/extensions", "/kernel"] },
 ];
 
@@ -122,7 +118,6 @@ const pageTitleOverrides: Record<string, string> = {
   "/onboarding": "引导",
   "/privacy": "隐私说明",
   "/usage-boundary": "使用边界",
-  "/storage": "存储清理",
   "/runtime-debug": "运行时调试",
   "/chat": "新对话",
   "/character": "角色管理",
@@ -150,7 +145,7 @@ const pageTitleOverrides: Record<string, string> = {
   "/extensions/mcp": "MCP 服务",
   "/extensions/packages": "扩展包",
   "/extensions/workflows": "工作流",
-  "/kernel": "扩展包",
+  "/kernel": "内核工具",
   "/kernel/trusted-services": "可信服务运行时",
   "/kernel/wasm": "WASM 运行时",
   "/kernel/hooks": "Hook 中心",
@@ -162,12 +157,10 @@ const pageTitleOverrides: Record<string, string> = {
   "/kernel/dev-console": "开发者诊断控制台",
   "/kernel/dev-mode": "开发模式中心",
   "/devices": "运行模式",
-  "/workspaces": "工作区",
   "/long-running": "长期运行维护",
   "/settings/system-logs": "系统运行日志",
   "/settings/feedback": "问题反馈",
   "/settings/prompt-trace": "Prompt Trace",
-  "/logs": "归档对话",
 };
 
 function finiteNumber(value: unknown, fallback: number): number {

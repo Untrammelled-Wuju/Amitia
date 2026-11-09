@@ -901,7 +901,7 @@ func (f *ToolFacade) resolveExecutionTarget(ctx context.Context, def capability.
 	if scope.ExecContext != nil && scope.ExecContext.RuntimeTarget != nil {
 		targetDeviceID = scope.ExecContext.RuntimeTarget.DeviceID
 	}
-	workspaceTarget := def.ExtensionID == "com.amitia.builtin.workspace"
+	workspaceTarget := def.Runtime.RuntimeType == capability.RuntimeTypeWorkspace
 	if workspaceTarget {
 		if workspaceDeviceID := workspaceExecutionContextDeviceID(scope.ExecContext); workspaceDeviceID != "" {
 			targetDeviceID = runtimeidentity.DeviceID(workspaceDeviceID)

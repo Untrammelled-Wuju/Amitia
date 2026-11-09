@@ -1,6 +1,6 @@
 {
-  "manifestVersion": 1,
-  "extension": {
+  "schemaVersion": 1,
+  "plugin": {
     "id": "com.amitia/world-game-plugin",
     "name": {
       "default": "Amitia World Game"
@@ -20,12 +20,12 @@
       "sdk-consumer",
       "amitia",
       "formal-plugin"
-    ]
-  },
-  "publisher": {
-    "id": "amitia",
-    "displayName": "Amitia",
-    "trustLevel": "trusted"
+    ],
+    "publisher": {
+      "id": "amitia",
+      "displayName": "Amitia",
+      "trustLevel": "trusted"
+    }
   },
   "compatibility": {
     "minHostVersion": "0.1.0",
@@ -43,10 +43,9 @@
       "name": {
         "default": "Amitia World Game Runtime"
       },
-      "type": "javascript",
       "runtime": {
-        "type": "javascript",
-        "entryPoint": "dist/index.js",
+        "adapter": "javascript",
+        "entry": "dist/index.js",
         "hostAccess": {
           "filesystem": {
             "mode": "none"
@@ -59,10 +58,23 @@
           }
         }
       },
+      "dynamic": {
+        "allowedAdapters": [
+          "game",
+          "tool"
+        ],
+        "maxContributions": 2,
+        "maxTools": 1,
+        "maxRoutes": 0,
+        "maxServices": 0,
+        "allowUnregister": true
+      },
       "contributions": [
         {
           "id": "world-game-plugin-contribution",
           "kind": "gamex",
+          "adapter": "game",
+          "contractVersion": 1,
           "name": {
             "default": "World Game Plugin"
           },
@@ -211,6 +223,8 @@
         {
           "id": "world-game-move-tool",
           "kind": "tool",
+          "adapter": "tool",
+          "contractVersion": 1,
           "name": {
             "default": "World Game Move"
           },
@@ -251,10 +265,9 @@
       "name": {
         "default": "World Game Support Runtime"
       },
-      "type": "javascript",
       "runtime": {
-        "type": "javascript",
-        "entryPoint": "dist/support.js",
+        "adapter": "javascript",
+        "entry": "dist/support.js",
         "hostAccess": {
           "filesystem": {
             "mode": "none"
@@ -267,7 +280,6 @@
           }
         }
       },
-      "contributions": [],
       "placement": "device"
     },
     {
@@ -275,21 +287,28 @@
       "name": {
         "default": "Amitia World Game UI"
       },
-      "type": "data_only",
-      "placement": "device",
+      "dynamic": {
+        "allowedAdapters": [
+          "ui"
+        ],
+        "maxContributions": 2,
+        "maxTools": 0,
+        "maxRoutes": 2,
+        "maxServices": 0,
+        "allowUnregister": true
+      },
       "contributions": [
         {
           "id": "world-game-detail-desktop",
           "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
           "name": {
             "default": "World Game（桌面）"
           },
           "description": {
             "default": "在游戏插件详情中查看状态并发送移动指令。"
           },
-          "requiredPermissions": [
-            "tool.invoke"
-          ],
           "spec": {
             "contribution_id": "world-game-detail-desktop",
             "extension_id": "com.amitia/world-game-plugin",
@@ -340,20 +359,22 @@
             "integrity": {
               "definition_hash": "world-game-detail-desktop-v1"
             }
-          }
+          },
+          "requiredPermissions": [
+            "tool.invoke"
+          ]
         },
         {
           "id": "world-game-detail-mobile",
           "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
           "name": {
             "default": "World Game（手机）"
           },
           "description": {
             "default": "在手机端查看游戏状态并发送移动指令。"
           },
-          "requiredPermissions": [
-            "tool.invoke"
-          ],
           "spec": {
             "contribution_id": "world-game-detail-mobile",
             "extension_id": "com.amitia/world-game-plugin",
@@ -403,12 +424,15 @@
             "integrity": {
               "definition_hash": "world-game-detail-mobile-v1"
             }
-          }
+          },
+          "requiredPermissions": [
+            "tool.invoke"
+          ]
         }
-      ]
+      ],
+      "placement": "device"
     }
   ],
-  "dependencies": [],
   "permissions": [
     {
       "name": "gamehost.control",
@@ -459,9 +483,14 @@
       "description": "World Game provider token for testing SecretLease lifecycle."
     }
   ],
+  "data": {
+    "schemaVersion": 1,
+    "backup": true,
+    "export": true,
+    "uninstall": "retain"
+  },
   "integrity": {
     "algorithm": "sha256",
     "contentTreeHash": ""
-  },
-  "placement": "device"
+  }
 }

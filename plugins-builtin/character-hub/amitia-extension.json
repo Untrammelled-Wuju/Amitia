@@ -1,0 +1,614 @@
+{
+  "schemaVersion": 1,
+  "plugin": {
+    "id": "com.amitia/character-hub",
+    "name": {
+      "default": "角色中心"
+    },
+    "description": {
+      "default": "通过统一 UI Provider 提供角色管理、团队、世界书与画像入口。"
+    },
+    "version": "1.1.0",
+    "license": "AGPL-3.0-only",
+    "homepage": "https://amitia.untrammelled.top",
+    "categories": [
+      "character",
+      "navigation",
+      "system"
+    ],
+    "keywords": [
+      "character",
+      "team",
+      "worldbook",
+      "profile"
+    ],
+    "metadata": {
+      "system.defaultInstall": true,
+      "system.defaultEnabled": true
+    },
+    "publisher": {
+      "id": "com.amitia",
+      "displayName": "Amitia",
+      "trustLevel": "official"
+    }
+  },
+  "compatibility": {
+    "minHostVersion": "0.1.0",
+    "platforms": [
+      "web",
+      "windows",
+      "linux",
+      "macos"
+    ]
+  },
+  "modules": [
+    {
+      "id": "character-hub-runtime",
+      "name": {
+        "default": "角色中心运行时"
+      },
+      "description": {
+        "default": "注册角色中心页面、路由和导航贡献。"
+      },
+      "runtime": {
+        "adapter": "javascript",
+        "entry": "dist/index.js",
+        "timeout": "10s",
+        "memoryBytes": 33554432,
+        "capabilities": {
+          "network": false,
+          "filesystem": false
+        },
+        "hostAccess": {
+          "filesystem": {
+            "mode": "none"
+          },
+          "network": {
+            "mode": "none"
+          },
+          "process": {
+            "mode": "none"
+          }
+        }
+      },
+      "dynamic": {
+        "allowedAdapters": [
+          "ui",
+          "ui_provider"
+        ],
+        "maxContributions": 9,
+        "maxTools": 0,
+        "maxRoutes": 7,
+        "maxServices": 0,
+        "allowUnregister": true
+      },
+      "contributions": [
+        {
+          "id": "character-hub-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "角色中心"
+          },
+          "description": {
+            "default": "查看角色、团队、世界书与画像。"
+          },
+          "spec": {
+            "contribution_id": "character-hub-page",
+            "extension_id": "com.amitia/character-hub",
+            "module_id": "character-hub-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "角色"
+              },
+              "description": {
+                "default": "管理角色、画像、团队与世界观设定。"
+              },
+              "icon": "character"
+            },
+            "entry": {
+              "type": "schema_renderer",
+              "schema_path": "modules/character-hub-ui/desktop/character-hub.json",
+              "content_hash": "pending"
+            },
+            "sandbox": {
+              "type": "schema_renderer"
+            },
+            "ordering": {
+              "priority": 230
+            },
+            "visibility": {
+              "platforms": [
+                "web",
+                "windows",
+                "linux",
+                "macos"
+              ]
+            },
+            "actions": [],
+            "integrity": {
+              "definition_hash": "character-hub-page-v1"
+            }
+          }
+        },
+        {
+          "id": "character-detail-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "角色详情"
+          },
+          "spec": {
+            "contribution_id": "character-detail-page",
+            "extension_id": "com.amitia/character-hub",
+            "module_id": "character-hub-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "角色管理"
+              },
+              "description": {
+                "default": "管理角色、生活规则、语音与心理状态。"
+              },
+              "icon": "character"
+            },
+            "entry": {
+              "type": "host_native",
+              "path": "builtin://com.amitia/character-hub/character-detail",
+              "runtime_id": "host.character.detail",
+              "content_hash": "builtin"
+            },
+            "sandbox": {
+              "type": "host_native"
+            },
+            "ordering": {
+              "priority": 229
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            },
+            "actions": [],
+            "integrity": {
+              "definition_hash": "character-detail-page-v1"
+            }
+          }
+        },
+        {
+          "id": "character-teams-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "角色团队"
+          },
+          "spec": {
+            "contribution_id": "character-teams-page",
+            "extension_id": "com.amitia/character-hub",
+            "module_id": "character-hub-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "团队"
+              },
+              "description": {
+                "default": "管理角色团队和协作关系。"
+              },
+              "icon": "character"
+            },
+            "entry": {
+              "type": "host_native",
+              "path": "builtin://com.amitia/character-hub/character-teams",
+              "runtime_id": "host.character.teams",
+              "content_hash": "builtin"
+            },
+            "sandbox": {
+              "type": "host_native"
+            },
+            "ordering": {
+              "priority": 224
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            },
+            "actions": [],
+            "integrity": {
+              "definition_hash": "character-teams-page-v1"
+            }
+          }
+        },
+        {
+          "id": "character-worldbook-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "世界书"
+          },
+          "spec": {
+            "contribution_id": "character-worldbook-page",
+            "extension_id": "com.amitia/character-hub",
+            "module_id": "character-hub-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "世界书"
+              },
+              "description": {
+                "default": "维护角色世界观、设定和检索条目。"
+              },
+              "icon": "collection"
+            },
+            "entry": {
+              "type": "host_native",
+              "path": "builtin://com.amitia/character-hub/character-worldbook",
+              "runtime_id": "host.character.worldbook",
+              "content_hash": "builtin"
+            },
+            "sandbox": {
+              "type": "host_native"
+            },
+            "ordering": {
+              "priority": 223
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            },
+            "actions": [],
+            "integrity": {
+              "definition_hash": "character-worldbook-page-v1"
+            }
+          }
+        },
+        {
+          "id": "character-hub-routes",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "角色中心路由"
+          },
+          "spec": {
+            "providerId": "character-hub-routes",
+            "capability": "route.registry",
+            "mode": "replace",
+            "priority": 230,
+            "trustLevel": "official",
+            "entries": {
+              "web": {
+                "type": "declarative"
+              },
+              "electron_windows": {
+                "type": "declarative"
+              },
+              "electron_macos": {
+                "type": "declarative"
+              },
+              "electron_linux": {
+                "type": "declarative"
+              }
+            },
+            "metadata": {
+              "routes": [
+                {
+                  "id": "character-hub",
+                  "path": "/characters",
+                  "providerId": "character-hub-page-provider",
+                  "capability": "page.provider",
+                  "title": "角色",
+                  "priority": 230
+                },
+                {
+                  "id": "character-list",
+                  "path": "/character",
+                  "providerId": "character-detail-page-provider",
+                  "capability": "page.provider",
+                  "title": "角色管理",
+                  "priority": 229
+                },
+                {
+                  "id": "character-detail",
+                  "path": "/character/:id",
+                  "providerId": "character-detail-page-provider",
+                  "capability": "page.provider",
+                  "title": "角色详情",
+                  "priority": 228
+                },
+                {
+                  "id": "character-life-rules",
+                  "path": "/character/:id/life-rules",
+                  "providerId": "character-detail-page-provider",
+                  "capability": "page.provider",
+                  "title": "生活规则",
+                  "priority": 227
+                },
+                {
+                  "id": "character-voice",
+                  "path": "/character/:id/voice",
+                  "providerId": "character-detail-page-provider",
+                  "capability": "page.provider",
+                  "title": "角色语音",
+                  "priority": 226
+                },
+                {
+                  "id": "character-psyche",
+                  "path": "/character/:id/psyche",
+                  "providerId": "character-detail-page-provider",
+                  "capability": "page.provider",
+                  "title": "心理状态",
+                  "priority": 225
+                },
+                {
+                  "id": "character-teams",
+                  "path": "/characters/teams",
+                  "providerId": "character-teams-page-provider",
+                  "capability": "page.provider",
+                  "title": "团队",
+                  "priority": 224
+                },
+                {
+                  "id": "character-worldbook",
+                  "path": "/world-book",
+                  "providerId": "character-worldbook-page-provider",
+                  "capability": "page.provider",
+                  "title": "世界书",
+                  "priority": 223
+                }
+              ],
+              "sectionEntries": [
+                {
+                  "id": "character-list",
+                  "section": "character",
+                  "route": "/character",
+                  "label": "角色管理",
+                  "order": 10
+                },
+                {
+                  "id": "character-teams",
+                  "section": "character",
+                  "route": "/characters/teams",
+                  "label": "团队",
+                  "order": 20
+                },
+                {
+                  "id": "character-worldbook",
+                  "section": "character",
+                  "route": "/world-book",
+                  "label": "世界书",
+                  "order": 30
+                }
+              ],
+              "navigationItems": [
+                {
+                  "id": "character-hub",
+                  "label": "角色",
+                  "route": "/characters",
+                  "description": "管理角色、模型、技能与团队。",
+                  "icon": "character",
+                  "group": "character",
+                  "groupLabel": "角色",
+                  "groupIcon": "character",
+                  "order": 20,
+                  "match": [
+                    "/character",
+                    "/characters/teams",
+                    "/world-book"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "character-hub-page-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "角色中心页面 Provider"
+          },
+          "spec": {
+            "providerId": "character-hub-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 230,
+            "trustLevel": "official",
+            "entries": {
+              "web": {
+                "type": "schema_renderer",
+                "contributionId": "character-hub-page"
+              },
+              "electron_windows": {
+                "type": "schema_renderer",
+                "contributionId": "character-hub-page"
+              },
+              "electron_macos": {
+                "type": "schema_renderer",
+                "contributionId": "character-hub-page"
+              },
+              "electron_linux": {
+                "type": "schema_renderer",
+                "contributionId": "character-hub-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/characters"
+              ]
+            }
+          }
+        },
+        {
+          "id": "character-detail-page-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "角色详情页面 Provider"
+          },
+          "spec": {
+            "providerId": "character-detail-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 229,
+            "trustLevel": "official",
+            "entries": {
+              "web": {
+                "type": "schema_renderer",
+                "contributionId": "character-detail-page"
+              },
+              "electron_windows": {
+                "type": "schema_renderer",
+                "contributionId": "character-detail-page"
+              },
+              "electron_macos": {
+                "type": "schema_renderer",
+                "contributionId": "character-detail-page"
+              },
+              "electron_linux": {
+                "type": "schema_renderer",
+                "contributionId": "character-detail-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/character",
+                "/character/:id",
+                "/character/:id/life-rules",
+                "/character/:id/voice",
+                "/character/:id/psyche"
+              ]
+            }
+          }
+        },
+        {
+          "id": "character-teams-page-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "团队页面 Provider"
+          },
+          "spec": {
+            "providerId": "character-teams-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 224,
+            "trustLevel": "official",
+            "entries": {
+              "web": {
+                "type": "schema_renderer",
+                "contributionId": "character-teams-page"
+              },
+              "electron_windows": {
+                "type": "schema_renderer",
+                "contributionId": "character-teams-page"
+              },
+              "electron_macos": {
+                "type": "schema_renderer",
+                "contributionId": "character-teams-page"
+              },
+              "electron_linux": {
+                "type": "schema_renderer",
+                "contributionId": "character-teams-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/characters/teams"
+              ]
+            }
+          }
+        },
+        {
+          "id": "character-worldbook-page-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "世界书页面 Provider"
+          },
+          "spec": {
+            "providerId": "character-worldbook-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 223,
+            "trustLevel": "official",
+            "entries": {
+              "web": {
+                "type": "schema_renderer",
+                "contributionId": "character-worldbook-page"
+              },
+              "electron_windows": {
+                "type": "schema_renderer",
+                "contributionId": "character-worldbook-page"
+              },
+              "electron_macos": {
+                "type": "schema_renderer",
+                "contributionId": "character-worldbook-page"
+              },
+              "electron_linux": {
+                "type": "schema_renderer",
+                "contributionId": "character-worldbook-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/world-book"
+              ]
+            }
+          }
+        }
+      ],
+      "placement": "device"
+    }
+  ],
+  "permissions": [],
+  "data": {
+    "schemaVersion": 1,
+    "scopes": [
+      "device"
+    ],
+    "backup": false,
+    "export": false,
+    "uninstall": "retain"
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "contentTreeHash": ""
+  }
+}

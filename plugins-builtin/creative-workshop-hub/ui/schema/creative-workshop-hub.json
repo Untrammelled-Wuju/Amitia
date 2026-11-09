@@ -1,0 +1,148 @@
+{
+  "schemaVersion": "schema-ui/1",
+  "type": "document",
+  "title": "创意工坊",
+  "actions": [],
+  "children": [
+    {
+      "id": "creative-workshop-hub-page",
+      "type": "page",
+      "children": [
+        {
+          "id": "creative-workshop-hub-intro",
+          "type": "alert",
+          "props": {
+            "type": "info",
+            "title": "创意工坊由插件提供",
+            "description": "角色卡和桌宠内容继续使用核心安装、权限和数据边界，入口可以随插件启停。",
+            "closable": false
+          }
+        },
+        {
+          "id": "creative-workshop-hub-grid",
+          "type": "grid",
+          "props": {
+            "columnsTemplate": "repeat(auto-fill, minmax(250px, 1fr))",
+            "gap": "12px"
+          },
+          "children": [
+            {
+              "id": "creative-workshop-hub-character-cards",
+              "type": "card",
+              "props": {
+                "header": "角色卡工坊"
+              },
+              "children": [
+                {
+                  "id": "creative-workshop-hub-character-cards-copy",
+                  "type": "text",
+                  "props": {
+                    "text": "创建、导入和编辑角色卡与人格配置。",
+                    "variant": "muted"
+                  }
+                },
+                {
+                  "id": "creative-workshop-hub-character-cards-link",
+                  "type": "resource_link",
+                  "props": {
+                    "text": "打开角色卡工坊",
+                    "href": "/creative-workshop/character-cards",
+                    "target": "_self"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "creative-workshop-hub-pets",
+              "type": "card",
+              "props": {
+                "header": "桌宠中心"
+              },
+              "children": [
+                {
+                  "id": "creative-workshop-hub-pets-copy",
+                  "type": "text",
+                  "props": {
+                    "text": "浏览桌宠内容、动作和创作资源。",
+                    "variant": "muted"
+                  }
+                },
+                {
+                  "id": "creative-workshop-hub-pets-link",
+                  "type": "resource_link",
+                  "props": {
+                    "text": "打开桌宠中心",
+                    "href": "/creative-workshop/pet",
+                    "target": "_self"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "creative-workshop-hub-installations",
+              "type": "card",
+              "props": {
+                "header": "桌宠安装管理"
+              },
+              "children": [
+                {
+                  "id": "creative-workshop-hub-installations-copy",
+                  "type": "text",
+                  "props": {
+                    "text": "管理已安装桌宠、运行时状态和恢复。",
+                    "variant": "muted"
+                  }
+                },
+                {
+                  "id": "creative-workshop-hub-installations-link",
+                  "type": "resource_link",
+                  "props": {
+                    "text": "打开安装管理",
+                    "href": "/creative-workshop/pet/installations",
+                    "target": "_self"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "creative-workshop-hub-workflows",
+              "type": "card",
+              "props": {
+                "header": "创作工作流"
+              },
+              "children": [
+                {
+                  "id": "creative-workshop-hub-workflows-copy",
+                  "type": "text",
+                  "props": {
+                    "text": "使用工作流组合创作、生成和发布步骤。",
+                    "variant": "muted"
+                  }
+                },
+                {
+                  "id": "creative-workshop-hub-workflows-link",
+                  "type": "resource_link",
+                  "props": {
+                    "text": "打开工作流",
+                    "href": "/extensions/workflows",
+                    "target": "_self"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "theme": {
+    "mode": "auto"
+  },
+  "performanceBudget": {
+    "maxRenderTimeMs": 60,
+    "maxLayoutCount": 50,
+    "maxNodeCount": 50,
+    "maxDataFetchCount": 0,
+    "maxActionCount": 0
+  }
+}

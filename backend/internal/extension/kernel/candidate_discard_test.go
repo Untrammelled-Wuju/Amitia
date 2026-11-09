@@ -47,9 +47,11 @@ func TestDiscardCandidateContributions_PreservesStableTool(t *testing.T) {
 
 	candidateContribs := []domain.ContributionDefinition{
 		{
-			ID:          "ext-a/tool-candidate",
-			ExtensionID: "ext-a",
-			Kind:        domain.ContributionKindTool,
+			ID:              "ext-a/tool-candidate",
+			ExtensionID:     "ext-a",
+			Kind:            domain.ContributionKindTool,
+			Adapter:         domain.ContributionAdapterTool,
+			ContractVersion: 1,
 			Definition: map[string]any{
 				"toolId": "ext-a/tool-candidate",
 			},
@@ -92,9 +94,11 @@ func TestDiscardCandidateContributions_Idempotent(t *testing.T) {
 
 	contribs := []domain.ContributionDefinition{
 		{
-			ID:          "ext-a/tool-1",
-			ExtensionID: "ext-a",
-			Kind:        domain.ContributionKindTool,
+			ID:              "ext-a/tool-1",
+			ExtensionID:     "ext-a",
+			Kind:            domain.ContributionKindTool,
+			Adapter:         domain.ContributionAdapterTool,
+			ContractVersion: 1,
 			Definition: map[string]any{
 				"toolId": "ext-a/tool-1",
 			},
@@ -149,18 +153,22 @@ func TestDiscardCandidateContributions_MultipleTypes(t *testing.T) {
 
 	candidateContribs := []domain.ContributionDefinition{
 		{
-			ID:          "ext-b/candidate",
-			ExtensionID: "ext-b",
-			Kind:        domain.ContributionKindTool,
+			ID:              "ext-b/candidate",
+			ExtensionID:     "ext-b",
+			Kind:            domain.ContributionKindTool,
+			Adapter:         domain.ContributionAdapterTool,
+			ContractVersion: 1,
 			Definition: map[string]any{
 				"toolId": "ext-b/candidate",
 			},
 		},
 		{
-			ID:          "ext-b/unknown-kind",
-			ExtensionID: "ext-b",
-			Kind:        domain.ContributionKind("unknown"),
-			Definition:  map[string]any{},
+			ID:              "ext-b/unknown-kind",
+			ExtensionID:     "ext-b",
+			Kind:            domain.ContributionKind("unknown"),
+			Adapter:         domain.ContributionAdapterTool,
+			ContractVersion: 1,
+			Definition:      map[string]any{},
 		},
 	}
 
@@ -213,10 +221,12 @@ func TestDiscardSingleContribution_ToolUsesFallbackID(t *testing.T) {
 	}
 
 	contrib := domain.ContributionDefinition{
-		ID:          "ext-c/my-contrib",
-		ExtensionID: "ext-c",
-		Kind:        domain.ContributionKindTool,
-		Definition:  map[string]any{},
+		ID:              "ext-c/my-contrib",
+		ExtensionID:     "ext-c",
+		Kind:            domain.ContributionKindTool,
+		Adapter:         domain.ContributionAdapterTool,
+		ContractVersion: 1,
+		Definition:      map[string]any{},
 	}
 
 	if err := installer.discardSingleContribution(ctx, contrib, nil); err != nil {
@@ -251,9 +261,11 @@ func TestDiscardCandidateContributions_HookNilService(t *testing.T) {
 
 	candidateContribs := []domain.ContributionDefinition{
 		{
-			ID:          "ext-d/hook-candidate",
-			ExtensionID: "ext-d",
-			Kind:        domain.ContributionKindHook,
+			ID:              "ext-d/hook-candidate",
+			ExtensionID:     "ext-d",
+			Kind:            domain.ContributionKindHook,
+			Adapter:         domain.ContributionAdapterHook,
+			ContractVersion: 1,
 			Definition: map[string]any{
 				"contributionId": "ext-d/hook-candidate",
 				"event":          "on_message",

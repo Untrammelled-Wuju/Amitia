@@ -1,0 +1,267 @@
+{
+  "schemaVersion": "schema-ui/1",
+  "type": "document",
+  "title": "运行时协作调试",
+  "lifecycle": {
+    "onMount": [
+      {
+        "action_id": "command",
+        "target": "tool",
+        "input": {
+          "action": "snapshot"
+        },
+        "statePath": "snapshot"
+      }
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "command",
+      "target": "tool"
+    }
+  ],
+  "children": [
+    {
+      "id": "runtime-debug-page",
+      "type": "page",
+      "children": [
+        {
+          "id": "runtime-debug-toolbar",
+          "type": "row",
+          "props": {
+            "justify": "space-between",
+            "align": "center",
+            "layout": "toolbar"
+          },
+          "children": [
+            {
+              "id": "runtime-debug-title",
+              "type": "text",
+              "props": {
+                "text": "运行时协作调试",
+                "variant": "title"
+              }
+            },
+            {
+              "id": "runtime-debug-refresh",
+              "type": "button",
+              "props": {
+                "text": "刷新",
+                "type": "primary"
+              },
+              "actions": [
+                {
+                  "action_id": "command",
+                  "target": "tool",
+                  "input": {
+                    "action": "snapshot"
+                  },
+                  "statePath": "snapshot"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "runtime-debug-summary",
+          "type": "grid",
+          "props": {
+            "columns": 4
+          },
+          "children": [
+            {
+              "id": "runtime-debug-generated",
+              "type": "key_value",
+              "props": {
+                "title": "快照时间",
+                "columns": 1
+              },
+              "bindings": [
+                {
+                  "path": "items",
+                  "source": "state",
+                  "sourcePath": "snapshot.meta"
+                }
+              ]
+            },
+            {
+              "id": "runtime-debug-active",
+              "type": "key_value",
+              "props": {
+                "title": "运行摘要",
+                "columns": 1
+              },
+              "bindings": [
+                {
+                  "path": "items",
+                  "source": "state",
+                  "sourcePath": "snapshot.summary"
+                }
+              ]
+            },
+            {
+              "id": "runtime-debug-circuits",
+              "type": "key_value",
+              "props": {
+                "title": "熔断状态",
+                "columns": 1
+              },
+              "bindings": [
+                {
+                  "path": "items",
+                  "source": "state",
+                  "sourcePath": "snapshot.circuits"
+                }
+              ]
+            },
+            {
+              "id": "runtime-debug-reconciliation",
+              "type": "key_value",
+              "props": {
+                "title": "一致性巡检",
+                "columns": 1
+              },
+              "bindings": [
+                {
+                  "path": "items",
+                  "source": "state",
+                  "sourcePath": "snapshot.reconciliation"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "runtime-debug-interactions-card",
+          "type": "card",
+          "props": {
+            "title": "交互状态"
+          },
+          "children": [
+            {
+              "id": "runtime-debug-interactions",
+              "type": "table",
+              "props": {
+                "columns": [
+                  { "prop": "scope", "label": "Scope" },
+                  { "prop": "status", "label": "状态" },
+                  { "prop": "priority", "label": "优先级" },
+                  { "prop": "path", "label": "路径" },
+                  { "prop": "stateVersion", "label": "版本" },
+                  { "prop": "deadlineAt", "label": "截止时间" },
+                  { "prop": "cancelReason", "label": "取消原因" }
+                ]
+              },
+              "bindings": [
+                {
+                  "path": "data",
+                  "source": "state",
+                  "sourcePath": "snapshot.interactions"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "runtime-debug-queues-card",
+          "type": "card",
+          "props": {
+            "title": "预算与队列"
+          },
+          "children": [
+            {
+              "id": "runtime-debug-budgets",
+              "type": "table",
+              "props": {
+                "columns": [
+                  { "prop": "scope", "label": "Scope" },
+                  { "prop": "path", "label": "路径" },
+                  { "prop": "callsUsed", "label": "调用" },
+                  { "prop": "callsLimit", "label": "调用上限" },
+                  { "prop": "tokensUsed", "label": "Token" },
+                  { "prop": "tokensLimit", "label": "Token 上限" },
+                  { "prop": "queueMs", "label": "排队毫秒" }
+                ]
+              },
+              "bindings": [
+                {
+                  "path": "data",
+                  "source": "state",
+                  "sourcePath": "snapshot.budgets"
+                }
+              ]
+            },
+            {
+              "id": "runtime-debug-queue-table",
+              "type": "table",
+              "props": {
+                "columns": [
+                  { "prop": "name", "label": "队列" },
+                  { "prop": "priority", "label": "级别" },
+                  { "prop": "depth", "label": "深度" },
+                  { "prop": "oldestAgeMs", "label": "最老毫秒" },
+                  { "prop": "status", "label": "状态" }
+                ]
+              },
+              "bindings": [
+                {
+                  "path": "data",
+                  "source": "state",
+                  "sourcePath": "snapshot.queues"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "runtime-debug-deliveries-card",
+          "type": "card",
+          "props": {
+            "title": "投递与工具结果"
+          },
+          "children": [
+            {
+              "id": "runtime-debug-deliveries",
+              "type": "table",
+              "props": {
+                "columns": [
+                  { "prop": "channel", "label": "渠道" },
+                  { "prop": "leaseState", "label": "租约" },
+                  { "prop": "deliveryState", "label": "投递" },
+                  { "prop": "attempt", "label": "尝试" },
+                  { "prop": "updatedAt", "label": "更新时间" }
+                ]
+              },
+              "bindings": [
+                {
+                  "path": "data",
+                  "source": "state",
+                  "sourcePath": "snapshot.deliveries"
+                }
+              ]
+            },
+            {
+              "id": "runtime-debug-tools",
+              "type": "table",
+              "props": {
+                "columns": [
+                  { "prop": "tool", "label": "工具" },
+                  { "prop": "status", "label": "状态" },
+                  { "prop": "idempotencyKey", "label": "幂等键" },
+                  { "prop": "updatedAt", "label": "更新时间" }
+                ]
+              },
+              "bindings": [
+                {
+                  "path": "data",
+                  "source": "state",
+                  "sourcePath": "snapshot.tools"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

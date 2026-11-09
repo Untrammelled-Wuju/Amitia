@@ -28,16 +28,16 @@ func runInspect(args []string, output *Output) int {
 
 	data := map[string]any{
 		"archive":     archivePath,
-		"extensionId": pkg.Manifest.Extension.ID,
-		"name":        pkg.Manifest.Extension.Name.Default,
-		"version":     pkg.Manifest.Extension.Version,
-		"license":     pkg.Manifest.Extension.License,
-		"homepage":    pkg.Manifest.Extension.Homepage,
-		"repository":  pkg.Manifest.Extension.Repository,
+		"extensionId": pkg.Manifest.Plugin.ID,
+		"name":        pkg.Manifest.Plugin.Name.Default,
+		"version":     pkg.Manifest.Plugin.Version,
+		"license":     pkg.Manifest.Plugin.License,
+		"homepage":    pkg.Manifest.Plugin.Homepage,
+		"repository":  pkg.Manifest.Plugin.Repository,
 		"publisher": map[string]any{
-			"id":          pkg.Manifest.Publisher.ID,
-			"displayName": pkg.Manifest.Publisher.DisplayName,
-			"trustLevel":  pkg.Manifest.Publisher.TrustLevel,
+			"id":          pkg.Manifest.Plugin.Publisher.ID,
+			"displayName": pkg.Manifest.Plugin.Publisher.DisplayName,
+			"trustLevel":  pkg.Manifest.Plugin.Publisher.TrustLevel,
 		},
 		"moduleCount": len(pkg.Manifest.Modules),
 		"fileCount":   len(pkg.Integrity.Files),
@@ -67,12 +67,12 @@ func runInspect(args []string, output *Output) int {
 		for _, mod := range pkg.Manifest.Modules {
 			modData := map[string]any{
 				"id":   mod.ID,
-				"type": mod.Type,
+				"type": mod.EffectiveType(),
 				"name": mod.Name.Default,
 			}
 			if mod.Runtime != nil {
-				modData["runtime"] = mod.Runtime.Type
-				modData["entryPoint"] = mod.Runtime.EntryPoint
+				modData["runtime"] = mod.Runtime.Adapter
+				modData["entryPoint"] = mod.Runtime.Entry
 			}
 			if len(mod.Contributions) > 0 {
 				var contribs []string

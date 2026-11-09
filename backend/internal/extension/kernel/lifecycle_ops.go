@@ -42,6 +42,7 @@ type enableTransaction struct {
 	extEnablementCommitted     bool
 	modulesCommitted           int
 	contributionsActivated     bool
+	servicesActivated          bool
 	providerInstancesActivated bool
 	providerInstanceIDs        []capability.ProviderInstanceID
 	uiRegistered               bool
@@ -88,6 +89,9 @@ func (r *Runtime) enable(ctx context.Context, extensionID string, force bool) er
 	gameHostOwnedModules, err := r.gameHostOwnedRuntimeModules(ctx, extID)
 	if err != nil {
 		return fmt.Errorf("kernel: resolve game runtime ownership: %w", err)
+	}
+	if err := r.validateInstalledPluginServiceChange(extID, true); err != nil {
+		return fmt.Errorf("kernel: validate plugin service activation: %w", err)
 	}
 
 	moduleSnapshots := make([]moduleEnablementSnapshot, 0, len(modules))
@@ -287,6 +291,16 @@ func (r *Runtime) enable(ctx context.Context, extensionID string, force bool) er
 	}
 	r.logEnableStep(operationID, extensionID, "activate_contributions", "succeeded", nil)
 	r.persistLifecycleStep(ctx, operationID, "activate_contributions", LifecycleStepSucceeded, nil)
+	if err := r.setInstalledPluginServices(extID, true); err != nil {
+		tx.rollback(ctx)
+		r.logEnableStep(operationID, extensionID, "activate_services", "failed", err)
+		r.persistLifecycleStep(ctx, operationID, "activate_services", LifecycleStepFailed, err)
+		r.updateLifecycleOperationStatus(ctx, operationID, LifecycleOperationCompensating, "activate_services", err)
+		return fmt.Errorf("kernel: activate plugin services: %w", err)
+	}
+	tx.servicesActivated = true
+	r.logEnableStep(operationID, extensionID, "activate_services", "succeeded", nil)
+	r.persistLifecycleStep(ctx, operationID, "activate_services", LifecycleStepSucceeded, nil)
 
 	if r.container.ProviderInstanceReconciler != nil && r.container.DefinitionRepository != nil {
 		def, defErr := r.container.DefinitionRepository.GetExtension(ctx, extID, inst.InstalledVersion)
@@ -430,6 +444,14 @@ func (tx *enableTransaction) rollback(ctx context.Context) {
 			tx.saveCompensationWithError(ctx, "activate_contributions", "deactivate_contributions", err)
 		} else {
 			tx.saveCompensation(ctx, "activate_contributions", "deactivate_contributions")
+		}
+	}
+	if tx.servicesActivated {
+		if err := tx.runtime.setInstalledPluginServices(tx.extID, false); err != nil {
+			rollbackErrs = append(rollbackErrs, fmt.Errorf("deactivate plugin services: %w", err))
+			tx.saveCompensationWithError(ctx, "activate_services", "deactivate_services", err)
+		} else {
+			tx.saveCompensation(ctx, "activate_services", "deactivate_services")
 		}
 	}
 
@@ -707,6 +729,9 @@ func (r *Runtime) Disable(ctx context.Context, extensionID string) error {
 	if err != nil {
 		return fmt.Errorf("kernel: resolve game runtime ownership: %w", err)
 	}
+	if err := r.validateInstalledPluginServiceChange(extID, false); err != nil {
+		return fmt.Errorf("kernel: validate plugin service deactivation: %w", err)
+	}
 
 	extSubject := enablement.StateSubject{Kind: enablement.SubjectExtension, ID: extensionID}
 	var disableErrs []error
@@ -766,6 +791,9 @@ func (r *Runtime) Disable(ctx context.Context, extensionID string) error {
 			}
 			return fmt.Errorf("kernel: deactivate contributions: %w", err)
 		}
+	}
+	if err := r.setInstalledPluginServices(extID, false); err != nil {
+		disableErrs = append(disableErrs, fmt.Errorf("deactivate plugin services: %w", err))
 	}
 
 	if r.container.DesktopPetPluginBoundary != nil {
@@ -832,6 +860,11 @@ func (r *Runtime) Uninstall(ctx context.Context, extensionID string) error {
 	if ownershipErr != nil {
 		return fmt.Errorf("kernel: resolve game runtime ownership: %w", ownershipErr)
 	}
+	if err == nil {
+		if err := r.validateInstalledPluginServiceRemoval(extID); err != nil {
+			return fmt.Errorf("kernel: validate plugin service removal: %w", err)
+		}
+	}
 	if r.container.GameHost != nil {
 		if err := r.container.GameHost.QuiesceExtension(ctx, extensionID); err != nil {
 			return fmt.Errorf("kernel: quiesce game runtime before uninstall: %w", err)
@@ -883,6 +916,20 @@ func (r *Runtime) Uninstall(ctx context.Context, extensionID string) error {
 			}
 			return fmt.Errorf("kernel: uninstall contributions: %w", err)
 		}
+	}
+	if err := r.removeInstalledPluginServices(extID); err != nil {
+		if inst.InstallationID != "" {
+			inst.InstallationState = domain.InstallationStateUninstallFailed
+			inst.EnablementState = domain.EnablementRequiresRecovery
+			inst.UpdatedAt = time.Now().UTC()
+			if putErr := r.container.InstallationRepository.PutInstallation(ctx, inst); putErr != nil {
+				log.Printf("[uninstall-tx] failed to persist uninstall_failed state for %s: %v", extensionID, putErr)
+			}
+		}
+		return fmt.Errorf("kernel: uninstall plugin services: %w", err)
+	}
+	if err := r.removeInstalledAdapterProviders(extID); err != nil {
+		return fmt.Errorf("kernel: uninstall adapter providers: %w", err)
 	}
 
 	if r.container.ExtensionProviderReconciler != nil {

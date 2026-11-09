@@ -2,7 +2,6 @@ package kernel
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -12,7 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/extension/kernel/dev_mode"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
-	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
+	"github.com/u-ai/backend/internal/extension/kernel/plugincontract"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	"github.com/u-ai/backend/internal/extension/kernel/update"
 	amitialog "log"
@@ -67,21 +66,24 @@ func (r *ProductionCandidateRunner) StartCandidate(ctx context.Context, id dev_m
 		}
 	}
 
-	var manifest manifest_v1.Manifest
-	if err := json.Unmarshal(manifestData, &manifest); err != nil {
+	manifest, err := plugincontract.Parse(manifestData)
+	if err != nil {
 		return "", fmt.Errorf("candidate_runner: parse manifest: %w", err)
 	}
+	if report := manifest.Validate(); report.HasErrors() {
+		return "", fmt.Errorf("candidate_runner: invalid manifest: %+v", report.Issues)
+	}
 
-	extID := domain.ExtensionID(manifest.Extension.ID)
+	extID := domain.ExtensionID(manifest.Plugin.ID)
 	if extID == "" {
-		return "", fmt.Errorf("candidate_runner: manifest missing extension.id")
+		return "", fmt.Errorf("candidate_runner: manifest missing plugin.id")
 	}
 
 	defHash := rev.ManifestHash
 	if defHash == "" {
 		defHash = rev.SourceHash
 	}
-	gen := r.generationMgr.Prepare(ctx, string(extID), manifest.Extension.Version, defHash)
+	gen := r.generationMgr.Prepare(ctx, string(extID), manifest.Plugin.Version, defHash)
 	if err := r.generationMgr.Transition(ctx, string(extID), gen.GenerationID, update.GenerationStateValidated); err != nil {
 		return "", fmt.Errorf("candidate_runner: transition to validated: %w", err)
 	}
@@ -92,10 +94,10 @@ func (r *ProductionCandidateRunner) StartCandidate(ctx context.Context, id dev_m
 	for _, mod := range manifest.Modules {
 		modID := domain.ModuleID(mod.ID)
 
-		if mod.Runtime != nil && mod.Runtime.Type != "" && mod.Runtime.Type != "static" {
+		if mod.Runtime != nil && mod.Runtime.Adapter != "" && mod.Runtime.Adapter != "static" {
 			spec := r.buildInstanceSpec(extID, modID, mod, gen.Generation)
 			result := r.supervisor.Reconcile(ctx, runtime_supervisor.ReconcileRequest{
-				DefinitionID: runtime_supervisor.BuildRuntimeDefinitionID(string(extID), string(modID), domain.RuntimeType(mod.Runtime.Type)),
+				DefinitionID: runtime_supervisor.BuildRuntimeDefinitionID(string(extID), string(modID), domain.RuntimeType(mod.Runtime.Adapter)),
 				Desired:      runtime_supervisor.DesiredRunning,
 				Spec:         spec,
 			})
@@ -404,24 +406,24 @@ func (r *ProductionCandidateRunner) rollbackCandidate(ctx context.Context, extID
 	}
 }
 
-func (r *ProductionCandidateRunner) buildInstanceSpec(extID domain.ExtensionID, modID domain.ModuleID, mod manifest_v1.ModuleMeta, genNum int) runtime_supervisor.InstanceSpec {
+func (r *ProductionCandidateRunner) buildInstanceSpec(extID domain.ExtensionID, modID domain.ModuleID, mod plugincontract.Module, genNum int) runtime_supervisor.InstanceSpec {
 	spec := runtime_supervisor.InstanceSpec{
-		DefinitionID:  runtime_supervisor.BuildRuntimeDefinitionID(string(extID), string(modID), domain.RuntimeType(mod.Runtime.Type)),
+		DefinitionID:  runtime_supervisor.BuildRuntimeDefinitionID(string(extID), string(modID), domain.RuntimeType(mod.Runtime.Adapter)),
 		ExtensionID:   extID,
 		ModuleID:      modID,
-		RuntimeType:   domain.RuntimeType(mod.Runtime.Type),
+		RuntimeType:   domain.RuntimeType(mod.Runtime.Adapter),
 		Generation:    int64(genNum),
 		Strategy:      runtime_supervisor.StrategySingletonPerModule,
-		EntryPoint:    mod.Runtime.EntryPoint,
+		EntryPoint:    mod.Runtime.Entry,
 		WorkerCount:   mod.Runtime.WorkerCount,
-		Env:           mod.Runtime.Env,
+		Env:           mod.Runtime.Environment,
 		Permissions:   mod.Runtime.Permissions,
 		Capabilities:  mod.Runtime.Capabilities,
 		Restart:       runtime_supervisor.RestartOnCrash,
 		MaxRestarts:   3,
 		RestartWindow: 60 * time.Second,
 		Limits: runtime_supervisor.ResourceLimits{
-			MaxMemoryBytes:     mod.Runtime.Memory,
+			MaxMemoryBytes:     mod.Runtime.MemoryBytes,
 			MaxExecutionTime:   0,
 			MaxConcurrentCalls: 10,
 			MaxQueueDepth:      64,

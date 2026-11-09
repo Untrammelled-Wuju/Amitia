@@ -321,7 +321,7 @@ function ensureCoreBinaries(dataDir: string): void {
 
 function ensureBundledPlugins(dataDir: string): void {
   const source = isDevMode()
-    ? path.resolve(getInstallDir(), "..", "plugin", "plugin-market")
+    ? path.resolve(getInstallDir(), "..", "plugin")
     : path.join(getCoreResourcesPath(), "bundled-plugins");
   if (!fs.existsSync(source)) {
     throw new Error(`默认插件目录不存在: ${source}`);

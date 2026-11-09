@@ -35,6 +35,7 @@ type ChatManagementRequest struct {
 	Channels            []string                `json:"channels,omitempty"`
 	Sources             []string                `json:"sources,omitempty"`
 	IncludeMemories     bool                    `json:"includeMemories"`
+	ArchivedOnly        bool                    `json:"archivedOnly,omitempty"`
 	PreviewID           string                  `json:"previewId,omitempty"`
 	ConfirmText         string                  `json:"confirmText,omitempty"`
 }

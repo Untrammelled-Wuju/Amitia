@@ -28,6 +28,7 @@ export interface UIContributionSummary {
   title: string;
   description?: string;
   icon?: string;
+  chrome?: string;
   ordering: number;
   priority?: number;
   /** Stable DSH-style list cell identity for server/declarative entries. */

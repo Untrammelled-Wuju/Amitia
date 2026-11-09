@@ -482,6 +482,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		log.Error("failed to initialize kernel container:", err)
 		panic("failed to initialize kernel container")
 	}
+	if kernelContainer.Workspace != nil {
+		kernelContainer.Workspace.SetGitHandler(workspaceGitHandler)
+	}
 	kernelContainer.ChannelSandbox = newChannelSandboxPolicySource(channelsandbox.NewService(ctx.DB, channelSandboxDataDir()))
 	kernelChatAppender.resourceLinks = kernelContainer.ResourceLinks
 	extensionRuntime.Kernel.SetContainer(kernelContainer)
@@ -494,8 +497,12 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			}
 		}
 	}
-	if err := kernel.ProvisionBundledPlugins(context.Background(), extensionRuntime.Kernel, bundledPluginsDir, spaceidentity.DefaultSpaceID()); err != nil {
+	bundledPluginIssues, err := kernel.ProvisionBundledPlugins(context.Background(), extensionRuntime.Kernel, bundledPluginsDir, spaceidentity.DefaultSpaceID())
+	if err != nil {
 		return nil, fmt.Errorf("provision bundled plugins: %w", err)
+	}
+	for _, issue := range bundledPluginIssues {
+		log.Warn("bundled plugin skipped: ", issue.Path, ": ", issue.Error)
 	}
 	wireConversationEventDurableStore(kernelContainer.EventService)
 	mcpRuntime, mcpRuntimeErr = mcpservice.NewRuntime(
@@ -733,6 +740,10 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		entry.SetExecutionService(kernelContainer.ExecutionService)
 	}
 	reconciliationEngine := mindruntime.NewReconciliationEngine(mindruntime.DefaultReconciliationConfig())
+	if kernelContainer != nil && kernelContainer.RuntimeObservability != nil {
+		kernelContainer.RuntimeObservability.SetDB(ctx.DB)
+		kernelContainer.RuntimeObservability.SetReconciliation(reconciliationEngine)
+	}
 	if err := mindruntime.RegisterRuntimeReconciliationCheckers(reconciliationEngine, ctx.DB); err != nil {
 		log.Warn("reconciliation checkers registration warning: ", err)
 	}

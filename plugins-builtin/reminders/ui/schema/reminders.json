@@ -1,0 +1,693 @@
+{
+  "schemaVersion": "schema-ui/1",
+  "type": "document",
+  "title": "提醒与主动任务",
+  "lifecycle": {
+    "onMount": [
+      {
+        "action_id": "command",
+        "target": "tool",
+        "input": {
+          "action": "characters",
+          "payload": {}
+        },
+        "statePath": "characters"
+      },
+      {
+        "action_id": "command",
+        "target": "tool",
+        "input": {
+          "action": "overview",
+          "payload": {
+            "kind": "user_reminder"
+          }
+        },
+        "statePath": "overview"
+      }
+    ],
+    "onRefresh": [
+      {
+        "action_id": "command",
+        "target": "tool",
+        "input": {
+          "action": "overview",
+          "payload": {
+            "kind": "$form.taskKind"
+          }
+        },
+        "statePath": "overview"
+      }
+    ],
+    "refreshIntervalMs": 5000
+  },
+  "actions": [
+    {
+      "actionId": "command",
+      "target": "tool"
+    },
+    {
+      "actionId": "load-edit-task",
+      "target": "local"
+    }
+  ],
+  "children": [
+    {
+      "id": "reminders-page",
+      "type": "page",
+      "children": [
+        {
+          "id": "reminders-kind-toolbar",
+          "type": "grid",
+          "props": {
+            "columnsTemplate": "minmax(180px, 220px) auto",
+            "gap": "10px"
+          },
+          "children": [
+            {
+              "id": "reminders-kind",
+              "type": "select",
+              "props": {
+                "label": "任务类型",
+                "options": [
+                  {
+                    "label": "定时提醒",
+                    "value": "user_reminder"
+                  },
+                  {
+                    "label": "主动消息",
+                    "value": "proactive_task"
+                  }
+                ]
+              },
+              "bindings": [
+                {
+                  "path": "taskKind",
+                  "source": "form",
+                  "default": "user_reminder"
+                }
+              ]
+            },
+            {
+              "id": "reminders-refresh",
+              "type": "button",
+              "props": {
+                "text": "刷新任务",
+                "type": "primary"
+              },
+              "actions": [
+                {
+                  "action_id": "command",
+                  "target": "tool",
+                  "input": {
+                    "action": "overview",
+                    "payload": {
+                      "kind": "$form.taskKind"
+                    }
+                  },
+                  "statePath": "overview"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "reminders-status",
+          "type": "key_value",
+          "props": {
+            "title": "调度概览",
+            "columns": 2
+          },
+          "bindings": [
+            {
+              "path": "items",
+              "source": "state",
+              "sourcePath": "overview.status"
+            }
+          ]
+        },
+        {
+          "id": "reminders-queue",
+          "type": "key_value",
+          "props": {
+            "title": "待执行队列",
+            "columns": 2
+          },
+          "bindings": [
+            {
+              "path": "items",
+              "source": "state",
+              "sourcePath": "overview.queue"
+            }
+          ]
+        },
+        {
+          "id": "reminders-task-section",
+          "type": "section",
+          "props": {
+            "title": "任务"
+          },
+          "children": [
+            {
+              "id": "reminders-task-list",
+              "type": "gallery",
+              "props": {
+                "variant": "cards",
+                "titleField": "title",
+                "subtitleField": "localRemindAt",
+                "summaryField": "content",
+                "statusField": "state",
+                "minItemWidth": 280,
+                "emptyText": "暂无任务",
+                "showSubtitle": true,
+                "showCount": false,
+                "itemActions": [
+                  {
+                    "id": "preview",
+                    "action_id": "command",
+                    "label": "预览",
+                    "target": "tool",
+                    "input": {
+                      "action": "preview",
+                      "payload": {
+                        "kind": "$form.taskKind",
+                        "id": "$item.id"
+                      }
+                    },
+                    "statePath": "preview"
+                  },
+                  {
+                    "id": "execute",
+                    "action_id": "command",
+                    "label": "立即执行",
+                    "target": "tool",
+                    "visibleWhen": [
+                      {
+                        "field": "enabled",
+                        "operator": "==",
+                        "value": true
+                      }
+                    ],
+                    "input": {
+                      "action": "execute",
+                      "payload": {
+                        "kind": "$form.taskKind",
+                        "id": "$item.id",
+                        "generation": "$item.generation"
+                      }
+                    },
+                    "confirmation": "确认立即执行这项任务？",
+                    "statePath": "taskAction",
+                    "followUpActions": [
+                      {
+                        "action_id": "command",
+                        "target": "tool",
+                        "input": {
+                          "action": "overview",
+                          "payload": {
+                            "kind": "$form.taskKind"
+                          }
+                        },
+                        "statePath": "overview"
+                      }
+                    ]
+                  },
+                  {
+                    "id": "pause",
+                    "action_id": "command",
+                    "label": "暂停",
+                    "target": "tool",
+                    "visibleWhen": [
+                      {
+                        "field": "paused",
+                        "operator": "!=",
+                        "value": true
+                      }
+                    ],
+                    "input": {
+                      "action": "pause",
+                      "payload": {
+                        "kind": "$form.taskKind",
+                        "id": "$item.id",
+                        "generation": "$item.generation"
+                      }
+                    },
+                    "statePath": "taskAction"
+                  },
+                  {
+                    "id": "resume",
+                    "action_id": "command",
+                    "label": "恢复",
+                    "target": "tool",
+                    "visibleWhen": [
+                      {
+                        "field": "paused",
+                        "operator": "==",
+                        "value": true
+                      }
+                    ],
+                    "input": {
+                      "action": "resume",
+                      "payload": {
+                        "kind": "$form.taskKind",
+                        "id": "$item.id",
+                        "generation": "$item.generation"
+                      }
+                    },
+                    "statePath": "taskAction"
+                  },
+                  {
+                    "id": "edit",
+                    "action_id": "load-edit-task",
+                    "label": "载入编辑",
+                    "target": "local",
+                    "formPath": "editRows",
+                    "input": [
+                      "$item"
+                    ]
+                  },
+                  {
+                    "id": "cancel",
+                    "action_id": "command",
+                    "label": "取消",
+                    "type": "danger",
+                    "target": "tool",
+                    "confirmation": "取消后不再执行，已产生的历史会保留。",
+                    "input": {
+                      "action": "cancel",
+                      "payload": {
+                        "kind": "$form.taskKind",
+                        "id": "$item.id",
+                        "generation": "$item.generation"
+                      }
+                    },
+                    "statePath": "taskAction",
+                    "followUpActions": [
+                      {
+                        "action_id": "command",
+                        "target": "tool",
+                        "input": {
+                          "action": "overview",
+                          "payload": {
+                            "kind": "$form.taskKind"
+                          }
+                        },
+                        "statePath": "overview"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "bindings": [
+                {
+                  "path": "items",
+                  "source": "state",
+                  "sourcePath": "overview.list.items"
+                }
+              ]
+            },
+            {
+              "id": "reminders-preview",
+              "type": "key_value",
+              "props": {
+                "title": "任务预览",
+                "columns": 1
+              },
+              "bindings": [
+                {
+                  "path": "items",
+                  "source": "state",
+                  "sourcePath": "preview"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "reminders-create-section",
+          "type": "section",
+          "props": {
+            "title": "新建任务"
+          },
+          "children": [
+            {
+              "id": "reminders-title",
+              "type": "field",
+              "props": {
+                "label": "标题"
+              },
+              "bindings": [
+                {
+                  "path": "title",
+                  "source": "form",
+                  "default": ""
+                }
+              ]
+            },
+            {
+              "id": "reminders-content",
+              "type": "field",
+              "props": {
+                "label": "消息内容",
+                "variant": "textarea",
+                "rows": 3
+              },
+              "bindings": [
+                {
+                  "path": "content",
+                  "source": "form",
+                  "default": ""
+                }
+              ]
+            },
+            {
+              "id": "reminders-character",
+              "type": "select",
+              "props": {
+                "label": "所属角色",
+                "placeholder": "选择角色"
+              },
+              "bindings": [
+                {
+                  "path": "characterId",
+                  "source": "form",
+                  "default": ""
+                },
+                {
+                  "path": "options",
+                  "source": "state",
+                  "sourcePath": "characters"
+                }
+              ]
+            },
+            {
+              "id": "reminders-time",
+              "type": "field",
+              "props": {
+                "label": "执行时间",
+                "placeholder": "RFC3339，例如 2026-11-10T09:00:00+08:00"
+              },
+              "bindings": [
+                {
+                  "path": "remindAt",
+                  "source": "form",
+                  "default": ""
+                }
+              ]
+            },
+            {
+              "id": "reminders-timezone",
+              "type": "field",
+              "props": {
+                "label": "时区",
+                "placeholder": "Asia/Shanghai"
+              },
+              "bindings": [
+                {
+                  "path": "timezone",
+                  "source": "form",
+                  "default": "Asia/Shanghai"
+                }
+              ]
+            },
+            {
+              "id": "reminders-repeat",
+              "type": "select",
+              "props": {
+                "label": "重复",
+                "options": [
+                  {
+                    "label": "不重复",
+                    "value": "none"
+                  },
+                  {
+                    "label": "每天",
+                    "value": "daily"
+                  },
+                  {
+                    "label": "每周",
+                    "value": "weekly"
+                  },
+                  {
+                    "label": "每月",
+                    "value": "monthly"
+                  },
+                  {
+                    "label": "Cron",
+                    "value": "cron"
+                  }
+                ]
+              },
+              "bindings": [
+                {
+                  "path": "repeatRule",
+                  "source": "form",
+                  "default": "none"
+                }
+              ]
+            },
+            {
+              "id": "reminders-create",
+              "type": "button",
+              "props": {
+                "text": "创建任务",
+                "type": "primary"
+              },
+              "actions": [
+                {
+                  "action_id": "command",
+                  "target": "tool",
+                  "input": {
+                    "action": "create",
+                    "payload": {
+                      "kind": "$form.taskKind",
+                      "title": "$form.title",
+                      "content": "$form.content",
+                      "characterId": "$form.characterId",
+                      "remindAt": "$form.remindAt",
+                      "timezone": "$form.timezone",
+                      "repeatRule": "$form.repeatRule"
+                    }
+                  },
+                  "confirmation": "确认创建该任务？",
+                  "statePath": "createResult",
+                  "followUpActions": [
+                    {
+                      "action_id": "command",
+                      "target": "tool",
+                      "input": {
+                        "action": "overview",
+                        "payload": {
+                          "kind": "$form.taskKind"
+                        }
+                      },
+                      "statePath": "overview"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "reminders-edit-section",
+          "type": "section",
+          "props": {
+            "title": "编辑已载入任务"
+          },
+          "children": [
+            {
+              "id": "reminders-edit-table",
+              "type": "editable_table",
+              "props": {
+                "columns": [
+                  {
+                    "prop": "title",
+                    "label": "标题",
+                    "width": 180
+                  },
+                  {
+                    "prop": "content",
+                    "label": "内容"
+                  },
+                  {
+                    "prop": "remindAt",
+                    "label": "执行时间",
+                    "width": 220
+                  },
+                  {
+                    "prop": "repeatRule",
+                    "label": "重复",
+                    "width": 110
+                  }
+                ]
+              },
+              "bindings": [
+                {
+                  "path": "editRows",
+                  "source": "form",
+                  "default": []
+                }
+              ]
+            },
+            {
+              "id": "reminders-update",
+              "type": "button",
+              "props": {
+                "text": "保存任务",
+                "type": "primary"
+              },
+              "actions": [
+                {
+                  "action_id": "command",
+                  "target": "tool",
+                  "input": {
+                    "action": "update",
+                    "payload": {
+                      "kind": "$form.taskKind",
+                      "task": "$form.editRows.0"
+                    }
+                  },
+                  "confirmation": "确认保存任务修改？",
+                  "statePath": "updateResult",
+                  "followUpActions": [
+                    {
+                      "action_id": "command",
+                      "target": "tool",
+                      "input": {
+                        "action": "overview",
+                        "payload": {
+                          "kind": "$form.taskKind"
+                        }
+                      },
+                      "statePath": "overview"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "reminders-history-section",
+          "type": "section",
+          "props": {
+            "title": "执行历史"
+          },
+          "children": [
+            {
+              "id": "reminders-history-refresh",
+              "type": "button",
+              "props": {
+                "text": "刷新历史"
+              },
+              "actions": [
+                {
+                  "action_id": "command",
+                  "target": "tool",
+                  "input": {
+                    "action": "history",
+                    "payload": {
+                      "kind": "$form.taskKind",
+                      "page": 1,
+                      "pageSize": 50
+                    }
+                  },
+                  "statePath": "history"
+                }
+              ]
+            },
+            {
+              "id": "reminders-history",
+              "type": "table",
+              "props": {
+                "columns": [
+                  {
+                    "prop": "triggeredAt",
+                    "label": "时间",
+                    "width": 190
+                  },
+                  {
+                    "prop": "state",
+                    "label": "状态",
+                    "width": 110
+                  },
+                  {
+                    "prop": "messageId",
+                    "label": "消息",
+                    "width": 180
+                  },
+                  {
+                    "prop": "error",
+                    "label": "错误"
+                  }
+                ]
+              },
+              "bindings": [
+                {
+                  "path": "data",
+                  "source": "state",
+                  "sourcePath": "history.items"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "reminders-attention",
+          "type": "button",
+          "props": {
+            "text": "打开审批与待处理中心"
+          },
+          "actions": [
+            {
+              "action_id": "command",
+              "target": "tool",
+              "input": {
+                "action": "navigate",
+                "payload": {
+                  "route": "/attention"
+                }
+              },
+              "statePath": "navigation"
+            }
+          ]
+        },
+        {
+          "id": "reminders-continuity",
+          "type": "button",
+          "props": {
+            "text": "打开持续事项"
+          },
+          "actions": [
+            {
+              "action_id": "command",
+              "target": "tool",
+              "input": {
+                "action": "navigate",
+                "payload": {
+                  "route": "/continuity"
+                }
+              },
+              "statePath": "navigation"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "theme": {
+    "mode": "auto"
+  },
+  "accessibility": {
+    "enabled": true,
+    "keyboardNav": true,
+    "screenReader": true
+  },
+  "performanceBudget": {
+    "maxRenderTimeMs": 180,
+    "maxLayoutCount": 260,
+    "maxNodeCount": 260,
+    "maxDataFetchCount": 2,
+    "maxActionCount": 32
+  }
+}

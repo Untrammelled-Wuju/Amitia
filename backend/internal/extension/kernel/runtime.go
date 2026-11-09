@@ -18,7 +18,7 @@ import (
 
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
-	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
+	"github.com/u-ai/backend/internal/extension/kernel/plugincontract"
 )
 
 type InstalledExtension struct {
@@ -299,22 +299,25 @@ func (r *Runtime) Recover() error {
 		if readErr != nil {
 			continue
 		}
-		manifest, report, parseErr := manifest_v1.ParseValidated(data)
+		parsedManifest, parseErr := plugincontract.Parse(data)
 		if parseErr != nil {
 			continue
 		}
-		if report.HasErrors() {
+		if parsedManifest.Validate().HasErrors() {
 			continue
 		}
 		info, statErr := os.Stat(dir)
 		if statErr != nil {
 			continue
 		}
-		recovered[manifest.Extension.ID] = installedFromManifest(manifest, dir, info.ModTime())
+		recovered[parsedManifest.Plugin.ID] = installedFromManifest(*parsedManifest, dir, info.ModTime())
 	}
 	r.mu.Lock()
 	r.installed = recovered
 	r.mu.Unlock()
+	if err := r.rebuildPluginServiceCatalog(); err != nil {
+		return fmt.Errorf("kernel: rebuild plugin service catalog: %w", err)
+	}
 	return nil
 }
 
@@ -335,16 +338,16 @@ func (r *Runtime) Install(ctx context.Context, archivePath string) (InstalledExt
 		return InstalledExtension{}, err
 	}
 	if report := pkg.Manifest.Validate(); report.HasErrors() {
-		data, _ := json.Marshal(report.Errors)
+		data, _ := json.Marshal(report.Issues)
 		return InstalledExtension{}, fmt.Errorf("manifest validation failed: %s", data)
 	}
-	name := safeDirectoryName(pkg.Manifest.Extension.ID)
+	name := safeDirectoryName(pkg.Manifest.Plugin.ID)
 	staging, err := os.MkdirTemp(r.root, ".install-"+name+"-")
 	if err != nil {
 		return InstalledExtension{}, err
 	}
 	defer os.RemoveAll(staging)
-	result := r.installer.Install(ctx, amitiax.InstallRequest{ArchivePath: archivePath, TargetDir: staging, ExtensionID: domain.ExtensionID(pkg.Manifest.Extension.ID)})
+	result := r.installer.Install(ctx, amitiax.InstallRequest{ArchivePath: archivePath, TargetDir: staging, ExtensionID: domain.ExtensionID(pkg.Manifest.Plugin.ID)})
 	if result.Status != amitiax.InstallSucceeded {
 		return InstalledExtension{}, fmt.Errorf("installation failed: %v", result.Errors)
 	}
@@ -375,14 +378,14 @@ func (r *Runtime) Install(ctx context.Context, archivePath string) (InstalledExt
 	r.mu.Unlock()
 
 	if r.container != nil && r.container.PermissionRepository != nil {
-		if err := r.syncInstalledPackagePermissions(ctx, domain.ExtensionID(pkg.Manifest.Extension.ID), pkg.Manifest.Permissions); err != nil {
+		if err := r.syncInstalledPackagePermissions(ctx, domain.ExtensionID(pkg.Manifest.Plugin.ID), pkg.Manifest.Permissions); err != nil {
 			return InstalledExtension{}, err
 		}
 	}
 
 	if r.container != nil && r.container.DesktopPetPluginBoundary != nil {
-		extID := domain.ExtensionID(pkg.Manifest.Extension.ID)
-		version := pkg.Manifest.Extension.Version
+		extID := domain.ExtensionID(pkg.Manifest.Plugin.ID)
+		version := pkg.Manifest.Plugin.Version
 		if err := r.container.DesktopPetPluginBoundary.HandleExtensionInstalled(ctx, extID, version, ""); err != nil {
 			log.Printf("[install] petx boundary error: %v", err)
 		}
@@ -405,8 +408,8 @@ func (r *Runtime) Update(ctx context.Context, archivePath string) (InstalledExte
 	return item, nil
 }
 
-func installedFromManifest(manifest manifest_v1.Manifest, path string, installedAt time.Time) InstalledExtension {
-	return InstalledExtension{ID: manifest.Extension.ID, Name: manifest.Extension.Name.Default, Version: manifest.Extension.Version, Publisher: manifest.Publisher.ID, Path: path, ModuleCount: len(manifest.Modules), InstalledAt: installedAt.UTC()}
+func installedFromManifest(manifest plugincontract.Manifest, path string, installedAt time.Time) InstalledExtension {
+	return InstalledExtension{ID: manifest.Plugin.ID, Name: manifest.Plugin.Name.Default, Version: manifest.Plugin.Version, Publisher: manifest.Plugin.Publisher.ID, Path: path, ModuleCount: len(manifest.Modules), InstalledAt: installedAt.UTC()}
 }
 
 func safeDirectoryName(id string) string {

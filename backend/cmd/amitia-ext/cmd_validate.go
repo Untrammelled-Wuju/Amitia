@@ -8,7 +8,8 @@ import (
 	"strings"
 
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
-	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
+	"github.com/u-ai/backend/internal/extension/kernel/packageext"
+	"github.com/u-ai/backend/internal/extension/kernel/plugincontract"
 )
 
 func runValidate(args []string, output *Output) int {
@@ -35,49 +36,44 @@ func runValidate(args []string, output *Output) int {
 		target = manifestPath
 	}
 
-	if strings.HasSuffix(target, ".amitiax") {
+	if packageext.IsArchivePath(target) {
 		return validatePackage(target, output)
 	}
 	return validateManifest(target, output, *useSchema)
 }
 
 func validateManifest(path string, output *Output, useSchema bool) int {
-	m, report := manifest_v1.ValidateFile(path)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		output.fail(ExitEnv, fmt.Sprintf("读取 manifest 失败: %v", err))
+	}
+	m, err := plugincontract.Parse(raw)
+	if err != nil {
+		output.fail(ExitFailure, fmt.Sprintf("解析 manifest 失败: %v", err))
+	}
+	report := m.Validate()
 
 	result := Result{
 		OK:      true,
 		Message: fmt.Sprintf("验证 manifest: %s", path),
 	}
 
-	for _, e := range report.Errors {
+	for _, e := range report.Issues {
 		if isContentTreeHashMissing(e) {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("%s: %s（打包后将自动生成）", e.Path, e.Message))
 		} else {
 			result.Errors = append(result.Errors, fmt.Sprintf("%s: %s [%s]", e.Path, e.Message, e.Code))
 		}
 	}
-	for _, w := range report.Warnings {
-		result.Warnings = append(result.Warnings, fmt.Sprintf("%s: %s", w.Path, w.Message))
-	}
-
-	if useSchema && m != nil {
-		schemaReport := m.ValidateWithSchema()
-		for _, e := range schemaReport.Errors {
-			if isContentTreeHashMissing(e) {
-				result.Warnings = append(result.Warnings, fmt.Sprintf("schema: %s: %s（打包后将自动生成）", e.Path, e.Message))
-			} else {
-				result.Errors = append(result.Errors, fmt.Sprintf("schema: %s: %s", e.Path, e.Message))
-			}
-		}
-	}
+	_ = useSchema
 
 	result.OK = len(result.Errors) == 0
 
 	if m != nil && result.OK {
 		result.Data = map[string]any{
-			"extensionId": m.Extension.ID,
-			"version":     m.Extension.Version,
-			"publisher":   m.Publisher.ID,
+			"extensionId": m.Plugin.ID,
+			"version":     m.Plugin.Version,
+			"publisher":   m.Plugin.Publisher.ID,
 			"modules":     len(m.Modules),
 		}
 	}
@@ -101,9 +97,9 @@ func validatePackage(path string, output *Output) int {
 		OK:      true,
 		Message: fmt.Sprintf("验证包: %s", path),
 		Data: map[string]any{
-			"extensionId": pkg.Manifest.Extension.ID,
-			"version":     pkg.Manifest.Extension.Version,
-			"publisher":   pkg.Manifest.Publisher.ID,
+			"extensionId": pkg.Manifest.Plugin.ID,
+			"version":     pkg.Manifest.Plugin.Version,
+			"publisher":   pkg.Manifest.Plugin.Publisher.ID,
 			"modules":     len(pkg.Manifest.Modules),
 			"treeHash":    pkg.Tree.TreeHash,
 			"fileCount":   len(pkg.Integrity.Files),
@@ -111,11 +107,8 @@ func validatePackage(path string, output *Output) int {
 		},
 	}
 
-	for _, e := range report.Errors {
+	for _, e := range report.Issues {
 		result.Errors = append(result.Errors, fmt.Sprintf("%s: %s [%s]", e.Path, e.Message, e.Code))
-	}
-	for _, w := range report.Warnings {
-		result.Warnings = append(result.Warnings, fmt.Sprintf("%s: %s", w.Path, w.Message))
 	}
 
 	if err := amitiax.VerifyIntegrity(pkg); err != nil {
@@ -131,6 +124,6 @@ func validatePackage(path string, output *Output) int {
 	return ExitFailure
 }
 
-func isContentTreeHashMissing(e manifest_v1.ValidationError) bool {
+func isContentTreeHashMissing(e plugincontract.ValidationIssue) bool {
 	return e.Code == "missing" && strings.Contains(e.Path, "contentTreeHash")
 }

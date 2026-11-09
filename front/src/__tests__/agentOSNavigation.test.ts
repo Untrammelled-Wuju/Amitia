@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { appSection, resolveAppSection } from "@/navigation/appSections";
 import { builtinBusinessRoutes } from "@/router/builtinRoutes";
 
@@ -14,9 +16,11 @@ describe("Agent page removal", () => {
     expect(paths).not.toContain("/extensions/market");
     expect(paths).not.toContain("/marketplace");
     expect(appSection("extensions")?.entries.map((entry) => entry.route)).not.toContain("/extensions/market");
-    expect(builtinBusinessRoutes.find((route) => route.path === "/extensions")?.props).toEqual({
-      title: "扩展中心",
-      description: "管理扩展包、工作流、MCP 服务与 Agent Skills。",
-    });
+    expect(builtinBusinessRoutes.some((route) => route.path === "/extensions")).toBe(false);
+    const manifest = JSON.parse(readFileSync(resolve(__dirname, "../../../plugins-builtin/plugin-market/amitia-extension.json"), "utf8"));
+    const routes = manifest.modules.flatMap((module: any) => module.contributions)
+      .flatMap((contribution: any) => contribution.spec?.metadata?.routes ?? [])
+      .map((item: any) => item.path);
+    expect(routes).toEqual(expect.arrayContaining(["/extensions", "/kernel"]));
   });
 });

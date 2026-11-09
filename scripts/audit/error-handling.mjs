@@ -9,6 +9,7 @@ const roots = [
   "admin-system/src",
   "mobile_app/lib",
   "sdk",
+  "plugins-builtin",
   "plugins-code",
   "runtime/plugin-host/src",
   "runtime/task-host/src",

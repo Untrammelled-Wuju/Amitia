@@ -66,6 +66,17 @@ func (c *GitController) resolveRepoPath(workspaceURI string) (string, error) {
 	return root, err
 }
 
+func (c *GitController) resolveWritableRepoPath(workspaceURI string) (string, error) {
+	root, mount, err := c.resolveRepositoryPath(workspaceURI)
+	if err != nil {
+		return "", err
+	}
+	if mount.ReadOnly {
+		return "", workspace.ErrReadOnly
+	}
+	return root, nil
+}
+
 func parseMountIDFromURI(uri string) (workspace.WorkspaceID, error) {
 	if !strings.HasPrefix(uri, "amitia://workspace/@") {
 		return "", workspace.ErrInvalidURI
@@ -170,7 +181,7 @@ func (c *GitController) Log(ctx context.Context, req GitLogRequest) (*GitLogResu
 }
 
 func (c *GitController) Add(ctx context.Context, req GitAddRequest) (*GitAddResult, error) {
-	root, _, err := c.resolveRepositoryPath(req.WorkspaceURI)
+	root, err := c.resolveWritableRepoPath(req.WorkspaceURI)
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +224,7 @@ func (c *GitController) Add(ctx context.Context, req GitAddRequest) (*GitAddResu
 }
 
 func (c *GitController) Restore(ctx context.Context, req GitRestoreRequest) (*GitRestoreResult, error) {
-	root, err := c.resolveRepoPath(req.WorkspaceURI)
+	root, err := c.resolveWritableRepoPath(req.WorkspaceURI)
 	if err != nil {
 		return nil, err
 	}
@@ -244,7 +255,7 @@ func (c *GitController) Restore(ctx context.Context, req GitRestoreRequest) (*Gi
 }
 
 func (c *GitController) Commit(ctx context.Context, req GitCommitRequest) (*GitCommitResult, error) {
-	root, err := c.resolveRepoPath(req.WorkspaceURI)
+	root, err := c.resolveWritableRepoPath(req.WorkspaceURI)
 	if err != nil {
 		return nil, err
 	}
@@ -271,7 +282,7 @@ func (c *GitController) ListBranches(ctx context.Context, workspaceURI string) (
 }
 
 func (c *GitController) Checkout(ctx context.Context, req GitCheckoutRequest) (*GitCheckoutResult, error) {
-	root, err := c.resolveRepoPath(req.WorkspaceURI)
+	root, err := c.resolveWritableRepoPath(req.WorkspaceURI)
 	if err != nil {
 		return nil, err
 	}
@@ -297,7 +308,7 @@ func (c *GitController) Checkout(ctx context.Context, req GitCheckoutRequest) (*
 }
 
 func (c *GitController) Fetch(ctx context.Context, req GitFetchRequest) (*GitFetchResult, error) {
-	root, err := c.resolveRepoPath(req.WorkspaceURI)
+	root, err := c.resolveWritableRepoPath(req.WorkspaceURI)
 	if err != nil {
 		return nil, err
 	}
@@ -310,7 +321,7 @@ func (c *GitController) Fetch(ctx context.Context, req GitFetchRequest) (*GitFet
 }
 
 func (c *GitController) Pull(ctx context.Context, req GitPullRequest) (*GitPullResult, error) {
-	root, err := c.resolveRepoPath(req.WorkspaceURI)
+	root, err := c.resolveWritableRepoPath(req.WorkspaceURI)
 	if err != nil {
 		return nil, err
 	}
@@ -331,7 +342,7 @@ func (c *GitController) Pull(ctx context.Context, req GitPullRequest) (*GitPullR
 }
 
 func (c *GitController) Push(ctx context.Context, req GitPushRequest) (*GitPushResult, error) {
-	root, err := c.resolveRepoPath(req.WorkspaceURI)
+	root, err := c.resolveWritableRepoPath(req.WorkspaceURI)
 	if err != nil {
 		return nil, err
 	}

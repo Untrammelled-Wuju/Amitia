@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import '../backend_transport/backend_service_api.dart';
+import '../backend_transport/errors/backend_transport_error.dart';
+import '../backend_transport/errors/backend_transport_error_code.dart';
 import '../backend_transport/providers/backend_transport_providers.dart';
 import '../ui_runtime/ui_runtime_invalidation.dart';
 import 'space_profile_service.dart';
@@ -270,6 +272,19 @@ final deviceMeshServiceProvider = Provider<DeviceMeshService>(
   (ref) => DeviceMeshService(_getDynamicServiceApi(ref)),
 );
 
+bool retryableSharedCoreAccessError(Object error) {
+  return error is BackendTransportError &&
+      const {
+        BackendTransportErrorCode.connectionRefused,
+        BackendTransportErrorCode.connectionReset,
+        BackendTransportErrorCode.networkUnreachable,
+        BackendTransportErrorCode.requestTimeout,
+        BackendTransportErrorCode.serverError,
+        BackendTransportErrorCode.serviceUnavailable,
+        BackendTransportErrorCode.transportClosed,
+      }.contains(error.code);
+}
+
 final sharedCoreDataAccessProvider =
     FutureProvider.autoDispose<SharedCoreDataAccess>((ref) async {
       ref.watch(mobileDeploymentConfigProvider);
@@ -281,7 +296,24 @@ final sharedCoreDataAccessProvider =
       if (deployment.mode != MobileDeploymentMode.cloud) {
         return const SharedCoreDataAccess.local();
       }
-      final response = await ref.read(deviceMeshServiceProvider).coordination();
+      Map<String, dynamic>? response;
+      Object? lastError;
+      for (var attempt = 0; attempt < 2; attempt++) {
+        try {
+          response = await ref.read(deviceMeshServiceProvider).coordination();
+          break;
+        } catch (error) {
+          lastError = error;
+          if (attempt > 0 || !retryableSharedCoreAccessError(error)) rethrow;
+          await Future<void>.delayed(const Duration(milliseconds: 800));
+        }
+      }
+      if (response == null) {
+        Error.throwWithStackTrace(
+          lastError ?? StateError('统筹中心未返回数据权限'),
+          StackTrace.current,
+        );
+      }
       if (!identical(ref.read(rawBackendServiceApiProvider), api) ||
           ref.read(mobileDeploymentConfigProvider).mode !=
               MobileDeploymentMode.cloud ||

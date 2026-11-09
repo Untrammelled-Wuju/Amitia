@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { CliCommand, CliContext, CliCommandResult, CliReport } from "../types.js";
 import { EXIT_CODES } from "../exit-codes.js";
-import { validateManifest, type AmitiaxManifestV1 } from "../manifest.js";
+import { validateManifest, type PluginManifest } from "../manifest.js";
 
 export const validateCommand: CliCommand = {
   name: "validate",
@@ -32,10 +32,10 @@ export const validateCommand: CliCommand = {
     }
 
     const reports: CliReport[] = [];
-    let manifest: AmitiaxManifestV1 | null = null;
+    let manifest: PluginManifest | null = null;
     try {
       const raw = fs.readFileSync(manifestPath, "utf-8");
-      manifest = JSON.parse(raw) as AmitiaxManifestV1;
+      manifest = JSON.parse(raw) as PluginManifest;
     } catch (cause) {
       reports.push({
         ruleId: "manifest.parse",
@@ -77,20 +77,20 @@ export const validateCommand: CliCommand = {
         : `validation passed (${reports.length} informational)`,
       reports,
       data: {
-        manifest: manifest.extension.id,
-        version: manifest.extension.version,
+        manifest: manifest.plugin.id,
+        version: manifest.plugin.version,
         modules: manifest.modules.length,
       },
     };
   },
 };
 
-function validateEntryPaths(ctx: CliContext, manifest: AmitiaxManifestV1, manifestPath: string): CliReport[] {
+function validateEntryPaths(ctx: CliContext, manifest: PluginManifest, manifestPath: string): CliReport[] {
   const reports: CliReport[] = [];
   const baseDir = path.dirname(manifestPath);
   for (const module of manifest.modules ?? []) {
-    if (!module.runtime?.entryPoint) continue;
-    const entry = path.resolve(baseDir, "modules", module.id, module.runtime.entryPoint);
+    if (!module.runtime?.entry) continue;
+    const entry = path.resolve(baseDir, "modules", module.id, module.runtime.entry);
     if (!fs.existsSync(entry)) {
       reports.push({
         ruleId: "module.entry.missing",
@@ -103,7 +103,7 @@ function validateEntryPaths(ctx: CliContext, manifest: AmitiaxManifestV1, manife
   return reports;
 }
 
-function validatePermissions(manifest: AmitiaxManifestV1, manifestPath: string): CliReport[] {
+function validatePermissions(manifest: PluginManifest, manifestPath: string): CliReport[] {
   const reports: CliReport[] = [];
   const highRisk = ["desktop.shell", "filesystem.write", "network.request", "process.spawn"];
   for (const perm of manifest.permissions ?? []) {
@@ -119,7 +119,7 @@ function validatePermissions(manifest: AmitiaxManifestV1, manifestPath: string):
   return reports;
 }
 
-function validatePlatforms(manifest: AmitiaxManifestV1, manifestPath: string): CliReport[] {
+function validatePlatforms(manifest: PluginManifest, manifestPath: string): CliReport[] {
   const reports: CliReport[] = [];
   if (!manifest.compatibility?.platforms || manifest.compatibility.platforms.length === 0) {
     reports.push({
@@ -132,7 +132,7 @@ function validatePlatforms(manifest: AmitiaxManifestV1, manifestPath: string): C
   return reports;
 }
 
-function validateModules(manifest: AmitiaxManifestV1, manifestPath: string): CliReport[] {
+function validateModules(manifest: PluginManifest, manifestPath: string): CliReport[] {
   const reports: CliReport[] = [];
   const moduleIds = new Set<string>();
   for (const module of manifest.modules ?? []) {

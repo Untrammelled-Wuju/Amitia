@@ -1,49 +1,80 @@
 {
-	"manifestVersion": 1,
-	"extension": {
-		"id": "com.amitia.mismatch/signature-publisher-mismatch",
-		"name": {"default": "Signature Publisher Mismatch"},
-		"description": {"default": "Phase 10 E2E: extension where manifest publisher does not match the signature publisher, must fail install"},
-		"version": "1.0.0",
-		"metadata": {
-			"expectedSignatureStatus": "publisher_mismatch",
-			"expectedInstallStatus": "failed",
-			"signaturePublisher": "com.amitia.repair"
-		}
-	},
-	"publisher": {
-		"id": "com.amitia.mismatch",
-		"displayName": "Mismatched Publisher",
-		"trustLevel": "untrusted"
-	},
-	"modules": [
-		{
-			"id": "main",
-			"name": {"default": "Main"},
-			"type": "javascript",
-			"runtime": {"type": "javascript", "entryPoint": "index.js"},
-			"contributions": [
-				{
-					"id": "mismatch-tool",
-					"kind": "tool",
-					"name": {"default": "Mismatch Tool"},
-					"description": {"default": "Tool whose package publisher differs from manifest"},
-					"modelName": "mismatch_tool",
-					"inputSchema": {
-						"type": "object",
-						"properties": {
-							"input": {"type": "string"}
-						}
-					}
-				}
-			]
-		}
-	],
-	"permissions": [
-		{"name": "tool.invoke", "reason": "Execute tool", "required": true}
-	],
-	"integrity": {
-		"algorithm": "sha256",
-		"contentTreeHash": ""
-	}
+  "schemaVersion": 1,
+  "plugin": {
+    "id": "com.amitia.mismatch/signature-publisher-mismatch",
+    "name": {
+      "default": "Signature Publisher Mismatch"
+    },
+    "description": {
+      "default": "Phase 10 E2E: extension where manifest publisher does not match the signature publisher, must fail install"
+    },
+    "version": "1.0.0",
+    "metadata": {
+      "expectedSignatureStatus": "publisher_mismatch",
+      "expectedInstallStatus": "failed",
+      "signaturePublisher": "com.amitia.repair"
+    },
+    "publisher": {
+      "id": "com.amitia.mismatch",
+      "displayName": "Mismatched Publisher",
+      "trustLevel": "untrusted"
+    }
+  },
+  "compatibility": {
+    "minHostVersion": "0.1.0"
+  },
+  "modules": [
+    {
+      "id": "main",
+      "name": {
+        "default": "Main"
+      },
+      "runtime": {
+        "adapter": "javascript",
+        "entry": "index.js"
+      },
+      "dynamic": {
+        "allowedAdapters": [
+          "tool"
+        ],
+        "maxContributions": 1,
+        "maxTools": 1,
+        "maxRoutes": 0,
+        "maxServices": 0,
+        "allowUnregister": true
+      },
+      "contributions": [
+        {
+          "id": "mismatch-tool",
+          "kind": "tool",
+          "adapter": "tool",
+          "contractVersion": 1,
+          "name": {
+            "default": "Mismatch Tool"
+          },
+          "description": {
+            "default": "Tool whose package publisher differs from manifest"
+          }
+        }
+      ],
+      "placement": "device"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "tool.invoke",
+      "reason": "Execute tool",
+      "required": true
+    }
+  ],
+  "data": {
+    "schemaVersion": 1,
+    "backup": true,
+    "export": true,
+    "uninstall": "retain"
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "contentTreeHash": ""
+  }
 }

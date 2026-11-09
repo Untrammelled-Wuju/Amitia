@@ -1,51 +1,89 @@
 {
-	"manifestVersion": 1,
-	"extension": {
-		"id": "com.amitia.repair/event-basic",
-		"name": {"default": "Event Basic"},
-		"description": {"default": "Phase 10 E2E: basic event subscription that receives system.test events"},
-		"version": "1.0.0"
-	},
-	"publisher": {
-		"id": "com.amitia.repair",
-		"displayName": "Amitia Repair"
-	},
-	"modules": [
-		{
-			"id": "main",
-			"name": {"default": "Main"},
-			"type": "javascript",
-			"runtime": {"type": "javascript", "entryPoint": "index.js"},
-			"contributions": [
-				{
-					"id": "test-subscription",
-					"kind": "event_subscription",
-					"name": {"default": "Test Subscription"},
-					"description": {"default": "Subscribes to system.test events"},
-					"spec": {
-						"eventTypeId": "system.test",
-						"eventVersionRange": "^1",
-						"entry": "onEvent",
-						"deliveryPolicy": {
-							"timeout": "5s",
-							"maxInFlight": 4
-						},
-						"retryPolicy": {
-							"maxAttempts": 3,
-							"initialBackoff": "100ms",
-							"maxBackoff": "1s",
-							"multiplier": 2
-						}
-					}
-				}
-			]
-		}
-	],
-	"permissions": [
-		{"name": "event.subscribe", "reason": "Subscribe to system.test events", "required": true}
-	],
-	"integrity": {
-		"algorithm": "sha256",
-		"contentTreeHash": ""
-	}
+  "schemaVersion": 1,
+  "plugin": {
+    "id": "com.amitia.repair/event-basic",
+    "name": {
+      "default": "Event Basic"
+    },
+    "description": {
+      "default": "Phase 10 E2E: basic event subscription that receives system.test events"
+    },
+    "version": "1.0.0",
+    "publisher": {
+      "id": "com.amitia.repair",
+      "displayName": "Amitia Repair"
+    }
+  },
+  "compatibility": {
+    "minHostVersion": "0.1.0"
+  },
+  "modules": [
+    {
+      "id": "main",
+      "name": {
+        "default": "Main"
+      },
+      "runtime": {
+        "adapter": "javascript",
+        "entry": "index.js"
+      },
+      "dynamic": {
+        "allowedAdapters": [
+          "event"
+        ],
+        "maxContributions": 1,
+        "maxTools": 0,
+        "maxRoutes": 0,
+        "maxServices": 0,
+        "allowUnregister": true
+      },
+      "contributions": [
+        {
+          "id": "test-subscription",
+          "kind": "event_subscription",
+          "adapter": "event",
+          "contractVersion": 1,
+          "name": {
+            "default": "Test Subscription"
+          },
+          "description": {
+            "default": "Subscribes to system.test events"
+          },
+          "spec": {
+            "eventTypeId": "system.test",
+            "eventVersionRange": "^1",
+            "entry": "onEvent",
+            "deliveryPolicy": {
+              "timeout": "5s",
+              "maxInFlight": 4
+            },
+            "retryPolicy": {
+              "maxAttempts": 3,
+              "initialBackoff": "100ms",
+              "maxBackoff": "1s",
+              "multiplier": 2
+            }
+          }
+        }
+      ],
+      "placement": "device"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "event.subscribe",
+      "reason": "Subscribe to system.test events",
+      "required": true
+    }
+  ],
+  "data": {
+    "schemaVersion": 1,
+    "backup": true,
+    "export": true,
+    "uninstall": "retain"
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "contentTreeHash": ""
+  }
 }

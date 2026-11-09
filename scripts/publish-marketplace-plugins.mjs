@@ -59,9 +59,19 @@ async function request(path, { method = "GET", body, cookie, csrf } = {}) {
 
 function packagePaths() {
   const specs = [
-    ["plugins-code/plugin-market/amitia-extension.json", "plugin-market"],
+    ["plugins-builtin/plugin-market/amitia-extension.json", "plugin-market"],
     ["plugins-code/emote/amitia-extension.json", "Emote"],
     ["plugins-code/lifestyle/amitia-extension.json", "lifestyle"],
+    ["plugins-builtin/runtime-insights/amitia-extension.json", "runtime-insights"],
+    ["plugins-builtin/workspace/amitia-extension.json", "workspace"],
+    ["plugins-builtin/chat-import/amitia-extension.json", "chat-import"],
+    ["plugins-builtin/reminders/amitia-extension.json", "reminders"],
+    ["plugins-builtin/storage/amitia-extension.json", "storage"],
+    ["plugins-builtin/chat-logs/amitia-extension.json", "chat-logs"],
+    ["plugins-builtin/memory-hub/amitia-extension.json", "memory-hub"],
+    ["plugins-builtin/character-hub/amitia-extension.json", "character-hub"],
+    ["plugins-builtin/creative-workshop-hub/amitia-extension.json", "creative-workshop-hub"],
+    ["plugins-builtin/game-center-hub/amitia-extension.json", "game-center-hub"],
     ["plugins-code/agent-identities/browser-profile/amitia-extension.json", "agent-identities"],
     ["plugins-code/agent-identities/calendar/amitia-extension.json", "agent-identities"],
     ["plugins-code/agent-identities/email/amitia-extension.json", "agent-identities"],
@@ -73,16 +83,36 @@ function packagePaths() {
   ]
   return specs.map(([manifestPath, directory]) => {
     const manifest = JSON.parse(readFileSync(join(root, manifestPath), "utf8"))
-    const name = String(manifest.extension.id).replaceAll("/", ".")
+    const name = String(manifest.plugin.id).replaceAll("/", ".")
     const fileName = directory === "Emote"
-      ? `amitia-emote-${manifest.extension.version}.amitiax`
+      ? `amitia-emote-${manifest.plugin.version}.amitiax`
       : directory === "plugin-market"
-        ? `amitia-plugin-market-${manifest.extension.version}.amitiax`
+        ? `amitia-plugin-market-${manifest.plugin.version}.amitiax`
       : directory === "lifestyle"
-        ? `amitia-lifestyle-${manifest.extension.version}.amitiax`
+        ? `amitia-lifestyle-${manifest.plugin.version}.amitiax`
+      : directory === "runtime-insights"
+        ? `amitia-runtime-insights-${manifest.plugin.version}.amitiax`
+      : directory === "workspace"
+        ? `amitia-workspace-${manifest.plugin.version}.amitiax`
+      : directory === "chat-import"
+        ? `amitia-chat-import-${manifest.plugin.version}.amitiax`
+      : directory === "reminders"
+        ? `amitia-reminders-${manifest.plugin.version}.amitiax`
+      : directory === "storage"
+        ? `amitia-storage-${manifest.plugin.version}.amitiax`
+      : directory === "chat-logs"
+        ? `amitia-chat-logs-${manifest.plugin.version}.amitiax`
+      : directory === "memory-hub"
+        ? `amitia-memory-hub-${manifest.plugin.version}.amitiax`
+      : directory === "character-hub"
+        ? `amitia-character-hub-${manifest.plugin.version}.amitiax`
+      : directory === "creative-workshop-hub"
+        ? `amitia-creative-workshop-hub-${manifest.plugin.version}.amitiax`
+      : directory === "game-center-hub"
+        ? `amitia-game-center-hub-${manifest.plugin.version}.amitiax`
         : directory === "agent-identities"
-          ? `${basename(dirname(join(root, manifestPath)))}-${manifest.extension.version}.amitiax`
-          : `${name}-${manifest.extension.version}.amitiax`
+          ? `${basename(dirname(join(root, manifestPath)))}-${manifest.plugin.version}.amitiax`
+          : `${name}-${manifest.plugin.version}.amitiax`
     return directory ? join(root, "plugin", directory, fileName) : join(root, "plugin", fileName)
   })
 }
@@ -92,6 +122,7 @@ function categoryFor(extensionID) {
   if (extensionID.startsWith("com.amitia/channel-")) return "channels"
   if (extensionID === "com.amitia/lifestyle") return "lifestyle"
   if (extensionID === "com.amitia/plugin-market") return "developer"
+  if (extensionID === "com.amitia/runtime-insights") return "developer"
   return "productivity"
 }
 
@@ -115,7 +146,7 @@ async function main() {
     const data = readFileSync(path)
     const files = entries(data)
     const manifest = JSON.parse(files.get("manifest.json").toString("utf8"))
-    const extensionID = manifest.extension.id
+    const extensionID = manifest.plugin.id
     if (filter && extensionID !== filter) continue
     const category = categories.get(categoryFor(extensionID))
     if (!category) throw new Error(`marketplace category not found: ${categoryFor(extensionID)}`)
@@ -124,7 +155,7 @@ async function main() {
     form.append("sbom", new Blob([readFileSync(sbomPath)], { type: "application/json" }), basename(sbomPath))
     form.append("categoryId", String(category.id))
     form.append("expectedExtensionId", extensionID)
-    form.append("releaseNotes", process.env.AMITIA_PLUGIN_RELEASE_NOTES || `Amitia plugin marketplace release ${manifest.extension.version}`)
+      form.append("releaseNotes", process.env.AMITIA_PLUGIN_RELEASE_NOTES || `Amitia plugin marketplace release ${manifest.plugin.version}`)
     const response = await request("/api/v1/admin/marketplace/publish", {
       method: "POST",
       cookie,
@@ -133,7 +164,7 @@ async function main() {
     })
     results.push({
       extensionId: extensionID,
-      version: manifest.extension.version,
+      version: manifest.plugin.version,
       category: category.slug,
       status: response.payload?.data?.status,
     })

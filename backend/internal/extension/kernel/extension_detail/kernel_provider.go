@@ -59,7 +59,7 @@ func (p *KernelDetailProvider) GetExtension(ctx context.Context, extensionID str
 		EffectiveState:    string(inst.InstallationState),
 		FailureCount:      metadataInt(inst.Metadata, "failureCount"),
 		Platforms:         append([]string(nil), def.Compatibility.Platforms...),
-		SystemManaged:     metadataBool(def.Metadata, "system.managed") || strings.HasPrefix(extensionID, "com.amitia.builtin."),
+		SystemManaged:     metadataBool(def.Metadata, "system.managed"),
 		DevMode:           metadataBool(inst.Metadata, "devOnly") || metadataBool(def.Metadata, "devOnly"),
 		UserModified:      metadataBool(inst.Metadata, "user.modified") || metadataBool(def.Metadata, "user.modified"),
 		Modules:           []ModuleDetail{},

@@ -32,11 +32,7 @@ describe("图标导航栏布局", () => {
       expect(wrapper.get(".side-nav").classes()).not.toContain("is-collapsed");
       expect(wrapper.findAll(".el-menu-item").map(item => item.text())).toEqual([
         "主页",
-        "角色",
-        "记忆",
-        "任务",
-        "游戏模式",
-        "创意工坊",
+        "持续事项",
         "扩展中心",
       ]);
       expect(wrapper.find(".user-profile").exists()).toBe(true);
@@ -58,13 +54,13 @@ describe("图标导航栏布局", () => {
       global: { plugins: [pinia, router, ElementPlus] },
     });
     try {
-      const memoryItem = wrapper.findAll(".el-menu-item").find(item => item.text().includes("记忆"));
-      expect(memoryItem).toBeTruthy();
-      await memoryItem!.trigger("mouseenter");
+      const continuityItem = wrapper.findAll(".el-menu-item").find(item => item.text().includes("持续事项"));
+      expect(continuityItem).toBeTruthy();
+      await continuityItem!.trigger("mouseenter");
       await vi.waitFor(() => {
         const tooltip = document.body.querySelector("#side-nav-tooltip");
-        expect(tooltip?.textContent).toContain("记忆");
-        expect(tooltip?.textContent).toContain("知识库、用户画像、记忆图谱、情景和时间线");
+        expect(tooltip?.textContent).toContain("持续事项");
+        expect(tooltip?.textContent).toContain("查看长期目标和持续事项");
       });
     } finally {
       wrapper.unmount();

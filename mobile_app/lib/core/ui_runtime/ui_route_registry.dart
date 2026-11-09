@@ -46,6 +46,8 @@ const _protectedRouteNamespaces = <String>{
   AppRoutes.desktopPet,
 };
 
+const _openProviderRouteNamespaces = <String>{AppRoutes.extensions};
+
 String? _rootNamespace(String path) {
   final normalized = path.trim();
   if (!normalized.startsWith('/') || normalized == '/') return null;
@@ -58,7 +60,11 @@ String? _rootNamespace(String path) {
 
 bool isProtectedProviderRoutePath(String path) {
   final namespace = _rootNamespace(path);
-  return namespace != null && _protectedRouteNamespaces.contains(namespace);
+  if (namespace == null) return false;
+  if (_openProviderRouteNamespaces.contains(namespace)) {
+    return path.trim() == namespace;
+  }
+  return _protectedRouteNamespaces.contains(namespace);
 }
 
 bool _hasSafeProviderRouteSyntax(String path) {

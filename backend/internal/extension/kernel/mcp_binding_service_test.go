@@ -13,11 +13,13 @@ import (
 func TestMCPBindingDescriptorParsesCanonicalManifest(t *testing.T) {
 	installer := NewTypedContributionInstaller(&Container{})
 	contrib := domain.ContributionDefinition{
-		ID:          "fixture",
-		ExtensionID: "example.test/fixture",
-		ModuleID:    "main",
-		Kind:        domain.ContributionKindMCPServer,
-		Name:        domain.LocalizedText{Default: "Fixture MCP"},
+		ID:              "fixture",
+		ExtensionID:     "example.test/fixture",
+		ModuleID:        "main",
+		Kind:            domain.ContributionKindMCPServer,
+		Adapter:         domain.ContributionAdapterMCPServer,
+		ContractVersion: 1,
+		Name:            domain.LocalizedText{Default: "Fixture MCP"},
 		Definition: map[string]any{
 			"schemaVersion": 1,
 			"transport": map[string]any{
@@ -74,11 +76,13 @@ func TestMCPBindingDescriptorResolvesPackageSecrets(t *testing.T) {
 	}
 	installer := NewTypedContributionInstaller(&Container{SecretBroker: broker})
 	contrib := domain.ContributionDefinition{
-		ID:          "fixture",
-		ExtensionID: "example.test/secret",
-		ModuleID:    "main",
-		Kind:        domain.ContributionKindMCPServer,
-		Name:        domain.LocalizedText{Default: "Secret MCP"},
+		ID:              "fixture",
+		ExtensionID:     "example.test/secret",
+		ModuleID:        "main",
+		Kind:            domain.ContributionKindMCPServer,
+		Adapter:         domain.ContributionAdapterMCPServer,
+		ContractVersion: 1,
+		Name:            domain.LocalizedText{Default: "Secret MCP"},
 		Definition: map[string]any{
 			"schemaVersion": 1,
 			"transport": map[string]any{
@@ -137,11 +141,13 @@ func TestMCPContributionLifecycleUsesBindingService(t *testing.T) {
 	bindingService := &recordingMCPBindingService{}
 	installer := NewTypedContributionInstaller(&Container{MCPBindings: bindingService})
 	contrib := domain.ContributionDefinition{
-		ID:          "fixture",
-		ExtensionID: "example.test/fixture",
-		ModuleID:    "main",
-		Kind:        domain.ContributionKindMCPServer,
-		Name:        domain.LocalizedText{Default: "Fixture MCP"},
+		ID:              "fixture",
+		ExtensionID:     "example.test/fixture",
+		ModuleID:        "main",
+		Kind:            domain.ContributionKindMCPServer,
+		Adapter:         domain.ContributionAdapterMCPServer,
+		ContractVersion: 1,
+		Name:            domain.LocalizedText{Default: "Fixture MCP"},
 		Definition: map[string]any{
 			"schemaVersion": 1,
 			"transport": map[string]any{

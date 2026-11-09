@@ -1,48 +1,92 @@
 {
-	"manifestVersion": 1,
-	"extension": {
-		"id": "com.amitia.repair/schedule-workflow",
-		"name": {"default": "Schedule Workflow"},
-		"description": {"default": "Phase 10 E2E: interval schedule that triggers a workflow execution"},
-		"version": "1.0.0"
-	},
-	"publisher": {
-		"id": "com.amitia.repair",
-		"displayName": "Amitia Repair"
-	},
-	"modules": [
-		{
-			"id": "main",
-			"name": {"default": "Main"},
-			"type": "javascript",
-			"runtime": {"type": "javascript", "entryPoint": "index.js"},
-			"contributions": [
-				{
-					"id": "workflow-schedule",
-					"kind": "schedule",
-					"name": {"default": "Workflow Schedule"},
-					"description": {"default": "Interval schedule targeting a workflow"},
-					"spec": {
-						"trigger": {
-							"type": "interval",
-							"interval": "60s"
-						},
-						"target": {
-							"type": "workflow",
-							"workflowId": "cleanup-workflow",
-							"input": {"mode": "scheduled"}
-						}
-					}
-				}
-			]
-		}
-	],
-	"permissions": [
-		{"name": "schedule.create", "reason": "Create interval schedule", "required": true},
-		{"name": "workflow.invoke", "reason": "Invoke scheduled workflow", "required": true}
-	],
-	"integrity": {
-		"algorithm": "sha256",
-		"contentTreeHash": ""
-	}
+  "schemaVersion": 1,
+  "plugin": {
+    "id": "com.amitia.repair/schedule-workflow",
+    "name": {
+      "default": "Schedule Workflow"
+    },
+    "description": {
+      "default": "Phase 10 E2E: interval schedule that triggers a workflow execution"
+    },
+    "version": "1.0.0",
+    "publisher": {
+      "id": "com.amitia.repair",
+      "displayName": "Amitia Repair"
+    }
+  },
+  "compatibility": {
+    "minHostVersion": "0.1.0"
+  },
+  "modules": [
+    {
+      "id": "main",
+      "name": {
+        "default": "Main"
+      },
+      "runtime": {
+        "adapter": "javascript",
+        "entry": "index.js"
+      },
+      "dynamic": {
+        "allowedAdapters": [
+          "schedule"
+        ],
+        "maxContributions": 1,
+        "maxTools": 0,
+        "maxRoutes": 0,
+        "maxServices": 0,
+        "allowUnregister": true
+      },
+      "contributions": [
+        {
+          "id": "workflow-schedule",
+          "kind": "schedule",
+          "adapter": "schedule",
+          "contractVersion": 1,
+          "name": {
+            "default": "Workflow Schedule"
+          },
+          "description": {
+            "default": "Interval schedule targeting a workflow"
+          },
+          "spec": {
+            "trigger": {
+              "type": "interval",
+              "interval": "60s"
+            },
+            "target": {
+              "type": "workflow",
+              "workflowId": "cleanup-workflow",
+              "input": {
+                "mode": "scheduled"
+              }
+            }
+          }
+        }
+      ],
+      "placement": "device"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "schedule.create",
+      "reason": "Create interval schedule",
+      "required": true
+    },
+    {
+      "name": "workflow.invoke",
+      "reason": "Invoke scheduled workflow",
+      "required": true
+    }
+  ],
+  "data": {
+    "schemaVersion": 1,
+    "backup": true,
+    "export": true,
+    "uninstall": "retain"
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "contentTreeHash": ""
+  }
 }

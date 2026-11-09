@@ -3,7 +3,15 @@ import type {
 } from "./manifest";
 import type { ExtensionID, ModuleID } from "./types";
 import { makeExtensionID, makeModuleID } from "./types";
-import type { RuntimeScope, RuntimeContext } from "./runtime";
+import type {
+  ContributionClient,
+  ContributionRegistration,
+  AdapterClient,
+  RuntimeScope,
+  RuntimeContext,
+  ServiceClient,
+  ServiceLease,
+} from "./runtime";
 import type { ToolHandler, ToolRegistration } from "./tools";
 import { defineTool, listTools, unregisterTool } from "./tools";
 import type { EventSubscriptionSpec } from "./events";
@@ -88,6 +96,9 @@ export interface ExtensionContext {
   readonly secrets: SecretReferenceClient;
   readonly resources: ResourceClient;
   readonly events: { emit<T>(type: string, payload: T): Promise<void> };
+  readonly contributions: ContributionClient;
+  readonly services: ServiceClient;
+  readonly adapters: AdapterClient;
   readonly logger: ExtensionLogger;
   readonly lifecycle: RuntimeLifecycleClient;
   readonly fiber: ExtensionFiber;
@@ -197,6 +208,66 @@ export function bootstrapExtension(
 
   const resources: ResourceClient = bootstrap.resourceBackend;
   const fiber = new RuntimeFiber(namespace);
+  const callHost = async (method: string, input: unknown): Promise<unknown> => {
+    if (!bootstrap.hostBridge.call) throw new Error("host API transport is unavailable");
+    return bootstrap.hostBridge.call(method, input);
+  };
+  const contributions: ContributionClient = {
+    register: async (request): Promise<ContributionRegistration> => {
+      const result = await callHost("plugin.contribution.register", request) as { id?: string };
+      const id = String(result?.id ?? request.id);
+      const registration = {
+        id,
+        async dispose() {
+          await callHost("plugin.contribution.unregister", { id: request.id });
+        },
+      };
+      fiber.own(() => registration.dispose());
+      return registration;
+    },
+    unregister: async (id) => {
+      await callHost("plugin.contribution.unregister", { id });
+    },
+  };
+  const services: ServiceClient = {
+    provide: async (offer) => {
+      await callHost("plugin.service.provide", offer);
+      const withdraw = async () => {
+        await callHost("plugin.service.unprovide", { serviceId: offer.serviceId });
+      };
+      fiber.own(withdraw);
+      return withdraw;
+    },
+    require: async (requirement): Promise<ServiceLease> => {
+      const result = await callHost("plugin.service.require", requirement) as { providerIds?: unknown[] };
+      const lease: ServiceLease = {
+        serviceId: requirement.serviceId,
+        providerIds: Array.isArray(result?.providerIds) ? result.providerIds.map(String) : [],
+        async release() {
+          await callHost("plugin.service.release", { serviceId: requirement.serviceId });
+        },
+      };
+      fiber.own(() => lease.release());
+      return lease;
+    },
+  };
+  const adapters: AdapterClient = {
+    invoke: async (adapterId, contractVersion, request) => {
+      return await callHost("plugin.adapter.invoke", {
+        adapterId,
+        contractVersion,
+        ...request,
+      }) as { invocationId: string; output?: unknown };
+    },
+    cancel: async (adapterId, contractVersion, invocationId, reason) => {
+      await callHost("plugin.adapter.cancel", {
+        adapterId,
+        contractVersion,
+        invocationId,
+        reason,
+      });
+    },
+  };
 
   const assertEntry = (entryName: string) => {
     if (!allowedEntries.has(entryName)) {
@@ -267,6 +338,9 @@ export function bootstrapExtension(
     secrets,
     resources,
     events,
+    contributions,
+    services,
+    adapters,
     logger,
     lifecycle,
     fiber,

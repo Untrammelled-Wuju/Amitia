@@ -21,7 +21,7 @@ const packageRoot = readOption("--source") || process.env.AMITIA_EMOTE_SOURCE ||
 const stagingRoot = join(packageRoot, ".package-staging");
 const outputDir = readOption("--output") || process.env.AMITIA_EMOTE_OUTPUT_DIR || join("..", "..", "Plugin", "Emote");
 const manifest = JSON.parse(readFileSync(join(packageRoot, "amitia-extension.json"), "utf8"));
-const outputFile = join(outputDir, `amitia-emote-${manifest.extension.version}.amitiax`);
+const outputFile = join(outputDir, `amitia-emote-${manifest.plugin.version}.amitiax`);
 const generatedAt = "2026-01-01T00:00:00Z";
 
 function collectFiles(root) {

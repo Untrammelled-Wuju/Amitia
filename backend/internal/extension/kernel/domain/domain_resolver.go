@@ -35,11 +35,26 @@ func ResolveExtensionDomain(contributions []ContributionDefinition) (ExtensionDo
 }
 
 func ResolveDomainFromKinds(kinds []ContributionKind) (ExtensionDomain, error) {
-	adapters := make([]ContributionAdapter, 0, len(kinds))
+	hasGame := false
+	hasDesktopPet := false
 	for _, kind := range kinds {
-		adapters = append(adapters, ContributionAdapterForKind(kind))
+		if kind == ContributionKindGamePlugin {
+			hasGame = true
+		}
+		if kind == ContributionKindPetPlugin {
+			hasDesktopPet = true
+		}
 	}
-	return ResolveDomainFromAdapters(adapters)
+	if hasGame && hasDesktopPet {
+		return ExtensionDomainGeneral, fmt.Errorf("domain: extension declares contributions for multiple exclusive domains")
+	}
+	if hasGame {
+		return ExtensionDomainGame, nil
+	}
+	if hasDesktopPet {
+		return ExtensionDomainDesktopPet, nil
+	}
+	return ExtensionDomainGeneral, nil
 }
 
 func ResolveDomainFromAdapters(adapters []ContributionAdapter) (ExtensionDomain, error) {

@@ -88,7 +88,7 @@ func TestExtensionDefinitionValidate(t *testing.T) {
 				ExtensionID: "com.example/test",
 				Type:        ModuleTypeBuiltin,
 				Contributions: []ContributionDefinition{
-					{ID: "tool1", ModuleID: "main", Kind: ContributionKindTool},
+					{ID: "tool1", ModuleID: "main", Kind: ContributionKindTool, Adapter: ContributionAdapterTool},
 				},
 			},
 		},
@@ -102,8 +102,8 @@ func TestExtensionDefinitionValidate(t *testing.T) {
 }
 
 func TestContributionAdapterResolution(t *testing.T) {
-	if got := (ContributionDefinition{Kind: ContributionKindUIPage}).EffectiveAdapter(); got != ContributionAdapterUI {
-		t.Fatalf("legacy ui adapter = %s", got)
+	if got := (ContributionDefinition{Kind: ContributionKindUIPage}).EffectiveAdapter(); got != "" {
+		t.Fatalf("implicit ui adapter = %s", got)
 	}
 	if got := (ContributionDefinition{
 		Kind:    ContributionKind("com.example.market/page"),

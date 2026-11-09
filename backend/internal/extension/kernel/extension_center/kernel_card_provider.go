@@ -139,7 +139,7 @@ func (p *KernelCardProvider) cardFromDefinition(def domain.ExtensionDefinition) 
 		ProvidedCapabilities: providedCapabilities(def),
 		Platforms:            append([]string(nil), def.Compatibility.Platforms...),
 		Placement:            string(def.Placement),
-		SystemManaged:        metadataBool(def.Metadata, "system.managed") || strings.HasPrefix(string(def.ID), "com.amitia.builtin."),
+		SystemManaged:        metadataBool(def.Metadata, "system.managed"),
 		Source:               metadataString(def.Metadata, "source"),
 		DevMode:              metadataBool(def.Metadata, "devOnly"),
 		UserModified:         metadataBool(def.Metadata, "user.modified"),

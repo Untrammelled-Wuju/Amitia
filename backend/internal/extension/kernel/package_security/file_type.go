@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"path"
 	"strings"
+
+	"github.com/u-ai/backend/internal/extension/kernel/packageext"
 )
 
 type FileTypeDetector struct{}
@@ -55,7 +57,7 @@ func (d *FileTypeDetector) Detect(raw []byte, declaredExtension string) FileType
 
 	if archiveMagic := findMagicPrefix(raw, archiveMagicNumbers); archiveMagic != "" {
 		result.IsArchive = true
-		if result.Extension != ".zip" && result.Extension != ".amitiax" && result.Extension != ".gamex" && result.Extension != ".petx" {
+		if result.Extension != ".zip" && !packageext.IsArchivePath(result.Extension) {
 			result.Warnings = append(result.Warnings, "archive magic without expected extension")
 		}
 	}
@@ -69,7 +71,7 @@ func (d *FileTypeDetector) Detect(raw []byte, declaredExtension string) FileType
 		result.IsText = true
 	}
 
-	if (result.Extension == ".amitiax" || result.Extension == ".gamex" || result.Extension == ".petx") && !result.IsArchive {
+	if packageext.IsArchivePath(result.Extension) && !result.IsArchive {
 		result.Warnings = append(result.Warnings, result.Extension+" extension without valid archive magic")
 	}
 

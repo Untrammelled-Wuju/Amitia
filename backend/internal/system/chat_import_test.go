@@ -124,6 +124,69 @@ func TestChatImportConfirmUsesStagingOnlyAndIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestChatImportDomainContract(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "chat-import-domain.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&importbatch.Batch{}, &importbatch.Item{}); err != nil {
+		t.Fatal(err)
+	}
+	for _, statement := range []string{
+		`CREATE TABLE characters (id TEXT PRIMARY KEY, space_id TEXT, name TEXT, deleted_at DATETIME)`,
+		`INSERT INTO characters (id, space_id, name) VALUES ('role', 'space', 'Role')`,
+	} {
+		if err := db.Exec(statement).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	handler := NewHandler(NewService(&app.AppContext{DB: db}, runtimeprofile.ProfileLocal), db, chatImportSummaryStub{}, nil, nil, nil)
+	parsed, err := handler.ParseImportText(t.Context(), map[string]any{
+		"rawText": "用户：你好\nAI：你好呀",
+		"format":  "auto",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsedItems, _ := parsed["items"].([]map[string]any)
+	if len(parsedItems) != 2 {
+		t.Fatalf("unexpected parsed items: %+v", parsed["items"])
+	}
+	items := make([]any, 0, len(parsedItems))
+	for _, item := range parsedItems {
+		items = append(items, item)
+	}
+	confirmed, err := handler.ConfirmImport(t.Context(), ImportActor{SpaceID: "space", DeviceID: "device"}, map[string]any{
+		"items":          items,
+		"title":          "导入测试",
+		"characterId":    "role",
+		"defaultRole":    "user",
+		"detectedFormat": parsed["detectedFormat"],
+		"idempotencyKey": "domain-contract",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	batchID, _ := confirmed["batchId"].(string)
+	if batchID == "" || confirmed["messageCount"] != 2 {
+		t.Fatalf("unexpected confirmation: %+v", confirmed)
+	}
+	listed, err := handler.ImportBatches(t.Context(), "space")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if listed["total"] != 1 {
+		t.Fatalf("unexpected batch list: %+v", listed)
+	}
+	detail, err := handler.ImportBatchDetail(t.Context(), "space", batchID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rows, _ := detail["items"].([]map[string]any); len(rows) != 2 {
+		t.Fatalf("unexpected batch detail: %+v", detail)
+	}
+}
+
 func TestChatImportRoutesRemoveLegacyWritesAndFakeUpload(t *testing.T) {
 	router, _ := newChatImportTestRouter(t)
 	routes := map[string]bool{}

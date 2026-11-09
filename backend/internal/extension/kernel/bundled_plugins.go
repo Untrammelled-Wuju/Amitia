@@ -7,51 +7,105 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
+	"github.com/u-ai/backend/internal/extension/kernel/packageext"
 )
 
-func ProvisionBundledPlugins(ctx context.Context, runtime *Runtime, root, spaceID string) error {
+type BundledPluginIssue struct {
+	Path  string
+	Error string
+}
+
+func ProvisionBundledPlugins(ctx context.Context, runtime *Runtime, root, spaceID string) ([]BundledPluginIssue, error) {
 	if runtime == nil || runtime.container == nil {
-		return errors.New("kernel: bundled plugin provisioning requires an attached container")
+		return nil, errors.New("kernel: bundled plugin provisioning requires an attached container")
 	}
 	root = strings.TrimSpace(root)
 	if root == "" {
-		return nil
+		return nil, nil
 	}
 	info, err := os.Stat(root)
 	if errors.Is(err, os.ErrNotExist) {
-		return nil
+		return nil, nil
 	}
 	if err != nil {
-		return fmt.Errorf("kernel: inspect bundled plugin directory: %w", err)
+		return []BundledPluginIssue{{Path: root, Error: fmt.Sprintf("inspect bundled plugin directory: %v", err)}}, nil
 	}
 	if !info.IsDir() {
-		return fmt.Errorf("kernel: bundled plugin path is not a directory: %s", root)
+		return []BundledPluginIssue{{Path: root, Error: "bundled plugin path is not a directory"}}, nil
 	}
 	paths := make([]string, 0)
 	err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
-		if entry.IsDir() || !strings.EqualFold(filepath.Ext(entry.Name()), ".amitiax") {
+		if entry.IsDir() || !packageext.IsArchivePath(entry.Name()) {
 			return nil
 		}
 		paths = append(paths, path)
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("kernel: scan bundled plugins: %w", err)
+		return []BundledPluginIssue{{Path: root, Error: fmt.Sprintf("scan bundled plugins: %v", err)}}, nil
 	}
+	paths = selectLatestBundledPluginPaths(paths)
 	sort.Strings(paths)
+	issues := make([]BundledPluginIssue, 0)
 	for _, path := range paths {
 		if err := provisionBundledPlugin(ctx, runtime, path, spaceID); err != nil {
-			return fmt.Errorf("kernel: provision bundled plugin %s: %w", path, err)
+			issues = append(issues, BundledPluginIssue{Path: path, Error: err.Error()})
 		}
 	}
-	return nil
+	return issues, nil
+}
+
+var bundledPluginVersionSuffix = regexp.MustCompile(`^(.*)-(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)$`)
+
+func selectLatestBundledPluginPaths(paths []string) []string {
+	selected := make(map[string]string, len(paths))
+	versions := make(map[string]domain.SemanticVersion, len(paths))
+	order := make([]string, 0, len(paths))
+	for _, path := range paths {
+		archiveName := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+		match := bundledPluginVersionSuffix.FindStringSubmatch(archiveName)
+		if match == nil {
+			key := "path:" + path
+			selected[key] = path
+			order = append(order, key)
+			continue
+		}
+		version, err := domain.ParseVersion(match[2])
+		if err != nil {
+			key := "path:" + path
+			selected[key] = path
+			order = append(order, key)
+			continue
+		}
+		key := "package:" + filepath.Dir(path) + "\x00" + match[1]
+		current, exists := selected[key]
+		if !exists {
+			selected[key] = path
+			versions[key] = version
+			order = append(order, key)
+			continue
+		}
+		if version.Compare(versions[key]) > 0 || version.Compare(versions[key]) == 0 && path < current {
+			selected[key] = path
+			versions[key] = version
+		}
+	}
+	result := make([]string, 0, len(selected))
+	for _, key := range order {
+		if path, exists := selected[key]; exists {
+			result = append(result, path)
+			delete(selected, key)
+		}
+	}
+	return result
 }
 
 func provisionBundledPlugin(ctx context.Context, runtime *Runtime, path, spaceID string) error {
@@ -79,7 +133,7 @@ func provisionBundledPlugin(ctx context.Context, runtime *Runtime, path, spaceID
 	if closeErr != nil {
 		return fmt.Errorf("close package: %w", closeErr)
 	}
-	defaultInstall, _ := preview.Manifest.Extension.Metadata["system.defaultInstall"].(bool)
+	defaultInstall, _ := preview.Manifest.Plugin.Metadata["system.defaultInstall"].(bool)
 	if !defaultInstall {
 		return nil
 	}
@@ -102,7 +156,7 @@ func provisionBundledPlugin(ctx context.Context, runtime *Runtime, path, spaceID
 		}
 		return fmt.Errorf("preview package is not installable: %s", strings.Join(issues, "; "))
 	}
-	defaultEnabled, _ := preview.Manifest.Extension.Metadata["system.defaultEnabled"].(bool)
+	defaultEnabled, _ := preview.Manifest.Plugin.Metadata["system.defaultEnabled"].(bool)
 	extensionID := domain.ExtensionID(preview.ExtensionID)
 	bundledVersion, err := domain.ParseVersion(preview.Version)
 	if err != nil {

@@ -1,8 +1,7 @@
 {
-  "manifestVersion": 1,
-  "extension": {
+  "schemaVersion": 1,
+  "plugin": {
     "id": "com.amitia.e2e/mcp-server",
-    "version": "1.0.0",
     "name": {
       "default": "MCP E2E Fixture",
       "translations": {}
@@ -10,33 +9,45 @@
     "description": {
       "default": "Production-path MCP package integration fixture",
       "translations": {}
+    },
+    "version": "1.0.0",
+    "publisher": {
+      "id": "amitia-e2e",
+      "displayName": "Amitia E2E",
+      "trustLevel": "untrusted"
     }
-  },
-  "publisher": {
-    "id": "amitia-e2e",
-    "displayName": "Amitia E2E",
-    "trustLevel": "untrusted"
   },
   "compatibility": {
     "minHostVersion": "26.2.0-beta.10",
-    "platforms": ["windows", "macos", "linux"]
-  },
-  "integrity": {
-    "algorithm": "sha256",
-    "contentTreeHash": ""
+    "platforms": [
+      "windows",
+      "macos",
+      "linux"
+    ]
   },
   "modules": [
     {
       "id": "main",
-      "type": "service",
       "name": {
         "default": "MCP E2E",
         "translations": {}
+      },
+      "dynamic": {
+        "allowedAdapters": [
+          "mcp_server"
+        ],
+        "maxContributions": 1,
+        "maxTools": 0,
+        "maxRoutes": 0,
+        "maxServices": 0,
+        "allowUnregister": true
       },
       "contributions": [
         {
           "id": "echo",
           "kind": "mcp_server",
+          "adapter": "mcp_server",
+          "contractVersion": 1,
           "name": {
             "default": "MCP E2E Echo",
             "translations": {}
@@ -82,7 +93,18 @@
             }
           }
         }
-      ]
+      ],
+      "placement": "device"
     }
-  ]
+  ],
+  "data": {
+    "schemaVersion": 1,
+    "backup": true,
+    "export": true,
+    "uninstall": "retain"
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "contentTreeHash": ""
+  }
 }

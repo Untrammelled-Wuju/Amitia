@@ -51,7 +51,7 @@ func kernelReadImportSession(ctx context.Context, runtime *Runtime, sessionID, s
 func translateKernelPackagePreviewDirect(ctx context.Context, container *kernelruntime.Container, preview kernelruntime.InstallPreview, scopeType, scopeID string) PackageImportPreview {
 	result := PackageImportPreview{SessionID: preview.SessionID, Format: PackageFormatAmitiax,
 		ID: preview.ExtensionID, Name: preview.Name, Version: preview.Version,
-		Description: preview.Manifest.Extension.Description.Default, License: preview.Manifest.Extension.License,
+		Description: preview.Manifest.Plugin.Description.Default, License: preview.Manifest.Plugin.License,
 		Source: "local-amitiax", ScopeType: scopeType, ScopeID: scopeID, PackageHash: preview.ArchiveHash,
 		Checksum:   PackageChecksumView{Valid: true, PackageHash: preview.ArchiveHash},
 		Signature:  PackageSignatureView{Status: kernelSignatureStatus(preview.SignatureStatus), Fingerprint: preview.SignerKeyID},
@@ -78,13 +78,6 @@ func translateKernelPackagePreviewDirect(ctx context.Context, container *kernelr
 	for _, dependency := range preview.MissingDependencies {
 		result.Dependencies = append(result.Dependencies, PackageDependencyView{ID: dependency.ID,
 			VersionConstraint: dependency.Version, Required: !dependency.Optional, Installed: !dependency.Missing})
-	}
-	for _, warning := range preview.ValidationReport.Warnings {
-		message := warning.Message
-		if warning.Code != "" {
-			message = warning.Code + ": " + message
-		}
-		result.Warnings = append(result.Warnings, message)
 	}
 	for _, issue := range preview.Issues {
 		result.Errors = append(result.Errors, issue.Code+": "+issue.Message)
@@ -166,10 +159,7 @@ func packagePreviewManagementTarget(preview kernelruntime.InstallPreview) (strin
 			if kind == "" {
 				continue
 			}
-			adapters = append(adapters, domain.ResolveContributionAdapter(
-				domain.ContributionKind(contribution.Kind),
-				domain.ContributionAdapter(contribution.Adapter),
-			))
+			adapters = append(adapters, domain.ContributionAdapter(contribution.Adapter))
 			if _, exists := seen[kind]; !exists {
 				seen[kind] = struct{}{}
 				kindNames = append(kindNames, kind)

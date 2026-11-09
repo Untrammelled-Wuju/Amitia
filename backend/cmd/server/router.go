@@ -208,6 +208,9 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 	})
 
 	systemSvc := system.NewService(ctx, services.RuntimeProfile)
+	if services.KernelContainer != nil && services.KernelContainer.RuntimeMaintenance != nil {
+		services.KernelContainer.RuntimeMaintenance.SetProvider(kernelRuntimeMaintenanceAdapter{service: systemSvc})
+	}
 	if services.KernelContainer != nil {
 		if err := systemSvc.AttachTaskRuntime(services.KernelContainer.TaskRuntimeService); err != nil {
 			return nil, fmt.Errorf("initialize task maintenance policy: %w", err)
@@ -226,6 +229,26 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		}
 	}
 	spaceID := spaceStore.SpaceID()
+	if services.KernelContainer != nil && services.KernelContainer.ChatImport != nil {
+		services.KernelContainer.ChatImport.SetProvider(chatImportHostAdapter{
+			handler:  systemHandler,
+			services: services,
+			coreID:   spaceID,
+		})
+	}
+	if services.KernelContainer != nil && services.KernelContainer.Storage != nil {
+		services.KernelContainer.Storage.SetProvider(storageHostAdapter{
+			service:  systemSvc,
+			services: services,
+			coreID:   spaceID,
+		})
+	}
+	if services.KernelContainer != nil && services.KernelContainer.ChatLogs != nil {
+		services.KernelContainer.ChatLogs.SetProvider(chatLogsHostAdapter{
+			services: services,
+			coreID:   spaceID,
+		})
+	}
 	agentPlatformOwnerID := ""
 	if services.AgentPlatform != nil {
 		if err := services.AgentPlatform.SeedAgentTemplates(context.Background()); err != nil {

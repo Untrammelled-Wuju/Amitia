@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
 	"github.com/u-ai/backend/internal/extension/kernel/migration"
+	"github.com/u-ai/backend/internal/extension/kernel/plugincontract"
 )
 
 func packageMigrationString(value string) *string {
@@ -72,7 +72,7 @@ func packageMigrationHash(data []byte) string {
 
 func packageMigrationPreflight(t *testing.T, guard *PackageMigrationGuard, extensionID string, definitions []migration.MigrationDefinition, from, to string) *migration.ReversiblePreflight {
 	t.Helper()
-	manifest := manifest_v1.Manifest{Extension: manifest_v1.ExtensionMeta{ID: extensionID, Version: to, Metadata: map[string]any{"migrations": map[string]any{"definitions": definitions}}}}
+	manifest := plugincontract.Manifest{Plugin: plugincontract.PluginMeta{ID: extensionID, Version: to, Metadata: map[string]any{"migrations": map[string]any{"definitions": definitions}}}}
 	preflight, err := guard.PreflightManifest(context.Background(), manifest, from)
 	if err != nil {
 		t.Fatal(err)
@@ -262,7 +262,7 @@ func TestPackageMigrationGuardDetectsAppliedDefinitionDrift(t *testing.T) {
 	if err := container.MigrationRepository.SaveMigrationStep(context.Background(), &migration.MigrationStepRecord{StepID: 1, OperationID: op.OperationID, MigrationID: "f1", Status: "succeeded", InputHash: "old-hash", StartedAt: now}); err != nil {
 		t.Fatal(err)
 	}
-	manifest := manifest_v1.Manifest{Extension: manifest_v1.ExtensionMeta{ID: "ext.drift", Version: "1.1.0", Metadata: map[string]any{"migrations": packageMigrationChain("ext.drift", 1)}}}
+	manifest := plugincontract.Manifest{Plugin: plugincontract.PluginMeta{ID: "ext.drift", Version: "1.1.0", Metadata: map[string]any{"migrations": packageMigrationChain("ext.drift", 1)}}}
 	_, err := guard.PreflightManifest(context.Background(), manifest, "1.0.0")
 	if err == nil {
 		t.Fatal("expected applied definition drift rejection")

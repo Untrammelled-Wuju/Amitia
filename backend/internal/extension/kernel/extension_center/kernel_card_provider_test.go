@@ -92,7 +92,7 @@ func (c fixedUpdateChecker) Check(context.Context, string, string) (*package_dis
 func TestKernelCardProviderBuildsUpdateAndTrustState(t *testing.T) {
 	definitions := domain.NewInMemoryDefinitionRepository()
 	installations := domain.NewInMemoryInstallationRepository()
-	extensionID := domain.ExtensionID("com.example/update-test")
+	extensionID := domain.ExtensionID("com.amitia.builtin.update-test")
 	v1 := domain.SemanticVersion{Major: 1}
 	v2 := domain.SemanticVersion{Major: 2}
 	definition := domain.ExtensionDefinition{
@@ -151,7 +151,7 @@ func TestKernelCardProviderBuildsUpdateAndTrustState(t *testing.T) {
 		t.Fatalf("trust = %q, want official", card.Trust)
 	}
 	if card.SystemManaged {
-		t.Fatal("normal extension must not be system managed")
+		t.Fatal("builtin-looking id without system.managed metadata must not be system managed")
 	}
 }
 

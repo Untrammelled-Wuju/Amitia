@@ -95,7 +95,7 @@ function openGameInstall() {
 
 function openGamePlugin(plugin: GamePlugin) {
   void router.push({
-    name: "gamePlugin",
+    path: "/game-center/plugin",
     query: { pluginId: plugin.pluginId, extensionId: plugin.extensionId },
   });
 }

@@ -63,18 +63,18 @@ func BuildLocalAgentSkillPackage(ctx context.Context, spaceID, rootName string, 
 	}
 	entryPoint := "resources/" + name + "/SKILL.md"
 	manifest := map[string]any{
-		"manifestVersion": 1,
-		"extension": map[string]any{
+		"schemaVersion": 1,
+		"plugin": map[string]any{
 			"id": extensionID, "name": map[string]any{"default": name},
 			"description": map[string]any{"default": description}, "version": version,
+			"publisher": map[string]any{"id": "local.agentskill", "displayName": "Local Import"},
 		},
-		"publisher":     map[string]any{"id": "local.agentskill", "displayName": "Local Import"},
 		"compatibility": map[string]any{"minHostVersion": "1.0.0"},
 		"modules": []any{map[string]any{
 			"id": "agent-skill", "name": map[string]any{"default": name},
-			"type": "data_only", "version": version,
+			"version": version, "placement": "device",
 			"contributions": []any{map[string]any{
-				"id": name, "kind": "agent_skill", "name": map[string]any{"default": name},
+				"id": name, "kind": "agent_skill", "adapter": "agent_skill", "contractVersion": 1, "name": map[string]any{"default": name},
 				"description": map[string]any{"default": description}, "version": version,
 				"spec": map[string]any{"entryPoint": entryPoint},
 			}},

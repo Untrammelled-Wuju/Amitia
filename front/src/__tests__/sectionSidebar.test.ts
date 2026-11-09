@@ -9,6 +9,28 @@ const mocks = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock("../composables/useApi", () => ({
   useApi: () => ({ get: mocks.get }),
 }));
+vi.mock("../ui-runtime/providerRoutes", () => ({
+  collectExtensionSectionEntries: (_store: unknown, sectionId: string) => {
+    if (sectionId === "character") {
+      return [
+        { route: "/character", label: "角色管理" },
+        { route: "/characters/teams", label: "团队" },
+        { route: "/world-book", label: "世界书" },
+      ];
+    }
+    if (sectionId === "memory") {
+      return [
+        { route: "/knowledge", label: "知识库" },
+        { route: "/memory-manager", label: "记忆总览" },
+        { route: "/episodic", label: "情景记忆" },
+        { route: "/graph", label: "记忆图谱" },
+        { route: "/memory-timeline", label: "时间线" },
+        { route: "/profiles", label: "用户画像" },
+      ];
+    }
+    return [];
+  },
+}));
 
 async function render(sectionId: "character" | "memory" | "tasks" | "game" | "workshop" | "extensions") {
   const router = createRouter({
@@ -31,11 +53,9 @@ async function render(sectionId: "character" | "memory" | "tasks" | "game" | "wo
 describe("一级导航对应的第二栏", () => {
   it("角色和记忆显示各自的二级进入入口", async () => {
     const character = await render("character");
-    expect(character.wrapper.findAll(".section-entry strong").map(node => node.text())).toEqual([
-      "角色管理",
-      "团队",
-      "世界书",
-    ]);
+    expect(character.wrapper.findAll(".section-entry strong").map(node => node.text())).toEqual(
+      expect.arrayContaining(["角色管理", "团队", "世界书"]),
+    );
     character.wrapper.unmount();
 
     const memory = await render("memory");

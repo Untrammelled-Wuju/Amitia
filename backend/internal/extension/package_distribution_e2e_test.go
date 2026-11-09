@@ -550,15 +550,18 @@ func createDistributionTestArchive(t *testing.T, extensionID, version string, de
 		extension["metadata"] = map[string]any{"migrations": map[string]any{"definitions": definitions}}
 	}
 	manifest := map[string]any{
-		"manifestVersion": 1,
-		"extension":       extension,
-		"publisher":       map[string]any{"id": "com.example", "displayName": "Example"},
-		"compatibility":   map[string]any{},
+		"schemaVersion": 1,
+		"plugin": map[string]any{
+			"id": extension["id"], "name": extension["name"], "description": extension["description"], "version": version,
+			"metadata":  extension["metadata"],
+			"publisher": map[string]any{"id": "com.example", "displayName": "Example"},
+		},
+		"compatibility": map[string]any{"minHostVersion": "0.1.0"},
 		"modules": []any{map[string]any{
-			"id": "main", "name": map[string]any{"default": "Main"}, "type": "javascript", "version": version,
-			"runtime": map[string]any{"type": "javascript", "entryPoint": "index.js"},
+			"id": "main", "name": map[string]any{"default": "Main"}, "version": version, "placement": "device",
+			"runtime": map[string]any{"adapter": "javascript", "entry": "index.js"},
 			"contributions": []any{map[string]any{
-				"id": "distribution-tool", "kind": "tool",
+				"id": "distribution-tool", "kind": "tool", "adapter": "tool", "contractVersion": 1,
 				"name": map[string]any{"default": "Distribution Tool"}, "version": version,
 			}},
 		}},

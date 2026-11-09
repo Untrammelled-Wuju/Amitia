@@ -10,7 +10,7 @@ import (
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
-	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
+	"github.com/u-ai/backend/internal/extension/kernel/plugincontract"
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	"github.com/u-ai/backend/internal/extension/platformcompat"
 	gamehostnetworkpolicy "github.com/u-ai/backend/internal/gamehost/networkpolicy"
@@ -45,7 +45,7 @@ func packageVersionAtMost(actual, required string) bool {
 	return actualErr == nil && requiredErr == nil && actualVersion.Compare(requiredVersion) <= 0
 }
 
-func appendPackageHostCompatibilityIssues(manifest manifest_v1.Manifest, preview *InstallPreview) {
+func appendPackageHostCompatibilityIssues(manifest plugincontract.Manifest, preview *InstallPreview) {
 	if preview == nil {
 		return
 	}
@@ -77,11 +77,11 @@ func appendPackageHostCompatibilityIssues(manifest manifest_v1.Manifest, preview
 	}
 }
 
-func packageModuleSupported(mod manifest_v1.ModuleMeta, platform, hostVersion string) bool {
-	if !manifest_v1.IsSupportedModuleType(mod.Type) {
+func packageModuleSupported(mod plugincontract.Module, platform, hostVersion string) bool {
+	if !plugincontract.IsSupportedModuleType(mod.EffectiveType()) {
 		return false
 	}
-	if mod.Runtime != nil && strings.TrimSpace(mod.Runtime.Type) != "" && !manifest_v1.IsSupportedRuntimeType(mod.Runtime.Type) {
+	if mod.Runtime != nil && strings.TrimSpace(mod.Runtime.Adapter) != "" && !plugincontract.IsSupportedRuntimeAdapter(mod.Runtime.Adapter) {
 		return false
 	}
 	if mod.Compatibility == nil {
@@ -108,11 +108,11 @@ func packageGamePluginNetworkPolicy(spec *gameprotocol.PluginNetworkPolicy, requ
 	}
 }
 
-func appendGamePluginNetworkCompatibilityIssues(manifest manifest_v1.Manifest, preview *InstallPreview) {
+func appendGamePluginNetworkCompatibilityIssues(manifest plugincontract.Manifest, preview *InstallPreview) {
 	appendGamePluginNetworkCompatibilityIssuesWithHostValidator(manifest, preview, trusted_service.ValidateNetworkSandboxPrerequisites)
 }
 
-func appendGamePluginNetworkCompatibilityIssuesWithHostValidator(manifest manifest_v1.Manifest, preview *InstallPreview, validateHost func(trusted_service.ServiceNetworkPolicy) error) {
+func appendGamePluginNetworkCompatibilityIssuesWithHostValidator(manifest plugincontract.Manifest, preview *InstallPreview, validateHost func(trusted_service.ServiceNetworkPolicy) error) {
 	if preview == nil {
 		return
 	}
@@ -152,11 +152,11 @@ func appendGamePluginNetworkCompatibilityIssuesWithHostValidator(manifest manife
 	}
 }
 
-func gamePluginUsesNodePermissionIsolation(manifest manifest_v1.Manifest, spec gameprotocol.PluginHostSpec) bool {
+func gamePluginUsesNodePermissionIsolation(manifest plugincontract.Manifest, spec gameprotocol.PluginHostSpec) bool {
 	if len(spec.Services) == 0 {
 		return false
 	}
-	modules := make(map[string]manifest_v1.ModuleMeta, len(manifest.Modules))
+	modules := make(map[string]plugincontract.Module, len(manifest.Modules))
 	for _, module := range manifest.Modules {
 		modules[module.ID] = module
 	}
@@ -166,7 +166,7 @@ func gamePluginUsesNodePermissionIsolation(manifest manifest_v1.Manifest, spec g
 			moduleID = strings.TrimSpace(service.ID)
 		}
 		module, ok := modules[moduleID]
-		if !ok || module.Runtime == nil || !strings.EqualFold(strings.TrimSpace(module.Runtime.Type), "javascript") {
+		if !ok || module.Runtime == nil || !strings.EqualFold(strings.TrimSpace(module.Runtime.Adapter), "javascript") {
 			return false
 		}
 	}

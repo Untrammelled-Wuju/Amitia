@@ -304,6 +304,12 @@ type HostAPIRouteDeps struct {
 	VectorStore                 ExtensionVectorStore
 	NetworkClient               *http.Client
 	NetworkAllowPrivate         bool
+	RuntimeObservability        *RuntimeObservabilityBridge
+	RuntimeMaintenance          *RuntimeMaintenanceBridge
+	Workspace                   *WorkspaceBridge
+	ChatImport                  *ChatImportBridge
+	Storage                     *StorageBridge
+	ChatLogs                    *ChatLogsBridge
 }
 
 type SecretStore interface {
@@ -2624,6 +2630,173 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 			},
 		},
 		{
+			method:          host_api.MethodRuntimeSnapshot,
+			riskLevel:       host_api.RiskLow,
+			sideEffectLevel: host_api.SideEffectReadOnly,
+			timeout:         15 * time.Second,
+			handler: func(ctx context.Context, _ host_api.CallRequest) (host_api.CallResult, error) {
+				if deps.RuntimeObservability == nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "runtime observability not configured"},
+					}, nil
+				}
+				output, err := json.Marshal(deps.RuntimeObservability.Snapshot(ctx))
+				if err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+					}, nil
+				}
+				return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
+			},
+		},
+		{
+			method:          host_api.MethodWorkspaceRead,
+			riskLevel:       host_api.RiskLow,
+			sideEffectLevel: host_api.SideEffectReadOnly,
+			timeout:         30 * time.Second,
+			handler: func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+				if deps.Workspace == nil {
+					return workspaceHostResult(nil, errors.New("workspace service is unavailable"))
+				}
+				return workspaceHostResult(deps.Workspace.Read(ctx, req.Input))
+			},
+		},
+		{
+			method:          host_api.MethodWorkspaceWrite,
+			riskLevel:       host_api.RiskHigh,
+			sideEffectLevel: host_api.SideEffectWrite,
+			timeout:         2 * time.Minute,
+			handler: func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+				if deps.Workspace == nil {
+					return workspaceHostResult(nil, errors.New("workspace service is unavailable"))
+				}
+				return workspaceHostResult(deps.Workspace.Write(ctx, req.Input))
+			},
+		},
+		{
+			method:          host_api.MethodImportExecute,
+			riskLevel:       host_api.RiskHigh,
+			sideEffectLevel: host_api.SideEffectWrite,
+			timeout:         2 * time.Minute,
+			handler: func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+				if deps.ChatImport == nil {
+					return workspaceHostResult(nil, errors.New("chat import service is unavailable"))
+				}
+				var input struct {
+					Operation string          `json:"operation"`
+					Input     json.RawMessage `json:"input,omitempty"`
+				}
+				if err := json.Unmarshal(req.Input, &input); err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()},
+					}, nil
+				}
+				if input.Operation == "" {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: "operation is required"},
+					}, nil
+				}
+				if len(input.Input) == 0 {
+					input.Input = json.RawMessage(`{}`)
+				}
+				return workspaceHostResult(deps.ChatImport.Execute(ctx, req, input.Operation, input.Input))
+			},
+		},
+		storageHostRoute(host_api.MethodStorageCleanup, deps.Storage),
+		storageHostRoute(host_api.MethodStorageBackup, deps.Storage),
+		storageHostRoute(host_api.MethodStorageRestore, deps.Storage),
+		chatLogsHostRoute(host_api.MethodConversationLogsRead, deps.ChatLogs, host_api.RiskLow, host_api.SideEffectReadOnly),
+		chatLogsHostRoute(host_api.MethodConversationLogsManage, deps.ChatLogs, host_api.RiskHigh, host_api.SideEffectWrite),
+		chatLogsHostRoute(host_api.MethodConversationLogsExport, deps.ChatLogs, host_api.RiskMedium, host_api.SideEffectReadOnly),
+		{
+			method:          host_api.MethodRuntimeMaintenanceStatus,
+			riskLevel:       host_api.RiskLow,
+			sideEffectLevel: host_api.SideEffectReadOnly,
+			timeout:         10 * time.Second,
+			handler: func(ctx context.Context, _ host_api.CallRequest) (host_api.CallResult, error) {
+				if deps.RuntimeMaintenance == nil {
+					return runtimeMaintenanceResult(nil, errors.New("runtime maintenance service is unavailable"))
+				}
+				return runtimeMaintenanceResult(deps.RuntimeMaintenance.Status(ctx))
+			},
+		},
+		{
+			method:          host_api.MethodRuntimeMaintenanceOverview,
+			riskLevel:       host_api.RiskLow,
+			sideEffectLevel: host_api.SideEffectReadOnly,
+			timeout:         15 * time.Second,
+			handler: func(ctx context.Context, _ host_api.CallRequest) (host_api.CallResult, error) {
+				if deps.RuntimeMaintenance == nil {
+					return runtimeMaintenanceResult(nil, errors.New("runtime maintenance service is unavailable"))
+				}
+				return runtimeMaintenanceResult(deps.RuntimeMaintenance.Overview(ctx))
+			},
+		},
+		{
+			method:          host_api.MethodRuntimeMaintenanceConfig,
+			riskLevel:       host_api.RiskLow,
+			sideEffectLevel: host_api.SideEffectReadOnly,
+			timeout:         10 * time.Second,
+			handler: func(ctx context.Context, _ host_api.CallRequest) (host_api.CallResult, error) {
+				if deps.RuntimeMaintenance == nil {
+					return runtimeMaintenanceResult(nil, errors.New("runtime maintenance service is unavailable"))
+				}
+				return runtimeMaintenanceResult(deps.RuntimeMaintenance.Config(ctx))
+			},
+		},
+		{
+			method:          host_api.MethodRuntimeMaintenanceUpdate,
+			riskLevel:       host_api.RiskHigh,
+			sideEffectLevel: host_api.SideEffectWrite,
+			timeout:         10 * time.Second,
+			handler: func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+				if deps.RuntimeMaintenance == nil {
+					return runtimeMaintenanceResult(nil, errors.New("runtime maintenance service is unavailable"))
+				}
+				return runtimeMaintenanceResult(deps.RuntimeMaintenance.UpdateConfig(ctx, req.Input))
+			},
+		},
+		{
+			method:          host_api.MethodRuntimeCleanupTemp,
+			riskLevel:       host_api.RiskHigh,
+			sideEffectLevel: host_api.SideEffectWrite,
+			timeout:         2 * time.Minute,
+			handler: func(ctx context.Context, _ host_api.CallRequest) (host_api.CallResult, error) {
+				if deps.RuntimeMaintenance == nil {
+					return runtimeMaintenanceResult(nil, errors.New("runtime maintenance service is unavailable"))
+				}
+				return runtimeMaintenanceResult(deps.RuntimeMaintenance.CleanupTemp(ctx))
+			},
+		},
+		{
+			method:          host_api.MethodRuntimeRotateLogs,
+			riskLevel:       host_api.RiskHigh,
+			sideEffectLevel: host_api.SideEffectWrite,
+			timeout:         2 * time.Minute,
+			handler: func(ctx context.Context, _ host_api.CallRequest) (host_api.CallResult, error) {
+				if deps.RuntimeMaintenance == nil {
+					return runtimeMaintenanceResult(nil, errors.New("runtime maintenance service is unavailable"))
+				}
+				return runtimeMaintenanceResult(deps.RuntimeMaintenance.RotateLogs(ctx))
+			},
+		},
+		{
+			method:          host_api.MethodRuntimeCheckDBIntegrity,
+			riskLevel:       host_api.RiskHigh,
+			sideEffectLevel: host_api.SideEffectWrite,
+			timeout:         2 * time.Minute,
+			handler: func(ctx context.Context, _ host_api.CallRequest) (host_api.CallResult, error) {
+				if deps.RuntimeMaintenance == nil {
+					return runtimeMaintenanceResult(nil, errors.New("runtime maintenance service is unavailable"))
+				}
+				return runtimeMaintenanceResult(deps.RuntimeMaintenance.CheckDBIntegrity(ctx))
+			},
+		},
+		{
 			method:          host_api.MethodSecretGet,
 			riskLevel:       host_api.RiskHigh,
 			sideEffectLevel: host_api.SideEffectReadOnly,
@@ -2799,6 +2972,125 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 	}
 
 	return nil
+}
+
+func runtimeMaintenanceResult(value any, err error) (host_api.CallResult, error) {
+	if err != nil {
+		return host_api.CallResult{
+			Status: host_api.StatusFailed,
+			Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+		}, nil
+	}
+	output, err := json.Marshal(value)
+	if err != nil {
+		return host_api.CallResult{
+			Status: host_api.StatusFailed,
+			Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+		}, nil
+	}
+	return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
+}
+
+func workspaceHostResult(value any, err error) (host_api.CallResult, error) {
+	if err != nil {
+		return host_api.CallResult{
+			Status: host_api.StatusFailed,
+			Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+		}, nil
+	}
+	output, err := json.Marshal(value)
+	if err != nil {
+		return host_api.CallResult{
+			Status: host_api.StatusFailed,
+			Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+		}, nil
+	}
+	return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
+}
+
+func storageHostRoute(method host_api.Method, bridge *StorageBridge) struct {
+	method          host_api.Method
+	riskLevel       host_api.RiskLevel
+	sideEffectLevel host_api.SideEffectLevel
+	timeout         time.Duration
+	handler         host_api.Handler
+} {
+	return struct {
+		method          host_api.Method
+		riskLevel       host_api.RiskLevel
+		sideEffectLevel host_api.SideEffectLevel
+		timeout         time.Duration
+		handler         host_api.Handler
+	}{
+		method:          method,
+		riskLevel:       host_api.RiskHigh,
+		sideEffectLevel: host_api.SideEffectWrite,
+		timeout:         10 * time.Minute,
+		handler: func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+			if bridge == nil {
+				return workspaceHostResult(nil, errors.New("storage service is unavailable"))
+			}
+			var input struct {
+				Operation string          `json:"operation"`
+				Input     json.RawMessage `json:"input,omitempty"`
+			}
+			if err := json.Unmarshal(req.Input, &input); err != nil {
+				return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()}}, nil
+			}
+			if input.Operation == "" {
+				return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: "operation is required"}}, nil
+			}
+			if len(input.Input) == 0 {
+				input.Input = json.RawMessage(`{}`)
+			}
+			return workspaceHostResult(bridge.Execute(ctx, req, method, input.Operation, input.Input))
+		},
+	}
+}
+
+func chatLogsHostRoute(
+	method host_api.Method,
+	bridge *ChatLogsBridge,
+	risk host_api.RiskLevel,
+	sideEffect host_api.SideEffectLevel,
+) struct {
+	method          host_api.Method
+	riskLevel       host_api.RiskLevel
+	sideEffectLevel host_api.SideEffectLevel
+	timeout         time.Duration
+	handler         host_api.Handler
+} {
+	return struct {
+		method          host_api.Method
+		riskLevel       host_api.RiskLevel
+		sideEffectLevel host_api.SideEffectLevel
+		timeout         time.Duration
+		handler         host_api.Handler
+	}{
+		method:          method,
+		riskLevel:       risk,
+		sideEffectLevel: sideEffect,
+		timeout:         2 * time.Minute,
+		handler: func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+			if bridge == nil {
+				return workspaceHostResult(nil, errors.New("conversation archive service is unavailable"))
+			}
+			var input struct {
+				Operation string          `json:"operation"`
+				Input     json.RawMessage `json:"input,omitempty"`
+			}
+			if err := json.Unmarshal(req.Input, &input); err != nil {
+				return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()}}, nil
+			}
+			if input.Operation == "" {
+				return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: "operation is required"}}, nil
+			}
+			if len(input.Input) == 0 {
+				input.Input = json.RawMessage(`{}`)
+			}
+			return workspaceHostResult(bridge.Execute(ctx, req, method, input.Operation, input.Input))
+		},
+	}
 }
 
 func isPathSafe(baseDir, targetPath string) bool {

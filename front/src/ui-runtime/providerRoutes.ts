@@ -2,6 +2,7 @@ import type { RouteRecordNormalized, RouteRecordRaw, Router } from "vue-router";
 import ProviderRouteHost from "@/components/ui-runtime/ProviderRouteHost.vue";
 import type { useExtensionUIStore } from "@/stores/extensionUI";
 import { builtinBusinessRoutes } from "@/router/builtinRoutes";
+import { CORE_ROUTE_ROOTS } from "@/router/coreRoutes";
 import { isUIProviderCapability, type UIProviderCapability, type UIProviderDefinition } from "./types";
 import { collectRegistryProviders } from "./providerCollection";
 import { isProviderCompatible } from "./providerRuntime";
@@ -22,14 +23,6 @@ export interface ProviderRouteDefinition {
 
 const PROVIDER_ROUTE_PREFIX = "ui-provider:";
 const registeredRouteNames = new Set<string>();
-const ALLOWED_EXTENSION_ROUTE_PATHS = new Set<string>(["/extensions/market"]);
-
-const BOOTSTRAP_ROUTE_PREFIXES = [
-  "/onboarding",
-  "/privacy",
-  "/usage-boundary",
-  "/404",
-];
 
 function rootNamespace(path: string): string | null {
   const normalized = String(path || "").trim();
@@ -65,19 +58,33 @@ function routeAliases(route: RouteRecordRaw): string[] {
   return Array.isArray(route.alias) ? route.alias.map(String) : [String(route.alias)];
 }
 
-const PROTECTED_ROUTE_NAMESPACES = new Set<string>([
-  ...BOOTSTRAP_ROUTE_PREFIXES.map(rootNamespace).filter((value): value is string => Boolean(value)),
-  ...builtinBusinessRoutes
+const BUILTIN_ROUTE_PATHS = new Set<string>(
+  builtinBusinessRoutes
     .flatMap((route) => [String(route.path ?? ""), ...routeAliases(route)])
-    .map(rootNamespace)
+    .filter(Boolean),
+);
+
+const OPEN_BUILTIN_ROUTE_ROOTS = new Set<string>(
+  builtinBusinessRoutes
+    .filter((route) => route.meta?.allowsExtensionChildren === true)
+    .map((route) => rootNamespace(String(route.path ?? "")))
     .filter((value): value is string => Boolean(value)),
-]);
+);
+
+const PROTECTED_BUILTIN_ROUTE_ROOTS = new Set<string>(
+  [...BUILTIN_ROUTE_PATHS]
+    .map(rootNamespace)
+    .filter((value): value is string => value !== null && !OPEN_BUILTIN_ROUTE_ROOTS.has(value)),
+);
 
 /** Extension routes may not occupy a built-in top-level route namespace. */
 export function shadowsProtectedRoute(path: string): boolean {
-  if (ALLOWED_EXTENSION_ROUTE_PATHS.has(String(path || "").trim())) return false;
+  const normalized = String(path || "").trim();
   const namespace = rootNamespace(path);
-  return namespace !== null && PROTECTED_ROUTE_NAMESPACES.has(namespace);
+  if (namespace === null) return false;
+  if (CORE_ROUTE_ROOTS.has(namespace) || BUILTIN_ROUTE_PATHS.has(normalized)) return true;
+  if (OPEN_BUILTIN_ROUTE_ROOTS.has(namespace)) return false;
+  return PROTECTED_BUILTIN_ROUTE_ROOTS.has(namespace);
 }
 
 function finiteNumber(value: unknown, fallback: number): number {

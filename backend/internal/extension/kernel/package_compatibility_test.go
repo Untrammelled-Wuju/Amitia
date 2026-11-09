@@ -6,18 +6,17 @@ import (
 	"testing"
 
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
-	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
+	"github.com/u-ai/backend/internal/extension/kernel/plugincontract"
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	gameprotocol "github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
 
 func TestPackageCompatibilityUsesManifestRuntimeSourceOfTruth(t *testing.T) {
-	service := manifest_v1.ModuleMeta{
-		ID:   "native-runtime",
-		Type: "service",
-		Runtime: &manifest_v1.RuntimeMeta{
-			Type:       "service",
-			EntryPoint: "bin/plugin",
+	service := plugincontract.Module{
+		ID: "native-runtime",
+		Runtime: &plugincontract.RuntimeSpec{
+			Adapter: "service",
+			Entry:   "bin/plugin",
 		},
 	}
 	if !packageModuleSupported(service, "linux", "1.0.0") {
@@ -25,13 +24,13 @@ func TestPackageCompatibilityUsesManifestRuntimeSourceOfTruth(t *testing.T) {
 	}
 
 	native := service
-	native.Type = "native"
+	native.Runtime = &plugincontract.RuntimeSpec{Adapter: "native", Entry: "bin/plugin"}
 	if !packageModuleSupported(native, "windows", "1.0.0") {
 		t.Fatal("native module with service runtime must be installable by canonical package preview")
 	}
 
 	unknown := service
-	unknown.Runtime = &manifest_v1.RuntimeMeta{Type: "plugin_service"}
+	unknown.Runtime = &plugincontract.RuntimeSpec{Adapter: "plugin_service"}
 	if packageModuleSupported(unknown, "linux", "1.0.0") {
 		t.Fatal("unknown runtime type must remain unsupported")
 	}
@@ -61,13 +60,12 @@ func TestPackagePlatformUsesCanonicalValues(t *testing.T) {
 }
 
 func TestPackageModuleCompatibilityChecksMinimumHostVersion(t *testing.T) {
-	mod := manifest_v1.ModuleMeta{
-		ID:   "runtime",
-		Type: "service",
-		Runtime: &manifest_v1.RuntimeMeta{
-			Type: "service",
+	mod := plugincontract.Module{
+		ID: "runtime",
+		Runtime: &plugincontract.RuntimeSpec{
+			Adapter: "service",
 		},
-		Compatibility: &manifest_v1.ModuleCompatibility{MinHostVersion: "2.0.0"},
+		Compatibility: &plugincontract.ModuleCompatibility{MinHostVersion: "2.0.0"},
 	}
 	if packageModuleSupported(mod, "linux", "1.9.9") {
 		t.Fatal("module requiring newer host version was accepted")
@@ -97,12 +95,12 @@ func TestPackageGamePluginNetworkPreflightMatchesRuntimePermissionBoundary(t *te
 }
 
 func TestPackageGamePluginNetworkPreflightRejectsMissingHostSandboxPrerequisite(t *testing.T) {
-	manifest := manifest_v1.Manifest{Modules: []manifest_v1.ModuleMeta{{
-		ID:   "runtime",
-		Type: "service",
-		Contributions: []manifest_v1.ContributionMeta{{
-			ID:   "game-plugin",
-			Kind: "gamex",
+	manifest := plugincontract.Manifest{Modules: []plugincontract.Module{{
+		ID: "runtime",
+		Contributions: []plugincontract.ContributionDescriptor{{
+			ID:      "game-plugin",
+			Kind:    "gamex",
+			Adapter: "game",
 			Spec: map[string]any{
 				"protocolVersion": "amitia-game-host/1",
 				"runtimeModuleId": "runtime",
@@ -133,16 +131,16 @@ func TestPackageGamePluginNetworkPreflightRejectsMissingHostSandboxPrerequisite(
 }
 
 func TestPackageGamePluginNoneNetworkUsesNodePermissionIsolation(t *testing.T) {
-	manifest := manifest_v1.Manifest{Modules: []manifest_v1.ModuleMeta{{
-		ID:   "runtime",
-		Type: "service",
-		Runtime: &manifest_v1.RuntimeMeta{
-			Type:       "javascript",
-			EntryPoint: "dist/index.js",
+	manifest := plugincontract.Manifest{Modules: []plugincontract.Module{{
+		ID: "runtime",
+		Runtime: &plugincontract.RuntimeSpec{
+			Adapter: "javascript",
+			Entry:   "dist/index.js",
 		},
-		Contributions: []manifest_v1.ContributionMeta{{
-			ID:   "game-plugin",
-			Kind: "gamex",
+		Contributions: []plugincontract.ContributionDescriptor{{
+			ID:      "game-plugin",
+			Kind:    "gamex",
+			Adapter: "game",
 			Spec: map[string]any{
 				"protocolVersion": "amitia-game-host/1",
 				"runtimeModuleId": "runtime",
@@ -168,12 +166,12 @@ func TestPackageGamePluginNoneNetworkUsesNodePermissionIsolation(t *testing.T) {
 }
 
 func TestPackageCompatibilityExecuteRecheckUsesHostSandboxPrerequisites(t *testing.T) {
-	pkg := &amitiax.Package{Manifest: manifest_v1.Manifest{Modules: []manifest_v1.ModuleMeta{{
-		ID:   "runtime",
-		Type: "service",
-		Contributions: []manifest_v1.ContributionMeta{{
-			ID:   "game-plugin",
-			Kind: "gamex",
+	pkg := &amitiax.Package{Manifest: plugincontract.Manifest{Modules: []plugincontract.Module{{
+		ID: "runtime",
+		Contributions: []plugincontract.ContributionDescriptor{{
+			ID:      "game-plugin",
+			Kind:    "gamex",
+			Adapter: "game",
 			Spec: map[string]any{
 				"protocolVersion": "amitia-game-host/1",
 				"runtimeModuleId": "runtime",
@@ -200,12 +198,12 @@ func TestPackageCompatibilityExecuteRecheckUsesHostSandboxPrerequisites(t *testi
 
 func TestPackageGamePluginArtifactSourcesMustExistInArchive(t *testing.T) {
 	pkg := &amitiax.Package{
-		Manifest: manifest_v1.Manifest{Modules: []manifest_v1.ModuleMeta{{
-			ID:   "runtime",
-			Type: "service",
-			Contributions: []manifest_v1.ContributionMeta{{
-				ID:   "game-plugin",
-				Kind: "gamex",
+		Manifest: plugincontract.Manifest{Modules: []plugincontract.Module{{
+			ID: "runtime",
+			Contributions: []plugincontract.ContributionDescriptor{{
+				ID:      "game-plugin",
+				Kind:    "gamex",
+				Adapter: "game",
 				Spec: map[string]any{
 					"protocolVersion": "amitia-game-host/1",
 					"runtimeModuleId": "runtime",

@@ -1,24 +1,32 @@
 {
-  "manifestVersion": 1,
-  "extensionId": "event-runtime-test",
-  "version": "1.0.0",
-  "name": "Event Runtime Test Extension",
+  "schemaVersion": 1,
+  "plugin": {
+    "name": {},
+    "description": {
+      "default": ""
+    },
+    "version": "1.0.0",
+    "publisher": {
+      "id": "unknown",
+      "displayName": "unknown"
+    }
+  },
+  "compatibility": {
+    "minHostVersion": "0.1.0"
+  },
   "modules": [
     {
-      "moduleId": "main",
-      "runtimeType": "javascript_main",
-      "entry": "./modules/main/index.js"
+      "placement": "device"
     }
   ],
-  "contributions": [
-    {
-      "id": "test-event-subscription",
-      "type": "event_subscription",
-      "moduleId": "main",
-      "eventTypeId": "test.event.triggered",
-      "eventVersionRange": "*",
-      "entry": "on-test-event",
-      "eventType": "ext.event-runtime-test.event.triggered"
-    }
-  ]
+  "data": {
+    "schemaVersion": 1,
+    "backup": true,
+    "export": true,
+    "uninstall": "retain"
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "contentTreeHash": ""
+  }
 }

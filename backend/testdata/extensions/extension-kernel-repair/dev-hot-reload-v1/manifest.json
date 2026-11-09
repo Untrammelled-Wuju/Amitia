@@ -1,53 +1,85 @@
 {
-	"manifestVersion": 1,
-	"extension": {
-		"id": "com.amitia.repair/dev-hot-reload",
-		"name": {"default": "Dev Hot Reload v1"},
-		"description": {"default": "Phase 10 E2E: developer mode extension v1, used as baseline before hot reload to v2"},
-		"version": "1.0.0",
-		"metadata": {
-			"expectedGeneration": 1,
-			"reloadScenario": "baseline"
-		}
-	},
-	"publisher": {
-		"id": "com.amitia.repair",
-		"displayName": "Amitia Repair"
-	},
-	"modules": [
-		{
-			"id": "main",
-			"name": {"default": "Main"},
-			"type": "javascript",
-			"runtime": {"type": "javascript", "entryPoint": "index.js"},
-			"contributions": [
-				{
-					"id": "dev-tool",
-					"kind": "tool",
-					"name": {"default": "Dev Tool v1"},
-					"description": {"default": "Developer tool generation 1"},
-					"modelName": "dev_tool",
-					"inputSchema": {
-						"type": "object",
-						"properties": {
-							"input": {"type": "string"}
-						}
-					}
-				}
-			]
-		}
-	],
-	"permissions": [
-		{"name": "tool.invoke", "reason": "Execute dev tool", "required": true}
-	],
-	"development": {
-		"developerMode": true,
-		"hotReload": true,
-		"sourceMaps": true,
-		"watchPaths": ["modules/main/index.js"]
-	},
-	"integrity": {
-		"algorithm": "sha256",
-		"contentTreeHash": ""
-	}
+  "schemaVersion": 1,
+  "plugin": {
+    "id": "com.amitia.repair/dev-hot-reload",
+    "name": {
+      "default": "Dev Hot Reload v1"
+    },
+    "description": {
+      "default": "Phase 10 E2E: developer mode extension v1, used as baseline before hot reload to v2"
+    },
+    "version": "1.0.0",
+    "metadata": {
+      "expectedGeneration": 1,
+      "reloadScenario": "baseline"
+    },
+    "publisher": {
+      "id": "com.amitia.repair",
+      "displayName": "Amitia Repair"
+    }
+  },
+  "compatibility": {
+    "minHostVersion": "0.1.0"
+  },
+  "modules": [
+    {
+      "id": "main",
+      "name": {
+        "default": "Main"
+      },
+      "runtime": {
+        "adapter": "javascript",
+        "entry": "index.js"
+      },
+      "dynamic": {
+        "allowedAdapters": [
+          "tool"
+        ],
+        "maxContributions": 1,
+        "maxTools": 1,
+        "maxRoutes": 0,
+        "maxServices": 0,
+        "allowUnregister": true
+      },
+      "contributions": [
+        {
+          "id": "dev-tool",
+          "kind": "tool",
+          "adapter": "tool",
+          "contractVersion": 1,
+          "name": {
+            "default": "Dev Tool v1"
+          },
+          "description": {
+            "default": "Developer tool generation 1"
+          }
+        }
+      ],
+      "placement": "device"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "tool.invoke",
+      "reason": "Execute dev tool",
+      "required": true
+    }
+  ],
+  "data": {
+    "schemaVersion": 1,
+    "backup": true,
+    "export": true,
+    "uninstall": "retain"
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "contentTreeHash": ""
+  },
+  "development": {
+    "hotReload": true,
+    "sourceMaps": true,
+    "watchPaths": [
+      "modules/main/index.js"
+    ]
+  }
 }

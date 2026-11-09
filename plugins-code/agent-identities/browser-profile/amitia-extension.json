@@ -1,76 +1,203 @@
 {
-  "manifestVersion": 1,
-  "placement": "device",
-  "extension": {
+  "schemaVersion": 1,
+  "plugin": {
     "id": "com.amitia/agent-identity-browser-profile",
-    "name": { "default": "Agent 浏览器身份" },
-    "description": { "default": "为 Agent 提供独立浏览器 Profile、站点登录和页面操作能力。" },
+    "name": {
+      "default": "Agent 浏览器身份"
+    },
+    "description": {
+      "default": "为 Agent 提供独立浏览器 Profile、站点登录和页面操作能力。"
+    },
     "version": "1.0.0",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
-    "categories": ["agent-identities", "computer"],
-    "keywords": ["browser", "profile", "chromium", "cdp", "agent-identity"]
+    "categories": [
+      "agent-identities",
+      "computer"
+    ],
+    "keywords": [
+      "browser",
+      "profile",
+      "chromium",
+      "cdp",
+      "agent-identity"
+    ],
+    "publisher": {
+      "id": "com.amitia",
+      "displayName": "Amitia",
+      "trustLevel": "official"
+    }
   },
-  "publisher": { "id": "com.amitia", "displayName": "Amitia", "trustLevel": "official" },
-  "compatibility": { "minHostVersion": "0.1.0", "platforms": ["windows", "linux", "macos", "android", "ios"] },
+  "compatibility": {
+    "minHostVersion": "0.1.0",
+    "platforms": [
+      "windows",
+      "linux",
+      "macos",
+      "android",
+      "ios"
+    ]
+  },
   "modules": [
     {
       "id": "browser-profile-runtime",
-      "name": { "default": "Agent 浏览器身份运行时" },
-      "description": { "default": "连接独立浏览器 Profile 并执行页面操作。" },
-      "type": "javascript",
-      "placement": "device",
+      "name": {
+        "default": "Agent 浏览器身份运行时"
+      },
+      "description": {
+        "default": "连接独立浏览器 Profile 并执行页面操作。"
+      },
       "runtime": {
-        "type": "javascript",
-        "entryPoint": "dist/index.js",
+        "adapter": "javascript",
+        "entry": "dist/index.js",
         "timeout": "120s",
-        "memory": 268435456,
-        "maxSubprocesses": 0,
-        "capabilities": { "network": true, "filesystem": false },
+        "memoryBytes": 268435456,
+        "capabilities": {
+          "network": true,
+          "filesystem": false
+        },
         "hostAccess": {
-          "filesystem": { "mode": "none" },
-          "network": { "mode": "host" },
-          "process": { "mode": "none" }
+          "filesystem": {
+            "mode": "none"
+          },
+          "network": {
+            "mode": "host"
+          },
+          "process": {
+            "mode": "none"
+          }
         }
       },
-      "providedCapabilities": [{ "id": "agent.identity.browser", "version": "1.0.0" }],
+      "services": {
+        "provides": [
+          {
+            "serviceId": "agent.identity.browser",
+            "version": "1.0.0",
+            "scopes": [
+              "global"
+            ],
+            "placement": "device"
+          }
+        ],
+        "requires": []
+      },
+      "dynamic": {
+        "allowedAdapters": [
+          "tool"
+        ],
+        "maxContributions": 1,
+        "maxTools": 1,
+        "maxRoutes": 0,
+        "maxServices": 1,
+        "allowUnregister": true
+      },
       "contributions": [
         {
           "id": "browser-profile-command",
           "kind": "tool",
-          "name": { "default": "Agent 浏览器身份命令" },
-          "description": { "default": "读取浏览器页面、导航、截图和关闭页面。" },
-          "requiredPermissions": ["storage.state.read", "storage.state.write", "secret.read", "service.network.request"],
+          "adapter": "tool",
+          "contractVersion": 1,
+          "name": {
+            "default": "Agent 浏览器身份命令"
+          },
+          "description": {
+            "default": "读取浏览器页面、导航、截图和关闭页面。"
+          },
           "spec": {
             "toolId": "com.amitia/agent-identity-browser-profile/command",
             "modelName": "agent_browser_profile_command",
             "handlerName": "command",
             "inputSchema": {
               "type": "object",
-              "required": ["action"],
+              "required": [
+                "action"
+              ],
               "properties": {
-                "action": { "type": "string", "enum": ["status", "config", "configure", "enable", "disable", "execute"] },
-                "config": { "type": "object" },
-                "credentialRef": { "type": "string" },
-                "input": { "type": "object" }
+                "action": {
+                  "type": "string",
+                  "enum": [
+                    "status",
+                    "config",
+                    "configure",
+                    "enable",
+                    "disable",
+                    "execute"
+                  ]
+                },
+                "config": {
+                  "type": "object"
+                },
+                "credentialRef": {
+                  "type": "string"
+                },
+                "input": {
+                  "type": "object"
+                }
               },
               "additionalProperties": false
             },
-            "outputSchema": { "type": "object", "additionalProperties": true },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
             "riskLevel": "high",
             "sideEffect": "external",
-            "runtime": { "runtimeType": "javascript", "handlerName": "command" }
-          }
+            "runtime": {
+              "runtimeType": "javascript",
+              "handlerName": "command"
+            }
+          },
+          "requiredPermissions": [
+            "storage.state.read",
+            "storage.state.write",
+            "secret.read",
+            "service.network.request"
+          ]
+        }
+      ],
+      "placement": "device",
+      "providedCapabilities": [
+        {
+          "id": "agent.identity.browser",
+          "version": "1.0.0"
         }
       ]
     }
   ],
   "permissions": [
-    { "name": "storage.state.read", "reason": "读取浏览器身份配置。", "required": true, "scope": "extension" },
-    { "name": "storage.state.write", "reason": "保存浏览器身份配置。", "required": true, "scope": "extension" },
-    { "name": "secret.read", "reason": "读取浏览器 Profile Provider 凭据。", "required": true, "scope": "extension" },
-    { "name": "service.network.request", "reason": "连接浏览器 Profile Provider。", "required": true, "scope": "extension" }
+    {
+      "name": "storage.state.read",
+      "reason": "读取浏览器身份配置。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "storage.state.write",
+      "reason": "保存浏览器身份配置。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "secret.read",
+      "reason": "读取浏览器 Profile Provider 凭据。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "service.network.request",
+      "reason": "连接浏览器 Profile Provider。",
+      "required": true,
+      "scope": "extension"
+    }
   ],
-  "lifecycle": { "backgroundTasks": true, "networkAccess": true, "sandbox": true },
-  "integrity": { "algorithm": "sha256", "contentTreeHash": "" }
+  "data": {
+    "schemaVersion": 1,
+    "backup": true,
+    "export": true,
+    "uninstall": "retain"
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "contentTreeHash": ""
+  }
 }

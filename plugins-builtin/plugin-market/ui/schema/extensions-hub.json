@@ -1,0 +1,174 @@
+{
+  "schemaVersion": "schema-ui/1",
+  "type": "document",
+  "title": "扩展中心",
+  "actions": [],
+  "children": [
+    {
+      "id": "extensions-hub-page",
+      "type": "page",
+      "children": [
+        {
+          "id": "extensions-hub-intro",
+          "type": "alert",
+          "props": {
+            "type": "info",
+            "title": "扩展中心由插件提供",
+            "description": "这里的入口和导航会随插件市场启停，核心只保留安装、权限、恢复与插件协议边界。",
+            "closable": false
+          }
+        },
+        {
+          "id": "extensions-hub-grid",
+          "type": "grid",
+          "props": {
+            "columnsTemplate": "repeat(auto-fill, minmax(260px, 1fr))",
+            "gap": "12px"
+          },
+          "children": [
+            {
+              "id": "extensions-hub-market",
+              "type": "card",
+              "props": {
+                "header": "插件市场"
+              },
+              "children": [
+                {
+                  "id": "extensions-hub-market-copy",
+                  "type": "text",
+                  "props": {
+                    "text": "发现、审查、安装、更新和卸载经过宿主验证的插件。",
+                    "variant": "muted"
+                  }
+                },
+                {
+                  "id": "extensions-hub-market-link",
+                  "type": "resource_link",
+                  "props": {
+                    "text": "打开插件市场",
+                    "href": "/extensions/market",
+                    "target": "_self"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "extensions-hub-packages",
+              "type": "card",
+              "props": {
+                "header": "扩展包"
+              },
+              "children": [
+                {
+                  "id": "extensions-hub-packages-copy",
+                  "type": "text",
+                  "props": {
+                    "text": "管理本地包、版本、完整性、权限和生命周期。",
+                    "variant": "muted"
+                  }
+                },
+                {
+                  "id": "extensions-hub-packages-link",
+                  "type": "resource_link",
+                  "props": {
+                    "text": "打开扩展包",
+                    "href": "/extensions/packages",
+                    "target": "_self"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "extensions-hub-workflows",
+              "type": "card",
+              "props": {
+                "header": "工作流"
+              },
+              "children": [
+                {
+                  "id": "extensions-hub-workflows-copy",
+                  "type": "text",
+                  "props": {
+                    "text": "组合工具、插件能力和自动化步骤。",
+                    "variant": "muted"
+                  }
+                },
+                {
+                  "id": "extensions-hub-workflows-link",
+                  "type": "resource_link",
+                  "props": {
+                    "text": "打开工作流",
+                    "href": "/extensions/workflows",
+                    "target": "_self"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "extensions-hub-mcp",
+              "type": "card",
+              "props": {
+                "header": "MCP 服务"
+              },
+              "children": [
+                {
+                  "id": "extensions-hub-mcp-copy",
+                  "type": "text",
+                  "props": {
+                    "text": "配置受控模型上下文协议服务及其连接状态。",
+                    "variant": "muted"
+                  }
+                },
+                {
+                  "id": "extensions-hub-mcp-link",
+                  "type": "resource_link",
+                  "props": {
+                    "text": "打开 MCP 服务",
+                    "href": "/extensions/mcp",
+                    "target": "_self"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "extensions-hub-agent-skills",
+              "type": "card",
+              "props": {
+                "header": "Agent Skills"
+              },
+              "children": [
+                {
+                  "id": "extensions-hub-agent-skills-copy",
+                  "type": "text",
+                  "props": {
+                    "text": "查看可组合到 Agent 执行流程中的技能包。",
+                    "variant": "muted"
+                  }
+                },
+                {
+                  "id": "extensions-hub-agent-skills-link",
+                  "type": "resource_link",
+                  "props": {
+                    "text": "打开 Agent Skills",
+                    "href": "/extensions/agent-skills",
+                    "target": "_self"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "theme": {
+    "mode": "auto"
+  },
+  "performanceBudget": {
+    "maxRenderTimeMs": 60,
+    "maxLayoutCount": 60,
+    "maxNodeCount": 60,
+    "maxDataFetchCount": 0,
+    "maxActionCount": 0
+  }
+}

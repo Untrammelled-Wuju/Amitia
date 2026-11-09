@@ -142,7 +142,7 @@ func TestOwnedWorkspaceRoutesToWorkspaceDevice(t *testing.T) {
 	definition := capability.ToolDefinition{
 		ID:           "workspace.write",
 		CapabilityID: "workspace.write",
-		ExtensionID:  "com.amitia.builtin.workspace",
+		ExtensionID:  "com.example/third-party-workspace",
 		ModuleID:     "builtin-workspace",
 		Runtime:      capability.RuntimeBinding{RuntimeType: capability.RuntimeTypeWorkspace},
 	}

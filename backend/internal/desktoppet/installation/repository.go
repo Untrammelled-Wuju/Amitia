@@ -703,8 +703,17 @@ func (r *repository) AllocateDeviceDesiredRevisionCAS(tx *gorm.DB, spaceID, devi
 	} else {
 		counter.CurrentRevision = newRevision
 		counter.UpdatedAt = time.Now().Format(installationTimeFormat)
-		if err := tx.Save(&counter).Error; err != nil {
-			return 0, err
+		result := tx.Model(&desired.DeviceDesiredRevisionCounter{}).
+			Where("space_id = ? AND device_id = ?", spaceID, deviceID).
+			Updates(map[string]interface{}{
+				"current_revision": counter.CurrentRevision,
+				"updated_at":       counter.UpdatedAt,
+			})
+		if result.Error != nil {
+			return 0, result.Error
+		}
+		if result.RowsAffected != 1 {
+			return 0, fmt.Errorf("desired revision CAS affected %d rows", result.RowsAffected)
 		}
 	}
 	return newRevision, nil

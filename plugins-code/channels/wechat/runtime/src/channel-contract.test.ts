@@ -82,7 +82,7 @@ test("channel contract routes are registered", async () => {
 
 test("manifest declares the channel contract paths used by the host", () => {
     const manifest = JSON.parse(fs.readFileSync(new URL("../../amitia-extension.json", import.meta.url), "utf8"));
-    const service = manifest.modules.find((item: any) => item.type === "service");
+    const service = manifest.modules.find((item: any) => item.runtime?.adapter === "service");
     const sidecar = service.provider.metadata.sidecar;
     assert.equal(sidecar.connectPath, "/api/connect");
     assert.equal(sidecar.disconnectPath, "/api/disconnect");

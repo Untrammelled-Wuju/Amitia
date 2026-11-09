@@ -64,14 +64,14 @@ func (u *ProductionArchiveUpdater) UpdateArchive(ctx context.Context, extensionI
 	if err != nil {
 		return &upgrade.KernelUpdateResult{Success: false, Reason: err.Error()}, fmt.Errorf("open rollback archive: %w", err)
 	}
-	manifestExtensionID := strings.TrimSpace(pkg.Manifest.Extension.ID)
+	manifestExtensionID := strings.TrimSpace(pkg.Manifest.Plugin.ID)
 	if manifestExtensionID == "" || manifestExtensionID != strings.TrimSpace(extensionID) {
 		err := fmt.Errorf("rollback archive extension mismatch: expected %q, got %q", extensionID, manifestExtensionID)
 		return &upgrade.KernelUpdateResult{Success: false, Reason: err.Error()}, err
 	}
-	targetVersion, err := domain.ParseVersion(strings.TrimSpace(pkg.Manifest.Extension.Version))
+	targetVersion, err := domain.ParseVersion(strings.TrimSpace(pkg.Manifest.Plugin.Version))
 	if err != nil {
-		return &upgrade.KernelUpdateResult{Success: false, Reason: err.Error()}, fmt.Errorf("parse rollback archive version %q: %w", pkg.Manifest.Extension.Version, err)
+		return &upgrade.KernelUpdateResult{Success: false, Reason: err.Error()}, fmt.Errorf("parse rollback archive version %q: %w", pkg.Manifest.Plugin.Version, err)
 	}
 
 	result, err := container.LifecycleManager.Execute(ctx, lifecycle_manager.LifecycleCommand{

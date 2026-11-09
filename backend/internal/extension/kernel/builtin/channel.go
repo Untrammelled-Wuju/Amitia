@@ -93,12 +93,14 @@ func buildChannelContributions(extID domain.ExtensionID, modID domain.ModuleID, 
 	modelName := "channel.deliver." + string(capID)
 	return []domain.ContributionDefinition{
 		{
-			ID:          domain.ContributionID(contributionID),
-			ModuleID:    modID,
-			ExtensionID: extID,
-			Kind:        domain.ContributionKindTool,
-			Name:        domain.LocalizedText{Default: "Channel Deliver - " + string(capID)},
-			Description: domain.LocalizedText{Default: "Send a message through the " + string(capID) + " channel"},
+			ID:              domain.ContributionID(contributionID),
+			ModuleID:        modID,
+			ExtensionID:     extID,
+			Kind:            domain.ContributionKindTool,
+			Adapter:         domain.ContributionAdapterTool,
+			ContractVersion: 1,
+			Name:            domain.LocalizedText{Default: "Channel Deliver - " + string(capID)},
+			Description:     domain.LocalizedText{Default: "Send a message through the " + string(capID) + " channel"},
 			Definition: map[string]any{
 				"capabilityId": string(capID),
 				"modelName":    modelName,

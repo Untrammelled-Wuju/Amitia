@@ -99,12 +99,14 @@ func buildCharacterTabContribution(
 ) domain.ContributionDefinition {
 	contributionID := domain.ContributionID(string(extID) + ".character-tab")
 	return domain.ContributionDefinition{
-		ID:          contributionID,
-		ModuleID:    modID,
-		ExtensionID: extID,
-		Kind:        domain.ContributionKindUIPage,
-		Name:        domain.LocalizedText{Default: displayName},
-		Description: domain.LocalizedText{Default: tabTitle},
+		ID:              contributionID,
+		ModuleID:        modID,
+		ExtensionID:     extID,
+		Kind:            domain.ContributionKindUIPage,
+		Adapter:         domain.ContributionAdapterUI,
+		ContractVersion: 1,
+		Name:            domain.LocalizedText{Default: displayName},
+		Description:     domain.LocalizedText{Default: tabTitle},
 		Definition: map[string]any{
 			"contribution_id": string(contributionID),
 			"extension_id":    string(extID),

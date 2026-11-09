@@ -16,9 +16,15 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/backend_connection/providers/backend_connection_providers.dart';
+import '../../../../core/backend_connection/backend_connection_availability.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
+import '../../../../core/backend_transport/state/backend_transport_state.dart';
 import '../../../../core/errors/original_error.dart';
+import '../../../../core/runtime/backend/backend_topology.dart';
+import '../../../../core/runtime/backend/mobile_backend_lifecycle.dart';
 import '../../../../core/runtime/backend/mobile_backend_providers.dart';
+import '../../../../core/runtime/runtime_bridge_provider.dart';
+import '../../../../core/runtime/runtime_bridge_state.dart';
 import '../../../../core/runtime/backend/mobile_deployment_mode.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/services/device_management_intent.dart';
@@ -72,6 +78,24 @@ bool isDevicePairingCenter(
 ) {
   return deployment.mode == MobileDeploymentMode.local &&
       !isPairingRouteAction(routeAction);
+}
+
+bool pairingClaimRequiresBootstrap(Map<String, dynamic> claim) {
+  return claim['alreadyPaired'] != true;
+}
+
+EmbeddedRuntimeProfile? pairingTransitionProfile(
+  MobileDeploymentConfig deployment,
+) {
+  return deployment.mode == MobileDeploymentMode.local
+      ? EmbeddedRuntimeProfile.deviceAgent
+      : null;
+}
+
+bool embeddedProfileWaitsForStream(EmbeddedRuntimeStatus status) {
+  return status == EmbeddedRuntimeStatus.starting ||
+      status == EmbeddedRuntimeStatus.installing ||
+      status == EmbeddedRuntimeStatus.stopping;
 }
 
 class _DeviceAddPageState extends ConsumerState<DeviceAddPage> {
@@ -680,9 +704,17 @@ class _DeviceAddPageState extends ConsumerState<DeviceAddPage> {
     }
     setState(() => _submitting = true);
     var deploymentConfigChanged = false;
+    var runtimeProfileChanged = false;
     var notificationHandoff = false;
     final notificationCoordinator = ref.read(notificationCoordinatorProvider);
+    final backendLifecycle = ref.read(mobileBackendLifecycleProvider);
     try {
+      final transitionProfile = pairingTransitionProfile(deployment);
+      if (transitionProfile != null) {
+        runtimeProfileChanged = true;
+        backendLifecycle.pauseAutomaticReconciliation();
+        await _ensureEmbeddedProfile(transitionProfile);
+      }
       final localService = ref.read(deviceMeshLocalServiceProvider);
       final identity = await localService?.identity();
       if (identity == null) {
@@ -719,18 +751,19 @@ class _DeviceAddPageState extends ConsumerState<DeviceAddPage> {
             fingerprint: fingerprint,
             coreId: coreId,
           );
-      final ticket = (claim['ticket'] ?? '').toString().trim();
-      if (ticket.isEmpty) throw StateError('统筹中心未返回 Bootstrap Ticket');
-
       if (localService == null) {
         throw StateError('本机 Device Agent 不可用，无法保存设备凭据');
       }
-      await localService.bootstrap(
-        cloudBaseUrl: cloudUri,
-        bootstrapTicket: ticket,
-        fingerprint: fingerprint,
-        coreId: coreId,
-      );
+      if (pairingClaimRequiresBootstrap(claim)) {
+        final ticket = (claim['ticket'] ?? '').toString().trim();
+        if (ticket.isEmpty) throw StateError('统筹中心未返回 Bootstrap Ticket');
+        await localService.bootstrap(
+          cloudBaseUrl: cloudUri,
+          bootstrapTicket: ticket,
+          fingerprint: fingerprint,
+          coreId: coreId,
+        );
+      }
       final previous = ref.read(mobileDeploymentConfigProvider);
       final next = MobileDeploymentConfig(
         mode: MobileDeploymentMode.cloud,
@@ -768,11 +801,20 @@ class _DeviceAddPageState extends ConsumerState<DeviceAddPage> {
         } catch (error, stackTrace) {
           print("[original-error] $error\n$stackTrace");
         }
+      } else if (runtimeProfileChanged) {
+        try {
+          await _ensureEmbeddedProfile(EmbeddedRuntimeProfile.local);
+        } catch (error, stackTrace) {
+          print("[original-error] $error\n$stackTrace");
+        }
       }
       if (mounted) _show('配对失败：${_message(error)}');
     } finally {
       if (notificationHandoff) {
         notificationCoordinator.resumeRegistrationAfterDeploymentTransition();
+      }
+      if (runtimeProfileChanged && !deploymentConfigChanged) {
+        backendLifecycle.resumeAutomaticReconciliation();
       }
       if (mounted) setState(() => _submitting = false);
     }
@@ -802,6 +844,43 @@ class _DeviceAddPageState extends ConsumerState<DeviceAddPage> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _ensureEmbeddedProfile(EmbeddedRuntimeProfile profile) async {
+    final runtime = ref.read(embeddedRuntimeControllerProvider);
+    var status = await runtime.ensureRunning(profile);
+    if (embeddedProfileWaitsForStream(status)) {
+      await ref
+          .read(runtimeBridgeProvider)
+          .snapshots
+          .firstWhere(
+            (snapshot) =>
+                snapshot.state == RuntimeBridgeState.ready &&
+                snapshot.activeProfile == profile.runtimeProfileArg,
+          )
+          .timeout(const Duration(minutes: 5));
+      status = EmbeddedRuntimeStatus.ready;
+    }
+    if (status != EmbeddedRuntimeStatus.ready) {
+      throw StateError('本机 Runtime 无法切换到 ${profile.runtimeProfileArg} 模式');
+    }
+    ref.invalidate(runtimeSnapshotProvider);
+    ref.invalidate(deviceLocalBackendConnectionProvider);
+    final connection = await ref.read(
+      deviceLocalBackendConnectionProvider.future,
+    );
+    if (connection is! BackendConnectionAvailable) {
+      throw StateError('本机 Runtime 连接尚未恢复');
+    }
+    ref.invalidate(deviceLocalBackendTransportProvider);
+    final transport = await ref.read(
+      deviceLocalBackendTransportProvider.future,
+    );
+    if (transport is! TransportAvailable) {
+      throw StateError('本机 Runtime 传输尚未恢复');
+    }
+    ref.invalidate(localDeviceMeshIdentityProvider);
+    ref.invalidate(localDeviceMeshStatusProvider);
   }
 
   static String _message(Object error) => originalErrorText(

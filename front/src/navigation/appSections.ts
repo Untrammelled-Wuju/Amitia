@@ -28,24 +28,13 @@ export const appSections: AppSectionDefinition[] = [
     id: "character",
     route: "/characters",
     label: "角色",
-    entries: [
-      { route: "/character", label: "角色管理" },
-      { route: "/characters/teams", label: "团队" },
-      { route: "/world-book", label: "世界书" },
-    ],
+    entries: [],
   },
   {
     id: "memory",
     route: "/memory",
     label: "记忆",
-    entries: [
-      { route: "/knowledge", label: "知识库" },
-      { route: "/memory-manager", label: "记忆总览" },
-      { route: "/episodic", label: "情景记忆" },
-      { route: "/graph", label: "记忆图谱" },
-      { route: "/memory-timeline", label: "时间线" },
-      { route: "/profiles", label: "用户画像" },
-    ],
+    entries: [],
   },
   {
     id: "tasks",
@@ -60,10 +49,7 @@ export const appSections: AppSectionDefinition[] = [
     id: "workshop",
     route: "/creative-workshop",
     label: "创意工坊",
-    entries: [
-      { route: "/creative-workshop/character-cards", label: "角色卡工坊" },
-      { route: "/creative-workshop/pet/installations", label: "桌宠" },
-    ],
+    entries: [],
   },
   {
     id: "extensions",

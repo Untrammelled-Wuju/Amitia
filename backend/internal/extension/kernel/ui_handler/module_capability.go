@@ -54,6 +54,43 @@ func validProviderModuleCapability(providerID, token string) bool {
 	return hmac.Equal([]byte(expected), []byte(strings.TrimSpace(token)))
 }
 
+func pageModuleCapability(extensionID, pageID string, expiresAt int64) string {
+	mac := hmac.New(sha256.New, providerModuleCapabilityKey)
+	if _, err := mac.Write([]byte("page:")); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if _, err := mac.Write([]byte(extensionID)); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if _, err := mac.Write([]byte(":")); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if _, err := mac.Write([]byte(pageID)); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if _, err := mac.Write([]byte(":")); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	if _, err := mac.Write([]byte(strconv.FormatInt(expiresAt, 10))); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+	signature := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+	return strconv.FormatInt(expiresAt, 10) + "." + signature
+}
+
+func validPageModuleCapability(extensionID, pageID, token string) bool {
+	expiryRaw, signatureRaw, ok := strings.Cut(strings.TrimSpace(token), ".")
+	if !ok || expiryRaw == "" || signatureRaw == "" {
+		return false
+	}
+	expiresAt, err := strconv.ParseInt(expiryRaw, 10, 64)
+	if err != nil || time.Now().Unix() > expiresAt {
+		return false
+	}
+	expected := pageModuleCapability(extensionID, pageID, expiresAt)
+	return hmac.Equal([]byte(expected), []byte(strings.TrimSpace(token)))
+}
+
 func signProviderModuleCapabilities(provider *ui_provider.ProviderDefinition) *ui_provider.ProviderDefinition {
 	if provider == nil {
 		return nil

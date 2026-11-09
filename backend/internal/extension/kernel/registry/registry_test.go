@@ -8,13 +8,22 @@ import (
 )
 
 func makeContribution(id string, kind domain.ContributionKind, ext string, mod string) domain.ContributionDefinition {
+	adapter := domain.ContributionAdapter("")
+	switch kind {
+	case domain.ContributionKindTool:
+		adapter = domain.ContributionAdapterTool
+	case domain.ContributionKindAgentSkill:
+		adapter = domain.ContributionAdapterAgentSkill
+	}
 	return domain.ContributionDefinition{
-		ID:          domain.ContributionID(id),
-		ModuleID:    domain.ModuleID(mod),
-		ExtensionID: domain.ExtensionID(ext),
-		Kind:        kind,
-		Name:        domain.LocalizedText{Default: id},
-		Definition:  map[string]any{},
+		ID:              domain.ContributionID(id),
+		ModuleID:        domain.ModuleID(mod),
+		ExtensionID:     domain.ExtensionID(ext),
+		Kind:            kind,
+		Adapter:         adapter,
+		ContractVersion: 1,
+		Name:            domain.LocalizedText{Default: id},
+		Definition:      map[string]any{},
 	}
 }
 
@@ -253,7 +262,7 @@ func TestRebuild(t *testing.T) {
 
 func TestRegisterAdapter(t *testing.T) {
 	r := NewDefaultRegistry()
-	adapter := &fakeAdapter{kind: domain.ContributionKindTool}
+	adapter := &fakeAdapter{adapter: domain.ContributionAdapterTool}
 	r.RegisterAdapter(adapter)
 	batch := ContributionRegistrationBatch{
 		ExtensionID: "com.example/test",
@@ -271,7 +280,7 @@ func TestRegisterAdapter(t *testing.T) {
 
 func TestRegisterAdapterUsesContributionAdapter(t *testing.T) {
 	r := NewDefaultRegistry()
-	adapter := &fakeAdapter{kind: domain.ContributionKindTool}
+	adapter := &fakeAdapter{adapter: domain.ContributionAdapterTool}
 	r.RegisterAdapter(adapter)
 	contribution := makeContribution("custom-1", domain.ContributionKind("com.example.market/page"), "com.example/test", "main")
 	contribution.Adapter = domain.ContributionAdapterTool
@@ -287,7 +296,7 @@ func TestRegisterAdapterUsesContributionAdapter(t *testing.T) {
 }
 
 type fakeAdapter struct {
-	kind            domain.ContributionKind
+	adapter         domain.ContributionAdapter
 	registerCount   int
 	activateCount   int
 	deactivateCount int
@@ -295,7 +304,7 @@ type fakeAdapter struct {
 }
 
 func (a *fakeAdapter) Adapter() domain.ContributionAdapter {
-	return domain.ContributionAdapterForKind(a.kind)
+	return a.adapter
 }
 func (a *fakeAdapter) OnRegister(_ context.Context, _ RegisteredContribution) error {
 	a.registerCount++

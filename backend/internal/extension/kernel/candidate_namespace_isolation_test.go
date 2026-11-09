@@ -22,13 +22,15 @@ func makeTestInstallerWithNamespace(t *testing.T) (*TypedContributionInstaller, 
 
 func makeToolContrib(id, extID string) domain.ContributionDefinition {
 	return domain.ContributionDefinition{
-		ID:          domain.ContributionID(id),
-		ExtensionID: domain.ExtensionID(extID),
-		ModuleID:    "mod-1",
-		Kind:        domain.ContributionKindTool,
-		Version:     "1.0.0",
-		Name:        domain.LocalizedText{Default: id},
-		Description: domain.LocalizedText{Default: "test tool"},
+		ID:              domain.ContributionID(id),
+		ExtensionID:     domain.ExtensionID(extID),
+		ModuleID:        "mod-1",
+		Kind:            domain.ContributionKindTool,
+		Adapter:         domain.ContributionAdapterTool,
+		ContractVersion: 1,
+		Version:         "1.0.0",
+		Name:            domain.LocalizedText{Default: id},
+		Description:     domain.LocalizedText{Default: "test tool"},
 		Definition: map[string]any{
 			"toolId":       id,
 			"modelName":    id,

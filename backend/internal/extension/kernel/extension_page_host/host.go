@@ -91,6 +91,8 @@ type ExtensionPageSpec struct {
 	Navigation     PageNavigationDefinition  `json:"navigation"`
 	EntryKind      PageKind                  `json:"entryKind"`
 	EntryPath      string                    `json:"entryPath"`
+	EntryHash      string                    `json:"entryHash,omitempty"`
+	ModuleToken    string                    `json:"moduleToken,omitempty"`
 	SchemaPath     string                    `json:"schemaPath,omitempty"`
 	Scope          PageScope                 `json:"scope"`
 	Permissions    []string                  `json:"permissions,omitempty"`
@@ -521,6 +523,7 @@ type PageRegistrationInput struct {
 	ContractVersion int
 	EntryKind       PageKind
 	EntryPath       string
+	EntryHash       string
 	SchemaPath      string
 	Title           LocalizedText
 	Description     LocalizedText
@@ -538,6 +541,7 @@ func NewExtensionPageDefinition(input PageRegistrationInput) *ExtensionPageDefin
 			Icon:        input.Icon,
 			EntryKind:   input.EntryKind,
 			EntryPath:   input.EntryPath,
+			EntryHash:   input.EntryHash,
 			SchemaPath:  input.SchemaPath,
 			Scope:       ScopeGlobal,
 			Permissions: input.Permissions,
@@ -584,6 +588,10 @@ func (h *PageHost) EnsurePage(ctx context.Context, def *ExtensionPageDefinition)
 
 func (h *PageHost) UnregisterPage(ctx context.Context, contributionID ContributionID) error {
 	return h.registry.Unregister(ctx, contributionID)
+}
+
+func (h *PageHost) ResolvePage(ctx context.Context, extensionID ExtensionID, pageID PageID) (*ExtensionPageDefinition, error) {
+	return h.registry.Resolve(ctx, extensionID, pageID)
 }
 
 type OpenPageRequest struct {

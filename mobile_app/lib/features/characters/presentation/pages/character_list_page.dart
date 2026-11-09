@@ -190,7 +190,9 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                           label: '管理角色',
                           isSecondary: true,
                           isFullWidth: true,
-                          onPressed: () => _showManageSheet(context),
+                          onPressed: coreAccess.write
+                              ? () => _showManageSheet(context)
+                              : null,
                         ),
                       ),
                     ],

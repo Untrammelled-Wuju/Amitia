@@ -26,7 +26,7 @@
     "package": "node scripts/build-release.mjs --win --x64",
     "upload": "node scripts/publish-release.mjs",
     "verify:desktop-pet-package": "node scripts/verify-desktop-pet-package.mjs",
-    "package:ci": "pnpm run release:gate && node scripts/build-amitiacore.mjs && node ../plugins-code/plugin-market/scripts/build-package.mjs && node ../plugins-code/plugin-market/scripts/verify-package.mjs && electron-builder --config electron-builder.ci.yml --win --x64 --dir && node scripts/verify-packaged-desktop-pet.mjs release-ci/win-unpacked && node scripts/verify-packaged-core.mjs release-ci/win-unpacked",
+    "package:ci": "pnpm run release:gate && node scripts/build-amitiacore.mjs && node ../plugins-builtin/plugin-market/scripts/build-package.mjs && node ../plugins-builtin/plugin-market/scripts/verify-package.mjs && electron-builder --config electron-builder.ci.yml --win --x64 --dir && node scripts/verify-packaged-desktop-pet.mjs release-ci/win-unpacked && node scripts/verify-packaged-core.mjs release-ci/win-unpacked",
     "test:electron-pet-smoke": "electron scripts/desktop-pet-electron-smoke.cjs",
     "verify:pet-player-singleton": "node scripts/verify-pet-player-singleton.mjs",
     "verify:desktop-pet-runtime-singletrack": "node ../scripts/audit/verify-desktop-pet-runtime-singletrack.mjs",

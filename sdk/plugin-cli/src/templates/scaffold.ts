@@ -4,17 +4,17 @@ export function scaffoldManifest(input: TemplateScaffoldInput, kind: TemplateKin
   const module = moduleForTemplate(kind);
   const permissions = permissionsForTemplate(kind);
   const manifest = {
-    manifestVersion: 1,
-    extension: {
+    schemaVersion: 1,
+    plugin: {
       id: input.extensionId,
       name: { default: input.displayName },
       description: { default: input.description },
       version: input.version,
       license: input.license,
-    },
-    publisher: {
-      id: input.publisher,
-      displayName: input.publisher,
+      publisher: {
+        id: input.publisher,
+        displayName: input.publisher,
+      },
     },
     compatibility: {
       minHostVersion: "0.1.0",
@@ -23,12 +23,11 @@ export function scaffoldManifest(input: TemplateScaffoldInput, kind: TemplateKin
     modules: [
       {
         id: module.moduleId,
-        type: "javascript",
         name: { default: input.displayName },
         description: { default: input.description },
         runtime: {
-          type: module.runtime,
-          entryPoint: "index.js",
+          adapter: module.runtime,
+          entry: "index.js",
         },
       },
     ],

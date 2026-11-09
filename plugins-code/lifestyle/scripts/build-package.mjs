@@ -27,7 +27,7 @@ const outputDir =
   process.env.AMITIA_PLUGIN_OUTPUT_DIR ||
   resolve(packageRoot, "..", "..", "plugin", "lifestyle");
 const manifestInfo = JSON.parse(readFileSync(join(packageRoot, "amitia-extension.json"), "utf8"));
-const outputFile = join(outputDir, `amitia-lifestyle-${manifestInfo.extension.version}.amitiax`);
+const outputFile = join(outputDir, `amitia-lifestyle-${manifestInfo.plugin.version}.amitiax`);
 const generatedAt = "2026-01-01T00:00:00Z";
 
 function collectFiles(root) {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 )
@@ -35,13 +34,21 @@ func (m *HostPluginPackageManager) List(ctx context.Context) (HostPluginInventor
 }
 
 func hostPluginIsSystemManaged(ctx context.Context, container *Container, installation domain.ExtensionInstallation) bool {
-	if strings.HasPrefix(string(installation.ExtensionID), "com.amitia.builtin.") {
-		return true
-	}
 	if container == nil || container.DefinitionRepository == nil {
 		return false
 	}
-	definition, err := container.DefinitionRepository.GetExtension(ctx, installation.ExtensionID, installation.InstalledVersion)
+	return extensionInstallationIsSystemManaged(ctx, container.DefinitionRepository, installation)
+}
+
+func extensionInstallationIsSystemManaged(
+	ctx context.Context,
+	definitions domain.DefinitionRepository,
+	installation domain.ExtensionInstallation,
+) bool {
+	if definitions == nil {
+		return false
+	}
+	definition, err := definitions.GetExtension(ctx, installation.ExtensionID, installation.InstalledVersion)
 	if err != nil {
 		return false
 	}

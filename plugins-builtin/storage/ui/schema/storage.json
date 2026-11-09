@@ -1,0 +1,470 @@
+{
+  "schemaVersion": "schema-ui/1",
+  "type": "document",
+  "title": "存储维护",
+  "lifecycle": {
+    "onMount": [
+      {
+        "action_id": "command",
+        "target": "tool",
+        "input": {
+          "action": "characters",
+          "payload": {}
+        },
+        "statePath": "characters"
+      },
+      {
+        "action_id": "command",
+        "target": "tool",
+        "input": {
+          "action": "overview",
+          "payload": {}
+        },
+        "statePath": "overview"
+      }
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "command",
+      "target": "tool"
+    }
+  ],
+  "children": [
+    {
+      "id": "storage-page",
+      "type": "page",
+      "children": [
+        {
+          "id": "storage-info",
+          "type": "key_value",
+          "props": {
+            "title": "存储信息",
+            "columns": 2
+          },
+          "bindings": [
+            {
+              "path": "items",
+              "source": "state",
+              "sourcePath": "overview.info"
+            }
+          ]
+        },
+        {
+          "id": "storage-role",
+          "type": "select",
+          "props": {
+            "label": "清理所属角色",
+            "placeholder": "选择角色"
+          },
+          "bindings": [
+            {
+              "path": "roleId",
+              "source": "form",
+              "default": ""
+            },
+            {
+              "path": "options",
+              "source": "state",
+              "sourcePath": "characters"
+            }
+          ]
+        },
+        {
+          "id": "storage-cleanup-section",
+          "type": "section",
+          "props": {
+            "title": "聊天清理"
+          },
+          "children": [
+            {
+              "id": "storage-before-date",
+              "type": "field",
+              "props": {
+                "label": "清理此日期之前",
+                "placeholder": "YYYY-MM-DD"
+              },
+              "bindings": [
+                {
+                  "path": "beforeDate",
+                  "source": "form",
+                  "default": ""
+                }
+              ]
+            },
+            {
+              "id": "storage-older-days",
+              "type": "field",
+              "props": {
+                "label": "或清理超过 N 天",
+                "placeholder": "例如 90"
+              },
+              "bindings": [
+                {
+                  "path": "olderThanDays",
+                  "source": "form",
+                  "default": 0
+                }
+              ]
+            },
+            {
+              "id": "storage-include-memories",
+              "type": "switch",
+              "props": {
+                "activeText": "同时清理关联记忆"
+              },
+              "bindings": [
+                {
+                  "path": "includeMemories",
+                  "source": "form",
+                  "default": false
+                }
+              ]
+            },
+            {
+              "id": "storage-stats",
+              "type": "button",
+              "props": {
+                "text": "读取统计"
+              },
+              "actions": [
+                {
+                  "action_id": "command",
+                  "target": "tool",
+                  "input": {
+                    "action": "stats",
+                    "payload": {
+                      "roleId": "$form.roleId"
+                    }
+                  },
+                  "statePath": "stats"
+                }
+              ]
+            },
+            {
+              "id": "storage-vacuum",
+              "type": "button",
+              "props": {
+                "text": "执行 VACUUM",
+                "type": "primary"
+              },
+              "actions": [
+                {
+                  "action_id": "command",
+                  "target": "tool",
+                  "input": {
+                    "action": "vacuum",
+                    "payload": {
+                      "roleId": "$form.roleId"
+                    }
+                  },
+                  "confirmation": "确认压缩当前数据库文件？",
+                  "statePath": "vacuum"
+                }
+              ]
+            },
+            {
+              "id": "storage-preview",
+              "type": "button",
+              "props": {
+                "text": "预览清理范围",
+                "type": "primary"
+              },
+              "actions": [
+                {
+                  "action_id": "command",
+                  "target": "tool",
+                  "input": {
+                    "action": "cleanup_preview",
+                    "payload": {
+                      "roleId": "$form.roleId",
+                      "beforeDate": "$form.beforeDate",
+                      "olderThanDays": "$form.olderThanDays",
+                      "includeMemories": "$form.includeMemories"
+                    }
+                  },
+                  "statePath": "cleanupPreview"
+                }
+              ]
+            },
+            {
+              "id": "storage-preview-view",
+              "type": "key_value",
+              "props": {
+                "title": "清理预览",
+                "columns": 2
+              },
+              "bindings": [
+                {
+                  "path": "items",
+                  "source": "state",
+                  "sourcePath": "cleanupPreview"
+                }
+              ]
+            },
+            {
+              "id": "storage-confirm-text",
+              "type": "field",
+              "props": {
+                "label": "输入“确认清理”",
+                "placeholder": "确认清理"
+              },
+              "bindings": [
+                {
+                  "path": "confirmText",
+                  "source": "form",
+                  "default": ""
+                }
+              ]
+            },
+            {
+              "id": "storage-confirm",
+              "type": "button",
+              "props": {
+                "text": "确认清理",
+                "type": "danger"
+              },
+              "actions": [
+                {
+                  "action_id": "command",
+                  "target": "tool",
+                  "input": {
+                    "action": "cleanup_confirm",
+                    "payload": {
+                      "roleId": "$form.roleId",
+                      "previewId": "$context.cleanupPreview.previewId",
+                      "confirmText": "$form.confirmText"
+                    }
+                  },
+                  "confirmation": "清理前会创建完整备份，确认继续？",
+                  "statePath": "cleanupResult",
+                  "followUpActions": [
+                    {
+                      "action_id": "command",
+                      "target": "tool",
+                      "input": {
+                        "action": "overview",
+                        "payload": {}
+                      },
+                      "statePath": "overview"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "storage-backup-section",
+          "type": "section",
+          "props": {
+            "title": "完整备份与恢复"
+          },
+          "children": [
+            {
+              "id": "storage-passphrase",
+              "type": "field",
+              "props": {
+                "label": "备份口令",
+                "variant": "password",
+                "placeholder": "至少 8 位，可留空创建未加密备份"
+              },
+              "bindings": [
+                {
+                  "path": "passphrase",
+                  "source": "form",
+                  "default": ""
+                }
+              ]
+            },
+            {
+              "id": "storage-create-backup",
+              "type": "button",
+              "props": {
+                "text": "创建完整备份",
+                "type": "primary"
+              },
+              "actions": [
+                {
+                  "action_id": "command",
+                  "target": "tool",
+                  "input": {
+                    "action": "create_backup",
+                    "payload": {
+                      "passphrase": "$form.passphrase"
+                    }
+                  },
+                  "confirmation": "确认创建当前设备的完整备份？",
+                  "statePath": "backupResult",
+                  "followUpActions": [
+                    {
+                      "action_id": "command",
+                      "target": "tool",
+                      "input": {
+                        "action": "list_backups",
+                        "payload": {}
+                      },
+                      "statePath": "backups"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "storage-refresh-backups",
+              "type": "button",
+              "props": {
+                "text": "刷新备份列表"
+              },
+              "actions": [
+                {
+                  "action_id": "command",
+                  "target": "tool",
+                  "input": {
+                    "action": "list_backups",
+                    "payload": {}
+                  },
+                  "statePath": "backups"
+                }
+              ]
+            },
+            {
+              "id": "storage-backups",
+              "type": "gallery",
+              "props": {
+                "variant": "cards",
+                "titleField": "name",
+                "subtitleField": "createdAt",
+                "summaryField": "encrypted",
+                "minItemWidth": 280,
+                "emptyText": "暂无备份",
+                "showSubtitle": true,
+                "showCount": false,
+                "itemActions": [
+                  {
+                    "id": "preview-restore",
+                    "action_id": "command",
+                    "label": "预检恢复",
+                    "type": "primary",
+                    "target": "tool",
+                    "input": {
+                      "action": "preview_restore",
+                      "payload": {
+                        "name": "$item.name",
+                        "passphrase": "$form.passphrase"
+                      }
+                    },
+                    "statePath": "restorePreview"
+                  },
+                  {
+                    "id": "delete-backup",
+                    "action_id": "command",
+                    "label": "删除",
+                    "type": "danger",
+                    "target": "tool",
+                    "confirmation": "删除后无法恢复该备份，确认继续？",
+                    "input": {
+                      "action": "delete_backup",
+                      "payload": {
+                        "name": "$item.name"
+                      }
+                    },
+                    "statePath": "backupAction",
+                    "followUpActions": [
+                      {
+                        "action_id": "command",
+                        "target": "tool",
+                        "input": {
+                          "action": "list_backups",
+                          "payload": {}
+                        },
+                        "statePath": "backups"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "bindings": [
+                {
+                  "path": "items",
+                  "source": "state",
+                  "sourcePath": "backups.backups"
+                }
+              ]
+            },
+            {
+              "id": "storage-restore-preview",
+              "type": "key_value",
+              "props": {
+                "title": "恢复预检",
+                "columns": 1
+              },
+              "bindings": [
+                {
+                  "path": "items",
+                  "source": "state",
+                  "sourcePath": "restorePreview"
+                }
+              ]
+            },
+            {
+              "id": "storage-execute-restore",
+              "type": "button",
+              "props": {
+                "text": "确认恢复",
+                "type": "danger"
+              },
+              "actions": [
+                {
+                  "action_id": "command",
+                  "target": "tool",
+                  "input": {
+                    "action": "execute_restore",
+                    "payload": {
+                      "operationId": "$context.restorePreview.operationId"
+                    }
+                  },
+                  "confirmation": "恢复会替换当前设备 Runtime 数据，并自动创建恢复前备份。确认继续？",
+                  "statePath": "restoreResult"
+                }
+              ]
+            },
+            {
+              "id": "storage-cancel-restore",
+              "type": "button",
+              "props": {
+                "text": "取消待执行恢复"
+              },
+              "actions": [
+                {
+                  "action_id": "command",
+                  "target": "tool",
+                  "input": {
+                    "action": "cancel_restore",
+                    "payload": {}
+                  },
+                  "statePath": "restoreCancel"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "theme": {
+    "mode": "auto"
+  },
+  "accessibility": {
+    "enabled": true,
+    "keyboardNav": true,
+    "screenReader": true
+  },
+  "performanceBudget": {
+    "maxRenderTimeMs": 180,
+    "maxLayoutCount": 260,
+    "maxNodeCount": 260,
+    "maxDataFetchCount": 2,
+    "maxActionCount": 24
+  }
+}

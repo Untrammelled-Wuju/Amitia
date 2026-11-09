@@ -1,48 +1,79 @@
 {
-	"manifestVersion": 1,
-	"extension": {
-		"id": "com.amitia.repair/signature-valid",
-		"name": {"default": "Signature Valid"},
-		"description": {"default": "Phase 10 E2E: extension with a valid signature from a trusted publisher"},
-		"version": "1.0.0",
-		"metadata": {
-			"expectedSignatureStatus": "valid",
-			"expectedInstallStatus": "succeeded"
-		}
-	},
-	"publisher": {
-		"id": "com.amitia.repair",
-		"displayName": "Amitia Repair",
-		"trustLevel": "trusted"
-	},
-	"modules": [
-		{
-			"id": "main",
-			"name": {"default": "Main"},
-			"type": "javascript",
-			"runtime": {"type": "javascript", "entryPoint": "index.js"},
-			"contributions": [
-				{
-					"id": "signed-tool",
-					"kind": "tool",
-					"name": {"default": "Signed Tool"},
-					"description": {"default": "Tool from a validly signed package"},
-					"modelName": "signed_tool",
-					"inputSchema": {
-						"type": "object",
-						"properties": {
-							"input": {"type": "string"}
-						}
-					}
-				}
-			]
-		}
-	],
-	"permissions": [
-		{"name": "tool.invoke", "reason": "Execute signed tool", "required": true}
-	],
-	"integrity": {
-		"algorithm": "sha256",
-		"contentTreeHash": ""
-	}
+  "schemaVersion": 1,
+  "plugin": {
+    "id": "com.amitia.repair/signature-valid",
+    "name": {
+      "default": "Signature Valid"
+    },
+    "description": {
+      "default": "Phase 10 E2E: extension with a valid signature from a trusted publisher"
+    },
+    "version": "1.0.0",
+    "metadata": {
+      "expectedSignatureStatus": "valid",
+      "expectedInstallStatus": "succeeded"
+    },
+    "publisher": {
+      "id": "com.amitia.repair",
+      "displayName": "Amitia Repair",
+      "trustLevel": "trusted"
+    }
+  },
+  "compatibility": {
+    "minHostVersion": "0.1.0"
+  },
+  "modules": [
+    {
+      "id": "main",
+      "name": {
+        "default": "Main"
+      },
+      "runtime": {
+        "adapter": "javascript",
+        "entry": "index.js"
+      },
+      "dynamic": {
+        "allowedAdapters": [
+          "tool"
+        ],
+        "maxContributions": 1,
+        "maxTools": 1,
+        "maxRoutes": 0,
+        "maxServices": 0,
+        "allowUnregister": true
+      },
+      "contributions": [
+        {
+          "id": "signed-tool",
+          "kind": "tool",
+          "adapter": "tool",
+          "contractVersion": 1,
+          "name": {
+            "default": "Signed Tool"
+          },
+          "description": {
+            "default": "Tool from a validly signed package"
+          }
+        }
+      ],
+      "placement": "device"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "tool.invoke",
+      "reason": "Execute signed tool",
+      "required": true
+    }
+  ],
+  "data": {
+    "schemaVersion": 1,
+    "backup": true,
+    "export": true,
+    "uninstall": "retain"
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "contentTreeHash": ""
+  }
 }

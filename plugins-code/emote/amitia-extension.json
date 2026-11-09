@@ -1,6 +1,6 @@
 {
-  "manifestVersion": 1,
-  "extension": {
+  "schemaVersion": 1,
+  "plugin": {
     "id": "com.amitia/emote",
     "name": {
       "default": "表情包"
@@ -19,14 +19,13 @@
       "emote",
       "sticker",
       "media"
-    ]
+    ],
+    "publisher": {
+      "id": "com.amitia",
+      "displayName": "Amitia",
+      "trustLevel": "official"
+    }
   },
-  "publisher": {
-    "id": "com.amitia",
-    "displayName": "Amitia",
-    "trustLevel": "official"
-  },
-  "placement": "device",
   "compatibility": {
     "minHostVersion": "0.1.0",
     "platforms": [
@@ -46,23 +45,11 @@
       "description": {
         "default": "管理插件自有表情数据、资源和发送决策。"
       },
-      "type": "javascript",
-      "placement": "device",
-      "deviceRequirements": {
-        "platforms": [
-          "windows",
-          "linux",
-          "macos",
-          "android",
-          "ios"
-        ]
-      },
       "runtime": {
-        "type": "javascript",
-        "entryPoint": "dist/index.js",
+        "adapter": "javascript",
+        "entry": "dist/index.js",
         "timeout": "120s",
-        "memory": 268435456,
-        "maxSubprocesses": 0,
+        "memoryBytes": 268435456,
         "capabilities": {
           "network": false,
           "filesystem": false
@@ -79,32 +66,41 @@
           }
         }
       },
-      "providedCapabilities": [
-        {
-          "id": "com.amitia/emote/ai",
-          "version": "1.0.0",
-          "metadata": {
-            "toolId": "com.amitia/emote/ai"
+      "services": {
+        "provides": [
+          {
+            "serviceId": "com.amitia/emote/ai",
+            "version": "1.0.0",
+            "scopes": [
+              "global"
+            ],
+            "placement": "device"
           }
-        }
-      ],
+        ],
+        "requires": []
+      },
+      "dynamic": {
+        "allowedAdapters": [
+          "tool"
+        ],
+        "maxContributions": 2,
+        "maxTools": 2,
+        "maxRoutes": 0,
+        "maxServices": 1,
+        "allowUnregister": true
+      },
       "contributions": [
         {
           "id": "emote-command",
           "kind": "tool",
+          "adapter": "tool",
+          "contractVersion": 1,
           "name": {
             "default": "表情包命令"
           },
           "description": {
             "default": "表情包插件内部管理和发送入口。"
           },
-          "requiredPermissions": [
-            "storage.state.read",
-            "storage.state.write",
-            "resource.read",
-            "resource.write",
-            "message.append"
-          ],
           "spec": {
             "toolId": "com.amitia/emote/command",
             "handlerName": "command",
@@ -168,16 +164,6 @@
               "runtimeType": "javascript",
               "handlerName": "command"
             }
-          }
-        },
-        {
-          "id": "emote-ai",
-          "kind": "tool",
-          "name": {
-            "default": "AI 表情选择"
-          },
-          "description": {
-            "default": "回复适合使用表情时，先调用 action=list 获取可用表情的 id、名称、含义和关键词，由模型根据当前语境自主选择最合适的表情，再调用 action=send 发送。"
           },
           "requiredPermissions": [
             "storage.state.read",
@@ -185,7 +171,19 @@
             "resource.read",
             "resource.write",
             "message.append"
-          ],
+          ]
+        },
+        {
+          "id": "emote-ai",
+          "kind": "tool",
+          "adapter": "tool",
+          "contractVersion": 1,
+          "name": {
+            "default": "AI 表情选择"
+          },
+          "description": {
+            "default": "回复适合使用表情时，先调用 action=list 获取可用表情的 id、名称、含义和关键词，由模型根据当前语境自主选择最合适的表情，再调用 action=send 发送。"
+          },
           "spec": {
             "toolId": "com.amitia/emote/ai",
             "modelName": "emote",
@@ -237,6 +235,32 @@
               "runtimeType": "javascript",
               "handlerName": "ai"
             }
+          },
+          "requiredPermissions": [
+            "storage.state.read",
+            "storage.state.write",
+            "resource.read",
+            "resource.write",
+            "message.append"
+          ]
+        }
+      ],
+      "placement": "device",
+      "deviceRequirements": {
+        "platforms": [
+          "windows",
+          "linux",
+          "macos",
+          "android",
+          "ios"
+        ]
+      },
+      "providedCapabilities": [
+        {
+          "id": "com.amitia/emote/ai",
+          "version": "1.0.0",
+          "metadata": {
+            "toolId": "com.amitia/emote/ai"
           }
         }
       ]
@@ -249,18 +273,26 @@
       "description": {
         "default": "提供独立表情包导航、管理页面和聊天区域界面。"
       },
-      "type": "data_only",
-      "placement": "device",
+      "dynamic": {
+        "allowedAdapters": [
+          "ui",
+          "ui_provider"
+        ],
+        "maxContributions": 12,
+        "maxTools": 0,
+        "maxRoutes": 12,
+        "maxServices": 0,
+        "allowUnregister": true
+      },
       "contributions": [
         {
           "id": "emote-page",
           "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
           "name": {
             "default": "表情包管理"
           },
-          "requiredPermissions": [
-            "tool.invoke"
-          ],
           "spec": {
             "contribution_id": "emote-page",
             "extension_id": "com.amitia/emote",
@@ -278,6 +310,7 @@
               "description": {
                 "default": "管理表情、分组和 AI 使用设置。"
               },
+              "chrome": "frameless",
               "icon": "star"
             },
             "entry": {
@@ -311,17 +344,19 @@
             "integrity": {
               "definition_hash": "emote-page-v1"
             }
-          }
+          },
+          "requiredPermissions": [
+            "tool.invoke"
+          ]
         },
         {
           "id": "emote-mobile-page",
           "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
           "name": {
             "default": "表情包管理（手机）"
           },
-          "requiredPermissions": [
-            "tool.invoke"
-          ],
           "spec": {
             "contribution_id": "emote-mobile-page",
             "extension_id": "com.amitia/emote",
@@ -339,6 +374,7 @@
               "description": {
                 "default": "管理表情、分组和 AI 使用设置。"
               },
+              "chrome": "frameless",
               "icon": "star"
             },
             "entry": {
@@ -371,11 +407,16 @@
             "integrity": {
               "definition_hash": "emote-mobile-page-v1"
             }
-          }
+          },
+          "requiredPermissions": [
+            "tool.invoke"
+          ]
         },
         {
           "id": "emote-workspace-sidebar",
           "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
           "name": {
             "default": "表情包工作区导航"
           },
@@ -421,6 +462,8 @@
         {
           "id": "emote-mobile-workspace-sidebar",
           "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
           "name": {
             "default": "表情包工作区导航（手机）"
           },
@@ -461,12 +504,11 @@
         {
           "id": "emote-composer",
           "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
           "name": {
             "default": "表情包发送入口"
           },
-          "requiredPermissions": [
-            "tool.invoke"
-          ],
           "spec": {
             "contribution_id": "emote-composer",
             "extension_id": "com.amitia/emote",
@@ -514,17 +556,19 @@
             "integrity": {
               "definition_hash": "emote-composer-v1"
             }
-          }
+          },
+          "requiredPermissions": [
+            "tool.invoke"
+          ]
         },
         {
           "id": "emote-mobile-composer",
           "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
           "name": {
             "default": "表情包发送入口（手机）"
           },
-          "requiredPermissions": [
-            "tool.invoke"
-          ],
           "spec": {
             "contribution_id": "emote-mobile-composer",
             "extension_id": "com.amitia/emote",
@@ -571,11 +615,16 @@
             "integrity": {
               "definition_hash": "emote-mobile-composer-v1"
             }
-          }
+          },
+          "requiredPermissions": [
+            "tool.invoke"
+          ]
         },
         {
           "id": "emote-message",
           "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
           "name": {
             "default": "表情消息渲染"
           },
@@ -617,6 +666,8 @@
         {
           "id": "emote-mobile-message",
           "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
           "name": {
             "default": "表情消息渲染（手机）"
           },
@@ -657,6 +708,8 @@
         {
           "id": "emote-page-provider",
           "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
           "name": {
             "default": "表情包页面 Provider"
           },
@@ -698,6 +751,8 @@
         {
           "id": "emote-workspace-sidebar-provider",
           "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
           "name": {
             "default": "表情包工作区导航 Provider"
           },
@@ -737,6 +792,8 @@
         {
           "id": "emote-routes",
           "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
           "name": {
             "default": "表情包路由"
           },
@@ -808,6 +865,8 @@
         {
           "id": "emote-message-provider",
           "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
           "name": {
             "default": "表情消息 Provider"
           },
@@ -851,7 +910,8 @@
             }
           }
         }
-      ]
+      ],
+      "placement": "device"
     }
   ],
   "permissions": [
@@ -892,10 +952,11 @@
       "scope": "extension"
     }
   ],
-  "lifecycle": {
-    "backgroundTasks": false,
-    "networkAccess": false,
-    "sandbox": true
+  "data": {
+    "schemaVersion": 1,
+    "backup": true,
+    "export": true,
+    "uninstall": "retain"
   },
   "integrity": {
     "algorithm": "sha256",

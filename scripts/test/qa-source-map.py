@@ -29,9 +29,11 @@ def main():
                     entry_platform = "管理端 API" if "adminrelease" in path.parts else platform
                     entries.append({"platform": entry_platform, "source": str(path.relative_to(ROOT)), "line": number, "entry": " ".join(value for value in match.groups() if value), "classification": "源码候选入口，非动态路由确认"})
     plugins = []
-    for path in sorted((ROOT / "plugins-code").rglob("amitia-extension.json")):
-        manifest = json.loads(path.read_text())
-        plugins.append({"source": str(path.relative_to(ROOT)), "id": manifest.get("id"), "name": manifest.get("name"), "keys": sorted(manifest)})
+    for directory in ("plugins-builtin", "plugins-code"):
+        for path in sorted((ROOT / directory).rglob("amitia-extension.json")):
+            manifest = json.loads(path.read_text())
+            plugin = manifest.get("plugin", {})
+            plugins.append({"source": str(path.relative_to(ROOT)), "id": plugin.get("id"), "name": plugin.get("name", {}).get("default"), "keys": sorted(manifest)})
     models = []
     for path in sorted((ROOT / "backend").rglob("*.go")):
         if path.name.endswith("_test.go"):

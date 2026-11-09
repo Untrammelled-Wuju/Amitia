@@ -269,16 +269,6 @@ func dynamicChannelPortEnv(module domain.ModuleDefinition) map[string]string {
 	if transport != nil {
 		portEnv = strings.TrimSpace(channelStringValue(transport["portEnv"]))
 	}
-	if portEnv == "" {
-		switch channelID {
-		case "qq":
-			portEnv = "QQ_SIDECAR_PORT"
-		case "wechat":
-			portEnv = "SIDECAR_PORT"
-		case "wechat_ipad860":
-			portEnv = "AMITIA_WECHAT_IPAD860_PORT"
-		}
-	}
 	if channelID == "" || portEnv == "" {
 		return nil
 	}
@@ -288,9 +278,17 @@ func dynamicChannelPortEnv(module domain.ModuleDefinition) map[string]string {
 	}
 	env := map[string]string{portEnv: strconv.Itoa(port)}
 	runtimeport.SetChannelEndpoint(channelID, fmt.Sprintf("http://127.0.0.1:%d", port))
-	if channelID == "wechat_ipad860" {
-		if enginePort, engineErr := runtimeport.AllocateLoopback(); engineErr == nil {
-			env["AMITIA_WECHAT_IPAD860_ENGINE_PORT"] = strconv.Itoa(enginePort)
+	if transport != nil {
+		if values, ok := transport["additionalPortEnvs"].([]any); ok {
+			for _, value := range values {
+				name := strings.TrimSpace(channelStringValue(value))
+				if name == "" || name == portEnv {
+					continue
+				}
+				if additionalPort, portErr := runtimeport.AllocateLoopback(); portErr == nil {
+					env[name] = strconv.Itoa(additionalPort)
+				}
+			}
 		}
 	}
 	return env

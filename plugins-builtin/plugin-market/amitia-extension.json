@@ -1,0 +1,715 @@
+{
+  "schemaVersion": 1,
+  "plugin": {
+    "id": "com.amitia/plugin-market",
+    "name": {
+      "default": "插件市场"
+    },
+    "description": {
+      "default": "发现、审查、安装、更新和卸载经过宿主验证的插件。"
+    },
+    "version": "1.2.0",
+    "license": "AGPL-3.0-only",
+    "homepage": "https://amitia.untrammelled.top",
+    "categories": [
+      "developer",
+      "system"
+    ],
+    "keywords": [
+      "market",
+      "plugin",
+      "extension"
+    ],
+    "metadata": {
+      "system.defaultInstall": true,
+      "system.defaultEnabled": true
+    },
+    "publisher": {
+      "id": "com.amitia",
+      "displayName": "Amitia",
+      "trustLevel": "official"
+    }
+  },
+  "compatibility": {
+    "minHostVersion": "0.1.0",
+    "platforms": [
+      "windows",
+      "linux",
+      "macos",
+      "android",
+      "ios"
+    ]
+  },
+  "modules": [
+    {
+      "id": "plugin-market-runtime",
+      "name": {
+        "default": "插件市场运行时"
+      },
+      "description": {
+        "default": "读取插件目录并通过宿主插件包能力执行安装、更新和卸载。"
+      },
+      "runtime": {
+        "adapter": "javascript",
+        "entry": "dist/index.js",
+        "timeout": "120s",
+        "memoryBytes": 134217728,
+        "capabilities": {
+          "network": false,
+          "filesystem": false
+        },
+        "hostAccess": {
+          "filesystem": {
+            "mode": "none"
+          },
+          "network": {
+            "mode": "host"
+          },
+          "process": {
+            "mode": "none"
+          }
+        }
+      },
+      "dynamic": {
+        "allowedAdapters": [
+          "tool",
+          "ui",
+          "ui_provider"
+        ],
+        "maxContributions": 9,
+        "maxTools": 1,
+        "maxRoutes": 6,
+        "maxServices": 0,
+        "allowUnregister": true
+      },
+      "contributions": [
+        {
+          "id": "plugin-market-command",
+          "kind": "tool",
+          "adapter": "tool",
+          "contractVersion": 1,
+          "name": {
+            "default": "插件市场命令"
+          },
+          "description": {
+            "default": "读取插件目录、准备安装审查、确认安装、更新或卸载普通插件。"
+          },
+          "spec": {
+            "toolId": "com.amitia/plugin-market/command",
+            "modelName": "amitia_plugin_market",
+            "handlerName": "command",
+            "inputSchema": {
+              "type": "object",
+              "required": [
+                "action"
+              ],
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "enum": [
+                    "catalog",
+                    "prepare",
+                    "install",
+                    "uninstall"
+                  ]
+                },
+                "q": {
+                  "type": "string"
+                },
+                "category": {
+                  "type": "string"
+                },
+                "catalogUrl": {
+                  "type": "string"
+                },
+                "platform": {
+                  "type": "string"
+                },
+                "extensionId": {
+                  "type": "string"
+                },
+                "version": {
+                  "type": "string"
+                },
+                "packageUri": {
+                  "type": "string"
+                },
+                "sha256": {
+                  "type": "string"
+                },
+                "fileName": {
+                  "type": "string"
+                },
+                "publisher": {
+                  "type": "string"
+                },
+                "trustLevel": {
+                  "type": "string"
+                },
+                "entryId": {
+                  "type": "string"
+                },
+                "requiredConfirmations": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "confirmations": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "boolean"
+                  }
+                },
+                "confirmed": {
+                  "type": "boolean"
+                },
+                "sessionId": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "object",
+                  "properties": {
+                    "uri": {
+                      "type": "string"
+                    },
+                    "catalogId": {
+                      "type": "string"
+                    },
+                    "sourceType": {
+                      "type": "string"
+                    },
+                    "publisher": {
+                      "type": "string"
+                    },
+                    "trustLevel": {
+                      "type": "string"
+                    },
+                    "entryId": {
+                      "type": "string"
+                    },
+                    "resolvedUrl": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "idempotencyKey": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "riskLevel": "high",
+            "sideEffect": "external",
+            "internal": true,
+            "runtime": {
+              "runtimeType": "javascript",
+              "handlerName": "command"
+            }
+          },
+          "requiredPermissions": [
+            "tool.invoke",
+            "service.network.request",
+            "extensions.read",
+            "extensions.install",
+            "extensions.uninstall"
+          ]
+        },
+        {
+          "id": "plugin-market-desktop-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "插件市场"
+          },
+          "description": {
+            "default": "从管理端目录发现并管理经过宿主验证的插件。"
+          },
+          "spec": {
+            "contribution_id": "plugin-market-desktop-page",
+            "extension_id": "com.amitia/plugin-market",
+            "module_id": "plugin-market-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "插件市场"
+              },
+              "description": {
+                "default": "发现、审查、安装、更新和卸载插件。"
+              },
+              "icon": "extension"
+            },
+            "entry": {
+              "type": "schema_renderer",
+              "schema_path": "modules/plugin-market-ui/desktop/schema.json",
+              "content_hash": "pending"
+            },
+            "sandbox": {
+              "type": "schema_renderer"
+            },
+            "ordering": {
+              "priority": 260
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            },
+            "actions": [
+              {
+                "action_id": "command",
+                "title": {
+                  "default": "执行插件市场命令"
+                },
+                "target": {
+                  "type": "tool",
+                  "tool_id": "com.amitia/plugin-market/command"
+                },
+                "risk_level": "high"
+              }
+            ],
+            "integrity": {
+              "definition_hash": "plugin-market-desktop-page-v1"
+            }
+          },
+          "requiredPermissions": [
+            "tool.invoke"
+          ]
+        },
+        {
+          "id": "plugin-market-mobile-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "插件市场"
+          },
+          "description": {
+            "default": "从管理端目录发现并管理经过宿主验证的插件。"
+          },
+          "spec": {
+            "contribution_id": "plugin-market-mobile-page",
+            "extension_id": "com.amitia/plugin-market",
+            "module_id": "plugin-market-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "插件市场"
+              },
+              "description": {
+                "default": "发现、审查、安装、更新和卸载插件。"
+              },
+              "icon": "extension"
+            },
+            "entry": {
+              "type": "schema_renderer",
+              "schema_path": "modules/plugin-market-ui/mobile/schema.json",
+              "content_hash": "pending"
+            },
+            "sandbox": {
+              "type": "schema_renderer"
+            },
+            "ordering": {
+              "priority": 260
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "actions": [
+              {
+                "action_id": "command",
+                "title": {
+                  "default": "执行插件市场命令"
+                },
+                "target": {
+                  "type": "tool",
+                  "tool_id": "com.amitia/plugin-market/command"
+                },
+                "risk_level": "high"
+              }
+            ],
+            "integrity": {
+              "definition_hash": "plugin-market-mobile-page-v1"
+            }
+          },
+          "requiredPermissions": [
+            "tool.invoke"
+          ]
+        },
+        {
+          "id": "plugin-market-extensions-hub-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "扩展中心"
+          },
+          "description": {
+            "default": "统一发现插件市场、扩展包、工作流、MCP 服务和 Agent Skills。"
+          },
+          "spec": {
+            "contribution_id": "plugin-market-extensions-hub-page",
+            "extension_id": "com.amitia/plugin-market",
+            "module_id": "plugin-market-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "扩展中心"
+              },
+              "description": {
+                "default": "管理扩展包、工作流、MCP 服务与 Agent Skills。"
+              },
+              "icon": "extension"
+            },
+            "entry": {
+              "type": "schema_renderer",
+              "schema_path": "modules/plugin-market-ui/desktop/extensions-hub.json",
+              "content_hash": "pending"
+            },
+            "sandbox": {
+              "type": "schema_renderer"
+            },
+            "ordering": {
+              "priority": 259
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            },
+            "actions": [],
+            "integrity": {
+              "definition_hash": "plugin-market-extensions-hub-page-v1"
+            }
+          }
+        },
+        {
+          "id": "plugin-market-kernel-hub-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "内核工具"
+          },
+          "description": {
+            "default": "统一访问任务、事件、调度、Hook、WASM、可信服务、桌面贡献和开发诊断。"
+          },
+          "spec": {
+            "contribution_id": "plugin-market-kernel-hub-page",
+            "extension_id": "com.amitia/plugin-market",
+            "module_id": "plugin-market-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "内核工具"
+              },
+              "description": {
+                "default": "管理内核运行时、扩展生命周期和开发诊断。"
+              },
+              "icon": "extension"
+            },
+            "entry": {
+              "type": "schema_renderer",
+              "schema_path": "modules/plugin-market-ui/desktop/kernel-hub.json",
+              "content_hash": "pending"
+            },
+            "sandbox": {
+              "type": "schema_renderer"
+            },
+            "ordering": {
+              "priority": 258
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            },
+            "actions": [],
+            "integrity": {
+              "definition_hash": "plugin-market-kernel-hub-page-v1"
+            }
+          }
+        },
+        {
+          "id": "plugin-market-routes",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "插件市场路由"
+          },
+          "spec": {
+            "providerId": "plugin-market-routes",
+            "capability": "route.registry",
+            "mode": "replace",
+            "priority": 260,
+            "trustLevel": "official",
+            "entries": {
+              "web": {
+                "type": "declarative"
+              },
+              "electron_windows": {
+                "type": "declarative"
+              },
+              "electron_macos": {
+                "type": "declarative"
+              },
+              "electron_linux": {
+                "type": "declarative"
+              },
+              "mobile": {
+                "type": "declarative"
+              }
+            },
+            "metadata": {
+              "routes": [
+                {
+                  "id": "kernel-hub",
+                  "path": "/kernel",
+                  "providerId": "plugin-market-kernel-hub-provider",
+                  "capability": "page.provider",
+                  "title": "内核工具",
+                  "priority": 258
+                },
+                {
+                  "id": "extensions-hub",
+                  "path": "/extensions",
+                  "providerId": "plugin-market-extensions-hub-provider",
+                  "capability": "page.provider",
+                  "title": "扩展中心",
+                  "priority": 259
+                },
+                {
+                  "id": "plugin-market",
+                  "path": "/extensions/market",
+                  "providerId": "plugin-market-page-provider",
+                  "capability": "page.provider",
+                  "title": "插件市场",
+                  "priority": 260
+                }
+              ],
+              "sectionEntries": [
+                {
+                  "id": "plugin-market",
+                  "section": "extensions",
+                  "label": "插件市场",
+                  "route": "/extensions/market",
+                  "order": 10,
+                  "description": "发现、审查、安装、更新和卸载插件"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "plugin-market-page-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "插件市场页面 Provider"
+          },
+          "spec": {
+            "providerId": "plugin-market-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 260,
+            "trustLevel": "official",
+            "entries": {
+              "web": {
+                "type": "schema_renderer",
+                "contributionId": "plugin-market-desktop-page"
+              },
+              "electron_windows": {
+                "type": "schema_renderer",
+                "contributionId": "plugin-market-desktop-page"
+              },
+              "electron_macos": {
+                "type": "schema_renderer",
+                "contributionId": "plugin-market-desktop-page"
+              },
+              "electron_linux": {
+                "type": "schema_renderer",
+                "contributionId": "plugin-market-desktop-page"
+              },
+              "mobile": {
+                "type": "schema_renderer",
+                "contributionId": "plugin-market-mobile-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/extensions/market"
+              ]
+            }
+          }
+        },
+        {
+          "id": "plugin-market-extensions-hub-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "扩展中心页面 Provider"
+          },
+          "spec": {
+            "providerId": "plugin-market-extensions-hub-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 259,
+            "trustLevel": "official",
+            "entries": {
+              "web": {
+                "type": "schema_renderer",
+                "contributionId": "plugin-market-extensions-hub-page"
+              },
+              "electron_windows": {
+                "type": "schema_renderer",
+                "contributionId": "plugin-market-extensions-hub-page"
+              },
+              "electron_macos": {
+                "type": "schema_renderer",
+                "contributionId": "plugin-market-extensions-hub-page"
+              },
+              "electron_linux": {
+                "type": "schema_renderer",
+                "contributionId": "plugin-market-extensions-hub-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/extensions"
+              ]
+            }
+          }
+        },
+        {
+          "id": "plugin-market-kernel-hub-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "内核工具页面 Provider"
+          },
+          "spec": {
+            "providerId": "plugin-market-kernel-hub-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 258,
+            "trustLevel": "official",
+            "entries": {
+              "web": {
+                "type": "schema_renderer",
+                "contributionId": "plugin-market-kernel-hub-page"
+              },
+              "electron_windows": {
+                "type": "schema_renderer",
+                "contributionId": "plugin-market-kernel-hub-page"
+              },
+              "electron_macos": {
+                "type": "schema_renderer",
+                "contributionId": "plugin-market-kernel-hub-page"
+              },
+              "electron_linux": {
+                "type": "schema_renderer",
+                "contributionId": "plugin-market-kernel-hub-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/kernel"
+              ]
+            }
+          }
+        }
+      ],
+      "placement": "device",
+      "deviceRequirements": {
+        "platforms": [
+          "windows",
+          "linux",
+          "macos",
+          "android",
+          "ios"
+        ]
+      }
+    }
+  ],
+  "permissions": [
+    {
+      "name": "tool.invoke",
+      "reason": "通过插件市场工具执行目录、安装、更新和卸载操作。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "service.network.request",
+      "reason": "读取经过配置的插件市场目录。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "extensions.read",
+      "reason": "识别已安装、可更新和已启用的插件。",
+      "required": true,
+      "scope": "global"
+    },
+    {
+      "name": "extensions.install",
+      "reason": "通过宿主事务安装和更新经过验证的插件。",
+      "required": true,
+      "scope": "global"
+    },
+    {
+      "name": "extensions.uninstall",
+      "reason": "通过宿主事务卸载用户确认移除的插件。",
+      "required": true,
+      "scope": "global"
+    }
+  ],
+  "data": {
+    "schemaVersion": 1,
+    "backup": true,
+    "export": true,
+    "uninstall": "retain"
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "contentTreeHash": ""
+  }
+}

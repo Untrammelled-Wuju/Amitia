@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import SchemaUINode from "../components/extension/SchemaUINode.vue";
 import { validateDocument, type SchemaUIDocument, type SchemaUINode as SchemaNode } from "../components/extension/schema-ui-utils";
 
-const document = JSON.parse(readFileSync(resolve(__dirname, "../../../plugins-code/plugin-market/ui/schema/desktop.json"), "utf8")) as SchemaUIDocument;
+const document = JSON.parse(readFileSync(resolve(__dirname, "../../../plugins-builtin/plugin-market/ui/schema/desktop.json"), "utf8")) as SchemaUIDocument;
 
 function findNode(nodes: SchemaNode[], id: string): SchemaNode | undefined {
   for (const node of nodes) {

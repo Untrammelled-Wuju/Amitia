@@ -1,7 +1,6 @@
 {
-  "manifestVersion": 1,
-  "placement": "device",
-  "extension": {
+  "schemaVersion": 1,
+  "plugin": {
     "id": "com.amitia/channel-qq",
     "name": {
       "default": "QQ 渠道"
@@ -20,12 +19,12 @@
       "qq",
       "qqbot",
       "channel"
-    ]
-  },
-  "publisher": {
-    "id": "com.amitia",
-    "displayName": "Amitia",
-    "trustLevel": "official"
+    ],
+    "publisher": {
+      "id": "com.amitia",
+      "displayName": "Amitia",
+      "trustLevel": "official"
+    }
   },
   "compatibility": {
     "minHostVersion": "0.1.0",
@@ -46,13 +45,12 @@
       "description": {
         "default": "管理 QQ Bot 连接、账号状态、入站消息和单条消息发送。"
       },
-      "type": "service",
       "runtime": {
-        "type": "service",
-        "entryPoint": "launcher.mjs",
+        "adapter": "service",
+        "entry": "launcher.mjs",
         "timeout": "30s",
-        "memory": 268435456,
-        "maxSubprocesses": 1,
+        "memoryBytes": 268435456,
+        "maxProcesses": 1,
         "hostAccess": {
           "filesystem": {
             "mode": "read_write",
@@ -69,6 +67,19 @@
             "maxProcesses": 1
           }
         }
+      },
+      "services": {
+        "provides": [
+          {
+            "serviceId": "channel.provider",
+            "version": "1.0.0",
+            "scopes": [
+              "global"
+            ],
+            "placement": "device"
+          }
+        ],
+        "requires": []
       },
       "placement": "device",
       "providedCapabilities": [
@@ -99,11 +110,11 @@
             "defaultPort": 19877,
             "healthPath": "/api/health",
             "kind": "qq",
+            "portEnv": "QQ_SIDECAR_PORT",
             "subdir": "qq-sidecar"
           }
         }
-      },
-      "contributions": []
+      }
     },
     {
       "id": "qq-channel-ui",
@@ -113,12 +124,23 @@
       "description": {
         "default": "提供 QQ Bot 配置、连接状态、断开操作和渠道入口。"
       },
-      "type": "data_only",
-      "placement": "device",
+      "dynamic": {
+        "allowedAdapters": [
+          "ui",
+          "ui_provider"
+        ],
+        "maxContributions": 5,
+        "maxTools": 0,
+        "maxRoutes": 5,
+        "maxServices": 0,
+        "allowUnregister": true
+      },
       "contributions": [
         {
           "id": "qq-page",
           "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
           "name": {
             "default": "QQ 渠道"
           },
@@ -216,6 +238,8 @@
         {
           "id": "qq-mobile-page",
           "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
           "name": {
             "default": "QQ 渠道（手机）"
           },
@@ -312,6 +336,8 @@
         {
           "id": "qq-routes",
           "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
           "name": {
             "default": "QQ 路由"
           },
@@ -371,6 +397,8 @@
         {
           "id": "qq-page-provider",
           "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
           "name": {
             "default": "QQ 页面 Provider"
           },
@@ -431,6 +459,8 @@
         {
           "id": "qq-channel-presentation",
           "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
           "name": {
             "default": "QQ 渠道展示"
           },
@@ -478,7 +508,8 @@
             "trustLevel": "official"
           }
         }
-      ]
+      ],
+      "placement": "device"
     }
   ],
   "permissions": [
@@ -531,11 +562,11 @@
       "scope": "extension"
     }
   ],
-  "lifecycle": {
-    "autoUpdate": true,
-    "backgroundTasks": true,
-    "networkAccess": true,
-    "sandbox": false
+  "data": {
+    "schemaVersion": 1,
+    "backup": true,
+    "export": true,
+    "uninstall": "retain"
   },
   "integrity": {
     "algorithm": "sha256",

@@ -62,7 +62,7 @@ func dispatchAttentionNotifications(ctx context.Context, services *AppServices, 
 		if body == "" {
 			body = item.Title
 		}
-		deepLink := "amitia://reminders?attentionId=" + item.ID
+		deepLink := "amitia://attention?attentionId=" + item.ID
 		if item.ConversationID != "" {
 			deepLink = fmt.Sprintf("amitia://chat/%s?attentionId=%s", item.ConversationID, item.ID)
 		}

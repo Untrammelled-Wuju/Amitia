@@ -567,6 +567,17 @@ async function invokeAction(payload: { action: SchemaUIActionBinding; node: Sche
     });
     const data = unwrapActionResult(bridgeResult);
     if (data && typeof data === "object") {
+      const download = asRecord(data.download);
+      if (typeof download.content === "string" && download.content) {
+        const url = URL.createObjectURL(new Blob([download.content], {
+          type: String(download.mimeType || "application/octet-stream"),
+        }));
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = String(download.filename || "amitia-export");
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
       if (data.clientExecute === true && typeof data.text === "string") {
         try {
           if (window.amitiaDesktop?.writeClipboardText) {

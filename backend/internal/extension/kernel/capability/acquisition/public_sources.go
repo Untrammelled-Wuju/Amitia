@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
+	"github.com/u-ai/backend/internal/extension/kernel/packageext"
+	"github.com/u-ai/backend/internal/extension/kernel/plugincontract"
 	"github.com/u-ai/backend/internal/timeoutpolicy"
 )
 
@@ -347,12 +349,16 @@ func (s *PublicPackageSource) Search(ctx context.Context, request AcquisitionReq
 		if err != nil {
 			continue
 		}
-		var manifest packageDiscoveryManifest
-		if err := json.Unmarshal(raw, &manifest); err != nil || manifest.ManifestVersion < 1 || manifest.Extension.ID == "" || manifest.Extension.Version == "" {
+		manifest, err := plugincontract.Parse(raw)
+		if err != nil {
+			continue
+		}
+		report := manifest.Validate()
+		if report.HasErrors() || manifest.Plugin.ID == "" || manifest.Plugin.Version == "" {
 			continue
 		}
 		for _, asset := range release.Assets {
-			if !strings.HasSuffix(strings.ToLower(asset.Name), ".amitiax") {
+			if !packageext.IsArchivePath(asset.Name) {
 				continue
 			}
 			uri, err := url.Parse(asset.URL)

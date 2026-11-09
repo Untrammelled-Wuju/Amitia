@@ -7,7 +7,6 @@ void main() {
     const paths = <String>[
       'lib/features/settings/presentation/pages/advanced_system_page.dart',
       'lib/features/settings/presentation/pages/appearance_settings_page.dart',
-      'lib/features/settings/presentation/pages/decision_viz_page.dart',
       'lib/features/settings/presentation/pages/device_settings_page.dart',
       'lib/features/settings/presentation/pages/devices_page.dart',
       'lib/features/settings/presentation/pages/safety_page.dart',

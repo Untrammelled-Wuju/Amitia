@@ -1,4 +1,5 @@
 import type { ExtensionID, ModuleID } from "./types";
+import type { ServiceOffer, ServiceRequirement } from "./manifest";
 
 export interface RuntimeContext {
   extensionId: ExtensionID;
@@ -63,6 +64,59 @@ export interface EventBusEvent {
   source: string;
 }
 
+export interface ContributionRegistrationRequest {
+  id: string;
+  kind: string;
+  adapter: string;
+  contractVersion: number;
+  schema?: Record<string, unknown>;
+  name: Record<string, string>;
+  description?: Record<string, string>;
+  version?: string;
+  spec?: Record<string, unknown>;
+  requiredPermissions?: string[];
+  requiredScope?: string[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface ContributionRegistration {
+  id: string;
+  dispose(): Promise<void>;
+}
+
+export interface ServiceLease {
+  serviceId: string;
+  providerIds: string[];
+  release(): Promise<void>;
+}
+
+export interface ContributionClient {
+  register(request: ContributionRegistrationRequest): Promise<ContributionRegistration>;
+  unregister(id: string): Promise<void>;
+}
+
+export interface ServiceClient {
+  provide(offer: ServiceOffer): Promise<() => Promise<void>>;
+  require(requirement: ServiceRequirement): Promise<ServiceLease>;
+}
+
+export interface AdapterInvocationRequest {
+  invocationId?: string;
+  contributionId?: string;
+  operation: string;
+  input?: unknown;
+}
+
+export interface AdapterInvocationResult {
+  invocationId: string;
+  output?: unknown;
+}
+
+export interface AdapterClient {
+  invoke(adapterId: string, contractVersion: number, request: AdapterInvocationRequest): Promise<AdapterInvocationResult>;
+  cancel(adapterId: string, contractVersion: number, invocationId: string, reason?: string): Promise<void>;
+}
+
 export interface HostBridge {
   invokeTool(request: ToolCallRequest): Promise<ToolCallResponse>;
   storageGet(key: string): Promise<StorageEntry | null>;
@@ -75,6 +129,12 @@ export interface HostBridge {
   log(level: "debug" | "info" | "warn" | "error", message: string, fields?: Record<string, unknown>): void;
   fetchFromHost(url: string, init?: RequestInit): Promise<Response>;
   requestPermission(permission: string, reason?: string): Promise<boolean>;
+  registerContribution(request: ContributionRegistrationRequest): Promise<{ id: string }>;
+  unregisterContribution(id: string): Promise<void>;
+  provideService(offer: ServiceOffer): Promise<void>;
+  withdrawService(serviceId: string): Promise<void>;
+  requireService(requirement: ServiceRequirement): Promise<{ providerIds: string[] }>;
+  releaseService(serviceId: string): Promise<void>;
 }
 
 export abstract class ExtensionRuntime {

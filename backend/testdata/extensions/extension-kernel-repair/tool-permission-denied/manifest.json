@@ -1,45 +1,77 @@
 {
-	"manifestVersion": 1,
-	"extension": {
-		"id": "com.amitia.repair/tool-permission-denied",
-		"name": {"default": "Tool Permission Denied"},
-		"description": {"default": "Phase 10 E2E: tool that requires a permission which is not granted by default, must be denied"},
-		"version": "1.0.0"
-	},
-	"publisher": {
-		"id": "com.amitia.repair",
-		"displayName": "Amitia Repair"
-	},
-	"modules": [
-		{
-			"id": "main",
-			"name": {"default": "Main"},
-			"type": "javascript",
-			"runtime": {"type": "javascript", "entryPoint": "index.js"},
-			"contributions": [
-				{
-					"id": "guarded-tool",
-					"kind": "tool",
-					"name": {"default": "Guarded Tool"},
-					"description": {"default": "Tool requiring filesystem.read permission to execute"},
-					"modelName": "guarded_tool",
-					"requiredPermissions": ["filesystem.read"],
-					"inputSchema": {
-						"type": "object",
-						"properties": {
-							"path": {"type": "string", "description": "Path to read"}
-						},
-						"required": ["path"]
-					}
-				}
-			]
-		}
-	],
-	"permissions": [
-		{"name": "filesystem.read", "reason": "Read files via guarded tool", "required": true}
-	],
-	"integrity": {
-		"algorithm": "sha256",
-		"contentTreeHash": ""
-	}
+  "schemaVersion": 1,
+  "plugin": {
+    "id": "com.amitia.repair/tool-permission-denied",
+    "name": {
+      "default": "Tool Permission Denied"
+    },
+    "description": {
+      "default": "Phase 10 E2E: tool that requires a permission which is not granted by default, must be denied"
+    },
+    "version": "1.0.0",
+    "publisher": {
+      "id": "com.amitia.repair",
+      "displayName": "Amitia Repair"
+    }
+  },
+  "compatibility": {
+    "minHostVersion": "0.1.0"
+  },
+  "modules": [
+    {
+      "id": "main",
+      "name": {
+        "default": "Main"
+      },
+      "runtime": {
+        "adapter": "javascript",
+        "entry": "index.js"
+      },
+      "dynamic": {
+        "allowedAdapters": [
+          "tool"
+        ],
+        "maxContributions": 1,
+        "maxTools": 1,
+        "maxRoutes": 0,
+        "maxServices": 0,
+        "allowUnregister": true
+      },
+      "contributions": [
+        {
+          "id": "guarded-tool",
+          "kind": "tool",
+          "adapter": "tool",
+          "contractVersion": 1,
+          "name": {
+            "default": "Guarded Tool"
+          },
+          "description": {
+            "default": "Tool requiring filesystem.read permission to execute"
+          },
+          "requiredPermissions": [
+            "filesystem.read"
+          ]
+        }
+      ],
+      "placement": "device"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "filesystem.read",
+      "reason": "Read files via guarded tool",
+      "required": true
+    }
+  ],
+  "data": {
+    "schemaVersion": 1,
+    "backup": true,
+    "export": true,
+    "uninstall": "retain"
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "contentTreeHash": ""
+  }
 }

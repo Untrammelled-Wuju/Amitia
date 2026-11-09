@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
-	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
+	"github.com/u-ai/backend/internal/extension/kernel/plugincontract"
 )
 
 type archiveEntry struct {
@@ -40,9 +40,13 @@ func runPack(args []string, output *Output) int {
 		output.fail(ExitConfig, fmt.Sprintf("读取 manifest.json 失败: %v", err))
 	}
 
-	var m manifest_v1.Manifest
-	if err := json.Unmarshal(manifestRaw, &m); err != nil {
+	m, err := plugincontract.Parse(manifestRaw)
+	if err != nil {
 		output.fail(ExitConfig, fmt.Sprintf("解析 manifest.json 失败: %v", err))
+	}
+	report := m.Validate()
+	if report.HasErrors() {
+		output.fail(ExitConfig, fmt.Sprintf("manifest 校验失败: %+v", report.Issues))
 	}
 
 	m.Integrity.Algorithm = "sha256"
@@ -136,7 +140,7 @@ func runPack(args []string, output *Output) int {
 	})
 
 	if *outFile == "" {
-		*outFile = fmt.Sprintf("%s-%s.amitiax", m.Extension.ID, m.Extension.Version)
+		*outFile = fmt.Sprintf("%s-%s.amitiax", m.Plugin.ID, m.Plugin.Version)
 	}
 	outAbs, err := filepath.Abs(*outFile)
 	if err != nil {
@@ -154,8 +158,8 @@ func runPack(args []string, output *Output) int {
 			"file":        outAbs,
 			"treeHash":    treeHash,
 			"fileCount":   len(fileEntries),
-			"extensionId": m.Extension.ID,
-			"version":     m.Extension.Version,
+			"extensionId": m.Plugin.ID,
+			"version":     m.Plugin.Version,
 		},
 	})
 	return ExitSuccess

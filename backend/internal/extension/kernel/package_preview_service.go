@@ -18,8 +18,8 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/dependency"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
-	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
+	"github.com/u-ai/backend/internal/extension/kernel/plugincontract"
 	"github.com/u-ai/backend/internal/extension/kernel/trust"
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	"github.com/u-ai/backend/internal/extension/platformcompat"
@@ -106,15 +106,15 @@ func (r *Runtime) PreviewPackage(ctx context.Context, request PackagePreviewRequ
 	validation := pkg.Manifest.Validate()
 	preview := InstallPreview{
 		SessionID: "preview-" + uuid.NewString(), ArtifactID: artifact.ArtifactID,
-		ExtensionID: pkg.Manifest.Extension.ID, Name: pkg.Manifest.Extension.Name.Default,
-		Version: pkg.Manifest.Extension.Version, Publisher: pkg.Manifest.Publisher.ID,
+		ExtensionID: pkg.Manifest.Plugin.ID, Name: pkg.Manifest.Plugin.Name.Default,
+		Version: pkg.Manifest.Plugin.Version, Publisher: pkg.Manifest.Plugin.Publisher.ID,
 		ArchiveHash: artifact.ArchiveHash, ManifestHash: computeManifestHash(pkg),
 		ContentTreeHash: pkg.Tree.TreeHash, ArtifactHash: computeArtifactHashFromPackage(pkg),
 		SecurityPassed: true, SecurityReport: securityReport, Manifest: pkg.Manifest,
 		ValidationReport: validation, SignatureStatus: "unsigned", TrustDecision: "unsigned",
 		Source: request.Source, ExpiresAt: time.Now().UTC().Add(30 * time.Minute),
 	}
-	for _, validationError := range validation.Errors {
+	for _, validationError := range validation.Issues {
 		preview.Issues = append(preview.Issues, PreviewIssue{Category: PreviewNotInstallable, Code: validationError.Code, Message: validationError.Message, Path: validationError.Path})
 	}
 	for _, permission := range pkg.Manifest.Permissions {
@@ -140,7 +140,7 @@ func (r *Runtime) PreviewPackage(ctx context.Context, request PackagePreviewRequ
 		preview.SignerKeyID = doc.KeyID
 		verification := r.container.TrustService.Verifier().VerifyPackage(ctx, trust.PackageVerificationInput{
 			Document: doc, ActualExtensionID: preview.ExtensionID, ActualVersion: preview.Version,
-			ActualManifestVersion: pkg.Manifest.ManifestVersion, ActualManifestHash: preview.ManifestHash,
+			ActualManifestVersion: pkg.Manifest.SchemaVersion, ActualManifestHash: preview.ManifestHash,
 			ActualContentTreeHash: preview.ContentTreeHash, ActualArtifactHash: preview.ArtifactHash,
 		})
 		preview.SignatureStatus = string(verification.Status)
@@ -189,6 +189,8 @@ func (r *Runtime) PreviewPackage(ctx context.Context, request PackagePreviewRequ
 	r.evaluatePackageCompatibilityAndDependencies(ctx, pkg, &preview)
 	if !request.TrustedBundled {
 		r.evaluatePackageUpdateRisks(ctx, &preview)
+	} else {
+		r.evaluateBundledUpdateConfirmation(ctx, &preview)
 	}
 	r.evaluatePackageMigrationPreflight(ctx, pkg.Manifest, &preview)
 	for _, file := range pkg.Files {
@@ -267,7 +269,7 @@ func (r *Runtime) PreviewPackage(ctx context.Context, request PackagePreviewRequ
 	return preview, nil
 }
 
-func (r *Runtime) evaluatePackageMigrationPreflight(ctx context.Context, manifest manifest_v1.Manifest, preview *InstallPreview) {
+func (r *Runtime) evaluatePackageMigrationPreflight(ctx context.Context, manifest plugincontract.Manifest, preview *InstallPreview) {
 	if preview == nil || !packageManifestHasMigrations(manifest) {
 		return
 	}
@@ -276,7 +278,7 @@ func (r *Runtime) evaluatePackageMigrationPreflight(ctx context.Context, manifes
 		preview.Issues = append(preview.Issues, PreviewIssue{Category: PreviewNotInstallable, Code: "package_migration_unavailable", Message: "migration preflight is unavailable"})
 		return
 	}
-	current, err := r.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(manifest.Extension.ID))
+	current, err := r.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(manifest.Plugin.ID))
 	if err != nil {
 		preview.Issues = append(preview.Issues, PreviewIssue{Category: PreviewNotInstallable, Code: "package_migration_source_version_required", Message: "migration package requires an installed source version"})
 		return
@@ -304,12 +306,12 @@ func (r *Runtime) evaluatePackageMigrationPreflight(ctx context.Context, manifes
 	}
 }
 
-func packageManifestHasMigrations(manifest manifest_v1.Manifest) bool {
-	if len(manifest.Extension.Metadata) == 0 {
+func packageManifestHasMigrations(manifest plugincontract.Manifest) bool {
+	if len(manifest.Plugin.Metadata) == 0 {
 		return false
 	}
-	_, migrations := manifest.Extension.Metadata["migrations"]
-	_, migrationValue := manifest.Extension.Metadata["migration"]
+	_, migrations := manifest.Plugin.Metadata["migrations"]
+	_, migrationValue := manifest.Plugin.Metadata["migration"]
 	return migrations || migrationValue
 }
 
@@ -334,6 +336,15 @@ func (r *Runtime) validateUnsignedDeveloperSession(sessionID, spaceID, extension
 		return fmt.Errorf("kernel: developer session binding unavailable")
 	}
 	return validateDeveloperSessionBinding(r.container.DevModeSessions, r.container.DevModeRegistry, sessionID, spaceID, extensionID)
+}
+
+func (r *Runtime) evaluateBundledUpdateConfirmation(ctx context.Context, preview *InstallPreview) {
+	if r.container == nil || r.container.InstallationRepository == nil {
+		return
+	}
+	if _, err := r.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(preview.ExtensionID)); err == nil {
+		preview.RequiredConfirmations = append(preview.RequiredConfirmations, "confirm.update", PackageConfirmationSnapshotExempt)
+	}
 }
 
 func (r *Runtime) evaluatePackageUpdateRisks(ctx context.Context, preview *InstallPreview) {
@@ -429,14 +440,14 @@ func (r *Runtime) evaluatePackageCompatibilityAndDependenciesWithHostValidator(c
 		supported := packageModuleSupported(mod, platform, hostVersion)
 		runtimeType := ""
 		if mod.Runtime != nil {
-			runtimeType = mod.Runtime.Type
+			runtimeType = mod.Runtime.Adapter
 		}
-		preview.Modules = append(preview.Modules, PreviewModule{ID: mod.ID, Name: mod.Name.Default, Type: mod.Type, Runtime: runtimeType, Supported: supported})
+		preview.Modules = append(preview.Modules, PreviewModule{ID: mod.ID, Name: mod.Name.Default, Type: mod.EffectiveType(), Runtime: runtimeType, Supported: supported})
 		if !supported {
 			preview.Issues = append(preview.Issues, PreviewIssue{Category: PreviewPartialUnsupported, Code: "unsupported_module", Message: mod.ID})
 		}
 	}
-	deps := append([]manifest_v1.Dependency(nil), pkg.Manifest.Dependencies...)
+	deps := append([]plugincontract.PluginDependency(nil), pkg.Manifest.Dependencies...)
 	for _, mod := range pkg.Manifest.Modules {
 		deps = append(deps, mod.Dependencies...)
 		for _, contribution := range mod.Contributions {
@@ -482,6 +493,10 @@ func (r *Runtime) evaluatePackageCompatibilityAndDependenciesWithHostValidator(c
 		if item.Missing && !item.Optional {
 			preview.Issues = append(preview.Issues, PreviewIssue{Category: PreviewMissingDependency, Code: "dependency_unsatisfied", Message: dep.ID})
 		}
+	}
+	if r.container != nil {
+		appendPackageServiceGraphIssues(r.container.PluginServices, pkg, preview)
+		appendPackageAdapterIssues(r.container.PluginAdapters, pkg, preview)
 	}
 }
 

@@ -1,21 +1,34 @@
 import { describe, expect, it } from "vitest"
+import { readFileSync } from "node:fs"
+import { resolve } from "node:path"
 import builtinRoutesSource from "../router/builtinRoutes.ts?raw"
+import { validateDocument } from "@/components/extension/schema-ui-utils"
 
 describe("Extension Center Baseline", () => {
   describe("Router", () => {
-    it("resolves extension center route", { timeout: 30000 }, async () => {
+    it("leaves extension and kernel roots to the plugin route registry", { timeout: 30000 }, async () => {
       const router = (await import("@/router")).default
       const route = router.resolve("/extensions")
-      expect(route.name).toBe("extensionCenter")
-      expect(builtinRoutesSource).toContain(
-        'path: "/extensions", name: "extensionCenter", component: () => import("@/views/SectionPlaceholderView.vue")',
-      )
+      expect(route.name).not.toBe("extensionCenter")
+      expect(builtinRoutesSource).not.toContain('path: "/extensions"')
+      const manifest = JSON.parse(readFileSync(resolve(__dirname, "../../../plugins-builtin/plugin-market/amitia-extension.json"), "utf8"))
+      const routes = manifest.modules.flatMap((module: any) => module.contributions)
+        .flatMap((contribution: any) => contribution.spec?.metadata?.routes ?? [])
+        .map((item: any) => item.path)
+      expect(routes).toEqual(expect.arrayContaining(["/extensions", "/kernel"]))
     })
 
     it("resolves MCP server route", async () => {
       const router = (await import("@/router")).default
       const route = router.resolve("/extensions/mcp")
       expect(route.name).toBe("extensionMCP")
+    })
+
+    it("validates the plugin-owned extension and kernel hub schemas", () => {
+      for (const name of ["extensions-hub.json", "kernel-hub.json"]) {
+        const document = JSON.parse(readFileSync(resolve(__dirname, "../../../plugins-builtin/plugin-market/ui/schema", name), "utf8"))
+        expect(validateDocument(document)).toEqual(expect.objectContaining({ valid: true, errors: [] }))
+      }
     })
 
     it("resolves package manager route", async () => {
@@ -86,7 +99,6 @@ describe("Extension Center Baseline", () => {
     it("all extension routes require auth", async () => {
       const router = (await import("@/router")).default
       const extRoutes = [
-        "/extensions",
         "/extensions/mcp",
         "/extensions/packages",
         "/extensions/agent-skills",
@@ -114,7 +126,6 @@ describe("Extension Center Baseline", () => {
 
   describe("Component imports", () => {
     const extensionViews = [
-      { name: "ExtensionCenterView", path: "@/views/extensions/ExtensionCenterView.vue" },
       { name: "AgentSkillListView", path: "@/views/extensions/agent-skills/AgentSkillListView.vue" },
       { name: "PackageManagerView", path: "@/views/extensions/packages/PackageManagerView.vue" },
       { name: "WorkflowListView", path: "@/views/extensions/workflows/WorkflowListView.vue" },
@@ -135,6 +146,7 @@ describe("Extension Center Baseline", () => {
       const { resolvePageTitle } = await import("@/ui-runtime/navigationRegistry")
       const title = resolvePageTitle("/extensions")
       expect(title).toBe("扩展中心")
+      expect(resolvePageTitle("/kernel")).toBe("内核工具")
     })
 
     it("resolvePageTitle resolves MCP path", async () => {

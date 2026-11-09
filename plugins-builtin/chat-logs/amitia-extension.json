@@ -1,0 +1,367 @@
+{
+  "schemaVersion": 1,
+  "plugin": {
+    "id": "com.amitia/chat-logs",
+    "name": {
+      "default": "归档对话"
+    },
+    "description": {
+      "default": "浏览、搜索、恢复、删除、摘要和导出设备归档对话。"
+    },
+    "version": "1.0.0",
+    "license": "AGPL-3.0-only",
+    "homepage": "https://amitia.untrammelled.top",
+    "categories": [
+      "productivity",
+      "character"
+    ],
+    "keywords": [
+      "archive",
+      "logs",
+      "conversation"
+    ],
+    "metadata": {
+      "system.defaultInstall": true,
+      "system.defaultEnabled": true
+    },
+    "publisher": {
+      "id": "com.amitia",
+      "displayName": "Amitia",
+      "trustLevel": "official"
+    }
+  },
+  "compatibility": {
+    "minHostVersion": "0.1.0",
+    "platforms": [
+      "windows",
+      "linux",
+      "macos"
+    ]
+  },
+  "modules": [
+    {
+      "id": "chat-logs-runtime",
+      "name": {
+        "default": "归档对话运行时"
+      },
+      "description": {
+        "default": "通过 Owner 会话管理读取和管理归档对话。"
+      },
+      "runtime": {
+        "adapter": "javascript",
+        "entry": "dist/index.js",
+        "timeout": "2m",
+        "memoryBytes": 67108864,
+        "capabilities": {
+          "network": false,
+          "filesystem": false
+        },
+        "hostAccess": {
+          "filesystem": {
+            "mode": "none"
+          },
+          "network": {
+            "mode": "none"
+          },
+          "process": {
+            "mode": "none"
+          }
+        }
+      },
+      "dynamic": {
+        "allowedAdapters": [
+          "tool",
+          "ui",
+          "ui_provider"
+        ],
+        "maxContributions": 8,
+        "maxTools": 1,
+        "maxRoutes": 1,
+        "maxServices": 0,
+        "allowUnregister": true
+      },
+      "contributions": [
+        {
+          "id": "chat-logs-command",
+          "kind": "tool",
+          "adapter": "tool",
+          "contractVersion": 1,
+          "name": {
+            "default": "归档对话操作"
+          },
+          "description": {
+            "default": "读取、恢复、删除、摘要和导出归档对话。"
+          },
+          "spec": {
+            "toolId": "com.amitia/chat-logs/command",
+            "modelName": "amitia_chat_logs",
+            "handlerName": "command",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "enum": [
+                    "characters",
+                    "list",
+                    "messages",
+                    "restore",
+                    "delete",
+                    "summary",
+                    "export"
+                  ]
+                },
+                "payload": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "action"
+              ],
+              "additionalProperties": false
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "riskLevel": "high",
+            "sideEffect": "write",
+            "internal": true,
+            "runtime": {
+              "runtimeType": "javascript",
+              "handlerName": "command"
+            }
+          },
+          "requiredPermissions": [
+            "tool.invoke",
+            "character.read",
+            "conversation.read",
+            "conversation.manage",
+            "conversation.export"
+          ]
+        },
+        {
+          "id": "chat-logs-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "归档对话"
+          },
+          "description": {
+            "default": "浏览归档消息并管理对话。"
+          },
+          "spec": {
+            "contribution_id": "chat-logs-page",
+            "extension_id": "com.amitia/chat-logs",
+            "module_id": "chat-logs-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "归档对话"
+              },
+              "description": {
+                "default": "浏览、恢复、删除、摘要和导出归档对话。"
+              },
+              "icon": "collection"
+            },
+            "entry": {
+              "type": "schema_renderer",
+              "schema_path": "modules/chat-logs-ui/desktop/chat-logs.json",
+              "content_hash": "pending"
+            },
+            "sandbox": {
+              "type": "schema_renderer"
+            },
+            "ordering": {
+              "priority": 246
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            },
+            "actions": [
+              {
+                "action_id": "command",
+                "title": {
+                  "default": "执行归档对话操作"
+                },
+                "target": {
+                  "type": "tool",
+                  "tool_id": "com.amitia/chat-logs/command"
+                },
+                "risk_level": "high"
+              }
+            ],
+            "integrity": {
+              "definition_hash": "chat-logs-page-v1"
+            }
+          },
+          "requiredPermissions": [
+            "tool.invoke",
+            "character.read",
+            "conversation.read",
+            "conversation.manage",
+            "conversation.export"
+          ]
+        },
+        {
+          "id": "chat-logs-routes",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "归档对话路由"
+          },
+          "spec": {
+            "providerId": "chat-logs-routes",
+            "capability": "route.registry",
+            "mode": "replace",
+            "priority": 246,
+            "trustLevel": "official",
+            "entries": {
+              "web": {
+                "type": "declarative"
+              },
+              "electron_windows": {
+                "type": "declarative"
+              },
+              "electron_macos": {
+                "type": "declarative"
+              },
+              "electron_linux": {
+                "type": "declarative"
+              }
+            },
+            "metadata": {
+              "routes": [
+                {
+                  "id": "chat-logs",
+                  "path": "/logs",
+                  "providerId": "chat-logs-page-provider",
+                  "capability": "page.provider",
+                  "title": "归档对话",
+                  "priority": 246
+                }
+              ],
+              "navigationItems": [
+                {
+                  "id": "chat-logs",
+                  "label": "归档对话",
+                  "route": "/logs",
+                  "icon": "collection",
+                  "group": "home",
+                  "groupLabel": "主页",
+                  "groupIcon": "chat",
+                  "order": 20,
+                  "mobile": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "chat-logs-page-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "归档对话页面 Provider"
+          },
+          "spec": {
+            "providerId": "chat-logs-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 246,
+            "trustLevel": "official",
+            "entries": {
+              "web": {
+                "type": "schema_renderer",
+                "contributionId": "chat-logs-page"
+              },
+              "electron_windows": {
+                "type": "schema_renderer",
+                "contributionId": "chat-logs-page"
+              },
+              "electron_macos": {
+                "type": "schema_renderer",
+                "contributionId": "chat-logs-page"
+              },
+              "electron_linux": {
+                "type": "schema_renderer",
+                "contributionId": "chat-logs-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/logs"
+              ]
+            }
+          }
+        }
+      ],
+      "placement": "device",
+      "deviceRequirements": {
+        "platforms": [
+          "windows",
+          "linux",
+          "macos"
+        ]
+      }
+    }
+  ],
+  "permissions": [
+    {
+      "name": "tool.invoke",
+      "reason": "通过插件工具管理归档对话。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "character.read",
+      "reason": "选择归档对话所属角色。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "conversation.read",
+      "reason": "读取归档会话和消息。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "conversation.manage",
+      "reason": "恢复、永久删除和生成归档摘要。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "conversation.export",
+      "reason": "导出归档对话内容。",
+      "required": true,
+      "scope": "extension"
+    }
+  ],
+  "data": {
+    "schemaVersion": 1,
+    "scopes": [
+      "device"
+    ],
+    "backup": false,
+    "export": false,
+    "uninstall": "retain"
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "contentTreeHash": ""
+  }
+}

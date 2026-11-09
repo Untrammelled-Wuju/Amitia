@@ -46,7 +46,7 @@ func (r *Runtime) VerifyStoredPackage(ctx context.Context, artifact PackageArtif
 		}
 		verification := r.container.TrustService.Verifier().VerifyPackage(ctx, trust.PackageVerificationInput{
 			Document: document, ActualExtensionID: artifact.ExtensionID, ActualVersion: artifact.Version,
-			ActualManifestVersion: pkg.Manifest.ManifestVersion, ActualManifestHash: artifact.ManifestHash,
+			ActualManifestVersion: pkg.Manifest.SchemaVersion, ActualManifestHash: artifact.ManifestHash,
 			ActualContentTreeHash: artifact.ContentTreeHash, ActualArtifactHash: artifact.ArtifactHash,
 		})
 		if verification.Status != trust.SignatureStatusValid || artifact.SignatureStatus != string(trust.SignatureStatusValid) {
@@ -64,7 +64,7 @@ func (r *Runtime) VerifyStoredPackage(ctx context.Context, artifact PackageArtif
 
 func (r *Runtime) packageTrustBlockReason(ctx context.Context, pkg *amitiax.Package, packageHash string) string {
 	service := r.container.TrustService
-	publisherID := pkg.Manifest.Publisher.ID
+	publisherID := pkg.Manifest.Plugin.Publisher.ID
 	keyID := ""
 	if len(pkg.V2Signature) > 0 {
 		if document, err := trust.ParseSignatureDocument(pkg.V2Signature); err == nil {
@@ -94,7 +94,7 @@ func (r *Runtime) packageTrustBlockReason(ctx context.Context, pkg *amitiax.Pack
 	if revoked := service.RevocationList().CheckPublisher(publisherID); revoked != nil {
 		return revoked.Reason
 	}
-	if revoked := service.RevocationList().CheckExtension(pkg.Manifest.Extension.ID, pkg.Manifest.Extension.Version); revoked != nil {
+	if revoked := service.RevocationList().CheckExtension(pkg.Manifest.Plugin.ID, pkg.Manifest.Plugin.Version); revoked != nil {
 		return revoked.Reason
 	}
 	return ""

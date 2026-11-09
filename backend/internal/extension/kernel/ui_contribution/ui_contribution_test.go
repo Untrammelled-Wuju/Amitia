@@ -74,6 +74,22 @@ func TestValidateDefinitionInvalidSandbox(t *testing.T) {
 	}
 }
 
+func TestValidateDefinitionAllowsFramelessDisplayChrome(t *testing.T) {
+	def := makeValidDefinition()
+	def.Display.Chrome = "frameless"
+	if err := ValidateDefinition(def); err != nil {
+		t.Fatalf("frameless display chrome rejected: %v", err)
+	}
+}
+
+func TestValidateDefinitionRejectsUnknownDisplayChrome(t *testing.T) {
+	def := makeValidDefinition()
+	def.Display.Chrome = "floating-window"
+	if err := ValidateDefinition(def); err == nil {
+		t.Fatal("unknown display chrome was accepted")
+	}
+}
+
 func TestValidateDefinitionMissingEntryPath(t *testing.T) {
 	def := makeValidDefinition()
 	def.Entry.Path = ""

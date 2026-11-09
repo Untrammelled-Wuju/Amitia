@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
-	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
+	"github.com/u-ai/backend/internal/extension/kernel/plugincontract"
 )
 
 func TestInstallationPermissionPolicyUsesInstallGrant(t *testing.T) {
@@ -40,7 +40,7 @@ func TestInstallationPermissionPolicyUsesInstallGrant(t *testing.T) {
 	}
 
 	runtime := &Runtime{container: container}
-	if err := runtime.syncInstalledPackagePermissions(ctx, extID, []manifest_v1.PermissionReq{{
+	if err := runtime.syncInstalledPackagePermissions(ctx, extID, []plugincontract.Permission{{
 		Name:     "message.send",
 		Required: true,
 		Scope:    string(permission.ScopeExtension),
@@ -131,6 +131,59 @@ func TestInstallationPermissionPolicySkipsUndeclaredBuiltInToolPermission(t *tes
 	}
 }
 
+func TestInstallationPermissionPolicyRejectsBuiltInNamespaceSpoof(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	root := t.TempDir()
+	container, err := NewContainerBuilder().
+		WithDBPath(filepath.Join(root, "kernel.db")).
+		WithExtensionRoot(filepath.Join(root, "extensions")).
+		Build(ctx)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	defer container.Close()
+
+	extID := domain.ExtensionID("com.amitia.builtin.namespace-spoof")
+	version := domain.SemanticVersion{Major: 1}
+	if err := container.DefinitionRepository.PutExtension(ctx, domain.ExtensionDefinition{
+		ID:              extID,
+		Name:            domain.LocalizedText{Default: "Spoof"},
+		Version:         version,
+		ManifestVersion: 1,
+		Domain:          domain.ExtensionDomainGeneral,
+		Metadata:        map[string]any{},
+		Modules: []domain.ModuleDefinition{{
+			ID:          "main",
+			ExtensionID: extID,
+			Name:        domain.LocalizedText{Default: "Main"},
+			Type:        domain.ModuleTypeService,
+		}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := container.InstallationRepository.PutInstallation(ctx, domain.ExtensionInstallation{
+		InstallationID:    "spoof-install",
+		ExtensionID:       extID,
+		InstalledVersion:  version,
+		InstallationState: domain.InstallationStateInstalled,
+		EnablementState:   domain.EnablementDisabled,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	request := permission.PermissionEvaluationRequest{
+		Subject:      permission.SubjectForTool(string(extID), "spoof-tool"),
+		ApprovalMode: string(permission.ApprovalFullControl),
+		Requirements: []permission.PermissionRequirement{{
+			PermissionID: "undeclared.spoof",
+			Scope:        permission.ScopeForExtension(string(extID)),
+		}},
+	}
+	if result := container.PermissionBroker.Evaluate(ctx, request); result.Decision != permission.DecisionDeny {
+		t.Fatalf("builtin namespace spoof bypassed installation permission policy: %s", result.Decision)
+	}
+}
+
 func TestInstallationPermissionPolicyOverridesPerUseAndPreservesRevokedGrant(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -159,7 +212,7 @@ func TestInstallationPermissionPolicyOverridesPerUseAndPreservesRevokedGrant(t *
 		}},
 	}
 	runtime := &Runtime{container: container}
-	if err := runtime.syncInstalledPackagePermissions(ctx, extID, []manifest_v1.PermissionReq{{
+	if err := runtime.syncInstalledPackagePermissions(ctx, extID, []plugincontract.Permission{{
 		Name:     "resource.write",
 		Required: true,
 		Scope:    string(permission.ScopeExtension),
@@ -271,8 +324,10 @@ func TestRestorePackagePermissionsAddsUIToolInvoke(t *testing.T) {
 		Modules: []domain.ModuleDefinition{{
 			ID: "ui",
 			Contributions: []domain.ContributionDefinition{{
-				ID:   "dashboard",
-				Kind: domain.ContributionKindUIPage,
+				ID:              "dashboard",
+				Kind:            domain.ContributionKindUIPage,
+				Adapter:         domain.ContributionAdapterUI,
+				ContractVersion: 1,
 				Definition: map[string]any{
 					"actions": []any{
 						map[string]any{

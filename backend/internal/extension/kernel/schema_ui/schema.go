@@ -42,6 +42,7 @@ const (
 	NodeButtonGroup       NodeType = "button_group"
 	NodeList              NodeType = "list"
 	NodeTable             NodeType = "table"
+	NodeEditableTable     NodeType = "editable_table"
 	NodeEmptyState        NodeType = "empty_state"
 	NodeAlert             NodeType = "alert"
 	NodeProgress          NodeType = "progress"
@@ -64,7 +65,8 @@ var allowedNodeTypes = map[NodeType]bool{
 	NodeImage: true, NodeField: true, NodeSelect: true, NodeSwitch: true,
 	NodeSlider: true, NodeButton: true, NodeButtonGroup: true, NodeList: true,
 	NodeTable: true, NodeEmptyState: true, NodeAlert: true, NodeProgress: true,
-	NodeCode: true, NodeKeyValue: true, NodeResourceLink: true,
+	NodeEditableTable: true,
+	NodeCode:          true, NodeKeyValue: true, NodeResourceLink: true,
 	NodePermissionSummary: true, NodeRuntimeStatus: true,
 	NodeExtensionSlot: true, NodeGallery: true, NodeFilePicker: true,
 	NodeTabItem: true, NodeColumn: true,

@@ -82,6 +82,48 @@ var CapabilityMatrix = []CapabilityEntry{
 		Reason:     "Existing Gateway 已注册；G12 #30-#32 直接复用",
 	},
 	{
+		Name:       "Runtime Snapshot",
+		Route:      string(MethodRuntimeSnapshot),
+		Resolution: ResolutionNewMinimal,
+		Reason:     "运行时调试与决策页面通过统一只读快照契约读取数据，不直接访问管理员 HTTP 接口",
+	},
+	{
+		Name:       "Runtime Maintenance",
+		Route:      "(composed)",
+		Resolution: ResolutionCompose,
+		Reason:     "长期运行维护页面通过同一 Runtime Maintenance Bridge 访问任务状态、配置和受控维护动作",
+	},
+	{
+		Name:       "Workspace",
+		Route:      string(MethodWorkspaceRead) + "/" + string(MethodWorkspaceWrite),
+		Resolution: ResolutionNewMinimal,
+		Reason:     "工作区业务页面通过统一 Bridge 访问受控文件与 Git 能力，路径策略、只读限制和 Git 策略仍由核心执行",
+	},
+	{
+		Name:       "Conversation Import",
+		Route:      string(MethodImportExecute),
+		Resolution: ResolutionNewMinimal,
+		Reason:     "聊天导入页面通过受控 Host API 完成解析、批次管理和设备会话晋升，不直接访问管理员导入路由",
+	},
+	{
+		Name:       "Storage Maintenance",
+		Route:      string(MethodStorageCleanup) + "/" + string(MethodStorageBackup) + "/" + string(MethodStorageRestore),
+		Resolution: ResolutionNewMinimal,
+		Reason:     "存储业务页通过分离的清理、备份、恢复 Host API 访问 Owner 业务和数据可移植性事务",
+	},
+	{
+		Name:       "Conversation Archive",
+		Route:      string(MethodConversationLogsRead) + "/" + string(MethodConversationLogsManage) + "/" + string(MethodConversationLogsExport),
+		Resolution: ResolutionNewMinimal,
+		Reason:     "归档对话页面通过 Owner 会话管理读取、恢复、删除、生成摘要和导出，不直连设备管理 HTTP",
+	},
+	{
+		Name:       "Adapter Invocation",
+		Route:      "(composed)",
+		Resolution: ResolutionCompose,
+		Reason:     "外部 Adapter Provider 通过 plugin.adapter.invoke/cancel 承载新的执行语义，调用受 Manifest AllowedAdapters 与权限并集约束",
+	},
+	{
 		Name:       "State",
 		Route:      string(MethodStateGet),
 		Resolution: ResolutionReuseExisting,
@@ -117,6 +159,12 @@ var CapabilityMatrix = []CapabilityEntry{
 		Resolution: ResolutionCompose,
 		Reason:     "G12 #52-#62：host.ui.dialog (pendingDialog) + PermissionBroker.RecordApproval + Execution StatusAwaitingApproval 基础设施已齐全；不新建专用 Route",
 	},
+	{
+		Name:       "Plugin Composition",
+		Route:      string(MethodPluginContributionRegister) + "/" + string(MethodPluginContributionUnregister) + "/" + string(MethodPluginServiceProvide) + "/" + string(MethodPluginServiceUnprovide) + "/" + string(MethodPluginServiceRequire) + "/" + string(MethodPluginServiceRelease),
+		Resolution: ResolutionNewMinimal,
+		Reason:     "动态贡献与插件服务通过统一 Broker 注册、校验和撤销",
+	},
 }
 
 // AllRegisteredMethods 返回当前 Gateway 中实际已注册的全部 Method。
@@ -141,6 +189,12 @@ func AllRegisteredMethods() []string {
 		string(MethodCharacterRead), string(MethodCharacterList), string(MethodConversationRead), string(MethodMemoryQuery),
 		// Provider / Tool / Runtime / mediated network
 		string(MethodProviderInvoke), string(MethodToolExecute), string(MethodPluginPreview), string(MethodPluginInstall), string(MethodPluginUninstall), string(MethodPluginList), string(MethodRuntimeHealth), string(MethodNetworkRequest),
+		string(MethodWorkspaceRead), string(MethodWorkspaceWrite),
+		string(MethodImportExecute),
+		string(MethodStorageCleanup), string(MethodStorageBackup), string(MethodStorageRestore),
+		string(MethodConversationLogsRead), string(MethodConversationLogsManage), string(MethodConversationLogsExport),
+		string(MethodPluginContributionRegister), string(MethodPluginContributionUnregister),
+		string(MethodPluginServiceProvide), string(MethodPluginServiceUnprovide), string(MethodPluginServiceRequire), string(MethodPluginServiceRelease),
 		string(MethodConversationMessageSend),
 		string(MethodConversationMessageAppend),
 		string(MethodVectorUpsert), string(MethodVectorSearch), string(MethodVectorDelete),

@@ -17,6 +17,66 @@ func NewGitHandler(controller *GitController) *GitHandler {
 	return &GitHandler{controller: controller}
 }
 
+func (h *GitHandler) Status(ctx context.Context, workspaceURI string, includeIgnored bool) (*GitStatusResult, error) {
+	return h.controller.Status(ctx, workspaceURI, includeIgnored)
+}
+
+func (h *GitHandler) Diff(ctx context.Context, req GitDiffRequest) (*GitDiffResult, error) {
+	return h.controller.Diff(ctx, req)
+}
+
+func (h *GitHandler) Log(ctx context.Context, req GitLogRequest) (*GitLogResult, error) {
+	return h.controller.Log(ctx, req)
+}
+
+func (h *GitHandler) Add(ctx context.Context, req GitAddRequest) (*GitAddResult, error) {
+	return h.controller.Add(ctx, req)
+}
+
+func (h *GitHandler) Restore(ctx context.Context, req GitRestoreRequest) (*GitRestoreResult, error) {
+	return h.controller.Restore(ctx, req)
+}
+
+func (h *GitHandler) Commit(ctx context.Context, req GitCommitRequest) (*GitCommitResult, error) {
+	return h.controller.Commit(ctx, req)
+}
+
+func (h *GitHandler) ListBranches(ctx context.Context, workspaceURI string) (*GitBranchListResult, error) {
+	return h.controller.ListBranches(ctx, workspaceURI)
+}
+
+func (h *GitHandler) Checkout(ctx context.Context, req GitCheckoutRequest) (*GitCheckoutResult, error) {
+	return h.controller.Checkout(ctx, req)
+}
+
+func (h *GitHandler) Fetch(ctx context.Context, req GitFetchRequest) (*GitFetchResult, error) {
+	return h.controller.Fetch(ctx, req)
+}
+
+func (h *GitHandler) Pull(ctx context.Context, req GitPullRequest) (*GitPullResult, error) {
+	return h.controller.Pull(ctx, req)
+}
+
+func (h *GitHandler) Push(ctx context.Context, req GitPushRequest) (*GitPushResult, error) {
+	return h.controller.Push(ctx, req)
+}
+
+func (h *GitHandler) ListRemotes(ctx context.Context, workspaceURI string) ([]GitRemoteInfo, error) {
+	return h.controller.ListRemotes(ctx, workspaceURI)
+}
+
+func (h *GitHandler) CreateIsolated(ctx context.Context, req IsolatedCreateRequest) (*IsolatedCreateResult, error) {
+	return h.controller.CreateIsolated(ctx, req)
+}
+
+func (h *GitHandler) DeleteIsolated(ctx context.Context, workspaceURI string, force bool) error {
+	return h.controller.DeleteIsolated(ctx, workspaceURI, force)
+}
+
+func (h *GitHandler) IsolatedInfo(ctx context.Context, workspaceURI string) (*IsolatedWorkspaceInfo, error) {
+	return h.controller.IsolatedInfo(ctx, workspaceURI)
+}
+
 func (h *GitHandler) CreateTaskWorktree(ctx context.Context, req WorktreeCreateRequest) (*gitworktree.Entry, error) {
 	if h == nil || h.controller == nil || req.TaskID == "" || req.ConversationID == "" {
 		return nil, gitworktree.ErrInvalidArgument

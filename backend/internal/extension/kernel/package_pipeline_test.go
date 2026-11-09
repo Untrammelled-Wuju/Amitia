@@ -48,18 +48,36 @@ func createPackagePipelineArchive(t *testing.T, version string) string {
 }
 
 func createPackagePipelineArchiveWithMigrations(t *testing.T, version string, definitions []migration.MigrationDefinition) string {
+	return createPackagePipelineArchiveWithOptions(t, version, definitions, nil)
+}
+
+func createPackagePipelineArchiveWithMetadata(t *testing.T, version string, metadata map[string]any) string {
+	return createPackagePipelineArchiveWithOptions(t, version, nil, metadata)
+}
+
+func createPackagePipelineArchiveWithOptions(t *testing.T, version string, definitions []migration.MigrationDefinition, metadata map[string]any) string {
 	t.Helper()
 	extension := map[string]any{"id": "com.example/pipeline", "name": map[string]any{"default": "Pipeline"}, "description": map[string]any{"default": "Pipeline test"}, "version": version}
+	extensionMetadata := map[string]any{}
 	if len(definitions) > 0 {
-		extension["metadata"] = map[string]any{"migrations": map[string]any{"definitions": definitions}}
+		extensionMetadata["migrations"] = map[string]any{"definitions": definitions}
+	}
+	for key, value := range metadata {
+		extensionMetadata[key] = value
+	}
+	if len(extensionMetadata) > 0 {
+		extension["metadata"] = extensionMetadata
 	}
 	manifest := map[string]any{
-		"manifestVersion": 1,
-		"extension":       extension,
-		"publisher":       map[string]any{"id": "com.example", "displayName": "Example"},
-		"compatibility":   map[string]any{},
-		"modules":         []any{map[string]any{"id": "main", "name": map[string]any{"default": "Main"}, "type": "javascript", "version": version, "runtime": map[string]any{"type": "javascript", "entryPoint": "index.js"}, "contributions": []any{map[string]any{"id": "pipeline-tool", "kind": "tool", "name": map[string]any{"default": "Pipeline Tool"}, "version": version, "spec": map[string]any{"inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}}}}}},
-		"integrity":       map[string]any{"algorithm": "sha256", "contentTreeHash": ""},
+		"schemaVersion": 1,
+		"plugin": map[string]any{
+			"id": extension["id"], "name": extension["name"], "description": extension["description"], "version": version,
+			"metadata":  extension["metadata"],
+			"publisher": map[string]any{"id": "com.example", "displayName": "Example"},
+		},
+		"compatibility": map[string]any{"minHostVersion": "0.1.0"},
+		"modules":       []any{map[string]any{"id": "main", "name": map[string]any{"default": "Main"}, "version": version, "placement": "device", "runtime": map[string]any{"adapter": "javascript", "entry": "index.js"}, "contributions": []any{map[string]any{"id": "pipeline-tool", "kind": "tool", "adapter": "tool", "contractVersion": 1, "name": map[string]any{"default": "Pipeline Tool"}, "version": version, "spec": map[string]any{"inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}}}}}},
+		"integrity":     map[string]any{"algorithm": "sha256", "contentTreeHash": ""},
 	}
 	manifestRaw, err := json.Marshal(manifest)
 	if err != nil {

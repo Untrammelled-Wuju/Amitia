@@ -1,0 +1,112 @@
+{
+  "schemaVersion": "schema-ui/1",
+  "type": "document",
+  "title": "BDI 决策可视化",
+  "lifecycle": {
+    "onMount": [
+      {
+        "action_id": "command",
+        "target": "tool",
+        "input": {
+          "action": "snapshot"
+        },
+        "statePath": "snapshot"
+      }
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "command",
+      "target": "tool"
+    }
+  ],
+  "children": [
+    {
+      "id": "decision-viz-mobile-page",
+      "type": "page",
+      "children": [
+        {
+          "id": "decision-viz-mobile-refresh",
+          "type": "button",
+          "props": {
+            "text": "刷新决策快照",
+            "type": "primary"
+          },
+          "actions": [
+            {
+              "action_id": "command",
+              "target": "tool",
+              "input": {
+                "action": "snapshot"
+              },
+              "statePath": "snapshot"
+            }
+          ]
+        },
+        {
+          "id": "decision-viz-mobile-status",
+          "type": "alert",
+          "props": {
+            "title": "当前没有 BehaviorPlan 或 ExpressionPlan",
+            "type": "info",
+            "closable": false
+          },
+          "visibleWhen": [
+            {
+              "field": "snapshot.behaviorPlan",
+              "operator": "is_null"
+            }
+          ]
+        },
+        {
+          "id": "decision-viz-mobile-behavior-card",
+          "type": "card",
+          "props": {
+            "title": "行为计划"
+          },
+          "children": [
+            {
+              "id": "decision-viz-mobile-behavior",
+              "type": "key_value",
+              "props": {
+                "columns": 1,
+                "bordered": true
+              },
+              "bindings": [
+                {
+                  "path": "items",
+                  "source": "state",
+                  "sourcePath": "snapshot.behaviorPlan"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "decision-viz-mobile-expression-card",
+          "type": "card",
+          "props": {
+            "title": "表达计划"
+          },
+          "children": [
+            {
+              "id": "decision-viz-mobile-expression",
+              "type": "key_value",
+              "props": {
+                "columns": 1,
+                "bordered": true
+              },
+              "bindings": [
+                {
+                  "path": "items",
+                  "source": "state",
+                  "sourcePath": "snapshot.expressionPlan"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

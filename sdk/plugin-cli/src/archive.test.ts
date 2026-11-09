@@ -36,14 +36,15 @@ describe("archive integrity", () => {
       manifestPath,
       `${JSON.stringify(
         {
-          manifestVersion: 1,
-          extension: {
+          schemaVersion: 1,
+          plugin: {
             id: "com.example/case-order",
             name: { default: "Case Order" },
             description: { default: "Case order fixture" },
             version: "1.0.0",
+            publisher: { id: "com.example", displayName: "Example" },
           },
-          publisher: { id: "com.example", displayName: "Example" },
+          compatibility: { minHostVersion: "0.1.0" },
           modules: [],
           integrity: { algorithm: "sha256", contentTreeHash: "" },
         },

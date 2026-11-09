@@ -126,6 +126,7 @@ type UIDisplayMetadata struct {
 	Title       LocalizedText      `json:"title"`
 	Description LocalizedText      `json:"description,omitempty"`
 	Icon        string             `json:"icon,omitempty"`
+	Chrome      string             `json:"chrome,omitempty"`
 	Badge       *UIBadgeDefinition `json:"badge,omitempty"`
 	Category    string             `json:"category,omitempty"`
 	Keywords    []string           `json:"keywords,omitempty"`
@@ -417,6 +418,11 @@ func ValidateDefinition(def *UIContributionDefinition) error {
 	}
 	if !def.Sandbox.Type.Valid() {
 		return fmt.Errorf("%w: %s", ErrInvalidSandbox, def.Sandbox.Type)
+	}
+	switch def.Display.Chrome {
+	case "", "default", "frameless":
+	default:
+		return fmt.Errorf("ui_contribution: invalid display chrome %q", def.Display.Chrome)
 	}
 	if def.Integrity.DefinitionHash == "" {
 		return ErrIntegrityHashEmpty

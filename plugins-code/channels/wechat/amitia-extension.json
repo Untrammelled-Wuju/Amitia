@@ -1,7 +1,6 @@
 {
-  "manifestVersion": 1,
-  "placement": "device",
-  "extension": {
+  "schemaVersion": 1,
+  "plugin": {
     "id": "com.amitia/channel-wechat",
     "name": {
       "default": "微信渠道"
@@ -20,12 +19,12 @@
       "wechat",
       "openclaw",
       "channel"
-    ]
-  },
-  "publisher": {
-    "id": "com.amitia",
-    "displayName": "Amitia",
-    "trustLevel": "official"
+    ],
+    "publisher": {
+      "id": "com.amitia",
+      "displayName": "Amitia",
+      "trustLevel": "official"
+    }
   },
   "compatibility": {
     "minHostVersion": "0.1.0",
@@ -46,13 +45,12 @@
       "description": {
         "default": "管理微信扫码登录、账号状态、入站消息和单条消息发送。"
       },
-      "type": "service",
       "runtime": {
-        "type": "service",
-        "entryPoint": "launcher.mjs",
+        "adapter": "service",
+        "entry": "launcher.mjs",
         "timeout": "30s",
-        "memory": 536870912,
-        "maxSubprocesses": 1,
+        "memoryBytes": 536870912,
+        "maxProcesses": 1,
         "hostAccess": {
           "filesystem": {
             "mode": "read_write",
@@ -69,6 +67,19 @@
             "maxProcesses": 1
           }
         }
+      },
+      "services": {
+        "provides": [
+          {
+            "serviceId": "channel.provider",
+            "version": "1.0.0",
+            "scopes": [
+              "global"
+            ],
+            "placement": "device"
+          }
+        ],
+        "requires": []
       },
       "placement": "device",
       "providedCapabilities": [
@@ -107,11 +118,11 @@
             "imagePath": "/api/send-image",
             "voicePath": "/api/send-voice",
             "kind": "wechat",
+            "portEnv": "SIDECAR_PORT",
             "subdir": "sidecar"
           }
         }
-      },
-      "contributions": []
+      }
     },
     {
       "id": "wechat-channel-ui",
@@ -121,11 +132,23 @@
       "description": {
         "default": "提供微信连接、扫码、账号状态和断开操作页面。"
       },
-      "type": "data_only",
+      "dynamic": {
+        "allowedAdapters": [
+          "ui",
+          "ui_provider"
+        ],
+        "maxContributions": 5,
+        "maxTools": 0,
+        "maxRoutes": 5,
+        "maxServices": 0,
+        "allowUnregister": true
+      },
       "contributions": [
         {
           "id": "wechat-page",
           "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
           "name": {
             "default": "微信连接"
           },
@@ -223,6 +246,8 @@
         {
           "id": "wechat-mobile-page",
           "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
           "name": {
             "default": "微信连接（手机）"
           },
@@ -319,6 +344,8 @@
         {
           "id": "wechat-presentation",
           "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
           "name": {
             "default": "微信渠道展示"
           },
@@ -370,6 +397,8 @@
         {
           "id": "wechat-routes",
           "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
           "name": {
             "default": "微信路由"
           },
@@ -428,6 +457,8 @@
         {
           "id": "wechat-page-provider",
           "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
           "name": {
             "default": "微信页面 Provider"
           },
@@ -539,11 +570,11 @@
       "scope": "extension"
     }
   ],
-  "lifecycle": {
-    "autoUpdate": true,
-    "backgroundTasks": true,
-    "networkAccess": true,
-    "sandbox": false
+  "data": {
+    "schemaVersion": 1,
+    "backup": true,
+    "export": true,
+    "uninstall": "retain"
   },
   "integrity": {
     "algorithm": "sha256",

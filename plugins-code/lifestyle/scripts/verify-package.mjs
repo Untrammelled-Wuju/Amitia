@@ -9,7 +9,7 @@ const manifestInfo = JSON.parse(readFileSync(join(scriptRoot, "amitia-extension.
 const packageFile =
   process.argv[2] ||
   process.env.AMITIA_LIFESTYLE_PACKAGE ||
-  resolve(scriptRoot, "..", "..", "plugin", "lifestyle", `amitia-lifestyle-${manifestInfo.extension.version}.amitiax`);
+  resolve(scriptRoot, "..", "..", "plugin", "lifestyle", `amitia-lifestyle-${manifestInfo.plugin.version}.amitiax`);
 
 function readEntries(buffer) {
   const entries = new Map();
@@ -70,7 +70,7 @@ function main() {
   for (const path of required) {
     if (!entries.has(path)) throw new Error(`missing package path: ${path}`);
   }
-  if (manifest.extension?.id !== "com.amitia/lifestyle") throw new Error("unexpected extension id");
+  if (manifest.plugin?.id !== "com.amitia/lifestyle") throw new Error("unexpected extension id");
   const command = manifest.modules
     ?.flatMap((module) => module.contributions || [])
     .find((item) => item.id === "lifestyle-command");

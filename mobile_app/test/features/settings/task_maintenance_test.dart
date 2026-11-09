@@ -1,152 +1,70 @@
-import 'package:amitia_app/core/services/task_maintenance_contract.dart';
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:amitia_app/core/backend_transport/backend_service_api.dart';
-import 'package:amitia_app/core/backend_transport/providers/backend_transport_providers.dart';
-import 'package:amitia_app/features/settings/presentation/pages/long_running_page.dart';
 
-class MaintenanceApi implements BackendServiceApi {
-  @override
-  int get generation => 1;
-  final paths = <String>[];
-  Map<String, dynamic> current = config();
-  bool badAck = false;
-
-  @override
-  Future<T?> get<T>(
-    String path, {
-    Map<String, dynamic>? queryParameters,
-    Map<String, String>? headers,
-    T Function(dynamic)? fromJson,
-  }) async {
-    paths.add(path);
-    final value = path.endsWith('/tasks/config')
-        ? current
-        : path.endsWith('/tasks/status')
-        ? <String, dynamic>{
-            'source': 'task-runtime',
-            'running': true,
-            'activeCount': 1,
-            'localProcessCount': 1,
-            'tasks': [
-              {
-                'id': 'real-run',
-                'title': '真实任务',
-                'status': 'running',
-                'placement': 'local',
-              },
-            ],
-          }
-        : <String, dynamic>{};
-    return value as T;
+Map<String, dynamic> _findNode(List<dynamic> nodes, String id) {
+  for (final raw in nodes) {
+    final node = Map<String, dynamic>.from(raw as Map);
+    if (node['id'] == id) return node;
+    final children = node['children'];
+    if (children is List) {
+      final nested = _findNode(children, id);
+      if (nested.isNotEmpty) return nested;
+    }
   }
-
-  @override
-  Future<T?> put<T>(
-    String path, {
-    Object? data,
-    Map<String, dynamic>? queryParameters,
-    Map<String, String>? headers,
-    T Function(dynamic)? fromJson,
-  }) async {
-    paths.add(path);
-    final request = data as Map;
-    current = {
-      ...current,
-      'maxTasks': request['maxTasks'],
-      'timeout': request['timeout'],
-      'revision': request['expectedRevision'] + 1,
-      'timeoutRevision': request['expectedTimeoutRevision'] + 1,
-      'applied': !badAck,
-    };
-    return current as T;
-  }
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+  return <String, dynamic>{};
 }
 
-Map<String, dynamic> config() => {
-  'source': 'task-runtime',
-  'applied': true,
-  'revision': 2,
-  'timeoutRevision': 3,
-  'maxTasks': 4,
-  'timeout': {'disabled': false, 'seconds': 180},
-};
-
 void main() {
-  setUp(() => SharedPreferences.setMockInitialValues({}));
-  testWidgets(
-    'maintenance page reads real tasks and requires applied save acknowledgement',
-    (tester) async {
-      final api = MaintenanceApi();
-      final router = GoRouter(
-        routes: [
-          GoRoute(
-            path: '/',
-            builder: (context, state) => const LongRunningPage(),
-          ),
-        ],
-      );
-      addTearDown(router.dispose);
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            backendServiceProvider.overrideWithValue(api),
-            rawBackendServiceApiProvider.overrideWithValue(api),
-          ],
-          child: MaterialApp.router(routerConfig: router),
-        ),
-      );
-      await tester.pumpAndSettle();
-      expect(find.textContaining('真实任务'), findsOneWidget);
-      expect(api.paths, contains('/api/runtime/tasks/status'));
-      await tester.ensureVisible(find.text('保存长期运行配置'));
-      await tester.tap(find.text('保存长期运行配置'));
-      await tester.pumpAndSettle();
-      expect(find.text('执行器应用配置完成'), findsOneWidget);
-      await tester.pump(const Duration(seconds: 5));
-      await tester.pumpAndSettle();
-      api.badAck = true;
-      await tester.tap(find.text('保存长期运行配置'));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('任务执行器未确认配置生效'), findsOneWidget);
-      expect(api.paths.any((path) => path.contains('long-running')), isFalse);
-    },
-  );
-  test('only accepts the real executor and valid effective policy', () {
-    expect(requireAppliedTaskConfig(config())['maxTasks'], 4);
-    for (final invalid in [
-      {...config(), 'source': 'legacy'},
-      {...config(), 'applied': false},
-      {...config(), 'maxTasks': 0},
-      {
-        ...config(),
-        'timeout': {'disabled': false, 'seconds': 31},
-      },
-    ]) {
-      expect(() => requireAppliedTaskConfig(invalid), throwsStateError);
-    }
-  });
-  test('save acknowledgement must match both policy revisions and values', () {
-    final request = {
-      'expectedRevision': 1,
-      'expectedTimeoutRevision': 2,
-      'maxTasks': 4,
-      'timeout': {'disabled': false, 'seconds': 180},
-    };
-    requireSavedTaskConfig(config(), request);
-    expect(
-      () => requireSavedTaskConfig({...config(), 'revision': 1}, request),
-      throwsStateError,
+  const pluginRoot = '../plugins-builtin/runtime-insights';
+
+  test('long-running maintenance is provided by the runtime-insights plugin', () {
+    final manifest = jsonDecode(
+      File('$pluginRoot/amitia-extension.json').readAsStringSync(),
+    ) as Map<String, dynamic>;
+    final contributions =
+        (manifest['modules'][0]['contributions'] as List).cast<Map>();
+    final routeRegistry = contributions.firstWhere(
+      (item) => item['id'] == 'runtime-insights-routes',
     );
+    final routes =
+        routeRegistry['spec']['metadata']['routes'] as List<dynamic>;
     expect(
-      () => requireSavedTaskConfig({...config(), 'maxTasks': 8}, request),
-      throwsStateError,
+      routes,
+      contains(
+        predicate(
+          (value) =>
+              value is Map &&
+              value['id'] == 'long-running' &&
+              value['path'] == '/long-running',
+        ),
+      ),
+    );
+  });
+
+  test('maintenance schema loads overview and preserves revision-bound saves', () {
+    final document = jsonDecode(
+      File('$pluginRoot/ui/schema/long-running-mobile.json').readAsStringSync(),
+    ) as Map<String, dynamic>;
+    final mountActions =
+        (document['lifecycle']['onMount'] as List<dynamic>)
+            .map((item) => item['input']['action'])
+            .toList();
+    expect(
+      mountActions,
+      ['maintenance.overview', 'maintenance.config'],
+    );
+    final save = _findNode(
+      document['children'] as List<dynamic>,
+      'long-running-mobile-save',
+    );
+    final input = save['actions'][0]['input'] as Map<String, dynamic>;
+    expect(input['action'], 'maintenance.update');
+    expect(input['payload']['expectedRevision'], r'$state.maintenanceConfig.revision');
+    expect(
+      input['payload']['expectedTimeoutRevision'],
+      r'$state.maintenanceConfig.timeoutRevision',
     );
   });
 }

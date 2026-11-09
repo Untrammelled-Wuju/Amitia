@@ -1,6 +1,6 @@
 {
-  "manifestVersion": 1,
-  "extension": {
+  "schemaVersion": 1,
+  "plugin": {
     "id": "com.amitia/lifestyle",
     "name": {
       "default": "生活系统"
@@ -21,12 +21,12 @@
       "sleep",
       "work",
       "events"
-    ]
-  },
-  "publisher": {
-    "id": "com.amitia",
-    "displayName": "Amitia",
-    "trustLevel": "official"
+    ],
+    "publisher": {
+      "id": "com.amitia",
+      "displayName": "Amitia",
+      "trustLevel": "official"
+    }
   },
   "compatibility": {
     "minHostVersion": "0.1.0",
@@ -38,7 +38,6 @@
       "ios"
     ]
   },
-  "placement": "device",
   "modules": [
     {
       "id": "lifestyle-runtime",
@@ -48,14 +47,11 @@
       "description": {
         "default": "以插件自有状态管理生活规则、日程和状态。"
       },
-      "type": "javascript",
-      "placement": "device",
       "runtime": {
-        "type": "javascript",
-        "entryPoint": "dist/index.js",
+        "adapter": "javascript",
+        "entry": "dist/index.js",
         "timeout": "120s",
-        "memory": 134217728,
-        "maxSubprocesses": 0,
+        "memoryBytes": 134217728,
         "capabilities": {
           "network": false,
           "filesystem": false
@@ -72,20 +68,30 @@
           }
         }
       },
+      "dynamic": {
+        "allowedAdapters": [
+          "tool",
+          "ui",
+          "ui_provider"
+        ],
+        "maxContributions": 8,
+        "maxTools": 2,
+        "maxRoutes": 6,
+        "maxServices": 0,
+        "allowUnregister": true
+      },
       "contributions": [
         {
           "id": "lifestyle-command",
           "kind": "tool",
+          "adapter": "tool",
+          "contractVersion": 1,
           "name": {
             "default": "生活系统命令"
           },
           "description": {
             "default": "生活系统 UI 的统一控制入口。"
           },
-          "requiredPermissions": [
-            "storage.state.read",
-            "storage.state.write"
-          ],
           "spec": {
             "toolId": "com.amitia/lifestyle/command",
             "modelName": "lifestyle_command",
@@ -125,20 +131,23 @@
               "runtimeType": "javascript",
               "handlerName": "command"
             }
-          }
+          },
+          "requiredPermissions": [
+            "storage.state.read",
+            "storage.state.write"
+          ]
         },
         {
           "id": "lifestyle-context",
           "kind": "tool",
+          "adapter": "tool",
+          "contractVersion": 1,
           "name": {
             "default": "生活上下文"
           },
           "description": {
             "default": "向宿主提供角色生活上下文。"
           },
-          "requiredPermissions": [
-            "storage.state.read"
-          ],
           "spec": {
             "toolId": "com.amitia/lifestyle/context",
             "modelName": "lifestyle_context",
@@ -179,20 +188,22 @@
               "runtimeType": "javascript",
               "handlerName": "context"
             }
-          }
+          },
+          "requiredPermissions": [
+            "storage.state.read"
+          ]
         },
         {
           "id": "lifestyle-character-tab",
           "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
           "name": {
             "default": "生活"
           },
           "description": {
             "default": "管理角色生活规则、日程、状态、作息、工作和事件。"
           },
-          "requiredPermissions": [
-            "tool.invoke"
-          ],
           "spec": {
             "contribution_id": "lifestyle-character-tab",
             "extension_id": "com.amitia/lifestyle",
@@ -250,20 +261,22 @@
             "integrity": {
               "definition_hash": "lifestyle-character-tab-v1"
             }
-          }
+          },
+          "requiredPermissions": [
+            "tool.invoke"
+          ]
         },
         {
           "id": "lifestyle-character-tab-mobile",
           "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
           "name": {
             "default": "生活"
           },
           "description": {
             "default": "管理角色生活规则、日程、状态、作息、工作和事件。"
           },
-          "requiredPermissions": [
-            "tool.invoke"
-          ],
           "spec": {
             "contribution_id": "lifestyle-character-tab-mobile",
             "extension_id": "com.amitia/lifestyle",
@@ -320,20 +333,22 @@
             "integrity": {
               "definition_hash": "lifestyle-character-tab-mobile-v1"
             }
-          }
+          },
+          "requiredPermissions": [
+            "tool.invoke"
+          ]
         },
         {
           "id": "lifestyle-page",
           "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
           "name": {
             "default": "生活"
           },
           "description": {
             "default": "管理角色生活规则、日程、状态、作息、工作和事件。"
           },
-          "requiredPermissions": [
-            "tool.invoke"
-          ],
           "spec": {
             "contribution_id": "lifestyle-page",
             "extension_id": "com.amitia/lifestyle",
@@ -386,20 +401,22 @@
             "integrity": {
               "definition_hash": "lifestyle-page-v1"
             }
-          }
+          },
+          "requiredPermissions": [
+            "tool.invoke"
+          ]
         },
         {
           "id": "lifestyle-desktop-page",
           "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
           "name": {
             "default": "生活"
           },
           "description": {
             "default": "管理角色生活规则、日程、状态、作息、工作和事件。"
           },
-          "requiredPermissions": [
-            "tool.invoke"
-          ],
           "spec": {
             "contribution_id": "lifestyle-desktop-page",
             "extension_id": "com.amitia/lifestyle",
@@ -453,11 +470,16 @@
             "integrity": {
               "definition_hash": "lifestyle-desktop-page-v1"
             }
-          }
+          },
+          "requiredPermissions": [
+            "tool.invoke"
+          ]
         },
         {
           "id": "lifestyle-routes",
           "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
           "name": {
             "default": "生活系统路由"
           },
@@ -501,6 +523,8 @@
         {
           "id": "lifestyle-page-provider",
           "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
           "name": {
             "default": "生活系统页面 Provider"
           },
@@ -539,7 +563,8 @@
             }
           }
         }
-      ]
+      ],
+      "placement": "device"
     }
   ],
   "permissions": [
@@ -568,10 +593,11 @@
       "scope": "extension"
     }
   ],
-  "lifecycle": {
-    "backgroundTasks": true,
-    "networkAccess": false,
-    "sandbox": true
+  "data": {
+    "schemaVersion": 1,
+    "backup": true,
+    "export": true,
+    "uninstall": "retain"
   },
   "integrity": {
     "algorithm": "sha256",

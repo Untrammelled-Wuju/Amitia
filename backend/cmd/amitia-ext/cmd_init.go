@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
+	"github.com/u-ai/backend/internal/extension/kernel/plugincontract"
 )
 
 func runInit(args []string, output *Output) int {
@@ -77,33 +77,30 @@ func runInit(args []string, output *Output) int {
 		output.fail(ExitEnv, fmt.Sprintf("创建目录失败: %v", err))
 	}
 
-	manifest := manifest_v1.Manifest{
-		ManifestVersion: manifest_v1.ManifestVersion,
-		Extension: manifest_v1.ExtensionMeta{
-			ID:      extID,
-			Name:    manifest_v1.LocalizedText{Default: *displayName},
-			Version: *version,
-			License: "MIT",
-		},
-		Publisher: manifest_v1.PublisherMeta{
-			ID:          *publisher,
-			DisplayName: *publisherName,
-		},
-		Compatibility: manifest_v1.Compatibility{},
-		Modules: []manifest_v1.ModuleMeta{
-			{
-				ID:   "main",
-				Name: manifest_v1.LocalizedText{Default: "Main Module"},
-				Type: "javascript",
-				Runtime: &manifest_v1.RuntimeMeta{
-					Type:       "javascript",
-					EntryPoint: "index.js",
-				},
+	manifest := plugincontract.Manifest{
+		SchemaVersion: plugincontract.SchemaVersion,
+		Plugin: plugincontract.PluginMeta{
+			ID:          extID,
+			Name:        plugincontract.LocalizedText{Default: *displayName},
+			Description: plugincontract.LocalizedText{Default: *displayName},
+			Version:     *version,
+			License:     "MIT",
+			Publisher: plugincontract.Publisher{
+				ID:          *publisher,
+				DisplayName: *publisherName,
 			},
 		},
-		Integrity: manifest_v1.IntegrityMeta{
-			Algorithm: "sha256",
-		},
+		Compatibility: plugincontract.Compatibility{MinHostVersion: "0.1.0"},
+		Modules: []plugincontract.Module{{
+			ID:        "main",
+			Name:      plugincontract.LocalizedText{Default: "Main Module"},
+			Placement: plugincontract.ServicePlacementDevice,
+			Runtime: &plugincontract.RuntimeSpec{
+				Adapter: "javascript",
+				Entry:   "index.js",
+			},
+		}},
+		Integrity: plugincontract.Integrity{Algorithm: "sha256"},
 	}
 
 	files := map[string][]byte{

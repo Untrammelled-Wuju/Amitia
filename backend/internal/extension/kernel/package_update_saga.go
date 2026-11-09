@@ -14,10 +14,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
-	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
 	"github.com/u-ai/backend/internal/extension/kernel/migration"
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
+	"github.com/u-ai/backend/internal/extension/kernel/plugincontract"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	amitialog "log"
 )
@@ -671,7 +671,7 @@ func (r *Runtime) executePackageUpdateMigrations(ctx context.Context, packageOpe
 	return execution, err
 }
 
-func packageManifestRequirements(extensionID domain.ExtensionID, permissions []manifest_v1.PermissionReq, modules ...domain.ModuleDefinition) []sqlite.PermissionRequirement {
+func packageManifestRequirements(extensionID domain.ExtensionID, permissions []plugincontract.Permission, modules ...domain.ModuleDefinition) []sqlite.PermissionRequirement {
 	result := make([]sqlite.PermissionRequirement, 0, len(permissions))
 	for _, permission := range permissions {
 		result = append(result, sqlite.PermissionRequirement{ExtensionID: extensionID, PermissionName: permission.Name, Reason: permission.Reason, Required: permission.Required, Scope: permission.Scope})
@@ -685,7 +685,7 @@ func packageManifestRequirements(extensionID domain.ExtensionID, permissions []m
 	return result
 }
 
-func packageManifestResources(extensionID domain.ExtensionID, resources []manifest_v1.ResourceMeta, generationPath string) []domain.ResourceOwnership {
+func packageManifestResources(extensionID domain.ExtensionID, resources []plugincontract.Resource, generationPath string) []domain.ResourceOwnership {
 	now := time.Now().UTC()
 	result := make([]domain.ResourceOwnership, 0, len(resources))
 	for _, resource := range resources {
@@ -716,7 +716,7 @@ func clonePackageMetadata(metadata map[string]any) map[string]any {
 	return result
 }
 
-func computePackageUpdateDiff(oldDefinition domain.ExtensionDefinition, oldModules []domain.ModuleDefinition, oldContributions []domain.ContributionDefinition, oldRequirements []sqlite.PermissionRequirement, oldResources []domain.ResourceOwnership, target manifest_v1.Manifest, artifact PackageArtifact) PackageUpdateDiff {
+func computePackageUpdateDiff(oldDefinition domain.ExtensionDefinition, oldModules []domain.ModuleDefinition, oldContributions []domain.ContributionDefinition, oldRequirements []sqlite.PermissionRequirement, oldResources []domain.ResourceOwnership, target plugincontract.Manifest, artifact PackageArtifact) PackageUpdateDiff {
 	targetDefinition, _ := target.ToExtensionDefinition()
 	diff := PackageUpdateDiff{DefinitionChanged: packageCanonicalJSON(oldDefinition) != packageCanonicalJSON(targetDefinition)}
 	diff.ModulesAdded, diff.ModulesRemoved, diff.ModulesChanged = packageObjectDiff(oldModules, targetDefinition.Modules, func(value domain.ModuleDefinition) string { return string(value.ID) })

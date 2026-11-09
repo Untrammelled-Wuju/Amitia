@@ -3,7 +3,6 @@ package acquisition
 import (
 	"archive/zip"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -12,6 +11,8 @@ import (
 
 	"github.com/u-ai/backend/internal/extension/kernel/agent_skill"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
+	"github.com/u-ai/backend/internal/extension/kernel/packageext"
+	"github.com/u-ai/backend/internal/extension/kernel/plugincontract"
 )
 
 type LocalSkillSource struct{ roots []string }
@@ -87,52 +88,43 @@ func (s *LocalSkillSource) Search(ctx context.Context, request AcquisitionReques
 	return result, nil
 }
 
-type packageDiscoveryManifest struct {
-	ManifestVersion int `json:"manifestVersion"`
-	Extension       struct {
-		ID          string            `json:"id"`
-		Version     string            `json:"version"`
-		Name        map[string]string `json:"name"`
-		Description map[string]string `json:"description"`
-	} `json:"extension"`
-}
-
-func readPackageDiscoveryManifest(reader *zip.Reader) (packageDiscoveryManifest, error) {
-	var manifest packageDiscoveryManifest
+func readPackageDiscoveryManifest(reader *zip.Reader) (*plugincontract.Manifest, error) {
 	for _, entry := range reader.File {
 		if entry.Name != "manifest.json" {
 			continue
 		}
 		if entry.UncompressedSize64 > 1<<20 {
-			return manifest, fmt.Errorf("package manifest is too large")
+			return nil, fmt.Errorf("package manifest is too large")
 		}
 		file, err := entry.Open()
 		if err != nil {
-			return manifest, err
+			return nil, err
 		}
 		raw, err := io.ReadAll(io.LimitReader(file, (1<<20)+1))
 		file.Close()
 		if err != nil {
-			return manifest, err
+			return nil, err
 		}
-		if err := json.Unmarshal(raw, &manifest); err != nil {
-			return manifest, err
+		manifest, err := plugincontract.Parse(raw)
+		if err != nil {
+			return nil, err
 		}
-		if manifest.ManifestVersion < 1 || manifest.Extension.ID == "" || manifest.Extension.Version == "" {
-			return manifest, fmt.Errorf("not an Amitia package manifest")
+		report := manifest.Validate()
+		if report.HasErrors() {
+			return nil, fmt.Errorf("not an Amitia package manifest")
 		}
 		return manifest, nil
 	}
-	return manifest, fmt.Errorf("Amitia manifest.json is missing")
+	return nil, fmt.Errorf("Amitia manifest.json is missing")
 }
 
-func packageDiscoveryCandidate(manifest packageDiscoveryManifest, uri string, request AcquisitionRequest) CapabilityCandidate {
-	name := manifest.Extension.Name["default"]
+func packageDiscoveryCandidate(manifest *plugincontract.Manifest, uri string, request AcquisitionRequest) CapabilityCandidate {
+	name := manifest.Plugin.Name.Default
 	if name == "" {
-		name = manifest.Extension.ID
+		name = manifest.Plugin.ID
 	}
-	return CapabilityCandidate{ID: "package:" + manifest.Extension.ID + "@" + manifest.Extension.Version, ExtensionID: manifest.Extension.ID,
-		PackageName: manifest.Extension.ID, Name: name, Description: manifest.Extension.Description["default"], Version: manifest.Extension.Version,
+	return CapabilityCandidate{ID: "package:" + manifest.Plugin.ID + "@" + manifest.Plugin.Version, ExtensionID: manifest.Plugin.ID,
+		PackageName: manifest.Plugin.ID, Name: name, Description: manifest.Plugin.Description.Default, Version: manifest.Plugin.Version,
 		Kind: CandidateExtensionPackage, Capabilities: []capability.CapabilityID{request.CapabilityID}, Source: CandidateSource{URI: uri}, Trust: CandidateTrust{Level: TrustUnverified},
 		Install: CandidateInstallDescriptor{Method: InstallExtension, ExtensionPackage: &ExtensionInstallDescriptor{PackageURI: uri}}, Metadata: map[string]any{"installOnly": true},
 	}
@@ -160,7 +152,7 @@ func (s *LocalPackageSource) Search(ctx context.Context, request AcquisitionRequ
 			if err := ctx.Err(); err != nil {
 				return nil, err
 			}
-			if file.IsDir() || file.Type()&os.ModeSymlink != 0 || !strings.EqualFold(filepath.Ext(file.Name()), ".amitiax") {
+			if file.IsDir() || file.Type()&os.ModeSymlink != 0 || !packageext.IsArchivePath(file.Name()) {
 				continue
 			}
 			archivePath := filepath.Join(root, file.Name())

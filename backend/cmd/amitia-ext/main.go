@@ -14,8 +14,8 @@ func usage() {
 
 命令:
   init               创建新扩展项目
-  validate           校验 manifest.json 或 .amitiax 包
-  pack               将目录打包成 .amitiax
+  validate           校验 manifest.json 或 .amitiax/.gamex/.petx 包
+  pack               将目录打包成 .amitiax/.gamex/.petx
   sign               用 ed25519 私钥签名 .amitiax 包
   verify             验证 .amitiax 包的完整性和签名
   inspect            显示 .amitiax 包的详细信息
@@ -34,6 +34,7 @@ func usage() {
   amitiax init --name com.example.my-ext --dir ./my-ext
   amitiax validate manifest.json
   amitiax validate my-ext.amitiax
+  amitiax validate my-game.gamex
   amitiax pack --dir ./my-ext -o my-ext.amitiax
   amitiax sign my-ext.amitiax --key private.key --key-id my-key --publisher com.example
   amitiax verify my-ext.amitiax --pubkey public.key

@@ -2,6 +2,7 @@ package ui_handler
 
 import (
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -140,6 +141,7 @@ func (h *HTTPHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/extensions/ui/providers", h.handleProviders)
 	mux.HandleFunc("/api/extensions/ui/providers/resolve", h.handleProviderResolve)
 	mux.HandleFunc("/api/extensions/ui/provider-module/", h.handleProviderModuleResource)
+	mux.HandleFunc("/api/extensions/ui/page-module/", h.handlePageModuleResource)
 	mux.HandleFunc("/api/extensions/ui/profile", h.handleProfile)
 	mux.HandleFunc("/api/extensions/ui/sessions", h.handleSessionsCollection)
 	mux.HandleFunc("/api/extensions/ui/sessions/", h.handleSessionItem)
@@ -165,6 +167,8 @@ func (h *HTTPHandler) Register(mux *http.ServeMux) {
 func (h *HTTPHandler) RegisterPublicModuleRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/ui/provider-module/", h.handleProviderModuleResource)
 	mux.HandleFunc("/api/public/extensions/ui/provider-module/", h.handleProviderModuleResource)
+	mux.HandleFunc("/ui/page-module/", h.handlePageModuleResource)
+	mux.HandleFunc("/api/public/extensions/ui/page-module/", h.handlePageModuleResource)
 }
 
 func (h *HTTPHandler) handleResourceLink(w http.ResponseWriter, r *http.Request) {
@@ -450,6 +454,126 @@ func (h *HTTPHandler) handleProviderModuleResource(w http.ResponseWriter, r *htt
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write(content); err != nil {
 		amitialog.Printf("[original-error] %v", err)
+	}
+}
+
+func (h *HTTPHandler) handlePageModuleResource(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	if h.pageHost == nil {
+		writeError(w, http.StatusServiceUnavailable, "page_host_unavailable", "page host unavailable")
+		return
+	}
+	const marker = "/ui/page-module/"
+	markerIndex := strings.Index(r.URL.EscapedPath(), marker)
+	if markerIndex < 0 {
+		writeError(w, http.StatusNotFound, "page_module_not_found", "page module route not found")
+		return
+	}
+	rest := r.URL.EscapedPath()[markerIndex+len(marker):]
+	parts := strings.SplitN(rest, "/", 3)
+	if len(parts) != 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
+		writeError(w, http.StatusNotFound, "page_module_not_found", "extension id, page id and resource path required")
+		return
+	}
+	extensionID, err := url.PathUnescape(parts[0])
+	if err != nil || extensionID == "" {
+		writeError(w, http.StatusBadRequest, "invalid_extension_id", "invalid extension id")
+		return
+	}
+	pageID, err := url.PathUnescape(parts[1])
+	if err != nil || pageID == "" {
+		writeError(w, http.StatusBadRequest, "invalid_page_id", "invalid page id")
+		return
+	}
+	if !validPageModuleCapability(extensionID, pageID, r.URL.Query().Get("accessToken")) {
+		writeError(w, http.StatusForbidden, "page_module_forbidden", "page module capability is invalid or expired")
+		return
+	}
+	definition, err := h.pageHost.ResolvePage(r.Context(), extension_page_host.ExtensionID(extensionID), extension_page_host.PageID(pageID))
+	if err != nil || definition == nil || definition.PageSpec == nil || definition.PageSpec.EntryKind != extension_page_host.PageKindWeb {
+		writeError(w, http.StatusForbidden, "page_module_forbidden", "web page contribution required")
+		return
+	}
+	entryPath := filepath.Clean(filepath.FromSlash(strings.TrimSpace(definition.PageSpec.EntryPath)))
+	if entryPath == "." || entryPath == ".." || strings.HasPrefix(entryPath, ".."+string(filepath.Separator)) || filepath.IsAbs(entryPath) {
+		writeError(w, http.StatusForbidden, "page_module_forbidden", "page entry path is invalid")
+		return
+	}
+	resourcePath, err := url.PathUnescape(parts[2])
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_path", "invalid page module path")
+		return
+	}
+	basePath := h.resolveExtensionBasePath(extensionID)
+	if basePath == "" {
+		writeError(w, http.StatusNotFound, "extension_path_not_found", "extension bundle path not found")
+		return
+	}
+	cleanPath, err := sanitizeUIModulePath(basePath, resourcePath)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_path", err.Error())
+		return
+	}
+	fullPath := filepath.Join(basePath, cleanPath)
+	entryRoot := filepath.Dir(filepath.Join(basePath, entryPath))
+	relative, err := filepath.Rel(entryRoot, fullPath)
+	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) || filepath.IsAbs(relative) {
+		writeError(w, http.StatusForbidden, "page_module_forbidden", "resource is outside the page module directory")
+		return
+	}
+	info, err := os.Stat(fullPath)
+	if err != nil || info.IsDir() {
+		writeError(w, http.StatusNotFound, "page_module_resource_not_found", "page module resource not found")
+		return
+	}
+	mimeType := uiModuleMIME(cleanPath)
+	if mimeType == "" {
+		writeError(w, http.StatusUnsupportedMediaType, "mime_not_allowed", "mime type not allowed")
+		return
+	}
+	content, err := os.ReadFile(fullPath)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "read_failed", err.Error())
+		return
+	}
+	if filepath.Clean(filepath.Join(basePath, entryPath)) == fullPath && strings.TrimSpace(definition.PageSpec.EntryPath) != "" {
+		if definition.PageSpec.EntryHash != "" && !pageModuleHashMatches(definition.PageSpec.EntryHash, content) {
+			writeError(w, http.StatusConflict, "page_module_integrity_mismatch", "page module content hash mismatch")
+			return
+		}
+	}
+	w.Header().Set("Content-Type", mimeType)
+	w.Header().Set("Cache-Control", "public, max-age=3600, immutable")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write(content); err != nil {
+		amitialog.Printf("[original-error] %v", err)
+	}
+}
+
+func pageModuleHashMatches(expected string, content []byte) bool {
+	expected = strings.TrimSpace(expected)
+	if expected == "" {
+		return true
+	}
+	sum := sha256.Sum256(content)
+	hexHash := hex.EncodeToString(sum[:])
+	base64Hash := base64.RawStdEncoding.EncodeToString(sum[:])
+	base64PaddedHash := base64.StdEncoding.EncodeToString(sum[:])
+	switch {
+	case strings.HasPrefix(expected, "sha256:"):
+		expected = strings.TrimPrefix(expected, "sha256:")
+		return strings.EqualFold(expected, hexHash)
+	case strings.HasPrefix(expected, "sha256-"):
+		expected = strings.TrimPrefix(expected, "sha256-")
+		return expected == base64Hash || expected == base64PaddedHash
+	default:
+		return strings.EqualFold(expected, hexHash) || expected == base64Hash || expected == base64PaddedHash
 	}
 }
 
@@ -768,7 +892,7 @@ func (h *HTTPHandler) openExtensionPage(w http.ResponseWriter, r *http.Request, 
 		writeError(w, http.StatusInternalServerError, "page_open_failed", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, result)
+	writeJSON(w, http.StatusOK, pageOpenResultForResponse(result, extensionID))
 }
 
 func (h *HTTPHandler) handleExtensionContributions(w http.ResponseWriter, r *http.Request) {
@@ -832,7 +956,22 @@ func (h *HTTPHandler) handleOpenPage(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "page_open_failed", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, result)
+	writeJSON(w, http.StatusOK, pageOpenResultForResponse(result, body.ExtensionID))
+}
+
+func pageOpenResultForResponse(result *extension_page_host.OpenPageResult, extensionID string) *extension_page_host.OpenPageResult {
+	if result == nil || result.Definition == nil || result.Definition.EntryKind != extension_page_host.PageKindWeb {
+		return result
+	}
+	clone := *result
+	definition := *result.Definition
+	definition.ModuleToken = pageModuleCapability(
+		extensionID,
+		string(definition.PageID),
+		time.Now().Add(time.Hour).Unix(),
+	)
+	clone.Definition = &definition
+	return &clone
 }
 
 func (h *HTTPHandler) handleSchema(w http.ResponseWriter, r *http.Request) {

@@ -516,47 +516,17 @@ func (a ContributionAdapter) Valid() bool {
 	}
 }
 
-func ContributionAdapterForKind(kind ContributionKind) ContributionAdapter {
+func IsBuiltinContributionKind(kind ContributionKind) bool {
 	switch kind {
-	case ContributionKindTool:
-		return ContributionAdapterTool
-	case ContributionKindAgentSkill:
-		return ContributionAdapterAgentSkill
-	case ContributionKindWorkflow:
-		return ContributionAdapterWorkflow
-	case ContributionKindMCPServer:
-		return ContributionAdapterMCPServer
-	case ContributionKindHook:
-		return ContributionAdapterHook
-	case ContributionKindEventSubscription:
-		return ContributionAdapterEvent
-	case ContributionKindSchedule:
-		return ContributionAdapterSchedule
-	case ContributionKindUIPage, ContributionKindUIPanel, ContributionKindUIChat,
-		ContributionKindUIContextAction, ContributionKindUIDesktop:
-		return ContributionAdapterUI
-	case ContributionKindUIProvider:
-		return ContributionAdapterUIProvider
-	case ContributionKindUISlot:
-		return ContributionAdapterUISlot
-	case ContributionKindBackgroundTask:
-		return ContributionAdapterBackground
-	case ContributionKindProvider:
-		return ContributionAdapterProvider
-	case ContributionKindGamePlugin:
-		return ContributionAdapterGame
-	case ContributionKindPetPlugin:
-		return ContributionAdapterDesktopPet
-	default:
-		return ContributionAdapter("")
+	case ContributionKindTool, ContributionKindAgentSkill, ContributionKindWorkflow,
+		ContributionKindMCPServer, ContributionKindHook, ContributionKindEventSubscription,
+		ContributionKindSchedule, ContributionKindUIPage, ContributionKindUIPanel,
+		ContributionKindUIChat, ContributionKindUIContextAction, ContributionKindUIDesktop,
+		ContributionKindUIProvider, ContributionKindUISlot, ContributionKindBackgroundTask,
+		ContributionKindProvider, ContributionKindGamePlugin, ContributionKindPetPlugin:
+		return true
 	}
-}
-
-func ResolveContributionAdapter(kind ContributionKind, adapter ContributionAdapter) ContributionAdapter {
-	if adapter != "" {
-		return adapter
-	}
-	return ContributionAdapterForKind(kind)
+	return false
 }
 
 type ContributionDefinition struct {
@@ -588,10 +558,10 @@ func (c *ContributionDefinition) Validate() error {
 	if c.Kind == "" {
 		return fmt.Errorf("domain: contribution %s missing kind", c.ID)
 	}
-	if ContributionAdapterForKind(c.Kind) == "" {
-		if c.Adapter == "" {
-			return fmt.Errorf("domain: contribution %s custom kind %s requires an adapter", c.ID, c.Kind)
-		}
+	if c.Adapter == "" {
+		return fmt.Errorf("domain: contribution %s requires an adapter", c.ID)
+	}
+	if !IsBuiltinContributionKind(c.Kind) {
 		if c.ContractVersion <= 0 {
 			return fmt.Errorf("domain: contribution %s custom kind %s requires a positive contract version", c.ID, c.Kind)
 		}
@@ -615,7 +585,7 @@ func (c *ContributionDefinition) Validate() error {
 }
 
 func (c ContributionDefinition) EffectiveAdapter() ContributionAdapter {
-	return ResolveContributionAdapter(c.Kind, c.Adapter)
+	return c.Adapter
 }
 
 type Exposure struct {

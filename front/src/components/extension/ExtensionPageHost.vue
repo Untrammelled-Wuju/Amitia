@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch, defineAsyncComponent } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { apiClient } from "@/composables/useApi";
 import { useExtensionUIStore } from "@/stores/extensionUI";
 import type { UIContributionSummary } from "@/stores/extensionUI";
 import { openExtensionPage, pollPageSessionStatus, closePageSession } from "@/api/extension";
@@ -8,6 +9,7 @@ import { resolveHostEnvironment } from "@/composables/useHostEnvironment";
 import { resolvePluginSurface } from "@/ui-runtime/pluginSurfaceResolver";
 import PluginPageFrame from "./PluginPageFrame.vue";
 import ExtensionLoadingOverlay from "./ExtensionLoadingOverlay.vue";
+import ClientModulePage from "./ClientModulePage.vue";
 
 const SchemaUIRenderer = defineAsyncComponent({ loader: () => import("./SchemaUIRenderer.vue"), loadingComponent: ExtensionLoadingOverlay, delay: 0 });
 
@@ -32,6 +34,8 @@ interface PageSpec {
   icon?: string;
   entryKind: "schema_page" | "web_page";
   entryPath: string;
+  entryHash?: string;
+  moduleToken?: string;
   schemaPath?: string;
   scope: "global" | "character" | "conversation";
   permissions?: string[];
@@ -112,6 +116,39 @@ const pageSurfaceKind = computed(() =>
   pageContribution.value ? resolvePluginSurface(pageContribution.value) : "none",
 );
 const isSchemaPage = computed(() => pageSurfaceKind.value === "schema");
+const isWebPage = computed(() => pageSpec.value?.entryKind === "web_page");
+
+const pageContributionDefinition = computed(() =>
+  uiStore.getContributionById(pageId.value),
+);
+
+const pageActions = computed<Record<string, (input?: unknown) => Promise<unknown>>>(() => {
+  const actions: Record<string, (input?: unknown) => Promise<unknown>> = {};
+  for (const action of pageContributionDefinition.value?.actions ?? []) {
+    actions[action.actionId] = async (input?: unknown) => {
+      const contributionId = pageContributionDefinition.value?.contributionId || pageId.value;
+      const response = await apiClient.post(
+        `/api/extension/action/${encodeURIComponent(contributionId)}/${encodeURIComponent(action.actionId)}`,
+        { context: pageContext.value, input: input ?? {} },
+      );
+      const data = response.data as Record<string, unknown> | undefined;
+      if (data?.ok === false) {
+        const error = data.error as Record<string, unknown> | string | undefined;
+        throw new Error(typeof error === "string" ? error : String(error?.message ?? "插件操作失败"));
+      }
+      return data?.result ?? data;
+    };
+  }
+  return actions;
+});
+
+function navigatePage(target: string, type?: string) {
+  if (type === "external") {
+    window.open(target, "_blank", "noopener,noreferrer");
+    return;
+  }
+  void router.push(target);
+}
 
 const pageContext = computed<Record<string, unknown>>(() => {
   const env = resolveHostEnvironment();
@@ -245,6 +282,7 @@ async function goBack() {
 
 onMounted(() => {
   disposed = false;
+  if (!uiStore.snapshot) void uiStore.refreshSnapshot();
   void openPage();
 });
 onBeforeUnmount(() => {
@@ -302,6 +340,18 @@ watch([extensionId, pageId], async () => {
             :contribution="pageContribution"
             :slot-id="`extension.page.main`"
             :context="pageContext"
+          />
+          <ClientModulePage
+            v-else-if="isWebPage && pageSpec"
+            :extension-id="extensionId"
+            :page-id="pageId"
+            :generation="pageSessionGeneration"
+            :entry-path="pageSpec.entryPath"
+            :entry-hash="pageSpec.entryHash"
+            :module-token="pageSpec.moduleToken"
+            :context="pageContext"
+            :actions="pageActions"
+            :navigate="navigatePage"
           />
           <div v-else class="extension-page-host__placeholder">
             未知页面类型: {{ pageSpec?.entryKind }}
