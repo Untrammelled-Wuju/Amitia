@@ -60,7 +60,10 @@ export const appSections: AppSectionDefinition[] = [
     id: "workshop",
     route: "/creative-workshop",
     label: "创意工坊",
-    entries: [],
+    entries: [
+      { route: "/creative-workshop/character-cards", label: "角色卡工坊" },
+      { route: "/creative-workshop/pet/installations", label: "桌宠" },
+    ],
   },
   {
     id: "extensions",

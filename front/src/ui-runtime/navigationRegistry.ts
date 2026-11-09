@@ -101,6 +101,8 @@ const coreNavigationItems: UINavigationItem[] = [
   { id: "character", route: "/characters", label: "角色", placement: "primary", description: "管理角色、团队、世界书和角色能力。", icon: CharacterIcon, group: "character", order: 20, profile: true, match: ["/character", "/characters", "/world-book"] },
   { id: "memory", route: "/memory", label: "记忆", placement: "primary", description: "管理记忆、知识库、图谱和时间线。", icon: BrainIcon, group: "memory", order: 50, mobile: true, profile: true, tabLabel: "记忆", match: ["/memory", "/knowledge", "/episodic", "/graph", "/profiles"] },
   { id: "tasks", route: "/tasks", label: "任务", placement: "primary", description: "管理主动任务、定时提醒和持续事项。", icon: Calendar, group: "tasks", order: 70, mobile: true, profile: true, tabLabel: "任务", match: ["/tasks", "/reminders", "/continuity"] },
+  { id: "game-center", route: "/game-center", label: "游戏模式", placement: "primary", description: "管理游戏插件、运行环境和游戏内容。", icon: GamepadIcon, group: "game", order: 78, match: ["/game-center"] },
+  { id: "creative-workshop", route: "/creative-workshop", label: "创意工坊", placement: "primary", description: "管理角色卡、工作流和桌宠内容。", icon: MagicStick, group: "workshop", order: 85, match: ["/creative-workshop", "/workshop"] },
 ];
 
 const corePageTitles: Record<string, string> = {
