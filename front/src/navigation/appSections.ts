@@ -28,19 +28,33 @@ export const appSections: AppSectionDefinition[] = [
     id: "character",
     route: "/characters",
     label: "角色",
-    entries: [],
+    entries: [
+      { route: "/character", label: "角色管理" },
+      { route: "/characters/teams", label: "团队" },
+      { route: "/world-book", label: "世界书" },
+    ],
   },
   {
     id: "memory",
     route: "/memory",
     label: "记忆",
-    entries: [],
+    entries: [
+      { route: "/knowledge", label: "知识库" },
+      { route: "/memory-manager", label: "记忆总览" },
+      { route: "/episodic", label: "情景记忆" },
+      { route: "/graph", label: "记忆图谱" },
+      { route: "/memory-timeline", label: "时间线" },
+      { route: "/profiles", label: "用户画像" },
+    ],
   },
   {
     id: "tasks",
-    route: "/reminders",
+    route: "/tasks",
     label: "任务",
-    entries: [],
+    entries: [
+      { route: "/reminders", label: "主动任务" },
+      { route: "/continuity", label: "持续事项" },
+    ],
   },
   {
     id: "workshop",
@@ -70,7 +84,7 @@ export function resolveAppSection(target: string): AppSectionId | null {
   if (settingsSectionRoutes.has(path)) return "settings";
   if (path === "/my-space" || path.startsWith("/my-space/")) return "account";
   if (path === "/channel-center" || path.startsWith("/channels/")) return "channels";
-  if (path === "/reminders" || path === "/continuity" || /^\/characters\/[^/]+\/active-task$/.test(path)) return "tasks";
+  if (path === "/tasks" || path === "/reminders" || path === "/continuity" || /^\/characters\/[^/]+\/active-task$/.test(path)) return "tasks";
   if (path === "/game-center" || path.startsWith("/game-center/")) return "game";
   if (path === "/characters" || path === "/character" || path.startsWith("/character/") || path === "/characters/teams" || path === "/world-book") return "character";
   if (path === "/memory" || path.startsWith("/memory/") || path === "/memory-manager" || path === "/memory-timeline" || path === "/knowledge" || path === "/episodic" || path === "/graph" || path === "/profiles") return "memory";

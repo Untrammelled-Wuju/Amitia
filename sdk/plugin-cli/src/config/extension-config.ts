@@ -1,3 +1,7 @@
+import { readFileSync, statSync } from "node:fs";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+
 export interface AmitiaExtensionConfig {
   readonly manifest: string;
   readonly outputDir: string;
@@ -33,6 +37,14 @@ export function validateConfig(config: AmitiaExtensionConfig): string[] {
   if (!config.packageDir) errors.push("packageDir is required");
   if (!config.targets || config.targets.length === 0) {
     errors.push("at least one build target is required");
+  } else {
+    const validTargets = new Set<BuildTarget>(["windows-x64", "macos-arm64", "macos-x64", "linux-x64", "linux-arm64"]);
+    for (const target of config.targets) {
+      if (!validTargets.has(target)) errors.push(`unknown build target: ${target}`);
+    }
+  }
+  if (config.bundler && !["esbuild", "rollup", "vite"].includes(config.bundler)) {
+    errors.push(`unknown bundler: ${config.bundler}`);
   }
   if (config.signer) {
     const signerErrors = validateSignerConfig(config.signer);
@@ -81,7 +93,34 @@ export function mergeConfig(base: AmitiaExtensionConfig, override: Partial<Amiti
   };
 }
 
-export function loadConfig(configPath: string): AmitiaExtensionConfig {
-  // Stub for dynamic import — actual implementation resolves .ts/.js file at runtime
-  throw new Error(`loadConfig not implemented for path: ${configPath}`);
+export async function loadConfig(configPath: string): Promise<AmitiaExtensionConfig> {
+  const absolutePath = resolve(configPath);
+  const extension = absolutePath.slice(absolutePath.lastIndexOf(".")).toLowerCase();
+  let loaded: unknown;
+  if (extension === ".json") {
+    loaded = JSON.parse(readFileSync(absolutePath, "utf8"));
+  } else if ([".js", ".mjs", ".cjs", ".ts", ".mts", ".cts"].includes(extension)) {
+    loaded = await import(pathToFileURL(absolutePath).href + `?mtime=${statSync(absolutePath).mtimeMs}`);
+  } else {
+    throw new Error(`unsupported config extension: ${extension || "(none)"}`);
+  }
+  return normalizeLoadedConfig(loaded);
+}
+
+function normalizeLoadedConfig(value: unknown): AmitiaExtensionConfig {
+  const moduleValue = value && typeof value === "object" && "default" in value
+    ? (value as { default: unknown }).default
+    : value;
+  const candidate = moduleValue && typeof moduleValue === "object" && "config" in moduleValue
+    ? (moduleValue as { config: unknown }).config
+    : moduleValue;
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+    throw new Error("config module must export an object");
+  }
+  const config = mergeConfig(DEFAULT_CONFIG, candidate as Partial<AmitiaExtensionConfig>);
+  const errors = validateConfig(config);
+  if (errors.length > 0) {
+    throw new Error(`invalid Amitia extension config: ${errors.join("; ")}`);
+  }
+  return Object.freeze(config);
 }

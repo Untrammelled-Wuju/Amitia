@@ -95,16 +95,10 @@ function packagePaths() {
         ? `amitia-workspace-${manifest.plugin.version}.amitiax`
       : directory === "chat-import"
         ? `amitia-chat-import-${manifest.plugin.version}.amitiax`
-      : directory === "active-task"
-        ? `amitia-active-task-${manifest.plugin.version}.amitiax`
       : directory === "storage"
         ? `amitia-storage-${manifest.plugin.version}.amitiax`
       : directory === "chat-logs"
         ? `amitia-chat-logs-${manifest.plugin.version}.amitiax`
-      : directory === "memory-hub"
-        ? `amitia-memory-hub-${manifest.plugin.version}.amitiax`
-      : directory === "character-hub"
-        ? `amitia-character-hub-${manifest.plugin.version}.amitiax`
       : directory === "creative-workshop-hub"
         ? `amitia-creative-workshop-hub-${manifest.plugin.version}.amitiax`
       : directory === "game-center-hub"

@@ -32,6 +32,9 @@ describe("图标导航栏布局", () => {
       expect(wrapper.get(".side-nav").classes()).not.toContain("is-collapsed");
       expect(wrapper.findAll(".el-menu-item").map(item => item.text())).toEqual([
         "主页",
+        "角色",
+        "记忆",
+        "任务",
       ]);
       expect(wrapper.find(".user-profile").exists()).toBe(true);
     } finally {

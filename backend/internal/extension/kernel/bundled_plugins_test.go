@@ -9,17 +9,6 @@ import (
 	"time"
 )
 
-func TestBundledCoreModulesAreRetiredFromPluginProvisioning(t *testing.T) {
-	for _, extensionID := range []string{"com.amitia/active-task", "com.amitia/memory-hub", "com.amitia/character-hub"} {
-		if !isBundledCoreModule(extensionID) {
-			t.Fatalf("%s must be classified as a bundled core module", extensionID)
-		}
-	}
-	if isBundledCoreModule("com.amitia/plugin-market") {
-		t.Fatal("marketplace plugin must remain a bundled plugin")
-	}
-}
-
 func TestTrustedBundledPreviewSkipsSignatureAndSameVersionContentChecks(t *testing.T) {
 	ctx := context.Background()
 	runtime, _ := newPackagePipelineRuntime(t)

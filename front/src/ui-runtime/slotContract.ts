@@ -266,6 +266,8 @@ export interface ClientSlotMap {
   "character.detail.tab": ClientList<ClientCharacterOwner>;
   "character.detail.action": ClientList<ClientCharacterOwner>;
   "character.sidebar.card": ClientList<ClientCharacterOwner>;
+  "memory.page.section": ClientList<ClientRootOwner>;
+  "tasks.page.section": ClientList<ClientRootOwner>;
   "system.status.item": ClientList<ClientRootOwner>;
   "system.settings.section": ClientList<ClientRootOwner>;
   "system.diagnostics.tab": ClientList<ClientRootOwner>;

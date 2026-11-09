@@ -146,9 +146,8 @@ const groupDescriptions: Record<string, string> = {
   channels: "渠道插件和宿主消息。",
 };
 const activeIndex = computed(() => {
-  const path = route.path;
-  const active = primaryNavigationItems.value.find((item) => isUINavigationItemActive(path, item));
-  return active?.route ?? path;
+  const active = primaryNavigationItems.value.find((item) => isUINavigationItemActive(route.path, item));
+  return active?.route ?? route.path;
 });
 
 function openMySpace() {

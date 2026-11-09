@@ -23,20 +23,6 @@ type BundledPluginIssue struct {
 	Error string
 }
 
-var bundledPluginLegacyIDs = map[string][]string{
-	"com.amitia/active-task": {"com.amitia.builtin.active-task"},
-}
-
-var bundledCoreModuleIDs = map[string]bool{
-	"com.amitia/active-task":   true,
-	"com.amitia/memory-hub":    true,
-	"com.amitia/character-hub": true,
-}
-
-func isBundledCoreModule(extensionID string) bool {
-	return bundledCoreModuleIDs[extensionID]
-}
-
 func ProvisionBundledPlugins(ctx context.Context, runtime *Runtime, root, spaceID string) ([]BundledPluginIssue, error) {
 	if runtime == nil || runtime.container == nil {
 		return nil, errors.New("kernel: bundled plugin provisioning requires an attached container")
@@ -150,19 +136,6 @@ func provisionBundledPlugin(ctx context.Context, runtime *Runtime, path, spaceID
 	if closeErr != nil {
 		return fmt.Errorf("close package: %w", closeErr)
 	}
-	if isBundledCoreModule(preview.ExtensionID) {
-		installation, err := runtime.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(preview.ExtensionID))
-		if errors.Is(err, domain.ErrInvalidExtensionID) {
-			return nil
-		}
-		if err != nil {
-			return fmt.Errorf("read retired core module package: %w", err)
-		}
-		if installation.InstallationID != "" {
-			return runtime.Uninstall(ctx, preview.ExtensionID)
-		}
-		return nil
-	}
 	defaultInstall, _ := preview.Manifest.Plugin.Metadata["system.defaultInstall"].(bool)
 	if !defaultInstall {
 		return nil
@@ -206,9 +179,6 @@ func provisionBundledPlugin(ctx context.Context, runtime *Runtime, path, spaceID
 				return fmt.Errorf("enable already installed package: %w", err)
 			}
 		}
-		if err := retireBundledPluginAliases(ctx, runtime, preview.ExtensionID); err != nil {
-			return fmt.Errorf("retire legacy bundled plugin aliases: %w", err)
-		}
 		return nil
 	}
 	confirmations := make(map[string]bool, len(preview.RequiredConfirmations))
@@ -243,9 +213,6 @@ func provisionBundledPlugin(ctx context.Context, runtime *Runtime, path, spaceID
 	if err != nil {
 		return fmt.Errorf("execute package transaction: %w", err)
 	}
-	if err := retireBundledPluginAliases(ctx, runtime, preview.ExtensionID); err != nil {
-		return fmt.Errorf("retire legacy bundled plugin aliases: %w", err)
-	}
 	if !defaultEnabled {
 		return nil
 	}
@@ -256,31 +223,6 @@ func provisionBundledPlugin(ctx context.Context, runtime *Runtime, path, spaceID
 	if !after.IsUserDisabled() && after.EnablementState != domain.EnablementEnabled {
 		if err := runtime.Enable(ctx, preview.ExtensionID); err != nil {
 			return fmt.Errorf("enable package: %w", err)
-		}
-	}
-	return nil
-}
-
-func retireBundledPluginAliases(ctx context.Context, runtime *Runtime, canonicalID string) error {
-	for _, legacyID := range bundledPluginLegacyIDs[canonicalID] {
-		if _, err := runtime.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(legacyID)); err != nil {
-			if errors.Is(err, domain.ErrInvalidExtensionID) {
-				if runtime.container.PackageGenerationStore != nil {
-					if err := runtime.container.PackageGenerationStore.RemoveExtensionRoot(legacyID); err != nil {
-						return fmt.Errorf("remove orphaned legacy bundled plugin files %s: %w", legacyID, err)
-					}
-				}
-				continue
-			}
-			return fmt.Errorf("read legacy bundled plugin %s: %w", legacyID, err)
-		}
-		if err := runtime.Uninstall(ctx, legacyID); err != nil {
-			return fmt.Errorf("uninstall legacy bundled plugin %s: %w", legacyID, err)
-		}
-		if runtime.container.PackageGenerationStore != nil {
-			if err := runtime.container.PackageGenerationStore.RemoveExtensionRoot(legacyID); err != nil {
-				return fmt.Errorf("remove legacy bundled plugin files %s: %w", legacyID, err)
-			}
 		}
 	}
 	return nil

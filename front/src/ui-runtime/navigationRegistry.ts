@@ -98,6 +98,9 @@ export function resolveNavigationIcon(name?: string): Component {
 
 const coreNavigationItems: UINavigationItem[] = [
   { id: "home", route: "/chat", label: "主页", placement: "primary", description: "开始新对话，或继续最近的聊天。", icon: HomeIcon, group: "home", order: 0, mobile: true, match: ["/chat"] },
+  { id: "character", route: "/characters", label: "角色", placement: "primary", description: "管理角色、团队、世界书和角色能力。", icon: CharacterIcon, group: "character", order: 20, profile: true, match: ["/character", "/characters", "/world-book"] },
+  { id: "memory", route: "/memory", label: "记忆", placement: "primary", description: "管理记忆、知识库、图谱和时间线。", icon: BrainIcon, group: "memory", order: 50, mobile: true, profile: true, tabLabel: "记忆", match: ["/memory", "/knowledge", "/episodic", "/graph", "/profiles"] },
+  { id: "tasks", route: "/tasks", label: "任务", placement: "primary", description: "管理主动任务、定时提醒和持续事项。", icon: Calendar, group: "tasks", order: 70, mobile: true, profile: true, tabLabel: "任务", match: ["/tasks", "/reminders", "/continuity"] },
 ];
 
 const corePageTitles: Record<string, string> = {
@@ -155,6 +158,13 @@ function activeNavigationProviders(store: ReturnType<typeof useExtensionUIStore>
     .sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0) || a.providerId.localeCompare(b.providerId));
 }
 
+function hasEffectiveRoute(effectiveRoutes: Set<string>, ownerId: string, route: string): boolean {
+  const exact = `${ownerId}\u0000${route}`;
+  if (effectiveRoutes.has(exact)) return true;
+  const childPrefix = `${exact}/`;
+  return [...effectiveRoutes].some((key) => key.startsWith(childPrefix));
+}
+
 /**
  * Resolve additive navigation contributions from every enabled compatible
  * provider. route.registry navigation items are shown only when their route won
@@ -180,10 +190,10 @@ export function collectExtensionNavigationItems(
       if (!id || !route.startsWith("/") || route === "/" || !label) continue;
       if (!isRuntimeRouteAvailable(route)) continue;
       if (provider.capability === "route.registry") {
-        if (!effectiveRouteKeys.has(`${provider.providerId}\u0000${route}`)) continue;
+        if (!hasEffectiveRoute(effectiveRouteKeys, provider.providerId, route)) continue;
       } else if (
         !shadowsProtectedRoute(route) &&
-        !effectiveExtensionRoutes.has(`${provider.extensionId}\u0000${route}`)
+        !hasEffectiveRoute(effectiveExtensionRoutes, provider.extensionId, route)
       ) {
         continue;
       }

@@ -4,46 +4,22 @@
     "/onboarding",
     "/privacy",
     "/usage-boundary",
-    "/settings/ui-providers"
+    "/settings/ui-providers",
+    "/characters",
+    "/memory",
+    "/tasks",
+    "/extensions",
+    "/reminders",
+    "/continuity"
   ],
   "providerRoutes": [
     {
-      "path": "/tasks",
-      "extensionId": "com.amitia/active-task",
-      "manifest": "plugins-builtin/active-task/amitia-extension.json",
-      "registryProviderId": "active-task-routes",
-      "routeId": "tasks-hub",
-      "pageProviderId": "active-task-page-provider",
-      "entries": [
-        "web",
-        "electron_windows",
-        "electron_macos",
-        "electron_linux",
-        "mobile"
-      ]
-    },
-    {
-      "path": "/memory-hub",
-      "extensionId": "com.amitia/memory-hub",
-      "manifest": "plugins-builtin/memory-hub/amitia-extension.json",
-      "registryProviderId": "memory-hub-routes",
-      "routeId": "memory-shell",
-      "pageProviderId": "memory-hub-page-provider",
-      "entries": [
-        "web",
-        "electron_windows",
-        "electron_macos",
-        "electron_linux",
-        "mobile"
-      ]
-    },
-    {
-      "path": "/extensions",
+      "path": "/extensions/market",
       "extensionId": "com.amitia/plugin-market",
       "manifest": "plugins-builtin/plugin-market/amitia-extension.json",
       "registryProviderId": "plugin-market-routes",
-      "routeId": "extensions-hub",
-      "pageProviderId": "plugin-market-extensions-hub-provider",
+      "routeId": "plugin-market",
+      "pageProviderId": "plugin-market-page-provider",
       "entries": [
         "web",
         "electron_windows",
@@ -89,36 +65,6 @@
       "registryProviderId": "creative-workshop-hub-routes",
       "routeId": "creative-workshop-hub",
       "pageProviderId": "creative-workshop-hub-page-provider",
-      "entries": [
-        "web",
-        "electron_windows",
-        "electron_macos",
-        "electron_linux",
-        "mobile"
-      ]
-    },
-    {
-      "path": "/characters",
-      "extensionId": "com.amitia/character-hub",
-      "manifest": "plugins-builtin/character-hub/amitia-extension.json",
-      "registryProviderId": "character-hub-routes",
-      "routeId": "character-hub",
-      "pageProviderId": "character-hub-page-provider",
-      "entries": [
-        "web",
-        "electron_windows",
-        "electron_macos",
-        "electron_linux",
-        "mobile"
-      ]
-    },
-    {
-      "path": "/memory",
-      "extensionId": "com.amitia/memory-hub",
-      "manifest": "plugins-builtin/memory-hub/amitia-extension.json",
-      "registryProviderId": "memory-hub-routes",
-      "routeId": "memory-hub",
-      "pageProviderId": "memory-hub-page-provider",
       "entries": [
         "web",
         "electron_windows",

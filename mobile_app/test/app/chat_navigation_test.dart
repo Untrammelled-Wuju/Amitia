@@ -86,6 +86,7 @@ UIProviderSnapshot _navigationSnapshot({Set<String> omittedTabs = const {}}) {
     AppRoutes.tasks,
     AppRoutes.memoryHub,
     AppRoutes.extensions,
+    AppRoutes.extensionsPackages,
     AppRoutes.me,
     AppRoutes.characters,
     AppRoutes.workshop,
@@ -120,35 +121,39 @@ UIProviderSnapshot _navigationSnapshot({Set<String> omittedTabs = const {}}) {
         metadata: {
           'routes': routeRows,
           'navigationItems': [
-            if (!omittedTabs.contains('tasks')) {
-              'id': 'tasks',
-              'label': '任务',
-              'tabLabel': '任务',
-              'route': AppRoutes.tasks,
-              'icon': 'calendar',
-            },
-            if (!omittedTabs.contains('memory')) {
-              'id': 'memory',
-              'label': '记忆',
-              'tabLabel': '记忆',
-              'route': AppRoutes.memoryHub,
-              'icon': 'memory',
-            },
-            if (!omittedTabs.contains('extensions')) {
-              'id': 'extensions',
-              'label': '扩展中心',
-              'tabLabel': '扩展',
-              'route': AppRoutes.extensions,
-              'icon': 'extension',
-            },
-            if (!omittedTabs.contains('me')) {
-              'id': 'settings',
-              'label': '设置',
-              'tabLabel': '我的',
-              'route': AppRoutes.settings,
-              'icon': 'setting',
-              'match': [AppRoutes.me],
-            },
+            if (!omittedTabs.contains('tasks'))
+              {
+                'id': 'tasks',
+                'label': '任务',
+                'tabLabel': '任务',
+                'route': AppRoutes.tasks,
+                'icon': 'calendar',
+              },
+            if (!omittedTabs.contains('memory'))
+              {
+                'id': 'memory',
+                'label': '记忆',
+                'tabLabel': '记忆',
+                'route': AppRoutes.memoryHub,
+                'icon': 'memory',
+              },
+            if (!omittedTabs.contains('extensions'))
+              {
+                'id': 'extensions',
+                'label': '扩展中心',
+                'tabLabel': '扩展',
+                'route': AppRoutes.extensions,
+                'icon': 'extension',
+              },
+            if (!omittedTabs.contains('me'))
+              {
+                'id': 'settings',
+                'label': '设置',
+                'tabLabel': '我的',
+                'route': AppRoutes.settings,
+                'icon': 'setting',
+                'match': [AppRoutes.me],
+              },
             {
               'id': 'characters',
               'label': '角色',
@@ -279,7 +284,7 @@ void _expectRootContentTop(WidgetTester tester, Finder page) {
 }
 
 void main() {
-  testWidgets('Provider 导航移除后对应主 Tab 同步消失', (tester) async {
+  testWidgets('Provider 任务导航缺失时核心任务 Tab 仍保留', (tester) async {
     await tester.pumpWidget(
       _app(
         _router(),
@@ -288,7 +293,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const ValueKey('main-tab-任务')), findsNothing);
+    expect(find.byKey(const ValueKey('main-tab-任务')), findsOneWidget);
     expect(find.byKey(const ValueKey('main-tab-记忆')), findsOneWidget);
     expect(find.byKey(const ValueKey('main-tab-扩展')), findsOneWidget);
     expect(find.byKey(const ValueKey('main-tab-我的')), findsOneWidget);
@@ -344,9 +349,7 @@ void main() {
     expect(find.text('暂无最近记忆'), findsOneWidget);
 
     expect(
-      tester
-          .widget<Icon>(find.byKey(const ValueKey('main-tab-icon-扩展')))
-          .icon,
+      tester.widget<Icon>(find.byKey(const ValueKey('main-tab-icon-扩展'))).icon,
       Icons.extension_outlined,
     );
     await tester.tap(find.byKey(const ValueKey('main-tab-扩展')));

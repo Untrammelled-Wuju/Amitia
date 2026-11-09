@@ -124,27 +124,48 @@ void main() {
     );
   });
 
-  test('continuity is resolved from a provider navigation entry', () {
-    final items = UINavigationRegistry.resolve(
-      _snapshot([
-        _routes(
-          extensionId: 'com.amitia/active-task',
-          id: 'active-task-routes',
-          path: AppRoutes.continuity,
-          pageProviderId: 'continuity-page',
-          priority: 100,
-          includeNavigation: true,
-        ),
-        _page('com.amitia/active-task', 'continuity-page'),
-      ]),
-    );
-    final continuity = items.singleWhere(
-      (item) => item.route == AppRoutes.continuity,
-    );
-    expect(continuity.label, 'com.amitia/active-task');
-    expect(continuity.panel, UINavigationPanel.main);
-    expect(UINavigationRegistry.resolve(_snapshot(const [])), isEmpty);
-  });
+  test(
+    'retired active task provider entries are ignored by core navigation',
+    () {
+      final items = UINavigationRegistry.resolve(
+        _snapshot([
+          _routes(
+            extensionId: 'com.amitia/active-task',
+            id: 'active-task-routes',
+            path: AppRoutes.continuity,
+            pageProviderId: 'continuity-page',
+            priority: 100,
+            includeNavigation: true,
+          ),
+          _page('com.amitia/active-task', 'continuity-page'),
+        ]),
+      );
+      expect(
+        items.where((item) => item.extensionId == 'com.amitia/active-task'),
+        isEmpty,
+      );
+      expect(
+        items.any((item) => item.route == AppRoutes.tasks && item.builtin),
+        isTrue,
+      );
+      expect(
+        UINavigationRegistry.resolve(
+          _snapshot(const []),
+        ).any((item) => item.route == AppRoutes.continuity),
+        isFalse,
+      );
+      expect(
+        UINavigationRegistry.resolve(
+          _snapshot(const []),
+        ).map((item) => item.route),
+        containsAll(<String>[
+          AppRoutes.tasks,
+          AppRoutes.memoryHub,
+          AppRoutes.characters,
+        ]),
+      );
+    },
+  );
 
   test(
     'separates primary, settings, profile, workspace and contextual items',
@@ -246,7 +267,9 @@ void main() {
         UINavigationPlacement.contextual,
       );
       expect(
-        UINavigationRegistry.resolvePrimary(snapshot).map((item) => item.route),
+        UINavigationRegistry.resolvePrimary(
+          snapshot,
+        ).where((item) => item.extensionId != null).map((item) => item.route),
         ['/hub'],
       );
     },
@@ -323,8 +346,10 @@ void main() {
       _page('com.example/mobile-placement', 'mobile-placement-pages'),
     ]);
     expect(
-      UINavigationRegistry.resolveMobile(snapshot).map((item) => item.route),
-      ['/settings', '/tasks'],
+      UINavigationRegistry.resolveMobile(
+        snapshot,
+      ).where((item) => item.extensionId != null).map((item) => item.route),
+      ['/settings'],
     );
   });
 
@@ -358,6 +383,44 @@ void main() {
       expect(extensions.map((item) => item.extensionId), ['winner']);
     },
   );
+
+  test('backs a section root navigation item with its effective child route', () {
+    final snapshot = _snapshot([
+      _provider(
+        id: 'plugin-market-routes',
+        extensionId: 'com.amitia/plugin-market',
+        capability: UICapability.routeRegistry,
+        priority: 260,
+        metadata: const {
+          'routes': [
+            {
+              'id': 'plugin-market',
+              'path': '/extensions/market',
+              'providerId': 'plugin-market-page-provider',
+              'capability': UICapability.pageProvider,
+            },
+          ],
+          'navigationItems': [
+            {
+              'id': 'extensions-hub',
+              'label': '扩展中心',
+              'route': AppRoutes.extensions,
+              'placement': 'primary',
+              'group': 'extensions',
+              'order': 90,
+            },
+          ],
+        },
+      ),
+      _page('com.amitia/plugin-market', 'plugin-market-page-provider'),
+    ]);
+
+    final item = UINavigationRegistry.resolve(
+      snapshot,
+    ).singleWhere((item) => item.route == AppRoutes.extensions);
+    expect(item.extensionId, 'com.amitia/plugin-market');
+    expect(item.placement, UINavigationPlacement.primary);
+  });
 
   test(
     'hides app.navigation links when the extension route is not effective',

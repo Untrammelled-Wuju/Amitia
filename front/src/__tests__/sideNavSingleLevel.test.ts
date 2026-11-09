@@ -52,6 +52,8 @@ describe("桌面图标导航栏", () => {
       await wrapper.get(".user-profile").trigger("click");
       expect(wrapper.findAll(".profile-menu__item").map((item) => item.text())).toContain("设置");
       expect(wrapper.findAll(".profile-menu__item").map((item) => item.text())).toContain("归档对话");
+      await wrapper.findAll(".el-menu-item")[1].trigger("click");
+      await vi.waitFor(() => expect(router.currentRoute.value.path).toBe("/memory"));
     } finally {
       wrapper.unmount();
       document.body.querySelector("#side-nav-tooltip")?.remove();

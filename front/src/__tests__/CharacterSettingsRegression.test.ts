@@ -16,6 +16,11 @@ describe("角色信息设置回归", () => {
     expect(characterViewSource).not.toContain("r.data?.data || []");
   });
 
+  it("一级角色入口不自动选择角色", () => {
+    expect(characterViewSource).not.toContain("selectDefaultChar");
+    expect(characterViewSource).not.toContain("selectDefaultChar(characters.value[0])");
+  });
+
   it("生活设置不再散落在角色设置页并改由扩展标签承载", () => {
     expect(settingsSource).not.toContain("LifestyleTendencySection");
     expect(settingsSource).not.toContain("SleepSettingSection");

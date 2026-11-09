@@ -10,6 +10,7 @@ describe("两级导航映射", () => {
     expect(resolveAppSection("/profiles")).toBe("memory");
     expect(resolveAppSection("/memory-manager")).toBe("memory");
     expect(resolveAppSection("/reminders")).toBe("tasks");
+    expect(resolveAppSection("/tasks")).toBe("tasks");
     expect(resolveAppSection("/characters/role-1/active-task")).toBe("tasks");
     expect(resolveAppSection("/continuity")).toBe("tasks");
     expect(resolveAppSection("/game-center/plugin")).toBe("game");
@@ -26,12 +27,21 @@ describe("两级导航映射", () => {
     expect(resolveAppSection("/plugin-only-route")).toBeNull();
   });
 
-  it("提供任务、角色、记忆、创意工坊和扩展中心的二级入口", () => {
-    expect(appSection("tasks")?.entries).toEqual([]);
-    expect(appSection("character")?.entries).toEqual([]);
-    expect(appSection("memory")?.entries).toEqual([]);
+  it("核心模块提供真实二级入口", () => {
+    expect(appSection("tasks")?.entries.map(item => item.label)).toEqual(["主动任务", "持续事项"]);
+    expect(appSection("character")?.entries.map(item => item.label)).toEqual(["角色管理", "团队", "世界书"]);
+    expect(appSection("memory")?.entries.map(item => item.label)).toEqual(["知识库", "记忆总览", "情景记忆", "记忆图谱", "时间线", "用户画像"]);
     expect(appSection("workshop")?.entries).toEqual([]);
     expect(appSection("extensions")?.entries).toEqual([]);
+  });
+
+  it("一级入口保持分区根路径，不自动选择第二栏", () => {
+    expect(appSection("character")?.route).toBe("/characters");
+    expect(appSection("character")?.entries[0]?.route).toBe("/character");
+    expect(appSection("memory")?.route).toBe("/memory");
+    expect(appSection("memory")?.entries[0]?.route).toBe("/knowledge");
+    expect(appSection("tasks")?.route).toBe("/tasks");
+    expect(appSection("tasks")?.entries[0]?.route).toBe("/reminders");
   });
 
   it("第二栏位于圆角主工作区内部", () => {

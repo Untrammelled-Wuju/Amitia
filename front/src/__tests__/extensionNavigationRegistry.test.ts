@@ -133,58 +133,19 @@ describe("extension navigation registry", () => {
       }),
       pageProvider("com.example/mobile-placement", "mobile-placement-pages"),
     ]));
-    expect(resolveMobileNavigationItems(items).map((item) => item.route)).toEqual(["/tasks", "/settings"]);
+    expect(resolveMobileNavigationItems(items).map((item) => item.route)).toEqual(["/settings"]);
   });
 
-  it("resolves character, memory and workshop hubs from plugins", () => {
+  it("keeps character, memory and tasks in core navigation", () => {
     const items = resolveBuiltinNavigationItems(store([]));
-    expect(items.filter((item) => item.group === "character")).toEqual([]);
-    expect(items.filter((item) => item.group === "memory")).toEqual([]);
+    expect(items.find((item) => item.route === "/characters")?.label).toBe("角色");
+    expect(items.find((item) => item.route === "/memory")?.label).toBe("记忆");
+    expect(items.find((item) => item.route === "/tasks")?.label).toBe("任务");
+  });
+
+  it("resolves workshop hubs from plugins", () => {
+    const items = resolveBuiltinNavigationItems(store([]));
     expect(items.filter((item) => item.group === "workshop")).toEqual([]);
-    const characterStore = store([
-      provider({
-        providerId: "character-hub-routes",
-        extensionId: "com.amitia/character-hub",
-        capability: "route.registry",
-        priority: 230,
-        metadata: {
-          routes: [
-            { id: "character-hub", path: "/characters", providerId: "character-hub-page-provider", capability: "page.provider" },
-          ],
-          navigationItems: [
-            { id: "character-hub", label: "角色", route: "/characters", icon: "character", group: "character", order: 20 },
-          ],
-        },
-      }),
-      pageProvider("com.amitia/character-hub", "character-hub-page-provider"),
-    ]);
-    const characterItems = collectExtensionNavigationItems(characterStore);
-    expect(characterItems.filter((item) => item.route === "/characters").map((item) => ({
-      route: item.route,
-      label: item.label,
-    }))).toEqual([{ route: "/characters", label: "角色" }]);
-    const memoryStore = store([
-      provider({
-        providerId: "memory-hub-routes",
-        extensionId: "com.amitia/memory-hub",
-        capability: "route.registry",
-        priority: 220,
-        metadata: {
-          routes: [
-            { id: "memory-hub", path: "/memory", providerId: "memory-hub-page-provider", capability: "page.provider" },
-          ],
-          navigationItems: [
-            { id: "memory-hub", label: "记忆", route: "/memory", icon: "memory", group: "memory", order: 50 },
-          ],
-        },
-      }),
-      pageProvider("com.amitia/memory-hub", "memory-hub-page-provider"),
-    ]);
-    const memoryItems = collectExtensionNavigationItems(memoryStore);
-    expect(memoryItems.filter((item) => item.route === "/memory").map((item) => ({
-      route: item.route,
-      label: item.label,
-    }))).toEqual([{ route: "/memory", label: "记忆" }]);
     const workshopStore = store([
       provider({
         providerId: "creative-workshop-hub-routes",
@@ -231,7 +192,7 @@ describe("extension navigation registry", () => {
         providerId: "game-center-hub-page-provider",
       }),
     );
-    expect(items.filter((item) => item.group === "tasks")).toEqual([]);
+    expect(items.find((item) => item.group === "tasks")?.label).toBe("任务");
   });
 
   it("keeps channel center out of built-in navigation and lists plugins separately", () => {
@@ -328,11 +289,11 @@ describe("extension navigation registry", () => {
   it("protects every built-in top-level route namespace", () => {
     expect(shadowsProtectedRoute("/chat/plugin-page")).toBe(true);
     expect(shadowsProtectedRoute("/game-center/plugin-page")).toBe(false);
-    expect(shadowsProtectedRoute("/characters")).toBe(false);
-    expect(shadowsProtectedRoute("/characters/plugin-page")).toBe(false);
+    expect(shadowsProtectedRoute("/characters")).toBe(true);
+    expect(shadowsProtectedRoute("/characters/plugin-page")).toBe(true);
     expect(shadowsProtectedRoute("/creative-workshop/plugin-page")).toBe(false);
     expect(shadowsProtectedRoute("/extensions/market")).toBe(false);
-    expect(shadowsProtectedRoute("/extensions")).toBe(false);
+    expect(shadowsProtectedRoute("/extensions")).toBe(true);
     expect(shadowsProtectedRoute("/extensions/another-provider")).toBe(false);
     expect(shadowsProtectedRoute("/games/minecraft")).toBe(false);
     expect(collectEffectiveProviderRoutes(store([
@@ -374,7 +335,7 @@ describe("extension navigation registry", () => {
     );
   });
 
-  it("renders plugin market only as an extension center section entry", () => {
+  it("keeps the plugin market root navigation backed by its section routes", () => {
     const providers = [
       pageProvider("com.amitia/plugin-market", "plugin-market-page-provider"),
       provider({
@@ -398,6 +359,14 @@ describe("extension navigation registry", () => {
             route: "/extensions/market",
             order: 10,
           }],
+          navigationItems: [{
+            id: "extensions-hub",
+            label: "扩展中心",
+            route: "/extensions",
+            placement: "primary",
+            group: "extensions",
+            order: 90,
+          }],
         },
       }),
     ];
@@ -409,7 +378,13 @@ describe("extension navigation registry", () => {
         extensionId: "com.amitia/plugin-market",
       }),
     ]);
-    expect(collectExtensionNavigationItems(store(providers))).toEqual([]);
+    expect(collectExtensionNavigationItems(store(providers))).toEqual([
+      expect.objectContaining({
+        route: "/extensions",
+        label: "扩展中心",
+        placement: "primary",
+      }),
+    ]);
   });
 
   it("keeps extension pages in the existing character navigation group", () => {
@@ -529,8 +504,8 @@ describe("extension navigation registry", () => {
     expect(collectExtensionNavigationItems(store(disabledProviders))).toEqual([]);
   });
 
-  it("removes character-scoped task, memory, and timeline routes", () => {
-    expect(builtinBusinessRoutes.some((item) => item.path === "/characters/:id/active-task")).toBe(false);
+  it("keeps character-scoped task routing in the core module", () => {
+    expect(builtinBusinessRoutes.some((item) => item.path === "/characters/:id/active-task")).toBe(true);
     expect(builtinBusinessRoutes.some((item) => item.path === "/characters/:id/proactive")).toBe(false);
     expect(builtinBusinessRoutes.some((item) => item.path === "/character/:id/memory")).toBe(false);
     expect(builtinBusinessRoutes.some((item) => item.path === "/character/:id/timeline")).toBe(false);

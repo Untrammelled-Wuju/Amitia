@@ -456,6 +456,34 @@ func makeCronDef() *ScheduleContributionDefinition {
 	}
 }
 
+func TestDeleteAllByExtensionRemovesOnlyOwnedSchedules(t *testing.T) {
+	store := newMemStore()
+	service, err := NewScheduleService(ScheduleDeps{Store: store, Clock: NewFakeClock(time.Now().UTC())})
+	if err != nil {
+		t.Fatal(err)
+	}
+	owned := makeCronDef()
+	owned.ScheduleID = "owned-schedule"
+	other := makeCronDef()
+	other.ScheduleID = "other-schedule"
+	other.ExtensionID = "com.example/other"
+	if err := service.InstallDefinition(context.Background(), owned); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.InstallDefinition(context.Background(), other); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.DeleteAllByExtension(context.Background(), owned.ExtensionID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.GetDefinition(context.Background(), owned.ScheduleID); err == nil {
+		t.Fatal("owned schedule remained after extension cleanup")
+	}
+	if _, err := store.GetDefinition(context.Background(), other.ScheduleID); err != nil {
+		t.Fatalf("unrelated schedule was removed: %v", err)
+	}
+}
+
 func TestFakeClock(t *testing.T) {
 	base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 	clock := NewFakeClock(base)

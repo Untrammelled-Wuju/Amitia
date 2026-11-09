@@ -16,6 +16,13 @@
       </template>
     </ExtensionPageHeader>
 
+    <ExtensionSlot
+      slot-id="tasks.page.section"
+      :context="{ taskKind: kind, route: '/tasks' }"
+      fallback="none"
+      layout="stack"
+      surface-role="main"
+    />
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
     <div class="task-grid" v-loading="loading">
       <article v-for="task in tasks" :key="task.id" class="task-card">
@@ -67,7 +74,8 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from "vue";
 import { ElMessage } from "element-plus";
-import ExtensionPageHeader from "@/components/extension/ExtensionPageHeader.vue";
+import ExtensionSlot from "@/components/extension/ExtensionSlot.vue";
+import ExtensionPageHeader from "@/views/extensions/components/ExtensionPageHeader.vue";
 import { apiClient } from "@/composables/useApi";
 
 interface ReminderTask {

@@ -134,7 +134,7 @@ export const signCommand: CliCommand = {
     const publisherId = opts["--publisher-id"] ?? "";
     const keyId = opts["--key-id"] ?? "";
 
-    const cliArgs: string[] = ["sign", resolvedPackagePath, "--key", hexKeyPath, "--publisher", publisherId];
+    const cliArgs: string[] = ["sign", resolvedPackagePath, "--key", hexKeyPath, "--publisher", publisherId, "--json"];
     if (keyId) {
       cliArgs.push("--key-id", keyId);
     }
@@ -177,6 +177,7 @@ export const verifyCommand: CliCommand = {
   options: [
     { name: "--package", shortName: "-p", description: "Package path", takesValue: true, required: true },
     { name: "--public-key", description: "Public key path", takesValue: true },
+    { name: "--publisher", description: "Publisher ID", takesValue: true },
   ],
   async run(ctx: CliContext, args: string[]): Promise<CliCommandResult> {
     const opts = parseOptions(args);
@@ -186,12 +187,37 @@ export const verifyCommand: CliCommand = {
         message: "missing required option: --package",
       };
     }
-    try {
-      const inspection = inspectPackage(path.resolve(ctx.cwd, opts["--package"]));
-      return { exitCode: EXIT_CODES.SUCCESS, message: "package integrity verified", data: inspection };
-    } catch (cause) {
-      return { exitCode: EXIT_CODES.SIGNATURE_OR_TRUST_ERROR, message: cause instanceof Error ? cause.message : String(cause) };
+    const publicKey = opts["--public-key"];
+    const publisher = opts["--publisher"];
+    if (!publicKey || !publisher) {
+      return { exitCode: EXIT_CODES.CONFIGURATION_ERROR, message: "verify requires --public-key and --publisher" };
     }
+    const binary = findAmitiaxBinary();
+    if (!binary) {
+      return { exitCode: EXIT_CODES.CONFIGURATION_ERROR, message: "amitiax CLI binary not found" };
+    }
+    const result = spawnSync(binary, [
+      "verify",
+      path.resolve(ctx.cwd, opts["--package"]),
+      "--pubkey",
+      path.resolve(ctx.cwd, publicKey),
+      "--publisher",
+      publisher,
+      "--json",
+    ], { cwd: ctx.cwd, encoding: "utf8" });
+    if (result.status !== 0) {
+      return {
+        exitCode: EXIT_CODES.SIGNATURE_OR_TRUST_ERROR,
+        message: `signature verification failed: ${result.stderr || result.stdout || "unknown error"}`,
+      };
+    }
+    let data: unknown = { raw: result.stdout };
+    try {
+      data = JSON.parse(result.stdout);
+    } catch {
+      data = { raw: result.stdout };
+    }
+    return { exitCode: EXIT_CODES.SUCCESS, message: "package integrity and signature verified", data };
   },
 };
 

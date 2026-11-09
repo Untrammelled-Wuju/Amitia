@@ -29,8 +29,16 @@ const _protectedRouteNamespaces = <String>{
   AppRoutes.dashboard,
   AppRoutes.agent,
   AppRoutes.me,
+  AppRoutes.tasks,
+  AppRoutes.reminders,
+  AppRoutes.continuity,
+  AppRoutes.characters,
   AppRoutes.memoryHub,
+  AppRoutes.memory,
   AppRoutes.knowledge,
+  AppRoutes.memoryEpisodic,
+  AppRoutes.memoryGraph,
+  AppRoutes.memoryProfiles,
   AppRoutes.extensions,
   '/extension',
 };
@@ -38,16 +46,10 @@ const _protectedRouteNamespaces = <String>{
 const _openProviderRouteNamespaces = <String>{
   AppRoutes.extensions,
   AppRoutes.me,
-  AppRoutes.memoryHub,
 };
 
 const _protectedProviderRoutePaths = <String>{AppRoutes.settingsUIProviders};
-const _providerContentShellPaths = <String>{
-  AppRoutes.tasks,
-  AppRoutes.memoryHub,
-  AppRoutes.extensions,
-  AppRoutes.me,
-};
+const _providerContentShellPaths = <String>{AppRoutes.me};
 
 String? _rootNamespace(String path) {
   final normalized = path.trim();

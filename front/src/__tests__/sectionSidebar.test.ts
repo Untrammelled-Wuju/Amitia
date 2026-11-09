@@ -11,29 +11,6 @@ vi.mock("../composables/useApi", () => ({
 }));
 vi.mock("../ui-runtime/providerRoutes", () => ({
   collectExtensionSectionEntries: (_store: unknown, sectionId: string) => {
-    if (sectionId === "character") {
-      return [
-        { route: "/character", label: "角色管理" },
-        { route: "/characters/teams", label: "团队" },
-        { route: "/world-book", label: "世界书" },
-      ];
-    }
-    if (sectionId === "memory") {
-      return [
-        { route: "/knowledge", label: "知识库" },
-        { route: "/memory-manager", label: "记忆总览" },
-        { route: "/episodic", label: "情景记忆" },
-        { route: "/graph", label: "记忆图谱" },
-        { route: "/memory-timeline", label: "时间线" },
-        { route: "/profiles", label: "用户画像" },
-      ];
-    }
-    if (sectionId === "tasks") {
-      return [
-        { route: "/reminders", label: "主动任务" },
-        { route: "/continuity", label: "持续事项" },
-      ];
-    }
     if (sectionId === "extensions") {
       return [
         { route: "/extensions/market", label: "插件市场" },

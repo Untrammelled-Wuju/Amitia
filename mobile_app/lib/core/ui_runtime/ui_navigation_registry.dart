@@ -51,7 +51,46 @@ class UINavigationItem {
 }
 
 abstract final class UINavigationRegistry {
-  static const List<UINavigationItem> builtinItems = <UINavigationItem>[];
+  static const List<UINavigationItem> builtinItems = <UINavigationItem>[
+    UINavigationItem(
+      id: 'core.tasks',
+      label: '任务',
+      route: AppRoutes.tasks,
+      icon: Icons.task_alt_outlined,
+      panel: UINavigationPanel.main,
+      placement: UINavigationPlacement.primary,
+      group: 'tasks',
+      order: 69,
+      builtin: true,
+      profile: true,
+      tabLabel: '任务',
+    ),
+    UINavigationItem(
+      id: 'core.memory',
+      label: '记忆',
+      route: AppRoutes.memoryHub,
+      icon: Icons.psychology_outlined,
+      panel: UINavigationPanel.main,
+      placement: UINavigationPlacement.primary,
+      group: 'memory',
+      order: 50,
+      builtin: true,
+      profile: true,
+      tabLabel: '记忆',
+    ),
+    UINavigationItem(
+      id: 'core.characters',
+      label: '角色',
+      route: AppRoutes.characters,
+      icon: Icons.people_outline,
+      panel: UINavigationPanel.more,
+      placement: UINavigationPlacement.profile,
+      group: 'character',
+      order: 20,
+      builtin: true,
+      profile: true,
+    ),
+  ];
 
   static const UINavigationItem channelMessagesItem = UINavigationItem(
     id: 'builtin.channelMessages',
@@ -96,6 +135,7 @@ abstract final class UINavigationRegistry {
     final effectiveProviderRoutes = effectiveProviderRouteKeys(snapshot);
     final effectiveExtensionRoutes = effectiveExtensionRouteKeys(snapshot);
     final seenIds = <String>{};
+    final occupiedRoutes = items.map((item) => item.route).toSet();
     for (final provider in sources) {
       final raw = provider.metadata['navigationItems'];
       if (raw is! List) continue;
@@ -113,18 +153,23 @@ abstract final class UINavigationRegistry {
           continue;
         }
         if (provider.capability == UICapability.routeRegistry) {
-          if (!effectiveProviderRoutes.contains(
-            '${provider.providerId}\u0000$route',
+          if (!_hasEffectiveRoute(
+            effectiveProviderRoutes,
+            provider.providerId,
+            route,
           )) {
             continue;
           }
         } else if (!isProtectedProviderRoutePath(route) &&
-            !effectiveExtensionRoutes.contains(
-              '${provider.extensionId}\u0000$route',
+            !_hasEffectiveRoute(
+              effectiveExtensionRoutes,
+              provider.extensionId,
+              route,
             )) {
           continue;
         }
         if (!seenIds.add(compositeId)) continue;
+        if (occupiedRoutes.contains(route)) continue;
         final rawOrder = row['order'];
         final rawPrefixes = row['routePrefixes'] ?? row['match'];
         final baseIcon = UIIconRegistry.iconFromName(
@@ -188,6 +233,17 @@ abstract final class UINavigationRegistry {
         )
         .toList();
     return _sorted(withIconOverrides);
+  }
+
+  static bool _hasEffectiveRoute(
+    Set<String> effectiveRoutes,
+    String ownerId,
+    String route,
+  ) {
+    final exact = '$ownerId\u0000$route';
+    if (effectiveRoutes.contains(exact)) return true;
+    final childPrefix = '$exact/';
+    return effectiveRoutes.any((key) => key.startsWith(childPrefix));
   }
 
   static List<UINavigationItem> _sorted(List<UINavigationItem> items) {

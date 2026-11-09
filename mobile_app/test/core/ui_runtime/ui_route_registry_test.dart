@@ -46,8 +46,8 @@ UIProviderSnapshot _snapshot(List<UIProviderDefinition> providers) {
 }
 
 void main() {
-  test('open built-in shells accept child provider routes', () {
-    expect(isProtectedProviderRoutePath(AppRoutes.extensions), isFalse);
+  test('section shells protect their root and accept child provider routes', () {
+    expect(isProtectedProviderRoutePath(AppRoutes.extensions), isTrue);
     expect(
       isProtectedProviderRoutePath('${AppRoutes.extensions}/market'),
       isFalse,
@@ -68,7 +68,7 @@ void main() {
     );
     expect(
       isProtectedProviderRoutePath('${AppRoutes.memoryHub}/plugin'),
-      isFalse,
+      isTrue,
     );
     expect(
       isProtectedProviderRoutePath('${AppRoutes.gameCenter}/plugin'),
@@ -76,11 +76,15 @@ void main() {
     );
   });
 
-  test('migrated business roots are provider-owned', () {
-    expect(isProtectedProviderRoutePath(AppRoutes.characters), isFalse);
-    expect(isProtectedProviderRoutePath(AppRoutes.memory), isFalse);
-    expect(isProtectedProviderRoutePath(AppRoutes.developer), isFalse);
-  });
+  test(
+    'core business roots are protected while remaining plugin roots stay open',
+    () {
+      expect(isProtectedProviderRoutePath(AppRoutes.characters), isTrue);
+      expect(isProtectedProviderRoutePath(AppRoutes.memory), isTrue);
+      expect(isProtectedProviderRoutePath(AppRoutes.tasks), isTrue);
+      expect(isProtectedProviderRoutePath(AppRoutes.developer), isFalse);
+    },
+  );
 
   test('settings root resolves from the provider snapshot', () {
     final snapshot = _snapshot([
@@ -112,52 +116,49 @@ void main() {
     );
   });
 
-  test('migrated business roots resolve from the provider snapshot', () {
-    const entries = <(String, String, String)>[
-      (
-        '/characters',
-        'com.amitia/character-hub',
-        'character-hub-page-provider',
-      ),
-      ('/memory', 'com.amitia/memory-hub', 'memory-hub-page-provider'),
-      (
-        '/developer',
-        'com.amitia/runtime-insights',
-        'runtime-insights-mobile-page-provider',
-      ),
-    ];
-    final providers = <UIProviderDefinition>[];
-    for (final (index, (route, extensionId, pageProviderId))
-        in entries.indexed) {
-      providers.addAll([
-        _provider(
-          id: 'route-registry-$index',
-          extensionId: extensionId,
-          capability: UICapability.routeRegistry,
-          metadata: {
-            'routes': [
-              {
-                'id': 'root-$index',
-                'path': route,
-                'providerId': pageProviderId,
-                'capability': UICapability.pageProvider,
-              },
-            ],
-          },
+  test(
+    'remaining plugin business roots resolve from the provider snapshot',
+    () {
+      const entries = <(String, String, String)>[
+        (
+          '/developer',
+          'com.amitia/runtime-insights',
+          'runtime-insights-mobile-page-provider',
         ),
-        _provider(
-          id: pageProviderId,
-          extensionId: extensionId,
-          capability: UICapability.pageProvider,
-        ),
-      ]);
-    }
+      ];
+      final providers = <UIProviderDefinition>[];
+      for (final (index, (route, extensionId, pageProviderId))
+          in entries.indexed) {
+        providers.addAll([
+          _provider(
+            id: 'route-registry-$index',
+            extensionId: extensionId,
+            capability: UICapability.routeRegistry,
+            metadata: {
+              'routes': [
+                {
+                  'id': 'root-$index',
+                  'path': route,
+                  'providerId': pageProviderId,
+                  'capability': UICapability.pageProvider,
+                },
+              ],
+            },
+          ),
+          _provider(
+            id: pageProviderId,
+            extensionId: extensionId,
+            capability: UICapability.pageProvider,
+          ),
+        ]);
+      }
 
-    expect(
-      resolveProviderRoutes(_snapshot(providers)).map((route) => route.path),
-      containsAll(entries.map((entry) => entry.$1)),
-    );
-  });
+      expect(
+        resolveProviderRoutes(_snapshot(providers)).map((route) => route.path),
+        containsAll(entries.map((entry) => entry.$1)),
+      );
+    },
+  );
 
   test(
     'disabled or uninstalled providers remove routes and invalidate router signature',
