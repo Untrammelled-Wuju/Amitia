@@ -486,7 +486,7 @@
       "name": "tool.invoke",
       "reason": "通过插件工具管理提醒任务。",
       "required": true,
-      "scope": "session"
+      "scope": "extension"
     },
     {
       "name": "character.read",
@@ -546,7 +546,7 @@
       "name": "ui.navigate",
       "reason": "跳转到持续事项页面。",
       "required": true,
-      "scope": "extension"
+      "scope": "session"
     }
   ],
   "data": {

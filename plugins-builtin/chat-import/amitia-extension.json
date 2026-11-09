@@ -423,7 +423,7 @@
       "name": "tool.invoke",
       "reason": "通过插件工具执行聊天导入。",
       "required": true,
-      "scope": "session"
+      "scope": "extension"
     },
     {
       "name": "character.read",
@@ -441,7 +441,7 @@
       "name": "ui.navigate",
       "reason": "导入完成后跳转到目标会话或归档页面。",
       "required": true,
-      "scope": "extension"
+      "scope": "session"
     }
   ],
   "data": {
