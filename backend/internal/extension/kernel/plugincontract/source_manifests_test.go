@@ -83,6 +83,39 @@ func TestBuiltInAndOrdinaryPluginSourcesAreSeparated(t *testing.T) {
 	}
 }
 
+func TestCoreModuleExceptionsAreNotPluginSources(t *testing.T) {
+	workspaceRoot := filepath.Join("..", "..", "..", "..", "..")
+	coreOnlyIDs := map[string]bool{
+		"com.amitia/active-task":           true,
+		"com.amitia/memory-hub":            true,
+		"com.amitia/character-hub":         true,
+		"com.amitia/user-space-hub":        true,
+		"com.amitia/chat-logs":             true,
+		"com.amitia/channels-hub":          true,
+		"com.amitia/game-center-hub":       true,
+		"com.amitia/chat-import":           true,
+		"com.amitia/runtime-insights":      true,
+		"com.amitia/workspace":             true,
+		"com.amitia/storage":               true,
+		"com.amitia/creative-workshop-hub": true,
+	}
+	manifests := sourceManifestPaths(t, filepath.Join(workspaceRoot, "plugins-builtin"))
+	manifests = append(manifests, sourceManifestPaths(t, filepath.Join(workspaceRoot, "plugins-code"))...)
+	for _, path := range manifests {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		manifest, err := Parse(data)
+		if err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		if coreOnlyIDs[manifest.Plugin.ID] {
+			t.Errorf("core module %s must not be packaged as a plugin at %s", manifest.Plugin.ID, path)
+		}
+	}
+}
+
 func TestSourceNavigationItemsDeclarePlacement(t *testing.T) {
 	workspaceRoot := filepath.Join("..", "..", "..", "..", "..")
 	manifests := sourceManifestPaths(t, filepath.Join(workspaceRoot, "plugins-builtin"))

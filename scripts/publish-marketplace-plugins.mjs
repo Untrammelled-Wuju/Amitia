@@ -92,7 +92,6 @@ function categoryFor(extensionID) {
   if (extensionID.startsWith("com.amitia/channel-")) return "channels"
   if (extensionID === "com.amitia/lifestyle") return "lifestyle"
   if (extensionID === "com.amitia/plugin-market") return "developer"
-  if (extensionID === "com.amitia/runtime-insights") return "developer"
   return "productivity"
 }
 

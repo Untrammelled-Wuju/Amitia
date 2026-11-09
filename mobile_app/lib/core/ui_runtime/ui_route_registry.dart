@@ -64,7 +64,10 @@ const _openProviderRouteNamespaces = <String>{
   AppRoutes.me,
 };
 
-const _protectedProviderRoutePaths = <String>{AppRoutes.settingsUIProviders};
+const _protectedProviderRoutePaths = <String>{
+  AppRoutes.settingsUIProviders,
+  AppRoutes.meCharacters,
+};
 const _providerContentShellPaths = <String>{};
 
 String? _rootNamespace(String path) {

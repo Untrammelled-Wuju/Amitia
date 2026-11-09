@@ -14,23 +14,23 @@ Set<String> _paths(List<RouteBase> routes) {
 }
 
 void main() {
-  test('memory routes follow the actual navigation hierarchy', () {
+  test('memory routes follow the restored core navigation hierarchy', () {
     final paths = _paths(buildBuiltinBusinessRoutes());
     expect(paths, contains(AppRoutes.memoryHub));
-    expect(paths, isNot(contains(AppRoutes.memory)));
-    expect(paths, isNot(contains(AppRoutes.meCharacters)));
-    expect(paths, isNot(contains(AppRoutes.knowledge)));
-    expect(paths, isNot(contains(AppRoutes.memoryEpisodic)));
-    expect(paths, isNot(contains(AppRoutes.memoryGraph)));
-    expect(paths, isNot(contains(AppRoutes.memoryTimeline)));
-    expect(paths, isNot(contains(AppRoutes.memoryProfiles)));
-    expect(paths, isNot(contains(AppRoutes.memoryWorldBook)));
+    expect(paths, contains(AppRoutes.memory));
+    expect(paths, contains(AppRoutes.meCharacters));
+    expect(paths, contains(AppRoutes.knowledge));
+    expect(paths, contains(AppRoutes.memoryEpisodic));
+    expect(paths, contains(AppRoutes.memoryGraph));
+    expect(paths, contains(AppRoutes.memoryTimeline));
+    expect(paths, contains(AppRoutes.memoryProfiles));
+    expect(paths, contains(AppRoutes.memoryWorldBook));
     expect(paths, isNot(contains('/memory/manager')));
     expect(paths, isNot(contains('/memory-manager')));
     expect(paths, isNot(contains('/knowledge')));
-    expect(isProtectedProviderRoutePath(AppRoutes.memoryHub), isFalse);
-    expect(isProtectedProviderRoutePath(AppRoutes.memory), isFalse);
-    expect(isProtectedProviderRoutePath(AppRoutes.meCharacters), isFalse);
-    expect(isProtectedProviderRoutePath(AppRoutes.knowledge), isFalse);
+    expect(isProtectedProviderRoutePath(AppRoutes.memoryHub), isTrue);
+    expect(isProtectedProviderRoutePath(AppRoutes.memory), isTrue);
+    expect(isProtectedProviderRoutePath(AppRoutes.meCharacters), isTrue);
+    expect(isProtectedProviderRoutePath(AppRoutes.knowledge), isTrue);
   });
 }

@@ -8,14 +8,14 @@
 | 运行时领域映射 | 仅保留 Manifest 到 `domain.ExtensionDefinition` 的单向投影 |
 | 市场解析 | 管理员市场直接使用统一 Manifest，不再读取 `extension`/`publisher` 旧字段 |
 | 源码契约验收 | 自动遍历并验证 `plugins-builtin/` 与 `plugins-code/` 下全部源码 Manifest |
-| 源码目录边界 | 固定业务插件位于 `plugins-builtin/`；普通与市场插件位于 `plugins-code/`，并由测试强制校验 |
+| 源码目录边界 | 明确可插件的官方随包插件位于 `plugins-builtin/`；普通与市场插件位于 `plugins-code/`；核心例外不得进入任一插件目录 |
 | 身份插件分发包 | `email`、`calendar`、`phone`、`wallet`、`browser-profile` 已由源码重新构建并签名 |
 | JavaScript SDK | 宿主受控提供 `@amitia/plugin-sdk`，工具按 Manifest `handlerName` 注册和调用 |
 | SDK/CLI 真实链路 | 新工具项目已完成 `init`、`build`、严格 `validate`、`pack`、`install`、`enable`、`disable`、再次 `enable` 和 `uninstall` |
 | 数据契约执行 | 插件状态按扩展执行字节/键配额；更新按 `data.backup` 备份，卸载按 `data.uninstall` 保留、删除或导出后删除 |
 | 崩溃隔离清理 | 运行时重启耗尽或不可恢复失败时，自动释放该扩展的动态贡献、服务、依赖和缓存 |
 
-## 已迁出核心
+## 模块归属
 
 | 模块 | 插件 | 状态 |
 | --- | --- | --- |
@@ -35,6 +35,28 @@
 | 归档对话 | 核心模块 | Web `/logs` 与移动端 `/chat-logs` 使用核心页面和 Owner 会话服务；读取、恢复、删除、摘要和导出仅接受具有 `archivedAt` 的会话 |
 | 创意工坊 Hub | 核心模块 | `/creative-workshop`、角色卡和桌宠入口由核心页面提供，工坊扩展继续通过 Provider、Service 和 Slot 注入 |
 | 游戏中心 Hub | 核心模块 | `/game-center` 和插件详情由核心页面提供，游戏扩展继续走插件生命周期，能力门禁由核心执行 |
+
+## 用户裁决的核心例外
+
+以下模块固定为核心，不得再次迁回 `plugins-builtin`，不得通过随包插件或 Provider 路由替换其核心页面：
+
+| 核心模块 | 禁止恢复的旧插件身份 |
+| --- | --- |
+| 统筹模式 | 不得建立统筹模式宿主插件；保留 Device Mesh、事件、Service 和第三方接入点 |
+| 角色 | `com.amitia/character-hub` |
+| 记忆 | `com.amitia/memory-hub` |
+| 主动任务 | `com.amitia/active-task` |
+| 个人空间与设置 | `com.amitia/user-space-hub` |
+| 归档对话 | `com.amitia/chat-logs` |
+| 渠道中心 | `com.amitia/channels-hub` |
+| 游戏中心 | `com.amitia/game-center-hub` |
+| 聊天导入 | `com.amitia/chat-import` |
+| 运行时洞察 | `com.amitia/runtime-insights` |
+| 工作区 | `com.amitia/workspace` |
+| 存储维护 | `com.amitia/storage` |
+| 创意工坊 | `com.amitia/creative-workshop-hub` |
+
+这些模块继续保留 UI Slot、UI Provider 注入、Hook、Event、Service、Tool 和 Host API 扩展能力；核心页面、保护和生命周期不交给插件。
 
 ## 核心不可替换
 
@@ -59,7 +81,7 @@
 | --- | --- |
 | 第三方替换矩阵 | 用测试插件逐项替换官方市场、渠道、页面、工具和服务 |
 | 生命周期零残留 | 安装、启用、停用、更新、回滚、卸载后检查路由、导航、Slot、监听器和进程 |
-| 正式资产 | 从当前源码基线重新构建并签名全部固定业务插件与普通插件 |
+| 正式资产 | 从当前源码基线重新构建并签名实际存在的官方随包插件与普通插件 |
 
 第三方替换的源码级矩阵已覆盖官方页面、市场入口、渠道、消息渲染器和服务提供者。签名包已完成从当前源码重新构建、验签和真实安装生命周期；最终逐项证据见 `docs/audits/plugin-system-rewrite-acceptance-20261109.md`。
 
@@ -67,7 +89,7 @@
 
 每个待迁移模块必须同时满足：
 
-1. 宿主固定路由和页面源码已删除。
+1. 对于明确允许插件化的模块，宿主固定路由和页面源码已删除；用户裁决的核心例外不受此条约束。
 2. 插件 Manifest、权限、数据契约和平台支持完整。
 3. 禁用插件后路由、导航、工具和服务全部消失。
 4. 第三方插件可在不修改宿主源码的情况下替换该模块。
@@ -78,7 +100,7 @@
 | 模块 | Web | Windows / macOS / Linux | Android / iOS |
 | --- | --- | --- | --- |
 | 插件市场与扩展中心 | 支持 `/extensions` 根页面与市场页面 | 支持 `/extensions` 根页面与市场页面 | 市场页面由插件提供；扩展中心根 Tab 仍由移动端宿主壳承载 |
-| 工作区 | 支持 | 支持 | 暂不声明，移动端尚无本地 Workspace 业务页面 |
+| 工作区 | 核心模块，支持 | 核心模块，支持 | 核心模块，支持设置内工作区与文件工具 |
 | 聊天导入 | 支持 | 支持 | 支持 |
 | 主动任务 | 核心模块，支持 | 核心模块，支持 | 核心模块，支持主动任务和持续事项 |
 | 存储维护 | 支持 | 支持 | 支持设置内的存储维护页面 |
@@ -86,6 +108,6 @@
 | 渠道中心 | 支持 | 支持 | 支持 |
 | 设置与个人空间 | 支持 | 支持 | 设置子页面支持；个人中心主 Tab 由移动端宿主壳承载 |
 | 角色与记忆 | 核心模块，支持 | 核心模块，支持 | 核心模块，支持 |
-| 创意工坊 | 支持 | 支持 | 子页面由移动端 Host Runtime Provider 提供，主 Tab 壳保留宿主导航 |
-| 游戏中心、Kernel 与扩展子页 | 支持 | 支持 | 由移动端 Provider 动态注册，插件停用后对应路由消失 |
+| 创意工坊 | 核心模块，支持 | 核心模块，支持 | 核心模块，支持 |
+| 游戏中心与 Kernel | 核心模块，支持 | 核心模块，支持 | 核心模块，支持 |
 | 聊天导入、归档、渠道与桌宠 | 支持 | 支持 | 已接入同一移动端 Provider 快照 |
