@@ -7,11 +7,11 @@ import { shadowsProtectedRoute } from "@/ui-runtime/providerRoutes";
 describe("user space core routes", () => {
   it("owns settings and account routes in the core router", () => {
     const paths = builtinBusinessRoutes.map((route) => String(route.path ?? ""));
-    expect(paths).toContain("/settings/:pathMatch(.*)*");
-    expect(paths).toContain("/my-space/:pathMatch(.*)*");
-    expect(paths).toContain("/settings/ui-providers");
-    expect(builtinBusinessRoutes.find((route) => route.path === "/settings/:pathMatch(.*)*")?.meta?.coreSurface).toBe(true);
-    expect(builtinBusinessRoutes.find((route) => route.path === "/my-space/:pathMatch(.*)*")?.meta?.coreSurface).toBe(true);
+    expect(paths).toContain("/settings");
+    expect(paths).toContain("/my-space");
+    expect(builtinBusinessRoutes.find((route) => route.path === "/settings")?.meta?.coreSurface).toBe(true);
+    expect(builtinBusinessRoutes.find((route) => route.path === "/my-space")?.meta?.coreSurface).toBe(true);
+    expect((builtinBusinessRoutes.find((route) => route.path === "/settings")?.children ?? []).some((route) => route.path === "ui-providers")).toBe(true);
   });
 
   it("rejects provider ownership of settings and account routes", () => {

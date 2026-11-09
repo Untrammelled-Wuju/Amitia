@@ -40,8 +40,8 @@ describe("builtin route ownership", () => {
       "/reminders",
       "/continuity",
       "/extensions",
-      "/settings/:pathMatch(.*)*",
-      "/my-space/:pathMatch(.*)*",
+      "/settings",
+      "/my-space",
       "/logs",
     ]));
     for (const path of ["/extensions/market", "/extensions/packages", "/runtime-debug", "/decision-viz", "/long-running", "/workspaces", "/import", "/storage"]) {

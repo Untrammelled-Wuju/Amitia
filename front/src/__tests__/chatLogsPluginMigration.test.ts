@@ -7,8 +7,9 @@ import { shadowsProtectedRoute } from "@/ui-runtime/providerRoutes";
 describe("chat logs core route", () => {
   it("owns the archive route in the core router", () => {
     const route = builtinBusinessRoutes.find((item) => item.path === "/logs");
-    expect(route?.name).toBe("chatLogs");
+    expect(route?.name).toBe("logs");
     expect(route?.meta?.requiresAuth).toBe(true);
+    expect(route?.meta?.fullHeight).toBe(true);
     expect(route?.meta?.coreSurface).toBe(true);
   });
 
