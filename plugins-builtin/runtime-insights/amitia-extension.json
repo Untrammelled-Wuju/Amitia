@@ -8,7 +8,7 @@
     "description": {
       "default": "通过统一 Host API 展示运行时协作快照与 BDI 决策计划。"
     },
-    "version": "1.0.0",
+    "version": "1.2.0",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -77,9 +77,9 @@
           "ui",
           "ui_provider"
         ],
-        "maxContributions": 32,
+        "maxContributions": 33,
         "maxTools": 1,
-        "maxRoutes": 14,
+        "maxRoutes": 24,
         "maxServices": 0,
         "allowUnregister": true
       },
@@ -1005,6 +1005,57 @@
           }
         },
         {
+          "id": "runtime-insights-mobile-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "运行时洞察移动端页面"
+          },
+          "spec": {
+            "contribution_id": "runtime-insights-mobile-page",
+            "extension_id": "com.amitia/runtime-insights",
+            "module_id": "runtime-insights-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "内核诊断"
+              },
+              "description": {
+                "default": "在移动端查看和维护内核运行时。"
+              },
+              "icon": "data-analysis"
+            },
+            "entry": {
+              "type": "host_native",
+              "path": "builtin://com.amitia/runtime-insights/mobile",
+              "runtime_id": "host.mobile.native-page",
+              "content_hash": "builtin"
+            },
+            "sandbox": {
+              "type": "host_native"
+            },
+            "ordering": {
+              "priority": 232
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "actions": [],
+            "integrity": {
+              "definition_hash": "runtime-insights-mobile-page-v1"
+            }
+          }
+        },
+        {
           "id": "runtime-insights-routes",
           "kind": "ui_provider",
           "adapter": "ui_provider",
@@ -1140,6 +1191,94 @@
                   "capability": "page.provider",
                   "title": "开发模式中心",
                   "priority": 233
+                },
+                {
+                  "id": "developer-kernel-mobile",
+                  "path": "/developer/kernel",
+                  "providerId": "runtime-insights-mobile-page-provider",
+                  "capability": "page.provider",
+                  "title": "内核诊断",
+                  "priority": 232
+                },
+                {
+                  "id": "developer-kernel-wasm-mobile",
+                  "path": "/developer/kernel/wasm",
+                  "providerId": "runtime-insights-mobile-page-provider",
+                  "capability": "page.provider",
+                  "title": "WASM 运行时",
+                  "priority": 232
+                },
+                {
+                  "id": "developer-kernel-hooks-mobile",
+                  "path": "/developer/kernel/hooks",
+                  "providerId": "runtime-insights-mobile-page-provider",
+                  "capability": "page.provider",
+                  "title": "Hook 中心",
+                  "priority": 232
+                },
+                {
+                  "id": "developer-kernel-trusted-services-mobile",
+                  "path": "/developer/kernel/trusted-services",
+                  "providerId": "runtime-insights-mobile-page-provider",
+                  "capability": "page.provider",
+                  "title": "可信服务运行时",
+                  "priority": 232
+                },
+                {
+                  "id": "developer-kernel-tasks-mobile",
+                  "path": "/developer/kernel/tasks",
+                  "providerId": "runtime-insights-mobile-page-provider",
+                  "capability": "page.provider",
+                  "title": "任务运行时",
+                  "priority": 232
+                },
+                {
+                  "id": "developer-kernel-events-mobile",
+                  "path": "/developer/kernel/events",
+                  "providerId": "runtime-insights-mobile-page-provider",
+                  "capability": "page.provider",
+                  "title": "事件中心",
+                  "priority": 232
+                },
+                {
+                  "id": "developer-kernel-schedules-mobile",
+                  "path": "/developer/kernel/schedules",
+                  "providerId": "runtime-insights-mobile-page-provider",
+                  "capability": "page.provider",
+                  "title": "调度中心",
+                  "priority": 232
+                },
+                {
+                  "id": "developer-kernel-desktop-mobile",
+                  "path": "/developer/kernel/desktop",
+                  "providerId": "runtime-insights-mobile-page-provider",
+                  "capability": "page.provider",
+                  "title": "桌面贡献中心",
+                  "priority": 232
+                },
+                {
+                  "id": "developer-kernel-updates-mobile",
+                  "path": "/developer/kernel/updates",
+                  "providerId": "runtime-insights-mobile-page-provider",
+                  "capability": "page.provider",
+                  "title": "扩展更新中心",
+                  "priority": 232
+                },
+                {
+                  "id": "developer-kernel-dev-console-mobile",
+                  "path": "/developer/kernel/dev-console",
+                  "providerId": "runtime-insights-mobile-page-provider",
+                  "capability": "page.provider",
+                  "title": "开发者诊断控制台",
+                  "priority": 232
+                },
+                {
+                  "id": "developer-kernel-dev-mode-mobile",
+                  "path": "/developer/kernel/dev-mode",
+                  "providerId": "runtime-insights-mobile-page-provider",
+                  "capability": "page.provider",
+                  "title": "开发模式中心",
+                  "priority": 232
                 }
               ],
               "navigationItems": [
@@ -1705,6 +1844,47 @@
               ]
             }
           }
+        },
+        {
+          "id": "runtime-insights-mobile-page-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "运行时洞察移动端页面 Provider"
+          },
+          "spec": {
+            "providerId": "runtime-insights-mobile-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 232,
+            "platforms": [
+              "android",
+              "ios"
+            ],
+            "trustLevel": "official",
+            "entries": {
+              "mobile": {
+                "type": "schema_renderer",
+                "contributionId": "runtime-insights-mobile-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/developer/kernel",
+                "/developer/kernel/wasm",
+                "/developer/kernel/hooks",
+                "/developer/kernel/trusted-services",
+                "/developer/kernel/tasks",
+                "/developer/kernel/events",
+                "/developer/kernel/schedules",
+                "/developer/kernel/desktop",
+                "/developer/kernel/updates",
+                "/developer/kernel/dev-console",
+                "/developer/kernel/dev-mode"
+              ]
+            }
+          }
         }
       ],
       "placement": "device",
@@ -1712,7 +1892,9 @@
         "platforms": [
           "windows",
           "linux",
-          "macos"
+          "macos",
+          "android",
+          "ios"
         ]
       }
     }

@@ -33,20 +33,22 @@ const _protectedRouteNamespaces = <String>{
   AppRoutes.memoryHub,
   AppRoutes.memory,
   AppRoutes.knowledge,
-  AppRoutes.reminders,
-  AppRoutes.emotes,
-  AppRoutes.chatLogs,
-  AppRoutes.chatImport,
   AppRoutes.extensions,
   '/extension',
-  AppRoutes.workshop,
   AppRoutes.settings,
   AppRoutes.developer,
-  AppRoutes.gameCenter,
-  AppRoutes.desktopPet,
 };
 
-const _openProviderRouteNamespaces = <String>{AppRoutes.extensions};
+const _openProviderRouteNamespaces = <String>{
+  AppRoutes.extensions,
+  AppRoutes.settings,
+  AppRoutes.characters,
+  AppRoutes.me,
+  AppRoutes.memory,
+  AppRoutes.developer,
+};
+
+const _protectedProviderRoutePaths = <String>{AppRoutes.settingsUIProviders};
 
 String? _rootNamespace(String path) {
   final normalized = path.trim();
@@ -59,6 +61,8 @@ String? _rootNamespace(String path) {
 }
 
 bool isProtectedProviderRoutePath(String path) {
+  final normalized = path.trim();
+  if (_protectedProviderRoutePaths.contains(normalized)) return true;
   final namespace = _rootNamespace(path);
   if (namespace == null) return false;
   if (_openProviderRouteNamespaces.contains(namespace)) {

@@ -17,11 +17,14 @@
 | --- | --- | --- |
 | 插件市场、扩展中心与内核入口 | `com.amitia/plugin-market` | `/extensions`、`/kernel`、扩展包、工作流、MCP、Agent Skills 的页面和路由均使用 Tool、UI Provider、Route Registry；宿主固定业务页已删除 |
 | 渠道页面与连接 | `com.amitia/channel-*` | 已使用 Service、UI Provider、Route Registry |
+| 渠道中心 | `com.amitia/channels-hub` | 固定 `/channel-center` 路由已删除，渠道发现、插件导航和接入入口由插件提供 |
+| 设置与个人空间 | `com.amitia/user-space-hub` | `/settings` 与 `/my-space` 固定路由树已删除，页面和二级选择由插件 Host Runtime 提供；Provider 修复页保留为核心恢复入口 |
 | 表情与消息渲染 | `com.amitia/emote` | 已使用 Tool、UI Slot、UI Provider |
 | 生活系统 | `com.amitia/lifestyle` | 已使用 Tool、UI Slot、UI Provider |
 | 运行时调试 | `com.amitia/runtime-insights` | 已从固定 Vue 路由迁出 |
 | BDI 决策可视化 | `com.amitia/runtime-insights` | Web、桌面与移动端均由插件提供 |
 | 长期运行维护 | `com.amitia/runtime-insights` | 状态、配置和维护动作均走 Host API |
+| Kernel 管理页 | `com.amitia/runtime-insights` | WASM、Hook、可信服务、任务、事件、调度、桌面贡献、更新、诊断和开发模式均由插件路由提供 |
 | 工作区文件与 Git | `com.amitia/workspace` | 固定路由与 Vue 页面已删除，文件、Git 和隔离工作区统一走 Workspace Bridge |
 | 聊天导入 | `com.amitia/chat-import` | 固定路由与 Vue 向导已删除，解析、批次管理和设备会话晋升统一走 Import Bridge |
 | 主动任务（已合并提醒能力） | `com.amitia.builtin.active-task` | 唯一任务业务插件；固定路由与 Vue 页面已删除，主动任务、定时提醒、队列和历史统一走现有 Reminder Host API |
@@ -44,13 +47,13 @@
 | 最小聊天、模型、会话与记忆执行边界 | 页面可替换，底层执行协议不可替换 |
 | 文件系统和进程监管 | 沙箱、进程树、资源限制留在核心 |
 
-## 待继续迁移
+## 验收收尾
 
-| 模块 | 目标 |
+| 项目 | 目标 |
 | --- | --- |
-| 角色、记忆、知识详情页 | 保留核心数据契约，页面由插件提供 |
-| 桌宠中心 | 使用 `.petx` 包别名共享统一插件生命周期 |
-| Kernel 中非恢复类诊断页面 | 保留最小修复入口，其余迁移为开发插件 |
+| 第三方替换矩阵 | 用测试插件逐项替换官方市场、渠道、页面、工具和服务 |
+| 生命周期零残留 | 安装、启用、停用、更新、回滚、卸载后检查路由、导航、Slot、监听器和进程 |
+| 正式资产 | 从当前源码基线重新构建并签名全部固定业务插件与普通插件 |
 
 ## 验收要求
 
@@ -68,7 +71,12 @@
 | --- | --- | --- | --- |
 | 插件市场与扩展中心 | 支持 `/extensions` 根页面与市场页面 | 支持 `/extensions` 根页面与市场页面 | 市场页面由插件提供；扩展中心根 Tab 仍由移动端宿主壳承载 |
 | 工作区 | 支持 | 支持 | 暂不声明，移动端尚无本地 Workspace 业务页面 |
-| 聊天导入 | 支持 | 支持 | 暂不声明，移动端尚无对应导入向导 |
-| 提醒与主动任务 | 支持 | 支持 | 暂不声明，移动端任务工作台尚未迁移 |
-| 存储维护 | 支持 | 支持 | 暂不声明，移动端尚未提供完整备份恢复工作流 |
-| 归档对话 | 支持 | 支持 | 暂不声明，移动端归档工作台尚未迁移 |
+| 聊天导入 | 支持 | 支持 | 支持 |
+| 提醒与主动任务 | 支持 | 支持 | 支持主动任务和持续事项 |
+| 存储维护 | 支持 | 支持 | 支持设置内的存储维护页面 |
+| 归档对话 | 支持 | 支持 | 支持 |
+| 渠道中心 | 支持 | 支持 | 支持 |
+| 设置与个人空间 | 支持 | 支持 | 设置子页面支持；个人中心主 Tab 由移动端宿主壳承载 |
+| 角色、记忆与创意工坊 | 支持 | 支持 | 子页面由移动端 Host Runtime Provider 提供，主 Tab 壳保留宿主导航 |
+| 游戏中心、Kernel 与扩展子页 | 支持 | 支持 | 由移动端 Provider 动态注册，插件停用后对应路由消失 |
+| 聊天导入、归档、渠道与桌宠 | 支持 | 支持 | 已接入同一移动端 Provider 快照 |

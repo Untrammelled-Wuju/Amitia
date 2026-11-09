@@ -32,6 +32,8 @@ const testMemoryHubRuntimePath = resolve(__dirname, "../../plugins-builtin/memor
 const testCharacterHubRuntimePath = resolve(__dirname, "../../plugins-builtin/character-hub/scripts/test-runtime.mjs");
 const testCreativeWorkshopHubRuntimePath = resolve(__dirname, "../../plugins-builtin/creative-workshop-hub/scripts/test-runtime.mjs");
 const testGameCenterHubRuntimePath = resolve(__dirname, "../../plugins-builtin/game-center-hub/scripts/test-runtime.mjs");
+const testChannelsHubRuntimePath = resolve(__dirname, "../../plugins-builtin/channels-hub/scripts/test-runtime.mjs");
+const testUserSpaceHubRuntimePath = resolve(__dirname, "../../plugins-builtin/user-space-hub/scripts/test-runtime.mjs");
 const compressionLevel = process.env.ELECTRON_BUILDER_COMPRESSION_LEVEL || "5";
 
 function run(command, args, options = {}) {
@@ -125,7 +127,7 @@ async function main() {
   run(process.execPath, [buildRuntimeHostsPath]);
 
   console.log("[build-release] building bundled plugins...");
-  for (const extensionID of ["com.amitia/plugin-market", "com.amitia/runtime-insights", "com.amitia/workspace", "com.amitia/chat-import", "com.amitia.builtin.active-task", "com.amitia/storage", "com.amitia/chat-logs", "com.amitia/memory-hub", "com.amitia/character-hub", "com.amitia/creative-workshop-hub", "com.amitia/game-center-hub"]) {
+  for (const extensionID of ["com.amitia/plugin-market", "com.amitia/runtime-insights", "com.amitia/workspace", "com.amitia/chat-import", "com.amitia.builtin.active-task", "com.amitia/storage", "com.amitia/chat-logs", "com.amitia/memory-hub", "com.amitia/character-hub", "com.amitia/creative-workshop-hub", "com.amitia/game-center-hub", "com.amitia/channels-hub", "com.amitia/user-space-hub"]) {
     run(process.execPath, [buildMarketplacePluginsPath, "--build"], {
       env: { ...process.env, AMITIA_PLUGIN_FILTER: extensionID },
     });
@@ -141,6 +143,8 @@ async function main() {
   run(process.execPath, [testCharacterHubRuntimePath]);
   run(process.execPath, [testCreativeWorkshopHubRuntimePath]);
   run(process.execPath, [testGameCenterHubRuntimePath]);
+  run(process.execPath, [testChannelsHubRuntimePath]);
+  run(process.execPath, [testUserSpaceHubRuntimePath]);
   run(process.execPath, [verifyPluginMarketPackagePath]);
 
   console.log("[build-release] building AmitiaCore from the frozen source...");

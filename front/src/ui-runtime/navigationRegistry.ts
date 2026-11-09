@@ -100,20 +100,6 @@ const builtinItems: UINavigationItem[] = [
   { id: "extensions", route: "/extensions", label: "扩展中心", description: "管理扩展包、工作流、MCP 和 Agent Skills。", icon: Extensions, group: "extensions", order: 90, match: ["/extensions", "/kernel"] },
 ];
 
-const channelCenterItem: UINavigationItem = {
-  id: "channels.messages",
-  route: "/channel-center",
-  label: "渠道接入",
-  description: "管理渠道插件、连接状态和宿主消息。",
-  icon: ChannelIcon,
-  group: "channels",
-  groupLabel: "渠道接入",
-  groupIcon: ChannelIcon,
-  order: 78,
-  mobile: true,
-  match: ["/channels"],
-};
-
 const pageTitleOverrides: Record<string, string> = {
   "/onboarding": "引导",
   "/privacy": "隐私说明",
@@ -305,12 +291,9 @@ function applyIconProvider(store: ReturnType<typeof useExtensionUIStore>, items:
 }
 
 export function resolveBuiltinNavigationItems(store: ReturnType<typeof useExtensionUIStore>): UINavigationItem[] {
-  const available = builtinItems.filter(
+  return builtinItems.filter(
     (item) => !item.runtimeCapability || isRuntimeCapabilityAvailable(item.runtimeCapability),
   );
-  return resolveChannelPresentations(store).length > 0
-    ? [...available, channelCenterItem]
-    : available;
 }
 
 export function useUINavigationRegistry() {

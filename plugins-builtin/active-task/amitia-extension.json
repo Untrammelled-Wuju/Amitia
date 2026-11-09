@@ -8,7 +8,7 @@
     "description": {
       "default": "通过统一 Host API 管理主动任务、时间提醒、队列和执行历史。"
     },
-    "version": "1.1.0",
+    "version": "1.2.1",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -35,7 +35,9 @@
     "platforms": [
       "windows",
       "linux",
-      "macos"
+      "macos",
+      "android",
+      "ios"
     ]
   },
   "modules": [
@@ -76,7 +78,7 @@
         ],
         "maxContributions": 6,
         "maxTools": 1,
-        "maxRoutes": 2,
+        "maxRoutes": 3,
         "maxServices": 0,
         "allowUnregister": true
       },
@@ -200,7 +202,9 @@
               "platforms": [
                 "windows",
                 "linux",
-                "macos"
+                "macos",
+                "android",
+                "ios"
               ]
             },
             "actions": [
@@ -276,7 +280,9 @@
               "platforms": [
                 "windows",
                 "linux",
-                "macos"
+                "macos",
+                "android",
+                "ios"
               ]
             },
             "actions": [],
@@ -311,6 +317,9 @@
               },
               "electron_linux": {
                 "type": "declarative"
+              },
+              "mobile": {
+                "type": "declarative"
               }
             },
             "metadata": {
@@ -330,6 +339,14 @@
                   "capability": "page.provider",
                   "title": "持续事项",
                   "priority": 247
+                },
+                {
+                  "id": "continuity-detail",
+                  "path": "/continuity/:id",
+                  "providerId": "continuity-page-provider",
+                  "capability": "page.provider",
+                  "title": "持续事项",
+                  "priority": 246
                 }
               ],
               "sectionEntries": [
@@ -394,6 +411,10 @@
               "electron_linux": {
                 "type": "schema_renderer",
                 "contributionId": "active-task-page"
+              },
+              "mobile": {
+                "type": "schema_renderer",
+                "contributionId": "active-task-page"
               }
             },
             "metadata": {
@@ -433,11 +454,16 @@
               "electron_linux": {
                 "type": "schema_renderer",
                 "contributionId": "continuity-page"
+              },
+              "mobile": {
+                "type": "schema_renderer",
+                "contributionId": "continuity-page"
               }
             },
             "metadata": {
               "routes": [
-                "/continuity"
+                "/continuity",
+                "/continuity/:id"
               ]
             }
           }
@@ -448,7 +474,9 @@
         "platforms": [
           "windows",
           "linux",
-          "macos"
+          "macos",
+          "android",
+          "ios"
         ]
       }
     }
@@ -458,7 +486,7 @@
       "name": "tool.invoke",
       "reason": "通过插件工具管理提醒任务。",
       "required": true,
-      "scope": "extension"
+      "scope": "session"
     },
     {
       "name": "character.read",

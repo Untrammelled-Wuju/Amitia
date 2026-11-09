@@ -9,6 +9,8 @@ export const HOST_RUNTIME_CHARACTER_WORLDBOOK = "host.character.worldbook";
 export const HOST_RUNTIME_CREATIVE_CARDS = "host.creative.character-cards";
 export const HOST_RUNTIME_CREATIVE_PET_INSTALLATIONS = "host.creative.pet-installations";
 export const HOST_RUNTIME_GAME_PLUGIN = "host.game.plugin";
+export const HOST_RUNTIME_CHANNELS_HUB = "host.channels.hub";
+export const HOST_RUNTIME_USER_SPACE = "host.user-space";
 export const HOST_RUNTIME_CONTINUITY_THREADS = "host.tasks.continuity";
 export const HOST_RUNTIME_EXTENSION_PACKAGES = "host.extensions.packages";
 export const HOST_RUNTIME_EXTENSION_MCP = "host.extensions.mcp";
@@ -70,6 +72,14 @@ registerHostRuntimeComponent(
 registerHostRuntimeComponent(
   HOST_RUNTIME_GAME_PLUGIN,
   defineAsyncComponent(() => import("@/views/game-center/GamePluginView.vue")),
+);
+registerHostRuntimeComponent(
+  HOST_RUNTIME_CHANNELS_HUB,
+  defineAsyncComponent(() => import("@/views/channels/ChannelHubView.vue")),
+);
+registerHostRuntimeComponent(
+  HOST_RUNTIME_USER_SPACE,
+  defineAsyncComponent(() => import("@/views/user-settings/UserSpaceHost.vue")),
 );
 registerHostRuntimeComponent(
   HOST_RUNTIME_CONTINUITY_THREADS,

@@ -608,9 +608,7 @@ class UIContributionSnapshotEntry {
       moduleId: (json['module_id'] ?? '').toString(),
       kind: (json['kind'] ?? '').toString(),
       slotId: (slot['slot_id'] ?? '').toString(),
-      contractVersion:
-          (json['contract_version'] as num?)?.toInt() ??
-          1,
+      contractVersion: (json['contract_version'] as num?)?.toInt() ?? 1,
       entryType: (entry['type'] ?? '').toString(),
       runtimeId: (entry['runtime_id'] ?? '').toString().trim(),
       entryPath: (entry['path'] ?? '').toString(),
@@ -625,12 +623,10 @@ class UIContributionSnapshotEntry {
           (ordering['priority'] as num?)?.toInt() ??
           0,
       priority: (ordering['priority'] as num?)?.toInt() ?? 0,
-      entryKey:
-          (dispatch['entry_key'] ?? sortKey).toString().trim().isNotEmpty
+      entryKey: (dispatch['entry_key'] ?? sortKey).toString().trim().isNotEmpty
           ? (dispatch['entry_key'] ?? sortKey).toString().trim()
           : contributionId,
-      cellId:
-          (dispatch['cell_id'] ?? sortKey).toString().trim().isNotEmpty
+      cellId: (dispatch['cell_id'] ?? sortKey).toString().trim().isNotEmpty
           ? (dispatch['cell_id'] ?? sortKey).toString().trim()
           : contributionId,
       matched: dispatch['matched'],
@@ -673,36 +669,31 @@ class UISlotSnapshotEntry {
     required this.contributions,
   });
 
-  factory UISlotSnapshotEntry.fromJson(
-    Map<String, dynamic> json,
-  ) => UISlotSnapshotEntry(
-    slotId: (json['slotId'] ?? '').toString(),
-    contractVersion:
-        (json['contractVersion'] as num?)?.toInt() ?? 1,
-    supportedKinds:
-        ((json['supportedKinds']) as List? ?? const <dynamic>[])
+  factory UISlotSnapshotEntry.fromJson(Map<String, dynamic> json) =>
+      UISlotSnapshotEntry(
+        slotId: (json['slotId'] ?? '').toString(),
+        contractVersion: (json['contractVersion'] as num?)?.toInt() ?? 1,
+        supportedKinds: ((json['supportedKinds']) as List? ?? const <dynamic>[])
             .map((item) => item.toString().trim())
             .where((item) => item.isNotEmpty)
             .toList(growable: false),
-    kind: _text(json['kind']),
-    layout: (json['layout'] ?? 'stack').toString(),
-    fallbackPolicy:
-        (json['fallbackPolicy'] ?? 'empty').toString(),
-    ownerExtension: json['ownerExtension']?.toString(),
-    parentSlotId: json['parentSlotId']?.toString(),
-    declarationEpoch:
-        (json['declarationEpoch'] as num?)?.toInt() ?? 0,
-    scope: (json['scope'] ?? 'root').toString(),
-    dynamicSlot: json['dynamic'] == true,
-    contributions: ((json['contributions'] as List?) ?? const [])
-        .whereType<Map>()
-        .map(
-          (item) => UIContributionSnapshotEntry.fromJson(
-            item.cast<String, dynamic>(),
-          ),
-        )
-        .toList(growable: false),
-  );
+        kind: _text(json['kind']),
+        layout: (json['layout'] ?? 'stack').toString(),
+        fallbackPolicy: (json['fallbackPolicy'] ?? 'empty').toString(),
+        ownerExtension: json['ownerExtension']?.toString(),
+        parentSlotId: json['parentSlotId']?.toString(),
+        declarationEpoch: (json['declarationEpoch'] as num?)?.toInt() ?? 0,
+        scope: (json['scope'] ?? 'root').toString(),
+        dynamicSlot: json['dynamic'] == true,
+        contributions: ((json['contributions'] as List?) ?? const [])
+            .whereType<Map>()
+            .map(
+              (item) => UIContributionSnapshotEntry.fromJson(
+                item.cast<String, dynamic>(),
+              ),
+            )
+            .toList(growable: false),
+      );
 }
 
 String _text(Object? value) => (value ?? '').toString().trim();
@@ -724,6 +715,17 @@ class UIProviderSnapshot {
     required this.resolved,
     required this.version,
   });
+
+  UIContributionSnapshotEntry? contributionById(String contributionId) {
+    final target = contributionId.trim();
+    if (target.isEmpty) return null;
+    for (final slot in slots) {
+      for (final contribution in slot.contributions) {
+        if (contribution.contributionId == target) return contribution;
+      }
+    }
+    return null;
+  }
 
   factory UIProviderSnapshot.fromJson(Map<String, dynamic> json) {
     final providers = ((json['providers'] as List?) ?? const [])

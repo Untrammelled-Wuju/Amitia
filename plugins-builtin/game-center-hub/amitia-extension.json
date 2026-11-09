@@ -8,7 +8,7 @@
     "description": {
       "default": "通过统一 UI Provider 提供游戏模式、插件管理和运行入口。"
     },
-    "version": "1.1.0",
+    "version": "1.2.0",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -37,7 +37,9 @@
       "web",
       "windows",
       "linux",
-      "macos"
+      "macos",
+      "android",
+      "ios"
     ]
   },
   "modules": [
@@ -75,9 +77,9 @@
           "ui",
           "ui_provider"
         ],
-        "maxContributions": 6,
+        "maxContributions": 7,
         "maxTools": 0,
-        "maxRoutes": 2,
+        "maxRoutes": 4,
         "maxServices": 0,
         "allowUnregister": true
       },
@@ -190,6 +192,57 @@
           }
         },
         {
+          "id": "game-center-mobile-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "游戏中心移动端页面"
+          },
+          "spec": {
+            "contribution_id": "game-center-mobile-page",
+            "extension_id": "com.amitia/game-center-hub",
+            "module_id": "game-center-hub-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "游戏模式"
+              },
+              "description": {
+                "default": "在移动端管理游戏插件、运行模式和会话。"
+              },
+              "icon": "gamepad"
+            },
+            "entry": {
+              "type": "host_native",
+              "path": "builtin://com.amitia/game-center-hub/mobile",
+              "runtime_id": "host.mobile.native-page",
+              "content_hash": "builtin"
+            },
+            "sandbox": {
+              "type": "host_native"
+            },
+            "ordering": {
+              "priority": 238
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "actions": [],
+            "integrity": {
+              "definition_hash": "game-center-mobile-page-v1"
+            }
+          }
+        },
+        {
           "id": "game-center-hub-routes",
           "kind": "ui_provider",
           "adapter": "ui_provider",
@@ -214,6 +267,9 @@
                 "type": "declarative"
               },
               "electron_linux": {
+                "type": "declarative"
+              },
+              "mobile": {
                 "type": "declarative"
               }
             },
@@ -283,6 +339,10 @@
               "electron_linux": {
                 "type": "schema_renderer",
                 "contributionId": "game-center-hub-page"
+              },
+              "mobile": {
+                "type": "schema_renderer",
+                "contributionId": "game-center-mobile-page"
               }
             },
             "metadata": {
@@ -322,6 +382,10 @@
               "electron_linux": {
                 "type": "schema_renderer",
                 "contributionId": "game-plugin-page"
+              },
+              "mobile": {
+                "type": "schema_renderer",
+                "contributionId": "game-center-mobile-page"
               }
             },
             "metadata": {

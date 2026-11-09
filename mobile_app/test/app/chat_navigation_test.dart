@@ -277,7 +277,7 @@ void main() {
     );
   });
 
-  testWidgets('我的角色入口先进入角色与世界书二级页', (tester) async {
+  testWidgets('我的角色入口不含固定宿主页面', (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(500, 1200);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -291,9 +291,7 @@ void main() {
 
     await tester.tap(find.text('角色'));
     await tester.pumpAndSettle();
-    expect(find.byType(CharacterWorldBookHubPage), findsOneWidget);
-    expect(find.text('角色管理'), findsOneWidget);
-    expect(find.text('世界书'), findsOneWidget);
+    expect(find.byType(CharacterWorldBookHubPage), findsNothing);
   });
 
   testWidgets('角色与世界书二级页提供两个独立入口', (tester) async {

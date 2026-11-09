@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { basename, dirname, join, resolve } from "node:path"
 import { spawnSync } from "node:child_process"
@@ -16,6 +16,21 @@ const amitiaExt = join(tmpdir(), `amitia-ext-marketplace-${process.pid}`)
 const filter = (process.env.AMITIA_PLUGIN_FILTER || "").trim()
 const sourceDateEpoch = process.env.SOURCE_DATE_EPOCH || spawnSync("git", ["show", "-s", "--format=%ct", "HEAD"], { cwd: root, encoding: "utf8" }).stdout.trim()
 const signatureCreatedAt = new Date(Number(sourceDateEpoch) * 1000).toISOString()
+const bundledOutputDirectories = new Map([
+  ["com.amitia/plugin-market", "plugin-market"],
+  ["com.amitia/runtime-insights", "runtime-insights"],
+  ["com.amitia/workspace", "workspace"],
+  ["com.amitia/chat-import", "chat-import"],
+  ["com.amitia.builtin.active-task", "active-task"],
+  ["com.amitia/storage", "storage"],
+  ["com.amitia/chat-logs", "chat-logs"],
+  ["com.amitia/memory-hub", "memory-hub"],
+  ["com.amitia/character-hub", "character-hub"],
+  ["com.amitia/creative-workshop-hub", "creative-workshop-hub"],
+  ["com.amitia/game-center-hub", "game-center-hub"],
+  ["com.amitia/channels-hub", "channels-hub"],
+  ["com.amitia/user-space-hub", "user-space-hub"],
+])
 
 function run(command, args, cwd = root) {
   const result = spawnSync(command, args, { cwd, stdio: "inherit", env: process.env })
@@ -29,6 +44,18 @@ function readManifest(file) {
 
 function packageName(manifest) {
   return `${String(manifest.plugin.id).replaceAll("/", ".")}-${manifest.plugin.version}.amitiax`
+}
+
+function cleanBundledOutput(extensionID) {
+  const directoryName = bundledOutputDirectories.get(extensionID)
+  if (!directoryName) return
+  const directory = join(pluginRoot, directoryName)
+  if (!existsSync(directory)) return
+  for (const file of readdirSync(directory)) {
+    if (file.endsWith(".amitiax") || file.endsWith(".amitiax.sbom.json")) {
+      rmSync(join(directory, file), { force: true })
+    }
+  }
 }
 
 function buildPlugins() {
@@ -46,6 +73,8 @@ function buildPlugins() {
     ["com.amitia/character-hub", nodeBinary, [join(root, "plugins-builtin/character-hub/scripts/build-package.mjs"), "--output", join(pluginRoot, "character-hub")]],
     ["com.amitia/creative-workshop-hub", nodeBinary, [join(root, "plugins-builtin/creative-workshop-hub/scripts/build-package.mjs"), "--output", join(pluginRoot, "creative-workshop-hub")]],
     ["com.amitia/game-center-hub", nodeBinary, [join(root, "plugins-builtin/game-center-hub/scripts/build-package.mjs"), "--output", join(pluginRoot, "game-center-hub")]],
+    ["com.amitia/channels-hub", nodeBinary, [join(root, "plugins-builtin/channels-hub/scripts/build-package.mjs"), "--output", join(pluginRoot, "channels-hub")]],
+    ["com.amitia/user-space-hub", nodeBinary, [join(root, "plugins-builtin/user-space-hub/scripts/build-package.mjs"), "--output", join(pluginRoot, "user-space-hub")]],
     ...["browser-profile", "calendar", "email", "phone", "wallet"].map((name) => {
       const manifest = readManifest(join(root, "plugins-code/agent-identities", name, "amitia-extension.json"))
       return [manifest.plugin.id, nodeBinary, [join(root, "plugins-code/agent-identities/scripts/build-package.mjs"), "--package", join(root, "plugins-code/agent-identities", name)]]
@@ -57,6 +86,7 @@ function buildPlugins() {
   ]
   for (const [extensionID, command, args] of builds) {
     if (filter && extensionID !== filter) continue
+    cleanBundledOutput(extensionID)
     run(command, args)
   }
 }
@@ -76,6 +106,8 @@ function expectedPackages() {
     ["plugins-builtin/character-hub/amitia-extension.json", "character-hub"],
     ["plugins-builtin/creative-workshop-hub/amitia-extension.json", "creative-workshop-hub"],
     ["plugins-builtin/game-center-hub/amitia-extension.json", "game-center-hub"],
+    ["plugins-builtin/channels-hub/amitia-extension.json", "channels-hub"],
+    ["plugins-builtin/user-space-hub/amitia-extension.json", "user-space-hub"],
     ["plugins-code/agent-identities/browser-profile/amitia-extension.json", "agent-identities"],
     ["plugins-code/agent-identities/calendar/amitia-extension.json", "agent-identities"],
     ["plugins-code/agent-identities/email/amitia-extension.json", "agent-identities"],
@@ -114,6 +146,10 @@ function expectedPackages() {
         ? `amitia-creative-workshop-hub-${manifest.plugin.version}.amitiax`
       : directory === "game-center-hub"
         ? `amitia-game-center-hub-${manifest.plugin.version}.amitiax`
+      : directory === "channels-hub"
+        ? `amitia-channels-hub-${manifest.plugin.version}.amitiax`
+      : directory === "user-space-hub"
+        ? `amitia-user-space-hub-${manifest.plugin.version}.amitiax`
         : directory === "agent-identities"
           ? `${basename(dirname(join(root, manifestPath)))}-${manifest.plugin.version}.amitiax`
           : packageName(manifest)

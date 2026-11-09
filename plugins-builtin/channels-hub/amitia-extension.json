@@ -1,0 +1,324 @@
+{
+  "schemaVersion": 1,
+  "plugin": {
+    "id": "com.amitia/channels-hub",
+    "name": {
+      "default": "渠道中心"
+    },
+    "description": {
+      "default": "发现和管理通过统一渠道协议接入的外部消息渠道。"
+    },
+    "version": "1.1.0",
+    "license": "AGPL-3.0-only",
+    "homepage": "https://amitia.untrammelled.top",
+    "categories": [
+      "communication",
+      "system"
+    ],
+    "keywords": [
+      "channel",
+      "messaging",
+      "integration"
+    ],
+    "metadata": {
+      "system.defaultInstall": true,
+      "system.defaultEnabled": true
+    },
+    "publisher": {
+      "id": "com.amitia",
+      "displayName": "Amitia",
+      "trustLevel": "official"
+    }
+  },
+  "compatibility": {
+    "minHostVersion": "0.1.0",
+    "platforms": [
+      "windows",
+      "linux",
+      "macos",
+      "android",
+      "ios"
+    ]
+  },
+  "modules": [
+    {
+      "id": "channels-hub-runtime",
+      "name": {
+        "default": "渠道中心运行时"
+      },
+      "runtime": {
+        "adapter": "javascript",
+        "entry": "dist/index.js",
+        "timeout": "30s",
+        "memoryBytes": 33554432,
+        "capabilities": {
+          "network": false,
+          "filesystem": false
+        },
+        "hostAccess": {
+          "filesystem": {
+            "mode": "none"
+          },
+          "network": {
+            "mode": "none"
+          },
+          "process": {
+            "mode": "none"
+          }
+        }
+      },
+      "dynamic": {
+        "allowedAdapters": [
+          "ui",
+          "ui_provider"
+        ],
+        "maxContributions": 4,
+        "maxTools": 0,
+        "maxRoutes": 1,
+        "maxServices": 0,
+        "allowUnregister": true
+      },
+      "contributions": [
+        {
+          "id": "channels-hub-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "渠道中心"
+          },
+          "spec": {
+            "contribution_id": "channels-hub-page",
+            "extension_id": "com.amitia/channels-hub",
+            "module_id": "channels-hub-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "渠道中心"
+              },
+              "description": {
+                "default": "管理渠道插件、连接状态和宿主消息。"
+              },
+              "icon": "channel"
+            },
+            "entry": {
+              "type": "host_native",
+              "path": "builtin://com.amitia/channels-hub/center",
+              "runtime_id": "host.channels.hub",
+              "content_hash": "builtin"
+            },
+            "sandbox": {
+              "type": "host_native"
+            },
+            "ordering": {
+              "priority": 230
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            },
+            "actions": [],
+            "integrity": {
+              "definition_hash": "channels-hub-page-v1"
+            }
+          }
+        },
+        {
+          "id": "channels-hub-mobile-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "渠道中心移动端页面"
+          },
+          "spec": {
+            "contribution_id": "channels-hub-mobile-page",
+            "extension_id": "com.amitia/channels-hub",
+            "module_id": "channels-hub-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "渠道中心"
+              },
+              "description": {
+                "default": "在移动端查看渠道插件和宿主消息。"
+              },
+              "icon": "channel"
+            },
+            "entry": {
+              "type": "host_native",
+              "path": "builtin://com.amitia/channels-hub/mobile",
+              "runtime_id": "host.mobile.native-page",
+              "content_hash": "builtin"
+            },
+            "sandbox": {
+              "type": "host_native"
+            },
+            "ordering": {
+              "priority": 230
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "actions": [],
+            "integrity": {
+              "definition_hash": "channels-hub-mobile-page-v1"
+            }
+          }
+        },
+        {
+          "id": "channels-hub-routes",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "渠道中心路由"
+          },
+          "spec": {
+            "providerId": "channels-hub-routes",
+            "capability": "route.registry",
+            "mode": "replace",
+            "priority": 230,
+            "trustLevel": "official",
+            "entries": {
+              "web": {
+                "type": "declarative"
+              },
+              "electron_windows": {
+                "type": "declarative"
+              },
+              "electron_macos": {
+                "type": "declarative"
+              },
+              "electron_linux": {
+                "type": "declarative"
+              },
+              "mobile": {
+                "type": "declarative"
+              }
+            },
+            "metadata": {
+              "routes": [
+                {
+                  "id": "channels-hub",
+                  "path": "/channel-center",
+                  "providerId": "channels-hub-page-provider",
+                  "capability": "page.provider",
+                  "title": "渠道中心",
+                  "priority": 230
+                }
+              ],
+              "navigationItems": [
+                {
+                  "id": "channels-hub",
+                  "label": "渠道接入",
+                  "route": "/channel-center",
+                  "icon": "channel",
+                  "group": "channels",
+                  "groupLabel": "渠道接入",
+                  "groupIcon": "channel",
+                  "order": 78,
+                  "match": [
+                    "/channel-center",
+                    "/channels"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "channels-hub-page-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "渠道中心页面 Provider"
+          },
+          "spec": {
+            "providerId": "channels-hub-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 230,
+            "platforms": [
+              "web",
+              "windows",
+              "linux",
+              "macos",
+              "android",
+              "ios"
+            ],
+            "trustLevel": "official",
+            "entries": {
+              "web": {
+                "type": "schema_renderer",
+                "contributionId": "channels-hub-page"
+              },
+              "electron_windows": {
+                "type": "schema_renderer",
+                "contributionId": "channels-hub-page"
+              },
+              "electron_macos": {
+                "type": "schema_renderer",
+                "contributionId": "channels-hub-page"
+              },
+              "electron_linux": {
+                "type": "schema_renderer",
+                "contributionId": "channels-hub-page"
+              },
+              "mobile": {
+                "type": "schema_renderer",
+                "contributionId": "channels-hub-mobile-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/channel-center"
+              ]
+            }
+          }
+        }
+      ],
+      "placement": "device",
+      "deviceRequirements": {
+        "platforms": [
+          "windows",
+          "linux",
+          "macos",
+          "android",
+          "ios"
+        ]
+      }
+    }
+  ],
+  "permissions": [],
+  "data": {
+    "schemaVersion": 1,
+    "scopes": [
+      "device"
+    ],
+    "backup": false,
+    "export": false,
+    "uninstall": "retain"
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "contentTreeHash": ""
+  }
+}

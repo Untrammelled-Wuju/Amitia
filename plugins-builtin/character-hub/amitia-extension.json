@@ -8,7 +8,7 @@
     "description": {
       "default": "通过统一 UI Provider 提供角色管理、团队、世界书与画像入口。"
     },
-    "version": "1.1.0",
+    "version": "1.2.0",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -38,7 +38,9 @@
       "web",
       "windows",
       "linux",
-      "macos"
+      "macos",
+      "android",
+      "ios"
     ]
   },
   "modules": [
@@ -76,9 +78,9 @@
           "ui",
           "ui_provider"
         ],
-        "maxContributions": 9,
+        "maxContributions": 11,
         "maxTools": 0,
-        "maxRoutes": 7,
+        "maxRoutes": 14,
         "maxServices": 0,
         "allowUnregister": true
       },
@@ -295,6 +297,57 @@
           }
         },
         {
+          "id": "character-mobile-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "角色移动端页面"
+          },
+          "spec": {
+            "contribution_id": "character-mobile-page",
+            "extension_id": "com.amitia/character-hub",
+            "module_id": "character-hub-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "角色"
+              },
+              "description": {
+                "default": "在移动端管理角色、语音、心理状态和世界书。"
+              },
+              "icon": "character"
+            },
+            "entry": {
+              "type": "host_native",
+              "path": "builtin://com.amitia/character-hub/mobile",
+              "runtime_id": "host.mobile.native-page",
+              "content_hash": "builtin"
+            },
+            "sandbox": {
+              "type": "host_native"
+            },
+            "ordering": {
+              "priority": 222
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "actions": [],
+            "integrity": {
+              "definition_hash": "character-mobile-page-v1"
+            }
+          }
+        },
+        {
           "id": "character-hub-routes",
           "kind": "ui_provider",
           "adapter": "ui_provider",
@@ -319,6 +372,9 @@
                 "type": "declarative"
               },
               "electron_linux": {
+                "type": "declarative"
+              },
+              "mobile": {
                 "type": "declarative"
               }
             },
@@ -387,6 +443,54 @@
                   "capability": "page.provider",
                   "title": "世界书",
                   "priority": 223
+                },
+                {
+                  "id": "character-create-mobile",
+                  "path": "/characters/create",
+                  "providerId": "character-mobile-page-provider",
+                  "capability": "page.provider",
+                  "title": "创建角色",
+                  "priority": 222
+                },
+                {
+                  "id": "character-detail-mobile",
+                  "path": "/characters/:id",
+                  "providerId": "character-mobile-page-provider",
+                  "capability": "page.provider",
+                  "title": "角色详情",
+                  "priority": 222
+                },
+                {
+                  "id": "character-voice-mobile",
+                  "path": "/characters/:id/voice",
+                  "providerId": "character-mobile-page-provider",
+                  "capability": "page.provider",
+                  "title": "角色语音",
+                  "priority": 222
+                },
+                {
+                  "id": "character-psyche-mobile",
+                  "path": "/characters/:id/psyche",
+                  "providerId": "character-mobile-page-provider",
+                  "capability": "page.provider",
+                  "title": "心理状态",
+                  "priority": 222
+                },
+                {
+                  "id": "character-worldbook-mobile",
+                  "path": "/memory/world-book",
+                  "providerId": "character-mobile-page-provider",
+                  "capability": "page.provider",
+                  "title": "世界书",
+                  "priority": 222
+                },
+                {
+                  "id": "character-worldbook-hub-mobile",
+                  "path": "/me/characters",
+                  "providerId": "character-mobile-page-provider",
+                  "capability": "page.provider",
+                  "title": "角色世界书",
+                  "priority": 222
                 }
               ],
               "sectionEntries": [
@@ -545,6 +649,10 @@
               "electron_linux": {
                 "type": "schema_renderer",
                 "contributionId": "character-teams-page"
+              },
+              "mobile": {
+                "type": "schema_renderer",
+                "contributionId": "character-mobile-page"
               }
             },
             "metadata": {
@@ -589,6 +697,42 @@
             "metadata": {
               "routes": [
                 "/world-book"
+              ]
+            }
+          }
+        },
+        {
+          "id": "character-mobile-page-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "角色移动端页面 Provider"
+          },
+          "spec": {
+            "providerId": "character-mobile-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 222,
+            "platforms": [
+              "android",
+              "ios"
+            ],
+            "trustLevel": "official",
+            "entries": {
+              "mobile": {
+                "type": "schema_renderer",
+                "contributionId": "character-mobile-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/characters/create",
+                "/characters/:id",
+                "/characters/:id/voice",
+                "/characters/:id/psyche",
+                "/memory/world-book",
+                "/me/characters"
               ]
             }
           }

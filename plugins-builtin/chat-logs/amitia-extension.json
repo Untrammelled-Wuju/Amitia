@@ -8,7 +8,7 @@
     "description": {
       "default": "浏览、搜索、恢复、删除、摘要和导出设备归档对话。"
     },
-    "version": "1.0.0",
+    "version": "1.1.0",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -35,7 +35,9 @@
     "platforms": [
       "windows",
       "linux",
-      "macos"
+      "macos",
+      "android",
+      "ios"
     ]
   },
   "modules": [
@@ -74,9 +76,9 @@
           "ui",
           "ui_provider"
         ],
-        "maxContributions": 8,
+        "maxContributions": 6,
         "maxTools": 1,
-        "maxRoutes": 1,
+        "maxRoutes": 2,
         "maxServices": 0,
         "allowUnregister": true
       },
@@ -215,6 +217,57 @@
           ]
         },
         {
+          "id": "chat-logs-mobile-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "归档对话移动端页面"
+          },
+          "spec": {
+            "contribution_id": "chat-logs-mobile-page",
+            "extension_id": "com.amitia/chat-logs",
+            "module_id": "chat-logs-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "归档对话"
+              },
+              "description": {
+                "default": "在移动端浏览和管理归档对话。"
+              },
+              "icon": "collection"
+            },
+            "entry": {
+              "type": "host_native",
+              "path": "builtin://com.amitia/chat-logs/mobile",
+              "runtime_id": "host.mobile.native-page",
+              "content_hash": "builtin"
+            },
+            "sandbox": {
+              "type": "host_native"
+            },
+            "ordering": {
+              "priority": 245
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "actions": [],
+            "integrity": {
+              "definition_hash": "chat-logs-mobile-page-v1"
+            }
+          }
+        },
+        {
           "id": "chat-logs-routes",
           "kind": "ui_provider",
           "adapter": "ui_provider",
@@ -240,6 +293,9 @@
               },
               "electron_linux": {
                 "type": "declarative"
+              },
+              "mobile": {
+                "type": "declarative"
               }
             },
             "metadata": {
@@ -251,6 +307,14 @@
                   "capability": "page.provider",
                   "title": "归档对话",
                   "priority": 246
+                },
+                {
+                  "id": "chat-logs-mobile",
+                  "path": "/chat-logs",
+                  "providerId": "chat-logs-mobile-page-provider",
+                  "capability": "page.provider",
+                  "title": "归档对话",
+                  "priority": 245
                 }
               ],
               "navigationItems": [
@@ -307,6 +371,37 @@
               ]
             }
           }
+        },
+        {
+          "id": "chat-logs-mobile-page-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "归档对话移动端页面 Provider"
+          },
+          "spec": {
+            "providerId": "chat-logs-mobile-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 245,
+            "platforms": [
+              "android",
+              "ios"
+            ],
+            "trustLevel": "official",
+            "entries": {
+              "mobile": {
+                "type": "schema_renderer",
+                "contributionId": "chat-logs-mobile-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/chat-logs"
+              ]
+            }
+          }
         }
       ],
       "placement": "device",
@@ -314,7 +409,9 @@
         "platforms": [
           "windows",
           "linux",
-          "macos"
+          "macos",
+          "android",
+          "ios"
         ]
       }
     }

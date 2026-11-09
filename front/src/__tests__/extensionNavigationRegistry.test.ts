@@ -179,7 +179,7 @@ describe("extension navigation registry", () => {
     }))).toEqual([{ route: "/continuity", label: "持续事项", match: ["/continuity"] }]);
   });
 
-  it("shows one fixed channel center after a plugin is available and lists plugins separately", () => {
+  it("keeps channel center out of built-in navigation and lists plugins separately", () => {
     expect(resolveBuiltinNavigationItems(store([])).some((item) => item.route === "/channel-center")).toBe(false);
     const channelStore = store([
       provider({
@@ -191,12 +191,7 @@ describe("extension navigation registry", () => {
       routeRegistry("com.amitia/channel-wechat", "wechat-routes", "/channels/wechat", "wechat-page", 100),
       pageProvider("com.amitia/channel-wechat", "wechat-page"),
     ]);
-    const channels = resolveBuiltinNavigationItems(channelStore);
-    expect(channels.filter((item) => item.route === "/channel-center")).toHaveLength(1);
-    expect(channels.find((item) => item.route === "/channel-center")).toMatchObject({
-      label: "渠道接入",
-      match: ["/channels"],
-    });
+    expect(resolveBuiltinNavigationItems(channelStore).some((item) => item.route === "/channel-center")).toBe(false);
     expect(collectChannelPluginNavigationItems(channelStore)).toEqual([{
       id: "channel:com.amitia/channel-wechat:wechat_personal",
       route: "/channels/wechat",

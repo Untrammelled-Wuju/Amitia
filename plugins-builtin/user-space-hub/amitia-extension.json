@@ -1,0 +1,316 @@
+{
+  "schemaVersion": 1,
+  "plugin": {
+    "id": "com.amitia/user-space-hub",
+    "name": {
+      "default": "个人与设置中心"
+    },
+    "description": {
+      "default": "通过统一 Host Runtime 提供设置和个人空间业务页面。"
+    },
+    "version": "1.1.0",
+    "license": "AGPL-3.0-only",
+    "homepage": "https://amitia.untrammelled.top",
+    "categories": [
+      "system",
+      "productivity"
+    ],
+    "keywords": [
+      "settings",
+      "account",
+      "profile",
+      "preferences"
+    ],
+    "metadata": {
+      "system.defaultInstall": true,
+      "system.defaultEnabled": true
+    },
+    "publisher": {
+      "id": "com.amitia",
+      "displayName": "Amitia",
+      "trustLevel": "official"
+    }
+  },
+  "compatibility": {
+    "minHostVersion": "0.1.0",
+    "platforms": [
+      "windows",
+      "linux",
+      "macos",
+      "android",
+      "ios"
+    ]
+  },
+  "modules": [
+    {
+      "id": "user-space-hub-runtime",
+      "name": {
+        "default": "个人与设置中心运行时"
+      },
+      "runtime": {
+        "adapter": "javascript",
+        "entry": "dist/index.js",
+        "timeout": "30s",
+        "memoryBytes": 33554432,
+        "capabilities": {
+          "network": false,
+          "filesystem": false
+        },
+        "hostAccess": {
+          "filesystem": {
+            "mode": "none"
+          },
+          "network": {
+            "mode": "none"
+          },
+          "process": {
+            "mode": "none"
+          }
+        }
+      },
+      "dynamic": {
+        "allowedAdapters": [
+          "ui",
+          "ui_provider"
+        ],
+        "maxContributions": 3,
+        "maxTools": 0,
+        "maxRoutes": 9,
+        "maxServices": 0,
+        "allowUnregister": true
+      },
+      "contributions": [
+        {
+          "id": "user-space-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "个人与设置中心"
+          },
+          "spec": {
+            "contribution_id": "user-space-page",
+            "extension_id": "com.amitia/user-space-hub",
+            "module_id": "user-space-hub-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "个人与设置中心"
+              },
+              "description": {
+                "default": "管理个人资料、设备、运行时和系统设置。"
+              },
+              "icon": "setting"
+            },
+            "entry": {
+              "type": "host_native",
+              "path": "builtin://com.amitia/user-space-hub/surface",
+              "runtime_id": "host.user-space",
+              "content_hash": "builtin"
+            },
+            "sandbox": {
+              "type": "host_native"
+            },
+            "ordering": {
+              "priority": 229
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos",
+                "android",
+                "ios"
+              ]
+            },
+            "actions": [],
+            "integrity": {
+              "definition_hash": "user-space-page-v1"
+            }
+          }
+        },
+        {
+          "id": "user-space-routes",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "个人与设置中心路由"
+          },
+          "spec": {
+            "providerId": "user-space-routes",
+            "capability": "route.registry",
+            "mode": "replace",
+            "priority": 229,
+            "trustLevel": "official",
+            "entries": {
+              "web": {
+                "type": "declarative"
+              },
+              "electron_windows": {
+                "type": "declarative"
+              },
+              "electron_macos": {
+                "type": "declarative"
+              },
+              "electron_linux": {
+                "type": "declarative"
+              },
+              "mobile": {
+                "type": "declarative"
+              }
+            },
+            "metadata": {
+              "routes": [
+                {
+                  "id": "settings-root",
+                  "path": "/settings",
+                  "providerId": "user-space-page-provider",
+                  "capability": "page.provider",
+                  "title": "设置",
+                  "priority": 229
+                },
+                {
+                  "id": "settings-section",
+                  "path": "/settings/:section",
+                  "providerId": "user-space-page-provider",
+                  "capability": "page.provider",
+                  "title": "设置",
+                  "priority": 229
+                },
+                {
+                  "id": "settings-model",
+                  "path": "/settings/model/:modelType",
+                  "providerId": "user-space-page-provider",
+                  "capability": "page.provider",
+                  "title": "模型配置",
+                  "priority": 229
+                },
+                {
+                  "id": "my-space-root",
+                  "path": "/my-space",
+                  "providerId": "user-space-page-provider",
+                  "capability": "page.provider",
+                  "title": "我的空间",
+                  "priority": 229
+                },
+                {
+                  "id": "my-space-section",
+                  "path": "/my-space/:section",
+                  "providerId": "user-space-page-provider",
+                  "capability": "page.provider",
+                  "title": "我的空间",
+                  "priority": 229
+                },
+                {
+                  "id": "settings-models-mobile",
+                  "path": "/settings/models/:modelType",
+                  "providerId": "user-space-page-provider",
+                  "capability": "page.provider",
+                  "title": "模型配置",
+                  "priority": 229
+                },
+                {
+                  "id": "settings-devices-mobile",
+                  "path": "/settings/devices/:deviceAction",
+                  "providerId": "user-space-page-provider",
+                  "capability": "page.provider",
+                  "title": "设备管理",
+                  "priority": 229
+                },
+                {
+                  "id": "settings-toolbox-mobile",
+                  "path": "/settings/toolbox/:toolboxPage",
+                  "providerId": "user-space-page-provider",
+                  "capability": "page.provider",
+                  "title": "维护工具",
+                  "priority": 229
+                },
+                {
+                  "id": "settings-category-mobile",
+                  "path": "/settings/category/:categoryId",
+                  "providerId": "user-space-page-provider",
+                  "capability": "page.provider",
+                  "title": "设置分类",
+                  "priority": 229
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "user-space-page-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "个人与设置中心页面 Provider"
+          },
+          "spec": {
+            "providerId": "user-space-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 229,
+            "platforms": [
+              "web",
+              "windows",
+              "linux",
+              "macos",
+              "android",
+              "ios"
+            ],
+            "trustLevel": "official",
+            "entries": {
+              "*": {
+                "type": "schema_renderer",
+                "contributionId": "user-space-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/settings",
+                "/settings/:section",
+                "/settings/model/:modelType",
+                "/settings/models/:modelType",
+                "/settings/devices/:deviceAction",
+                "/settings/toolbox/:toolboxPage",
+                "/settings/category/:categoryId",
+                "/my-space",
+                "/my-space/:section"
+              ]
+            }
+          }
+        }
+      ],
+      "placement": "device",
+      "deviceRequirements": {
+        "platforms": [
+          "windows",
+          "linux",
+          "macos",
+          "android",
+          "ios"
+        ]
+      }
+    }
+  ],
+  "permissions": [],
+  "data": {
+    "schemaVersion": 1,
+    "scopes": [
+      "device"
+    ],
+    "backup": false,
+    "export": false,
+    "uninstall": "retain"
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "contentTreeHash": ""
+  }
+}

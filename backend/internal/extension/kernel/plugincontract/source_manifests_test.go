@@ -48,6 +48,8 @@ func TestBuiltInAndOrdinaryPluginSourcesAreSeparated(t *testing.T) {
 		"com.amitia/character-hub":         true,
 		"com.amitia/creative-workshop-hub": true,
 		"com.amitia/game-center-hub":       true,
+		"com.amitia/channels-hub":          true,
+		"com.amitia/user-space-hub":        true,
 	}
 	foundBuiltIns := make(map[string]bool, len(expectedBuiltIns))
 	for _, path := range sourceManifestPaths(t, builtInRoot) {

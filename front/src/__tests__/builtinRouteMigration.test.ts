@@ -11,7 +11,7 @@ import {
 describe("builtin route migration plan", () => {
   it("classifies every built-in business route", () => {
     expect(unclassifiedBuiltinRoutes()).toEqual([]);
-    expect(builtinRouteMigrationPlan().length).toBeGreaterThan(10);
+    expect(builtinRouteMigrationPlan().length).toBeGreaterThan(0);
   });
 
   it("maps nested routes to their top-level provider namespace", () => {
@@ -60,6 +60,22 @@ describe("builtin route migration plan", () => {
     expect(paths).not.toContain("/extensions/workflows");
     expect(paths).not.toContain("/extensions/workflows/:id");
     expect(paths).not.toContain("/privacy-scan");
+    expect(paths).not.toContain("/kernel/wasm");
+    expect(paths).not.toContain("/kernel/hooks");
+    expect(paths).not.toContain("/kernel/trusted-services");
+    expect(paths).not.toContain("/kernel/tasks");
+    expect(paths).not.toContain("/kernel/events");
+    expect(paths).not.toContain("/kernel/schedules");
+    expect(paths).not.toContain("/kernel/desktop");
+    expect(paths).not.toContain("/kernel/updates");
+    expect(paths).not.toContain("/kernel/dev-console");
+    expect(paths).not.toContain("/kernel/dev-mode");
+    expect(paths).not.toContain("/channel-center");
+    expect(paths).not.toContain("/settings");
+    expect(paths).not.toContain("/settings/system");
+    expect(paths).not.toContain("/settings/model");
+    expect(paths).not.toContain("/my-space");
+    expect(paths).not.toContain("/my-space/profile");
 
     const manifest = JSON.parse(readFileSync(
       resolve(__dirname, "../../../plugins-builtin/runtime-insights/amitia-extension.json"),
@@ -71,7 +87,21 @@ describe("builtin route migration plan", () => {
       .flatMap((module) => module.contributions)
       .flatMap((contribution) => contribution.spec?.metadata?.routes ?? [])
       .map((route) => route.path);
-    expect(routes).toEqual(expect.arrayContaining(["/runtime-debug", "/decision-viz", "/long-running"]));
+    expect(routes).toEqual(expect.arrayContaining([
+      "/runtime-debug",
+      "/decision-viz",
+      "/long-running",
+      "/kernel/wasm",
+      "/kernel/hooks",
+      "/kernel/trusted-services",
+      "/kernel/tasks",
+      "/kernel/events",
+      "/kernel/schedules",
+      "/kernel/desktop",
+      "/kernel/updates",
+      "/kernel/dev-console",
+      "/kernel/dev-mode",
+    ]));
 
     const workspaceManifest = JSON.parse(readFileSync(
       resolve(__dirname, "../../../plugins-builtin/workspace/amitia-extension.json"),
@@ -172,6 +202,36 @@ describe("builtin route migration plan", () => {
       "/character/:id/voice",
       "/character/:id/psyche",
       "/world-book",
+    ]));
+
+    const channelsHubManifest = JSON.parse(readFileSync(
+      resolve(__dirname, "../../../plugins-builtin/channels-hub/amitia-extension.json"),
+      "utf8",
+    )) as {
+      modules: Array<{ contributions: Array<{ spec?: { metadata?: { routes?: Array<{ path: string }> } } }> }>;
+    };
+    const channelsHubRoutes = channelsHubManifest.modules
+      .flatMap((module) => module.contributions)
+      .flatMap((contribution) => contribution.spec?.metadata?.routes ?? [])
+      .map((route) => route.path);
+    expect(channelsHubRoutes).toContain("/channel-center");
+
+    const userSpaceManifest = JSON.parse(readFileSync(
+      resolve(__dirname, "../../../plugins-builtin/user-space-hub/amitia-extension.json"),
+      "utf8",
+    )) as {
+      modules: Array<{ contributions: Array<{ spec?: { metadata?: { routes?: Array<{ path: string }> } } }> }>;
+    };
+    const userSpaceRoutes = userSpaceManifest.modules
+      .flatMap((module) => module.contributions)
+      .flatMap((contribution) => contribution.spec?.metadata?.routes ?? [])
+      .map((route) => route.path);
+    expect(userSpaceRoutes).toEqual(expect.arrayContaining([
+      "/settings",
+      "/settings/:section",
+      "/settings/model/:modelType",
+      "/my-space",
+      "/my-space/:section",
     ]));
 
     const creativeWorkshopManifest = JSON.parse(readFileSync(

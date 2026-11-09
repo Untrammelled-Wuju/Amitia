@@ -18,8 +18,18 @@ void main() {
   });
 
   test('closed built-in namespaces remain protected', () {
-    expect(isProtectedProviderRoutePath('${AppRoutes.settings}/plugin'), isTrue);
-    expect(isProtectedProviderRoutePath('${AppRoutes.memoryHub}/plugin'), isTrue);
-    expect(isProtectedProviderRoutePath('${AppRoutes.gameCenter}/plugin'), isTrue);
+    expect(isProtectedProviderRoutePath(AppRoutes.settings), isTrue);
+    expect(
+      isProtectedProviderRoutePath('${AppRoutes.settings}/plugin'),
+      isFalse,
+    );
+    expect(
+      isProtectedProviderRoutePath('${AppRoutes.memoryHub}/plugin'),
+      isTrue,
+    );
+    expect(
+      isProtectedProviderRoutePath('${AppRoutes.gameCenter}/plugin'),
+      isFalse,
+    );
   });
 }

@@ -16,6 +16,9 @@ const (
 	HostRuntimeCreativeCards       = "host.creative.character-cards"
 	HostRuntimeCreativePetInstall  = "host.creative.pet-installations"
 	HostRuntimeGamePlugin          = "host.game.plugin"
+	HostRuntimeChannelsHub         = "host.channels.hub"
+	HostRuntimeUserSpace           = "host.user-space"
+	HostRuntimeMobileNativePage    = "host.mobile.native-page"
 	HostRuntimeContinuityThreads   = "host.tasks.continuity"
 	HostRuntimeExtensionPackages   = "host.extensions.packages"
 	HostRuntimeExtensionMCP        = "host.extensions.mcp"
@@ -57,6 +60,9 @@ var hostRuntimeAllowlist = map[string]struct{}{
 	HostRuntimeCreativeCards:       {},
 	HostRuntimeCreativePetInstall:  {},
 	HostRuntimeGamePlugin:          {},
+	HostRuntimeChannelsHub:         {},
+	HostRuntimeUserSpace:           {},
+	HostRuntimeMobileNativePage:    {},
 	HostRuntimeContinuityThreads:   {},
 	HostRuntimeExtensionPackages:   {},
 	HostRuntimeExtensionMCP:        {},

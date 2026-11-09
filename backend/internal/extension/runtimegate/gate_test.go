@@ -20,6 +20,15 @@ func TestHostRuntimeAllowlist(t *testing.T) {
 	if !HostRuntimeAllowed(HostRuntimeCharacterActiveTask) {
 		t.Fatal("active task host runtime must be allowed")
 	}
+	if !HostRuntimeAllowed(HostRuntimeChannelsHub) {
+		t.Fatal("channels hub host runtime must be allowed")
+	}
+	if !HostRuntimeAllowed(HostRuntimeUserSpace) {
+		t.Fatal("user space host runtime must be allowed")
+	}
+	if !HostRuntimeAllowed(HostRuntimeMobileNativePage) {
+		t.Fatal("mobile native page host runtime must be allowed")
+	}
 	for _, runtimeID := range []string{
 		HostRuntimeKernelWasm,
 		HostRuntimeKernelHooks,

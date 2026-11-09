@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'ui_provider.dart';
 import 'ui_runtime_controller.dart';
+import 'mobile_host_runtime_registry.dart';
 import 'renderers/schema_provider_host.dart';
 import 'renderers/sandbox_web_provider_host.dart';
 import 'renderers/external_web_ui_provider_host.dart';
@@ -69,7 +70,12 @@ class _UIProviderHostState extends ConsumerState<UIProviderHost> {
     UIProviderDefinition provider,
     UIProviderEntry entry,
     Map<String, dynamic> renderContext,
+    UIContributionSnapshotEntry? contribution,
   ) {
+    final hostRuntime = resolveMobileHostRuntime(contribution?.runtimeId ?? '');
+    if (hostRuntime != null) {
+      return hostRuntime(renderContext);
+    }
     switch (entry.type) {
       case UIProviderEntryType.schemaRenderer:
         return SchemaProviderHost(
@@ -226,7 +232,13 @@ class _UIProviderHostState extends ConsumerState<UIProviderHost> {
       'platform': currentUIPlatform(),
       ...widget.context,
     };
-    final external = _externalRenderer(provider, entry, renderContext);
+    final contribution = snapshot?.contributionById(entry.contributionId ?? '');
+    final external = _externalRenderer(
+      provider,
+      entry,
+      renderContext,
+      contribution,
+    );
 
     switch (provider.mode) {
       case UIProviderMode.replace:

@@ -8,7 +8,7 @@
     "description": {
       "default": "通过统一 UI Provider 提供记忆总览、知识、情景、图谱、时间线和画像入口。"
     },
-    "version": "1.1.0",
+    "version": "1.2.0",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -38,7 +38,9 @@
       "web",
       "windows",
       "linux",
-      "macos"
+      "macos",
+      "android",
+      "ios"
     ]
   },
   "modules": [
@@ -76,9 +78,9 @@
           "ui",
           "ui_provider"
         ],
-        "maxContributions": 15,
+        "maxContributions": 17,
         "maxTools": 0,
-        "maxRoutes": 7,
+        "maxRoutes": 12,
         "maxServices": 0,
         "allowUnregister": true
       },
@@ -450,6 +452,57 @@
           }
         },
         {
+          "id": "memory-mobile-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "记忆移动端页面"
+          },
+          "spec": {
+            "contribution_id": "memory-mobile-page",
+            "extension_id": "com.amitia/memory-hub",
+            "module_id": "memory-hub-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "记忆"
+              },
+              "description": {
+                "default": "在移动端管理记忆、图谱、时间线、知识和用户画像。"
+              },
+              "icon": "memory"
+            },
+            "entry": {
+              "type": "host_native",
+              "path": "builtin://com.amitia/memory-hub/mobile",
+              "runtime_id": "host.mobile.native-page",
+              "content_hash": "builtin"
+            },
+            "sandbox": {
+              "type": "host_native"
+            },
+            "ordering": {
+              "priority": 213
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "actions": [],
+            "integrity": {
+              "definition_hash": "memory-mobile-page-v1"
+            }
+          }
+        },
+        {
           "id": "memory-hub-routes",
           "kind": "ui_provider",
           "adapter": "ui_provider",
@@ -474,6 +527,9 @@
                 "type": "declarative"
               },
               "electron_linux": {
+                "type": "declarative"
+              },
+              "mobile": {
                 "type": "declarative"
               }
             },
@@ -534,6 +590,46 @@
                   "capability": "page.provider",
                   "title": "用户画像",
                   "priority": 214
+                },
+                {
+                  "id": "memory-episodic-mobile",
+                  "path": "/memory/episodic",
+                  "providerId": "memory-mobile-page-provider",
+                  "capability": "page.provider",
+                  "title": "情景记忆",
+                  "priority": 213
+                },
+                {
+                  "id": "memory-graph-mobile",
+                  "path": "/memory/graph",
+                  "providerId": "memory-mobile-page-provider",
+                  "capability": "page.provider",
+                  "title": "记忆图谱",
+                  "priority": 213
+                },
+                {
+                  "id": "memory-timeline-mobile",
+                  "path": "/memory/timeline",
+                  "providerId": "memory-mobile-page-provider",
+                  "capability": "page.provider",
+                  "title": "时间线",
+                  "priority": 213
+                },
+                {
+                  "id": "memory-profiles-mobile",
+                  "path": "/memory/profiles",
+                  "providerId": "memory-mobile-page-provider",
+                  "capability": "page.provider",
+                  "title": "用户画像",
+                  "priority": 213
+                },
+                {
+                  "id": "memory-knowledge-mobile",
+                  "path": "/memory/knowledge",
+                  "providerId": "memory-mobile-page-provider",
+                  "capability": "page.provider",
+                  "title": "知识库",
+                  "priority": 213
                 }
               ],
               "sectionEntries": [
@@ -873,6 +969,41 @@
             "metadata": {
               "routes": [
                 "/profiles"
+              ]
+            }
+          }
+        },
+        {
+          "id": "memory-mobile-page-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "记忆移动端页面 Provider"
+          },
+          "spec": {
+            "providerId": "memory-mobile-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 213,
+            "platforms": [
+              "android",
+              "ios"
+            ],
+            "trustLevel": "official",
+            "entries": {
+              "mobile": {
+                "type": "schema_renderer",
+                "contributionId": "memory-mobile-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/memory/episodic",
+                "/memory/graph",
+                "/memory/timeline",
+                "/memory/profiles",
+                "/memory/knowledge"
               ]
             }
           }

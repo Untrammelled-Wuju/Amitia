@@ -29,8 +29,8 @@ extraResources:
     to: bundled-plugins/chat-import
     filter:
       - "*.amitiax"
-  - from: ../plugin/reminders
-    to: bundled-plugins/reminders
+  - from: ../plugin/active-task
+    to: bundled-plugins/active-task
     filter:
       - "*.amitiax"
   - from: ../plugin/storage
@@ -55,6 +55,14 @@ extraResources:
       - "*.amitiax"
   - from: ../plugin/game-center-hub
     to: bundled-plugins/game-center-hub
+    filter:
+      - "*.amitiax"
+  - from: ../plugin/channels-hub
+    to: bundled-plugins/channels-hub
+    filter:
+      - "*.amitiax"
+  - from: ../plugin/user-space-hub
+    to: bundled-plugins/user-space-hub
     filter:
       - "*.amitiax"
   - from: ../runtime/plugin-host/dist

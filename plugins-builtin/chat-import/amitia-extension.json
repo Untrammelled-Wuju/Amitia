@@ -8,7 +8,7 @@
     "description": {
       "default": "解析聊天记录、编辑消息、管理导入批次并晋升为设备会话。"
     },
-    "version": "1.0.0",
+    "version": "1.1.1",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -35,7 +35,9 @@
     "platforms": [
       "windows",
       "linux",
-      "macos"
+      "macos",
+      "android",
+      "ios"
     ]
   },
   "modules": [
@@ -74,9 +76,9 @@
           "ui",
           "ui_provider"
         ],
-        "maxContributions": 8,
+        "maxContributions": 6,
         "maxTools": 1,
-        "maxRoutes": 1,
+        "maxRoutes": 2,
         "maxServices": 0,
         "allowUnregister": true
       },
@@ -217,6 +219,57 @@
           ]
         },
         {
+          "id": "chat-import-mobile-page",
+          "kind": "ui_page",
+          "adapter": "ui",
+          "contractVersion": 1,
+          "name": {
+            "default": "聊天导入移动端页面"
+          },
+          "spec": {
+            "contribution_id": "chat-import-mobile-page",
+            "extension_id": "com.amitia/chat-import",
+            "module_id": "chat-import-runtime",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.page.provider",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "聊天导入"
+              },
+              "description": {
+                "default": "在移动端解析、编辑和导入聊天记录。"
+              },
+              "icon": "upload"
+            },
+            "entry": {
+              "type": "host_native",
+              "path": "builtin://com.amitia/chat-import/mobile",
+              "runtime_id": "host.mobile.native-page",
+              "content_hash": "builtin"
+            },
+            "sandbox": {
+              "type": "host_native"
+            },
+            "ordering": {
+              "priority": 248
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "actions": [],
+            "integrity": {
+              "definition_hash": "chat-import-mobile-page-v1"
+            }
+          }
+        },
+        {
           "id": "chat-import-routes",
           "kind": "ui_provider",
           "adapter": "ui_provider",
@@ -242,6 +295,9 @@
               },
               "electron_linux": {
                 "type": "declarative"
+              },
+              "mobile": {
+                "type": "declarative"
               }
             },
             "metadata": {
@@ -253,6 +309,14 @@
                   "capability": "page.provider",
                   "title": "聊天导入",
                   "priority": 249
+                },
+                {
+                  "id": "chat-import-mobile",
+                  "path": "/chat-import",
+                  "providerId": "chat-import-mobile-page-provider",
+                  "capability": "page.provider",
+                  "title": "聊天导入",
+                  "priority": 248
                 }
               ],
               "navigationItems": [
@@ -309,6 +373,37 @@
               ]
             }
           }
+        },
+        {
+          "id": "chat-import-mobile-page-provider",
+          "kind": "ui_provider",
+          "adapter": "ui_provider",
+          "contractVersion": 1,
+          "name": {
+            "default": "聊天导入移动端页面 Provider"
+          },
+          "spec": {
+            "providerId": "chat-import-mobile-page-provider",
+            "capability": "page.provider",
+            "mode": "replace",
+            "priority": 248,
+            "platforms": [
+              "android",
+              "ios"
+            ],
+            "trustLevel": "official",
+            "entries": {
+              "mobile": {
+                "type": "schema_renderer",
+                "contributionId": "chat-import-mobile-page"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/chat-import"
+              ]
+            }
+          }
         }
       ],
       "placement": "device",
@@ -316,7 +411,9 @@
         "platforms": [
           "windows",
           "linux",
-          "macos"
+          "macos",
+          "android",
+          "ios"
         ]
       }
     }
@@ -326,7 +423,7 @@
       "name": "tool.invoke",
       "reason": "通过插件工具执行聊天导入。",
       "required": true,
-      "scope": "extension"
+      "scope": "session"
     },
     {
       "name": "character.read",
