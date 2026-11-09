@@ -50,6 +50,7 @@ def main():
     parser.add_argument("--plugin-host", required=True)
     parser.add_argument("--task-host")
     parser.add_argument("--plugin-market-package", required=True)
+    parser.add_argument("--bundled-plugin-package", action="append", default=[])
     parser.add_argument("--surrealdb", required=True)
     parser.add_argument("--surrealdb-version", default="2.3.8")
     parser.add_argument("--source-commit", required=True)
@@ -64,6 +65,9 @@ def main():
     plugin_host = Path(args.plugin_host).resolve()
     task_host = Path(args.task_host).resolve() if args.task_host else None
     plugin_market_package = Path(args.plugin_market_package).resolve()
+    bundled_plugin_packages = [
+        Path(value).resolve() for value in args.bundled_plugin_package
+    ]
     required = [base_package, Path(args.backend), Path(args.surrealdb)]
     missing = [str(path) for path in required if not path.is_file()]
     if not plugin_host.is_dir():
@@ -72,6 +76,9 @@ def main():
         missing.append(str(task_host))
     if not plugin_market_package.is_file():
         missing.append(str(plugin_market_package))
+    missing.extend(
+        str(path) for path in bundled_plugin_packages if not path.is_file()
+    )
     if missing:
         raise RuntimeError("missing input: " + ", ".join(missing))
 
@@ -114,6 +121,11 @@ def main():
             shutil.copytree(task_host / "dist", task_host_target / "dist")
             copy_file(task_host / "package.json", task_host_target / "package.json")
         copy_file(plugin_market_package, runtime_root / "bundled-plugins" / "plugin-market" / plugin_market_package.name)
+        for package in bundled_plugin_packages:
+            copy_file(
+                package,
+                runtime_root / "bundled-plugins" / package.parent.name / package.name,
+            )
 
         for relative in [
             "backend/amitia-server",

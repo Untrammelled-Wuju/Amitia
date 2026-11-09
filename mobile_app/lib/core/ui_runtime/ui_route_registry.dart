@@ -49,7 +49,7 @@ const _openProviderRouteNamespaces = <String>{
 };
 
 const _protectedProviderRoutePaths = <String>{AppRoutes.settingsUIProviders};
-const _providerContentShellPaths = <String>{AppRoutes.me};
+const _providerContentShellPaths = <String>{AppRoutes.me, AppRoutes.settings};
 
 String? _rootNamespace(String path) {
   final normalized = path.trim();

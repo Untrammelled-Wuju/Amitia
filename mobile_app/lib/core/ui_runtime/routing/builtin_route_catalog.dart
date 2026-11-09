@@ -14,7 +14,9 @@ import '../../../features/extensions/presentation/pages/extension_center_page.da
 import '../../../features/extensions/presentation/pages/extension_page_host_page.dart';
 import '../../../features/tasks/presentation/pages/task_hub_page.dart';
 import '../../../features/memory/presentation/pages/memory_hub_page.dart';
+import '../../../features/profile/presentation/pages/character_world_book_hub_page.dart';
 import '../../../features/profile/presentation/pages/profile_hub_page.dart';
+import '../../../features/settings/presentation/pages/mobile_user_space_host.dart';
 import '../../../core/widgets/main_tab_scaffold.dart';
 import '../provider_tab_host.dart';
 
@@ -114,6 +116,23 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
       context: context,
       state: state,
       child: const ConversationSearchPage(),
+    ),
+  ),
+  GoRoute(
+    path: AppRoutes.meCharacters,
+    pageBuilder: (context, state) =>
+        amitiaSlidePage(state: state, child: const CharacterWorldBookHubPage()),
+  ),
+  GoRoute(
+    path: AppRoutes.settings,
+    pageBuilder: (context, state) => amitiaSlidePage(
+      state: state,
+      child: MobileUserSpaceHost(
+        context: {
+          'route': state.uri.toString(),
+          'queryParameters': state.uri.queryParameters,
+        },
+      ),
     ),
   ),
   GoRoute(

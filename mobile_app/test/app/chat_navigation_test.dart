@@ -200,6 +200,22 @@ UIProviderSnapshot _navigationSnapshot({Set<String> omittedTabs = const {}}) {
   );
 }
 
+UIProviderSnapshot _emptyNavigationSnapshot() {
+  return const UIProviderSnapshot(
+    providers: <UIProviderDefinition>[],
+    slots: <UISlotSnapshotEntry>[],
+    profile: UIProfile(
+      profileId: 'default',
+      name: 'Default',
+      selections: <String, String>{},
+    ),
+    profileLayers: <UIProfile>[],
+    context: UIProviderResolveContext(localRuntime: true),
+    resolved: <String, UIProviderDefinition>{},
+    version: 1,
+  );
+}
+
 GoRouter _router() {
   return GoRouter(
     initialLocation: AppRoutes.conversations,
@@ -297,6 +313,36 @@ void main() {
     expect(find.byKey(const ValueKey('main-tab-记忆')), findsOneWidget);
     expect(find.byKey(const ValueKey('main-tab-扩展')), findsOneWidget);
     expect(find.byKey(const ValueKey('main-tab-我的')), findsOneWidget);
+  });
+
+  testWidgets('插件导航与页面 Provider 全部缺失时五个核心入口仍可进入', (tester) async {
+    await tester.pumpWidget(
+      _app(_router(), snapshot: _emptyNavigationSnapshot()),
+    );
+    await tester.pumpAndSettle();
+
+    for (final label in ['消息', '任务', '记忆', '扩展', '我的']) {
+      expect(find.byKey(ValueKey('main-tab-$label')), findsOneWidget);
+    }
+
+    await tester.tap(find.byKey(const ValueKey('main-tab-任务')));
+    await tester.pumpAndSettle();
+    expect(find.byType(TaskHubPage), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('main-tab-记忆')));
+    await tester.pumpAndSettle();
+    expect(find.byType(MemoryHubPage), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('main-tab-扩展')));
+    await tester.pumpAndSettle();
+    expect(find.byType(ExtensionCenterPage), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('main-tab-我的')));
+    await tester.pumpAndSettle();
+    expect(find.byType(ProfileHubPage), findsOneWidget);
+    for (final label in ['角色', '创意工坊', '游戏模式', '设置']) {
+      expect(find.text(label), findsOneWidget);
+    }
   });
 
   testWidgets('五个底部入口可以切换', (tester) async {
@@ -442,7 +488,7 @@ void main() {
     );
   });
 
-  testWidgets('我的角色入口不含固定宿主页面', (tester) async {
+  testWidgets('我的角色入口恢复内置角色与世界书页面', (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(500, 1200);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -456,7 +502,7 @@ void main() {
 
     await tester.tap(find.text('角色'));
     await tester.pumpAndSettle();
-    expect(find.byType(CharacterWorldBookHubPage), findsNothing);
+    expect(find.byType(CharacterWorldBookHubPage), findsOneWidget);
   });
 
   testWidgets('角色与世界书二级页提供两个独立入口', (tester) async {

@@ -117,23 +117,28 @@ class _MainTabScaffoldState extends ConsumerState<MainTabScaffold> {
         glyph: AmitiaIconGlyph.messages,
       ),
     ];
-    const providerTabs = <(int, String)>[
-      (1, AppRoutes.tasks),
-      (2, AppRoutes.memoryHub),
-      (3, AppRoutes.extensions),
-      (4, AppRoutes.me),
+    const providerTabs = <(int, String, String, AmitiaIconGlyph)>[
+      (1, AppRoutes.tasks, '任务', AmitiaIconGlyph.tasks),
+      (2, AppRoutes.memoryHub, '记忆', AmitiaIconGlyph.memory),
+      (3, AppRoutes.extensions, '扩展', AmitiaIconGlyph.extensions),
+      (4, AppRoutes.me, '我的', AmitiaIconGlyph.profile),
     ];
-    for (final (branchIndex, route) in providerTabs) {
+    for (final (branchIndex, route, fallbackLabel, fallbackGlyph)
+        in providerTabs) {
       final item = items.cast<UINavigationItem?>().firstWhere(
         (candidate) => candidate?.matches(route) == true,
         orElse: () => null,
       );
-      if (item == null) continue;
       destinations.add(
         _MainTabDestination(
           branchIndex: branchIndex,
-          label: item.tabLabel.isEmpty ? item.label : item.tabLabel,
-          icon: item.icon,
+          label: item == null
+              ? fallbackLabel
+              : item.tabLabel.isEmpty
+              ? item.label
+              : item.tabLabel,
+          glyph: item == null ? fallbackGlyph : null,
+          icon: item?.icon,
         ),
       );
     }
