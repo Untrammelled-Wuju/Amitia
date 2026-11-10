@@ -178,13 +178,21 @@ class _SettingTile extends StatelessWidget {
         borderRadius: AppRadius.brMedium,
         child: Padding(
           padding: EdgeInsets.symmetric(
-            horizontal: AppSpacing.md,
+            horizontal: AppSpacing.lg,
             vertical: 13,
           ),
           child: Row(
             children: [
-              Icon(item.icon, size: 20, color: context.textSecondary),
-              SizedBox(width: AppSpacing.sm),
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: context.accentSoft,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(item.icon, size: 17, color: context.accentPrimary),
+              ),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

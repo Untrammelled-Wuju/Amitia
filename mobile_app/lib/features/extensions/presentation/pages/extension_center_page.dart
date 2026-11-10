@@ -190,10 +190,9 @@ class ExtensionCenterPage extends ConsumerWidget {
               ],
             ),
           ),
-          SizedBox(height: AppSpacing.lg),
         ],
         if (visibleCards.isEmpty) ...[
-          if (navigationItems.isEmpty) SizedBox(height: AppSpacing.lg),
+          SizedBox(height: AppSpacing.lg),
           Text('已安装', style: AppTypography.label(context)),
           Padding(
             padding: EdgeInsets.symmetric(vertical: AppSpacing.lg),
@@ -208,7 +207,7 @@ class ExtensionCenterPage extends ConsumerWidget {
           ),
         ],
         if (updates.isNotEmpty) ...[
-          if (navigationItems.isEmpty) SizedBox(height: AppSpacing.lg),
+          SizedBox(height: AppSpacing.lg),
           Text(
             '可更新 (${updates.length})',
             style: AppTypography.sectionTitle(context),
@@ -241,8 +240,7 @@ class ExtensionCenterPage extends ConsumerWidget {
           ),
         ],
         if (needsAction.isNotEmpty) ...[
-          if (navigationItems.isEmpty || updates.isNotEmpty)
-            SizedBox(height: AppSpacing.lg),
+          SizedBox(height: AppSpacing.lg),
           Text(
             '需要处理 (${needsAction.length})',
             style: AppTypography.sectionTitle(context),
@@ -275,6 +273,7 @@ class ExtensionCenterPage extends ConsumerWidget {
           ),
         ],
         if (installed.isNotEmpty) ...[
+          SizedBox(height: AppSpacing.lg),
           Text('已安装', style: AppTypography.sectionTitle(context)),
           SizedBox(height: AppSpacing.sm),
           ...installed.map(
