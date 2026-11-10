@@ -510,8 +510,15 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 func validateInboundRequest(request *Request) error {
 	request.Message = strings.TrimSpace(request.Message)
 	request.RequestID = strings.TrimSpace(request.RequestID)
-	if request.RequestID == "" || len(request.RequestID) > 128 || request.Message == "" || len(request.Message) > 128<<10 {
-		return fmt.Errorf("%w: 请求编号和消息内容无效", ErrInvalidRequest)
+	switch {
+	case request.RequestID == "":
+		return fmt.Errorf("%w: 请求编号为空", ErrInvalidRequest)
+	case len(request.RequestID) > 128:
+		return fmt.Errorf("%w: 请求编号长度 %d 超过上限 128", ErrInvalidRequest, len(request.RequestID))
+	case request.Message == "":
+		return fmt.Errorf("%w: 消息内容为空", ErrInvalidRequest)
+	case len(request.Message) > 128<<10:
+		return fmt.Errorf("%w: 消息内容长度 %d 超过上限 %d", ErrInvalidRequest, len(request.Message), 128<<10)
 	}
 	if err := validateForwardedContext(*request); err != nil {
 		return err

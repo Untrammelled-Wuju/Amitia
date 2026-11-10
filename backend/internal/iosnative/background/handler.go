@@ -102,6 +102,9 @@ func (h *BackgroundHandler) bridgeCall(ctx context.Context, request nativebridge
 	if h.bridge == nil {
 		return NewBackgroundError(request, ErrNativeBridgeUnavailable, "ios native bridge is not available")
 	}
+	if err := ctx.Err(); err != nil {
+		return NewBackgroundError(request, ErrTimeout, operation+" cancelled: "+err.Error())
+	}
 	done := make(chan nativebridge.Response, 1)
 	go func() {
 		resp, err := h.bridge.Execute(ctx, nativebridge.Request{
@@ -112,6 +115,10 @@ func (h *BackgroundHandler) bridgeCall(ctx context.Context, request nativebridge
 			Payload:         payload,
 		})
 		if err != nil {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				done <- NewBackgroundError(request, ErrTimeout, operation+" cancelled: "+err.Error())
+				return
+			}
 			done <- NewBackgroundError(request, ErrOutcomeUnknown, err.Error())
 			return
 		}
@@ -119,7 +126,7 @@ func (h *BackgroundHandler) bridgeCall(ctx context.Context, request nativebridge
 	}()
 	select {
 	case <-ctx.Done():
-		return NewBackgroundError(request, ErrTimeout, operation+" cancelled")
+		return NewBackgroundError(request, ErrTimeout, operation+" cancelled: "+ctx.Err().Error())
 	case resp := <-done:
 		return resp
 	}

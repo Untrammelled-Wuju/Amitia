@@ -563,7 +563,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 			var resolveErr error
 			threadID, resolveErr = services.ContinuityOwner.Resolve(c.Request.Context(), owner, request.RoleID, request.ConversationID, request.PrimaryWorkspaceID, request.Message, "", request.RequestID, continuityOwnerRequestID(request.RequestID+"|continuity-resolve"))
 			if resolveErr != nil {
-				c.JSON(409, gin.H{"code": "mesh.continuity_unavailable", "message": resolveErr.Error()})
+				c.JSON(409, gin.H{"code": codeForOwnedRuntimeError(resolveErr), "message": resolveErr.Error()})
 				return
 			}
 		}

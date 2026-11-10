@@ -461,9 +461,11 @@ func (ctx *wsConnContext) readLoop() {
 		sessionID, generation := ctx.conn.SessionSnapshot()
 		if env.MessageType != MessageTypeHello {
 			if env.RuntimeSessionID != runtimeidentity.RuntimeSessionID(sessionID) {
+				log.Warn("[runtime-v1-ws] runtime session mismatch: type=", env.MessageType, " name=", env.MessageName, " expected=", sessionID, " actual=", env.RuntimeSessionID)
 				return
 			}
 			if generation <= 0 || env.ConnectionGeneration != generation {
+				log.Warn("[runtime-v1-ws] connection generation mismatch: type=", env.MessageType, " name=", env.MessageName, " expected=", generation, " actual=", env.ConnectionGeneration)
 				return
 			}
 		}
@@ -510,16 +512,20 @@ func (ctx *wsConnContext) readLoop() {
 		case MessageTypeCommandAck:
 			var ackPayload CommandAckPayload
 			if err := json.Unmarshal(env.Payload, &ackPayload); err != nil {
+				log.Warn("[runtime-v1-ws] command ack payload unmarshal failed: ", err)
 				return
 			}
 			if err := ctx.handler.HandleCommandAck(ctx.conn, &env, &ackPayload); err != nil {
+				log.Warn("[runtime-v1-ws] command ack rejected: ", err)
 				return
 			}
 			if err := ctx.sendCommittedEventAck(); err != nil {
+				log.Warn("[runtime-v1-ws] command ack event acknowledgement failed: ", err)
 				return
 			}
 		case MessageTypePing:
 			if err := ctx.handler.HandleHeartbeat(ctx.conn); err != nil {
+				log.Warn("[runtime-v1-ws] heartbeat rejected: ", err)
 				return
 			}
 			pongEnv, err := ctx.handler.CreateEnvelope(MessageTypePong, "pong", ctx.conn.RuntimeID, runtimeidentity.ParseRuntimeSessionID(ctx.conn.SessionIDValue()), protocol.PongPayload{Time: time.Now()}, ctx.conn.SpaceID, ctx.conn.DeviceID)
@@ -531,9 +537,11 @@ func (ctx *wsConnContext) readLoop() {
 			}
 		default:
 			if _, err := ctx.handler.HandleEvent(ctx.conn, &env); err != nil {
+				log.Warn("[runtime-v1-ws] runtime event rejected: name=", env.MessageName, " sequence=", env.Sequence, " error=", err)
 				return
 			}
 			if err := ctx.sendCommittedEventAck(); err != nil {
+				log.Warn("[runtime-v1-ws] runtime event acknowledgement failed: ", err)
 				return
 			}
 		}

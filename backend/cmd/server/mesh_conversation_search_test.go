@@ -115,11 +115,41 @@ func TestMeshConversationSearchOwnerRoleAndCursorIsolation(t *testing.T) {
 	if _, _, err := p.store.ListPage(t.Context(), "conversation", "one", query); !errors.Is(err, coordination.ErrWrongOwner) {
 		t.Fatalf("changed search accepted old cursor: %v", err)
 	}
-	scope := coordination.ExecutionScope{TargetDeviceID: p.ownerID, CoreID: "core", ResourceOwnerID: "core", RoleOwnerID: "core", RoleID: "cloud-role", Coordinated: true}
+	scope := coordination.ExecutionScope{TargetDeviceID: p.ownerID, CoreID: "core", ResourceOwnerID: "core", RoleOwnerID: "core", RoleID: "one", Coordinated: true}
 	query.Cursor, query.SearchQuery = "", "正文关键词"
 	page, err := p.HistoricalConversationPage(t.Context(), scope, query)
 	if err != nil || len(page.Conversations) != 1 || page.NextCursor == "" {
 		t.Fatalf("historical search=%+v err=%v", page, err)
+	}
+	foreign := scope
+	foreign.RoleID = "two"
+	foreignQuery := query
+	foreignQuery.HistoricalListCursor, foreignQuery.SearchQuery = "", "正文关键词"
+	foreignPage, err := p.HistoricalConversationPage(t.Context(), foreign, foreignQuery)
+	if err != nil || len(foreignPage.Conversations) != 0 || foreignPage.NextCursor != "" {
+		t.Fatalf("foreign role history=%+v err=%v", foreignPage, err)
+	}
+	blank := scope
+	blank.RoleID = ""
+	if _, err := p.HistoricalConversationPage(t.Context(), blank, foreignQuery); !errors.Is(err, coordination.ErrWrongOwner) {
+		t.Fatalf("blank role history accepted: %v", err)
+	}
+	allMemory := scope
+	allMemory.RoleID = coordination.AllMemoryRole
+	if _, err := p.HistoricalConversationPage(t.Context(), allMemory, foreignQuery); !errors.Is(err, coordination.ErrWrongOwner) {
+		t.Fatalf("all-memory role history accepted: %v", err)
+	}
+	legacyScope := scope
+	legacyScope.ResourceOwnerID = p.ownerID
+	legacy, err := p.HistoricalConversations(t.Context(), legacyScope)
+	if err != nil || len(legacy) != 6 {
+		t.Fatalf("legacy history=%d err=%v", len(legacy), err)
+	}
+	legacyForeignScope := legacyScope
+	legacyForeignScope.RoleID = "two"
+	legacyForeign, err := p.HistoricalConversations(t.Context(), legacyForeignScope)
+	if err != nil || len(legacyForeign) != 0 {
+		t.Fatalf("legacy foreign history=%d err=%v", len(legacyForeign), err)
 	}
 	query.HistoricalListCursor, query.SearchQuery = page.NextCursor, "其他条件"
 	if _, err := p.HistoricalConversationPage(t.Context(), scope, query); !errors.Is(err, coordination.ErrWrongOwner) {

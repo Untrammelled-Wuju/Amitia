@@ -35,6 +35,8 @@ describe("图标导航栏布局", () => {
         "角色",
         "记忆",
         "任务",
+        "游戏模式",
+        "创意工坊",
       ]);
       expect(wrapper.find(".user-profile").exists()).toBe(true);
     } finally {

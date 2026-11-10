@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 import shutil
 import zipfile
 import base64
@@ -9,8 +10,23 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = ROOT.parents[1]
 STAGE = ROOT / ".build"
-OUTPUT = PROJECT_ROOT / "plugin" / "qa" / "qa-desktop-pet-plugin-1.0.0.petx"
-PACKAGE_VERSION = "1.0.0"
+SOURCE_MANIFEST = json.loads(
+    (ROOT / "amitia-extension.json").read_text(encoding="utf-8")
+)
+PACKAGE_VERSION = os.environ.get(
+    "AMITIA_QA_PET_VERSION",
+    SOURCE_MANIFEST["plugin"]["version"],
+)
+OUTPUT = (
+    PROJECT_ROOT
+    / "plugin"
+    / "qa"
+    / f"qa-desktop-pet-plugin-{PACKAGE_VERSION}.petx"
+)
+RELEASE_ID = os.environ.get(
+    "AMITIA_QA_PET_RELEASE_ID",
+    f"qa-pet-v1-release-{PACKAGE_VERSION}",
+)
 
 
 def digest_bytes(value):
@@ -76,59 +92,19 @@ def main():
     if STAGE.exists():
         shutil.rmtree(STAGE)
     STAGE.mkdir(parents=True)
-    manifest = {
-        "manifestVersion": 1,
-        "extension": {
-            "id": "com.amitia.qa/desktop-pet-plugin",
-            "name": {"default": "QA Desktop Pet Plugin"},
-            "description": {"default": "Amitia desktop pet packaging QA fixture"},
-            "version": PACKAGE_VERSION,
-            "license": "MIT",
-            "categories": ["desktop-pet", "qa"],
-        },
-        "publisher": {
-            "id": "com.amitia.qa",
-            "displayName": "Amitia QA",
-            "trustLevel": "trusted",
-        },
-        "compatibility": {
-            "minHostVersion": "0.1.0",
-            "platforms": ["windows", "linux", "macos", "android", "ios"],
-        },
-        "modules": [
-            {
-                "id": "qa-pet-runtime",
-                "name": {"default": "QA Desktop Pet Runtime"},
-                "type": "javascript",
-                "runtime": {
-                    "type": "javascript",
-                    "entryPoint": "dist/index.js",
-                },
-                "contributions": [
-                    {
-                        "id": "qa-pet-plugin",
-                        "kind": "petx",
-                        "name": {"default": "QA Desktop Pet Plugin"},
-                        "description": {"default": "QA desktop pet extension package"},
-                        "spec": {
-                            "contributionKind": "pet_resource",
-                            "displayName": "QA Desktop Pet Resource",
-                            "description": "Complete desktop pet resource bundle",
-                            "assetKind": "manifest",
-                            "resourceRef": "assets/pet/manifest.json",
-                        },
-                    }
-                ],
-            }
-        ],
-        "integrity": {"algorithm": "sha256", "contentTreeHash": ""},
-    }
+    manifest = json.loads(json.dumps(SOURCE_MANIFEST))
+    manifest["plugin"]["version"] = PACKAGE_VERSION
+    manifest["modules"][0]["version"] = PACKAGE_VERSION
     (STAGE / "manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
     module_dir = STAGE / "modules" / "qa-pet-runtime" / "dist"
     module_dir.mkdir(parents=True)
+    (module_dir.parent / "package.json").write_text(
+        json.dumps({"type": "module"}, indent=2) + "\n",
+        encoding="utf-8",
+    )
     (module_dir / "index.js").write_text(
         (
             "defineExtension({\n"
@@ -150,12 +126,15 @@ def main():
     )
     (frames_root / "0.png").write_bytes(frame)
     (asset_root / "preview.png").write_bytes(frame)
+    notice = (ROOT / "NOTICE.txt").read_bytes()
+    (asset_root / "NOTICE.txt").write_bytes(notice)
     frame_hash = digest_bytes(frame)
     action = {
         "actionKey": "idle",
         "anchor": {"coordinateSpace": "normalized_canvas", "x": 0.5, "y": 1.0},
         "cooldownMs": 0,
         "displayName": "Idle",
+        "frameCount": 1,
         "fps": 8,
         "frames": [
             {
@@ -209,6 +188,13 @@ def main():
             "role": "preview",
             "sha256": frame_hash,
         },
+        {
+            "bytes": len(notice),
+            "mediaType": "text/plain",
+            "path": "NOTICE.txt",
+            "role": "asset",
+            "sha256": digest_bytes(notice),
+        },
     ]
     pet_manifest = {
         "actions": [
@@ -237,7 +223,7 @@ def main():
             "transparentBackground": True,
         },
         "compatibility": {
-            "minRuntimeVersion": "0.0.0",
+            "minRuntimeVersion": "1.0.0",
             "renderMode": "sprite",
         },
         "defaultAction": "idle",
@@ -250,7 +236,7 @@ def main():
             "manifestHash": "",
             "totalBytes": sum(item["bytes"] for item in files),
         },
-        "license": {"noticePath": "", "spdx": "MIT"},
+        "license": {"noticePath": "NOTICE.txt", "spdx": "MIT"},
         "manifestFormat": "amitia-desktop-pet",
         "name": "QA Desktop Pet",
         "petId": "qa-pet-v1",
@@ -262,9 +248,9 @@ def main():
             "processingTaskId": "",
             "sourceType": "qa",
         },
-        "releaseId": "qa-pet-v1-release-1",
+        "releaseId": RELEASE_ID,
         "schemaVersion": 1,
-        "version": "1.0.0",
+        "version": PACKAGE_VERSION,
     }
     manifest_hash, content_root_hash = pet_content_root_hash(pet_manifest)
     pet_manifest["integrity"]["manifestHash"] = manifest_hash
@@ -320,7 +306,13 @@ def main():
     with zipfile.ZipFile(OUTPUT, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for path in sorted(STAGE.rglob("*"), key=lambda item: item.as_posix()):
             if path.is_file():
-                archive.write(path, path.relative_to(STAGE).as_posix())
+                entry = zipfile.ZipInfo(
+                    path.relative_to(STAGE).as_posix(),
+                    date_time=(2026, 1, 1, 0, 0, 0),
+                )
+                entry.compress_type = zipfile.ZIP_DEFLATED
+                entry.external_attr = 0o100644 << 16
+                archive.writestr(entry, path.read_bytes())
     print(json.dumps({"output": str(OUTPUT), "sha256": digest_bytes(OUTPUT.read_bytes())}))
 
 

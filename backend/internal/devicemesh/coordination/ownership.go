@@ -356,9 +356,13 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 	if err := s.validateContinuityExecutionBindings(ctx, tx, newContinuityBindings); err != nil {
 		return Acknowledgement{}, err
 	}
+	coreOwner := scope.CoreID
+	if coreOwner == "" {
+		coreOwner = s.ownerID
+	}
 	for _, conversation := range deletedConversations {
 		if keepConversationMemories[conversation] {
-			if _, err := tx.ExecContext(ctx, `UPDATE kernel_device_owned_resources SET deleted=1,body='null',revision=revision+1 WHERE owner_id=? AND kind IN ('message','summary','working','checkpoint','tool-result','group-round','group-delivery','group-invitation') AND deleted=0 AND json_extract(CAST(body AS TEXT),'$.conversationId')=? AND (role_id=? OR kind IN ('checkpoint','group-round','group-delivery','group-invitation'))`, s.ownerID, conversation, StorageRole(scope, "message")); err != nil {
+			if _, err := tx.ExecContext(ctx, `UPDATE kernel_device_owned_resources SET deleted=1,body='null',revision=revision+1 WHERE owner_id IN (?,?) AND kind IN ('message','summary','working','checkpoint','tool-result','group-round','group-delivery','group-invitation') AND deleted=0 AND json_extract(CAST(body AS TEXT),'$.conversationId')=? AND (role_id=? OR kind IN ('checkpoint','group-round','group-delivery','group-invitation'))`, s.ownerID, coreOwner, conversation, StorageRole(scope, "message")); err != nil {
 				return Acknowledgement{}, err
 			}
 			if _, err := tx.ExecContext(ctx, `UPDATE kernel_device_owned_resources SET deleted=1,body='null',revision=revision+1 WHERE owner_id=? AND role_id=? AND kind='checkpoint' AND deleted=0 AND json_extract(CAST(body AS TEXT),'$.mutations[0].body.conversationId')=?`, s.ownerID, scope.RoleID, conversation); err != nil {
@@ -366,7 +370,7 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 			}
 			continue
 		}
-		rows, err := tx.QueryContext(ctx, `SELECT resource_id FROM kernel_device_owned_resources WHERE owner_id=? AND (role_id=? OR json_extract(CAST(body AS TEXT),'$.executionScope.roleId')=?) AND kind='memory' AND deleted=0 AND json_extract(CAST(body AS TEXT),'$.conversationId')=?`, s.ownerID, scope.RoleID, scope.RoleID, conversation)
+		rows, err := tx.QueryContext(ctx, `SELECT resource_id FROM kernel_device_owned_resources WHERE owner_id IN (?,?) AND (role_id=? OR json_extract(CAST(body AS TEXT),'$.executionScope.roleId')=?) AND kind='memory' AND deleted=0 AND json_extract(CAST(body AS TEXT),'$.conversationId')=?`, s.ownerID, coreOwner, scope.RoleID, scope.RoleID, conversation)
 		if err != nil {
 			return Acknowledgement{}, err
 		}
@@ -383,7 +387,7 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 			return Acknowledgement{}, err
 		}
 		rows.Close()
-		if _, err := tx.ExecContext(ctx, `UPDATE kernel_device_owned_resources SET deleted=1,body='null',revision=revision+1 WHERE owner_id=? AND (role_id=? OR (kind='memory' AND json_extract(CAST(body AS TEXT),'$.executionScope.roleId')=?)) AND kind<>'conversation' AND deleted=0 AND json_extract(CAST(body AS TEXT),'$.conversationId')=?`, s.ownerID, scope.RoleID, scope.RoleID, conversation); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE kernel_device_owned_resources SET deleted=1,body='null',revision=revision+1 WHERE owner_id IN (?,?) AND (role_id=? OR (kind='memory' AND json_extract(CAST(body AS TEXT),'$.executionScope.roleId')=?)) AND kind<>'conversation' AND deleted=0 AND json_extract(CAST(body AS TEXT),'$.conversationId')=?`, s.ownerID, coreOwner, scope.RoleID, scope.RoleID, conversation); err != nil {
 			return Acknowledgement{}, err
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE kernel_device_owned_resources SET deleted=1,body='null',revision=revision+1 WHERE owner_id=? AND role_id=? AND kind='checkpoint' AND deleted=0 AND json_extract(CAST(body AS TEXT),'$.mutations[0].body.conversationId')=?`, s.ownerID, scope.RoleID, conversation); err != nil {
@@ -407,13 +411,13 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 		if changed.conversation == "" {
 			continue
 		}
-		if _, err := tx.ExecContext(ctx, `UPDATE kernel_device_owned_resources SET deleted=1,body='null',revision=revision+1 WHERE owner_id=? AND role_id=? AND kind IN ('summary','working') AND deleted=0 AND json_extract(CAST(body AS TEXT),'$.conversationId')=?`, s.ownerID, scope.RoleID, changed.conversation); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE kernel_device_owned_resources SET deleted=1,body='null',revision=revision+1 WHERE owner_id IN (?,?) AND role_id=? AND kind IN ('summary','working') AND deleted=0 AND json_extract(CAST(body AS TEXT),'$.conversationId')=?`, s.ownerID, coreOwner, scope.RoleID, changed.conversation); err != nil {
 			return Acknowledgement{}, err
 		}
 		if changed.request == "" {
 			continue
 		}
-		rows, err := tx.QueryContext(ctx, `SELECT resource_id FROM kernel_device_owned_resources WHERE owner_id=? AND (role_id=? OR json_extract(CAST(body AS TEXT),'$.executionScope.roleId')=?) AND kind='memory' AND deleted=0 AND json_extract(CAST(body AS TEXT),'$.executionScope.requestId') IN (?,?)`, s.ownerID, scope.RoleID, scope.RoleID, changed.request, changed.request+"|memory")
+		rows, err := tx.QueryContext(ctx, `SELECT resource_id FROM kernel_device_owned_resources WHERE owner_id IN (?,?) AND (role_id=? OR json_extract(CAST(body AS TEXT),'$.executionScope.roleId')=?) AND kind='memory' AND deleted=0 AND json_extract(CAST(body AS TEXT),'$.executionScope.requestId') IN (?,?)`, s.ownerID, coreOwner, scope.RoleID, scope.RoleID, changed.request, changed.request+"|memory")
 		if err != nil {
 			return Acknowledgement{}, err
 		}
@@ -430,15 +434,15 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 			return Acknowledgement{}, err
 		}
 		rows.Close()
-		if _, err := tx.ExecContext(ctx, `UPDATE kernel_device_owned_resources SET deleted=1,body='null',revision=revision+1 WHERE owner_id=? AND (role_id=? OR json_extract(CAST(body AS TEXT),'$.executionScope.roleId')=?) AND kind='memory' AND deleted=0 AND json_extract(CAST(body AS TEXT),'$.executionScope.requestId') IN (?,?)`, s.ownerID, scope.RoleID, scope.RoleID, changed.request, changed.request+"|memory"); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE kernel_device_owned_resources SET deleted=1,body='null',revision=revision+1 WHERE owner_id IN (?,?) AND (role_id=? OR json_extract(CAST(body AS TEXT),'$.executionScope.roleId')=?) AND kind='memory' AND deleted=0 AND json_extract(CAST(body AS TEXT),'$.executionScope.requestId') IN (?,?)`, s.ownerID, coreOwner, scope.RoleID, scope.RoleID, changed.request, changed.request+"|memory"); err != nil {
 			return Acknowledgement{}, err
 		}
 	}
 	for _, source := range changedMemories {
-		statement := `UPDATE kernel_device_owned_resources SET deleted=1,body='null',revision=revision+1 WHERE owner_id=? AND source_id=? AND deleted=0`
-		arguments := []any{s.ownerID, source}
+		statement := `UPDATE kernel_device_owned_resources SET deleted=1,body='null',revision=revision+1 WHERE owner_id IN (?,?) AND source_id=? AND deleted=0`
+		arguments := []any{s.ownerID, coreOwner, source}
 		var sourceDeleted bool
-		if err := tx.QueryRowContext(ctx, `SELECT deleted FROM kernel_device_owned_resources WHERE owner_id=? AND kind='memory' AND resource_id=?`, s.ownerID, source).Scan(&sourceDeleted); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT deleted FROM kernel_device_owned_resources WHERE owner_id IN (?,?) AND kind='memory' AND resource_id=?`, s.ownerID, coreOwner, source).Scan(&sourceDeleted); err != nil {
 			return Acknowledgement{}, err
 		}
 		if !sourceDeleted {

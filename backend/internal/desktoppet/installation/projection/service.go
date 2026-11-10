@@ -5,6 +5,7 @@ package projection
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -46,8 +47,12 @@ func (s *Service) UpdateProjection(ctx context.Context, spaceID, deviceID string
 func (s *Service) HandleRuntimeHeartbeat(ctx context.Context, spaceID, deviceID, runtimeID string, heartbeat *coordinator.RuntimeHeartbeat) error {
 	return s.UpdateProjection(ctx, spaceID, deviceID, func(p *InstallationRuntimeProjection) error {
 		p.RuntimeID = runtimeID
-		p.InstallationID = heartbeat.InstallationID
-		p.PetID = heartbeat.PetID
+		if strings.TrimSpace(heartbeat.InstallationID) != "" {
+			p.InstallationID = heartbeat.InstallationID
+		}
+		if strings.TrimSpace(heartbeat.PetID) != "" {
+			p.PetID = heartbeat.PetID
+		}
 		if heartbeat.AppliedDesiredRevision >= p.AppliedDesiredRevision {
 			p.AppliedDesiredRevision = heartbeat.AppliedDesiredRevision
 		}

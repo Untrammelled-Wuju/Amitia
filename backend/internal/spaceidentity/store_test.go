@@ -3,6 +3,7 @@ package spaceidentity
 import (
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 )
 
@@ -40,5 +41,50 @@ func TestOpenRejectsInvalidIdentityWithoutRegenerating(t *testing.T) {
 	}
 	if string(current) != string(original) {
 		t.Fatal("invalid identity file was overwritten")
+	}
+}
+
+func TestOpenConcurrentProcessesConvergeOnOneIdentity(t *testing.T) {
+	dataDir := t.TempDir()
+	const workers = 64
+	start := make(chan struct{})
+	spaceIDs := make(chan string, workers)
+	errs := make(chan error, workers)
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			store, err := Open(dataDir)
+			if err != nil {
+				errs <- err
+				return
+			}
+			spaceIDs <- store.SpaceID()
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(spaceIDs)
+	close(errs)
+	for err := range errs {
+		t.Fatal(err)
+	}
+	var canonical string
+	for spaceID := range spaceIDs {
+		if canonical == "" {
+			canonical = spaceID
+			continue
+		}
+		if spaceID != canonical {
+			t.Fatalf("concurrent identity mismatch: %s != %s", spaceID, canonical)
+		}
+	}
+	if canonical == "" {
+		t.Fatal("no concurrent identity was created")
+	}
+	if _, err := os.Stat(filepath.Join(dataDir, "identity", "space.json")); err != nil {
+		t.Fatalf("persisted identity missing: %v", err)
 	}
 }

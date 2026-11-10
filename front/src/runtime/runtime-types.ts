@@ -115,6 +115,7 @@ export interface AmitiaDesktopAPI {
     config: DeploymentModeConfig,
   ): Promise<DeploymentModeConfig>;
   getRuntimeStatus(): Promise<RuntimeStatus>;
+  onRuntimeEndpointChanged(callback: () => void): () => void;
   openLogsDirectory(): Promise<void>;
   selectAgentSkillDirectory(): Promise<AgentSkillDirectorySelection | null>;
   selectMCPRoot(): Promise<{ path: string; name: string } | null>;

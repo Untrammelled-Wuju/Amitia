@@ -9,6 +9,7 @@
     "version",
     "playbackMode",
     "fps",
+    "frameCount",
     "interruptible",
     "priority",
     "cooldownMs",
@@ -47,6 +48,10 @@
       "type": "integer",
       "minimum": 1,
       "maximum": 120
+    },
+    "frameCount": {
+      "type": "integer",
+      "minimum": 1
     },
     "interruptible": {
       "type": "boolean"

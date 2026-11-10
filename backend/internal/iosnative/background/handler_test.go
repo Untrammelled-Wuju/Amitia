@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -1125,6 +1126,49 @@ func TestHandler_ContextCancel(t *testing.T) {
 	}
 	if resp.Error.Code != ErrTimeout {
 		t.Errorf("expected ErrTimeout, got %s", resp.Error.Code)
+	}
+}
+
+func TestHandler_ContextCancelNeverReportsOutcomeUnknown(t *testing.T) {
+	for attempt := 0; attempt < 200; attempt++ {
+		bridge := &mockBackgroundBridge{delay: time.Millisecond}
+		h := NewBackgroundHandler(bridge)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		resp := h.Execute(ctx, baseBackgroundRequest(OperationStatus))
+		if resp.Status != "error" || resp.Error == nil {
+			t.Fatalf("attempt %d: expected error response, got %+v", attempt, resp)
+		}
+		if resp.Error.Code != ErrTimeout {
+			t.Fatalf("attempt %d: expected %s, got %s (%s)", attempt, ErrTimeout, resp.Error.Code, resp.Error.Message)
+		}
+		if !strings.Contains(resp.Error.Message, context.Canceled.Error()) {
+			t.Fatalf("attempt %d: original cancel error dropped from message: %s", attempt, resp.Error.Message)
+		}
+	}
+}
+
+func TestHandler_CancelDuringBridgeCallReportsTimeout(t *testing.T) {
+	bridge := &mockBackgroundBridge{delay: 2 * time.Second}
+	h := NewBackgroundHandler(bridge)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		cancel()
+	}()
+
+	resp := h.Execute(ctx, baseBackgroundRequest(OperationStatus))
+	if resp.Status != "error" || resp.Error == nil {
+		t.Fatalf("expected error response, got %+v", resp)
+	}
+	if resp.Error.Code != ErrTimeout {
+		t.Fatalf("expected %s, got %s (%s)", ErrTimeout, resp.Error.Code, resp.Error.Message)
+	}
+	if !strings.Contains(resp.Error.Message, context.Canceled.Error()) {
+		t.Fatalf("original cancel error dropped from message: %s", resp.Error.Message)
 	}
 }
 

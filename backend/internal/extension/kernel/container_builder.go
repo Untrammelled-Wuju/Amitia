@@ -463,7 +463,6 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	permSnapshotStore := permission.NewSQLitePermissionSnapshotStore(db)
 	permBroker := permission.NewDefaultPermissionBroker(permDefRegistry, permStorage)
 	permBroker.SetSnapshotStore(permSnapshotStore)
-	permBroker.SetTrustLevelChecker(newRepositoryPermissionTrustChecker(instRepo, defRepo))
 	permBroker.InstallationPolicy = newInstallationPermissionPolicy(permRepo, instRepo, defRepo)
 	permBroker.PersistentOverride = map[string]struct{}{
 		permission.PermissionServiceRuntimeExecute: {},
@@ -582,6 +581,8 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	packageSec := package_security.NewPackageSecurityServiceAtRoot(package_security.DefaultArchivePolicy(), package_security.NewSQLiteAuditWriter(db), b.extRoot)
 	packageRepo := NewPackageRepository(db)
 	packageArtifactStore := NewPackageArtifactStore(b.extRoot)
+	permBroker.SetTrustLevelChecker(newRepositoryPermissionTrustChecker(instRepo, defRepo).
+		withBundledProvenance(newBundledInstallationProvenance(packageRepo)))
 	packageArtifactStoreAdapter := &kernelArtifactStoreAdapter{store: packageArtifactStore}
 	packageRepoAdapter := &kernelArtifactRegistryAdapter{repo: packageRepo}
 	packageGenerationStore := NewPackageGenerationStore(b.extRoot)

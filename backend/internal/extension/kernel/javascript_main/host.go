@@ -608,6 +608,7 @@ func (h *PluginHost) readLoop() {
 		copy(data, frame)
 		env, err := jsonrpc.DecodeEnvelope(data)
 		if err != nil {
+			h.reportUndecodableFrame(data, err)
 			continue
 		}
 		switch env.Kind {
@@ -887,6 +888,22 @@ func withHostInvocationActor(ctx context.Context, invocation capability.ToolInvo
 	})
 }
 
+func (h *PluginHost) reportUndecodableFrame(data []byte, decodeErr error) {
+	message := fmt.Sprintf("jsonrpc: undecodable frame from runtime: %v: %s", decodeErr, string(data))
+	amitialog.Printf("[js-runtime:%s] %s", h.instanceID, message)
+	var probe struct {
+		ID json.RawMessage `json:"id"`
+	}
+	if err := json.Unmarshal(data, &probe); err != nil {
+		return
+	}
+	var id jsonrpc.RequestID
+	if err := json.Unmarshal(probe.ID, &id); err != nil || !id.IsSet() {
+		return
+	}
+	h.deliverResponse(jsonrpc.EncodeErrorResponse(id, jsonrpc.NewError(jsonrpc.ErrCodeProtocol, message, false, jsonrpc.CategoryProtocol)))
+}
+
 func (h *PluginHost) deliverResponse(resp *jsonrpc.Response) {
 	h.pendingMu.Lock()
 	ch, ok := h.pending[resp.ID.String()]
@@ -1083,14 +1100,14 @@ func (h *PluginHost) InvokeWithContext(ctx context.Context, contributionID strin
 			timeout = d
 		}
 	}
-	callCtx, cancel := timeoutpolicy.WithTimeout(ctx, timeout)
+	callCtx, cancel := context.WithTimeout(ctx, timeoutpolicy.Bounded(timeout))
 	defer cancel()
 	resp, err := h.sendRequestWithInvocation(callCtx, "runtime.invoke", params, &invocation)
 	if err != nil {
 		return nil, err
 	}
 	if resp.Error != nil {
-		return nil, fmt.Errorf("invoke error: %s", resp.Error.Message)
+		return nil, fmt.Errorf("invoke error: %w", resp.Error)
 	}
 	var result interface{}
 	if len(resp.Result) > 0 {

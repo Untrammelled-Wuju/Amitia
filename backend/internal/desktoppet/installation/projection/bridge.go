@@ -142,6 +142,10 @@ func (b *ProjectionBridge) processEvent(ctx context.Context, event RuntimeEventR
 		return b.handleStateSnapshot(ctx, event)
 	case "runtime.command.acknowledged", "command.ack":
 		return b.handleCommandAcknowledged(ctx, event)
+	case "runtime.state.desired_applied":
+		return b.handleDesiredStateResult(ctx, event, true)
+	case "runtime.state.desired_rejected":
+		return b.handleDesiredStateResult(ctx, event, false)
 	default:
 		return nil
 	}
@@ -178,7 +182,7 @@ func (b *ProjectionBridge) handleStateSnapshot(ctx context.Context, event Runtim
 		ActualReleaseID:         snapshot.ReleaseID,
 		ActualVisible:           boolToInt(snapshot.WindowStatus == "visible"),
 		ActualActionKey:         snapshot.CurrentActionKey,
-		ActualHealth:            mapHealthStatus(snapshot.PlaybackStatus),
+		ActualHealth:            deriveSnapshotHealth(snapshot),
 		Timestamp:               snapshot.CapturedAt,
 	}
 	return b.service.HandleRuntimeHeartbeat(ctx, identity.SpaceID, identity.DeviceID, identity.RuntimeID, heartbeat)
@@ -221,37 +225,104 @@ func (b *ProjectionBridge) handleCommandAcknowledged(ctx context.Context, event 
 	if err := b.completeRecenterOperationFromACK(ctx, command.IdempotencyKey, ack.Status); err != nil {
 		return err
 	}
-	return b.completeDesiredStateOperationFromACK(ctx, identity.SpaceID, identity.DeviceID, command.DesiredRevision, ack.Status)
+	return b.completeDesiredStateOperationFromACK(ctx, identity.SpaceID, identity.DeviceID, command.DesiredRevision, ack.Status, "", "")
 }
 
-func (b *ProjectionBridge) completeDesiredStateOperationFromACK(ctx context.Context, spaceID, deviceID string, desiredRevision int64, ackStatus string) error {
-	if desiredRevision <= 0 {
-		return nil
+type desiredStateResultPayload struct {
+	CommandID       string `json:"commandId"`
+	DesiredRevision int64  `json:"desiredRevision"`
+	ErrorCode       string `json:"errorCode"`
+	ErrorMessage    string `json:"errorMessage"`
+}
+
+func (b *ProjectionBridge) handleDesiredStateResult(ctx context.Context, event RuntimeEventRecord, success bool) error {
+	var payload desiredStateResultPayload
+	if err := json.Unmarshal(event.Payload, &payload); err != nil {
+		return err
 	}
-	var state struct {
-		OperationID string `gorm:"column:operation_id"`
-	}
-	err := b.db.WithContext(ctx).Table("desktop_pet_runtime_desired_states").
-		Select("operation_id").
-		Where("space_id = ? AND device_id = ? AND desired_revision = ?", spaceID, deviceID, desiredRevision).
-		Take(&state).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil
-	}
+	identity, err := b.sessionIdentity(ctx, event.RuntimeSessionID)
 	if err != nil {
 		return err
 	}
-	if state.OperationID == "" {
+	commandID := strings.TrimSpace(payload.CommandID)
+	if commandID == "" {
+		commandID = event.CommandID
+	}
+	desiredRevision := payload.DesiredRevision
+	if commandID != "" {
+		var command runtimeCommandProjection
+		if err := b.db.WithContext(ctx).Where("id = ?", commandID).First(&command).Error; err != nil {
+			return fmt.Errorf("projection bridge: load desired-state command %s: %w", commandID, err)
+		}
+		if desiredRevision == 0 {
+			desiredRevision = command.DesiredRevision
+		}
+	}
+	result := &coordinator.CommandResult{
+		Success:         success,
+		AppliedRevision: desiredRevision,
+		Timestamp:       time.Now().UTC().Format(time.RFC3339),
+	}
+	if err := b.service.HandleCommandResult(ctx, identity.SpaceID, identity.DeviceID, result); err != nil {
+		return err
+	}
+	status := "failed_terminal"
+	if success {
+		status = "completed"
+	}
+	return b.completeDesiredStateOperationFromACK(
+		ctx,
+		identity.SpaceID,
+		identity.DeviceID,
+		desiredRevision,
+		status,
+		payload.ErrorCode,
+		payload.ErrorMessage,
+	)
+}
+
+func (b *ProjectionBridge) completeDesiredStateOperationFromACK(ctx context.Context, spaceID, deviceID string, desiredRevision int64, ackStatus, errorCode, errorMessage string) error {
+	if desiredRevision <= 0 {
 		return nil
 	}
 	var op operation.InstallationOperation
-	if err := b.db.WithContext(ctx).Where("id = ?", state.OperationID).First(&op).Error; err != nil {
-		return err
+	operationTypes := []string{
+		operation.TypeEnable,
+		operation.TypeDisable,
+		operation.TypeSettings,
+		operation.TypeDefaultAction,
 	}
-	switch op.OperationType {
-	case operation.TypeEnable, operation.TypeDisable, operation.TypeSettings, operation.TypeDefaultAction:
-	default:
-		return nil
+	err := b.db.WithContext(ctx).
+		Where(
+			"space_id = ? AND device_id = ? AND desired_revision = ? AND operation_type IN ?",
+			spaceID,
+			deviceID,
+			desiredRevision,
+			operationTypes,
+		).
+		Order("created_at DESC").
+		First(&op).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		var state struct {
+			OperationID string `gorm:"column:operation_id"`
+		}
+		stateErr := b.db.WithContext(ctx).Table("desktop_pet_runtime_desired_states").
+			Select("operation_id").
+			Where("space_id = ? AND device_id = ? AND desired_revision = ?", spaceID, deviceID, desiredRevision).
+			Take(&state).Error
+		if errors.Is(stateErr, gorm.ErrRecordNotFound) {
+			return nil
+		}
+		if stateErr != nil {
+			return stateErr
+		}
+		if state.OperationID == "" {
+			return nil
+		}
+		err = b.db.WithContext(ctx).Where("id = ?", state.OperationID).First(&op).Error
+	}
+	if err != nil {
+		return err
 	}
 	if op.IsTerminal() {
 		return nil
@@ -270,7 +341,12 @@ func (b *ProjectionBridge) completeDesiredStateOperationFromACK(ctx context.Cont
 		installationSyncState = "confirmed"
 	case "failed_terminal":
 		operationUpdates["status"] = operation.OpStatusFailedTerminal
-		operationUpdates["error_code"] = "RUNTIME_COMMAND_FAILED"
+		operationUpdates["stage"] = operation.OpStatusFailedTerminal
+		if strings.TrimSpace(errorCode) == "" {
+			errorCode = "RUNTIME_COMMAND_FAILED"
+		}
+		operationUpdates["error_code"] = strings.TrimSpace(errorCode)
+		operationUpdates["error_message"] = strings.TrimSpace(errorMessage)
 		installationSyncState = "failed"
 	default:
 		return nil
@@ -363,14 +439,19 @@ func (b *ProjectionBridge) markDelivered(ctx context.Context, eventID string) er
 	return nil
 }
 
-func mapHealthStatus(playbackStatus string) string {
-	switch playbackStatus {
-	case "playing", "holding":
-		return "healthy"
-	case "failed":
-		return "failed"
-	case "idle", "stopped":
+func deriveSnapshotHealth(snapshot StateSnapshotPayload) string {
+	switch {
+	case snapshot.InstanceStatus == "absent" || snapshot.InstanceStatus == "stopped":
 		return "online_no_pet"
+	case snapshot.InstanceStatus == "failed" || snapshot.WindowStatus == "failed" ||
+		snapshot.RendererStatus == "crashed" || snapshot.RendererStatus == "failed" ||
+		snapshot.PlaybackStatus == "failed":
+		return "failed"
+	case snapshot.RendererStatus == "unresponsive":
+		return "degraded"
+	case snapshot.InstanceStatus == "ready" && snapshot.RendererStatus == "runtime_ready" &&
+		(snapshot.WindowStatus == "visible" || snapshot.WindowStatus == "hidden"):
+		return "healthy"
 	default:
 		return "syncing"
 	}

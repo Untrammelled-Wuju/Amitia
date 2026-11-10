@@ -1,0 +1,5 @@
+Amitia QA Desktop Pet Plugin
+
+Copyright 2026 Amitia QA
+
+Licensed under the MIT License.

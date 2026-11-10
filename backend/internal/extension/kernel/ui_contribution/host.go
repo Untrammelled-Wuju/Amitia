@@ -879,7 +879,7 @@ func (b *UIBridge) handleActionInvoke(ctx context.Context, sess *BridgeSession, 
 	}
 	result, err := handler(ctx, sess, action, UIActionInvocation{Input: p.Input, Meta: p.Meta})
 	if err != nil {
-		return BridgeResponse{OK: false, Error: NewUIError(UIErrRuntimeUnavailable, err.Error(), nil)}
+		return BridgeResponse{OK: false, Error: NewUIError(ClassifyFailure(err), err.Error(), nil)}
 	}
 	return BridgeResponse{OK: true, Result: result}
 }
@@ -903,7 +903,7 @@ func (b *UIBridge) handleDataRequest(ctx context.Context, sess *BridgeSession, p
 	}
 	result, err := handler(ctx, sess, p.Key, p.Params)
 	if err != nil {
-		return BridgeResponse{OK: false, Error: NewUIError(UIErrRuntimeUnavailable, err.Error(), nil)}
+		return BridgeResponse{OK: false, Error: NewUIError(ClassifyFailure(err), err.Error(), nil)}
 	}
 	return BridgeResponse{OK: true, Result: result}
 }

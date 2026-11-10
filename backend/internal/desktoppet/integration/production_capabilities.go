@@ -105,11 +105,11 @@ func (c *productionResourceCapability) AttachPluginResource(ctx context.Context,
 }
 
 func (c *productionResourceCapability) DetachPluginResource(ctx context.Context, handle PetResourceHandle) error {
-	c.mu.Lock()
-	req, ok := c.cache[handle]
-	c.mu.Unlock()
+	c.mu.RLock()
+	_, ok := c.cache[handle]
+	c.mu.RUnlock()
 	if !ok {
-		return fmt.Errorf("DetachPluginResource: handle %s not found", handle)
+		return nil
 	}
 	if c.release == nil {
 		return fmt.Errorf("DetachPluginResource: Existing pet resource port unavailable")
@@ -119,7 +119,6 @@ func (c *productionResourceCapability) DetachPluginResource(ctx context.Context,
 	}
 	c.mu.Lock()
 	delete(c.cache, handle)
-	_ = req
 	c.mu.Unlock()
 	return nil
 }
@@ -365,30 +364,42 @@ func (c *productionFloatingWindowCapability) RebuildFromExisting() error {
 }
 
 type ProductionCapabilitiesOptions struct {
-	InstallationRepo installation.Repository
-	ReleaseService   ExistingPetResourcePort
-	RuntimeFacade    ExistingPetActionPort
-	RuntimePort      ExistingPetRuntimePort
-	FloatingWindow   ExistingPetWindowPort
+	InstallationRepo    installation.Repository
+	ReleaseService      ExistingPetResourcePort
+	RuntimeFacade       ExistingPetActionPort
+	RuntimePort         ExistingPetRuntimePort
+	FloatingWindow      ExistingPetWindowPort
+	InstallationCleanup PluginInstallationCleanupCapability
 }
 
 func NewProductionCapabilities(opts ProductionCapabilitiesOptions) DesktopPetPluginCapabilities {
 	resolver := NewProductionActionTargetResolver(opts.InstallationRepo)
 	return DesktopPetPluginCapabilities{
-		Resource:       NewProductionResourceCapability(opts.InstallationRepo, opts.ReleaseService),
-		Action:         NewProductionActionCapability(opts.RuntimeFacade, resolver),
-		Runtime:        NewProductionRuntimeCapability(opts.RuntimePort),
-		FloatingWindow: NewProductionFloatingWindowCapability(opts.FloatingWindow),
-		ActionTarget:   resolver,
+		Resource:            NewProductionResourceCapability(opts.InstallationRepo, opts.ReleaseService),
+		Action:              NewProductionActionCapability(opts.RuntimeFacade, resolver),
+		Runtime:             NewProductionRuntimeCapability(opts.RuntimePort),
+		FloatingWindow:      NewProductionFloatingWindowCapability(opts.FloatingWindow),
+		ActionTarget:        resolver,
+		InstallationCleanup: opts.InstallationCleanup,
 	}
 }
 
 func NewFixtureCapabilities() DesktopPetPluginCapabilities {
 	return DesktopPetPluginCapabilities{
-		Resource:       NewDefaultResourceCapability(),
-		Action:         NewDefaultActionCapability(),
-		Runtime:        NewDefaultRuntimeCapability(),
-		FloatingWindow: NewDefaultFloatingWindowCapability(),
-		ActionTarget:   NewDefaultActionTargetResolver(),
+		Resource:            NewDefaultResourceCapability(),
+		Action:              NewDefaultActionCapability(),
+		Runtime:             NewDefaultRuntimeCapability(),
+		FloatingWindow:      NewDefaultFloatingWindowCapability(),
+		ActionTarget:        NewDefaultActionTargetResolver(),
+		InstallationCleanup: fixtureInstallationCleanup{},
 	}
+}
+
+type fixtureInstallationCleanup struct{}
+
+func (fixtureInstallationCleanup) CleanupOwnedInstallations(ctx context.Context, req OwnedInstallationCleanupRequest) error {
+	if ctx == nil {
+		return fmt.Errorf("fixture installation cleanup: context is required")
+	}
+	return nil
 }

@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "plugin": {
+    "id": "com.amitia.qa/desktop-pet-plugin",
+    "name": {
+      "default": "QA Desktop Pet Plugin"
+    },
+    "description": {
+      "default": "Amitia desktop pet packaging QA fixture"
+    },
+    "version": "1.0.5",
+    "license": "MIT",
+    "categories": [
+      "desktop-pet",
+      "qa"
+    ],
+    "publisher": {
+      "id": "com.amitia.qa",
+      "displayName": "Amitia QA",
+      "trustLevel": "trusted"
+    }
+  },
+  "compatibility": {
+    "minHostVersion": "0.1.0",
+    "platforms": [
+      "windows",
+      "linux",
+      "macos",
+      "android",
+      "ios"
+    ]
+  },
+  "modules": [
+    {
+      "id": "qa-pet-runtime",
+      "name": {
+        "default": "QA Desktop Pet Runtime"
+      },
+      "version": "1.0.5",
+      "placement": "device",
+      "runtime": {
+        "adapter": "javascript",
+        "entry": "dist/index.js",
+        "timeout": "30s",
+        "memoryBytes": 134217728,
+        "capabilities": {
+          "network": false,
+          "filesystem": false
+        },
+        "hostAccess": {
+          "filesystem": {
+            "mode": "none"
+          },
+          "network": {
+            "mode": "none"
+          },
+          "process": {
+            "mode": "none"
+          }
+        }
+      },
+      "dynamic": {
+        "allowedAdapters": [
+          "desktop_pet"
+        ],
+        "allowedKinds": [
+          "petx"
+        ],
+        "maxContributions": 1,
+        "allowUnregister": false
+      },
+      "contributions": [
+        {
+          "id": "qa-pet-plugin",
+          "kind": "petx",
+          "adapter": "desktop_pet",
+          "contractVersion": 1,
+          "name": {
+            "default": "QA Desktop Pet Plugin"
+          },
+          "description": {
+            "default": "QA desktop pet extension package"
+          },
+          "spec": {
+            "contributionKind": "pet_resource",
+            "displayName": "QA Desktop Pet Resource",
+            "description": "Complete desktop pet resource bundle",
+            "assetKind": "manifest",
+            "resourceRef": "assets/pet/manifest.json"
+          }
+        }
+      ]
+    }
+  ],
+  "data": {
+    "schemaVersion": 1,
+    "backup": true,
+    "export": false,
+    "uninstall": "delete"
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "contentTreeHash": ""
+  }
+}

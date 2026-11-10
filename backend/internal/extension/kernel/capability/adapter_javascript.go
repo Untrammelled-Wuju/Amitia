@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 )
 
@@ -56,15 +57,7 @@ func (a *JavaScriptRuntimeAdapter) Execute(
 
 	output, err := a.caller(ctx, extID, modID, binding.HandlerName, withJavaScriptInvocationContext(input, invocation), invocation)
 	if err != nil {
-		code := ErrorCodeExecutionFailed
-		switch {
-		case contains(err.Error(), "timeout"):
-			code = ErrorCodeTimeout
-		case contains(err.Error(), "cancelled"):
-			code = ErrorCodeCancelled
-		case contains(err.Error(), "not found"):
-			code = ErrorCodeRuntimeUnavailable
-		}
+		code := classifyJavaScriptRuntimeError(err)
 		return UnifiedToolResult{
 			InvocationID: invocation.InvocationID,
 			Status:       ToolResultStatusFailed,
@@ -72,7 +65,7 @@ func (a *JavaScriptRuntimeAdapter) Execute(
 				Code:        code,
 				Message:     fmt.Sprintf("javascript runtime: %s", err.Error()),
 				UserVisible: false,
-				Retryable:   code == ErrorCodeTimeout,
+				Retryable:   code == ErrorCodeTimeout || code == ErrorCodeUpstream,
 			},
 		}
 	}
@@ -88,6 +81,34 @@ func (a *JavaScriptRuntimeAdapter) Execute(
 		result.Structured = append(json.RawMessage(nil), trimmed...)
 	}
 	return result
+}
+
+func classifyJavaScriptRuntimeError(err error) string {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return ErrorCodeTimeout
+	case errors.Is(err, context.Canceled):
+		return ErrorCodeCancelled
+	}
+	text := err.Error()
+	markers := []struct {
+		token string
+		code  string
+	}{
+		{"permission_denied", ErrorCodePermissionDenied},
+		{"scope_denied", ErrorCodeScopeDenied},
+		{"upstream_error", ErrorCodeUpstream},
+		{"timeout", ErrorCodeTimeout},
+		{"cancelled", ErrorCodeCancelled},
+		{"canceled", ErrorCodeCancelled},
+		{"not found", ErrorCodeRuntimeUnavailable},
+	}
+	for _, marker := range markers {
+		if contains(text, marker.token) {
+			return marker.code
+		}
+	}
+	return ErrorCodeExecutionFailed
 }
 
 func withJavaScriptInvocationContext(input json.RawMessage, invocation ToolInvocationContext) json.RawMessage {

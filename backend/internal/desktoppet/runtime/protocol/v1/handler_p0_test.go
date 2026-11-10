@@ -297,6 +297,108 @@ func TestPersistActualStateSnapshotRejectsCursorMismatch(t *testing.T) {
 	}
 }
 
+func TestDesiredRejectionIsAcceptedBeforeRuntimeAcceptanceAndAfterTerminalFailure(t *testing.T) {
+	db, _, handler := newHandlerP0DB(t)
+	statuses := []CommandStatus{
+		CommandStatusCreated,
+		CommandStatusQueued,
+		CommandStatusDispatching,
+		CommandStatusTransportDispatched,
+		CommandStatusRuntimeReceived,
+		CommandStatusRuntimeAccepted,
+		CommandStatusFailedRetryable,
+		CommandStatusCompleted,
+		CommandStatusFailedTerminal,
+		CommandStatusExpired,
+		CommandStatusCancelRequested,
+		CommandStatusCancelled,
+		CommandStatusSuperseded,
+	}
+	for _, status := range statuses {
+		t.Run(string(status), func(t *testing.T) {
+			commandID := "cmd-reject-" + string(status)
+			payload := []byte(`{"commandId":"` + commandID + `","desiredRevision":8,"desiredHash":"sha256:desired"}`)
+			cmd := &RuntimeCommand{
+				ID:              commandID,
+				SpaceID:         "user-reject",
+				DeviceID:        "device-reject",
+				RuntimeID:       "runtime-reject",
+				CommandType:     string(CommandTypeSyncDesiredState),
+				Durability:      "durable",
+				Status:          string(status),
+				DesiredRevision: 8,
+				PayloadJSON:     string(payload),
+				PayloadHash:     ComputePayloadHash(payload),
+			}
+			if err := db.Create(cmd).Error; err != nil {
+				t.Fatal(err)
+			}
+			env := &Envelope{MessageName: EventStateDesiredRejected, Payload: payload}
+			if err := handler.validateRuntimeEventProgressPrecondition(env); err != nil {
+				t.Fatalf("desired rejection must be accepted from %s: %v", status, err)
+			}
+		})
+	}
+}
+
+func TestDesiredRejectionIsAcceptedAsIdempotentTerminalReplay(t *testing.T) {
+	db, _, handler := newHandlerP0DB(t)
+	commandID := "cmd-reject-completed"
+	payload := []byte(`{"commandId":"` + commandID + `","desiredRevision":8,"desiredHash":"sha256:desired"}`)
+	cmd := &RuntimeCommand{
+		ID:              commandID,
+		SpaceID:         "user-reject",
+		DeviceID:        "device-reject",
+		RuntimeID:       "runtime-reject",
+		CommandType:     string(CommandTypeSyncDesiredState),
+		Durability:      "durable",
+		Status:          string(CommandStatusCompleted),
+		DesiredRevision: 8,
+		PayloadJSON:     string(payload),
+		PayloadHash:     ComputePayloadHash(payload),
+	}
+	if err := db.Create(cmd).Error; err != nil {
+		t.Fatal(err)
+	}
+	env := &Envelope{MessageName: EventStateDesiredRejected, Payload: payload}
+	if err := handler.validateRuntimeEventProgressPrecondition(env); err != nil {
+		t.Fatalf("terminal desired rejection replay must be acknowledged: %v", err)
+	}
+}
+
+func TestDurableEventOwnershipAllowsReplayFromNewSessionForSameRuntime(t *testing.T) {
+	db, _, handler := newHandlerP0DB(t)
+	cmd := &RuntimeCommand{
+		ID:               "cmd-session-replay",
+		SpaceID:          "user-replay",
+		DeviceID:         "device-replay",
+		RuntimeID:        "runtime-replay",
+		RuntimeSessionID: "sess-old",
+		CommandType:      string(CommandTypeSyncDesiredState),
+		Durability:       "durable",
+		Status:           string(CommandStatusSuperseded),
+		DesiredRevision:  8,
+		PayloadJSON:      `{}`,
+		PayloadHash:      ComputePayloadHash([]byte(`{}`)),
+	}
+	if err := db.Create(cmd).Error; err != nil {
+		t.Fatal(err)
+	}
+	conn := &Connection{
+		ID:        "conn-replay",
+		SpaceID:   "user-replay",
+		DeviceID:  "device-replay",
+		RuntimeID: "runtime-replay",
+	}
+	got, err := handler.validateDurableEventCommandOwnership(conn, cmd.ID)
+	if err != nil {
+		t.Fatalf("same-runtime session replay must be accepted: %v", err)
+	}
+	if got.ID != cmd.ID {
+		t.Fatalf("command id=%s want %s", got.ID, cmd.ID)
+	}
+}
+
 func TestHandleEventRejectsInvalidStateSnapshotBeforeConsumingSequence(t *testing.T) {
 	db, _, handler := newHandlerP0DB(t)
 	now := time.Now().UTC().Format("2006-01-02 15:04:05")

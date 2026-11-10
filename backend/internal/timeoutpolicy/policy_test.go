@@ -82,3 +82,18 @@ func TestOperationTimeoutValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestBoundedKeepsRouteBudgetUnderGlobalPolicy(t *testing.T) {
+	restore := Configure(Settings{Seconds: 180})
+	defer restore()
+	if got := Bounded(30 * time.Second); got != 30*time.Second {
+		t.Fatalf("route budget must win: %s", got)
+	}
+	if got := Bounded(5 * time.Minute); got != 180*time.Second {
+		t.Fatalf("global policy must cap route budget: %s", got)
+	}
+	Configure(Settings{Disabled: true})
+	if got := Bounded(30 * time.Second); got != 30*time.Second {
+		t.Fatalf("disabled policy must keep route budget: %s", got)
+	}
+}

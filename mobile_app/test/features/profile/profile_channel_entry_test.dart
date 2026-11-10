@@ -101,6 +101,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('渠道消息'), findsOneWidget);
+    expect(find.text('运行模式'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
     container.dispose();
   });

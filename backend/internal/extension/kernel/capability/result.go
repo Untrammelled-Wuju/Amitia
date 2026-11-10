@@ -102,6 +102,7 @@ const (
 	ErrorCodeDependencyMissing            = "dependency_missing"
 	ErrorCodeConnectionLost               = "connection_lost"
 	ErrorCodeExecutionFailed              = "execution_failed"
+	ErrorCodeUpstream                     = "upstream_error"
 	ErrorCodeInvalidResult                = "invalid_result"
 	ErrorCodeStreamProtocol               = "stream_protocol_error"
 	ErrorCodeStreamLimitExceeded          = "stream_limit_exceeded"
@@ -141,6 +142,8 @@ func ErrorCategoryForCode(code string) ToolErrorCategory {
 		ErrorCodeScopeDenied:
 		return ToolErrorCategoryPermission
 	case ErrorCodeNotAvailable:
+		return ToolErrorCategoryAvailability
+	case ErrorCodeUpstream:
 		return ToolErrorCategoryAvailability
 	case ErrorCodeRuntimeUnavailable,
 		ErrorCodeExecutionFailed,

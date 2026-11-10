@@ -3,6 +3,7 @@ package plugin_boundary
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
@@ -311,6 +312,75 @@ func TestReconcilerReconcileExtension_RemovesGoneContributions(t *testing.T) {
 	}
 }
 
+type refreshResourceAdapter struct {
+	registers int
+	detaches  int
+}
+
+func (a *refreshResourceAdapter) Kind() ContributionKind { return KindResource }
+
+func (a *refreshResourceAdapter) Validate(context.Context, ContributionRef, map[string]any) error {
+	return nil
+}
+
+func (a *refreshResourceAdapter) Register(_ context.Context, ref ContributionRef, def map[string]any, rev int, enabled bool) (ContributionRegistration, error) {
+	a.registers++
+	status := ContributionStatusRegistered
+	if enabled {
+		status = ContributionStatusActive
+	}
+	return ContributionRegistration{
+		Ref:             ref,
+		Kind:            KindResource,
+		Revision:        rev,
+		Status:          status,
+		Definition:      cloneMap(def),
+		CanonicalHandle: fmt.Sprintf("resource-%d", a.registers),
+	}, nil
+}
+
+func (a *refreshResourceAdapter) Detach(context.Context, ContributionRegistration) error {
+	a.detaches++
+	return nil
+}
+
+func TestReconcilerUpdateRefreshesSamePathResourceWhenDefinitionIsUnchanged(t *testing.T) {
+	src := newFakeSource()
+	adapter := &refreshResourceAdapter{}
+	rec := NewReconciler(src, []ContributionAdapter{adapter})
+	ext := domain.ExtensionID("com.example/pet")
+	contrib := makeContrib(string(ext), "pet-resource", domain.ContributionKindPetPlugin, map[string]any{
+		"contributionKind": "pet_resource",
+		"displayName":      "Pet",
+		"resourceRef":      "assets/pet/manifest.json",
+	})
+	src.contribs[string(ext)] = []domain.ContributionDefinition{contrib}
+
+	if err := rec.ReconcileExtension(context.Background(), ext); err != nil {
+		t.Fatal(err)
+	}
+	ref := ContributionRefFromDefinition(contrib)
+	before, ok := rec.Get(ref)
+	if !ok || before.CanonicalHandle != "resource-1" {
+		t.Fatalf("initial registration=%+v ok=%v", before, ok)
+	}
+
+	if err := rec.HandleEvent(context.Background(), LifecycleEvent{
+		Phase:       PhaseUpdated,
+		ExtensionID: ext,
+		Version:     "1.0.3",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	after, ok := rec.Get(ref)
+	if !ok || after.CanonicalHandle != "resource-2" {
+		t.Fatalf("updated registration=%+v ok=%v", after, ok)
+	}
+	if adapter.registers != 2 || adapter.detaches != 1 {
+		t.Fatalf("refresh registers=%d detaches=%d", adapter.registers, adapter.detaches)
+	}
+}
+
 func TestReconcilerInvalidContribution_MarksUnregistered(t *testing.T) {
 	src := newFakeSource()
 	rec := NewReconciler(src, defaultAdapters())
@@ -383,5 +453,67 @@ func TestReconcilerReconcileErrorPropagates(t *testing.T) {
 	err := rec.ReconcileExtension(context.Background(), "com.example/pet")
 	if err == nil {
 		t.Error("expected reconcile error from failing source")
+	}
+}
+
+func TestReconcilerUninstallCleansOwnedInstallations(t *testing.T) {
+	src := newFakeSource()
+	ext := domain.ExtensionID("com.example/pet")
+	var cleaned []domain.ExtensionID
+	rec := NewReconciler(src, defaultAdapters(), WithUninstallCleanup(func(_ context.Context, extID domain.ExtensionID) error {
+		cleaned = append(cleaned, extID)
+		return nil
+	}))
+
+	contrib := makeContrib(string(ext), "a1", domain.ContributionKindDesktopPetPlugin, map[string]any{
+		"actionKey":   "a1",
+		"displayName": "a1",
+	})
+	if err := rec.HandleEvent(context.Background(), LifecycleEvent{Phase: PhaseInstalled, ExtensionID: ext, Contribution: contrib}); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	if err := rec.HandleEvent(context.Background(), LifecycleEvent{Phase: PhaseUninstalled, ExtensionID: ext}); err != nil {
+		t.Fatalf("uninstall: %v", err)
+	}
+	if len(cleaned) != 1 || cleaned[0] != ext {
+		t.Fatalf("cleanup calls=%v want single call for %s", cleaned, ext)
+	}
+}
+
+func TestReconcilerUninstallPropagatesCleanupError(t *testing.T) {
+	src := newFakeSource()
+	ext := domain.ExtensionID("com.example/pet")
+	cleanupErr := errors.New("runtime offline: descriptor rtsess-one generation 4")
+	rec := NewReconciler(src, defaultAdapters(), WithUninstallCleanup(func(_ context.Context, extID domain.ExtensionID) error {
+		return fmt.Errorf("cleanup %s: %w", extID, cleanupErr)
+	}))
+
+	if err := rec.HandleEvent(context.Background(), LifecycleEvent{Phase: PhaseUninstalled, ExtensionID: ext}); err == nil {
+		t.Fatal("expected uninstall cleanup error")
+	} else if !errors.Is(err, cleanupErr) {
+		t.Fatalf("cleanup error chain lost: %v", err)
+	}
+}
+
+func TestReconcilerUpdateDoesNotCleanupInstallations(t *testing.T) {
+	src := newFakeSource()
+	ext := domain.ExtensionID("com.example/pet")
+	calls := 0
+	rec := NewReconciler(src, defaultAdapters(), WithUninstallCleanup(func(_ context.Context, extID domain.ExtensionID) error {
+		calls++
+		return nil
+	}))
+	src.contribs[string(ext)] = []domain.ContributionDefinition{
+		makeContrib(string(ext), "a1", domain.ContributionKindDesktopPetPlugin, map[string]any{
+			"revision":    float64(2),
+			"actionKey":   "a1",
+			"displayName": "a1",
+		}),
+	}
+	if err := rec.HandleEvent(context.Background(), LifecycleEvent{Phase: PhaseUpdated, ExtensionID: ext}); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if calls != 0 {
+		t.Fatalf("update lifecycle must not clean installations, calls=%d", calls)
 	}
 }

@@ -653,7 +653,11 @@ func (p *meshLocalDataPort) HistoricalConversations(ctx context.Context, scope c
 	if !scope.Coordinated || scope.TargetDeviceID != p.ownerID || scope.ResourceOwnerID != p.ownerID || (scope.RoleOwnerID != p.ownerID && scope.RoleOwnerID != scope.CoreID) {
 		return nil, coordination.ErrWrongOwner
 	}
-	rows, err := p.services.KernelContainer.DeviceRegistry.Database().QueryContext(ctx, `SELECT body FROM kernel_device_owned_resources WHERE owner_id=? AND kind='conversation' AND deleted=0 ORDER BY updated_at DESC,resource_id DESC LIMIT 128`, p.ownerID)
+	partition := coordination.StorageRole(scope, "conversation")
+	if partition == "" || partition == coordination.AllMemoryRole {
+		return nil, coordination.ErrWrongOwner
+	}
+	rows, err := p.services.KernelContainer.DeviceRegistry.Database().QueryContext(ctx, `SELECT body FROM kernel_device_owned_resources WHERE owner_id=? AND role_id=? AND kind='conversation' AND deleted=0 ORDER BY updated_at DESC,resource_id DESC LIMIT 128`, p.ownerID, partition)
 	if err != nil {
 		return nil, err
 	}

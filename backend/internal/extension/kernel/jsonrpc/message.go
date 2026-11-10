@@ -130,6 +130,27 @@ const (
 	ErrCodeRequestNotFound    ErrorCode = "request_not_found"
 )
 
+func (c *ErrorCode) UnmarshalJSON(data []byte) error {
+	if c == nil {
+		return errors.New("jsonrpc: nil error code receiver")
+	}
+	if string(data) == "null" {
+		*c = ""
+		return nil
+	}
+	var text string
+	if err := json.Unmarshal(data, &text); err == nil {
+		*c = ErrorCode(text)
+		return nil
+	}
+	var number json.Number
+	if err := json.Unmarshal(data, &number); err == nil {
+		*c = ErrorCode(number.String())
+		return nil
+	}
+	return fmt.Errorf("jsonrpc: invalid error code %s", string(data))
+}
+
 type ErrorCategory string
 
 const (

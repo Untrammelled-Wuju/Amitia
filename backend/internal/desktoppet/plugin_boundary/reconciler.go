@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"reflect"
 	"sync"
 	"time"
 
@@ -79,6 +80,14 @@ func WithClock(fn func() time.Time) ReconcilerOption {
 	}
 }
 
+func WithUninstallCleanup(fn func(ctx context.Context, extID domain.ExtensionID) error) ReconcilerOption {
+	return func(r *Reconciler) {
+		if fn != nil {
+			r.uninstallCleanup = fn
+		}
+	}
+}
+
 type Reconciler struct {
 	mu       sync.RWMutex
 	source   KernelContributionSource
@@ -87,7 +96,8 @@ type Reconciler struct {
 	logger   *log.Logger
 	now      func() time.Time
 
-	adapters []ContributionAdapter
+	adapters         []ContributionAdapter
+	uninstallCleanup func(ctx context.Context, extID domain.ExtensionID) error
 }
 
 type ContributionAdapter interface {
@@ -134,11 +144,11 @@ func (r *Reconciler) HandleEvent(ctx context.Context, evt LifecycleEvent) error 
 	case PhaseDisabled:
 		return r.handleDisabledLocked(ctx, evt)
 	case PhaseUpdated:
-		return r.handleReconcileExtensionLocked(ctx, evt.ExtensionID)
+		return r.handleReconcileExtensionLocked(ctx, evt.ExtensionID, true)
 	case PhaseUninstalled:
 		return r.handleExtensionUninstallLocked(ctx, evt.ExtensionID)
 	case PhaseReconcileAll:
-		return r.handleReconcileExtensionLocked(ctx, evt.ExtensionID)
+		return r.handleReconcileExtensionLocked(ctx, evt.ExtensionID, false)
 	default:
 		return fmt.Errorf("plugin_boundary: unknown lifecycle phase: %s", evt.Phase)
 	}
@@ -238,7 +248,7 @@ func (r *Reconciler) handleDisabledLocked(ctx context.Context, evt LifecycleEven
 	return firstErr
 }
 
-func (r *Reconciler) handleReconcileExtensionLocked(ctx context.Context, extID domain.ExtensionID) error {
+func (r *Reconciler) handleReconcileExtensionLocked(ctx context.Context, extID domain.ExtensionID, forceRefresh bool) error {
 	if r.source == nil {
 		return nil
 	}
@@ -284,8 +294,19 @@ func (r *Reconciler) handleReconcileExtensionLocked(ctx context.Context, extID d
 			continue
 		}
 		if existing, ok := r.registry[key]; ok {
-			if existing.Revision == newReg.Revision && existing.Status == newReg.Status {
+			if !forceRefresh &&
+				existing.Revision == newReg.Revision &&
+				existing.Status == newReg.Status &&
+				reflect.DeepEqual(existing.Definition, newReg.Definition) {
 				continue
+			}
+			if forceRefresh {
+				if detachErr := r.detachSingleLocked(ctx, existing.Ref); detachErr != nil {
+					r.log("reconcile: detach previous %s: %v", key, detachErr)
+					if firstErr == nil {
+						firstErr = detachErr
+					}
+				}
 			}
 		}
 		r.registry[key] = newReg
@@ -319,6 +340,17 @@ func (r *Reconciler) handleExtensionUninstallLocked(ctx context.Context, extID d
 		r.registry[key] = reg
 		delete(r.enabled, key)
 		r.log("uninstall: detached %s", key)
+	}
+	if r.uninstallCleanup == nil {
+		return firstErr
+	}
+	if err := r.uninstallCleanup(ctx, extID); err != nil {
+		r.log("uninstall: cleanup owned installations %s: %v", extID, err)
+		cleanupErr := fmt.Errorf("cleanup owned installations for %s: %w", extID, err)
+		if firstErr == nil {
+			return cleanupErr
+		}
+		return errors.Join(firstErr, cleanupErr)
 	}
 	return firstErr
 }
@@ -419,7 +451,7 @@ func revisionOf(c domain.ContributionDefinition) int {
 func (r *Reconciler) ReconcileExtension(ctx context.Context, extID domain.ExtensionID) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.handleReconcileExtensionLocked(ctx, extID)
+	return r.handleReconcileExtensionLocked(ctx, extID, false)
 }
 
 func (r *Reconciler) DetachExtension(ctx context.Context, extID domain.ExtensionID) error {

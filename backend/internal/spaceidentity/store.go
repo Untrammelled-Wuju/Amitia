@@ -69,18 +69,23 @@ func (s *Store) loadOrCreate() error {
 	path := s.identityPath()
 	data, err := os.ReadFile(path)
 	if err == nil {
-		var id Identity
-		if json.Unmarshal(data, &id) == nil && validID(id.SpaceID, "space_") && validID(id.InstanceID, "inst_") {
-			if id.SchemaVersion == 0 {
-				id.SchemaVersion = SchemaVersion
-			}
-			s.identity = id
-			return nil
-		}
-		return fmt.Errorf("spaceidentity: invalid identity file %s", path)
+		return s.parseIdentity(path, data)
 	}
 	if !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("spaceidentity: read identity: %w", err)
+	}
+
+	release, err := acquireIdentityCreationLock(path)
+	if err != nil {
+		return err
+	}
+	defer release()
+	data, err = os.ReadFile(path)
+	if err == nil {
+		return s.parseIdentity(path, data)
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("spaceidentity: read identity after lock: %w", err)
 	}
 
 	now := time.Now().UTC()
@@ -90,6 +95,47 @@ func (s *Store) loadOrCreate() error {
 	}
 	s.identity = id
 	return nil
+}
+
+func (s *Store) parseIdentity(path string, data []byte) error {
+	var id Identity
+	if json.Unmarshal(data, &id) != nil || !validID(id.SpaceID, "space_") || !validID(id.InstanceID, "inst_") {
+		return fmt.Errorf("spaceidentity: invalid identity file %s", path)
+	}
+	if id.SchemaVersion == 0 {
+		id.SchemaVersion = SchemaVersion
+	}
+	s.identity = id
+	return nil
+}
+
+func acquireIdentityCreationLock(identityPath string) (func(), error) {
+	lockPath := identityPath + ".lock"
+	if err := os.MkdirAll(filepath.Dir(lockPath), 0o700); err != nil {
+		return nil, fmt.Errorf("spaceidentity: create identity directory: %w", err)
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		file, err := os.OpenFile(lockPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if err == nil {
+			_, _ = fmt.Fprintf(file, "%d\n", os.Getpid())
+			_ = file.Close()
+			return func() {
+				_ = os.Remove(lockPath)
+			}, nil
+		}
+		if !errors.Is(err, os.ErrExist) {
+			return nil, fmt.Errorf("spaceidentity: acquire identity lock: %w", err)
+		}
+		if info, statErr := os.Stat(lockPath); statErr == nil && time.Since(info.ModTime()) > 30*time.Second {
+			_ = os.Remove(lockPath)
+			continue
+		}
+		if time.Now().After(deadline) {
+			return nil, errors.New("spaceidentity: identity creation lock timeout")
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
 }
 
 func (s *Store) ReadProfile() (Profile, error) {

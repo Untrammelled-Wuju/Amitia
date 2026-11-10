@@ -1,4 +1,5 @@
 const DEFAULT_CATALOG_URL = process.env.AMITIA_PLUGIN_MARKET_CATALOG_URL || "https://amitia.untrammelled.top/api/v1/market/catalog";
+const CATALOG_TIMEOUT_MS = 10000;
 
 function text(value) {
   return value == null ? "" : String(value).trim();
@@ -128,14 +129,11 @@ async function readCatalog(host, input) {
   if (query) url.searchParams.set("q", query);
   if (category) url.searchParams.set("category", category);
   if (platform && platform !== "all") url.searchParams.set("platform", platform);
-  const response = record(await host.call("host.network.request", {
-    url: url.toString(),
-    method: "GET",
-  }));
+  const response = record(await requestCatalog(host, url));
   const status = Number(response.status);
   const body = record(response.body);
   if (status < 200 || status >= 300) {
-    throw new Error(`插件目录请求失败: HTTP ${status} ${JSON.stringify(body)}`);
+    throw new Error(`插件目录请求失败: upstream_error HTTP ${status} ${JSON.stringify(body)}`);
   }
   if (![0, 200].includes(Number(body.code))) {
     throw new Error(`插件目录返回错误: ${JSON.stringify(body)}`);
@@ -149,6 +147,20 @@ async function readCatalog(host, input) {
     catalogUrl: url.toString(),
     platform,
   };
+}
+
+async function requestCatalog(host, url) {
+  try {
+    return await host.call("host.network.request", {
+      url: url.toString(),
+      method: "GET",
+      timeoutMs: CATALOG_TIMEOUT_MS,
+      failOnServerError: true,
+    });
+  } catch (error) {
+    const message = error && error.message ? String(error.message) : String(error);
+    throw new Error(`插件目录请求失败: ${message}`);
+  }
 }
 
 async function catalog(host, input) {

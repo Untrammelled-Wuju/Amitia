@@ -305,6 +305,9 @@ func reconcileBundledPluginReadModel(ctx context.Context, runtime *Runtime, exte
 	installed.Metadata["currentVersionId"] = version.VersionID
 	installed.Metadata["lastOperationId"] = current.OperationID
 	installed.Metadata["fencingToken"] = float64(current.FencingToken)
+	if runtime.container.PackageRepository != nil {
+		installed.Metadata = applyStoredBundledProvenance(ctx, runtime.container.PackageRepository, installed.Metadata, current.ArtifactID, version.ArchiveHash)
+	}
 	if runtime.container.TransactionManager == nil {
 		return runtime.container.InstallationRepository.PutInstallation(ctx, installed)
 	}

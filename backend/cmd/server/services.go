@@ -881,12 +881,19 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		string(kernelRuntimeIdentity.SpaceID),
 		kernelRuntimeIdentity.DeviceID.String(),
 	)
+	petxInstallationCleanupCapability := newPetxInstallationCleanup(
+		installationRepo,
+		releaseRepo,
+		installationCoordinator,
+		string(kernelRuntimeIdentity.SpaceID),
+	)
 	petCapabilities := desktoppetintegration.NewProductionCapabilities(desktoppetintegration.ProductionCapabilitiesOptions{
-		InstallationRepo: installationRepo,
-		ReleaseService:   petxReleaseBridge,
-		RuntimeFacade:    desktoppetintegration.NewExistingActionCorrelationPort(),
-		RuntimePort:      desktoppetintegration.NewExistingRuntimeCorrelationPort(),
-		FloatingWindow:   desktoppetintegration.NewExistingWindowCorrelationPort(),
+		InstallationRepo:    installationRepo,
+		ReleaseService:      petxReleaseBridge,
+		RuntimeFacade:       desktoppetintegration.NewExistingActionCorrelationPort(),
+		RuntimePort:         desktoppetintegration.NewExistingRuntimeCorrelationPort(),
+		FloatingWindow:      desktoppetintegration.NewExistingWindowCorrelationPort(),
+		InstallationCleanup: petxInstallationCleanupCapability,
 	})
 	petBoundary, err := petpluginboundary.NewProductionBoundary(
 		petpluginboundary.NewContainerSource(kernelContainer.ContributionRepository, kernelContainer.InstallationRepository),

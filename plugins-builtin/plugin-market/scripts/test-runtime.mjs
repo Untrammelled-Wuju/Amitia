@@ -143,4 +143,78 @@ if (uninstallCalls.length !== 2) throw new Error("uninstall host API was not cal
 if (uninstallCalls[0].input.idempotencyKey === uninstallCalls[1].input.idempotencyKey) {
   throw new Error("uninstall operations must use unique idempotency keys");
 }
+const networkCall = calls.find((call) => call.method === "host.network.request");
+if (networkCall.input.timeoutMs !== 10000) {
+  throw new Error(`catalog request must bound timeout to 10000ms, got ${networkCall.input.timeoutMs}`);
+}
+if (networkCall.input.failOnServerError !== true) {
+  throw new Error("catalog request must fail on upstream server errors");
+}
+
+async function activateWithHost(nextHost) {
+  let boundHandler = null;
+  await extension.activate({
+    handlers: {
+      bindTool(name, handler) {
+        if (name === "command") boundHandler = handler;
+      },
+    },
+    host: nextHost,
+    log: { info() {} },
+  });
+  if (!boundHandler) throw new Error("command handler was not registered");
+  return boundHandler;
+}
+
+const upstreamBody = {
+  code: 500,
+  msg: "读取插件市场分类: dial tcp 127.0.0.1:3306: connect: connection refused",
+  data: null,
+};
+const failingHost = {
+  async call(method) {
+    if (method === "host.network.request") {
+      return { status: 500, body: upstreamBody };
+    }
+    throw new Error(`unexpected host method: ${method}`);
+  },
+};
+const failingCommand = await activateWithHost(failingHost);
+let upstreamError = null;
+try {
+  await failingCommand({ action: "catalog", platform: "macos" });
+} catch (error) {
+  upstreamError = error;
+}
+if (!upstreamError) throw new Error("upstream server error must not be swallowed");
+if (!String(upstreamError.message).includes("读取插件市场分类")) {
+  throw new Error(`upstream error must keep original cause, got ${upstreamError.message}`);
+}
+if (!String(upstreamError.message).includes("connection refused")) {
+  throw new Error(`upstream error must keep original cause text, got ${upstreamError.message}`);
+}
+if (!String(upstreamError.message).includes("upstream_error")) {
+  throw new Error(`upstream error must keep error class, got ${upstreamError.message}`);
+}
+
+const hostFailureText = "host.call: timeout: context deadline exceeded after 10s";
+const throwingHost = {
+  async call(method) {
+    if (method === "host.network.request") {
+      throw new Error(hostFailureText);
+    }
+    throw new Error(`unexpected host method: ${method}`);
+  },
+};
+const throwingCommand = await activateWithHost(throwingHost);
+let transportError = null;
+try {
+  await throwingCommand({ action: "catalog", platform: "macos" });
+} catch (error) {
+  transportError = error;
+}
+if (!transportError) throw new Error("transport failure must not be swallowed");
+if (!String(transportError.message).includes(hostFailureText)) {
+  throw new Error(`transport failure must keep original cause, got ${transportError.message}`);
+}
 console.log("plugin-market runtime tests passed");

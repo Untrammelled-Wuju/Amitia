@@ -26,6 +26,7 @@ func buildGoldenPackage(t *testing.T) (string, *Manifest) {
 		IsStableStateCandidate: false,
 		IsTransitionOnly:       false,
 		Fps:                    12,
+		FrameCount:             3,
 		PlaybackMode:           "loop",
 		Frames: []testFrameEntry{
 			{Index: 0, FrameID: "idle_0", File: "frames/0.png", DurationMs: 83, AssetID: "asset_idle_0", ContentHash: frameHash},
@@ -51,6 +52,7 @@ func buildGoldenPackage(t *testing.T) (string, *Manifest) {
 		IsStableStateCandidate: false,
 		IsTransitionOnly:       false,
 		Fps:                    15,
+		FrameCount:             4,
 		PlaybackMode:           "ping_pong",
 		Frames: []testFrameEntry{
 			{Index: 0, FrameID: "wave_0", File: "frames/0.png", DurationMs: 67, AssetID: "asset_wave_0", ContentHash: frameHash},
@@ -249,6 +251,7 @@ func TestGoldenPackage_ReturnToActionInvalid(t *testing.T) {
 		IsStableStateCandidate: false,
 		IsTransitionOnly:       false,
 		Fps:                    12,
+		FrameCount:             2,
 		PlaybackMode:           "loop",
 		Frames: []testFrameEntry{
 			{Index: 0, FrameID: "idle_0", File: "frames/0.png", DurationMs: 83, AssetID: "asset_idle_0", ContentHash: frameHash},
@@ -273,6 +276,7 @@ func TestGoldenPackage_ReturnToActionInvalid(t *testing.T) {
 		IsStableStateCandidate: false,
 		IsTransitionOnly:       false,
 		Fps:                    15,
+		FrameCount:             2,
 		PlaybackMode:           "ping_pong",
 		Frames: []testFrameEntry{
 			{Index: 0, FrameID: "wave_0", File: "frames/0.png", DurationMs: 67, AssetID: "asset_wave_0", ContentHash: frameHash},

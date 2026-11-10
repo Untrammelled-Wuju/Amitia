@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -9,6 +9,7 @@ import {
   getCoreEndpointEpoch,
   invalidateCoreEndpoint,
   isCoreEndpointOwnedByProcess,
+  onCoreEndpointChanged,
   parseCoreEndpoint,
   readCoreEndpoint,
   removeCoreEndpoint,
@@ -36,6 +37,17 @@ function writeEndpoint(overrides: Record<string, unknown> = {}): void {
 }
 
 describe("core endpoint lifecycle", () => {
+  it("端点失效与重新就绪时通知订阅者", () => {
+    const listener = vi.fn();
+    const unsubscribe = onCoreEndpointChanged(listener);
+    invalidateCoreEndpoint();
+    expect(listener).toHaveBeenCalledTimes(1);
+    setCoreEndpoint({ schemaVersion: 1, pid: 2, startedAt: "2026-01-01T00:00:00Z", host: "127.0.0.1", port: 12345, httpBaseURL: "http://127.0.0.1:12345", websocketBaseURL: "ws://127.0.0.1:12345" });
+    expect(listener).toHaveBeenCalledTimes(2);
+    unsubscribe();
+    invalidateCoreEndpoint();
+    expect(listener).toHaveBeenCalledTimes(2);
+  });
   beforeEach(() => {
     dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "amitia-endpoint-"));
     setCoreEndpoint(null);

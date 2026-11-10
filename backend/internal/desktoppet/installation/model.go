@@ -54,6 +54,8 @@ type InstallationRuntimeView struct {
 	RuntimeSyncState        string `json:"runtimeSyncState"`
 	Pending                 bool   `json:"pending"`
 	LastHeartbeatAt         string `json:"lastHeartbeatAt"`
+	LastSnapshotAt          string `json:"lastSnapshotAt"`
+	RuntimeGeneration       int64  `json:"runtimeGeneration,omitempty"`
 	UpdatedAt               string `json:"updatedAt"`
 }
 

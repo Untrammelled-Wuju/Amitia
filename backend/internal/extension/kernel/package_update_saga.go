@@ -349,6 +349,7 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	metadata["contentTreeHash"] = confirmed.artifact.ContentTreeHash
 	metadata["artifactHash"] = confirmed.artifact.ArtifactHash
 	metadata["devOnly"] = confirmed.preview.DevOnly
+	metadata = applyVerifiedPackageProvenance(metadata, confirmed.preview)
 	current.Metadata = packageInstallationMetadata(metadata, targetGeneration.Current, targetGeneration.GenerationPath, op.OperationID)
 	err = r.container.TransactionManager.WithTransaction(ctx, func(txCtx context.Context) error {
 		if err := r.container.PackageRepository.VerifyFencingTokenInContext(txCtx, guard); err != nil {
@@ -431,6 +432,7 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	if err := r.recordPackageVersionAfterOperation(ctx, op.OperationID, "update", confirmed.session.ExtensionID, confirmed.session.Version, confirmed.artifact.ArtifactID, targetGeneration.GenerationPath, targetGeneration.Current.TreeHash, confirmed.artifact.ArchiveHash, confirmed.artifact.ManifestHash, confirmed.artifact.ContentTreeHash, targetGeneration.Current.GenerationID, guard); err != nil {
 		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, "record_version", err, compensation, guard)
 	}
+	compensation.versionRecorded = true
 	if err := r.prepareGameHostExtensionAfterPackageGenerationChange(ctx, confirmed.session.ExtensionID); err != nil {
 		failErr := r.failPackageUpdateOperation(op.OperationID, "prepare_game_host_generation", err, compensation, guard)
 		if err := r.prepareGameHostExtensionAfterPackageGenerationChange(context.Background(), confirmed.session.ExtensionID); err != nil {
@@ -552,6 +554,7 @@ type packageUpdateCompensation struct {
 	target                PackagePreparedGeneration
 	switched              bool
 	repositoriesCommitted bool
+	versionRecorded       bool
 	migration             *packageMigrationExecution
 	quiesced              bool
 	wasEnabled            bool
@@ -579,6 +582,18 @@ func (c *packageUpdateCompensation) run() error {
 			failures = append(failures, err)
 		} else if err := c.runtime.rebindPackageInstallationGeneration(context.Background(), c.stable, c.rollbackPoint.InstalledPath); err != nil {
 			failures = append(failures, err)
+		}
+	}
+	if c.versionRecorded {
+		if err := c.runtime.container.PackageRepository.RestoreCurrentPackageVersionForRollback(
+			context.Background(),
+			c.rollbackPoint.ExtensionID,
+			c.target.Current.Version,
+			c.rollbackPoint.SourceVersionID,
+			c.stable.GenerationID,
+			c.operationID,
+		); err != nil {
+			failures = append(failures, fmt.Errorf("restore package version after failed update: %w", err))
 		}
 	}
 	if err := c.runtime.restorePackageMigrationState(context.Background(), c.rollbackPoint); err != nil {

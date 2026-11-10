@@ -1,6 +1,7 @@
 package ui_contribution
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -600,6 +601,9 @@ const (
 	UIErrPayloadInvalid     UIErrorCode = "payload_invalid"
 	UIErrRenderTimeout      UIErrorCode = "render_timeout"
 	UIErrRuntimeUnavailable UIErrorCode = "runtime_unavailable"
+	UIErrTimeout            UIErrorCode = "action_timeout"
+	UIErrCancelled          UIErrorCode = "action_cancelled"
+	UIErrUpstream           UIErrorCode = "upstream_error"
 	UIErrCrashed            UIErrorCode = "ui_crashed"
 )
 
@@ -615,6 +619,55 @@ func (e *UIError) Error() string {
 
 func NewUIError(code UIErrorCode, msg string, detail map[string]any) *UIError {
 	return &UIError{Code: code, Message: msg, Detail: detail}
+}
+
+type failureCoder interface {
+	ErrorCode() string
+}
+
+func ClassifyFailure(err error) UIErrorCode {
+	if err == nil {
+		return UIErrRuntimeUnavailable
+	}
+	var coded failureCoder
+	if errors.As(err, &coded) {
+		switch coded.ErrorCode() {
+		case "permission_denied", "identity_invalid":
+			return UIErrPermissionDenied
+		case "scope_denied":
+			return UIErrScopeDenied
+		case "timeout":
+			return UIErrTimeout
+		case "cancelled":
+			return UIErrCancelled
+		case "upstream_error":
+			return UIErrUpstream
+		}
+	}
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return UIErrTimeout
+	case errors.Is(err, context.Canceled):
+		return UIErrCancelled
+	}
+	text := err.Error()
+	markers := []struct {
+		token string
+		code  UIErrorCode
+	}{
+		{"permission_denied", UIErrPermissionDenied},
+		{"scope_denied", UIErrScopeDenied},
+		{"upstream_error", UIErrUpstream},
+		{"timeout", UIErrTimeout},
+		{"cancelled", UIErrCancelled},
+		{"canceled", UIErrCancelled},
+	}
+	for _, marker := range markers {
+		if strings.Contains(text, marker.token) {
+			return marker.code
+		}
+	}
+	return UIErrRuntimeUnavailable
 }
 
 type SchemaUIDoc = schema_ui.SchemaUIDocument

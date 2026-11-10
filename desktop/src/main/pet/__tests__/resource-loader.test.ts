@@ -55,6 +55,7 @@ function buildActionJson(action: ActionConfig, frameRelPaths: string[]): string 
     version: action.version ?? 1,
     playbackMode: action.loopType ?? "loop",
     fps: action.fps ?? 8,
+    frameCount: Math.max(1, action.frameCount ?? frameRelPaths.length),
     interruptible: action.interruptible ?? true,
     priority: 50,
     cooldownMs: 0,

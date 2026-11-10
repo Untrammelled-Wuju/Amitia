@@ -43,6 +43,7 @@ import { registerRealtimeMediaHandlers } from "./realtime-media";
 import { installDesktopClientDiagnostics } from "./client-diagnostics";
 import { configureDesktopNotificationHost } from "./desktop-notification";
 import { ensureInstalledAppElevation } from "./windows-elevation";
+import { onCoreEndpointChanged } from "./core-endpoint";
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -56,6 +57,10 @@ let deploymentLifecycle: DesktopDeploymentLifecycle | null = null;
 let startupTimer: ReturnType<typeof setTimeout> | null = null;
 let startupFailureHandled = false;
 let mainWindowReady = false;
+
+onCoreEndpointChanged(() => {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(IPC_CHANNELS.runtimeEndpointChanged);
+});
 
 const STARTUP_TIMEOUT_MS = 180000;
 

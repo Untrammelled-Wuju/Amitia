@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
@@ -94,6 +95,25 @@ func (r *Runtime) quiesceExtensionForPackageSwap(ctx context.Context, extID doma
 // like an extension that was never activated, so the next enable activation
 // installs the new generation definitions on its own.
 func (r *Runtime) restoreExtensionAfterPackageSwap(ctx context.Context, extID domain.ExtensionID, wasEnabled bool) error {
+	if r.container == nil {
+		return nil
+	}
+	if r.container.DesktopPetPluginBoundary != nil && r.container.InstallationRepository != nil {
+		inst, err := r.container.InstallationRepository.GetInstallation(ctx, extID)
+		if err != nil {
+			return fmt.Errorf("kernel: read %s during petx refresh: %w", extID, err)
+		}
+		operationID := fmt.Sprintf("package-swap-%s-%d", extID, time.Now().UnixNano())
+		if err := r.container.DesktopPetPluginBoundary.HandleExtensionUpdated(
+			ctx,
+			extID,
+			"",
+			inst.InstalledVersion.String(),
+			operationID,
+		); err != nil {
+			return fmt.Errorf("kernel: refresh desktop pet contributions for %s: %w", extID, err)
+		}
+	}
 	if !wasEnabled {
 		return nil
 	}

@@ -200,3 +200,46 @@ func TestKernelCardProviderPreservesUpdateError(t *testing.T) {
 		t.Fatalf("error message changed: %q", cards[0].Diagnostics[0].Message)
 	}
 }
+
+func TestKernelCardProviderTreatsMissingUpdateRegistryAsOptional(t *testing.T) {
+	definitions := domain.NewInMemoryDefinitionRepository()
+	installations := domain.NewInMemoryInstallationRepository()
+	extensionID := domain.ExtensionID("com.example/no-update-registry")
+	version := domain.SemanticVersion{Major: 1}
+	if err := definitions.PutExtension(context.Background(), domain.ExtensionDefinition{
+		ID:              extensionID,
+		Name:            domain.LocalizedText{Default: "No Update Registry"},
+		Version:         version,
+		ManifestVersion: 1,
+		Domain:          domain.ExtensionDomainGeneral,
+		Modules: []domain.ModuleDefinition{{
+			ID:          "main",
+			ExtensionID: extensionID,
+			Name:        domain.LocalizedText{Default: "Main"},
+			Type:        domain.ModuleTypeService,
+		}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if err := installations.PutInstallation(context.Background(), domain.ExtensionInstallation{
+		ExtensionID:       extensionID,
+		InstalledVersion:  version,
+		InstallationState: domain.InstallationStateInstalled,
+		EnablementState:   domain.EnablementEnabled,
+		InstalledAt:       now,
+		UpdatedAt:         now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	provider := NewKernelCardProvider(definitions, installations, CardProviderDependencies{
+		Updates: fixedUpdateChecker{err: package_distribution.ErrRegistryNotConfigured},
+	})
+	cards, err := provider.ListCards(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cards) != 1 || len(cards[0].Diagnostics) != 0 {
+		t.Fatalf("unconfigured update registry must not mark cards partial: %+v", cards)
+	}
+}

@@ -41,6 +41,10 @@ func (p *meshLocalDataPort) HistoricalConversationPage(ctx context.Context, scop
 	if !scope.Coordinated || scope.TargetDeviceID != p.ownerID || (scope.ResourceOwnerID != p.ownerID && scope.ResourceOwnerID != scope.CoreID) || scope.RoleOwnerID != scope.CoreID || !query.ListConversations {
 		return result, coordination.ErrWrongOwner
 	}
+	partition := coordination.StorageRole(scope, "conversation")
+	if partition == "" || partition == coordination.AllMemoryRole {
+		return result, coordination.ErrWrongOwner
+	}
 	stableScope := scope
 	stableScope.RequestID, stableScope.TurnID, stableScope.ExecutionID = "", "", ""
 	encodedScope, err := json.Marshal(stableScope)
@@ -78,8 +82,8 @@ func (p *meshLocalDataPort) HistoricalConversationPage(ctx context.Context, scop
 		return err
 	}
 	if !cursor.Owned.Done {
-		statement := `SELECT resource_id,updated_at,body FROM kernel_device_owned_resources WHERE owner_id=? AND kind='conversation' AND deleted=0`
-		args := []any{p.ownerID}
+		statement := `SELECT resource_id,updated_at,body FROM kernel_device_owned_resources WHERE owner_id=? AND role_id=? AND kind='conversation' AND deleted=0`
+		args := []any{p.ownerID, partition}
 		if search != "" {
 			statement += coordination.OwnedConversationSearchPredicate
 			args = append(args, search, search)

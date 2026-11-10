@@ -44,6 +44,7 @@ export interface RuntimeAction {
   actionKey: string;
   displayName: string;
   fps: number;
+  frameCount: number;
   playbackMode: PlaybackMode;
   interruptible: boolean;
   interruptAfterMs?: number;
@@ -405,6 +406,7 @@ const CANONICAL_ACTION_TOP_LEVEL_FIELDS = [
   "version",
   "playbackMode",
   "fps",
+  "frameCount",
   "interruptible",
   "interruptAfterMs",
   "priority",
@@ -955,6 +957,8 @@ export class CanonicalPackageReader implements StrictPackageContractReader {
     const playbackMode = requireCanonicalPlaybackMode(a.playbackMode, actionKey);
     const fps = requireInteger(a.fps, "fps", "PACKAGE_MANIFEST_INVALID");
     assertCondition(fps >= 1 && fps <= 120, "PACKAGE_MANIFEST_INVALID", `fps must be between 1 and 120 (action: ${actionKey})`);
+    const frameCount = requireInteger(a.frameCount, "frameCount", "PACKAGE_MANIFEST_INVALID");
+    assertCondition(frameCount >= 1, "PACKAGE_MANIFEST_INVALID", `frameCount must be >= 1 (action: ${actionKey})`);
     const interruptible = requireBoolean(a.interruptible, "interruptible", "PACKAGE_MANIFEST_INVALID");
     let interruptAfterMs: number | undefined;
     if (a.interruptAfterMs !== undefined) {
@@ -990,11 +994,18 @@ export class CanonicalPackageReader implements StrictPackageContractReader {
     const returnTo = normalizeReturnToRule(a.returnTo, actionKey);
     const anchor = normalizeAnchor(a.anchor, actionKey);
     const frames = normalizeFramesStrict(a.frames, actionKey);
+    assertCondition(
+      frameCount === frames.length,
+      "ACTION_CONFIG_INVALID",
+      `frameCount=${frameCount} does not match frames=${frames.length} (action: ${actionKey})`,
+      { actionKey, expected: String(frameCount), actual: String(frames.length) },
+    );
 
     const action: RuntimeAction = {
       actionKey: key,
       displayName,
       fps,
+      frameCount,
       playbackMode,
       interruptible,
       interruptAfterMs,
@@ -1055,6 +1066,12 @@ export class RuntimePackageNormalizer {
         );
       }
       const actionResult = reader.readAction(actionRaw, entry.key, entry.config);
+      assertCondition(
+        actionResult.action.frameCount === entry.frameCount,
+        "PACKAGE_ACTION_SUMMARY_MISMATCH",
+        `action frameCount=${actionResult.action.frameCount} does not match manifest=${entry.frameCount} (action: ${entry.key})`,
+        { actionKey: entry.key, expected: String(entry.frameCount), actual: String(actionResult.action.frameCount) },
+      );
       actions.set(entry.key, actionResult.action);
     }
 

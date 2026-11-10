@@ -635,6 +635,7 @@ type validatedActionConfig struct {
 	DisplayName            string                `json:"displayName"`
 	Version                int                   `json:"version"`
 	Fps                    int                   `json:"fps"`
+	FrameCount             int                   `json:"frameCount"`
 	PlaybackMode           string                `json:"playbackMode"`
 	Interruptible          bool                  `json:"interruptible"`
 	InterruptAfterMs       *int                  `json:"interruptAfterMs"`
@@ -653,14 +654,14 @@ type validatedActionConfig struct {
 
 var actionConfigAllowedFields = []string{
 	"schemaVersion", "actionKey", "displayName", "version", "playbackMode",
-	"fps", "interruptible", "interruptAfterMs", "priority", "cooldownMs",
+	"fps", "frameCount", "interruptible", "interruptAfterMs", "priority", "cooldownMs",
 	"minimumPlayMs", "maximumPlayMs", "mutexGroup", "supportsDefaultIdle",
 	"isStableStateCandidate", "isTransitionOnly", "returnTo", "anchor", "frames",
 }
 
 var actionConfigRequiredFields = []string{
 	"schemaVersion", "actionKey", "displayName", "version", "playbackMode",
-	"fps", "interruptible", "priority", "cooldownMs", "minimumPlayMs",
+	"fps", "frameCount", "interruptible", "priority", "cooldownMs", "minimumPlayMs",
 	"maximumPlayMs", "mutexGroup", "supportsDefaultIdle",
 	"isStableStateCandidate", "isTransitionOnly", "returnTo", "anchor", "frames",
 }
@@ -898,6 +899,28 @@ func (v *Validator) validateActionConfigLayer(report *ValidationReport, fs Packa
 				Expected:  fmt.Sprintf("frameCount=%d", action.FrameCount),
 				Actual:    fmt.Sprintf("frames=%d", len(cfg.Frames)),
 				Message:   fmt.Sprintf("frameCount mismatch: manifest=%d, config=%d", action.FrameCount, len(cfg.Frames)),
+			})
+		}
+		if cfg.FrameCount != action.FrameCount {
+			report.addFinding(Finding{
+				Code:      ErrCodePackageActionSummaryMismatch,
+				Severity:  SeverityError,
+				Path:      action.Config,
+				ActionKey: action.Key,
+				Expected:  fmt.Sprintf("frameCount=%d", action.FrameCount),
+				Actual:    fmt.Sprintf("frameCount=%d", cfg.FrameCount),
+				Message:   fmt.Sprintf("frameCount mismatch: manifest=%d, config=%d", action.FrameCount, cfg.FrameCount),
+			})
+		}
+		if cfg.FrameCount != len(cfg.Frames) {
+			report.addFinding(Finding{
+				Code:      ErrCodePackageActionSummaryMismatch,
+				Severity:  SeverityError,
+				Path:      action.Config,
+				ActionKey: action.Key,
+				Expected:  fmt.Sprintf("frameCount=%d", cfg.FrameCount),
+				Actual:    fmt.Sprintf("frames=%d", len(cfg.Frames)),
+				Message:   fmt.Sprintf("config frameCount=%d does not match frames=%d", cfg.FrameCount, len(cfg.Frames)),
 			})
 		}
 

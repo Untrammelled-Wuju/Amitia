@@ -19,6 +19,7 @@
     </div>
     <input ref="pairingImageInput" class="pairing-image-input" type="file" accept="image/*" aria-label="选择配对二维码图片" @change="readPairingImage" />
     <el-alert v-if="localError" :title="localError" type="warning" show-icon :closable="false" />
+    <el-alert v-if="offerNotice" :title="offerNotice" type="warning" show-icon :closable="false" />
     <DevicePairScanner v-if="!localCenter" v-model="scannerOpen" @scanned="joinCurrentDevice" />
     <div v-if="pairingOffer" class="pairing-offer">
       <h4>设备配对二维码</h4>
@@ -51,6 +52,7 @@ import {
 import { initializeRuntimeCapabilities } from "@/runtime/runtime-capabilities";
 import { getWebDeviceMeshIdentity } from "@/runtime/web-device-mesh";
 import type { PairingInput } from "@/runtime/web-device-mesh";
+import { startPairingLANMonitor } from "@/runtime/pairing-lan-monitor";
 
 const props = defineProps<{ serverURL: string; mode?: "local" | "cloud" }>();
 const emit = defineEmits<{ paired: [baseURL: string] }>();
@@ -64,12 +66,26 @@ const joinBusy = ref(false);
 const offerBusy = ref(false);
 const pairingOffer = ref("");
 const pairingImage = ref("");
+const offerNotice = ref("");
+let offerGeneration = 0;
+let offerTimer: ReturnType<typeof setTimeout> | undefined;
+let lanMonitor: AbortController | undefined;
 let disposed = false;
 const desktopAvailable = computed(() => Boolean(window.amitiaDesktop));
 const management = useDeviceManagementIntent(() => {
+  invalidateOffer("统筹中心连接或权限已变化，请重新生成二维码");
+});
+
+function invalidateOffer(message: string) {
+  offerGeneration++;
+  lanMonitor?.abort();
+  lanMonitor = undefined;
+  if (offerTimer) clearTimeout(offerTimer);
+  offerTimer = undefined;
+  if (pairingOffer.value || offerBusy.value) offerNotice.value = message;
   pairingOffer.value = "";
   pairingImage.value = "";
-});
+}
 
 async function loadCurrentDevice() {
   localError.value = "";
@@ -165,11 +181,21 @@ async function joinCurrentDevice(scanned?: string) {
 async function generatePairingOffer() {
   if (!localCenter.value) return;
   if (offerBusy.value || joinBusy.value) return;
+  invalidateOffer("");
+  offerNotice.value = "";
+  const generation = offerGeneration;
   offerBusy.value = true;
   let intent: Awaited<ReturnType<typeof management.capture>> | null = null;
   try {
     const deployment = await getDeploymentConfig();
     if (deployment.mode === "local" && desktopAvailable.value) {
+      const monitor = new AbortController();
+      lanMonitor = monitor;
+      await startPairingLANMonitor(monitor,
+        () => invalidateOffer("局域网地址已变化，请重新生成二维码"),
+        (error) => invalidateOffer(`局域网地址监测中断，请重新生成二维码：${error instanceof Error ? error.stack || error.message : String(error)}`),
+      );
+      if (disposed || generation !== offerGeneration) return;
       intent = await management.capture();
       const result = await api.get<{ devices?: { deviceId: string; trustState: string }[] }>("/api/device-mesh/v1/devices", undefined, deviceManagementRequestConfig(intent));
       await management.validate(intent);
@@ -182,12 +208,21 @@ async function generatePairingOffer() {
     }
     const connection = await getRuntimeConnection();
     const offer = await createCurrentDevicePairingOffer(connection.apiBaseURL, 1800);
+    if (disposed || generation !== offerGeneration) return;
+    if (intent) await management.validate(intent);
+    if (disposed || generation !== offerGeneration) return;
+    const expiresAt = Date.parse(offer.expiresAt);
+    if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) throw new Error(`配对二维码有效期无效：${offer.expiresAt}`);
     pairingOffer.value = String(offer.qrPayload || offer.offerToken || "").trim();
     pairingImage.value = String(offer.qrImage || "");
     if (!pairingOffer.value) throw new Error("统筹中心未返回配对 Offer");
+    offerTimer = setTimeout(() => invalidateOffer("配对二维码已过期，请重新生成"), expiresAt - Date.now());
     ElMessage.success("30 分钟有效的设备配对二维码已生成");
   } catch (err: any) {
-    if (err !== "cancel" && err !== "close") ElMessage.error(err?.message || "生成配对 Offer 失败");
+    if (generation === offerGeneration) {
+      invalidateOffer("");
+      if (err !== "cancel" && err !== "close") ElMessage.error(err instanceof Error ? err.stack || err.message : String(err));
+    }
   } finally {
     management.release(intent);
     offerBusy.value = false;
@@ -231,7 +266,7 @@ async function manualPairing() {
 }
 
 onMounted(loadCurrentDevice);
-onBeforeUnmount(() => { disposed = true; });
+onBeforeUnmount(() => { disposed = true; invalidateOffer(""); });
 </script>
 
 <style scoped>

@@ -15,6 +15,11 @@ import (
 type repositoryPermissionTrustChecker struct {
 	installations domain.InstallationRepository
 	definitions   domain.DefinitionRepository
+	provenance    bundledProvenanceVerifier
+}
+
+type bundledProvenanceVerifier interface {
+	IsVerifiedBundledInstallation(ctx context.Context, extensionID domain.ExtensionID, version domain.SemanticVersion, metadata map[string]any) bool
 }
 
 func newRepositoryPermissionTrustChecker(
@@ -22,6 +27,14 @@ func newRepositoryPermissionTrustChecker(
 	definitions domain.DefinitionRepository,
 ) *repositoryPermissionTrustChecker {
 	return &repositoryPermissionTrustChecker{installations: installations, definitions: definitions}
+}
+
+func (c *repositoryPermissionTrustChecker) withBundledProvenance(verifier bundledProvenanceVerifier) *repositoryPermissionTrustChecker {
+	if c == nil {
+		return nil
+	}
+	c.provenance = verifier
+	return c
 }
 
 func (c *repositoryPermissionTrustChecker) IsTrusted(subject permission.PermissionSubject) bool {
@@ -53,6 +66,11 @@ func (c *repositoryPermissionTrustChecker) IsTrusted(subject permission.Permissi
 	switch strings.ToLower(strings.TrimSpace(def.Publisher.TrustLevel)) {
 	case "system", "official", "trusted", "user_trusted":
 		return true
+	case packageProvenanceBundled:
+		if c.provenance == nil {
+			return false
+		}
+		return c.provenance.IsVerifiedBundledInstallation(ctx, domain.ExtensionID(extensionID), inst.InstalledVersion, inst.Metadata)
 	default:
 		return false
 	}

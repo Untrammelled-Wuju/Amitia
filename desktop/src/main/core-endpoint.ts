@@ -16,6 +16,16 @@ export interface CoreEndpoint {
 
 let currentEndpoint: CoreEndpoint | null = null;
 let endpointEpoch = 0;
+const endpointListeners = new Set<() => void>();
+
+export function onCoreEndpointChanged(listener: () => void): () => void {
+  endpointListeners.add(listener);
+  return () => endpointListeners.delete(listener);
+}
+
+function notifyCoreEndpointChanged(): void {
+  for (const listener of endpointListeners) listener();
+}
 const endpointWaiters = new Set<{
   resolve: (endpoint: CoreEndpoint) => void;
   reject: (error: Error) => void;
@@ -111,6 +121,7 @@ export function setCoreEndpoint(endpoint: CoreEndpoint | null): void {
   currentEndpoint = endpoint;
   endpointEpoch += 1;
   setLocalMeshBaseURL(endpoint.httpBaseURL);
+  notifyCoreEndpointChanged();
   for (const waiter of endpointWaiters) {
     clearTimeout(waiter.timer);
     waiter.resolve(endpoint);
@@ -121,6 +132,7 @@ export function setCoreEndpoint(endpoint: CoreEndpoint | null): void {
 export function invalidateCoreEndpoint(): void {
   currentEndpoint = null;
   endpointEpoch += 1;
+  notifyCoreEndpointChanged();
 }
 
 export function waitForCoreEndpoint(timeoutMs = 30000): Promise<CoreEndpoint> {

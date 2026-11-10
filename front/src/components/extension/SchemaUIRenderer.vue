@@ -9,6 +9,8 @@ import { fetchSchemaDocument } from "@/api/extension";
 import { resolveHostEnvironment } from "@/composables/useHostEnvironment";
 import SchemaUINode from "./SchemaUINode.vue";
 import ExtensionRenderState from "./ExtensionRenderState.vue";
+import SchemaUIErrorPanel from "./SchemaUIErrorPanel.vue";
+import { originalErrorMessage, originalErrorText } from "@/runtime/original-error";
 import {
   validateDocument,
   countNodes,
@@ -50,7 +52,11 @@ const capturedError = ref<string | null>(null);
 const lifecycleMountKey = ref("");
 const lifecycleRunning = ref(false);
 const dataSourcesLoading = ref(false);
-const isLoading = computed(() => !error.value && !capturedError.value && (loading.value || !sessionReady.value || lifecycleRunning.value || dataSourcesLoading.value));
+const mountFailure = ref<SchemaUIFailure | null>(null);
+const actionFailure = ref<SchemaUIFailure | null>(null);
+const bridgeInFlight = ref(false);
+let bridgeAbort: AbortController | null = null;
+const isLoading = computed(() => !error.value && !capturedError.value && !mountFailure.value && (loading.value || !sessionReady.value || lifecycleRunning.value || dataSourcesLoading.value));
 
 const formState = reactive<Record<string, unknown>>({});
 const localContextOverride = reactive<Record<string, unknown>>({});
@@ -278,7 +284,7 @@ async function loadSchema() {
     for (const r of roots) initializeFormDefaults(r);
   } catch (e) {
     if (token !== schemaLoadToken) return;
-    error.value = e instanceof Error ? e.message : String(e);
+    error.value = originalErrorMessage(e, "schema 文档加载失败");
   } finally {
     if (token === schemaLoadToken) {
       loading.value = false;
@@ -406,7 +412,7 @@ async function restartSession() {
     await createSession(token);
   } catch (e) {
     if (token !== restartToken) return;
-    capturedError.value = e instanceof Error ? e.message : String(e);
+    capturedError.value = originalErrorMessage(e, "插件会话创建失败");
   }
 }
 
@@ -422,16 +428,83 @@ function nextBridgeNonce(): string {
   return `${Date.now().toString(36)}-${bridgeNonceSequence.toString(36)}-${random[0].toString(36)}${random[1].toString(36)}`;
 }
 
+type SchemaUIFailure = {
+  code: string;
+  summary: string;
+  raw: string;
+};
+
+const BRIDGE_READ_TIMEOUT_MS = 20000;
+const BRIDGE_ACTION_TIMEOUT_MS = 45000;
+
+const FAILURE_SUMMARIES: Record<string, string> = {
+  permission_denied: "宿主拒绝了该请求：插件未获得执行该操作的权限。",
+  scope_denied: "宿主拒绝了该请求：动作或数据源超出当前会话作用域。",
+  identity_invalid: "宿主拒绝了该请求：插件身份校验未通过。",
+  action_timeout: "请求在应用或宿主侧超时，已被中止。",
+  render_timeout: "插件渲染超时，宿主已中止本次调用。",
+  action_cancelled: "请求已取消。",
+  upstream_error: "插件依赖的上游服务返回错误，宿主已保留原始响应。",
+  session_unavailable: "插件会话不可用，需重建会话后再试。",
+  session_restarted: "插件会话已重建，需要重新执行本次操作。",
+  runtime_unavailable: "插件运行时不可用，宿主未返回结果。",
+};
+
 class BridgeError extends Error {
   code?: string;
+  detail?: unknown;
 
-  constructor(message: string, code?: string) {
+  constructor(message: string, code?: string, detail?: unknown) {
     super(message);
+    this.name = "BridgeError";
     this.code = code;
+    this.detail = detail;
   }
 }
 
-async function postBridge(method: string, payload: Record<string, unknown>): Promise<unknown> {
+function normalizeFailureCode(code: string): string {
+  switch (code) {
+    case "ERR_CANCELED":
+      return "action_cancelled";
+    case "ECONNABORTED":
+    case "ETIMEDOUT":
+      return "action_timeout";
+    default:
+      return code;
+  }
+}
+
+function failureCodeOf(error: unknown): string {
+  if (!error || typeof error !== "object") return "";
+  const record = error as Record<string, unknown>;
+  const response = record.response;
+  const envelope = response && typeof response === "object" ? (response as Record<string, unknown>).data : undefined;
+  const envelopeRecord = envelope && typeof envelope === "object" ? envelope as Record<string, unknown> : undefined;
+  const nested = envelopeRecord?.error && typeof envelopeRecord.error === "object" ? envelopeRecord.error as Record<string, unknown> : undefined;
+  const code = nested?.code ?? envelopeRecord?.code ?? record.code;
+  return typeof code === "string" ? normalizeFailureCode(code) : "";
+}
+
+function buildFailure(error: unknown, context: string): SchemaUIFailure {
+  const code = failureCodeOf(error);
+  const message = originalErrorMessage(error, context);
+  return {
+    code: code || "runtime_unavailable",
+    summary: FAILURE_SUMMARIES[code] ?? message,
+    raw: `${context}\n${originalErrorText(error)}`,
+  };
+}
+
+function cancelBridgeRequest() {
+  bridgeAbort?.abort();
+}
+
+function clearFailures() {
+  mountFailure.value = null;
+  actionFailure.value = null;
+}
+
+async function postBridge(method: string, payload: Record<string, unknown>, options: { timeout?: number; signal?: AbortSignal } = {}): Promise<unknown> {
   if (!sessionId.value || !sessionReady.value) {
     const token = ++restartToken;
     await createSession(token);
@@ -442,7 +515,7 @@ async function postBridge(method: string, payload: Record<string, unknown>): Pro
   if (!sessionId.value || !sessionReady.value) {
     throw new BridgeError("插件会话不可用，请重试", "session_unavailable");
   }
-  const response = await apiClient.post<{ ok?: boolean; result?: unknown; error?: { code?: string; message?: string } | string }>(
+  const response = await apiClient.post<{ ok?: boolean; result?: unknown; error?: { code?: string; message?: string; detail?: unknown } | string }>(
     `/api/extensions/ui/sessions/${sessionId.value}/bridge`,
     {
       method,
@@ -454,18 +527,24 @@ async function postBridge(method: string, payload: Record<string, unknown>): Pro
       nonce: nextBridgeNonce(),
       payload,
     },
+    {
+      timeout: options.timeout ?? BRIDGE_READ_TIMEOUT_MS,
+      signal: options.signal,
+    },
   );
   const envelope = response.data ?? {};
   if (envelope.ok === false) {
     const detail = typeof envelope.error === "string" ? envelope.error : envelope.error?.message;
     const code = typeof envelope.error === "string" ? undefined : envelope.error?.code;
-    throw new BridgeError(detail || "Bridge 调用失败", code);
+    const envelopeDetail = typeof envelope.error === "string" ? undefined : envelope.error?.detail;
+    throw new BridgeError(detail || "Bridge 调用失败", code, envelopeDetail);
   }
   return envelope.result;
 }
 
 async function loadDataSources() {
   dataSourcesLoading.value = true;
+  const failures: SchemaUIFailure[] = [];
   try {
     for (const key of Object.keys(dataSourceState)) delete dataSourceState[key];
     const sources = schema.value?.dataSources ?? [];
@@ -480,13 +559,20 @@ async function loadDataSources() {
         dataSourceState[source.id] = await postBridge("ui.data.request", {
           key: source.id,
           params: sourceInput,
-        });
+        }, { timeout: BRIDGE_READ_TIMEOUT_MS });
       } catch (e) {
-        if (import.meta.env.DEV) console.warn(`[SchemaUI] data source ${source.id} failed`, e);
+        failures.push(buildFailure(e, `数据源 ${source.id} 加载失败`));
       }
     }));
   } finally {
     dataSourcesLoading.value = false;
+    if (failures.length > 0) {
+      mountFailure.value = {
+        code: failures[0].code,
+        summary: failures.length === 1 ? failures[0].summary : `${failures[0].summary}（共 ${failures.length} 个数据源失败）`,
+        raw: failures.map(item => item.raw).join("\n\n"),
+      };
+    }
   }
 }
 
@@ -560,11 +646,21 @@ async function invokeAction(payload: { action: SchemaUIActionBinding; node: Sche
       ...resolvedInput,
       ...(files ? { files } : {}),
     } as Record<string, unknown>;
-    const bridgeResult = await postBridge("ui.action.invoke", {
-      action_id: action.action_id,
-      input: actionInput,
-      meta: renderMeta,
-    });
+    bridgeAbort?.abort();
+    const controller = new AbortController();
+    bridgeAbort = controller;
+    bridgeInFlight.value = true;
+    let bridgeResult: unknown;
+    try {
+      bridgeResult = await postBridge("ui.action.invoke", {
+        action_id: action.action_id,
+        input: actionInput,
+        meta: renderMeta,
+      }, { timeout: BRIDGE_ACTION_TIMEOUT_MS, signal: controller.signal });
+    } finally {
+      bridgeInFlight.value = false;
+      if (bridgeAbort === controller) bridgeAbort = null;
+    }
     const data = unwrapActionResult(bridgeResult);
     if (data && typeof data === "object") {
       const download = asRecord(data.download);
@@ -611,27 +707,34 @@ async function invokeAction(payload: { action: SchemaUIActionBinding; node: Sche
       if (reportFailure) {
         const failureMessage = findActionFailure(data);
         if (failureMessage) {
-          ElMessage.error(formatActionMessage(failureMessage));
+          actionFailure.value = {
+            code: "runtime_unavailable",
+            summary: formatActionMessage(failureMessage),
+            raw: `动作 ${action.action_id} 返回失败状态\n${originalErrorText(data)}`,
+          };
         } else if (!action.successMessage && typeof data.message === "string" && data.message) {
           ElMessage.success(data.message);
         }
       }
     }
     actionSucceeded = !findActionFailure(data);
+    if (actionSucceeded) {
+      actionFailure.value = null;
+    }
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
-    ElMessage.error(message);
+    const failure = buildFailure(e, `动作 ${action.action_id} 调用失败`);
+    actionFailure.value = failure;
     try {
       uiStore.recordError({
         contributionId: props.contribution.contributionId,
         slotId: props.slotId,
-        message,
+        message: failure.summary,
         timestamp: Date.now(),
         recoverable: true,
       });
     } catch (error) {
-  console.error("[original-error]", error);
-}
+      console.error("[original-error]", error);
+    }
   } finally {
     actionLoading[action.action_id] = false;
     if (nodeId) busyNodeIds.delete(nodeId);
@@ -669,6 +772,11 @@ async function runLifecycleActions(
           type: "page",
         },
       }, false);
+      if (actionFailure.value) {
+        mountFailure.value = actionFailure.value;
+        actionFailure.value = null;
+        return;
+      }
     }
   } finally {
     lifecycleRunning.value = false;
@@ -690,7 +798,16 @@ function onNodeError(payload: { nodeId: string; message: string }) {
 }
 
 async function retry() {
+  clearFailures();
+  lifecycleMountKey.value = "";
+  for (const k of Object.keys(dataSourceState)) delete dataSourceState[k];
   await Promise.all([loadSchema(), restartSession()]);
+  if (schema.value && sessionReady.value) {
+    if (Object.keys(dataSourceState).length === 0) {
+      await loadDataSources();
+    }
+    runMountLifecycle();
+  }
 }
 
 onMounted(() => {
@@ -708,6 +825,7 @@ watch(
     for (const k of Object.keys(dataSourceState)) delete dataSourceState[k];
     lifecycleMountKey.value = "";
     capturedError.value = null;
+    clearFailures();
     await loadSchema();
   }
 );
@@ -744,6 +862,7 @@ watch(
 onBeforeUnmount(() => {
   ++restartToken;
   ++schemaLoadToken;
+  cancelBridgeRequest();
   disposeSession();
 });
 </script>
@@ -762,12 +881,24 @@ onBeforeUnmount(() => {
   >
     <template v-if="isLoading">
       <ExtensionRenderState state="loading" />
+      <div v-if="bridgeInFlight" class="schema-ui-renderer__cancel">
+        <button type="button" class="schema-ui-renderer__cancel-button" @click="cancelBridgeRequest">取消请求</button>
+      </div>
     </template>
     <template v-else-if="capturedError">
       <ExtensionRenderState state="error" :detail="capturedError" @retry="retry" />
     </template>
     <template v-else-if="error && !schema">
       <ExtensionRenderState state="error" :detail="error" @retry="retry" />
+    </template>
+    <template v-else-if="mountFailure">
+      <SchemaUIErrorPanel
+        :code="mountFailure.code"
+        :summary="mountFailure.summary"
+        :raw="mountFailure.raw"
+        retryable
+        @retry="retry"
+      />
     </template>
     <template v-else-if="schema">
       <div
@@ -783,6 +914,15 @@ onBeforeUnmount(() => {
         <span>节点数量超出性能预算限制</span>
       </div>
       <div v-if="!nodeCountExceeded" class="schema-ui-renderer__content">
+        <SchemaUIErrorPanel
+          v-if="actionFailure"
+          :code="actionFailure.code"
+          :summary="actionFailure.summary"
+          :raw="actionFailure.raw"
+        />
+        <div v-if="bridgeInFlight" class="schema-ui-renderer__cancel">
+          <button type="button" class="schema-ui-renderer__cancel-button" @click="cancelBridgeRequest">取消请求</button>
+        </div>
         <template v-if="hasRoot">
           <SchemaUINode
             v-if="rootNode"
@@ -886,6 +1026,24 @@ onBeforeUnmount(() => {
 }
 .schema-ui-renderer__retry:hover {
   background: rgba(220, 60, 60, 0.1);
+}
+.schema-ui-renderer__cancel {
+  display: flex;
+  justify-content: flex-end;
+  padding: 2px 0;
+}
+.schema-ui-renderer__cancel-button {
+  padding: 3px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--amitia-color-border, rgba(127, 127, 127, 0.3));
+  background: transparent;
+  color: var(--amitia-color-text-secondary, rgba(127, 127, 127, 0.9));
+  font-size: 12px;
+  cursor: pointer;
+}
+.schema-ui-renderer__cancel-button:hover {
+  color: var(--ac-color-danger);
+  border-color: color-mix(in srgb, var(--ac-color-danger) 45%, transparent);
 }
 .schema-ui-renderer__warning {
   padding: 6px 10px;

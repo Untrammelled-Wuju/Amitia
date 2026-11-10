@@ -58,7 +58,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       </div>
     </el-card>
 
-    <PetPluginManager />
+    <PetPluginManager @changed="refreshAll" />
 
     <el-card shadow="never" class="table-card">
       <el-empty

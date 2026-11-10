@@ -1,9 +1,11 @@
 package plugin_boundary
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/u-ai/backend/internal/desktoppet/integration"
+	"github.com/u-ai/backend/internal/extension/kernel/domain"
 )
 
 type BoundaryAdapters struct {
@@ -38,20 +40,26 @@ func (a BoundaryAdapters) toSlice() []ContributionAdapter {
 	}
 }
 
-func NewBoundaryWith(source KernelContributionSource, adapters BoundaryAdapters) (*DesktopPetPluginBoundary, error) {
+func NewBoundaryWith(source KernelContributionSource, adapters BoundaryAdapters, opts ...ReconcilerOption) (*DesktopPetPluginBoundary, error) {
 	if err := adapters.validate(); err != nil {
 		return nil, err
 	}
-	reconciler := NewReconciler(source, adapters.toSlice())
+	reconciler := NewReconciler(source, adapters.toSlice(), opts...)
 	return NewDesktopPetPluginBoundary(reconciler), nil
 }
 
 func NewProductionBoundary(source KernelContributionSource, caps integration.DesktopPetPluginCapabilities) (*DesktopPetPluginBoundary, error) {
+	if caps.InstallationCleanup == nil {
+		return nil, fmt.Errorf("plugin_boundary: InstallationCleanup capability is required")
+	}
 	prod, err := newProductionAdapters(caps)
 	if err != nil {
 		return nil, err
 	}
-	reconciler := NewReconciler(source, prod.toAdapters())
+	cleanup := caps.InstallationCleanup
+	reconciler := NewReconciler(source, prod.toAdapters(), WithUninstallCleanup(func(ctx context.Context, extID domain.ExtensionID) error {
+		return cleanup.CleanupOwnedInstallations(ctx, integration.OwnedInstallationCleanupRequest{ExtensionID: string(extID)})
+	}))
 	return NewDesktopPetPluginBoundary(reconciler), nil
 }
 

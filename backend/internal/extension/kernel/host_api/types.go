@@ -183,6 +183,42 @@ type Error struct {
 	Detail  string
 }
 
+func (e *Error) Error() string {
+	if e == nil {
+		return ""
+	}
+	if e.Code == "" {
+		return e.Message
+	}
+	return e.Code + ": " + e.Message
+}
+
+func (e *Error) ErrorCode() string {
+	if e == nil {
+		return ""
+	}
+	return e.Code
+}
+
+func (e *Error) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	switch e.Code {
+	case ErrorCodeTimeout:
+		return ErrTimeout
+	case ErrorCodeCancelled:
+		return ErrCancelled
+	case ErrorCodePermissionDenied:
+		return ErrPermissionDenied
+	case ErrorCodeScopeDenied:
+		return ErrScopeDenied
+	case ErrorCodeUpstream:
+		return ErrUpstream
+	}
+	return nil
+}
+
 type Route struct {
 	Method          Method
 	Version         int
@@ -232,6 +268,7 @@ var (
 	ErrRateLimited        = errors.New("host_api: rate limited")
 	ErrTimeout            = errors.New("host_api: timeout")
 	ErrCancelled          = errors.New("host_api: cancelled")
+	ErrUpstream           = errors.New("host_api: upstream error")
 	ErrMethodNotFound     = errors.New("host_api: method not found")
 	ErrVersionUnsupported = errors.New("host_api: version unsupported")
 	ErrHostUnavailable    = errors.New("host_api: host unavailable")
@@ -259,6 +296,7 @@ const (
 	ErrorCodeRateLimited               = "rate_limited"
 	ErrorCodeTimeout                   = "timeout"
 	ErrorCodeCancelled                 = "cancelled"
+	ErrorCodeUpstream                  = "upstream_error"
 	ErrorCodeResourceNotFound          = "resource_not_found"
 	ErrorCodeStateConflict             = "state_conflict"
 	ErrorCodeQuotaExceeded             = "quota_exceeded"

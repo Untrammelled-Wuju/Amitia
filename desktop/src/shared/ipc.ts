@@ -2,6 +2,7 @@ export const IPC_CHANNELS = {
   getEnvironment: "amitia:environment:get",
   getDeploymentConfig: "amitia:deployment:get",
   getRuntimeEndpoint: "amitia:runtime:endpoint",
+  runtimeEndpointChanged: "amitia:runtime:endpoint-changed",
   saveDeploymentConfig: "amitia:deployment:save",
   getRuntimeStatus: "amitia:runtime:status",
   openLogsDirectory: "amitia:logs:open",

@@ -405,38 +405,101 @@ func (p *ProductionRuntimeRepo) SendDesiredCommand(ctx context.Context, opID, sp
 		return nil
 	}
 
-	var state desired.RuntimeDesiredState
-	if err := p.db.WithContext(ctx).Where("space_id = ? AND device_id = ?", spaceID, deviceID).First(&state).Error; err != nil {
+	snapshot, err := p.loadDesiredStateSnapshot(ctx, opID, spaceID, deviceID, desiredRevision)
+	if err != nil {
 		return err
 	}
-	if desiredRevision == 0 {
-		desiredRevision = state.DesiredRevision
+	if desiredRevision > 0 && snapshot.DesiredRevision != desiredRevision {
+		return fmt.Errorf("production runtime recovery: desired snapshot revision conflict operation=%s expected=%d actual=%d", opID, desiredRevision, snapshot.DesiredRevision)
+	}
+	if installationID != "" && snapshot.InstallationID != "" && snapshot.InstallationID != installationID {
+		return fmt.Errorf("production runtime recovery: desired snapshot installation conflict operation=%s expected=%s actual=%s", opID, installationID, snapshot.InstallationID)
+	}
+	if snapshot.DesiredHash == "" {
+		return fmt.Errorf("production runtime recovery: desired snapshot has empty desired hash operation=%s revision=%d", opID, snapshot.DesiredRevision)
+	}
+	var settingsSnapshot json.RawMessage
+	if snapshot.SettingsSnapshotJSON != "" {
+		if !json.Valid([]byte(snapshot.SettingsSnapshotJSON)) {
+			return fmt.Errorf("production runtime recovery: desired snapshot settings payload is invalid JSON operation=%s revision=%d", opID, snapshot.DesiredRevision)
+		}
+		settingsSnapshot = json.RawMessage(snapshot.SettingsSnapshotJSON)
 	}
 	seq, err := p.facade.Commands().AllocateDeviceSequence(nil, spaceID, deviceID, time.Now())
 	if err != nil {
 		return err
 	}
-	ensureAbsent := op.OperationType == operation.TypeUninstall || (!state.DesiredEnabled && !state.DesiredVisible && op.OperationType == operation.TypeUninstall)
 	payload := runtimev1.SyncDesiredStatePayload{
-		DesiredRevision:        desiredRevision,
-		DesiredHash:            state.DesiredHash,
-		EnsureAbsent:           ensureAbsent,
-		InstallationID:         firstNonEmpty(installationID, state.InstallationID),
-		PetID:                  state.PetID,
-		ReleaseID:              state.ReleaseID,
+		DesiredRevision:        snapshot.DesiredRevision,
+		DesiredHash:            snapshot.DesiredHash,
+		EnsureAbsent:           snapshot.EnsureAbsent,
+		InstallationID:         snapshot.InstallationID,
+		PetID:                  snapshot.PetID,
+		ReleaseID:              snapshot.ReleaseID,
 		RuntimeContractVersion: runtimev1.CurrentSchemaVersion,
-		DefaultActionKey:       state.DesiredActionKey,
-		SettingsRevision:       state.SettingsRevision,
+		DefaultActionKey:       snapshot.DefaultActionKey,
+		SettingsRevision:       snapshot.SettingsRevision,
+		SettingsSnapshot:       settingsSnapshot,
 	}
 	commandType := runtimev1.CommandTypeSyncDesiredState
-	if ensureAbsent {
+	if snapshot.EnsureAbsent {
 		commandType = runtimev1.CommandTypeEnsureAbsent
 	}
-	_, err = p.facade.Commands().CreateDurableCommand(spaceID, deviceID, string(commandType), fmt.Sprintf("desired:%s:%d", deviceID, desiredRevision), fmt.Sprintf("desired:%s", deviceID), seq, payload)
+	_, err = p.facade.Commands().CreateDurableCommand(spaceID, deviceID, string(commandType), fmt.Sprintf("desired:%s:%d", deviceID, snapshot.DesiredRevision), fmt.Sprintf("desired:%s", deviceID), seq, payload)
 	if errors.Is(err, runtimev1.ErrCommandDuplication) {
 		return nil
 	}
-	return err
+	if err != nil {
+		return fmt.Errorf("production runtime recovery: create desired command operation=%s revision=%d: %w", opID, snapshot.DesiredRevision, err)
+	}
+	return nil
+}
+
+func (p *ProductionRuntimeRepo) loadDesiredStateSnapshot(ctx context.Context, opID, spaceID, deviceID string, desiredRevision int64) (*coordinator.DesiredStateSnapshot, error) {
+	var outbox desired.DesiredStateOutboxEvent
+	query := p.db.WithContext(ctx).
+		Where("operation_id = ? AND space_id = ? AND device_id = ? AND desired_revision > 0", opID, spaceID, deviceID)
+	if desiredRevision > 0 {
+		query = query.Where("desired_revision = ?", desiredRevision)
+	}
+	err := query.Order("created_at DESC").First(&outbox).Error
+	if err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("production runtime recovery: load desired outbox snapshot operation=%s revision=%d: %w", opID, desiredRevision, err)
+		}
+		var latest desired.DesiredStateOutboxEvent
+		latestErr := p.db.WithContext(ctx).
+			Where("operation_id = ? AND space_id = ? AND device_id = ? AND desired_revision > 0", opID, spaceID, deviceID).
+			Order("created_at DESC").
+			First(&latest).Error
+		if latestErr == nil && latest.DesiredRevision != desiredRevision {
+			return nil, fmt.Errorf("production runtime recovery: desired snapshot revision conflict operation=%s expected=%d actual=%d", opID, desiredRevision, latest.DesiredRevision)
+		}
+		if latestErr != nil && !errors.Is(latestErr, gorm.ErrRecordNotFound) {
+			return nil, errors.Join(
+				fmt.Errorf("production runtime recovery: desired outbox snapshot missing operation=%s revision=%d: %w", opID, desiredRevision, err),
+				fmt.Errorf("production runtime recovery: load latest desired outbox snapshot operation=%s: %w", opID, latestErr),
+			)
+		}
+		return nil, fmt.Errorf("production runtime recovery: desired outbox snapshot missing operation=%s revision=%d: %w", opID, desiredRevision, err)
+	}
+	if strings.TrimSpace(outbox.PayloadJSON) == "" {
+		return nil, fmt.Errorf("production runtime recovery: desired outbox snapshot payload empty operation=%s revision=%d", opID, outbox.DesiredRevision)
+	}
+	var snapshot coordinator.DesiredStateSnapshot
+	if err := json.Unmarshal([]byte(outbox.PayloadJSON), &snapshot); err != nil {
+		return nil, fmt.Errorf("production runtime recovery: decode desired outbox snapshot operation=%s revision=%d: %w", opID, outbox.DesiredRevision, err)
+	}
+	if snapshot.DesiredRevision != outbox.DesiredRevision {
+		return nil, fmt.Errorf("production runtime recovery: desired outbox snapshot corrupted operation=%s rowRevision=%d payloadRevision=%d", opID, outbox.DesiredRevision, snapshot.DesiredRevision)
+	}
+	if snapshot.SpaceID != "" && snapshot.SpaceID != spaceID {
+		return nil, fmt.Errorf("production runtime recovery: desired outbox snapshot space mismatch operation=%s expected=%s actual=%s", opID, spaceID, snapshot.SpaceID)
+	}
+	if snapshot.DeviceID != "" && snapshot.DeviceID != deviceID {
+		return nil, fmt.Errorf("production runtime recovery: desired outbox snapshot device mismatch operation=%s expected=%s actual=%s", opID, deviceID, snapshot.DeviceID)
+	}
+	return &snapshot, nil
 }
 
 func (p *ProductionRuntimeRepo) ResolveDesiredRevision(ctx context.Context, opID, spaceID, deviceID string) (int64, error) {
@@ -448,26 +511,16 @@ func (p *ProductionRuntimeRepo) ResolveDesiredRevision(ctx context.Context, opID
 		Where("operation_id = ? AND space_id = ? AND device_id = ? AND desired_revision > 0", opID, spaceID, deviceID).
 		Order("created_at DESC").
 		First(&outbox).Error
-	if err == nil && outbox.DesiredRevision > 0 {
-		return outbox.DesiredRevision, nil
-	}
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		return 0, err
-	}
-
-	// Older recovery records may predate the outbox row but still preserve the
-	// operation identity on the authoritative desired-state snapshot.
-	var state desired.RuntimeDesiredState
-	err = p.db.WithContext(ctx).
-		Where("operation_id = ? AND space_id = ? AND device_id = ? AND desired_revision > 0", opID, spaceID, deviceID).
-		First(&state).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return 0, errors.New("production runtime recovery: authoritative desired revision not found for operation")
+			return 0, fmt.Errorf("production runtime recovery: desired outbox snapshot missing operation=%s: %w", opID, err)
 		}
-		return 0, err
+		return 0, fmt.Errorf("production runtime recovery: load desired outbox snapshot operation=%s: %w", opID, err)
 	}
-	return state.DesiredRevision, nil
+	if outbox.DesiredRevision <= 0 {
+		return 0, fmt.Errorf("production runtime recovery: desired outbox snapshot revision invalid operation=%s revision=%d", opID, outbox.DesiredRevision)
+	}
+	return outbox.DesiredRevision, nil
 }
 
 func (p *ProductionRuntimeRepo) CancelDesiredCommand(ctx context.Context, opID, spaceID, deviceID, runtimeID string) error {

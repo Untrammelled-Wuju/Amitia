@@ -88,7 +88,7 @@ func TestInstallationRuntimeViewSeparatesDesiredAndAppliedState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	if err := db.AutoMigrate(&Installation{}, &desired.RuntimeDesiredState{}, &projection.InstallationRuntimeProjection{}); err != nil {
+	if err := db.AutoMigrate(&Installation{}, &desired.RuntimeDesiredState{}, &projection.InstallationRuntimeProjection{}, &runtimeSessionAuthority{}, &runtimeActualStateAuthority{}); err != nil {
 		t.Fatalf("migrate runtime view schema: %v", err)
 	}
 	if err := db.Create(&desired.RuntimeDesiredState{

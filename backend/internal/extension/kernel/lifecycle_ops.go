@@ -952,9 +952,10 @@ func (r *Runtime) Uninstall(ctx context.Context, extensionID string) error {
 		}
 	}
 
+	var cleanupErrs []error
 	if r.container.DesktopPetPluginBoundary != nil {
 		if err := r.container.DesktopPetPluginBoundary.HandleExtensionUninstalled(ctx, extID, version, "", ""); err != nil {
-			log.Printf("[uninstall-tx] petx boundary error: %v", err)
+			cleanupErrs = append(cleanupErrs, fmt.Errorf("uninstall petx boundary: %w", err))
 		}
 	}
 
@@ -962,7 +963,6 @@ func (r *Runtime) Uninstall(ctx context.Context, extensionID string) error {
 		r.container.GameHost.SecretSubscriptions.OnExtensionUninstalled(extensionID)
 	}
 
-	var cleanupErrs []error
 	if r.container.HookService != nil && r.container.HookService.Lifecycle != nil {
 		if err := r.container.HookService.Lifecycle.UninstallByExtension(ctx, extensionID); err != nil {
 			cleanupErrs = append(cleanupErrs, fmt.Errorf("uninstall hooks: %w", err))

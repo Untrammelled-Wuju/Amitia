@@ -15,6 +15,7 @@ import '../../../../core/ui_runtime/ui_runtime_controller.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_icons.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import '../../../../core/widgets/hub_entry_card.dart';
 
 final installedExtensionViewProvider =
     FutureProvider.autoDispose<ExtensionCenterView>((ref) async {
@@ -68,7 +69,9 @@ class ExtensionCenterPage extends ConsumerWidget {
     final navigationItems = UINavigationRegistry.resolve(snapshot)
         .where(
           (item) =>
-              !item.builtin && !channelExtensionIds.contains(item.extensionId),
+              !item.builtin &&
+              item.route != AppRoutes.extensions &&
+              !channelExtensionIds.contains(item.extensionId),
         )
         .toList(growable: false);
     final installed = _withoutChannelCards(view.installed, channelExtensionIds);
@@ -187,9 +190,10 @@ class ExtensionCenterPage extends ConsumerWidget {
               ],
             ),
           ),
+          SizedBox(height: AppSpacing.lg),
         ],
         if (visibleCards.isEmpty) ...[
-          SizedBox(height: AppSpacing.lg),
+          if (navigationItems.isEmpty) SizedBox(height: AppSpacing.lg),
           Text('已安装', style: AppTypography.label(context)),
           Padding(
             padding: EdgeInsets.symmetric(vertical: AppSpacing.lg),
@@ -204,7 +208,7 @@ class ExtensionCenterPage extends ConsumerWidget {
           ),
         ],
         if (updates.isNotEmpty) ...[
-          SizedBox(height: AppSpacing.lg),
+          if (navigationItems.isEmpty) SizedBox(height: AppSpacing.lg),
           Text(
             '可更新 (${updates.length})',
             style: AppTypography.sectionTitle(context),
@@ -237,7 +241,8 @@ class ExtensionCenterPage extends ConsumerWidget {
           ),
         ],
         if (needsAction.isNotEmpty) ...[
-          SizedBox(height: AppSpacing.lg),
+          if (navigationItems.isEmpty || updates.isNotEmpty)
+            SizedBox(height: AppSpacing.lg),
           Text(
             '需要处理 (${needsAction.length})',
             style: AppTypography.sectionTitle(context),
@@ -393,44 +398,13 @@ class _CenterEntry extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          height: 56,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          decoration: BoxDecoration(
-            border: showDivider
-                ? Border(
-                    bottom: BorderSide(
-                      color: context.borderSecondary,
-                      width: 0.5,
-                    ),
-                  )
-                : null,
-          ),
-          child: Row(
-            children: [
-              AmitiaIcon.adaptive(icon, size: 20, color: context.textSecondary),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  label,
-                  style: AppTypography.body(
-                    context,
-                  ).copyWith(fontSize: 14, fontWeight: FontWeight.w400),
-                ),
-              ),
-              AmitiaIcon(
-                AmitiaIconGlyph.chevronRight,
-                size: 18,
-                color: context.textTertiary,
-              ),
-            ],
-          ),
-        ),
-      ),
+    final glyph = AmitiaIcon.tryFromMaterial(icon);
+    return HubEntryCard(
+      icon: glyph ?? AmitiaIconGlyph.page,
+      iconData: glyph == null ? icon : null,
+      title: label,
+      onTap: onTap,
+      showDivider: showDivider,
     );
   }
 }

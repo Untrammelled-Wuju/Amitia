@@ -3834,6 +3834,7 @@ void 0;
               }
               await this.applyDesiredStateCommand(desiredCommand);
               this.markDesiredRevisionApplied(desiredRevision, desiredHash);
+              await this.syncRuntimeState();
               return {
                 commandId,
                 status: "applied",
@@ -3859,6 +3860,7 @@ void 0;
                 this.disableInternal(false, false),
               );
               this.markDesiredRevisionApplied(desiredRevision, desiredHash);
+              await this.syncRuntimeState();
               return {
                 commandId,
                 status: "applied",
@@ -4045,6 +4047,7 @@ void 0;
                 );
               }
               this.markDesiredRevisionApplied(desiredRevision, desiredHash);
+              await this.syncRuntimeState();
               return {
                 commandId,
                 status: "applied",
@@ -4316,11 +4319,11 @@ void 0;
     };
   }
 
-  private syncRuntimeState(): void {
+  private syncRuntimeState(): Promise<void> {
     const summary = this.collectPetInstanceSummary();
     this.petInstances = summary ? [summary] : [];
     const handler = this.runtimeHandler;
-    if (!handler || !handler.isConnected()) return;
+    if (!handler || !handler.isConnected()) return Promise.resolve();
 
     this.runtimeStateSync = this.runtimeStateSync
       .catch((error) => {
@@ -4340,6 +4343,7 @@ void 0;
           this.errorMessage(err),
         );
       });
+    return this.runtimeStateSync;
   }
 }
 

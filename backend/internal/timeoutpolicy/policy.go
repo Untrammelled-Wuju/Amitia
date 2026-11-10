@@ -50,6 +50,18 @@ func Duration(fallback time.Duration) time.Duration {
 	return time.Duration(s.Seconds) * time.Second
 }
 
+func Bounded(fallback time.Duration) time.Duration {
+	s, active := Current()
+	if !active || s.Disabled {
+		return fallback
+	}
+	seconds := time.Duration(s.Seconds) * time.Second
+	if fallback > 0 && fallback < seconds {
+		return fallback
+	}
+	return seconds
+}
+
 func WithTimeout(ctx context.Context, fallback time.Duration) (context.Context, context.CancelFunc) {
 	d := Duration(fallback)
 	if d <= 0 {

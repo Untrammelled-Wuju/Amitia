@@ -41,4 +41,17 @@ func TestProjectionCreatesIdentityAndNeverRegressesAppliedRevision(t *testing.T)
 	if got.AppliedSettingsRevision != 7 {
 		t.Fatalf("settings revision regressed: %d", got.AppliedSettingsRevision)
 	}
+	if err := svc.HandleRuntimeHeartbeat(ctx, "u", "d", "r", &coordinator.RuntimeHeartbeat{
+		AppliedDesiredRevision: 11,
+		ActualHealth:           "online_no_pet",
+		Timestamp:              "2026-08-18T00:00:02Z",
+	}); err != nil {
+		t.Fatalf("empty heartbeat: %v", err)
+	}
+	if err := db.Where("space_id = ? AND device_id = ?", "u", "d").Take(&got).Error; err != nil {
+		t.Fatalf("reload projection: %v", err)
+	}
+	if got.InstallationID != "inst" || got.PetID != "pet" {
+		t.Fatalf("empty runtime identity cleared installation binding: %+v", got)
+	}
 }

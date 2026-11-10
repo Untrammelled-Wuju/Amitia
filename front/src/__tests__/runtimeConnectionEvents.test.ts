@@ -2,9 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const endpoint = { value: "http://127.0.0.1:18899" };
 let statusListener: ((status: { state: string }) => void) | null = null;
+let endpointListener: (() => void) | null = null;
 const desktopApi = {
   getDeploymentConfig: vi.fn(async () => ({ mode: "local" as const })),
   getRuntimeEndpoint: vi.fn(async () => ({ httpBaseURL: endpoint.value })),
+  onRuntimeEndpointChanged: vi.fn((listener: () => void) => {
+    endpointListener = listener;
+    return () => { endpointListener = null; };
+  }),
   onRuntimeStatusChanged: vi.fn((listener: (status: { state: string }) => void) => {
     statusListener = listener;
     return () => { statusListener = null; };
@@ -17,6 +22,7 @@ describe("runtime connection events", () => {
     vi.clearAllMocks();
     endpoint.value = "http://127.0.0.1:18899";
     statusListener = null;
+    endpointListener = null;
     Object.defineProperty(window, "amitiaDesktop", {
       configurable: true,
       value: desktopApi,
@@ -48,6 +54,20 @@ describe("runtime connection events", () => {
       endpoint.value = "http://127.0.0.1:19999";
       statusListener?.({ state: "ready" });
       await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(1));
+    } finally {
+      window.removeEventListener("amitia:runtime-connection-changed", listener);
+    }
+  });
+  it("Core 实例变化时清除缓存并通知，即使地址相同", async () => {
+    const adapter = await import("../runtime/runtime-adapter");
+    await adapter.getRuntimeConnection();
+    const listener = vi.fn();
+    window.addEventListener("amitia:runtime-connection-changed", listener);
+    try {
+      endpointListener?.();
+      expect(listener).toHaveBeenCalledTimes(1);
+      await adapter.getRuntimeConnection();
+      expect(desktopApi.getRuntimeEndpoint).toHaveBeenCalledTimes(2);
     } finally {
       window.removeEventListener("amitia:runtime-connection-changed", listener);
     }

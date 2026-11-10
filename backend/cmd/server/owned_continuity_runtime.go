@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -53,8 +54,11 @@ func (r *ownedContinuityRuntime) request(owner interaction.EntryOwner, roleID, r
 }
 
 func (r *ownedContinuityRuntime) Resolve(ctx context.Context, owner interaction.EntryOwner, roleID, conversationID, workspaceID, message, replyToMessageID, sourceRequestID, requestID string, hints ...continuity.BindingLookup) (string, error) {
-	if r == nil || r.engine == nil || strings.TrimSpace(roleID) == "" {
+	if r == nil || r.engine == nil {
 		return "", errors.New("持续事项解析服务未就绪")
+	}
+	if strings.TrimSpace(roleID) == "" {
+		return "", fmt.Errorf("持续事项解析缺少角色标识 role=%q conversation=%q request=%q: %w", roleID, conversationID, requestID, coordination.ErrRoleRequired)
 	}
 	message = strings.TrimSpace(message)
 	if message == "" {

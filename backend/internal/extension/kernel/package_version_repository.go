@@ -276,6 +276,75 @@ func (r *PackageRepository) ActivatePackageVersionTx(ctx context.Context, tx *sq
 	return nil
 }
 
+func (r *PackageRepository) RestoreCurrentPackageVersionForRollback(ctx context.Context, extensionID, failedVersion, sourceVersionID, sourceGenerationID, operationID string) error {
+	if r == nil || r.db == nil {
+		return errors.New("kernel: package version database unavailable")
+	}
+	if extensionID == "" || failedVersion == "" || sourceVersionID == "" || sourceGenerationID == "" {
+		return errors.New("kernel: package version rollback identity is incomplete")
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return storageOperationError("begin package version rollback", err)
+	}
+	defer tx.Rollback()
+	var sourceExtensionID string
+	if err := tx.QueryRowContext(ctx, `SELECT extension_id FROM package_versions WHERE version_id = ?`, sourceVersionID).Scan(&sourceExtensionID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return operationStateError(PackageErrCodeVersionActivateTargetNotFound, "rollback source version not found: "+sourceVersionID, nil)
+		}
+		return storageOperationError("query rollback source version", err)
+	}
+	if sourceExtensionID != extensionID {
+		return operationStateError(PackageErrCodeVersionActivateTargetNotFound, "rollback source version extension_id mismatch", nil)
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := tx.ExecContext(ctx, `UPDATE package_versions SET version_state = ?, uninstall_operation_id = ?, uninstalled_at = ?, retained_until = ? WHERE extension_id = ? AND version = ? AND version_id != ?`,
+		string(PackageVersionStateRemoved), operationID, now, now, extensionID, failedVersion, sourceVersionID); err != nil {
+		return storageOperationError("remove failed package version", err)
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE package_versions SET version_state = ?, retained_until = ? WHERE extension_id = ? AND version_state = ? AND version_id != ?`,
+		string(PackageVersionStateRetained), now, extensionID, string(PackageVersionStateCurrent), sourceVersionID); err != nil {
+		return storageOperationError("retain displaced package versions", err)
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE package_versions SET version_state = ?, retained_until = '', uninstall_operation_id = '', uninstalled_at = '' WHERE extension_id = ? AND version_id = ?`,
+		string(PackageVersionStateCurrent), extensionID, sourceVersionID)
+	if err != nil {
+		return storageOperationError("restore source package version", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return storageOperationError("restore source package version rows affected", err)
+	}
+	if affected != 1 {
+		return operationStateError(PackageErrCodeVersionActivateTargetNotFound, fmt.Sprintf("restore source version affected %d rows, expected 1", affected), nil)
+	}
+	installResult, err := tx.ExecContext(ctx, `UPDATE extension_installations SET current_version_id = ?, current_generation_id = ? WHERE extension_id = ?`,
+		sourceVersionID, sourceGenerationID, extensionID)
+	if err != nil {
+		return storageOperationError("restore installation package version", err)
+	}
+	installAffected, err := installResult.RowsAffected()
+	if err != nil {
+		return storageOperationError("restore installation package version rows affected", err)
+	}
+	if installAffected != 1 {
+		return operationStateError(PackageErrCodeInstallationNotFound, fmt.Sprintf("restore installation affected %d rows, expected 1", installAffected), nil)
+	}
+	var currentCount int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM package_versions WHERE extension_id = ? AND version_state = ?`,
+		extensionID, string(PackageVersionStateCurrent)).Scan(&currentCount); err != nil {
+		return storageOperationError("count restored current versions", err)
+	}
+	if currentCount != 1 {
+		return operationStateError(PackageErrCodeVersionHistoryCorrupted, fmt.Sprintf("expected 1 current version after rollback, found %d", currentCount), nil)
+	}
+	if err := tx.Commit(); err != nil {
+		return storageOperationError("commit package version rollback", err)
+	}
+	return nil
+}
+
 func (r *PackageRepository) GetPackageVersion(ctx context.Context, extensionID, version string) (PackageVersionRecord, error) {
 	var record PackageVersionRecord
 	err := r.db.QueryRowContext(ctx, `SELECT `+packageVersionSelectColumns+`

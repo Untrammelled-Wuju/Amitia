@@ -215,9 +215,9 @@ func (g *DefaultGateway) Call(ctx context.Context, request CallRequest) CallResu
 		return result
 	}
 	timeoutCtx := ctx
-	if route.Timeout > 0 {
+	if budget := timeoutpolicy.Bounded(route.Timeout); budget > 0 {
 		var cancel context.CancelFunc
-		timeoutCtx, cancel = timeoutpolicy.WithTimeout(ctx, route.Timeout)
+		timeoutCtx, cancel = context.WithTimeout(ctx, budget)
 		defer cancel()
 	}
 	output, err := route.Handler(timeoutCtx, request)
@@ -244,6 +244,14 @@ func (g *DefaultGateway) Call(ctx context.Context, request CallRequest) CallResu
 		case errors.Is(err, ErrIdentityInvalid):
 			code = ErrorCodeIdentityInvalid
 			status = StatusRejected
+		case errors.Is(err, ErrUpstream):
+			code = ErrorCodeUpstream
+		case errors.Is(err, context.DeadlineExceeded):
+			code = ErrorCodeTimeout
+			status = StatusTimeout
+		case errors.Is(err, context.Canceled):
+			code = ErrorCodeCancelled
+			status = StatusCancelled
 		case errors.Is(err, ErrHostUnavailable):
 			code = ErrorCodeHostUnavailable
 		}

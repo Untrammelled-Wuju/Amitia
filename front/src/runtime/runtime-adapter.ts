@@ -244,6 +244,10 @@ export function resetRuntimeConnectionCache(): void {
   window.dispatchEvent(new CustomEvent("amitia:runtime-connection-changed"));
 }
 
+if (typeof window !== "undefined" && window.amitiaDesktop?.onRuntimeEndpointChanged) {
+  window.amitiaDesktop.onRuntimeEndpointChanged(() => resetRuntimeConnectionCache());
+}
+
 if (typeof window !== "undefined" && window.amitiaDesktop?.onRuntimeStatusChanged) {
   window.amitiaDesktop.onRuntimeStatusChanged((status) => {
     if (status.state !== "ready") return;

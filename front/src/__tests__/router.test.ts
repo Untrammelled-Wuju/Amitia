@@ -17,10 +17,15 @@ describe("router", () => {
     expect(route.name).toBe("catchAll");
   });
 
-  it("keeps personal space routes out of the fixed router", () => {
-    expect(router.resolve("/my-space").name).toBe("catchAll");
-    for (const section of ["profile", "identity", "runtime", "devices"]) {
-      expect(router.resolve(`/my-space/${section}`).name).toBe("catchAll");
+  it("keeps personal space and settings routes in the fixed core router", () => {
+    const sections = {
+      profile: "mySpaceProfile",
+      identity: "mySpaceIdentity",
+      runtime: "mySpaceRuntime",
+      devices: "mySpaceDevices",
+    };
+    for (const [section, name] of Object.entries(sections)) {
+      expect(router.resolve(`/my-space/${section}`).name).toBe(name);
     }
     expect(router.resolve("/settings/ui-providers").name).toBe("settingsUIProviders");
     for (const removed of ["/user-settings", "/devices"]) {

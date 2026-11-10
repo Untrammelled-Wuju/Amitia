@@ -147,6 +147,9 @@ func TestProductionResourceDetach_CallsExistingOwner(t *testing.T) {
 	if count != 0 {
 		t.Errorf("expected 0 bindings after detach, got %d", count)
 	}
+	if err := cap.DetachPluginResource(context.Background(), handle); err != nil {
+		t.Fatalf("repeated detach should be idempotent: %v", err)
+	}
 }
 
 func TestProductionResourceCache_IsNotSourceOfTruth(t *testing.T) {

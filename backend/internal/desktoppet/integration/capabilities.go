@@ -110,12 +110,22 @@ type PetFloatingWindowCapability interface {
 	DetachPluginFloatingWindow(ctx context.Context, handle PetFloatingWindowHandle) error
 }
 
+type OwnedInstallationCleanupRequest struct {
+	ExtensionID string
+	SpaceID     string
+}
+
+type PluginInstallationCleanupCapability interface {
+	CleanupOwnedInstallations(ctx context.Context, req OwnedInstallationCleanupRequest) error
+}
+
 type DesktopPetPluginCapabilities struct {
-	Resource       PetResourceCapability
-	Action         PetActionCapability
-	Runtime        PetRuntimeCapability
-	FloatingWindow PetFloatingWindowCapability
-	ActionTarget   ActionTargetResolver
+	Resource            PetResourceCapability
+	Action              PetActionCapability
+	Runtime             PetRuntimeCapability
+	FloatingWindow      PetFloatingWindowCapability
+	ActionTarget        ActionTargetResolver
+	InstallationCleanup PluginInstallationCleanupCapability
 }
 
 func (c DesktopPetPluginCapabilities) Validate() error {

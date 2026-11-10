@@ -23,6 +23,11 @@ const api = {
   getRuntimeEndpoint(): Promise<unknown> {
     return ipcRenderer.invoke(IPC_CHANNELS.getRuntimeEndpoint);
   },
+  onRuntimeEndpointChanged(callback: () => void): () => void {
+    const listener = () => callback();
+    ipcRenderer.on(IPC_CHANNELS.runtimeEndpointChanged, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.runtimeEndpointChanged, listener);
+  },
   saveDeploymentConfig(
     config: DeploymentModeConfig,
   ): Promise<DeploymentModeConfig> {

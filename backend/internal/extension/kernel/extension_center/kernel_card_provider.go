@@ -2,6 +2,7 @@ package extension_center
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"strings"
 	"sync"
@@ -297,6 +298,9 @@ func (p *KernelCardProvider) checkUpdates(ctx context.Context, cards []Extension
 			}
 			update, err := p.dependencies.Updates.Check(checkCtx, cards[index].ExtensionID, cards[index].Version)
 			if err != nil {
+				if errors.Is(err, package_distribution.ErrRegistryNotConfigured) {
+					return
+				}
 				cards[index].Diagnostics = append(cards[index].Diagnostics, CardDiagnostic{
 					Code:    "UPDATE_CHECK_FAILED",
 					Message: err.Error(),

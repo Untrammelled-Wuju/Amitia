@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -135,6 +136,13 @@ type Coordinator struct {
 	executionID      string
 	defaultLeaseTTL  time.Duration
 	maxRetryAttempts int
+	idempotencyMu    sync.Mutex
+	idempotencyLocks map[string]*idempotencyLock
+}
+
+type idempotencyLock struct {
+	mu   sync.Mutex
+	refs int
 }
 
 func NewCoordinator(
@@ -168,6 +176,7 @@ func NewCoordinator(
 		executionID:      generateExecutionID(),
 		defaultLeaseTTL:  5 * time.Minute,
 		maxRetryAttempts: 3,
+		idempotencyLocks: make(map[string]*idempotencyLock),
 	}, nil
 }
 
@@ -445,6 +454,32 @@ func (c *Coordinator) resolveIdempotentOperation(ctx context.Context, op *operat
 	return existing, nil
 }
 
+func (c *Coordinator) lockIdempotency(op *operation.InstallationOperation) func() {
+	if op == nil || op.IdempotencyKey == "" {
+		return func() {}
+	}
+	key := op.SpaceID + "\x00" + op.DeviceID + "\x00" + op.OperationType + "\x00" + op.IdempotencyKey
+	c.idempotencyMu.Lock()
+	entry := c.idempotencyLocks[key]
+	if entry == nil {
+		entry = &idempotencyLock{}
+		c.idempotencyLocks[key] = entry
+	}
+	entry.refs++
+	c.idempotencyMu.Unlock()
+
+	entry.mu.Lock()
+	return func() {
+		entry.mu.Unlock()
+		c.idempotencyMu.Lock()
+		entry.refs--
+		if entry.refs == 0 {
+			delete(c.idempotencyLocks, key)
+		}
+		c.idempotencyMu.Unlock()
+	}
+}
+
 func (c *Coordinator) buildIdempotencyKey(opType string, parts ...string) string {
 	allParts := append([]string{opType}, parts...)
 	return operation.ComputeIdempotencyKey(allParts...)
@@ -580,6 +615,8 @@ func (c *Coordinator) executeEnableDisable(ctx context.Context, req EnableDisabl
 		UpdatedAt:      time.Now().Format(operationTimeFormat),
 	}
 	op.RequestHash = operationRequestHash(op, map[string]string{"enabled": fmt.Sprintf("%t", enabled)})
+	unlock := c.lockIdempotency(op)
+	defer unlock()
 	if existing, err := c.resolveIdempotentOperation(ctx, op); err != nil {
 		return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: operation.ErrCodeIDEMPOTENCYConflict}, err
 	} else if existing != nil {
@@ -604,7 +641,7 @@ func (c *Coordinator) executeEnableDisable(ctx context.Context, req EnableDisabl
 		return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "OPERATION_UPDATE_FAILED"}, err
 	}
 
-	if err := c.publishPersistedDesiredState(ctx, req.DeviceCtx, false); err != nil {
+	if err := c.publishPersistedDesiredState(ctx, req.DeviceCtx, !enabled); err != nil {
 		op.Status = operation.OpStatusFailedTerminal
 		op.ErrorCode = "PUBLISH_FAILED"
 		op.ErrorMessage = err.Error()

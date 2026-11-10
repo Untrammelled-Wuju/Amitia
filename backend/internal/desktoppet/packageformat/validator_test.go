@@ -16,6 +16,7 @@ type testActionConfig struct {
 	DisplayName            string           `json:"displayName"`
 	Version                int              `json:"version"`
 	Fps                    int              `json:"fps"`
+	FrameCount             int              `json:"frameCount"`
 	PlaybackMode           string           `json:"playbackMode"`
 	Interruptible          bool             `json:"interruptible"`
 	Priority               int              `json:"priority"`
@@ -105,6 +106,7 @@ func createValidTestPackage(t *testing.T) (string, *Manifest) {
 		IsStableStateCandidate: false,
 		IsTransitionOnly:       false,
 		Fps:                    10,
+		FrameCount:             2,
 		PlaybackMode:           "loop",
 		Frames: []testFrameEntry{
 			{Index: 0, FrameID: "idle_0", File: "frames/0.png", DurationMs: 100, AssetID: "asset_idle_0", ContentHash: frameHash},
@@ -324,6 +326,7 @@ func TestValidateDirectory_InvalidPlaybackMode(t *testing.T) {
 		IsStableStateCandidate: false,
 		IsTransitionOnly:       false,
 		Fps:                    10,
+		FrameCount:             2,
 		PlaybackMode:           "unknown",
 		Frames: []testFrameEntry{
 			{Index: 0, FrameID: "idle_0", File: "frames/0.png", DurationMs: 100, AssetID: "asset_idle_0", ContentHash: frameHash},
@@ -359,6 +362,7 @@ func TestValidateDirectory_EmptyFrames(t *testing.T) {
 		IsStableStateCandidate: false,
 		IsTransitionOnly:       false,
 		Fps:                    10,
+		FrameCount:             0,
 		PlaybackMode:           "loop",
 		Frames:                 []testFrameEntry{},
 		ReturnTo:               testReturnTo{Type: "none"},
@@ -393,6 +397,7 @@ func TestValidateDirectory_ReturnToActionInvalid(t *testing.T) {
 		IsStableStateCandidate: false,
 		IsTransitionOnly:       false,
 		Fps:                    10,
+		FrameCount:             2,
 		PlaybackMode:           "loop",
 		Frames: []testFrameEntry{
 			{Index: 0, FrameID: "idle_0", File: "frames/0.png", DurationMs: 100, AssetID: "asset_idle_0", ContentHash: frameHash},

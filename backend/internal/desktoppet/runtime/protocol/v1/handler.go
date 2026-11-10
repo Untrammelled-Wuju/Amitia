@@ -414,6 +414,23 @@ func (h *Handler) validateCommandOwnership(conn *Connection, sessionID, commandI
 	return cmd, nil
 }
 
+func (h *Handler) validateDurableEventCommandOwnership(conn *Connection, commandID string) (*RuntimeCommand, error) {
+	cmd, err := h.commands.GetCommand(commandID)
+	if err != nil {
+		return nil, err
+	}
+	if !cmd.HasValidClassification() {
+		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, "stored runtime command classification is invalid")
+	}
+	if cmd.SpaceID != string(conn.SpaceID) || cmd.DeviceID != string(conn.DeviceID) {
+		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, "command ownership mismatch")
+	}
+	if cmd.RuntimeID != "" && cmd.RuntimeID != string(conn.RuntimeID) {
+		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, "command runtime mismatch")
+	}
+	return cmd, nil
+}
+
 func (h *Handler) HandleCommandAck(conn *Connection, env *Envelope, ack *CommandAckPayload) error {
 	if conn == nil {
 		return ErrConnectionClosed
@@ -713,7 +730,7 @@ func (h *Handler) validateRuntimeEventCommandOwnership(conn *Connection, session
 			return NewProtocolError(ErrCodeEnvelopeInvalid, "playback event identity does not match renderer-accepted playback")
 		}
 	case EventStateDesiredApplied, EventStateDesiredRejected:
-		cmd, err := h.validateCommandOwnership(conn, sessionID, meta.CommandID)
+		cmd, err := h.validateDurableEventCommandOwnership(conn, meta.CommandID)
 		if err != nil {
 			return fmt.Errorf("validate runtime event command ownership: %w", err)
 		}
@@ -781,9 +798,23 @@ func (h *Handler) validateRuntimeEventProgressPrecondition(env *Envelope) error 
 	case EventStateDesiredApplied:
 		return valid(current == CommandStatusRuntimeAccepted || current == CommandStatusCompleted, env.MessageName)
 	case EventStateDesiredRejected:
-		return valid(current == CommandStatusRuntimeAccepted || current == CommandStatusFailedTerminal, env.MessageName)
+		return valid(desiredRejectionStatusAllowed(current), env.MessageName)
 	default:
 		return nil
+	}
+}
+
+func desiredRejectionStatusAllowed(status CommandStatus) bool {
+	switch status {
+	case CommandStatusCreated, CommandStatusQueued, CommandStatusDispatching,
+		CommandStatusTransportDispatched, CommandStatusRuntimeReceived,
+		CommandStatusRuntimeAccepted, CommandStatusFailedRetryable,
+		CommandStatusCompleted, CommandStatusFailedTerminal,
+		CommandStatusExpired, CommandStatusCancelRequested, CommandStatusCancelled,
+		CommandStatusSuperseded:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -807,6 +838,13 @@ func (h *Handler) applyRuntimeEventCommandProgress(conn *Connection, sessionID s
 	case EventStateDesiredApplied:
 		return h.commands.MarkCompleted(meta.CommandID, "", now)
 	case EventStateDesiredRejected:
+		cmd, err := h.commands.GetCommand(meta.CommandID)
+		if err != nil {
+			return err
+		}
+		if CommandStatus(cmd.Status).IsTerminal() {
+			return nil
+		}
 		code := strings.TrimSpace(meta.ErrorCode)
 		if code == "" {
 			code = "DESIRED_STATE_REJECTED"

@@ -8,7 +8,7 @@
     "description": {
       "default": "发现、审查、安装、更新和卸载经过宿主验证的插件。"
     },
-    "version": "1.4.4",
+    "version": "1.4.5",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [

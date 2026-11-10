@@ -221,6 +221,7 @@ describe("PackageIntegrityVerifier filesystem verification", () => {
         actionKey: "idle",
         displayName: "Idle",
         fps: 12,
+        frameCount: 1,
         playbackMode: "loop",
         interruptible: true,
         priority: 0,

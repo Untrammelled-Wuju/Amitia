@@ -101,3 +101,93 @@ func TestProjectionBridge_RecenterACKBeforeCoordinatorStagePersistsIsRetryable(t
 		t.Fatalf("expected retry to complete original operation, got %s", got.Status)
 	}
 }
+
+func TestProjectionBridge_DesiredRejectedFailsWaitingOperation(t *testing.T) {
+	db := newProjectionBridgeP0TestDB(t)
+	ctx := context.Background()
+	if err := db.Create(&runtimeSessionIdentity{ID: "sess-reject", SpaceID: "u", DeviceID: "d", RuntimeID: "r"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	op := &operation.InstallationOperation{
+		ID:              "op-reject",
+		OperationType:   operation.TypeEnable,
+		SpaceID:         "u",
+		DeviceID:        "d",
+		RuntimeID:       "r",
+		InstallationID:  "inst-reject",
+		Status:          operation.OpStatusWaitingRuntimeACK,
+		Stage:           operation.OpStageWaitingRuntimeACK,
+		DesiredRevision: 7,
+	}
+	if err := db.Create(op).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&runtimeCommandProjection{ID: "cmd-reject", DesiredRevision: 7}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`CREATE TABLE desktop_pet_runtime_desired_states (
+		space_id TEXT NOT NULL,
+		device_id TEXT NOT NULL,
+		operation_id TEXT NOT NULL,
+		desired_revision INTEGER NOT NULL
+	)`).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`INSERT INTO desktop_pet_runtime_desired_states
+		(space_id, device_id, operation_id, desired_revision) VALUES (?, ?, ?, ?)`,
+		"u", "d", "op-newer-settings", 9).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`CREATE TABLE desktop_pet_installations (
+		id TEXT PRIMARY KEY,
+		space_id TEXT NOT NULL,
+		device_id TEXT NOT NULL,
+		runtime_sync_state TEXT NOT NULL DEFAULT '',
+		updated_at TEXT NOT NULL DEFAULT ''
+	)`).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`INSERT INTO desktop_pet_installations
+		(id, space_id, device_id, runtime_sync_state) VALUES (?, ?, ?, ?)`,
+		op.InstallationID, "u", "d", "pending").Error; err != nil {
+		t.Fatal(err)
+	}
+	payload, err := json.Marshal(desiredStateResultPayload{
+		CommandID:       "cmd-reject",
+		DesiredRevision: 7,
+		ErrorCode:       "RUNTIME_INIT_FAILED",
+		ErrorMessage:    "action config invalid",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bridge := NewProjectionBridge(db, NewService(db))
+	if err := bridge.processEvent(ctx, RuntimeEventRecord{
+		ID:               "evt-reject",
+		EventType:        "runtime.state.desired_rejected",
+		Payload:          payload,
+		RuntimeSessionID: "sess-reject",
+		CommandID:        "cmd-reject",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var got operation.InstallationOperation
+	if err := db.Where("id = ?", op.ID).Take(&got).Error; err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != operation.OpStatusFailedTerminal ||
+		got.Stage != operation.OpStatusFailedTerminal ||
+		got.ErrorCode != "RUNTIME_INIT_FAILED" ||
+		got.ErrorMessage != "action config invalid" {
+		t.Fatalf("unexpected operation failure projection: %+v", got)
+	}
+	var syncState string
+	if err := db.Table("desktop_pet_installations").
+		Where("id = ?", op.InstallationID).
+		Pluck("runtime_sync_state", &syncState).Error; err != nil {
+		t.Fatal(err)
+	}
+	if syncState != "failed" {
+		t.Fatalf("installation sync state=%q want failed", syncState)
+	}
+}

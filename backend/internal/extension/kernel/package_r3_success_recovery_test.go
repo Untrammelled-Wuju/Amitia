@@ -133,6 +133,57 @@ func setupR3FullInstall(t *testing.T) (*Runtime, *Container, packagePipelineInst
 	return runtime, container, result
 }
 
+func TestRestoreCurrentPackageVersionForRollback(t *testing.T) {
+	ctx := context.Background()
+	runtime, container, installed := setupR3FullInstall(t)
+	targetVersionID := "ver-r3-target"
+	targetGenerationID := "gen-r3-target"
+	_, err := container.PackageRepository.DB().ExecContext(ctx,
+		`UPDATE package_versions SET version_state = ? WHERE version_id = ?`,
+		string(PackageVersionStateRetained), installed.VersionID,
+	)
+	require.NoError(t, err)
+	require.NoError(t, container.PackageRepository.PutPackageVersion(ctx, PackageVersionRecord{
+		VersionID:         targetVersionID,
+		ExtensionID:       installed.ExtensionID,
+		Version:           "2.0.0",
+		ArtifactID:        "artifact-r3-target",
+		VersionState:      string(PackageVersionStateCurrent),
+		InstalledAt:       time.Now().UTC().Format(time.RFC3339Nano),
+		GenerationID:      targetGenerationID,
+		InstalledPath:     installed.InstallPath,
+		InstalledTreeHash: installed.TreeHash,
+	}))
+	_, err = container.PackageRepository.DB().ExecContext(ctx,
+		`UPDATE extension_installations SET current_version_id = ?, current_generation_id = ? WHERE extension_id = ?`,
+		targetVersionID, targetGenerationID, installed.ExtensionID,
+	)
+	require.NoError(t, err)
+	compensation := &packageUpdateCompensation{
+		runtime:         runtime,
+		operationID:     "package-operation-failed-update",
+		rollbackPoint:   PackageRollbackPoint{ExtensionID: installed.ExtensionID, SourceVersionID: installed.VersionID, MigrationStateSnapshotJSON: `{"mode":"none"}`},
+		stable:          PackageGenerationCurrent{ExtensionID: installed.ExtensionID, GenerationID: installed.GenerationID},
+		target:          PackagePreparedGeneration{Current: PackageGenerationCurrent{Version: "2.0.0"}},
+		versionRecorded: true,
+	}
+	require.NoError(t, compensation.run())
+	current, err := container.PackageRepository.GetCurrentPackageVersion(ctx, installed.ExtensionID)
+	require.NoError(t, err)
+	require.Equal(t, installed.VersionID, current.VersionID)
+	require.Equal(t, "1.0.0", current.Version)
+	failed, err := container.PackageRepository.GetPackageVersion(ctx, installed.ExtensionID, "2.0.0")
+	require.NoError(t, err)
+	require.Equal(t, string(PackageVersionStateRemoved), failed.VersionState)
+	var currentVersionID, currentGenerationID string
+	require.NoError(t, container.PackageRepository.DB().QueryRowContext(ctx,
+		`SELECT current_version_id, current_generation_id FROM extension_installations WHERE extension_id = ?`,
+		installed.ExtensionID,
+	).Scan(&currentVersionID, &currentGenerationID))
+	require.Equal(t, installed.VersionID, currentVersionID)
+	require.Equal(t, installed.GenerationID, currentGenerationID)
+}
+
 func buildR3QuarantineMetadata(t *testing.T, ctx context.Context, container *Container, res packagePipelineInstallResult, operationID string) PackageQuarantineMetadata {
 	t.Helper()
 	now := time.Now().UTC().Format(time.RFC3339Nano)

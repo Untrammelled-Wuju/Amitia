@@ -374,16 +374,17 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 		installedAt = previous.InstalledAt
 		installationID = previous.InstallationID
 	}
+	installationMetadata := applyVerifiedPackageProvenance(map[string]any{"installedPath": targetPath, "artifactId": artifact.ArtifactID,
+		"archiveHash": artifact.ArchiveHash, "manifestHash": artifact.ManifestHash,
+		"contentTreeHash": artifact.ContentTreeHash, "artifactHash": artifact.ArtifactHash,
+		"installedTreeHash": generationTreeHash,
+		"devOnly":           preview.DevOnly,
+		"ownerSpaceId":      request.SpaceID, "scopeType": request.ScopeType, "scopeId": request.ScopeID}, preview)
 	installation := domain.ExtensionInstallation{InstallationID: installationID, ExtensionID: definition.ID,
 		InstalledVersion: definition.Version, PackageID: artifact.ArtifactID,
 		InstallationState: domain.InstallationStateInstalled, EnablementState: domain.EnablementDisabled,
 		InstalledAt: installedAt, UpdatedAt: time.Now().UTC(), Generation: generation,
-		Metadata: packageInstallationMetadata(map[string]any{"installedPath": targetPath, "artifactId": artifact.ArtifactID,
-			"archiveHash": artifact.ArchiveHash, "manifestHash": artifact.ManifestHash,
-			"contentTreeHash": artifact.ContentTreeHash, "artifactHash": artifact.ArtifactHash,
-			"installedTreeHash": generationTreeHash,
-			"devOnly":           preview.DevOnly,
-			"ownerSpaceId":      request.SpaceID, "scopeType": request.ScopeType, "scopeId": request.ScopeID}, targetGeneration.Current, targetPath, operationID)}
+		Metadata: packageInstallationMetadata(installationMetadata, targetGeneration.Current, targetPath, operationID)}
 	if r.container.ExtensionProviderReconciler != nil {
 		providerSnapshot = r.container.ExtensionProviderReconciler.SnapshotExtension(string(definition.ID))
 	}

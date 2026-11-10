@@ -2013,7 +2013,7 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 						}
 					}
 					return host_api.CallResult{
-						Status: host_api.StatusFailed,
+						Status: toolFailureStatus(code),
 						Output: output,
 						Error: &host_api.Error{
 							Code:    code,
@@ -2218,12 +2218,13 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 					}, nil
 				}
 				var input struct {
-					URL            string            `json:"url"`
-					Method         string            `json:"method"`
-					Headers        map[string]string `json:"headers"`
-					Body           json.RawMessage   `json:"body"`
-					TimeoutMS      int64             `json:"timeoutMs"`
-					IdempotencyKey string            `json:"idempotencyKey,omitempty"`
+					URL               string            `json:"url"`
+					Method            string            `json:"method"`
+					Headers           map[string]string `json:"headers"`
+					Body              json.RawMessage   `json:"body"`
+					TimeoutMS         int64             `json:"timeoutMs"`
+					IdempotencyKey    string            `json:"idempotencyKey,omitempty"`
+					FailOnServerError bool              `json:"failOnServerError,omitempty"`
 				}
 				if err := json.Unmarshal(req.Input, &input); err != nil {
 					return host_api.CallResult{
@@ -2319,22 +2320,32 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 				response, err := client.Do(request)
 				if err != nil {
 					return host_api.CallResult{
-						Status: host_api.StatusFailed,
-						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+						Status: transportFailureStatus(err),
+						Error:  &host_api.Error{Code: transportFailureCode(err), Message: err.Error()},
 					}, nil
 				}
 				defer response.Body.Close()
 				payload, err := io.ReadAll(io.LimitReader(response.Body, (16<<20)+1))
 				if err != nil {
 					return host_api.CallResult{
-						Status: host_api.StatusFailed,
-						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+						Status: transportFailureStatus(err),
+						Error:  &host_api.Error{Code: transportFailureCode(err), Message: err.Error()},
 					}, nil
 				}
 				if len(payload) > 16<<20 {
 					return host_api.CallResult{
 						Status: host_api.StatusFailed,
 						Error:  &host_api.Error{Code: host_api.ErrorCodeOutputInvalid, Message: "network response exceeds 16 MiB"},
+					}, nil
+				}
+				if input.FailOnServerError && (response.StatusCode < 200 || response.StatusCode >= 300) {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error: &host_api.Error{
+							Code:    host_api.ErrorCodeUpstream,
+							Message: upstreamFailureMessage(response.StatusCode, payload),
+							Detail:  string(payload),
+						},
 					}, nil
 				}
 				headers := make(map[string]string, len(response.Header))
@@ -3135,6 +3146,50 @@ func extractDepth(parentID string) int {
 		}
 	}
 	return d
+}
+
+func toolFailureStatus(code string) string {
+	switch code {
+	case capability.ErrorCodeTimeout:
+		return host_api.StatusTimeout
+	case capability.ErrorCodeCancelled:
+		return host_api.StatusCancelled
+	case capability.ErrorCodePermissionDenied, capability.ErrorCodeScopeDenied:
+		return host_api.StatusRejected
+	}
+	return host_api.StatusFailed
+}
+
+func transportFailureCode(err error) string {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return host_api.ErrorCodeTimeout
+	case errors.Is(err, context.Canceled):
+		return host_api.ErrorCodeCancelled
+	}
+	return host_api.ErrorCodeInternal
+}
+
+func transportFailureStatus(err error) string {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return host_api.StatusTimeout
+	case errors.Is(err, context.Canceled):
+		return host_api.StatusCancelled
+	}
+	return host_api.StatusFailed
+}
+
+func upstreamFailureMessage(status int, payload []byte) string {
+	message := fmt.Sprintf("upstream HTTP %d %s", status, http.StatusText(status))
+	body := strings.TrimSpace(string(payload))
+	if body == "" {
+		return message
+	}
+	if len(body) <= 4096 {
+		return message + ": " + body
+	}
+	return fmt.Sprintf("%s: %d bytes body, complete text preserved in detail", message, len(body))
 }
 
 func rejectPrivateNetworkURL(ctx context.Context, target *url.URL) error {

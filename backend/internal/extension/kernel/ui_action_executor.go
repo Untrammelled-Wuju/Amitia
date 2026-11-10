@@ -154,8 +154,8 @@ func (e *UIActionExecutor) executeTool(ctx context.Context, execCtx UIActionExec
 	}
 	result := e.hostAPIGateway.Call(ctx, callReq)
 	if result.Error != nil {
-		log.Printf("[ui-action] gateway call failed: action=%s call=%s code=%s msg=%s", action.ActionID, callID, result.Error.Code, result.Error.Message)
-		return nil, fmt.Errorf("action %s failed: %s", action.ActionID, result.Error.Message)
+		log.Printf("[ui-action] gateway call failed: action=%s call=%s status=%s code=%s msg=%s detail=%s", action.ActionID, callID, result.Status, result.Error.Code, result.Error.Message, result.Error.Detail)
+		return nil, fmt.Errorf("action %s failed: %w", action.ActionID, result.Error)
 	}
 	return result.Output, nil
 }

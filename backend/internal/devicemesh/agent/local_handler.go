@@ -33,6 +33,8 @@ type LocalHandler struct {
 	taskWorkerSet      bool
 	credentialObserver func(*StoredCredential) error
 	lanEndpoints       []lan.Endpoint
+	lanRevision        uint64
+	lanSubscribers     map[chan uint64]struct{}
 	providerMu         sync.Mutex
 	providerContext    context.Context
 	providerCancel     context.CancelFunc
@@ -65,6 +67,7 @@ func NewLocalHandler(dataDir string, platform runtimeidentity.Platform) *LocalHa
 		dataDir:            dataDir,
 		dispatcher:         NewRuntimeDispatcher(),
 		stateSubscribers:   make(map[chan AgentState]struct{}),
+		lanSubscribers:     make(map[chan uint64]struct{}),
 		capabilityExposure: NewCapabilityExposureStore(dataDir),
 	}
 	if pending, err := handler.credStore.pendingUnpair(); err != nil || pending {
@@ -294,6 +297,13 @@ func (h *LocalHandler) SetLANEndpoints(endpoints []lan.Endpoint) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.lanEndpoints = append([]lan.Endpoint(nil), endpoints...)
+	h.lanRevision++
+	for subscriber := range h.lanSubscribers {
+		select {
+		case subscriber <- h.lanRevision:
+		default:
+		}
+	}
 }
 
 func (h *LocalHandler) LANEndpoints() []lan.Endpoint {
@@ -323,6 +333,7 @@ func (h *LocalHandler) RegisterRoutes(r *gin.Engine, authMW gin.HandlerFunc, pro
 		c.Header("Cache-Control", "no-store")
 		c.JSON(200, gin.H{"endpoints": h.LANEndpoints()})
 	})
+	dm.GET("/lan/events", h.handleLANEvents)
 	dm.POST("/identity/sign-claim", h.handleSignClaim)
 	dm.POST("/pairing/claim", h.handlePinnedPairing)
 	dm.POST("/endpoint/update", h.handleUpdateEndpoint)

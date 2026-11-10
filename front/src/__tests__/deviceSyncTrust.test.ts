@@ -1,18 +1,19 @@
 import { flushPromises, shallowMount } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), confirm: vi.fn(), prompt: vi.fn(), offer: vi.fn(), provision: vi.fn(), saveDeployment: vi.fn(), pairingStatus: vi.fn(), initialize: vi.fn(), meshIdentity: vi.fn(), meshStatus: vi.fn(), state: {} as any, devices: [] as any[] }));
+const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), confirm: vi.fn(), prompt: vi.fn(), offer: vi.fn(), provision: vi.fn(), saveDeployment: vi.fn(), pairingStatus: vi.fn(), initialize: vi.fn(), meshIdentity: vi.fn(), meshStatus: vi.fn(), invalidate: undefined as (() => void) | undefined, lanChanged: undefined as (() => void) | undefined, lanFailed: undefined as ((error: unknown) => void) | undefined, state: {} as any, devices: [] as any[] }));
 vi.mock("@/composables/useApi", () => ({ useApi: () => ({ get: mocks.get, post: mocks.post, put: mocks.put }) }));
 vi.mock("element-plus", () => ({ ElMessage: { success: vi.fn(), warning: vi.fn(), error: vi.fn() }, ElMessageBox: { confirm: mocks.confirm, prompt: mocks.prompt } }));
 vi.mock("@/composables/useDeviceManagementIntent", () => ({
   deviceManagementRequestConfig: () => ({}),
-  useDeviceManagementIntent: () => ({
+  useDeviceManagementIntent: (invalidate: () => void) => (mocks.invalidate = invalidate, {
     release: vi.fn(), validate: vi.fn(),
     capture: async () => ({ controller: new AbortController(), state: mocks.state }),
   }),
 }));
 vi.mock("@/runtime/runtime-adapter", () => ({ getDeploymentConfig: async () => ({ mode: "local" }), getRuntimeConnection: async () => ({ apiBaseURL: "http://local.test" }), createCurrentDevicePairingOffer: mocks.offer, provisionCurrentDeviceMesh: mocks.provision, saveDeploymentConfig: mocks.saveDeployment, getCurrentDevicePairingStatus: mocks.pairingStatus, resolveApiUrl: async (path: string) => path, isDeviceLocalApiPath: () => false, isDeviceRoleManagementPath: () => false, getBackendAuthHeaders: async () => ({}) }));
 vi.mock("@/runtime/runtime-capabilities", () => ({ initializeRuntimeCapabilities: mocks.initialize }));
+vi.mock("@/runtime/pairing-lan-monitor", () => ({ startPairingLANMonitor: vi.fn(async (_controller: AbortController, changed: () => void, failed: (error: unknown) => void) => { mocks.lanChanged = changed; mocks.lanFailed = failed; }) }));
 vi.mock("@/components/DevicePairScanner.vue", () => ({ default: { template: "<div />" } }));
 vi.mock("@/components/DeviceCapabilityGrants.vue", () => ({ default: { template: "<div />" } }));
 import DevicePairingPanel from "@/components/DevicePairingPanel.vue";
@@ -49,7 +50,7 @@ describe("设备同步信任状态", () => {
     mocks.post.mockReset().mockImplementation(async () => { mocks.devices = mocks.devices.map(device => device.deviceId === "trusted" ? { ...device, trustState: "trusted" } : device); return { ok: true }; });
     mocks.put.mockReset().mockResolvedValue({ ok: true });
     mocks.confirm.mockReset().mockResolvedValue("confirm");
-    mocks.offer.mockReset().mockResolvedValue({ qrPayload: "amitia://pair?offer=test", qrImage: "test-image" });
+    mocks.offer.mockReset().mockResolvedValue({ qrPayload: "amitia://pair?offer=test", qrImage: "test-image", expiresAt: new Date(Date.now() + 1800000).toISOString() });
     mocks.prompt.mockReset().mockResolvedValue({ value: "manual-offer" });
     mocks.provision.mockReset().mockResolvedValue(undefined);
     mocks.saveDeployment.mockReset().mockResolvedValue(undefined);
@@ -186,6 +187,55 @@ describe("设备同步信任状态", () => {
     expect(mocks.post).not.toHaveBeenCalled();
     expect(mocks.offer).not.toHaveBeenCalled();
     wrapper.unmount();
+  });
+  it("连接失效时清除二维码并提示重新生成", async () => {
+    const wrapper = mountPairing();
+    await flushPromises();
+    await (wrapper.vm as any).generatePairingOffer();
+    expect((wrapper.vm as any).pairingOffer).toBeTruthy();
+    mocks.invalidate?.();
+    await flushPromises();
+    expect((wrapper.vm as any).pairingOffer).toBe("");
+    expect((wrapper.vm as any).offerNotice).toContain("重新生成");
+    wrapper.unmount();
+  });
+  it("局域网地址变化或监测失败时清除二维码并显示原始错误", async () => {
+    const wrapper = mountPairing();
+    await flushPromises();
+    await (wrapper.vm as any).generatePairingOffer();
+    mocks.lanChanged?.();
+    expect((wrapper.vm as any).pairingOffer).toBe("");
+    expect((wrapper.vm as any).offerNotice).toContain("局域网地址已变化");
+    await (wrapper.vm as any).generatePairingOffer();
+    mocks.lanFailed?.(new Error("stream failure detail"));
+    expect((wrapper.vm as any).pairingOffer).toBe("");
+    expect((wrapper.vm as any).offerNotice).toContain("stream failure detail");
+    wrapper.unmount();
+  });
+  it("生成期间连接失效时不展示迟到的二维码", async () => {
+    let resolveOffer!: (value: unknown) => void;
+    mocks.offer.mockReturnValue(new Promise(resolve => { resolveOffer = resolve; }));
+    const wrapper = mountPairing();
+    await flushPromises();
+    const pending = (wrapper.vm as any).generatePairingOffer();
+    await flushPromises();
+    mocks.invalidate?.();
+    resolveOffer({ qrPayload: "amitia://pair?offer=old", expiresAt: new Date(Date.now() + 60000).toISOString() });
+    await pending;
+    expect((wrapper.vm as any).pairingOffer).toBe("");
+    expect((wrapper.vm as any).offerNotice).toContain("重新生成");
+    wrapper.unmount();
+  });
+  it("二维码到期后清除配对信息", async () => {
+    vi.useFakeTimers();
+    mocks.offer.mockResolvedValue({ qrPayload: "amitia://pair?offer=test", expiresAt: new Date(Date.now() + 1000).toISOString() });
+    const wrapper = mountPairing();
+    await (wrapper.vm as any).generatePairingOffer();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect((wrapper.vm as any).pairingOffer).toBe("");
+    expect((wrapper.vm as any).offerNotice).toContain("已过期");
+    wrapper.unmount();
+    vi.useRealTimers();
   });
   it("手动配对使用云端表单地址，完成配对后才保存运行模式", async () => {
     const wrapper = mountPairing("cloud");

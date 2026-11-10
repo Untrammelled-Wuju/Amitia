@@ -201,6 +201,8 @@ import {
   type PackageOperationResult,
 } from "../../extensions/api";
 
+const emit = defineEmits<{ changed: [] }>();
+
 interface PetPlugin {
   extensionId: string;
   pluginId: string;
@@ -413,6 +415,7 @@ async function commitPackageInstall() {
     ElMessage.success(installMode.value === "update" ? "桌宠插件已更新" : "桌宠插件已安装");
     installDialogVisible.value = false;
     await loadPlugins();
+    emit("changed");
   } catch (error: any) {
     ElMessage.error(error?.message || (installMode.value === "update" ? "更新失败" : "安装失败"));
   } finally {
@@ -447,6 +450,7 @@ async function togglePlugin(plugin: PetPlugin) {
     );
     ElMessage.success(plugin.enabled ? "桌宠插件已禁用" : "桌宠插件已启用");
     await loadPlugins();
+    emit("changed");
   } catch (error: any) {
     ElMessage.error(error?.message || "桌宠插件状态切换失败");
   } finally {
@@ -476,6 +480,7 @@ return;
     });
     ElMessage.success("桌宠插件已卸载");
     await loadPlugins();
+    emit("changed");
   } catch (error: any) {
     ElMessage.error(error?.message || "桌宠插件卸载失败");
   } finally {

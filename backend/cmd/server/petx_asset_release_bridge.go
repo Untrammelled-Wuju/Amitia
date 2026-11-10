@@ -351,6 +351,11 @@ func (b *petxAssetReleaseBridge) ensureInstallation(ctx context.Context, extensi
 	if b.coordinator == nil || b.installations == nil {
 		return errors.New("desktop pet installation services unavailable")
 	}
+	installed, err := b.kernelInstalls.GetInstallation(ctx, domainkernel.ExtensionID(extensionID))
+	if err != nil {
+		return fmt.Errorf("read petx installation operation scope: %w", err)
+	}
+	idempotencyKey := petxInstallationIdempotencyKey(extensionID, installed, releaseData.ContentRootHash)
 	items, err := b.installations.ListInstallationsBySpaceDevice(b.spaceID, b.deviceID)
 	if err != nil {
 		return fmt.Errorf("list desktop pet installations: %w", err)
@@ -374,7 +379,7 @@ func (b *petxAssetReleaseBridge) ensureInstallation(ctx context.Context, extensi
 			DeviceCtx:       deviceCtx,
 			InstallationID:  current.ID,
 			TargetReleaseID: releaseData.ID,
-			IdempotencyKey:  "petx:" + extensionID + ":" + releaseData.ContentRootHash,
+			IdempotencyKey:  idempotencyKey,
 		})
 		return err
 	}
@@ -382,9 +387,20 @@ func (b *petxAssetReleaseBridge) ensureInstallation(ctx context.Context, extensi
 		DeviceCtx:       deviceCtx,
 		PetID:           releaseData.PetID,
 		TargetReleaseID: releaseData.ID,
-		IdempotencyKey:  "petx:" + extensionID + ":" + releaseData.ContentRootHash,
+		IdempotencyKey:  idempotencyKey,
 	})
 	return err
+}
+
+func petxInstallationIdempotencyKey(extensionID string, installed domainkernel.ExtensionInstallation, contentRootHash string) string {
+	scope := strings.TrimSpace(fmt.Sprint(installed.Metadata["lastOperationId"]))
+	if scope == "" || scope == "<nil>" {
+		scope = strings.TrimSpace(fmt.Sprint(installed.Metadata["generationId"]))
+	}
+	if scope == "" || scope == "<nil>" {
+		scope = installed.InstalledVersion.String()
+	}
+	return "petx:" + extensionID + ":" + scope + ":" + contentRootHash
 }
 
 func copyPetxTree(source, destination string) error {

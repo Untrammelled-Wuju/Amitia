@@ -690,6 +690,8 @@ type installationDetailResponse struct {
 func (h *CoordinatorHandler) loadRuntimeView(ctx context.Context, spaceID, deviceID, installationID string) (*InstallationRuntimeView, error) {
 	var desiredState *desired.RuntimeDesiredState
 	var runtimeProjection *projection.InstallationRuntimeProjection
+	var sessionAuthority *runtimeSessionAuthority
+	var actualStateAuthority *runtimeActualStateAuthority
 	err := h.repo.Transaction(ctx, func(tx RepositoryV2) error {
 		state, err := tx.GetRuntimeDesiredStateTx(tx.DB(), spaceID, deviceID)
 		if err != nil {
@@ -697,13 +699,32 @@ func (h *CoordinatorHandler) loadRuntimeView(ctx context.Context, spaceID, devic
 		}
 		desiredState = state
 		projected, err := tx.GetRuntimeProjectionTx(tx.DB(), spaceID, deviceID)
-		if errors.Is(err, ErrProjectionNotFound) {
-			return nil
-		}
-		if err != nil {
+		switch {
+		case errors.Is(err, ErrProjectionNotFound):
+			projected = nil
+		case err != nil:
 			return err
 		}
 		runtimeProjection = projected
+		targetRuntimeID := ""
+		if runtimeProjection != nil {
+			targetRuntimeID = runtimeProjection.RuntimeID
+		}
+		session, err := loadActiveRuntimeSessionAuthority(tx.DB(), spaceID, deviceID, targetRuntimeID)
+		if err != nil {
+			return err
+		}
+		sessionAuthority = session
+		if session == nil {
+			return nil
+		}
+		actual, err := loadRuntimeActualStateAuthority(tx.DB(), spaceID, deviceID, session.RuntimeID)
+		if err != nil {
+			return err
+		}
+		if runtimeAuthorityMatchesSession(actual, session) {
+			actualStateAuthority = actual
+		}
 		return nil
 	})
 	if err != nil {
@@ -734,10 +755,17 @@ func (h *CoordinatorHandler) loadRuntimeView(ctx context.Context, spaceID, devic
 		view.ActualActionKey = runtimeProjection.ActualActionKey
 		view.ActualHealth = runtimeProjection.ActualHealth
 		view.RuntimeSyncState = runtimeProjection.RuntimeSyncState
-		view.LastHeartbeatAt = runtimeProjection.LastHeartbeatAt
+		view.LastSnapshotAt = normalizeRuntimeTimestamp(runtimeProjection.LastHeartbeatAt)
 		if runtimeProjection.UpdatedAt != "" {
 			view.UpdatedAt = runtimeProjection.UpdatedAt
 		}
+	}
+	if sessionAuthority != nil {
+		view.LastHeartbeatAt = normalizeRuntimeTimestamp(sessionAuthority.LastHeartbeatAt)
+		view.RuntimeGeneration = sessionAuthority.ConnectionGeneration
+	}
+	if actualStateAuthority != nil && actualStateAuthority.InstallationID == installationID {
+		view.ActualHealth = actualStateAuthority.HealthStatus
 	}
 	view.Pending = desiredState != nil &&
 		(runtimeProjection == nil || runtimeProjection.AppliedDesiredRevision < desiredState.DesiredRevision)
