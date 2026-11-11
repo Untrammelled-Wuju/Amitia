@@ -1,5 +1,5 @@
 import { flushPromises, mount } from "@vue/test-utils";
-import ElementPlus from "element-plus";
+import ElementPlus, { ElMessage } from "element-plus";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import GameCenterView from "../views/game-center/GameCenterView.vue";
 
@@ -132,6 +132,19 @@ describe("游戏模式页面状态", () => {
     expect(wrapper.text()).toContain("运行连接");
     expect(mocks.get).toHaveBeenCalledWith("/api/game-center/plugins", { page: 1, pageSize: 100 });
     expect(mocks.get).toHaveBeenCalledWith("/api/game-center/runtimes", { page: 1, pageSize: 100 });
+    const warning = vi.spyOn(ElMessage, "warning").mockImplementation(() => undefined as any);
+    const postCount = mocks.post.mock.calls.length;
+    await wrapper.get('.runtime-actions .guarded-action[role="button"]').trigger("click");
+    expect(warning).toHaveBeenCalledWith("当前运行状态为“运行中”，暂不能启动。");
+    expect(mocks.post).toHaveBeenCalledTimes(postCount);
+    await wrapper.get(".add-game-card").trigger("click");
+    await flushPromises();
+    const installAction = document.querySelector<HTMLElement>('.el-dialog__footer .guarded-action[role="button"]') || (wrapper.element as Element).querySelector<HTMLElement>('.el-dialog__footer .guarded-action[role="button"]');
+    expect(installAction).not.toBeNull();
+    installAction?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(warning).toHaveBeenCalledWith("请先选择并检查扩展包。");
+    expect(mocks.post).toHaveBeenCalledTimes(postCount);
+    warning.mockRestore();
     wrapper.unmount();
   });
 

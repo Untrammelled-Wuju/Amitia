@@ -1482,7 +1482,7 @@ func (r *Runtime) TestDevicePush(ctx context.Context, spaceID, deviceID string) 
 	result := r.gateway.Send(ctx, *endpoint, envelope)
 	status := "failed"
 	if result.Accepted {
-		status = "accepted"
+		status = outboxAcceptedStatus(envelope.Type)
 	}
 	if err := r.repo.UpdateOutbox(ctx, outbox.ID, map[string]any{
 		"status":              status,
@@ -1851,7 +1851,7 @@ func (r *Runtime) deliverOutbox(ctx context.Context, id string) {
 	status := "failed"
 	nextAttemptAt := time.Now().UTC()
 	if result.Accepted {
-		status = "accepted"
+		status = outboxAcceptedStatus(envelope.Type)
 	} else if result.ErrorCode == "device_offline" && !row.ExpiresAt.IsZero() {
 		nextAttemptAt = time.Now().UTC().Add(time.Duration(1<<minInt(attemptCount, 8)) * time.Second)
 		if nextAttemptAt.Before(row.ExpiresAt) {

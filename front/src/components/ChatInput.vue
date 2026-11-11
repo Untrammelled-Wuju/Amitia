@@ -250,7 +250,7 @@ SPDX-License-Identifier: AGPL-3.0-only
                       'is-selected': currentWorkspace?.workspaceId === workspace.id,
                       'is-unavailable': !workspace.available,
                     }"
-                    :disabled="workspaceLoading || !workspace.available || !!activeConversationId"
+                    :aria-disabled="workspaceLoading || !workspace.available || !!activeConversationId"
                     @click="handleWorkspaceSelect(workspace)"
                   >
                     <el-icon class="workspace-option-icon"><FolderOpened /></el-icon>
@@ -412,6 +412,12 @@ SPDX-License-Identifier: AGPL-3.0-only
                   <div
                     class="model-effort-slider-track"
                     :class="{ disabled: !draftReasoningEnabled }"
+                    :tabindex="draftReasoningEnabled ? undefined : 0"
+                    :role="draftReasoningEnabled ? undefined : 'button'"
+                    :aria-label="draftReasoningEnabled ? undefined : '思考强度不可用，请先开启思考模式'"
+                    @click.capture="explainReasoningUnavailable"
+                    @keydown.enter="explainReasoningUnavailable"
+                    @keydown.space="explainReasoningUnavailable"
                   >
                     <div class="model-effort-track-range">
                       <div class="model-effort-track-base"></div>
@@ -447,7 +453,7 @@ SPDX-License-Identifier: AGPL-3.0-only
                     <span>低</span><span>中</span><span>高</span><span>极高</span>
                   </div>
                   <div v-if="!draftReasoningEnabled" class="model-effort-hint">
-                    该模型不支持思考强度
+                    请先在思考模式中选择“支持”
                   </div>
                 </div>
               </div>
@@ -946,6 +952,13 @@ function notifyModelCommit(
   );
 }
 
+function explainReasoningUnavailable(event: Event) {
+  if (draftReasoningEnabled.value) return;
+  event.preventDefault();
+  event.stopPropagation();
+  ElMessage.warning("请先在思考模式中选择“支持”。");
+}
+
 function previewReasoningIndex(value: number | number[]) {
   const index = Math.round(reasoningValueFromInput(value));
   modelSliderDragging.value = true;
@@ -1218,6 +1231,9 @@ async function loadAgentSkills(more = false, query = "") {
 }
 
 async function handleWorkspaceSelect(workspace: WorkspaceMountSummary) {
+  if (workspaceLoading.value) { ElMessage.warning("正在加载工作区，请稍后重试。"); return; }
+  if (!workspace.available) { ElMessage.warning(workspace.statusReason || "工作区不可用。"); return; }
+  if (activeConversationId.value) { ElMessage.warning("当前对话已绑定工作区，无法在此切换。"); return; }
   try {
     await selectWorkspaceMount(workspace);
     workspaceMenuOpen.value = false;
@@ -1836,6 +1852,7 @@ defineExpose({ focus, setText, insertText: insertComposerText, clear: clearText 
 }
 
 .workspace-option:disabled,
+.workspace-option[aria-disabled="true"],
 .workspace-action:disabled {
   cursor: not-allowed;
   opacity: 0.5;
@@ -2249,6 +2266,7 @@ defineExpose({ focus, setText, insertText: insertComposerText, clear: clearText 
 .model-effort-slider-track.disabled .model-effort-markers {
   opacity: 0.5;
 }
+.model-effort-slider-track.disabled :deep(.el-slider) { pointer-events: none; }
 
 .model-effort-labels {
   display: flex;

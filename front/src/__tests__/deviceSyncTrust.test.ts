@@ -1,5 +1,6 @@
 import { flushPromises, shallowMount } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ElMessage } from "element-plus";
 
 const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), confirm: vi.fn(), prompt: vi.fn(), offer: vi.fn(), provision: vi.fn(), saveDeployment: vi.fn(), pairingStatus: vi.fn(), initialize: vi.fn(), meshIdentity: vi.fn(), meshStatus: vi.fn(), invalidate: undefined as (() => void) | undefined, lanChanged: undefined as (() => void) | undefined, lanFailed: undefined as ((error: unknown) => void) | undefined, state: {} as any, devices: [] as any[] }));
 vi.mock("@/composables/useApi", () => ({ useApi: () => ({ get: mocks.get, post: mocks.post, put: mocks.put }) }));
@@ -57,6 +58,19 @@ describe("设备同步信任状态", () => {
     mocks.pairingStatus.mockReset().mockResolvedValue({ firstDeviceSetupRequired: false });
     mocks.initialize.mockReset().mockResolvedValue(undefined);
     mocks.get.mockReset().mockImplementation(async (path: string) => path.endsWith("/devices") ? { devices: mocks.devices } : { lastApplied: 3 });
+  });
+  it("设备身份不可用时说明原因且不发起配对", async () => {
+    mocks.meshIdentity.mockRejectedValueOnce(new Error("身份读取失败"));
+    vi.mocked(ElMessage.warning).mockClear();
+    const wrapper = mountPairing("cloud");
+    await flushPromises();
+    const controls = wrapper.findAll('.pairing-control[role="button"]');
+    expect(controls).toHaveLength(3);
+    expect(wrapper.get("details").text()).toContain("身份读取失败");
+    await controls[0].trigger("click");
+    expect(ElMessage.warning).toHaveBeenCalledWith("设备身份尚未就绪，请检查页面中的错误信息。");
+    expect(mocks.provision).not.toHaveBeenCalled();
+    wrapper.unmount();
   });
   it("本机中心只生成二维码，子设备只扫码或选择图片", async () => {
     const center = mountPairing("local");

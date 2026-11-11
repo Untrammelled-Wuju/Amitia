@@ -5,7 +5,11 @@ import { useImmersiveOnboarding } from "../views/onboarding/composables/useImmer
 
 const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), saveDeploymentConfig: vi.fn(), error: vi.fn() }));
 vi.mock("../composables/useApi", () => ({ useApi: () => mocks }));
-vi.mock("../runtime/runtime-adapter", () => ({ saveDeploymentConfig: mocks.saveDeploymentConfig, getApiBaseURL: vi.fn() }));
+vi.mock("../runtime/runtime-adapter", () => ({
+  saveDeploymentConfig: mocks.saveDeploymentConfig,
+  getApiBaseURL: vi.fn(),
+  getDeploymentConfig: async () => ({ mode: "local", baseURL: "http://127.0.0.1:0" }),
+}));
 vi.mock("vue-router", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock("element-plus", () => ({ ElMessage: { error: mocks.error }, ElMessageBox: {} }));
 
@@ -31,7 +35,9 @@ describe("引导创建角色归属", () => {
     expect(mocks.get).toHaveBeenCalledTimes(1);
     expect(mocks.post).toHaveBeenCalledTimes(1);
     expect(onboarding.characterCreatedInSession.value).toBe(false);
-    expect(onboarding.stageError.value).toBe("角色数据归属已变化，请重新开始引导");
+    expect(onboarding.stageError.value).toContain("设置过程中出现错误");
+    expect(onboarding.stageError.value).toContain("原始错误");
+    expect(onboarding.stageError.value).toContain("角色数据归属已变化，请重新开始引导");
     wrapper.unmount();
   });
 });

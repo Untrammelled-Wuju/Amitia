@@ -9,16 +9,18 @@
     </div>
     <div class="pairing-actions">
       <template v-if="localCenter">
-        <el-button type="primary" data-amitia-ui="device-pairing.generate" :loading="offerBusy" :disabled="joinBusy" @click="generatePairingOffer">生成二维码</el-button>
+        <span class="pairing-control" :tabindex="busyReason ? 0 : undefined" :role="busyReason ? 'button' : undefined" :aria-label="busyReason || undefined" @click.capture="explainUnavailable($event, busyReason)" @keydown.enter="explainUnavailable($event, busyReason)" @keydown.space="explainUnavailable($event, busyReason)"><el-button type="primary" data-amitia-ui="device-pairing.generate" :loading="offerBusy" :disabled="!!busyReason" @click="generatePairingOffer">生成二维码</el-button></span>
       </template>
       <template v-else>
-        <el-button type="primary" data-amitia-ui="device-pairing.scan" :disabled="!localIdentity || joinBusy || offerBusy" @click="scannerOpen = true">扫码配对</el-button>
-        <el-button data-amitia-ui="device-pairing.image" :disabled="!localIdentity || joinBusy || offerBusy" @click="choosePairingImage">使用二维码图片</el-button>
+        <span class="pairing-control" :tabindex="joinReason ? 0 : undefined" :role="joinReason ? 'button' : undefined" :aria-label="joinReason || undefined" @click.capture="explainUnavailable($event, joinReason)" @keydown.enter="explainUnavailable($event, joinReason)" @keydown.space="explainUnavailable($event, joinReason)"><el-button type="primary" data-amitia-ui="device-pairing.scan" :disabled="!!joinReason" @click="scannerOpen = true">扫码配对</el-button></span>
+        <span class="pairing-control" :tabindex="joinReason ? 0 : undefined" :role="joinReason ? 'button' : undefined" :aria-label="joinReason || undefined" @click.capture="explainUnavailable($event, joinReason)" @keydown.enter="explainUnavailable($event, joinReason)" @keydown.space="explainUnavailable($event, joinReason)"><el-button data-amitia-ui="device-pairing.image" :disabled="!!joinReason" @click="choosePairingImage">使用二维码图片</el-button></span>
       </template>
-      <el-button data-amitia-ui="device-pairing.manual" :loading="joinBusy || offerBusy" :disabled="localCenter ? joinBusy : !localIdentity || offerBusy" @click="manualPairing">手动配对</el-button>
+      <span class="pairing-control" :tabindex="manualReason ? 0 : undefined" :role="manualReason ? 'button' : undefined" :aria-label="manualReason || undefined" @click.capture="explainUnavailable($event, manualReason)" @keydown.enter="explainUnavailable($event, manualReason)" @keydown.space="explainUnavailable($event, manualReason)"><el-button data-amitia-ui="device-pairing.manual" :loading="joinBusy || offerBusy" :disabled="!!manualReason" @click="manualPairing">手动配对</el-button></span>
     </div>
     <input ref="pairingImageInput" class="pairing-image-input" type="file" accept="image/*" aria-label="选择配对二维码图片" @change="readPairingImage" />
     <el-alert v-if="localError" :title="localError" type="warning" show-icon :closable="false" />
+    <details v-if="localErrorDetail"><summary>查看设备身份原始错误</summary><pre>{{ localErrorDetail }}</pre></details>
+    <el-button v-if="localError" size="small" :loading="identityLoading" @click="loadCurrentDevice">重试读取设备身份</el-button>
     <el-alert v-if="offerNotice" :title="offerNotice" type="warning" show-icon :closable="false" />
     <DevicePairScanner v-if="!localCenter" v-model="scannerOpen" @scanned="joinCurrentDevice" />
     <div v-if="pairingOffer" class="pairing-offer">
@@ -53,6 +55,7 @@ import { initializeRuntimeCapabilities } from "@/runtime/runtime-capabilities";
 import { getWebDeviceMeshIdentity } from "@/runtime/web-device-mesh";
 import type { PairingInput } from "@/runtime/web-device-mesh";
 import { startPairingLANMonitor } from "@/runtime/pairing-lan-monitor";
+import { originalErrorText } from "@/runtime/original-error";
 
 const props = defineProps<{ serverURL: string; mode?: "local" | "cloud" }>();
 const emit = defineEmits<{ paired: [baseURL: string] }>();
@@ -60,10 +63,21 @@ const api = useApi();
 const localCenter = computed(() => props.mode !== "cloud");
 const localIdentity = ref<{ deviceId?: string } | null>(null);
 const localError = ref("");
+const localErrorDetail = ref("");
+const identityLoading = ref(false);
 const scannerOpen = ref(false);
 const pairingImageInput = ref<HTMLInputElement>();
 const joinBusy = ref(false);
 const offerBusy = ref(false);
+const busyReason = computed(() => joinBusy.value || offerBusy.value ? "正在处理设备配对，请稍后重试。" : "");
+const joinReason = computed(() => busyReason.value || (identityLoading.value ? "正在读取设备身份，请稍后重试。" : !localIdentity.value ? "设备身份尚未就绪，请检查页面中的错误信息。" : ""));
+const manualReason = computed(() => localCenter.value ? busyReason.value : joinReason.value);
+function explainUnavailable(event: Event, reason: string) {
+  if (!reason) return;
+  event.preventDefault();
+  event.stopPropagation();
+  ElMessage.warning(reason);
+}
 const pairingOffer = ref("");
 const pairingImage = ref("");
 const offerNotice = ref("");
@@ -88,7 +102,10 @@ function invalidateOffer(message: string) {
 }
 
 async function loadCurrentDevice() {
+  if (identityLoading.value) return;
+  identityLoading.value = true;
   localError.value = "";
+  localErrorDetail.value = "";
   try {
     if (desktopAvailable.value) {
       const identity = await window.amitiaDesktop?.getMeshIdentity?.();
@@ -98,9 +115,13 @@ async function loadCurrentDevice() {
       localIdentity.value = getWebDeviceMeshIdentity();
       void connection;
     }
-  } catch (err: any) {
+    if (!localIdentity.value?.deviceId) throw new Error("设备未返回有效的 Device Mesh 身份");
+  } catch (err) {
     localIdentity.value = null;
-    localError.value = err?.message || "无法读取当前设备的 Device Mesh 身份";
+    localError.value = "无法读取当前设备的 Device Mesh 身份";
+    localErrorDetail.value = originalErrorText(err);
+  } finally {
+    identityLoading.value = false;
   }
 }
 
@@ -276,6 +297,9 @@ onBeforeUnmount(() => { disposed = true; invalidateOffer(""); });
 .pairing-description { color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
 .pairing-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .pairing-actions .el-button { margin-left: 0; }
+.pairing-control { display: inline-flex; }
+.pairing-control[role="button"] :deep(.el-button) { pointer-events: none; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
 .pairing-image-input { display: none; }
 .pairing-offer { margin-top: 20px; }
 .pairing-offer h4 { margin: 0; font-size: 14px; }

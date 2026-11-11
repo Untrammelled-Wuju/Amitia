@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/services/background_keep_alive_service.dart';
+import '../../../../core/errors/original_error.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 
 class BackgroundKeepAliveSettings extends ConsumerStatefulWidget {
@@ -16,6 +17,7 @@ class _BackgroundKeepAliveSettingsState
   BackgroundKeepAliveStatus? _status;
   bool _busy = false;
   bool _refreshPending = false;
+  String? _error;
 
   @override
   void initState() {
@@ -63,14 +65,18 @@ class _BackgroundKeepAliveSettingsState
     setState(() => _busy = true);
     try {
       final status = await operation();
-      if (mounted) setState(() => _status = status);
-    } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(error.toString().replaceFirst('Bad state: ', '')),
-          ),
+        setState(() {
+          _status = status;
+          _error = null;
+        });
+      }
+    } catch (error, stackTrace) {
+      if (mounted) {
+        setState(
+          () => _error = '$error\n${originalErrorText(error)}\n$stackTrace',
         );
+        _showError(showOriginal: true);
       }
     } finally {
       if (mounted) {
@@ -83,14 +89,40 @@ class _BackgroundKeepAliveSettingsState
     }
   }
 
+  void _showError({bool showOriginal = false}) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('后台保活设置不可用'),
+        content: SingleChildScrollView(
+          child: SelectableText(
+            !showOriginal && _busy
+                ? '正在处理，请稍后重试。'
+                : '无法完成操作。\n\n原始错误：\n$_error',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('知道了'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => Column(
     children: [
-      AmitiaSwitchTile(
-        title: '后台保活',
-        subtitle: '通过持续通知维持后台运行，优先复用本地运行时；仍受系统省电策略限制',
-        value: _status?.enabled ?? false,
-        onChanged: _status == null || _busy ? null : _update,
+      GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _status == null || _busy ? _showError : null,
+        child: AmitiaSwitchTile(
+          title: '后台保活',
+          subtitle: '通过持续通知维持后台运行，优先复用本地运行时；仍受系统省电策略限制',
+          value: _status?.enabled ?? false,
+          onChanged: _status == null || _busy ? null : _update,
+        ),
       ),
       if (_status == null && !_busy)
         TextButton(onPressed: _load, child: const Text('重试读取保活设置')),

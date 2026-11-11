@@ -5,6 +5,7 @@ import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/services/core_configuration_guard.dart';
 import '../../../../core/services/core_configuration_session.dart';
 import '../../../../core/runtime/backend/mobile_backend_providers.dart';
+import '../../../../core/errors/original_error.dart';
 
 class TimeoutSettings extends ConsumerStatefulWidget {
   const TimeoutSettings({super.key});
@@ -31,7 +32,7 @@ class _TimeoutSettingsState extends ConsumerState<TimeoutSettings> {
         if (!mounted) return;
         _loadEpoch++;
         setState(() {
-          _error = reason.toString();
+          _error = '$reason\n${originalErrorText(reason)}';
           _loading = false;
         });
       },
@@ -45,6 +46,12 @@ class _TimeoutSettingsState extends ConsumerState<TimeoutSettings> {
     return minutes > 0
         ? '$minutes 分钟${seconds > 0 ? ' $seconds 秒' : ''}'
         : '$seconds 秒';
+  }
+
+  void _showSaving() {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('正在保存，请稍后重试。')));
   }
 
   Future<void> _load() async {
@@ -66,9 +73,12 @@ class _TimeoutSettingsState extends ConsumerState<TimeoutSettings> {
         _seconds = (value['seconds'] as num).toInt();
       });
     } catch (error, stackTrace) {
-      print("[original-error] $error\n$stackTrace");
-      if (mounted && epoch == _loadEpoch)
-        setState(() => _error = '无法加载当前统筹中心超时设置，普通绑定设备需要由中心管理员配置');
+      if (mounted && epoch == _loadEpoch) {
+        setState(
+          () => _error =
+              '无法加载超时设置。\n原始错误：\n$error\n${originalErrorText(error)}\n$stackTrace',
+        );
+      }
     } finally {
       if (mounted && epoch == _loadEpoch) setState(() => _loading = false);
     }
@@ -94,11 +104,24 @@ class _TimeoutSettingsState extends ConsumerState<TimeoutSettings> {
         context,
       ).showSnackBar(const SnackBar(content: Text('超时设置已保存，对新调用生效')));
     } catch (error, stackTrace) {
-      print("[original-error] $error\n$stackTrace");
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.toString())));
+        showDialog<void>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('保存超时设置失败'),
+            content: SingleChildScrollView(
+              child: SelectableText(
+                '$error\n${originalErrorText(error)}\n$stackTrace',
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('知道了'),
+              ),
+            ],
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -133,7 +156,7 @@ class _TimeoutSettingsState extends ConsumerState<TimeoutSettings> {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            Text(_error!),
+            SelectableText(_error!),
             TextButton(onPressed: _load, child: const Text('重新加载')),
           ],
         ),
@@ -142,13 +165,17 @@ class _TimeoutSettingsState extends ConsumerState<TimeoutSettings> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        AmitiaSwitchTile(
-          title: '停用超时',
-          subtitle: '开启后，功能调用不再因执行时间过长而中止',
-          value: _disabled,
-          onChanged: _saving
-              ? null
-              : (value) => setState(() => _disabled = value),
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _saving ? _showSaving : null,
+          child: AmitiaSwitchTile(
+            title: '停用超时',
+            subtitle: '开启后，功能调用不再因执行时间过长而中止',
+            value: _disabled,
+            onChanged: _saving
+                ? null
+                : (value) => setState(() => _disabled = value),
+          ),
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -156,21 +183,40 @@ class _TimeoutSettingsState extends ConsumerState<TimeoutSettings> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text('超时时间：$_duration'),
-              Slider(
-                value: _seconds.toDouble(),
-                min: 30,
-                max: 1800,
-                divisions: 59,
-                label: _duration,
-                onChanged: _disabled || _saving
-                    ? null
-                    : (value) => setState(() => _seconds = value.round()),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _disabled || _saving
+                    ? () => ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            _saving ? '正在保存，请稍后重试。' : '请先关闭“停用超时”。',
+                          ),
+                        ),
+                      )
+                    : null,
+                child: IgnorePointer(
+                  ignoring: _disabled || _saving,
+                  child: Slider(
+                    value: _seconds.toDouble(),
+                    min: 30,
+                    max: 1800,
+                    divisions: 59,
+                    label: _duration,
+                    onChanged: _disabled || _saving
+                        ? null
+                        : (value) => setState(() => _seconds = value.round()),
+                  ),
+                ),
               ),
               const Text('统一控制模型、工具与媒体处理等功能的执行时限。保存后对新调用生效；仍可主动取消。'),
               const SizedBox(height: 12),
-              FilledButton(
-                onPressed: _saving ? null : _save,
-                child: Text(_saving ? '保存中…' : '保存'),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _saving ? _showSaving : null,
+                child: FilledButton(
+                  onPressed: _saving ? null : _save,
+                  child: Text(_saving ? '保存中…' : '保存'),
+                ),
               ),
             ],
           ),

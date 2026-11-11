@@ -164,8 +164,8 @@
                 </div>
               </div>
               <div class="runtime-actions">
-                <el-button size="small" :disabled="!isRuntimeStartable(runtime.state)" :loading="busy === runtime.runtimeId" @click="runtimeAction(runtime.runtimeId, 'start')">启动</el-button>
-                <el-button size="small" :disabled="runtime.state !== 'running'" :loading="busy === runtime.runtimeId" @click="runtimeAction(runtime.runtimeId, 'stop')">停止</el-button>
+                <span class="guarded-action" :tabindex="runtimeActionReason(runtime, 'start') ? 0 : undefined" :role="runtimeActionReason(runtime, 'start') ? 'button' : undefined" :aria-label="runtimeActionReason(runtime, 'start') || undefined" @click.capture="explainBlocked($event, runtimeActionReason(runtime, 'start'))" @keydown.enter="explainBlocked($event, runtimeActionReason(runtime, 'start'))" @keydown.space="explainBlocked($event, runtimeActionReason(runtime, 'start'))"><el-button size="small" :disabled="!!runtimeActionReason(runtime, 'start')" :loading="busy === runtime.runtimeId" @click="runtimeAction(runtime.runtimeId, 'start')">启动</el-button></span>
+                <span class="guarded-action" :tabindex="runtimeActionReason(runtime, 'stop') ? 0 : undefined" :role="runtimeActionReason(runtime, 'stop') ? 'button' : undefined" :aria-label="runtimeActionReason(runtime, 'stop') || undefined" @click.capture="explainBlocked($event, runtimeActionReason(runtime, 'stop'))" @keydown.enter="explainBlocked($event, runtimeActionReason(runtime, 'stop'))" @keydown.space="explainBlocked($event, runtimeActionReason(runtime, 'stop'))"><el-button size="small" :disabled="!!runtimeActionReason(runtime, 'stop')" :loading="busy === runtime.runtimeId" @click="runtimeAction(runtime.runtimeId, 'stop')">停止</el-button></span>
                 <el-button size="small" @click="showRuntimeDetail(runtime)">详情</el-button>
               </div>
             </div>
@@ -305,14 +305,14 @@
 
       <template #footer>
         <el-button @click="installDialogVisible = false">取消</el-button>
-        <el-button
+        <span class="guarded-action" :tabindex="installReason ? 0 : undefined" :role="installReason ? 'button' : undefined" :aria-label="installReason || undefined" @click.capture="explainBlocked($event, installReason)" @keydown.enter="explainBlocked($event, installReason)" @keydown.space="explainBlocked($event, installReason)"><el-button
           type="primary"
           :loading="installLoading"
           :disabled="!canInstallPreview"
           @click="commitPackageInstall"
         >
           {{ installMode === "update" ? "确认更新" : "确认安装" }}
-        </el-button>
+        </el-button></span>
       </template>
     </el-dialog>
 
@@ -582,6 +582,25 @@ const canInstallPreview = computed(() => {
   if (installMode.value === "update" && updateTarget.value && preview.id !== updateTarget.value.extensionId) return false;
   return !needsInstallAcknowledgement.value || installAcknowledged.value;
 });
+const installReason = computed(() => {
+  const preview = installPreview.value;
+  if (installLoading.value) return "正在安装扩展，请稍后重试。";
+  if (previewLoading.value) return "正在检查扩展包，请稍后重试。";
+  if (!preview) return "请先选择并检查扩展包。";
+  if (!previewIsGame.value) return "该扩展包不是游戏中心扩展。";
+  if (!preview.compatible) return "扩展包与当前环境不兼容，请查看预览详情。";
+  if (preview.errors?.length) return "扩展包检查未通过，请查看预览中的错误。";
+  if (previewMatchesInstalledVersion.value) return "该版本已安装，无需重复安装。";
+  if (installMode.value === "update" && updateTarget.value && preview.id !== updateTarget.value.extensionId) return "扩展包与待更新的游戏不匹配。";
+  if (needsInstallAcknowledgement.value && !installAcknowledged.value) return "请先确认已查看扩展包的签名、权限和风险信息。";
+  return canInstallPreview.value ? "" : "扩展包暂不可安装，请查看预览详情。";
+});
+function explainBlocked(event: Event, reason: string) {
+  if (!reason) return;
+  event.preventDefault();
+  event.stopPropagation();
+  ElMessage.warning(reason);
+}
 
 async function refresh() {
   loading.value = true;
@@ -742,6 +761,12 @@ function isPluginRunning(plugin: Plugin) {
 
 function isRuntimeStartable(state?: string) {
   return state === "created" || state === "stopped";
+}
+function runtimeActionReason(runtime: Runtime, action: "start" | "stop") {
+  if (busy.value === runtime.runtimeId) return "正在处理该运行实例，请稍后重试。";
+  if (action === "start" && !isRuntimeStartable(runtime.state)) return `当前运行状态为“${stateLabel(runtime.state)}”，暂不能启动。`;
+  if (action === "stop" && runtime.state !== "running") return `当前运行状态为“${stateLabel(runtime.state)}”，暂不能停止。`;
+  return "";
 }
 
 function pluginSupportsCapability(plugin: Plugin | null | undefined, capability: string) {
@@ -1233,6 +1258,7 @@ async function uninstall(plugin: Plugin) {
 }
 
 async function runtimeAction(runtimeId: string, action: "start" | "stop" | "restart") {
+  if (busy.value === runtimeId) { ElMessage.warning("正在处理该运行实例，请稍后重试。"); return; }
   busy.value = runtimeId;
   try {
     if (action === "start") {
@@ -1307,6 +1333,8 @@ watch(() => route.query.install, () => { void maybeOpenInstallFromQuery(); });
 </script>
 
 <style scoped>
+.guarded-action { display: inline-flex; }
+.guarded-action[role="button"] :deep(.el-button) { pointer-events: none; }
 .game-mode-page {
   --game-primary: var(--tp-primary);
   --game-primary-hover: var(--tp-primary-hover);

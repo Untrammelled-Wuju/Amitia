@@ -7,6 +7,7 @@ import { getInitialBrandImage } from "./branding";
 import { getAmitiaDataDir } from "./path-manager";
 
 let latestUpdateMenu: (() => Promise<void>) | null = null;
+let latestContextMenu: Menu | null = null;
 
 export function refreshTrayMenu() {
   latestUpdateMenu?.();
@@ -33,48 +34,58 @@ export function createAppTray(
     const visible = win.isVisible();
     const config = getConfig();
     const autoLaunch = await configStore.getAutoLaunch();
-    tray.setContextMenu(
-      Menu.buildFromTemplate([
-        {
-          label: "显示 Amitia",
-          enabled: !visible,
-          click: () => showWindow(win),
+    latestContextMenu = Menu.buildFromTemplate([
+      {
+        label: "显示 Amitia",
+        enabled: !visible,
+        click: () => showWindow(win),
+      },
+      { label: "隐藏窗口", enabled: visible, click: () => win.hide() },
+      { label: `当前运行模式：${configToLabel(config)}`, enabled: false },
+      { type: "separator" },
+      {
+        label: "开机自启动",
+        type: "checkbox",
+        checked: autoLaunch,
+        click: async (menuItem) => {
+          const next = menuItem.checked;
+          await configStore.setAutoLaunch(next);
+          app.setLoginItemSettings({ openAtLogin: next });
+          win.webContents.send(IPC_CHANNELS.autoLaunchChanged, next);
         },
-        { label: "隐藏窗口", enabled: visible, click: () => win.hide() },
-        { label: `当前运行模式：${configToLabel(config)}`, enabled: false },
-        { type: "separator" },
-        {
-          label: "开机自启动",
-          type: "checkbox",
-          checked: autoLaunch,
-          click: async (menuItem) => {
-            const next = menuItem.checked;
-            await configStore.setAutoLaunch(next);
-            app.setLoginItemSettings({ openAtLogin: next });
-            win.webContents.send(IPC_CHANNELS.autoLaunchChanged, next);
-          },
+      },
+      { type: "separator" },
+      {
+        label: "打开数据目录",
+        click: () => void shell.openPath(getAmitiaDataDir()),
+      },
+      ...(extensionItems.length > 0
+        ? [{ type: "separator" as const }, ...extensionItems]
+        : []),
+      { type: "separator" },
+      {
+        label: "退出 Amitia",
+        click: () => {
+          app.quit();
         },
-        { type: "separator" },
-        {
-          label: "打开数据目录",
-          click: () => void shell.openPath(getAmitiaDataDir()),
-        },
-        ...(extensionItems.length > 0
-          ? [{ type: "separator" as const }, ...extensionItems]
-          : []),
-        { type: "separator" },
-        {
-          label: "退出 Amitia",
-          click: () => {
-            app.quit();
-          },
-        },
-      ]),
-    );
+      },
+    ]);
+    if (process.platform !== "darwin" && !tray.isDestroyed()) {
+      tray.setContextMenu(latestContextMenu);
+    }
   };
 
   tray.on("click", () => showWindow(win));
   tray.on("double-click", () => showWindow(win));
+  tray.on("right-click", () => {
+    if (process.platform !== "darwin") return;
+    void (async () => {
+      await updateMenu();
+      if (!tray.isDestroyed() && latestContextMenu) {
+        tray.popUpContextMenu(latestContextMenu);
+      }
+    })();
+  });
   win.on("show", () => {
     void updateMenu();
   });
@@ -95,6 +106,10 @@ export function createAppTray(
 
 function showWindow(win: BrowserWindow): void {
   if (win.isMinimized()) win.restore();
+  if (process.platform === "darwin") {
+    if (app.isHidden()) app.show();
+    app.focus({ steal: true });
+  }
   win.show();
   win.focus();
 }

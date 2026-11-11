@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:amitia_app/core/backend_transport/backend_service_api.dart';
 import 'package:amitia_app/core/backend_transport/providers/backend_transport_providers.dart';
 import 'package:amitia_app/features/settings/presentation/widgets/timeout_settings.dart';
@@ -18,6 +20,7 @@ class TimeoutApi implements BackendServiceApi {
   int reads = 0;
   Map<String, dynamic> settings = {'disabled': false, 'seconds': 180};
   int writes = 0;
+  Completer<void>? pendingWrite;
 
   @override
   Future<T?> get<T>(
@@ -26,7 +29,7 @@ class TimeoutApi implements BackendServiceApi {
     Map<String, String>? headers,
     T Function(dynamic)? fromJson,
   }) async {
-    if (path.endsWith('/coordination/me'))
+    if (path.endsWith('/coordination/me')) {
       return {
             'coreId': 'core',
             'coordinationAvailable': true,
@@ -39,6 +42,7 @@ class TimeoutApi implements BackendServiceApi {
             },
           }
           as T;
+    }
     reads++;
     return Map<String, dynamic>.from(settings) as T;
   }
@@ -51,6 +55,7 @@ class TimeoutApi implements BackendServiceApi {
     Map<String, String>? headers,
     T Function(dynamic)? fromJson,
   }) async {
+    await pendingWrite?.future;
     settings = Map<String, dynamic>.from(data as Map);
     writes++;
     return settings as T;
@@ -156,5 +161,50 @@ void main() {
     expect(api.writes, 0);
     expect(find.byType(Slider), findsNothing);
     await tester.pumpWidget(const SizedBox());
+  });
+  testWidgets('停用超时和保存中点击禁用控件会提示原因', (tester) async {
+    final api = TimeoutApi();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          backendServiceProvider.overrideWithValue(api),
+          rawBackendServiceApiProvider.overrideWithValue(api),
+        ],
+        child: const MaterialApp(home: Scaffold(body: TimeoutSettings())),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Switch));
+    await tester.pumpAndSettle();
+    await tester.tapAt(
+      tester.getCenter(find.byType(Slider), warnIfMissed: false),
+    );
+    await tester.pump();
+    expect(find.text('请先关闭“停用超时”。'), findsOneWidget);
+    ScaffoldMessenger.of(
+      tester.element(find.byType(Slider)),
+    ).hideCurrentSnackBar();
+    await tester.pumpAndSettle();
+    api.pendingWrite = Completer<void>();
+    await tester.tap(find.text('保存'));
+    await tester.pump();
+    expect(
+      tester.widget<SwitchListTile>(find.byType(SwitchListTile)).onChanged,
+      isNull,
+    );
+    await tester.tap(find.byType(SwitchListTile));
+    await tester.pump();
+    expect(find.text('正在保存，请稍后重试。'), findsOneWidget);
+    ScaffoldMessenger.of(
+      tester.element(find.byType(SwitchListTile)),
+    ).hideCurrentSnackBar();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保存中…'));
+    await tester.pump();
+    expect(find.text('正在保存，请稍后重试。'), findsOneWidget);
+    expect(api.writes, 0);
+    api.pendingWrite!.complete();
+    await tester.pumpAndSettle();
+    expect(api.writes, 1);
   });
 }

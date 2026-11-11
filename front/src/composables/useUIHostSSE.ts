@@ -546,7 +546,17 @@ return null;
           acknowledge: async (state) => {
             const path = '/api/notifications/scheduled/' + encodeURIComponent(envelope.requestId) + '/ack';
             const response = await fetch(await resolveApiUrl(path), await createAuthenticatedFetchInit(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state }) }));
-            if (!response.ok) throw new Error('通知回执未确认');
+            if (response.ok) return;
+            const body = await response.text();
+            let detail = body;
+            try {
+              const parsed = JSON.parse(body) as Record<string, unknown>;
+              const candidate = parsed?.msg ?? parsed?.message ?? parsed?.error;
+              if (candidate !== undefined && candidate !== null && candidate !== '') detail = String(candidate);
+            } catch (parseError) {
+              console.error("[original-error]", parseError);
+            }
+            throw new Error('通知回执未确认（HTTP ' + response.status + '）：' + detail);
           },
           navigate: (target) => { if (isNavigationAllowed(target, router)) void router.push(target); },
         }).catch((error) => {

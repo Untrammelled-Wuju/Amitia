@@ -56,6 +56,29 @@ describe("ChatInput model settings", () => {
       expect(wrapper.find(".permission-trigger").exists()).toBe(true);
     } finally { wrapper.unmount(); }
   });
+  it("思考模式关闭时点击强度显示原因且不提交", async () => {
+    const warning = vi.spyOn(ElMessage, "warning").mockImplementation(() => undefined as any);
+    const overlayRoot = document.createElement("div");
+    overlayRoot.id = "amitia-overlay-root";
+    document.body.appendChild(overlayRoot);
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const commit = vi.fn();
+    const wrapper = mount(ChatInput, {
+      attachTo: document.body,
+      props: { models: [{ id: 1, name: "模型", apiType: "openai" }], selectedModelId: 1, reasoningEnabled: false, modelCommitChange: commit },
+      global: { plugins: [pinia, ElementPlus] },
+    });
+    try {
+      await wrapper.get(".model-effort-trigger").trigger("click");
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      const track = overlayRoot.querySelector<HTMLElement>(".model-effort-slider-track");
+      expect(track?.getAttribute("role")).toBe("button");
+      track?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      expect(warning).toHaveBeenCalledWith("请先在思考模式中选择“支持”。");
+      expect(commit).not.toHaveBeenCalled();
+    } finally { wrapper.unmount(); overlayRoot.remove(); warning.mockRestore(); }
+  });
   it("switches the trailing action between voice, send and stop", async () => {
     localStorage.clear();
     const overlayRoot = document.createElement("div");

@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ref } from "vue";
 import { flushPromises } from "@vue/test-utils";
-const mocks = vi.hoisted(() => ({ refresh: vi.fn(), data: vi.fn(), send: vi.fn(), groupState: vi.fn(), query: vi.fn(), sendGroup: vi.fn(), warning: vi.fn() }));
-vi.mock("@/composables/useDeviceOwnedConversation", () => ({ useDeviceOwnedConversation: () => ({ enabled: { value: true }, coreId: { value: "core" }, notice: { value: "" }, refresh: mocks.refresh, data: mocks.data, send: mocks.send, groupState: mocks.groupState, query: mocks.query, sendGroup: mocks.sendGroup }) }));
+const mocks = vi.hoisted(() => ({ refresh: vi.fn(), data: vi.fn(), send: vi.fn(), groupState: vi.fn(), query: vi.fn(), sendGroup: vi.fn(), warning: vi.fn(), chatScope: vi.fn() }));
+vi.mock("@/composables/useDeviceOwnedConversation", () => ({ useDeviceOwnedConversation: () => ({ enabled: { value: true }, coreId: { value: "core" }, notice: { value: "" }, refresh: mocks.refresh, data: mocks.data, chatScope: mocks.chatScope, send: mocks.send, groupState: mocks.groupState, query: mocks.query, sendGroup: mocks.sendGroup }) }));
 vi.mock("@/composables/useConversationWorkspace", () => ({ useConversationWorkspace: () => ({ currentWorkspace: { value: null } }) }));
 vi.mock("@/composables/useChatAppearancePreference", () => ({ useChatAppearancePreference: () => ({ messageStyle: { value: "flow" } }) }));
 vi.mock("@/runtime/desktop-pet-chat-state", () => ({ notifyDesktopPetChatState: vi.fn() }));
@@ -16,6 +16,7 @@ describe("saved reply completion", () => {
       if (vi.isMockFunction(mock)) mock.mockReset();
     }
     mocks.groupState.mockResolvedValue(null);
+    mocks.chatScope.mockImplementation((roleId: string, conversationRoleId?: string) => ({ coreId: "core", resourceOwnerId: "owner", roleId, ...(conversationRoleId ? { conversationRoleId } : {}) }));
   });
   it("does not reopen an old conversation when its response finishes after a new draft", async () => {
     const scope = { coreId: "core", resourceOwnerId: "owner", roleId: "role" };

@@ -3,9 +3,10 @@
     <template #header><div class="setting-row"><span>自定义配色</span><el-switch data-amitia-ui="component.switch" :model-value="palette.enabled" aria-label="启用自定义配色" @update:model-value="togglePalette" /></div></template>
     <p>主色用于主要操作，副色用于辅助操作。关闭后恢复预设配色。</p>
     <div class="color-grid">
-      <label v-for="field in fields" :key="field.key">{{ field.label }}<el-color-picker data-amitia-ui="component.input" :model-value="palette[field.key]" :disabled="!palette.enabled" :aria-label="field.label" @change="changeColor(field.key, $event)" /><span>{{ palette[field.key] }}</span></label>
+      <label v-for="field in fields" :key="field.key">{{ field.label }}<span class="control-wrapper" :tabindex="palette.enabled ? undefined : 0" :role="palette.enabled ? undefined : 'button'" :aria-label="palette.enabled ? undefined : `${field.label}不可用，先开启自定义配色`" @click.capture="explainUnavailable" @keydown.enter="explainUnavailable" @keydown.space="explainUnavailable"><el-color-picker data-amitia-ui="component.input" :model-value="palette[field.key]" :disabled="!palette.enabled" :aria-label="field.label" @change="changeColor(field.key, $event)" /></span><span>{{ palette[field.key] }}</span></label>
     </div>
-    <div class="setting-row"><span>文字颜色模式</span><el-select data-amitia-ui="component.input" :model-value="palette.textMode" :disabled="!palette.enabled" aria-label="文字颜色模式" @update:model-value="changeTextMode"><el-option v-for="option in modes" :key="option.value" :label="option.label" :value="option.value" /></el-select></div>
+    <div class="setting-row"><span>文字颜色模式</span><span class="control-wrapper" :tabindex="palette.enabled ? undefined : 0" :role="palette.enabled ? undefined : 'button'" :aria-label="palette.enabled ? undefined : '文字颜色模式不可用，先开启自定义配色'" @click.capture="explainUnavailable" @keydown.enter="explainUnavailable" @keydown.space="explainUnavailable"><el-select data-amitia-ui="component.input" :model-value="palette.textMode" :disabled="!palette.enabled" aria-label="文字颜色模式" @update:model-value="changeTextMode"><el-option v-for="option in modes" :key="option.value" :label="option.label" :value="option.value" /></el-select></span></div>
+    <details v-if="saveError"><summary>查看保存失败的原始错误</summary><pre>{{ saveError }}</pre></details>
     <p>选择文字颜色会切换为自选；自动模式按背景选择高对比文字。页面亮色、暗色和跟随系统仍由上方主题模式控制。</p>
     <div class="preview-grid">
       <div v-for="sample in samples" :key="sample.label" class="sample" :style="{ background: sample.background, color: sample.text }">
@@ -15,18 +16,27 @@
   </el-card>
 </template>
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useTheme } from "../composables/useTheme";
 import { ElMessage } from "element-plus";
 import { contrastRatio, paletteText, readableText, type CustomPalette } from "../composables/customPalette";
+import { originalErrorText } from "@/runtime/original-error";
 const { state, setCustomPalette } = useTheme();
 const palette = computed(() => state.value.customPalette);
+const saveError = ref("");
 const fields = [{ key: "primary", label: "主色" }, { key: "secondary", label: "副色" }, { key: "text", label: "文字颜色" }] as const;
 const modes = [{ value: "auto", label: "自动" }, { value: "dark", label: "深色文字" }, { value: "light", label: "浅色文字" }, { value: "custom", label: "自选颜色" }];
 function save(value: Partial<CustomPalette>) {
-  try { setCustomPalette(value); } catch (error) {
-  console.error("[original-error]", error);
-ElMessage.error(error instanceof Error ? error.message : String(error)); }
+  try { setCustomPalette(value); saveError.value = ""; } catch (error) {
+    saveError.value = originalErrorText(error);
+    ElMessage.error("保存配色失败，请查看原始错误。");
+  }
+}
+function explainUnavailable(event: Event) {
+  if (palette.value.enabled) return;
+  event.preventDefault();
+  event.stopPropagation();
+  ElMessage.warning("请先开启自定义配色。");
 }
 function togglePalette(value: boolean | string | number) { save({ enabled: Boolean(value) }); }
 function changeTextMode(value: CustomPalette["textMode"]) { save({ textMode: value }); }
@@ -44,6 +54,10 @@ const samples = computed(() => [
 .custom-theme { margin-bottom: 14px; }
 .setting-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .setting-row .el-select { width: 150px; }
+.control-wrapper { display: inline-flex; }
+.control-wrapper[role="button"] :deep(.el-color-picker),
+.control-wrapper[role="button"] :deep(.el-select) { pointer-events: none; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
 p { color: var(--ac-color-text-secondary); font-size: 13px; line-height: 1.6; }
 .color-grid, .preview-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 16px 0; }
 label { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

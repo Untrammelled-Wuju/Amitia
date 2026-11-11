@@ -647,6 +647,26 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     }
   }
 
+  String get _proceedReason {
+    if (_submitting) return '正在保存，请稍后重试。';
+    return switch (_currentStep) {
+      1 => '请先完成环境检查。',
+      2 => '请填写远程 Core 地址。',
+      3 => _profileNameController.text.trim().isEmpty
+          ? '请填写个人名称。'
+          : '请填写设备配对码。',
+      4 => '请先确认所有使用边界。',
+      5 => '请填写文本模型密钥。',
+      6 => '请填写视觉模型密钥。',
+      7 => '请填写语音模型密钥。',
+      8 => '请填写向量模型密钥。',
+      10 => '请填写角色名称。',
+      11 => '请填写角色身份。',
+      12 => '请至少选择一个性格特征。',
+      _ => '当前步骤尚未完成。',
+    };
+  }
+
   Color _parseColor(String hex) {
     final cleaned = hex.replaceAll('#', '');
     return Color(int.parse('FF$cleaned', radix: 16));
@@ -744,7 +764,9 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
               child: AmitiaButton(
                 label: _submitting ? '正在保存…' : (isLast ? '进入 Amitia' : '下一步'),
                 icon: isLast ? Icons.rocket_launch : Icons.arrow_forward,
-                onPressed: _canProceed && !_submitting ? _next : null,
+                onPressed: _canProceed && !_submitting
+                    ? _next
+                    : () => amitiaSnackBar(context, _proceedReason),
               ),
             ),
           ],

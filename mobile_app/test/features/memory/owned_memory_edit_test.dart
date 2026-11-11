@@ -130,4 +130,82 @@ void main() {
     expect(find.textContaining('当前设备未获统筹中心管理员授权'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('只读模式的总览管理入口解释权限原因', (tester) async {
+    final source = MemorySource(BackendServiceApi(TaskTransport([]), 1));
+    final service = AuthorityMemory(BackendServiceApi(TaskTransport([]), 1));
+    final router = GoRouter(
+      routes: [
+        GoRoute(
+          path: '/',
+          builder: (context, state) => const OwnedMemoryPage(),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          memoryDataSourceProvider.overrideWithValue(source),
+          deviceOwnedMemoryServiceProvider.overrideWithValue(service),
+          sharedCoreDataAccessProvider.overrideWith(
+            (ref) async => const SharedCoreDataAccess(
+              read: true,
+              write: false,
+              reason: '当前设备无写入权限',
+              coreId: 'core',
+            ),
+          ),
+        ],
+        child: MaterialApp.router(
+          routerConfig: router,
+          theme: AppTheme.lightTheme(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final button = find.ancestor(
+      of: find.text('生成候选'),
+      matching: find.byType(TextButton),
+    );
+    expect(tester.widget<TextButton>(button).onPressed, isNull);
+    await tester.tap(find.text('生成候选'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('当前设备无写入权限'), findsWidgets);
+  });
+
+  testWidgets('没有可用角色时刷新说明原因', (tester) async {
+    final source = MemorySource(BackendServiceApi(TaskTransport([]), 1))
+      ..roles = [];
+    final service = AuthorityMemory(BackendServiceApi(TaskTransport([]), 1));
+    final router = GoRouter(
+      routes: [
+        GoRoute(
+          path: '/',
+          builder: (context, state) => const OwnedMemoryPage(),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          memoryDataSourceProvider.overrideWithValue(source),
+          deviceOwnedMemoryServiceProvider.overrideWithValue(service),
+          sharedCoreDataAccessProvider.overrideWith(
+            (ref) async => const SharedCoreDataAccess.local(),
+          ),
+        ],
+        child: MaterialApp.router(
+          routerConfig: router,
+          theme: AppTheme.lightTheme(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('刷新'));
+    await tester.tap(find.text('刷新'));
+    await tester.pump();
+    expect(find.text('请先创建或选择可用角色。'), findsOneWidget);
+  });
 }

@@ -616,7 +616,7 @@ func (r *Repository) UpdateOutbox(ctx context.Context, id string, values map[str
 	}
 	update["updated_at"] = time.Now().UTC()
 	return r.db.WithContext(ctx).Model(&NotificationOutbox{}).
-		Where("id = ? AND status NOT IN (?, ?, ?)", strings.TrimSpace(id), "displayed", "clicked", "display_failed").
+		Where("id = ? AND status NOT IN ?", strings.TrimSpace(id), outboxTerminalStatuses).
 		Updates(update).Error
 }
 
@@ -625,11 +625,20 @@ func (r *Repository) ExpireOutbox(ctx context.Context) error {
 		return errors.New("notification repository unavailable")
 	}
 	now := time.Now().UTC()
-	return r.db.WithContext(ctx).Model(&NotificationOutbox{}).
+	if err := r.db.WithContext(ctx).Model(&NotificationOutbox{}).
 		Where("status IN ? AND expires_at <= ?", []string{"queued", "retry", "processing"}, now).
 		Updates(map[string]any{
 			"status":     "failed",
 			"last_error": "notification TTL expired",
+			"updated_at": now,
+		}).Error; err != nil {
+		return err
+	}
+	return r.db.WithContext(ctx).Model(&NotificationOutbox{}).
+		Where("status = ? AND expires_at <= ?", "accepted", now).
+		Updates(map[string]any{
+			"status":     "expired",
+			"last_error": "notification receipt expired",
 			"updated_at": now,
 		}).Error
 }

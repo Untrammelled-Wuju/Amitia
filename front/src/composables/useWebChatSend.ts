@@ -207,8 +207,8 @@ export function useWebChatSend(
     try {
       if (await owned.refresh()) {
         if (!originalRole) throw new Error("请选择调用角色后发送消息");
-        const prepared = await owned.data("working", originalRole);
-        let expectedExecutionScope = prepared.executionScope;
+        const preview = await owned.data("working", originalRole);
+        let expectedExecutionScope = owned.chatScope(originalRole, preview?.executionScope?.conversationRoleId);
         if (sendGeneration !== draftGeneration) return;
         if (expectedExecutionScope.roleId !== originalRole || convId.value !== originalConversation || characterId.value !== originalRole) throw new Error("对话或角色已变化，原消息未发送");
         if (draftProjectReference) {

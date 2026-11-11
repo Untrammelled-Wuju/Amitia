@@ -20,8 +20,11 @@ export async function prepareOwnedChatRequest(body: Record<string, any> = {}, ro
   const prepared = previewKind === "message"
     ? await owned.resourcePreview("message", String(body.messageId || ""), role)
     : await owned.data("working", role);
-  const expected = (body.expectedExecutionScope || prepared.executionScope) as OwnedExecutionScope;
-  if (!sameOwnedAuthority(expected, prepared.executionScope)) throw new Error("服务或数据归属已变化，请重新预览后操作");
+  const previewScope = prepared.executionScope;
+  const supplied = body.expectedExecutionScope as OwnedExecutionScope | undefined;
+  const catalogScope = previewKind === "message" ? previewScope : owned.chatScope(role, previewScope.conversationRoleId);
+  const expected = (supplied || catalogScope) as OwnedExecutionScope;
+  if (supplied && !sameOwnedAuthority(supplied, previewScope)) throw new Error("服务或数据归属已变化，请重新预览后操作");
   const origin = parseConversationReference(String(body.conversationId || ""));
   const payload = { ...body, ...(origin ? { conversationId: origin.id, conversationOwnerId: origin.ownerId } : {}), targetDeviceId: expected.targetDeviceId, characterId: role, expectedExecutionScope: expected };
   return { owned, expected, payload: { requestId: crypto.randomUUID(), ...payload } };

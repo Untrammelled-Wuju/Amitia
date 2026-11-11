@@ -1,5 +1,5 @@
 import { flushPromises, mount } from "@vue/test-utils";
-import ElementPlus from "element-plus";
+import ElementPlus, { ElMessage } from "element-plus";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import GroupMemberPanel from "../components/GroupMemberPanel.vue";
 
@@ -19,6 +19,33 @@ afterEach(() => {
 });
 
 describe("GroupMemberPanel avatar", () => {
+  it("未选角色或超过人数上限时提示且不提交", async () => {
+    const warning = vi.spyOn(ElMessage, "warning").mockImplementation(() => undefined as any);
+    const wrapper = mount(GroupMemberPanel, {
+      attachTo: document.body,
+      props: {
+        visible: true,
+        group: null,
+        characters: Array.from({ length: 8 }, (_, index) => ({ id: `role-${index}`, name: `角色 ${index}` })),
+        roleId: "current",
+        conversationId: "conversation",
+      },
+      global: { plugins: [ElementPlus] },
+    });
+    try {
+      await flushPromises();
+      const control = document.body.querySelector<HTMLElement>(".invite-control");
+      expect(control?.getAttribute("role")).toBe("button");
+      control?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      expect(warning).toHaveBeenCalledWith("请先选择要邀请的角色。");
+      const state = (wrapper.vm as any).$.setupState;
+      for (let index = 0; index < 8; index++) state.toggleSelection(`role-${index}`, true);
+      await wrapper.vm.$nextTick();
+      control?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      expect(warning).toHaveBeenCalledWith("群聊最多支持 8 位角色，请减少选择数量。");
+      expect(wrapper.emitted("changed")).toBeUndefined();
+    } finally { wrapper.unmount(); warning.mockRestore(); }
+  });
   it("单聊邀请列表排除当前角色并保持头像比例", async () => {
     const wrapper = mount(GroupMemberPanel, {
       attachTo: document.body,

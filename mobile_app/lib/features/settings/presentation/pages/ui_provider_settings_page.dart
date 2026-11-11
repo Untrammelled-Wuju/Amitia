@@ -134,7 +134,12 @@ class _UIProviderSettingsPageState extends ConsumerState<UIProviderSettingsPage>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    DropdownButtonFormField<UIProfileScopeKind>(
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _scopeLoading ? () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('正在加载配置，请稍后重试。'))) : null,
+                      child: IgnorePointer(
+                        ignoring: _scopeLoading,
+                        child: DropdownButtonFormField<UIProfileScopeKind>(
                       key: ValueKey(_scope),
                       initialValue: _scope,
                       isExpanded: true,
@@ -144,6 +149,8 @@ class _UIProviderSettingsPageState extends ConsumerState<UIProviderSettingsPage>
                       ),
                       items: UIProfileScopeKind.values.map((value) => DropdownMenuItem(value: value, child: Text(_scopeLabel(value)))).toList(),
                       onChanged: _scopeLoading ? null : _changeScope,
+                        ),
+                      ),
                     ),
                     SizedBox(height: AppSpacing.sm),
                     Wrap(
@@ -224,7 +231,11 @@ class _ProviderRow extends StatelessWidget {
     final selector = registryCapability
         ? Chip(label: Text('自动组合 ${candidates.where((p) => p.enabled && !p.builtin).length}'))
         : saving
-        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+        ? GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('正在保存该界面提供者，请稍后重试。'))),
+            child: const SizedBox(width: 48, height: 48, child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))),
+          )
         : DropdownButton<String>(
             value: explicit,
             isExpanded: true,
@@ -233,7 +244,11 @@ class _ProviderRow extends StatelessWidget {
               ...candidates.map((p) => DropdownMenuItem(
                 value: p.providerId,
                 enabled: p.enabled,
-                child: Text('${p.providerId}${p.builtin ? ' · Built-in' : ''}${p.placement != UIProviderPlacement.any ? ' · ${p.placement.name}' : ''}', maxLines: 1, overflow: TextOverflow.ellipsis),
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: p.enabled ? null : () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('该界面提供者未启用，无法选择。'))),
+                  child: Text('${p.providerId}${p.builtin ? ' · Built-in' : ''}${p.placement != UIProviderPlacement.any ? ' · ${p.placement.name}' : ''}', maxLines: 1, overflow: TextOverflow.ellipsis),
+                ),
               )),
             ],
             onChanged: (value) => onChanged(value?.isEmpty == true ? null : value),

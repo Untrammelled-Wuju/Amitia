@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../core/settings/background_preferences.dart';
+import '../../../../core/errors/original_error.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/background_media.dart';
 
@@ -28,12 +29,11 @@ class _BackgroundSettingsState extends ConsumerState<BackgroundSettings> {
     });
     try {
       await action();
-    } catch (error) {
+    } catch (error, stackTrace) {
       if (mounted) {
         setState(
-          () => _error = error is FormatException
-              ? error.message
-              : '无法保存或读取背景，请重试',
+          () => _error =
+              '无法保存或读取背景，请重试。\n\n原始错误：\n$error\n${originalErrorText(error)}\n$stackTrace',
         );
       }
     } finally {
@@ -58,9 +58,22 @@ class _BackgroundSettingsState extends ConsumerState<BackgroundSettings> {
     try {
       await action();
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-if (mounted) setState(() => _error = '保存背景设置失败，请重试');
+      if (mounted) {
+        setState(
+          () => _error =
+              '保存背景设置失败，请重试。\n\n原始错误：\n$error\n${originalErrorText(error)}\n$stackTrace',
+        );
+      }
     }
+  }
+
+  void _showUnavailable({bool needsBlur = false}) {
+    final reason = _busy
+        ? '正在处理，请稍后重试。'
+        : needsBlur
+        ? '请先开启背景模糊。'
+        : '请先选择背景。';
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(reason)));
   }
 
   @override
@@ -83,13 +96,17 @@ if (mounted) setState(() => _error = '保存背景设置失败，请重试');
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          AmitiaSwitchTile(
-            title: '自定义背景',
-            subtitle: '图片或静音循环视频，保存在当前设备',
-            value: preferences.enabled,
-            onChanged: _busy || !hasVisual
-                ? null
-                : (value) => _run(() => notifier.update(enabled: value)),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _busy || !hasVisual ? _showUnavailable : null,
+            child: AmitiaSwitchTile(
+              title: '自定义背景',
+              subtitle: '图片或静音循环视频，保存在当前设备',
+              value: preferences.enabled,
+              onChanged: _busy || !hasVisual
+                  ? null
+                  : (value) => _run(() => notifier.update(enabled: value)),
+            ),
           ),
           Text(
             preferences.name.isNotEmpty
@@ -122,7 +139,10 @@ if (mounted) setState(() => _error = '保存背景设置失败，请重试');
           if (_error != null)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Text(_error!, style: TextStyle(color: context.error)),
+              child: SelectableText(
+                _error!,
+                style: TextStyle(color: context.error),
+              ),
             ),
           if (_error != null)
             TextButton(
@@ -131,33 +151,56 @@ if (mounted) setState(() => _error = '保存背景设置失败，请重试');
             ),
           const SizedBox(height: 16),
           Text('背景不透明度 ${(preferences.opacity * 100).round()}%'),
-          Slider(
-            value: preferences.opacity,
-            min: 0,
-            max: 1,
-            divisions: 100,
-            label: '${(preferences.opacity * 100).round()}%',
-            onChanged: _busy || !hasVisual
-                ? null
-                : (value) => _adjust(() => notifier.update(opacity: value)),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _busy || !hasVisual ? _showUnavailable : null,
+            child: IgnorePointer(
+              ignoring: _busy || !hasVisual,
+              child: Slider(
+                value: preferences.opacity,
+                min: 0,
+                max: 1,
+                divisions: 100,
+                label: '${(preferences.opacity * 100).round()}%',
+                onChanged: _busy || !hasVisual
+                    ? null
+                    : (value) => _adjust(() => notifier.update(opacity: value)),
+              ),
+            ),
           ),
-          AmitiaSwitchTile(
-            title: '背景模糊',
-            value: preferences.blurEnabled,
-            onChanged: _busy || !hasVisual
-                ? null
-                : (value) => _run(() => notifier.update(blurEnabled: value)),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _busy || !hasVisual ? _showUnavailable : null,
+            child: AmitiaSwitchTile(
+              title: '背景模糊',
+              value: preferences.blurEnabled,
+              onChanged: _busy || !hasVisual
+                  ? null
+                  : (value) => _run(() => notifier.update(blurEnabled: value)),
+            ),
           ),
           Text('模糊半径 ${preferences.blurRadius.round()} px'),
-          Slider(
-            value: preferences.blurRadius,
-            min: 0,
-            max: 30,
-            divisions: 30,
-            label: '${preferences.blurRadius.round()} px',
-            onChanged: _busy || !hasVisual || !preferences.blurEnabled
-                ? null
-                : (value) => _adjust(() => notifier.update(blurRadius: value)),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _busy || !hasVisual || !preferences.blurEnabled
+                ? () => _showUnavailable(
+                    needsBlur: hasVisual && !preferences.blurEnabled,
+                  )
+                : null,
+            child: IgnorePointer(
+              ignoring: _busy || !hasVisual || !preferences.blurEnabled,
+              child: Slider(
+                value: preferences.blurRadius,
+                min: 0,
+                max: 30,
+                divisions: 30,
+                label: '${preferences.blurRadius.round()} px',
+                onChanged: _busy || !hasVisual || !preferences.blurEnabled
+                    ? null
+                    : (value) =>
+                          _adjust(() => notifier.update(blurRadius: value)),
+              ),
+            ),
           ),
           if (hasVisual)
             SizedBox(

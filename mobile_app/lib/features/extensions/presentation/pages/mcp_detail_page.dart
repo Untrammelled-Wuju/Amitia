@@ -124,6 +124,18 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
     return transport.toString();
   }
 
+  Widget _guardConnectionAction(Widget child) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _connectionAction
+          ? () => ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('正在处理 MCP 连接，请稍后重试。')),
+            )
+          : null,
+      child: child,
+    );
+  }
+
   String _statusLabel(dynamic status) {
     final s = status.toString().toLowerCase();
     if (s == 'ready' || (s.contains('connected') && !s.contains('dis')))
@@ -375,21 +387,21 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
         Row(
           children: [
             Expanded(
-              child: AmitiaButton(
+              child: _guardConnectionAction(AmitiaButton(
                 label: _connectionAction ? '处理中...' : '连接',
                 isSecondary: true,
                 icon: Icons.link,
                 onPressed: _connectionAction ? null : _connectServer,
-              ),
+              )),
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: AmitiaButton(
+              child: _guardConnectionAction(AmitiaButton(
                 label: '断开',
                 isSecondary: true,
                 icon: Icons.link_off,
                 onPressed: _connectionAction ? null : _disconnectServer,
-              ),
+              )),
             ),
           ],
         ),
@@ -397,21 +409,21 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
         Row(
           children: [
             Expanded(
-              child: AmitiaButton(
+              child: _guardConnectionAction(AmitiaButton(
                 label: '重新连接',
                 isSecondary: true,
                 icon: Icons.sync,
                 onPressed: _connectionAction ? null : _reconnectServer,
-              ),
+              )),
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: AmitiaButton(
+              child: _guardConnectionAction(AmitiaButton(
                 label: '重新发现能力',
                 isSecondary: true,
                 icon: Icons.refresh,
                 onPressed: _connectionAction ? null : _refreshServer,
-              ),
+              )),
             ),
           ],
         ),

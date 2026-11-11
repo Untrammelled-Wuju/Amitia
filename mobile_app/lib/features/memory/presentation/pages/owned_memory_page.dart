@@ -999,6 +999,36 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
         state.valueOrNull?.write == true;
   }
 
+  void _showManagementUnavailable() {
+    if (!_loading && !_managing && _source == 'current' && !_canWrite) {
+      showSharedCoreAccessReason(context, ref.read(sharedCoreDataAccessProvider));
+      return;
+    }
+    final reason = _loading || _managing
+        ? '正在处理记忆，请稍后重试。'
+        : _source != 'current'
+            ? '历史设备记忆仅供查看，请切换到当前设备。'
+            : _role.isEmpty
+                ? '请先创建或选择可用角色。'
+                : _error.isNotEmpty
+                    ? '记忆数据不可用：\n$_error'
+                    : '记忆数据尚未准备完成，请刷新后重试。';
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('无法管理记忆'),
+        content: SingleChildScrollView(child: SelectableText(reason)),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('知道了'))],
+      ),
+    );
+  }
+
+  void _showRefreshUnavailable() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(_loading ? '正在加载记忆，请稍后重试。' : '请先创建或选择可用角色。')),
+    );
+  }
+
   IconData get _pageIcon => switch (_kind) {
     'profile' => Icons.person_outline,
     'episodic' => Icons.psychology_outlined,
@@ -1231,10 +1261,14 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
         onPressed: () => context.push(AppRoutes.memoryGraph),
       ),
     if (_kind == 'graph' || widget.timeline || _kind == 'episodic')
-      AmitiaIconButton(
-        icon: Icons.refresh,
-        tooltip: '刷新',
-        onPressed: _loading || _role.isEmpty ? null : () => _load(),
+      GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _loading || _role.isEmpty ? _showRefreshUnavailable : null,
+        child: AmitiaIconButton(
+          icon: Icons.refresh,
+          tooltip: '刷新',
+          onPressed: _loading || _role.isEmpty ? null : () => _load(),
+        ),
       ),
   ];
 
@@ -1492,7 +1526,12 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                TextButton(
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _managementPage == null || _loading || _managing || _source != 'current' || !_canWrite
+                      ? _showManagementUnavailable
+                      : null,
+                  child: TextButton(
                   onPressed:
                       _managementPage == null ||
                           _loading ||
@@ -1502,8 +1541,14 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                       ? null
                       : _createMemory,
                   child: const Text('新增记忆'),
+                  ),
                 ),
-                TextButton(
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _managementPage == null || _loading || _managing || _source != 'current' || !_canWrite
+                      ? _showManagementUnavailable
+                      : null,
+                  child: TextButton(
                   onPressed:
                       _managementPage == null ||
                           _loading ||
@@ -1513,6 +1558,7 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                       ? null
                       : _generateCandidates,
                   child: const Text('生成候选'),
+                  ),
                 ),
                 TextButton(
                   onPressed: _loading || _managing
@@ -1523,9 +1569,13 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                         },
                   child: const Text('待审核候选'),
                 ),
-                TextButton(
-                  onPressed: _loading || _role.isEmpty ? null : () => _load(),
-                  child: const Text('刷新'),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _loading || _role.isEmpty ? _showRefreshUnavailable : null,
+                  child: TextButton(
+                    onPressed: _loading || _role.isEmpty ? null : () => _load(),
+                    child: const Text('刷新'),
+                  ),
                 ),
               ],
             ),
@@ -1942,7 +1992,24 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
               TextButton(
                 onPressed:
                     _projection == null || _loading || _rebuilding || !_canWrite
-                    ? null
+                    ? () {
+                        if (!_canWrite) {
+                          showSharedCoreAccessReason(
+                            context,
+                            ref.read(sharedCoreDataAccessProvider),
+                          );
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                _loading || _rebuilding
+                                    ? '正在处理，请稍后重试。'
+                                    : '索引状态尚未加载，请刷新后重试。',
+                              ),
+                            ),
+                          );
+                        }
+                      }
                     : _rebuild,
                 child: Text(_rebuilding ? '正在提交' : '重建当前范围索引'),
               ),

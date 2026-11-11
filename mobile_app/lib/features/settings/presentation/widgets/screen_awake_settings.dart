@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/services/screen_awake_service.dart';
 import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/errors/original_error.dart';
 
 class ScreenAwakeSettings extends ConsumerStatefulWidget {
   const ScreenAwakeSettings({super.key});
@@ -14,6 +15,7 @@ class _ScreenAwakeSettingsState extends ConsumerState<ScreenAwakeSettings> {
   bool _enabled = false;
   bool _busy = true;
   bool _loaded = false;
+  String? _error;
 
   @override
   void initState() {
@@ -22,7 +24,10 @@ class _ScreenAwakeSettingsState extends ConsumerState<ScreenAwakeSettings> {
   }
 
   Future<void> _load() async {
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
     try {
       final enabled = await ref.read(screenAwakeServiceProvider).load();
       if (!mounted) return;
@@ -31,8 +36,12 @@ class _ScreenAwakeSettingsState extends ConsumerState<ScreenAwakeSettings> {
         _loaded = true;
       });
     } catch (error, stackTrace) {
-      print("[original-error] $error\n$stackTrace");
-      if (mounted) setState(() => _loaded = false);
+      if (mounted) {
+        setState(() {
+          _loaded = false;
+          _error = '$error\n${originalErrorText(error)}\n$stackTrace';
+        });
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -46,23 +55,9 @@ class _ScreenAwakeSettingsState extends ConsumerState<ScreenAwakeSettings> {
           .setEnabled(enabled);
       if (mounted) setState(() => _enabled = saved);
     } catch (error, stackTrace) {
-      print("[original-error] $error\n$stackTrace");
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('屏幕常亮设置保存失败，请重试'),
-                const SizedBox(height: 4),
-                Text(
-                  error.toString(),
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
-          ),
+        _showUnavailable(
+          '屏幕常亮设置保存失败，请重试。\n\n原始错误：\n$error\n${originalErrorText(error)}\n$stackTrace',
         );
       }
     } finally {
@@ -70,14 +65,40 @@ class _ScreenAwakeSettingsState extends ConsumerState<ScreenAwakeSettings> {
     }
   }
 
+  void _showUnavailable(String message) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('屏幕常亮设置'),
+        content: SingleChildScrollView(child: SelectableText(message)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('知道了'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => Column(
     children: [
-      AmitiaSwitchTile(
-        title: '屏幕常亮',
-        subtitle: '开启后仅应用前台保持屏幕亮起，后台恢复系统息屏规则',
-        value: _enabled,
-        onChanged: !_loaded || _busy ? null : _update,
+      GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: !_loaded || _busy
+            ? () => _showUnavailable(
+                _busy
+                    ? '正在处理，请稍后重试。'
+                    : '无法读取屏幕设置，请重试。\n\n原始错误：\n${_error ?? '未返回错误详情'}',
+              )
+            : null,
+        child: AmitiaSwitchTile(
+          title: '屏幕常亮',
+          subtitle: '开启后仅应用前台保持屏幕亮起，后台恢复系统息屏规则',
+          value: _enabled,
+          onChanged: !_loaded || _busy ? null : _update,
+        ),
       ),
       if (!_loaded && !_busy)
         TextButton(onPressed: _load, child: const Text('重试读取屏幕设置')),

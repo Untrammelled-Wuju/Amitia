@@ -53,4 +53,17 @@ describe("background preference", () => {
     await Promise.all([preferences.update({ opacity: 0.8 }), preferences.update({ blurRadius: 16 })]);
     expect(preferences.settings.value).toMatchObject({ opacity: 0.8, blurRadius: 16 });
   });
+  it("读取失败时传播原始错误并阻止写入，重试成功后恢复", async () => {
+    const cause = new Error("background-read-original");
+    storage.readBackground.mockRejectedValueOnce(cause).mockRejectedValueOnce(cause);
+    const preferences = (await import("../composables/useBackgroundPreference")).useBackgroundPreference();
+    await expect(preferences.init()).rejects.toBe(cause);
+    expect(preferences.error.value).toContain("background-read-original");
+    await expect(preferences.update({ opacity: 0.5 })).rejects.toBe(cause);
+    expect(storage.writeBackground).not.toHaveBeenCalled();
+    await preferences.init();
+    expect(preferences.error.value).toBe("");
+    await preferences.update({ opacity: 0.5 });
+    expect(storage.writeBackground).toHaveBeenCalledOnce();
+  });
 });

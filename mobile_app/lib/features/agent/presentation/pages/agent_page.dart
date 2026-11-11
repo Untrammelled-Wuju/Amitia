@@ -540,6 +540,11 @@ class _CreateTaskSheetState extends ConsumerState<_CreateTaskSheet> {
   String _submissionKey = '';
   String _requestId = '';
   bool _submitting = false;
+  Widget _guardControl(Widget child, String? reason) => GestureDetector(
+    behavior: HitTestBehavior.opaque,
+    onTap: reason == null ? null : () => amitiaSnackBar(context, reason),
+    child: IgnorePointer(ignoring: reason != null, child: child),
+  );
   _QuickTask? _selectedQuickTask;
 
   final _quickTasks = [
@@ -1000,7 +1005,7 @@ class _CreateTaskSheetState extends ConsumerState<_CreateTaskSheet> {
                         _selectDevice(devices.single.deviceId);
                     });
                   }
-                  return DropdownButtonFormField<String>(
+                  return _guardControl(DropdownButtonFormField<String>(
                     value: selectedDevice?.deviceId,
                     isExpanded: true,
                     decoration: const InputDecoration(hintText: '选择在线设备'),
@@ -1017,7 +1022,7 @@ class _CreateTaskSheetState extends ConsumerState<_CreateTaskSheet> {
                         )
                         .toList(growable: false),
                     onChanged: _submitting ? null : _selectDevice,
-                  );
+                  ), _submitting ? '正在提交任务，请稍后重试。' : null);
                 },
               ),
               if (_authorityLoading) ...[
@@ -1033,7 +1038,7 @@ class _CreateTaskSheetState extends ConsumerState<_CreateTaskSheet> {
                   ).copyWith(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 6),
-                DropdownButtonFormField<String>(
+                _guardControl(DropdownButtonFormField<String>(
                   value: _roleId.isEmpty ? null : _roleId,
                   isExpanded: true,
                   decoration: const InputDecoration(hintText: '选择数据归属角色'),
@@ -1051,15 +1056,15 @@ class _CreateTaskSheetState extends ConsumerState<_CreateTaskSheet> {
                       )
                       .toList(growable: false),
                   onChanged: _submitting ? null : _selectRole,
-                ),
+                ), _submitting ? '正在提交任务，请稍后重试。' : null),
                 const SizedBox(height: 6),
-                TextButton(
+                _guardControl(TextButton(
                   onPressed:
                       _submitting || _deviceId == null || _authorityLoading
                       ? null
                       : () => _selectDevice(_deviceId),
                   child: const Text('刷新设备、角色与任务目录'),
-                ),
+                ), _submitting ? '正在提交任务，请稍后重试。' : _authorityLoading ? '正在加载设备和角色，请稍后重试。' : _deviceId == null ? '请先选择目标设备。' : null),
               ],
               if (_authorityError != null) ...[
                 const SizedBox(height: 8),
@@ -1095,7 +1100,7 @@ class _CreateTaskSheetState extends ConsumerState<_CreateTaskSheet> {
                   ).copyWith(color: context.warning),
                 )
               else
-                DropdownButtonFormField<String>(
+                _guardControl(DropdownButtonFormField<String>(
                   value:
                       _definitions.any((item) => item.optionId == _definitionId)
                       ? _definitionId
@@ -1121,7 +1126,7 @@ class _CreateTaskSheetState extends ConsumerState<_CreateTaskSheet> {
                           _submissionKey = '';
                           _requestId = '';
                         }),
-                ),
+                ), _submitting ? '正在提交任务，请稍后重试。' : null),
               const SizedBox(height: 16),
               Text(
                 '任务名称',
@@ -1233,12 +1238,12 @@ class _CreateTaskSheetState extends ConsumerState<_CreateTaskSheet> {
                 }),
               ),
               const SizedBox(height: 24),
-              AmitiaButton(
+              _guardControl(AmitiaButton(
                 label: _submitting ? '提交中…' : '开始任务',
                 icon: Icons.play_arrow,
                 isFullWidth: true,
                 onPressed: _submitting ? null : _submit,
-              ),
+              ), _submitting ? '正在提交任务，请稍后重试。' : null),
             ],
           ),
         ),

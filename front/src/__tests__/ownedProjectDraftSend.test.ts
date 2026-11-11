@@ -15,7 +15,7 @@ describe("项目中首次对话的保存确认", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     scope = { coreId: "core", roleId: "role", roleRevision: 1, resourceOwnerId: "source", targetDeviceId: "source", modeRevision: 1 };
-    mocks.owned = { enabled: ref(true), coreId: ref("core"), refresh: vi.fn().mockResolvedValue(true), data: vi.fn().mockResolvedValue({ executionScope: scope }), send: mocks.send, query: mocks.query, edit: mocks.edit, previousSummary: vi.fn() };
+    mocks.owned = { enabled: ref(true), coreId: ref("core"), refresh: vi.fn().mockResolvedValue(true), data: vi.fn().mockResolvedValue({ executionScope: scope }), chatScope: (roleId: string) => ({ ...scope, roleId }), send: mocks.send, query: mocks.query, edit: mocks.edit, previousSummary: vi.fn() };
     mocks.workspace = ref({ projectId: ownedProjectReference("source", "project"), workspaceId: "workspace-a", primaryWorkspaceId: "workspace-a", workspaces: [{ id: "workspace-a", deviceId: "source", name: "A", kind: "local", rootUri: "amitia://workspace/@workspace-a/" }], executionScope: scope });
     mocks.send.mockResolvedValue({ conversationId: "conversation", requestId: "request", executionScope: scope, saved: true, reply: "回答" });
     mocks.query.mockResolvedValue({});

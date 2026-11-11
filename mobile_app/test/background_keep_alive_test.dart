@@ -11,6 +11,7 @@ class KeepAliveDispatcher implements NativeBridgePlatformDispatcher {
   bool unrestricted = false;
   bool permissionDenied = false;
   bool startFailed = false;
+  bool statusFailed = false;
   bool powerSaveMode = false;
   String dataRestriction = 'disabled';
   bool legacyStatus = false;
@@ -18,6 +19,16 @@ class KeepAliveDispatcher implements NativeBridgePlatformDispatcher {
   @override
   Future<Map<String, dynamic>> execute(Map<String, dynamic> request) async {
     requests.add(request);
+    if (request['operation'] == 'device.keep_alive.status' && statusFailed) {
+      return {
+        'status': 'error',
+        'error': {
+          'message': '无法读取保活状态',
+          'detail': 'native-detail-123',
+          'diagnostic': 'keep-alive-extra-123',
+        },
+      };
+    }
     if (request['operation'] == 'notification.request_permission') {
       return {
         'status': permissionDenied ? 'error' : 'success',
@@ -234,6 +245,32 @@ void main() {
     await tester.tap(find.byType(Switch));
     await tester.pumpAndSettle();
     expect(tester.widget<Switch>(find.byType(Switch)).value, false);
-    expect(find.text('系统限制了后台保活'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is SelectableText &&
+            (widget.data?.contains('系统限制了后台保活') ?? false),
+      ),
+      findsOneWidget,
+    );
+  });
+  testWidgets('读取失败时禁用开关可再次查看完整原始错误', (tester) async {
+    final dispatcher = KeepAliveDispatcher()..statusFailed = true;
+    await tester.pumpWidget(
+      settings(BackgroundKeepAliveService(dispatcher, platform: 'android')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('native-detail-123'), findsOneWidget);
+    expect(find.textContaining('keep-alive-extra-123'), findsOneWidget);
+    await tester.tap(find.text('知道了'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<SwitchListTile>(find.byType(SwitchListTile)).onChanged,
+      isNull,
+    );
+    await tester.tap(find.byType(SwitchListTile));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('native-detail-123'), findsOneWidget);
+    expect(dispatcher.requests, hasLength(1));
   });
 }

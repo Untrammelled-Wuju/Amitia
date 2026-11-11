@@ -6,6 +6,7 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/services/channel_sandbox_service.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/errors/original_error.dart';
 
 class ChannelPluginSettingsView extends ConsumerStatefulWidget {
   final String channelId;
@@ -28,6 +29,8 @@ class _ChannelPluginSettingsViewState
   bool _loading = true;
   bool _saving = false;
   String _error = '';
+  int _loadEpoch = 0;
+  int _saveEpoch = 0;
 
   @override
   void initState() {
@@ -38,11 +41,25 @@ class _ChannelPluginSettingsViewState
   @override
   void didUpdateWidget(covariant ChannelPluginSettingsView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.channelId != widget.channelId) _load();
+    if (oldWidget.channelId != widget.channelId) {
+      _saveEpoch++;
+      _saving = false;
+      _policy = null;
+      _load();
+    }
   }
 
   Future<void> _load() async {
-    if (widget.channelId.trim().isEmpty) return;
+    final epoch = ++_loadEpoch;
+    final channelId = widget.channelId;
+    if (widget.channelId.trim().isEmpty) {
+      setState(() {
+        _loading = false;
+        _policy = null;
+        _error = '渠道标识为空，无法读取渠道设置。';
+      });
+      return;
+    }
     setState(() {
       _loading = true;
       _error = '';
@@ -50,20 +67,27 @@ class _ChannelPluginSettingsViewState
     try {
       final policy = await ref
           .read(channelSandboxServiceProvider)
-          .getPolicy(widget.channelId);
-      if (!mounted) return;
+          .getPolicy(channelId);
+      if (!mounted || epoch != _loadEpoch) return;
       setState(() => _policy = policy);
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _error = error.toString());
+    } catch (error, stackTrace) {
+      if (!mounted) Error.throwWithStackTrace(error, stackTrace);
+      final detail = '$error\n${originalErrorText(error)}\n$stackTrace';
+      if (epoch != _loadEpoch) {
+        _showFailure('渠道 $channelId 读取失败', detail);
+      } else {
+        setState(() => _error = detail);
+      }
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && epoch == _loadEpoch) setState(() => _loading = false);
     }
   }
 
   Future<void> _save({bool? enabled, bool? allowNetwork}) async {
     final current = _policy;
     if (current == null || _saving) return;
+    final epoch = ++_saveEpoch;
+    final channelId = widget.channelId;
     setState(() {
       _saving = true;
       _error = '';
@@ -72,18 +96,43 @@ class _ChannelPluginSettingsViewState
       final policy = await ref
           .read(channelSandboxServiceProvider)
           .savePolicy(
-            channelId: widget.channelId,
+            channelId: channelId,
             enabled: enabled ?? current.enabled,
             allowNetwork: allowNetwork ?? current.allowNetwork,
           );
-      if (!mounted) return;
+      if (!mounted || epoch != _saveEpoch) return;
       setState(() => _policy = policy);
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _error = error.toString());
+    } catch (error, stackTrace) {
+      if (!mounted) Error.throwWithStackTrace(error, stackTrace);
+      final detail = '$error\n${originalErrorText(error)}\n$stackTrace';
+      if (epoch != _saveEpoch) {
+        _showFailure('渠道 $channelId 保存失败', detail);
+      } else {
+        setState(() => _error = detail);
+      }
     } finally {
-      if (mounted) setState(() => _saving = false);
+      if (mounted && epoch == _saveEpoch) setState(() => _saving = false);
     }
+  }
+
+  void _showFailure(String title, String detail) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: SingleChildScrollView(child: SelectableText(detail)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('知道了'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showUnavailable(String reason) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(reason)));
   }
 
   @override
@@ -91,7 +140,20 @@ class _ChannelPluginSettingsViewState
     if (_loading) return const Center(child: CircularProgressIndicator());
     final policy = _policy;
     if (policy == null) {
-      return Center(child: Text(_error.isEmpty ? '读取渠道设置失败' : _error));
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: SingleChildScrollView(
+                child: SelectableText(_error.isEmpty ? '读取渠道设置失败' : _error),
+              ),
+            ),
+            if (widget.channelId.trim().isNotEmpty)
+              TextButton(onPressed: _load, child: const Text('重试')),
+          ],
+        ),
+      );
     }
     return ListView(
       padding: EdgeInsets.fromLTRB(
@@ -119,16 +181,20 @@ class _ChannelPluginSettingsViewState
                 ],
               ),
             ),
-            IconButton(
-              onPressed: _saving ? null : _load,
-              tooltip: '刷新',
-              icon: const Icon(Icons.refresh),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _saving ? () => _showUnavailable('正在保存渠道设置，请稍后重试。') : null,
+              child: IconButton(
+                onPressed: _saving ? null : _load,
+                tooltip: '刷新',
+                icon: const Icon(Icons.refresh),
+              ),
             ),
           ],
         ),
         if (_error.isNotEmpty) ...[
           SizedBox(height: AppSpacing.sm),
-          Text(
+          SelectableText(
             _error,
             style: AppTypography.bodySmall(
               context,
@@ -138,21 +204,33 @@ class _ChannelPluginSettingsViewState
         SizedBox(height: AppSpacing.md),
         _SettingsCard(
           children: [
-            SwitchListTile(
-              value: policy.enabled,
-              onChanged: _saving ? null : (value) => _save(enabled: value),
-              title: const Text('沙箱隔离'),
-              subtitle: const Text('限制插件和 Agent 只能访问该渠道的沙箱目录'),
-              contentPadding: EdgeInsets.zero,
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _saving ? () => _showUnavailable('正在保存渠道设置，请稍后重试。') : null,
+              child: SwitchListTile(
+                value: policy.enabled,
+                onChanged: _saving ? null : (value) => _save(enabled: value),
+                title: const Text('沙箱隔离'),
+                subtitle: const Text('限制插件和 Agent 只能访问该渠道的沙箱目录'),
+                contentPadding: EdgeInsets.zero,
+              ),
             ),
-            SwitchListTile(
-              value: policy.allowNetwork,
-              onChanged: !policy.enabled || _saving
-                  ? null
-                  : (value) => _save(allowNetwork: value),
-              title: const Text('允许联网'),
-              subtitle: const Text('关闭后仅允许访问本机回环地址'),
-              contentPadding: EdgeInsets.zero,
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: !policy.enabled || _saving
+                  ? () => _showUnavailable(
+                      _saving ? '正在保存渠道设置，请稍后重试。' : '请先开启沙箱隔离。',
+                    )
+                  : null,
+              child: SwitchListTile(
+                value: policy.allowNetwork,
+                onChanged: !policy.enabled || _saving
+                    ? null
+                    : (value) => _save(allowNetwork: value),
+                title: const Text('允许联网'),
+                subtitle: const Text('关闭后仅允许访问本机回环地址'),
+                contentPadding: EdgeInsets.zero,
+              ),
             ),
           ],
         ),
@@ -197,7 +275,10 @@ class _SettingsCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: context.borderPrimary, width: 0.6),
       ),
-      child: Column(children: children),
+      child: Material(
+        type: MaterialType.transparency,
+        child: Column(children: children),
+      ),
     );
   }
 }

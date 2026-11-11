@@ -512,7 +512,7 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
             value: _enabled,
             onChanged: _canWrite
                 ? (value) => setState(() => _enabled = value)
-                : null,
+                : (_) => _showAccessReason(),
           ),
           _divider(),
           _buildDropdownTile(
@@ -569,7 +569,7 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
             value: _autoDetectTimezone,
             onChanged: _canWrite
                 ? (value) => setState(() => _autoDetectTimezone = value)
-                : null,
+                : (_) => _showAccessReason(),
           ),
         ]),
         SizedBox(height: AppSpacing.sectionGap),
@@ -584,7 +584,7 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
             value: _holidayAwareness,
             onChanged: _canWrite
                 ? (value) => setState(() => _holidayAwareness = value)
-                : null,
+                : (_) => _showAccessReason(),
           ),
           _divider(),
           AmitiaSwitchTile(
@@ -593,7 +593,7 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
             value: _daypartAwareness,
             onChanged: _canWrite
                 ? (value) => setState(() => _daypartAwareness = value)
-                : null,
+                : (_) => _showAccessReason(),
           ),
           _divider(),
           AmitiaSwitchTile(
@@ -602,7 +602,7 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
             value: _anniversaryAwareness,
             onChanged: _canWrite
                 ? (value) => setState(() => _anniversaryAwareness = value)
-                : null,
+                : (_) => _showAccessReason(),
           ),
           _divider(),
           AmitiaSwitchTile(
@@ -611,7 +611,7 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
             value: _memoryResonance,
             onChanged: _canWrite
                 ? (value) => setState(() => _memoryResonance = value)
-                : null,
+                : (_) => _showAccessReason(),
           ),
           _divider(),
           AmitiaSwitchTile(
@@ -620,7 +620,7 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
             value: _allowSharedDateMention,
             onChanged: _canWrite
                 ? (value) => setState(() => _allowSharedDateMention = value)
-                : null,
+                : (_) => _showAccessReason(),
           ),
         ]),
         SizedBox(height: AppSpacing.sectionGap),
@@ -629,7 +629,7 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
           actionText: '新增',
           onAction: _canWrite
               ? () => _showAnchorSheet(null, initialKind: 'recurring')
-              : null,
+              : _showAccessReason,
         ),
         SizedBox(height: AppSpacing.sm),
         ..._periodicAnchors.map(
@@ -642,7 +642,7 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
           actionText: '新增',
           onAction: _canWrite
               ? () => _showAnchorSheet(null, initialKind: 'annual_date')
-              : null,
+              : _showAccessReason,
         ),
         SizedBox(height: AppSpacing.sm),
         ..._specialAnchors.map(
@@ -1055,7 +1055,7 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onChanged == null
-          ? null
+          ? _showAccessReason
           : () => _showOptionSheet(
               title,
               options,

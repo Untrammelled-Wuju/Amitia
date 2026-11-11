@@ -11,7 +11,7 @@ const scope = { coreId: "core", roleId: "role", resourceOwnerId: "device", roleO
 describe("Owner聊天管理与控制", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.owned = { refresh: mocks.refresh, data: mocks.data, resourcePreview: mocks.preview, selectInitialRole: () => "role", coreId: { value: "core" }, roleOwnerId: { value: "device" }, notice: { value: "" } };
+    mocks.owned = { refresh: mocks.refresh, data: mocks.data, resourcePreview: mocks.preview, selectInitialRole: () => "role", chatScope: (roleId: string, conversationRoleId?: string) => ({ ...scope, roleId, ...(conversationRoleId ? { conversationRoleId } : {}) }), coreId: { value: "core" }, roleOwnerId: { value: "device" }, notice: { value: "" } };
     mocks.refresh.mockResolvedValue(true);
     mocks.data.mockResolvedValue({ executionScope: scope });
     mocks.preview.mockResolvedValue({ resource: { id: "reply", ownerId: "device", roleId: "role" }, executionScope: scope });

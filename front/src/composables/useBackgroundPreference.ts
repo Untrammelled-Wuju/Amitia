@@ -1,6 +1,7 @@
 import { readonly, ref } from "vue";
 import { backgroundFileKind, defaultBackground, readBackground, writeBackground, normalizeBackground, type BackgroundSettings } from "./backgroundStorage";
 import { resolveConversationMediaUrl } from "../conversation/rendering/media";
+import { originalErrorText } from "../runtime/original-error";
 
 const settings = ref<BackgroundSettings>({ ...defaultBackground });
 const source = ref("");
@@ -14,15 +15,18 @@ function replaceSource(blob: Blob | null) {
   if (previous) URL.revokeObjectURL(previous);
 }
 function init() {
-  return initialization ??= readBackground().then(result => {
+  if (initialization) return initialization;
+  loading.value = true;
+  initialization = readBackground().then(result => {
     settings.value = result.media ? result.settings : { ...result.settings, enabled: false, name: "" };
     replaceSource(result.media);
     error.value = "";
-  }).catch((error) => {
-  console.error("[original-error]", error);
-error.value = "无法读取背景设置，请重试";
+  }).catch((caughtError) => {
+    error.value = originalErrorText(caughtError);
     initialization = undefined;
+    throw caughtError;
   }).finally(() => { loading.value = false; });
+  return initialization;
 }
 function serialize(action: () => Promise<void>) {
   const next = queue.then(action);

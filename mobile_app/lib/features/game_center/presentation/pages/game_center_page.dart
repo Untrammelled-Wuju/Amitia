@@ -45,14 +45,20 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
         navigation: AmitiaAppBarNavigation.back,
         actions: [
           if (active)
-            IconButton(
-              icon: const Icon(Icons.logout),
-              tooltip: '退出游戏模式',
-              onPressed: state.gameModeOperating
-                  ? null
-                  : () => ref
-                        .read(gameCenterControllerProvider.notifier)
-                        .releaseGameMode(),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: state.gameModeOperating
+                  ? () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('正在处理游戏模式，请稍后重试。')))
+                  : null,
+              child: IconButton(
+                icon: const Icon(Icons.logout),
+                tooltip: '退出游戏模式',
+                onPressed: state.gameModeOperating
+                    ? null
+                    : () => ref
+                          .read(gameCenterControllerProvider.notifier)
+                          .releaseGameMode(),
+              ),
             ),
           IconButton(
             icon: const Icon(Icons.add_box_outlined),
@@ -81,8 +87,27 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
           ),
           IconButton(
             icon: const Icon(Icons.refresh),
+            tooltip: '刷新',
             onPressed: !active || state.pluginsRefreshing
-                ? null
+                ? () => showDialog<void>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('无法刷新游戏中心'),
+                      content: SingleChildScrollView(
+                        child: SelectableText(
+                          state.pluginsRefreshing || state.gameModeLoading
+                              ? '正在刷新游戏中心，请稍后重试。'
+                              : state.gameModeError ?? '请先启用游戏模式。',
+                        ),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('知道了'),
+                        ),
+                      ],
+                    ),
+                  )
                 : () async {
                     final controller = ref.read(
                       gameCenterControllerProvider.notifier,
@@ -168,14 +193,20 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
               ),
             ],
             const SizedBox(height: 20),
-            AmitiaButton(
-              label: state.gameModeOperating ? '正在进入...' : '进入游戏模式',
-              isFullWidth: true,
-              onPressed: state.gameModeOperating
-                  ? null
-                  : () => ref
-                        .read(gameCenterControllerProvider.notifier)
-                        .acquireGameMode(),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: state.gameModeOperating
+                  ? () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('正在处理游戏模式，请稍后重试。')))
+                  : null,
+              child: AmitiaButton(
+                label: state.gameModeOperating ? '正在进入...' : '进入游戏模式',
+                isFullWidth: true,
+                onPressed: state.gameModeOperating
+                    ? null
+                    : () => ref
+                          .read(gameCenterControllerProvider.notifier)
+                          .acquireGameMode(),
+              ),
             ),
           ],
         ),
@@ -456,7 +487,9 @@ class _PluginCard extends StatelessWidget {
     return Card(
       margin: EdgeInsets.only(bottom: AppSpacing.md),
       child: InkWell(
-        onTap: isOperating ? null : onTap,
+        onTap: isOperating
+            ? () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('正在处理该游戏插件，请稍后重试。')))
+            : onTap,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: EdgeInsets.all(AppSpacing.md),

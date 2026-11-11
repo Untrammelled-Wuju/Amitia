@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../errors/original_error.dart';
 import '../native_bridge/native_bridge_platform_dispatcher.dart';
 import '../native_bridge/providers/native_bridge_relay_provider.dart';
 
@@ -41,7 +42,9 @@ class ScreenAwakeService {
     if (!['ok', 'success'].contains(response['status']) ||
         result is! Map ||
         result['enabled'] is! bool) {
-      throw StateError('无法读取或保存屏幕常亮设置');
+      throw StateError(
+        '无法读取或保存屏幕常亮设置：\n${originalErrorText(response)}\n原始响应：\n$response',
+      );
     }
     return result['enabled'] as bool;
   }

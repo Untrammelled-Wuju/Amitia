@@ -2,7 +2,7 @@ import { notificationRegistrationPayload } from "./device-notifications";
 
 export interface ScheduledBrowserEnvelope {
   requestId: string;
-  payload: { title?: unknown; body?: unknown; conversationId?: unknown; characterId?: unknown; ownerId?: unknown; sound?: unknown; attentionId?: unknown };
+  payload: { title?: unknown; body?: unknown; conversationId?: unknown; characterId?: unknown; ownerId?: unknown; sound?: unknown; attentionId?: unknown; ackable?: unknown };
 }
 
 export interface ScheduledBrowserDelivery {
@@ -29,21 +29,22 @@ async function registerScheduledEndpoint(platform: 'web' | 'desktop', deviceId: 
 }
 
 export async function deliverScheduledBrowserNotification(envelope: ScheduledBrowserEnvelope, delivery: ScheduledBrowserDelivery): Promise<void> {
+  const payload = envelope.payload;
+  const acknowledge = (state: 'displayed' | 'clicked' | 'display_failed'): Promise<void> => payload.ackable === true ? delivery.acknowledge(state) : Promise.resolve();
   if (typeof Notification === 'undefined' || Notification.permission !== 'granted') {
-    await delivery.acknowledge('display_failed');
+    await acknowledge('display_failed');
     return;
   }
-  const payload = envelope.payload;
   try {
     const notification = new Notification(String(payload.title || 'Amitia'), { body: String(payload.body || ''), tag: envelope.requestId, silent: payload.sound === false });
-    notification.onshow = () => { void delivery.acknowledge('displayed').catch((error) => {
+    notification.onshow = () => { void acknowledge('displayed').catch((error) => {
   console.error("[original-error]", error);
 }); };
-    notification.onerror = () => { void delivery.acknowledge('display_failed').catch((error) => {
+    notification.onerror = () => { void acknowledge('display_failed').catch((error) => {
   console.error("[original-error]", error);
 }); };
     notification.onclick = () => {
-      void delivery.acknowledge('clicked').catch((error) => {
+      void acknowledge('clicked').catch((error) => {
   console.error("[original-error]", error);
 });
       notification.close();
@@ -55,6 +56,6 @@ export async function deliverScheduledBrowserNotification(envelope: ScheduledBro
     };
   } catch (error) {
   console.error("[original-error]", error);
-await delivery.acknowledge('display_failed');
+await acknowledge('display_failed');
   }
 }

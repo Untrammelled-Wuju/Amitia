@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
+import { ElMessage } from "element-plus";
 
 const stubs = {
   "el-card": { template: '<section><slot name="header"/><slot/></section>' },
@@ -10,6 +11,17 @@ const stubs = {
 };
 describe("custom theme settings", () => {
   beforeEach(() => { vi.resetModules(); localStorage.clear(); });
+  it("关闭自定义配色时解释不可修改原因", async () => {
+    const warning = vi.spyOn(ElMessage, "warning").mockImplementation(() => undefined as any);
+    const Component = (await import("../components/CustomThemeSettings.vue")).default;
+    const wrapper = mount(Component, { global: { stubs } });
+    try {
+      expect(wrapper.get('input[type="color"]').attributes("disabled")).toBeDefined();
+      await wrapper.findAll('.control-wrapper[role="button"]')[0].trigger("click");
+      expect(warning).toHaveBeenCalledWith("请先开启自定义配色。");
+      expect(wrapper.get('input[type="color"]').attributes("disabled")).toBeDefined();
+    } finally { wrapper.unmount(); warning.mockRestore(); }
+  });
   it("enables editing, selects custom text, and shows contrast feedback", async () => {
     const Component = (await import("../components/CustomThemeSettings.vue")).default;
     const wrapper = mount(Component, { global: { stubs } });

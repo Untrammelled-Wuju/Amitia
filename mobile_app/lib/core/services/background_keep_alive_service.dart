@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../errors/original_error.dart';
 import '../native_bridge/native_bridge_platform_dispatcher.dart';
 import '../native_bridge/providers/native_bridge_relay_provider.dart';
 
@@ -69,9 +70,8 @@ class BackgroundKeepAliveService {
       'payload': payload,
     });
     if (!['ok', 'success'].contains(response['status'])) {
-      final error = response['error'];
       throw StateError(
-        error is Map ? error['message']?.toString() ?? '后台保活操作失败' : '后台保活操作失败',
+        '后台保活操作失败：\n${originalErrorText(response)}\n原始响应：\n$response',
       );
     }
     return response;
@@ -87,7 +87,9 @@ class BackgroundKeepAliveService {
         result['enabled'] is! bool ||
         result['active'] is! bool ||
         result['batteryUnrestricted'] is! bool) {
-      throw StateError('后台保活状态无效');
+      throw StateError(
+        '后台保活状态无效：\n${originalErrorText(response)}\n原始响应：\n$response',
+      );
     }
     return BackgroundKeepAliveStatus(
       enabled: result['enabled'] as bool,

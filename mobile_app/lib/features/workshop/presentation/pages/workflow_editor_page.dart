@@ -475,6 +475,20 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Widget _guardWorkflowAction(Widget child, {required bool blocked}) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: blocked
+          ? () => _show(_saving && _workflow != null
+                ? '正在保存工作流，请稍后重试。'
+                : _loading
+                    ? '正在加载工作流，请稍后重试。'
+                    : '工作流不可用，请重新打开页面。')
+          : null,
+      child: child,
+    );
+  }
+
   void _markDirty() {
     if (!_dirty && mounted) setState(() => _dirty = true);
   }
@@ -4765,9 +4779,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
                       ),
                       const SizedBox(height: 8),
                       OutlinedButton.icon(
-                        onPressed: _canUseDeviceTrigger('tasker')
-                            ? () => _generateTaskerSecret(taskerSecretRef)
-                            : null,
+                        onPressed: () => _generateTaskerSecret(taskerSecretRef),
                         icon: const Icon(Icons.key_outlined),
                         label: const Text('生成 Tasker Secret'),
                       ),
@@ -4808,9 +4820,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
                             ),
                           ),
                           FilledButton.tonalIcon(
-                            onPressed: _canUseDeviceTrigger('voice_wake')
-                                ? () => _createWakeConfig(wakeConfigId)
-                                : null,
+                            onPressed: () => _createWakeConfig(wakeConfigId),
                             icon: const Icon(Icons.add_circle_outline),
                             label: const Text('创建 Wake'),
                           ),
@@ -5866,7 +5876,9 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
       resizeToAvoidBottomInset: false,
       appBar: AmitiaAppBar(
         titleWidget: GestureDetector(
-          onTap: _workflow == null ? null : _editMetadata,
+          onTap: _workflow == null
+              ? () => _show(_loading ? '正在加载工作流，请稍后重试。' : '工作流不可用，请重新打开页面。')
+              : _editMetadata,
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -5899,17 +5911,17 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
             ),
-          IconButton(
+          _guardWorkflowAction(IconButton(
             tooltip: '校验',
             onPressed: _workflow == null ? null : _validate,
             icon: const Icon(Icons.fact_check_outlined),
-          ),
-          IconButton(
+          ), blocked: _workflow == null),
+          _guardWorkflowAction(IconButton(
             tooltip: '预检',
             onPressed: _workflow == null ? null : _showPreflight,
             icon: const Icon(Icons.health_and_safety_outlined),
-          ),
-          IconButton(
+          ), blocked: _workflow == null),
+          _guardWorkflowAction(IconButton(
             tooltip: '保存',
             onPressed: _workflow == null || _saving ? null : _save,
             icon: _saving
@@ -5919,12 +5931,12 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.save_outlined),
-          ),
-          IconButton(
+          ), blocked: _workflow == null || _saving),
+          _guardWorkflowAction(IconButton(
             tooltip: '运行',
             onPressed: _workflow == null ? null : _run,
             icon: const Icon(Icons.play_arrow),
-          ),
+          ), blocked: _workflow == null),
           AmitiaPopupMenuButton<String>(
             onSelected: (value) {
               switch (value) {

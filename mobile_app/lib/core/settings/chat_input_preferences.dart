@@ -11,7 +11,10 @@ class ChatInputPreferencesNotifier extends StateNotifier<bool> {
   ChatInputPreferencesNotifier() : super(false);
   Future<void>? _initialization;
 
-  Future<void> init() => _initialization ??= _load();
+  Future<void> init() => _initialization ??= _load().catchError((Object error, StackTrace stack) {
+    _initialization = null;
+    Error.throwWithStackTrace(error, stack);
+  });
 
   Future<void> _load() async {
     final preferences = await SharedPreferences.getInstance();

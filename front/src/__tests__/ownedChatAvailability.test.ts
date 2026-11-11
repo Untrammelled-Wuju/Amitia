@@ -34,6 +34,26 @@ describe("云端可用性恢复与中断通知", () => {
     expect(mocks.get.mock.calls.filter(([path]) => path.endsWith("/coordination/me"))).toHaveLength(2);
   });
 
+  it("角色目录会话范围补齐记忆角色归属与角色版本", async () => {
+    const catalog = { spaceId: "S", initiatorDeviceId: "D", targetDeviceId: "D", coreId: "C", providerEpoch: 2, coordinated: true, modeRevision: 3, permissionRevision: 4, roleId: "", targetPermissionRevision: 5, targetProviderEpoch: 2, authorizationRealm: "C", roleOwnerId: "C", resourceOwnerId: "D", requestId: "R" };
+    mocks.get.mockImplementation(async (path: string) => ({ data: path.endsWith("/coordination/me")
+      ? { coreId: "C", coordinationAvailable: true, policy: { coordinated: true, providerEpoch: 2, modeRevision: 3, permissionRevision: 4 } }
+      : { roles: [{ id: "role-a", name: "角色甲", revision: 7 }], roleOwnerId: "C", executionScope: catalog } }));
+    const { useDeviceOwnedConversation } = await import("../composables/useDeviceOwnedConversation");
+    const owned = useDeviceOwnedConversation();
+    expect(await owned.refresh()).toBe(true);
+    expect(owned.chatScope("role-a")).toEqual({ ...catalog, roleId: "role-a", roleRevision: 7, memoryRoleId: "role-a" });
+    expect(owned.chatScope("role-a", "group-role")).toMatchObject({ roleId: "role-a", memoryRoleId: "role-a", conversationRoleId: "group-role" });
+    expect(() => owned.chatScope("missing")).toThrow("角色不在当前角色目录中");
+  });
+
+  it("角色目录未下发会话范围时拒绝使用过期范围发送", async () => {
+    const { useDeviceOwnedConversation } = await import("../composables/useDeviceOwnedConversation");
+    const owned = useDeviceOwnedConversation();
+    expect(await owned.refresh()).toBe(true);
+    expect(() => owned.chatScope("role")).toThrow("设备对话服务尚未就绪");
+  });
+
   it("共享刷新失败后释放请求，下一次可以恢复服务", async () => {
     const { useDeviceOwnedConversation } = await import("../composables/useDeviceOwnedConversation");
     const owned = useDeviceOwnedConversation();

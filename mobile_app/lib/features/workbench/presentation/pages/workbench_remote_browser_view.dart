@@ -533,6 +533,17 @@ class _WorkbenchRemoteBrowserViewState
     }
   }
 
+  void _showControlUnavailable() {
+    final reason = _isRemote
+        ? '远程设备浏览器当前仅支持只读观察。'
+        : _busy
+        ? '浏览器正在处理，请稍后重试。'
+        : !_running
+        ? '浏览器尚未启动。'
+        : '当前为只读观察，尚未取得浏览器控制权。';
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(reason)));
+  }
+
   void _action(String action) {
     if (_isRemote) return;
     if (_observed && !_canControl) return;
@@ -804,7 +815,7 @@ class _WorkbenchRemoteBrowserViewState
                           !_busy &&
                           (!_observed || _canControl)
                       ? () => _action('back')
-                      : null,
+                      : _showControlUnavailable,
                   icon: const Icon(Icons.arrow_back, size: 19),
                 ),
                 IconButton(
@@ -816,7 +827,7 @@ class _WorkbenchRemoteBrowserViewState
                           !_busy &&
                           (!_observed || _canControl)
                       ? () => _action('forward')
-                      : null,
+                      : _showControlUnavailable,
                   icon: const Icon(Icons.arrow_forward, size: 19),
                 ),
                 Expanded(
@@ -836,6 +847,9 @@ class _WorkbenchRemoteBrowserViewState
                           _isRemote ||
                           ((_observed || widget.browserRef.isNotEmpty) &&
                               !_canControl),
+                      onTap: _isRemote || ((_observed || widget.browserRef.isNotEmpty) && !_canControl)
+                          ? _showControlUnavailable
+                          : null,
                       keyboardType: TextInputType.url,
                       onSubmitted: (_) => _navigate(),
                       style: AppTypography.caption(
@@ -860,7 +874,7 @@ class _WorkbenchRemoteBrowserViewState
                       _isRemote ||
                           _busy ||
                           (_running && _observed && !_canControl)
-                      ? null
+                      ? _showControlUnavailable
                       : _navigate,
                   icon: Icon(
                     _running
@@ -878,7 +892,7 @@ class _WorkbenchRemoteBrowserViewState
                           !_busy &&
                           (!_observed || _canControl)
                       ? () => _action('reload')
-                      : null,
+                      : _showControlUnavailable,
                   icon: const Icon(Icons.refresh, size: 19),
                 ),
               ],

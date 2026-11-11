@@ -51,7 +51,7 @@
             </label>
           </div>
           <el-checkbox v-model="shareHistory">允许新成员查看加入前聊天历史</el-checkbox>
-          <el-button class="invite-submit" :loading="inviting" :disabled="selected.size === 0 || activeMembers.length + selected.size > 8" @click="invite">邀请 {{ selected.size }} 位角色</el-button>
+          <span class="invite-control" :tabindex="inviteUnavailable ? 0 : undefined" :role="inviteUnavailable ? 'button' : undefined" :aria-label="inviteUnavailable || undefined" @click.capture="explainInviteUnavailable" @keydown.enter="explainInviteUnavailable" @keydown.space="explainInviteUnavailable"><el-button class="invite-submit" :loading="inviting" :disabled="!!inviteUnavailable" @click="invite">邀请 {{ selected.size }} 位角色</el-button></span>
         </section>
       </template>
       <template v-else>
@@ -70,7 +70,7 @@
           </div>
           <p v-if="!availableCharacters.length" class="group-help">没有可邀请的其他角色。</p>
           <el-checkbox v-model="shareHistory">允许新成员查看加入前聊天历史</el-checkbox>
-          <el-button class="invite-submit" :loading="inviting" :disabled="selected.size === 0 || selected.size > 7" @click="invite">创建群聊</el-button>
+          <span class="invite-control" :tabindex="inviteUnavailable ? 0 : undefined" :role="inviteUnavailable ? 'button' : undefined" :aria-label="inviteUnavailable || undefined" @click.capture="explainInviteUnavailable" @keydown.enter="explainInviteUnavailable" @keydown.space="explainInviteUnavailable"><el-button class="invite-submit" :loading="inviting" :disabled="!!inviteUnavailable" @click="invite">创建群聊</el-button></span>
         </section>
       </template>
     </div>
@@ -108,6 +108,20 @@ const failedDeliveries = ref<OwnedGroupDelivery[]>([]);
 const activeMembers = computed(() => (props.group?.members || []).filter((member) => member.status === "active").sort((left, right) => left.orderIndex - right.orderIndex));
 const activeCharacterIDs = computed(() => new Set(activeMembers.value.map((member) => member.characterId)));
 const availableCharacters = computed(() => props.characters.filter((character) => character.id !== props.roleId && !activeCharacterIDs.value.has(character.id)));
+const inviteUnavailable = computed(() => {
+  if (inviting.value) return "正在保存群成员，请稍后重试。";
+  if (!props.conversationId || !props.roleId) return "当前会话或角色不可用，请重新打开会话。";
+  if (!selected.value.size) return "请先选择要邀请的角色。";
+  if ((props.group ? activeMembers.value.length : 1) + selected.value.size > 8) return "群聊最多支持 8 位角色，请减少选择数量。";
+  return "";
+});
+
+function explainInviteUnavailable(event: Event) {
+  if (!inviteUnavailable.value) return;
+  event.preventDefault();
+  event.stopPropagation();
+  ElMessage.warning(inviteUnavailable.value);
+}
 
 watch(() => props.visible, (visible) => {
   if (!visible) selected.value = new Set();
@@ -126,7 +140,7 @@ function toggleSelection(id: string, checked: boolean) {
 }
 
 async function invite() {
-  if (!props.conversationId || !props.roleId || selected.value.size === 0) return;
+  if (inviteUnavailable.value) { ElMessage.warning(inviteUnavailable.value); return; }
   inviting.value = true;
   try {
     const next = await owned.inviteGroupMembers(props.conversationId, props.roleId, Array.from(selected.value).map((characterId) => ({ characterId, shareHistory: shareHistory.value })), props.group?.membershipRevision || 1);
@@ -236,6 +250,8 @@ async function retry(delivery: OwnedGroupDelivery) {
 .invite-row { min-height: 38px; cursor: pointer; }
 .invite-row span { flex: 1; }
 .invite-submit { width: 100%; }
+.invite-control { display: block; width: 100%; }
+.invite-control[role="button"] :deep(.el-button) { pointer-events: none; }
 .group-empty { padding: 10px 0; }
 .group-empty p { margin: 6px 0 0; color: var(--text-muted); font-size: 12px; }
 </style>

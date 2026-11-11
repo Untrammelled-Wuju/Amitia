@@ -109,6 +109,7 @@ func (g *PushGateway) Send(ctx context.Context, endpoint DeviceEndpoint, envelop
 		for key, value := range envelope.Data {
 			payload[key] = value
 		}
+		payload["ackable"] = AckableNotificationType(envelope.Type)
 		count := sse.Global.SendToDevice(endpoint.SpaceID, endpoint.DeviceID, "scheduled_notification", map[string]interface{}{"requestId": envelope.NotificationID, "payload": payload, "expiresAt": time.Now().Add(envelope.TTL).UTC().Format(time.RFC3339Nano)})
 		if count == 0 {
 			return ProviderResult{Provider: "desktop-sse", ErrorCode: "device_offline", ErrorMessage: "桌面通知通道离线"}

@@ -55,6 +55,7 @@ return null; }
 const coreId = ref("");
 const roleOwnerId = ref("");
 const policy = ref<MeshPolicy | null>(null);
+let chatCatalogScope: OwnedExecutionScope | null = null;
 const notice = ref("");
 let transientNotice = "";
 let providerChangeId = "";
@@ -153,6 +154,7 @@ window.addEventListener("amitia:runtime-connection-changed", () => {
   roles.value = [];
   roleOwnerId.value = "";
   policy.value = null;
+  chatCatalogScope = null;
   if (interrupted) stopLocal("设备服务连接正在变化，当前回复已中断；请等待当前服务确认");
   else invalidateWithoutInterrupt();
 });
@@ -208,6 +210,7 @@ export function useDeviceOwnedConversation() {
       roles.value = [];
       roleOwnerId.value = "";
       enabled.value = false;
+      chatCatalogScope = null;
       if (interrupted) stopLocal("设备服务连接正在变化，当前回复已中断；请等待当前服务确认");
       else invalidateWithoutInterrupt();
     }
@@ -256,6 +259,7 @@ export function useDeviceOwnedConversation() {
     if (roles.value.some(role => nextRoles.find(item => item.id === role.id)?.revision !== role.revision)) noteWithoutInterrupt("角色配置已变化");
     roles.value = nextRoles;
     roleOwnerId.value = String(available.roleOwnerId || "");
+    chatCatalogScope = available.executionScope?.coreId === coreId.value ? { ...available.executionScope } : null;
     const unavailable = deviceUnavailableNotice(mode);
     if (notice.value === unavailable) {
       notice.value = "";
@@ -263,6 +267,13 @@ export function useDeviceOwnedConversation() {
       saveProviderState();
     }
     return true;
+  }
+
+  function chatScope(roleId: string, conversationRoleId?: string): OwnedExecutionScope {
+    if (!chatCatalogScope || chatCatalogScope.coreId !== coreId.value) throw new Error("设备对话服务尚未就绪，请重新选择角色");
+    const role = roles.value.find((item) => item.id === roleId);
+    if (!role) throw new Error("角色不在当前角色目录中，请重新选择角色");
+    return { ...chatCatalogScope, roleId: role.id, roleRevision: role.revision, memoryRoleId: role.id, ...(conversationRoleId ? { conversationRoleId } : {}) };
   }
 
   function selectInitialRole(saved?: string): string {
@@ -738,5 +749,5 @@ export function useDeviceOwnedConversation() {
     if (captured !== revision || result.saved !== true || result.project?.id !== `project-${identity}` || result.project?.primaryWorkspaceId !== primaryWorkspaceId || result.executionScope?.requestId !== requestId || authorityStamp(result.executionScope) !== authorityStamp(expected) || result.acknowledgement?.ownerId !== expected.resourceOwnerId || result.acknowledgement?.requestId !== requestId || result.acknowledgement?.versions?.[`project/${result.project.id}`] !== 1 || result.acknowledgement?.versions?.[`checkpoint/project/${requestId}`] !== 1) throw new Error("项目尚未获得数据所有者保存确认");
     return { ...result.project, ownerId: expected.resourceOwnerId, roleId: expected.roleId, readOnly: false, revision: 1, executionScope: result.executionScope } as OwnedProject;
   }
-  return { enabled, roles, coreId, roleOwnerId, policy, notice, refresh, markUnavailable, selectInitialRole, query, data, resourcePreview, historicalRoles, projections, hasMore, conversations, allMessages, exportConversation, conversationSummary, editConversationSummary, prepareSummaryGeneration, generateConversationSummary, edit, messages, send, groupState, sendGroup, createGroupConversation, inviteGroupMembers, removeGroupMember, updateGroupSettings, requestGroupReplies, retryGroupDelivery, failedGroupDeliveries, interrupt, stopLocal, previousSummary, projects, createProject };
+  return { enabled, roles, coreId, roleOwnerId, policy, notice, refresh, markUnavailable, selectInitialRole, chatScope, query, data, resourcePreview, historicalRoles, projections, hasMore, conversations, allMessages, exportConversation, conversationSummary, editConversationSummary, prepareSummaryGeneration, generateConversationSummary, edit, messages, send, groupState, sendGroup, createGroupConversation, inviteGroupMembers, removeGroupMember, updateGroupSettings, requestGroupReplies, retryGroupDelivery, failedGroupDeliveries, interrupt, stopLocal, previousSummary, projects, createProject };
 }

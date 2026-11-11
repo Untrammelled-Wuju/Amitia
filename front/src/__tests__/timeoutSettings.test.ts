@@ -4,7 +4,8 @@ import TimeoutSettings from "../components/TimeoutSettings.vue";
 
 const api = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn() }));
 vi.mock("@/composables/useApi", () => ({ apiClient: api }));
-vi.mock("element-plus", () => ({ ElMessage: { success: vi.fn() } }));
+const messages = vi.hoisted(() => ({ success: vi.fn(), warning: vi.fn(), error: vi.fn() }));
+vi.mock("element-plus", () => ({ ElMessage: messages }));
 
 const stubs = {
   "el-card": { template: '<section><slot name="header"/><slot/></section>' },
@@ -19,6 +20,7 @@ const stubs = {
 describe("timeout settings", () => {
   beforeEach(() => {
     api.get.mockReset(); api.put.mockReset();
+    messages.success.mockReset(); messages.warning.mockReset(); messages.error.mockReset();
     api.get.mockResolvedValue({ data: { disabled: false, seconds: 180 }, config: { baseURL: "desktop-test" } });
     api.put.mockImplementation(async (_path, data) => ({ data, config: { baseURL: "desktop-test" } }));
   });
@@ -28,6 +30,8 @@ describe("timeout settings", () => {
     expect(wrapper.text()).toContain("3 分钟");
     await wrapper.get('input[type="checkbox"]').setValue(true);
     expect(wrapper.get('input[type="range"]').attributes("disabled")).toBeDefined();
+    await wrapper.get(".timeout-slider").trigger("click");
+    expect(messages.warning).toHaveBeenCalledWith("请先关闭“停用超时”。");
     await wrapper.get("button").trigger("click");
     await flushPromises();
     expect(api.put).toHaveBeenCalledWith("/api/runtime/timeout/config", { disabled: true, seconds: 180 });
@@ -37,10 +41,20 @@ describe("timeout settings", () => {
     const wrapper = mount(TimeoutSettings, { global: { stubs, directives: { loading: {} } } });
     await flushPromises();
     expect(wrapper.text()).toContain("无法加载超时设置");
+    expect(wrapper.get("details").text()).toContain("offline");
     expect(wrapper.get('input[type="checkbox"]').attributes("disabled")).toBeDefined();
     await wrapper.get("button").trigger("click");
     await flushPromises();
     expect(api.get).toHaveBeenCalledTimes(2);
     expect(api.put).not.toHaveBeenCalled();
+  });
+  it("保留保存失败的原始错误", async () => {
+    api.put.mockRejectedValueOnce(new Error("save-original-detail"));
+    const wrapper = mount(TimeoutSettings, { global: { stubs, directives: { loading: {} } } });
+    await flushPromises();
+    await wrapper.get("button").trigger("click");
+    await flushPromises();
+    expect(wrapper.get("details").text()).toContain("save-original-detail");
+    expect(messages.error).toHaveBeenCalled();
   });
 });

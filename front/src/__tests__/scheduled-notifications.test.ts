@@ -20,7 +20,7 @@ afterEach(() => vi.unstubAllGlobals());
 it('only confirms display after the browser reports it and preserves notification owner on click', async () => {
   const acknowledge = vi.fn().mockResolvedValue(undefined);
   const navigate = vi.fn();
-  await deliverScheduledBrowserNotification({ requestId: 'notification', payload: { title: '提醒', body: '喝水', conversationId: 'conversation', characterId: 'role', ownerId: 'core' } }, { acknowledge, navigate });
+  await deliverScheduledBrowserNotification({ requestId: 'notification', payload: { ackable: true, title: '提醒', body: '喝水', conversationId: 'conversation', characterId: 'role', ownerId: 'core' } }, { acknowledge, navigate });
   expect(acknowledge).not.toHaveBeenCalled();
   expect(entries).toHaveLength(1);
   entries[0]!.onshow!();
@@ -33,9 +33,36 @@ it('only confirms display after the browser reports it and preserves notificatio
 it('does not show a browser notification when system permission is unavailable', async () => {
   const acknowledge = vi.fn().mockResolvedValue(undefined);
   (Notification as any).permission = 'denied';
-  await deliverScheduledBrowserNotification({ requestId: 'notification', payload: {} }, { acknowledge, navigate: vi.fn() });
+  await deliverScheduledBrowserNotification({ requestId: 'notification', payload: { ackable: true } }, { acknowledge, navigate: vi.fn() });
   expect(entries).toHaveLength(0);
   expect(acknowledge).toHaveBeenCalledWith('display_failed');
+});
+
+it('shows display-only notifications without writing a receipt the Core rejects', async () => {
+  const acknowledge = vi.fn().mockResolvedValue(undefined);
+  const navigate = vi.fn();
+  await deliverScheduledBrowserNotification({ requestId: 'completed', payload: { ackable: false, title: '回复完成', body: '内容' } }, { acknowledge, navigate });
+  expect(entries).toHaveLength(1);
+  entries[0]!.onshow!();
+  entries[0]!.onclick!();
+  expect(acknowledge).not.toHaveBeenCalled();
+  expect(navigate).not.toHaveBeenCalled();
+});
+
+it('skips both display and receipt when a display-only notification cannot be shown', async () => {
+  const acknowledge = vi.fn().mockResolvedValue(undefined);
+  (Notification as any).permission = 'denied';
+  await deliverScheduledBrowserNotification({ requestId: 'completed', payload: { ackable: false } }, { acknowledge, navigate: vi.fn() });
+  expect(entries).toHaveLength(0);
+  expect(acknowledge).not.toHaveBeenCalled();
+});
+
+it('treats a payload without the receipt capability as display-only', async () => {
+  const acknowledge = vi.fn().mockResolvedValue(undefined);
+  await deliverScheduledBrowserNotification({ requestId: 'legacy', payload: { title: '提醒' } }, { acknowledge, navigate: vi.fn() });
+  entries[0]!.onshow!();
+  entries[0]!.onclick!();
+  expect(acknowledge).not.toHaveBeenCalled();
 });
 
 it('rejects an empty registration receipt and does not register a desktop endpoint for a browser', async () => {

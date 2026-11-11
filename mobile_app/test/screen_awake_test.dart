@@ -13,7 +13,16 @@ class ScreenDispatcher implements NativeBridgePlatformDispatcher {
   @override
   Future<Map<String, dynamic>> execute(Map<String, dynamic> request) async {
     requests.add(request);
-    if (fail) return {'status': 'error'};
+    if (fail) {
+      return {
+        'status': 'error',
+        'error': {
+          'message': '桥接失败',
+          'detail': 'screen-native-detail',
+          'diagnostic': 'screen-extra-123',
+        },
+      };
+    }
     if (request['operation'] == 'display.keep_awake.set' && !ignoreSave) {
       enabled = request['payload']['enabled'] as bool;
     }
@@ -93,15 +102,28 @@ void main() {
     await tester.tap(find.byType(Switch));
     await tester.pumpAndSettle();
     expect(tester.widget<Switch>(find.byType(Switch)).value, false);
-    expect(find.text('屏幕常亮设置保存失败，请重试'), findsOneWidget);
+    expect(find.textContaining('屏幕常亮设置保存失败，请重试'), findsOneWidget);
   });
-  testWidgets('failed load disables switch and can be retried', (tester) async {
+  testWidgets('failed load explains unavailable switch and can be retried', (
+    tester,
+  ) async {
     final dispatcher = ScreenDispatcher()..fail = true;
     await tester.pumpWidget(
       screenSettings(ScreenAwakeService(dispatcher, platform: 'android')),
     );
     await tester.pumpAndSettle();
-    expect(tester.widget<Switch>(find.byType(Switch)).onChanged, isNull);
+    expect(
+      tester.widget<SwitchListTile>(find.byType(SwitchListTile)).onChanged,
+      isNull,
+    );
+    await tester.tap(find.byType(SwitchListTile));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('无法读取屏幕设置'), findsOneWidget);
+    expect(find.textContaining('screen-native-detail'), findsOneWidget);
+    expect(find.textContaining('screen-extra-123'), findsOneWidget);
+    expect(tester.widget<Switch>(find.byType(Switch)).value, false);
+    await tester.tap(find.text('知道了'));
+    await tester.pumpAndSettle();
     dispatcher.fail = false;
     await tester.tap(find.text('重试读取屏幕设置'));
     await tester.pumpAndSettle();

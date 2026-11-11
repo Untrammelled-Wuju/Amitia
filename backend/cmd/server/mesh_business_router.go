@@ -290,7 +290,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 			c.AbortWithStatus(401)
 			return
 		}
-		request := business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: coreID, RoleID: c.Query("characterId"), RequestID: uuid.NewString()}
+		request := business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: actor.DeviceID.String(), RoleOwnerID: coreID, RoleID: c.Query("characterId"), RequestID: uuid.NewString()}
 		var expected *coordination.ExecutionScope
 		request.MemoryView = c.Query("memoryView")
 		rebuild := c.Request.Method == http.MethodPost
@@ -305,7 +305,14 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 				c.JSON(400, gin.H{"message": util.OriginalErrorMessage(err, "投影重建请求缺少原始执行范围")})
 				return
 			}
-			request.RoleID, request.TargetDeviceID, expected = input.RoleID, coreID, input.ExpectedScope
+			request.RoleID, expected = input.RoleID, input.ExpectedScope
+			if target := strings.TrimSpace(input.TargetDeviceID); target != "" {
+				if target != request.DeviceID {
+					c.JSON(http.StatusForbidden, gin.H{"code": "mesh.local_data_forbidden", "message": "投影属于设备本地数据，不能通过统筹中心重建其他设备投影"})
+					return
+				}
+				request.TargetDeviceID = target
+			}
 			request.ExpectedScope = expected
 		}
 		status, scope, err := services.OwnedBusiness.Projections(c.Request.Context(), request, rebuild, expected)
