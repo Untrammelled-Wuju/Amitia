@@ -140,6 +140,8 @@
 }
 
 .onboarding-world .ob-error {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   min-height: 18px;
   margin-top: 10px;
   color: var(--ob-danger);

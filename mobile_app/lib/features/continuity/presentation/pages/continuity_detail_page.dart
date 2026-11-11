@@ -39,6 +39,10 @@ class _ContinuityDetailPageState extends ConsumerState<ContinuityDetailPage> {
   Timer? _refreshTimer;
   bool get _readOnly => _detail?.thread.sourceDocument?['readOnly'] == true;
 
+  void _unavailable(String message) => ScaffoldMessenger.of(
+    context,
+  ).showSnackBar(SnackBar(content: Text(message)));
+
   Future<void> _transferScope() async {
     final document = _detail?.thread.sourceDocument;
     if (document == null || document['executionScope'] is! Map || _saving)
@@ -53,7 +57,10 @@ class _ContinuityDetailPageState extends ConsumerState<ContinuityDetailPage> {
     );
     if (target == null || !mounted) return;
     final api = ref.read(rawBackendServiceApiProvider);
-    if (api == null) return;
+    if (api == null) {
+      _unavailable('Core 连接尚未就绪，请稍后重试。');
+      return;
+    }
     setState(() => _saving = true);
     try {
       await transferMemoryScope(
@@ -383,11 +390,11 @@ class _ContinuityDetailPageState extends ConsumerState<ContinuityDetailPage> {
                     : '提升为全局事项',
                 isSecondary: true,
                 outlined: true,
-                onPressed:
-                    _saving ||
-                        detail.leaseState == 'running' ||
-                        detail.leaseState == 'unknown'
+                onPressed: _saving
                     ? null
+                    : detail.leaseState == 'running' ||
+                          detail.leaseState == 'unknown'
+                    ? () => _unavailable('事项执行中或状态尚未确认，暂时无法转移。')
                     : _transferScope,
               ),
             if (!thread.terminal)
@@ -398,9 +405,12 @@ class _ContinuityDetailPageState extends ConsumerState<ContinuityDetailPage> {
                     : Icons.pause_outlined,
                 isSecondary: true,
                 outlined: true,
-                onPressed:
-                    _readOnly || _saving || detail.leaseState == 'unknown'
+                onPressed: _saving
                     ? null
+                    : _readOnly
+                    ? () => _unavailable('该事项为只读，无法修改。')
+                    : detail.leaseState == 'unknown'
+                    ? () => _unavailable('执行状态尚未确认，请先处理本次执行。')
                     : () => _setStatus(thread.paused ? 'active' : 'paused'),
               ),
             if (!thread.terminal)
@@ -409,8 +419,10 @@ class _ContinuityDetailPageState extends ConsumerState<ContinuityDetailPage> {
                 icon: Icons.check_circle_outline,
                 isSecondary: true,
                 outlined: true,
-                onPressed: _readOnly || _saving
+                onPressed: _saving
                     ? null
+                    : _readOnly
+                    ? () => _unavailable('该事项为只读，无法修改。')
                     : () => _setStatus('completed'),
               ),
             AmitiaButton(
@@ -418,15 +430,21 @@ class _ContinuityDetailPageState extends ConsumerState<ContinuityDetailPage> {
               icon: Icons.edit_outlined,
               isSecondary: true,
               outlined: true,
-              onPressed: _readOnly || _saving ? null : _edit,
+              onPressed: _saving
+                  ? null
+                  : _readOnly
+                  ? () => _unavailable('该事项为只读，无法修改。')
+                  : _edit,
             ),
             if (detail.leaseState == 'unknown')
               AmitiaButton(
                 label: '确认执行已完成',
                 isSecondary: true,
                 outlined: true,
-                onPressed: _readOnly || _saving
+                onPressed: _saving
                     ? null
+                    : _readOnly
+                    ? () => _unavailable('该事项为只读，无法修改。')
                     : () => _confirmExecution('completed'),
               ),
             if (detail.leaseState == 'unknown')
@@ -434,8 +452,10 @@ class _ContinuityDetailPageState extends ConsumerState<ContinuityDetailPage> {
                 label: '放弃本次执行',
                 isSecondary: true,
                 outlined: true,
-                onPressed: _readOnly || _saving
+                onPressed: _saving
                     ? null
+                    : _readOnly
+                    ? () => _unavailable('该事项为只读，无法修改。')
                     : () => _confirmExecution('abandoned'),
               ),
           ],
@@ -459,8 +479,12 @@ class _ContinuityDetailPageState extends ConsumerState<ContinuityDetailPage> {
               isSecondary: true,
               outlined: true,
               height: 38,
-              onPressed: _readOnly || detail.thread.terminal || _saving
+              onPressed: _saving
                   ? null
+                  : _readOnly
+                  ? () => _unavailable('该事项为只读，无法修改。')
+                  : detail.thread.terminal
+                  ? () => _unavailable('事项已结束，无法添加等待条件。')
                   : _addWait,
             ),
           ],
@@ -539,8 +563,10 @@ class _ContinuityDetailPageState extends ConsumerState<ContinuityDetailPage> {
                     isSecondary: true,
                     outlined: true,
                     height: 40,
-                    onPressed: _readOnly || _saving
+                    onPressed: _saving
                         ? null
+                        : _readOnly
+                        ? () => _unavailable('该事项为只读，无法修改。')
                         : () => _resolveWait(wait),
                   ),
                 ),
@@ -551,8 +577,10 @@ class _ContinuityDetailPageState extends ConsumerState<ContinuityDetailPage> {
                     isSecondary: true,
                     outlined: true,
                     height: 40,
-                    onPressed: _readOnly || _saving
+                    onPressed: _saving
                         ? null
+                        : _readOnly
+                        ? () => _unavailable('该事项为只读，无法修改。')
                         : () => _cancelWait(wait),
                   ),
                 ),
@@ -638,8 +666,8 @@ String _eventSummary(String raw) {
       return value.toString();
     }
   } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+    print("[original-error] $error\n$stackTrace");
+  }
   return '';
 }
 

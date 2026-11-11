@@ -19,8 +19,8 @@
         class="project-action project-create-action"
         title="在项目中新建对话"
         aria-label="在项目中新建对话"
-        :disabled="!project.available || project.readOnly"
-        @click.stop="emit('createConversation', project)"
+        :aria-disabled="!project.available || project.readOnly"
+        @click.stop="createConversation"
       >
         <el-icon><Plus /></el-icon>
       </button>
@@ -77,6 +77,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { FolderOpened, MoreFilled, Plus } from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
 import type { ConversationItem, ProjectItem } from "@/stores/chat";
 import { useConversationDisclosure } from "@/composables/useConversationDisclosure";
 import { isDesktopShell } from "@/runtime/runtime-capabilities";
@@ -105,6 +106,14 @@ const emit = defineEmits<{
   markConversationRead: [conversation: ConversationItem];
   deleteConversation: [conversation: ConversationItem];
 }>();
+
+function createConversation() {
+  if (!props.project.available || props.project.readOnly) {
+    ElMessage.warning(props.project.statusReason || (props.project.readOnly ? "只读项目不能创建对话。" : "项目不可用，无法创建对话。"));
+    return;
+  }
+  emit("createConversation", props.project);
+}
 
 const expanded = ref(false);
 const workspaces = computed(() => props.project.workspaces || []);

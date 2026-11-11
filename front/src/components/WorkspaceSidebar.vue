@@ -317,8 +317,8 @@
           :class="{ 'is-selected': projectConversationTargetId === project.id }"
           role="option"
           :aria-selected="projectConversationTargetId === project.id"
-          :disabled="!project.available || project.readOnly"
-          @click="projectConversationTargetId = project.id"
+          :aria-disabled="!project.available || project.readOnly"
+          @click="!project.available || project.readOnly ? ElMessage.warning(project.statusReason || (project.readOnly ? '只读项目不能创建对话。' : '项目不可用，无法创建对话。')) : projectConversationTargetId = project.id"
         >
           <el-icon><FolderOpened /></el-icon>
           <span class="project-conversation-choice-copy">

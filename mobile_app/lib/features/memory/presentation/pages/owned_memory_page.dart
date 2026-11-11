@@ -992,8 +992,12 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
       ? '角色记忆'
       : _layers[_kind] ?? '记忆';
 
-  bool get _canWrite =>
-      ref.read(sharedCoreDataAccessProvider).valueOrNull?.write ?? false;
+  bool get _canWrite {
+    final state = ref.read(sharedCoreDataAccessProvider);
+    return !state.isLoading &&
+        !state.hasError &&
+        state.valueOrNull?.write == true;
+  }
 
   IconData get _pageIcon => switch (_kind) {
     'profile' => Icons.person_outline,
@@ -1172,9 +1176,13 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
       ),
       floatingActionButton: manager && _source == 'current'
           ? FloatingActionButton(
-              onPressed:
-                  _loading || _managing || _managementPage == null || !_canWrite
+              onPressed: _loading || _managing || _managementPage == null
                   ? null
+                  : !_canWrite
+                  ? () => showSharedCoreAccessReason(
+                      context,
+                      ref.read(sharedCoreDataAccessProvider),
+                    )
                   : _createMemory,
               backgroundColor: _canWrite
                   ? context.accentPrimary
@@ -1202,8 +1210,13 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
       AmitiaIconButton(
         icon: Icons.add,
         tooltip: '新增画像',
-        onPressed: _loading || _source != 'current' || !_canWrite
+        onPressed: _loading || _source != 'current'
             ? null
+            : !_canWrite
+            ? () => showSharedCoreAccessReason(
+                context,
+                ref.read(sharedCoreDataAccessProvider),
+              )
             : _openCreateProfile,
       ),
     AmitiaIconButton(
@@ -1815,7 +1828,14 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton.icon(
-                  onPressed: _loading || !_canWrite ? null : _openCreateProfile,
+                  onPressed: _loading
+                      ? null
+                      : !_canWrite
+                      ? () => showSharedCoreAccessReason(
+                          context,
+                          ref.read(sharedCoreDataAccessProvider),
+                        )
+                      : _openCreateProfile,
                   icon: const Icon(Icons.add),
                   label: const Text('新增画像'),
                 ),
@@ -1829,11 +1849,13 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                   if (_kind != 'memory' || widget.timeline)
                     TextButton(
                       onPressed:
-                          _managementPage == null ||
-                              _loading ||
-                              _managing ||
-                              !_canWrite
+                          _managementPage == null || _loading || _managing
                           ? null
+                          : !_canWrite
+                          ? () => showSharedCoreAccessReason(
+                              context,
+                              ref.read(sharedCoreDataAccessProvider),
+                            )
                           : _kind == 'candidate'
                           ? _generateCandidates
                           : _createMemory,
@@ -1843,8 +1865,13 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                     Wrap(
                       children: [
                         TextButton(
-                          onPressed: _loading || _managing || !_canWrite
+                          onPressed: _loading || _managing
                               ? null
+                              : !_canWrite
+                              ? () => showSharedCoreAccessReason(
+                                  context,
+                                  ref.read(sharedCoreDataAccessProvider),
+                                )
                               : _generateCandidates,
                           child: const Text('从对话生成候选'),
                         ),
@@ -1894,7 +1921,10 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                                 operationId: pending.id,
                               );
                             }
-                          : null,
+                          : () => showSharedCoreAccessReason(
+                              context,
+                              ref.read(sharedCoreDataAccessProvider),
+                            ),
                       child: const Text('使用原请求重试保存'),
                     ),
                 ],

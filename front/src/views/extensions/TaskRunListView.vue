@@ -10,6 +10,7 @@
         >
       </template>
     </ExtensionPageHeader>
+    <details v-if="actionError"><summary>查看操作的原始错误</summary><pre>{{ actionError }}</pre></details>
 
     <el-card shadow="never" class="filter-card">
       <el-form :inline="true" label-position="top" @submit.prevent>
@@ -49,12 +50,13 @@
 
     <el-alert
       v-if="loadError"
-      :title="loadError"
+      title="任务列表加载失败"
       type="error"
       show-icon
       :closable="false"
     >
       <template #default>
+        <details><summary>查看原始错误</summary><pre>{{ loadError }}</pre></details>
         <el-button link type="primary" @click="load">重新加载</el-button>
       </template>
     </el-alert>
@@ -149,7 +151,6 @@
                 type="danger"
                 plain
                 :loading="actingId === row.taskRunId"
-                :disabled="row.readOnly === true || !canCancel(row.status)"
                 @click="onCancel(row)"
                 >取消</el-button
               >
@@ -158,7 +159,6 @@
                 type="primary"
                 plain
                 :loading="actingId === row.taskRunId"
-                :disabled="row.readOnly === true || !canRetry(row.status)"
                 @click="onRetry(row)"
                 >重试</el-button
               >
@@ -192,6 +192,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
+import { originalErrorText } from "@/runtime/original-error";
 import { Refresh } from "@element-plus/icons-vue";
 import ExtensionPageHeader from "./components/ExtensionPageHeader.vue";
 import TaskRunDetailView from "./TaskRunDetailView.vue";
@@ -200,6 +201,7 @@ import type { TaskRun, TaskRunPage, TaskRunStatus } from "./types";
 
 const loading = ref(false);
 const loadError = ref("");
+const actionError = ref("");
 const actingId = ref("");
 const page = ref<TaskRunPage>({ items: [], total: 0 });
 const currentPage = ref(1);
@@ -256,7 +258,7 @@ async function load() {
     });
   } catch (error: any) {
     page.value = { items: [], total: 0 };
-    loadError.value = problem(error, "任务列表加载失败");
+    loadError.value = originalErrorText(error);
   } finally {
     loading.value = false;
   }
@@ -282,6 +284,9 @@ function canRetry(status: TaskRunStatus) {
 }
 
 async function onCancel(task: TaskRun) {
+  if (task.readOnly) { ElMessage.warning("当前任务为只读，不能取消。"); return; }
+  if (!canCancel(task.status)) { ElMessage.warning(`任务处于 ${task.status} 状态，不能取消。`); return; }
+  actionError.value = "";
   try {
     await ElMessageBox.confirm(
       `确认取消任务 ${shortId(task.taskRunId)}？取消后任务将停止执行。`,
@@ -289,8 +294,8 @@ async function onCancel(task: TaskRun) {
       { type: "warning", confirmButtonText: "取消任务", cancelButtonText: "保留" },
     );
   } catch (error) {
-  console.error("[original-error]", error);
-return;
+    if (error !== "cancel" && error !== "close") actionError.value = originalErrorText(error);
+    return;
   }
   actingId.value = task.taskRunId;
   try {
@@ -298,20 +303,25 @@ return;
     ElMessage.success("已请求取消任务");
     await load();
   } catch (error: any) {
-    ElMessage.error(problem(error, "取消任务失败"));
+    actionError.value = originalErrorText(error);
+    ElMessage.error("取消任务失败，请查看原始错误。");
   } finally {
     actingId.value = "";
   }
 }
 
 async function onRetry(task: TaskRun) {
+  if (task.readOnly) { ElMessage.warning("当前任务为只读，不能重试。"); return; }
+  if (!canRetry(task.status)) { ElMessage.warning(`任务处于 ${task.status} 状态，不能重试。`); return; }
+  actionError.value = "";
   actingId.value = task.taskRunId;
   try {
     await retryTask(task.taskRunId, task);
     ElMessage.success("已重新提交任务");
     await load();
   } catch (error: any) {
-    ElMessage.error(problem(error, "重试任务失败"));
+    actionError.value = originalErrorText(error);
+    ElMessage.error("重试任务失败，请查看原始错误。");
   } finally {
     actingId.value = "";
   }
@@ -372,15 +382,6 @@ function formatTime(value?: string) {
 
 function shortId(id: string) {
   return id.length > 14 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id;
-}
-
-function problem(error: any, fallback: string) {
-  return (
-    error?.response?.data?.detail ||
-    error?.detail ||
-    error?.message ||
-    fallback
-  );
 }
 
 onMounted(load);

@@ -60,6 +60,13 @@ class _WorkflowListPageState extends ConsumerState<WorkflowListPage> {
       _location == 'device' ? 'device:$_deviceId' : _location;
   WorkflowApiTarget get _target => _workflowTargetFromKey(_targetKey);
   bool get _hasUsableTarget => _location != 'device' || _deviceId.isNotEmpty;
+
+  void _showUnavailable(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   int? _revisionOf(Map<String, dynamic> item) {
     final installation = item['installation'];
     if (installation is! Map) return null;
@@ -106,8 +113,8 @@ class _WorkflowListPageState extends ConsumerState<WorkflowListPage> {
               : (items.first['deviceId'] ?? '').toString();
       });
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-if (mounted) setState(() => _devices = <Map<String, dynamic>>[]);
+      print("[original-error] $error\n$stackTrace");
+      if (mounted) setState(() => _devices = <Map<String, dynamic>>[]);
     }
   }
 
@@ -123,8 +130,8 @@ if (mounted) setState(() => _devices = <Map<String, dynamic>>[]);
       _syncCursor = raw is int ? raw : int.tryParse(raw?.toString() ?? '') ?? 0;
       _syncTargetKey = key;
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-if (mounted && _targetKey == key) {
+      print("[original-error] $error\n$stackTrace");
+      if (mounted && _targetKey == key) {
         _syncCursor = null;
         _syncTargetKey = '';
       }
@@ -159,8 +166,8 @@ if (mounted && _targetKey == key) {
       if (_location == 'device' && !changed && _deviceRefreshTicks % 8 == 0)
         _refresh();
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-// Durable cursor is intentionally retained and retried on the next tick.
+      print("[original-error] $error\n$stackTrace");
+      // Durable cursor is intentionally retained and retried on the next tick.
     } finally {
       _syncPolling = false;
     }
@@ -775,24 +782,35 @@ if (mounted && _targetKey == key) {
                 AmitiaIconButton(
                   icon: Icons.add,
                   tooltip: '新建工作流',
-                  onPressed: _busy || !_hasUsableTarget ? null : _create,
+                  onPressed: _busy || !_hasUsableTarget
+                      ? () =>
+                            _showUnavailable(_busy ? '正在处理，请稍候。' : '请先选择可用设备。')
+                      : _create,
                 ),
                 IconButton(
                   tooltip: '导入 JSON',
-                  onPressed: _busy || _location == 'device' ? null : _import,
+                  onPressed: _busy || _location == 'device'
+                      ? () => _showUnavailable(
+                          _busy ? '正在处理，请稍候。' : '设备工作流暂不支持导入，请切换位置。',
+                        )
+                      : _import,
                   icon: const Icon(Icons.file_download_outlined),
                 ),
                 IconButton(
                   tooltip: '我的模板',
                   onPressed: _busy || _location == 'device'
-                      ? null
+                      ? () => _showUnavailable(
+                          _busy ? '正在处理，请稍候。' : '设备工作流暂不支持模板，请切换位置。',
+                        )
                       : _showTemplates,
                   icon: const Icon(Icons.dashboard_customize_outlined),
                 ),
                 IconButton(
                   tooltip: 'AI 创建',
                   onPressed: _busy || _location == 'device'
-                      ? null
+                      ? () => _showUnavailable(
+                          _busy ? '正在处理，请稍候。' : '设备工作流暂不支持 AI 创建，请切换位置。',
+                        )
                       : _createWithAI,
                   icon: const Icon(Icons.auto_awesome_outlined),
                 ),

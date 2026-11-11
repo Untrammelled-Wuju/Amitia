@@ -276,8 +276,8 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
       _cameraSupported = visual.cameraSupported;
       _screenSupported = visual.screenSupported;
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-_cameraSupported = false;
+      print("[original-error] $error\n$stackTrace");
+      _cameraSupported = false;
       _screenSupported = false;
     }
     final client = BackendWebSocketClient(availability.config);
@@ -572,8 +572,8 @@ _cameraSupported = false;
           WebSocketTextMessage(jsonEncode(const {'type': 'stop'})),
         );
       } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+        print("[original-error] $error\n$stackTrace");
+      }
     }
     await _audioSubscription?.cancel();
     _audioSubscription = null;
@@ -584,25 +584,25 @@ _cameraSupported = false;
     try {
       await _audio.reset();
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+      print("[original-error] $error\n$stackTrace");
+    }
     try {
       await _visual.reset();
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+      print("[original-error] $error\n$stackTrace");
+    }
     try {
       await session?.close();
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+      print("[original-error] $error\n$stackTrace");
+    }
     final client = _client;
     _client = null;
     try {
       await client?.close();
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-}
+      print("[original-error] $error\n$stackTrace");
+    }
     _aiSpeaking = false;
     _muted = false;
     _wakeArmed = false;
@@ -1156,6 +1156,7 @@ _cameraSupported = false;
             label: _screenActive ? '停止共享' : '共享屏幕',
             selected: _screenActive,
             enabled: connected && _screenSupported,
+            unavailableReason: connected ? '当前通话不支持屏幕共享。' : '通话尚未连接，请稍后重试。',
             labelStyle: labelStyle,
             onTap: _toggleScreen,
           )
@@ -1166,6 +1167,7 @@ _cameraSupported = false;
             label: _cameraActive ? '关闭视频' : '视频',
             selected: _cameraActive,
             enabled: connected && _cameraSupported,
+            unavailableReason: connected ? '当前通话不支持视频。' : '通话尚未连接，请稍后重试。',
             labelStyle: labelStyle,
             onTap: _toggleCamera,
           );
@@ -1179,6 +1181,7 @@ _cameraSupported = false;
             label: _muted ? '取消静音' : '静音',
             selected: _muted,
             enabled: connected,
+            unavailableReason: '通话尚未连接，请稍后重试。',
             labelStyle: labelStyle,
             onTap: _toggleMute,
           ),
@@ -1192,6 +1195,7 @@ _cameraSupported = false;
             label: _wakeArmed ? '关闭唤醒' : '开启唤醒',
             selected: _wakeArmed,
             enabled: connected,
+            unavailableReason: '通话尚未连接，请稍后重试。',
             labelStyle: labelStyle,
             onTap: _toggleWake,
           ),
@@ -1262,6 +1266,7 @@ class _RealtimeCallControl extends StatelessWidget {
   final bool selected;
   final bool destructive;
   final bool enabled;
+  final String unavailableReason;
   final TextStyle? labelStyle;
   final VoidCallback onTap;
 
@@ -1270,6 +1275,7 @@ class _RealtimeCallControl extends StatelessWidget {
     required this.label,
     required this.enabled,
     required this.onTap,
+    this.unavailableReason = '当前操作暂不可用。',
     this.selected = false,
     this.destructive = false,
     this.labelStyle,
@@ -1291,7 +1297,11 @@ class _RealtimeCallControl extends StatelessWidget {
         : Colors.white38;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: enabled ? onTap : null,
+      onTap: enabled
+          ? onTap
+          : () => ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(unavailableReason))),
       child: SizedBox(
         width: 66,
         child: Column(

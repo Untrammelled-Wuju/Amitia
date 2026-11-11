@@ -8,6 +8,7 @@ import type { OwnedExecutionScope } from "@/runtime/device-owned-chat";
 import { getApiBaseURL, saveDeploymentConfig } from "@/runtime/runtime-adapter";
 import { roleAuthorityConfig } from "@/runtime/role-authority";
 import { useCoreConfigurationAccess, coreConfigurationRequestConfig } from "@/composables/useCoreConfigurationAccess";
+import { originalErrorText } from "@/runtime/original-error";
 
 export function useImmersiveOnboarding() {
   const router = useRouter();
@@ -231,8 +232,9 @@ export function useImmersiveOnboarding() {
         roleAuthorityConfig(authority?.roleAuthority);
         roleAuthority.value = authority.roleAuthority;
         configurationContext.value = await configurationAccess.refresh();
+        if (configurationAccess.accessError.value) throw configurationAccess.accessError.value;
       } catch (error: any) {
-        const message = error?.message || "部署配置保存失败，请重试";
+        const message = `部署配置保存失败，请重试。\n原始错误：\n${originalErrorText(error)}`;
         stageError.value = message;
         ElMessage.error(message);
         return;
@@ -514,6 +516,7 @@ vectorReady.value = false;
 
     try {
       const configurationAllowed = Boolean(await configurationAccess.refresh());
+      if (configurationAccess.accessError.value) throw configurationAccess.accessError.value;
       if (configurationAllowed) await configurationAccess.requireAccess(context);
       if (configurationAllowed && modelApiKey.value && modelBaseUrl.value && modelName.value) {
         await post("/api/model/configs", {
@@ -625,10 +628,7 @@ vectorReady.value = false;
 
       await router.push("/chat");
     } catch (err: any) {
-      stageError.value =
-        err?.message ||
-        err?.response?.data?.message ||
-        "设置过程中出现错误，请重试";
+      stageError.value = `设置过程中出现错误，请重试。\n原始错误：\n${originalErrorText(err)}`;
     } finally {
       entering.value = false;
     }

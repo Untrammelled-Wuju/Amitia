@@ -5,6 +5,7 @@ import '../../../../core/services/device_management_intent.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 import '../../../../core/runtime/backend/mobile_backend_providers.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import '../../../../core/errors/original_error.dart';
 
 class DeviceCapabilityGrantsPage extends ConsumerStatefulWidget {
   const DeviceCapabilityGrantsPage({
@@ -33,6 +34,29 @@ class _DeviceCapabilityGrantsPageState
   bool _allowed = false;
   int _generation = 0;
   DeviceManagementIntent? _authority;
+
+  void _explainUnavailable() {
+    final message = _loading || _busy
+        ? '正在处理设备授权，请稍后重试。'
+        : !_allowed
+        ? (_error.isEmpty ? '无法确认设备管理权限，请刷新后重试。' : _error)
+        : _caller.isEmpty
+        ? '请先选择调用设备。'
+        : '请先填写能力标识。';
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('暂时无法操作'),
+        content: SingleChildScrollView(child: SelectableText(message)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('知道了'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -76,20 +100,26 @@ class _DeviceCapabilityGrantsPageState
         _authority = authority;
         _allowed = true;
       });
-    } catch (cause) {
+    } catch (cause, stack) {
       if (mounted && ticket == _generation)
-        setState(() => _error = cause.toString());
+        setState(() => _error = '$cause\n${originalErrorText(cause)}\n$stack');
     } finally {
       if (mounted && ticket == _generation) setState(() => _loading = false);
     }
   }
 
   Future<void> _save(bool allowed, {Map<String, dynamic>? grant}) async {
-    if (_busy || !_allowed) return;
+    if (_busy || _loading || !_allowed) {
+      _explainUnavailable();
+      return;
+    }
     final caller = grant?['callerId'].toString() ?? _caller;
     final capability =
         grant?['capability'].toString() ?? _capability.text.trim();
-    if (caller.isEmpty || capability.isEmpty) return;
+    if (caller.isEmpty || capability.isEmpty) {
+      _explainUnavailable();
+      return;
+    }
     final previous =
         grant ??
         _grants
@@ -125,9 +155,9 @@ class _DeviceCapabilityGrantsPageState
             : 0,
       );
       if (mounted && generation == _generation) await _load();
-    } catch (cause) {
+    } catch (cause, stack) {
       if (mounted && generation == _generation)
-        setState(() => _error = cause.toString());
+        setState(() => _error = '$cause\n${originalErrorText(cause)}\n$stack');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -174,25 +204,34 @@ class _DeviceCapabilityGrantsPageState
           Text('当前 Core：$_core'),
           const Text('只授予明确的设备和能力。撤销后会中断正在进行的相关调用。'),
           if (_error.isNotEmpty)
-            Text(
+            SelectableText(
               _error,
               style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
           if (_loading) const LinearProgressIndicator(),
-          DropdownButtonFormField<String>(
-            initialValue: _caller.isEmpty ? null : _caller,
-            decoration: const InputDecoration(labelText: '调用设备'),
-            items: devices
-                .map(
-                  (row) => DropdownMenuItem(
-                    value: row['deviceId'].toString(),
-                    child: Text((row['label'] ?? row['deviceId']).toString()),
-                  ),
-                )
-                .toList(),
-            onChanged: !_allowed || _busy || _loading
-                ? null
-                : (value) => setState(() => _caller = value ?? ''),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: !_allowed || _busy || _loading ? _explainUnavailable : null,
+            child: IgnorePointer(
+              ignoring: !_allowed || _busy || _loading,
+              child: DropdownButtonFormField<String>(
+                initialValue: _caller.isEmpty ? null : _caller,
+                decoration: const InputDecoration(labelText: '调用设备'),
+                items: devices
+                    .map(
+                      (row) => DropdownMenuItem(
+                        value: row['deviceId'].toString(),
+                        child: Text(
+                          (row['label'] ?? row['deviceId']).toString(),
+                        ),
+                      ),
+                    )
+                    .toList(),
+                onChanged: !_allowed || _busy || _loading
+                    ? null
+                    : (value) => setState(() => _caller = value ?? ''),
+              ),
+            ),
           ),
           Wrap(
             spacing: 8,
@@ -200,13 +239,13 @@ class _DeviceCapabilityGrantsPageState
               ActionChip(
                 label: const Text('AI 对话'),
                 onPressed: !_allowed || _busy || _loading
-                    ? null
+                    ? _explainUnavailable
                     : () => setState(() => _capability.text = 'ai.chat'),
               ),
               ActionChip(
                 label: const Text('设备任务'),
                 onPressed: !_allowed || _busy || _loading
-                    ? null
+                    ? _explainUnavailable
                     : () => setState(() => _capability.text = 'task.execute'),
               ),
             ],
@@ -214,7 +253,8 @@ class _DeviceCapabilityGrantsPageState
           TextField(
             controller: _capability,
             maxLength: 128,
-            enabled: _allowed && !_busy && !_loading,
+            readOnly: !_allowed || _busy || _loading,
+            onTap: !_allowed || _busy || _loading ? _explainUnavailable : null,
             decoration: const InputDecoration(
               labelText: '能力标识',
               hintText: '选择上方能力或输入其他设备能力标识',
@@ -228,7 +268,7 @@ class _DeviceCapabilityGrantsPageState
                     _loading ||
                     _caller.isEmpty ||
                     _capability.text.trim().isEmpty
-                ? null
+                ? _explainUnavailable
                 : () => _save(true),
             child: const Text('允许调用'),
           ),
@@ -238,7 +278,7 @@ class _DeviceCapabilityGrantsPageState
               subtitle: Text(grant['allowed'] == true ? '已授权' : '已撤销'),
               trailing: TextButton(
                 onPressed: _busy || _loading || !_allowed
-                    ? null
+                    ? _explainUnavailable
                     : () => _save(grant['allowed'] != true, grant: grant),
                 child: Text(grant['allowed'] == true ? '撤销' : '重新授予'),
               ),

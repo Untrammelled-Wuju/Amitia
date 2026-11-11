@@ -238,9 +238,11 @@ class _CharacterPsychePageState extends ConsumerState<CharacterPsychePage> {
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton(
-                      onPressed: _deletingEmotionId == null && _canWrite
-                          ? () => _clearEmotionHistory(context, items)
-                          : null,
+                      onPressed: _deletingEmotionId != null
+                          ? null
+                          : !_canWrite
+                          ? _showAccessReason
+                          : () => _clearEmotionHistory(context, items),
                       child: const Text('清空'),
                     ),
                   ),
@@ -326,9 +328,11 @@ class _CharacterPsychePageState extends ConsumerState<CharacterPsychePage> {
           SizedBox(width: AppSpacing.xs),
           IconButton(
             tooltip: '删除',
-            onPressed: _deletingEmotionId == null && _canWrite
-                ? () => _deleteEmotionHistory(context, item)
-                : null,
+            onPressed: _deletingEmotionId != null
+                ? null
+                : !_canWrite
+                ? _showAccessReason
+                : () => _deleteEmotionHistory(context, item),
             icon: _deletingEmotionId == item['id'].toString()
                 ? const SizedBox(
                     width: 16,
@@ -444,8 +448,17 @@ class _CharacterPsychePageState extends ConsumerState<CharacterPsychePage> {
     }
   }
 
-  bool get _canWrite =>
-      ref.read(sharedCoreDataAccessProvider).valueOrNull?.write ?? false;
+  bool get _canWrite {
+    final state = ref.read(sharedCoreDataAccessProvider);
+    return !state.isLoading &&
+        !state.hasError &&
+        state.valueOrNull?.write == true;
+  }
+
+  void _showAccessReason() => showSharedCoreAccessReason(
+    context,
+    ref.read(sharedCoreDataAccessProvider),
+  );
 
   String _emotionLabel(String value) {
     return switch (value.trim().toLowerCase()) {

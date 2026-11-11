@@ -124,7 +124,10 @@ class _CharacterCardWorkshopPageState
   Widget build(BuildContext context) {
     final charactersAsync = ref.watch(characterListProvider);
     final accessAsync = ref.watch(sharedCoreDataAccessProvider);
-    final canWrite = accessAsync.valueOrNull?.write ?? false;
+    final canWrite =
+        !accessAsync.isLoading &&
+        !accessAsync.hasError &&
+        accessAsync.valueOrNull?.write == true;
     return PopScope(
       canPop: !_saving && !(_creating && _editing),
       onPopInvokedWithResult: (didPop, result) {
@@ -147,16 +150,21 @@ class _CharacterCardWorkshopPageState
               AmitiaIconButton(
                 icon: Icons.file_upload_outlined,
                 tooltip: '导入角色卡',
-                onPressed: !canWrite || _importing || _saving || _loading
+                onPressed: _importing || _saving || _loading
                     ? null
+                    : !canWrite
+                    ? _showAccessReason
                     : _importCard,
               ),
             AmitiaIconButton(
               icon: Icons.file_download_outlined,
               tooltip: '导出 CHARX',
-              onPressed:
-                  _exporting || _saving || _loading || _selectedId.isEmpty
+              onPressed: _exporting || _saving || _loading
                   ? null
+                  : _selectedId.isEmpty
+                  ? () => ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(const SnackBar(content: Text('请先选择要导出的角色。')))
                   : _exportCard,
             ),
           ],
@@ -247,7 +255,7 @@ class _CharacterCardWorkshopPageState
       children: [
         if (!_inEditor) ...[
           OutlinedButton.icon(
-            onPressed: canWrite ? () => _openEditor() : null,
+            onPressed: canWrite ? () => _openEditor() : _showAccessReason,
             icon: const Icon(Icons.add),
             label: const Text('创建角色卡'),
           ),
@@ -256,7 +264,9 @@ class _CharacterCardWorkshopPageState
               title: Text(character.name),
               subtitle: Text(character.identity),
               trailing: const Icon(Icons.chevron_right),
-              onTap: canWrite ? () => _openEditor(character: character) : null,
+              onTap: canWrite
+                  ? () => _openEditor(character: character)
+                  : _showAccessReason,
             ),
         ],
         SizedBox(height: AppSpacing.lg),
@@ -291,7 +301,11 @@ class _CharacterCardWorkshopPageState
             maxLines: field.key == 'boundaryRules' ? 4 : 1,
           ),
         OutlinedButton.icon(
-          onPressed: _saving || !_canWrite ? null : _pickAvatar,
+          onPressed: _saving
+              ? null
+              : !_canWrite
+              ? _showAccessReason
+              : _pickAvatar,
           icon: const Icon(Icons.add_photo_alternate_outlined),
           label: Text(_pendingAvatarPath == null ? '上传角色头像' : '已选择头像，保存时上传'),
         ),
@@ -321,14 +335,27 @@ class _CharacterCardWorkshopPageState
           label: _saving ? '保存中...' : '保存角色卡',
           icon: Icons.save_outlined,
           isFullWidth: true,
-          onPressed: _saving || !_canWrite ? null : () => _saveCard(character),
+          onPressed: _saving
+              ? null
+              : !_canWrite
+              ? _showAccessReason
+              : () => _saveCard(character),
         ),
       ],
     );
   }
 
-  bool get _canWrite =>
-      ref.read(sharedCoreDataAccessProvider).valueOrNull?.write ?? false;
+  bool get _canWrite {
+    final state = ref.read(sharedCoreDataAccessProvider);
+    return !state.isLoading &&
+        !state.hasError &&
+        state.valueOrNull?.write == true;
+  }
+
+  void _showAccessReason() => showSharedCoreAccessReason(
+    context,
+    ref.read(sharedCoreDataAccessProvider),
+  );
 
   Widget _field(
     String label,

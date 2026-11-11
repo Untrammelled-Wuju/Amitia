@@ -121,8 +121,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
             .where(
               (item) =>
                   !item.runtimeId.startsWith('host.character.') &&
-                  item.contributionId !=
-                      'com.amitia/active-task.character-tab',
+                  item.contributionId != 'com.amitia/active-task.character-tab',
             )
             .isNotEmpty ??
         false;
@@ -283,8 +282,10 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
       child: Row(
         children: [
           InkWell(
-            onTap: _uploadingAvatar || !_canWrite
+            onTap: _uploadingAvatar
                 ? null
+                : !_canWrite
+                ? _showAccessReason
                 : () => _uploadAvatar(character),
             customBorder: const CircleBorder(),
             child: Stack(
@@ -730,8 +731,10 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
           label: _savingSettings ? '保存中...' : '保存角色设定',
           icon: Icons.save_outlined,
           isFullWidth: true,
-          onPressed: _savingSettings || !_canWrite
+          onPressed: _savingSettings
               ? null
+              : !_canWrite
+              ? _showAccessReason
               : () => _saveCharacterSettings(character),
         ),
       ],
@@ -916,7 +919,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
           Icons.psychology_outlined,
           onTap: _canWrite
               ? () => _showCharacterModelSettings(character, configs)
-              : null,
+              : _showAccessReason,
         ),
         SizedBox(height: AppSpacing.sm),
         _buildAbilitySection(
@@ -1281,7 +1284,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                           Navigator.pop(sheetContext);
                           _setAsCurrent(character);
                         }
-                      : null,
+                      : _showAccessReason,
                 ),
                 AmitiaListTile(
                   leading: _buildActionIcon(
@@ -1295,7 +1298,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                           Navigator.pop(sheetContext);
                           _copyCharacter(character);
                         }
-                      : null,
+                      : _showAccessReason,
                 ),
                 AmitiaListTile(
                   leading: _buildActionIcon(
@@ -1321,7 +1324,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                           Navigator.pop(sheetContext);
                           _showDeleteConfirm(context, character);
                         }
-                      : null,
+                      : _showAccessReason,
                 ),
                 const SizedBox(height: 8),
               ],
@@ -1344,8 +1347,17 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     );
   }
 
-  bool get _canWrite =>
-      ref.read(sharedCoreDataAccessProvider).valueOrNull?.write ?? false;
+  bool get _canWrite {
+    final state = ref.read(sharedCoreDataAccessProvider);
+    return !state.isLoading &&
+        !state.hasError &&
+        state.valueOrNull?.write == true;
+  }
+
+  void _showAccessReason() => showSharedCoreAccessReason(
+    context,
+    ref.read(sharedCoreDataAccessProvider),
+  );
 
   Future<void> _setAsCurrent(CharacterDto character) async {
     try {

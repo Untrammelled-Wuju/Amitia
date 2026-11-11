@@ -32,6 +32,10 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
   BuildContext? _overlayContext;
   int _loadEpoch = 0;
 
+  void _showAccessReason() {
+    showSharedCoreAccessReason(context, ref.read(sharedCoreDataAccessProvider));
+  }
+
   @override
   void initState() {
     super.initState();
@@ -104,12 +108,12 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
           AmitiaIconButton(
             icon: Icons.science_outlined,
             tooltip: '匹配测试',
-            onPressed: access.write ? _showMatchTester : null,
+            onPressed: _canWrite ? _showMatchTester : _showAccessReason,
           ),
           AmitiaIconButton(
             icon: Icons.file_upload_outlined,
             tooltip: '导入世界书',
-            onPressed: access.write ? _importJson : null,
+            onPressed: _canWrite ? _importJson : _showAccessReason,
           ),
           AmitiaIconButton(
             icon: Icons.file_download_outlined,
@@ -119,7 +123,7 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
           AmitiaIconButton(
             icon: Icons.add,
             tooltip: '新增规则',
-            onPressed: access.write ? () => _showEditor(null) : null,
+            onPressed: _canWrite ? () => _showEditor(null) : _showAccessReason,
           ),
         ],
       ),
@@ -269,12 +273,14 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
           Row(
             children: [
               TextButton.icon(
-                onPressed: _canWrite ? () => _showEditor(entry) : null,
+                onPressed: _canWrite
+                    ? () => _showEditor(entry)
+                    : _showAccessReason,
                 icon: const Icon(Icons.edit_outlined, size: 16),
                 label: const Text('编辑'),
               ),
               TextButton.icon(
-                onPressed: _canWrite ? () => _delete(entry) : null,
+                onPressed: _canWrite ? () => _delete(entry) : _showAccessReason,
                 icon: Icon(
                   Icons.delete_outline,
                   size: 16,
@@ -290,7 +296,10 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
   }
 
   Future<void> _showEditor(WorldBookDto? existing) async {
-    if (!_canWrite) return;
+    if (!_canWrite) {
+      _showAccessReason();
+      return;
+    }
     final patternController = TextEditingController(
       text: existing?.matchPattern ?? '',
     );
@@ -460,7 +469,10 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
   }
 
   Future<void> _showMatchTester() async {
-    if (!_canWrite) return;
+    if (!_canWrite) {
+      _showAccessReason();
+      return;
+    }
     final controller = TextEditingController();
     List<WorldBookMatchDto> matches = const [];
     var testing = false;
@@ -554,7 +566,10 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
   }
 
   Future<void> _importJson() async {
-    if (!_canWrite) return;
+    if (!_canWrite) {
+      _showAccessReason();
+      return;
+    }
     final picked = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['json'],
@@ -637,7 +652,10 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
   }
 
   Future<void> _delete(WorldBookDto entry) async {
-    if (!_canWrite) return;
+    if (!_canWrite) {
+      _showAccessReason();
+      return;
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
@@ -664,6 +682,10 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
     await _load();
   }
 
-  bool get _canWrite =>
-      ref.read(sharedCoreDataAccessProvider).valueOrNull?.write ?? false;
+  bool get _canWrite {
+    final state = ref.read(sharedCoreDataAccessProvider);
+    return !state.isLoading &&
+        !state.hasError &&
+        state.valueOrNull?.write == true;
+  }
 }

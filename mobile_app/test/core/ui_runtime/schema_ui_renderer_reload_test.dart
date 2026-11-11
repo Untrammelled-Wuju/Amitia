@@ -6,6 +6,40 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('扩展入口不可用时提示原因且不触发动作', (tester) async {
+    var calls = 0;
+    const document = SchemaUIDocument(
+      children: [
+        SchemaUINode(
+          id: 'no-action',
+          type: SchemaUI.nodeButton,
+          props: {'label': '扩展操作'},
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SchemaUIRenderer(
+            document: document,
+            extensionId: 'test',
+            contributionId: 'test',
+            embedded: true,
+            onActionDispatch: (_) async {
+              calls++;
+              return <String, dynamic>{};
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.text('扩展操作'));
+    await tester.pump();
+    expect(find.text('该扩展入口尚未提供可执行操作。'), findsOneWidget);
+    expect(calls, 0);
+  });
+
   testWidgets('refresh lifecycle polls and stops when disposed', (
     tester,
   ) async {

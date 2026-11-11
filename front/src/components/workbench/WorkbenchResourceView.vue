@@ -4,7 +4,7 @@
     <div v-else-if="tab.kind === 'agents'"><WorkbenchAgentRunsView /></div>
     <div v-else-if="tab.targetDeviceId && (tab.kind !== 'browser' || !tab.browserRef)" class="muted" role="alert">目标设备资源不支持远程访问，已阻止向本机错误发起请求。</div>
     <template v-else-if="tab.kind === 'files'">
-      <div class="toolbar"><select v-model="workspaceUri" aria-label="工作目录" @change="changeWorkspace"><option value="">选择工作区</option><option v-for="mount in mounts" :key="mount.id" :value="mount.rootUri" :disabled="!mount.available">{{ mount.name }}{{ mount.available ? '' : '（不可用）' }}</option></select><button type="button" @click="refresh">刷新</button></div>
+      <div class="toolbar"><select :value="workspaceUri" aria-label="工作目录" @change="selectWorkspace($event, false)"><option value="">选择工作区</option><option v-for="mount in mounts" :key="mount.id" :value="mount.rootUri">{{ mount.name }}{{ mount.available ? '' : '（不可用）' }}</option></select><button type="button" @click="refresh">刷新</button></div>
       <div class="path">{{ directory || '请选择工作区' }}</div>
       <button v-if="directory && directory !== workspaceUri" class="entry" type="button" @click="goUp">.. 上一级</button>
       <button v-for="file in files" :key="file.uri" class="entry" type="button" @click="openEntry(file)"><span>{{ file.type === 'directory' ? '▸' : '▤' }}</span><span>{{ file.name }}</span><small v-if="file.sizeBytes !== undefined">{{ file.sizeBytes }} B</small></button>
@@ -18,7 +18,7 @@
       <button v-if="fileHasMore && !loading" type="button" class="load-more" @click="loadFile(true)">加载下一部分文件</button>
     </template>
     <template v-else-if="tab.kind === 'git' || tab.kind === 'diff'">
-      <div class="toolbar"><select v-model="workspaceUri" aria-label="Git 工作目录" @change="changeGitWorkspace"><option value="">选择仓库</option><option v-for="mount in mounts" :key="mount.id" :value="mount.rootUri" :disabled="!mount.available || (mount.kind !== 'local' && mount.kind !== 'isolated')">{{ mount.name }}</option></select><button type="button" @click="refresh">刷新</button></div>
+      <div class="toolbar"><select :value="workspaceUri" aria-label="Git 工作目录" @change="selectWorkspace($event, true)"><option value="">选择仓库</option><option v-for="mount in mounts" :key="mount.id" :value="mount.rootUri">{{ mount.name }}{{ !mount.available ? '（不可用）' : (mount.kind !== 'local' && mount.kind !== 'isolated') ? '（不支持 Git）' : '' }}</option></select><button type="button" @click="refresh">刷新</button></div>
       <div v-if="gitStatus" class="summary">{{ gitStatus.branch || 'detached' }} · {{ changes.length }} 项变更 <small v-if="gitStatus.ahead || gitStatus.behind">↑{{ gitStatus.ahead || 0 }} ↓{{ gitStatus.behind || 0 }}</small></div>
       <template v-if="tab.kind === 'git' && gitStatus">
         <div class="section-title">Git Worktree · 独立任务环境</div>
@@ -28,7 +28,7 @@
           <input v-model.trim="newWorktreeBranch" maxlength="80" aria-label="新分支名称" placeholder="新分支（留空则 detached）" />
           <input v-model.trim="newWorktreeRef" maxlength="160" aria-label="起始提交" placeholder="起点：HEAD" />
           <input v-model.trim="newWorktreeTaskId" maxlength="128" aria-label="关联任务 ID" placeholder="关联任务 ID（可选，绑定当前对话）" />
-          <button type="button" :disabled="worktreeBusy" @click="createWorktree">{{ worktreeBusy ? '处理中…' : '创建 Worktree' }}</button>
+          <button type="button" :aria-disabled="worktreeBusy" @click="runWorktreeAction(worktreeBusy ? '正在处理 Worktree，请稍后重试。' : '', createWorktree)">{{ worktreeBusy ? '处理中…' : '创建 Worktree' }}</button>
         </div>
         <div v-if="worktreeBusy" class="status" role="status">正在处理 Worktree…</div>
         <div v-for="tree in worktrees" :key="tree.path" class="worktree-item">
@@ -39,9 +39,9 @@
           </div>
           <button v-if="tree.workspaceUri" type="button" @click="openWorktree(tree)">浏览文件</button>
           <button v-if="tree.workspaceUri && tree.managed" type="button" @click="openWorktreeTerminal(tree)">在独立终端中打开</button>
-          <button v-if="tree.managed && tree.taskBinding && tree.id" type="button" :disabled="worktreeBusy" @click="reviewWorktree(tree)">审查变更</button>
-          <button v-if="tree.managed && tree.id && tree.taskBinding" type="button" :disabled="worktreeBusy" @click="releaseWorktree(tree)">解除任务绑定</button>
-          <button v-if="tree.managed && tree.id" type="button" :disabled="worktreeBusy || tree.locked || tree.prunable || !!tree.taskBinding" @click="removeWorktree(tree)">安全删除</button>
+          <button v-if="tree.managed && tree.taskBinding && tree.id" type="button" :aria-disabled="worktreeBusy" @click="runWorktreeAction(worktreeBusy ? '正在处理 Worktree，请稍后重试。' : '', () => reviewWorktree(tree))">审查变更</button>
+          <button v-if="tree.managed && tree.id && tree.taskBinding" type="button" :aria-disabled="worktreeBusy" @click="runWorktreeAction(worktreeBusy ? '正在处理 Worktree，请稍后重试。' : '', () => releaseWorktree(tree))">解除任务绑定</button>
+          <button v-if="tree.managed && tree.id" type="button" :aria-disabled="worktreeBusy || tree.locked || tree.prunable || !!tree.taskBinding" @click="runWorktreeAction(worktreeBusy ? '正在处理 Worktree，请稍后重试。' : tree.locked ? '该工作树已锁定，无法删除。' : tree.prunable ? '该工作树状态需要先修复，无法安全删除。' : tree.taskBinding ? '请先解除任务绑定。' : '', () => removeWorktree(tree))">安全删除</button>
         </div>
         <div v-if="worktreeReview" class="commit-detail" role="region" aria-label="任务 Worktree 审查">
           <div class="toolbar"><strong>任务 {{ worktreeReview.entry.taskBinding?.taskId }} · 工作树审查</strong><button type="button" @click="worktreeReview = null">关闭</button></div>
@@ -50,12 +50,12 @@
           <div v-if="worktreeReview.conflictedCount" class="status error" role="alert">存在 {{ worktreeReview.conflictedCount }} 个 Git 冲突</div>
           <div class="section-title">任务验收检查点</div>
           <div class="toolbar worktree-controls">
-            <button type="button" :disabled="worktreeBusy || worktreeReview.reviewIncomplete" @click="prepareCheckpoint">创建 / 恢复检查点</button>
+          <button type="button" :aria-disabled="worktreeBusy || worktreeReview.reviewIncomplete" @click="runWorktreeAction(worktreeBusy ? '正在处理 Worktree，请稍后重试。' : worktreeReview.reviewIncomplete ? '工作树审查不完整，请先处理未跟踪文件或补全审查。' : '', prepareCheckpoint)">创建 / 恢复检查点</button>
             <select v-model="checkpointProfile" aria-label="验证测试方案"><option value="go">Go 测试</option><option value="go-race">Go race 测试</option></select>
-            <button type="button" :disabled="worktreeBusy || !checkpoint || !!checkpoint.approvedAt" @click="runCheckpointTest">执行测试</button>
-            <button type="button" :disabled="worktreeBusy || !checkpoint || !!checkpoint.approvedAt || !checkpoint.tests?.at(-1)?.passed" @click="approveCheckpoint">人工批准</button>
-            <button v-if="checkpoint?.approvedAt" type="button" :disabled="worktreeBusy" @click="previewApprovedMerge">预检快进合并</button>
-            <button v-if="checkpoint?.approvedAt" type="button" :disabled="worktreeBusy" @click="readMergeAudit">查看合并审计</button>
+          <button type="button" :aria-disabled="worktreeBusy || !checkpoint || !!checkpoint.approvedAt" @click="runWorktreeAction(worktreeBusy ? '正在处理 Worktree，请稍后重试。' : !checkpoint ? '请先创建或恢复检查点。' : checkpoint.approvedAt ? '检查点已批准，无法再次执行测试。' : '', runCheckpointTest)">执行测试</button>
+          <button type="button" :aria-disabled="worktreeBusy || !checkpoint || !!checkpoint.approvedAt || !checkpoint.tests?.at(-1)?.passed" @click="runWorktreeAction(worktreeBusy ? '正在处理 Worktree，请稍后重试。' : !checkpoint ? '请先创建或恢复检查点。' : checkpoint.approvedAt ? '检查点已经批准。' : !checkpoint.tests?.at(-1)?.passed ? '请先通过最新一次检查点测试。' : '', approveCheckpoint)">人工批准</button>
+            <button v-if="checkpoint?.approvedAt" type="button" :aria-disabled="worktreeBusy" @click="runWorktreeAction(worktreeBusy ? '正在处理 Worktree，请稍后重试。' : '', previewApprovedMerge)">预检快进合并</button>
+            <button v-if="checkpoint?.approvedAt" type="button" :aria-disabled="worktreeBusy" @click="runWorktreeAction(worktreeBusy ? '正在处理 Worktree，请稍后重试。' : '', readMergeAudit)">查看合并审计</button>
           </div>
           <div v-if="checkpoint" class="commit-detail">
             <div class="summary">固定提交 {{ checkpoint.head.slice(0, 12) }} · {{ checkpoint.approvedAt ? '已人工批准' : '未批准' }}</div>
@@ -65,14 +65,14 @@
             <div v-if="mergePlan" class="commit-detail" role="region" aria-label="安全合并预检">
               <div class="status">目标分支 {{ mergePlan.targetBranch }} · 目标 {{ mergePlan.targetHead.slice(0, 12) }} → 来源 {{ mergePlan.sourceHead.slice(0, 12) }} · {{ mergePlan.filesChanged }} 个文件</div>
               <div class="muted">仅允许干净目标工作树的 fast-forward 合并。目标分支或 HEAD 变化后须重新预检；不会强制覆盖或推送远端。</div>
-              <button type="button" :disabled="worktreeBusy" @click="applyApprovedMerge">确认并执行本地快进合并</button>
+              <button type="button" :aria-disabled="worktreeBusy" @click="runWorktreeAction(worktreeBusy ? '正在处理 Worktree，请稍后重试。' : '', applyApprovedMerge)">确认并执行本地快进合并</button>
             </div>
 
           </div>
           <pre class="code diff"><code><template v-for="(line, index) in worktreeReview.diff.files.map(f => f.patch || '[未包含文本差异]').join('\n').split('\n').slice(0, 3000)" :key="index"><span :class="diffClass(line)">{{ line }}{{ '\n' }}</span></template></code></pre>
         </div>
         <div v-if="mergeAudit" class="status" role="status">合并审计：{{ mergeAudit.result }} · {{ mergeAudit.appliedHead?.slice(0, 12) || '需人工核对' }}</div>
-        <div v-if="worktreeError" class="status error" role="alert">{{ worktreeError }}</div>
+        <div v-if="worktreeError" class="status error" role="alert"><pre>{{ worktreeError }}</pre></div>
         <div class="section-title">未提交变更</div>
         <button v-for="entry in changes" :key="entry.uri" type="button" class="entry" @click="openDiff(entry.uri)"><span :class="{ conflict: entry.conflict }">{{ entry.conflict ? '冲突' : entry.untracked ? '?' : `${entry.staging}${entry.worktree}` }}</span><span>{{ relativePath(entry.uri) }}</span></button>
         <div v-if="gitStatus.clean" class="muted">工作区没有未提交的更改</div>
@@ -99,12 +99,13 @@
     <template v-else-if="tab.kind === 'terminal'"><WorkbenchTerminalView :tab="tab" /></template>
     <template v-else><div class="muted">交互式终端尚未连接。本视图不会模拟任何命令执行。</div></template>
     <div v-if="loading" class="status" role="status">正在加载…</div>
-    <div v-if="error" class="status error" role="alert">{{ error }}</div>
+    <div v-if="error" class="status error" role="alert"><pre>{{ error }}</pre></div>
   </div>
 </template>
 <script setup lang="ts">
 import { ref, watch, computed, onActivated, onDeactivated, onBeforeUnmount } from 'vue';
 import { apiClient } from '@/composables/useApi';
+import { originalErrorText } from '@/runtime/original-error';
 import { useWorkbenchStore, type WorkbenchTab } from '@/stores/workbench';
 import WorkbenchBrowserView from './WorkbenchBrowserView.vue';
 import WorkbenchTerminalView from './WorkbenchTerminalView.vue';
@@ -113,7 +114,7 @@ import WorkbenchAgentRunsView from './WorkbenchAgentRunsView.vue';
 import { parseWorkbenchDocumentChunk, type WorkbenchDocumentContent } from './workbench-document-chunks';
 import { needsWorkbenchWorkspaceData } from './workbench-resource-lifecycle';
 
-interface Mount { id: string; name: string; kind: string; rootUri: string; available: boolean }
+interface Mount { id: string; name: string; kind: string; rootUri: string; available: boolean; statusReason?: string }
 interface FileEntry { uri: string; name: string; type: 'directory' | 'file'; readable?: boolean; sizeBytes?: number }
 interface GitChange { uri: string; staging: string; worktree: string; conflict: boolean; untracked: boolean }
 interface GitCommit { hash: string; subject: string; body?: string; authorName: string; committedAt: string; parents?: string[] }
@@ -164,7 +165,25 @@ const newWorktreeTaskId = ref('');
 const diffLines = computed(() => content.value.split('\n'));
 const visibleDiffLines = computed(() => diffLines.value.slice(0, diffLineLimit.value));
 let sequence = 0;
-function failure(value: unknown) { return (value as any)?.response?.data?.error || (value as Error)?.message || String(value); }
+function failure(value: unknown) { return originalErrorText(value); }
+
+function runWorktreeAction(reason: string, action: () => unknown) {
+  if (reason) { worktreeError.value = reason; return; }
+  action();
+}
+
+function selectWorkspace(event: Event, git: boolean) {
+  const target = event.target as HTMLSelectElement;
+  const mount = mounts.value.find((item) => item.rootUri === target.value);
+  if (target.value && (!mount || !mount.available || (git && mount.kind !== 'local' && mount.kind !== 'isolated'))) {
+    error.value = !mount ? '所选工作区已不存在，请刷新后重试。' : !mount.available ? mount.statusReason || '所选工作区不可用。' : '此工作区类型不支持 Git。';
+    target.value = workspaceUri.value;
+    return;
+  }
+  workspaceUri.value = target.value;
+  error.value = '';
+  if (git) changeGitWorkspace(); else changeWorkspace();
+}
 function relativePath(uri: string) { return uri.startsWith(workspaceUri.value) ? uri.slice(workspaceUri.value.length).replace(/^\//, '') : uri; }
 function formatDate(value: string) { const date = new Date(value); return Number.isNaN(date.getTime()) ? '' : date.toLocaleString(); }
 function diffClass(line: string) { return line.startsWith('+') && !line.startsWith('+++') ? 'added' : line.startsWith('-') && !line.startsWith('---') ? 'removed' : line.startsWith('@@') ? 'hunk' : ''; }
@@ -172,7 +191,7 @@ async function loadMounts() {
   const request = sequence;
   try {
     const response = await apiClient.get('/api/workspaces');
-    if (request !== sequence) return;
+    if (request !== sequence) return false;
     mounts.value = Array.isArray(response.data) ? response.data : [];
     if (workspaceUri.value && !mounts.value.some(mount => mount.rootUri === workspaceUri.value)) {
       workspaceUri.value = '';
@@ -187,7 +206,8 @@ async function loadMounts() {
       workspaceUri.value = mounts.value[0].rootUri;
       directory.value = workspaceUri.value;
     }
-  } catch (cause) { if (request === sequence) error.value = failure(cause); }
+    return true;
+  } catch (cause) { if (request === sequence) error.value = failure(cause); return false; }
 }
 function changeWorkspace() { worktrees.value = []; worktreeReview.value = null; checkpoint.value = null; mergePlan.value = null; mergeAudit.value = null; worktreeError.value = ''; selectedCommit.value = null; commitPatch.value = ''; directory.value = workspaceUri.value; nextCursor.value = ''; files.value = []; if (props.tab.kind === 'files') void loadFiles(false); else void loadGit(); }
 async function loadFiles(append: boolean) {
@@ -413,7 +433,7 @@ function openDiff(uri: string) { store.openTab({ kind: 'diff', title: uri.split(
 async function refresh() {
   if (props.tab.kind === 'file') return loadFile(false);
   if (props.tab.kind !== 'files' && props.tab.kind !== 'git' && props.tab.kind !== 'diff') return;
-  await loadMounts();
+  if (!await loadMounts()) return;
   if (props.tab.kind === 'files') await loadFiles(false);
   else await loadGit();
 }
@@ -455,7 +475,7 @@ async function initialize() {
   const request = sequence;
   if (props.tab.kind === 'file' && !props.tab.targetDeviceId) { await loadFile(false); return; }
   if (!needsWorkbenchWorkspaceData(props.tab.kind, props.tab.targetDeviceId)) return;
-  await loadMounts();
+  if (!await loadMounts()) return;
   if (request !== sequence) return;
   if (props.tab.kind === 'files') await loadFiles(false);
   else if (props.tab.kind === 'git' || props.tab.kind === 'diff') await loadGit();
@@ -476,5 +496,5 @@ void initialize();
 </style>
 
 <style scoped>
-.worktree-controls{flex-wrap:wrap}.worktree-controls input{flex:1 1 110px}.worktree-item{display:flex;gap:8px;padding:9px;border:1px solid var(--surface-border);border-radius:8px;align-items:center}.worktree-description{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}.worktree-description small{font-size:11px;color:var(--el-text-color-secondary)}.worktree-item button{flex-shrink:0;padding:6px;border:1px solid var(--surface-border);border-radius:5px;background:transparent;color:inherit;cursor:pointer}.worktree-item button:disabled{opacity:.35;cursor:not-allowed}
+.worktree-controls{flex-wrap:wrap}.worktree-controls input{flex:1 1 110px}.worktree-item{display:flex;gap:8px;padding:9px;border:1px solid var(--surface-border);border-radius:8px;align-items:center}.worktree-description{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}.worktree-description small{font-size:11px;color:var(--el-text-color-secondary)}.worktree-item button{flex-shrink:0;padding:6px;border:1px solid var(--surface-border);border-radius:5px;background:transparent;color:inherit;cursor:pointer}.worktree-item button:disabled,.resource-view button[aria-disabled="true"]{opacity:.35;cursor:not-allowed}.status.error pre{white-space:pre-wrap;overflow-wrap:anywhere}
 </style>

@@ -10,6 +10,7 @@ import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/services/workspace_service.dart';
+import '../../../../core/errors/original_error.dart';
 
 class ToolboxWorkspacePage extends ConsumerStatefulWidget {
   final bool embedded;
@@ -940,6 +941,9 @@ class _ToolboxWorkspacePageState extends ConsumerState<ToolboxWorkspacePage> {
 
   Future<void> _openGitPanel(WorkspaceMountDto workspace) async {
     final svc = ref.read(workspaceServiceProvider);
+    void showReadOnly() => ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('当前工作区为只读，无法执行此操作。')));
     Map<String, dynamic>? status;
     Map<String, dynamic>? branches;
     Map<String, dynamic>? remotes;
@@ -969,9 +973,9 @@ class _ToolboxWorkspacePageState extends ConsumerState<ToolboxWorkspacePage> {
           worktrees = values[4];
           loading = false;
         });
-      } catch (e) {
+      } catch (e, stack) {
         setSheetState(() {
-          error = e.toString();
+          error = '$e\n${originalErrorText(e)}\n$stack';
           loading = false;
         });
       }
@@ -1044,7 +1048,7 @@ class _ToolboxWorkspacePageState extends ConsumerState<ToolboxWorkspacePage> {
                   if (error != null)
                     Padding(
                       padding: EdgeInsets.all(AppSpacing.md),
-                      child: Text(
+                      child: SelectableText(
                         error!,
                         style: TextStyle(color: AppColors.error),
                       ),
@@ -1087,7 +1091,7 @@ class _ToolboxWorkspacePageState extends ConsumerState<ToolboxWorkspacePage> {
                                   isSecondary: true,
                                   icon: Icons.add_task,
                                   onPressed: workspace.readOnly
-                                      ? null
+                                      ? showReadOnly
                                       : () async {
                                           await svc.gitAdd(
                                             workspace.rootUri,
@@ -1104,7 +1108,7 @@ class _ToolboxWorkspacePageState extends ConsumerState<ToolboxWorkspacePage> {
                                   label: '提交',
                                   icon: Icons.commit,
                                   onPressed: workspace.readOnly
-                                      ? null
+                                      ? showReadOnly
                                       : () => _gitCommitDialog(
                                           workspace,
                                           refresh: () => refresh(setSheetState),
@@ -1132,7 +1136,7 @@ class _ToolboxWorkspacePageState extends ConsumerState<ToolboxWorkspacePage> {
                                   label: 'Pull',
                                   isSecondary: true,
                                   onPressed: workspace.readOnly
-                                      ? null
+                                      ? showReadOnly
                                       : () async {
                                           await svc.gitPull(workspace.rootUri);
                                           await refresh(setSheetState);
@@ -1145,7 +1149,7 @@ class _ToolboxWorkspacePageState extends ConsumerState<ToolboxWorkspacePage> {
                                   label: 'Push',
                                   isSecondary: true,
                                   onPressed: workspace.readOnly
-                                      ? null
+                                      ? showReadOnly
                                       : () => _gitPushDialog(
                                           workspace,
                                           status ?? {},
@@ -1170,7 +1174,7 @@ class _ToolboxWorkspacePageState extends ConsumerState<ToolboxWorkspacePage> {
                                 isSecondary: true,
                                 icon: Icons.account_tree_outlined,
                                 onPressed: workspace.readOnly
-                                    ? null
+                                    ? showReadOnly
                                     : () => _createGitWorktree(
                                         workspace,
                                         refresh: () => refresh(setSheetState),
@@ -1363,7 +1367,7 @@ class _ToolboxWorkspacePageState extends ConsumerState<ToolboxWorkspacePage> {
                                 isSecondary: true,
                                 icon: Icons.call_split_outlined,
                                 onPressed: workspace.readOnly
-                                    ? null
+                                    ? showReadOnly
                                     : () => _gitCreateBranchDialog(
                                         workspace,
                                         fromRef: (status!['branch'] ?? 'HEAD')
@@ -1390,10 +1394,15 @@ class _ToolboxWorkspacePageState extends ConsumerState<ToolboxWorkspacePage> {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
-                              onTap:
-                                  branch['current'] == true ||
-                                      workspace.readOnly
-                                  ? null
+                              onTap: workspace.readOnly
+                                  ? showReadOnly
+                                  : branch['current'] == true
+                                  ? () => ScaffoldMessenger.of(context)
+                                        .showSnackBar(
+                                          const SnackBar(
+                                            content: Text('当前已在此分支。'),
+                                          ),
+                                        )
                                   : () async {
                                       await svc.gitCheckout(
                                         workspace.rootUri,
@@ -1753,7 +1762,27 @@ class _ToolboxWorkspacePageState extends ConsumerState<ToolboxWorkspacePage> {
                         label: 'Git 管理',
                         isSecondary: true,
                         icon: Icons.account_tree_outlined,
-                        onPressed: w.available ? () => _openGitPanel(w) : null,
+                        onPressed: w.available
+                            ? () => _openGitPanel(w)
+                            : () => showDialog<void>(
+                                context: context,
+                                builder: (context) => AlertDialog(
+                                  title: const Text('工作区不可用'),
+                                  content: SingleChildScrollView(
+                                    child: SelectableText(
+                                      w.statusReason.isEmpty
+                                          ? '当前工作区不可用，请检查设备与挂载状态。'
+                                          : w.statusReason,
+                                    ),
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(context),
+                                      child: const Text('知道了'),
+                                    ),
+                                  ],
+                                ),
+                              ),
                       ),
                       if (w.kind == 'isolated') ...[
                         AmitiaButton(

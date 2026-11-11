@@ -3,6 +3,33 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('无法标记已读时给出提示', (tester) async {
+    var reads = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 800,
+            child: ConversationSwipeTile(
+              pinned: false,
+              readable: false,
+              onPin: () async {},
+              onArchive: () async {},
+              onMarkRead: () async => reads++,
+              child: const SizedBox(height: 76, child: Text('已读消息')),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.drag(find.text('已读消息'), const Offset(-240, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('标为已读'));
+    await tester.pump();
+    expect(find.text('当前对话无法标记为已读。'), findsOneWidget);
+    expect(reads, 0);
+  });
+
   testWidgets('向左滑动后可以置顶、归档并标为已读', (tester) async {
     var pinned = 0;
     var archived = 0;
@@ -34,25 +61,40 @@ void main() {
 
     final messageBefore = tester.getTopLeft(find.text('测试消息')).dx;
     final actionBefore = tester.getTopLeft(find.text('归档')).dx;
-    final gesture = await tester.startGesture(tester.getCenter(find.text('归档')));
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.text('归档')),
+    );
     await gesture.moveBy(const Offset(50, 0));
     await tester.pump();
     await gesture.moveBy(const Offset(35, 0));
     await tester.pump();
-    final messageMovement = tester.getTopLeft(find.text('测试消息')).dx - messageBefore;
+    final messageMovement =
+        tester.getTopLeft(find.text('测试消息')).dx - messageBefore;
     final actionMovement = tester.getTopLeft(find.text('归档')).dx - actionBefore;
     expect(messageMovement, greaterThan(0));
     expect(actionMovement, closeTo(messageMovement, 0.1));
     await gesture.moveBy(const Offset(150, 0));
     await gesture.up();
     await tester.pumpAndSettle();
-    expect(tester.widget<AnimatedContainer>(find.byType(AnimatedContainer).first).transform!.storage[12], 0);
+    expect(
+      tester
+          .widget<AnimatedContainer>(find.byType(AnimatedContainer).first)
+          .transform!
+          .storage[12],
+      0,
+    );
     await tester.drag(find.text('测试消息'), const Offset(-240, 0));
     await tester.pumpAndSettle();
 
-    await tester.dragFrom(tester.getTopLeft(find.byKey(const ValueKey('swipe-tile'))) + const Offset(300, 38), const Offset(160, 0));
+    await tester.dragFrom(
+      tester.getTopLeft(find.byKey(const ValueKey('swipe-tile'))) +
+          const Offset(300, 38),
+      const Offset(160, 0),
+    );
     await tester.pumpAndSettle();
-    final transform = tester.widget<AnimatedContainer>(find.byType(AnimatedContainer).first).transform!;
+    final transform = tester
+        .widget<AnimatedContainer>(find.byType(AnimatedContainer).first)
+        .transform!;
     expect(transform.storage[12], 0);
     await tester.drag(find.text('测试消息'), const Offset(-240, 0));
     await tester.pumpAndSettle();

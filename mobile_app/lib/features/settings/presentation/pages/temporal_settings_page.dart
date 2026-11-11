@@ -475,8 +475,10 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
                       Expanded(
                         child: AmitiaButtonOutline(
                           label: '拒绝',
-                          onPressed: _resolvingTimezoneSuggestion || !_canWrite
+                          onPressed: _resolvingTimezoneSuggestion
                               ? null
+                              : !_canWrite
+                              ? _showAccessReason
                               : () => _resolveTimezoneSuggestion(false),
                         ),
                       ),
@@ -486,8 +488,10 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
                           label: _resolvingTimezoneSuggestion
                               ? '处理中...'
                               : '接受建议',
-                          onPressed: _resolvingTimezoneSuggestion || !_canWrite
+                          onPressed: _resolvingTimezoneSuggestion
                               ? null
+                              : !_canWrite
+                              ? _showAccessReason
                               : () => _resolveTimezoneSuggestion(true),
                         ),
                       ),
@@ -666,7 +670,11 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
             label: _savingProfile ? '保存中…' : '保存配置',
             icon: Icons.check,
             isFullWidth: true,
-            onPressed: _savingProfile || !_canWrite ? null : _saveConfig,
+            onPressed: _savingProfile
+                ? null
+                : !_canWrite
+                ? _showAccessReason
+                : _saveConfig,
           ),
         ),
         SizedBox(height: AppSpacing.xl),
@@ -680,8 +688,17 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
     return values.toList(growable: false);
   }
 
-  bool get _canWrite =>
-      ref.read(sharedCoreDataAccessProvider).valueOrNull?.write ?? false;
+  bool get _canWrite {
+    final state = ref.read(sharedCoreDataAccessProvider);
+    return !state.isLoading &&
+        !state.hasError &&
+        state.valueOrNull?.write == true;
+  }
+
+  void _showAccessReason() => showSharedCoreAccessReason(
+    context,
+    ref.read(sharedCoreDataAccessProvider),
+  );
 
   Map<String, dynamic> _decodeQuietHours(dynamic raw) {
     final defaults = <String, dynamic>{
@@ -708,7 +725,7 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
   Widget _buildQuietHoursTile() {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: _canWrite ? _showQuietHoursSheet : null,
+      onTap: _canWrite ? _showQuietHoursSheet : _showAccessReason,
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 13),
         child: Row(
@@ -824,7 +841,7 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
   Widget _buildTimezoneTile() {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: _canWrite ? _showTimezoneSheet : null,
+      onTap: _canWrite ? _showTimezoneSheet : _showAccessReason,
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 13),
         child: Row(
@@ -1205,7 +1222,9 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
           if (candidate)
             IconButton(
               tooltip: '确认锚点',
-              onPressed: _canWrite ? () => _confirmAnchor(anchor) : null,
+              onPressed: _canWrite
+                  ? () => _confirmAnchor(anchor)
+                  : _showAccessReason,
               icon: Icon(
                 Icons.check_circle_outline,
                 size: 20,
@@ -1214,7 +1233,9 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
             ),
           IconButton(
             tooltip: '编辑',
-            onPressed: _canWrite ? () => _showAnchorSheet(anchor) : null,
+            onPressed: _canWrite
+                ? () => _showAnchorSheet(anchor)
+                : _showAccessReason,
             icon: Icon(
               Icons.edit_outlined,
               size: 19,
@@ -1223,7 +1244,9 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
           ),
           IconButton(
             tooltip: '删除',
-            onPressed: _canWrite ? () => _confirmDelete(anchor) : null,
+            onPressed: _canWrite
+                ? () => _confirmDelete(anchor)
+                : _showAccessReason,
             icon: Icon(Icons.delete_outline, size: 19, color: context.error),
           ),
         ],

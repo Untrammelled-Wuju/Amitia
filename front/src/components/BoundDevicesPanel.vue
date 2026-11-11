@@ -61,8 +61,8 @@
 
               <div class="card-actions">
                 <el-button v-if="device.trustState === 'trusted' && canAdminister" size="small" @click="grantDevice = device; grantsOpen = true">能力授权</el-button>
-                <el-button v-if="canAdminister && device.coordination" size="small" :disabled="device.trustState !== 'trusted'" :loading="busy === device.deviceId" @click="changeAdministrator(device)">{{ device.coordination.administrator ? '撤销管理员' : '授予管理员' }}</el-button>
-                <el-button size="small" :disabled="device.trustState !== 'trusted' || (!canAdminister && device.deviceId !== currentPolicy?.deviceId)" @click="loadSync(device.deviceId)">刷新同步状态</el-button>
+                <el-button v-if="canAdminister && device.coordination" size="small" :loading="busy === device.deviceId" @click="device.trustState !== 'trusted' ? ElMessage.warning('该设备未受信任，无法更改管理员权限。') : changeAdministrator(device)">{{ device.coordination.administrator ? '撤销管理员' : '授予管理员' }}</el-button>
+                <el-button size="small" @click="device.trustState !== 'trusted' ? ElMessage.warning('该设备未受信任，无法查看同步状态。') : (!canAdminister && device.deviceId !== currentPolicy?.deviceId) ? ElMessage.warning('当前设备没有查看此设备同步状态的权限。') : loadSync(device.deviceId)">刷新同步状态</el-button>
                 <el-button v-if="(canAdminister || device.deviceId === localIdentity?.deviceId) && device.deviceId !== coreConsoleDeviceId" size="small" type="danger" plain :loading="busy === device.deviceId" @click="revoke(device)">移除设备</el-button>
               </div>
             </div>
@@ -75,6 +75,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from "vue";
+import { ElMessage } from "element-plus";
 import DeviceCapabilityGrants from "@/components/DeviceCapabilityGrants.vue";
 import { useDeviceManagement } from "@/composables/useDeviceManagement";
 import { canProbeRuntime, isDeviceOnline } from "@/runtime/device-presence";

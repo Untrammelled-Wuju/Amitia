@@ -57,7 +57,27 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
           IconButton(
             icon: const Icon(Icons.add_box_outlined),
             tooltip: '安装插件',
-            onPressed: active ? () => _showInstallDialog(context) : null,
+            onPressed: active
+                ? () => _showInstallDialog(context)
+                : () => showDialog<void>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('无法安装插件'),
+                      content: SingleChildScrollView(
+                        child: SelectableText(
+                          state.gameModeLoading
+                              ? '正在检查游戏模式状态，请稍后重试。'
+                              : state.gameModeError ?? '请先启用游戏模式。',
+                        ),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('知道了'),
+                        ),
+                      ],
+                    ),
+                  ),
           ),
           IconButton(
             icon: const Icon(Icons.refresh),

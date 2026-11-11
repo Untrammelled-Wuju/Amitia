@@ -5,7 +5,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
   <div class="page">
     <h2 class="page-title">音色配置</h2>
-    <el-alert v-if="!canConfigure" :title="configurationExplanation" type="info" :closable="false" show-icon />
+    <el-alert v-if="!canConfigure" :title="access.accessError.value ? '无法确认模型配置权限，请查看原始错误并重试。' : configurationExplanation" type="info" :closable="false" show-icon />
+    <details v-if="access.accessError.value"><summary>查看原始错误</summary><pre>{{ originalErrorText(access.accessError.value) }}</pre></details>
     <template v-if="canConfigure">
 
     <el-alert
@@ -386,6 +387,7 @@ import {
 import { apiClient, useApi } from "../../composables/useApi";
 import type { TtsConfig, VoicePreset } from "@/types";
 import { useCoreConfigurationAccess, coreConfigurationRequestConfig } from "../../composables/useCoreConfigurationAccess";
+import { originalErrorText } from "../../runtime/original-error";
 
 const { get, post, put, del } = useApi();
 const access = useCoreConfigurationAccess();

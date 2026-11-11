@@ -5,9 +5,7 @@ import { useApi } from "./useApi";
 export function coreConfigurationRequestConfig(context: string) {
   if (context === "local") return {};
   let fields: unknown;
-  try { fields = JSON.parse(context); } catch (error) {
-  console.error("[original-error]", error);
-throw new Error(error instanceof Error ? error.message : String(error)); }
+  fields = JSON.parse(context);
   if (!Array.isArray(fields) || fields.length !== 5 || typeof fields[1] !== "string" || !fields[1] || fields[1].length > 512 || fields[1] !== fields[1].trim()) throw new Error("配置归属无法确认，请重新加载配置");
   if (fields.slice(2).some((value) => !Number.isSafeInteger(value) || value < 1)) throw new Error("配置权限版本无法确认，请重新加载配置");
   return { headers: { "X-Amitia-Expected-Core-ID": fields[1], "X-Amitia-Expected-Configuration-Policy": fields.slice(2).join(":") } };
@@ -18,6 +16,7 @@ export function useCoreConfigurationAccess() {
   const canConfigure = ref(false);
   const checking = ref(true);
   const contextKey = ref("");
+  const accessError = ref<unknown>(null);
   const explanation = "模型由统筹中心统一管理。只有获得中心管理员权限的设备可以修改。";
   let generation = 0;
   let refreshNumber = 0;
@@ -27,7 +26,15 @@ export function useCoreConfigurationAccess() {
     if (pending?.generation === generation) return pending.promise;
     const promise = queryAccess();
     pending = { generation, promise };
-    promise.finally(() => { if (pending?.promise === promise) pending = undefined; });
+    void promise.then(
+      () => { if (pending?.promise === promise) pending = undefined; },
+      (error) => {
+        if (pending?.promise === promise) {
+          pending = undefined;
+          if (accessError.value == null) accessError.value = error;
+        }
+      },
+    );
     return promise;
   }
 
@@ -40,7 +47,15 @@ export function useCoreConfigurationAccess() {
       if (deployment.mode === "cloud") {
         const status = await get<any>("/api/device-mesh/v1/coordination/me");
         const policy = status?.policy;
-        if (status?.canAdminister !== true || typeof status.coreId !== "string" || !status.coreId) throw new Error(explanation);
+        if (status?.canAdminister === false || policy?.coordinated === false) {
+          if (generation === currentGeneration && request === refreshNumber) {
+            contextKey.value = "";
+            canConfigure.value = false;
+            accessError.value = null;
+          }
+          return "";
+        }
+        if (status?.canAdminister !== true || policy?.coordinated !== true || typeof status.coreId !== "string" || !status.coreId) throw new Error(`无法确认云端配置权限：${JSON.stringify(status)}`);
         const revisions = [policy.providerEpoch, policy.modeRevision, policy.permissionRevision];
         if (revisions.some((value) => !Number.isSafeInteger(value) || value < 1)) throw new Error(explanation);
         key = JSON.stringify([deployment.serverURL, status.coreId, ...revisions]);
@@ -48,14 +63,15 @@ export function useCoreConfigurationAccess() {
       if (generation !== currentGeneration || request !== refreshNumber) return "";
       contextKey.value = key;
       canConfigure.value = true;
+      accessError.value = null;
       return key;
     } catch (error) {
-  console.error("[original-error]", error);
-if (generation === currentGeneration && request === refreshNumber) {
+      if (generation === currentGeneration && request === refreshNumber) {
         canConfigure.value = false;
         contextKey.value = "";
+        accessError.value = error;
       }
-      return "";
+      throw error;
     } finally {
       if (request === refreshNumber) checking.value = false;
     }
@@ -65,19 +81,27 @@ if (generation === currentGeneration && request === refreshNumber) {
     generation++;
     canConfigure.value = false;
     contextKey.value = "";
+    accessError.value = null;
     checking.value = true;
-    void refresh();
+    observeRefresh();
+  }
+
+  function observeRefresh() {
+    const observedGeneration = generation;
+    void refresh().catch((error) => {
+      if (generation === observedGeneration) accessError.value = error;
+    });
   }
 
   async function requireAccess(expected?: string) {
     const current = await refresh();
-    if (!current) throw new Error(explanation);
+    if (!current) throw accessError.value ?? new Error(explanation);
     if (expected !== undefined && expected !== current) throw new Error("Core 或管理员权限已变化，请重新加载配置后操作");
     return current;
   }
 
   onMounted(() => {
-    void refresh();
+    observeRefresh();
     window.addEventListener("amitia:runtime-connection-changed", invalidate);
     window.addEventListener("amitia:execution-scope-changed", invalidate);
     window.addEventListener("focus", invalidate);
@@ -90,5 +114,5 @@ if (generation === currentGeneration && request === refreshNumber) {
     window.removeEventListener("focus", invalidate);
     document.removeEventListener("visibilitychange", invalidate);
   });
-  return { canConfigure, checking, contextKey, explanation, refresh, requireAccess };
+  return { canConfigure, checking, contextKey, explanation, accessError, refresh, requireAccess };
 }

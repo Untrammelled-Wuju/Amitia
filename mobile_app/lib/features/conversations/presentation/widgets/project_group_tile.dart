@@ -81,275 +81,309 @@ class ProjectGroupTile extends ConsumerWidget {
         !busy &&
         project.available &&
         project.workspaces.isNotEmpty;
+    void showReason(String message) => showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('暂时无法操作'),
+        content: SingleChildScrollView(child: SelectableText(message)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('知道了'),
+          ),
+        ],
+      ),
+    );
+    void showCreateReason() {
+      if (busy) {
+        showReason('正在处理，请稍后重试。');
+      } else if (project.readOnly) {
+        showReason('当前项目为只读，无法创建对话。');
+      } else if (!project.available) {
+        showReason(
+          project.statusReason.isEmpty ? '项目不可用，无法创建对话。' : project.statusReason,
+        );
+      } else {
+        showReason('请先为项目添加工作区。');
+      }
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              key: ValueKey('project-header-${project.id}'),
-              onTap: onToggle,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 9, 8, 9),
-                child: Row(
-                  children: [
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            key: ValueKey('project-header-${project.id}'),
+            onTap: onToggle,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 9, 8, 9),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 38,
+                    height: 38,
+                    child: Icon(
+                      primary == null
+                          ? Icons.folder_outlined
+                          : projectWorkspaceIcon(primary.kind),
+                      size: 21,
+                      color: context.accentPrimary,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          project.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.body(context).copyWith(
+                            fontSize: 15.5,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          projectMeta,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.bodySmall(context).copyWith(
+                            color: project.available
+                                ? context.textSecondary
+                                : context.warning,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  if (runningCount > 0) ...[
                     SizedBox(
-                      width: 38,
-                      height: 38,
-                      child: Icon(
-                        primary == null
-                            ? Icons.folder_outlined
-                            : projectWorkspaceIcon(primary.kind),
-                        size: 21,
+                      width: 13,
+                      height: 13,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1.5,
                         color: context.accentPrimary,
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            project.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTypography.body(context).copyWith(
-                              fontSize: 15.5,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            projectMeta,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTypography.bodySmall(context).copyWith(
-                              color: project.available
-                                  ? context.textSecondary
-                                  : context.warning,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    if (runningCount > 0) ...[
-                      SizedBox(
-                        width: 13,
-                        height: 13,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 1.5,
-                          color: context.accentPrimary,
-                        ),
-                      ),
-                      const SizedBox(width: 5),
-                    ],
-                    if (unreadCount > 0)
-                      Container(
-                        constraints: const BoxConstraints(
-                          minWidth: 18,
-                          minHeight: 18,
-                        ),
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        decoration: BoxDecoration(
-                          color: context.error,
-                          borderRadius: BorderRadius.circular(9),
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          unreadCount > 99 ? '99+' : '$unreadCount',
-                          style: AppTypography.label(context).copyWith(
-                            color: Colors.white,
-                            fontSize: 9,
-                            height: 1,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    AnimatedRotation(
-                      turns: expanded ? 0.5 : 0,
-                      duration: const Duration(milliseconds: 180),
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 7),
-                        child: Icon(
-                          Icons.keyboard_arrow_down_rounded,
-                          size: 18,
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: '在项目中新建对话',
-                      onPressed: canCreate ? onCreateConversation : null,
-                      icon: const AmitiaIcon(AmitiaIconGlyph.add, size: 20),
-                    ),
-                    AmitiaPopupMenuButton<String>(
-                      tooltip: '项目操作',
-                      menuWidth: 250,
-                      itemVerticalPadding: 0,
-                      itemFontSize: 14,
-                      itemIconSize: 18,
-                      itemHorizontalPadding: 14,
-                      itemHorizontalMargin: 0,
-                      itemMinHeight: 44,
-                      onSelected: (action) => onAction(project, action),
-                      itemBuilder: (context) => [
-                        PopupMenuItem(
-                          value: 'newChat',
-                          enabled: canCreate,
-                          child: const AmitiaPopupMenuLabel(
-                            icon: Icons.add_comment_outlined,
-                            label: '新建对话',
-                          ),
-                        ),
-                        if (!project.readOnly)
-                          const PopupMenuItem(
-                            value: 'rename',
-                            child: AmitiaPopupMenuLabel(
-                              icon: Icons.edit_outlined,
-                              label: '重命名项目',
-                            ),
-                          ),
-                        if (!project.readOnly)
-                          const PopupMenuItem(
-                            value: 'addWorkspace',
-                            child: AmitiaPopupMenuLabel(
-                              icon: Icons.create_new_folder_outlined,
-                              label: '添加副工作区',
-                            ),
-                          ),
-                        if (project.workspaces.isNotEmpty)
-                          const PopupMenuDivider(),
-                        for (final workspace in project.workspaces)
-                          PopupMenuItem(
-                            value: 'primary:${workspace.id}',
-                            enabled:
-                                !project.readOnly &&
-                                workspace.id != project.primaryWorkspaceId,
-                            child: AmitiaPopupMenuLabel(
-                              icon: workspace.id == project.primaryWorkspaceId
-                                  ? Icons.star_rounded
-                                  : Icons.star_border_rounded,
-                              label:
-                                  '${workspace.id == project.primaryWorkspaceId ? '主工作区' : '设为主工作区'}：${workspace.name}',
-                            ),
-                          ),
-                        for (final workspace in project.workspaces)
-                          PopupMenuItem(
-                            value: 'removeWorkspace:${workspace.id}',
-                            enabled: !project.readOnly,
-                            child: AmitiaPopupMenuLabel(
-                              icon: Icons.remove_circle_outline,
-                              label: '移除工作区：${workspace.name}',
-                            ),
-                          ),
-                        if (!project.readOnly) const PopupMenuDivider(),
-                        if (!project.readOnly)
-                          PopupMenuItem(
-                            value: 'pin',
-                            child: AmitiaPopupMenuLabel(
-                              icon: Icons.push_pin_outlined,
-                              label: project.pinnedAt.isEmpty ? '置顶项目' : '取消置顶',
-                            ),
-                          ),
-                        PopupMenuItem(
-                          value: 'browse',
-                          enabled: project.workspaces.isNotEmpty,
-                          child: const AmitiaPopupMenuLabel(
-                            icon: Icons.folder_open_outlined,
-                            label: '浏览主工作区',
-                          ),
-                        ),
-                        if (!project.readOnly)
-                          const PopupMenuItem(
-                            value: 'remove',
-                            child: AmitiaPopupMenuLabel(
-                              icon: Icons.visibility_off_outlined,
-                              label: '从消息列表移除',
-                            ),
-                          ),
-                      ],
-                      child: const SizedBox(
-                        width: 36,
-                        height: 36,
-                        child: Icon(Icons.more_horiz_rounded, size: 20),
-                      ),
-                    ),
+                    const SizedBox(width: 5),
                   ],
-                ),
+                  if (unreadCount > 0)
+                    Container(
+                      constraints: const BoxConstraints(
+                        minWidth: 18,
+                        minHeight: 18,
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      decoration: BoxDecoration(
+                        color: context.error,
+                        borderRadius: BorderRadius.circular(9),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        unreadCount > 99 ? '99+' : '$unreadCount',
+                        style: AppTypography.label(context).copyWith(
+                          color: Colors.white,
+                          fontSize: 9,
+                          height: 1,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  AnimatedRotation(
+                    turns: expanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 180),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 7),
+                      child: Icon(Icons.keyboard_arrow_down_rounded, size: 18),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: '在项目中新建对话',
+                    onPressed: canCreate
+                        ? onCreateConversation
+                        : showCreateReason,
+                    icon: const AmitiaIcon(AmitiaIconGlyph.add, size: 20),
+                  ),
+                  AmitiaPopupMenuButton<String>(
+                    tooltip: '项目操作',
+                    menuWidth: 250,
+                    itemVerticalPadding: 0,
+                    itemFontSize: 14,
+                    itemIconSize: 18,
+                    itemHorizontalPadding: 14,
+                    itemHorizontalMargin: 0,
+                    itemMinHeight: 44,
+                    onSelected: (action) {
+                      if (action == 'newChat' && !canCreate) {
+                        showCreateReason();
+                      } else if (action == 'browse' &&
+                          project.workspaces.isEmpty) {
+                        showReason('请先为项目添加工作区。');
+                      } else if (action.startsWith('primary:') &&
+                          (project.readOnly ||
+                              action.substring(8) ==
+                                  project.primaryWorkspaceId)) {
+                        showReason(
+                          project.readOnly
+                              ? '当前项目为只读，无法修改主工作区。'
+                              : '该工作区已是主工作区。',
+                        );
+                      } else if (action.startsWith('removeWorkspace:') &&
+                          project.readOnly) {
+                        showReason('当前项目为只读，无法移除工作区。');
+                      } else {
+                        onAction(project, action);
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'newChat',
+                        child: const AmitiaPopupMenuLabel(
+                          icon: Icons.add_comment_outlined,
+                          label: '新建对话',
+                        ),
+                      ),
+                      if (!project.readOnly)
+                        const PopupMenuItem(
+                          value: 'rename',
+                          child: AmitiaPopupMenuLabel(
+                            icon: Icons.edit_outlined,
+                            label: '重命名项目',
+                          ),
+                        ),
+                      if (!project.readOnly)
+                        const PopupMenuItem(
+                          value: 'addWorkspace',
+                          child: AmitiaPopupMenuLabel(
+                            icon: Icons.create_new_folder_outlined,
+                            label: '添加副工作区',
+                          ),
+                        ),
+                      if (project.workspaces.isNotEmpty)
+                        const PopupMenuDivider(),
+                      for (final workspace in project.workspaces)
+                        PopupMenuItem(
+                          value: 'primary:${workspace.id}',
+                          child: AmitiaPopupMenuLabel(
+                            icon: workspace.id == project.primaryWorkspaceId
+                                ? Icons.star_rounded
+                                : Icons.star_border_rounded,
+                            label:
+                                '${workspace.id == project.primaryWorkspaceId ? '主工作区' : '设为主工作区'}：${workspace.name}',
+                          ),
+                        ),
+                      for (final workspace in project.workspaces)
+                        PopupMenuItem(
+                          value: 'removeWorkspace:${workspace.id}',
+                          child: AmitiaPopupMenuLabel(
+                            icon: Icons.remove_circle_outline,
+                            label: '移除工作区：${workspace.name}',
+                          ),
+                        ),
+                      if (!project.readOnly) const PopupMenuDivider(),
+                      if (!project.readOnly)
+                        PopupMenuItem(
+                          value: 'pin',
+                          child: AmitiaPopupMenuLabel(
+                            icon: Icons.push_pin_outlined,
+                            label: project.pinnedAt.isEmpty ? '置顶项目' : '取消置顶',
+                          ),
+                        ),
+                      PopupMenuItem(
+                        value: 'browse',
+                        child: const AmitiaPopupMenuLabel(
+                          icon: Icons.folder_open_outlined,
+                          label: '浏览主工作区',
+                        ),
+                      ),
+                      if (!project.readOnly)
+                        const PopupMenuItem(
+                          value: 'remove',
+                          child: AmitiaPopupMenuLabel(
+                            icon: Icons.visibility_off_outlined,
+                            label: '从消息列表移除',
+                          ),
+                        ),
+                    ],
+                    child: const SizedBox(
+                      width: 36,
+                      height: 36,
+                      child: Icon(Icons.more_horiz_rounded, size: 20),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
-          ClipRect(
-            child: AnimatedSize(
-              duration: const Duration(milliseconds: 190),
-              curve: Curves.easeOutCubic,
-              child: expanded
-                  ? Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: conversations.isEmpty
-                            ? [
-                                Padding(
-                                  padding: const EdgeInsets.fromLTRB(
-                                    16,
-                                    8,
-                                    16,
-                                    12,
-                                  ),
-                                  child: Text(
-                                    '暂无对话',
-                                    style: AppTypography.caption(context),
-                                  ),
+        ),
+        ClipRect(
+          child: AnimatedSize(
+            duration: const Duration(milliseconds: 190),
+            curve: Curves.easeOutCubic,
+            child: expanded
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: conversations.isEmpty
+                        ? [
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                              child: Text(
+                                '暂无对话',
+                                style: AppTypography.caption(context),
+                              ),
+                            ),
+                          ]
+                        : [
+                            for (
+                              var index = 0;
+                              index < conversations.length;
+                              index++
+                            )
+                              ConversationSwipeTile(
+                                key: ValueKey(
+                                  'project-conversation-${conversations[index].id}',
                                 ),
-                              ]
-                            : [
-                                for (
-                                  var index = 0;
-                                  index < conversations.length;
-                                  index++
-                                )
-                                  ConversationSwipeTile(
-                                    key: ValueKey(
-                                      'project-conversation-${conversations[index].id}',
-                                    ),
-                                    enabled: !selecting,
-                                    pinned: conversations[index].pinnedAt
-                                        .trim()
-                                        .isNotEmpty,
-                                    readable: true,
-                                    onPin: () =>
-                                        onConversationPin(conversations[index]),
-                                    onArchive: () => onConversationArchive(
-                                      conversations[index],
-                                    ),
-                                    onMarkRead: () => onConversationMarkRead(
-                                      conversations[index],
-                                    ),
-                                    child: ConversationListTile(
-                                      conversation: conversations[index],
-                                      selecting: selecting,
-                                      selected: selectedIds.contains(conversations[index].id),
-                                      timeText: formatConversationTime(
-                                        conversations[index].updatedAt,
-                                      ),
-                                      showDivider:
-                                          index < conversations.length - 1,
-                                      onTap: () => onOpenConversation(
-                                        conversations[index],
-                                      ),
-                                      onLongPressAt: (position) =>
-                                          onConversationLongPress(
-                                            conversations[index],
-                                            position,
-                                          ),
-                                    ),
+                                enabled: !selecting,
+                                pinned: conversations[index].pinnedAt
+                                    .trim()
+                                    .isNotEmpty,
+                                readable: true,
+                                onPin: () =>
+                                    onConversationPin(conversations[index]),
+                                onArchive: () =>
+                                    onConversationArchive(conversations[index]),
+                                onMarkRead: () => onConversationMarkRead(
+                                  conversations[index],
+                                ),
+                                child: ConversationListTile(
+                                  conversation: conversations[index],
+                                  selecting: selecting,
+                                  selected: selectedIds.contains(
+                                    conversations[index].id,
                                   ),
-                              ],
-                    )
-                  : const SizedBox.shrink(),
-            ),
+                                  timeText: formatConversationTime(
+                                    conversations[index].updatedAt,
+                                  ),
+                                  showDivider: index < conversations.length - 1,
+                                  onTap: () =>
+                                      onOpenConversation(conversations[index]),
+                                  onLongPressAt: (position) =>
+                                      onConversationLongPress(
+                                        conversations[index],
+                                        position,
+                                      ),
+                                ),
+                              ),
+                          ],
+                  )
+                : const SizedBox.shrink(),
           ),
-          const Divider(height: 1),
+        ),
+        const Divider(height: 1),
       ],
     );
   }

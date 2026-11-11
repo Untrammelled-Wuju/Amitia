@@ -103,7 +103,10 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
   Future<bool> _save() async {
     if (_saving) return false;
     if (!_canWrite) {
-      _show('当前为中心只读模式，不能修改角色语音设置', error: true);
+      showSharedCoreAccessReason(
+        context,
+        ref.read(sharedCoreDataAccessProvider),
+      );
       return false;
     }
     if (_voiceMode == 'clone' && _customVoiceId.trim().isEmpty) {
@@ -584,7 +587,7 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
                         child: AmitiaButton(
                           label: _saving ? '保存中...' : '保存',
                           icon: Icons.save_outlined,
-                          onPressed: _saving || !access.write ? null : _save,
+                          onPressed: _saving ? null : _save,
                         ),
                       ),
                     ],
@@ -622,6 +625,10 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
     );
   }
 
-  bool get _canWrite =>
-      ref.read(sharedCoreDataAccessProvider).valueOrNull?.write ?? false;
+  bool get _canWrite {
+    final state = ref.read(sharedCoreDataAccessProvider);
+    return !state.isLoading &&
+        !state.hasError &&
+        state.valueOrNull?.write == true;
+  }
 }

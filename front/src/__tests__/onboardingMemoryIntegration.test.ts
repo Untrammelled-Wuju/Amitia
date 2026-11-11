@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), refresh: vi.fn(),
 vi.mock("../composables/useApi", () => ({ useApi: () => mocks }));
 vi.mock("../composables/useOwnedMemoryManagement", () => ({ useOwnedMemoryManagement: () => ({ write: mocks.write }) }));
 vi.mock("../composables/useDeviceOwnedConversation", () => ({ useDeviceOwnedConversation: () => ({ refresh: mocks.refresh, selectInitialRole: () => "role" }) }));
-vi.mock("../composables/useCoreConfigurationAccess", () => ({ useCoreConfigurationAccess: () => ({ refresh: async () => "", canConfigure: ref(false), checking: ref(false) }), coreConfigurationRequestConfig: () => ({}) }));
+vi.mock("../composables/useCoreConfigurationAccess", () => ({ useCoreConfigurationAccess: () => ({ refresh: async () => "", canConfigure: ref(false), checking: ref(false), accessError: ref(null) }), coreConfigurationRequestConfig: () => ({}) }));
 vi.mock("vue-router", () => ({ useRouter: () => ({ push: mocks.push }) }));
 vi.mock("element-plus", () => ({ ElMessage: {}, ElMessageBox: {} }));
 
@@ -42,7 +42,7 @@ describe("引导初始记忆接入", () => {
     mocks.write.mockRejectedValue(new Error("数据所有者尚未确认保存"));
     await onboarding.handleEnterAmitia();
     expect(onboarding.onboardingComplete.value).toBe(false);
-    expect(onboarding.stageError.value).toBe("数据所有者尚未确认保存");
+    expect(onboarding.stageError.value).toContain("数据所有者尚未确认保存");
     expect(onboarding.entering.value).toBe(false);
     await onboarding.handleEnterAmitia();
     expect(mocks.write.mock.calls[0][1]).toBe(mocks.write.mock.calls[1][1]);

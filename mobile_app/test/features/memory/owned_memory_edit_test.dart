@@ -87,7 +87,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('只读模式将新增记忆入口显示为禁用状态', (tester) async {
+  testWidgets('只读模式点击新增记忆时解释权限原因', (tester) async {
     final source = MemorySource(BackendServiceApi(TaskTransport([]), 1));
     final service = AuthorityMemory(BackendServiceApi(TaskTransport([]), 1));
     final router = GoRouter(
@@ -123,8 +123,11 @@ void main() {
     final action = tester.widget<FloatingActionButton>(
       find.byType(FloatingActionButton),
     );
-    expect(action.onPressed, isNull);
+    expect(action.onPressed, isNotNull);
     expect(action.backgroundColor, isNot(AppColors.light.accentPrimary));
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('当前设备未获统筹中心管理员授权'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 }

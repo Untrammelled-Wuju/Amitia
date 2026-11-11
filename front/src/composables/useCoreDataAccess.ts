@@ -1,6 +1,7 @@
 import { onMounted, onUnmounted, ref } from "vue";
 import { getDeploymentConfig } from "../runtime/runtime-adapter";
 import { apiClient } from "./useApi";
+import { originalErrorText } from "../runtime/original-error";
 
 export type CoreDataAccessState = {
   read: boolean;
@@ -46,11 +47,14 @@ export function useCoreDataAccess() {
   const checking = ref(true);
   const error = ref("");
   let generation = 0;
+  let refreshNumber = 0;
 
   async function refresh() {
     const current = generation;
+    const request = ++refreshNumber;
     checking.value = true;
     error.value = "";
+    access.value = { read: true, write: false, reason: "正在确认统筹中心数据权限", coreId: "" };
     try {
       const deployment = await getDeploymentConfig();
       let next: CoreDataAccessState;
@@ -64,12 +68,12 @@ export function useCoreDataAccess() {
           response?.data?.data ?? response?.data ?? response,
         );
       }
-      if (current !== generation) return access.value;
+      if (current !== generation || request !== refreshNumber) throw new Error("统筹中心权限检查已更新，请重试");
       access.value = next;
       return next;
     } catch (cause) {
-      if (current === generation) {
-        const message = cause instanceof Error ? cause.message : String(cause);
+      if (current === generation && request === refreshNumber) {
+        const message = originalErrorText(cause);
         access.value = {
           read: true,
           write: false,
@@ -78,9 +82,9 @@ export function useCoreDataAccess() {
         };
         error.value = message;
       }
-      return access.value;
+      throw cause;
     } finally {
-      if (current === generation) checking.value = false;
+      if (current === generation && request === refreshNumber) checking.value = false;
     }
   }
 
@@ -92,7 +96,16 @@ export function useCoreDataAccess() {
       reason: "正在确认统筹中心数据权限",
       coreId: "",
     };
-    void refresh();
+    observeRefresh();
+  }
+
+  function observeRefresh() {
+    const current = generation;
+    const promise = refresh();
+    const request = refreshNumber;
+    void promise.catch((cause) => {
+      if (current === generation && request === refreshNumber) error.value = originalErrorText(cause);
+    });
   }
 
   async function requireWrite() {
@@ -104,7 +117,7 @@ export function useCoreDataAccess() {
   }
 
   onMounted(() => {
-    void refresh();
+    observeRefresh();
     window.addEventListener("amitia:runtime-connection-changed", invalidate);
     window.addEventListener("amitia:execution-scope-changed", invalidate);
     window.addEventListener("focus", invalidate);

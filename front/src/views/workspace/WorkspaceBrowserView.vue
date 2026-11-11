@@ -28,6 +28,8 @@
         </template>
 
         <template v-if="activeTab==='files'">
+          <el-alert v-if="listError" title="无法读取工作区目录" type="error" :closable="false" show-icon />
+          <details v-if="listError"><summary>查看原始错误</summary><pre>{{ listError }}</pre></details>
           <el-table v-if="entries.length" :data="entries" @row-dblclick="openEntry">
             <el-table-column label="名称" min-width="260"><template #default="{row}"><span class="entry" @click="openEntry(row)">{{ row.type==='directory'?'📁':'📄' }} {{ row.name }}</span></template></el-table-column>
             <el-table-column prop="type" label="类型" width="110" />
@@ -40,7 +42,8 @@
         <template v-else>
           <el-empty v-if="!activeMount" description="请选择工作区" />
           <div v-else v-loading="gitLoading" class="git-panel">
-            <el-alert v-if="gitError" type="error" :closable="false" :title="gitError" />
+            <el-alert v-if="gitError" type="error" :closable="false" title="Git 操作失败" />
+            <details v-if="gitError"><summary>查看原始错误</summary><pre>{{ gitError }}</pre></details>
             <template v-if="gitStatus">
               <div class="git-summary">
                 <el-tag>{{ gitStatus.branch || 'detached' }}</el-tag>
@@ -49,11 +52,11 @@
                 <code>{{ gitStatus.head || '—' }}</code>
               </div>
               <div class="toolbar">
-                <el-button :disabled="activeMount.readOnly" @click="stageAll">暂存全部</el-button>
-                <el-button type="primary" :disabled="activeMount.readOnly" @click="commitDialog=true">提交</el-button>
+                <el-button @click="withWritable(stageAll)">暂存全部</el-button>
+                <el-button type="primary" @click="withWritable(() => commitDialog=true)">提交</el-button>
                 <el-button @click="fetchGit">Fetch</el-button>
-                <el-button :disabled="activeMount.readOnly" @click="pullGit">Pull</el-button>
-                <el-button :disabled="activeMount.readOnly" @click="openPush">Push</el-button>
+                <el-button @click="withWritable(pullGit)">Pull</el-button>
+                <el-button @click="withWritable(openPush)">Push</el-button>
               </div>
 
               <h3>变更</h3>
@@ -64,8 +67,9 @@
                 <el-table-column label="状态" width="110"><template #default="{row}"><el-tag v-if="row.conflict" type="danger" size="small">冲突</el-tag><el-tag v-else-if="row.untracked" type="info" size="small">未跟踪</el-tag><span v-else>—</span></template></el-table-column>
                 <el-table-column label="操作" width="230" fixed="right"><template #default="{row}">
                   <el-button link type="primary" @click="showDiff(row.uri)">Diff</el-button>
-                  <el-button link type="primary" :disabled="activeMount?.readOnly" @click="stagePath(row.uri)">暂存</el-button>
-                  <el-popconfirm title="还原该文件的工作区改动？" @confirm="restorePath(row.uri)"><template #reference><el-button link type="danger" :disabled="activeMount?.readOnly">还原</el-button></template></el-popconfirm>
+                  <el-button link type="primary" @click="withWritable(() => stagePath(row.uri))">暂存</el-button>
+                  <el-button v-if="activeMount?.readOnly" link type="danger" @click="withWritable(() => undefined)">还原</el-button>
+                  <el-popconfirm v-else title="还原该文件的工作区改动？" @confirm="withWritable(() => restorePath(row.uri))"><template #reference><el-button link type="danger">还原</el-button></template></el-popconfirm>
                 </template></el-table-column>
               </el-table>
 
@@ -74,8 +78,8 @@
                   <el-table-column label="" width="42"><template #default="{row}"><span>{{ row.current?'●':'○' }}</span></template></el-table-column>
                   <el-table-column prop="name" label="分支" min-width="160" />
                   <el-table-column prop="commit" label="Commit" min-width="120" show-overflow-tooltip />
-                  <el-table-column width="85"><template #default="{row}"><el-button link :disabled="row.current || activeMount?.readOnly" @click="checkout(row.name)">切换</el-button></template></el-table-column>
-                </el-table><el-button class="section-action" :disabled="activeMount.readOnly" @click="newBranchDialog=true">新建分支</el-button></section>
+                  <el-table-column width="85"><template #default="{row}"><el-button link @click="row.current ? ElMessage.info('当前已在此分支。') : withWritable(() => checkout(row.name))">切换</el-button></template></el-table-column>
+                </el-table><el-button class="section-action" @click="withWritable(() => newBranchDialog=true)">新建分支</el-button></section>
                 <section><h3>远程</h3><el-table :data="gitRemotes" size="small" max-height="300">
                   <el-table-column prop="name" label="名称" width="100" />
                   <el-table-column prop="fetchUrl" label="Fetch URL" min-width="220" show-overflow-tooltip />
@@ -102,14 +106,17 @@
 
     <el-dialog v-model="commitDialog" title="创建 Git 提交" width="520px">
       <el-input v-model="commitMessage" type="textarea" :rows="4" placeholder="提交信息" />
-      <template #footer><el-button @click="commitDialog=false">取消</el-button><el-button type="primary" :disabled="!commitMessage.trim()" @click="commitGit">提交</el-button></template>
+      <details v-if="gitError"><summary>查看原始错误</summary><pre>{{ gitError }}</pre></details>
+      <template #footer><el-button @click="commitDialog=false">取消</el-button><el-button type="primary" @click="commitMessage.trim() ? commitGit() : ElMessage.warning('请填写提交信息')">提交</el-button></template>
     </el-dialog>
     <el-dialog v-model="newBranchDialog" title="新建并切换分支" width="520px">
       <el-form label-position="top"><el-form-item label="分支名"><el-input v-model="newBranch.name" /></el-form-item><el-form-item label="起点（可选）"><el-input v-model="newBranch.fromRef" placeholder="HEAD" /></el-form-item></el-form>
-      <template #footer><el-button @click="newBranchDialog=false">取消</el-button><el-button type="primary" :disabled="!newBranch.name.trim()" @click="createBranch">创建</el-button></template>
+      <details v-if="gitError"><summary>查看原始错误</summary><pre>{{ gitError }}</pre></details>
+      <template #footer><el-button @click="newBranchDialog=false">取消</el-button><el-button type="primary" @click="newBranch.name.trim() ? createBranch() : ElMessage.warning('请填写分支名称')">创建</el-button></template>
     </el-dialog>
     <el-dialog v-model="pushDialog" title="Push" width="520px">
       <el-form label-position="top"><el-form-item label="Remote"><el-input v-model="push.remote" /></el-form-item><el-form-item label="Local ref"><el-input v-model="push.localRef" /></el-form-item><el-form-item label="Remote ref"><el-input v-model="push.remoteRef" /></el-form-item><el-checkbox v-model="push.setUpstream">设置 upstream</el-checkbox></el-form>
+      <details v-if="gitError"><summary>查看原始错误</summary><pre>{{ gitError }}</pre></details>
       <template #footer><el-button @click="pushDialog=false">取消</el-button><el-button type="primary" @click="pushGit">Push</el-button></template>
     </el-dialog>
     <el-dialog v-model="isolatedDialog" title="创建隔离工作区" width="560px">
@@ -131,11 +138,17 @@
 import { computed,onMounted,ref,watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { apiClient } from '@/composables/useApi';
+import { originalErrorText } from '@/runtime/original-error';
 
 type Mount={id:string;name:string;kind:string;status:string;rootUri:string;available:boolean;readOnly?:boolean};
 type Entry={uri:string;name:string;type:'file'|'directory';mimeType?:string;sizeBytes?:number;readable:boolean};
 
-const loading=ref(false),mounts=ref<Mount[]>([]),activeMount=ref<Mount|null>(null),currentUri=ref(''),entries=ref<Entry[]>([]),previewOpen=ref(false),previewName=ref(''),previewContent=ref('');
+const loading=ref(false),mounts=ref<Mount[]>([]),activeMount=ref<Mount|null>(null),currentUri=ref(''),entries=ref<Entry[]>([]),previewOpen=ref(false),previewName=ref(''),previewContent=ref(''),listError=ref('');
+function withWritable(action: () => unknown) {
+  if (!activeMount.value) { ElMessage.warning('请先选择工作区。'); return; }
+  if (activeMount.value.readOnly) { ElMessage.warning('当前工作区为只读，无法执行此操作。'); return; }
+  return action();
+}
 const activeTab=ref<'files'|'git'>('files');
 const gitLoading=ref(false),gitError=ref(''),gitStatus=ref<any>(null),gitBranches=ref<any[]>([]),gitRemotes=ref<any[]>([]),gitLog=ref<any[]>([]);
 const diffOpen=ref(false),diffContent=ref(''),rawOpen=ref(false),rawTitle=ref(''),rawContent=ref('');
@@ -147,27 +160,25 @@ const gitEntries=computed<any[]>(()=>Array.isArray(gitStatus.value?.entries)?git
 
 async function loadMounts(){loading.value=true;try{const r=await apiClient.get('/api/workspaces');mounts.value=Array.isArray(r.data)?r.data:[];if(activeMount.value){const fresh=mounts.value.find(x=>x.id===activeMount.value?.id);if(fresh)activeMount.value=fresh;}}finally{loading.value=false;}}
 async function selectMount(m:Mount){activeMount.value=m;currentUri.value=m.rootUri;isolatedForm.value.sourceWorkspaceUri=m.rootUri;await list();if(activeTab.value==='git')await loadGit();}
-async function list(){if(!currentUri.value)return;loading.value=true;try{const r=await apiClient.get('/api/workspaces/list',{params:{uri:currentUri.value,limit:500}});entries.value=r.data?.Entries??r.data?.entries??[];}catch (error) {
-  console.error("[original-error]", error);
-entries.value=[];}finally{loading.value=false;}}
+async function list(){if(!currentUri.value)return;loading.value=true;listError.value='';try{const r=await apiClient.get('/api/workspaces/list',{params:{uri:currentUri.value,limit:500}});entries.value=r.data?.Entries??r.data?.entries??[];}catch (error) {listError.value=originalErrorText(error);entries.value=[];}finally{loading.value=false;}}
 function parentUri(uri:string){const root=activeMount.value?.rootUri||'';if(uri===root)return root;const clean=uri.replace(/\/+$/,'');const slash=clean.lastIndexOf('/');const p=slash>=0?clean.slice(0,slash):root;return p.length>=root.length?p:root;}
 async function up(){currentUri.value=parentUri(currentUri.value);await list();}
 async function openEntry(e:Entry){if(e.type==='directory'){currentUri.value=e.uri;await list();return;}if(!e.readable){ElMessage.warning('该文件不可读取');return;}const r=await apiClient.get('/api/workspaces/read',{params:{uri:e.uri,maxBytes:1048576}});if(!r.data?.isText){ElMessage.warning('当前仅支持预览文本文件');return;}previewName.value=e.name;previewContent.value=String(r.data?.content??'');previewOpen.value=true;}
 function formatBytes(v?:number){if(v==null)return '—';if(v<1024)return `${v} B`;if(v<1024*1024)return `${(v/1024).toFixed(1)} KB`;return `${(v/1024/1024).toFixed(1)} MB`;}
 async function gitPost(path:string,data:any){return (await apiClient.post(path,data)).data;}
-async function loadGit(){if(!activeMount.value)return;gitLoading.value=true;gitError.value='';const workspaceUri=activeMount.value.rootUri;try{const [status,branches,remotes,log]=await Promise.all([gitPost('/api/workspaces/git/status',{workspaceUri,includeIgnored:false}),gitPost('/api/workspaces/git/branches',{workspaceUri}),gitPost('/api/workspaces/git/remotes',{workspaceUri}),gitPost('/api/workspaces/git/log',{workspaceUri,limit:50})]);gitStatus.value=status;gitBranches.value=branches?.branches??[];gitRemotes.value=remotes?.remotes??remotes?.items??[];gitLog.value=log?.entries??[];}catch(e:any){gitError.value=e?.response?.data?.error||e?.message||String(e);}finally{gitLoading.value=false;}}
-async function runGit(fn:()=>Promise<any>,message:string){try{await fn();ElMessage.success(message);await loadGit();}catch(e:any){ElMessage.error(e?.response?.data?.error||e?.message||String(e));}}
+async function loadGit(){if(!activeMount.value)return;gitLoading.value=true;gitError.value='';const workspaceUri=activeMount.value.rootUri;try{const [status,branches,remotes,log]=await Promise.all([gitPost('/api/workspaces/git/status',{workspaceUri,includeIgnored:false}),gitPost('/api/workspaces/git/branches',{workspaceUri}),gitPost('/api/workspaces/git/remotes',{workspaceUri}),gitPost('/api/workspaces/git/log',{workspaceUri,limit:50})]);gitStatus.value=status;gitBranches.value=branches?.branches??[];gitRemotes.value=remotes?.remotes??remotes?.items??[];gitLog.value=log?.entries??[];}catch(error){gitError.value=originalErrorText(error);}finally{gitLoading.value=false;}}
+async function runGit(fn:()=>Promise<any>,message:string){gitError.value='';try{await fn();ElMessage.success(message);await loadGit();return true;}catch(error){gitError.value=originalErrorText(error);ElMessage.error('Git 操作失败，请查看原始错误');return false;}}
 async function stageAll(){if(!activeMount.value)return;await runGit(()=>gitPost('/api/workspaces/git/add',{workspaceUri:activeMount.value!.rootUri,paths:[],all:true,force:true}),'已暂存全部变更');}
 async function stagePath(uri:string){if(!activeMount.value)return;await runGit(()=>gitPost('/api/workspaces/git/add',{workspaceUri:activeMount.value!.rootUri,paths:[uri],all:false,force:false}),'已暂存');}
 async function restorePath(uri:string){if(!activeMount.value)return;await runGit(()=>gitPost('/api/workspaces/git/restore',{workspaceUri:activeMount.value!.rootUri,paths:[uri],staged:false,worktree:true}),'已还原工作区文件');}
 async function showDiff(uri:string){if(!activeMount.value)return;try{const data=await gitPost('/api/workspaces/git/diff',{workspaceUri:activeMount.value.rootUri,mode:'worktree',base:'',target:'',paths:[uri],maxBytes:2097152});diffContent.value=(data?.files??[]).map((f:any)=>`# ${f.uri}\n${f.patch||'[binary/no patch]'}`).join('\n\n');diffOpen.value=true;}catch(e:any){ElMessage.error(e?.response?.data?.error||e?.message||String(e));}}
-async function commitGit(){if(!activeMount.value||!commitMessage.value.trim())return;await runGit(()=>gitPost('/api/workspaces/git/commit',{workspaceUri:activeMount.value!.rootUri,message:commitMessage.value.trim()}),'提交完成');commitMessage.value='';commitDialog.value=false;}
+async function commitGit(){if(!activeMount.value||!commitMessage.value.trim())return;if(await runGit(()=>gitPost('/api/workspaces/git/commit',{workspaceUri:activeMount.value!.rootUri,message:commitMessage.value.trim()}),'提交完成')){commitMessage.value='';commitDialog.value=false;}}
 async function checkout(branch:string){if(!activeMount.value)return;await runGit(()=>gitPost('/api/workspaces/git/checkout',{workspaceUri:activeMount.value!.rootUri,branch,create:false,fromRef:'',detach:false,force:false}),`已切换到 ${branch}`);}
-async function createBranch(){if(!activeMount.value||!newBranch.value.name.trim())return;await runGit(()=>gitPost('/api/workspaces/git/checkout',{workspaceUri:activeMount.value!.rootUri,branch:newBranch.value.name.trim(),create:true,fromRef:newBranch.value.fromRef.trim(),detach:false,force:false}),'分支已创建并切换');newBranchDialog.value=false;newBranch.value={name:'',fromRef:''};}
+async function createBranch(){if(!activeMount.value||!newBranch.value.name.trim())return;if(await runGit(()=>gitPost('/api/workspaces/git/checkout',{workspaceUri:activeMount.value!.rootUri,branch:newBranch.value.name.trim(),create:true,fromRef:newBranch.value.fromRef.trim(),detach:false,force:false}),'分支已创建并切换')){newBranchDialog.value=false;newBranch.value={name:'',fromRef:''};}}
 async function fetchGit(){if(!activeMount.value)return;await runGit(()=>gitPost('/api/workspaces/git/fetch',{workspaceUri:activeMount.value!.rootUri}),'Fetch 完成');}
 async function pullGit(){if(!activeMount.value)return;await runGit(()=>gitPost('/api/workspaces/git/pull',{workspaceUri:activeMount.value!.rootUri}),'Pull 完成');}
 function openPush(){const branch=String(gitStatus.value?.branch||'');push.value={remote:String(gitRemotes.value[0]?.name||'origin'),localRef:branch||'HEAD',remoteRef:branch||'HEAD',setUpstream:false};pushDialog.value=true;}
-async function pushGit(){if(!activeMount.value)return;await runGit(()=>gitPost('/api/workspaces/git/push',{workspaceUri:activeMount.value!.rootUri,...push.value}),'Push 完成');pushDialog.value=false;}
+async function pushGit(){if(!activeMount.value)return;if(await runGit(()=>gitPost('/api/workspaces/git/push',{workspaceUri:activeMount.value!.rootUri,...push.value}),'Push 完成'))pushDialog.value=false;}
 async function loadIsolatedInfo(){if(!activeMount.value)return;try{const data=await gitPost('/api/workspaces/isolated/info',{workspaceUri:activeMount.value.rootUri});rawTitle.value=`隔离工作区 · ${activeMount.value.name}`;rawContent.value=JSON.stringify(data,null,2);rawOpen.value=true;}catch(e:any){ElMessage.error(e?.response?.data?.error||e?.message||String(e));}}
 async function createIsolated(){const f=isolatedForm.value;try{await gitPost('/api/workspaces/isolated',{name:f.name.trim(),mode:f.mode,sourceWorkspaceUri:f.mode==='snapshot'?f.sourceWorkspaceUri.trim():'',gitRemote:f.mode==='git_clone'?{url:f.remoteUrl.trim(),ref:f.refName.trim()}:undefined,ref:f.refName.trim(),readOnly:f.readOnly,lifetime:f.lifetime.trim()});isolatedDialog.value=false;isolatedForm.value={name:'',mode:'snapshot',sourceWorkspaceUri:activeMount.value?.rootUri||'',remoteUrl:'',refName:'',lifetime:'',readOnly:false};ElMessage.success('隔离工作区已创建');await loadMounts();}catch(e:any){ElMessage.error(e?.response?.data?.error||e?.message||String(e));}}
 watch(activeTab,tab=>{if(tab==='git')loadGit();});

@@ -55,8 +55,15 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
     String? userLabel,
     String? bio,
   }) async {
-    final access = ref.read(sharedCoreDataAccessProvider).valueOrNull;
-    if (access == null || !access.write) {
+    final state = ref.read(sharedCoreDataAccessProvider);
+    final access = state.valueOrNull;
+    if (state.hasError) {
+      Error.throwWithStackTrace(
+        state.error!,
+        state.stackTrace ?? StackTrace.current,
+      );
+    }
+    if (state.isLoading || access == null || !access.write) {
       throw StateError(access?.reason ?? '无法确认统筹中心数据写权限');
     }
     final current = _profile;
@@ -77,11 +84,10 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
 
   Future<void> _changeAvatar() async {
     if (_avatarUpdating) return;
-    final access = ref.read(sharedCoreDataAccessProvider).valueOrNull;
-    if (access == null || !access.write) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(access?.reason ?? '无法确认统筹中心数据写权限')),
-      );
+    final state = ref.read(sharedCoreDataAccessProvider);
+    final access = state.valueOrNull;
+    if (state.isLoading || state.hasError || access == null || !access.write) {
+      showSharedCoreAccessReason(context, state);
       return;
     }
     setState(() => _avatarUpdating = true);
@@ -110,6 +116,10 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
   @override
   Widget build(BuildContext context) {
     final accessAsync = ref.watch(sharedCoreDataAccessProvider);
+    final canWrite =
+        !accessAsync.isLoading &&
+        !accessAsync.hasError &&
+        accessAsync.valueOrNull?.write == true;
     final access =
         accessAsync.valueOrNull ??
         SharedCoreDataAccess(
@@ -144,8 +154,13 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
                     button: true,
                     label: '更换头像',
                     child: GestureDetector(
-                      onTap: _avatarUpdating || !access.write
+                      onTap: _avatarUpdating
                           ? null
+                          : !canWrite
+                          ? () => showSharedCoreAccessReason(
+                              context,
+                              ref.read(sharedCoreDataAccessProvider),
+                            )
                           : _changeAvatar,
                       child: ProfileAvatar(
                         avatar: profile?.avatar ?? '',
@@ -180,13 +195,16 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
                   _buildEditTile(
                     '显示名称',
                     displayName,
-                    access.write
+                    canWrite
                         ? () => _showEditSheet(
                             '显示名称',
                             displayName,
                             (value) => _save(displayName: value),
                           )
-                        : null,
+                        : () => showSharedCoreAccessReason(
+                            context,
+                            ref.read(sharedCoreDataAccessProvider),
+                          ),
                   ),
                   _divider(),
                   _buildEditTile(
@@ -194,20 +212,23 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
                     (profile?.userLabel ?? '').trim().isEmpty
                         ? '未设置'
                         : profile!.userLabel,
-                    access.write
+                    canWrite
                         ? () => _showEditSheet(
                             'AI 对你的称呼',
                             profile?.userLabel ?? '',
                             (value) => _save(userLabel: value),
                             allowEmpty: true,
                           )
-                        : null,
+                        : () => showSharedCoreAccessReason(
+                            context,
+                            ref.read(sharedCoreDataAccessProvider),
+                          ),
                   ),
                   _divider(),
                   _buildEditTile(
                     '个人简介',
                     (profile?.bio ?? '').trim().isEmpty ? '未设置' : profile!.bio,
-                    access.write
+                    canWrite
                         ? () => _showEditSheet(
                             '个人简介',
                             profile?.bio ?? '',
@@ -215,7 +236,10 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
                             maxLines: 3,
                             allowEmpty: true,
                           )
-                        : null,
+                        : () => showSharedCoreAccessReason(
+                            context,
+                            ref.read(sharedCoreDataAccessProvider),
+                          ),
                   ),
                 ]),
                 SizedBox(height: AppSpacing.sectionGap),

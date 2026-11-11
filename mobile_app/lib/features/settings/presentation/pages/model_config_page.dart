@@ -10,6 +10,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/backend_transport/core_configuration_intent.dart';
 import '../../../../core/services/core_configuration_guard.dart';
+import '../../../../core/errors/original_error.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_editor.dart';
@@ -114,11 +115,11 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
         _canConfigure = true;
         _loading = false;
       });
-    } catch (e) {
+    } catch (e, stack) {
       if (!mounted || epoch != _loadEpoch) return;
       setState(() {
         _loading = false;
-        _error = e.toString();
+        _error = '$e\n${originalErrorText(e)}\n$stack';
       });
     }
   }
@@ -128,11 +129,11 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
       if (intent == null) throw StateError('模型配置归属无法确认，请重新加载');
       await coreConfigurationGuardFor(ref).validate(intent);
       return mounted;
-    } catch (error) {
+    } catch (error, stack) {
       if (mounted) {
         setState(() {
           _canConfigure = false;
-          _error = error.toString();
+          _error = '$error\n${originalErrorText(error)}\n$stack';
         });
         _toast('模型配置已禁用：$error', error: true);
       }
@@ -212,8 +213,28 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
             ),
           IconButton(
             tooltip: '新建',
-            onPressed: _busy || !_canConfigure
+            onPressed: _busy
                 ? null
+                : !_canConfigure
+                ? () => showDialog<void>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('无法新建模型配置'),
+                      content: SingleChildScrollView(
+                        child: SelectableText(
+                          _loading
+                              ? '正在确认模型配置权限，请稍后重试。'
+                              : _error ?? '模型配置权限未确认，请刷新后重试。',
+                        ),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('知道了'),
+                        ),
+                      ],
+                    ),
+                  )
                 : () => _showConfigSheet(null),
             icon: const Icon(Icons.add),
           ),
@@ -233,24 +254,26 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
   }
 
   Widget _buildError() {
-    return Center(
-      child: Padding(
-        padding: EdgeInsets.all(AppSpacing.pagePadding),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Icon(Icons.error_outline, size: 48, color: context.error),
-            SizedBox(height: AppSpacing.md),
-            Text('加载失败', style: AppTypography.body(context)),
-            const SizedBox(height: 4),
-            Text(
-              _error ?? '',
-              textAlign: TextAlign.center,
-              style: AppTypography.caption(context),
-            ),
-            SizedBox(height: AppSpacing.md),
-            AmitiaButton(label: '重试', isSecondary: true, onPressed: _load),
-          ],
+    return SingleChildScrollView(
+      child: Center(
+        child: Padding(
+          padding: EdgeInsets.all(AppSpacing.pagePadding),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Icon(Icons.error_outline, size: 48, color: context.error),
+              SizedBox(height: AppSpacing.md),
+              Text('加载失败', style: AppTypography.body(context)),
+              const SizedBox(height: 4),
+              SelectableText(
+                _error ?? '',
+                textAlign: TextAlign.center,
+                style: AppTypography.caption(context),
+              ),
+              SizedBox(height: AppSpacing.md),
+              AmitiaButton(label: '重试', isSecondary: true, onPressed: _load),
+            ],
+          ),
         ),
       ),
     );

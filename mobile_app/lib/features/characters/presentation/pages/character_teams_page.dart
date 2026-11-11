@@ -595,7 +595,7 @@ class _CharacterTeamsPageState extends ConsumerState<CharacterTeamsPage> {
           AmitiaIconButton(
             icon: Icons.add,
             tooltip: '新建团队',
-            onPressed: _acting || !access.write ? null : _createTeam,
+            onPressed: () => _runIfAvailable(_createTeam),
           ),
         ],
       ),
@@ -709,7 +709,7 @@ class _CharacterTeamsPageState extends ConsumerState<CharacterTeamsPage> {
                   ),
                 ),
                 TextButton(
-                  onPressed: _acting || !_canWrite ? null : _editTeam,
+                  onPressed: () => _runIfAvailable(_editTeam),
                   child: const Text('编辑'),
                 ),
               ],
@@ -739,15 +739,15 @@ class _CharacterTeamsPageState extends ConsumerState<CharacterTeamsPage> {
               runSpacing: AppSpacing.sm,
               children: [
                 OutlinedButton(
-                  onPressed: _acting || !_canWrite ? null : _addMember,
+                  onPressed: () => _runIfAvailable(_addMember),
                   child: const Text('添加成员'),
                 ),
                 OutlinedButton(
-                  onPressed: _acting || !_canWrite ? null : _addContext,
+                  onPressed: () => _runIfAvailable(_addContext),
                   child: const Text('添加共享上下文'),
                 ),
                 OutlinedButton(
-                  onPressed: _acting || !_canWrite ? null : _testRoute,
+                  onPressed: () => _runIfAvailable(_testRoute),
                   child: const Text('测试路由'),
                 ),
               ],
@@ -868,6 +868,25 @@ class _CharacterTeamsPageState extends ConsumerState<CharacterTeamsPage> {
         ),
       );
 
-  bool get _canWrite =>
-      ref.read(sharedCoreDataAccessProvider).valueOrNull?.write ?? false;
+  bool get _canWrite {
+    final state = ref.read(sharedCoreDataAccessProvider);
+    return !state.isLoading &&
+        !state.hasError &&
+        state.valueOrNull?.write == true;
+  }
+
+  void _runIfAvailable(Future<void> Function() action) {
+    if (_acting) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('正在处理，请稍后重试。')));
+    } else if (!_canWrite) {
+      showSharedCoreAccessReason(
+        context,
+        ref.read(sharedCoreDataAccessProvider),
+      );
+    } else {
+      action();
+    }
+  }
 }

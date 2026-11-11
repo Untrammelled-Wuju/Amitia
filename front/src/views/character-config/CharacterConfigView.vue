@@ -11,11 +11,10 @@ SPDX-License-Identifier: AGPL-3.0-only
       parent-path="/creative-workshop"
     >
       <template #actions>
-        <el-button :disabled="readOnly" @click="showImportDialog = true">导入角色卡</el-button>
+        <el-button @click="readOnly ? ElMessage.warning('当前使用 Core 角色，只有 Core 管理员可以修改。') : showImportDialog = true">导入角色卡</el-button>
         <el-button
           :loading="exportingPack"
-          :disabled="!selected"
-          @click="onExportPack"
+          @click="selected ? onExportPack() : ElMessage.warning('请先选择需要导出的角色。')"
         >
           导出 CHARX
         </el-button>
@@ -173,6 +172,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script setup lang="ts">
 import { computed, onMounted } from "vue";
+import { ElMessage } from "element-plus";
 import { useCharacterConfig } from "./composables/useCharacterConfig";
 import { useCharacterTestChat } from "./composables/useCharacterTestChat";
 import { useCharacterImportExport } from "./composables/useCharacterImportExport";

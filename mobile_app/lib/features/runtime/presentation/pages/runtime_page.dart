@@ -13,6 +13,8 @@ import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/log_folder_button.dart';
 import '../../../../core/runtime/runtime_bridge_provider.dart';
 import '../../../../core/runtime/runtime_bridge.dart';
+import '../../../../core/runtime/runtime_bridge_error.dart';
+import '../../../../core/errors/original_error.dart';
 import '../../../../core/runtime/runtime_bridge_state.dart';
 import '../../../../core/runtime/status/runtime_status_provider.dart';
 import '../../../../core/runtime/status/runtime_status_snapshot.dart';
@@ -99,6 +101,9 @@ class _RuntimePageState extends ConsumerState<RuntimePage> {
       final result = await action();
       if (!mounted) return;
       _showOperationResult(result);
+    } catch (error, stack) {
+      if (mounted) _showError('$error\n${originalErrorText(error)}\n$stack');
+      Error.throwWithStackTrace(error, stack);
     } finally {
       if (mounted) {
         setState(() => _commandInFlight = false);
@@ -108,17 +113,36 @@ class _RuntimePageState extends ConsumerState<RuntimePage> {
 
   void _showOperationResult(RuntimeBridgeCommandResult result) {
     if (result.error != null) {
-      _showError(result.error!.message);
+      _showError(_bridgeErrorText(result.error!));
     } else if (!result.accepted) {
       _showError('命令未被接受');
     }
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('运行环境操作未完成'),
+        content: SingleChildScrollView(child: SelectableText(message)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('知道了'),
+          ),
+        ],
+      ),
     );
   }
+
+  String _bridgeErrorText(RuntimeBridgeError error) =>
+      '错误码：${error.code}\n消息：${error.message}\n可重试：${error.retryable}\n详情：${error.details}';
+
+  void _showUnavailable(RuntimeStatusSnapshot status) => _showError(
+    _commandInFlight
+        ? '正在处理运行环境，请稍后重试。'
+        : '当前运行环境状态为 ${status.runtimeState.name}，暂不能执行此操作。',
+  );
 
   void _resumeRuntimeCoordination() {
     ref.invalidate(backendConnectionProvider);
@@ -157,7 +181,7 @@ class _RuntimePageState extends ConsumerState<RuntimePage> {
       if (ref.read(runtimeStatusCurrentProvider).runtimeReady) {
         final stopResult = await bridge.stop();
         if (stopResult.error != null) {
-          _showError(stopResult.error!.message);
+          _showError(_bridgeErrorText(stopResult.error!));
           return;
         }
         var stopSettled = false;
@@ -188,8 +212,13 @@ class _RuntimePageState extends ConsumerState<RuntimePage> {
         if (startResult.accepted && startResult.error == null) {
           _resumeRuntimeCoordination();
           coordinationResumed = true;
+        } else {
+          _showOperationResult(startResult);
         }
       }
+    } catch (error, stack) {
+      if (mounted) _showError('$error\n${originalErrorText(error)}\n$stack');
+      Error.throwWithStackTrace(error, stack);
     } finally {
       if (!coordinationResumed) {
         lifecycle.resumeAutomaticReconciliation();
@@ -205,7 +234,9 @@ class _RuntimePageState extends ConsumerState<RuntimePage> {
     return statusAsync.when(
       data: (status) => _buildContent(context, status),
       loading: () => const _RuntimeLoadingWidget(),
-      error: (_, __) => const _RuntimeErrorWidget(),
+      error: (error, stack) => _RuntimeErrorWidget(
+        error: '$error\n${originalErrorText(error)}\n$stack',
+      ),
     );
   }
 
@@ -255,7 +286,7 @@ class _RuntimePageState extends ConsumerState<RuntimePage> {
                               .read(runtimeBridgeProvider)
                               .reconcileEmbedded(),
                         )
-                      : null,
+                      : () => _showUnavailable(status),
                 ),
               if (status.runtimeInstalled)
                 AmitiaButton(
@@ -263,7 +294,7 @@ class _RuntimePageState extends ConsumerState<RuntimePage> {
                   icon: Icons.play_arrow,
                   onPressed: _canStart(status) && !_commandInFlight
                       ? () => _runCommand(_startRuntime)
-                      : null,
+                      : () => _showUnavailable(status),
                 ),
               if (status.runtimeReady ||
                   status.runtimeState == RuntimeBridgeState.starting)
@@ -273,7 +304,7 @@ class _RuntimePageState extends ConsumerState<RuntimePage> {
                   isSecondary: true,
                   onPressed: _canStop(status) && !_commandInFlight
                       ? () => _runCommand(_stopRuntime)
-                      : null,
+                      : () => _showUnavailable(status),
                 ),
               AmitiaButton(
                 label: '查看日志',
@@ -294,7 +325,7 @@ class _RuntimePageState extends ConsumerState<RuntimePage> {
                   isSecondary: true,
                   onPressed: _canRepair(status) && !_commandInFlight
                       ? _repairRuntime
-                      : null,
+                      : () => _showUnavailable(status),
                 ),
             ],
           ),
@@ -391,12 +422,16 @@ class _RuntimeLoadingWidget extends StatelessWidget {
 }
 
 class _RuntimeErrorWidget extends StatelessWidget {
-  const _RuntimeErrorWidget();
+  const _RuntimeErrorWidget({required this.error});
+  final String error;
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Text('Runtime 状态加载失败', style: AppTypography.body(context)),
+    return SingleChildScrollView(
+      child: SelectableText(
+        'Runtime 状态加载失败\n\n原始错误：\n$error',
+        style: AppTypography.body(context),
+      ),
     );
   }
 }

@@ -141,7 +141,7 @@ SPDX-License-Identifier: AGPL-3.0-only
               :capabilities="hostCapabilities"
               :draft="text"
             />
-            <el-button :icon="Plus" circle size="small" class="add-btn" data-amitia-ui="chat.composer.add" :disabled="isInputDisabled" title="上传文件或选择技能" aria-label="上传文件或选择技能" @click="openComposerMenu" />
+            <el-button :icon="Plus" circle size="small" class="add-btn" data-amitia-ui="chat.composer.add" :aria-disabled="isInputDisabled" title="上传文件或选择技能" aria-label="上传文件或选择技能" @click="isInputDisabled ? showInputUnavailable() : openComposerMenu()" />
             <el-popover
               v-model:visible="permissionMenuOpen"
               placement="top-start"
@@ -158,7 +158,8 @@ SPDX-License-Identifier: AGPL-3.0-only
                   class="permission-trigger"
                   data-amitia-ui="chat.composer.permission"
                   :class="{ 'is-full-access': permissionMode === 'full_access' }"
-                  :disabled="isInputDisabled"
+                  :aria-disabled="isInputDisabled"
+                  @click.capture="guardUnavailableInput($event)"
                   :aria-expanded="permissionMenuOpen"
                   aria-haspopup="menu"
                   :title="permissionLabel"
@@ -224,7 +225,8 @@ SPDX-License-Identifier: AGPL-3.0-only
                   type="button"
                   class="workspace-trigger"
                   :class="{ 'has-workspace': !!currentWorkspace }"
-                  :disabled="workspaceLoading || isInputDisabled"
+                  :aria-disabled="workspaceLoading || isInputDisabled"
+                  @click.capture="guardUnavailableInput($event, workspaceLoading ? '正在加载工作区，请稍后重试。' : '')"
                   title="选择项目"
                 >
                   <el-icon><FolderOpened /></el-icon>
@@ -295,7 +297,9 @@ SPDX-License-Identifier: AGPL-3.0-only
               class="input-field"
               data-amitia-ui="chat.composer.input"
               placeholder="输入消息..."
-              :disabled="isInputDisabled"
+              :readonly="isInputDisabled"
+              :aria-disabled="isInputDisabled"
+              @click="isInputDisabled && showInputUnavailable()"
               rows="1"
               :aria-expanded="slashMenuOpen"
               aria-haspopup="listbox"
@@ -309,7 +313,9 @@ SPDX-License-Identifier: AGPL-3.0-only
               type="button"
               class="hold-voice-btn"
               :class="{ 'is-recording': holding }"
-              :disabled="isInputDisabled"
+              :aria-disabled="isInputDisabled"
+              @pointerdown.capture="guardUnavailableInput($event)"
+              @keydown.capture="guardUnavailableInput($event)"
               @pointerdown.prevent="startHold"
               @pointerup.prevent="endHold"
               @pointercancel.prevent="cancelHold"
@@ -344,7 +350,8 @@ SPDX-License-Identifier: AGPL-3.0-only
                   type="button"
                   class="model-effort-trigger"
                   data-amitia-ui="chat.composer.model"
-                  :disabled="isInputDisabled"
+                  :aria-disabled="isInputDisabled"
+                  @click.capture="guardUnavailableInput($event)"
                 >
                   <span v-if="isGroup && activeModelRole">{{ activeModelRole.name }} · </span>
                   <span>{{ selectedModelLabel }}</span>
@@ -509,8 +516,8 @@ SPDX-License-Identifier: AGPL-3.0-only
               size="small"
               class="voice-mode-toggle"
               :class="{ 'is-voice-mode': voiceMode }"
-              :disabled="isInputDisabled"
-              @click="toggleVoiceMode"
+              :aria-disabled="isInputDisabled"
+              @click="isInputDisabled ? showInputUnavailable() : toggleVoiceMode()"
               :title="voiceMode ? '切换到文字输入' : '切换到语音输入'"
               :aria-label="voiceMode ? '切换到文字输入' : '切换到语音输入'"
             >
@@ -524,7 +531,7 @@ SPDX-License-Identifier: AGPL-3.0-only
               :type="generating ? 'danger' : 'primary'"
               circle
               size="small"
-              :disabled="
+              :aria-disabled="
                 !generating &&
                 (isInputDisabled ||
                   uploadingVideo ||
@@ -588,6 +595,7 @@ const env = resolveHostEnvironment();
 const { sendOnEnter } = useChatInputPreference();
 const props = withDefaults(defineProps<{
   disabled?: boolean;
+  disabledReason?: string;
   sending?: boolean;
   generating?: boolean;
   isSubmitting?: boolean;
@@ -683,6 +691,17 @@ const emit = defineEmits<{
 
 const isDisabled = () => !!props.disabled;
 const isInputDisabled = computed(isDisabled);
+function showInputUnavailable() {
+  ElMessage.warning(props.disabledReason || "当前会话暂时无法输入，请检查连接和会话状态。");
+}
+function guardUnavailableInput(event: Event, reason = "") {
+  if (!isInputDisabled.value && !reason) return;
+  if (event instanceof KeyboardEvent && event.key !== "Enter" && event.key !== " ") return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  if (reason) ElMessage.warning(reason);
+  else showInputUnavailable();
+}
 const mediaUpload = useMediaUpload(
   (file: File, base64: string) => emit("image", file, base64),
   (file: File, videoUrl: string) => emit("video", file, videoUrl),
@@ -1463,14 +1482,18 @@ function finishSubmit() {
 
 async function submitComposer(event?: KeyboardEvent) {
   if (event) event.preventDefault();
-  if (
-    isInputDisabled.value ||
-    props.generating ||
-    props.isSubmitting ||
-    processingImage.value ||
-    uploadingVideo.value
-  )
+  if (isInputDisabled.value) {
+    showInputUnavailable();
     return;
+  }
+  if (props.generating || props.isSubmitting || processingImage.value || uploadingVideo.value) {
+    ElMessage.warning("正在处理消息或附件，请稍后重试。");
+    return;
+  }
+  if (videoUploadError.value) {
+    ElMessage.error(videoUploadError.value);
+    return;
+  }
   const outgoingText = buildOutgoingText(text.value);
 
   if (attachedVideo.value) {
@@ -1495,7 +1518,10 @@ async function submitComposer(event?: KeyboardEvent) {
     return;
   }
 
-  if (!outgoingText) return;
+  if (!outgoingText) {
+    ElMessage.warning("请输入消息或添加附件。");
+    return;
+  }
   emit("send", outgoingText);
   clearText();
   finishSubmit();
@@ -1590,6 +1616,10 @@ defineExpose({ focus, setText, insertText: insertComposerText, clear: clearText 
     box-shadow 0.18s ease;
 }
 
+.input-wrapper button[aria-disabled="true"] {
+  opacity: 0.5;
+}
+
 .permission-trigger {
   display: inline-flex;
   align-items: center;
@@ -1620,7 +1650,8 @@ defineExpose({ focus, setText, insertText: insertComposerText, clear: clearText 
   color: var(--ac-color-warning, #b7791f);
 }
 
-.permission-trigger:disabled {
+.permission-trigger:disabled,
+.permission-trigger[aria-disabled="true"] {
   cursor: not-allowed;
   opacity: 0.55;
 }
@@ -1735,7 +1766,8 @@ defineExpose({ focus, setText, insertText: insertComposerText, clear: clearText 
   color: var(--ac-color-text);
 }
 
-.workspace-trigger:disabled {
+.workspace-trigger:disabled,
+.workspace-trigger[aria-disabled="true"] {
   cursor: not-allowed;
   opacity: 0.55;
 }
@@ -1938,7 +1970,8 @@ defineExpose({ focus, setText, insertText: insertComposerText, clear: clearText 
   color: var(--ac-color-text-placeholder);
 }
 
-.input-field:disabled {
+.input-field:disabled,
+.input-field[aria-disabled="true"] {
   opacity: 0.7;
 }
 
@@ -2324,7 +2357,8 @@ defineExpose({ focus, setText, insertText: insertComposerText, clear: clearText 
   animation: voiceRecordPulse 1.4s ease-in-out infinite;
 }
 
-.hold-voice-btn:disabled {
+.hold-voice-btn:disabled,
+.hold-voice-btn[aria-disabled="true"] {
   cursor: not-allowed;
   opacity: 0.5;
 }

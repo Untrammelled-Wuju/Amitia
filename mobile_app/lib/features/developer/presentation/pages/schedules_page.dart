@@ -150,7 +150,7 @@ class _SchedulesPageState extends ConsumerState<SchedulesPage> {
             ),
             SizedBox(height: AppSpacing.md),
             Row(children: [
-              Expanded(child: AmitiaButton(label: '立即执行', icon: Icons.play_arrow, isSecondary: true, onPressed: disabled ? null : () => _postAction(id, 'run-now', '已触发执行'))),
+              Expanded(child: AmitiaButton(label: '立即执行', icon: Icons.play_arrow, isSecondary: true, onPressed: disabled ? () => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('当前调度状态为 $status，无法立即执行。'))) : () => _postAction(id, 'run-now', '已触发执行'))),
               SizedBox(width: AppSpacing.sm),
               Expanded(child: AmitiaButton(label: status == 'paused' ? '恢复' : '暂停', icon: status == 'paused' ? Icons.play_circle_outline : Icons.pause_circle_outline, isSecondary: true, onPressed: () => _postAction(id, status == 'paused' ? 'resume' : 'pause', status == 'paused' ? '调度已恢复' : '调度已暂停'))),
             ]),

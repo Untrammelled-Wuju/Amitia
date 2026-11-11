@@ -415,8 +415,15 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
   }
 
   void _showManageSheet(BuildContext context) {
+    final access = ref.read(sharedCoreDataAccessProvider);
     final canWrite =
-        ref.read(sharedCoreDataAccessProvider).valueOrNull?.write ?? false;
+        !access.isLoading &&
+        !access.hasError &&
+        access.valueOrNull?.write == true;
+    void showUnavailable() => showSharedCoreAccessReason(
+      context,
+      ref.read(sharedCoreDataAccessProvider),
+    );
     showModalBottomSheet(
       context: context,
       backgroundColor: context.surfacePrimary,
@@ -458,7 +465,7 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                             Navigator.pop(sheetContext);
                             _showTemplatePicker(context);
                           }
-                        : null,
+                        : showUnavailable,
                   ),
                   AmitiaListTile(
                     leading: _buildSheetIcon(
@@ -526,7 +533,7 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                               }
                             });
                           }
-                        : null,
+                        : showUnavailable,
                   ),
                   AmitiaListTile(
                     leading: _buildSheetIcon(
@@ -562,7 +569,7 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                               }
                             });
                           }
-                        : null,
+                        : showUnavailable,
                   ),
                   AmitiaListTile(
                     leading: _buildSheetIcon(
@@ -576,7 +583,7 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                             Navigator.pop(sheetContext);
                             _importCharacterCard();
                           }
-                        : null,
+                        : showUnavailable,
                   ),
                   AmitiaListTile(
                     leading: _buildSheetIcon(
@@ -632,7 +639,7 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                               }
                             });
                           }
-                        : null,
+                        : showUnavailable,
                   ),
                   AmitiaListTile(
                     leading: _buildSheetIcon(
@@ -662,7 +669,7 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                               await _handleDelete(context, character);
                             });
                           }
-                        : null,
+                        : showUnavailable,
                   ),
                   const SizedBox(height: 8),
                 ],

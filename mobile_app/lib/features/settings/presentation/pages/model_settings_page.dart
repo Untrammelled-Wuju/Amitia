@@ -8,6 +8,7 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/services/core_configuration_guard.dart';
+import '../../../../core/errors/original_error.dart';
 
 class ModelSettingsPage extends ConsumerWidget {
   const ModelSettingsPage({super.key});
@@ -24,7 +25,10 @@ class ModelSettingsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final access = ref.watch(coreConfigurationAccessProvider);
-    final canConfigure = access.valueOrNull?.canConfigure == true;
+    final canConfigure =
+        !access.isLoading &&
+        !access.hasError &&
+        access.valueOrNull?.canConfigure == true;
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '模型设置',
@@ -43,8 +47,10 @@ class ModelSettingsPage extends ConsumerWidget {
         children: [
           Text(
             access.when(
+              skipLoadingOnReload: false,
+              skipLoadingOnRefresh: false,
               loading: () => '正在确认模型配置权限…',
-              error: (_, __) => '无法确认模型配置权限，请恢复 Core 连接后重试',
+              error: (error, stack) => '无法确认模型配置权限，请点击入口查看原始错误',
               data: (intent) => intent.canConfigure
                   ? '选择模型类型进行配置'
                   : '模型由统筹中心统一管理，请由获授权的中心管理员配置。',
@@ -59,13 +65,39 @@ class ModelSettingsPage extends ConsumerWidget {
                 icon: t.$1,
                 title: t.$2,
                 subtitle: t.$3,
-                onTap: !canConfigure
-                    ? null
-                    : () => context.push(
-                        t.$4 == 'asr'
-                            ? AppRoutes.settingsAsr
-                            : AppRoutes.modelConfig(t.$4),
+                onTap: () {
+                  if (canConfigure) {
+                    context.push(
+                      t.$4 == 'asr'
+                          ? AppRoutes.settingsAsr
+                          : AppRoutes.modelConfig(t.$4),
+                    );
+                    return;
+                  }
+                  final message = access.when(
+                    skipLoadingOnReload: false,
+                    skipLoadingOnRefresh: false,
+                    loading: () => '正在确认模型配置权限，请稍后重试。',
+                    error: (error, stack) =>
+                        '无法确认模型配置权限，请恢复 Core 连接后重试。\n\n原始错误：\n$error\n${originalErrorText(error)}\n$stack',
+                    data: (_) => '模型由统筹中心统一管理，请由获授权的中心管理员配置。',
+                  );
+                  showDialog<void>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('无法打开模型设置'),
+                      content: SingleChildScrollView(
+                        child: SelectableText(message),
                       ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('知道了'),
+                        ),
+                      ],
+                    ),
+                  );
+                },
               ),
             ),
           ),

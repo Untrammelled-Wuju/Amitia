@@ -1,5 +1,5 @@
 import { mount } from "@vue/test-utils";
-import ElementPlus from "element-plus";
+import ElementPlus, { ElMessage } from "element-plus";
 import { createPinia, setActivePinia } from "pinia";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import ChatInput from "../components/ChatInput.vue";
@@ -25,6 +25,25 @@ vi.mock("../views/extensions/api", () => ({
 }));
 
 describe("ChatInput model settings", () => {
+  it("模型不可用时点击输入和附件会说明原因且不发送", async () => {
+    const warning = vi.spyOn(ElMessage, "warning").mockImplementation(() => ({}) as never);
+    const overlayRoot = document.createElement("div");
+    overlayRoot.id = "amitia-overlay-root";
+    document.body.appendChild(overlayRoot);
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const wrapper = mount(ChatInput, { props: { disabled: true, disabledReason: "请先配置模型" }, global: { plugins: [pinia, ElementPlus] } });
+    try {
+      expect(wrapper.get("textarea").attributes("readonly")).toBeDefined();
+      await wrapper.get("textarea").trigger("click");
+      await wrapper.get('[aria-label="上传文件或选择技能"]').trigger("click");
+      await wrapper.get(".permission-trigger").trigger("click");
+      await wrapper.get(".model-effort-trigger").trigger("click");
+      expect(warning).toHaveBeenCalledTimes(4);
+      expect(warning).toHaveBeenCalledWith("请先配置模型");
+      expect(wrapper.emitted("send")).toBeUndefined();
+    } finally { wrapper.unmount(); overlayRoot.remove(); warning.mockRestore(); }
+  });
   it("始终显示模型和权限配置入口", async () => {
     const overlayRoot = document.createElement("div");
     overlayRoot.id = "amitia-overlay-root";

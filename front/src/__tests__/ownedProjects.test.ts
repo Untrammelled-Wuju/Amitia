@@ -236,12 +236,14 @@ describe("按角色和数据所有者保存的逻辑项目", () => {
     expect(mocks.post).not.toHaveBeenCalled();
   });
 
-  it("只读项目保留原有菜单限制", () => {
+  it("只读项目保留原有菜单限制", async () => {
     const readOnly = { ...project("source", "old-role", true), name: "只读项目", available: true, status: "available", workspaceId: "workspace-source", deviceId: "source", rootUri: "amitia://workspace/@workspace-source/", conversationCount: 0, conversations: [] };
     const wrapper = mount(SidebarProjectBlock, { props: { project: readOnly, active: false, activeConversationId: "" }, global: { stubs: { ElIcon: { template: "<span><slot /></span>" }, ElDropdown: { template: "<div><slot /><slot name='dropdown' /></div>" }, ElDropdownMenu: { template: "<div><slot /></div>" }, ElDropdownItem: { template: "<span><slot /></span>" } } } });
     expect(wrapper.text()).toContain("只读");
     for (const text of ["重命名项目", "添加主工作区", "添加子工作区", "置顶", "从侧边栏移除"]) expect(wrapper.text()).not.toContain(text);
-    expect(wrapper.get(".project-create-action").attributes("disabled")).toBeDefined();
+    expect(wrapper.get(".project-create-action").attributes("aria-disabled")).toBe("true");
+    await wrapper.get(".project-create-action").trigger("click");
+    expect(wrapper.emitted("createConversation")).toBeUndefined();
     wrapper.unmount();
   });
 

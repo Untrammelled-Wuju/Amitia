@@ -55,8 +55,13 @@ class _ConversationSwipeTileState extends State<ConversationSwipeTile> {
   void _handleDragEnd(DragEndDetails details) {
     if (!widget.enabled || _busy) return;
     final velocity = details.primaryVelocity ?? 0;
-    final shouldOpen = velocity.abs() > 250 ? velocity < 0 : _offset.abs() > _maxOffset / 2;
-    setState(() { _dragging = false; _offset = shouldOpen ? -_maxOffset : 0; });
+    final shouldOpen = velocity.abs() > 250
+        ? velocity < 0
+        : _offset.abs() > _maxOffset / 2;
+    setState(() {
+      _dragging = false;
+      _offset = shouldOpen ? -_maxOffset : 0;
+    });
   }
 
   Future<void> _run(Future<void> Function() action) async {
@@ -78,88 +83,103 @@ class _ConversationSwipeTileState extends State<ConversationSwipeTile> {
   Widget build(BuildContext context) {
     final open = _offset.abs() > 1;
     return ClipRect(
-      child: LayoutBuilder(builder: (context, constraints) => GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onHorizontalDragStart: (_) { if (widget.enabled && !_busy) setState(() => _dragging = true); },
-        onHorizontalDragUpdate: _handleDragUpdate,
-        onHorizontalDragEnd: _handleDragEnd,
-        onHorizontalDragCancel: () { if (_dragging) setState(() { _dragging = false; _offset = _offset.abs() > _maxOffset / 2 ? -_maxOffset : 0; }); },
-        child: Stack(
-        children: [
-          AnimatedPositioned(
-            duration: _busy || _dragging ? Duration.zero : const Duration(milliseconds: 170),
-            curve: Curves.easeOutCubic,
-            left: constraints.maxWidth + _offset,
-            top: 0,
-            bottom: 0,
-            width: _maxOffset,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _SwipeAction(
-                    label: widget.pinned ? '取消置顶' : '置顶',
-                    icon: widget.pinned
-                        ? Icons.push_pin
-                        : Icons.push_pin_outlined,
-                    color: context.accentPrimary,
-                    enabled: !_busy,
-                    onTap: () => _run(widget.onPin),
-                  ),
-                  _SwipeAction(
-                    label: '归档',
-                    icon: Icons.archive_outlined,
-                    color: context.warning,
-                    enabled: !_busy,
-                    onTap: () => _run(widget.onArchive),
-                  ),
-                  _SwipeAction(
-                    label: '标为已读',
-                    icon: Icons.mark_chat_read_outlined,
-                    color: context.success,
-                    enabled: !_busy && widget.readable,
-                    onTap: () => _run(widget.onMarkRead),
-                  ),
-                ],
-              ),
-          ),
-          AnimatedContainer(
-            width: double.infinity,
-            duration: _busy || _dragging ? Duration.zero : const Duration(milliseconds: 170),
-            curve: Curves.easeOutCubic,
-            transform: Matrix4.translationValues(_offset, 0, 0),
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: open ? () => setState(() => _offset = 0) : null,
-              child: AbsorbPointer(
-                absorbing: open || _busy,
-                child: ColoredBox(
-                  color: context.backgroundPrimary,
-                  child: widget.child,
+      child: LayoutBuilder(
+        builder: (context, constraints) => GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onHorizontalDragStart: (_) {
+            if (widget.enabled && !_busy) setState(() => _dragging = true);
+          },
+          onHorizontalDragUpdate: _handleDragUpdate,
+          onHorizontalDragEnd: _handleDragEnd,
+          onHorizontalDragCancel: () {
+            if (_dragging)
+              setState(() {
+                _dragging = false;
+                _offset = _offset.abs() > _maxOffset / 2 ? -_maxOffset : 0;
+              });
+          },
+          child: Stack(
+            children: [
+              AnimatedPositioned(
+                duration: _busy || _dragging
+                    ? Duration.zero
+                    : const Duration(milliseconds: 170),
+                curve: Curves.easeOutCubic,
+                left: constraints.maxWidth + _offset,
+                top: 0,
+                bottom: 0,
+                width: _maxOffset,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _SwipeAction(
+                      label: widget.pinned ? '取消置顶' : '置顶',
+                      icon: widget.pinned
+                          ? Icons.push_pin
+                          : Icons.push_pin_outlined,
+                      color: context.accentPrimary,
+                      enabled: !_busy,
+                      onTap: () => _run(widget.onPin),
+                    ),
+                    _SwipeAction(
+                      label: '归档',
+                      icon: Icons.archive_outlined,
+                      color: context.warning,
+                      enabled: !_busy,
+                      onTap: () => _run(widget.onArchive),
+                    ),
+                    _SwipeAction(
+                      label: '标为已读',
+                      icon: Icons.mark_chat_read_outlined,
+                      color: context.success,
+                      enabled: !_busy && widget.readable,
+                      unavailableReason: _busy ? '正在处理，请稍后重试。' : '当前对话无法标记为已读。',
+                      onTap: () => _run(widget.onMarkRead),
+                    ),
+                  ],
                 ),
               ),
-            ),
-          ),
-          if (_busy)
-            Positioned.fill(
-              child: IgnorePointer(
-                child: ColoredBox(
-                  color: context.backgroundPrimary.withValues(alpha: 0.55),
-                  child: Center(
-                    child: SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: context.accentPrimary,
-                      ),
+              AnimatedContainer(
+                width: double.infinity,
+                duration: _busy || _dragging
+                    ? Duration.zero
+                    : const Duration(milliseconds: 170),
+                curve: Curves.easeOutCubic,
+                transform: Matrix4.translationValues(_offset, 0, 0),
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: open ? () => setState(() => _offset = 0) : null,
+                  child: AbsorbPointer(
+                    absorbing: open || _busy,
+                    child: ColoredBox(
+                      color: context.backgroundPrimary,
+                      child: widget.child,
                     ),
                   ),
                 ),
               ),
-            ),
-        ],
+              if (_busy)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: ColoredBox(
+                      color: context.backgroundPrimary.withValues(alpha: 0.55),
+                      child: Center(
+                        child: SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: context.accentPrimary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
-      )),
     );
   }
 }
@@ -171,6 +191,7 @@ class _SwipeAction extends StatelessWidget {
     required this.color,
     required this.enabled,
     required this.onTap,
+    this.unavailableReason = '正在处理，请稍后重试。',
   });
 
   final String label;
@@ -178,6 +199,7 @@ class _SwipeAction extends StatelessWidget {
   final Color color;
   final bool enabled;
   final VoidCallback onTap;
+  final String unavailableReason;
 
   @override
   Widget build(BuildContext context) {
@@ -186,7 +208,11 @@ class _SwipeAction extends StatelessWidget {
       child: Material(
         color: color.withValues(alpha: enabled ? 0.13 : 0.05),
         child: InkWell(
-          onTap: enabled ? onTap : null,
+          onTap: enabled
+              ? onTap
+              : () => ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text(unavailableReason))),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
             child: Column(

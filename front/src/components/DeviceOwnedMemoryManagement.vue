@@ -1,6 +1,7 @@
 <template>
   <section class="owned-management">
     <el-alert v-if="!canWrite" :title="coreData.access.value.reason || '当前设备只能查看统筹中心记忆'" type="info" :closable="false" show-icon />
+    <details v-if="coreData.error.value"><summary>查看原始错误</summary><pre>{{ coreData.error.value }}</pre></details>
     <div class="management-toolbar">
       <el-input v-if="props.search === undefined" v-model="query" clearable placeholder="检索当前查看范围的记忆" @keyup.enter="search()" />
       <el-select v-model="mode" aria-label="记忆检索方式"><el-option label="关键词" value="keyword" /><el-option label="混合检索" value="hybrid" /><el-option label="向量检索" value="vector" /></el-select>
@@ -13,8 +14,8 @@
       <el-button :loading="loading" @click="search()">检索</el-button>
     </div>
     <div class="management-actions">
-      <el-button :disabled="!canWrite || loading" @click="openCreate">新增记忆</el-button>
-      <el-button :disabled="!canWrite || loading" @click="openGenerate">从对话生成候选</el-button>
+      <el-button :disabled="loading" @click="withWriteAccess(openCreate)">新增记忆</el-button>
+      <el-button :disabled="loading" @click="withWriteAccess(openGenerate)">从对话生成候选</el-button>
       <el-button :disabled="loading" @click="loadCandidates">待审核候选</el-button>
       <el-button :disabled="loading" @click="checkConsolidation">巩固检查</el-button>
       <el-button :disabled="loading" @click="emit('refresh')">刷新</el-button>
@@ -30,22 +31,22 @@
     <el-button v-if="nextCursor" :loading="loading" @click="search(true)">加载更多检索结果</el-button>
     <article v-for="row in candidates" :key="`${row.ownerId}/${row.id}`" class="management-row">
       <strong>{{ row.body.key }}</strong><p>{{ row.body.value }}</p><small>待审核 · {{ row.ownerId }} · 版本 {{ row.revision }}</small>
-      <div><el-button :disabled="!canWrite || loading" @click="accept(row)">确认保存</el-button><el-button :disabled="!canWrite || loading" @click="editCandidate(row)">编辑候选</el-button><el-button :disabled="!canWrite || loading" @click="reject(row)">拒绝</el-button></div>
+      <div><el-button :disabled="loading" @click="withWriteAccess(() => accept(row))">确认保存</el-button><el-button :disabled="loading" @click="withWriteAccess(() => editCandidate(row))">编辑候选</el-button><el-button :disabled="loading" @click="withWriteAccess(() => reject(row))">拒绝</el-button></div>
     </article>
     <el-dialog v-model="editorOpen" :title="editingCandidate ? '编辑候选记忆' : '新增记忆'" width="min(560px, 96vw)">
       <el-form label-position="top"><el-form-item label="标题"><el-input v-model="form.key" maxlength="512" /></el-form-item><el-form-item label="内容"><el-input v-model="form.value" type="textarea" :rows="5" /></el-form-item><el-form-item label="记忆类型"><el-select v-model="form.memoryType"><el-option v-for="kind in types" :key="kind.value" :label="kind.label" :value="kind.value" /></el-select></el-form-item><el-form-item label="重要程度"><el-input-number v-model="form.importance" :min="0" :max="10" /></el-form-item><el-form-item label="保留等级"><el-select v-model="form.retentionLevel" :disabled="form.pinned"><el-option v-for="level in 5" :key="level" :label="`L${level}`" :value="level" /></el-select></el-form-item><el-form-item label="固定记忆"><el-switch v-model="form.pinned" /><span>固定为 L1，保持完整强度</span></el-form-item></el-form>
-      <template #footer><el-button @click="editorOpen = false">取消</el-button><el-button :loading="loading" :disabled="!canWrite" @click="save">保存</el-button></template>
+      <template #footer><el-button @click="editorOpen = false">取消</el-button><el-button :loading="loading" @click="withWriteAccess(save)">保存</el-button></template>
     </el-dialog>
     <el-dialog v-model="generateOpen" title="从已保存对话提取候选" width="min(560px, 96vw)">
       <el-alert title="提取结果先保存为待审核候选，确认后才写入当前数据所有者的记忆。旧设备对话保持原位置，审核时会再次核验来源。" type="info" :closable="false" />
       <el-select v-model="generationSource" @change="loadGenerationConversations"><el-option label="当前数据所有者" value="current" /><el-option v-for="role in historicalRoles" :key="role.id" :label="`旧设备 · ${role.name || role.id}`" :value="role.id" /></el-select>
       <el-select v-model="conversationId" placeholder="选择对话"><el-option v-for="row in conversations" :key="row.id" :label="row.title || row.id" :value="row.id" /></el-select>
-      <template #footer><el-button @click="generateOpen = false">取消</el-button><el-button :loading="loading" :disabled="!canWrite" @click="generate">生成候选</el-button></template>
+      <template #footer><el-button @click="generateOpen = false">取消</el-button><el-button :loading="loading" @click="withWriteAccess(generate)">生成候选</el-button></template>
     </el-dialog>
     <el-dialog v-model="conflictOpen" title="确认记忆冲突" width="min(560px, 96vw)">
       <article v-for="row in conflictRows" :key="row.id"><strong>{{ row.body.key }}</strong><p>{{ text(row) }}</p><small>原数据所有者 {{ row.ownerId }} · 版本 {{ row.revision }}</small></article>
       <el-select v-model="resolution"><el-option label="替换原内容" value="replace" /><el-option label="合并原内容与新内容" value="merge" /><el-option label="同时保留两条" value="keep_both" /></el-select>
-      <template #footer><el-button @click="conflictOpen = false">取消</el-button><el-button :loading="loading" :disabled="!canWrite || !resolution" @click="resolveConflict">按原版本处理</el-button></template>
+      <template #footer><el-button @click="conflictOpen = false">取消</el-button><el-button :loading="loading" @click="withWriteAccess(() => resolution ? resolveConflict() : ElMessage.warning('请选择冲突处理方式'))">按原版本处理</el-button></template>
     </el-dialog>
   </section>
 </template>
@@ -64,6 +65,13 @@ const emit = defineEmits<{ saved: []; refresh: [] }>();
 const owned = useDeviceOwnedConversation();
 const coreData = useCoreDataAccess();
 const canWrite = computed(() => coreData.access.value.write);
+function withWriteAccess(action: () => void) {
+  if (!canWrite.value) {
+    ElMessage.warning(coreData.access.value.reason || "当前设备只能查看统筹中心记忆");
+    return;
+  }
+  action();
+}
 const api = useOwnedMemoryManagement();
 const internalQuery = ref("");
 const query = computed({ get: () => props.search ?? internalQuery.value, set: value => { internalQuery.value = value; } });

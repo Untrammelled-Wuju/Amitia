@@ -73,6 +73,16 @@ describe("Core 模型配置授权", () => {
     expect(access.canConfigure.value).toBe(false);
   });
 
+  it("权限接口失败时保留原始错误并向调用方传播", async () => {
+    const original = new Error("权限服务连接失败", { cause: new Error("底层连接错误") });
+    mocks.get.mockRejectedValue(original);
+    const access = open(() => useCoreConfigurationAccess());
+    await flushPromises();
+    expect(access.canConfigure.value).toBe(false);
+    expect(access.accessError.value).toBe(original);
+    await expect(access.requireAccess()).rejects.toBe(original);
+  });
+
   it("权限撤销后重新授予，同 Core 旧表单仍拒绝且原版本头不变", async () => {
     const configuration = open(() => useModelConfig());
     await flushPromises();

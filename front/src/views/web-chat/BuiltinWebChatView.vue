@@ -182,6 +182,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       :actions="conversationHostActions"
       ref="inputRef"
       :disabled="modelMissing"
+      :disabled-reason="modelMissing ? '请先配置模型，才能发送消息。' : ''"
       :sending="sending"
       :generating="generating"
       :is-submitting="isSubmitting"

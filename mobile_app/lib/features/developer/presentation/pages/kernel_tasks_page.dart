@@ -25,6 +25,24 @@ class KernelTasksPage extends ConsumerStatefulWidget {
 class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
   bool _loading = true;
   bool _working = false;
+
+  void _showUnavailable(String message) => ScaffoldMessenger.of(
+    context,
+  ).showSnackBar(SnackBar(content: Text(message)));
+
+  void _runTaskAction(
+    Map<String, dynamic> run,
+    Future<void> Function() action,
+  ) {
+    if (_working) {
+      _showUnavailable('正在处理任务，请稍后重试。');
+    } else if (run['readOnly'] == true) {
+      _showUnavailable('该任务为只读，不能执行此操作。');
+    } else {
+      action();
+    }
+  }
+
   String? _error;
   List<Map<String, dynamic>> _definitions = const [];
   List<Map<String, dynamic>> _runs = const [];
@@ -1032,7 +1050,9 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
                   icon: Icons.add_task,
                   isSecondary: true,
                   onPressed: _working || id.isEmpty
-                      ? null
+                      ? () => _showUnavailable(
+                          _working ? '正在处理任务，请稍后重试。' : '任务定义缺少 ID，无法入队。',
+                        )
                       : () => _enqueue(definition),
                 ),
               ],
@@ -1080,7 +1100,9 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
     return Padding(
       padding: EdgeInsets.only(bottom: AppSpacing.sm),
       child: AmitiaCard(
-        onTap: id.isEmpty ? null : () => _showRunDetail(run),
+        onTap: id.isEmpty
+            ? () => _showUnavailable('任务缺少 ID，无法查看详情。')
+            : () => _showRunDetail(run),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1155,47 +1177,39 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
               runSpacing: 8,
               children: [
                 OutlinedButton.icon(
-                  onPressed: id.isEmpty ? null : () => _showRunDetail(run),
+                  onPressed: id.isEmpty
+                      ? () => _showUnavailable('任务缺少 ID，无法查看详情。')
+                      : () => _showRunDetail(run),
                   icon: const Icon(Icons.info_outline),
                   label: const Text('真实详情'),
                 ),
                 if (controls.pause)
                   OutlinedButton.icon(
-                    onPressed: _working || run['readOnly'] == true
-                        ? null
-                        : () => _pause(run),
+                    onPressed: () => _runTaskAction(run, () => _pause(run)),
                     icon: const Icon(Icons.pause),
                     label: const Text('暂停'),
                   ),
                 if (controls.resume)
                   OutlinedButton.icon(
-                    onPressed: _working || run['readOnly'] == true
-                        ? null
-                        : () => _resume(run),
+                    onPressed: () => _runTaskAction(run, () => _resume(run)),
                     icon: const Icon(Icons.play_arrow),
                     label: const Text('继续'),
                   ),
                 if (isRunning || isPaused || status == 'queued')
                   OutlinedButton.icon(
-                    onPressed: _working || run['readOnly'] == true
-                        ? null
-                        : () => _cancel(run),
+                    onPressed: () => _runTaskAction(run, () => _cancel(run)),
                     icon: const Icon(Icons.cancel_outlined),
                     label: const Text('取消'),
                   ),
                 if (canRetry)
                   OutlinedButton.icon(
-                    onPressed: _working || run['readOnly'] == true
-                        ? null
-                        : () => _retry(run),
+                    onPressed: () => _runTaskAction(run, () => _retry(run)),
                     icon: const Icon(Icons.replay),
                     label: const Text('Retry'),
                   ),
                 if (canRecover)
                   OutlinedButton.icon(
-                    onPressed: _working || run['readOnly'] == true
-                        ? null
-                        : () => _recover(run),
+                    onPressed: () => _runTaskAction(run, () => _recover(run)),
                     icon: const Icon(Icons.settings_backup_restore),
                     label: const Text('Recover'),
                   ),
@@ -1239,8 +1253,8 @@ class _KernelTaskRuntimeSheetState extends State<_KernelTaskRuntimeSheet> {
     try {
       return const JsonEncoder.withIndent('  ').convert(value);
     } catch (error, stackTrace) {
-  print("[original-error] $error\n$stackTrace");
-return value?.toString() ?? '';
+      print("[original-error] $error\n$stackTrace");
+      return value?.toString() ?? '';
     }
   }
 

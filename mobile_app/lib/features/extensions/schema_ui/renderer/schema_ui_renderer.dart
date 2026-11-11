@@ -992,6 +992,23 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
         evaluateVisibility(node.disabledWhen, _buildContext());
   }
 
+  void _showNodeUnavailable(SchemaUINode node, {bool loading = false}) {
+    final message = loading
+        ? '正在处理，请稍后重试。'
+        : node.actions.isEmpty
+        ? '该扩展入口尚未提供可执行操作。'
+        : '该扩展入口在当前状态下不可用。';
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  void _showFieldUnavailable() {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('该扩展字段在当前状态下不可修改。')));
+  }
+
   double _dimension(dynamic value, double fallback) {
     if (value is num) return value.toDouble();
     final text = value?.toString().trim().replaceAll(RegExp(r'px$'), '') ?? '';
@@ -1919,6 +1936,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
           hintText: node.props?['placeholder']?.toString() ?? '',
           controller: TextEditingController(text: text),
           readOnly: disabled,
+          onTap: disabled ? _showFieldUnavailable : null,
           obscureText: variant == 'password',
           keyboardType: keyboardType,
           maxLines: multiline ? rows : 1,
@@ -2021,7 +2039,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
               Expanded(
                 child: InkWell(
                   onTap: disabled
-                      ? null
+                      ? _showFieldUnavailable
                       : () => _openSelectPicker(
                           node: node,
                           binding: binding,
@@ -2219,15 +2237,21 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     final inactiveText = node.props?['inactiveText']?.toString().trim() ?? '';
     final subtitle = value ? activeText : inactiveText;
     final disabled = _isNodeDisabled(node) || !_isEditableBinding(binding);
-    return AmitiaSwitchTile(
-      styleTarget: _styleTargetForNode(node),
-      title: label,
-      subtitle: subtitle.isEmpty ? null : subtitle,
-      value: value,
-      onChanged: disabled
-          ? null
-          : (enabled) =>
-                _updateBinding(binding, enabled ? activeValue : inactiveValue),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: disabled ? _showFieldUnavailable : null,
+      child: AmitiaSwitchTile(
+        styleTarget: _styleTargetForNode(node),
+        title: label,
+        subtitle: subtitle.isEmpty ? null : subtitle,
+        value: value,
+        onChanged: disabled
+            ? null
+            : (enabled) => _updateBinding(
+                binding,
+                enabled ? activeValue : inactiveValue,
+              ),
+      ),
     );
   }
 
@@ -2256,12 +2280,18 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
         Row(
           children: [
             Expanded(
-              child: Slider(
-                value: value,
-                min: min,
-                max: max,
-                divisions: divisions,
-                onChanged: disabled ? null : (v) => _updateBinding(binding, v),
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: disabled ? _showFieldUnavailable : null,
+                child: Slider(
+                  value: value,
+                  min: min,
+                  max: max,
+                  divisions: divisions,
+                  onChanged: disabled
+                      ? null
+                      : (v) => _updateBinding(binding, v),
+                ),
               ),
             ),
             if (showInput) ...[
@@ -2276,6 +2306,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
                     ),
                   ),
                   readOnly: disabled,
+                  onTap: disabled ? _showFieldUnavailable : null,
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
                     signed: true,
@@ -2317,17 +2348,23 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       'large' => 48.0,
       _ => AppSpacing.buttonHeight,
     };
-    return AmitiaButton(
-      styleTarget: styleTarget,
-      label: loading ? '加载中…' : label,
-      height: height,
-      isSecondary: kind == 'secondary' || kind == 'default' || kind == 'info',
-      isDestructive: kind == 'danger' || kind == 'error',
-      outlined: node.props?['plain'] == true,
-      round: node.props?['round'] == true,
-      onPressed: disabled
-          ? null
-          : () => _handleActions(node.actions, nodeId: node.id),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: disabled
+          ? () => _showNodeUnavailable(node, loading: loading)
+          : null,
+      child: AmitiaButton(
+        styleTarget: styleTarget,
+        label: loading ? '加载中…' : label,
+        height: height,
+        isSecondary: kind == 'secondary' || kind == 'default' || kind == 'info',
+        isDestructive: kind == 'danger' || kind == 'error',
+        outlined: node.props?['plain'] == true,
+        round: node.props?['round'] == true,
+        onPressed: disabled
+            ? null
+            : () => _handleActions(node.actions, nodeId: node.id),
+      ),
     );
   }
 
@@ -2449,7 +2486,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
             return InkWell(
               borderRadius: AppRadius.brMedium,
               onTap: disabled
-                  ? null
+                  ? () => _showNodeUnavailable(node)
                   : () => _handleActions(
                       node.actions,
                       nodeId: node.id,
@@ -2525,21 +2562,25 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       runSpacing: AppSpacing.sm,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        AmitiaButton(
-          label: label,
-          isSecondary: node.props?['type'] == 'default',
-          outlined: node.props?['plain'] == true,
-          onPressed: disabled
-              ? null
-              : () async {
-                  final files = await _pickFiles(node);
-                  if (files == null || files.isEmpty || !mounted) return;
-                  await _handleActions(
-                    node.actions,
-                    nodeId: node.id,
-                    files: files,
-                  );
-                },
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: disabled ? () => _showNodeUnavailable(node) : null,
+          child: AmitiaButton(
+            label: label,
+            isSecondary: node.props?['type'] == 'default',
+            outlined: node.props?['plain'] == true,
+            onPressed: disabled
+                ? null
+                : () async {
+                    final files = await _pickFiles(node);
+                    if (files == null || files.isEmpty || !mounted) return;
+                    await _handleActions(
+                      node.actions,
+                      nodeId: node.id,
+                      files: files,
+                    );
+                  },
+          ),
         ),
         if (hint.isNotEmpty) Text(hint, style: AppTypography.caption(context)),
       ],
@@ -3224,7 +3265,11 @@ class _SchemaTabsViewState extends State<_SchemaTabsView> {
       selected: selected,
       enabled: !disabled,
       child: InkWell(
-        onTap: disabled ? null : () => _activate(index),
+        onTap: disabled
+            ? () => ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('该扩展标签在当前状态下不可用。')),
+              )
+            : () => _activate(index),
         borderRadius: BorderRadius.circular(8),
         child: Container(
           constraints: vertical ? const BoxConstraints(minWidth: 112) : null,

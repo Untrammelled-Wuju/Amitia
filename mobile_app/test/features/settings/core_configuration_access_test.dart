@@ -130,7 +130,7 @@ void main() {
     return container;
   }
 
-  testWidgets('普通绑定设备不读取模型配置且新建按钮禁用', (tester) async {
+  testWidgets('普通绑定设备不读取模型配置且新建按钮说明权限', (tester) async {
     final api = _Api();
     await render(tester, api, cloud: true);
     expect(api.configReads, 0);
@@ -143,8 +143,15 @@ void main() {
             ),
           )
           .onPressed,
-      isNull,
+      isNotNull,
     );
+    await tester.tap(
+      find.byWidgetPredicate(
+        (widget) => widget is IconButton && widget.tooltip == '新建',
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('无法新建模型配置'), findsOneWidget);
     expect(api.writes, 0);
   });
 

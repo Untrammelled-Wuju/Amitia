@@ -1,8 +1,9 @@
 <template>
   <div id="local-profile" class="space-settings" v-loading="loading">
     <el-alert v-if="!canWrite" :title="coreData.access.value.reason || '当前设备只能查看统筹中心用户画像'" type="info" :closable="false" show-icon />
+    <details v-if="coreData.error.value"><summary>查看原始错误</summary><pre>{{ coreData.error.value }}</pre></details>
     <section class="profile-overview" aria-label="个人资料概览">
-      <button type="button" class="avatar-preview" :disabled="!canWrite" :title="canWrite ? (profile.avatar ? '更换头像' : '上传头像') : '只读'" @click="triggerAvatarUpload">
+      <button type="button" class="avatar-preview" :title="canWrite ? (profile.avatar ? '更换头像' : '上传头像') : '只读'" @click="triggerAvatarUpload">
         <img v-if="profile.avatar" :src="profile.avatar" alt="个人头像" />
         <el-icon v-else :size="30"><UserFilled /></el-icon>
         <span class="avatar-edit-hint">更换</span>
@@ -17,8 +18,8 @@
         <span>{{ profile.userLabel.trim() || "还没有设置用户标签" }}</span>
         <p>{{ profile.bio.trim() || "添加一段个人简介，让角色更了解你。" }}</p>
         <div class="avatar-actions">
-          <el-button :disabled="!canWrite" :loading="avatarProcessing" @click="triggerAvatarUpload">更换头像</el-button>
-          <el-button v-if="profile.avatar" :disabled="!canWrite" text type="danger" @click="profile.avatar = ''">移除</el-button>
+          <el-button :loading="avatarProcessing" @click="triggerAvatarUpload">更换头像</el-button>
+          <el-button v-if="profile.avatar" text type="danger" @click="requireWrite() && (profile.avatar = '')">移除</el-button>
         </div>
         <input ref="avatarInputRef" type="file" accept="image/*" hidden @change="handleAvatarFile" />
       </div>
@@ -41,21 +42,21 @@
         <el-form label-position="top" class="profile-form">
           <div class="profile-field-row">
             <el-form-item label="显示名称">
-              <el-input v-model="profile.displayName" :disabled="!canWrite" maxlength="100" placeholder="请输入昵称" />
+              <el-input v-model="profile.displayName" :readonly="!canWrite" maxlength="100" placeholder="请输入昵称" @click="canWrite || requireWrite()" />
             </el-form-item>
             <el-form-item label="用户标签">
-              <el-input v-model="profile.userLabel" :disabled="!canWrite" maxlength="100" placeholder="例如：开发者、写作、游戏" />
+              <el-input v-model="profile.userLabel" :readonly="!canWrite" maxlength="100" placeholder="例如：开发者、写作、游戏" @click="canWrite || requireWrite()" />
             </el-form-item>
           </div>
           <el-form-item label="个人简介">
-            <el-input v-model="profile.bio" :disabled="!canWrite" type="textarea" :rows="5" maxlength="1000" show-word-limit placeholder="简单介绍一下自己" />
+            <el-input v-model="profile.bio" :readonly="!canWrite" type="textarea" :rows="5" maxlength="1000" show-word-limit placeholder="简单介绍一下自己" @click="canWrite || requireWrite()" />
           </el-form-item>
         </el-form>
         <details class="profile-advanced">
           <summary>高级头像设置</summary>
           <el-form label-position="top">
             <el-form-item label="头像地址">
-              <el-input v-model="profile.avatar" :disabled="!canWrite" placeholder="本地文件或图片地址" />
+              <el-input v-model="profile.avatar" :readonly="!canWrite" placeholder="本地文件或图片地址" @click="canWrite || requireWrite()" />
             </el-form-item>
           </el-form>
         </details>
@@ -79,7 +80,7 @@
             <strong>保存修改</strong>
             <span>修改后需要保存才会同步到个人空间。</span>
           </div>
-          <el-button type="primary" :disabled="!canWrite" :loading="saving || avatarProcessing" @click="saveProfile">保存资料</el-button>
+          <el-button type="primary" :loading="saving || avatarProcessing" @click="saveProfile">保存资料</el-button>
         </section>
       </aside>
     </div>
@@ -97,6 +98,11 @@ import { useCoreDataAccess } from "@/composables/useCoreDataAccess";
 const appStore = useAppStore();
 const coreData = useCoreDataAccess();
 const canWrite = computed(() => coreData.access.value.write);
+function requireWrite() {
+  if (canWrite.value) return true;
+  ElMessage.warning(coreData.access.value.reason || "当前设备只能查看统筹中心用户画像");
+  return false;
+}
 const loading = ref(false);
 const saving = ref(false);
 const avatarProcessing = ref(false);
@@ -126,7 +132,7 @@ async function loadAll() {
 }
 
 async function saveProfile() {
-  if (!canWrite.value) return;
+  if (!requireWrite()) return;
   saving.value = true;
   try {
     await coreData.requireWrite();
@@ -149,7 +155,7 @@ async function saveProfile() {
 }
 
 function triggerAvatarUpload() {
-  if (!canWrite.value) return;
+  if (!requireWrite()) return;
   avatarInputRef.value?.click();
 }
 
