@@ -61,11 +61,17 @@ func (r *Registry) HasBackend(kind WorkspaceKind) bool {
 }
 
 func (r *Registry) RegisterLocalMount(ctx context.Context, name string, localRoot string, readOnly bool) (WorkspaceMount, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	mount := newLocalMount(name, localRoot, readOnly)
+	if err := r.RestoreMount(mount); err != nil {
+		return WorkspaceMount{}, err
+	}
+	return mount, nil
+}
+
+func newLocalMount(name string, localRoot string, readOnly bool) WorkspaceMount {
 	now := time.Now().UTC()
 	id := WorkspaceID(uuid.NewString())
-	mount := WorkspaceMount{
+	return WorkspaceMount{
 		ID:         id,
 		Name:       name,
 		Kind:       WorkspaceKindLocal,
@@ -78,8 +84,6 @@ func (r *Registry) RegisterLocalMount(ctx context.Context, name string, localRoo
 		UpdatedAt:  now,
 		LastUsedAt: now,
 	}
-	r.mounts[id] = mount
-	return mount, nil
 }
 
 func (r *Registry) RegisterRemoteMount(ctx context.Context, name string, config RemoteMountConfig, credRef string, readOnly bool) (WorkspaceMount, error) {

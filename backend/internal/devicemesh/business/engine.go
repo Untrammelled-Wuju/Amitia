@@ -28,6 +28,8 @@ var ErrInvalidRequest = errors.New("请求参数无效")
 // ErrRequestInFlight reports a second delivery of a request that is still
 // running. It is a conflict with the in-flight turn, not a service outage.
 var ErrRequestInFlight = errors.New("当前请求正在执行")
+
+var ErrMemoryDeleted = errors.New("该记忆已被删除，不能继续修改，请新建一条记忆")
 var ErrInterrupted = errors.New("当前回复已主动停止")
 
 type Request struct {
@@ -1075,6 +1077,9 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 				if saveErr != nil {
 					return response, errors.Join(cause, saveErr)
 				}
+			}
+			if interrupted {
+				return response, cause
 			}
 			return response, fmt.Errorf("对话执行期间权限校验失败: %w", cause)
 		}

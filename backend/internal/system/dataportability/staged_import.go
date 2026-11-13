@@ -47,7 +47,7 @@ func (c *Coordinator) StageImport(ctx context.Context, archivePath string) (*Imp
 		return nil, err
 	}
 	if preview == nil || !preview.CanImport || preview.Manifest == nil {
-		return nil, ErrImportPackageInvalid
+		return nil, fmt.Errorf("%w: 预检结果缺少可用清单", ErrImportPackageInvalid)
 	}
 	hash, err := fileSHA256(archivePath)
 	if err != nil {
@@ -102,7 +102,7 @@ func (c *Coordinator) CommitStagedImport(ctx context.Context, id string, policy 
 		return nil, ErrImportCollisionPolicyInvalid
 	}
 	if ticket.Preview == nil || ticket.Preview.Manifest == nil {
-		return nil, ErrImportPackageInvalid
+		return nil, fmt.Errorf("%w: 导入票据缺少可用清单", ErrImportPackageInvalid)
 	}
 	snapshot, err := c.CreateBackup(ctx, BackupRequest{
 		Scope:          ScopeAll,
@@ -168,7 +168,7 @@ func (c *Coordinator) readImportTicket(id string) (*ImportTicket, error) {
 	}
 	var ticket ImportTicket
 	if err := json.Unmarshal(data, &ticket); err != nil {
-		return nil, ErrImportPackageInvalid
+		return nil, fmt.Errorf("%w: 导入票据解析失败: %v", ErrImportPackageInvalid, err)
 	}
 	return &ticket, nil
 }

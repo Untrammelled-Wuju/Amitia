@@ -42,6 +42,7 @@ type LifecycleEvent struct {
 	Phase        LifecyclePhase
 	ExtensionID  domain.ExtensionID
 	Version      string
+	SpaceID      string
 	OldVersion   string
 	OperationID  string
 	Timestamp    time.Time
@@ -80,7 +81,7 @@ func WithClock(fn func() time.Time) ReconcilerOption {
 	}
 }
 
-func WithUninstallCleanup(fn func(ctx context.Context, extID domain.ExtensionID) error) ReconcilerOption {
+func WithUninstallCleanup(fn func(ctx context.Context, extID domain.ExtensionID, spaceID string) error) ReconcilerOption {
 	return func(r *Reconciler) {
 		if fn != nil {
 			r.uninstallCleanup = fn
@@ -97,7 +98,7 @@ type Reconciler struct {
 	now      func() time.Time
 
 	adapters         []ContributionAdapter
-	uninstallCleanup func(ctx context.Context, extID domain.ExtensionID) error
+	uninstallCleanup func(ctx context.Context, extID domain.ExtensionID, spaceID string) error
 }
 
 type ContributionAdapter interface {
@@ -146,7 +147,7 @@ func (r *Reconciler) HandleEvent(ctx context.Context, evt LifecycleEvent) error 
 	case PhaseUpdated:
 		return r.handleReconcileExtensionLocked(ctx, evt.ExtensionID, true)
 	case PhaseUninstalled:
-		return r.handleExtensionUninstallLocked(ctx, evt.ExtensionID)
+		return r.handleExtensionUninstallLocked(ctx, evt.ExtensionID, evt.SpaceID)
 	case PhaseReconcileAll:
 		return r.handleReconcileExtensionLocked(ctx, evt.ExtensionID, false)
 	default:
@@ -156,12 +157,9 @@ func (r *Reconciler) HandleEvent(ctx context.Context, evt LifecycleEvent) error 
 
 func (r *Reconciler) handleInstalledLocked(ctx context.Context, evt LifecycleEvent) error {
 	ref := ContributionRefFromDefinition(evt.Contribution)
-	if _, exists := r.registry[ref.Key()]; exists {
-		existing := r.registry[ref.Key()]
-		if existing.Revision >= revisionOf(evt.Contribution) {
-			r.log("install: skip existing %s rev %d >= %d", ref.Key(), existing.Revision, revisionOf(evt.Contribution))
-			return nil
-		}
+	if existing, exists := r.registry[ref.Key()]; exists && existing.Status != ContributionStatusDetached && existing.Revision >= revisionOf(evt.Contribution) {
+		r.log("install: skip existing %s rev %d >= %d", ref.Key(), existing.Revision, revisionOf(evt.Contribution))
+		return nil
 	}
 	reg, err := r.contribToRegistrationLocked(ctx, evt.Contribution, false)
 	if err != nil {
@@ -177,7 +175,7 @@ func (r *Reconciler) handleEnabledLocked(ctx context.Context, evt LifecycleEvent
 	if evt.Contribution.ID != "" {
 		ref := ContributionRefFromDefinition(evt.Contribution)
 		reg, ok := r.registry[ref.Key()]
-		if !ok {
+		if !ok || reg.Status == ContributionStatusDetached || reg.Status == ContributionStatusDisabled {
 			created, err := r.contribToRegistrationLocked(ctx, evt.Contribution, true)
 			if err != nil {
 				return err
@@ -319,7 +317,7 @@ func (r *Reconciler) handleReconcileExtensionLocked(ctx context.Context, extID d
 	return firstErr
 }
 
-func (r *Reconciler) handleExtensionUninstallLocked(ctx context.Context, extID domain.ExtensionID) error {
+func (r *Reconciler) handleExtensionUninstallLocked(ctx context.Context, extID domain.ExtensionID, spaceID string) error {
 	var firstErr error
 	for key, reg := range r.registry {
 		if reg.Ref.ExtensionID != extID {
@@ -344,7 +342,7 @@ func (r *Reconciler) handleExtensionUninstallLocked(ctx context.Context, extID d
 	if r.uninstallCleanup == nil {
 		return firstErr
 	}
-	if err := r.uninstallCleanup(ctx, extID); err != nil {
+	if err := r.uninstallCleanup(ctx, extID, spaceID); err != nil {
 		r.log("uninstall: cleanup owned installations %s: %v", extID, err)
 		cleanupErr := fmt.Errorf("cleanup owned installations for %s: %w", extID, err)
 		if firstErr == nil {
@@ -457,7 +455,7 @@ func (r *Reconciler) ReconcileExtension(ctx context.Context, extID domain.Extens
 func (r *Reconciler) DetachExtension(ctx context.Context, extID domain.ExtensionID) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.handleExtensionUninstallLocked(ctx, extID)
+	return r.handleExtensionUninstallLocked(ctx, extID, "")
 }
 
 func (r *Reconciler) View() ContributionRegistryView {

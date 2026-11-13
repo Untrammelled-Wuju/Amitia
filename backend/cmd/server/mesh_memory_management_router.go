@@ -217,6 +217,10 @@ func registerMeshMemoryManagementRouter(mesh *gin.RouterGroup, services *AppServ
 
 func writeMeshMemoryManagement(c *gin.Context, result business.MemoryManagementResponse, err error) {
 	if err != nil {
+		if errors.Is(err, business.ErrMemoryDeleted) {
+			c.JSON(409, gin.H{"message": err.Error(), "code": "MEMORY_DELETED"})
+			return
+		}
 		var conflict business.MemoryManagementConflict
 		if errors.As(err, &conflict) {
 			c.JSON(409, gin.H{"message": err.Error(), "conflicts": conflict.Resources})

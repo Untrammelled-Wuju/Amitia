@@ -74,9 +74,10 @@ func (b *DesktopPetPluginBoundary) HandleExtensionUpdated(ctx context.Context, e
 	})
 }
 
-func (b *DesktopPetPluginBoundary) HandleExtensionUninstalled(ctx context.Context, extID domain.ExtensionID, version, operationID, reason string) error {
+func (b *DesktopPetPluginBoundary) HandleExtensionUninstalled(ctx context.Context, extID domain.ExtensionID, version, operationID, spaceID string) error {
 	return b.reconciler.HandleEvent(ctx, LifecycleEvent{
 		Phase:       PhaseUninstalled,
+		SpaceID:     spaceID,
 		ExtensionID: extID,
 		Version:     version,
 		OperationID: operationID,

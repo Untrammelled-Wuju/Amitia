@@ -541,13 +541,20 @@ func (s *service) Delete(id string) error {
 	return s.DeleteForSpace(id, requestidentity.CanonicalSpaceID())
 }
 
+type RoleDataPurger interface {
+	PurgeRoleData(ctx context.Context, roleID string) error
+}
+
 func (s *service) DeleteForSpace(id string, spaceID string) error {
 	unlock := LockRoleSource(s.db)
 	defer unlock()
-	return s.db.Transaction(func(tx *gorm.DB) error {
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
 		var current Character
 		if err := s.characterOwnerQuery(tx.Where("id = ?", id), spaceID).First(&current).Error; err != nil {
 			return err
+		}
+		if current.DeletedAt != nil && *current.DeletedAt != "" {
+			return enqueueRolePurgeTx(tx, id)
 		}
 		result := tx.Model(&Character{}).Where("id = ? AND revision = ? AND deleted_at IS NULL", id, current.Revision).Updates(map[string]interface{}{
 			"deleted_at": time.Now().Format("2006-01-02 15:04:05"),
@@ -593,6 +600,9 @@ func (s *service) DeleteForSpace(id string, spaceID string) error {
 				}
 			}
 		}
+		if err := enqueueRolePurgeTx(tx, id); err != nil {
+			return err
+		}
 		if s.changeRecorder != nil {
 			payload, marshalErr := json.Marshal(map[string]string{"id": id})
 			if marshalErr != nil {
@@ -603,7 +613,11 @@ func (s *service) DeleteForSpace(id string, spaceID string) error {
 			}
 		}
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+	NotifyRolePurgeQueue()
+	return nil
 }
 
 func (s *service) updateCharacterFieldsForSpace(id string, updates map[string]interface{}, spaceID string) (*Character, error) {

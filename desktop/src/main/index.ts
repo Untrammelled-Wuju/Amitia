@@ -15,6 +15,7 @@ import type { DeploymentModeConfig } from "../shared/types";
 import type { RuntimeStatus } from "../shared/types";
 import {
   ensureDataAndConfig,
+  onCoreUnexpectedExit,
   stopCore,
   waitForCoreReadiness,
 } from "./core-manager";
@@ -343,6 +344,47 @@ async function enterMainApp(): Promise<void> {
     },
     currentConfig,
   );
+  onCoreUnexpectedExit((profile, error) => {
+    if (quitting || startupFailureHandled) return;
+    const reportFailure = (detail: string) => {
+      const options = { type: "error" as const, message: "本机 Core 未恢复", detail };
+      const window = mainWindow;
+      const dialogTask = window && !window.isDestroyed()
+        ? dialog.showMessageBox(window, options)
+        : dialog.showMessageBox(options);
+      void dialogTask.catch((dialogError) => console.error("[AmitiaDesktop] 无法显示 Core 错误:", dialogError));
+    };
+    void deploymentLifecycle?.recoverUnexpectedExit(profile, error, (message) => {
+      notifyStatus(runtimeManager, "starting", message);
+    }).then((status) => {
+      if (!status || quitting) return;
+      notifyStatus(runtimeManager, status.state, status.message);
+      if (status.localRuntime?.state === "failed") {
+        reportFailure(status.localRuntime.message ?? error.stack ?? error.message);
+      }
+    }).catch((failure) => {
+      console.error("[AmitiaDesktop] Core 恢复失败:", failure);
+      if (quitting) return;
+      const detail = [error.stack ?? error.message, failure instanceof Error ? failure.stack ?? failure.message : String(failure)].join("\n");
+      notifyStatus(runtimeManager, "failed", detail);
+      reportFailure(detail);
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.restartRuntime, async () => {
+    if (!deploymentLifecycle) return runtimeManager.getStatus();
+    notifyStatus(runtimeManager, "starting", "正在重启本地服务");
+    try {
+      const status = await deploymentLifecycle.restartLocalRuntime();
+      notifyStatus(runtimeManager, status.state, status.message);
+      return status;
+    } catch (error) {
+      const message = error instanceof Error ? error.stack ?? error.message : String(error);
+      console.error("[AmitiaDesktop] 手动重启本地服务失败:", error);
+      notifyStatus(runtimeManager, "failed", message);
+      return runtimeManager.getStatus();
+    }
+  });
 
   registerIpcHandlers(configStore, runtimeManager, async (config) => {
     currentConfig = config;

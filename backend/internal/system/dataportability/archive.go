@@ -43,15 +43,26 @@ func (a *ArchiveWriter) CreateComponent(id, logicalName string, kind ComponentKi
 		return nil, ErrBackupComponentFailed
 	}
 	path := fmt.Sprintf("datasets/%s.ndjson", id)
+	a.entries[id] = true
+	return &componentWriteCloser{a: a, path: path}, nil
+}
+
+func (a *ArchiveWriter) openEntry(path string) (io.Writer, error) {
+	if a.err != nil {
+		return nil, a.err
+	}
+	if a.zipWriter == nil {
+		return nil, ErrBackupComponentFailed
+	}
 	w, err := a.zipWriter.CreateHeader(&zip.FileHeader{
 		Name:   path,
 		Method: zip.Deflate,
 	})
 	if err != nil {
+		a.err = err
 		return nil, err
 	}
-	a.entries[id] = true
-	return &componentWriteCloser{w: w, zw: a.zipWriter}, nil
+	return w, nil
 }
 
 func (a *ArchiveWriter) WriteManifest(data []byte) error {
@@ -128,15 +139,29 @@ func (a *ArchiveWriter) Close() error {
 }
 
 type componentWriteCloser struct {
-	w  io.Writer
-	zw *zip.Writer
+	a    *ArchiveWriter
+	path string
+	w    io.Writer
 }
 
 func (c *componentWriteCloser) Write(p []byte) (int, error) {
+	if c.w == nil {
+		w, err := c.a.openEntry(c.path)
+		if err != nil {
+			return 0, err
+		}
+		c.w = w
+	}
 	return c.w.Write(p)
 }
 
 func (c *componentWriteCloser) Close() error {
+	if c.w != nil {
+		return nil
+	}
+	if _, err := c.a.openEntry(c.path); err != nil {
+		return err
+	}
 	return nil
 }
 

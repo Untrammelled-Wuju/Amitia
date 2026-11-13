@@ -127,3 +127,56 @@ func TestBaselineSupportsDesktopPetInstallationPersistence(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+func TestDesktopPetInstallationUniquenessExcludesUninstalledHistory(t *testing.T) {
+	for _, existing := range []bool{false, true} {
+		t.Run(map[bool]string{false: "fresh", true: "initialized"}[existing], func(t *testing.T) {
+			db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "pet-installations.db")), &gorm.Config{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := ApplyBaseline(db); err != nil {
+				t.Fatal(err)
+			}
+			if existing {
+				for _, statement := range []string{
+					"DROP INDEX IF EXISTS uq_dpinst_live_space_device_pet",
+					"CREATE UNIQUE INDEX IF NOT EXISTS uq_dpinst_user_device_pet ON desktop_pet_installations(space_id, device_id, pet_id)",
+					"CREATE UNIQUE INDEX IF NOT EXISTS idx_dpinst_package_version ON desktop_pet_installations(package_id, package_version)",
+				} {
+					if err := db.Exec(statement).Error; err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			insert := func(id, device, state string) error {
+				return db.Exec(`INSERT INTO desktop_pet_installations
+					(id,space_id,device_id,pet_id,package_id,package_version,lifecycle_state,status)
+					VALUES (?, 'space-a', ?, 'pet-a', 'release-a', '1.0.0', ?, ?)`, id, device, state, state).Error
+			}
+			if err := insert("history", "device-a", "uninstalled"); err != nil {
+				t.Fatal(err)
+			}
+			if existing {
+				if err := ApplyBaseline(db); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := insert("reinstalled", "device-a", "installed"); err != nil {
+				t.Fatalf("reinstall with historical record: %v", err)
+			}
+			if err := insert("another-device", "device-b", "installed"); err != nil {
+				t.Fatalf("same release on another device: %v", err)
+			}
+			if err := insert("duplicate", "device-a", "uninstalling"); err == nil {
+				t.Fatal("the same pet cannot have two unfinished installations on one device")
+			}
+			if err := ApplyBaseline(db); err != nil {
+				t.Fatal(err)
+			}
+			var count int
+			if err := db.Raw("SELECT COUNT(*) FROM desktop_pet_installations").Scan(&count).Error; err != nil || count != 3 {
+				t.Fatalf("installations = %d, error = %v", count, err)
+			}
+		})
+	}
+}

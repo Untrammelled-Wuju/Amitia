@@ -36,6 +36,9 @@ const api = {
   getRuntimeStatus(): Promise<RuntimeStatus> {
     return ipcRenderer.invoke(IPC_CHANNELS.getRuntimeStatus);
   },
+  restartRuntime(): Promise<RuntimeStatus> {
+    return ipcRenderer.invoke(IPC_CHANNELS.restartRuntime);
+  },
   openLogsDirectory(): Promise<void> {
     return ipcRenderer.invoke(IPC_CHANNELS.openLogsDirectory);
   },

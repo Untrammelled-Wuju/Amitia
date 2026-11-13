@@ -522,13 +522,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	}
 	kernelContainer.MCPBindings = mcpRuntime
 	agentAdminController.SetMCPConnections(mcpRuntime.Connections)
-	if err := extensionRuntime.Kernel.RecoverPackageOperations(context.Background()); err != nil {
-		log.Error("package operation recovery failed: ", err)
-		log.Warn("Core continuing with package operations quarantined for recovery")
-	}
-	if err := kernelContainer.Recover(context.Background()); err != nil {
-		log.Warn("kernel recovery warning: ", err)
-	}
 	if kernelContainer.WorkflowExecutor != nil {
 		if _, err := kernelContainer.WorkflowExecutor.ReapStuck(context.Background(), 90*time.Second, 24*time.Hour, 100); err != nil {
 			log.Warn("workflow stuck-run reaper warning: ", err)
@@ -584,10 +577,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			log.Error("gamehost provider reconciliation failed: ", err)
 			panic("failed to reconcile gamehost providers")
 		}
-	}
-	if err := extensionRuntime.AttachKernelFacade(extensionRuntime.Kernel); err != nil {
-		log.Error("extension kernel facade attach failed: ", err)
-		panic("failed to attach extension kernel facade")
 	}
 	artifactMaintenance, err := kernel.NewPackageArtifactMaintenanceForStore(kernelContainer.PackageRepository, kernelContainer.PackageArtifactStore, kernel.DefaultPackageArtifactMaintenanceConfig())
 	if err != nil {
@@ -903,6 +892,13 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		return nil, fmt.Errorf("initialize desktop pet plugin boundary: %w", err)
 	}
 	kernelContainer.DesktopPetPluginBoundary = petBoundary
+	if err := extensionRuntime.Kernel.RecoverPackageOperations(context.Background()); err != nil {
+		log.Error("package operation recovery failed: ", err)
+		log.Warn("Core continuing with package operations quarantined for recovery")
+	}
+	if err := kernelContainer.Recover(context.Background()); err != nil {
+		log.Warn("kernel recovery warning: ", err)
+	}
 
 	recoveryRepo := installationrecovery.NewInstallRepoAdapter(ctx.DB)
 	installationRecoveryWorker := installationrecovery.NewRecoveryWorker(recoveryRepo)

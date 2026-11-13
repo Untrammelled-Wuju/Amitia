@@ -75,17 +75,28 @@ class _AmitiaMessageViewState extends ConsumerState<AmitiaMessageView> {
   bool _feedbackBusy = false;
   int _feedbackGeneration = 0;
 
-  bool get _feedbackReady =>
-      widget.message.role == MessageRole.assistant &&
-      widget.message.id.trim().isNotEmpty &&
-      widget.characterId.trim().isNotEmpty &&
-      (widget.message.sourceRevision ?? 0) > 0 &&
-      ![
-        MessageStatus.queued,
-        MessageStatus.sending,
-        MessageStatus.streaming,
-        MessageStatus.error,
-      ].contains(widget.message.status);
+  bool get _feedbackReady => _feedbackBlockReason == null;
+
+  String? get _feedbackBlockReason {
+    final message = widget.message;
+    if (message.role != MessageRole.assistant ||
+        widget.characterId.trim().isEmpty) {
+      return '当前消息缺少可用于反馈的角色信息。';
+    }
+    if (message.status == MessageStatus.error) {
+      return '当前回复未成功生成，无法提交反馈。';
+    }
+    if (message.id.trim().isEmpty ||
+        (message.sourceRevision ?? 0) <= 0 ||
+        const [
+          MessageStatus.queued,
+          MessageStatus.sending,
+          MessageStatus.streaming,
+        ].contains(message.status)) {
+      return '当前消息尚不可反馈，请等待回复保存后再试。';
+    }
+    return null;
+  }
 
   String _feedbackIdentity(AmitiaMessageView value) {
     final scope = value.message.sourceScope;
@@ -314,7 +325,9 @@ class _AmitiaMessageViewState extends ConsumerState<AmitiaMessageView> {
                         onReply: widget.onReply,
                         onRetry: widget.onRetry,
                         feedbackType: _feedback?.feedbackType,
-                        feedbackBusy: _feedbackBusy || !_feedbackReady,
+                        feedbackUnavailableReason: _feedbackBusy
+                            ? '正在处理反馈，请稍后重试。'
+                            : _feedbackBlockReason,
                         onHelpful: () => _submitFeedback('good'),
                         onImprove: _submitImprovement,
                         onUnsafe: _submitUnsafe,
@@ -932,7 +945,7 @@ class _MessageActions extends StatelessWidget {
   final VoidCallback? onReply;
   final VoidCallback? onRetry;
   final String? feedbackType;
-  final bool feedbackBusy;
+  final String? feedbackUnavailableReason;
   final VoidCallback onHelpful;
   final VoidCallback onImprove;
   final VoidCallback onUnsafe;
@@ -945,7 +958,7 @@ class _MessageActions extends StatelessWidget {
     this.onReply,
     this.onRetry,
     required this.feedbackType,
-    required this.feedbackBusy,
+    required this.feedbackUnavailableReason,
     required this.onHelpful,
     required this.onImprove,
     required this.onUnsafe,
@@ -1012,13 +1025,15 @@ class _MessageActions extends StatelessWidget {
           if (!streaming) ...[
             _CompactMessageAction(
               tooltip: '有帮助',
-              onPressed: feedbackBusy ? null : onHelpful,
+              onPressed: onHelpful,
+              unavailableReason: feedbackUnavailableReason,
               icon: Icons.thumb_up_alt_outlined,
               color: feedbackType == 'good' ? tokens.accent : tokens.muted,
             ),
             _CompactMessageAction(
               tooltip: '需要改进',
-              onPressed: feedbackBusy ? null : onImprove,
+              onPressed: onImprove,
+              unavailableReason: feedbackUnavailableReason,
               icon: Icons.thumb_down_alt_outlined,
               color:
                   feedbackType != null &&
@@ -1029,14 +1044,16 @@ class _MessageActions extends StatelessWidget {
             ),
             _CompactMessageAction(
               tooltip: '报告不安全内容',
-              onPressed: feedbackBusy ? null : onUnsafe,
+              onPressed: onUnsafe,
+              unavailableReason: feedbackUnavailableReason,
               icon: Icons.flag_outlined,
               color: feedbackType == 'unsafe' ? tokens.accent : tokens.muted,
             ),
             if (onDeleteFeedback != null)
               _CompactMessageAction(
                 tooltip: '撤销反馈',
-                onPressed: feedbackBusy ? null : onDeleteFeedback,
+                onPressed: onDeleteFeedback,
+                unavailableReason: feedbackUnavailableReason,
                 icon: Icons.delete_outline,
                 color: tokens.muted,
               ),
@@ -1050,6 +1067,7 @@ class _MessageActions extends StatelessWidget {
 class _CompactMessageAction extends StatelessWidget {
   final String tooltip;
   final VoidCallback? onPressed;
+  final String? unavailableReason;
   final IconData icon;
   final Color color;
 
@@ -1058,19 +1076,29 @@ class _CompactMessageAction extends StatelessWidget {
     required this.onPressed,
     required this.icon,
     required this.color,
+    this.unavailableReason,
   });
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
+    final reason = unavailableReason;
+    final button = IconButton(
       tooltip: tooltip,
-      onPressed: onPressed,
+      onPressed: reason == null ? onPressed : null,
       padding: EdgeInsets.zero,
       style: IconButton.styleFrom(
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
       constraints: const BoxConstraints.tightFor(width: 48, height: 48),
       icon: Icon(icon, size: 15, color: color),
+    );
+    if (reason == null) return button;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(reason)),
+      ),
+      child: button,
     );
   }
 }

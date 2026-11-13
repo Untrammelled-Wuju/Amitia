@@ -99,6 +99,10 @@ type BackupWriter interface {
 	WriteJSON(id string, v interface{}) error
 }
 
+type ComponentItemCountReporter interface {
+	SetComponentItemCount(id string, count int64) error
+}
+
 type BackupReader interface {
 	ReadComponent(id string) (io.ReadCloser, error)
 	ReadJSON(id string, v interface{}) error

@@ -17,6 +17,7 @@ PACKAGE_VERSION = os.environ.get(
     "AMITIA_QA_PET_VERSION",
     SOURCE_MANIFEST["plugin"]["version"],
 )
+PET_ID = os.environ.get("AMITIA_QA_PET_ID", "qa-pet-v1")
 OUTPUT = (
     PROJECT_ROOT
     / "plugin"
@@ -25,7 +26,7 @@ OUTPUT = (
 )
 RELEASE_ID = os.environ.get(
     "AMITIA_QA_PET_RELEASE_ID",
-    f"qa-pet-v1-release-{PACKAGE_VERSION}",
+    f"{PET_ID}-release-{PACKAGE_VERSION}",
 )
 
 
@@ -239,7 +240,7 @@ def main():
         "license": {"noticePath": "NOTICE.txt", "spdx": "MIT"},
         "manifestFormat": "amitia-desktop-pet",
         "name": "QA Desktop Pet",
-        "petId": "qa-pet-v1",
+        "petId": PET_ID,
         "preview": "preview.png",
         "provenance": {
             "builder": "amitia-qa",

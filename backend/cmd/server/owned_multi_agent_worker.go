@@ -196,6 +196,9 @@ func (r *ownedMultiAgentWorkerRunner) run(ctx context.Context, cancel context.Ca
 	if err != nil || !found || stored == nil {
 		return
 	}
+	if stored.Status != interaction.InteractionStatusReceived {
+		return
+	}
 	if !stored.CancelRequestedAt.IsZero() {
 		if err := r.cancelRecord(context.Background(), childID); err != nil {
 			amitialog.Printf("[original-error] %v", err)

@@ -29,16 +29,22 @@ func (s *service) GetStorageInfo() map[string]interface{} {
 		dbSize = info.Size()
 	}
 
+	totalBytes, freeBytes, capacityErr := diskCapacity(dir)
+	usedBytes := totalBytes - freeBytes
 	result := map[string]interface{}{
-		"totalMB":           totalSize / 1024 / 1024,
-		"usedMB":            totalSize / 1024 / 1024,
-		"freeMB":            0,
+		"totalMB":           totalBytes / 1024 / 1024,
+		"usedMB":            usedBytes / 1024 / 1024,
+		"freeMB":            freeBytes / 1024 / 1024,
+		"dataSizeMB":        totalSize / 1024 / 1024,
 		"path":              dir,
 		"dbSize":            formatStorageBytes(dbSize),
 		"dbSizeBytes":       dbSize,
 		"messageCount":      int64(0),
 		"conversationCount": int64(0),
 		"scope":             "all-roles",
+	}
+	if capacityErr != nil {
+		result["capacityError"] = capacityErr.Error()
 	}
 	if s.memoryConsumer == nil {
 		result["memoryError"] = "统一记忆统计入口不可用"

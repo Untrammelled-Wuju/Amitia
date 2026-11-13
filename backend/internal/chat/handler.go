@@ -3,7 +3,9 @@
 package chat
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
@@ -282,6 +284,10 @@ func (h *Handler) CreateModel(c *gin.Context) {
 	}
 	result, err := h.configurationService(c.Request.Context()).CreateModel(&cfg)
 	if err != nil {
+		if errors.Is(err, errInvalidModelConfiguration) {
+			util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
+			return
+		}
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
@@ -316,6 +322,10 @@ func (h *Handler) UpdateModel(c *gin.Context) {
 	}
 	result, err := h.configurationService(c.Request.Context()).UpdateModel(id, updates)
 	if err != nil {
+		if errors.Is(err, errInvalidModelConfiguration) {
+			util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
+			return
+		}
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
@@ -336,6 +346,10 @@ func (h *Handler) ActivateModel(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	result, err := h.configurationService(c.Request.Context()).ActivateModel(id)
 	if err != nil {
+		if errors.Is(err, errInvalidModelConfiguration) {
+			util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
+			return
+		}
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
@@ -455,52 +469,75 @@ func (h *Handler) ListProviders(c *gin.Context) {
 }
 
 func (h *Handler) doTestConnection(c *gin.Context, baseURL, apiKey, modelName, apiType string) {
+	util.SuccessResponse(c, probeProviderConnection(c.Request.Context(), baseURL, apiKey, apiType))
+}
+
+func probeProviderConnection(ctx context.Context, baseURL, apiKey, apiType string) gin.H {
 	start := time.Now()
 	base := strings.TrimRight(baseURL, "/")
 
-	var reqURL string
+	reqURL := base + "/models"
 	if apiType == "ollama" {
 		reqURL = base + "/api/tags"
-	} else {
-		reqURL = base + "/models"
 	}
-	req, _ := http.NewRequest("GET", reqURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return gin.H{
+			"success": false, "latencyMs": time.Since(start).Milliseconds(), "status": "error",
+			"message": err.Error(),
+		}
+	}
 	if apiType != "ollama" {
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 	}
 	client := timeoutpolicy.Client(&http.Client{Timeout: 15 * time.Second})
 	resp, err := client.Do(req)
 	latency := int(time.Since(start).Milliseconds())
-
 	if err != nil {
-		util.SuccessResponse(c, gin.H{
+		return gin.H{
 			"success": false, "latencyMs": latency, "status": "error",
 			"message": "连接失败: " + err.Error(),
-		})
-		return
+		}
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == 200 || resp.StatusCode == 401 || resp.StatusCode == 403 {
-		msg := "连接成功"
-		if resp.StatusCode == 401 || resp.StatusCode == 403 {
-			msg = "服务可达，请检查 API Key"
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return gin.H{
+			"success": true, "latencyMs": latency, "status": "ok", "statusCode": resp.StatusCode,
+			"message": "连接成功",
 		}
-		util.SuccessResponse(c, gin.H{
-			"success": true, "latencyMs": latency, "status": "ok", "message": msg,
-		})
-	} else {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		bodyStr := string(bodyBytes)
-		if len(bodyStr) > 500 {
-			bodyStr = bodyStr[:500]
-		}
-		util.SuccessResponse(c, gin.H{
-			"success": false, "latencyMs": latency, "status": "error",
-			"message": fmt.Sprintf("服务器返回 %d", resp.StatusCode),
-		})
+	}
+
+	bodyBytes, readErr := io.ReadAll(io.LimitReader(resp.Body, 256<<10))
+	latency = int(time.Since(start).Milliseconds())
+	rawResponse := strings.TrimSpace(string(bodyBytes))
+	truncated := false
+	shown := rawResponse
+	if len(shown) > 4000 {
+		shown = shown[:4000]
+		truncated = true
+	}
+
+	statusName := "error"
+	message := fmt.Sprintf("服务器返回 HTTP %d", resp.StatusCode)
+	if resp.StatusCode == 401 || resp.StatusCode == 403 {
+		statusName = "auth_failed"
+		message = fmt.Sprintf("鉴权失败（HTTP %d）", resp.StatusCode)
+	}
+	if readErr != nil {
+		message = fmt.Sprintf("%s，读取上游响应体失败: %v", message, readErr)
+	}
+	if shown != "" {
+		message = message + ": " + shown
+	}
+
+	return gin.H{
+		"success": false, "latencyMs": latency, "status": statusName,
+		"statusCode": resp.StatusCode, "message": message,
+		"rawResponse": rawResponse, "truncated": truncated, "rawResponseLength": len(rawResponse),
 	}
 }
+
 func (h *Handler) TestModelStandalone(c *gin.Context) {
 	var body struct {
 		BaseURL        string `json:"baseUrl"`

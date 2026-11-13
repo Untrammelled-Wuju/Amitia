@@ -31,6 +31,10 @@ func registerMeshChatManagementRouter(mesh *gin.RouterGroup, services *AppServic
 				c.JSON(400, gin.H{"message": util.OriginalErrorMessage(err, "聊天管理参数无效或缺少原服务范围")})
 				return
 			}
+			if operation == "search" && strings.TrimSpace(payload.Keyword) == "" {
+				c.JSON(400, gin.H{"message": "搜索关键词不能为空"})
+				return
+			}
 			payload.Operation = operation
 			if payload.TargetDeviceID != "" && payload.TargetDeviceID != actor.DeviceID.String() {
 				c.JSON(403, gin.H{"message": "会话属于设备本地数据，不能管理其他设备会话"})

@@ -26,6 +26,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -196,23 +197,93 @@ func Start(handler http.Handler, dataDir string, coreID string, port int, addres
 			result.Close(context.Background())
 			return nil, errors.New("局域网地址必须为私有网络地址")
 		}
-		listener, err := net.Listen("tcp", net.JoinHostPort(address.String(), strconv.Itoa(port)))
-		if err != nil {
+	}
+	listeners, boundPort, listenErr := listenOnPort(addresses, port)
+	if listenErr != nil {
+		if !isAddressInUse(listenErr) {
 			result.Close(context.Background())
-			return nil, fmt.Errorf("局域网监听失败: %w", err)
+			return nil, fmt.Errorf("局域网监听失败: %w", listenErr)
 		}
+		fallbackListeners, fallbackPort, fallbackErr := listenOnEphemeralPort(addresses)
+		if fallbackErr != nil {
+			result.Close(context.Background())
+			return nil, fmt.Errorf("局域网监听失败: %w (固定端口 %d 被占用且备用端口不可用: %v)", fallbackErr, port, listenErr)
+		}
+		amitialog.Printf("[lan] 局域网固定端口 %d 已被占用，改用端口 %d", port, fallbackPort)
+		listeners = fallbackListeners
+		boundPort = fallbackPort
+	}
+	if boundPort != port {
+		amitialog.Printf("[lan] 局域网服务实际监听端口 %d", boundPort)
+	}
+	for _, listener := range listeners {
 		server := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 90 * time.Second, MaxHeaderBytes: 32768}
 		result.listeners = append(result.listeners, listener)
 		result.servers = append(result.servers, server)
 		result.Endpoints = append(result.Endpoints, Endpoint{URL: "https://" + listener.Addr().String(), Fingerprint: fingerprint, CoreID: coreID})
 		secured := tls.NewListener(listener, &tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{certificate}})
-		go func() {
+		go func(server *http.Server, secured net.Listener) {
 			if err := server.Serve(secured); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				result.errors <- err
 			}
-		}()
+		}(server, secured)
 	}
 	return result, nil
+}
+
+func listenOnPort(addresses []net.IP, port int) ([]net.Listener, int, error) {
+	listeners := make([]net.Listener, 0, len(addresses))
+	for _, address := range addresses {
+		listener, err := net.Listen("tcp", net.JoinHostPort(address.String(), strconv.Itoa(port)))
+		if err != nil {
+			for _, opened := range listeners {
+				if closeErr := opened.Close(); closeErr != nil {
+					amitialog.Printf("[original-error] %v", closeErr)
+				}
+			}
+			return nil, 0, err
+		}
+		listeners = append(listeners, listener)
+	}
+	return listeners, port, nil
+}
+
+func listenOnEphemeralPort(addresses []net.IP) ([]net.Listener, int, error) {
+	if len(addresses) == 0 {
+		return nil, 0, errors.New("局域网地址为空")
+	}
+	first, err := net.Listen("tcp", net.JoinHostPort(addresses[0].String(), "0"))
+	if err != nil {
+		return nil, 0, err
+	}
+	_, portText, err := net.SplitHostPort(first.Addr().String())
+	if err != nil {
+		first.Close()
+		return nil, 0, err
+	}
+	port, err := strconv.Atoi(portText)
+	if err != nil {
+		first.Close()
+		return nil, 0, err
+	}
+	listeners := []net.Listener{first}
+	for _, address := range addresses[1:] {
+		listener, err := net.Listen("tcp", net.JoinHostPort(address.String(), portText))
+		if err != nil {
+			for _, opened := range listeners {
+				if closeErr := opened.Close(); closeErr != nil {
+					amitialog.Printf("[original-error] %v", closeErr)
+				}
+			}
+			return nil, 0, err
+		}
+		listeners = append(listeners, listener)
+	}
+	return listeners, port, nil
+}
+
+func isAddressInUse(err error) bool {
+	return errors.Is(err, syscall.EADDRINUSE)
 }
 
 func loadOrCreateTLSKey(dataDir string) (*ecdsa.PrivateKey, error) {

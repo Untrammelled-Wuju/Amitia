@@ -384,6 +384,7 @@ const {
   page,
   totalPages,
   fetchRules,
+  exportEntries,
   createRule,
   createRules,
   updateRule,
@@ -446,8 +447,7 @@ const importInvalidCount = computed(
 const canImportJson = computed(
   () =>
     canWrite.value
-    && importRows.value.length > 0
-    && importInvalidCount.value === 0
+    && importValidCount.value > 0
     && !importParsing.value
     && !importLoading.value,
 );
@@ -645,7 +645,13 @@ async function confirmImport() {
   operationError.value = "";
   try {
     await createRules(items, editorContext.value);
-    ElMessage.success(`导入完成：成功 ${items.length} 条`);
+    if (importInvalidCount.value > 0) {
+      ElMessage.warning(
+        `导入完成：成功 ${items.length} 条，跳过需修正的 ${importInvalidCount.value} 条`,
+      );
+    } else {
+      ElMessage.success(`导入完成：成功 ${items.length} 条`);
+    }
     importDialogVisible.value = false;
   } catch (error: any) {
     reportError(error);
@@ -668,7 +674,8 @@ async function exportRules() {
   try {
   const context = loadedContext.value;
   await access.requireAccess(context);
-  const data = rules.value.map((r) => ({
+  const entries = await exportEntries({ matchType: filterType.value || undefined });
+  const data = entries.map((r) => ({
     matchType: r.matchType,
     matchPattern: r.matchPattern,
     matchScope: r.matchScope,

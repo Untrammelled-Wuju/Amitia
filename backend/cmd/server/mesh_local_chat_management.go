@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/chat/importbatch"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/system/dataportability"
@@ -213,6 +214,31 @@ func chatManagementEstimatedBytes(records []ownedChatManagementRecord) int64 {
 	return total
 }
 
+func verifyChatCleanupBackup(backup *dataportability.BackupResult, plan ownedChatCleanupPlan) error {
+	if backup == nil || backup.Manifest == nil {
+		return errors.New("清理前备份缺少清单，已取消清理")
+	}
+	expectedConversations, expectedMessages := 0, 0
+	for _, row := range plan.Records {
+		switch row.Kind {
+		case "conversation":
+			expectedConversations++
+		case "message":
+			expectedMessages++
+		}
+	}
+	counts := map[string]int64{}
+	for _, component := range backup.Manifest.Components {
+		counts[component.ID] = component.ItemCount
+	}
+	backupConversations := counts[chat.ComponentIDChatConversations]
+	backupMessages := counts[chat.ComponentIDChatMessages]
+	if backupConversations < int64(expectedConversations) || backupMessages < int64(expectedMessages) {
+		return fmt.Errorf("清理前备份缺少待清理聊天数据，已取消清理：备份包含 %d 个会话/%d 条消息，待清理 %d 个会话/%d 条消息，备份文件 %s", backupConversations, backupMessages, expectedConversations, expectedMessages, backup.Path)
+	}
+	return nil
+}
+
 func (p *meshLocalDataPort) ManageChat(ctx context.Context, scope coordination.ExecutionScope, request coordination.ChatManagementRequest) (map[string]any, error) {
 	if request.ConversationOwnerID != p.ownerID {
 		return nil, coordination.ErrWrongOwner
@@ -310,6 +336,12 @@ func (p *meshLocalDataPort) manageChatForRole(ctx context.Context, scope coordin
 		}
 		return map[string]any{"totalConversations": counts["conversationCount"], "totalMessages": counts["messageCount"], "todayMessages": today, "dbSize": bytes, "dbSizeFormatted": fmt.Sprintf("%.2f MB", float64(bytes)/(1024*1024))}, nil
 	case "cleanup/preview":
+		if strings.TrimSpace(request.BeforeDate) == "" && request.OlderThanDays <= 0 && len(request.Channels) == 0 && len(request.Sources) == 0 && len(request.ConversationIDs) == 0 && request.ConversationID == "" {
+			return nil, errors.New("请至少选择一个清理条件")
+		}
+		if len(selected) == 0 {
+			return nil, errors.New("当前条件没有匹配到任何会话")
+		}
 		id := uuid.NewString()
 		expires := time.Now().Add(10 * time.Minute)
 		plan := ownedChatCleanupPlan{Scope: scope, Owner: p.ownerID, Role: role, Records: selected, IncludeMemories: request.IncludeMemories, Expires: expires, Fingerprint: chatManagementFingerprint(selected)}
@@ -369,6 +401,9 @@ func (p *meshLocalDataPort) manageChatForRole(ctx context.Context, scope coordin
 		}
 		if _, err := p.services.DataPortability.RestorePreview(ctx, backup.Path); err != nil {
 			return nil, fmt.Errorf("清理前备份完整性校验失败: %w", err)
+		}
+		if err := verifyChatCleanupBackup(backup, plan); err != nil {
+			return nil, err
 		}
 		if err := p.deleteManagedChat(ctx, scope, role, plan); err != nil {
 			return nil, err

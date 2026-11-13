@@ -711,18 +711,26 @@ func (f *ProductionRuntimeFinalizer) finalizeNonUninstall(ctx context.Context, o
 }
 
 func (f *ProductionRuntimeFinalizer) finalizeUninstall(ctx context.Context, op *operation.InstallationOperation) error {
-	var proj projection.InstallationRuntimeProjection
-	if err := f.db.WithContext(ctx).Where("space_id = ? AND device_id = ?", op.SpaceID, op.DeviceID).First(&proj).Error; err != nil {
-		return err
-	}
-	if proj.AppliedDesiredRevision < op.DesiredRevision {
-		return errors.New("uninstall finalizer: runtime has not applied ensure_absent revision")
-	}
-	if proj.InstallationID == op.InstallationID && proj.ActualReleaseID != "" {
-		return errors.New("uninstall finalizer: runtime still reports installation present")
-	}
-
 	return f.repo.Transaction(ctx, func(tx installation.RepositoryV2) error {
+		if op.Status == operation.OpStatusCompleted {
+			eligible := completedUninstallCandidates(tx.DB()).Select("1").Where("o.id = ?", op.ID)
+			locked := tx.DB().Model(&installation.Installation{}).
+				Where("id = ? AND EXISTS (?)", op.InstallationID, eligible).
+				UpdateColumn("status", gorm.Expr("status"))
+			if locked.Error != nil || locked.RowsAffected == 0 {
+				return locked.Error
+			}
+		}
+		var proj projection.InstallationRuntimeProjection
+		if err := tx.DB().Where("space_id = ? AND device_id = ?", op.SpaceID, op.DeviceID).First(&proj).Error; err != nil {
+			return err
+		}
+		if proj.AppliedDesiredRevision < op.DesiredRevision {
+			return errors.New("uninstall finalizer: runtime has not applied ensure_absent revision")
+		}
+		if proj.InstallationID == op.InstallationID && proj.ActualReleaseID != "" {
+			return errors.New("uninstall finalizer: runtime still reports installation present")
+		}
 		inst, err := loadInstallationForRecovery(tx.DB(), op.SpaceID, op.DeviceID, op.InstallationID)
 		if err != nil {
 			return err
@@ -742,14 +750,15 @@ func (f *ProductionRuntimeFinalizer) finalizeUninstall(ctx context.Context, op *
 				return err
 			}
 			trashEntityID := op.ID + "_" + inst.ID
-			dest, err := f.registry.MoveToTrashWithDestination(resolved, trashEntityID)
-			if err != nil {
-				if !errors.Is(err, os.ErrNotExist) {
-					return err
+			dest, moveErr := f.registry.MoveToTrashWithDestination(resolved, trashEntityID)
+			if moveErr != nil {
+				if !errors.Is(moveErr, os.ErrNotExist) {
+					return moveErr
 				}
-				dest, err = findRecoveredTrashPath(f.registry, op.ID, inst.ID, filepath.Base(resolved))
-				if err != nil {
-					return errors.Join(errors.New("uninstall finalizer: installation storage missing and no trash entry exists"), err)
+				var lookupErr error
+				dest, lookupErr = findRecoveredTrashPath(f.registry, op.ID, inst.ID, filepath.Base(resolved))
+				if lookupErr != nil {
+					return fmt.Errorf("uninstall finalizer: installation storage missing and no trash entry exists: %w", errors.Join(moveErr, lookupErr))
 				}
 			}
 			trashKey, err := f.registry.StorageKeyFromPath(security.RootStorageTrash, dest)

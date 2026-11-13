@@ -95,6 +95,16 @@ class OnboardingService {
     }
   }
 
+  Future<Map<String, dynamic>> coreInfoAt(String coreUri) async {
+    final dio = _publicClientAt(coreUri);
+    try {
+      final response = await dio.get<dynamic>('/api/public/core/info');
+      return _unwrapPublicResponse(response.data);
+    } finally {
+      dio.close(force: true);
+    }
+  }
+
   Future<Map<String, dynamic>> runtimeCapabilitiesAt(String coreUri) async {
     final dio = _publicClientAt(coreUri);
     try {

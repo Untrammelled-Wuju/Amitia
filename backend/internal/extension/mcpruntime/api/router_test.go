@@ -54,3 +54,20 @@ func TestCreateServerPreservesJSONBindingError(t *testing.T) {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 }
+
+func TestRespondReportsMissingMCPServerInsteadOfInternalError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	contextValue, _ := gin.CreateTestContext(recorder)
+	respond(contextValue, nil, gorm.ErrRecordNotFound)
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("status=%d want=%d", recorder.Code, http.StatusNotFound)
+	}
+	body := recorder.Body.String()
+	if !strings.Contains(body, "MCP_SERVER_NOT_FOUND") {
+		t.Fatalf("missing server must use its own code: %s", body)
+	}
+	if !strings.Contains(body, "record not found") {
+		t.Fatalf("original error must be preserved: %s", body)
+	}
+}

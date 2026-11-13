@@ -284,6 +284,15 @@ func (a *componentWriterAdapter) CreateComponent(id, logicalName string, kind Co
 	return &nopWriteCloser{capture.counting}, nil
 }
 
+func (a *componentWriterAdapter) SetComponentItemCount(id string, count int64) error {
+	capture, ok := a.captures[id]
+	if !ok {
+		return fmt.Errorf("%w: undeclared component %s", ErrBackupComponentFailed, id)
+	}
+	capture.plan.ItemCount = count
+	return nil
+}
+
 func (a *componentWriterAdapter) WriteJSON(id string, v interface{}) error {
 	capture, ok := a.captures[id]
 	if !ok {

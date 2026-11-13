@@ -1,12 +1,16 @@
 import { createInterface } from "node:readline";
+import { appendFileSync } from "node:fs";
+import { setTimeout as delay } from "node:timers/promises";
 
+const [pidFile, initializeDelay] = process.argv.slice(2);
+if (pidFile && initializeDelay !== undefined) appendFileSync(pidFile, `${process.pid}\n`);
 const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
 
 function send(message) {
   process.stdout.write(`${JSON.stringify(message)}\n`);
 }
 
-lines.on("line", (line) => {
+lines.on("line", async (line) => {
   if (!line.trim()) return;
   let message;
   try {
@@ -21,6 +25,7 @@ lines.on("line", (line) => {
   }
   if (!Object.prototype.hasOwnProperty.call(message, "id")) return;
   if (message.method === "initialize") {
+    if (initializeDelay) await delay(Number(initializeDelay));
     send({
       jsonrpc: "2.0",
       id: message.id,

@@ -3,12 +3,36 @@ import 'package:amitia_app/features/game_center/domain/game_center_dto.dart';
 import 'package:amitia_app/features/game_center/presentation/controllers/game_center_controller.dart';
 import 'package:amitia_app/features/game_center/presentation/controllers/game_center_providers.dart';
 import 'package:amitia_app/features/game_center/presentation/pages/game_center_page.dart';
+import 'package:amitia_app/features/game_center/presentation/pages/runtime_detail_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
-class TestGameApi extends Fake implements GameCenterApi {}
+class TestGameApi extends Fake implements GameCenterApi {
+  int accessReads = 0;
+
+  @override
+  Future<bool> developerAccess() async {
+    accessReads++;
+    return false;
+  }
+}
+
+class TestRuntimeController extends GameCenterController {
+  TestRuntimeController(TestGameApi api) : super(api: api) {
+    state = const GameCenterState(runtimeOperationByRuntimeId: {'runtime'});
+  }
+
+  @override
+  Future<void> selectRuntime(String runtimeId, {String? pluginId}) async {}
+  @override
+  Future<void> loadRuntimeServices(String runtimeId) async {}
+  @override
+  Future<void> loadRuntimeHealth(String runtimeId) async {}
+  @override
+  Future<void> performHandshake(String runtimeId) async {}
+}
 
 class TestGameController extends GameCenterController {
   TestGameController({bool inactive = false}) : super(api: TestGameApi()) {
@@ -51,6 +75,37 @@ class TestGameController extends GameCenterController {
 }
 
 void main() {
+  testWidgets('运行实例操作期间点击刷新显示原因且不重新加载', (tester) async {
+    final api = TestGameApi();
+    final router = GoRouter(
+      routes: [
+        GoRoute(
+          path: '/',
+          builder: (context, state) =>
+              const RuntimeDetailPage(runtimeId: 'runtime'),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          gameCenterApiProvider.overrideWithValue(api),
+          gameCenterControllerProvider.overrideWith(
+            (ref) => TestRuntimeController(api),
+          ),
+        ],
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
+    await tester.pump();
+    expect(api.accessReads, 1);
+    await tester.tap(find.byTooltip('刷新运行时详情'));
+    await tester.pump();
+    expect(find.text('正在处理该运行实例，请稍后刷新。'), findsOneWidget);
+    expect(api.accessReads, 1);
+  });
+
   testWidgets('游戏模式和插件处理中点击提示且不重复操作', (tester) async {
     final controller = TestGameController();
     final router = GoRouter(

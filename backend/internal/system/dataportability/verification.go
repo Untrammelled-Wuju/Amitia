@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 )
@@ -43,16 +44,16 @@ func VerifyArchive(archivePath string) (*VerificationResult, error) {
 
 	zr, err := zip.NewReader(f, info.Size())
 	if err != nil {
-		return nil, ErrImportPackageInvalid
+		return nil, fmt.Errorf("%w: 无法解析压缩包: %v", ErrImportPackageInvalid, err)
 	}
 	if len(zr.File) == 0 || len(zr.File) > MaxArchiveEntries {
-		return result, ErrImportPackageInvalid
+		return result, fmt.Errorf("%w: 归档条目数无效(%d)", ErrImportPackageInvalid, len(zr.File))
 	}
 	seenEntries := make(map[string]bool, len(zr.File))
 	var archiveUncompressed uint64
 	for _, entry := range zr.File {
 		if seenEntries[entry.Name] {
-			return result, ErrImportPackageInvalid
+			return result, fmt.Errorf("%w: 归档条目重复(%s)", ErrImportPackageInvalid, entry.Name)
 		}
 		seenEntries[entry.Name] = true
 		if entry.UncompressedSize64 > MaxSingleResource {

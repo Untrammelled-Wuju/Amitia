@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -12,7 +13,6 @@ import (
 	"github.com/u-ai/backend/internal/extension/mcpruntime/discovery"
 	"github.com/u-ai/backend/internal/extension/mcpruntime/protocol"
 	"github.com/u-ai/backend/internal/extension/mcpruntime/transport"
-	amitialog "log"
 )
 
 type CanonicalRemoteConnection struct {
@@ -87,10 +87,7 @@ func (c *CanonicalRemoteConnection) Start(ctx context.Context) error {
 	c.mu.Unlock()
 
 	if err := c.performHandshake(ctx); err != nil {
-		if err := c.Close(ctx); err != nil {
-			amitialog.Printf("[original-error] %v", err)
-		}
-		return err
+		return errors.Join(err, c.Close(ctx))
 	}
 
 	c.setState(MCPStdioStateReady)
@@ -116,7 +113,7 @@ func (c *CanonicalRemoteConnection) performHandshake(ctx context.Context) error 
 	})
 
 	if err := conn.Connect(ctx); err != nil {
-		return fmt.Errorf("%w: %v", protocol.ErrInitialization, err)
+		return fmt.Errorf("%w: %w", protocol.ErrInitialization, err)
 	}
 
 	c.mu.Lock()
@@ -146,9 +143,7 @@ func (c *CanonicalRemoteConnection) Close(ctx context.Context) error {
 		closeErr = conn.Close(ctx)
 	}
 	if transport != nil {
-		if err := transport.Close(ctx); err != nil {
-			amitialog.Printf("[original-error] %v", err)
-		}
+		closeErr = errors.Join(closeErr, transport.Close(ctx))
 	}
 
 	c.mu.Lock()

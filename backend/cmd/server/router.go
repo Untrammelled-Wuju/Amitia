@@ -672,6 +672,9 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		if services.MCPRuntime != nil {
 			mcpapi.RegisterRouter(apiGroup, ctx, services.MCPRuntime.API)
 		}
+		if err := character.EnsureRolePurgeJobsSchema(services.DB); err != nil {
+			return nil, err
+		}
 		if services.Sync != nil && services.Sync.ChangeLog != nil {
 			character.RegisterCharacterRouterWithLifecycle(apiGroup, ctx, ownedCharacterPreview{services: services}, services.Sync.ChangeLog, characterAgentLifecycle{platform: services.AgentPlatform})
 		} else {

@@ -362,10 +362,13 @@ func (b *petxAssetReleaseBridge) ensureInstallation(ctx context.Context, extensi
 	}
 	var current *installation.Installation
 	for _, item := range items {
-		if item == nil || item.CurrentReleaseID == "" {
+		if item == nil || item.CurrentReleaseID == "" || item.IsUninstalled() {
 			continue
 		}
 		if item.PetID == releaseData.PetID {
+			if item.Status == installation.StatusUninstalling {
+				return fmt.Errorf("desktop pet installation %s is still uninstalling", item.ID)
+			}
 			current = item
 			break
 		}

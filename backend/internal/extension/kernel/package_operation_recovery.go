@@ -228,6 +228,17 @@ func (r *Runtime) recoverPackageOperation(ctx context.Context, operation Package
 		leaseGuard.MarkLeaseReleased()
 		return nil
 	case "uninstall":
+		if _, ready := completed[stepDesktopPetUninstallReady]; ready {
+			if operation.Status == string(PackageOperationRequiresRecovery) {
+				if _, _, err := r.transitionRequiresRecoveryToInProgress(ctx, operation, guard); err != nil {
+					return err
+				}
+			}
+			if err := r.cleanupDesktopPetAfterPackageUninstall(ctx, operation, guard); err != nil {
+				return err
+			}
+			return r.FinalizePackageOperation(ctx, operation.OperationID, operation.ExtensionID, leaseGuard, guard)
+		}
 		if err := r.executeUninstallRecoveryChain(ctx, operation, completed, guard); err != nil {
 			return err
 		}

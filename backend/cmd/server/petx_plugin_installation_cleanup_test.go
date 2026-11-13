@@ -77,6 +77,7 @@ func TestPetxInstallationCleanupUninstallsOwnedInstallations(t *testing.T) {
 		{ID: "ins-owned", SpaceID: "space-one", DeviceID: "device-one", PetID: "pet-owned", CurrentReleaseID: "rel-owned"},
 		{ID: "ins-other", SpaceID: "space-one", DeviceID: "device-one", PetID: "pet-other", CurrentReleaseID: "rel-other"},
 		{ID: "ins-plain", SpaceID: "space-one", DeviceID: "device-one", PetID: "pet-plain", CurrentReleaseID: "rel-plain"},
+		{ID: "ins-other-space", SpaceID: "space-two", DeviceID: "device-two", PetID: "pet-owned", CurrentReleaseID: "rel-owned"},
 	})
 	reader := &fakeOwnershipReader{
 		identities: map[string]*release.PetIdentityData{
@@ -91,9 +92,9 @@ func TestPetxInstallationCleanupUninstallsOwnedInstallations(t *testing.T) {
 		},
 	}
 	uninstaller := &fakeInstallationUninstaller{}
-	cleanup := newPetxInstallationCleanup(repo, reader, uninstaller, "space-one")
+	cleanup := newPetxInstallationCleanup(repo, reader, uninstaller, "space-two")
 
-	if err := cleanup.CleanupOwnedInstallations(context.Background(), integration.OwnedInstallationCleanupRequest{ExtensionID: "com.amitia/desktop-pet"}); err != nil {
+	if err := cleanup.CleanupOwnedInstallations(context.Background(), integration.OwnedInstallationCleanupRequest{ExtensionID: "com.amitia/desktop-pet", SpaceID: "space-one"}); err != nil {
 		t.Fatalf("cleanup: %v", err)
 	}
 	if len(uninstaller.requests) != 1 {

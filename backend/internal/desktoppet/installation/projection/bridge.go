@@ -327,6 +327,9 @@ func (b *ProjectionBridge) completeDesiredStateOperationFromACK(ctx context.Cont
 	if op.IsTerminal() {
 		return nil
 	}
+	if op.OperationType == operation.TypeUninstall && ackStatus == "completed" {
+		return nil
+	}
 	if op.Status != operation.OpStatusWaitingRuntimeACK || op.Stage != operation.OpStageWaitingRuntimeACK {
 		return fmt.Errorf("projection bridge: desired-state operation %s is not ready for terminal ACK: status=%s stage=%s", op.ID, op.Status, op.Stage)
 	}

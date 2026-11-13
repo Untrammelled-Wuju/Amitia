@@ -22,7 +22,13 @@ func ApplyBaseline(db *gorm.DB) error {
 		return fmt.Errorf("check database baseline state: %w", err)
 	}
 	if initialized {
-		return ensureDesktopPetInstallationOperationColumns(db)
+		if err := ensureRolePurgeJobsTable(db); err != nil {
+			return err
+		}
+		if err := ensureDesktopPetInstallationOperationColumns(db); err != nil {
+			return err
+		}
+		return ensureDesktopPetInstallationIndexes(db)
 	}
 	statements := splitSQLStatements(baselineSQL)
 	if err := db.Transaction(func(tx *gorm.DB) error {
@@ -44,6 +50,47 @@ func ApplyBaseline(db *gorm.DB) error {
 		return err
 	}
 	return ensureDesktopPetInstallationOperationColumns(db)
+}
+
+func ensureRolePurgeJobsTable(db *gorm.DB) error {
+	if err := db.Exec(`CREATE TABLE IF NOT EXISTS role_data_purge_jobs (
+	role_id TEXT PRIMARY KEY,
+	state TEXT NOT NULL DEFAULT 'pending',
+	attempts INTEGER NOT NULL DEFAULT 0,
+	next_attempt_at TEXT NOT NULL DEFAULT '',
+	last_error TEXT NOT NULL DEFAULT '',
+	created_at DATETIME NOT NULL,
+	updated_at DATETIME NOT NULL
+)`).Error; err != nil {
+		return fmt.Errorf("create role data purge jobs table: %w", err)
+	}
+	if err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_role_purge_due ON role_data_purge_jobs(state, next_attempt_at)`).Error; err != nil {
+		return fmt.Errorf("create role data purge jobs index: %w", err)
+	}
+	return nil
+}
+
+func ensureDesktopPetInstallationIndexes(db *gorm.DB) error {
+	var indexes []string
+	if err := db.Raw(`SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'desktop_pet_installations'
+		AND name IN ('uq_dpinst_live_space_device_pet', 'uq_dpinst_user_device_pet', 'idx_dpinst_package_version')`).Scan(&indexes).Error; err != nil {
+		return fmt.Errorf("inspect desktop pet installation indexes: %w", err)
+	}
+	if len(indexes) == 1 && indexes[0] == "uq_dpinst_live_space_device_pet" {
+		return nil
+	}
+	return db.Transaction(func(tx *gorm.DB) error {
+		for _, statement := range []string{
+			"CREATE UNIQUE INDEX IF NOT EXISTS uq_dpinst_live_space_device_pet ON desktop_pet_installations(space_id, device_id, pet_id) WHERE lifecycle_state <> 'uninstalled'",
+			"DROP INDEX IF EXISTS uq_dpinst_user_device_pet",
+			"DROP INDEX IF EXISTS idx_dpinst_package_version",
+		} {
+			if err := tx.Exec(statement).Error; err != nil {
+				return fmt.Errorf("apply desktop pet installation indexes: %w", err)
+			}
+		}
+		return nil
+	})
 }
 
 func ensureDesktopPetInstallationOperationColumns(db *gorm.DB) error {

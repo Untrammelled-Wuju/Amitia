@@ -179,7 +179,7 @@ func (c *Coordinator) ConsumeRestoreTicket() (*DataRestoreTicket, error) {
 
 func (c *Coordinator) CancelRestore() error {
 	ticket, err := c.Staging.ReadRestoreTicket()
-	if errors.Is(err, os.ErrNotExist) {
+	if errors.Is(err, ErrRestoreNotPending) {
 		return nil
 	}
 	if err != nil {

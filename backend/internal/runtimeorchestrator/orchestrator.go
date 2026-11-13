@@ -2,9 +2,13 @@ package runtimeorchestrator
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"runtime/debug"
 	"sync"
 	"time"
 
+	"github.com/u-ai/backend/internal/runtimehost"
 	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/pkg/platform"
 	amitialog "log"
@@ -24,11 +28,20 @@ type RuntimeOrchestrator struct {
 }
 
 type componentRuntimeState struct {
-	status   ComponentStatus
-	started  bool
-	stopped  bool
-	startErr error
+	status     ComponentStatus
+	started    bool
+	stopped    bool
+	startErr   error
+	recovering bool
+	retryAt    time.Time
+	retryDelay time.Duration
 }
+
+const (
+	componentRecoveryBaseDelay = 2 * time.Second
+	componentRecoveryMaxDelay  = time.Minute
+	componentRecoveryTimeout   = 2 * time.Minute
+)
 
 type RestartableComponent interface {
 	Restart(ctx context.Context) error
@@ -222,6 +235,7 @@ func (o *RuntimeOrchestrator) ReportComponentState(id ComponentID, state Compone
 }
 
 func (o *RuntimeOrchestrator) RefreshHealth(ctx context.Context) RuntimeSnapshot {
+	o.scheduleUnstartedRecovery()
 	type probe struct {
 		id        ComponentID
 		component ManagedComponent
@@ -263,6 +277,125 @@ func (o *RuntimeOrchestrator) RefreshHealth(ctx context.Context) RuntimeSnapshot
 		o.mu.Unlock()
 	}
 	return o.Snapshot()
+}
+
+func (o *RuntimeOrchestrator) scheduleUnstartedRecovery() {
+	type recoveryJob struct {
+		id   ComponentID
+		comp ManagedComponent
+	}
+	now := o.nowFn()
+	var jobs []recoveryJob
+	o.mu.Lock()
+	if o.state == OrchestratorStopping || o.state == OrchestratorStopped {
+		o.mu.Unlock()
+		return
+	}
+	for id, st := range o.statuses {
+		if st.started || st.stopped || st.recovering || !st.status.Enabled {
+			continue
+		}
+		if st.status.State != StateFailed && st.status.State != StateDegraded {
+			continue
+		}
+		if now.Before(st.retryAt) {
+			continue
+		}
+		comp := o.components[id]
+		if comp == nil {
+			continue
+		}
+		delay := st.retryDelay
+		if delay <= 0 {
+			delay = componentRecoveryBaseDelay
+		} else if delay < componentRecoveryMaxDelay {
+			delay *= 2
+			if delay > componentRecoveryMaxDelay {
+				delay = componentRecoveryMaxDelay
+			}
+		}
+		st.recovering = true
+		st.retryDelay = delay
+		st.retryAt = now.Add(delay)
+		jobs = append(jobs, recoveryJob{id: id, comp: comp})
+	}
+	o.updateOverallLocked()
+	o.mu.Unlock()
+	for _, job := range jobs {
+		go o.recoverComponent(job.id, job.comp)
+	}
+}
+
+func (o *RuntimeOrchestrator) recoverComponent(id ComponentID, comp ManagedComponent) {
+	ctx, cancel := context.WithTimeout(context.Background(), componentRecoveryTimeout)
+	defer cancel()
+	recovered := false
+	var failure error
+	defer func() {
+		if panicValue := recover(); panicValue != nil {
+			failure = fmt.Errorf("component recovery panic: %v\n%s", panicValue, debug.Stack())
+		}
+		o.finishComponentRecovery(id, recovered, failure)
+	}()
+	if !o.checkDepsReady(id) {
+		failure = fmt.Errorf("dependencies not ready for component %s", id)
+		return
+	}
+	if restartable, ok := comp.(RestartableComponent); ok {
+		if err := restartable.Restart(ctx); err != nil {
+			failure = err
+			return
+		}
+	} else {
+		var cleanupErr error
+		if err := comp.Stop(ctx); err != nil && !errors.Is(err, runtimehost.ErrProcessNotFound) {
+			cleanupErr = fmt.Errorf("stop before recovery: %w", err)
+		}
+		if err := comp.Start(ctx); err != nil {
+			failure = errors.Join(cleanupErr, err)
+			return
+		}
+		if err := comp.Ready(ctx); err != nil {
+			failure = errors.Join(cleanupErr, err)
+			return
+		}
+		if cleanupErr != nil {
+			amitialog.Printf("[original-error] %v", cleanupErr)
+		}
+	}
+	recovered = true
+}
+
+func (o *RuntimeOrchestrator) finishComponentRecovery(id ComponentID, recovered bool, failure error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	st := o.statuses[id]
+	if st == nil {
+		return
+	}
+	st.recovering = false
+	if recovered {
+		st.started = true
+		st.stopped = false
+		st.status.State = StateReady
+		st.status.ReadyAt = o.nowFn()
+		st.status.LastError = ""
+		st.retryDelay = 0
+		st.retryAt = time.Time{}
+		o.updateOverallLocked()
+		return
+	}
+	if o.state == OrchestratorStopping || o.state == OrchestratorStopped {
+		return
+	}
+	st.status.State = StateDegraded
+	if comp, ok := o.components[id]; ok && comp.Descriptor().Required {
+		st.status.State = StateFailed
+	}
+	if failure != nil {
+		st.status.LastError = failure.Error()
+	}
+	o.updateOverallLocked()
 }
 
 func (o *RuntimeOrchestrator) RestartComponent(ctx context.Context, id ComponentID) error {

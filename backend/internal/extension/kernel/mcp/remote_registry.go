@@ -1,91 +1,34 @@
 package mcp
 
-import (
-	"context"
-	"sync"
-)
+import "context"
 
 type CanonicalRemoteRegistry struct {
-	mu          sync.Mutex
-	connections map[string]*CanonicalRemoteConnection
-	factory     *CanonicalRemoteFactory
+	registry *connectionRegistry[*CanonicalRemoteConnection]
+	factory  *CanonicalRemoteFactory
 }
 
 func NewCanonicalRemoteRegistry(factory *CanonicalRemoteFactory) *CanonicalRemoteRegistry {
-	return &CanonicalRemoteRegistry{
-		connections: make(map[string]*CanonicalRemoteConnection),
-		factory:     factory,
-	}
+	return &CanonicalRemoteRegistry{registry: newConnectionRegistry[*CanonicalRemoteConnection](), factory: factory}
 }
 
 func (r *CanonicalRemoteRegistry) StartOrGet(ctx context.Context, spec MCPRemoteSpec) (*CanonicalRemoteConnection, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	serverID := spec.ServerID
-	if existing, ok := r.connections[serverID]; ok {
-		if existing.State() == MCPStdioStateReady {
-			return existing, nil
-		}
-	}
-
-	conn, err := r.factory.Create(ctx, spec)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := conn.Start(ctx); err != nil {
-		return nil, err
-	}
-
-	r.connections[serverID] = conn
-	return conn, nil
+	return r.registry.start(ctx, spec.ServerID, func(ctx context.Context) (*CanonicalRemoteConnection, error) {
+		return r.factory.Create(ctx, spec)
+	})
 }
 
 func (r *CanonicalRemoteRegistry) Get(serverID string) (*CanonicalRemoteConnection, bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	conn, ok := r.connections[serverID]
-	return conn, ok
+	return r.registry.get(serverID)
 }
 
 func (r *CanonicalRemoteRegistry) Close(ctx context.Context, serverID string) error {
-	r.mu.Lock()
-	conn, ok := r.connections[serverID]
-	if !ok {
-		r.mu.Unlock()
-		return nil
-	}
-	delete(r.connections, serverID)
-	r.mu.Unlock()
-
-	return conn.Close(ctx)
+	return r.registry.close(ctx, serverID, nil)
 }
 
 func (r *CanonicalRemoteRegistry) CloseAll(ctx context.Context) error {
-	r.mu.Lock()
-	conns := make(map[string]*CanonicalRemoteConnection, len(r.connections))
-	for k, v := range r.connections {
-		conns[k] = v
-	}
-	r.connections = make(map[string]*CanonicalRemoteConnection)
-	r.mu.Unlock()
-
-	var lastErr error
-	for _, conn := range conns {
-		if err := conn.Close(ctx); err != nil {
-			lastErr = err
-		}
-	}
-	return lastErr
+	return r.registry.closeAll(ctx)
 }
 
 func (r *CanonicalRemoteRegistry) List() map[string]*CanonicalRemoteConnection {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	result := make(map[string]*CanonicalRemoteConnection, len(r.connections))
-	for k, v := range r.connections {
-		result[k] = v
-	}
-	return result
+	return r.registry.list()
 }

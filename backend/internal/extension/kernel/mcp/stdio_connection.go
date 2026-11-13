@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -13,7 +14,6 @@ import (
 	"github.com/u-ai/backend/internal/extension/mcpruntime/protocol"
 	"github.com/u-ai/backend/internal/extension/mcpruntime/transport"
 	"github.com/u-ai/backend/internal/scriptruntime/commandenv"
-	amitialog "log"
 )
 
 // CanonicalStdioConnection is the Extension Kernel MCP stdio connection.
@@ -113,10 +113,7 @@ func (c *CanonicalStdioConnection) Start(ctx context.Context) error {
 	c.mu.Unlock()
 
 	if err := c.performHandshake(startCtx); err != nil {
-		if err := c.Close(ctx); err != nil {
-			amitialog.Printf("[original-error] %v", err)
-		}
-		return err
+		return errors.Join(err, c.Close(ctx))
 	}
 
 	c.setState(MCPStdioStateReady)
@@ -162,7 +159,7 @@ func (c *CanonicalStdioConnection) performHandshake(ctx context.Context) error {
 	})
 
 	if err := conn.Connect(ctx); err != nil {
-		return fmt.Errorf("%w: %v", protocol.ErrInitialization, err)
+		return fmt.Errorf("%w: %w", protocol.ErrInitialization, err)
 	}
 
 	c.mu.Lock()
@@ -196,9 +193,7 @@ func (c *CanonicalStdioConnection) Close(ctx context.Context) error {
 		closeErr = conn.Close(closeCtx)
 	}
 	if tr != nil {
-		if err := tr.Close(closeCtx); err != nil {
-			amitialog.Printf("[original-error] %v", err)
-		}
+		closeErr = errors.Join(closeErr, tr.Close(closeCtx))
 	}
 
 	c.mu.Lock()

@@ -20,6 +20,10 @@ import { UIHostSSE } from "./ui-host-sse";
 import { DesktopPetManager } from "./pet/manager";
 import { getMeshCoordinator } from "./device-mesh/coordinator";
 
+const MAX_LOCAL_RECOVERY_ATTEMPTS = 5;
+const LOCAL_RECOVERY_BASE_DELAY_MS = 1000;
+const LOCAL_RECOVERY_MAX_DELAY_MS = 10000;
+
 export interface DesktopDeploymentLifecycleDeps {
   configStore: ConfigStore;
   runtimeManager: DesktopRuntimeManager;
@@ -42,6 +46,8 @@ export class DesktopDeploymentLifecycle {
   private uiHostSSE: UIHostSSE | null = null;
 
   private reconcileChain: Promise<void> = Promise.resolve();
+  private pendingReconciles = 0;
+  private recoveryAttempts = 0;
   private currentConfig: DeploymentModeConfig;
   private shuttingDown = false;
   private shutdownPromise: Promise<void> | null = null;
@@ -61,14 +67,68 @@ export class DesktopDeploymentLifecycle {
   }
 
   async reconcile(config: DeploymentModeConfig): Promise<RuntimeStatus> {
+    this.recoveryAttempts = 0;
+    return this.enqueueReconcile(config);
+  }
+
+  async restartLocalRuntime(): Promise<RuntimeStatus> {
+    if (this.shuttingDown) return this.runtimeManager.getStatus();
+    this.recoveryAttempts = 0;
+    this.stopBusinessIntegrations();
+    const result = await this.enqueueReconcile(this.currentConfig);
+    if (result.localRuntime?.state === "ready" && isCoreRunning()) this.recoveryAttempts = 0;
+    return result;
+  }
+
+  async recoverUnexpectedExit(
+    profile: BundledCoreProfile,
+    error: Error,
+    onStarting: (message: string) => void,
+  ): Promise<RuntimeStatus | undefined> {
+    if (this.shuttingDown || profile !== this.topology.localRuntimeProfile) return;
+    if (this.pendingReconciles > 0) {
+      await this.reconcileChain;
+    }
+    if (this.shuttingDown) return;
+    const original = error.stack ?? error.message;
+    this.stopBusinessIntegrations();
+    if (this.recoveryAttempts >= MAX_LOCAL_RECOVERY_ATTEMPTS) {
+      this.recordLocalFailure(profile, [original, `本地服务自动恢复已尝试 ${this.recoveryAttempts} 次仍未成功，请手动重启本地服务`].join("\n"));
+      return this.runtimeManager.getStatus();
+    }
+    this.recoveryAttempts++;
+    onStarting(original);
+    const delayMs = Math.min(LOCAL_RECOVERY_BASE_DELAY_MS * 2 ** (this.recoveryAttempts - 1), LOCAL_RECOVERY_MAX_DELAY_MS);
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+    if (this.shuttingDown) return;
+    const result = await this.enqueueReconcile(this.currentConfig);
+    if (result.localRuntime?.state === "ready" && isCoreRunning()) {
+      this.recoveryAttempts = 0;
+      return this.runtimeManager.getStatus();
+    }
+    const retryError = result.localRuntime?.message || result.message;
+    const combined = new Error([original, retryError].filter(Boolean).join("\n"));
+    if (this.recoveryAttempts < MAX_LOCAL_RECOVERY_ATTEMPTS) {
+      return this.recoverUnexpectedExit(profile, combined, onStarting);
+    }
+    this.recordLocalFailure(profile, [combined.message, `本地服务自动恢复已尝试 ${this.recoveryAttempts} 次仍未成功，请手动重启本地服务`].join("\n"));
+    return this.runtimeManager.getStatus();
+  }
+
+  private recordLocalFailure(profile: BundledCoreProfile, message: string): void {
+    if (profile === "local") this.runtimeManager.setBusinessCoreStatus("failed", "", message);
+    this.runtimeManager.setLocalRuntimeStatus("failed", "", profile, message);
+  }
+
+  private async enqueueReconcile(config: DeploymentModeConfig): Promise<RuntimeStatus> {
     if (this.shuttingDown) {
       return this.runtimeManager.getStatus();
     }
 
-    const result: { status?: RuntimeStatus; error?: Error } = {};
-
+    this.pendingReconciles++;
     this.reconcileChain = this.reconcileChain.then(async () => {
       try {
+        if (this.shuttingDown) return;
         const desired = { ...config };
         this.currentConfig = desired;
         this.topology = resolveBackendTopology(desired, getCoreBaseURL());
@@ -80,21 +140,22 @@ export class DesktopDeploymentLifecycle {
         }
       } catch (err) {
         console.error("[DeploymentLifecycle] reconcile失败:", err);
-        result.error = err instanceof Error ? err : new Error(String(err));
+        const message = err instanceof Error ? err.stack ?? err.message : String(err);
+        this.recordLocalFailure(this.topology.localRuntimeProfile, message);
+        this.runtimeManager.setStatus("failed", message);
+      } finally {
+        this.pendingReconciles--;
       }
     });
 
     await this.reconcileChain;
-
-    if (result.error) {
-      this.runtimeManager.setStatus("failed", result.error.message);
-    }
 
     return this.runtimeManager.getStatus();
   }
 
   private async reconcileLocalMode(): Promise<void> {
     await this.stopLocalPetIntegrations();
+    if (this.shuttingDown) return;
     this.stopBusinessIntegrations();
     getMeshCoordinator(this.getMainWindow).stop();
 
@@ -119,6 +180,7 @@ export class DesktopDeploymentLifecycle {
 
   private async reconcileCloudMode(): Promise<void> {
     await this.stopLocalPetIntegrations();
+    if (this.shuttingDown) return;
     this.stopBusinessIntegrations();
 
     const [coreResult] = await Promise.allSettled([
@@ -133,7 +195,7 @@ export class DesktopDeploymentLifecycle {
         "failed",
         this.topology.localRuntime.baseURL,
         "device-agent",
-        "本机执行节点启动失败",
+        coreResult.reason instanceof Error ? coreResult.reason.stack ?? coreResult.reason.message : String(coreResult.reason),
       );
     } else {
       this.topology = resolveBackendTopology(this.currentConfig, getCoreBaseURL());

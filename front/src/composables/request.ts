@@ -40,6 +40,7 @@ export interface RequestError {
   severity: ErrorSeverity;
   action?: { label: string; handler: () => void };
   raw?: any;
+  cause?: unknown;
 }
 
 export function isSuccessfulResponseCode(code: number): boolean {

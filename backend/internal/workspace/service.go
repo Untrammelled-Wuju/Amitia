@@ -3,6 +3,7 @@ package workspace
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -10,12 +11,14 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/u-ai/backend/pkg/resourceuri"
 	amitialog "log"
 )
 
 type Service struct {
+	localMountMu       sync.Mutex
 	registry           *Registry
 	physicalResolver   PhysicalResolverProvider
 	mountRepo          *MountRepository
@@ -204,58 +207,52 @@ func (s *Service) RegisterLocalMount(ctx context.Context, name, localRoot string
 		name = "Workspace"
 	}
 
-	if s.mountRepo != nil {
-		records, loadErr := s.mountRepo.LoadAll()
-		if loadErr == nil {
-			for _, rec := range records {
-				if rec.kind != WorkspaceKindLocal || strings.TrimSpace(rec.localRoot) == "" || !sameLocalRoot(rec.localRoot, root) {
-					continue
-				}
-				if existing, ok := s.registry.GetMount(WorkspaceID(rec.id)); ok {
-					if existing.ReadOnly != readOnly {
-						updated, updatedOK := s.registry.UpdateLocalMountConfig(existing.ID, readOnly)
-						if !updatedOK {
-							continue
-						}
-						existing = updated
-						if err := s.mountRepo.UpdateReadOnly(string(existing.ID), readOnly); err != nil {
-							return WorkspaceMount{}, fmt.Errorf("update local mount read-only mode: %w", err)
-						}
-					}
-					if touched, ok := s.registry.TouchMount(existing.ID); ok {
-						if err := s.mountRepo.Touch(string(touched.ID), touched.LastUsedAt); err != nil {
-							return WorkspaceMount{}, fmt.Errorf("touch local mount: %w", err)
-						}
-						return touched, nil
-					}
-					return existing, nil
-				}
-			}
-		}
+	s.localMountMu.Lock()
+	defer s.localMountMu.Unlock()
+	if s.mountRepo == nil {
+		return s.registry.RegisterLocalMount(ctx, name, root, readOnly)
 	}
 
-	mount, err := s.registry.RegisterLocalMount(ctx, name, root, readOnly)
+	records, err := s.mountRepo.LoadAll()
 	if err != nil {
-		return WorkspaceMount{}, err
+		return WorkspaceMount{}, fmt.Errorf("load local mounts: %w", err)
 	}
-	if s.mountRepo != nil {
-		rec := persistenceRecord{
-			id:         string(mount.ID),
-			name:       mount.Name,
-			kind:       mount.Kind,
-			localRoot:  root,
-			readOnly:   readOnly,
-			enabled:    true,
-			createdAt:  mount.CreatedAt,
-			updatedAt:  mount.UpdatedAt,
-			lastUsedAt: mount.LastUsedAt,
+	for _, rec := range records {
+		if rec.kind != WorkspaceKindLocal || strings.TrimSpace(rec.localRoot) == "" || !sameLocalRoot(rec.localRoot, root) {
+			continue
 		}
-		if err := s.mountRepo.Insert(rec); err != nil {
-			if err := s.registry.RemoveMount(ctx, mount.ID); err != nil {
-				amitialog.Printf("[original-error] %v", err)
+		existing, ok := s.registry.GetMount(WorkspaceID(rec.id))
+		if !ok {
+			return WorkspaceMount{}, fmt.Errorf("%w: persisted local mount %q missing from registry", ErrMountNotFound, rec.id)
+		}
+		if existing.ReadOnly != readOnly {
+			if err := s.mountRepo.UpdateReadOnly(string(existing.ID), readOnly); err != nil {
+				return WorkspaceMount{}, fmt.Errorf("update local mount read-only mode: %w", err)
 			}
-			return WorkspaceMount{}, fmt.Errorf("persist local mount: %w", err)
+			if _, ok := s.registry.UpdateLocalMountConfig(existing.ID, readOnly); !ok {
+				return WorkspaceMount{}, fmt.Errorf("%w: local mount %q removed during update", ErrMountNotFound, existing.ID)
+			}
 		}
+		return s.TouchMount(ctx, existing.ID)
+	}
+
+	mount := newLocalMount(name, root, readOnly)
+	rec := persistenceRecord{
+		id:         string(mount.ID),
+		name:       mount.Name,
+		kind:       mount.Kind,
+		localRoot:  root,
+		readOnly:   readOnly,
+		enabled:    true,
+		createdAt:  mount.CreatedAt,
+		updatedAt:  mount.UpdatedAt,
+		lastUsedAt: mount.LastUsedAt,
+	}
+	if err := s.mountRepo.Insert(rec); err != nil {
+		return WorkspaceMount{}, fmt.Errorf("persist local mount: %w", err)
+	}
+	if err := s.registry.RestoreMount(mount); err != nil {
+		return WorkspaceMount{}, fmt.Errorf("publish local mount: %w", errors.Join(err, s.mountRepo.Delete(rec.id)))
 	}
 	return mount, nil
 }
@@ -409,13 +406,14 @@ func (s *Service) RegisterIsolatedMount(ctx context.Context, name string, backen
 }
 
 func (s *Service) RemoveMount(ctx context.Context, id WorkspaceID) error {
-	if err := s.registry.RemoveMount(ctx, id); err != nil {
-		return err
-	}
+	s.localMountMu.Lock()
+	defer s.localMountMu.Unlock()
 	if s.mountRepo != nil {
-		return s.mountRepo.Delete(string(id))
+		if err := s.mountRepo.Delete(string(id)); err != nil {
+			return err
+		}
 	}
-	return nil
+	return s.registry.RemoveMount(ctx, id)
 }
 
 func (s *Service) RefreshMountStatus(ctx context.Context, id WorkspaceID) (WorkspaceMount, error) {

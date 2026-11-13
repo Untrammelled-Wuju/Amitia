@@ -12,6 +12,8 @@ import (
 	"github.com/u-ai/backend/internal/chat/localmodel"
 )
 
+var errInvalidModelConfiguration = errors.New("模型配置无效")
+
 type LocalModelManager interface {
 	ListLocalModels(context.Context, string) ([]localmodel.ModelArtifact, error)
 	ImportLocalModel(context.Context, string, string, string, io.Reader) (*localmodel.ModelArtifact, error)
@@ -128,6 +130,15 @@ func (s *service) validateModelConfiguration(ctx context.Context, cfg *ModelConf
 	}
 	provider := strings.TrimSpace(cfg.APIType)
 	if !localmodel.IsEmbedded(provider) {
+		if strings.TrimSpace(cfg.BaseURL) == "" {
+			return fmt.Errorf("%w: baseUrl 不能为空", errInvalidModelConfiguration)
+		}
+		if _, err := parseModelEndpoint(cfg.BaseURL); err != nil {
+			return fmt.Errorf("%w: %w", errInvalidModelConfiguration, err)
+		}
+		if strings.TrimSpace(cfg.ModelName) == "" {
+			return fmt.Errorf("%w: modelName 不能为空", errInvalidModelConfiguration)
+		}
 		return nil
 	}
 	if available, reason := localmodel.ProviderAvailable(provider); !available {
@@ -204,9 +215,8 @@ func providerConfigObject(raw string) (map[string]any, error) {
 	return value, nil
 }
 
-func projectModelConfigUpdate(current ModelConfig, updates map[string]interface{}) *ModelConfig {
+func projectModelConfigUpdate(current ModelConfig, normalized map[string]interface{}) *ModelConfig {
 	projected := current
-	normalized := normalizeConfigUpdates(updates)
 	for key, value := range normalized {
 		stringValue := fmt.Sprint(value)
 		switch key {

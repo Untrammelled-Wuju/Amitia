@@ -50,8 +50,14 @@
     </div>
 
     <el-dialog v-model="createOpen" title="新建主动任务" width="min(560px, 92vw)">
+      <pre v-if="createError" class="task-create-error" role="alert">{{ createError }}</pre>
       <el-form label-position="top">
         <el-form-item label="标题"><el-input v-model="form.title" maxlength="120" /></el-form-item>
+        <el-form-item label="所属角色">
+          <el-select v-model="form.characterId" aria-label="所属角色" :loading="loadingRoles" :disabled="loadingRoles || saving">
+            <el-option v-for="role in roles" :key="role.id" :label="role.name" :value="role.id" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="内容"><el-input v-model="form.content" type="textarea" :rows="4" maxlength="4000" /></el-form-item>
         <el-form-item label="执行时间"><el-input v-model="form.remindAt" type="datetime-local" /></el-form-item>
         <el-form-item label="重复规则">
@@ -65,7 +71,7 @@
       </el-form>
       <template #footer>
         <el-button @click="createOpen = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="createTask">创建</el-button>
+        <el-button type="primary" :loading="saving" :disabled="loadingRoles" @click="createTask">创建</el-button>
       </template>
     </el-dialog>
   </div>
@@ -77,6 +83,8 @@ import { ElMessage } from "element-plus";
 import ExtensionSlot from "@/components/extension/ExtensionSlot.vue";
 import ExtensionPageHeader from "@/views/extensions/components/ExtensionPageHeader.vue";
 import { apiClient } from "@/composables/useApi";
+import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
+import { originalErrorText } from "@/runtime/original-error";
 
 interface ReminderTask {
   id: string;
@@ -98,7 +106,12 @@ const loading = ref(false);
 const saving = ref(false);
 const error = ref("");
 const createOpen = ref(false);
-const form = reactive({ title: "", content: "", remindAt: "", repeatRule: "none" });
+const createError = ref("");
+const loadingRoles = ref(false);
+const roles = ref<Array<{ id: string; name: string }>>([]);
+const owned = useDeviceOwnedConversation();
+let formCoreId = "";
+const form = reactive({ title: "", characterId: "", content: "", remindAt: "", repeatRule: "none" });
 
 function responseData<T>(response: { data?: { data?: T } } | T): T {
   const payload = response as { data?: { data?: T } };
@@ -118,21 +131,47 @@ async function loadTasks() {
   }
 }
 
-function openCreate() {
+async function openCreate() {
+  if (loadingRoles.value || saving.value) return;
   form.title = "";
+  form.characterId = "";
   form.content = "";
   form.remindAt = "";
   form.repeatRule = "none";
+  formCoreId = "";
+  createError.value = "";
+  roles.value = [];
   createOpen.value = true;
+  loadingRoles.value = true;
+  try {
+    if (!await owned.refresh()) throw new Error("当前统筹中心角色目录不可用");
+    formCoreId = owned.coreId.value;
+    roles.value = owned.roles.value.map(({ id, name }) => ({ id, name }));
+    if (roles.value.length === 1) form.characterId = roles.value[0].id;
+    if (roles.value.length === 0) ElMessage.warning("请先创建角色，再新建任务");
+  } catch (cause) {
+    createError.value = originalErrorText(cause);
+  } finally {
+    loadingRoles.value = false;
+  }
 }
 
 async function createTask() {
+  if (saving.value || loadingRoles.value) return;
   if (!form.title.trim()) return ElMessage.warning("请输入任务标题");
+  if (!roles.value.some(role => role.id === form.characterId)) return ElMessage.warning("请选择所属角色");
   if (!form.remindAt) return ElMessage.warning("请选择执行时间");
+  const characterId = form.characterId;
+  createError.value = "";
   saving.value = true;
   try {
+    if (!await owned.refresh()) throw new Error("当前统筹中心角色目录不可用");
+    if (owned.coreId.value !== formCoreId || !owned.roles.value.some(role => role.id === characterId)) {
+      throw new Error("统筹中心或所属角色已变化，请重新打开新建任务表单");
+    }
     await apiClient.post("/api/reminders", {
       title: form.title.trim(),
+      characterId,
       content: form.content.trim(),
       remindAt: new Date(form.remindAt).toISOString(),
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
@@ -147,7 +186,7 @@ async function createTask() {
     ElMessage.success("任务已创建");
     await loadTasks();
   } catch (cause) {
-    ElMessage.error(cause instanceof Error ? cause.message : "创建任务失败");
+    createError.value = originalErrorText(cause);
   } finally {
     saving.value = false;
   }
@@ -189,6 +228,7 @@ onMounted(loadTasks);
 
 <style scoped>
 .active-tasks { width: min(1180px, 100%); margin: 0 auto; padding: 24px; }
+.task-create-error { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--el-color-danger); }
 .task-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin-top: 18px; }
 .task-card { display: grid; gap: 14px; padding: 18px; border: 1px solid var(--surface-border); border-radius: var(--ac-radius-md); background: var(--surface-bg); }
 .task-card header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }

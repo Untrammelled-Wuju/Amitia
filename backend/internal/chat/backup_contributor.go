@@ -3,26 +3,29 @@ package chat
 import (
 	"bufio"
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/system/dataportability"
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 const (
 	ComponentIDChatConversations = "chat.conversations"
 	ComponentIDChatMessages      = "chat.messages"
+
+	chatConversationsLogicalName = "chat.conversations.owned.v1"
+	chatMessagesLogicalName      = "chat.messages.owned.v1"
 )
 
 type ChatBackupContributor struct {
-	DB *gorm.DB
+	KernelDB *sql.DB
 }
 
-func NewChatBackupContributor(db *gorm.DB) *ChatBackupContributor {
-	return &ChatBackupContributor{DB: db}
+func NewChatBackupContributor(kernelDB *sql.DB) *ChatBackupContributor {
+	return &ChatBackupContributor{KernelDB: kernelDB}
 }
 
 func (c *ChatBackupContributor) ID() string             { return "chat" }
@@ -32,295 +35,221 @@ func (c *ChatBackupContributor) ComponentIDs() []string {
 	return []string{ComponentIDChatConversations, ComponentIDChatMessages}
 }
 
-type chatConversationV2 struct {
-	ID                       string `json:"id"`
-	SpaceID                  string `json:"spaceId"`
-	ProjectID                string `json:"projectId"`
-	WorkspaceID              string `json:"workspaceId"`
-	WorkspaceDeviceID        string `json:"workspaceDeviceId"`
-	Title                    string `json:"title"`
-	Channel                  string `json:"channel"`
-	Source                   string `json:"source"`
-	PeerID                   string `json:"peerId"`
-	ModelConfigID            int    `json:"modelConfigId"`
-	ReasoningEffort          string `json:"reasoningEffort"`
-	ReasoningEnabled         int    `json:"reasoningEnabled"`
-	PermissionMode           string `json:"permissionMode"`
-	MessageCount             int    `json:"messageCount"`
-	StateVersion             string `json:"stateVersion"`
-	PinnedAt                 string `json:"pinnedAt"`
-	ArchivedAt               string `json:"archivedAt"`
-	LastReadTurnSequence     int64  `json:"lastReadTurnSequence"`
-	LastTerminalTurnSequence int64  `json:"lastTerminalTurnSequence"`
-	CreatedAt                string `json:"createdAt"`
-	UpdatedAt                string `json:"updatedAt"`
-	Revision                 int64  `json:"revision"`
-}
-
-type chatMessageV2 struct {
-	ID                   string  `json:"id"`
-	ConversationID       string  `json:"conversationId"`
-	CharacterID          string  `json:"characterId"`
-	Sequence             int64   `json:"sequence"`
-	Role                 string  `json:"role"`
-	Content              string  `json:"content"`
-	ReasoningContent     string  `json:"reasoningContent"`
-	ReasoningDurationMS  int64   `json:"reasoningDurationMs"`
-	MsgType              string  `json:"msgType"`
-	ExtensionType        string  `json:"extensionType"`
-	Tokens               int     `json:"tokens"`
-	Source               string  `json:"source"`
-	SafetyLevel          string  `json:"safetyLevel"`
-	Status               string  `json:"status"`
-	IncludeInCtx         int     `json:"includeInContext"`
-	AudioURL             string  `json:"audioUrl"`
-	AudioDuration        float64 `json:"audioDuration"`
-	ImageURL             string  `json:"imageUrl"`
-	VideoURL             string  `json:"videoUrl"`
-	AltText              string  `json:"altText"`
-	IsAnimated           int     `json:"isAnimated"`
-	MediaWidth           int     `json:"width"`
-	MediaHeight          int     `json:"height"`
-	OriginalAsset        string  `json:"originalAssetReference"`
-	FallbackAsset        string  `json:"fallbackAssetReference"`
-	DeliveryGroupID      string  `json:"deliveryGroupId"`
-	DeliverySequence     int     `json:"deliverySequence"`
-	RequestID            string  `json:"requestId"`
-	ReplyToMessageID     *string `json:"replyToMessageId"`
-	ReplyToRole          *string `json:"replyToRole"`
-	ReplyToExcerpt       *string `json:"replyToExcerpt"`
-	CitationSnapshotJSON string  `json:"citationSnapshotJson"`
-	CreatedAt            string  `json:"createdAt"`
-	UpdatedAt            string  `json:"updatedAt"`
-	Revision             int64   `json:"revision"`
+type ownedChatRecordV1 struct {
+	OwnerID   string          `json:"ownerId"`
+	RoleID    string          `json:"roleId"`
+	ID        string          `json:"id"`
+	Revision  int64           `json:"revision"`
+	Body      json.RawMessage `json:"body"`
+	UpdatedAt string          `json:"updatedAt"`
 }
 
 func (c *ChatBackupContributor) Plan(ctx context.Context, req dataportability.BackupRequest) ([]dataportability.BackupComponentPlan, error) {
 	if req.EffectiveScope() != dataportability.ScopeAll && req.EffectiveScope() != dataportability.ScopeCharacter {
 		return nil, nil
 	}
-	var convCount int64
-	convQuery := c.DB.WithContext(ctx).Model(&Conversation{}).Where("deleted_at IS NULL")
-	if req.EffectiveScope() == dataportability.ScopeCharacter && req.CharacterID != "" {
-		convQuery = convQuery.Where("EXISTS (SELECT 1 FROM messages m WHERE m.conversation_id = conversations.id AND m.character_id = ? AND m.deleted_at IS NULL)", req.CharacterID)
+	if c == nil || c.KernelDB == nil {
+		return nil, errors.New("聊天备份数据库不可用")
 	}
-	convQuery.Count(&convCount)
-	var msgCount int64
-	msgQuery := c.DB.WithContext(ctx).Model(&Message{}).
-		Joins("JOIN conversations ON conversations.id = messages.conversation_id").
-		Where("conversations.deleted_at IS NULL").
-		Where("messages.deleted_at IS NULL")
-	if req.EffectiveScope() == dataportability.ScopeCharacter && req.CharacterID != "" {
-		msgQuery = msgQuery.Where("messages.character_id = ?", req.CharacterID)
+	conversations, err := c.countRecords(ctx, req, "conversation")
+	if err != nil {
+		return nil, err
 	}
-	msgQuery.Count(&msgCount)
-
+	messages, err := c.countRecords(ctx, req, "message")
+	if err != nil {
+		return nil, err
+	}
 	return []dataportability.BackupComponentPlan{
 		{
 			ID:            ComponentIDChatConversations,
 			Kind:          dataportability.KindNDJSON,
-			LogicalName:   "chat.conversations.v2",
+			LogicalName:   chatConversationsLogicalName,
 			Required:      true,
 			SourceOfTruth: true,
-			ItemCount:     convCount,
-			EstimatedSize: convCount * 512,
+			ItemCount:     conversations,
+			EstimatedSize: conversations * 1024,
 		},
 		{
 			ID:            ComponentIDChatMessages,
 			Kind:          dataportability.KindNDJSON,
-			LogicalName:   "chat.messages.v2",
+			LogicalName:   chatMessagesLogicalName,
 			Required:      true,
 			SourceOfTruth: true,
-			ItemCount:     msgCount,
-			EstimatedSize: msgCount * 1024,
+			ItemCount:     messages,
+			EstimatedSize: messages * 2048,
 		},
 	}, nil
+}
+
+func (c *ChatBackupContributor) countRecords(ctx context.Context, req dataportability.BackupRequest, kind string) (int64, error) {
+	query := `SELECT COUNT(*) FROM kernel_device_owned_resources WHERE kind=? AND deleted=0`
+	args := []any{kind}
+	if req.EffectiveScope() == dataportability.ScopeCharacter && req.CharacterID != "" {
+		query += ` AND role_id=?`
+		args = append(args, req.CharacterID)
+	}
+	var count int64
+	if err := c.KernelDB.QueryRowContext(ctx, query, args...).Scan(&count); err != nil {
+		return 0, fmt.Errorf("统计聊天备份记录失败(%s): %w", kind, err)
+	}
+	return count, nil
 }
 
 func (c *ChatBackupContributor) Export(ctx context.Context, req dataportability.BackupRequest, out dataportability.BackupWriter) error {
 	if req.EffectiveScope() != dataportability.ScopeAll && req.EffectiveScope() != dataportability.ScopeCharacter {
 		return nil
 	}
-	convComp, err := out.CreateComponent(ComponentIDChatConversations, "chat.conversations.v2", dataportability.KindNDJSON)
-	if err != nil {
-		return fmt.Errorf("export: create conversations component: %w", err)
+	if c == nil || c.KernelDB == nil {
+		return errors.New("聊天备份数据库不可用")
 	}
-	defer convComp.Close()
-
-	convQuery := c.DB.WithContext(ctx).Model(&Conversation{}).Where("deleted_at IS NULL")
-	if req.EffectiveScope() == dataportability.ScopeCharacter && req.CharacterID != "" {
-		convQuery = convQuery.Where("EXISTS (SELECT 1 FROM messages m WHERE m.conversation_id = conversations.id AND m.character_id = ? AND m.deleted_at IS NULL)", req.CharacterID)
-	}
-	rows, err := convQuery.Rows()
-	if err != nil {
+	if err := c.exportKind(ctx, req, out, "conversation", ComponentIDChatConversations, chatConversationsLogicalName); err != nil {
 		return err
+	}
+	return c.exportKind(ctx, req, out, "message", ComponentIDChatMessages, chatMessagesLogicalName)
+}
+
+func (c *ChatBackupContributor) exportKind(ctx context.Context, req dataportability.BackupRequest, out dataportability.BackupWriter, kind string, componentID string, logicalName string) error {
+	component, err := out.CreateComponent(componentID, logicalName, dataportability.KindNDJSON)
+	if err != nil {
+		return fmt.Errorf("导出聊天备份组件失败(%s): %w", kind, err)
+	}
+	defer component.Close()
+
+	query := `SELECT owner_id,role_id,resource_id,revision,body,updated_at FROM kernel_device_owned_resources WHERE kind=? AND deleted=0`
+	args := []any{kind}
+	if req.EffectiveScope() == dataportability.ScopeCharacter && req.CharacterID != "" {
+		query += ` AND role_id=?`
+		args = append(args, req.CharacterID)
+	}
+	query += ` ORDER BY owner_id,role_id,resource_id`
+	rows, err := c.KernelDB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("查询聊天备份记录失败(%s): %w", kind, err)
 	}
 	defer rows.Close()
+	writer := bufio.NewWriter(component)
 	for rows.Next() {
-		var conv Conversation
-		if err := c.DB.ScanRows(rows, &conv); err != nil {
-			continue
+		var record ownedChatRecordV1
+		var body []byte
+		if err := rows.Scan(&record.OwnerID, &record.RoleID, &record.ID, &record.Revision, &body, &record.UpdatedAt); err != nil {
+			return fmt.Errorf("读取聊天备份记录失败(%s): %w", kind, err)
 		}
-		rec := chatConversationV2{
-			ID:                       conv.ID,
-			SpaceID:                  conv.SpaceID,
-			ProjectID:                conv.ProjectID,
-			WorkspaceID:              conv.WorkspaceID,
-			WorkspaceDeviceID:        conv.WorkspaceDeviceID,
-			Title:                    conv.Title,
-			Channel:                  conv.Channel,
-			Source:                   conv.Source,
-			PeerID:                   conv.PeerID,
-			ModelConfigID:            conv.ModelConfigID,
-			ReasoningEffort:          conv.ReasoningEffort,
-			ReasoningEnabled:         conv.ReasoningEnabled,
-			PermissionMode:           conv.PermissionMode,
-			MessageCount:             conv.MessageCount,
-			StateVersion:             conv.StateVersion,
-			PinnedAt:                 conv.PinnedAt,
-			ArchivedAt:               conv.ArchivedAt,
-			LastReadTurnSequence:     conv.LastReadTurnSequence,
-			LastTerminalTurnSequence: conv.LastTerminalTurnSequence,
-			CreatedAt:                conv.CreatedAt,
-			UpdatedAt:                conv.UpdatedAt,
-			Revision:                 conv.Revision,
-		}
-		data, err := json.Marshal(rec)
+		record.Body = body
+		encoded, err := json.Marshal(record)
 		if err != nil {
-			continue
+			return fmt.Errorf("编码聊天备份记录失败(%s): %w", kind, err)
 		}
-		convComp.Write(data)
-		convComp.Write([]byte("\n"))
-	}
-
-	msgComp, err := out.CreateComponent(ComponentIDChatMessages, "chat.messages.v2", dataportability.KindNDJSON)
-	if err != nil {
-		return fmt.Errorf("export: create messages component: %w", err)
-	}
-	defer msgComp.Close()
-
-	msgQuery := c.DB.WithContext(ctx).Model(&Message{}).
-		Joins("JOIN conversations ON conversations.id = messages.conversation_id").
-		Where("conversations.deleted_at IS NULL").
-		Where("messages.deleted_at IS NULL")
-	if req.EffectiveScope() == dataportability.ScopeCharacter && req.CharacterID != "" {
-		msgQuery = msgQuery.Where("messages.character_id = ?", req.CharacterID)
-	}
-	msgRows, err := msgQuery.Order("messages.conversation_id, messages.sequence").Rows()
-	if err != nil {
-		return err
-	}
-	defer msgRows.Close()
-	for msgRows.Next() {
-		var msg Message
-		if err := c.DB.ScanRows(msgRows, &msg); err != nil {
-			continue
+		if _, err := writer.Write(append(encoded, '\n')); err != nil {
+			return fmt.Errorf("写入聊天备份记录失败(%s): %w", kind, err)
 		}
-		rec := chatMessageV2{
-			ID:                   msg.ID,
-			ConversationID:       msg.ConversationID,
-			CharacterID:          msg.CharacterID,
-			Sequence:             msg.Sequence,
-			Role:                 msg.Role,
-			Content:              msg.Content,
-			ReasoningContent:     msg.ReasoningContent,
-			ReasoningDurationMS:  msg.ReasoningDurationMS,
-			MsgType:              msg.MsgType,
-			ExtensionType:        msg.ExtensionType,
-			Tokens:               msg.Tokens,
-			Source:               msg.Source,
-			SafetyLevel:          msg.SafetyLevel,
-			Status:               msg.Status,
-			IncludeInCtx:         msg.IncludeInCtx,
-			AudioURL:             msg.AudioUrl,
-			AudioDuration:        msg.AudioDuration,
-			ImageURL:             msg.ImageUrl,
-			VideoURL:             msg.VideoUrl,
-			AltText:              msg.AltText,
-			IsAnimated:           msg.IsAnimated,
-			MediaWidth:           msg.MediaWidth,
-			MediaHeight:          msg.MediaHeight,
-			OriginalAsset:        msg.OriginalAsset,
-			FallbackAsset:        msg.FallbackAsset,
-			DeliveryGroupID:      msg.DeliveryGroupID,
-			DeliverySequence:     msg.DeliverySequence,
-			RequestID:            msg.RequestID,
-			ReplyToMessageID:     msg.ReplyToMessageID,
-			ReplyToRole:          msg.ReplyToRole,
-			ReplyToExcerpt:       msg.ReplyToExcerpt,
-			CitationSnapshotJSON: msg.CitationSnapshotJSON,
-			CreatedAt:            msg.CreatedAt,
-			UpdatedAt:            msg.UpdatedAt,
-			Revision:             msg.Revision,
-		}
-		data, err := json.Marshal(rec)
-		if err != nil {
-			continue
-		}
-		msgComp.Write(data)
-		msgComp.Write([]byte("\n"))
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("遍历聊天备份记录失败(%s): %w", kind, err)
+	}
+	if err := writer.Flush(); err != nil {
+		return fmt.Errorf("刷新聊天备份记录失败(%s): %w", kind, err)
 	}
 	return nil
 }
 
-func (c *ChatBackupContributor) PreviewImport(ctx context.Context, req dataportability.ImportPreviewRequest, in dataportability.BackupReader) ([]dataportability.ImportComponentPreview, error) {
-	previews := make([]dataportability.ImportComponentPreview, 0, 2)
+func readChatRecords(in dataportability.BackupReader, componentID string, invalid error) ([]ownedChatRecordV1, error) {
+	reader, err := in.ReadComponent(componentID)
+	if err != nil {
+		return nil, fmt.Errorf("读取聊天备份组件失败(%s): %w", componentID, err)
+	}
+	defer reader.Close()
+	records := make([]ownedChatRecordV1, 0)
+	scanner := bufio.NewScanner(reader)
+	scanner.Buffer(make([]byte, 64<<10), 8<<20)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+		var record ownedChatRecordV1
+		if err := json.Unmarshal(line, &record); err != nil {
+			return nil, fmt.Errorf("%w: %v", invalid, err)
+		}
+		if record.OwnerID == "" || record.RoleID == "" || record.ID == "" || record.Revision < 1 || len(record.Body) == 0 || !json.Valid(record.Body) {
+			return nil, fmt.Errorf("%w: 记录字段缺失或无效", invalid)
+		}
+		records = append(records, record)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("%w: %v", invalid, err)
+	}
+	return records, nil
+}
 
+func (c *ChatBackupContributor) PreviewImport(ctx context.Context, req dataportability.ImportPreviewRequest, in dataportability.BackupReader) ([]dataportability.ImportComponentPreview, error) {
+	conversations, err := readChatRecords(in, ComponentIDChatConversations, dataportability.ErrImportPackageInvalid)
+	if err != nil {
+		return nil, err
+	}
+	messages, err := readChatRecords(in, ComponentIDChatMessages, dataportability.ErrImportPackageInvalid)
+	if err != nil {
+		return nil, err
+	}
+	if c == nil || c.KernelDB == nil {
+		return nil, errors.New("聊天备份数据库不可用")
+	}
 	convPreview := dataportability.ImportComponentPreview{
 		ComponentID: ComponentIDChatConversations,
 		Kind:        dataportability.KindNDJSON,
-		LogicalName: "chat.conversations.v2",
+		LogicalName: chatConversationsLogicalName,
+		ItemCount:   int64(len(conversations)),
 		Collisions:  make([]dataportability.ComponentCollision, 0),
 		Warnings:    make([]string, 0),
 	}
-	convRC, err := in.ReadComponent(ComponentIDChatConversations)
-	if err == nil {
-		defer convRC.Close()
-		scanner := bufio.NewScanner(convRC)
-		for scanner.Scan() {
-			line := scanner.Bytes()
-			if len(line) == 0 {
-				continue
-			}
-			convPreview.ItemCount++
-			var rec chatConversationV2
-			if err := json.Unmarshal(line, &rec); err != nil {
-				continue
-			}
-			var existing struct{ ID string }
-			c.DB.WithContext(ctx).Model(&Conversation{}).Select("id").Where("id = ?", rec.ID).Scan(&existing)
-			if existing.ID != "" {
-				convPreview.Collisions = append(convPreview.Collisions, dataportability.ComponentCollision{
-					SourceID:   rec.ID,
-					TargetID:   existing.ID,
-					EntityType: "conversation",
-					Policy:     dataportability.CollisionDuplicate,
-				})
-			}
+	for _, record := range conversations {
+		exists, err := chatResourceExists(ctx, c.KernelDB, record.OwnerID, "conversation", record.ID)
+		if err != nil {
+			return nil, err
+		}
+		if exists {
+			convPreview.Collisions = append(convPreview.Collisions, dataportability.ComponentCollision{
+				SourceID:   record.OwnerID + "/" + record.ID,
+				TargetID:   record.ID,
+				EntityType: "conversation",
+				Policy:     dataportability.CollisionDuplicate,
+			})
 		}
 	}
-	previews = append(previews, convPreview)
-
 	msgPreview := dataportability.ImportComponentPreview{
 		ComponentID: ComponentIDChatMessages,
 		Kind:        dataportability.KindNDJSON,
-		LogicalName: "chat.messages.v2",
+		LogicalName: chatMessagesLogicalName,
+		ItemCount:   int64(len(messages)),
+		Collisions:  make([]dataportability.ComponentCollision, 0),
+		Warnings:    make([]string, 0),
 	}
-	msgRC, err := in.ReadComponent(ComponentIDChatMessages)
-	if err == nil {
-		defer msgRC.Close()
-		scanner := bufio.NewScanner(msgRC)
-		for scanner.Scan() {
-			line := scanner.Bytes()
-			if len(line) == 0 {
-				continue
-			}
-			msgPreview.ItemCount++
+	for _, record := range messages {
+		exists, err := chatResourceExists(ctx, c.KernelDB, record.OwnerID, "message", record.ID)
+		if err != nil {
+			return nil, err
+		}
+		if exists {
+			msgPreview.Collisions = append(msgPreview.Collisions, dataportability.ComponentCollision{
+				SourceID:   record.OwnerID + "/" + record.ID,
+				TargetID:   record.ID,
+				EntityType: "message",
+				Policy:     dataportability.CollisionDuplicate,
+			})
 		}
 	}
-	previews = append(previews, msgPreview)
+	return []dataportability.ImportComponentPreview{convPreview, msgPreview}, nil
+}
 
-	return previews, nil
+type chatQueryRower interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+func chatResourceExists(ctx context.Context, db chatQueryRower, ownerID string, kind string, resourceID string) (bool, error) {
+	var exists bool
+	if err := db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM kernel_device_owned_resources WHERE owner_id=? AND kind=? AND resource_id=?)`, ownerID, kind, resourceID).Scan(&exists); err != nil {
+		return false, fmt.Errorf("检查聊天记录冲突失败(%s): %w", kind, err)
+	}
+	return exists, nil
 }
 
 func (c *ChatBackupContributor) Import(ctx context.Context, req dataportability.ImportRequest, in dataportability.BackupReader) error {
@@ -340,185 +269,177 @@ func (c *ChatBackupContributor) RestoreChats(ctx context.Context, in dataportabi
 	if opts.IdentityMap == nil {
 		return dataportability.ErrImportIdentityMapMissing
 	}
-	idMap := opts.IdentityMap
-
-	convRC, err := in.ReadComponent(ComponentIDChatConversations)
+	if c == nil || c.KernelDB == nil {
+		return errors.New("聊天备份数据库不可用")
+	}
+	conversations, err := readChatRecords(in, ComponentIDChatConversations, dataportability.ErrImportPackageInvalid)
 	if err != nil {
-		return fmt.Errorf("restore: conversations component missing: %w", err)
-	}
-	conversations := make([]chatConversationV2, 0)
-	scanner := bufio.NewScanner(convRC)
-	scanner.Buffer(make([]byte, 64<<10), 4<<20)
-	for scanner.Scan() {
-		line := scanner.Bytes()
-		if len(line) == 0 {
-			continue
-		}
-		var rec chatConversationV2
-		if err := json.Unmarshal(line, &rec); err != nil {
-			convRC.Close()
-			return fmt.Errorf("%w: conversation record", dataportability.ErrImportPackageInvalid)
-		}
-		conversations = append(conversations, rec)
-	}
-	if err := scanner.Err(); err != nil {
-		convRC.Close()
 		return err
 	}
-	convRC.Close()
-
-	msgRC, err := in.ReadComponent(ComponentIDChatMessages)
+	messages, err := readChatRecords(in, ComponentIDChatMessages, dataportability.ErrImportPackageInvalid)
 	if err != nil {
-		return fmt.Errorf("restore: messages component missing: %w", err)
-	}
-	messages := make([]chatMessageV2, 0)
-	msgScanner := bufio.NewScanner(msgRC)
-	msgScanner.Buffer(make([]byte, 64<<10), 8<<20)
-	for msgScanner.Scan() {
-		line := msgScanner.Bytes()
-		if len(line) == 0 {
-			continue
-		}
-		var rec chatMessageV2
-		if err := json.Unmarshal(line, &rec); err != nil {
-			msgRC.Close()
-			return fmt.Errorf("%w: message record", dataportability.ErrImportPackageInvalid)
-		}
-		messages = append(messages, rec)
-	}
-	if err := msgScanner.Err(); err != nil {
-		msgRC.Close()
 		return err
 	}
-	msgRC.Close()
+	tx, err := c.KernelDB.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("开启聊天恢复事务失败: %w", err)
+	}
+	defer tx.Rollback()
 
-	return c.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		for _, rec := range conversations {
-			newID := rec.ID
-			var existing struct{ ID string }
-			if err := tx.Model(&Conversation{}).Select("id").Where("id = ?", rec.ID).Scan(&existing).Error; err != nil {
-				return err
-			}
-			if existing.ID != "" {
-				switch opts.CharacterPolicy {
-				case dataportability.CollisionSkip:
-					idMap.AddConversation(rec.ID, existing.ID)
-					continue
-				case dataportability.CollisionReplace:
-					newID = rec.ID
-				case dataportability.CollisionDuplicate:
-					newID = uuid.New().String()
-				default:
-					return dataportability.ErrImportCollisionPolicyInvalid
-				}
-			}
-			conv := Conversation{
-				ID:                       newID,
-				SpaceID:                  rec.SpaceID,
-				ProjectID:                rec.ProjectID,
-				WorkspaceID:              rec.WorkspaceID,
-				WorkspaceDeviceID:        rec.WorkspaceDeviceID,
-				Title:                    rec.Title,
-				Channel:                  rec.Channel,
-				Source:                   rec.Source,
-				PeerID:                   rec.PeerID,
-				ModelConfigID:            rec.ModelConfigID,
-				ReasoningEffort:          rec.ReasoningEffort,
-				ReasoningEnabled:         rec.ReasoningEnabled,
-				PermissionMode:           rec.PermissionMode,
-				MessageCount:             rec.MessageCount,
-				StateVersion:             rec.StateVersion,
-				PinnedAt:                 rec.PinnedAt,
-				ArchivedAt:               rec.ArchivedAt,
-				LastReadTurnSequence:     rec.LastReadTurnSequence,
-				LastTerminalTurnSequence: rec.LastTerminalTurnSequence,
-				CreatedAt:                rec.CreatedAt,
-				UpdatedAt:                rec.UpdatedAt,
-				Revision:                 rec.Revision,
-			}
-			query := tx
-			if opts.CharacterPolicy == dataportability.CollisionReplace {
-				query = query.Clauses(clause.OnConflict{UpdateAll: true})
-			}
-			if err := query.Create(&conv).Error; err != nil {
-				return err
-			}
-			idMap.AddConversation(rec.ID, newID)
+	conversationTargets := make(map[string]string, len(conversations))
+	for _, record := range conversations {
+		roleID := remapChatRole(opts, record.RoleID)
+		body := record.Body
+		targetID := record.ID
+		exists, err := chatResourceExists(ctx, tx, record.OwnerID, "conversation", record.ID)
+		if err != nil {
+			return err
 		}
+		if exists {
+			switch opts.CharacterPolicy {
+			case dataportability.CollisionSkip:
+				conversationTargets[record.ID] = record.ID
+				opts.IdentityMap.AddConversation(record.ID, record.ID)
+				continue
+			case dataportability.CollisionDuplicate:
+				targetID = uuid.NewString()
+				body, err = patchChatBody(body, map[string]string{"id": targetID, "conversationId": targetID})
+				if err != nil {
+					return fmt.Errorf("%w: %v", dataportability.ErrImportPackageInvalid, err)
+				}
+			case dataportability.CollisionReplace:
+			default:
+				return dataportability.ErrImportCollisionPolicyInvalid
+			}
+		} else {
+			body, err = patchChatBody(body, map[string]string{"id": targetID, "conversationId": targetID})
+			if err != nil {
+				return fmt.Errorf("%w: %v", dataportability.ErrImportPackageInvalid, err)
+			}
+		}
+		if err := writeChatRecord(ctx, tx, record.OwnerID, "conversation", targetID, roleID, record.Revision, body, record.UpdatedAt, opts.CharacterPolicy == dataportability.CollisionReplace); err != nil {
+			return err
+		}
+		conversationTargets[record.ID] = targetID
+		opts.IdentityMap.AddConversation(record.ID, targetID)
+	}
 
-		for _, rec := range messages {
-			newConvID := idMap.RemapConversationRef(rec.ConversationID)
-			if newConvID == "" {
-				return dataportability.ErrImportMessageRefInvalid
-			}
-			newMsgID := rec.ID
-			var existing struct{ ID string }
-			if err := tx.Model(&Message{}).Select("id").Where("id = ?", rec.ID).Scan(&existing).Error; err != nil {
-				return err
-			}
-			if existing.ID != "" {
-				switch opts.CharacterPolicy {
-				case dataportability.CollisionSkip:
-					idMap.AddMessage(rec.ID, existing.ID)
-					continue
-				case dataportability.CollisionReplace:
-					newMsgID = rec.ID
-				case dataportability.CollisionDuplicate:
-					newMsgID = uuid.New().String()
-				default:
-					return dataportability.ErrImportCollisionPolicyInvalid
-				}
-			}
-			citationJSON := rec.CitationSnapshotJSON
-			if citationJSON == "" {
-				citationJSON = "[]"
-			}
-			msg := Message{
-				ID:                   newMsgID,
-				ConversationID:       newConvID,
-				CharacterID:          idMap.RemapCharacterRef(rec.CharacterID),
-				Sequence:             rec.Sequence,
-				Role:                 rec.Role,
-				Content:              rec.Content,
-				ReasoningContent:     rec.ReasoningContent,
-				ReasoningDurationMS:  rec.ReasoningDurationMS,
-				MsgType:              rec.MsgType,
-				ExtensionType:        rec.ExtensionType,
-				Tokens:               rec.Tokens,
-				Source:               rec.Source,
-				SafetyLevel:          rec.SafetyLevel,
-				Status:               rec.Status,
-				IncludeInCtx:         rec.IncludeInCtx,
-				AudioUrl:             rec.AudioURL,
-				AudioDuration:        rec.AudioDuration,
-				ImageUrl:             rec.ImageURL,
-				VideoUrl:             rec.VideoURL,
-				AltText:              rec.AltText,
-				IsAnimated:           rec.IsAnimated,
-				MediaWidth:           rec.MediaWidth,
-				MediaHeight:          rec.MediaHeight,
-				OriginalAsset:        rec.OriginalAsset,
-				FallbackAsset:        rec.FallbackAsset,
-				DeliveryGroupID:      rec.DeliveryGroupID,
-				DeliverySequence:     rec.DeliverySequence,
-				RequestID:            rec.RequestID,
-				ReplyToMessageID:     rec.ReplyToMessageID,
-				ReplyToRole:          rec.ReplyToRole,
-				ReplyToExcerpt:       rec.ReplyToExcerpt,
-				CitationSnapshotJSON: citationJSON,
-				CreatedAt:            rec.CreatedAt,
-				UpdatedAt:            rec.UpdatedAt,
-				Revision:             rec.Revision,
-			}
-			query := tx
-			if opts.CharacterPolicy == dataportability.CollisionReplace {
-				query = query.Clauses(clause.OnConflict{UpdateAll: true})
-			}
-			if err := query.Create(&msg).Error; err != nil {
-				return err
-			}
-			idMap.AddMessage(rec.ID, newMsgID)
+	for _, record := range messages {
+		conversationID := chatRecordConversationID(record.Body)
+		if conversationID == "" {
+			return fmt.Errorf("%w: 消息缺少会话标识", dataportability.ErrImportPackageInvalid)
 		}
-		return nil
-	})
+		targetConversationID, ok := conversationTargets[conversationID]
+		if !ok {
+			targetConversationID, ok = opts.IdentityMap.GetConversation(conversationID)
+		}
+		if !ok || targetConversationID == "" {
+			return dataportability.ErrImportMessageRefInvalid
+		}
+		roleID := remapChatRole(opts, record.RoleID)
+		body, err := patchChatBody(record.Body, map[string]string{"conversationId": targetConversationID})
+		if err != nil {
+			return fmt.Errorf("%w: %v", dataportability.ErrImportPackageInvalid, err)
+		}
+		if roleID != record.RoleID {
+			body, err = patchChatBody(body, map[string]string{"characterId": roleID})
+			if err != nil {
+				return fmt.Errorf("%w: %v", dataportability.ErrImportPackageInvalid, err)
+			}
+		}
+		targetID := record.ID
+		exists, err := chatResourceExists(ctx, tx, record.OwnerID, "message", record.ID)
+		if err != nil {
+			return err
+		}
+		if exists {
+			switch opts.CharacterPolicy {
+			case dataportability.CollisionSkip:
+				opts.IdentityMap.AddMessage(record.ID, record.ID)
+				continue
+			case dataportability.CollisionDuplicate:
+				targetID = uuid.NewString() + "/" + chatRecordRoleSuffix(body)
+				body, err = patchChatBody(body, map[string]string{"id": targetID})
+				if err != nil {
+					return fmt.Errorf("%w: %v", dataportability.ErrImportPackageInvalid, err)
+				}
+			case dataportability.CollisionReplace:
+			default:
+				return dataportability.ErrImportCollisionPolicyInvalid
+			}
+		} else {
+			if err := writeChatRecord(ctx, tx, record.OwnerID, "message", targetID, roleID, record.Revision, body, record.UpdatedAt, false); err != nil {
+				return err
+			}
+			opts.IdentityMap.AddMessage(record.ID, targetID)
+			continue
+		}
+		if err := writeChatRecord(ctx, tx, record.OwnerID, "message", targetID, roleID, record.Revision, body, record.UpdatedAt, opts.CharacterPolicy == dataportability.CollisionReplace); err != nil {
+			return err
+		}
+		opts.IdentityMap.AddMessage(record.ID, targetID)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("提交聊天恢复事务失败: %w", err)
+	}
+	return nil
+}
+
+func writeChatRecord(ctx context.Context, tx *sql.Tx, ownerID string, kind string, resourceID string, roleID string, revision int64, body []byte, updatedAt string, replace bool) error {
+	statement := `INSERT INTO kernel_device_owned_resources(owner_id,kind,resource_id,role_id,source_id,revision,deleted,body,updated_at) VALUES(?,?,?,?,'',?,0,?,?)`
+	if replace {
+		statement += ` ON CONFLICT(owner_id,kind,resource_id) DO UPDATE SET role_id=excluded.role_id,revision=excluded.revision,deleted=0,body=excluded.body,updated_at=excluded.updated_at`
+	}
+	if _, err := tx.ExecContext(ctx, statement, ownerID, kind, resourceID, roleID, revision, body, updatedAt); err != nil {
+		return fmt.Errorf("写入聊天恢复记录失败(%s): %w", kind, err)
+	}
+	return nil
+}
+
+func remapChatRole(opts dataportability.RestoreOptions, roleID string) string {
+	if roleID == "" || opts.IdentityMap == nil {
+		return roleID
+	}
+	if mapped, ok := opts.IdentityMap.GetCharacter(roleID); ok && mapped != "" {
+		return mapped
+	}
+	if opts.DefaultCharacterID != "" {
+		return opts.DefaultCharacterID
+	}
+	return roleID
+}
+
+func chatRecordConversationID(body []byte) string {
+	document := map[string]any{}
+	if err := json.Unmarshal(body, &document); err != nil {
+		return ""
+	}
+	value, _ := document["conversationId"].(string)
+	return value
+}
+
+func chatRecordRoleSuffix(body []byte) string {
+	document := map[string]any{}
+	if err := json.Unmarshal(body, &document); err != nil {
+		return "message"
+	}
+	if value, ok := document["role"].(string); ok && value != "" {
+		return value
+	}
+	return "message"
+}
+
+func patchChatBody(body []byte, patches map[string]string) ([]byte, error) {
+	document := map[string]json.RawMessage{}
+	if err := json.Unmarshal(body, &document); err != nil {
+		return nil, err
+	}
+	for key, value := range patches {
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			return nil, err
+		}
+		document[key] = encoded
+	}
+	return json.Marshal(document)
 }

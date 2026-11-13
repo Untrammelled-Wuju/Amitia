@@ -699,6 +699,10 @@ func respond(c *gin.Context, data any, err error) {
 		switch {
 		case errors.Is(err, gorm.ErrRecordNotFound), strings.Contains(code, "NOT_FOUND"):
 			status = http.StatusNotFound
+			if code == "MCP_INTERNAL_ERROR" {
+				code = "MCP_SERVER_NOT_FOUND"
+				message = "MCP 服务不存在: " + message
+			}
 		case strings.Contains(code, "AUTH_REQUIRED"), strings.Contains(code, "AUTH_EXPIRED"):
 			status = http.StatusUnauthorized
 		case strings.Contains(code, "DENIED"), strings.Contains(code, "DISABLED"), strings.Contains(code, "PERMISSION"):

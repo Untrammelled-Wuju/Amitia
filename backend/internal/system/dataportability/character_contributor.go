@@ -209,7 +209,7 @@ func (c *CharacterContributor) RestoreCharacters(ctx context.Context, in BackupR
 		return err
 	}
 	if len(data) > 512<<20 {
-		return ErrImportPackageInvalid
+		return fmt.Errorf("%w: 角色组件超过大小上限(%d 字节)", ErrImportPackageInvalid, len(data))
 	}
 
 	idMap := opts.IdentityMap

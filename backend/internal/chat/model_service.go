@@ -23,23 +23,31 @@ var blockedModelDetectIPs = map[string]struct{}{
 }
 
 func validateModelDetectURL(raw string) error {
-	parsed, err := url.Parse(strings.TrimSpace(raw))
+	parsed, err := parseModelEndpoint(raw)
 	if err != nil {
-		return fmt.Errorf("无效的模型服务地址: %w", err)
-	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return fmt.Errorf("模型服务地址只允许 http/https")
-	}
-	if parsed.Hostname() == "" {
-		return fmt.Errorf("模型服务地址缺少主机名")
-	}
-	if parsed.User != nil {
-		return fmt.Errorf("模型服务地址不得包含内嵌凭据")
+		return err
 	}
 	if ip := net.ParseIP(parsed.Hostname()); ip != nil && blockedModelDetectIP(ip) {
 		return fmt.Errorf("模型服务地址指向受保护的网络地址")
 	}
 	return nil
+}
+
+func parseModelEndpoint(raw string) (*url.URL, error) {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return nil, fmt.Errorf("无效的模型服务地址: %w", err)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return nil, fmt.Errorf("模型服务地址只允许 http/https")
+	}
+	if parsed.Hostname() == "" {
+		return nil, fmt.Errorf("模型服务地址缺少主机名")
+	}
+	if parsed.User != nil {
+		return nil, fmt.Errorf("模型服务地址不得包含内嵌凭据")
+	}
+	return parsed, nil
 }
 
 func blockedModelDetectIP(ip net.IP) bool {
@@ -147,43 +155,11 @@ func (s *service) GetModel(id int) (*ModelConfig, error) {
 }
 
 func (s *service) CreateModel(cfg *ModelConfig) (*ModelConfig, error) {
-	if err := s.validateModelConfiguration(context.Background(), cfg, cfg.IsActive == 1); err != nil {
-		return nil, err
-	}
-	count, err := s.repo.CountModels()
-	if err != nil {
-		return nil, fmt.Errorf("查询失败: %w", err)
-	}
-	if count == 0 {
-		cfg.IsActive = 1
-	}
-	if err := s.repo.CreateModel(cfg); err != nil {
-		return nil, fmt.Errorf("创建失败: %w", err)
-	}
-	return cfg, nil
+	return (&contextualModelConfiguration{parent: s, repo: s.repo}).CreateModel(cfg)
 }
 
 func (s *service) UpdateModel(id int, updates map[string]interface{}) (*ModelConfig, error) {
-	current, err := s.repo.GetModelByID(id)
-	if err != nil {
-		return nil, fmt.Errorf("模型配置不存在: %w", err)
-	}
-	projected := projectModelConfigUpdate(*current, updates)
-	if err := s.validateModelConfiguration(context.Background(), projected, projected.IsActive == 1 || current.IsActive == 1); err != nil {
-		return nil, err
-	}
-	normalized := normalizeConfigUpdates(updates)
-	if _, ok := normalized["context_window"]; !ok && projected.ContextWindow > 0 {
-		normalized["context_window"] = projected.ContextWindow
-	}
-	if _, ok := normalized["max_output_tokens"]; !ok && projected.MaxOutputTokens > 0 {
-		normalized["max_output_tokens"] = projected.MaxOutputTokens
-	}
-	if err := s.repo.UpdateModel(id, normalized); err != nil {
-		return nil, fmt.Errorf("更新失败: %w", err)
-	}
-	s.invalidateLocalModels(context.Background())
-	return s.repo.GetModelByID(id)
+	return (&contextualModelConfiguration{parent: s, repo: s.repo}).UpdateModel(id, updates)
 }
 
 func (s *service) DeleteModel(id int) error {
@@ -195,18 +171,7 @@ func (s *service) DeleteModel(id int) error {
 }
 
 func (s *service) ActivateModel(id int) (*ModelConfig, error) {
-	current, err := s.repo.GetModelByID(id)
-	if err != nil {
-		return nil, fmt.Errorf("模型配置不存在: %w", err)
-	}
-	if err := s.validateModelConfiguration(context.Background(), current, true); err != nil {
-		return nil, err
-	}
-	if err := s.repo.ActivateModel(id); err != nil {
-		return nil, fmt.Errorf("激活失败: %w", err)
-	}
-	s.invalidateLocalModels(context.Background())
-	return s.repo.GetModelByID(id)
+	return (&contextualModelConfiguration{parent: s, repo: s.repo}).ActivateModel(id)
 }
 
 func (s *service) GetModelRoutes() ([]map[string]interface{}, error) {

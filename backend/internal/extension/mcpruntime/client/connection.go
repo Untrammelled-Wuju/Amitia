@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -93,31 +94,25 @@ func (c *Connection) Connect(ctx context.Context) error {
 	params := protocol.InitializeParams{ProtocolVersion: protocol.LatestProtocolVersion, Capabilities: c.config.Capabilities, ClientInfo: c.config.ClientInfo}
 	result, err := c.requests.Call(initCtx, "initialize", params, CallOptions{})
 	if err != nil {
-		c.failInitialization(ctx)
-		return fmt.Errorf("%w: %v", protocol.ErrInitialization, err)
+		return c.failInitialization(ctx, fmt.Errorf("%w: %w", protocol.ErrInitialization, err))
 	}
 	c.setState(StateNegotiating)
 	var initialized protocol.InitializeResult
 	if err := json.Unmarshal(result, &initialized); err != nil {
-		c.failInitialization(ctx)
-		return fmt.Errorf("%w: %v", protocol.ErrInitialization, err)
+		return c.failInitialization(ctx, fmt.Errorf("%w: %w", protocol.ErrInitialization, err))
 	}
 	if !protocol.SupportsVersion(initialized.ProtocolVersion) {
-		c.failInitialization(ctx)
-		return fmt.Errorf("%w: %s", protocol.ErrUnsupportedVersion, initialized.ProtocolVersion)
+		return c.failInitialization(ctx, fmt.Errorf("%w: %s", protocol.ErrUnsupportedVersion, initialized.ProtocolVersion))
 	}
 	if initialized.ServerInfo.Name == "" || initialized.ServerInfo.Version == "" {
-		c.failInitialization(ctx)
-		return fmt.Errorf("%w: serverInfo is incomplete", protocol.ErrInitialization)
+		return c.failInitialization(ctx, fmt.Errorf("%w: serverInfo is incomplete", protocol.ErrInitialization))
 	}
 	notification, err := protocol.Notification("notifications/initialized", nil)
 	if err != nil {
-		c.failInitialization(ctx)
-		return err
+		return c.failInitialization(ctx, err)
 	}
 	if err := c.transport.Send(initCtx, notification); err != nil {
-		c.failInitialization(ctx)
-		return fmt.Errorf("%w: %v", protocol.ErrInitialization, err)
+		return c.failInitialization(ctx, fmt.Errorf("%w: %w", protocol.ErrInitialization, err))
 	}
 	c.mu.Lock()
 	c.initialized = initialized
@@ -321,13 +316,12 @@ func (c *Connection) sendServerError(id json.RawMessage, rpcErr *protocol.RPCErr
 	}
 }
 
-func (c *Connection) failInitialization(ctx context.Context) {
-	if err := c.transport.Close(ctx); err != nil {
-		amitialog.Printf("[original-error] %v", err)
-	}
-	c.requests.FailAll(protocol.ErrInitialization)
+func (c *Connection) failInitialization(ctx context.Context, cause error) error {
+	err := errors.Join(cause, c.transport.Close(ctx))
+	c.requests.FailAll(err)
 	c.stopOnce.Do(func() { close(c.stop) })
 	c.setState(StateDisconnected)
+	return err
 }
 
 func (c *Connection) transition(from, to State) bool {

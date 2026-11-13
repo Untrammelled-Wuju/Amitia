@@ -80,6 +80,14 @@ func (c *MemoryBackupContributor) Export(ctx context.Context, req dataportabilit
 		}
 		return err
 	}
+	if reporter, ok := out.(dataportability.ComponentItemCountReporter); ok {
+		if err := reporter.SetComponentItemCount(OwnedMemoryBackupComponent, int64(len(archive.Entries))); err != nil {
+			if closeErr := w.Close(); closeErr != nil {
+				amitialog.Printf("[original-error] %v", closeErr)
+			}
+			return err
+		}
+	}
 	return w.Close()
 }
 func readMemoryArchive(in dataportability.BackupReader) (*MemoryArchive, error) {

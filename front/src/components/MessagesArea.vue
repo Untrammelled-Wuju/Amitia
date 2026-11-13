@@ -27,6 +27,10 @@ SPDX-License-Identifier: AGPL-3.0-only
         <p class="empty-text empty-text--project">你好，我是 {{ charName || "Amitia" }}</p>
         <p class="empty-hint">你想在 {{ workspaceName }} 中构建什么？</p>
       </template>
+      <template v-else-if="noCharacters">
+        <p class="empty-text">还没有可以对话的角色</p>
+        <p class="empty-hint">请先在「角色」中创建角色，然后回到这里开始对话。</p>
+      </template>
       <template v-else>
         <p class="empty-text">你好，我是 {{ charName || "AI 陪伴角色" }}</p>
         <p class="empty-hint">随时可以和我聊聊天，或者做你想做的事。</p>
@@ -123,6 +127,15 @@ SPDX-License-Identifier: AGPL-3.0-only
           class="conversation-error-divider"
           :text="errorNoticeText(item.detail)"
         />
+        <button
+          v-if="item.message"
+          type="button"
+          class="conversation-error-retry"
+          data-amitia-ui="chat.error.retry"
+          @click="$emit('retry', item.message)"
+        >
+          重试
+        </button>
       </div>
     </template>
 
@@ -176,10 +189,10 @@ import { hasUnifiedSlotItem } from "@/ui-runtime/slotLedger";
 import { acknowledgeClientRuntimeSessionState, fetchClientRuntimeSessionState, fetchConversationUIEventsBeforeSequence } from "@/api/extension";
 import { createConversationUIEventStream } from "@/composables/useConversationUIEventStream";
 import { resolveMessageRenderer } from "@/ui-runtime/messageRendererRegistry";
-import { normalizeMessageState } from "@/conversation/rendering/amrp";
 import {
-  errorNoticeText,
-  formatTurnErrorDetail,
+errorNoticeText,
+formatTurnErrorDetail,
+shouldShowTurnErrorNotice,
 } from "@/conversation/rendering/errorNoticeProjection";
 import {
   getMessageCharacterId,
@@ -212,6 +225,7 @@ const props = defineProps<{
   showScrollBtn: boolean;
   isPulling: boolean;
   pullReady: boolean;
+  noCharacters?: boolean;
   pullLoading: boolean;
   pullText: string;
   characters?: any[];
@@ -286,7 +300,7 @@ type FlowItem =
       roleSwitchCharacterId?: string;
     }
   | { kind: "node"; key: string; node: ConversationNode; sequence?: number; timestamp: string }
-  | { kind: "error"; key: string; detail: string; sequence?: number; timestamp: string };
+  | { kind: "error"; key: string; detail: string; message?: any; sequence?: number; timestamp: string };
 
 const flowItems = computed<FlowItem[]>(() => {
   const items: FlowItem[] = visibleMessages.value.map((message, index) => ({
@@ -343,34 +357,21 @@ const flowItems = computed<FlowItem[]>(() => {
       next.isAssistantContinuation === true;
   }
   const lastMessage = visibleMessages.value[visibleMessages.value.length - 1];
-  if (
-    lastMessage?.role === "assistant" &&
-    normalizeMessageState(lastMessage) === "failed"
-  ) {
+  if (shouldShowTurnErrorNotice(lastMessage, props.modelError)) {
     const messageIndex = ordered.findIndex(
       (candidate) => candidate.kind === "message" && candidate.message?.id === lastMessage.id,
     );
     if (messageIndex >= 0) {
+      const assistantFailed = lastMessage.role === "assistant";
       ordered.splice(messageIndex + 1, 0, {
         kind: "error",
-        key: `error:${lastMessage.assistantTurn?.id || lastMessage.id}`,
-        detail: formatTurnErrorDetail(lastMessage.assistantTurn, props.modelError),
-        sequence: finiteNumber(lastMessage?.seq ?? lastMessage?.sequence),
-        timestamp: String(lastMessage?.createdAt ?? lastMessage?.timestamp ?? ""),
-      });
-    }
-  } else if (
-    lastMessage?.role === "user" &&
-    normalizeMessageState(lastMessage) === "failed"
-  ) {
-    const messageIndex = ordered.findIndex(
-      (candidate) => candidate.kind === "message" && candidate.message?.id === lastMessage.id,
-    );
-    if (messageIndex >= 0) {
-      ordered.splice(messageIndex + 1, 0, {
-        kind: "error",
-        key: `error:send:${lastMessage.id}`,
-        detail: props.modelError?.trim() || "发送失败",
+        key: assistantFailed
+          ? `error:${lastMessage.assistantTurn?.id || lastMessage.id}`
+          : `error:send:${lastMessage.id}`,
+        detail: assistantFailed
+          ? formatTurnErrorDetail(lastMessage.assistantTurn, props.modelError)
+          : props.modelError?.trim() || "发送失败",
+        message: retrySourceFor(lastMessage, visibleMessages.value),
         sequence: finiteNumber(lastMessage?.seq ?? lastMessage?.sequence),
         timestamp: String(lastMessage?.createdAt ?? lastMessage?.timestamp ?? ""),
       });
@@ -692,6 +693,12 @@ function messageExtensionSummary(msg: any) {
   } as const;
 }
 
+function retrySourceFor(message: any, list: any[]) {
+  if (!message) return undefined;
+  if (message.role === "user") return message;
+  return [...list].reverse().find((item) => item?.role === "user" && item.status === "failed");
+}
+
 function finiteNumber(value: unknown): number | undefined {
   const number = Number(value);
   return Number.isFinite(number) ? number : undefined;
@@ -782,6 +789,23 @@ defineExpose({ rootEl });
 
 .conversation-flow-item--error {
   margin-bottom: 38px;
+}
+
+.conversation-error-retry {
+  display: block;
+  margin: 6px auto 0;
+  padding: 2px 12px;
+  border: 1px solid var(--ac-color-danger, #e5484d);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ac-color-danger, #e5484d);
+  font-size: 12px;
+  line-height: 18px;
+  cursor: pointer;
+}
+
+.conversation-error-retry:hover {
+  background: color-mix(in srgb, var(--ac-color-danger, #e5484d) 12%, transparent);
 }
 
 .conversation-error-divider :deep(.conversation-divider-text) {

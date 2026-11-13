@@ -40,6 +40,17 @@ export function useImmersiveOnboarding() {
   const modelType = ref("online");
   const modelProvider = ref("deepseek");
   const modelProtocol = ref("openai_chat");
+  let modelDetectionGeneration = 0;
+
+  watch([modelBaseUrl, modelApiKey, modelProvider, modelProtocol, configurationContext], () => {
+    ++modelDetectionGeneration;
+    if (detectedModels.value.some(model => model.id === modelName.value)) modelName.value = "";
+    detectingModels.value = false;
+    modelReady.value = false;
+    modelDetected.value = false;
+    modelStatusText.value = "等待检测";
+    detectedModels.value = [];
+  }, { flush: "sync" });
 
   const modelFieldErrors = ref<{
     baseUrl?: boolean;
@@ -251,20 +262,22 @@ export function useImmersiveOnboarding() {
   }
 
   async function detectModel() {
+    const generation = ++modelDetectionGeneration;
     const context = configurationContext.value;
-    try { await configurationAccess.requireAccess(context); }
-    catch (error: any) { modelStatusText.value = error.message; return; }
     detectingModels.value = true;
     modelStatusText.value = "正在检测模型连接";
 
     try {
+      await configurationAccess.requireAccess(context);
       await new Promise((resolve) => setTimeout(resolve, 600));
+      if (generation !== modelDetectionGeneration) return;
 
-	const res = await post<any>("/api/model/detect-models", {
-		baseUrl: modelBaseUrl.value,
-		apiKey: modelApiKey.value,
-		apiType: "openai-compatible",
-	}, coreConfigurationRequestConfig(context));
+      const res = await post<any>("/api/model/detect-models", {
+        baseUrl: modelBaseUrl.value,
+        apiKey: modelApiKey.value,
+        apiType: modelProvider.value,
+      }, coreConfigurationRequestConfig(context));
+      if (generation !== modelDetectionGeneration) return;
 
       if (res?.models && res.models.length > 0) {
         modelReady.value = true;
@@ -278,13 +291,14 @@ export function useImmersiveOnboarding() {
         detectedModels.value = [];
       }
     } catch (error) {
-  console.error("[original-error]", error);
-modelReady.value = false;
+      console.error("[original-error]", error);
+      if (generation !== modelDetectionGeneration) return;
+      modelReady.value = false;
       modelDetected.value = false;
-      modelStatusText.value = "检测失败，请检查 Base URL 和 API Key";
+      modelStatusText.value = `检测失败，请检查 Base URL 和 API Key\n原始错误：\n${originalErrorText(error)}`;
       detectedModels.value = [];
     } finally {
-      detectingModels.value = false;
+      if (generation === modelDetectionGeneration) detectingModels.value = false;
     }
   }
 

@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
-import { type Ref, ref } from "vue";
+import { type Ref, ref, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { createRequestEnvelope } from "../utils/requestEnvelope";
 import { notifyDesktopPetChatState } from "@/runtime/desktop-pet-chat-state";
@@ -68,6 +68,8 @@ export function useWebChatSend(
     sending.value = active;
     isSubmitting.value = active;
   }
+
+  watch(convId, () => syncSendState());
 
 
   function onImageAttached(file: File, base64: string) {
@@ -433,7 +435,7 @@ if (convId.value === response.conversationId && characterId.value === originalRo
         const index = messages.value.findIndex((message) => message.id === userMsgLocalId);
         if (index >= 0) messages.value[index] = { ...messages.value[index], status: "failed" };
         const assistantIndex = messages.value.findIndex((message) => message.id === `${requestEnvelope.requestId}/assistant`);
-        if (assistantIndex >= 0) messages.value[assistantIndex] = { ...messages.value[assistantIndex], status: "interrupted" };
+        if (assistantIndex >= 0) messages.value[assistantIndex] = { ...messages.value[assistantIndex], status: "failed", error: errMsg };
       }
       notifyDesktopPetChatState("assistant_error", requestEnvelope.requestId, errMsg);
     } finally {

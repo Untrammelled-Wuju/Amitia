@@ -31,6 +31,16 @@ function completion(content, toolCall) {
 }
 
 createServer((request, response) => {
+  if (request.method === "GET" && request.url === "/api/tags") {
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({ models: [{ name: "qa-ollama" }] }));
+    return;
+  }
+  if (request.method === "GET" && request.url === "/v1/models") {
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({ data: [{ id: "qa-compatible" }] }));
+    return;
+  }
   if (request.method !== "POST" || !request.url?.endsWith("/chat/completions")) {
     response.writeHead(404, { "Content-Type": "application/json" });
     response.end(JSON.stringify({ error: { message: `unexpected path: ${request.url}` } }));

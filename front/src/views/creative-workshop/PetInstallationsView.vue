@@ -60,6 +60,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 
     <PetPluginManager @changed="refreshAll" />
 
+    <el-alert v-if="uninstallRefreshError" title="刷新桌宠卸载状态失败" type="error" @close="uninstallRefreshError = ''">
+      <pre class="uninstall-refresh-error">{{ uninstallRefreshError }}</pre>
+    </el-alert>
+
     <el-card shadow="never" class="table-card">
       <el-empty
         v-if="!loading && !installations.length"
@@ -455,7 +459,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted } from "vue";
+import { ref, reactive, computed, watch, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Back, Refresh, Picture, Plus } from "@element-plus/icons-vue";
@@ -470,6 +474,7 @@ import {
   type InstallationRuntimeStatus,
 } from "../../composables/useDesktopPetInstallations";
 import { useAssetUrl } from "../../composables/useAssetUrl";
+import { originalErrorText } from "../../runtime/original-error";
 
 interface ReleaseOption {
   id: string;
@@ -506,6 +511,44 @@ const actionTargetId = ref<string | null>(null);
 const disablingAll = ref(false);
 const previewFailedSet = reactive<Set<string>>(new Set());
 const playActionLoadingKey = ref<string>("");
+const uninstallRefreshError = ref("");
+
+watch(
+  () => installations.value.some(item => item.status === "uninstalling"),
+  (pending, _, onCleanup) => {
+    if (!pending) {
+      uninstallRefreshError.value = "";
+      return;
+    }
+    const controller = new AbortController();
+    const { signal } = controller;
+    let timer: ReturnType<typeof setTimeout>;
+    const deadline = setTimeout(() => {
+      controller.abort();
+      clearTimeout(timer);
+    }, 60_000);
+
+    async function refreshPendingUninstall() {
+      if (signal.aborted) return;
+      if (!loading.value) {
+        try {
+          await listInstallations(signal);
+          if (!signal.aborted) uninstallRefreshError.value = "";
+        } catch (error) {
+          if (!signal.aborted) uninstallRefreshError.value = originalErrorText(error);
+        }
+      }
+      if (!signal.aborted) timer = setTimeout(refreshPendingUninstall, 2_000);
+    }
+
+    timer = setTimeout(refreshPendingUninstall, 2_000);
+    onCleanup(() => {
+      controller.abort();
+      clearTimeout(timer);
+      clearTimeout(deadline);
+    });
+  },
+);
 
 const resizeDialogVisible = ref(false);
 const resizeForm = reactive({
@@ -609,11 +652,13 @@ function runtimeStatusOf(
 }
 
 function runtimeStatusLabel(item: DesktopPetInstallation): string {
+  if (isUninstalled(item)) return statusLabel(item.status);
   const rs = runtimeStatusOf(item);
   return runtimeStatusMeta[rs]?.label || String(rs);
 }
 
 function runtimeStatusTagType(item: DesktopPetInstallation): any {
+  if (isUninstalled(item)) return statusTagType(item.status);
   const rs = runtimeStatusOf(item);
   const t = runtimeStatusMeta[rs]?.type;
   if (t === "success") return "success";
@@ -1184,6 +1229,12 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.uninstall-refresh-error {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
 .pet-installations {
   height: 100%;
   overflow: auto;

@@ -1329,12 +1329,37 @@ func (r *Runtime) ExecutePackageUninstall(ctx context.Context, req ExecutePackag
 		persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "requires_recovery", "cleanup_gamehost_authority", "PACKAGE_GAMEHOST_AUTHORITY_CLEANUP_FAILED", err.Error(), false, uninstallGuard)
 		return op, errors.Join(fmt.Errorf("kernel: cleanup gamehost authority after uninstall: %w", err), persistErr)
 	}
+	if r.container.DesktopPetPluginBoundary != nil {
+		if err := r.completeSimplePackageStep(ctx, op.OperationID, stepDesktopPetUninstallReady, 6, uninstallGuard); err != nil {
+			return op, err
+		}
+		if err := r.cleanupDesktopPetAfterPackageUninstall(ctx, uninstallOp, uninstallGuard); err != nil {
+			return op, err
+		}
+	}
 	if err := r.FinalizePackageOperation(ctx, op.OperationID, extensionID, leaseGuard, uninstallGuard); err != nil {
 		return op, err
 	}
 	op.Status = "completed"
 	op.CurrentStep = "completed"
 	return op, nil
+}
+
+const stepDesktopPetUninstallReady = "desktop_pet_uninstall_ready"
+
+func (r *Runtime) cleanupDesktopPetAfterPackageUninstall(ctx context.Context, operation PackageOperationRecord, guard PackageWriteGuard) error {
+	boundary := r.container.DesktopPetPluginBoundary
+	var err error
+	if boundary == nil {
+		err = errors.New("kernel: desktop pet plugin boundary unavailable")
+	} else {
+		err = boundary.HandleExtensionUninstalled(ctx, domain.ExtensionID(operation.ExtensionID), operation.TargetVersion, operation.OperationID, operation.SpaceID)
+	}
+	if err != nil {
+		persistErr := r.container.PackageRepository.SetOperation(context.Background(), operation.OperationID, "requires_recovery", "cleanup_desktop_pet_installations", "PACKAGE_DESKTOP_PET_CLEANUP_FAILED", err.Error(), false, guard)
+		return errors.Join(fmt.Errorf("kernel: cleanup desktop pet installations after uninstall: %w", err), persistErr)
+	}
+	return nil
 }
 
 func samePackageUninstallPreview(left, right PackageUninstallPreviewResult) bool {

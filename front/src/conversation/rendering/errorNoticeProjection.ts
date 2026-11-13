@@ -1,3 +1,5 @@
+import { normalizeMessageState } from "./amrp";
+
 const runtimeErrorFields = [
   "provider",
   "errorType",
@@ -67,4 +69,26 @@ export function formatTurnErrorDetail(turn: any, fallback = ""): string {
     }
   }
   return values.join("\n\n");
+}
+
+export function hasRenderableMessageContent(message: Record<string, any> | undefined): boolean {
+  if (!message) return false;
+  if (String(message.content || message.markdown || "").trim()) return true;
+  return Array.isArray(message.blocks) && message.blocks.length > 0;
+}
+
+export function shouldShowTurnErrorNotice(
+  message: Record<string, any> | undefined,
+  modelError = "",
+): boolean {
+  if (!message) return false;
+  const state = normalizeMessageState(message);
+  if (message.role === "user") return state === "failed";
+  if (message.role !== "assistant") return false;
+  if (state === "failed") return true;
+  return (
+    state === "interrupted" &&
+    !hasRenderableMessageContent(message) &&
+    Boolean(String(modelError || "").trim())
+  );
 }

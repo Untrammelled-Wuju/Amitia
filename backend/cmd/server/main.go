@@ -452,6 +452,7 @@ func startCoreWorkers(appCtx context.Context, services *AppServices, r *http.Ser
 	services.OutboxWorker.Start(appCtx)
 	services.DeliveryWorker.Start(appCtx)
 	startAttentionNotificationWorker(appCtx, services)
+	go runRolePurgeWorker(appCtx, services)
 	if services.OwnedBusiness != nil {
 		go services.OwnedBusiness.RunMemoryWorker(appCtx)
 		go services.OwnedBusiness.RunContinuityWorker(appCtx)

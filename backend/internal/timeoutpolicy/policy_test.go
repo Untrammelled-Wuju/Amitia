@@ -46,20 +46,28 @@ func TestOperationTimeoutHTTPHotReload(t *testing.T) {
 		_, _ = io.WriteString(w, "done")
 	}))
 	defer server.Close()
-	client := Client(&http.Client{Timeout: time.Millisecond})
 	restore := Configure(Settings{Disabled: true, Seconds: 30})
 	defer restore()
-	for _, disabled := range []bool{true, false} {
-		Configure(Settings{Disabled: disabled, Seconds: 30})
-		response, err := client.Get(server.URL)
-		if err != nil {
-			t.Fatal(err)
-		}
-		body, err := io.ReadAll(response.Body)
-		response.Body.Close()
-		if err != nil || string(body) != "done" {
-			t.Fatalf("stream body canceled early: %q %v", body, err)
-		}
+	client := Client(&http.Client{Timeout: 5 * time.Second})
+	response, err := client.Get(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(response.Body)
+	response.Body.Close()
+	if err != nil || string(body) != "done" {
+		t.Fatalf("disabled policy must keep the caller bound and read the body: %q %v", body, err)
+	}
+	tight := Client(&http.Client{Timeout: 5 * time.Millisecond})
+	Configure(Settings{Seconds: 30})
+	tightResponse, tightErr := tight.Get(server.URL)
+	if tightErr == nil {
+		_, readErr := io.ReadAll(tightResponse.Body)
+		tightResponse.Body.Close()
+		tightErr = readErr
+	}
+	if tightErr == nil {
+		t.Fatal("global policy must not extend the caller supplied bound")
 	}
 	Configure(Settings{Disabled: true, Seconds: 30})
 	ctx, cancel := context.WithCancel(context.Background())

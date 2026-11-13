@@ -103,6 +103,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           :characters="characters"
           :notice="owned.notice.value"
           :model-missing="modelMissing"
+          :no-characters="!characters.length"
           :is-offline="isOffline"
           :import-context="importContext"
           :show-import-detail="showImportDetail"
@@ -181,8 +182,8 @@ SPDX-License-Identifier: AGPL-3.0-only
       :context="chatExtensionContext"
       :actions="conversationHostActions"
       ref="inputRef"
-      :disabled="modelMissing"
-      :disabled-reason="modelMissing ? '请先配置模型，才能发送消息。' : ''"
+      :disabled="Boolean(sendGuardReason)"
+      :disabled-reason="sendGuardReason"
       :sending="sending"
       :generating="generating"
       :is-submitting="isSubmitting"
@@ -278,6 +279,7 @@ import DeviceOwnedMemoryPanel from "../../components/DeviceOwnedMemoryPanel.vue"
 import GroupMemberPanel from "../../components/GroupMemberPanel.vue";
 import ProfileSummaryPanel from "./components/ProfileSummaryPanel.vue";
 import MemoryInjectPanel from "./components/MemoryInjectPanel.vue";
+import { chatSendDisabledReason } from "./chatSendGuard";
 import { normalizeRealtimeMessage } from "@/utils/message-order";
 import ChatHeaderExtensionHost from "@/components/extension/chat/ChatHeaderExtensionHost.vue";
 import ExtensionSlot from "@/components/extension/ExtensionSlot.vue";
@@ -384,6 +386,7 @@ const charAvatar = ref("");
 
 const sending = ref(false);
 const modelMissing = ref(false);
+const sendGuardReason = computed(() => chatSendDisabledReason(modelMissing.value, characters.value.length));
 const modelError = ref("");
 const isOffline = ref(!navigator.onLine);
 const showScrollBtn = ref(false);

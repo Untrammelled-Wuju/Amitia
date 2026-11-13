@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { shallowMount, flushPromises } from "@vue/test-utils";
 import { ref } from "vue";
+import { ElMessage } from "element-plus";
 const mocks = vi.hoisted(() => ({ load: vi.fn(), create: vi.fn(), remove: vi.fn() }));
 vi.mock("@/runtime/message-feedback", () => ({ loadMessageFeedback: mocks.load, createMessageFeedback: mocks.create, deleteMessageFeedback: mocks.remove }));
 vi.mock("@/composables/useTheme", () => ({ useTheme: () => ({ resolvedMode: ref("light") }) }));
@@ -25,6 +26,34 @@ describe("message feedback lifecycle", () => {
   });
 
   beforeEach(() => { vi.clearAllMocks(); mocks.load.mockResolvedValue(null); });
+  it("explains unavailable feedback and prevents repeated submission", async () => {
+    const warning = vi.spyOn(ElMessage, "warning").mockImplementation(() => undefined as any);
+    let resolveSubmission!: (value: unknown) => void;
+    mocks.create.mockImplementationOnce(() => new Promise(resolve => { resolveSubmission = resolve; }));
+    const wrapper = shallowMount(Renderer, {
+      global: { stubs: { "el-icon": true } },
+      props: { message: { ...message, status: "completed", saved: false }, characterId: "one" },
+    });
+    try {
+      const helpful = () => wrapper.get('[aria-label="有帮助"]');
+      expect(helpful().attributes("aria-disabled")).toBe("true");
+      await helpful().trigger("click");
+      expect(warning).toHaveBeenCalledWith("当前消息尚不可反馈，请等待回复保存后再试。");
+      expect(mocks.create).not.toHaveBeenCalled();
+      await wrapper.setProps({ message: { ...message, status: "completed", saved: true, sourceRevision: 1 } });
+      await flushPromises();
+      await helpful().trigger("click");
+      await helpful().trigger("click");
+      expect(warning).toHaveBeenCalledWith("正在处理反馈，请稍后重试。");
+      expect(mocks.create).toHaveBeenCalledOnce();
+      resolveSubmission({ id: 1, feedbackType: "good" });
+      await flushPromises();
+      expect(helpful().attributes("aria-disabled")).toBe("false");
+    } finally {
+      wrapper.unmount();
+      warning.mockRestore();
+    }
+  });
   it("waits for persistence then loads feedback for the original authority", async () => {
     const wrapper = shallowMount(Renderer, { global: { stubs: { "el-icon": true } }, props: { message, characterId: "one" } });
     await flushPromises();

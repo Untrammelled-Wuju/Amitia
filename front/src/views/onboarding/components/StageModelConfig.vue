@@ -153,7 +153,7 @@
                     "
                     :placeholder="
                       modelType === 'local'
-                        ? 'http://localhost:11434/v1'
+                        ? 'http://localhost:11434'
                         : 'https://api.deepseek.com/v1'
                     "
                     :class="{ 'ob-field-error': fieldErrors.baseUrl }"
@@ -388,7 +388,7 @@ watch(
   () => props.modelType,
   (val) => {
     if (val === "local") {
-      emit("update:baseUrl", "http://localhost:11434/v1");
+      emit("update:baseUrl", "http://localhost:11434");
       emit("update:apiKey", "ollama");
       emit("update:provider", "ollama");
       emit("update:protocol", "ollama_chat");

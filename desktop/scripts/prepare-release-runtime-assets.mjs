@@ -1,15 +1,20 @@
 import { createHash } from "node:crypto";
 import {
+  closeSync,
   cpSync,
   copyFileSync,
   existsSync,
   mkdirSync,
+  mkdtempSync,
+  openSync,
   readFileSync,
+  readSync,
   readdirSync,
   rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, relative, resolve, sep } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -156,6 +161,46 @@ function candidateArchives(kind, platform, arch) {
   return [...new Set(candidates)];
 }
 
+function executableFamily(platform) {
+  if (platform === "windows") return "pe";
+  if (platform === "macos") return "mach-o";
+  return "elf";
+}
+
+function detectExecutableFamily(header) {
+  if (header[0] === 0x4d && header[1] === 0x5a) return "pe";
+  if (header[0] === 0x7f && header[1] === 0x45 && header[2] === 0x4c && header[3] === 0x46) return "elf";
+  const bigEndian = header.readUInt32BE(0);
+  if ([0xfeedface, 0xfeedfacf, 0xcefaedfe, 0xcffaedfe, 0xcafebabe, 0xbebafeca].includes(bigEndian)) return "mach-o";
+  return `unknown(0x${bigEndian.toString(16).padStart(8, "0")})`;
+}
+
+function assertArchiveExecutableFamily(kind, archivePath, entry, platform, arch) {
+  const tempRoot = mkdtempSync(join(tmpdir(), `amitia-${kind}-header-`));
+  try {
+    run("tar", ["-xf", archivePath, "-C", tempRoot, entry], { stdio: "pipe" });
+    const binaryPath = join(tempRoot, entry);
+    assertRegularNonEmptyFile(binaryPath, `${kind} archive executable`);
+    const descriptor = openSync(binaryPath, "r");
+    try {
+      const header = Buffer.alloc(4);
+      const read = readSync(descriptor, header, 0, 4, 0);
+      if (read < 4) {
+        throw new Error(`${kind} archive ${archivePath} stores a truncated executable at ${entry}`);
+      }
+      const got = detectExecutableFamily(header);
+      const want = executableFamily(platform);
+      if (got !== want) {
+        throw new Error(`${kind} archive ${archivePath} stores ${got} executable at ${entry}, want ${want} for ${runtimeTarget(platform, arch)}`);
+      }
+    } finally {
+      closeSync(descriptor);
+    }
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+}
+
 function selectArchive(kind, platform, arch) {
   const expected = expectedBinary(kind, platform);
   const inspected = [];
@@ -165,7 +210,10 @@ function selectArchive(kind, platform, arch) {
     const entries = archiveEntries(candidate);
     inspected.push({ path: candidate, entries });
     const entry = entries.find((item) => item === expected || item.endsWith(`/${expected}`));
-    if (entry) return { path: candidate, entries, expected, entry };
+    if (entry) {
+      assertArchiveExecutableFamily(kind, candidate, entry, platform, arch);
+      return { path: candidate, entries, expected, entry };
+    }
   }
   const details = inspected.length
     ? inspected.map((item) => `${item.path}: ${item.entries.join(", ")}`).join("; ")

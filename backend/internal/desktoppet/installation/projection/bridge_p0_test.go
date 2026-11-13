@@ -27,6 +27,32 @@ func newProjectionBridgeP0TestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
+func TestProjectionBridge_UninstallACKLeavesStorageFinalizationPending(t *testing.T) {
+	db := newProjectionBridgeP0TestDB(t)
+	if err := db.Exec(`CREATE TABLE desktop_pet_runtime_desired_states (space_id TEXT, device_id TEXT, desired_revision INTEGER, operation_id TEXT);
+		INSERT INTO desktop_pet_runtime_desired_states VALUES ('u','d',9,'op-uninstall');`).Error; err != nil {
+		t.Fatal(err)
+	}
+	op := operation.InstallationOperation{
+		ID: "op-uninstall", OperationType: operation.TypeUninstall, SpaceID: "u", DeviceID: "d", DesiredRevision: 9,
+		Status: operation.OpStatusWaitingRuntimeACK, Stage: operation.OpStageWaitingRuntimeACK,
+	}
+	if err := db.Create(&op).Error; err != nil {
+		t.Fatal(err)
+	}
+	bridge := NewProjectionBridge(db, NewService(db))
+	if err := bridge.completeDesiredStateOperationFromACK(t.Context(), "u", "d", 9, "completed", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	var saved operation.InstallationOperation
+	if err := db.Where("id = ?", op.ID).Take(&saved).Error; err != nil {
+		t.Fatal(err)
+	}
+	if saved.Status != operation.OpStatusWaitingRuntimeACK || saved.Stage != operation.OpStageWaitingRuntimeACK {
+		t.Fatalf("runtime ACK skipped uninstall finalization: status=%s stage=%s", saved.Status, saved.Stage)
+	}
+}
+
 func TestProjectionBridge_RecenterACKCompletesOriginalOperation(t *testing.T) {
 	db := newProjectionBridgeP0TestDB(t)
 	ctx := context.Background()

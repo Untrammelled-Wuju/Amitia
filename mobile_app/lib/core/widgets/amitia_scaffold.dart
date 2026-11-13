@@ -190,8 +190,10 @@ class AmitiaAppBar extends StatelessWidget implements PreferredSizeWidget {
                 systemStatusBarContrastEnforced: false,
               ));
     Widget? effectiveLeading = leading;
+    var hasDefaultBackButton = false;
     if (effectiveLeading == null) {
       if (navigation == AmitiaAppBarNavigation.back || showBackButton) {
+        hasDefaultBackButton = true;
         effectiveLeading = IconButton(
           icon: const AmitiaIcon(AmitiaIconGlyph.back, size: 19),
           tooltip: '返回',
@@ -209,6 +211,7 @@ class AmitiaAppBar extends StatelessWidget implements PreferredSizeWidget {
       } else if (navigation == AmitiaAppBarNavigation.none &&
           !showBackButton &&
           canPop) {
+        hasDefaultBackButton = true;
         effectiveLeading = IconButton(
           icon: const AmitiaIcon(AmitiaIconGlyph.back, size: 19),
           tooltip: '返回',
@@ -241,6 +244,7 @@ class AmitiaAppBar extends StatelessWidget implements PreferredSizeWidget {
       actions: actions,
       leading: effectiveLeading,
       leadingWidth: leadingWidth,
+      titleSpacing: hasDefaultBackButton ? 0 : null,
       centerTitle: centerTitle,
       elevation: elevation,
       scrolledUnderElevation: 0,

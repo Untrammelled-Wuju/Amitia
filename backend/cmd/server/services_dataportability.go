@@ -49,7 +49,7 @@ func buildDataPortabilityCoordinator(deps dataPortabilityDeps) (*dataportability
 	contributors := []dataportability.BackupContributor{
 		dataportability.NewCharacterContributor(deps.DB, deps.RoleLifecycle),
 		business.NewMemoryBackupContributor(deps.Memory),
-		chat.NewChatBackupContributor(deps.DB),
+		chat.NewChatBackupContributor(deps.KernelDB),
 		business.NewRuntimeStateBackupContributor(deps.KernelDB),
 		worldbook.NewWorldbookBackupContributor(deps.KernelDB),
 		system.NewSettingsBackupContributor(deps.DB),

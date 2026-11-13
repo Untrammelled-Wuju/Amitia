@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -94,11 +95,14 @@ func (s *StagingManager) ReadRestoreTicket() (*DataRestoreTicket, error) {
 	path := filepath.Join(s.BaseDir, ".restore", "ticket.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("%w: %w", ErrRestoreInvalid, ErrRestoreNotPending)
+		}
+		return nil, fmt.Errorf("%w: 读取恢复票据失败: %w", ErrRestoreInvalid, err)
 	}
 	var ticket DataRestoreTicket
 	if err := json.Unmarshal(data, &ticket); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: 恢复票据内容无法解析: %w", ErrRestoreInvalid, err)
 	}
 	return &ticket, nil
 }

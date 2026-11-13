@@ -72,7 +72,7 @@ def send(request_id, message, conversation_id="", accept=None, timeout=120):
 SCOPE = {}
 
 
-def search(keyword, page_size=128):
+def search(keyword, page_size=128, conversation_id=""):
     return call(
         "POST",
         "/api/device-mesh/v1/business/chat-management/search",
@@ -81,13 +81,14 @@ def search(keyword, page_size=128):
             "page": 1,
             "pageSize": page_size,
             "characterId": CHARACTER,
+            "conversationId": conversation_id,
             "expectedExecutionScope": SCOPE,
         },
     )
 
 
-def search_total(keyword):
-    status, _, payload = search(keyword)
+def search_total(keyword, conversation_id=""):
+    status, _, payload = search(keyword, conversation_id=conversation_id)
     data = payload.get("data") or {}
     return status, data.get("total", 0), data.get("items") or []
 
@@ -131,7 +132,8 @@ def main():
     run = f"{PREFIX}-{int(time.time())}"
 
     rid = run + "-basic"
-    status, elapsed, payload = send(rid, "端到端基线")
+    message = f"端到端基线 {run}"
+    status, elapsed, payload = send(rid, message)
     data = payload.get("data") or {}
     record(
         "normal-turn",
@@ -142,18 +144,20 @@ def main():
     first_turn = data.get("turnId") or ""
     SCOPE.update(data.get("executionScope") or {})
 
-    last = "端到端基线"
-    read_status, total, items = search_total(last)
-    contents = [item.get("content", "") for item in items]
+    reply = data.get("reply") or ""
+    user_status, total, items = search_total(message, conversation)
+    reply_status, _, replies = search_total(reply, conversation)
+    user_hits = [item for item in items if item.get("role") == "user" and item.get("content") == message]
+    reply_hits = [item for item in replies if item.get("role") == "assistant" and item.get("content") == reply]
     record(
         "readback-search",
-        read_status == 200 and total >= 2 and last in contents,
-        f"status={read_status} total={total} contents={contents[:3]!r}",
+        bool(conversation and reply) and user_status == reply_status == 200 and len(user_hits) == len(reply_hits) == 1,
+        f"user_status={user_status} user_hits={len(user_hits)} reply_status={reply_status} reply_hits={len(reply_hits)}",
     )
 
-    status, elapsed, payload = send(rid, "端到端基线", conversation)
+    status, elapsed, payload = send(rid, message, conversation)
     data = payload.get("data") or {}
-    after_total = search_total(last)[1]
+    after_total = search_total(message, conversation)[1]
     record(
         "idempotent-resend",
         status == 200 and data.get("turnId") == first_turn and after_total == total,

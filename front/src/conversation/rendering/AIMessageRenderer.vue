@@ -143,16 +143,16 @@
             <button type="button" title="回复" aria-label="回复" @click="emit('reply', message)">
               <el-icon><ChatLineSquare /></el-icon>
             </button>
-            <button v-if="feedbackReady" type="button" title="有帮助" aria-label="有帮助" :class="{ 'is-active': messageFeedback?.feedbackType === 'good' }" @click="submitHelpfulFeedback">
+            <button v-if="showFeedbackActions" type="button" title="有帮助" aria-label="有帮助" :aria-disabled="!!feedbackUnavailableReason" :class="{ 'is-active': messageFeedback?.feedbackType === 'good' }" @click="runFeedbackAction(submitHelpfulFeedback)">
               <el-icon><CircleCheck /></el-icon>
             </button>
-            <button v-if="feedbackReady" type="button" title="需要改进" aria-label="需要改进" :class="{ 'is-active': ['other','too_long','too_cold','too_exaggerated','not_understand'].includes(messageFeedback?.feedbackType || '') }" @click="submitImprovementFeedback">
+            <button v-if="showFeedbackActions" type="button" title="需要改进" aria-label="需要改进" :aria-disabled="!!feedbackUnavailableReason" :class="{ 'is-active': ['other','too_long','too_cold','too_exaggerated','not_understand'].includes(messageFeedback?.feedbackType || '') }" @click="runFeedbackAction(submitImprovementFeedback)">
               <el-icon><CircleClose /></el-icon>
             </button>
-            <button v-if="feedbackReady" type="button" title="报告不安全内容" aria-label="报告不安全内容" :class="{ 'is-active': messageFeedback?.feedbackType === 'unsafe' }" @click="submitUnsafeFeedback">
+            <button v-if="showFeedbackActions" type="button" title="报告不安全内容" aria-label="报告不安全内容" :aria-disabled="!!feedbackUnavailableReason" :class="{ 'is-active': messageFeedback?.feedbackType === 'unsafe' }" @click="runFeedbackAction(submitUnsafeFeedback)">
               <el-icon><Warning /></el-icon>
             </button>
-            <button v-if="messageFeedback" type="button" title="撤销反馈" aria-label="撤销反馈" @click="removeFeedback">
+            <button v-if="showFeedbackActions && messageFeedback" type="button" title="撤销反馈" aria-label="撤销反馈" :aria-disabled="!!feedbackUnavailableReason" @click="runFeedbackAction(removeFeedback)">
               <el-icon><Delete /></el-icon>
             </button>
           </template>
@@ -241,6 +241,7 @@ const { messageStyle, userMessageGlass, userMessageWaterGlass, aiAvatarEnabled, 
 const activeCitationId = ref("");
 const copyMenuOpen = ref(false);
 const messageFeedback = ref<MessageFeedback | null>(null);
+const feedbackBusy = ref(false);
 const message = computed<AIMessageData>(() =>
   normalizeAIMessage(props.message, {
     id: props.characterId,
@@ -290,9 +291,29 @@ const replyId = computed(() => String(props.message.replyToMessageId ?? ""));
 const replySender = computed(() => String(props.message.replyToRole === "user" ? "你" : props.charName));
 const replyText = computed(() => String(props.message.replyToExcerpt ?? "").slice(0, 120));
 const isAssistant = computed(() => message.value.role === "assistant");
-const feedbackReady = computed(() => !props.readOnly && props.message.readOnly !== true && isAssistant.value && !streaming.value && props.message.saved !== false && Number(props.message.sourceRevision) > 0 && Boolean(props.message.id && props.characterId));
+const showFeedbackActions = computed(() => !props.readOnly && props.message.readOnly !== true && isAssistant.value);
+const feedbackReady = computed(() => showFeedbackActions.value && !streaming.value && props.message.saved !== false && Number(props.message.sourceRevision) > 0 && Boolean(props.message.id && props.characterId));
+const feedbackUnavailableReason = computed(() => {
+  if (feedbackBusy.value) return "正在处理反馈，请稍后重试。";
+  if (feedbackReady.value) return "";
+  if (!props.characterId) return "当前消息缺少可用于反馈的角色信息。";
+  return "当前消息尚不可反馈，请等待回复保存后再试。";
+});
 const feedbackIdentity = computed(() => JSON.stringify([props.message.id, props.characterId, props.message.ownerId, props.message.executionScope, feedbackReady.value]));
 let feedbackGeneration = 0;
+
+async function runFeedbackAction(action: () => Promise<void>) {
+  if (feedbackUnavailableReason.value) {
+    ElMessage.warning(feedbackUnavailableReason.value);
+    return;
+  }
+  feedbackBusy.value = true;
+  try {
+    await action();
+  } finally {
+    feedbackBusy.value = false;
+  }
+}
 
 async function refreshFeedback() {
   const generation = ++feedbackGeneration;
@@ -381,8 +402,12 @@ watch(feedbackIdentity, refreshFeedback, { immediate: true });
 
 const stateNotice = computed(() => {
   switch (message.value.state) {
-    case "interrupted":
-      return { title: "已中断", detail: "保留已生成内容 · 可继续生成" };
+    case "interrupted": {
+      const hasContent = Boolean(String(message.value.markdown || "").trim()) || (message.value.blocks?.length || 0) > 0;
+      return hasContent
+        ? { title: "已中断", detail: "保留已生成内容 · 可继续生成" }
+        : { title: "已中断", detail: "本次回复未产生内容，可重新发送" };
+    }
     default:
       return null;
   }
@@ -715,6 +740,11 @@ async function handleCopy(mode: "plain" | "markdown") {
 .amrp-actions button:hover {
   background: var(--amrp-soft);
   color: var(--amrp-text);
+}
+
+.amrp-actions button[aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .amrp-copy-action {

@@ -2,12 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-
-import '../../../../app/app_routes.dart';
-import '../../../../app/center_navigation.dart';
 import '../../../../app/theme/app_colors.dart';
-import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_misc.dart';
@@ -85,8 +80,6 @@ class _DesktopPetPageState extends ConsumerState<DesktopPetPage>
               const AmitiaSectionHeader(title: '显示设置'),
               SizedBox(height: AppSpacing.sm),
               _buildSettingsCard(context, runtime),
-              SizedBox(height: AppSpacing.sectionGap),
-              _buildExtensionCenterCard(context),
               SizedBox(height: AppSpacing.sectionGap),
             ],
           ),
@@ -256,43 +249,6 @@ class _DesktopPetPageState extends ConsumerState<DesktopPetPage>
                       .setAlpha(value)
                   : null,
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildExtensionCenterCard(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-      child: AmitiaCard(
-        onTap: () => CenterNavigation.openExtensionCenter(context),
-        child: Row(
-          children: [
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: context.accentSoft,
-                borderRadius: AppRadius.brSmall,
-              ),
-              child: Icon(
-                Icons.extension_outlined,
-                size: 18,
-                color: context.accentPrimary,
-              ),
-            ),
-            SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('扩展中心', style: AppTypography.label(context)),
-                  Text('管理所有扩展', style: AppTypography.caption(context)),
-                ],
-              ),
-            ),
-            Icon(Icons.chevron_right, size: 16, color: context.textSecondary),
           ],
         ),
       ),

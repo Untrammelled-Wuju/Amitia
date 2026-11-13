@@ -369,10 +369,12 @@ func (s *service) ListDataPortabilityBackups() (map[string]interface{}, error) {
 		path := filepath.Join(dir, entry.Name())
 		encrypted := dataportability.IsEncryptedFile(path)
 		backup := map[string]interface{}{
-			"name":      entry.Name(),
-			"size":      info.Size(),
-			"createdAt": info.ModTime().Format(time.DateTime),
-			"encrypted": encrypted,
+			"name":       entry.Name(),
+			"size":       info.Size(),
+			"createdAt":  info.ModTime().UTC().Format(time.RFC3339),
+			"encrypted":  encrypted,
+			"backupId":   "",
+			"appVersion": "",
 		}
 		if encrypted {
 			if !strings.HasSuffix(entry.Name(), ".enc") || info.Size() <= int64(len("AMITIAE1")) {
@@ -388,7 +390,9 @@ func (s *service) ListDataPortabilityBackups() (map[string]interface{}, error) {
 			}
 			backup["backupId"] = manifest.BackupID
 			backup["appVersion"] = manifest.AppVersion
-			backup["createdAt"] = manifest.CreatedAt
+			if manifest.CreatedAt != "" {
+				backup["createdAt"] = manifest.CreatedAt
+			}
 		}
 		backups = append(backups, backup)
 	}

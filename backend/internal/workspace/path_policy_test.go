@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/glebarez/sqlite"
@@ -134,6 +135,29 @@ func TestLocalBackendListMarksSymlinkUnavailable(t *testing.T) {
 
 func TestRegisterLocalMountAppliesReadOnlyOnExistingRoot(t *testing.T) {
 	root := t.TempDir()
+	service := newLocalMountPersistenceTestService(t)
+	first, err := service.RegisterLocalMount(t.Context(), "workspace", root, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := service.RegisterLocalMount(t.Context(), "workspace", root, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.ID != first.ID {
+		t.Fatalf("same root produced a different mount: %s != %s", second.ID, first.ID)
+	}
+	if !second.ReadOnly {
+		t.Fatalf("existing writable mount ignored the read-only request: %#v", second)
+	}
+	current, ok := service.registry.GetMount(first.ID)
+	if !ok || !current.ReadOnly {
+		t.Fatalf("registry did not apply read-only mode: %#v", current)
+	}
+}
+
+func newLocalMountPersistenceTestService(t *testing.T) *Service {
+	t.Helper()
 	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "workspace.db")), &gorm.Config{})
 	if err != nil {
 		t.Fatal(err)
@@ -154,24 +178,41 @@ func TestRegisterLocalMountAppliesReadOnlyOnExistingRoot(t *testing.T) {
 	)`).Error; err != nil {
 		t.Fatal(err)
 	}
-	service := NewServiceWithPersistence(NewRegistry(), nil, NewMountRepository(db), nil)
-	first, err := service.RegisterLocalMount(t.Context(), "workspace", root, false)
-	if err != nil {
-		t.Fatal(err)
+	return NewServiceWithPersistence(NewRegistry(), nil, NewMountRepository(db), nil)
+}
+
+func TestConcurrentLocalMountRegistrationReusesPersistedID(t *testing.T) {
+	service := newLocalMountPersistenceTestService(t)
+	root := t.TempDir()
+	const requestCount = 16
+	var group sync.WaitGroup
+	start := make(chan struct{})
+	ids := make(chan WorkspaceID, requestCount)
+	for range requestCount {
+		group.Go(func() {
+			<-start
+			mount, err := service.RegisterLocalMount(t.Context(), "workspace", root, true)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			ids <- mount.ID
+		})
 	}
-	second, err := service.RegisterLocalMount(t.Context(), "workspace", root, true)
-	if err != nil {
-		t.Fatal(err)
+	close(start)
+	group.Wait()
+	close(ids)
+	records, err := service.mountRepo.LoadAll()
+	if err != nil || len(records) != 1 {
+		t.Fatalf("persisted mounts = %d, error = %v", len(records), err)
 	}
-	if second.ID != first.ID {
-		t.Fatalf("same root produced a different mount: %s != %s", second.ID, first.ID)
+	if len(ids) != requestCount || len(service.registry.ListMounts()) != 1 {
+		t.Fatalf("registration receipts = %d, registry mounts = %d", len(ids), len(service.registry.ListMounts()))
 	}
-	if !second.ReadOnly {
-		t.Fatalf("existing writable mount ignored the read-only request: %#v", second)
-	}
-	current, ok := service.registry.GetMount(first.ID)
-	if !ok || !current.ReadOnly {
-		t.Fatalf("registry did not apply read-only mode: %#v", current)
+	for id := range ids {
+		if string(id) != records[0].id {
+			t.Fatalf("receipt mount %q differs from persisted mount %q", id, records[0].id)
+		}
 	}
 }
 

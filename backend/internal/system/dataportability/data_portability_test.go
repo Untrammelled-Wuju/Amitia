@@ -188,7 +188,7 @@ func newPortabilityFixture(t *testing.T) (*gorm.DB, *dataportability.Coordinator
 		t.Fatal(err)
 	}
 	coord := dataportability.NewCoordinator(dataDir, "test", "test", "migrations-v1-1", dataportability.NewStagingManager(dataDir))
-	if err := coord.RegisterContributors(dataportability.NewCharacterContributor(db, nil), chat.NewChatBackupContributor(db), coresystem.NewSettingsBackupContributor(db), chat.NewModelConfigBackupContributor(db), business.NewRuntimeStateBackupContributor(sqlDB)); err != nil {
+	if err := coord.RegisterContributors(dataportability.NewCharacterContributor(db, nil), chat.NewChatBackupContributor(sqlDB), coresystem.NewSettingsBackupContributor(db), chat.NewModelConfigBackupContributor(db), business.NewRuntimeStateBackupContributor(sqlDB)); err != nil {
 		t.Fatal(err)
 	}
 	return db, coord, dataDir
@@ -202,17 +202,22 @@ func seedPortabilityFixture(t *testing.T, db *gorm.DB) {
 	if err := db.Create(&character.Character{ID: "role-b", SpaceID: "space", Name: "B"}).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Create(&chat.Conversation{ID: "conv-a", SpaceID: "space", Title: "A chat", Channel: "web"}).Error; err != nil {
-		t.Fatal(err)
+	chatRecords := []struct {
+		kind   string
+		id     string
+		roleID string
+		body   string
+	}{
+		{"conversation", "conv-a", "role-a", `{"id":"conv-a","conversationId":"conv-a","characterId":"role-a","title":"A chat","channel":"web"}`},
+		{"conversation", "conv-b", "role-b", `{"id":"conv-b","conversationId":"conv-b","characterId":"role-b","title":"B chat","channel":"web"}`},
+		{"message", "msg-a", "role-a", `{"id":"msg-a","conversationId":"conv-a","characterId":"role-a","role":"user","content":"A only"}`},
+		{"message", "msg-b", "role-b", `{"id":"msg-b","conversationId":"conv-b","characterId":"role-b","role":"user","content":"B only"}`},
 	}
-	if err := db.Create(&chat.Conversation{ID: "conv-b", SpaceID: "space", Title: "B chat", Channel: "web"}).Error; err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Create(&chat.Message{ID: "msg-a", ConversationID: "conv-a", CharacterID: "role-a", Sequence: 1, Role: "user", Content: "A only"}).Error; err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Create(&chat.Message{ID: "msg-b", ConversationID: "conv-b", CharacterID: "role-b", Sequence: 1, Role: "user", Content: "B only"}).Error; err != nil {
-		t.Fatal(err)
+	for _, record := range chatRecords {
+		if err := db.Exec(`INSERT INTO kernel_device_owned_resources(owner_id,kind,resource_id,role_id,revision,deleted,body,updated_at) VALUES(?,?,?,?,?,?,?,?)`,
+			"owner", record.kind, record.id, record.roleID, 1, 0, record.body, "2026-10-23T12:00:00Z").Error; err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := db.Create(&coresystem.AppSetting{Key: "portable-test", Value: "true"}).Error; err != nil {
 		t.Fatal(err)
@@ -283,8 +288,12 @@ func TestCharacterScopeExportsOnlyRelatedChats(t *testing.T) {
 	if err := scanner.Err(); err != nil {
 		t.Fatal(err)
 	}
-	if len(messages) != 1 || messages[0]["id"] != "msg-a" || messages[0]["characterId"] != "role-a" {
+	if len(messages) != 1 || messages[0]["id"] != "msg-a" || messages[0]["roleId"] != "role-a" {
 		t.Fatalf("unexpected character export messages: %#v", messages)
+	}
+	body, _ := messages[0]["body"].(map[string]interface{})
+	if body["content"] != "A only" || body["characterId"] != "role-a" {
+		t.Fatalf("unexpected character export message body: %#v", body)
 	}
 }
 

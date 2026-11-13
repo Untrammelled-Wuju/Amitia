@@ -62,6 +62,14 @@ func Bounded(fallback time.Duration) time.Duration {
 	return seconds
 }
 
+func WithBoundedTimeout(ctx context.Context, fallback time.Duration) (context.Context, context.CancelFunc) {
+	d := Bounded(fallback)
+	if d <= 0 {
+		return context.WithCancel(ctx)
+	}
+	return context.WithTimeout(ctx, d)
+}
+
 func WithTimeout(ctx context.Context, fallback time.Duration) (context.Context, context.CancelFunc) {
 	d := Duration(fallback)
 	if d <= 0 {
@@ -93,7 +101,7 @@ func (t transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if req.Method == http.MethodGet && strings.Contains(req.Header.Get("Accept"), "text/event-stream") {
 		return t.base.RoundTrip(req)
 	}
-	ctx, cancel := WithTimeout(req.Context(), t.fallback)
+	ctx, cancel := WithBoundedTimeout(req.Context(), t.fallback)
 	response, err := t.base.RoundTrip(req.Clone(ctx))
 	if err != nil {
 		cancel()

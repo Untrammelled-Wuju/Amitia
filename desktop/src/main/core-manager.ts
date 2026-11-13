@@ -1,5 +1,5 @@
 import { app } from "electron";
-import { spawn, ChildProcessWithoutNullStreams } from "child_process";
+import { spawn, execFileSync, ChildProcessWithoutNullStreams } from "child_process";
 import { createHash } from "node:crypto";
 import http from "http";
 import path from "path";
@@ -38,8 +38,16 @@ let runningCoreProfile: BundledCoreProfile | null = null;
 let coreGeneration = 0;
 let coreSpawnedAt = 0;
 let coreChildPid = 0;
+let stoppingCoreGeneration = 0;
+let lastCoreFailure: Error | null = null;
+const coreExitListeners = new Set<(profile: BundledCoreProfile, error: Error) => void>();
 const CORE_SHUTDOWN_TIMEOUT_MS = 30000;
 const CORE_SHUTDOWN_PROCESS_WAIT_MS = 35000;
+
+export function onCoreUnexpectedExit(listener: (profile: BundledCoreProfile, error: Error) => void): () => void {
+  coreExitListeners.add(listener);
+  return () => coreExitListeners.delete(listener);
+}
 
 process.on("exit", () => {
   const pid = coreProcess?.pid;
@@ -47,7 +55,7 @@ process.on("exit", () => {
     return;
   }
   try {
-    removeCoreEndpoint(getAmitiaDataDir(), coreChildPid || undefined);
+    removeCoreEndpoint(getAmitiaDataDir(), coreChildPid || pid);
   } catch (error) {
   console.error("[original-error]", error);
 console.error("[CoreManager] 退出时清理核心端点失败");
@@ -292,28 +300,19 @@ function ensureCoreBinaries(dataDir: string): void {
     {
       sources: databaseSourceCandidates(resourcesPath, "qdrant", process.platform, process.arch, extraRoots),
       dest: path.join(dataDir, "qdrant", "qdrant.zip"),
+      extracted: ["qdrant", "qdrant.exe"],
     },
     {
       sources: databaseSourceCandidates(resourcesPath, "surrealdb", process.platform, process.arch, extraRoots),
       dest: path.join(dataDir, "surrealdb", "surreal.zip"),
+      extracted: ["surreal", "surreal.exe"],
     },
   ];
   if (nodeArchive) {
     ensureBundledNodeArchive(dataDir, nodeArchive);
   }
-  for (const { sources, dest } of binaries) {
-    if (fs.existsSync(dest)) {
-      console.log("[CoreManager] 二进制已存在, 跳过复制:", dest);
-      continue;
-    }
-    const src = firstExisting(sources);
-    if (src) {
-      fs.mkdirSync(path.dirname(dest), { recursive: true });
-      fs.copyFileSync(src, dest);
-      console.log("[CoreManager] 二进制已复制:", src, "->", dest);
-    } else {
-      console.error("[CoreManager] 二进制资源不存在:", sources.join(", "));
-    }
+  for (const { sources, dest, extracted } of binaries) {
+    ensureDatabaseArchive(sources, dest, extracted);
   }
   ensureBundledPlugins(dataDir);
   syncRuntimeHostAssets(dataDir, getBundledRuntimeRoot());
@@ -358,6 +357,26 @@ export function syncRuntimeHostAssets(dataDir: string, runtimeRoot: string): voi
     fs.cpSync(source, destination, { recursive: true, force: true });
     console.log("[CoreManager] 运行时宿主已同步:", destination);
   }
+}
+
+function ensureDatabaseArchive(sources: string[], dest: string, extracted: string[]): void {
+  const source = firstExisting(sources);
+  if (!source) {
+    console.error("[CoreManager] 二进制资源不存在:", sources.join(", "));
+    return;
+  }
+  const sourceHash = fileSha256(source);
+  const destinationHash = fs.existsSync(dest) ? fileSha256(dest) : "";
+  if (sourceHash === destinationHash) {
+    console.log("[CoreManager] 二进制已是最新, 跳过复制:", dest);
+    return;
+  }
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  fs.copyFileSync(source, dest);
+  for (const name of extracted) {
+    fs.rmSync(path.join(path.dirname(dest), name), { force: true });
+  }
+  console.log("[CoreManager] 二进制已更新:", source, "->", dest);
 }
 
 function ensureBundledNodeArchive(dataDir: string, sourceArchive: string): void {
@@ -406,13 +425,15 @@ export function startCore(profile: BundledCoreProfile): void {
   }
 
   lastHealthyAt = 0;
+  lastCoreFailure = null;
   invalidateCoreEndpoint();
   ensureHealthPolling();
   coreChildPid = 0;
 
   const corePath = getCorePath();
   const dataDir = getAmitiaDataDir();
-  removeCoreEndpoint(dataDir);
+  const staleEndpoint = readCoreEndpoint(dataDir);
+  if (staleEndpoint && !isProcessAlive(staleEndpoint.pid)) removeCoreEndpoint(dataDir, staleEndpoint.pid);
 
   console.log("[CoreManager] 核心路径:", corePath);
   console.log("[CoreManager] 数据目录:", dataDir);
@@ -494,32 +515,37 @@ export function startCore(profile: BundledCoreProfile): void {
     }
   });
 
+  const finishCore = (error: Error) => {
+    if (currentGeneration !== coreGeneration) return;
+    const unexpected = stoppingCoreGeneration !== currentGeneration;
+    lastCoreFailure = unexpected ? error : null;
+    lastHealthyAt = 0;
+    if (unexpected) reapOrphanedCoreChildren(pid);
+    removeCoreEndpoint(dataDir, coreChildPid || pid);
+    coreChildPid = 0;
+    coreProcess = null;
+    runningCoreProfile = null;
+    invalidateCoreEndpoint();
+    if (unexpected) {
+      for (const listener of coreExitListeners) listener(profile, error);
+    }
+  };
+
   coreProcess.on("exit", (code, signal) => {
     console.log(`[AmitiaCore] 进程退出, code=${code}, signal=${signal}, generation=${currentGeneration}`);
-    if (currentGeneration === coreGeneration) {
-      removeCoreEndpoint(dataDir, coreChildPid || undefined);
-      coreChildPid = 0;
-      coreProcess = null;
-      runningCoreProfile = null;
-      invalidateCoreEndpoint();
-    }
+    finishCore(new Error(`Amitia Core 进程退出 (code=${code}, signal=${signal})`));
   });
 
   coreProcess.on("error", (error) => {
-    console.error("[AmitiaCore] 启动失败:", error.message);
-    if (currentGeneration === coreGeneration) {
-      removeCoreEndpoint(dataDir, coreChildPid || undefined);
-      coreChildPid = 0;
-      coreProcess = null;
-      runningCoreProfile = null;
-      invalidateCoreEndpoint();
-    }
+    console.error("[AmitiaCore] 启动失败:", error);
+    finishCore(error);
   });
 }
 
 export async function stopCore(strict = false): Promise<void> {
   if (coreProcess && !coreProcess.killed) {
     const currentGeneration = coreGeneration;
+    stoppingCoreGeneration = currentGeneration;
     const dataDir = getAmitiaDataDir();
     console.log("[CoreManager] 正在停止核心进程, PID:", coreProcess.pid);
     const pid = coreProcess.pid ?? 0;
@@ -534,13 +560,16 @@ export async function stopCore(strict = false): Promise<void> {
         await forceStopRunner();
       }
     } catch (err) {
-      if (strict) throw err;
+      if (strict) {
+        stoppingCoreGeneration = 0;
+        throw err;
+      }
       console.error("[CoreManager] 优雅关闭异常，强制终止:", err);
       await forceStopRunner();
     }
     await waitForChildExit(coreProcess, CORE_SHUTDOWN_PROCESS_WAIT_MS);
     if (currentGeneration === coreGeneration) {
-      removeCoreEndpoint(dataDir, endpointPid || undefined);
+      removeCoreEndpoint(dataDir, endpointPid || pid);
       coreChildPid = 0;
       coreProcess = null;
       runningCoreProfile = null;
@@ -588,6 +617,56 @@ async function waitForProcessExit(): Promise<void> {
   }
   if (coreProcess) {
     console.warn("[CoreManager] 等待进程退出超时");
+  }
+}
+
+function isProcessAlive(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    return code === "EPERM";
+  }
+}
+
+function reapOrphanedCoreChildren(pid: number): void {
+  if (process.platform === "win32") return;
+  if (pid) {
+    try {
+      process.kill(-pid, "SIGKILL");
+      console.log(`[CoreManager] 已回收核心进程组残留, PID: ${pid}`);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== "ESRCH") {
+        console.error("[original-error]", error);
+        console.error("[CoreManager] 回收核心进程组失败");
+      }
+    }
+  }
+  const dataDir = getAmitiaDataDir();
+  for (const pattern of [path.join(dataDir, "qdrant"), path.join(dataDir, "surrealdb")]) {
+    let output = "";
+    try {
+      output = execFileSync("pgrep", ["-f", pattern], { encoding: "utf8" });
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== "1") {
+        console.error("[original-error]", error);
+      }
+      continue;
+    }
+    for (const line of output.split(/\r?\n/)) {
+      const childPid = Number(line.trim());
+      if (!Number.isInteger(childPid) || childPid <= 0 || childPid === process.pid) continue;
+      try {
+        process.kill(childPid, "SIGKILL");
+        console.log(`[CoreManager] 已回收残留子进程, PID: ${childPid}, 匹配: ${pattern}`);
+      } catch (killError) {
+        console.error("[original-error]", killError);
+      }
+    }
   }
 }
 
@@ -734,6 +813,7 @@ export async function waitForCoreReady(profile: BundledCoreProfile, timeoutMs = 
     if (coreGeneration !== expectedGeneration) {
       throw new Error("核心进程已被替换, 等待取消");
     }
+    if (lastCoreFailure) throw lastCoreFailure;
     if (runningCoreProfile !== profile) {
       throw new Error(`Profile已变更: 期望${profile}, 当前${runningCoreProfile}`);
     }

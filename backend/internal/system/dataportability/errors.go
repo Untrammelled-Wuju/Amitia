@@ -23,6 +23,7 @@ var (
 	ErrBackupCompressionInvalid = errors.New("BACKUP_COMPRESSION_INVALID")
 
 	ErrRestoreInvalid                 = errors.New("RESTORE_BACKUP_INVALID")
+	ErrRestoreNotPending              = errors.New("没有待执行的恢复任务")
 	ErrRestoreBusy                    = errors.New("RESTORE_OPERATION_BUSY")
 	ErrRestoreFormatUnsupported       = errors.New("RESTORE_FORMAT_UNSUPPORTED")
 	ErrRestoreSchemaUnsupported       = errors.New("RESTORE_SCHEMA_UNSUPPORTED")

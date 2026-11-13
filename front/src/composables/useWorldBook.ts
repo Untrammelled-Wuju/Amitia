@@ -360,6 +360,27 @@ export function useWorldBook() {
     return scopeLabels[scope] || scope;
   }
 
+  async function exportEntries(filters: { matchType?: string; keyword?: string } = {}) {
+    const version = ++requestVersion;
+    loading.value = true;
+    try {
+      const role = await resolveAccess();
+      if (version !== requestVersion) return [] as WorldBookEntry[];
+      const result = await owned.data("worldbook", role);
+      if (version !== requestVersion) return [] as WorldBookEntry[];
+      const scope = result.executionScope;
+      if (!scope || scope.coreId !== owned.coreId.value || scope.roleId !== role || result.snapshot?.ownerId !== scope.resourceOwnerId) {
+        throw new Error("世界书所属设备、Core 或角色无效");
+      }
+      const loaded = (result.snapshot.resources || [])
+        .filter((resource: any) => resource.kind === "worldbook")
+        .map((resource: any) => resourceRule(resource, scope));
+      return filterRules(loaded, filters);
+    } finally {
+      if (version === requestVersion) loading.value = false;
+    }
+  }
+
   return {
     access: {
       canConfigure,
@@ -376,6 +397,7 @@ export function useWorldBook() {
     page,
     totalPages,
     fetchRules,
+    exportEntries,
     createRule,
     createRules,
     updateRule,

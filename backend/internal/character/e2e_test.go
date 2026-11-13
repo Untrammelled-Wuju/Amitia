@@ -30,6 +30,9 @@ func newTestDB(t *testing.T) *gorm.DB {
 	if err := db.AutoMigrate(&Character{}, &CharacterTemplate{}, &CardImportOperation{}); err != nil {
 		t.Fatal(err)
 	}
+	if err := EnsureRolePurgeJobsSchema(db); err != nil {
+		t.Fatal(err)
+	}
 	db.Exec(`CREATE TABLE IF NOT EXISTS conversations (id text, space_id text not null default '', character_id text, title text, channel text, source text, created_at text, updated_at text, revision integer not null default 1, deleted_at text default '')`)
 	return db
 }

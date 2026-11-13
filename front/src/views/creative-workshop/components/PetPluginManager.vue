@@ -6,10 +6,14 @@
         <p>管理桌宠扩展插件的安装、更新、启用与卸载</p>
       </div>
       <div class="section-actions">
-        <el-button :icon="Plus" type="primary" @click="openInstallDialog()">安装插件</el-button>
+        <el-button :icon="Plus" type="primary" :disabled="installLoading" @click="openInstallDialog()">安装插件</el-button>
         <el-button :icon="Refresh" :loading="loading" @click="loadPlugins">刷新</el-button>
       </div>
     </div>
+
+    <el-alert v-if="uninstallError" title="桌宠插件卸载失败" type="error" @close="uninstallError = ''">
+      <pre class="operation-error">{{ uninstallError }}</pre>
+    </el-alert>
 
     <section class="summary-grid">
       <div class="summary-card">
@@ -55,12 +59,13 @@
             </div>
           </div>
           <div class="plugin-actions">
-            <el-button size="small" @click="openInstallDialog(plugin)">更新</el-button>
+            <el-button size="small" :disabled="installLoading" @click="openInstallDialog(plugin)">更新</el-button>
             <el-button
               size="small"
               :type="plugin.enabled ? 'warning' : 'success'"
               plain
               :loading="busy === plugin.extensionId"
+              :disabled="!!busy"
               @click="togglePlugin(plugin)"
             >
               {{ plugin.enabled ? "禁用" : "启用" }}
@@ -70,7 +75,8 @@
               type="danger"
               plain
               :loading="busy === plugin.extensionId"
-              @click="uninstallPlugin(plugin)"
+              :disabled="!!busy"
+              @click="uninstallTarget = plugin"
             >
               卸载
             </el-button>
@@ -80,12 +86,15 @@
     </el-card>
 
     <el-dialog
+      v-if="installDialogVisible"
       v-model="installDialogVisible"
       :title="installMode === 'update' ? `更新 ${updateTarget?.name || '桌宠插件'}` : '安装桌宠插件'"
       width="680px"
-      destroy-on-close
-      @closed="resetClosedInstallState"
+      :before-close="cancelInstall"
     >
+      <el-alert v-if="installError" title="桌宠插件包操作失败" type="error" @close="installError = ''">
+        <pre class="operation-error">{{ installError }}</pre>
+      </el-alert>
       <div
         class="package-drop-zone"
         :class="{ 'has-file': !!installFile }"
@@ -175,7 +184,7 @@
       </div>
 
       <template #footer>
-        <el-button @click="installDialogVisible = false">取消</el-button>
+        <el-button :disabled="installLoading" @click="cancelInstall">取消</el-button>
         <el-button
           type="primary"
           :loading="installLoading"
@@ -186,14 +195,28 @@
         </el-button>
       </template>
     </el-dialog>
+    <el-dialog
+      v-if="uninstallTarget"
+      :model-value="true"
+      title="确认卸载桌宠插件"
+      width="420px"
+      :before-close="cancelUninstall"
+    >
+      <p>确定卸载「{{ uninstallTarget.name || uninstallTarget.pluginId }}」吗？相关桌宠能力将立即移除。</p>
+      <template #footer>
+        <el-button @click="cancelUninstall">取消</el-button>
+        <el-button type="danger" :disabled="!!busy" @click="uninstallPlugin">确认卸载</el-button>
+      </template>
+    </el-dialog>
   </section>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { ElMessage, ElMessageBox } from "element-plus";
+import { ElMessage } from "element-plus";
 import { Box, Plus, Refresh, UploadFilled } from "@element-plus/icons-vue";
 import { useApi } from "../../../composables/useApi";
+import { originalErrorText } from "../../../runtime/original-error";
 import {
   installExtensionPackage,
   previewExtensionPackage,
@@ -223,13 +246,14 @@ interface PetPluginList {
 
 interface PackageOperationView {
   status: string;
-  errorCode?: string;
 }
 
 const { get, post } = useApi();
 const plugins = ref<PetPlugin[]>([]);
 const loading = ref(false);
 const busy = ref("");
+const uninstallTarget = ref<PetPlugin | null>(null);
+const uninstallError = ref("");
 const enabledCount = computed(() => plugins.value.filter((item) => item.enabled).length);
 
 const installDialogVisible = ref(false);
@@ -239,6 +263,7 @@ const installFile = ref<File | null>(null);
 const installPreview = ref<PackageImportPreview | null>(null);
 const previewLoading = ref(false);
 const installLoading = ref(false);
+const installError = ref("");
 const uploadProgress = ref(0);
 const installAcknowledged = ref(false);
 const packageInput = ref<HTMLInputElement | null>(null);
@@ -294,6 +319,7 @@ async function loadPlugins() {
 }
 
 function openInstallDialog(plugin?: PetPlugin) {
+  if (installLoading.value) return;
   resetInstallState();
   installMode.value = plugin ? "update" : "install";
   updateTarget.value = plugin || null;
@@ -305,15 +331,20 @@ function resetInstallState() {
   installFile.value = null;
   installPreview.value = null;
   previewLoading.value = false;
-  installLoading.value = false;
+  installError.value = "";
   uploadProgress.value = 0;
   installAcknowledged.value = false;
   updateTarget.value = null;
   installMode.value = "install";
 }
 
-function resetClosedInstallState() {
-  if (!installDialogVisible.value) resetInstallState();
+function closeInstall() {
+  installDialogVisible.value = false;
+  resetInstallState();
+}
+
+function cancelInstall() {
+  if (!installLoading.value) closeInstall();
 }
 
 async function choosePackage() {
@@ -396,6 +427,7 @@ async function commitPackageInstall() {
   const preview = installPreview.value;
   if (!preview || !canInstallPreview.value) return;
   installLoading.value = true;
+  installError.value = "";
   try {
     const acknowledged = installAcknowledged.value || !needsInstallAcknowledgement.value;
     const result = await installExtensionPackage(
@@ -413,11 +445,11 @@ async function commitPackageInstall() {
     );
     await waitForPackageOperation(result.operationId);
     ElMessage.success(installMode.value === "update" ? "桌宠插件已更新" : "桌宠插件已安装");
-    installDialogVisible.value = false;
+    closeInstall();
     await loadPlugins();
     emit("changed");
-  } catch (error: any) {
-    ElMessage.error(error?.message || (installMode.value === "update" ? "更新失败" : "安装失败"));
+  } catch (error) {
+    installError.value = originalErrorText(error);
   } finally {
     installLoading.value = false;
   }
@@ -425,8 +457,9 @@ async function commitPackageInstall() {
 
 async function waitForPackageOperation(operationId?: string) {
   if (!operationId) return;
+  let operation: PackageOperationView | undefined;
   for (let attempt = 0; attempt < 120; attempt += 1) {
-    const operation = await get<PackageOperationView>(
+    operation = await get<PackageOperationView>(
       `/api/extensions/packages/operations/${encodeURIComponent(operationId)}`,
       undefined,
       { headers: { "X-Amitia-Management-Target": "pet-center" } },
@@ -434,14 +467,15 @@ async function waitForPackageOperation(operationId?: string) {
     const status = String(operation?.status || "").toLowerCase();
     if (status === "completed") return;
     if (status === "failed" || status === "requires_recovery") {
-      throw new Error(operation?.errorCode || "插件包操作失败");
+      throw new Error(`插件包操作 ${operationId} 失败`, { cause: operation });
     }
     await new Promise((resolve) => window.setTimeout(resolve, 500));
   }
-  throw new Error("插件包操作等待超时，请刷新页面检查最终状态");
+  throw new Error(`插件包操作 ${operationId} 等待超时，请刷新页面检查最终状态`, { cause: operation });
 }
 
 async function togglePlugin(plugin: PetPlugin) {
+  if (busy.value) return;
   busy.value = plugin.extensionId;
   try {
     await post(
@@ -458,22 +492,16 @@ async function togglePlugin(plugin: PetPlugin) {
   }
 }
 
-async function uninstallPlugin(plugin: PetPlugin) {
-  try {
-    await ElMessageBox.confirm(
-      `确定卸载「${plugin.name || plugin.pluginId}」吗？相关桌宠能力将立即移除。`,
-      "确认卸载桌宠插件",
-      {
-        confirmButtonText: "确认卸载",
-        cancelButtonText: "取消",
-        type: "warning",
-      },
-    );
-  } catch (error) {
-  console.error("[original-error]", error);
-return;
-  }
+function cancelUninstall() {
+  uninstallTarget.value = null;
+}
+
+async function uninstallPlugin() {
+  const plugin = uninstallTarget.value;
+  if (!plugin || busy.value) return;
   busy.value = plugin.extensionId;
+  uninstallError.value = "";
+  cancelUninstall();
   try {
     await post("/api/extensions/pet/plugins/actions/uninstall", {
       extensionId: plugin.extensionId,
@@ -481,8 +509,8 @@ return;
     ElMessage.success("桌宠插件已卸载");
     await loadPlugins();
     emit("changed");
-  } catch (error: any) {
-    ElMessage.error(error?.message || "桌宠插件卸载失败");
+  } catch (error) {
+    uninstallError.value = originalErrorText(error);
   } finally {
     busy.value = "";
   }
@@ -506,6 +534,12 @@ function formatBytes(value: number) {
 </script>
 
 <style scoped>
+.operation-error {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
 .pet-plugin-manager {
   display: flex;
   flex-direction: column;

@@ -15,6 +15,7 @@ export const IPC_CHANNELS = {
   syncCaptionColors: "amitia:window:caption-colors",
   editCommand: "amitia:window:edit-command",
   runtimeStatusChanged: "amitia:runtime:status-changed",
+  restartRuntime: "amitia:runtime:restart",
   selectAgentSkillDirectory: "amitia:agent-skill:select-directory",
   selectMCPRoot: "amitia:mcp:select-root",
   selectWorkspaceDirectory: "amitia:workspace:select-directory",

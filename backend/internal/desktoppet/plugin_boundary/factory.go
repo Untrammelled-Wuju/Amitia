@@ -57,8 +57,8 @@ func NewProductionBoundary(source KernelContributionSource, caps integration.Des
 		return nil, err
 	}
 	cleanup := caps.InstallationCleanup
-	reconciler := NewReconciler(source, prod.toAdapters(), WithUninstallCleanup(func(ctx context.Context, extID domain.ExtensionID) error {
-		return cleanup.CleanupOwnedInstallations(ctx, integration.OwnedInstallationCleanupRequest{ExtensionID: string(extID)})
+	reconciler := NewReconciler(source, prod.toAdapters(), WithUninstallCleanup(func(ctx context.Context, extID domain.ExtensionID, spaceID string) error {
+		return cleanup.CleanupOwnedInstallations(ctx, integration.OwnedInstallationCleanupRequest{ExtensionID: string(extID), SpaceID: spaceID})
 	}))
 	return NewDesktopPetPluginBoundary(reconciler), nil
 }

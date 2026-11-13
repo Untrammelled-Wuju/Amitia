@@ -212,6 +212,11 @@ func (w *RecoveryWorker) tick(ctx context.Context) error {
 			log.Warn("installation recovery: operation ", op.ID, " failed: ", err)
 		}
 	}
+	if finalizer, ok := w.desiredStateFinalizer.(interface {
+		RecoverCompletedUninstalls(context.Context, int) error
+	}); ok {
+		return finalizer.RecoverCompletedUninstalls(ctx, w.maxBatch)
+	}
 	return nil
 }
 

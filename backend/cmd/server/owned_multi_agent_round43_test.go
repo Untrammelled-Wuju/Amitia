@@ -84,6 +84,49 @@ func TestRound43TwoCoreWorkerCASPreventsDuplicateEngineExecution(t *testing.T) {
 	}
 }
 
+func TestRound43LateWorkerDoesNotClaimProcessingInteraction(t *testing.T) {
+	first, second := round43Trackers(t)
+	registerOwnedWorkerParent(t, first)
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	owner := newOwnedMultiAgentWorkerRunner(ownedWorkerEngineFunc(func(ctx context.Context, _ coordination.ExecutionScope, _ business.Request, _ []business.ProjectWorkspace, _ string) (business.Response, error) {
+		close(entered)
+		select {
+		case <-release:
+			return business.Response{Saved: true, Generation: business.Generation{Text: "first worker result"}}, nil
+		case <-ctx.Done():
+			return business.Response{}, ctx.Err()
+		}
+	}), first)
+	t.Cleanup(func() {
+		close(release)
+		if err := owner.Shutdown(context.Background()); err != nil {
+			t.Error(err)
+		}
+	})
+	req := ownedWorkerFixture()
+	id, err := owner.StartWorker(t.Context(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("first worker did not enter the engine")
+	}
+	var ran bool
+	late := newOwnedMultiAgentWorkerRunner(ownedWorkerEngineFunc(func(context.Context, coordination.ExecutionScope, business.Request, []business.ProjectWorkspace, string) (business.Response, error) {
+		ran = true
+		return business.Response{Saved: true, Generation: business.Generation{Text: "duplicate worker result"}}, nil
+	}), second)
+	ctx, cancel := context.WithCancel(t.Context())
+	late.wg.Add(1)
+	late.run(ctx, cancel, req, *req.OwnedScope, id, "multi-agent-worker-"+req.AssignmentID)
+	if ran {
+		t.Fatal("late worker executed an already claimed interaction")
+	}
+}
+
 func TestRound43OtherCoreCancellationStopsExecutingWorker(t *testing.T) {
 	first, second := round43Trackers(t)
 	registerOwnedWorkerParent(t, first)

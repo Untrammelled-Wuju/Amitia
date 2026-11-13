@@ -49,7 +49,7 @@ func (b *DesktopPetPluginBoundary) internalHandleEvent(ctx context.Context, evt 
 	case PhaseUpdated:
 		return b.HandleExtensionUpdated(ctx, evt.ExtensionID, evt.OldVersion, evt.Version, evt.OperationID)
 	case PhaseUninstalled:
-		return b.HandleExtensionUninstalled(ctx, evt.ExtensionID, evt.Version, evt.OperationID, "")
+		return b.HandleExtensionUninstalled(ctx, evt.ExtensionID, evt.Version, evt.OperationID, evt.SpaceID)
 	case PhaseReconcileAll:
 		return b.ReconcileAfterContributionInstall(ctx, evt.ExtensionID)
 	default:

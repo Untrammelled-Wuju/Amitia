@@ -141,4 +141,38 @@ describe("Core 模型配置授权", () => {
     expect(mocks.post.mock.calls.map(([path]) => path)).toEqual(["/api/model/configs", "/api/vision/configs", "/api/tts/configs", "/api/embedding/configs", "/api/onboarding/complete"]);
     for (const [, , config] of mocks.post.mock.calls) expect(config).toEqual({ headers: { "X-Amitia-Expected-Core-ID": "core-b", "X-Amitia-Expected-Configuration-Policy": "1:1:1" } });
   });
+
+  it("引导检测按已选提供商发起请求并保留原始错误", async () => {
+    vi.useFakeTimers();
+    const onboarding = open(() => useImmersiveOnboarding());
+    await onboarding.nextStage();
+    onboarding.modelProvider.value = "ollama";
+    onboarding.modelBaseUrl.value = "http://localhost:11434";
+    mocks.post.mockRejectedValueOnce(new Error('Ollama upstream: invalid response'));
+    const detection = onboarding.detectModel();
+    await vi.advanceTimersByTimeAsync(700);
+    await detection;
+    expect(mocks.post).toHaveBeenCalledWith("/api/model/detect-models", {
+      apiType: "ollama", baseUrl: "http://localhost:11434", apiKey: "",
+    }, { headers: { "X-Amitia-Expected-Core-ID": "core-b", "X-Amitia-Expected-Configuration-Policy": "1:1:1" } });
+    expect(onboarding.modelStatusText.value).toContain("Ollama upstream: invalid response");
+    expect(onboarding.modelReady.value).toBe(false);
+  });
+
+  it("更换地址后，迟到的检测响应不能恢复旧模型列表", async () => {
+    vi.useFakeTimers();
+    const onboarding = open(() => useImmersiveOnboarding());
+    await onboarding.nextStage();
+    let completeDetection!: (value: { models: Array<{ id: string }> }) => void;
+    mocks.post.mockReturnValueOnce(new Promise(resolve => { completeDetection = resolve; }));
+    const detection = onboarding.detectModel();
+    await vi.advanceTimersByTimeAsync(700);
+    expect(mocks.post).toHaveBeenCalledTimes(1);
+    onboarding.modelBaseUrl.value = "http://localhost:11434";
+    completeDetection({ models: [{ id: "old-model" }] });
+    await detection;
+    expect(onboarding.detectedModels.value).toEqual([]);
+    expect(onboarding.modelStatusText.value).toBe("等待检测");
+    expect(onboarding.detectingModels.value).toBe(false);
+  });
 });

@@ -33,15 +33,15 @@ func (s *contextualModelConfiguration) GetModel(id int) (*ModelConfig, error) {
 }
 
 func (s *contextualModelConfiguration) CreateModel(cfg *ModelConfig) (*ModelConfig, error) {
-	if err := s.parent.validateModelConfiguration(context.Background(), cfg, cfg.IsActive == 1); err != nil {
-		return nil, err
-	}
 	count, err := s.repo.CountModels()
 	if err != nil {
 		return nil, fmt.Errorf("查询失败: %w", err)
 	}
 	if count == 0 {
 		cfg.IsActive = 1
+	}
+	if err := s.parent.validateModelConfiguration(context.Background(), cfg, cfg.IsActive == 1); err != nil {
+		return nil, err
 	}
 	if err := s.repo.CreateModel(cfg); err != nil {
 		return nil, fmt.Errorf("创建失败: %w", err)
@@ -54,11 +54,20 @@ func (s *contextualModelConfiguration) UpdateModel(id int, updates map[string]in
 	if err != nil {
 		return nil, fmt.Errorf("模型配置不存在: %w", err)
 	}
-	projected := projectModelConfigUpdate(*current, updates)
+	normalized := normalizeConfigUpdates(updates)
+	for _, field := range []struct{ column, name string }{
+		{"base_url", "baseUrl"}, {"model_name", "modelName"}, {"api_type", "apiType"},
+	} {
+		if value, exists := normalized[field.column]; exists {
+			if _, ok := value.(string); !ok {
+				return nil, fmt.Errorf("%w: %s 必须为字符串，收到 %T", errInvalidModelConfiguration, field.name, value)
+			}
+		}
+	}
+	projected := projectModelConfigUpdate(*current, normalized)
 	if err := s.parent.validateModelConfiguration(context.Background(), projected, projected.IsActive == 1 || current.IsActive == 1); err != nil {
 		return nil, err
 	}
-	normalized := normalizeConfigUpdates(updates)
 	if _, ok := normalized["context_window"]; !ok && projected.ContextWindow > 0 {
 		normalized["context_window"] = projected.ContextWindow
 	}

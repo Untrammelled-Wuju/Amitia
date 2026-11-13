@@ -994,7 +994,6 @@ CREATE INDEX IF NOT EXISTS idx_dpinst_user ON desktop_pet_installations(space_id
 CREATE INDEX IF NOT EXISTS idx_dpinst_character ON desktop_pet_installations(character_id);
 CREATE INDEX IF NOT EXISTS idx_dpinst_package ON desktop_pet_installations(package_id);
 CREATE INDEX IF NOT EXISTS idx_dpinst_status ON desktop_pet_installations(status);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_dpinst_package_version ON desktop_pet_installations(package_id, package_version);
 CREATE INDEX IF NOT EXISTS idx_dpinst_pet ON desktop_pet_installations(pet_id);
 CREATE INDEX IF NOT EXISTS idx_dpinst_release ON desktop_pet_installations(current_release_id);
 CREATE INDEX IF NOT EXISTS idx_dpinst_lifecycle ON desktop_pet_installations(lifecycle_state);
@@ -3168,7 +3167,7 @@ CREATE TABLE IF NOT EXISTS extension_package_user_data_restore_journal (
     PRIMARY KEY (operation_id, table_name)
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dpinst_user_device_pet ON desktop_pet_installations(space_id, device_id, pet_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_dpinst_live_space_device_pet ON desktop_pet_installations(space_id, device_id, pet_id) WHERE lifecycle_state <> 'uninstalled';
 
 CREATE TABLE IF NOT EXISTS desktop_pet_local_sessions (
     id TEXT PRIMARY KEY,
@@ -4542,3 +4541,14 @@ CREATE TABLE IF NOT EXISTS agent_attention_events (
 );
 CREATE INDEX IF NOT EXISTS idx_agent_attention_event_scope ON agent_attention_events(space_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_agent_attention_event_key ON agent_attention_events(space_id, idempotency_key, created_at);
+
+CREATE TABLE IF NOT EXISTS role_data_purge_jobs (
+    role_id TEXT PRIMARY KEY,
+    state TEXT NOT NULL DEFAULT 'pending',
+    attempts INTEGER NOT NULL DEFAULT 0,
+    next_attempt_at TEXT NOT NULL DEFAULT '',
+    last_error TEXT NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_role_purge_due ON role_data_purge_jobs(state, next_attempt_at);

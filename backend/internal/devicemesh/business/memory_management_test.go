@@ -303,3 +303,37 @@ func TestOfflineConsolidationAutoMergesSafeExactDuplicates(t *testing.T) {
 		t.Fatalf("merged=%d", merged)
 	}
 }
+
+func TestMemoryManagementRejectsWriteToDeletedMemory(t *testing.T) {
+	engine, db, _, _ := engineHarness(t)
+	request := Request{SpaceID: "core", DeviceID: "a", CoreID: "core", RoleID: "role", RequestID: "tombstone-seed"}
+	view, err := engine.Query(t.Context(), request, coordination.DataQuery{Management: true, ResourceKind: "memory"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.ExpectedScope = &view.Scope
+	created, err := engine.ManageOwnedMemory(t.Context(), request, MemoryManagementInput{Action: "create", Key: "饮品", Value: "喜欢茶", MemoryType: "preference", Importance: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	memoryID := ""
+	var memoryRevision int64
+	for _, resource := range created.Resources {
+		if resource.Kind == "memory" {
+			memoryID, memoryRevision = resource.ID, resource.Revision
+		}
+	}
+	if memoryID == "" {
+		t.Fatalf("created resources missing memory: %+v", created.Resources)
+	}
+	scope := view.Scope
+	scope.RequestID = "tombstone-delete"
+	if _, err := coordination.NewOwnershipStore(db, "a").Apply(t.Context(), coordination.Commit{Scope: scope, Mutations: []coordination.Mutation{{Kind: "memory", ID: memoryID, RoleID: "role", ExpectedRevision: memoryRevision, Deleted: true, Body: json.RawMessage(`{"key":"饮品"}`)}}}); err != nil {
+		t.Fatal(err)
+	}
+	request.RequestID = "tombstone-write"
+	_, err = engine.ManageOwnedMemory(t.Context(), request, MemoryManagementInput{Action: "create", Key: "饮品", Value: "换一种茶", MemoryType: "preference", Importance: 5})
+	if !errors.Is(err, ErrMemoryDeleted) {
+		t.Fatalf("写入已删除记忆必须返回 ErrMemoryDeleted: %v", err)
+	}
+}

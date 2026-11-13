@@ -10,6 +10,7 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/installation"
 	"github.com/u-ai/backend/internal/desktoppet/installation/coordinator"
 	"github.com/u-ai/backend/internal/desktoppet/installation/device"
+	"github.com/u-ai/backend/internal/desktoppet/installation/operation"
 	"github.com/u-ai/backend/internal/desktoppet/integration"
 	"github.com/u-ai/backend/internal/desktoppet/release"
 	"gorm.io/gorm"
@@ -62,7 +63,7 @@ func (c *petxInstallationCleanup) CleanupOwnedInstallations(ctx context.Context,
 	}
 	var cleanupErrs []error
 	for _, ins := range owned {
-		if ins == nil {
+		if ins == nil || ins.IsUninstalled() {
 			continue
 		}
 		matched, matchErr := c.ownedByExtension(ins, extensionID)
@@ -83,11 +84,16 @@ func (c *petxInstallationCleanup) CleanupOwnedInstallations(ctx context.Context,
 			cleanupErrs = append(cleanupErrs, fmt.Errorf("cleanup installation %s owned by %s: %w", ins.ID, extensionID, uninstallErr))
 			continue
 		}
-		operationID := ""
-		if result != nil {
-			operationID = result.OperationID
+		if result == nil {
+			cleanupErrs = append(cleanupErrs, fmt.Errorf("cleanup installation %s owned by %s: missing uninstall receipt", ins.ID, extensionID))
+			continue
 		}
-		c.logger.Printf("petx cleanup: uninstall requested installation=%s extension=%s operation=%s", ins.ID, extensionID, operationID)
+		switch result.Status {
+		case operation.OpStatusFailedTerminal, operation.OpStatusFailedRetryable, operation.OpStatusCancelled:
+			cleanupErrs = append(cleanupErrs, fmt.Errorf("cleanup installation %s owned by %s: operation %s status %s: %s", ins.ID, extensionID, result.OperationID, result.Status, result.ErrorMessage))
+			continue
+		}
+		c.logger.Printf("petx cleanup: uninstall requested installation=%s extension=%s operation=%s", ins.ID, extensionID, result.OperationID)
 	}
 	return errors.Join(cleanupErrs...)
 }

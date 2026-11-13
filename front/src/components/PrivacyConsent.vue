@@ -4,6 +4,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <el-dialog
+    v-if="visible"
     v-model="visible"
     title="欢迎使用阿米提亚"
     width="520px"

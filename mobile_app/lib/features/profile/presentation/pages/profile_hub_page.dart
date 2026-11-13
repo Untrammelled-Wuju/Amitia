@@ -43,11 +43,6 @@ class ProfileHubPage extends ConsumerWidget {
     icon: AmitiaIconGlyph.settings,
     route: AppRoutes.settings,
   );
-  static const _runtimeModeEntry = _ProfileEntry(
-    title: '运行模式',
-    icon: AmitiaIconGlyph.workspace,
-    route: AppRoutes.settingsDevices,
-  );
 
   List<_ProfileEntry> _entries(WidgetRef ref) {
     final snapshot = ref.watch(uiRuntimeProvider).valueOrNull;
@@ -59,7 +54,6 @@ class ProfileHubPage extends ConsumerWidget {
       _workshopEntry,
       _gameEntry,
       if (showChannels) _channelsEntry,
-      _runtimeModeEntry,
       _settingsEntry,
     ];
   }

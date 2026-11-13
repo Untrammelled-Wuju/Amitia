@@ -801,6 +801,7 @@ async function handleArchiveConversation(conversation: ConversationItem) {
   const wasActive = activeConversationId.value === conversation.id;
   await chatStore.archiveConversation(conversation.id);
   if (wasActive) await router.replace({ path: "/chat" });
+  ElMessage.success("对话已归档");
 }
 
 async function handleMarkConversationRead(conversation: ConversationItem) {

@@ -185,6 +185,7 @@ export function useDesktopPetInstallations() {
   const installations = ref<DesktopPetInstallation[]>([]);
   const total = ref(0);
   const currentInstallation = ref<InstallationDetail | null>(null);
+  let latestListRequest = 0;
 
   function buildInstallationsUrl(
     installationId: string,
@@ -267,22 +268,28 @@ export function useDesktopPetInstallations() {
     }
   }
 
-  async function listInstallations(): Promise<DesktopPetInstallation[]> {
-    loading.value = true;
+  async function listInstallations(signal?: AbortSignal): Promise<DesktopPetInstallation[]> {
+    const request = ++latestListRequest;
+    if (!signal) loading.value = true;
     try {
       const data = await get<ListInstallationsResponse>(
         `/api/desktop-pets/installations`,
+        undefined,
+        { signal },
       );
+      if (request !== latestListRequest || signal?.aborted) return installations.value;
       installations.value = data?.items || [];
       total.value = data?.total || 0;
       return installations.value;
     } catch (err: any) {
+      if (signal) throw err;
       ElMessage.error(err?.message || "加载安装列表失败");
+      if (request !== latestListRequest) return installations.value;
       installations.value = [];
       total.value = 0;
       return [];
     } finally {
-      loading.value = false;
+      if (!signal && request === latestListRequest) loading.value = false;
     }
   }
 

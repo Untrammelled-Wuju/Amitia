@@ -76,7 +76,7 @@ func (a *productionResourceAdapter) Register(ctx context.Context, ref Contributi
 
 	handle, err := a.adapt.Attach(ctx, req)
 	if err != nil {
-		return ContributionRegistration{}, fmt.Errorf("%w: attach resource: %v", ErrUnavailable, err)
+		return ContributionRegistration{}, fmt.Errorf("%w: attach resource: %w", ErrUnavailable, err)
 	}
 
 	status := ContributionStatusRegistered

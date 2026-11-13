@@ -8,22 +8,21 @@ SPDX-License-Identifier: AGPL-3.0-only
     <AppContextMenu />
     <div class="desktop-stage">
       <UpdateDialog />
+      <RuntimeRecoveryBanner />
       <AgentApprovalGuard />
       <PrivacyConsent v-if="!isPublicPage && !renderError" />
       <NotFoundView v-if="renderError" :error="capturedError" />
       <div v-else class="workspace-root">
         <ApplicationBackground :visible="!isPublicPage" />
         <div class="workspace-foreground">
-          <Transition name="route-slide" mode="out-in">
-            <AppLayout v-if="!isPublicPage" key="app">
-              <router-view v-slot="{ Component }">
-                <RouteSurfaceHost v-if="Component" :fallback="Component" />
-              </router-view>
-            </AppLayout>
-            <div v-else key="public" class="public-root">
-              <router-view />
-            </div>
-          </Transition>
+          <AppLayout v-if="!isPublicPage">
+            <router-view v-slot="{ Component }">
+              <RouteSurfaceHost v-if="Component" :fallback="Component" />
+            </router-view>
+          </AppLayout>
+          <div v-else class="public-root">
+            <router-view />
+          </div>
         </div>
       </div>
     </div>
@@ -38,6 +37,7 @@ import { AppLayout } from "./ui-index";
 import { apiClient } from "./ui-index";
 import PrivacyConsent from "./components/PrivacyConsent.vue";
 import UpdateDialog from "./components/UpdateDialog.vue";
+import RuntimeRecoveryBanner from "./components/RuntimeRecoveryBanner.vue";
 import AgentApprovalGuard from "./components/AgentApprovalGuard.vue";
 import DesktopTitleBar from "./components/DesktopTitleBar.vue";
 import { useTheme } from "./ui-index";
@@ -325,11 +325,5 @@ html.amitia-desktop-shell:has(.login-world) #WindowControlButtons {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-}
-.public-root.no-leave .route-slide-leave-active {
-  display: none;
-}
-.public-root.no-leave .route-slide-enter-active {
-  transition: opacity 0.2s ease;
 }
 </style>

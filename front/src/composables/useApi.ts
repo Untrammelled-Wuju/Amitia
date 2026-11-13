@@ -143,12 +143,14 @@ apiClient.interceptors.response.use(
         return response;
       }
       const err = classifyError(body, null);
+      err.raw = body;
       displayError(err);
       return Promise.reject(err);
     }
     return response;
   },
   async (error) => {
+    if (axios.isCancel(error)) return Promise.reject(error);
     if (error && typeof error === "object" && "severity" in error) {
       return Promise.reject(error);
     }
@@ -165,6 +167,13 @@ apiClient.interceptors.response.use(
     const webAccessExpired = notifyWebAccessExpired(error);
     const err = classifyError(body, error as AxiosError);
     err.raw = body;
+    err.cause = {
+      name: error?.name,
+      message: error?.message,
+      code: error?.code,
+      stack: error?.stack,
+      cause: error?.cause,
+    };
     const requestPath = String(requestConfig?.url || "").split("?")[0];
     recordClientError({
       message: err.message || (body as any)?.msg || String(error?.message || ""),

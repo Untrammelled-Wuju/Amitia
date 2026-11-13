@@ -344,6 +344,28 @@ func (a *refreshResourceAdapter) Detach(context.Context, ContributionRegistratio
 	return nil
 }
 
+func TestReconcilerReattachesResourceAfterDetach(t *testing.T) {
+	for _, phase := range []LifecyclePhase{PhaseDisabled, PhaseUninstalled} {
+		t.Run(string(phase), func(t *testing.T) {
+			adapter := &refreshResourceAdapter{}
+			rec := NewReconciler(nil, []ContributionAdapter{adapter})
+			ext := domain.ExtensionID("com.example/pet")
+			contribution := makeContrib(string(ext), "pet-resource", domain.ContributionKindPetPlugin, map[string]any{
+				"contributionKind": "pet_resource", "displayName": "Pet", "resourceRef": "assets/pet/manifest.json",
+			})
+			for _, step := range []LifecyclePhase{PhaseEnabled, phase, PhaseEnabled} {
+				if err := rec.HandleEvent(t.Context(), LifecycleEvent{Phase: step, ExtensionID: ext, Contribution: contribution}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			reg, ok := rec.Get(ContributionRefFromDefinition(contribution))
+			if !ok || reg.CanonicalHandle != "resource-2" || adapter.registers != 2 || adapter.detaches != 1 {
+				t.Fatalf("registration = %+v, registers = %d, detaches = %d", reg, adapter.registers, adapter.detaches)
+			}
+		})
+	}
+}
+
 func TestReconcilerUpdateRefreshesSamePathResourceWhenDefinitionIsUnchanged(t *testing.T) {
 	src := newFakeSource()
 	adapter := &refreshResourceAdapter{}
@@ -460,7 +482,7 @@ func TestReconcilerUninstallCleansOwnedInstallations(t *testing.T) {
 	src := newFakeSource()
 	ext := domain.ExtensionID("com.example/pet")
 	var cleaned []domain.ExtensionID
-	rec := NewReconciler(src, defaultAdapters(), WithUninstallCleanup(func(_ context.Context, extID domain.ExtensionID) error {
+	rec := NewReconciler(src, defaultAdapters(), WithUninstallCleanup(func(_ context.Context, extID domain.ExtensionID, _ string) error {
 		cleaned = append(cleaned, extID)
 		return nil
 	}))
@@ -484,7 +506,7 @@ func TestReconcilerUninstallPropagatesCleanupError(t *testing.T) {
 	src := newFakeSource()
 	ext := domain.ExtensionID("com.example/pet")
 	cleanupErr := errors.New("runtime offline: descriptor rtsess-one generation 4")
-	rec := NewReconciler(src, defaultAdapters(), WithUninstallCleanup(func(_ context.Context, extID domain.ExtensionID) error {
+	rec := NewReconciler(src, defaultAdapters(), WithUninstallCleanup(func(_ context.Context, extID domain.ExtensionID, _ string) error {
 		return fmt.Errorf("cleanup %s: %w", extID, cleanupErr)
 	}))
 
@@ -499,7 +521,7 @@ func TestReconcilerUpdateDoesNotCleanupInstallations(t *testing.T) {
 	src := newFakeSource()
 	ext := domain.ExtensionID("com.example/pet")
 	calls := 0
-	rec := NewReconciler(src, defaultAdapters(), WithUninstallCleanup(func(_ context.Context, extID domain.ExtensionID) error {
+	rec := NewReconciler(src, defaultAdapters(), WithUninstallCleanup(func(_ context.Context, extID domain.ExtensionID, _ string) error {
 		calls++
 		return nil
 	}))

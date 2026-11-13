@@ -654,7 +654,7 @@ func (e *Engine) ManageOwnedMemory(ctx context.Context, request Request, input M
 	dependencies := []coordination.ResourceVersion{}
 	if existing != nil {
 		if existing.Deleted {
-			return MemoryManagementResponse{}, coordination.ErrResourceVersion
+			return MemoryManagementResponse{}, fmt.Errorf("%w: memory/%s", ErrMemoryDeleted, memoryID)
 		}
 		if input.Action != "resolve" {
 			return MemoryManagementResponse{}, MemoryManagementConflict{Resources: []coordination.Resource{*existing}}

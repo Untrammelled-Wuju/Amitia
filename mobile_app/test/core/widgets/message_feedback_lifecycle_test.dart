@@ -65,6 +65,10 @@ void main() {
     expect(service.calls, isEmpty);
     await show(MessageStatus.sent, null, 'one');
     expect(service.calls, isEmpty);
+    await tester.tap(find.byTooltip('有帮助'));
+    await tester.pump();
+    expect(find.text('当前消息尚不可反馈，请等待回复保存后再试。'), findsOneWidget);
+    expect(service.calls, isEmpty);
     await show(MessageStatus.sent, 1, 'one');
     expect(service.calls, ['one']);
     await show(MessageStatus.sent, 1, 'two');

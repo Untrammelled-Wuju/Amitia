@@ -42,6 +42,17 @@ class _RuntimeDetailPageState extends ConsumerState<RuntimeDetailPage> {
     await controller.performHandshake(widget.runtimeId);
   }
 
+  Future<void> _refresh() async {
+    final controller = ref.read(gameCenterControllerProvider.notifier);
+    if (controller.hasRuntimeOp(widget.runtimeId)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('正在处理该运行实例，请稍后刷新。')),
+      );
+      return;
+    }
+    await _loadAll();
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = ref.watch(gameCenterControllerProvider.notifier);
@@ -54,10 +65,14 @@ class _RuntimeDetailPageState extends ConsumerState<RuntimeDetailPage> {
         title: '运行实例',
         navigation: AmitiaAppBarNavigation.back,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: hasOp ? null : _loadAll,
-            tooltip: '刷新运行时详情',
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: hasOp ? _refresh : null,
+            child: IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: hasOp ? null : _refresh,
+              tooltip: '刷新运行时详情',
+            ),
           ),
         ],
       ),
@@ -81,7 +96,7 @@ class _RuntimeDetailPageState extends ConsumerState<RuntimeDetailPage> {
     if (state.runtimeError != null && detail == null) {
       return AmitiaErrorState(
         message: '加载失败: ${state.runtimeError}',
-        onRetry: _loadAll,
+        onRetry: _refresh,
       );
     }
     if (detail == null || detail.runtimeId != widget.runtimeId) {
@@ -89,7 +104,7 @@ class _RuntimeDetailPageState extends ConsumerState<RuntimeDetailPage> {
     }
 
     return RefreshIndicator(
-      onRefresh: _loadAll,
+      onRefresh: _refresh,
       child: ListView(
         padding: EdgeInsets.all(AppSpacing.pagePadding),
         children: [
