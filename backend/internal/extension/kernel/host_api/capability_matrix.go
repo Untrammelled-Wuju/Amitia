@@ -195,7 +195,13 @@ var CapabilityMatrix = []CapabilityEntry{
 		Resolution: ResolutionNewMinimal,
 		Reason:     "会话派生需要复制消息到新会话（含附件），复用 chat 服务的存储层新增 ForkConversation，不复用只读接口",
 	},
-{
+	{
+		Name:       "Conversation Prepare",
+		Route:      string(MethodConversationPrepare),
+		Resolution: ResolutionReuseExisting,
+		Reason:     "会话预分配复用已有的 mesh 会话存储，只写入 draft 标记且首条消息前不进会话目录，不新建第二套会话系统",
+	},
+	{
 		Name:       "Conversation Pin",
 		Route:      string(MethodConversationPin),
 		Resolution: ResolutionReuseExisting,
@@ -243,7 +249,7 @@ func AllRegisteredMethods() []string {
 		string(MethodConversationTurnAwait),
 		string(MethodConversationCreate),
 		string(MethodConversationDelete),
-		string(MethodConversationArchive), string(MethodConversationPin), string(MethodConversationFork), string(MethodDirectoryList), string(MethodDirectoryCreate), string(MethodSkillList),
+		string(MethodConversationArchive), string(MethodConversationPin), string(MethodConversationFork), string(MethodConversationPrepare), string(MethodDirectoryList), string(MethodDirectoryCreate), string(MethodSkillList),
 		string(MethodProjectList), string(MethodProjectCreate), string(MethodProjectUpdate), string(MethodProjectDelete),
 		string(MethodVectorUpsert), string(MethodVectorSearch), string(MethodVectorDelete),
 		string(MethodNetworkTCPOpen), string(MethodNetworkTCPRead), string(MethodNetworkTCPWrite), string(MethodNetworkTCPClose),

@@ -68,6 +68,7 @@ const (
 	MethodConversationArchive          Method = "host.conversation.archive"
 	MethodConversationPin              Method = "host.conversation.pin"
 	MethodConversationFork             Method = "host.conversation.fork"
+	MethodConversationPrepare          Method = "host.conversation.prepare"
 	MethodDirectoryList                Method = "host.directory.list"
 	MethodDirectoryCreate              Method = "host.directory.create"
 	MethodSkillList                    Method = "host.skill.list"

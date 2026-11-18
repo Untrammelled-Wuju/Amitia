@@ -505,6 +505,13 @@ func (a *conversationCreatorAdapter) ListConversations(ctx context.Context, limi
 	}, nil
 }
 
+func conversationCreateOperation(draft bool) string {
+	if draft {
+		return "conversation/prepare"
+	}
+	return "conversation/create"
+}
+
 func (a *conversationCreatorAdapter) CreateConversation(ctx context.Context, request kernel.ConversationCreateRequest) (json.RawMessage, error) {
 	if a == nil || a.engine == nil {
 		return nil, fmt.Errorf("chat service is not configured")
@@ -518,7 +525,7 @@ func (a *conversationCreatorAdapter) CreateConversation(ctx context.Context, req
 		return nil, err
 	}
 	result, err := a.engine.ManageChat(ctx, ownedRequest, coordination.ChatManagementRequest{
-		Operation:           "conversation/create",
+		Operation:           conversationCreateOperation(request.Draft),
 		ConversationOwnerID: ownedRequest.ExpectedScope.ResourceOwnerID,
 		ConversationID:      request.ConversationID,
 		RequestID:           request.RequestID,
@@ -526,6 +533,7 @@ func (a *conversationCreatorAdapter) CreateConversation(ctx context.Context, req
 		ProjectID:           request.ProjectID,
 		Channel:             request.Channel,
 		PeerID:              request.PeerID,
+		Draft:               request.Draft,
 	})
 	if err != nil {
 		return nil, err

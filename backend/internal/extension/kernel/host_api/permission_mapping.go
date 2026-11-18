@@ -62,6 +62,7 @@ func DefaultPermissionMapping() map[Method][]PermissionMappingEntry {
 		MethodConversationArchive:          {{PermissionID: "conversation.manage", Resource: "conversation"}},
 		MethodConversationPin:              {{PermissionID: "conversation.manage", Resource: "conversation"}},
 		MethodConversationFork:             {{PermissionID: "conversation.manage", Resource: "conversation"}},
+		MethodConversationPrepare:          {{PermissionID: "conversation.manage", Resource: "conversation"}},
 		MethodDirectoryList:                {{PermissionID: "workspace.read", Resource: "workspace"}},
 		MethodDirectoryCreate:              {{PermissionID: "workspace.write", Resource: "workspace"}},
 		MethodSkillList:                    {{PermissionID: "conversation.read", Resource: "conversation"}},
@@ -155,7 +156,7 @@ func RouteScopeForMethod(method Method) ScopePolicy {
 		return ScopePolicy{RequireRoles: []string{"conversation"}}
 	case MethodConversationList:
 		return ScopePolicy{Namespaced: true}
-	case MethodConversationCreate, MethodConversationDelete, MethodConversationScope:
+	case MethodConversationCreate, MethodConversationDelete, MethodConversationScope, MethodConversationPrepare:
 		return ScopePolicy{Namespaced: true}
 	case MethodConversationMessageSend, MethodConversationMessageAppend, MethodConversationTurnInterrupt, MethodConversationTurnAwait:
 		return ScopePolicy{Namespaced: true}
@@ -206,7 +207,7 @@ func IsDataRouteMethod(method Method) bool {
 	case MethodStateGet, MethodStateCAS, MethodStateDelete, MethodStateList,
 		MethodResourceOpen, MethodResourceRead, MethodResourceWrite, MethodResourceClose, MethodResourceStat, MethodResourceLink, MethodResourceDelete,
 		MethodCharacterRead, MethodCharacterList, MethodConversationList, MethodConversationRead, MethodConversationSearch, MethodConversationCreate, MethodConversationDelete, MethodConversationScope, MethodMemoryQuery, MethodRuntimeHealth, MethodWorkspaceRead, MethodWorkspaceWrite, MethodImportExecute, MethodStorageCleanup, MethodStorageBackup, MethodStorageRestore, MethodConversationLogsRead, MethodConversationLogsManage, MethodConversationLogsExport, MethodExtensionDataRead,
-		MethodConversationArchive, MethodConversationPin, MethodConversationFork, MethodProjectList, MethodProjectCreate, MethodProjectUpdate, MethodProjectDelete,
+		MethodConversationArchive, MethodConversationPin, MethodConversationFork, MethodConversationPrepare, MethodProjectList, MethodProjectCreate, MethodProjectUpdate, MethodProjectDelete,
 		MethodVectorUpsert, MethodVectorSearch, MethodVectorDelete:
 		return true
 	default:
@@ -250,7 +251,7 @@ func RouteRiskForMethod(method Method) RiskLevel {
 		MethodPluginAdapterInvoke, MethodPluginAdapterCancel,
 		MethodConversationCreate, MethodConversationDelete, MethodConversationMessageSend, MethodConversationMessageAppend, MethodConversationTurnInterrupt:
 		return RiskHigh
-	case MethodConversationArchive, MethodConversationPin, MethodConversationFork, MethodProjectCreate, MethodProjectUpdate, MethodProjectDelete:
+	case MethodConversationArchive, MethodConversationPin, MethodConversationFork, MethodConversationPrepare, MethodProjectCreate, MethodProjectUpdate, MethodProjectDelete:
 		return RiskHigh
 	case MethodExtensionDataRead:
 		return RiskMedium
@@ -283,7 +284,7 @@ func RouteSideEffectForMethod(method Method) SideEffectLevel {
 		return SideEffectReadOnly
 	case MethodStateCAS, MethodStateDelete, MethodResourceWrite, MethodResourceDelete, MethodScheduleCreate, MethodScheduleCancel, MethodScheduleRun, MethodScheduleUpdate, MethodVectorUpsert, MethodVectorDelete, MethodConversationCreate, MethodConversationDelete, MethodConversationTurnInterrupt:
 		return SideEffectWrite
-	case MethodConversationArchive, MethodConversationPin, MethodConversationFork, MethodProjectCreate, MethodProjectUpdate, MethodProjectDelete:
+	case MethodConversationArchive, MethodConversationPin, MethodConversationFork, MethodConversationPrepare, MethodProjectCreate, MethodProjectUpdate, MethodProjectDelete:
 		return SideEffectWrite
 	case MethodRuntimeMaintenanceUpdate, MethodRuntimeCleanupTemp, MethodRuntimeRotateLogs, MethodRuntimeCheckDBIntegrity:
 		return SideEffectWrite

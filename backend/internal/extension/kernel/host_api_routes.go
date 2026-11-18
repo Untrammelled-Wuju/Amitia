@@ -899,6 +899,14 @@ func conversationMessageAppendRouteHandler(deps HostAPIRouteDeps) host_api.Handl
 }
 
 func conversationCreateRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
+	return conversationCreateRouteHandlerFor(deps, false)
+}
+
+func conversationPrepareRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
+	return conversationCreateRouteHandlerFor(deps, true)
+}
+
+func conversationCreateRouteHandlerFor(deps HostAPIRouteDeps, draft bool) host_api.Handler {
 	return func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
 		var p struct {
 			SpaceID        string `json:"spaceId"`
@@ -975,6 +983,7 @@ func conversationCreateRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
 			ProjectID:      p.ProjectID,
 			Channel:        p.Channel,
 			PeerID:         p.PeerID,
+			Draft:          draft,
 		})
 		if err != nil {
 			return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()}}, nil
@@ -993,11 +1002,14 @@ func conversationCreateRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
 		if strings.TrimSpace(createdConversationID) == "" {
 			createdConversationID = p.ConversationID
 		}
-		targetSnapshotID, err := createConversationTargetSnapshot(ctx, deps, req, createdConversationID)
-		if err != nil {
-			return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()}}, nil
+		created["draft"] = draft
+		if !draft {
+			targetSnapshotID, err := createConversationTargetSnapshot(ctx, deps, req, createdConversationID)
+			if err != nil {
+				return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()}}, nil
+			}
+			created["scopeSnapshotId"] = targetSnapshotID
 		}
-		created["scopeSnapshotId"] = targetSnapshotID
 		output, err = json.Marshal(created)
 		if err != nil {
 			return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()}}, nil
@@ -2131,6 +2143,7 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 	conversationMessageHandler := conversationMessageRouteHandler(deps)
 	conversationMessageAppendHandler := conversationMessageAppendRouteHandler(deps)
 	conversationCreateHandler := conversationCreateRouteHandler(deps)
+	conversationPrepareHandler := conversationPrepareRouteHandler(deps)
 	conversationTurnInterruptHandler := conversationTurnInterruptRouteHandler(deps)
 	conversationTurnAwaitHandler := conversationTurnAwaitRouteHandler(deps)
 	conversationArchiveHandler := conversationArchiveRouteHandler(deps)
@@ -4972,6 +4985,13 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 			sideEffectLevel: host_api.SideEffectWrite,
 			timeout:         30 * time.Second,
 			handler:         conversationCreateHandler,
+		},
+		{
+			method:          host_api.MethodConversationPrepare,
+			riskLevel:       host_api.RiskHigh,
+			sideEffectLevel: host_api.SideEffectWrite,
+			timeout:         30 * time.Second,
+			handler:         conversationPrepareHandler,
 		},
 		{
 			method:          host_api.MethodConversationDelete,
