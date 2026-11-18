@@ -138,6 +138,7 @@
                     "conversation-message-send",
                     "conversation-search",
                     "conversation-create",
+                    "conversation-prepare",
                     "conversation-delete",
                     "conversation-archive",
                     "conversation-fork",

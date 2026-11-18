@@ -978,6 +978,34 @@ export function createDshClientRuntimeServices(options = {}) {
       }
       return retainObserver(id);
     },
+    async prepare(sessionId, options = {}) {
+      const request = { action: "conversation-prepare" };
+      const id = text(sessionId);
+      if (id) request.conversationId = id;
+      const title = text(options?.title);
+      if (title) request.title = title;
+      const prepared = await command(request);
+      const preparedId = text(prepared?.conversationId);
+      if (!preparedId) throw hostResponseFailure("sessions.prepare", request, prepared);
+      return Object.freeze({
+        sessionId: preparedId,
+        id: preparedId,
+        draft: true,
+        prepared: true,
+        preparedAt: text(prepared?.preparedAt),
+        binding: () => sessions.binding(preparedId),
+        scope: () => sessions.scope(preparedId),
+        async publish() {
+          const input = { sessionId: preparedId };
+          const publishTitle = text(options?.title);
+          if (publishTitle) input.title = publishTitle;
+          return sessions.create(input);
+        },
+        async drop() {
+          return command({ action: "conversation-delete", conversationId: preparedId });
+        },
+      });
+    },
     async create(input = {}) {
       if (text(input.agentPreset)) {
         throw unsupported("sessions.create", "P13", "DSH agentPreset has no verified Amitia project mapping");

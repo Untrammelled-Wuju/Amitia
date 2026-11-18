@@ -747,6 +747,24 @@ export async function command(host, input) {
       await host.call("host.state.delete", { key: `dsh-session:${conversationId}` });
       return deleted;
     }
+    case "conversation-prepare": {
+      const prepareInput = {
+        title: String(request.title || "").trim(),
+        requestId: String(request.requestId || "").trim(),
+      };
+      const preparedConversationId = String(request.conversationId || "").trim();
+      if (preparedConversationId) prepareInput.conversationId = preparedConversationId;
+      if (!prepareInput.requestId) prepareInput.requestId = `dsh-prepare-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+      const result = await host.call("host.conversation.prepare", prepareInput);
+      const conversationId = String(result?.conversationId || result?.sessionId || result?.id || "");
+      if (!conversationId) throw new Error(`Amitia host.conversation.prepare returned no conversation id: ${JSON.stringify(result)}`);
+      return {
+        conversationId,
+        draft: result?.draft !== false,
+        preparedAt: String(result?.preparedAt || ""),
+        title: String(result?.title || ""),
+      };
+    }
     case "conversation-fork": {
       const conversationId = String(request.conversationId || "").trim();
       if (!conversationId) throw new Error("conversation-fork 需要 conversationId");
